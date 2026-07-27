@@ -7,7 +7,7 @@ import { getExpForLevel, randomConsumable, consumableItem } from "@/lib/gameData
 import { simulateBattle } from "@/lib/arenaEngine";
 import { DUNGEON_PLANETS, getInfinitePlanet } from "@/lib/dungeonData";
 import {
-  DUNGEON_ENEMIES_PER_PLANET, DUNGEON_DEATHS_PER_DAY, DUNGEON_REVIVE_COST,
+  DUNGEON_ENEMIES_PER_PLANET, DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST,
   DUNGEON_BATTLE_COOLDOWN_MS, DUNGEON_SKIP_COST,
   generateDungeonEnemy, computeDungeonRewards,
 } from "@/lib/dungeonEngine";
@@ -72,9 +72,10 @@ export default function GalaxyMapPage() {
     ? getInfinitePlanet(rawPlanet - DUNGEON_PLANETS.length)
     : (DUNGEON_PLANETS.find((p) => p.id === planetId) || DUNGEON_PLANETS[0]);
   const enemyIndex = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, character?.dungeon_enemy || 1));
-  const deaths = character?.dungeon_deaths || 0;
+  const deaths = Math.min(DUNGEON_DEATHS_PER_DAY, character?.dungeon_deaths || 0);
   const deathCap = DUNGEON_DEATHS_PER_DAY;
-  const reviveNeeded = deaths >= deathCap;
+  const freeLivesLeft = Math.max(0, deathCap - deaths);
+  const paidContinue = freeLivesLeft <= 0;
   const shipMods = character?.ship_mods || [];
   const cooldownEnds = character?.dungeon_cooldown_at ? new Date(character.dungeon_cooldown_at).getTime() + DUNGEON_BATTLE_COOLDOWN_MS : 0;
   const cooldownActive = now < cooldownEnds;
@@ -96,15 +97,18 @@ export default function GalaxyMapPage() {
       toast({ title: "Battle Cooldown", description: `Wait or skip with ${DUNGEON_SKIP_COST} 💎.`, variant: "destructive" });
       return;
     }
-    if (reviveNeeded) {
-      if ((character.nova_crystals || 0) < DUNGEON_REVIVE_COST) {
-        toast({ title: "Not enough Nova Crystals", description: `Revive costs ${DUNGEON_REVIVE_COST} 💎.`, variant: "destructive" });
+    // Free lives spent — charge gems per fight, leave the death counter at the
+    // cap so the header keeps reading "0 left" (don't reset to 3).
+    let crystals = character.nova_crystals || 0;
+    if (paidContinue) {
+      if (crystals < DUNGEON_CONTINUE_COST) {
+        toast({ title: "Not enough Nova Crystals", description: `Continue costs ${DUNGEON_CONTINUE_COST} 💎.`, variant: "destructive" });
         return;
       }
-      const upd = { nova_crystals: (character.nova_crystals || 0) - DUNGEON_REVIVE_COST, dungeon_deaths: 0 };
-      await api.entities.Character.update(character.id, upd);
-      setCharacter((c) => ({ ...c, ...upd }));
-      void trackNovaSpend(character, DUNGEON_REVIVE_COST, "dungeon_revive");
+      crystals -= DUNGEON_CONTINUE_COST;
+      await api.entities.Character.update(character.id, { nova_crystals: crystals });
+      setCharacter((c) => ({ ...c, nova_crystals: crystals }));
+      void trackNovaSpend(character, DUNGEON_CONTINUE_COST, "dungeon_continue");
     }
     const enemy = generateDungeonEnemy(planet, enemyIndex, character.level);
     const battle = simulateBattle(character, enemy, equippedItems);
@@ -191,7 +195,11 @@ export default function GalaxyMapPage() {
       });
       toast({
         title: "You Fell",
-        description: `Death ${update.dungeon_deaths}/${deathCap}. You'll respawn at this enemy.`,
+        description: freeLivesLeft > 1
+          ? `Death ${deaths + 1}/${deathCap}. You'll respawn at this enemy.`
+          : freeLivesLeft === 1
+          ? `Last free life spent. Further fights cost ${DUNGEON_CONTINUE_COST} 💎.`
+          : `You'll respawn here. Next fight costs ${DUNGEON_CONTINUE_COST} 💎.`,
         variant: "destructive",
       });
     }
@@ -230,11 +238,13 @@ export default function GalaxyMapPage() {
           <Satellite className="w-5 h-5 text-primary" /> Galaxy Dungeon
         </h1>
         <div className="flex items-center gap-4 text-xs">
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5" title="Free lives today (ET). After these, fights cost Nova Crystals.">
             {Array.from({ length: DUNGEON_DEATHS_PER_DAY }).map((_, i) => (
-              <Skull key={i} className={`w-4 h-4 ${i < DUNGEON_DEATHS_PER_DAY - deaths ? "text-red-400" : "text-muted/30"}`} />
+              <Skull key={i} className={`w-4 h-4 ${i < freeLivesLeft ? "text-red-400" : "text-muted/30"}`} />
             ))}
-            <span className="text-muted-foreground ml-1">{DUNGEON_DEATHS_PER_DAY - deaths} left</span>
+            <span className="text-muted-foreground ml-1">
+              {freeLivesLeft > 0 ? `${freeLivesLeft} left` : "0 left · paid"}
+            </span>
           </span>
           <span className="flex items-center gap-1 text-accent">
             <Rocket className="w-3.5 h-3.5" /> {shipMods.length} mods
@@ -247,8 +257,8 @@ export default function GalaxyMapPage() {
       <DungeonPlanetView
         planet={planet}
         currentEnemy={enemyIndex}
-        reviveNeeded={reviveNeeded}
-        reviveCost={DUNGEON_REVIVE_COST}
+        paidContinue={paidContinue}
+        continueCost={DUNGEON_CONTINUE_COST}
         onFight={handleFight}
         cooldownActive={cooldownActive}
         cooldownRemaining={cooldownEnds - now}

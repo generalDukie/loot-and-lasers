@@ -38,7 +38,7 @@ import AdminPage from '@/pages/AdminPage';
 import GameLayout from '@/components/game/GameLayout';
 import SpaceBackground from '@/components/game/SpaceBackground';
 import { SiteConfigProvider } from '@/lib/SiteConfigContext';
-import EditableText from '@/components/admin/EditableText';
+import SiteTitle from '@/components/admin/SiteTitle';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, checkAppState } = useAuth();
@@ -53,7 +53,7 @@ const AuthenticatedApp = () => {
     return (
       <div className="fixed inset-0 flex items-center justify-center stars-bg">
         <div className="text-center">
-          <EditableText textKey="app.title" default="LOOT & LASERS" as="h1" className="font-display font-bold text-3xl glow-cyan tracking-widest mb-4" />
+          <SiteTitle as="h1" className="font-display font-bold text-3xl glow-cyan tracking-widest mb-4" />
           <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto"></div>
         </div>
       </div>
@@ -71,7 +71,7 @@ const AuthenticatedApp = () => {
       return (
         <div className="fixed inset-0 flex items-center justify-center stars-bg p-4">
           <div className="max-w-md w-full rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm p-6 text-center">
-            <EditableText textKey="app.title" default="LOOT & LASERS" as="h1" className="font-display font-bold text-2xl glow-cyan tracking-widest mb-3" />
+            <SiteTitle as="h1" className="font-display font-bold text-2xl glow-cyan tracking-widest mb-3" />
             <p className="text-sm text-muted-foreground mb-1">Could not reach the game server.</p>
             <p className="text-xs text-destructive mb-4">{authError.message}</p>
             <Button onClick={checkAppState}>Retry</Button>

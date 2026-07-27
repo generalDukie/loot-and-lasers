@@ -8,7 +8,7 @@ export default function PromoCodeManager({ onAction }) {
   const [code, setCode] = useState("");
   const [label, setLabel] = useState("");
   const [maxRed, setMaxRed] = useState(0);
-  const [rewards, setRewards] = useState({ stardust: 0, nova_crystals: 0, item_rarity: "", consumable: "" });
+  const [rewards, setRewards] = useState({ stardust: 0, nova_crystals: 0, experience: 0, item_rarity: "", consumable: "" });
 
   async function load() { setCodes(await api.entities.PromoCode.list("-created_date", 100)); }
   useEffect(() => { load(); }, []);
@@ -17,6 +17,7 @@ export default function PromoCodeManager({ onAction }) {
     const r = {};
     if (rewards.stardust) r.stardust = +rewards.stardust;
     if (rewards.nova_crystals) r.nova_crystals = +rewards.nova_crystals;
+    if (rewards.experience) r.experience = +rewards.experience;
     if (rewards.item_rarity) r.item_rarity = rewards.item_rarity;
     if (rewards.consumable) {
       const c = CONSUMABLES[Math.floor(Math.random() * CONSUMABLES.length)];
@@ -25,7 +26,7 @@ export default function PromoCodeManager({ onAction }) {
     const res = await onAction({ action: "create_promo_code", code, label, rewards: r, max_redemptions: +maxRed });
     if (res) {
       setCode(""); setLabel(""); setMaxRed(0);
-      setRewards({ stardust: 0, nova_crystals: 0, item_rarity: "", consumable: "" });
+      setRewards({ stardust: 0, nova_crystals: 0, experience: 0, item_rarity: "", consumable: "" });
       load();
     }
   }
@@ -56,6 +57,7 @@ export default function PromoCodeManager({ onAction }) {
         <div className="grid grid-cols-2 gap-1.5">
           <label className="text-[10px] text-muted-foreground">✨ Stardust<input type="number" value={rewards.stardust} onChange={(e) => setRewards({ ...rewards, stardust: +e.target.value })} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>
           <label className="text-[10px] text-muted-foreground">💎 Nova Crystals<input type="number" value={rewards.nova_crystals} onChange={(e) => setRewards({ ...rewards, nova_crystals: +e.target.value })} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>
+          <label className="text-[10px] text-muted-foreground">⭐ Experience<input type="number" value={rewards.experience} onChange={(e) => setRewards({ ...rewards, experience: +e.target.value })} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>
           <label className="text-[10px] text-muted-foreground">🔁 Max Uses (0=∞)<input type="number" value={maxRed} onChange={(e) => setMaxRed(+e.target.value)} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>
         </div>
         <select value={rewards.consumable} onChange={(e) => setRewards({ ...rewards, consumable: e.target.value })} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs">

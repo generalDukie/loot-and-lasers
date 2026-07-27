@@ -2,18 +2,17 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { RACES, CLASSES, STAT_ICONS } from "@/lib/gameData";
+import { RACES, CLASSES } from "@/lib/gameData";
 import { bustMyCharacterCache } from "@/lib/socialEngine";
 import RaceCard from "@/components/game/RaceCard";
 import ClassCard from "@/components/game/ClassCard";
-import StatAllocator from "@/components/game/StatAllocator";
+import ClassStatsChart from "@/components/game/ClassStatsChart";
 import CharacterAvatar, { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 import ArrowSelector from "@/components/game/ArrowSelector";
 import { popIn, staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
 import { ChevronRight, ChevronLeft, Rocket, Check, X, Loader2 } from "lucide-react";
 
 const STEPS = ["Race", "Class", "Looks", "Launch"];
-const EMPTY_ALLOC = { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 };
 
 export default function CharacterCreation() {
   const navigate = useNavigate();
@@ -31,7 +30,6 @@ export default function CharacterCreation() {
     nose: "",
     eyebrows: "",
     marking: "",
-    allocated: { ...EMPTY_ALLOC },
   });
   const [checked, setChecked] = useState(false);
   const [startCrystals, setStartCrystals] = useState(100);
@@ -84,11 +82,8 @@ export default function CharacterCreation() {
   const race = form.race ? RACES[form.race] : null;
   const cls = form.class ? CLASSES[form.class] : null;
 
-  // Raw base stats — racial % bonuses applied at compute time, previewed here.
-  const baseStats = cls ? { ...cls.baseStats } : { ...EMPTY_ALLOC };
-  if (cls) {
-    Object.entries(form.allocated || {}).forEach(([k, v]) => { baseStats[k] += v; });
-  }
+  // Base class stats — racial % bonuses applied at compute time; previewed here.
+  const baseStats = cls ? { ...cls.baseStats } : { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 };
   const finalStats = { ...baseStats };
   if (race) {
     Object.entries(race.bonuses).forEach(([k, v]) => { finalStats[k] = Math.round((finalStats[k] || 0) * (1 + v)); });
@@ -127,7 +122,6 @@ export default function CharacterCreation() {
         setStep(2);
         return;
       }
-      const remaining = 10 - Object.values(form.allocated || {}).reduce((a, b) => a + (b || 0), 0);
       const created = await api.entities.Character.create({
         name: form.name.trim(),
         legacy_name: userLegacyName || undefined,
@@ -138,7 +132,7 @@ export default function CharacterCreation() {
         experience_to_next_level: 100,
         nova_crystals: startCrystals,
         stats: baseStats,
-        unspent_stat_points: remaining,
+        unspent_stat_points: 0,
         stardust: 0,
         appearance: {
           skin_color: form.skinColor || race.skinColors[0],
@@ -168,8 +162,6 @@ export default function CharacterCreation() {
     if (!skinTones.length) return;
     setForm(f => ({ ...f, skinColor: skinTones[(skinIdx + d + skinTones.length) % skinTones.length] }));
   };
-
-  const remainingPoints = 10 - Object.values(form.allocated || {}).reduce((a, b) => a + (b || 0), 0);
 
   const canNext = step === 0 ? !!form.race
     : step === 1 ? !!form.class
@@ -282,36 +274,12 @@ export default function CharacterCreation() {
                               <p className="text-[10px] text-accent/80 italic mt-1">{cls.special.identity}</p>
                             </div>
                           )}
-                          <div className="mt-3 pt-2 border-t border-border/40">
-                            <p className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-1.5">Starting Stats</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {Object.entries(cls.baseStats).map(([stat, val]) => (
-                                <span key={stat} className="text-[11px] bg-muted/40 px-2 py-0.5 rounded text-foreground/80">
-                                  {STAT_ICONS[stat]} {stat.slice(0, 3).toUpperCase()} {val}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
                         </div>
-
                         <div className="p-3 bg-muted/20 rounded-xl border border-border/40">
-                          <p className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-2">
-                            Spend points now — leftovers stay banked
-                          </p>
-                          <StatAllocator
-                            stats={finalStats}
+                          <ClassStatsChart
                             className={form.class}
-                            allocated={form.allocated}
-                            points={remainingPoints}
-                            onAdd={(s) => setForm(f => {
-                              const pts = 10 - Object.values(f.allocated || {}).reduce((a, b) => a + (b || 0), 0);
-                              if (pts <= 0) return f;
-                              return { ...f, allocated: { ...f.allocated, [s]: (f.allocated?.[s] || 0) + 1 } };
-                            })}
-                            onRemove={(s) => setForm(f => {
-                              if (!(f.allocated?.[s] > 0)) return f;
-                              return { ...f, allocated: { ...f.allocated, [s]: f.allocated[s] - 1 } };
-                            })}
+                            stats={finalStats}
+                            raceBonusNote={race ? `Includes ${race.name} racial bonuses on the preview values.` : null}
                           />
                         </div>
                       </motion.div>
@@ -422,36 +390,29 @@ export default function CharacterCreation() {
                 <div className="space-y-5">
                   <h2 className="font-display font-semibold text-lg tracking-wide">Looking Good. Ship It.</h2>
 
-                  <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start p-4 bg-muted/20 rounded-xl border border-border/40">
-                    <CharacterAvatar
-                      race={form.race}
-                      skinColor={form.skinColor || race.skinColors[0]}
-                      eyeStyle={form.eyeStyle}
-                      ears={form.ears}
-                      mouth={form.mouth}
-                      nose={form.nose}
-                      eyebrows={form.eyebrows}
-                      marking={form.marking}
-                      size={140}
-                    />
-                    <div className="flex-1 text-center sm:text-left space-y-3 min-w-0">
-                      <div>
+                  <div className="grid sm:grid-cols-[auto_1fr] gap-5 items-start p-4 bg-muted/20 rounded-xl border border-border/40">
+                    <div className="flex flex-col items-center gap-2">
+                      <CharacterAvatar
+                        race={form.race}
+                        skinColor={form.skinColor || race.skinColors[0]}
+                        eyeStyle={form.eyeStyle}
+                        ears={form.ears}
+                        mouth={form.mouth}
+                        nose={form.nose}
+                        eyebrows={form.eyebrows}
+                        marking={form.marking}
+                        size={140}
+                      />
+                      <div className="text-center">
                         <h3 className="font-display font-bold text-xl glow-cyan">{form.name}</h3>
                         <p className="text-sm text-muted-foreground mt-0.5">{race.name} · {cls.name}</p>
                       </div>
-                      <div className="flex flex-wrap justify-center sm:justify-start gap-1.5">
-                        {Object.entries(finalStats).map(([stat, val]) => (
-                          <span key={stat} className="text-[11px] bg-muted/40 px-2 py-0.5 rounded text-foreground/80">
-                            {STAT_ICONS[stat]} {stat.slice(0, 3).toUpperCase()} {val}
-                          </span>
-                        ))}
-                      </div>
-                      {remainingPoints > 0 && (
-                        <p className="text-[11px] text-primary">
-                          {remainingPoints} point{remainingPoints === 1 ? "" : "s"} banked for later
-                        </p>
-                      )}
                     </div>
+                    <ClassStatsChart
+                      className={form.class}
+                      stats={finalStats}
+                      raceBonusNote={`Includes ${race.name} racial bonuses.`}
+                    />
                   </div>
                 </div>
               )}

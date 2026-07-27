@@ -163,39 +163,64 @@ export const PROMO_CODES = {
     label: "Founders Pack",
     rewards: { level: 150, nova_crystals: 50000, fullLegendary: true },
   },
+  XP90K: {
+    label: "90,000 Experience Dump",
+    rewards: { experience: 90000 },
+  },
 };
 
 export async function redeemPromoCode(gameService, character, code) {
-  const entry = PROMO_CODES[code];
+  const entry = PROMO_CODES[code] || PROMO_CODES[Object.keys(PROMO_CODES).find((k) => k.toLowerCase() === String(code).toLowerCase())];
   if (!entry) return { ok: false, status: 404, error: "Invalid promo code" };
+  const canonical = Object.keys(PROMO_CODES).find((k) => PROMO_CODES[k] === entry) || code;
   const redeemed = character.promo_codes_redeemed || [];
-  if (redeemed.includes(code)) return { ok: false, status: 409, error: "Code already redeemed" };
-
-  const patch = {};
-  if (entry.rewards.nova_crystals) patch.nova_crystals = (character.nova_crystals || 0) + entry.rewards.nova_crystals;
-  if (entry.rewards.level) {
-    patch.level = entry.rewards.level;
-    patch.experience = 0;
-    patch.experience_to_next_level = expForLevel(entry.rewards.level);
-    const gained = entry.rewards.level - (character.level || 1);
-    if (gained > 0) patch.unspent_stat_points = (character.unspent_stat_points || 0) + gained * 4;
+  if (redeemed.includes(canonical) || redeemed.includes(code)) {
+    return { ok: false, status: 409, error: "Code already redeemed" };
   }
-  const items = [];
-  if (entry.rewards.fullLegendary) {
+
+  const r = entry.rewards || {};
+  const standard = {};
+  if (r.experience) standard.experience = r.experience;
+  if (r.stardust) standard.stardust = r.stardust;
+  if (r.nova_crystals && !r.level) standard.nova_crystals = r.nova_crystals;
+  if (r.fuel) standard.fuel = r.fuel;
+
+  let patch = {};
+  let items = [];
+  if (Object.keys(standard).length) {
+    const applied = await applyCharacterRewards(gameService, character.id, standard);
+    patch = { ...applied.patch };
+    items = applied.items || [];
+  }
+
+  // Re-read after standard apply so special rewards stack cleanly.
+  const ch = await gameService.asServiceRole.entities.Character.get(character.id);
+  const special = {};
+  if (r.nova_crystals && r.level) {
+    special.nova_crystals = (ch.nova_crystals || 0) + r.nova_crystals;
+  }
+  if (r.level) {
+    special.level = r.level;
+    special.experience = 0;
+    special.experience_to_next_level = expForLevel(r.level);
+    const gained = r.level - (ch.level || 1);
+    if (gained > 0) special.unspent_stat_points = (ch.unspent_stat_points || 0) + gained * 4;
+  }
+  if (r.fullLegendary) {
     const slots = ["weapon", "armor", "helmet", "boots", "accessory", "ship_module"];
-    const equipped = { ...(character.equipped_items || {}) };
-    const lvl = entry.rewards.level || character.level || 1;
+    const equipped = { ...(ch.equipped_items || {}) };
+    const lvl = r.level || ch.level || 1;
     for (const type of slots) {
       const it = randomItem("legendary", lvl, type);
       const created = await gameService.asServiceRole.entities.Item.create({
-        ...it, owner_id: character.created_by_id, character_id: character.id, is_equipped: true,
+        ...it, owner_id: ch.created_by_id, character_id: ch.id, is_equipped: true,
       });
       items.push(created);
       equipped[type] = created.id;
     }
-    patch.equipped_items = equipped;
+    special.equipped_items = equipped;
   }
-  patch.promo_codes_redeemed = [...redeemed, code];
-  await gameService.asServiceRole.entities.Character.update(character.id, patch);
-  return { ok: true, patch, items, code, label: entry.label };
+  special.promo_codes_redeemed = [...(ch.promo_codes_redeemed || redeemed), canonical];
+  await gameService.asServiceRole.entities.Character.update(ch.id, special);
+  return { ok: true, patch: { ...patch, ...special }, items, code: canonical, label: entry.label };
 }

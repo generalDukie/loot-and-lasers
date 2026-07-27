@@ -1,16 +1,13 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Palette, Pencil, Check, Shield, ChevronLeft, ChevronRight } from "lucide-react";
+import { Palette, Shield, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { useSiteConfig } from "@/lib/SiteConfigContext";
 import ThemeEditor from "@/components/admin/ThemeEditor";
 
-// Floating admin dock pinned to the right edge — admin-only quick actions
-// (Theme, Edit toggle, Admin console). Collapsible to a thin tab.
+// Floating admin dock — Theme + Admin console (no layout edit mode).
 export default function AdminDock() {
   const { user } = useAuth();
-  const { editMode, setEditMode } = useSiteConfig();
   const [themeOpen, setThemeOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -24,7 +21,6 @@ export default function AdminDock() {
         transition={{ type: "spring", stiffness: 260, damping: 22, delay: 0.2 }}
         className="fixed right-0 top-1/2 -translate-y-1/2 z-40 flex items-stretch"
       >
-        {/* Collapse tab */}
         <button
           onClick={() => setCollapsed((c) => !c)}
           className="self-center w-5 py-3 rounded-l-lg bg-primary/20 border border-l border-y border-primary/40 text-primary hover:bg-primary/30 transition-colors"
@@ -49,17 +45,6 @@ export default function AdminDock() {
                   title="Edit global theme"
                 >
                   <Palette className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setEditMode(!editMode)}
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-colors ${
-                    editMode
-                      ? "bg-primary/25 text-primary border-primary/60"
-                      : "bg-muted/40 text-muted-foreground border-border/50 hover:text-foreground"
-                  }`}
-                  title={editMode ? "Exit edit mode" : "Edit text & layout"}
-                >
-                  {editMode ? <Check className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
                 </button>
                 <Link
                   to="/admin"

@@ -16,7 +16,7 @@ export const BUILTIN_BUTTONS = [
   {
     id: "hero_ship",
     type: "split",
-    label: "Hero / Ship",
+    label: "Crew Quarters",
     icon: "🛋️",
     color: "#5CFFB0",
     desc: "Your hero & vessel",

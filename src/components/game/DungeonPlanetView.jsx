@@ -4,7 +4,17 @@ import { Skull, Crown, Swords, Gem, Lock, Check, Clock, Zap } from "lucide-react
 
 function fmtMs(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
-export default function DungeonPlanetView({ planet, currentEnemy, reviveNeeded, reviveCost, onFight, cooldownActive, cooldownRemaining, cooldownSkipCost, onSkipCooldown }) {
+export default function DungeonPlanetView({
+  planet,
+  currentEnemy,
+  paidContinue,
+  continueCost,
+  onFight,
+  cooldownActive,
+  cooldownRemaining,
+  cooldownSkipCost,
+  onSkipCooldown,
+}) {
   const enemies = Array.from({ length: 10 }, (_, i) => i + 1);
   return (
     <div className="painted-panel canvas-grain p-5">
@@ -84,18 +94,18 @@ export default function DungeonPlanetView({ planet, currentEnemy, reviveNeeded, 
         onClick={onFight}
         disabled={cooldownActive}
         className={`w-full text-sm px-4 py-2.5 rounded-lg font-display font-bold tracking-wide flex items-center justify-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-          reviveNeeded ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40" : "painted-btn"
+          paidContinue ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40" : "painted-btn"
         }`}
       >
-        {reviveNeeded ? (
-          <><Gem className="w-4 h-4" /> Revive & Fight · {reviveCost} 💎</>
+        {paidContinue ? (
+          <><Gem className="w-4 h-4" /> Fight Again · {continueCost} 💎</>
         ) : (
           <><Swords className="w-4 h-4" /> Fight Enemy {currentEnemy}{currentEnemy === 10 ? " (BOSS)" : ""}</>
         )}
       </button>
-      {reviveNeeded && (
+      {paidContinue && (
         <p className="mt-2 text-center text-[10px] text-amber-400/80 flex items-center justify-center gap-1">
-          <Skull className="w-3 h-3" /> Daily deaths spent — revive to continue.
+          <Skull className="w-3 h-3" /> Free lives spent — pay to keep going (30 min between fights).
         </p>
       )}
     </div>

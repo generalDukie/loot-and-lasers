@@ -5,9 +5,11 @@ import { RACES, CLASSES, generateItem, rollItemRarity } from "@/lib/gameData";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 
 export const DUNGEON_ENEMIES_PER_PLANET = 10;
-export const DUNGEON_DEATHS_PER_DAY = 3;
-export const DUNGEON_REVIVE_COST = 20; // Nova crystals
-export const DUNGEON_EXTRA_LIFE_COST = 5; // Nova crystals per extra life
+export const DUNGEON_DEATHS_PER_DAY = 3; // free lives per day (ET rollover)
+export const DUNGEON_CONTINUE_COST = 5; // Nova crystals per fight after free lives are spent
+/** @deprecated use DUNGEON_CONTINUE_COST */
+export const DUNGEON_REVIVE_COST = DUNGEON_CONTINUE_COST;
+export const DUNGEON_EXTRA_LIFE_COST = DUNGEON_CONTINUE_COST;
 export const DUNGEON_BATTLE_COOLDOWN_MS = 30 * 60 * 1000; // 30-minute cooldown between battles
 export const DUNGEON_SKIP_COST = 10; // Nova crystals to skip the cooldown
 

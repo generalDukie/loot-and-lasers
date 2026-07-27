@@ -8,7 +8,7 @@ import { getMyCharacters, getMyCharacter, setActiveCharacter } from "@/lib/socia
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { fullName } from "@/lib/legacyName";
 import { popIn, staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
-import EditableText from "@/components/admin/EditableText";
+import SiteTitle from "@/components/admin/SiteTitle";
 
 const MAX_SLOTS = 3;
 
@@ -65,7 +65,7 @@ export default function CharacterSelectPage() {
     return (
       <div className="min-h-screen stars-bg flex items-center justify-center">
         <div className="text-center">
-          <EditableText textKey="app.title" default="LOOT & LASERS" as="h1" className="font-display font-bold text-3xl glow-cyan tracking-widest mb-4" />
+          <SiteTitle as="h1" className="font-display font-bold text-3xl glow-cyan tracking-widest mb-4" />
           <Loader2 className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto" />
         </div>
       </div>

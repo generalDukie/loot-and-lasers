@@ -9,7 +9,7 @@ import LegacyNameModal from "@/components/game/LegacyNameModal";
 import { getProgress, canClaimToday, todayUTC } from "@/lib/dailyLoginEngine";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { useAuth } from "@/lib/AuthContext";
-import EditableText from "@/components/admin/EditableText";
+import SiteTitle from "@/components/admin/SiteTitle";
 
 export default function Home() {
   const { character, loading } = useMyCharacter();
@@ -51,7 +51,7 @@ export default function Home() {
     return (
       <div className="fixed inset-0 flex items-center justify-center stars-bg">
         <div className="text-center">
-          <EditableText textKey="app.title" default="LOOT & LASERS" as="h1" className="font-display font-bold text-3xl glow-cyan tracking-widest mb-4" />
+          <SiteTitle as="h1" className="font-display font-bold text-3xl glow-cyan tracking-widest mb-4" />
           <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto" />
         </div>
       </div>

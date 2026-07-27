@@ -1,12 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/api/gameClient";
 
-// Global site configuration: theme overrides + in-game text overrides.
-// Admins edit; changes propagate live to all users via a realtime subscription.
+// Global site configuration: theme overrides + text overrides (display only).
 const SiteConfigContext = createContext(null);
-
-// Grid cell size (px) for the hub edit-mode grid overlay + snap-to-grid.
-export const HUB_GRID_SIZE = 40;
 
 // Convert #rrggbb → "h s% l%" channels for hsl(var(--token)) consumers.
 function hexToHsl(hex) {
@@ -35,9 +31,6 @@ function hexToHsl(hex) {
 export function SiteConfigProvider({ children }) {
   const [theme, setTheme] = useState({});
   const [textOverrides, setTextOverrides] = useState({});
-  const [editMode, setEditMode] = useState(false);
-  const [showGrid, setShowGrid] = useState(false);
-  const [snapGrid, setSnapGrid] = useState(true);
   const idRef = useRef(null);
 
   const applyRecord = useCallback((rec) => {
@@ -58,7 +51,6 @@ export function SiteConfigProvider({ children }) {
     return () => { active = false; unsubscribe(); };
   }, [applyRecord]);
 
-  // Apply theme overrides to CSS custom properties (live, global).
   useEffect(() => {
     const root = document.documentElement;
     const set = (token, hex) => {
@@ -126,7 +118,7 @@ export function SiteConfigProvider({ children }) {
 
   return (
     <SiteConfigContext.Provider
-      value={{ theme, textOverrides, editMode, setEditMode, showGrid, setShowGrid, snapGrid, setSnapGrid, updateTheme, setText, resetText, getText }}
+      value={{ theme, textOverrides, updateTheme, setText, resetText, getText }}
     >
       {children}
     </SiteConfigContext.Provider>
@@ -135,7 +127,15 @@ export function SiteConfigProvider({ children }) {
 
 export function useSiteConfig() {
   const ctx = useContext(SiteConfigContext);
-  // Safe default if used outside the provider.
-  if (!ctx) return { theme: {}, textOverrides: {}, editMode: false, setEditMode: () => {}, showGrid: false, setShowGrid: () => {}, snapGrid: false, setSnapGrid: () => {}, updateTheme: () => {}, setText: () => {}, resetText: () => {}, getText: (_k, d) => d };
+  if (!ctx) {
+    return {
+      theme: {},
+      textOverrides: {},
+      updateTheme: () => {},
+      setText: () => {},
+      resetText: () => {},
+      getText: (_k, d) => d,
+    };
+  }
   return ctx;
 }

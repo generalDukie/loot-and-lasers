@@ -1,0 +1,264 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Exo+2:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@layer base {
+  :root {
+    --background: 230 25% 6%;
+    --foreground: 210 40% 92%;
+    --card: 230 25% 9%;
+    --card-foreground: 210 40% 92%;
+    --popover: 230 25% 9%;
+    --popover-foreground: 210 40% 92%;
+    --primary: 190 90% 50%;
+    --primary-foreground: 230 25% 6%;
+    --secondary: 270 60% 55%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 230 20% 14%;
+    --muted-foreground: 210 15% 55%;
+    --accent: 270 60% 55%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 230 20% 18%;
+    --input: 230 20% 18%;
+    --ring: 190 90% 50%;
+    --chart-1: 190 90% 50%;
+    --chart-2: 270 60% 55%;
+    --chart-3: 150 60% 50%;
+    --chart-4: 45 90% 60%;
+    --chart-5: 0 70% 55%;
+    --radius: 0.75rem;
+    --font-heading: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'Exo 2', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --sidebar-background: 230 25% 8%;
+    --sidebar-foreground: 210 40% 92%;
+    --sidebar-primary: 190 90% 50%;
+    --sidebar-primary-foreground: 230 25% 6%;
+    --sidebar-accent: 230 20% 14%;
+    --sidebar-accent-foreground: 210 40% 92%;
+    --sidebar-border: 230 20% 18%;
+    --sidebar-ring: 190 90% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+}
+
+/* Sci-fi glow effects */
+.glow-cyan { text-shadow: 0 0 10px hsl(190 90% 50% / 0.5), 0 0 20px hsl(190 90% 50% / 0.2); }
+.glow-purple { text-shadow: 0 0 10px hsl(270 60% 55% / 0.5), 0 0 20px hsl(270 60% 55% / 0.2); }
+.border-glow-cyan { box-shadow: 0 0 8px hsl(190 90% 50% / 0.15), inset 0 0 8px hsl(190 90% 50% / 0.05); }
+.border-glow-purple { box-shadow: 0 0 8px hsl(270 60% 55% / 0.15), inset 0 0 8px hsl(270 60% 55% / 0.05); }
+
+/* ═══════════════════════════════════════════ */
+/* Hand-painted fantasy-cartoon art direction */
+/* ═══════════════════════════════════════════ */
+
+/* Painterly panel — layered gradient, bevelled rim, soft cast shadow */
+.painted-panel {
+  background:
+    linear-gradient(180deg, hsl(230 24% 11%) 0%, hsl(232 30% 7%) 100%);
+  border: 1px solid hsl(230 20% 20%);
+  border-radius: 1.1rem;
+  box-shadow:
+    0 10px 28px hsl(232 40% 2% / 0.6),
+    inset 0 1px 0 hsl(0 0% 100% / 0.06),
+    inset 0 0 0 1px hsl(230 20% 16% / 0.8);
+}
+
+/* Decorative illustrated frame — glowing corner studs */
+.painted-frame { position: relative; }
+.painted-frame::before,
+.painted-frame::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  border: 2px solid hsl(190 90% 50% / 0.55);
+  border-radius: 4px;
+  filter: drop-shadow(0 0 3px hsl(190 90% 50% / 0.4));
+}
+.painted-frame::before { top: 9px; left: 9px; border-right: 0; border-bottom: 0; border-top-left-radius: 8px; }
+.painted-frame::after { bottom: 9px; right: 9px; border-left: 0; border-top: 0; border-bottom-right-radius: 8px; }
+
+/* Large readable painted button — chunky bevel, tactile press */
+.painted-btn {
+  background: linear-gradient(180deg, hsl(190 90% 56%) 0%, hsl(192 90% 42%) 100%);
+  border: 2px solid hsl(192 90% 30%);
+  color: hsl(232 30% 6%);
+  border-radius: 0.75rem;
+  box-shadow: 0 5px 0 hsl(192 90% 26%), inset 0 1px 0 hsl(0 0% 100% / 0.35);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
+}
+.painted-btn:hover { box-shadow: 0 5px 0 hsl(192 90% 26%), 0 0 14px hsl(190 90% 50% / 0.35); }
+.painted-btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 hsl(192 90% 26%), inset 0 1px 0 hsl(0 0% 100% / 0.3);
+}
+.painted-btn-accent {
+  background: linear-gradient(180deg, hsl(270 60% 62%) 0%, hsl(272 60% 46%) 100%);
+  border-color: hsl(272 60% 34%);
+  box-shadow: 0 5px 0 hsl(272 60% 30%), inset 0 1px 0 hsl(0 0% 100% / 0.3);
+}
+
+/* Canvas grain — subtle painterly paper texture overlay */
+.canvas-grain {
+  position: relative;
+}
+.canvas-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0.04;
+  background-image:
+    repeating-radial-gradient(circle at 30% 20%, hsl(0 0% 100%) 0, transparent 2px),
+    repeating-radial-gradient(circle at 70% 80%, hsl(0 0% 100%) 0, transparent 2px);
+  background-size: 5px 5px, 7px 7px;
+}
+
+/* ═══════════════════════════════════════════ */
+/* Neon sci-fi tavern surface treatment       */
+/* ═══════════════════════════════════════════ */
+
+/* Metallic industrial grid surface */
+.metal-grid {
+  background-color: transparent;
+  background-image:
+    linear-gradient(hsl(190 90% 50% / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(270 60% 55% / 0.03) 1px, transparent 1px);
+  background-size: 30px 30px, 30px 30px;
+}
+
+/* Neon glow text variants */
+.glow-violet { text-shadow: 0 0 10px hsl(270 90% 60% / 0.5), 0 0 20px hsl(270 90% 60% / 0.2); }
+.glow-green { text-shadow: 0 0 10px hsl(120 100% 50% / 0.5), 0 0 20px hsl(120 100% 50% / 0.2); }
+.glow-orange { text-shadow: 0 0 10px hsl(30 100% 55% / 0.5), 0 0 20px hsl(30 100% 55% / 0.2); }
+
+/* Notification badge */
+.neon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: hsl(230 25% 6%); }
+::-webkit-scrollbar-thumb { background: hsl(230 20% 22%); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(190 90% 50% / 0.5); }
+
+/* Deep space base */
+.stars-bg {
+  background-color: hsl(232 30% 4%);
+}
+
+/* Nebula layer — slow drifting cosmic clouds */
+.nebula-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 45% at 18% 22%, hsl(285 65% 28% / 0.28), transparent 60%),
+    radial-gradient(ellipse 55% 40% at 82% 28%, hsl(195 85% 32% / 0.22), transparent 60%),
+    radial-gradient(ellipse 65% 50% at 50% 85%, hsl(325 60% 26% / 0.20), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 90% 72%, hsl(260 60% 28% / 0.18), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 8% 75%, hsl(210 70% 30% / 0.16), transparent 60%);
+  animation: nebula-drift 80s ease-in-out infinite alternate;
+}
+@keyframes nebula-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(2%, -1.5%) scale(1.06); }
+  100% { transform: translate(-1.5%, 2%) scale(1.03); }
+}
+
+/* Star field — dense, multi-layered, twinkling */
+.stars-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 25px 12px, hsl(0 0% 100% / 0.8), transparent),
+    radial-gradient(1px 1px at 50px 48px, hsl(195 90% 82% / 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 125px 24px, hsl(0 0% 100% / 0.5), transparent),
+    radial-gradient(1px 1px at 78px 70px, hsl(280 60% 82% / 0.55), transparent),
+    radial-gradient(2px 2px at 155px 58px, hsl(195 90% 82% / 0.45), transparent),
+    radial-gradient(1px 1px at 12px 90px, hsl(0 0% 100% / 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 92px 100px, hsl(280 60% 82% / 0.4), transparent),
+    radial-gradient(1px 1px at 178px 40px, hsl(0 0% 100% / 0.7), transparent),
+    radial-gradient(1px 1px at 35px 65px, hsl(195 90% 82% / 0.5), transparent),
+    radial-gradient(2px 2px at 168px 88px, hsl(0 0% 100% / 0.35), transparent);
+  background-size: 200px 110px;
+  background-repeat: repeat;
+  animation: twinkle 6s ease-in-out infinite;
+}
+.stars-layer-2 {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 60px 20px, hsl(0 0% 100% / 0.5), transparent),
+    radial-gradient(2px 2px at 140px 50px, hsl(195 90% 82% / 0.35), transparent),
+    radial-gradient(1px 1px at 30px 75px, hsl(280 60% 82% / 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 180px 95px, hsl(0 0% 100% / 0.45), transparent);
+  background-size: 220px 120px;
+  background-repeat: repeat;
+  animation: twinkle 9s ease-in-out infinite reverse;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Space station scene — twinkling stars */
+@keyframes ss-twinkle { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+.ss-star { animation: ss-twinkle 3s ease-in-out infinite; }
+
+/* Shooting stars — streaks across the void at every level of the scene */
+.shooting-stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.shooting-star {
+  position: absolute;
+  left: -160px;
+  width: 140px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.9));
+  border-radius: 9999px;
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.6));
+  opacity: 0;
+  animation: shoot 9s linear infinite;
+}
+@keyframes shoot {
+  0%   { transform: translate(0, 0) rotate(18deg); opacity: 0; }
+  8%   { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translate(120vw, 38vh) rotate(18deg); opacity: 0; }
+}

@@ -432,7 +432,26 @@ export function generateItem(rarity, playerLevel, type) {
 // ATTRIBUTE POINTS
 // ═══════════════════════════════════════════
 export const STAT_POINTS_START = 10;
+/** @deprecated Prefer getStatPointsForLevel — kept for older call sites. */
 export const STAT_POINTS_PER_LEVEL = 4;
+
+/** Stat points granted when reaching `level` (level-up into this level). */
+export function getStatPointsForLevel(level) {
+  const L = Math.max(1, level || 1);
+  if (L <= 50) return 4;
+  if (L <= 100) return 3;
+  if (L <= 200) return 2;
+  return 1;
+}
+
+/** Total unspent points to award when leveling from `fromLevel` → `toLevel`. */
+export function getStatPointsForLevelRange(fromLevel, toLevel) {
+  const from = Math.max(1, fromLevel || 1);
+  const to = Math.max(from, toLevel || from);
+  let pts = 0;
+  for (let L = from + 1; L <= to; L++) pts += getStatPointsForLevel(L);
+  return pts;
+}
 
 // ═══════════════════════════════════════════
 // STARDUST (primary currency — earned via missions, arena, and dissolving gear in the Black Hole)
@@ -583,19 +602,143 @@ export function rollItemRarity(chanceString, playerLevel = 1) {
   return RARITY_ORDER[idx];
 }
 
-export function getExpForLevel(level) {
-  // Gentler early curve so the first levels come quickly; still scales long-term.
-  return Math.floor(60 * Math.pow(1.42, level - 1));
+/** Linear interpolate a value between [x0,y0] design waypoints. */
+function lerpWaypoints(level, points) {
+  const L = Math.max(1, Math.floor(level || 1));
+  if (L <= points[0][0]) return points[0][1];
+  for (let i = 0; i < points.length - 1; i++) {
+    const [x0, y0] = points[i];
+    const [x1, y1] = points[i + 1];
+    if (L <= x1) {
+      const t = (L - x0) / (x1 - x0);
+      return y0 + (y1 - y0) * t;
+    }
+  }
+  const [xA, yA] = points[points.length - 2];
+  const [xB, yB] = points[points.length - 1];
+  const slope = (yB - yA) / (xB - xA);
+  return yB + slope * (L - xB);
 }
 
-// Early-game acceleration: bonus XP + cheaper fuel for the first ~15-20 minutes.
-// Tapers off as you level so progression normalizes for the long haul.
-export function getEarlyXpMultiplier(level = 1) {
-  const l = Math.max(1, level || 1);
-  if (l <= 2) return 2.2;
-  if (l <= 4) return 1.6;
-  if (l <= 7) return 1.3;
-  if (l <= 10) return 1.12;
+// Design chart: XP needed for current level → next.
+// Target pacing: 1→50 ~3d, 50→100 ~1wk, 100→200 ~2wk, then progressively slower.
+const XP_TO_NEXT_WAYPOINTS = [
+  [1, 40],
+  [5, 50],
+  [10, 120],
+  [15, 150],
+  [25, 335],
+  [50, 1135],
+  [75, 1810],
+  [100, 2590],
+  [150, 4460],
+  [200, 14300],
+  [250, 19800],
+  [300, 51700],
+  [350, 65000],
+  [400, 159000],
+  [450, 190000],
+  [500, 228000],
+];
+
+// Design chart: mission XP granted per 1 fuel spent.
+const MISSION_XP_PER_FUEL_WAYPOINTS = [
+  [1, 10],
+  [10, 16],
+  [25, 29],
+  [50, 57],
+  [75, 90],
+  [100, 130],
+  [150, 223],
+  [200, 334],
+  [250, 461],
+  [300, 603],
+  [350, 758],
+  [400, 927],
+  [450, 1108],
+  [500, 1301],
+];
+
+// Stardust per fuel (SD/F) — parallel to XP/fuel, ~1.5× for currency weight.
+const MISSION_SD_PER_FUEL_WAYPOINTS = MISSION_XP_PER_FUEL_WAYPOINTS.map(([lvl, xp]) => [lvl, Math.round(xp * 1.5)]);
+
+export function getExpForLevel(level) {
+  return Math.max(1, Math.round(lerpWaypoints(level, XP_TO_NEXT_WAYPOINTS)));
+}
+
+/** Mission XP per 1 fuel at this level (design chart). */
+export function getMissionXpPerFuel(level = 1) {
+  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS)));
+}
+
+/** Mission stardust per 1 fuel at this level (SD/F). */
+export function getMissionStardustPerFuel(level = 1) {
+  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS)));
+}
+
+/** Per-mission efficiency roll — 0.90 to 1.10 inclusive-ish. */
+export function rollMissionEfficiency(rng = Math.random) {
+  const raw = 0.9 + rng() * 0.2;
+  return Math.round(raw * 100) / 100;
+}
+
+/** Clamp / default efficiency for older missions missing the field. */
+export function normalizeMissionEfficiency(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1.1, Math.max(0.9, Math.round(n * 100) / 100));
+}
+
+/** Display helper: 1.09 → "+9%", 0.93 → "-7%". */
+export function formatEfficiencyPct(efficiency) {
+  const pct = Math.round((normalizeMissionEfficiency(efficiency) - 1) * 100);
+  if (pct === 0) return "±0%";
+  return pct > 0 ? `+${pct}%` : `${pct}%`;
+}
+
+/**
+ * Mission XP = Fuel × Level XP/F × efficiency (0.90–1.10).
+ * Before ship/collection bonuses.
+ */
+export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
+  const fuel = Math.max(0, Number(fuelCost) || 0);
+  const eff = normalizeMissionEfficiency(efficiency);
+  return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionXpPerFuel(level) * eff));
+}
+
+/**
+ * Mission Stardust = Fuel × Level SD/F × efficiency (0.90–1.10).
+ * Before ship/nexus bonuses.
+ */
+export function computeMissionStardustFromFuel(fuelCost, level = 1, efficiency = 1) {
+  const fuel = Math.max(0, Number(fuelCost) || 0);
+  const eff = normalizeMissionEfficiency(efficiency);
+  return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionStardustPerFuel(level) * eff));
+}
+
+/**
+ * Passthrough for non-mission grants. Pacing lives in getExpForLevel + XP/fuel.
+ * Kept so call sites stay stable.
+ */
+export function scaleXpReward(baseXp, _level = 1) {
+  const base = Math.max(0, Number(baseXp) || 0);
+  return Math.max(base > 0 ? 1 : 0, Math.round(base));
+}
+
+/**
+ * Combat/frontier XP — scales with the mission XP/fuel chart so fights stay
+ * relevant at every band. `baseXp` is treated as ~L1 "fuel-minutes" × 10.
+ */
+export function scaleCombatXp(baseXp, playerLevel = 1, contentLevel = 1) {
+  const pl = Math.max(1, playerLevel || 1);
+  const cl = Math.max(1, contentLevel || 1);
+  const relative = Math.max(0.5, Math.min(1.65, 0.55 + 0.45 * (pl / cl)));
+  const fuelEquiv = (Number(baseXp) || 0) / 10;
+  return Math.max(1, Math.round(fuelEquiv * getMissionXpPerFuel(pl) * relative));
+}
+
+/** @deprecated Prefer getMissionXpPerFuel / computeMissionXpFromFuel. */
+export function getEarlyXpMultiplier(_level = 1) {
   return 1;
 }
 
@@ -730,7 +873,6 @@ export function generateDailyMissions(character) {
     const t = base[i % base.length];
     const maxRisk = level <= 2 ? 3 : level <= 5 ? 4 : 5;
     const risk = 1 + Math.floor(Math.random() * maxRisk);
-    const yieldMult = 0.6 + risk * 0.35;
     // Mission duration scales with level via waypoints: 30s@L1, 2.5m@L5,
     // 5m@L10, 10m@L15, 20m@L25 (cap). The 3 daily quests each occupy a
     // different tier (¼, ½, full of the level's max) so at L25 they land on
@@ -739,16 +881,24 @@ export function generateDailyMissions(character) {
     const tierFactor = [0.25, 0.5, 1.0][i] ?? 1.0;
     const duration = Math.min(MISSION_MAX_DURATION, Math.max(30, Math.round((baseMax * tierFactor) / 15) * 15));
     const collectible = COLLECTIBLES[Math.floor(Math.random() * COLLECTIBLES.length)];
-    return {
+    const sdEff = rollMissionEfficiency();
+    const xpEff = rollMissionEfficiency();
+    const draft = {
       ...t,
       _seed: `${Date.now()}-${i}`,
       patron: givers[i % givers.length],
       risk,
       difficulty: RISK_DIFFICULTY[risk],
       duration_seconds: duration,
+      stardust_efficiency: sdEff,
+      xp_efficiency: xpEff,
+    };
+    const fuelEst = getEffectiveFuelCost(character, draft);
+    return {
+      ...draft,
       rewards: {
-        experience: Math.round(t.rewards.experience * yieldMult),
-        stardust: Math.round(t.rewards.stardust * yieldMult),
+        experience: computeMissionXpFromFuel(fuelEst, level, xpEff),
+        stardust: computeMissionStardustFromFuel(fuelEst, level, sdEff),
         item_rarity_chance: RISK_RARITY[risk],
         collectible,
       },
@@ -786,8 +936,10 @@ export function generateLowFuelMission(character, currentFuel, excludePatronName
   // Spend as much of the remainder as possible on a clean 15s-snapped timer.
   const duration = Math.min(300, Math.max(30, Math.round((fuel * 60) / 15) * 15));
   const fuelCost = Math.min(fuel, Math.round((duration / 60) * 100) / 100);
-  const minutes = duration / 60;
   const tpl = LOW_FUEL_TEMPLATES[slot % LOW_FUEL_TEMPLATES.length];
+  const sdEff = rollMissionEfficiency();
+  const xpEff = rollMissionEfficiency();
+  const pinnedFuel = Math.max(0.5, fuelCost);
   return {
     name: tpl.name,
     description: tpl.description,
@@ -798,12 +950,14 @@ export function generateLowFuelMission(character, currentFuel, excludePatronName
     risk: 1,
     level_requirement: 1,
     // Pin cost to remainder so mounts/reductions can't push it above what you have.
-    fuel_cost: Math.max(0.5, fuelCost),
+    fuel_cost: pinnedFuel,
+    stardust_efficiency: sdEff,
+    xp_efficiency: xpEff,
     _lowFuel: true,
     patron: pickQuestGiver(Math.random, excludePatronNames),
     rewards: {
-      experience: Math.max(5, Math.round(level * 8 * minutes)),
-      stardust: Math.max(10, Math.round(level * 16 * minutes)),
+      experience: computeMissionXpFromFuel(pinnedFuel, level, xpEff),
+      stardust: computeMissionStardustFromFuel(pinnedFuel, level, sdEff),
       item_rarity_chance: "common",
     },
   };
@@ -1086,12 +1240,13 @@ export const SHIP_MODS = {
 };
 
 // ═══════════════════════════════════════════
-// SHIP TYPES (buyable hulls — unlocked at SHIP_UNLOCK_LEVEL)
+// SHIP TYPES (buyable hulls — staged unlock levels)
 // Each ship keeps its own independent mod loadout; inherent bonuses
 // apply only while that ship is active.
 // ═══════════════════════════════════════════
 export const STARTER_SHIP = "scout";
-export const SHIP_UNLOCK_LEVEL = 150;
+/** Highest hull gate (dreadnought). Individual ships use unlock_level. */
+export const SHIP_UNLOCK_LEVEL = 200;
 
 export const SHIP_TYPES = {
   scout: {
@@ -1107,13 +1262,13 @@ export const SHIP_TYPES = {
     upgrade_mult: 1.2,
   },
   cruiser: {
-    name: "Galaxy Cruiser", emoji: "🛳️", cost: 15000, unlock_level: 150,
+    name: "Galaxy Cruiser", emoji: "🛳️", cost: 15000, unlock_level: 100,
     desc: "Long-range endurance cruiser with an overcharged AI core.",
     inherent: { mission_xp_mult: 0.05, mission_duration_reduction: 0.03 },
     upgrade_mult: 1.4,
   },
   dreadnought: {
-    name: "Void Dreadnought", emoji: "🛸", cost: 50000, unlock_level: 250,
+    name: "Void Dreadnought", emoji: "🛸", cost: 40000, unlock_level: 200,
     desc: "Capital-class warship. The ultimate command vessel.",
     inherent: { mission_stardust_mult: 0.10, mission_xp_mult: 0.10, fuel_cost_reduction: 1 },
     upgrade_mult: 1.6,

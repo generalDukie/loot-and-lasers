@@ -1,30 +1,147 @@
 // ═══════════════════════════════════════════
 // DUNGEON PLANETS — 10-world PvE crawl
 // ═══════════════════════════════════════════
+
+// shipModCat maps to SHIP_MODS category keys — boss clears grant the next free tier.
 export const DUNGEON_PLANETS = [
-  { id: 1, name: "Verdant Expanse", icon: "🌍", color: "#22C55E", description: "Lush frontier world. The local fauna has teeth. Consider it a warm-up.", bossName: "Tharon Brood Matriarch", bossEmoji: "👾", shipMod: "Plasma Drive" },
-  { id: 2, name: "Ashen Reach", icon: "🏚️", color: "#3B82F6", description: "War-scarred ruins crawling with scavengers and worse. Watch the rooftops.", bossName: "Warden of Ash", bossEmoji: "🔥", shipMod: "Warp Coil" },
-  { id: 3, name: "Shadow Veil", icon: "🏴‍☠️", color: "#A855F7", description: "A nebula-smuggler's paradise. Everyone here wants your stardust and your organs.", bossName: "Captain Zyrik", bossEmoji: "💀", shipMod: "Phase Shift" },
-  { id: 4, name: "Shattered Expanse", icon: "🌀", color: "#F59E0B", description: "Spacetime is more of a suggestion here. Reality bites back.", bossName: "The Riftlord", bossEmoji: "🌀", shipMod: "Singularity Engine" },
-  { id: 5, name: "Abyssal Core", icon: "🕳️", color: "#EF4444", description: "Where stars go to die. Something down there is eating the light itself.", bossName: "Void Devourer", bossEmoji: "🕳️", shipMod: "Void Sail" },
-  { id: 6, name: "Frostfall Reach", icon: "❄️", color: "#06B6D4", description: "A frozen hellscape where the cold has learned to hunt in packs.", bossName: "Glacial Warden", bossEmoji: "🧊", shipMod: "Cryo Thruster" },
-  { id: 7, name: "Ember Maw", icon: "🌋", color: "#F97316", description: "A volcanic world ruled by things that swim in magma and breathe fire.", bossName: "Magma Titan", bossEmoji: "🌋", shipMod: "Solar Booster" },
-  { id: 8, name: "Void Sanctum", icon: "🌑", color: "#7C3AED", description: "A temple carved into a dead moon. The priests never left. Neither will you, easily.", bossName: "The Null King", bossEmoji: "🌑", shipMod: "Quantum Anchor" },
-  { id: 9, name: "Crystal Nexus", icon: "💎", color: "#14B8A6", description: "A lattice-world of living crystal that refracts your worst memories into lasers.", bossName: "Prism Sovereign", bossEmoji: "💎", shipMod: "Aether Wing" },
-  { id: 10, name: "World Zero", icon: "💫", color: "#FBBF24", description: "The first planet. The last stop. Whatever started everything is waiting here.", bossName: "The Genesis", bossEmoji: "💫", shipMod: "Genesis Core" },
+  {
+    id: 1, name: "Verdant Expanse", icon: "🌍", color: "#22C55E",
+    description: "Lush frontier world. The local fauna has teeth. Consider it a warm-up.",
+    lore: "Scout charts mark this as the soft edge of known space — until the canopy closes and the Brood answers. Every trail here was walked by something that never came back.",
+    bossName: "Tharon Brood Matriarch", bossEmoji: "👾",
+    shipMod: "Plasma Drive", shipModCat: "fuel_efficiency",
+    races: ["Grothak", "Zyrathi"], classes: ["Vanguard", "Astral Warden"],
+    enemyNames: ["Thornback", "Moss Reaver", "Canopy Stalker", "Rootmaw", "Sporekin", "Verdant Fang"],
+    bossRace: "Grothak", bossClass: "Astral Warden",
+  },
+  {
+    id: 2, name: "Ashen Reach", icon: "🏚️", color: "#3B82F6",
+    description: "War-scarred ruins crawling with scavengers and worse. Watch the rooftops.",
+    lore: "Once a trade hub, now a bone-yard of collapsed spires. Snipers nest in the ash, and the Warden still collects tithes in blood and scrap.",
+    bossName: "Warden of Ash", bossEmoji: "🔥",
+    shipMod: "Warp Coil", shipModCat: "warp_drive",
+    races: ["Synthara", "Cognati"], classes: ["Vanguard", "Technomancer"],
+    enemyNames: ["Ash Runner", "Ruin Sniper", "Scrap Hound", "Cinder Guard", "Rubble Knight", "Ember Jack"],
+    bossRace: "Synthara", bossClass: "Vanguard",
+  },
+  {
+    id: 3, name: "Shadow Veil", icon: "🏴‍☠️", color: "#A855F7",
+    description: "A nebula-smuggler's paradise. Everyone here wants your stardust and your organs.",
+    lore: "Fog thick enough to hide a fleet. Deals are sealed with knives, and Captain Zyrik's flag means your cargo already belongs to someone else.",
+    bossName: "Captain Zyrik", bossEmoji: "💀",
+    shipMod: "Phase Shift", shipModCat: "fuel_tank",
+    races: ["Zyrathi", "Luminae"], classes: ["Shadow Operative", "Cosmic Engineer"],
+    enemyNames: ["Veilcutter", "Dust Smuggler", "Night Hook", "Black Nebula", "Quiet Blade", "Zyrik Mate"],
+    bossRace: "Zyrathi", bossClass: "Shadow Operative",
+  },
+  {
+    id: 4, name: "Shattered Expanse", icon: "🌀", color: "#F59E0B",
+    description: "Spacetime is more of a suggestion here. Reality bites back.",
+    lore: "Navigation logs contradict themselves. You may arrive before you left. The Riftlord feeds on those who try to make sense of the folds.",
+    bossName: "The Riftlord", bossEmoji: "🌀",
+    shipMod: "Singularity Engine", shipModCat: "warp_drive",
+    races: ["Cognati", "Synthara"], classes: ["Technomancer", "Cosmic Engineer"],
+    enemyNames: ["Rift Tick", "Echo Twin", "Chrono Wisp", "Fracture", "Paradox Hound", "Foldling"],
+    bossRace: "Cognati", bossClass: "Technomancer",
+  },
+  {
+    id: 5, name: "Abyssal Core", icon: "🕳️", color: "#EF4444",
+    description: "Where stars go to die. Something down there is eating the light itself.",
+    lore: "No beacon lasts long here. Crews report the dark moving against the grain — and a hunger that learned their names from the silence.",
+    bossName: "Void Devourer", bossEmoji: "🕳️",
+    shipMod: "Void Sail", shipModCat: "stardust_magnet",
+    races: ["Luminae", "Grothak"], classes: ["Astral Warden", "Shadow Operative"],
+    enemyNames: ["Light-Eater", "Abyss Maw", "Null Spawn", "Dark Current", "Hunger", "Umbral"],
+    bossRace: "Luminae", bossClass: "Astral Warden",
+  },
+  {
+    id: 6, name: "Frostfall Reach", icon: "❄️", color: "#06B6D4",
+    description: "A frozen hellscape where the cold has learned to hunt in packs.",
+    lore: "Wind that cuts like wire. The packs don't chase heat — they herd it. The Glacial Warden keeps the ice honest, and visitors rare.",
+    bossName: "Glacial Warden", bossEmoji: "🧊",
+    shipMod: "Cryo Thruster", shipModCat: "fuel_tank",
+    races: ["Cognati", "Grothak"], classes: ["Vanguard", "Astral Warden"],
+    enemyNames: ["Ice Howler", "Rimeclaw", "Frost Pack", "Shard Wolf", "Glacier Kin", "Whiteout"],
+    bossRace: "Grothak", bossClass: "Vanguard",
+  },
+  {
+    id: 7, name: "Ember Maw", icon: "🌋", color: "#F97316",
+    description: "A volcanic world ruled by things that swim in magma and breathe fire.",
+    lore: "The crust is a thin lid on a living furnace. Magma lanes are roads if you can stand the heat — and the Titan that calls them home.",
+    bossName: "Magma Titan", bossEmoji: "🌋",
+    shipMod: "Solar Booster", shipModCat: "fuel_efficiency",
+    races: ["Synthara", "Grothak"], classes: ["Vanguard", "Technomancer"],
+    enemyNames: ["Magma Skimmer", "Cinder Drake", "Lava Wight", "Ember Serpent", "Pyre Guard", "Scoria"],
+    bossRace: "Synthara", bossClass: "Technomancer",
+  },
+  {
+    id: 8, name: "Void Sanctum", icon: "🌑", color: "#7C3AED",
+    description: "A temple carved into a dead moon. The priests never left. Neither will you, easily.",
+    lore: "Hymns still echo in vacuum. The Null King's congregation doesn't sleep — it waits for pilgrims foolish enough to pray aloud.",
+    bossName: "The Null King", bossEmoji: "🌑",
+    shipMod: "Quantum Anchor", shipModCat: "neural_accel",
+    races: ["Luminae", "Zyrathi"], classes: ["Astral Warden", "Shadow Operative"],
+    enemyNames: ["Moon Acolyte", "Silent Choir", "Null Priest", "Dead Cantor", "Sanctum Shade", "Vesperite"],
+    bossRace: "Luminae", bossClass: "Shadow Operative",
+  },
+  {
+    id: 9, name: "Crystal Nexus", icon: "💎", color: "#14B8A6",
+    description: "A lattice-world of living crystal that refracts your worst memories into lasers.",
+    lore: "Every facet is a mirror with an opinion. Walk carefully — the Prism Sovereign turns regret into a weapon and calls it judgment.",
+    bossName: "Prism Sovereign", bossEmoji: "💎",
+    shipMod: "Aether Wing", shipModCat: "cargo_hold",
+    races: ["Cognati", "Luminae"], classes: ["Technomancer", "Cosmic Engineer"],
+    enemyNames: ["Facet Wraith", "Prism Scout", "Lattice Blade", "Refractor", "Geode Knight", "Shardling"],
+    bossRace: "Cognati", bossClass: "Cosmic Engineer",
+  },
+  {
+    id: 10, name: "World Zero", icon: "💫", color: "#FBBF24",
+    description: "The first planet. The last stop of the known Frontier. Clear The Genesis to open the Wormhole beyond.",
+    lore: "Charts end here for a reason. The Genesis is not a guardian — it is a lock. Break it, and the Wormhole stops pretending to be sealed.",
+    bossName: "The Genesis", bossEmoji: "💫",
+    shipMod: "Genesis Core", shipModCat: "neural_accel",
+    races: ["Synthara", "Cognati", "Luminae"], classes: ["Technomancer", "Astral Warden", "Cosmic Engineer"],
+    enemyNames: ["Proto Guard", "First Echo", "Zero Spawn", "Origin Wisp", "Seedling", "Primeform"],
+    bossRace: "Synthara", bossClass: "Cosmic Engineer",
+  },
 ];
 
 // ═══════════════════════════════════════════
 // INFINITE DUNGEON — endless depths unlocked after World Zero is conquered.
-// Reuses the engine's planet-based scaling (enemy power & rewards climb with
-// planet.id = 11, 12, 13, …). No ship mods drop here — those are exclusive to
-// the 10-world story crawl — so the final boss can only be completed once.
 // ═══════════════════════════════════════════
 const INFINITE_THEMES = [
-  { name: "Shattered", icon: "🌌", color: "#9D6BFF", description: "Reality fragments into an endless crawl. There is no exit — only depth.", bossName: "The Fracture", bossEmoji: "🌌" },
-  { name: "Abyssal", icon: "🖤", color: "#7C3AED", description: "The dark has teeth and patience. Keep descending.", bossName: "The Hollow", bossEmoji: "🖤" },
-  { name: "Temporal", icon: "⏳", color: "#06B6D4", description: "Time loops and bites its own tail. Every step is a debt.", bossName: "Chronovore", bossEmoji: "⏳" },
-  { name: "Celestial", icon: "✨", color: "#FBBF24", description: "The stars themselves line up to end you. Shine on anyway.", bossName: "The Zenith", bossEmoji: "✨" },
+  {
+    name: "Shattered", icon: "🌌", color: "#9D6BFF",
+    description: "Reality fragments into an endless crawl. There is no exit — only depth.",
+    bossName: "The Fracture", bossEmoji: "🌌",
+    races: ["Cognati", "Synthara"], classes: ["Technomancer", "Cosmic Engineer"],
+    enemyNames: ["Shard Echo", "Broken Twin", "Fold Wraith", "Fractling"],
+    bossRace: "Cognati", bossClass: "Technomancer",
+  },
+  {
+    name: "Abyssal", icon: "🖤", color: "#7C3AED",
+    description: "The dark has teeth and patience. Keep descending.",
+    bossName: "The Hollow", bossEmoji: "🖤",
+    races: ["Luminae", "Zyrathi"], classes: ["Shadow Operative", "Astral Warden"],
+    enemyNames: ["Hollow Bite", "Deep Shade", "Null Maw", "Abyss Tick"],
+    bossRace: "Luminae", bossClass: "Astral Warden",
+  },
+  {
+    name: "Temporal", icon: "⏳", color: "#06B6D4",
+    description: "Time loops and bites its own tail. Every step is a debt.",
+    bossName: "Chronovore", bossEmoji: "⏳",
+    races: ["Cognati", "Grothak"], classes: ["Technomancer", "Vanguard"],
+    enemyNames: ["Time Debt", "Loop Hound", "Yesterday", "Second Skin"],
+    bossRace: "Cognati", bossClass: "Technomancer",
+  },
+  {
+    name: "Celestial", icon: "✨", color: "#FBBF24",
+    description: "The stars themselves line up to end you. Shine on anyway.",
+    bossName: "The Zenith", bossEmoji: "✨",
+    races: ["Luminae", "Synthara"], classes: ["Astral Warden", "Cosmic Engineer"],
+    enemyNames: ["Star Choir", "Nova Kin", "Zenith Spark", "Solarite"],
+    bossRace: "Luminae", bossClass: "Cosmic Engineer",
+  },
 ];
 
 export function getInfinitePlanet(depth) {
@@ -39,5 +156,33 @@ export function getInfinitePlanet(depth) {
     bossName: theme.bossName,
     bossEmoji: theme.bossEmoji,
     shipMod: null,
+    shipModCat: null,
+    races: theme.races,
+    classes: theme.classes,
+    enemyNames: theme.enemyNames,
+    bossRace: theme.bossRace,
+    bossClass: theme.bossClass,
+  };
+}
+
+export function getDungeonPlanetById(id) {
+  if (id <= DUNGEON_PLANETS.length) {
+    return DUNGEON_PLANETS.find((p) => p.id === id) || DUNGEON_PLANETS[0];
+  }
+  return getInfinitePlanet(id - DUNGEON_PLANETS.length);
+}
+
+/** Map selection id for the post–World Zero infinite entrance. */
+export const WORMHOLE_ID = "wormhole";
+
+export function getWormholePlanet(depth) {
+  const d = Math.max(1, depth || 1);
+  const planet = getInfinitePlanet(d);
+  return {
+    ...planet,
+    name: `The Wormhole · Depth ${d}`,
+    icon: "🌀",
+    description: "Beyond World Zero, spacetime folds into an endless corridor. There is no last floor — only deeper.",
+    lore: "Past the Genesis lock, every depth is a new shape of the same hunger. Charts burn out. Compasses spin. The only way is through — and through never ends.",
   };
 }

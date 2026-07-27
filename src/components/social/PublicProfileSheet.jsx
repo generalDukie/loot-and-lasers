@@ -9,6 +9,7 @@ import { presenceStatus } from "@/hooks/usePresence";
 import { useToast } from "@/components/ui/use-toast";
 import { getGuildMembership, invitePlayerToGuild } from "@/lib/guildUtils";
 import { sendFriendRequest, getFriends, getOutgoingRequests } from "@/lib/socialEngine";
+import { profileDisplayName, normalizeLegacyDisplay, LEGACY_DISPLAY_FAMILY } from "@/lib/legacyName";
 
 export default function PublicProfileSheet({ target, myChar, onClose, onMessage, onBlock, onReport, friendStatus = "none" }) {
   const [guildTag, setGuildTag] = useState("");
@@ -154,9 +155,12 @@ export default function PublicProfileSheet({ target, myChar, onClose, onMessage,
           </div>
           <div className="min-w-0">
             <h3 className="font-display font-bold text-lg truncate flex items-center gap-1.5">
-              {target.name}
+              {profileDisplayName(target)}
               {target.active_title && <span className="text-[11px] text-amber-300/90 font-display">「{target.active_title}」</span>}
             </h3>
+            {normalizeLegacyDisplay(target.legacy_display) === LEGACY_DISPLAY_FAMILY && target.legacy_name && target.name && (
+              <p className="text-[11px] text-muted-foreground/80">Operative {target.name}</p>
+            )}
             <p className="text-xs text-muted-foreground">Lv {target.level || 1} · {target.class}{guildTag ? ` · [${guildTag}]` : ""}</p>
             <p className="text-[10px] mt-0.5" style={{ color: statusColor }}>
               {status === "online" ? "● Online" : status === "in_mission" ? "● In Mission" : "○ Offline"}

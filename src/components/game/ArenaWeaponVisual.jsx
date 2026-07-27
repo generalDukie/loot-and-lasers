@@ -50,7 +50,7 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
     playAttackSound(weapon.type, isAbility || isRegen, className);
   }, [evIdx]);
 
-  const pos = side === "player" ? { right: 0, top: 76 } : { left: 0, top: 76 };
+  const pos = side === "player" ? { right: 0, top: 98 } : { left: 0, top: 98 };
 
   let animate = { rotate: 0, x: 0 };
   let transition = { duration: 0.5, ease: "easeOut" };

@@ -85,16 +85,16 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
   const { totalStats, dmg, armor, crit, dodge, primaryStat, classEmoji } = computeDisplayStats(entity);
   const dmgColor = PRIMARY_STAT_COLOR[primaryStat] || MOD_COLORS.dmg;
   return (
-    <div className="flex flex-col items-center" style={{ width: 190 }}>
-      <div className="flex items-center gap-1 mb-1">
-        <span className="text-sm">{classEmoji}</span>
-        <p className="font-display font-bold text-xs truncate max-w-[120px]" style={{ color }}>{entity.name}</p>
+    <div className="flex flex-col items-center" style={{ width: 248 }}>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="text-base">{classEmoji}</span>
+        <p className="font-display font-bold text-sm truncate max-w-[160px]" style={{ color }}>{entity.name}</p>
       </div>
-      <div className="relative" style={{ width: 176, height: 200 }}>
-        <motion.div animate={{ x: lunge ? [0, dir * 42, 0] : 0 }} transition={{ duration: 0.55, times: [0, 0.4, 1], ease: "easeOut" }}>
-        <motion.div animate={{ y: [0, -5, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}>
+      <div className="relative" style={{ width: 228, height: 260 }}>
+        <motion.div animate={{ x: lunge ? [0, dir * 56, 0] : 0 }} transition={{ duration: 0.55, times: [0, 0.4, 1], ease: "easeOut" }}>
+        <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}>
           <div style={{ transform: flip ? "scaleX(-1)" : undefined }}>
-            <CharacterAvatar {...avatarPropsFor(entity)} size={172} />
+            <CharacterAvatar {...avatarPropsFor(entity)} size={220} />
           </div>
         </motion.div>
 
@@ -196,9 +196,10 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
   );
 }
 
-export default function ArenaBattleOverlay({ player, opponent, battle, onDone, playerItems, opponentItems }) {
+export default function ArenaBattleOverlay({ player, opponent, battle, onDone, playerItems, opponentItems, theme }) {
   const playerWeapon = playerItems?.find((i) => i.type === "weapon") || null;
   const opponentWeapon = opponentItems?.find((i) => i.type === "weapon") || null;
+  const accent = theme?.color || null;
   const [phase, setPhase] = useState("intro");
   const [idx, setIdx] = useState(0);
   const [hp, setHp] = useState({ player: battle.playerMaxHp, opponent: battle.opponentMaxHp });
@@ -273,7 +274,17 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-[#040214]">
-      <ArenaBackdrop />
+      <ArenaBackdrop accent={accent} />
+      {theme?.label && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+          <span
+            className="px-3 py-1 rounded-full text-[10px] font-display font-bold tracking-[0.18em] uppercase border bg-background/50 backdrop-blur-sm"
+            style={{ color: accent || "#67e8f9", borderColor: `${accent || "#67e8f9"}55` }}
+          >
+            {theme.label}
+          </span>
+        </div>
+      )}
       <div className="grid grid-cols-[1fr_auto_1fr] gap-3 px-4 pt-8 items-center relative z-30">
         <HpBar name={player.name} hp={hp.player} max={battle.playerMaxHp} color="#22D3EE" emoji={CLASSES[player.class]?.emoji} />
         <div className="text-center px-2">
@@ -282,8 +293,8 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
         <HpBar name={opponent.name} hp={hp.opponent} max={battle.opponentMaxHp} color="#FB7185" align="right" emoji={CLASSES[opponent.class]?.emoji} />
       </div>
 
-      <motion.div animate={shake} className="flex-1 flex items-center justify-center gap-4 sm:gap-8 relative z-10">
-        <ArenaFloor pulse={isBigHit} />
+      <motion.div animate={shake} className="flex-1 flex items-center justify-center gap-8 sm:gap-16 relative z-10">
+        <ArenaFloor pulse={isBigHit} accent={accent} />
         <Fighter entity={player} side="player" lunge={attacker === "player" && !isQuiet} hurt={defender === "player" && !isQuiet} color="#22D3EE" flip={false} floating={ev && defender === "player" ? ev : null} attackEvent={ev && attacker === "player" ? ev : null} evIdx={idx} big={defender === "player" && isBigHit} weaponItem={playerWeapon} />
         <Fighter entity={opponent} side="opponent" lunge={attacker === "opponent" && !isQuiet} hurt={defender === "opponent" && !isQuiet} color="#FB7185" flip floating={ev && defender === "opponent" ? ev : null} attackEvent={ev && attacker === "opponent" ? ev : null} evIdx={idx} big={defender === "opponent" && isBigHit} weaponItem={opponentWeapon} />
         <AnimatePresence>

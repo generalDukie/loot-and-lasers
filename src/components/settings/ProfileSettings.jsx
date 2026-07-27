@@ -1,20 +1,32 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
-import { Loader2, Mail, Lock, Pencil, Gem } from "lucide-react";
+import { Loader2, Mail, Lock, Pencil, Gem, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { getMyCharacter } from "@/lib/socialEngine";
+import { getMyCharacter, bustMyCharacterCache } from "@/lib/socialEngine";
+import { useAuth } from "@/lib/AuthContext";
+import {
+  LEGACY_DISPLAY_SURNAME,
+  LEGACY_DISPLAY_FAMILY,
+  normalizeLegacyDisplay,
+  profileDisplayName,
+  familyLabel,
+} from "@/lib/legacyName";
 
 const NAME_CHANGE_COST = 500;
 
 export default function ProfileSettings() {
   const [char, setChar] = useState(null);
   const [email, setEmail] = useState("");
+  const [legacyName, setLegacyName] = useState("");
+  const [legacyDisplay, setLegacyDisplay] = useState(LEGACY_DISPLAY_SURNAME);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingDisplay, setSavingDisplay] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { checkUserAuth } = useAuth();
 
   useEffect(() => {
     Promise.all([
@@ -22,7 +34,11 @@ export default function ProfileSettings() {
       api.auth.me().catch(() => null),
     ]).then(([myChar, user]) => {
       if (myChar) { setChar(myChar); setName(myChar.name || ""); }
-      if (user) setEmail(user.email || "");
+      if (user) {
+        setEmail(user.email || "");
+        setLegacyName(user.legacy_name || myChar?.legacy_name || "");
+        setLegacyDisplay(normalizeLegacyDisplay(user.legacy_display || myChar?.legacy_display));
+      }
     }).finally(() => setLoading(false));
   }, []);
 
@@ -51,6 +67,43 @@ export default function ProfileSettings() {
     }
   }
 
+  async function handleLegacyDisplay(mode) {
+    const next = normalizeLegacyDisplay(mode);
+    if (next === legacyDisplay) return;
+    setSavingDisplay(true);
+    try {
+      await api.auth.updateMe({ legacy_display: next });
+      // Stamp onto every operative so public profiles honor the preference.
+      const uid = (await api.auth.me()).id;
+      const roster = await api.entities.Character.filter({ created_by_id: uid }, "-created_date", 50);
+      await Promise.all(
+        (roster || []).map((c) =>
+          api.entities.Character.update(c.id, { legacy_display: next }).catch(() => null)
+        )
+      );
+      setLegacyDisplay(next);
+      setChar((c) => (c ? { ...c, legacy_display: next } : c));
+      bustMyCharacterCache();
+      await checkUserAuth?.();
+      toast({
+        title: "Profile name style updated",
+        description: next === LEGACY_DISPLAY_FAMILY
+          ? `Profiles show ${familyLabel(legacyName) || "the family"}`
+          : "Profiles show your operative name + surname",
+      });
+    } catch (err) {
+      toast({ title: "Could not save", description: err.message || "Try again.", variant: "destructive" });
+    } finally {
+      setSavingDisplay(false);
+    }
+  }
+
+  const previewChar = {
+    name: name || char?.name || "Operative",
+    legacy_name: legacyName,
+    legacy_display: legacyDisplay,
+  };
+
   return (
     <div className="painted-panel canvas-grain p-4 space-y-4">
       {/* Linked email (locked) */}
@@ -71,6 +124,51 @@ export default function ProfileSettings() {
         )}
         <p className="text-[10px] text-muted-foreground/60 mt-1">Email is tied to your account and can't be changed.</p>
       </div>
+
+      {/* Legacy display style */}
+      {legacyName && (
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <Users className="w-4 h-4 text-primary" />
+            <h2 className="font-display font-semibold text-sm">Legacy on Profile</h2>
+          </div>
+          <p className="text-[10px] text-muted-foreground mb-2">
+            Locked surname: <span className="text-foreground font-semibold">{legacyName}</span>
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={savingDisplay}
+              onClick={() => handleLegacyDisplay(LEGACY_DISPLAY_SURNAME)}
+              className={`text-left p-3 rounded-xl border transition-colors ${
+                legacyDisplay === LEGACY_DISPLAY_SURNAME
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border/50 hover:bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              <p className="text-xs font-display font-semibold">As surname</p>
+              <p className="text-[10px] mt-1 opacity-80">First + {legacyName}</p>
+            </button>
+            <button
+              type="button"
+              disabled={savingDisplay}
+              onClick={() => handleLegacyDisplay(LEGACY_DISPLAY_FAMILY)}
+              className={`text-left p-3 rounded-xl border transition-colors ${
+                legacyDisplay === LEGACY_DISPLAY_FAMILY
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border/50 hover:bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              <p className="text-xs font-display font-semibold">Family only</p>
+              <p className="text-[10px] mt-1 opacity-80">{familyLabel(legacyName)}</p>
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Profile preview: <span className="text-foreground font-display font-semibold">{profileDisplayName(previewChar)}</span>
+            {savingDisplay && <Loader2 className="w-3 h-3 inline ml-1 animate-spin" />}
+          </p>
+        </div>
+      )}
 
       {/* Change operative name */}
       <div>

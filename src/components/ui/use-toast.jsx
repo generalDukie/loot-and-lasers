@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { getActiveCharacterId } from "@/lib/activeCharacter";
+import { pushNotification, emitLocalAlert } from "@/lib/notificationEngine";
 
 const TOAST_LIMIT = 20;
 const TOAST_DURATION = 10000; // auto-dismiss after 10s — paused while hovered
@@ -35,14 +37,6 @@ const addToRemoveQueue = (toastId) => {
   }, TOAST_REMOVE_DELAY);
 
   toastTimeouts.set(toastId, timeout);
-};
-
-const _clearFromRemoveQueue = (toastId) => {
-  const timeout = toastTimeouts.get(toastId);
-  if (timeout) {
-    clearTimeout(timeout);
-    toastTimeouts.delete(toastId);
-  }
 };
 
 // Pausable auto-dismiss timer. Paused on hover (pauseToast) and resumed on
@@ -142,12 +136,32 @@ function dispatch(action) {
 }
 
 function toast({ ...props }) {
+  const characterId = getActiveCharacterId();
+  if (characterId) {
+    const title = props.title ? String(props.title) : "Alert";
+    const body = props.description ? String(props.description) : undefined;
+    pushNotification({
+      owner_id: characterId,
+      type: "system",
+      title,
+      body,
+    }).catch(() => {});
+    // Immediate bell feedback without waiting on websocket debounce.
+    emitLocalAlert({ title, body });
+    const id = genId();
+    return {
+      id,
+      dismiss: () => {},
+      update: () => {},
+    };
+  }
+
   const id = genId();
 
-  const update = (props) =>
+  const update = (next) =>
     dispatch({
       type: actionTypes.UPDATE_TOAST,
-      toast: { ...props, id },
+      toast: { ...next, id },
     });
 
   const dismiss = () => {

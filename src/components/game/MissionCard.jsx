@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { DIFFICULTY_COLORS, getEffectiveFuelCost } from "@/lib/gameData";
+import { computeMissionGains } from "@/hooks/useMissionManager";
 import { Clock, MapPin, Star, Fuel, Gem } from "lucide-react";
 import RiskGauge from "@/components/game/RiskGauge";
 
@@ -87,6 +88,11 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
   const locked = mission.level_requirement > characterLevel;
   const fuelCost = getEffectiveFuelCost(character, mission);
   const insufficientFuel = !isActive && !isCompleted && (currentFuel ?? 0) < fuelCost;
+  const gains = !previewStardust && !previewXp && character
+    ? computeMissionGains(character, mission, false)
+    : null;
+  const shownXp = previewXp ?? gains?.xpGain ?? mission.rewards?.experience;
+  const shownSd = previewStardust ?? gains?.stardustGain ?? mission.rewards?.stardust;
 
   // Compact strip for the live / ready-to-fight active mission (no story blurb).
   if (isActive || isCompleted) {
@@ -160,8 +166,8 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
 
       <div className="flex flex-wrap items-center gap-3 mt-3 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(mission.duration_seconds)}</span>
-        <span className="flex items-center gap-1"><Star className="w-3 h-3 text-cyan-400" /><span className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent font-bold">{previewXp ?? mission.rewards?.experience} XP</span></span>
-        <span className="flex items-center gap-1 text-purple-400 font-bold">✨ {previewStardust ?? mission.rewards?.stardust}</span>
+        <span className="flex items-center gap-1"><Star className="w-3 h-3 text-cyan-400" /><span className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent font-bold">{shownXp} XP</span></span>
+        <span className="flex items-center gap-1 text-purple-400 font-bold">✨ {shownSd}</span>
         <span className={`flex items-center gap-1 font-bold ${insufficientFuel ? "text-amber-400" : "text-blue-400"}`}><Fuel className="w-3 h-3" /> {fuelCost}</span>
         {locked && <span className="text-destructive">Lv.{mission.level_requirement} required</span>}
       </div>

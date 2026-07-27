@@ -26,6 +26,7 @@ function publicUser(row) {
     email: row.email,
     role: row.role,
     legacy_name: row.legacy_name || null,
+    legacy_display: row.legacy_display === "family" ? "family" : "surname",
     active_character_id: row.active_character_id || null,
     purchased_slots: row.purchased_slots || 0,
     email_verified: !!row.email_verified,
@@ -208,14 +209,24 @@ export function createAuthRouter(express) {
   });
 
   router.patch("/me", requireAuth, (req, res) => {
-    const allowed = ["legacy_name", "active_character_id", "purchased_slots"];
+    const allowed = ["legacy_name", "legacy_display", "active_character_id", "purchased_slots"];
     const sets = [];
     const vals = [];
     for (const key of allowed) {
-      if (req.body?.[key] !== undefined) {
-        sets.push(`${key} = ?`);
-        vals.push(req.body[key]);
+      if (req.body?.[key] === undefined) continue;
+      // Legacy surname is permanent once set.
+      if (key === "legacy_name") {
+        const existing = getUserRowById(req.user.id);
+        if (existing?.legacy_name) continue;
       }
+      if (key === "legacy_display") {
+        const mode = req.body.legacy_display === "family" ? "family" : "surname";
+        sets.push("legacy_display = ?");
+        vals.push(mode);
+        continue;
+      }
+      sets.push(`${key} = ?`);
+      vals.push(req.body[key]);
     }
     if (!sets.length) return res.json(req.user);
     sets.push("updated_date = ?");

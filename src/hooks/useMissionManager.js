@@ -15,7 +15,10 @@ import {
   generateDailyMissions,
   generateLowFuelBoard,
   getModEffectTotal,
-  getEarlyXpMultiplier,
+  computeMissionXpFromFuel,
+  computeMissionStardustFromFuel,
+  normalizeMissionEfficiency,
+  getStatPointsForLevelRange,
   randomConsumable,
   GEAR_CATALOG_TOTAL,
 } from "@/lib/gameData";
@@ -31,22 +34,33 @@ import { useToast } from "@/components/ui/use-toast";
 import { playMissionComplete } from "@/lib/audioEngine";
 import { generateMissionEncounter } from "@/lib/missionCombat";
 import { simulateBattle } from "@/lib/arenaEngine";
+import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
 import { pickMissionExploreSceneIndex } from "@/components/game/MissionExploreBackdrop";
 import confetti from "canvas-confetti";
 
-// Computes the actual stardust/XP a mission will grant, including ship-mod
-// bonuses, the early-game catch-up multiplier, and the Nexus owner perk.
-// Used both for the on-card reward preview and at claim time so they match.
+// Computes stardust/XP for a mission.
+// XP  = fuel × XP/fuel(level) × xp efficiency (0.90–1.10)
+// SD  = fuel × SD/fuel(level) × stardust efficiency (0.90–1.10)
+// then ship / nexus / collection bonuses.
 export function computeMissionGains(character, mission, nexusBonus, gearTotal = GEAR_CATALOG_TOTAL) {
-  const rewards = mission?.rewards || {};
   const bonusMult = nexusBonus ? 1.05 : 1;
   const stardustMult = 1 + getModEffectTotal(character, "mission_stardust_mult");
-  const xpMult = (1 + getModEffectTotal(character, "mission_xp_mult")) * getEarlyXpMultiplier(character.level);
+  const xpMult = 1 + getModEffectTotal(character, "mission_xp_mult");
   const { percentage } = getCollectionStats(character, gearTotal);
-  const baseXp = Math.round((rewards.experience || 0) * xpMult);
+  const fuelCost = getEffectiveFuelCost(character, mission);
+  const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency);
+  const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency);
+  const chartXp = computeMissionXpFromFuel(fuelCost, character.level, xpEff);
+  const chartSd = computeMissionStardustFromFuel(fuelCost, character.level, sdEff);
+  const baseXp = Math.round(chartXp * xpMult);
   return {
     bonusMult,
-    stardustGain: Math.round((rewards.stardust || 0) * bonusMult * stardustMult),
+    fuelCost,
+    efficiency: sdEff,
+    xpEfficiency: xpEff,
+    stardustGain: Math.round(chartSd * bonusMult * stardustMult),
+    stardustBase: chartSd,
+    xpBase: chartXp,
     xpGain: applyXpBonus(baseXp, percentage),
     collectionPct: percentage,
   };
@@ -83,7 +97,12 @@ function readSavedCantinaBoard(characterId) {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length !== 3) return null;
     if (!parsed.every((m) => m && m.name && m.patron?.name)) return null;
-    return parsed;
+    // Backfill efficiency on older saved boards so preview/claim stay stable.
+    return parsed.map((m) => ({
+      ...m,
+      stardust_efficiency: m.stardust_efficiency != null ? m.stardust_efficiency : 1,
+      xp_efficiency: m.xp_efficiency != null ? m.xp_efficiency : 1,
+    }));
   } catch {
     return null;
   }
@@ -311,7 +330,7 @@ export function useMissionManager() {
 
     try {
       const rewards = activeMission.rewards;
-      const { stardustGain, xpGain, collectionPct } = computeMissionGains(character, activeMission, nexusBonus);
+      const { stardustGain, xpGain, collectionPct, stardustBase, xpBase, efficiency, xpEfficiency } = computeMissionGains(character, activeMission, nexusBonus);
       let newExp = (character.experience || 0) + xpGain;
       let newLevel = character.level;
       let expToNext = character.experience_to_next_level;
@@ -328,7 +347,7 @@ export function useMissionManager() {
         experience_to_next_level: expToNext,
         stardust: (character.stardust || 0) + stardustGain,
         total_stardust_earned: (character.total_stardust_earned || 0) + stardustGain,
-        unspent_stat_points: (character.unspent_stat_points || 0) + (newLevel - character.level) * 4,
+        unspent_stat_points: (character.unspent_stat_points || 0) + getStatPointsForLevelRange(character.level, newLevel),
         missions_completed: (character.missions_completed || 0) + 1,
         highest_sector: Math.max(character.highest_sector || 1, activeMission.sector),
         active_mission_id: "",
@@ -337,6 +356,8 @@ export function useMissionManager() {
 
       const { updates: discUpdates, found: discFound } = processDiscovery(character, { win: true, speciesId: enemy?.speciesId || null });
       Object.assign(charUpdate, discUpdates);
+      const weekly = progressWeeklyNovaQuest(character, "missions", 1);
+      if (weekly) charUpdate.weekly_nova_quests = weekly;
       await api.entities.Character.update(character.id, charUpdate);
       await api.entities.Mission.update(activeMission.id, { status: "claimed" });
 
@@ -379,21 +400,22 @@ export function useMissionManager() {
       setCompleteSummary({
         mission: activeMission,
         xp: {
-          base: rewards.experience || 0,
-          earlyMult: getEarlyXpMultiplier(character.level),
+          base: xpBase,
+          efficiency: xpEfficiency,
           shipMult: getModEffectTotal(character, "mission_xp_mult"),
           collectionPct,
           total: xpGain,
         },
         stardust: {
-          base: rewards.stardust || 0,
+          base: stardustBase,
+          efficiency,
           nexus: nexusBonus,
           shipMult: getModEffectTotal(character, "mission_stardust_mult"),
           total: stardustGain,
         },
         leveledUp,
         newLevel,
-        statPoints: (newLevel - character.level) * 4,
+        statPoints: getStatPointsForLevelRange(character.level, newLevel),
         gearItem,
         collectible: rewards.collectible || null,
         consumableItem,

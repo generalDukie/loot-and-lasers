@@ -9,6 +9,20 @@ export async function getUnreadCounts(characterId) {
   return counts;
 }
 
+const localAlertListeners = new Set();
+
+/** Optimistic UI ping for the notification bell (toasts → bell). */
+export function emitLocalAlert(payload) {
+  for (const cb of localAlertListeners) {
+    try { cb(payload); } catch {}
+  }
+}
+
+export function subscribeLocalAlerts(callback) {
+  localAlertListeners.add(callback);
+  return () => localAlertListeners.delete(callback);
+}
+
 export function subscribeNotifications(characterId, callback) {
   return api.entities.AppNotification.subscribe((event) => {
     if (event.data?.owner_id === characterId) callback(event);
@@ -19,9 +33,9 @@ export function markRead(id) {
   return api.entities.AppNotification.update(id, { read: true });
 }
 
-// Create a silent in-app notification (shown in the Notifications tab) instead
-// of a screen-blocking toast. Used for low-priority ambient events like mission
-// launches and discoveries.
+// Create an in-app notification shown in the bottom-right NotificationCenter
+// (blue bell). Prefer this over floating toasts for game feedback — toast()
+// also routes here while a character is active.
 export function pushNotification({ owner_id, type = "system", title, body, related_id }) {
   return api.entities.AppNotification.create({ owner_id, type, title, body, related_id });
 }

@@ -6,7 +6,7 @@ import { spring } from "@/lib/goofyMotion";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import EquippedFrame from "@/components/game/EquippedFrame";
 import { Star, Target, TrendingUp, Users, Save, BookOpen } from "lucide-react";
-import { fullName } from "@/lib/legacyName";
+import { profileDisplayName, normalizeLegacyDisplay, LEGACY_DISPLAY_FAMILY } from "@/lib/legacyName";
 
 export default function CharacterHeader({ character, guild, equippedItems }) {
   const [bio, setBio] = useState("");
@@ -48,10 +48,13 @@ export default function CharacterHeader({ character, guild, equippedItems }) {
         <div className="flex flex-col sm:flex-row items-start gap-5 w-full">
         <div className="flex-1 min-w-0 w-full">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="font-display font-bold text-xl glow-cyan tracking-wider">{fullName(character)}</h1>
+            <h1 className="font-display font-bold text-xl glow-cyan tracking-wider">{profileDisplayName(character)}</h1>
             <span className="text-lg">{race?.emoji}</span>
             <span className="text-lg">{cls?.emoji}</span>
           </div>
+          {normalizeLegacyDisplay(character.legacy_display) === LEGACY_DISPLAY_FAMILY && character.legacy_name && character.name && (
+            <p className="text-xs text-muted-foreground/80 mt-0.5">Operative {character.name}</p>
+          )}
           <p className="text-sm text-muted-foreground mt-0.5">{race?.name} · {cls?.name}</p>
           {character.active_title && (
             <span className="inline-block mt-1 text-[11px] font-display font-semibold tracking-wide text-amber-300/90 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30">「{character.active_title}」</span>

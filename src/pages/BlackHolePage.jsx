@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { Orbit } from "lucide-react";
 import { getPendingItem, clearPendingItem, subscribePending, getInventoryCap } from "@/lib/inventoryCap";
+import { playBlackHoleSuck, playBlackHoleBurst } from "@/lib/blackHoleSfx";
 
 // Stardust particle burst — emitted from the Black Hole when an item dissolves.
 function StardustBurst() {
@@ -71,12 +72,14 @@ export default function BlackHolePage() {
   function spawnBurst() {
     const id = Date.now() + Math.random();
     setBursts((b) => [...b, id]);
+    playBlackHoleBurst();
     setTimeout(() => setBursts((b) => b.filter((x) => x !== id)), 1000);
   }
 
   async function toss(item) {
     const value = computeStardustValue(item);
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, _sucking: true } : i));
+    playBlackHoleSuck();
     // Stardust erupts from the hole as the item finishes dissolving.
     setTimeout(() => spawnBurst(), 1250);
     setTimeout(async () => {
@@ -107,6 +110,7 @@ export default function BlackHolePage() {
     const ids = junk.map((i) => i.id);
     const total = junk.reduce((s, i) => s + computeStardustValue(i), 0);
     setItems((prev) => prev.map((i) => (ids.includes(i.id) ? { ...i, _sucking: true } : i)));
+    playBlackHoleSuck();
     setTimeout(() => spawnBurst(), 1250);
     setTimeout(async () => {
       await api.entities.Item.deleteMany({ id: { $in: ids } });

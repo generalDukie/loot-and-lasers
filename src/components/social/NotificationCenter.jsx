@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, CheckCheck, Calendar, X, Star } from "lucide-react";
 import { api } from "@/api/gameClient";
-import { getUnreadCounts, subscribeNotifications, markRead, syncStatPointsNotification } from "@/lib/notificationEngine";
+import { getUnreadCounts, subscribeNotifications, subscribeLocalAlerts, markRead, syncStatPointsNotification } from "@/lib/notificationEngine";
 import { canClaimToday, getProgress } from "@/lib/dailyLoginEngine";
 import { TYPE_META, timeAgo } from "@/components/social/NotificationsTab";
 import NotificationActions from "@/components/social/NotificationActions";
@@ -16,8 +16,10 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
   const [counts, setCounts] = useState({ total: 0 });
   const [dailyAvailable, setDailyAvailable] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pulse, setPulse] = useState(false);
   const loadingRef = useRef(false);
   const syncingRef = useRef(false);
+  const prevUnreadRef = useRef(0);
 
   const unspent = myChar?.unspent_stat_points || 0;
 
@@ -63,22 +65,42 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
     if (!myChar) return;
     setLoading(true);
     load();
-    // Throttle realtime-triggered reloads so a burst of events doesn't
-    // hammer the API and trip rate limits.
+    // Debounce realtime reloads — fast enough that toast→bell feedback feels
+    // instant, slow enough that a burst doesn't hammer the API.
     let pending = null;
     const schedule = () => {
       if (pending) return;
       pending = setTimeout(() => {
         pending = null;
         load();
-      }, 5000);
+      }, 400);
     };
     const unsub = subscribeNotifications(myChar.id, schedule);
+    const unsubLocal = subscribeLocalAlerts(() => {
+      setPulse(true);
+      setTimeout(() => setPulse(false), 900);
+      // Bump badge immediately; full list refresh follows via schedule/load.
+      setCounts((c) => ({ ...c, total: (c.total || 0) + 1 }));
+      schedule();
+    });
     return () => {
       unsub?.();
+      unsubLocal?.();
       if (pending) clearTimeout(pending);
     };
   }, [load, myChar]);
+
+  // Pulse the bell when unread count rises (new toast / push landed).
+  useEffect(() => {
+    const next = counts.total || 0;
+    if (next > prevUnreadRef.current) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 900);
+      prevUnreadRef.current = next;
+      return () => clearTimeout(t);
+    }
+    prevUnreadRef.current = next;
+  }, [counts.total]);
 
   // Auto-close the panel after 30 seconds so it doesn't linger on screen.
   useEffect(() => {
@@ -230,6 +252,8 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
 
       <motion.button
         whileTap={{ scale: 0.9 }}
+        animate={pulse ? { scale: [1, 1.12, 1] } : { scale: 1 }}
+        transition={{ duration: 0.45 }}
         onClick={() => setOpen((o) => !o)}
         className="relative w-12 h-12 rounded-full bg-primary/15 border border-primary/40 text-primary flex items-center justify-center shadow-lg hover:bg-primary/25 transition-colors border-glow-cyan"
         title={open ? "Minimize notifications" : "Open notifications"}

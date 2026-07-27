@@ -42,8 +42,66 @@ export function randomItem(rarity, level = 1, type) {
   };
 }
 
+function lerpWaypoints(level, points) {
+  const L = Math.max(1, Math.floor(level || 1));
+  if (L <= points[0][0]) return points[0][1];
+  for (let i = 0; i < points.length - 1; i++) {
+    const [x0, y0] = points[i];
+    const [x1, y1] = points[i + 1];
+    if (L <= x1) {
+      const t = (L - x0) / (x1 - x0);
+      return y0 + (y1 - y0) * t;
+    }
+  }
+  const [xA, yA] = points[points.length - 2];
+  const [xB, yB] = points[points.length - 1];
+  const slope = (yB - yA) / (xB - xA);
+  return yB + slope * (L - xB);
+}
+
+const XP_TO_NEXT_WAYPOINTS = [
+  [1, 40], [5, 50], [10, 120], [15, 150], [25, 335],
+  [50, 1135], [75, 1810], [100, 2590], [150, 4460],
+  [200, 14300], [250, 19800], [300, 51700], [350, 65000],
+  [400, 159000], [450, 190000], [500, 228000],
+];
+
+const MISSION_XP_PER_FUEL_WAYPOINTS = [
+  [1, 10], [10, 16], [25, 29], [50, 57], [75, 90], [100, 130],
+  [150, 223], [200, 334], [250, 461], [300, 603], [350, 758],
+  [400, 927], [450, 1108], [500, 1301],
+];
+
 export function expForLevel(level) {
-  return Math.floor(60 * Math.pow(1.42, level - 1));
+  return Math.max(1, Math.round(lerpWaypoints(level, XP_TO_NEXT_WAYPOINTS)));
+}
+
+export function getMissionXpPerFuel(level = 1) {
+  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS)));
+}
+
+/** Scale flat XP grants (dailies/promos) with the XP/fuel chart. */
+export function scaleXpReward(baseXp, level = 1) {
+  const base = Math.max(0, Number(baseXp) || 0);
+  const rate = getMissionXpPerFuel(level);
+  const atOne = getMissionXpPerFuel(1);
+  return Math.max(base > 0 ? 1 : 0, Math.round(base * (rate / atOne)));
+}
+
+export function getStatPointsForLevel(level) {
+  const L = Math.max(1, level || 1);
+  if (L <= 50) return 4;
+  if (L <= 100) return 3;
+  if (L <= 200) return 2;
+  return 1;
+}
+
+export function getStatPointsForLevelRange(fromLevel, toLevel) {
+  const from = Math.max(1, fromLevel || 1);
+  const to = Math.max(from, toLevel || from);
+  let pts = 0;
+  for (let L = from + 1; L <= to; L++) pts += getStatPointsForLevel(L);
+  return pts;
 }
 
 export async function applyCharacterRewards(gameService, characterId, rewards) {
@@ -60,17 +118,18 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
   if (rewards.experience) {
     const allItems = await gameService.asServiceRole.entities.Item.filter({}, null, 500);
     const collectPct = getCollectionPercentage(ch, allItems.length);
-    const boostedXp = applyXpBonus(rewards.experience, collectPct);
+    const scaled = scaleXpReward(rewards.experience, ch.level || 1);
+    const boostedXp = applyXpBonus(scaled, collectPct);
     let newExp = (ch.experience || 0) + boostedXp;
     let newLevel = ch.level || 1;
     let expToNext = ch.experience_to_next_level || expForLevel(newLevel);
-    let statPoints = 0;
+    const prevLevel = newLevel;
     while (newExp >= expToNext) {
       newExp -= expToNext;
       newLevel++;
-      statPoints += 4;
       expToNext = expForLevel(newLevel);
     }
+    const statPoints = getStatPointsForLevelRange(prevLevel, newLevel);
     patch.experience = newExp;
     patch.level = newLevel;
     patch.experience_to_next_level = expToNext;
@@ -161,7 +220,8 @@ export const DAILY_REWARDS = [
 export const PROMO_CODES = {
   FoundersOnly: {
     label: "Founders Pack",
-    rewards: { level: 150, nova_crystals: 50000, fullLegendary: true },
+    // Nova capped — was 50k and wrecked hard-currency scarcity before IAP.
+    rewards: { level: 150, nova_crystals: 100, fullLegendary: true },
   },
   XP90K: {
     label: "90,000 Experience Dump",
@@ -204,7 +264,10 @@ export async function redeemPromoCode(gameService, character, code) {
     special.experience = 0;
     special.experience_to_next_level = expForLevel(r.level);
     const gained = r.level - (ch.level || 1);
-    if (gained > 0) special.unspent_stat_points = (ch.unspent_stat_points || 0) + gained * 4;
+    if (gained > 0) {
+      special.unspent_stat_points =
+        (ch.unspent_stat_points || 0) + getStatPointsForLevelRange(ch.level || 1, r.level);
+    }
   }
   if (r.fullLegendary) {
     const slots = ["weapon", "armor", "helmet", "boots", "accessory", "ship_module"];

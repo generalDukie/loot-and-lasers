@@ -11,6 +11,9 @@ import CrystalJackpot from "@/components/casino/CrystalJackpot";
 import StardustDice from "@/components/casino/StardustDice";
 import StardustWheel from "@/components/casino/StardustWheel";
 
+/** Nova crystal tables stay locked until Crystal Store IAP is live. */
+const NOVA_CASINO_OPEN = false;
+
 export default function CasinoPage() {
   const [character, setCharacter] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,8 +31,12 @@ export default function CasinoPage() {
   useEffect(() => { load(); }, [load]);
 
   // Apply a net currency delta atomically — reads the freshest balance first
-  // so rapid plays can't overdraw.
+  // so rapid plays can't overdraw. Nova wins stay blocked while crystal tables are sealed.
   async function settle(deltaCrystals, deltaStardust) {
+    if (!NOVA_CASINO_OPEN && deltaCrystals > 0) {
+      toast({ title: "Crystal tables sealed", description: "Nova payouts are disabled until the Crystal Store opens.", variant: "destructive" });
+      return;
+    }
     setBusy(true);
     try {
       const fresh = await api.entities.Character.get(character.id);
@@ -74,14 +81,34 @@ export default function CasinoPage() {
       </motion.div>
 
       <div className="grid sm:grid-cols-2 gap-4">
-        <CrystalFlip character={character} onSettle={settle} busy={busy} />
-        <CrystalJackpot character={character} onSettle={settle} busy={busy} />
+        {NOVA_CASINO_OPEN ? (
+          <>
+            <CrystalFlip character={character} onSettle={settle} busy={busy} />
+            <CrystalJackpot character={character} onSettle={settle} busy={busy} />
+          </>
+        ) : (
+          <div className="sm:col-span-2 painted-panel canvas-grain p-4 border border-amber-500/25 relative overflow-hidden">
+            <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]" />
+            <div className="relative flex flex-col sm:flex-row sm:items-center gap-3">
+              <Gem className="w-8 h-8 text-amber-300/70 shrink-0" />
+              <div className="min-w-0">
+                <h3 className="font-display font-bold text-sm text-amber-200">Crystal tables sealed</h3>
+                <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                  Nova Crystal games are locked until the Crystal Store is live — they were minting hard currency.
+                  Stardust games below are still open.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
         <StardustDice character={character} onSettle={settle} busy={busy} />
         <StardustWheel character={character} onSettle={settle} busy={busy} />
       </div>
 
       <p className="text-[10px] text-muted-foreground/70 text-center italic">
-        Nova Crystal bets are capped at 100 per play. Play responsibly, operative.
+        {NOVA_CASINO_OPEN
+          ? "Nova Crystal bets are capped at 100 per play. Play responsibly, operative."
+          : "Earn Nova from Weekly Ops & daily login — don't gamble what the void won't refill."}
       </p>
     </div>
   );

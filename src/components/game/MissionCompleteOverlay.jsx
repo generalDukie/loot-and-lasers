@@ -51,11 +51,16 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
   const diffColor = DIFFICULTY_COLORS[m.difficulty] || "#9CA3AF";
 
   const xpChips = [];
-  if (xp.earlyMult > 1) xpChips.push(`×${xp.earlyMult} early`);
+  if (xp.efficiency != null && xp.efficiency !== 1) {
+    xpChips.push(`${xp.efficiency < 1 ? "" : "+"}${Math.round((xp.efficiency - 1) * 100)}% run`);
+  }
   if (xp.shipMult > 0) xpChips.push(`+${pct(xp.shipMult)}% ship`);
   if (xp.collectionPct > 0) xpChips.push(`+${xp.collectionPct}% collection`);
 
   const sdChips = [];
+  if (stardust.efficiency != null && stardust.efficiency !== 1) {
+    sdChips.push(`${stardust.efficiency < 1 ? "" : "+"}${Math.round((stardust.efficiency - 1) * 100)}% run`);
+  }
   if (stardust.nexus) sdChips.push("+5% nexus");
   if (stardust.shipMult > 0) sdChips.push(`+${pct(stardust.shipMult)}% ship`);
 

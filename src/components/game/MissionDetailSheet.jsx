@@ -1,7 +1,8 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { getEffectiveFuelCost, DIFFICULTY_COLORS, ITEM_DROP_RATES } from "@/lib/gameData";
+import { getEffectiveFuelCost, DIFFICULTY_COLORS, ITEM_DROP_RATES, formatEfficiencyPct, normalizeMissionEfficiency } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
+import { computeMissionGains } from "@/hooks/useMissionManager";
 import RiskGauge from "@/components/game/RiskGauge";
 import { X, Star, Fuel, MapPin, Lock, Clock } from "lucide-react";
 
@@ -23,6 +24,7 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
   const diffColor = DIFFICULTY_COLORS[mission.difficulty];
   const locked = mission.level_requirement > characterLevel;
   const fuelCost = getEffectiveFuelCost(character, mission);
+  const gains = character ? computeMissionGains(character, mission, false) : null;
   const lowFuel = (currentFuel ?? 0) < fuelCost;
   const disabled = locked || lowFuel || busy;
   const lootType = mission.rewards?.loot_type || LOOT_TYPES[mission.name.length % 6];
@@ -93,13 +95,19 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
           <div className="grid grid-cols-3 gap-2 text-center mb-2">
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
               <Star className="w-3.5 h-3.5 mx-auto text-cyan-400" />
-              <p className="text-sm font-display font-bold mt-1 bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">{mission.rewards?.experience}</p>
+              <p className="text-sm font-display font-bold mt-1 bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">{gains?.xpGain ?? mission.rewards?.experience}</p>
               <p className="text-[9px] text-muted-foreground">XP</p>
+              <p className={`text-[9px] font-semibold mt-0.5 ${normalizeMissionEfficiency(mission.xp_efficiency) >= 1 ? "text-cyan-400/80" : "text-rose-400/80"}`}>
+                {formatEfficiencyPct(mission.xp_efficiency)}
+              </p>
             </div>
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
               <span className="text-sm block text-center">✨</span>
-              <p className="text-sm font-display font-bold mt-1 text-purple-400">{mission.rewards?.stardust}</p>
+              <p className="text-sm font-display font-bold mt-1 text-purple-400">{gains?.stardustGain ?? mission.rewards?.stardust}</p>
               <p className="text-[9px] text-muted-foreground">Stardust</p>
+              <p className={`text-[9px] font-semibold mt-0.5 ${normalizeMissionEfficiency(mission.stardust_efficiency) >= 1 ? "text-purple-400/80" : "text-rose-400/80"}`}>
+                {formatEfficiencyPct(mission.stardust_efficiency)}
+              </p>
             </div>
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
               <Fuel className="w-3.5 h-3.5 mx-auto text-blue-400" />

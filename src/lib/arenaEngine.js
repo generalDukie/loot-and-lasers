@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════
 // ARENA ENGINE — async PvP simulation
 // ═══════════════════════════════════════════
-import { RACES, CLASSES } from "@/lib/gameData";
+import { RACES, CLASSES, generateItem, generateClassWeapon, scaleCombatXp } from "@/lib/gameData";
 import { computeTotalStats, computeDerivedStats, getClassWeights, CLASS_ATK_MULT } from "@/lib/statEngine";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 
@@ -14,6 +14,15 @@ export const ARENA_REFRESH_MS = 5 * 60 * 1000;
 export const ARENA_REFRESH_COST = 50; // stardust
 export const ARENA_BATTLE_COOLDOWN_MS = 5 * 60 * 1000; // 5-minute cooldown between battles
 export const ARENA_SKIP_COST = 1; // nova crystals to skip the cooldown
+export const ARENA_CHALLENGER_SLOTS = 3;
+/** Prefer this many real players when the population supports it (rest filled with bots). */
+export const ARENA_MAX_REAL_OPPONENTS = 2;
+/** Soft rating band for "fair" matches before widening the search. */
+export const ARENA_RATING_BAND = 120;
+export const ARENA_RATING_BAND_WIDE = 280;
+export const ARENA_LEVEL_BAND = 8;
+/** Personal match log size (oldest pruned after each fight). */
+export const ARENA_HISTORY_LIMIT = 10;
 
 const BOT_NAMES = [
   "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
@@ -94,32 +103,54 @@ function botStats(level, cls) {
   return out;
 }
 
-// Determines which class an item's stat distribution favours (for bot gear matching).
-function classForItem(item) {
-  const s = item.stats || {};
-  let top = null, topVal = 0;
-  for (const [k, v] of Object.entries(s)) {
-    if ((v || 0) > topVal) { topVal = v || 0; top = k; }
-  }
-  const map = { strength: "Vanguard", agility: "Shadow Operative", intellect: "Technomancer", vitality: "Astral Warden", luck: "Cosmic Engineer" };
-  return map[top] || null;
+const BOT_EXTRA_SLOTS = ["armor", "helmet", "boots", "legs", "neck", "accessory"];
+
+function rollBotRarity(level) {
+  const roll = Math.random();
+  if (level >= 12 && roll < 0.06) return "legendary";
+  if (level >= 8 && roll < 0.18) return "epic";
+  if (level >= 4 && roll < 0.4) return "rare";
+  if (roll < 0.55) return "uncommon";
+  return "common";
 }
 
-// Picks 2-3 catalog item IDs that suit the bot's class and level — these are
-// the gear pieces the enemy is "wearing," which the player can discover in battle.
-function pickGearForBot(catalogItems, classKey, level) {
-  if (!catalogItems || !catalogItems.length) return [];
-  const underLevel = catalogItems.filter((it) => (it.level_requirement || 1) <= level);
-  const suitable = underLevel.filter((it) => classForItem(it) === classKey);
-  const pool = suitable.length >= 2 ? suitable : underLevel;
-  if (!pool.length) return [];
-  const picks = new Set();
-  // Always equip a weapon so the enemy's actual weapon shows in combat.
-  const weapons = pool.filter((it) => it.type === "weapon");
-  if (weapons.length) picks.add(weapons[Math.floor(Math.random() * weapons.length)].id);
-  const num = 1 + Math.floor(Math.random() * 2);
-  for (let i = 0; i < num; i++) picks.add(pool[Math.floor(Math.random() * pool.length)].id);
-  return [...picks];
+function botGearId(slot) {
+  return `bot-${slot}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Build real gear objects for a bot (not DB Item ids). Always includes a weapon
+ * so combat stats and the overlay weapon match the card's power readout.
+ */
+export function pickGearForBot(_catalogItems, classKey, level) {
+  const gearLevel = Math.max(1, level || 1);
+  const items = [];
+
+  const weaponRarity = rollBotRarity(gearLevel);
+  const weaponBase = Math.random() < 0.6
+    ? generateClassWeapon(classKey, weaponRarity, gearLevel)
+    : generateItem(weaponRarity, gearLevel, "weapon");
+  items.push({ ...weaponBase, id: botGearId("weapon"), is_equipped: true });
+
+  const extras = [...BOT_EXTRA_SLOTS].sort(() => Math.random() - 0.5);
+  const extraCount = 1 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < extraCount; i++) {
+    const type = extras[i];
+    const piece = generateItem(rollBotRarity(gearLevel), gearLevel, type);
+    items.push({ ...piece, id: botGearId(type), is_equipped: true });
+  }
+  return items;
+}
+
+/** Resolve opponent gear for combat — prefers live equippedItems, else catalog ids. */
+export function resolveOpponentItems(opp, catalogItems = []) {
+  if (opp?.equippedItems?.length) return opp.equippedItems;
+  if (opp?.equippedItemIds?.length) {
+    return opp.equippedItemIds
+      .map((id) => catalogItems.find((c) => c.id === id))
+      .filter(Boolean);
+  }
+  return [];
 }
 
 // Converts a real player's Character record (+ equipped gear) into the same
@@ -133,6 +164,9 @@ export function characterToOpponent(char, equippedItems = [], guildTag = null) {
   const lastOnlineMins = char.updated_date
     ? Math.max(0, Math.floor((Date.now() - new Date(char.updated_date).getTime()) / 60000))
     : 0;
+  const guild = guildTag
+    ? (String(guildTag).startsWith("[") ? guildTag : `[${guildTag}]`)
+    : null;
   return {
     id: `real-${char.id}`,
     realCharacterId: char.id,
@@ -145,7 +179,7 @@ export function characterToOpponent(char, equippedItems = [], guildTag = null) {
     power,
     arena_wins: char.arena_wins || 0,
     arena_losses: char.arena_losses || 0,
-    guild: guildTag,
+    guild,
     lastOnlineMins,
     appearance: char.appearance || {},
     avatar_url: char.avatar_url,
@@ -154,6 +188,74 @@ export function characterToOpponent(char, equippedItems = [], guildTag = null) {
     equippedItems,
     speciesId: null,
   };
+}
+
+/**
+ * Lower score = better match. Prefers similar rating, then level, then recent activity.
+ */
+export function scoreArenaCandidate(player, candidate) {
+  const myRating = player.arena_rating || 1000;
+  const theirRating = candidate.arena_rating || 1000;
+  const ratingGap = Math.abs(theirRating - myRating);
+  const levelGap = Math.abs((candidate.level || 1) - (player.level || 1));
+  let score = ratingGap + levelGap * 28;
+  const mins = candidate.updated_date
+    ? Math.max(0, (Date.now() - new Date(candidate.updated_date).getTime()) / 60000)
+    : 14 * 24 * 60;
+  if (mins <= 60) score -= 18;
+  else if (mins <= 24 * 60) score -= 8;
+  else if (mins > 7 * 24 * 60) score += 45;
+  return score;
+}
+
+/**
+ * Rank eligible characters into a preferred match list.
+ * Tight rating band first, then wide band, then remaining level-eligible players.
+ */
+export function rankArenaCandidates(player, candidates, {
+  levelBand = ARENA_LEVEL_BAND,
+  tightBand = ARENA_RATING_BAND,
+  wideBand = ARENA_RATING_BAND_WIDE,
+} = {}) {
+  const myLevel = player.level || 1;
+  const myRating = player.arena_rating || 1000;
+  const eligible = candidates.filter((c) => Math.abs((c.level || 1) - myLevel) <= levelBand);
+  const scored = eligible
+    .map((c) => ({ c, score: scoreArenaCandidate(player, c) }))
+    .sort((a, b) => a.score - b.score);
+
+  const tight = [];
+  const wide = [];
+  const rest = [];
+  for (const row of scored) {
+    const gap = Math.abs((row.c.arena_rating || 1000) - myRating);
+    if (gap <= tightBand) tight.push(row);
+    else if (gap <= wideBand) wide.push(row);
+    else rest.push(row);
+  }
+  return [...tight, ...wide, ...rest].map((r) => r.c);
+}
+
+/**
+ * Weighted pick from the top of a ranked list so matches stay fair but not identical every refresh.
+ */
+export function pickRankedCandidates(ranked, count) {
+  const pool = [...ranked];
+  const out = [];
+  while (out.length < count && pool.length) {
+    const band = pool.slice(0, Math.min(5, pool.length));
+    const weights = band.map((_, i) => band.length - i);
+    let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+    let idx = 0;
+    for (let i = 0; i < weights.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) { idx = i; break; }
+    }
+    const chosen = band[idx];
+    out.push(chosen);
+    pool.splice(pool.indexOf(chosen), 1);
+  }
+  return out;
 }
 
 export function generateOpponents(character, count = 3, catalogItems = []) {
@@ -168,9 +270,8 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
     // Opponent rating stays near the player's (±40) so fights stay competitive.
     const rating = Math.max(0, myRating + Math.floor(Math.random() * 80) - 40);
     const stats = botStats(level, CLASSES[classKey]);
-    const w = getClassWeights(classKey);
-    const weighted = POWER_STAT_KEYS.reduce((sum, k) => sum + (stats[k] || 0) * (w[k] ?? 0.1), 0);
-    const power = Math.round(level * 10 + weighted * 7.5);
+    const equippedItems = pickGearForBot(catalogItems, classKey, level);
+    const power = computePower({ level, class: classKey, stats }, equippedItems);
     const wins = Math.max(0, Math.floor(rating / 4) + Math.floor(Math.random() * 20));
     const losses = Math.floor(wins * (0.4 + Math.random() * 0.6));
     let name = pick(BOT_NAMES);
@@ -192,10 +293,50 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
       appearance: randomAppearance(raceKey),
       isBot: true,
       speciesId: ((i * 7 + name.charCodeAt(0)) % 30) + 1,
-      equippedItemIds: pickGearForBot(catalogItems, classKey, level),
+      equippedItems,
+      equippedItemIds: equippedItems.map((it) => it.id),
     });
   }
   return out;
+}
+
+/** Serializable opponent copy for revenge rematches (bots + real fallback). */
+export function snapshotOpponent(opp) {
+  const equippedItems = (opp.equippedItems || []).map((it) => ({
+    id: it.id,
+    name: it.name,
+    type: it.type,
+    rarity: it.rarity,
+    stats: it.stats,
+    level_requirement: it.level_requirement,
+    base_name: it.base_name,
+    emoji: it.emoji,
+  }));
+  const equippedItemIds = opp.equippedItemIds?.length
+    ? [...opp.equippedItemIds]
+    : equippedItems.map((it) => it.id).filter(Boolean);
+  return {
+    id: opp.id,
+    realCharacterId: opp.realCharacterId || null,
+    name: opp.name,
+    race: opp.race,
+    class: opp.class,
+    level: opp.level,
+    arena_rating: opp.arena_rating,
+    stats: opp.stats,
+    power: opp.power,
+    arena_wins: opp.arena_wins || 0,
+    arena_losses: opp.arena_losses || 0,
+    guild: opp.guild || null,
+    appearance: opp.appearance || {},
+    avatar_url: opp.avatar_url || null,
+    active_title: opp.active_title || null,
+    isBot: !!opp.isBot,
+    speciesId: opp.speciesId ?? null,
+    equippedItemIds,
+    equippedItems,
+    lastOnlineMins: opp.lastOnlineMins ?? 0,
+  };
 }
 
 function buildFighter(c, items, side) {
@@ -347,27 +488,87 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
   return { events, winner, playerMaxHp: A.maxHp, opponentMaxHp: B.maxHp };
 }
 
-export function computeRewards(player, opp, won, free = true) {
-  const levelDiff = (opp.level || 1) - (player.level || 1);
-  const ratingDiff = (opp.arena_rating || 1000) - (player.arena_rating || 1000);
+// Elo K-factor and soft clamps keep climbs meaningful without runaway swings.
+export const ARENA_ELO_K = 28;
+export const ARENA_RATING_DELTA_MIN = 6;
+export const ARENA_RATING_DELTA_MAX = 36;
 
+/** Expected win chance for `playerRating` vs `oppRating` (classic Elo). */
+export function eloExpectedScore(playerRating, oppRating) {
+  return 1 / (1 + 10 ** (((oppRating || 1000) - (playerRating || 1000)) / 400));
+}
+
+/**
+ * Balanced rating change: beating weaker foes pays less; upsets pay more.
+ * Losses mirror that (smashing down hurts more than falling to a favorite).
+ */
+export function eloRatingDelta(playerRating, oppRating, won, k = ARENA_ELO_K) {
+  const expected = eloExpectedScore(playerRating, oppRating);
+  const raw = Math.round(k * ((won ? 1 : 0) - expected));
   if (won) {
-    const upsetBonus = ratingDiff > 0 ? Math.min(20, Math.floor(ratingDiff / 15)) : 0;
-    const ratingDelta = 18 + upsetBonus + Math.max(0, Math.floor(ratingDiff / 20));
-    if (free) {
-      const xp = 40 + (opp.level || 1) * 8 + Math.max(0, levelDiff * 5);
-      const stardust = 50 + (opp.level || 1) * 12;
-      return { won: true, free: true, experience: xp, stardust, arena_rating_delta: ratingDelta };
-    }
-    // Paid battles (beyond the daily free quota) yield rating only.
-    return { won: true, free: false, experience: 0, stardust: 0, arena_rating_delta: ratingDelta };
+    return Math.max(ARENA_RATING_DELTA_MIN, Math.min(ARENA_RATING_DELTA_MAX, raw));
   }
+  return Math.max(-ARENA_RATING_DELTA_MAX, Math.min(-ARENA_RATING_DELTA_MIN, raw));
+}
 
-  const ratingDelta = Math.max(-25, -(10 + Math.max(0, Math.floor(-ratingDiff / 30))));
-  if (free) {
-    const xp = 12 + (opp.level || 1) * 3;
-    const stardust = 15 + (opp.level || 1) * 2;
-    return { won: false, free: true, experience: xp, stardust, arena_rating_delta: ratingDelta };
+function lootForOutcome(player, opp, won, free) {
+  if (!free) return { experience: 0, stardust: 0 };
+  const pl = player.level || 1;
+  const oppLevel = opp.level || 1;
+  const levelDiff = oppLevel - pl;
+  const ratingDiff = (opp.arena_rating || 1000) - (player.arena_rating || 1000);
+  // Slight loot tilt toward tougher matchups so farming down isn't optimal.
+  const challengeBonus = Math.max(0, Math.floor(ratingDiff / 40)) + Math.max(0, levelDiff);
+  const contentLevel = Math.max(1, Math.round((pl + oppLevel) / 2));
+  if (won) {
+    const rawXp = 36 + oppLevel * 7 + Math.max(0, levelDiff * 4) + challengeBonus * 3;
+    return {
+      experience: scaleCombatXp(rawXp, pl, contentLevel),
+      stardust: 50 + oppLevel * 12 + challengeBonus * 4,
+    };
   }
-  return { won: false, free: false, experience: 0, stardust: 0, arena_rating_delta: ratingDelta };
+  const rawXp = 10 + oppLevel * 2.5 + Math.max(0, Math.floor(challengeBonus / 2));
+  return {
+    experience: scaleCombatXp(rawXp, pl, contentLevel),
+    stardust: 15 + oppLevel * 2 + Math.max(0, Math.floor(challengeBonus / 2)),
+  };
+}
+
+export function computeRewards(player, opp, won, free = true) {
+  const ratingDelta = eloRatingDelta(player.arena_rating || 1000, opp.arena_rating || 1000, won);
+  const loot = lootForOutcome(player, opp, won, free);
+  return {
+    won,
+    free,
+    experience: loot.experience,
+    stardust: loot.stardust,
+    arena_rating_delta: ratingDelta,
+  };
+}
+
+/**
+ * Risk label from blended rating + power gap (not the same as Elo payout).
+ * Gives an honest "how hard is this fight?" read next to the reward chip.
+ */
+export function assessMatchRisk(playerPower, oppPower, playerRating, oppRating) {
+  const ratingGap = (oppRating || 1000) - (playerRating || 1000);
+  const powerGap = (oppPower || 0) - (playerPower || 0);
+  // Power weighs a bit more than raw rating for fight feel.
+  const score = ratingGap / 20 + powerGap / 18;
+  if (score <= -35) return { id: "favored", label: "FAVORED", tone: "emerald" };
+  if (score <= -12) return { id: "edge", label: "EDGE", tone: "cyan" };
+  if (score <= 12) return { id: "even", label: "EVEN", tone: "amber" };
+  if (score <= 35) return { id: "underdog", label: "UNDERDOG", tone: "orange" };
+  return { id: "danger", label: "DANGER", tone: "rose" };
+}
+
+/** Pre-fight stakes preview used by challenger cards. */
+export function previewArenaMatch(player, opp, { free = true, playerPower } = {}) {
+  const myRating = player.arena_rating || 1000;
+  const theirRating = opp.arena_rating || 1000;
+  const onWin = computeRewards(player, opp, true, free);
+  const onLoss = computeRewards(player, opp, false, free);
+  const risk = assessMatchRisk(playerPower ?? player.power, opp.power, myRating, theirRating);
+  const winChance = Math.round(eloExpectedScore(myRating, theirRating) * 100);
+  return { onWin, onLoss, risk, winChance };
 }

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { Gem, Sparkles, Crown, Check } from "lucide-react";
+import WeeklyNovaQuests from "@/components/game/WeeklyNovaQuests";
 
 const PACKAGES = [
   { id: "pouch", name: "Starter Pouch", crystals: 500, price: "$4.99", bonus: null, color: "#22D3EE" },
@@ -63,6 +64,8 @@ export default function CrystalStorePage() {
           <Gem className="w-4 h-4" /> {character.nova_crystals || 0} <span className="text-xs font-normal text-muted-foreground">Nova Crystals</span>
         </span>
       </motion.div>
+
+      <WeeklyNovaQuests character={character} onClaimed={setCharacter} />
 
       {/* Packages */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

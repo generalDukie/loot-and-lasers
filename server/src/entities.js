@@ -136,7 +136,7 @@ export function createEntityStore(type) {
 }
 
 const ENTITY_TYPES = [
-  "AppNotification", "Block", "Character", "ChatMessage", "DailyLogin",
+  "AppNotification", "ArenaMatch", "Block", "Character", "ChatMessage", "DailyLogin",
   "FriendRequest", "Friendship", "GalaxyNews", "Guild", "GuildBattle",
   "GuildChallenge", "GuildLog", "GuildMember", "GuildWar", "GuildWarReady",
   "HubLayout", "Item", "Mail", "Mission", "ModerationConfig", "Nexus",

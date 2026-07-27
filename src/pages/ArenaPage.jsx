@@ -4,57 +4,64 @@ import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
-import { getExpForLevel } from "@/lib/gameData";
-import { contributeArenaWin } from "@/lib/guildUtils";
+import { getExpForLevel, getStatPointsForLevelRange } from "@/lib/gameData";
+import { contributeArenaWin, getGuildMembership } from "@/lib/guildUtils";
 import { processDiscovery } from "@/lib/discovery";
 import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { pushNotification } from "@/lib/notificationEngine";
 import {
   ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST, ARENA_REFRESH_MS, ARENA_REFRESH_COST,
-  ARENA_BATTLE_COOLDOWN_MS, ARENA_SKIP_COST,
+  ARENA_BATTLE_COOLDOWN_MS, ARENA_SKIP_COST, ARENA_CHALLENGER_SLOTS, ARENA_MAX_REAL_OPPONENTS,
+  ARENA_RATING_BAND_WIDE,
   computePower, generateOpponents, characterToOpponent, simulateBattle, computeRewards,
+  rankArenaCandidates, pickRankedCandidates, resolveOpponentItems,
 } from "@/lib/arenaEngine";
+import { loadArenaHistory, recordArenaMatch, resolveRevengeOpponent } from "@/lib/arenaHistory";
 import ArenaOpponentCard from "@/components/game/ArenaOpponentCard";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import ArenaNewsFeed from "@/components/game/ArenaNewsFeed";
+import ArenaMatchHistory from "@/components/game/ArenaMatchHistory";
 import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
-import { Swords, Trophy, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
-
-// Resolve an opponent's equipped gear to full item records — real opponents
-// carry `equippedItems` directly; bots only carry `equippedItemIds` that must be
-// looked up against the loaded catalog. Used to render the enemy's weapon.
-function resolveOpponentItems(opp, catalogItems) {
-  if (opp.equippedItems?.length) return opp.equippedItems;
-  if (opp.equippedItemIds?.length) {
-    return opp.equippedItemIds.map((id) => catalogItems.find((c) => c.id === id)).filter(Boolean);
-  }
-  return [];
-}
+import { ArenaBackdrop } from "@/components/game/ArenaBackdrop";
+import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
+import { Swords, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
 
 import { todayET } from "@/lib/gameTime";
 function fmtMs(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
-// Fetch up to `maxReal` real player characters near the player's level/rating and
-// convert them to opponent shape. Falls back to all-bots if no other players exist.
-async function fetchRealOpponents(char, maxReal = 1, excludeIds = []) {
+async function guildTagForCharacter(characterId) {
   try {
-    const chars = await api.entities.Character.list("-arena_rating", 60);
+    const membership = await getGuildMembership(characterId);
+    if (!membership) return null;
+    const guild = await api.entities.Guild.get(membership.guild_id);
+    return guild?.tag || guild?.name || null;
+  } catch {
+    return null;
+  }
+}
+
+// Fetch up to `maxReal` real players near the player's rating (then level),
+// attach guild tags + equipped gear, and convert to opponent shape.
+async function fetchRealOpponents(char, maxReal = ARENA_MAX_REAL_OPPONENTS, excludeIds = []) {
+  try {
+    const chars = await api.entities.Character.list("-arena_rating", 80);
     const myOwnerId = char.created_by_id;
+    const exclude = new Set(excludeIds.filter(Boolean));
     const candidates = chars
-      // Never match the active hero or any other character on the same account.
       .filter((c) => c.id !== char.id)
       .filter((c) => !myOwnerId || c.created_by_id !== myOwnerId)
-      .filter((c) => !excludeIds.includes(c.id))
-      .filter((c) => Math.abs((c.level || 1) - (char.level || 1)) <= 6);
+      .filter((c) => !exclude.has(c.id));
     if (!candidates.length) return [];
-    const shuffled = [...candidates].sort(() => Math.random() - 0.5).slice(0, maxReal);
-    const out = [];
-    for (const c of shuffled) {
+
+    const ranked = rankArenaCandidates(char, candidates);
+    const picked = pickRankedCandidates(ranked, maxReal);
+    const out = await Promise.all(picked.map(async (c) => {
       let eq = [];
       try { eq = (await api.entities.Item.filter({ character_id: c.id, is_equipped: true })) || []; } catch (e) {}
-      out.push(characterToOpponent(c, eq));
-    }
+      const guildTag = await guildTagForCharacter(c.id);
+      return characterToOpponent(c, eq, guildTag);
+    }));
     return out;
   } catch (e) {
     return [];
@@ -62,11 +69,19 @@ async function fetchRealOpponents(char, maxReal = 1, excludeIds = []) {
 }
 
 // Mixes real players (when available) with bots to fill the challenger slots.
+// Prefers up to ARENA_MAX_REAL_OPPONENTS reals from the rating band; fills a 3rd
+// real slot only when another fair (wide-band) match exists. Rest are bots.
 // `excludeIds` lists real character ids already on screen so a replacement
 // can never duplicate a challenger still showing in the current refresh.
 async function buildOpponentPool(char, catalogItems, excludeIds = []) {
-  const real = await fetchRealOpponents(char, 1, excludeIds);
-  const bots = generateOpponents(char, 3 - real.length, catalogItems);
+  const candidates = await fetchRealOpponents(char, ARENA_CHALLENGER_SLOTS, excludeIds);
+  const myRating = char.arena_rating || 1000;
+  let real = candidates.slice(0, ARENA_MAX_REAL_OPPONENTS);
+  if (candidates.length >= 3) {
+    const thirdGap = Math.abs((candidates[2].arena_rating || 1000) - myRating);
+    if (thirdGap <= ARENA_RATING_BAND_WIDE) real = candidates.slice(0, 3);
+  }
+  const bots = generateOpponents(char, ARENA_CHALLENGER_SLOTS - real.length, catalogItems);
   const pool = [...real, ...bots];
   // Final guard: drop any duplicate real player within this refresh.
   const seen = new Set();
@@ -76,6 +91,7 @@ async function buildOpponentPool(char, catalogItems, excludeIds = []) {
     seen.add(key);
     return true;
   });
+  // Keep reals visible but shuffle within the board so slot order isn't fixed.
   return deduped.sort(() => Math.random() - 0.5);
 }
 
@@ -90,6 +106,8 @@ export default function ArenaPage() {
   const [completeSummary, setCompleteSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [catalogItems, setCatalogItems] = useState([]);
+  const [matchHistory, setMatchHistory] = useState([]);
+  const [revengeBusyId, setRevengeBusyId] = useState(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -112,6 +130,7 @@ export default function ArenaPage() {
     setCharacter(char);
     setFreeBattlesLeft(left);
     setOpponents(await buildOpponentPool(char, items));
+    setMatchHistory(await loadArenaHistory(char.id));
     setLoading(false);
     // Equipped gear feeds the power readout — load it best-effort so a hiccup
     // never traps the page on the loading spinner.
@@ -159,9 +178,25 @@ export default function ArenaPage() {
       toast({ title: "Not enough Nova Crystals", description: `Need ${totalCost} 💎 to fight now.`, variant: "destructive" });
       return;
     }
-    const battle = simulateBattle(character, opp, equippedItems, opp.equippedItems || []);
+    const oppItems = resolveOpponentItems(opp, catalogItems);
+    const battle = simulateBattle(character, opp, equippedItems, oppItems);
     const rewards = computeRewards(character, opp, battle.winner === "player", isFree);
-    setBattleState({ battle, opp, rewards, isFree, skipped: skipping });
+    setBattleState({ battle, opp: { ...opp, equippedItems: oppItems.length ? oppItems : opp.equippedItems }, rewards, isFree, skipped: skipping });
+  }
+
+  async function handleRevenge(match) {
+    if (revengeBusyId) return;
+    setRevengeBusyId(match.id);
+    try {
+      const opp = await resolveRevengeOpponent(match, catalogItems);
+      if (!opp) {
+        toast({ title: "Opponent unavailable", description: "Could not rebuild that rival for a rematch.", variant: "destructive" });
+        return;
+      }
+      handleChallenge(opp, { skip: cooldownActive });
+    } finally {
+      setRevengeBusyId(null);
+    }
   }
 
   async function finishBattle() {
@@ -198,17 +233,21 @@ export default function ArenaPage() {
       arena_battles: (character.arena_battles || 0) + 1,
       arena_attempts_left: Math.max(0, freeBattlesLeft - (isFree ? 1 : 0)),
       arena_cooldown_at: new Date().toISOString(),
-      unspent_stat_points: (character.unspent_stat_points || 0) + (newLevel - character.level) * 4,
+      unspent_stat_points: (character.unspent_stat_points || 0) + getStatPointsForLevelRange(character.level, newLevel),
     };
     const skipCost = skipped ? ARENA_SKIP_COST : 0;
     const battleCost = isFree ? 0 : ARENA_PAID_BATTLE_COST;
     if (skipCost || battleCost) update.nova_crystals = (character.nova_crystals || 0) - skipCost - battleCost;
-    const gearItems = (opp.equippedItemIds || []).map((id) => {
-      const it = catalogItems.find((c) => c.id === id);
-      return it ? { id: it.id, name: it.name, type: it.type, rarity: it.rarity } : null;
-    }).filter(Boolean);
+    const oppItems = resolveOpponentItems(opp, catalogItems);
+    const gearItems = oppItems.map((it) => ({
+      id: it.id, name: it.name, type: it.type, rarity: it.rarity, base_name: it.base_name,
+    }));
     const { updates: discUpdates, found: discFound } = processDiscovery(character, { win: rewards.won, speciesId: opp.speciesId, gearItems });
     Object.assign(update, discUpdates);
+    if (rewards.won) {
+      const weekly = progressWeeklyNovaQuest(character, "arena", 1);
+      if (weekly) update.weekly_nova_quests = weekly;
+    }
     await api.entities.Character.update(character.id, update);
     if ((skipCost || 0) + (battleCost || 0)) void trackNovaSpend(character, (skipCost || 0) + (battleCost || 0), "arena");
 
@@ -230,14 +269,29 @@ export default function ArenaPage() {
     // Feed Arena wins into the guild weekly challenge (fire-and-forget)
     if (rewards.won) void contributeArenaWin(character);
 
+    // Personal match log for revenge rematches
+    void recordArenaMatch({
+      characterId: character.id,
+      opp,
+      won: rewards.won,
+      ratingDelta: rewards.arena_rating_delta,
+      ratingAfter: newRating,
+    }).then(async () => {
+      setMatchHistory(await loadArenaHistory(character.id));
+    });
+
     setCharacter((c) => ({ ...c, ...update }));
     setFreeBattlesLeft((a) => Math.max(0, a - (isFree ? 1 : 0)));
     setBattleState(null);
     // Replace the just-fought challenger with a fresh mixed (real+bots) pick,
     // excluding real players already shown so no one appears twice at once.
+    // Revenge fights may not be on the board — only swap if they were.
     const excludeIds = opponents.filter((o) => o.id !== opp.id).map((o) => o.realCharacterId).filter(Boolean);
-    const replacement = (await buildOpponentPool(character, catalogItems, excludeIds))[0];
-    setOpponents((prev) => prev.map((o) => (o.id === opp.id ? replacement : o)));
+    const onBoard = opponents.some((o) => o.id === opp.id);
+    if (onBoard) {
+      const replacement = (await buildOpponentPool(character, catalogItems, excludeIds))[0];
+      setOpponents((prev) => prev.map((o) => (o.id === opp.id ? replacement : o)));
+    }
 
     if (discFound.length) {
       pushNotification({ owner_id: character.id, type: "system", title: "🔎 Discovery!", body: discFound.map((f) => `${f.emoji} ${f.name}`).join(" · ") });
@@ -254,7 +308,7 @@ export default function ArenaPage() {
       leveledUp: newLevel > prevLevel,
       prevLevel,
       newLevel,
-      statPoints: (newLevel - prevLevel) * 4,
+      statPoints: getStatPointsForLevelRange(prevLevel, newLevel),
       discoveries: discFound,
       note: !isFree ? `Paid battle (−${ARENA_PAID_BATTLE_COST} 💎) — rating only` : undefined,
     });
@@ -274,7 +328,13 @@ export default function ArenaPage() {
   const streak = character.arena_streak || 0;
 
   return (
-    <div className="space-y-6">
+    <div className="relative -mx-3 sm:-mx-4 px-3 sm:px-4 pb-6 min-h-[70vh]">
+      {/* Dim arena atmosphere behind the lobby */}
+      <div className="absolute inset-0 -z-10 overflow-hidden rounded-2xl opacity-[0.55] pointer-events-none">
+        <ArenaBackdrop />
+        <div className="absolute inset-0 bg-background/55" />
+      </div>
+
       {battleState && (
         <ArenaBattleOverlay
           player={character}
@@ -289,67 +349,109 @@ export default function ArenaPage() {
         <CombatCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />
       )}
 
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 420, damping: 16 }}>
-        <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2 mb-3">
-          <Swords className="w-5 h-5 text-primary" /> Battle Arena
-        </h1>
+      <div className="relative space-y-5 pt-2">
+        {/* Hero header */}
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 420, damping: 16 }}
+          className="rounded-2xl border border-border/60 painted-panel painted-frame canvas-grain overflow-hidden"
+        >
+          <div className="absolute inset-0 pointer-events-none" style={{
+            background: "radial-gradient(ellipse 60% 80% at 10% 50%, rgba(251,191,36,0.12), transparent 55%), radial-gradient(ellipse 50% 70% at 90% 30%, rgba(34,211,238,0.1), transparent 50%)",
+          }} />
+          <div className="relative p-4 sm:p-5">
+            <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+              <div>
+                <p className="text-[10px] font-display tracking-[0.22em] uppercase text-cyan-300/80 mb-1">Combat Colosseum</p>
+                <h1 className="font-display font-black text-2xl sm:text-3xl tracking-wider flex items-center gap-2">
+                  <Swords className="w-6 h-6 text-primary" /> Battle Arena
+                </h1>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-display tracking-widest uppercase text-muted-foreground">Your Rating</p>
+                <p className="font-display font-black text-3xl text-amber-300 drop-shadow-[0_0_12px_rgba(251,191,36,0.35)]">
+                  {character.arena_rating || 0}
+                </p>
+              </div>
+            </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          <Stat icon={Trophy} label="Rating" value={character.arena_rating || 0} color="#FFD700" />
-          <Stat icon={Zap} label="Power" value={power} color="#22D3EE" />
-          <Stat icon={Swords} label="W / L" value={`${wins} / ${losses}`} color="#60A5FA" />
-          <Stat icon={Flame} label="Streak" value={streak} color="#FB7185" />
-          <div className="p-2 rounded-lg bg-card/60 border border-border/50 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-amber-300" />
-            <div>
-              <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Free Battles</p>
-              <p className="font-display font-bold text-sm text-amber-300">{freeBattlesLeft}/{ARENA_DAILY_FREE_BATTLES}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <Stat icon={Zap} label="Power" value={power} color="#22D3EE" />
+              <Stat icon={Swords} label="W / L" value={`${wins} / ${losses}`} color="#60A5FA" />
+              <Stat icon={Flame} label="Streak" value={streak} color="#FB7185" />
+              <Stat icon={Shield} label="Free Battles" value={`${freeBattlesLeft}/${ARENA_DAILY_FREE_BATTLES}`} color="#FBBF24" />
             </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
 
-      {/* Opponents */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide">CHALLENGERS</h2>
-        <button
-          onClick={refreshOpponents}
-          className="text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1 transition-colors bg-accent/10 text-accent hover:bg-accent/20"
-        >
-          <RefreshCw className="w-3 h-3" /> {canFreeRefresh ? "Refresh" : `Refresh (${ARENA_REFRESH_COST} ✨)`}
-          {!canFreeRefresh && <span className="text-muted-foreground ml-1">{fmtMs(refreshAt - now)}</span>}
-        </button>
+        {/* Challengers */}
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-xs font-display font-bold tracking-[0.18em] text-muted-foreground">CHALLENGERS</h2>
+          <button
+            onClick={refreshOpponents}
+            className="text-xs px-3 py-1.5 rounded-full font-display font-semibold flex items-center gap-1.5 transition-colors bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25"
+          >
+            <RefreshCw className="w-3 h-3" /> {canFreeRefresh ? "Refresh" : `Refresh · ${ARENA_REFRESH_COST} ✨`}
+            {!canFreeRefresh && <span className="text-muted-foreground font-body font-normal">{fmtMs(refreshAt - now)}</span>}
+          </button>
+        </div>
+
+        {cooldownActive && (
+          <div className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 backdrop-blur-sm">
+            <Clock className="w-4 h-4 text-amber-300 shrink-0" />
+            <span className="text-xs text-amber-200 font-display">
+              Cooldown {fmtMs(cooldownEnds - now)} — skip from any challenger ({ARENA_SKIP_COST} 💎).
+            </span>
+          </div>
+        )}
+
+        <div className="grid gap-5 sm:grid-cols-3 sm:gap-6">
+          {opponents.map((o, i) => (
+            <motion.div
+              key={o.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06, type: "spring", stiffness: 380, damping: 22 }}
+            >
+              <ArenaOpponentCard
+                opponent={o}
+                player={character}
+                playerPower={power}
+                freeBattle={freeBattlesLeft > 0}
+                onChallenge={handleChallenge}
+                cooldownActive={cooldownActive}
+                skipCost={ARENA_SKIP_COST}
+              />
+            </motion.div>
+          ))}
+        </div>
+
+        {freeBattlesLeft <= 0 && (
+          <div className="text-center text-xs text-muted-foreground rounded-lg border border-border/40 bg-card/40 px-3 py-2">
+            Free battles used — keep climbing for {ARENA_PAID_BATTLE_COST} 💎 per battle (rating only).
+          </div>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ArenaMatchHistory
+            matches={matchHistory}
+            onRevenge={handleRevenge}
+            revengeBusyId={revengeBusyId}
+          />
+          <ArenaNewsFeed />
+        </div>
       </div>
-
-      {cooldownActive && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
-          <Clock className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-          <span className="text-xs text-amber-300 font-display">Battle cooldown — {fmtMs(cooldownEnds - now)} left · skip from any challenger below ({ARENA_SKIP_COST} 💎).</span>
-        </div>
-      )}
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {opponents.map((o) => (
-          <ArenaOpponentCard key={o.id} opponent={o} onChallenge={handleChallenge} cooldownActive={cooldownActive} skipCost={ARENA_SKIP_COST} />
-        ))}
-      </div>
-
-      {freeBattlesLeft <= 0 && (
-        <div className="text-center text-xs text-muted-foreground">
-          Free battles used — keep climbing for {ARENA_PAID_BATTLE_COST} 💎 per battle (rating only).
-        </div>
-      )}
-
-      <ArenaNewsFeed />
     </div>
   );
 }
 
 function Stat({ icon: Icon, label, value, color }) {
   return (
-    <div className="p-2 rounded-lg bg-card/60 border border-border/50 flex items-center gap-2">
-      <Icon className="w-4 h-4" style={{ color }} />
+    <div className="p-2.5 rounded-xl bg-background/45 border border-border/50 flex items-center gap-2.5 backdrop-blur-sm">
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}22`, color }}>
+        <Icon className="w-4 h-4" />
+      </div>
       <div className="min-w-0">
         <p className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</p>
         <p className="font-display font-bold text-sm truncate" style={{ color }}>{value}</p>

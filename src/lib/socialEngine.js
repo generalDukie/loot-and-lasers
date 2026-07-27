@@ -37,22 +37,30 @@ export async function getMyCharacter({ force = false } = {}) {
     // Prefer the user's chosen active character (stored on the user record).
     const me = getCurrentUser() || (await api.auth.me().catch(() => null));
     const activeId = me?.active_character_id || null;
+    let ch = null;
     if (activeId) {
       try {
-        const ch = await api.entities.Character.get(activeId);
-        if (ch && ch.created_by_id === uid) return ch;
+        const got = await api.entities.Character.get(activeId);
+        if (got && got.created_by_id === uid) ch = got;
       } catch {}
     }
-    // Fallback: newest character owned by this user.
-    const list = await api.entities.Character.filter({ created_by_id: uid }, "-created_date", 3);
-    const ch = list[0] || null;
-    // Defensive: never trust a record that isn't actually owned by this user.
-    if (ch && ch.created_by_id !== uid) return null;
-    // Migration: if the user has a character but no active set, pin the newest.
-    if (ch && !activeId) {
-      try { await api.auth.updateMe({ active_character_id: ch.id }); } catch {}
+    if (!ch) {
+      // Fallback: newest character owned by this user.
+      const list = await api.entities.Character.filter({ created_by_id: uid }, "-created_date", 3);
+      ch = list[0] || null;
+      // Defensive: never trust a record that isn't actually owned by this user.
+      if (ch && ch.created_by_id !== uid) ch = null;
+      // Migration: if the user has a character but no active set, pin the newest.
+      if (ch && !activeId) {
+        try { await api.auth.updateMe({ active_character_id: ch.id }); } catch {}
+      }
     }
-    return ch;
+    if (!ch) return null;
+    return {
+      ...ch,
+      legacy_name: ch.legacy_name || me?.legacy_name || null,
+      legacy_display: ch.legacy_display || me?.legacy_display || "surname",
+    };
   };
   const MAX_RETRIES = 3;
   const isTransient = (msg) => /rate limit|429|network|fetch|timeout|econnaborted|failed to fetch|5\d{2}/i.test(msg);

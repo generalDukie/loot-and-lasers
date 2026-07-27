@@ -20,6 +20,7 @@ db.exec(`
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'user',
     legacy_name TEXT,
+    legacy_display TEXT DEFAULT 'surname',
     active_character_id TEXT,
     purchased_slots INTEGER DEFAULT 0,
     email_verified INTEGER DEFAULT 0,
@@ -45,6 +46,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_entities_created_by_id ON entities(created_by_id);
   CREATE INDEX IF NOT EXISTS idx_entities_type_created ON entities(type, created_date);
 `);
+
+// Lightweight column adds for existing DBs (CREATE TABLE IF NOT EXISTS won't alter).
+(function ensureUserColumns() {
+  const cols = new Set(db.prepare("PRAGMA table_info(users)").all().map((c) => c.name));
+  if (!cols.has("legacy_display")) {
+    db.exec("ALTER TABLE users ADD COLUMN legacy_display TEXT DEFAULT 'surname'");
+  }
+})();
 
 export function nowIso() {
   return new Date().toISOString();

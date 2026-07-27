@@ -8,7 +8,6 @@ import { useHubLayout } from "@/hooks/useHubLayout";
 import { useSiteConfig } from "@/lib/SiteConfigContext";
 import { getBuiltin, mergeBuiltin, BTN_SIZE_W } from "@/lib/hubButtons";
 import GameCanvas from "@/components/game/GameCanvas";
-import HubLoadoutPanel from "@/components/game/HubLoadoutPanel";
 
 const STATION_IMG = "/assets/station-hub.png";
 
@@ -70,10 +69,8 @@ export default function SpaceStationHub({ character, children }) {
                 padding: "clamp(0.65rem, 1.2vw, 1.5rem) clamp(0.75rem, 2vw, 2.5rem) clamp(0.65rem, 1vw, 1.1rem)",
               }}
             >
-              {/* Open station art + loadout doll */}
-              <div className="flex-1 min-h-[6rem] flex items-end sm:items-center">
-                <HubLoadoutPanel character={character} />
-              </div>
+              {/* Open station art */}
+              <div className="flex-1 min-h-[6rem]" aria-hidden />
 
               {/* Optional custom buttons (read-only from HubLayout config) */}
               {customButtons.length > 0 && (

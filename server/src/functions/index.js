@@ -1,4 +1,4 @@
-import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel } from "../shared/rewards.js";
+import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, getStatPointsForLevelRange } from "../shared/rewards.js";
 import { ACHIEVEMENTS, evaluateUnlocked } from "../shared/achievements.js";
 import { createService, entities } from "../entities.js";
 import { db, nowIso } from "../db.js";
@@ -597,17 +597,17 @@ export async function AdminModeration(user, body) {
       let newExp = (ch.experience || 0) + deltas.experience;
       let newLevel = ch.level || 1;
       let expToNext = ch.experience_to_next_level || expForLevel(newLevel);
-      let statPoints = 0;
+      const prevLevel = newLevel;
       if (deltas.experience > 0) {
         while (newExp >= expToNext) {
           newExp -= expToNext;
           newLevel++;
-          statPoints += 4;
           expToNext = expForLevel(newLevel);
         }
       } else {
         newExp = Math.max(0, newExp);
       }
+      const statPoints = getStatPointsForLevelRange(prevLevel, newLevel);
       patch.experience = newExp;
       patch.level = newLevel;
       patch.experience_to_next_level = expToNext;
@@ -623,7 +623,7 @@ export async function AdminModeration(user, body) {
     if (!ch) return { status: 404, body: { error: "Character not found" } };
     entities.Item.deleteMany({ character_id });
     const updated = entities.Character.update(character_id, {
-      level: 1, experience: 0, experience_to_next_level: 60,
+      level: 1, experience: 0, experience_to_next_level: expForLevel(1),
       stardust: 0, nova_crystals: 0, unspent_stat_points: 10,
       discovered_species: [], collected_artifacts: [], collected_relics: [],
       arena_wins: 0, arena_losses: 0, arena_rating: 1000,

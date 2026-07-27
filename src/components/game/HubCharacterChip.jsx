@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FlaskConical, Rocket } from "lucide-react";
+import { Rocket, Sparkles } from "lucide-react";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { fullName } from "@/lib/legacyName";
-import { getActiveBuffs } from "@/lib/gameData";
+import { getActiveBuffs, STAT_ICONS, MAX_ACTIVE_STAT_TYPES } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
 
 // Ticks every second so countdown labels stay live.
@@ -17,15 +17,34 @@ function useNow() {
   return now;
 }
 
-// Compact remaining-time label for the soonest-expiring effect.
+// Compact remaining-time under each stim icon.
 function remainingLabel(expiresAt, now) {
   const ms = Math.max(0, new Date(expiresAt).getTime() - now);
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   const s = Math.floor((ms % 60000) / 1000);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
+  if (h > 0) return m > 0 ? `${h}h${m}m` : `${h}h`;
+  if (m > 0) return `${m}m`;
   return `${s}s`;
+}
+
+function StimIcon({ buff, now, large }) {
+  const isOmni = buff.stat === "all";
+  const icon = isOmni ? null : (STAT_ICONS[buff.stat] || "🧪");
+  const pct = Math.round((buff.mult || 0) * 100);
+  const title = `${buff.name || buff.stat} · +${pct}% · ${remainingLabel(buff.expires_at, now)} left`;
+  return (
+    <span className="flex flex-col items-center leading-none" title={title}>
+      {isOmni ? (
+        <Sparkles className={large ? "w-3 h-3 text-amber-300" : "w-2.5 h-2.5 text-amber-300"} />
+      ) : (
+        <span className={large ? "text-[11px]" : "text-[9px]"} aria-hidden>{icon}</span>
+      )}
+      <span className={`tabular-nums font-bold text-accent mt-0.5 ${large ? "text-[8px]" : "text-[7px]"}`}>
+        {remainingLabel(buff.expires_at, now)}
+      </span>
+    </span>
+  );
 }
 
 // Compact character identity chip — portrait + level badge + name + XP bar.
@@ -91,29 +110,36 @@ export default function HubCharacterChip({ character, xpPct, large = false }) {
             {(character.experience || 0).toLocaleString()} / {(character.experience_to_next_level || 0).toLocaleString()} XP
           </p>
           {(() => {
-            const buffs = getActiveBuffs(character);
+            const buffs = getActiveBuffs(character).slice(0, MAX_ACTIVE_STAT_TYPES);
             const mounts = getActiveFuelMounts(character);
             if (!buffs.length && !mounts.length) return null;
-            const buffExpiry = buffs.length ? Math.min(...buffs.map((b) => new Date(b.expires_at).getTime())) : null;
             const mountExpiry = mounts.length ? Math.min(...mounts.map((m) => new Date(m.expires_at).getTime())) : null;
             return (
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-end gap-1.5 mt-0.5">
                 {buffs.length > 0 && (
-                  <span className="flex items-center gap-0.5 text-accent" title={`${buffs.length} active stim${buffs.length > 1 ? "s" : ""}`}>
-                    <FlaskConical className={large ? "w-3 h-3" : "w-2.5 h-2.5"} />
-                    <span className={`tabular-nums font-bold ${large ? "text-[9px]" : "text-[8px]"}`}>{remainingLabel(buffExpiry, now)}</span>
-                    {buffs.length > 1 && (
-                      <span className={`tabular-nums font-bold leading-none rounded-full px-1 bg-accent/20 ${large ? "text-[8px]" : "text-[7px]"}`}>×{buffs.length}</span>
-                    )}
-                  </span>
+                  <div className="flex items-end gap-1">
+                    {buffs.map((b) => (
+                      <StimIcon
+                        key={`${b.stat}-${b.expires_at}`}
+                        buff={b}
+                        now={now}
+                        large={large}
+                      />
+                    ))}
+                  </div>
                 )}
                 {mounts.length > 0 && (
-                  <span className="flex items-center gap-0.5 text-amber-400" title={`${mounts.length} active fuel mount${mounts.length > 1 ? "s" : ""}`}>
-                    <Rocket className={large ? "w-3 h-3" : "w-2.5 h-2.5"} />
-                    <span className={`tabular-nums font-bold ${large ? "text-[9px]" : "text-[8px]"}`}>{remainingLabel(mountExpiry, now)}</span>
-                    {mounts.length > 1 && (
-                      <span className={`tabular-nums font-bold leading-none rounded-full px-1 bg-amber-400/20 text-amber-300 ${large ? "text-[8px]" : "text-[7px]"}`}>×{mounts.length}</span>
-                    )}
+                  <span
+                    className="flex flex-col items-center leading-none text-amber-400"
+                    title={mounts.map((m) => m.name).filter(Boolean).join(" · ") || `${mounts.length} fuel mount${mounts.length > 1 ? "s" : ""}`}
+                  >
+                    <span className="relative inline-flex">
+                      <Rocket className={large ? "w-3 h-3" : "w-2.5 h-2.5"} />
+                      {mounts.length > 1 && (
+                        <span className="absolute -top-1 -right-1.5 tabular-nums font-bold leading-none text-amber-300 text-[6px]">×{mounts.length}</span>
+                      )}
+                    </span>
+                    <span className={`tabular-nums font-bold mt-0.5 ${large ? "text-[8px]" : "text-[7px]"}`}>{remainingLabel(mountExpiry, now)}</span>
                   </span>
                 )}
               </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { RACES, CLASSES } from "@/lib/gameData";
+import { RACES, CLASSES, getExpForLevel } from "@/lib/gameData";
 import { bustMyCharacterCache } from "@/lib/socialEngine";
 import RaceCard from "@/components/game/RaceCard";
 import ClassCard from "@/components/game/ClassCard";
@@ -34,6 +34,7 @@ export default function CharacterCreation() {
   const [checked, setChecked] = useState(false);
   const [startCrystals, setStartCrystals] = useState(100);
   const [userLegacyName, setUserLegacyName] = useState("");
+  const [userLegacyDisplay, setUserLegacyDisplay] = useState("surname");
   const [existingCharCount, setExistingCharCount] = useState(0);
   // Debounced name availability: "idle" | "checking" | "available" | "taken"
   const [nameStatus, setNameStatus] = useState("idle");
@@ -48,6 +49,7 @@ export default function CharacterCreation() {
         setExistingCharCount(list.length);
         setStartCrystals(list.length === 0 ? 100 : 0);
         setUserLegacyName(me.legacy_name || "");
+        setUserLegacyDisplay(me.legacy_display === "family" ? "family" : "surname");
       } catch {
         navigate("/");
         return;
@@ -125,11 +127,12 @@ export default function CharacterCreation() {
       const created = await api.entities.Character.create({
         name: form.name.trim(),
         legacy_name: userLegacyName || undefined,
+        legacy_display: userLegacyDisplay,
         race: form.race,
         class: form.class,
         level: 1,
         experience: 0,
-        experience_to_next_level: 100,
+        experience_to_next_level: getExpForLevel(1),
         nova_crystals: startCrystals,
         stats: baseStats,
         unspent_stat_points: 0,

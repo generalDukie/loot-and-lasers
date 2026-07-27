@@ -122,7 +122,7 @@ function renderSection(id) {
             <Li><b>Neural Accelerator</b> — more XP from missions.</Li>
           </ul>
           <H>Ships</H>
-          <p>Each ship keeps its own mod loadout. New hulls unlock at higher levels, each with inherent bonuses that stack with your mods.</p>
+          <p>Each ship keeps its own mod loadout. Hulls unlock with major milestones — Frigate at 50, Cruiser at 100, Dreadnought at 200 — each with inherent bonuses that stack with your mods.</p>
         </div>
       );
     case "guilds":
@@ -144,12 +144,12 @@ function renderSection(id) {
           <p>Stay connected with the galaxy's other operatives.</p>
           <ul className="space-y-1.5">
             <Li><b>Friends</b> — send and accept friend requests, see who's online.</Li>
-            <Li><b>Messages</b> — private one-on-one conversations, plus a Notifications tab for alerts.</Li>
+            <Li><b>Messages</b> — private one-on-one conversations. Alerts and system notices live in the blue bell button (bottom-right).</Li>
             <Li><b>Mail</b> — receive system mail and rewards. Some mail carries claimable rewards.</Li>
             <Li><b>Global Chat</b> — talk to everyone online. Mind the rules; report abuse if needed.</Li>
             <Li><b>Daily Login</b> — a 30-day reward calendar. Log in each day to claim; rewards escalate.</Li>
           </ul>
-          <p className="text-xs text-muted-foreground"><Mail className="w-3 h-3 inline" /> Tip: check your Mail and Notifications tabs regularly — rewards expire!</p>
+          <p className="text-xs text-muted-foreground"><Mail className="w-3 h-3 inline" /> Tip: check Mail and the notification bell regularly — rewards expire!</p>
         </div>
       );
     default:

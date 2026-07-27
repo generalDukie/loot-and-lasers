@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { Newspaper } from "lucide-react";
 
-const NEWS_TTL_MS = 24 * 60 * 60 * 1000; // keep events for 24 hours
+const NEWS_TTL_MS = 24 * 60 * 60 * 1000;
 
 function eventTime(iso) {
   const d = new Date(iso);
@@ -27,7 +27,6 @@ export default function ArenaNewsFeed() {
 
   const load = useCallback(async () => {
     try {
-      // Drop anything older than 24h so wiped/stale events don't linger in the DB.
       const cutoff = new Date(Date.now() - NEWS_TTL_MS).toISOString();
       try {
         await api.entities.GalaxyNews.deleteMany({ created_date: { $lt: cutoff } });
@@ -45,28 +44,36 @@ export default function ArenaNewsFeed() {
   }, [load]);
 
   return (
-    <div className="p-3 rounded-xl border border-border/50 bg-card/40">
-      <h3 className="font-display font-bold text-xs tracking-wide flex items-center gap-1 mb-2">
-        <Newspaper className="w-3.5 h-3.5 text-primary" /> GALAXY NEWS
-      </h3>
-      <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-        {news.length === 0 && <p className="text-[11px] text-muted-foreground">The galaxy is quiet... for now.</p>}
-        <AnimatePresence>
-          {news.map((n) => (
-            <motion.div
-              key={n.id}
-              layout
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, height: 0 }}
-              className="text-[11px] text-foreground/80 leading-snug"
-            >
-              <span className="text-muted-foreground">{eventTime(n.created_date)}</span>
-              {" — "}
-              {n.message}
-            </motion.div>
-          ))}
-        </AnimatePresence>
+    <div className="relative overflow-hidden rounded-2xl border border-border/60 painted-panel painted-frame canvas-grain">
+      <div className="absolute inset-0 pointer-events-none opacity-60" style={{
+        background: "radial-gradient(ellipse 70% 50% at 0% 0%, rgba(34,211,238,0.1), transparent 55%)",
+      }} />
+      <div className="relative p-4">
+        <h3 className="font-display font-bold text-xs tracking-[0.18em] flex items-center gap-2 mb-3 text-cyan-300/90">
+          <Newspaper className="w-3.5 h-3.5" /> GALAXY NEWS
+        </h3>
+        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+          {news.length === 0 && (
+            <p className="text-[11px] text-muted-foreground italic">The galaxy is quiet... for now.</p>
+          )}
+          <AnimatePresence>
+            {news.map((n) => (
+              <motion.div
+                key={n.id}
+                layout
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, height: 0 }}
+                className="rounded-lg border border-border/40 bg-background/30 px-2.5 py-2 text-[11px] text-foreground/85 leading-snug"
+              >
+                <span className="text-muted-foreground font-display text-[10px] tracking-wide">
+                  {eventTime(n.created_date)}
+                </span>
+                <p className="mt-0.5">{n.message}</p>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

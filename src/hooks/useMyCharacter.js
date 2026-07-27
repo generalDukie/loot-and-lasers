@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/api/gameClient";
 import { getMyCharacter, bustMyCharacterCache, primeMyCharacterCache } from "@/lib/socialEngine";
+import { setActiveCharacterId } from "@/lib/activeCharacter";
 
 // Returns the current user's character and keeps it live: it subscribes to
 // Character realtime updates so currencies (stardust, fuel, nova crystals,
@@ -15,6 +16,7 @@ export function useMyCharacter() {
     bustMyCharacterCache();
     const c = await getMyCharacter({ force: true });
     idRef.current = c?.id || null;
+    setActiveCharacterId(c?.id);
     setCharacter(c);
     return c;
   }, []);
@@ -25,6 +27,7 @@ export function useMyCharacter() {
       .then((c) => {
         if (!active) return;
         idRef.current = c?.id || null;
+        setActiveCharacterId(c?.id);
         setCharacter(c);
       })
       .catch(() => {})
@@ -43,9 +46,20 @@ export function useMyCharacter() {
 
     return () => {
       active = false;
+      setActiveCharacterId(null);
       unsub?.();
     };
   }, []);
 
-  return { character, loading, refresh, setCharacter };
+  // Keep React state + the global active-character id in sync (pages call setCharacter after claims).
+  const setCharacterSynced = useCallback((next) => {
+    setCharacter((prev) => {
+      const value = typeof next === "function" ? next(prev) : next;
+      idRef.current = value?.id || null;
+      setActiveCharacterId(value?.id);
+      return value;
+    });
+  }, []);
+
+  return { character, loading, refresh, setCharacter: setCharacterSynced };
 }

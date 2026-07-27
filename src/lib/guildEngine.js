@@ -4,7 +4,9 @@
 import { api } from "@/api/gameClient";
 import { simulateBattle } from "@/lib/arenaEngine";
 
-export const GUILD_WAR_COST = 100; // stardust war chest
+export const GUILD_WAR_COST = 500; // stardust war chest (legacy sim path)
+export const GUILD_WAR_READY_HOURS = 24;
+export const GUILD_WAR_DECLARE_COST = 500; // stardust — declare is a real sink, not a farm
 
 const RIVAL_GUILD_NAMES = [
   "Void Reapers", "Stellar Syndicate", "Crimson Nebula", "Iron Orbit",
@@ -171,9 +173,10 @@ export function simulateGuildBattle(attackerGuild, attackerMembers, defenderGuil
 }
 
 export function computeGuildBattleRewards(playerGuild, rivalGuild, playerWon) {
-  const base = 200 + (rivalGuild.level || 1) * 60;
+  // Keep win payout below declare cost so wars aren't net-positive farming.
+  const base = 120 + (rivalGuild.level || 1) * 25;
   if (playerWon) return { stardust: base, guild_xp: Math.round(base * 0.8) };
-  return { stardust: Math.round(base * 0.15), guild_xp: Math.round(base * 0.2) };
+  return { stardust: Math.round(base * 0.1), guild_xp: Math.round(base * 0.15) };
 }
 
 export async function applyWarResult(guild, members, rival, simulation, character) {
@@ -245,8 +248,6 @@ export async function applyWarResult(guild, members, rival, simulation, characte
 // until they fall; attacker #2 picks up where #1 left off, and so on.
 // Ranking is by character level (highest first).
 // ═══════════════════════════════════════════
-export const GUILD_WAR_READY_HOURS = 24;
-export const GUILD_WAR_DECLARE_COST = 100; // stardust war chest
 
 export async function declareGuildWar(attackerGuild, defenderGuild, character) {
   const now = new Date();
@@ -351,7 +352,8 @@ export function simulateGauntlet(attackerFighters, defenderFighters) {
 }
 
 function computeWarRewards(totalFighters, winnerSide) {
-  const base = 200 + totalFighters * 30;
+  // Prestige payout — kept under declare cost so declaring stays a sink.
+  const base = 80 + totalFighters * 15;
   return { stardust: base, guild_xp: Math.round(base * 0.8) };
 }
 

@@ -3,19 +3,24 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { computeStardustValue, RARITY_COLORS } from "@/lib/gameData";
 import { getPendingItem, clearPendingItem, subscribePending } from "@/lib/inventoryCap";
+import { prepareConsumableBuffs } from "@/hooks/useInventory";
 import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
-import { Orbit, Loader2, AlertTriangle } from "lucide-react";
+import { Orbit, Loader2, AlertTriangle, FlaskConical } from "lucide-react";
 
-// Overlay shown when a loot pickup can't fit in the 10-slot inventory.
-// The player must dissolve an item (the new loot OR an existing spare) into the
-// void for stardust. Can be minimized — a flashing red/yellow bubble stays on
-// screen until resolved. Equipped items are never offered for dissolution.
+function isStim(item) {
+  return item?.type === "consumable" && !!item.consumable;
+}
+
+// Overlay shown when a loot pickup can't fit in the inventory.
+// Resolve by tossing into the void for stardust, or using a stim to free a slot.
+// Can be minimized — a flashing bubble stays until resolved.
+// Equipped items are never offered for dissolution.
 export default function InventoryFullModal({ character }) {
   const [pending, setPending] = useState(getPendingItem());
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
-  const [tossingId, setTossingId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
   const [minimized, setMinimized] = useState(false);
   const { toast } = useToast();
 
@@ -35,8 +40,8 @@ export default function InventoryFullModal({ character }) {
   if (!pending) return null;
 
   async function toss(item, isNew) {
-    if (!character || tossingId) return;
-    setTossingId(item.id || "new");
+    if (!character || busyId) return;
+    setBusyId(item.id || "new");
     try {
       if (isNew) {
         clearPendingItem();
@@ -69,12 +74,45 @@ export default function InventoryFullModal({ character }) {
     } catch (e) {
       toast({ title: "Something went wrong", description: e?.message, variant: "destructive" });
     } finally {
-      setTossingId(null);
+      setBusyId(null);
+    }
+  }
+
+  async function useStim(item, isNew) {
+    if (!character || busyId || !isStim(item)) return;
+    setBusyId(item.id || "new-use");
+    try {
+      const fresh = await api.entities.Character.get(character.id);
+      const prepared = prepareConsumableBuffs(fresh, item);
+      if (!prepared.ok) {
+        toast({ title: "Can't use", description: prepared.reason, variant: "destructive" });
+        return;
+      }
+      await api.entities.Character.update(character.id, { active_buffs: prepared.buffs });
+      if (isNew) {
+        clearPendingItem();
+        setItems([]);
+        toast({ title: `🧪 Used ${item.name}`, description: "Buff applied — inventory pressure cleared." });
+        return;
+      }
+      await api.entities.Item.delete(item.id);
+      await api.entities.Item.create(pending);
+      clearPendingItem();
+      setItems([]);
+      toast({
+        title: `🧪 Used ${item.name}`,
+        description: `${pending.name} added to inventory.`,
+      });
+    } catch (e) {
+      toast({ title: "Something went wrong", description: e?.message, variant: "destructive" });
+    } finally {
+      setBusyId(null);
     }
   }
 
   const pendingColor = RARITY_COLORS[pending.rarity] || "#9CA3AF";
   const spareItems = items.filter((it) => !it.is_equipped && !it.locked);
+  const busy = busyId !== null;
 
   // ── Minimized: flashing alert bubble ──
   if (minimized) {
@@ -111,7 +149,7 @@ export default function InventoryFullModal({ character }) {
             <div>
               <h2 className="font-display font-bold text-lg text-amber-300 glow-orange">Inventory Full</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Toss an item into the void to make room, or discard the new find.
+                Toss into the void, or use a stim to free a slot.
               </p>
             </div>
             <button
@@ -139,17 +177,28 @@ export default function InventoryFullModal({ character }) {
             <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-display font-bold tracking-wide">
               NEW
             </span>
-            <button
-              onClick={() => toss(pending, true)}
-              disabled={tossingId !== null}
-              className="shrink-0 text-[10px] px-2.5 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
-            >
-              <Orbit className="w-3 h-3" /> Toss
-            </button>
+            <div className="flex flex-col gap-1 shrink-0">
+              {isStim(pending) && (
+                <button
+                  onClick={() => useStim(pending, true)}
+                  disabled={busy}
+                  className="text-[10px] px-2.5 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
+                >
+                  <FlaskConical className="w-3 h-3" /> Use
+                </button>
+              )}
+              <button
+                onClick={() => toss(pending, true)}
+                disabled={busy}
+                className="text-[10px] px-2.5 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
+              >
+                <Orbit className="w-3 h-3" /> Toss
+              </button>
+            </div>
           </div>
 
           <p className="text-[10px] font-display font-semibold tracking-widest text-muted-foreground mb-2">
-            OR DISSOLVE A SPARE
+            OR FREE A SPARE SLOT
           </p>
 
           {loadingItems ? (
@@ -158,7 +207,7 @@ export default function InventoryFullModal({ character }) {
             </div>
           ) : spareItems.length === 0 ? (
             <p className="text-center text-xs text-muted-foreground italic py-4">
-              No spare items to dissolve. Toss the new find above.
+              No spare items. Toss{isStim(pending) ? " or use" : ""} the new find above.
             </p>
           ) : (
             <div className="max-h-[35vh] overflow-y-auto space-y-2 pr-1">
@@ -181,13 +230,24 @@ export default function InventoryFullModal({ character }) {
                       </p>
                     </div>
                     <span className="text-[10px] text-accent font-bold shrink-0">✨ {val}</span>
-                    <button
-                      onClick={() => toss(item, false)}
-                      disabled={tossingId !== null}
-                      className="shrink-0 text-[10px] px-2.5 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
-                    >
-                      <Orbit className="w-3 h-3" /> Toss
-                    </button>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      {isStim(item) && (
+                        <button
+                          onClick={() => useStim(item, false)}
+                          disabled={busy}
+                          className="text-[10px] px-2.5 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
+                        >
+                          <FlaskConical className="w-3 h-3" /> Use
+                        </button>
+                      )}
+                      <button
+                        onClick={() => toss(item, false)}
+                        disabled={busy}
+                        className="text-[10px] px-2.5 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
+                      >
+                        <Orbit className="w-3 h-3" /> Toss
+                      </button>
+                    </div>
                   </div>
                 );
               })}

@@ -13,7 +13,7 @@ import {
   FUEL_PURCHASE_MAX,
   checkFuelReset,
   generateDailyMissions,
-  generateLowFuelMission,
+  generateLowFuelBoard,
   getModEffectTotal,
   getEarlyXpMultiplier,
   randomConsumable,
@@ -29,6 +29,9 @@ import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import { useToast } from "@/components/ui/use-toast";
 import { playMissionComplete } from "@/lib/audioEngine";
+import { generateMissionEncounter } from "@/lib/missionCombat";
+import { simulateBattle } from "@/lib/arenaEngine";
+import { pickMissionExploreSceneIndex } from "@/components/game/MissionExploreBackdrop";
 import confetti from "canvas-confetti";
 
 // Computes the actual stardust/XP a mission will grant, including ship-mod
@@ -69,6 +72,41 @@ function formatTime(s) {
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+function cantinaStorageKey(characterId) {
+  return `loot_cantina_board_${characterId}`;
+}
+
+function readSavedCantinaBoard(characterId) {
+  try {
+    const raw = localStorage.getItem(cantinaStorageKey(characterId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length !== 3) return null;
+    if (!parsed.every((m) => m && m.name && m.patron?.name)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCantinaBoard(characterId, board) {
+  try {
+    localStorage.setItem(cantinaStorageKey(characterId), JSON.stringify(board));
+  } catch { /* ignore quota */ }
+}
+
+// Fresh board after a mission finishes — residual tank gets residual jobs, else normal dailies.
+function rollCantinaBoard(character) {
+  const fuel = Math.round((character?.fuel ?? FUEL_MAX) * 100) / 100;
+  if (fuel >= 0.5) {
+    const probe = generateDailyMissions(character);
+    const cheapest = Math.min(...probe.map((m) => getEffectiveFuelCost(character, m)));
+    if (fuel < cheapest) return generateLowFuelBoard(character, fuel, 3);
+    return probe;
+  }
+  return generateDailyMissions(character);
+}
+
 // Encapsulates the full mission lifecycle: fuel cycle, daily quest generation,
 // active-mission polling, launch/claim/skip, fuel purchase, reward computation,
 // loot rolls, discoveries, and guild/Nexus side-effects. The view layer consumes
@@ -82,10 +120,16 @@ export function useMissionManager() {
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [completeSummary, setCompleteSummary] = useState(null);
+  const [missionBattle, setMissionBattle] = useState(null);
   const [nexusBonus, setNexusBonus] = useState(false);
   const claimingRef = useRef(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const commitCantinaBoard = useCallback((characterId, board) => {
+    setDailyMissions(board);
+    writeCantinaBoard(characterId, board);
+  }, []);
 
   const load = useCallback(async () => {
     const char = await getMyCharacter();
@@ -98,7 +142,15 @@ export function useMissionManager() {
       Object.assign(char, resetPatch);
     }
 
-    setDailyMissions(generateDailyMissions(char));
+    // Same 3 patrons stay until one mission is finished — never reshuffle on load.
+    const saved = readSavedCantinaBoard(char.id);
+    if (saved) {
+      setDailyMissions(saved);
+    } else {
+      const board = rollCantinaBoard(char);
+      writeCantinaBoard(char.id, board);
+      setDailyMissions(board);
+    }
     setCharacter(char);
     setLoading(false);
 
@@ -141,8 +193,12 @@ export function useMissionManager() {
         fired = true;
         setActiveMission(m => m ? { ...m, status: "completed" } : null);
         playMissionComplete();
-        confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
-        setTimeout(() => confetti({ particleCount: 50, spread: 110, origin: { y: 0.4 } }), 400);
+        if (!document.hidden) {
+          confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
+          setTimeout(() => {
+            if (!document.hidden) confetti({ particleCount: 50, spread: 110, origin: { y: 0.4 } });
+          }, 400);
+        }
         toast({
           title: "🎉 MISSION COMPLETE!",
           description: `${activeMission.name} — return to the Cantina to claim your rewards!`,
@@ -191,6 +247,8 @@ export function useMissionManager() {
       difficulty: template.difficulty,
       level_requirement: template.level_requirement,
       risk: template.risk || 1,
+      patron: template.patron || null,
+      explore_scene: pickMissionExploreSceneIndex(),
     });
 
     await api.entities.Character.update(character.id, {
@@ -206,11 +264,51 @@ export function useMissionManager() {
     pushNotification({ owner_id: character.id, type: "system", title: "🚀 Mission Launched!", body: `${template.name} — returning in ${formatTime(duration)} · -${fuelCost} ⛽` });
   }, [activeMission, character, toast]);
 
+  // Claim opens a soft end-mission fight first — rewards only apply on a win.
   const handleClaim = useCallback(async () => {
-    if (claimingRef.current) return;
+    if (claimingRef.current || missionBattle) return;
     if (!activeMission || activeMission.status !== "completed") return;
     claimingRef.current = true;
     setClaiming(true);
+    try {
+      let playerItems = [];
+      try {
+        playerItems = (await api.entities.Item.filter({ character_id: character.id, is_equipped: true })) || [];
+      } catch (e) {}
+      const enemy = generateMissionEncounter(character, activeMission);
+      const battle = simulateBattle(character, enemy, playerItems);
+      setMissionBattle({ enemy, battle, playerItems });
+    } catch (e) {
+      claimingRef.current = false;
+      setClaiming(false);
+      toast({ title: "Battle failed to start", description: "Try claiming again.", variant: "destructive" });
+    }
+  }, [activeMission, character, missionBattle, toast]);
+
+  const finishMissionBattle = useCallback(async () => {
+    if (!missionBattle || !activeMission) return;
+    const { battle, enemy } = missionBattle;
+    const won = battle?.winner === "player";
+    setMissionBattle(null);
+
+    if (!won) {
+      try {
+        await api.entities.Mission.update(activeMission.id, { status: "failed" });
+        await api.entities.Character.update(character.id, { active_mission_id: "", mission_end_time: "" });
+      } catch (e) {}
+      setActiveMission(null);
+      setCharacter((c) => ({ ...c, active_mission_id: "", mission_end_time: "" }));
+      commitCantinaBoard(character.id, rollCantinaBoard({ ...character, fuel: character.fuel }));
+      toast({
+        title: "Defeated — no rewards",
+        description: "The encounter went south. Fuel is spent, but you walk away empty-handed.",
+        variant: "destructive",
+      });
+      claimingRef.current = false;
+      setClaiming(false);
+      return;
+    }
+
     try {
       const rewards = activeMission.rewards;
       const { stardustGain, xpGain, collectionPct } = computeMissionGains(character, activeMission, nexusBonus);
@@ -218,7 +316,6 @@ export function useMissionManager() {
       let newLevel = character.level;
       let expToNext = character.experience_to_next_level;
 
-      // Level up loop
       while (newExp >= expToNext) {
         newExp -= expToNext;
         newLevel++;
@@ -238,13 +335,11 @@ export function useMissionManager() {
         mission_end_time: "",
       };
 
-      const { updates: discUpdates, found: discFound } = processDiscovery(character, { win: true, speciesId: null });
+      const { updates: discUpdates, found: discFound } = processDiscovery(character, { win: true, speciesId: enemy?.speciesId || null });
       Object.assign(charUpdate, discUpdates);
       await api.entities.Character.update(character.id, charUpdate);
       await api.entities.Mission.update(activeMission.id, { status: "claimed" });
 
-      // Gear only drops when the launch roll said it would (legacy missions without
-      // a roll still drop, preserving old behavior).
       const dropsGear = rewards.loot_drops !== false;
       let gearItem = null;
       if (dropsGear) {
@@ -258,9 +353,7 @@ export function useMissionManager() {
       }
 
       if (rewards.collectible) {
-        // Vendor trash: sell value scales with mission level and is randomized
-        // via random stat points (computeStardustValue uses stats + level_requirement).
-        const junkStats = 1 + Math.floor(Math.random() * 4); // 1-4
+        const junkStats = 1 + Math.floor(Math.random() * 4);
         await addItemWithCap(character, {
           owner_id: character.created_by_id,
           character_id: character.id,
@@ -275,7 +368,6 @@ export function useMissionManager() {
         });
       }
 
-      // Consumable drop — 15% base chance; legendary gated at 1% via randomConsumable.
       let consumableItem = null;
       if (Math.random() < 0.15) {
         const { _cost, ...consItem } = randomConsumable();
@@ -312,19 +404,17 @@ export function useMissionManager() {
         pushNotification({ owner_id: character.id, type: "system", title: "🔎 Discovery!", body: discFound.map((f) => `${f.emoji} ${f.name}`).join(" · ") });
       }
 
-      // Feed completion into the guild shared log + collective progression
       contributeMission({ ...character, level: newLevel }, activeMission);
 
       setActiveMission(null);
       const updatedChar = { ...character, ...charUpdate };
       setCharacter(updatedChar);
-      // Re-roll the cantina so the player gets fresh quests after each claim.
-      setDailyMissions(generateDailyMissions(updatedChar));
+      commitCantinaBoard(updatedChar.id, rollCantinaBoard(updatedChar));
     } finally {
       claimingRef.current = false;
       setClaiming(false);
     }
-  }, [activeMission, character, nexusBonus]);
+  }, [missionBattle, activeMission, character, nexusBonus, toast, commitCantinaBoard]);
 
   const handleSkip = useCallback(async () => {
     if (!activeMission || activeMission.status !== "in_progress") return;
@@ -359,18 +449,11 @@ export function useMissionManager() {
     toast({ title: `⛽ +${FUEL_PURCHASE_AMOUNT} Fuel`, description: `-${FUEL_PURCHASE_COST} 💎` });
   }, [character, toast]);
 
-  const shuffleMissions = useCallback(() => {
-    if (character) setDailyMissions(generateDailyMissions(character));
-  }, [character]);
-
   // Derived view values
   const skipCost = activeMission ? skipCostFor(activeMission, now) : 0;
   const gains = activeMission && character ? computeMissionGains(character, activeMission, nexusBonus) : null;
-  const currentFuel = character ? (character.fuel ?? FUEL_MAX) : FUEL_MAX;
-  const cantAffordAny = character && dailyMissions.length > 0 && dailyMissions.every((m) => currentFuel < getEffectiveFuelCost(character, m));
-  const cantinaMissions = character && (!activeMission && cantAffordAny && currentFuel >= 0.5)
-    ? [...dailyMissions, generateLowFuelMission(character, currentFuel)]
-    : dailyMissions;
+  const currentFuel = character ? Math.round((character.fuel ?? FUEL_MAX) * 100) / 100 : FUEL_MAX;
+  const cantinaMissions = dailyMissions;
 
   return {
     // state
@@ -381,19 +464,20 @@ export function useMissionManager() {
     loading,
     claiming,
     completeSummary,
+    missionBattle,
     nexusBonus,
     // derived
     skipCost,
     gains,
     currentFuel,
-    cantAffordAny,
+    cantAffordAny: dailyMissions.some((m) => m._lowFuel),
     cantinaMissions,
     // actions
     handleStart,
     handleClaim,
+    finishMissionBattle,
     handleSkip,
     handleBuyFuel,
-    shuffleMissions,
     setCompleteSummary,
     setLaunchAnim,
     navigate,

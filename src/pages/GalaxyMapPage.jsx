@@ -18,6 +18,7 @@ import { getMyCharacter } from "@/lib/socialEngine";
 import DungeonMap from "@/components/game/DungeonMap";
 import DungeonPlanetView from "@/components/game/DungeonPlanetView";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
+import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
 import { Satellite, Skull, Rocket } from "lucide-react";
 
 import { todayET } from "@/lib/gameTime";
@@ -28,6 +29,7 @@ export default function GalaxyMapPage() {
   const [character, setCharacter] = useState(null);
   const [equippedItems, setEquippedItems] = useState([]);
   const [battleState, setBattleState] = useState(null);
+  const [completeSummary, setCompleteSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
@@ -122,12 +124,19 @@ export default function GalaxyMapPage() {
     const today = todayET();
     const maxPlayerHit = Math.max(0, ...battle.events.filter((e) => e.attacker === "player" && e.damage).map((e) => e.damage));
     const update = {};
+    const prevLevel = character.level;
+    let boostedXp = 0;
+    let collectPct = 0;
+    let newLevel = character.level;
+    let unlockedShipMod = null;
+    let gearItem = null;
+    let droppedConsumable = null;
+    let defeatNote;
 
     if (won) {
-      const { percentage: collectPct } = getCollectionStats(character);
-      const boostedXp = applyXpBonus(rewards.experience, collectPct);
+      ({ percentage: collectPct } = getCollectionStats(character));
+      boostedXp = applyXpBonus(rewards.experience, collectPct);
       let newExp = (character.experience || 0) + boostedXp;
-      let newLevel = character.level;
       let expToNext = character.experience_to_next_level;
       while (newExp >= expToNext) { newExp -= expToNext; newLevel++; expToNext = getExpForLevel(newLevel); }
       update.experience = newExp;
@@ -155,7 +164,10 @@ export default function GalaxyMapPage() {
           update.highest_sector = Math.max(character.highest_sector || 1, planet.id + 1);
           if (planet.shipMod) {
             const mods = [...(character.ship_mods || [])];
-            if (!mods.includes(planet.shipMod)) mods.push(planet.shipMod);
+            if (!mods.includes(planet.shipMod)) {
+              mods.push(planet.shipMod);
+              unlockedShipMod = planet.shipMod;
+            }
             update.ship_mods = mods;
           }
         }
@@ -164,10 +176,12 @@ export default function GalaxyMapPage() {
       }
 
       if (rewards.item) {
+        gearItem = rewards.item;
         await addItemWithCap(character, { ...rewards.item, owner_id: character.created_by_id, character_id: character.id });
       }
       if (Math.random() < 0.2) {
-        await addItemWithCap(character, { ...consumableItem(randomConsumable()), owner_id: character.created_by_id, character_id: character.id });
+        droppedConsumable = consumableItem(randomConsumable());
+        await addItemWithCap(character, { ...droppedConsumable, owner_id: character.created_by_id, character_id: character.id });
       }
       void api.entities.GalaxyNews.create({
         message: rewards.isBoss
@@ -179,11 +193,6 @@ export default function GalaxyMapPage() {
         character_name: character.name,
         character_id: character.id,
       });
-
-      toast({
-        title: rewards.isBoss ? (planet.id === DUNGEON_PLANETS.length ? "🏆 DUNGEON CONQUERED!" : "🏆 BOSS DEFEATED!") : "Victory!",
-        description: `+${boostedXp} XP · +${rewards.stardust} ✨${rewards.item ? ` · ${rewards.item.rarity} ${rewards.item.name}` : ""}${rewards.isBoss && planet.shipMod ? ` · 🔧 ${planet.shipMod} unlocked!` : ""}`,
-      });
     } else {
       update.dungeon_deaths = Math.min(deathCap, deaths + 1);
       update.dungeon_deaths_date = today;
@@ -193,27 +202,40 @@ export default function GalaxyMapPage() {
         character_name: character.name,
         character_id: character.id,
       });
-      toast({
-        title: "You Fell",
-        description: freeLivesLeft > 1
-          ? `Death ${deaths + 1}/${deathCap}. You'll respawn at this enemy.`
-          : freeLivesLeft === 1
-          ? `Last free life spent. Further fights cost ${DUNGEON_CONTINUE_COST} 💎.`
-          : `You'll respawn here. Next fight costs ${DUNGEON_CONTINUE_COST} 💎.`,
-        variant: "destructive",
-      });
+      defeatNote = freeLivesLeft > 1
+        ? `Death ${deaths + 1}/${deathCap}. You'll respawn at this enemy.`
+        : freeLivesLeft === 1
+        ? `Last free life spent. Further fights cost ${DUNGEON_CONTINUE_COST} 💎.`
+        : `You'll respawn here. Next fight costs ${DUNGEON_CONTINUE_COST} 💎.`;
     }
 
     update.highest_damage = Math.max(character.highest_damage || 0, maxPlayerHit);
     update.dungeon_cooldown_at = new Date().toISOString();
     const { updates: discUpdates, found: discFound } = processDiscovery(character, { win: won, speciesId: battleState.enemy.speciesId });
     Object.assign(update, discUpdates);
-    if (discFound.length) {
-      toast({ title: "🔎 Discovery!", description: discFound.map((f) => `${f.emoji} ${f.name}`).join(" · ") });
-    }
     await api.entities.Character.update(character.id, update);
     setCharacter((c) => ({ ...c, ...update }));
     setBattleState(null);
+
+    setCompleteSummary({
+      mode: "dungeon",
+      won,
+      title: won
+        ? (rewards.isBoss ? `Defeated ${enemy.name}` : `Cleared enemy ${enemyIndex}`)
+        : `Fell to ${enemy.name}`,
+      subtitle: `${planet.name}${rewards.isBoss ? " · Boss" : ""}`,
+      xp: won ? { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
+      stardust: won ? { total: rewards.stardust || 0 } : undefined,
+      leveledUp: won && newLevel > prevLevel,
+      prevLevel,
+      newLevel,
+      statPoints: won ? (newLevel - prevLevel) * 4 : 0,
+      gearItem: gearItem || undefined,
+      shipMod: unlockedShipMod || undefined,
+      consumableItem: droppedConsumable || undefined,
+      discoveries: discFound,
+      note: defeatNote,
+    });
   }
 
   if (loading) {
@@ -229,7 +251,16 @@ export default function GalaxyMapPage() {
   return (
     <div className="space-y-5">
       {battleState && (
-        <ArenaBattleOverlay player={character} opponent={battleState.enemy} battle={battleState.battle} onDone={finishBattle} />
+        <ArenaBattleOverlay
+          player={character}
+          opponent={battleState.enemy}
+          battle={battleState.battle}
+          onDone={finishBattle}
+          playerItems={equippedItems}
+        />
+      )}
+      {completeSummary && (
+        <CombatCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />
       )}
 
       {/* Header */}

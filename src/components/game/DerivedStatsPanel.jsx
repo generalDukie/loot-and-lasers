@@ -7,7 +7,7 @@ import {
   DODGE_CAP,
   ARMOR_CAP,
 } from "@/lib/statEngine";
-import { STAT_ICONS, getActiveBuffs } from "@/lib/gameData";
+import { getActiveBuffs } from "@/lib/gameData";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 const OFFENSIVE = [
@@ -146,21 +146,6 @@ export default function DerivedStatsPanel({ totalStats, noBuffStats, character }
         <SectionLabel icon={Shield} color="#A78BFA">Defensive</SectionLabel>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
           {DEFENSIVE.map(renderCell)}
-        </div>
-
-        {/* Class scaling breakdown */}
-        <div className="mt-4 pt-3 border-t border-border/30">
-          <p className="text-[9px] text-muted-foreground uppercase tracking-wide mb-2">Class Scaling</p>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(d.weights).sort((a, b) => b[1] - a[1]).map(([stat, w]) => (
-              <span
-                key={stat}
-                className={`text-[10px] px-2 py-0.5 rounded-full border ${w === 1.0 ? "border-primary/50 bg-primary/10 text-primary font-semibold" : "border-border/40 bg-muted/20 text-muted-foreground"}`}
-              >
-                {STAT_ICONS[stat]} {stat} {Math.round(w * 100)}%
-              </span>
-            ))}
-          </div>
         </div>
       </div>
     </TooltipProvider>

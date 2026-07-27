@@ -4,6 +4,7 @@ import SpaceStationHub from "@/components/game/SpaceStationHub";
 import NexusShowcase from "@/components/game/NexusShowcase";
 import NexusChatter from "@/components/game/NexusChatter";
 import DailyLoginModal from "@/components/social/DailyLoginModal";
+import NotificationCenter from "@/components/social/NotificationCenter";
 import CodexModal from "@/components/game/CodexModal";
 import LegacyNameModal from "@/components/game/LegacyNameModal";
 import { getProgress, canClaimToday, todayUTC } from "@/lib/dailyLoginEngine";
@@ -65,6 +66,7 @@ export default function Home() {
         <NexusChatter />
       </SpaceStationHub>
       <DailyLoginModal open={dailyOpen} onClose={() => setDailyOpen(false)} myChar={character} />
+      <NotificationCenter myChar={character} onOpenDaily={() => setDailyOpen(true)} />
       <CodexModal open={codexOpen} onClose={() => setCodexOpen(false)} />
       <LegacyNameModal open={legacyOpen} onClose={() => setLegacyOpen(false)} />
     </>

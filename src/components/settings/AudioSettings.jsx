@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Volume2, Music, Zap } from "lucide-react";
-import { getVolumes, setVolumes, subscribeVolumes } from "@/lib/audioEngine";
+import {
+  getVolumes,
+  setVolumes,
+  subscribeVolumes,
+  getAudioPrefs,
+  setPlayWhenMinimized,
+  subscribeAudioPrefs,
+} from "@/lib/audioEngine";
 
 function Row({ icon: Icon, label, value, onChange }) {
   return (
@@ -20,8 +28,10 @@ function Row({ icon: Icon, label, value, onChange }) {
 
 export default function AudioSettings() {
   const [vols, setVols] = useState(getVolumes());
+  const [prefs, setPrefs] = useState(getAudioPrefs());
 
   useEffect(() => subscribeVolumes(setVols), []);
+  useEffect(() => subscribeAudioPrefs(setPrefs), []);
 
   return (
     <div className="painted-panel canvas-grain p-4 space-y-4">
@@ -34,8 +44,21 @@ export default function AudioSettings() {
         <Row icon={Music} label="Music Volume" value={vols.music} onChange={(v) => setVolumes({ music: v })} />
         <Row icon={Zap} label="SFX Volume" value={vols.sfx} onChange={(v) => setVolumes({ sfx: v })} />
       </div>
+      <div className="flex items-start justify-between gap-3 pt-1 border-t border-border/40">
+        <div className="min-w-0">
+          <p className="text-xs font-medium">Play music when minimized</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+            Keep station ambience and cantina music running while the tab is in the background.
+          </p>
+        </div>
+        <Switch
+          checked={!!prefs.playWhenMinimized}
+          onCheckedChange={(on) => setPlayWhenMinimized(on)}
+          aria-label="Play music when minimized"
+        />
+      </div>
       <p className="text-[11px] text-muted-foreground">
-        Station theme (Donovan McNab chant) and cantina music play automatically. Adjust levels to taste.
+        Soft space ambience plays continuously across the station. The cantina has its own upbeat lounge tune.
       </p>
     </div>
   );

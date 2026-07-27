@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bell, CheckCheck, Calendar, X } from "lucide-react";
+import { Bell, CheckCheck, Calendar, X, Star } from "lucide-react";
 import { api } from "@/api/gameClient";
-import { getUnreadCounts, subscribeNotifications, markRead } from "@/lib/notificationEngine";
+import { getUnreadCounts, subscribeNotifications, markRead, syncStatPointsNotification } from "@/lib/notificationEngine";
 import { canClaimToday, getProgress } from "@/lib/dailyLoginEngine";
 import { TYPE_META, timeAgo } from "@/components/social/NotificationsTab";
 import NotificationActions from "@/components/social/NotificationActions";
@@ -16,6 +17,9 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
   const [dailyAvailable, setDailyAvailable] = useState(false);
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
+  const syncingRef = useRef(false);
+
+  const unspent = myChar?.unspent_stat_points || 0;
 
   const load = useCallback(async () => {
     if (!myChar || loadingRef.current) return;
@@ -38,6 +42,23 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
     }
   }, [myChar]);
 
+  // Persist an unread attribute-points notification while points remain.
+  useEffect(() => {
+    if (!myChar?.id) return;
+    let cancelled = false;
+    (async () => {
+      if (syncingRef.current) return;
+      syncingRef.current = true;
+      try {
+        await syncStatPointsNotification(myChar);
+        if (!cancelled) load();
+      } finally {
+        syncingRef.current = false;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [myChar?.id, unspent, load, myChar]);
+
   useEffect(() => {
     if (!myChar) return;
     setLoading(true);
@@ -57,7 +78,7 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
       unsub?.();
       if (pending) clearTimeout(pending);
     };
-  }, [load]);
+  }, [load, myChar]);
 
   // Auto-close the panel after 30 seconds so it doesn't linger on screen.
   useEffect(() => {
@@ -68,6 +89,8 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
 
   async function handleMarkRead(item) {
     if (item.read) return;
+    // Attribute-points alerts stay until the points are actually spent.
+    if (item.type === "stat_points" && unspent > 0) return;
     await markRead(item.id);
     setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
     setCounts((c) => ({ ...c, total: Math.max(0, (c.total || 0) - 1) }));
@@ -79,11 +102,13 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
       { owner_id: myChar.id, read: false },
       { $set: { read: true } }
     );
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
-    setCounts({ total: 0 });
+    // Re-assert the attribute-points alert if points are still available.
+    await syncStatPointsNotification(myChar);
+    await load();
   }
 
   const unread = counts.total || 0;
+  const hasStatPoints = unspent > 0;
   const total = unread + (dailyAvailable ? 1 : 0);
 
   return (
@@ -113,6 +138,22 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
             </div>
 
             <div className="overflow-y-auto p-2.5 flex-1">
+              {hasStatPoints && (
+                <Link
+                  to="/character"
+                  onClick={() => setOpen(false)}
+                  className="w-full flex items-center gap-2.5 p-2.5 mb-2 rounded-xl bg-cyan-500/10 border border-cyan-400/40 hover:bg-cyan-500/20 transition-colors text-left"
+                >
+                  <Star className="w-4 h-4 text-cyan-300 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-display font-semibold text-cyan-200">
+                      {unspent} Attribute Point{unspent === 1 ? "" : "s"} Available
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">Tap to open Hero and allocate</p>
+                  </div>
+                </Link>
+              )}
+
               {dailyAvailable && (
                 <button
                   onClick={() => { onOpenDaily?.(); setOpen(false); }}
@@ -130,7 +171,7 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
                 <div className="flex justify-center py-8">
                   <div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" />
                 </div>
-              ) : items.length === 0 && !dailyAvailable ? (
+              ) : items.length === 0 && !dailyAvailable && !hasStatPoints ? (
                 <div className="text-center py-8">
                   <Bell className="w-7 h-7 mx-auto text-muted-foreground/40 mb-2" />
                   <p className="text-xs text-muted-foreground">No notifications yet.</p>
@@ -140,12 +181,13 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
                   {items.map((n) => {
                     const meta = TYPE_META[n.type] || TYPE_META.system;
                     const Icon = meta.icon;
+                    const stickyPoints = n.type === "stat_points" && unspent > 0;
                     return (
                       <div
                         key={n.id}
                         onClick={() => handleMarkRead(n)}
                         className={`w-full flex items-start gap-2.5 p-2 rounded-xl border text-left transition-colors ${
-                          n.read ? "bg-card/20 border-border/20 opacity-60" : "bg-card/50 border-border/40 hover:bg-card/70"
+                          n.read && !stickyPoints ? "bg-card/20 border-border/20 opacity-60" : "bg-card/50 border-border/40 hover:bg-card/70"
                         }`}
                       >
                         <div className="mt-0.5 shrink-0 w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: meta.color + "18" }}>
@@ -157,6 +199,15 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
                             <span className="text-[9px] text-muted-foreground shrink-0">{timeAgo(n.created_date)}</span>
                           </div>
                           {n.body && <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>}
+                          {stickyPoints && (
+                            <Link
+                              to="/character"
+                              onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+                              className="inline-block mt-1.5 text-[10px] font-display font-semibold text-cyan-300 hover:text-cyan-200"
+                            >
+                              Open Hero →
+                            </Link>
+                          )}
                           <NotificationActions
                             notification={n}
                             myChar={myChar}
@@ -166,7 +217,7 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
                             }}
                           />
                         </div>
-                        {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5" />}
+                        {(!n.read || stickyPoints) && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5" />}
                       </div>
                     );
                   })}

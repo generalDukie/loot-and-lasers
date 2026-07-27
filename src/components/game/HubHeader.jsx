@@ -1,16 +1,19 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Users, Settings, MessageSquare, CornerUpLeft } from "lucide-react";
 import CharacterNavMenu from "@/components/game/CharacterNavMenu";
 import GameClock from "@/components/game/GameClock";
 import SiteTitle from "@/components/admin/SiteTitle";
+import ActivityCountdownChip from "@/components/game/ActivityCountdownChip";
 import { useUnreadMailCount } from "@/hooks/useUnreadMailCount";
 
 // Shared station header — 3-column grid so left / brand / right scale across
 // resolutions (including ultrawide) without crushing the center.
 export default function HubHeader({ character, onOpenChat, rightExtras }) {
   const unreadMail = useUnreadMailCount(character?.id);
+  const { pathname } = useLocation();
+  const onHub = pathname === "/";
   return (
     <header className="sticky top-0 z-50 bg-background/80 border-b border-border/30 backdrop-blur-sm shrink-0">
       <div
@@ -25,27 +28,37 @@ export default function HubHeader({ character, onOpenChat, rightExtras }) {
 
         {/* Center brand */}
         <div className="justify-self-center flex flex-col items-center px-1">
-          <Link to="/" className="pointer-events-auto focus:outline-none flex flex-col items-center leading-none relative">
-            <SiteTitle
-              as="h1"
-              className="font-display font-black tracking-wider bg-gradient-to-r from-orange-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap"
-              style={{ fontSize: "clamp(1.05rem, 2.1vw, 2.15rem)" }}
-            />
-            <motion.div
-              animate={{ rotate: [-38, -26, -38], scale: [1, 1.12, 1] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute top-0 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] flex flex-col items-center origin-top-right pointer-events-none"
-              style={{ right: "clamp(-2.4rem, -2.2vw, -1.6rem)" }}
-            >
-              <CornerUpLeft style={{ width: "clamp(0.85rem, 1.1vw, 1.15rem)", height: "clamp(0.85rem, 1.1vw, 1.15rem)" }} />
-              <span
-                className="font-display tracking-[0.2em] uppercase mt-0.5 whitespace-nowrap text-white"
-                style={{ fontSize: "clamp(0.45rem, 0.65vw, 0.6rem)" }}
+          {onHub ? (
+            <div className="flex flex-col items-center leading-none">
+              <SiteTitle
+                as="h1"
+                className="font-display font-black tracking-wider bg-gradient-to-r from-orange-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap"
+                style={{ fontSize: "clamp(1.05rem, 2.1vw, 2.15rem)" }}
+              />
+            </div>
+          ) : (
+            <Link to="/" className="pointer-events-auto focus:outline-none flex flex-col items-center leading-none relative">
+              <SiteTitle
+                as="h1"
+                className="font-display font-black tracking-wider bg-gradient-to-r from-orange-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap"
+                style={{ fontSize: "clamp(1.05rem, 2.1vw, 2.15rem)" }}
+              />
+              <motion.div
+                animate={{ rotate: [-38, -26, -38], scale: [1, 1.12, 1] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-0 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] flex flex-col items-center origin-top-right pointer-events-none"
+                style={{ right: "clamp(-2.4rem, -2.2vw, -1.6rem)" }}
               >
-                Hub
-              </span>
-            </motion.div>
-          </Link>
+                <CornerUpLeft style={{ width: "clamp(0.85rem, 1.1vw, 1.15rem)", height: "clamp(0.85rem, 1.1vw, 1.15rem)" }} />
+                <span
+                  className="font-display tracking-[0.2em] uppercase mt-0.5 whitespace-nowrap text-white"
+                  style={{ fontSize: "clamp(0.45rem, 0.65vw, 0.6rem)" }}
+                >
+                  Hub
+                </span>
+              </motion.div>
+            </Link>
+          )}
         </div>
 
         {/* Right actions */}
@@ -53,6 +66,7 @@ export default function HubHeader({ character, onOpenChat, rightExtras }) {
           className="justify-self-end flex items-center shrink-0"
           style={{ gap: "clamp(0.25rem, 0.6vw, 0.6rem)" }}
         >
+          <ActivityCountdownChip character={character} />
           <div className="hidden md:block mr-1">
             <GameClock />
           </div>

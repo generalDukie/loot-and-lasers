@@ -16,7 +16,6 @@ import { getCharacterById } from "@/lib/socialEngine";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { usePresence } from "@/hooks/usePresence";
 import { useAuth } from "@/lib/AuthContext";
-import { startStationAmbient, stopStationAmbient } from "@/lib/stationAmbient";
 
 export default function GameLayout() {
   const location = useLocation();
@@ -27,20 +26,7 @@ export default function GameLayout() {
   const [dailyOpen, setDailyOpen] = useState(false);
   const [profile, setProfile] = useState(null);
 
-
-
   usePresence(character, "online");
-
-  // Hub ambience plays across all station pages except the cantina,
-  // where the cantina music takes over instead.
-  useEffect(() => {
-    if (location.pathname === "/missions") {
-      stopStationAmbient();
-    } else {
-      startStationAmbient();
-    }
-    return () => stopStationAmbient();
-  }, [location.pathname]);
 
   // Accumulate playtime while the app is open (feeds the public "Time Played" stat).
   useEffect(() => {

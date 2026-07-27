@@ -3,10 +3,16 @@
 // registry so stale instances can be torn down, and a global click SFX.
 
 const STORAGE_KEY = "ll_audio_volumes";
+const PREFS_KEY = "ll_audio_prefs";
 const DEFAULTS = { master: 80, music: 55, sfx: 70 };
+const DEFAULT_PREFS = { playWhenMinimized: true };
 
 const listeners = new Set();
+const prefListeners = new Set();
 let volumes = loadVolumes();
+let prefs = loadPrefs();
+let musicBackgroundMuted = false;
+let keepAliveTimer = null;
 
 function loadVolumes() {
   try {
@@ -14,6 +20,14 @@ function loadVolumes() {
     if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
   } catch (e) {}
   return { ...DEFAULTS };
+}
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+  } catch (e) {}
+  return { ...DEFAULT_PREFS };
 }
 
 function getEngine() {
@@ -40,6 +54,13 @@ function saveVolumes(v) {
   listeners.forEach((fn) => fn(volumes));
 }
 
+function savePrefs(next) {
+  prefs = next;
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) {}
+  prefListeners.forEach((fn) => fn({ ...prefs }));
+  syncBackgroundPlayback();
+}
+
 function applyVolumes() {
   const e = (typeof window !== "undefined") && window.__ll_audio;
   if (!e) return;
@@ -49,8 +70,54 @@ function applyVolumes() {
   e.sfx.gain.cancelScheduledValues(t);
   // 0 = silence, 100 = full internal gain.
   e.master.gain.setValueAtTime(volumes.master / 100, t);
-  e.music.gain.setValueAtTime(volumes.music / 100, t);
+  // Music can be forced silent while minimized unless the user opted in.
+  const musicLevel = musicBackgroundMuted ? 0 : volumes.music / 100;
+  e.music.gain.setValueAtTime(musicLevel, t);
   e.sfx.gain.setValueAtTime(volumes.sfx / 100, t);
+}
+
+function stopKeepAlive() {
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+    keepAliveTimer = null;
+  }
+}
+
+function startKeepAlive() {
+  stopKeepAlive();
+  keepAliveTimer = setInterval(() => {
+    const e = (typeof window !== "undefined") && window.__ll_audio;
+    if (!e || !prefs.playWhenMinimized) return;
+    if (e.ctx.state === "suspended") e.ctx.resume().catch(() => {});
+  }, 1000);
+}
+
+function syncBackgroundPlayback() {
+  if (typeof document === "undefined") return;
+  const hidden = document.hidden;
+  if (!hidden) {
+    musicBackgroundMuted = false;
+    stopKeepAlive();
+    ensureAudio();
+    applyVolumes();
+    return;
+  }
+  if (prefs.playWhenMinimized) {
+    musicBackgroundMuted = false;
+    ensureAudio();
+    applyVolumes();
+    startKeepAlive();
+    try {
+      if (navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
+    } catch (e) {}
+  } else {
+    musicBackgroundMuted = true;
+    stopKeepAlive();
+    applyVolumes();
+    try {
+      if (navigator.mediaSession) navigator.mediaSession.playbackState = "paused";
+    } catch (e) {}
+  }
 }
 
 export function getVolumes() {
@@ -67,6 +134,21 @@ export function subscribeVolumes(fn) {
   listeners.add(fn);
   fn(volumes);
   return () => listeners.delete(fn);
+}
+
+export function getAudioPrefs() {
+  return { ...prefs };
+}
+
+export function setPlayWhenMinimized(enabled) {
+  ensureAudio();
+  savePrefs({ ...prefs, playWhenMinimized: !!enabled });
+}
+
+export function subscribeAudioPrefs(fn) {
+  prefListeners.add(fn);
+  fn({ ...prefs });
+  return () => prefListeners.delete(fn);
 }
 
 export function ensureAudio() {
@@ -176,6 +258,9 @@ if (typeof window !== "undefined" && !window.__ll_listeners) {
   const ensure = () => ensureAudio();
   window.addEventListener("pointerdown", ensure, true);
   window.addEventListener("keydown", ensure, true);
+  document.addEventListener("visibilitychange", () => syncBackgroundPlayback());
+  // Apply once in case the page loaded while already backgrounded.
+  syncBackgroundPlayback();
 
   // Play a click sound whenever an interactive element is pressed.
   window.addEventListener("pointerdown", (e) => {

@@ -36,6 +36,7 @@ import MailPage from '@/pages/MailPage';
 import MessagesPage from '@/pages/MessagesPage';
 import AdminPage from '@/pages/AdminPage';
 import GameLayout from '@/components/game/GameLayout';
+import SoundtrackController from '@/components/game/SoundtrackController';
 import SpaceBackground from '@/components/game/SpaceBackground';
 import { SiteConfigProvider } from '@/lib/SiteConfigContext';
 import SiteTitle from '@/components/admin/SiteTitle';
@@ -125,6 +126,7 @@ function App() {
         <QueryClientProvider client={queryClientInstance}>
           <Router>
             <ScrollToTop />
+            <SoundtrackController />
             <SpaceBackground fixed />
             <AuthenticatedApp />
           </Router>

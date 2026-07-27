@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import HubHeader from "@/components/game/HubHeader";
 import StationSplitButton from "@/components/game/StationSplitButton";
 import StationDockButton from "@/components/game/StationDockButton";
@@ -6,11 +6,9 @@ import SpaceBackground from "@/components/game/SpaceBackground";
 import { useAuth } from "@/lib/AuthContext";
 import { useHubLayout } from "@/hooks/useHubLayout";
 import { useSiteConfig } from "@/lib/SiteConfigContext";
-import HubAdminTools from "@/components/game/HubAdminTools";
-import HubButtonEditor from "@/components/game/HubButtonEditor";
-import { BUILTIN_BUTTONS, getBuiltin, mergeBuiltin, BTN_SIZE_W } from "@/lib/hubButtons";
+import { getBuiltin, mergeBuiltin, BTN_SIZE_W } from "@/lib/hubButtons";
 import GameCanvas from "@/components/game/GameCanvas";
-import { startStationAmbient, stopStationAmbient } from "@/lib/stationAmbient";
+import HubLoadoutPanel from "@/components/game/HubLoadoutPanel";
 
 const STATION_IMG = "/assets/station-hub.png";
 
@@ -41,24 +39,9 @@ function renderDockButton(id, overrides, delay) {
 
 export default function SpaceStationHub({ character, children }) {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const {
-    customButtons,
-    builtinOverrides,
-    addCustomButton,
-    updateCustomButton,
-    removeCustomButton,
-    updateBuiltin,
-    resetBuiltin,
-  } = useHubLayout(user?.id);
+  const { customButtons, builtinOverrides } = useHubLayout(user?.id);
   const { theme } = useSiteConfig();
   const stationImg = theme?.station_background || STATION_IMG;
-  const [editorOpen, setEditorOpen] = useState(false);
-
-  useEffect(() => {
-    startStationAmbient();
-    return () => stopStationAmbient();
-  }, []);
 
   return (
     <GameCanvas>
@@ -77,10 +60,7 @@ export default function SpaceStationHub({ character, children }) {
       </div>
 
       <div className="relative z-10 h-full w-full flex flex-col min-h-0">
-        <HubHeader
-          character={character}
-          rightExtras={isAdmin ? <HubAdminTools onManageButtons={() => setEditorOpen(true)} /> : null}
-        />
+        <HubHeader character={character} />
 
         <div className="relative z-10 flex-1 min-h-0 overflow-hidden flex flex-col">
           <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
@@ -90,10 +70,12 @@ export default function SpaceStationHub({ character, children }) {
                 padding: "clamp(0.65rem, 1.2vw, 1.5rem) clamp(0.75rem, 2vw, 2.5rem) clamp(0.65rem, 1vw, 1.1rem)",
               }}
             >
-              {/* Open station art */}
-              <div className="flex-1 min-h-[6rem]" aria-hidden />
+              {/* Open station art + loadout doll */}
+              <div className="flex-1 min-h-[6rem] flex items-end sm:items-center">
+                <HubLoadoutPanel character={character} />
+              </div>
 
-              {/* Optional custom buttons */}
+              {/* Optional custom buttons (read-only from HubLayout config) */}
               {customButtons.length > 0 && (
                 <div className="shrink-0 flex flex-nowrap items-center justify-center gap-2 sm:gap-3 overflow-x-auto">
                   {customButtons.map((btn) => (
@@ -124,21 +106,6 @@ export default function SpaceStationHub({ character, children }) {
           </div>
         </div>
       </div>
-
-      {isAdmin && (
-        <HubButtonEditor
-          open={editorOpen}
-          onClose={() => setEditorOpen(false)}
-          buttons={customButtons}
-          onAdd={addCustomButton}
-          onUpdate={updateCustomButton}
-          onRemove={removeCustomButton}
-          builtinButtons={BUILTIN_BUTTONS.filter((b) => b.id !== "command_hub")}
-          builtinOverrides={builtinOverrides}
-          onUpdateBuiltin={updateBuiltin}
-          onResetBuiltin={resetBuiltin}
-        />
-      )}
     </GameCanvas>
   );
 }

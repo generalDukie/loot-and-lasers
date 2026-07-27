@@ -251,13 +251,18 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
 
   useEffect(() => {
     if (phase !== "outro") return;
-    if (battle.winner === "player") {
+    if (battle.winner === "player" && !document.hidden) {
       confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
-      setTimeout(() => confetti({ particleCount: 60, spread: 110, origin: { y: 0.5 } }), 500);
+      const t = setTimeout(() => {
+        if (!document.hidden) confetti({ particleCount: 60, spread: 110, origin: { y: 0.5 } });
+      }, 500);
+      return () => {
+        clearTimeout(t);
+        confetti.reset();
+      };
     }
-    const t = setTimeout(() => onDone(), 2800);
-    return () => clearTimeout(t);
-  }, [phase, battle.winner, onDone]);
+    return undefined;
+  }, [phase, battle.winner]);
 
   const ev = phase === "fight" ? battle.events[idx] : null;
   const isQuiet = ev?.type === "regen";
@@ -277,7 +282,7 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
         <HpBar name={opponent.name} hp={hp.opponent} max={battle.opponentMaxHp} color="#FB7185" align="right" emoji={CLASSES[opponent.class]?.emoji} />
       </div>
 
-      <motion.div animate={shake} className="flex-1 flex items-center justify-center gap-4 sm:gap-8 relative">
+      <motion.div animate={shake} className="flex-1 flex items-center justify-center gap-4 sm:gap-8 relative z-10">
         <ArenaFloor pulse={isBigHit} />
         <Fighter entity={player} side="player" lunge={attacker === "player" && !isQuiet} hurt={defender === "player" && !isQuiet} color="#22D3EE" flip={false} floating={ev && defender === "player" ? ev : null} attackEvent={ev && attacker === "player" ? ev : null} evIdx={idx} big={defender === "player" && isBigHit} weaponItem={playerWeapon} />
         <Fighter entity={opponent} side="opponent" lunge={attacker === "opponent" && !isQuiet} hurt={defender === "opponent" && !isQuiet} color="#FB7185" flip floating={ev && defender === "opponent" ? ev : null} attackEvent={ev && attacker === "opponent" ? ev : null} evIdx={idx} big={defender === "opponent" && isBigHit} weaponItem={opponentWeapon} />
@@ -307,7 +312,7 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
         </AnimatePresence>
       </div>
 
-      {/* Skip button — always available during the entire battle overlay */}
+      {/* Skip — jumps straight to the rewards / results screen */}
       <div className="flex justify-center pb-5 relative z-40">
         <motion.button
           onClick={onDone}
@@ -318,7 +323,7 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
           className="group flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 border-2 border-amber-300 font-display font-black text-sm tracking-wider text-black shadow-[0_0_18px_rgba(251,191,36,0.6)] hover:shadow-[0_0_26px_rgba(251,191,36,0.8)] transition-shadow"
         >
           <Zap className="w-4 h-4 group-hover:scale-110 transition-transform" />
-          SKIP BATTLE
+          SKIP TO RESULTS
           <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
         </motion.button>
       </div>
@@ -370,7 +375,7 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
         )}
 
         {phase === "intro" && (
-          <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 flex items-start justify-center pt-20 sm:pt-24">
+          <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50 flex items-start justify-center pt-20 sm:pt-24 pointer-events-none">
             <motion.div initial={{ scale: 0.6 }} animate={{ scale: 1 }} className="text-center">
               <div className="flex items-center justify-center gap-3 mb-3">
                 <span className="font-display font-bold text-sm text-cyan-300">{player.name}</span>
@@ -389,8 +394,8 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
           </motion.div>
         )}
         {phase === "outro" && (
-          <motion.div key="outro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center bg-black/40">
-            <motion.div initial={{ scale: 0.5, y: 20 }} animate={{ scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 300 }} className="text-center">
+          <motion.div key="outro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-[2px]">
+            <motion.div initial={{ scale: 0.5, y: 20 }} animate={{ scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 300 }} className="relative z-10 text-center px-4">
               <h2 className={`font-display font-black text-5xl tracking-widest ${battle.winner === "player" ? "text-amber-300 glow-orange" : "text-red-400"}`}>
                 {battle.winner === "player" ? "VICTORY" : "DEFEAT"}
               </h2>
@@ -399,14 +404,14 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
                 onClick={onDone}
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }}
-                style={battle.winner === "player"
-                  ? { backgroundImage: "linear-gradient(to right, #22D3EE, #3B82F6)", border: "2px solid #67E8F9", boxShadow: "0 0 20px rgba(34,211,238,0.5)" }
-                  : { backgroundImage: "linear-gradient(to right, #EF4444, #E11D48)", border: "2px solid #FCA5A5", boxShadow: "0 0 20px rgba(239,68,68,0.5)" }
+                className={
+                  battle.winner === "player"
+                    ? "mt-6 inline-flex items-center gap-2 px-8 py-3 rounded-xl font-display font-black text-base tracking-wider text-black bg-gradient-to-r from-cyan-400 to-blue-500 border-2 border-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.5)] hover:shadow-[0_0_30px_rgba(34,211,238,0.75)] transition-shadow"
+                    : "mt-6 inline-flex items-center gap-2 px-8 py-3 rounded-xl font-display font-black text-base tracking-wider text-white bg-gradient-to-r from-red-500 to-rose-600 border-2 border-red-300 shadow-[0_0_20px_rgba(239,68,68,0.55)] hover:shadow-[0_0_30px_rgba(239,68,68,0.8)] transition-shadow"
                 }
-                className="mt-6 inline-flex items-center gap-2 px-8 py-3 rounded-xl font-display font-black text-base tracking-wider text-black transition-shadow hover:shadow-[0_0_30px_rgba(34,211,238,0.75)]"
               >
                 <ChevronRight className="w-5 h-5" />
-                {battle.winner === "player" ? "CLAIM GLORY" : "EXIT ARENA"}
+                {battle.winner === "player" ? "VIEW REWARDS" : "VIEW RESULTS"}
               </motion.button>
             </motion.div>
           </motion.div>

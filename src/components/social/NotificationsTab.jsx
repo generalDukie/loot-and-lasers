@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { markRead, subscribeNotifications } from "@/lib/notificationEngine";
-import { Bell, Users, MessageSquare, Mail, Gift, CheckCheck } from "lucide-react";
+import { markRead, subscribeNotifications, syncStatPointsNotification } from "@/lib/notificationEngine";
+import { Bell, Users, MessageSquare, Mail, Gift, CheckCheck, Star } from "lucide-react";
 import NotificationActions from "@/components/social/NotificationActions";
 
 export const TYPE_META = {
@@ -12,6 +12,7 @@ export const TYPE_META = {
   chat_mention: { label: "Mention", icon: Bell, color: "#34D399" },
   daily: { label: "Daily Reward", icon: Gift, color: "#FFD700" },
   system: { label: "System", icon: Bell, color: "#FB7185" },
+  stat_points: { label: "Attribute Points", icon: Star, color: "#22D3EE" },
 };
 
 export function timeAgo(dateStr) {
@@ -43,6 +44,7 @@ export default function NotificationsTab({ myChar }) {
 
   async function handleMarkRead(item) {
     if (item.read) return;
+    if (item.type === "stat_points" && (myChar.unspent_stat_points || 0) > 0) return;
     await markRead(item.id);
     setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
   }
@@ -52,7 +54,8 @@ export default function NotificationsTab({ myChar }) {
       { owner_id: myChar.id, read: false },
       { $set: { read: true } }
     );
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    await syncStatPointsNotification(myChar);
+    await load();
   }
 
   const unread = items.filter((n) => !n.read).length;

@@ -5,10 +5,10 @@ import { RACES, CLASSES } from "@/lib/gameData";
 import { spring } from "@/lib/goofyMotion";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import EquippedFrame from "@/components/game/EquippedFrame";
-import { Star, Zap, Target, TrendingUp, Users, Save, BookOpen } from "lucide-react";
+import { Star, Target, TrendingUp, Users, Save, BookOpen } from "lucide-react";
 import { fullName } from "@/lib/legacyName";
 
-export default function CharacterHeader({ character, guild, combatPower, equippedItems }) {
+export default function CharacterHeader({ character, guild, equippedItems }) {
   const [bio, setBio] = useState("");
   const [saving, setSaving] = useState(false);
   const race = RACES[character.race];
@@ -106,13 +106,6 @@ export default function CharacterHeader({ character, guild, combatPower, equippe
             </div>
           </div>
         </div>
-
-        {/* Combat Power */}
-        <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ ...spring, delay: 0.2 }} className="flex flex-col items-center justify-center bg-muted/20 rounded-xl p-4 min-w-[120px] border border-border/40">
-          <Zap className="w-5 h-5 text-yellow-500 mb-1" />
-          <p className="font-display font-bold text-2xl glow-cyan">{combatPower.toLocaleString()}</p>
-          <p className="text-[10px] text-muted-foreground tracking-wide">COMBAT POWER</p>
-        </motion.div>
         </div>
       </div>
 

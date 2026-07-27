@@ -15,15 +15,15 @@ function formatDuration(seconds) {
 }
 
 const GOOFY_STATUS = [
-  { at: 0.0, msg: "🚀 Igniting thrusters (hope they work)..." },
-  { at: 0.15, msg: "Captain spilled space coffee, mopping..." },
-  { at: 0.3, msg: "Dodging a space raccoon, brb..." },
-  { at: 0.45, msg: "Pilot forgot which button is 'go'..." },
-  { at: 0.6, msg: "Halfway! The snacks are holding up." },
-  { at: 0.75, msg: "Arguing with the GPS about shortcuts..." },
-  { at: 0.9, msg: "Almost there! Mostly. Probably." },
-  { at: 0.97, msg: "Parking the ship (parallel, ugh)..." },
-  { at: 1.0, msg: "🎉 Arrived! Intact and everything." },
+  { at: 0.0, msg: "🚀 Igniting thrusters..." },
+  { at: 0.15, msg: "Spilled space coffee..." },
+  { at: 0.3, msg: "Dodging a space raccoon..." },
+  { at: 0.45, msg: "Which button is go again..." },
+  { at: 0.6, msg: "Halfway — snacks holding." },
+  { at: 0.75, msg: "Arguing with the GPS..." },
+  { at: 0.9, msg: "Almost there. Probably." },
+  { at: 0.97, msg: "Parking the ship..." },
+  { at: 1.0, msg: "🎉 Arrived!" },
 ];
 
 function getGoofyStatus(progress) {
@@ -34,7 +34,7 @@ function getGoofyStatus(progress) {
   return current.msg;
 }
 
-function CountdownTimer({ endTime, duration_seconds, onComplete }) {
+function CountdownTimer({ endTime, duration_seconds, onComplete, compact }) {
   const [remaining, setRemaining] = useState(0);
   const total = Math.max(1, duration_seconds || 1);
 
@@ -53,24 +53,18 @@ function CountdownTimer({ endTime, duration_seconds, onComplete }) {
   const done = remaining <= 0;
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">Time Remaining</span>
-        <span className="font-display font-semibold text-white glow-cyan">
-          {done ? "COMPLETE!" : formatDuration(remaining)}
+    <div className={compact ? "space-y-1" : "space-y-2"}>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-muted-foreground truncate pr-2">{getGoofyStatus(progress)}</span>
+        <span className="font-display font-semibold text-white glow-cyan shrink-0">
+          {done ? "DONE" : formatDuration(remaining)}
         </span>
       </div>
-      <div className="relative h-5 bg-muted/50 rounded-full overflow-hidden border border-border/30">
-        {/* Filled portion */}
+      <div className={`relative ${compact ? "h-3.5" : "h-5"} bg-muted/50 rounded-full overflow-hidden border border-border/30`}>
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary/80 to-accent/80 transition-all duration-500 ease-linear"
           style={{ width: `${progress * 100}%` }}
         />
-        {/* Dotted path for traveled route */}
-        <div className="absolute inset-0 flex items-center px-2">
-          <div className="w-full border-t border-dashed border-primary/20" />
-        </div>
-        {/* Traveling ship */}
         <div
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-500 ease-linear"
           style={{ left: `${Math.max(3, progress * 97)}%` }}
@@ -78,16 +72,12 @@ function CountdownTimer({ endTime, duration_seconds, onComplete }) {
           <motion.div
             animate={{ rotate: done ? [0, -10, 10, 0] : [-3, 3, -3] }}
             transition={{ duration: done ? 0.4 : 0.8, repeat: Infinity, ease: "easeInOut" }}
-            className="text-base"
+            className={compact ? "text-xs" : "text-base"}
           >
             {done ? "🎉" : "🚀"}
           </motion.div>
         </div>
       </div>
-      {/* Goofy status line */}
-      <p className="text-[11px] text-muted-foreground/80 italic text-center min-h-[1em] transition-opacity">
-        {getGoofyStatus(progress)}
-      </p>
     </div>
   );
 }
@@ -98,12 +88,51 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
   const fuelCost = getEffectiveFuelCost(character, mission);
   const insufficientFuel = !isActive && !isCompleted && (currentFuel ?? 0) < fuelCost;
 
+  // Compact strip for the live / ready-to-fight active mission (no story blurb).
+  if (isActive || isCompleted) {
+    return (
+      <div className={`px-3 py-2 rounded-xl border transition-all duration-300 ${
+        isActive ? "border-primary/50 bg-primary/5 border-glow-cyan" : "border-green-500/50 bg-green-500/5"
+      }`}>
+        <div className="flex items-center gap-2 min-w-0 mb-1.5">
+          <h3 className="font-display font-semibold text-xs tracking-wide truncate flex-1">{mission.name}</h3>
+          <span
+            className="text-[9px] font-display font-bold uppercase px-1.5 py-0.5 rounded-full shrink-0"
+            style={{ backgroundColor: diffColor + "15", color: diffColor }}
+          >
+            {mission.difficulty}
+          </span>
+        </div>
+
+        {isActive && mission.end_time && (
+          <CountdownTimer endTime={mission.end_time} duration_seconds={mission.duration_seconds} onComplete={() => {}} compact />
+        )}
+
+        {isActive && onSkip && (
+          <button
+            onClick={onSkip}
+            className="mt-1.5 w-full text-[11px] px-3 py-1.5 rounded-lg font-display font-semibold tracking-wide bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors flex items-center justify-center gap-1"
+          >
+            <Gem className="w-3 h-3" /> Skip · {skipCost} 💎
+          </button>
+        )}
+
+        {isCompleted && (
+          <button
+            onClick={() => onClaim(mission)}
+            disabled={claiming}
+            className="w-full text-[11px] bg-green-500/10 hover:bg-green-500/20 text-green-400 px-3 py-1.5 rounded-lg font-display font-semibold tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed animate-pulse"
+          >
+            {claiming ? "ENGAGING…" : "FIGHT FOR REWARDS"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`p-4 rounded-xl border transition-all duration-300 ${
-      locked ? "opacity-40 border-border/30 bg-card/30" :
-      isActive ? "border-primary/50 bg-primary/5 border-glow-cyan" :
-      isCompleted ? "border-green-500/50 bg-green-500/5" :
-      "border-border/50 bg-card/50 hover:border-border"
+      locked ? "opacity-40 border-border/30 bg-card/30" : "border-border/50 bg-card/50 hover:border-border"
     }`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -137,22 +166,8 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
         {locked && <span className="text-destructive">Lv.{mission.level_requirement} required</span>}
       </div>
 
-      {isActive && mission.end_time && (
-        <div className="mt-3">
-          <CountdownTimer endTime={mission.end_time} duration_seconds={mission.duration_seconds} onComplete={() => {}} />
-          {onSkip && (
-            <button
-              onClick={onSkip}
-              className="mt-2 w-full text-xs px-4 py-2 rounded-lg font-display font-semibold tracking-wide bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Gem className="w-3.5 h-3.5" /> Skip · {skipCost} 💎
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="mt-3">
-        {!isActive && !isCompleted && !locked && (
+        {!locked && (
           <button
             onClick={() => onStart(mission)}
             disabled={insufficientFuel}
@@ -164,18 +179,6 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
           >
             {insufficientFuel ? `NEED ${fuelCost} FUEL` : `LAUNCH · ${fuelCost} ⛽`}
           </button>
-        )}
-        {isCompleted && (
-          <button
-            onClick={() => onClaim(mission)}
-            disabled={claiming}
-            className="w-full text-xs bg-green-500/10 hover:bg-green-500/20 text-green-400 px-4 py-2 rounded-lg font-display font-semibold tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed animate-pulse"
-          >
-            {claiming ? "CLAIMING…" : "CLAIM REWARDS"}
-          </button>
-        )}
-        {isActive && (
-          <p className="text-center text-[11px] text-muted-foreground font-medium">Mission in progress...</p>
         )}
       </div>
     </div>

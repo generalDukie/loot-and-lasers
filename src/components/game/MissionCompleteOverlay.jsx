@@ -34,9 +34,15 @@ function RewardCard({ icon, accent, children }) {
 
 export default function MissionCompleteOverlay({ summary, onClose }) {
   useEffect(() => {
+    if (document.hidden) return undefined;
     confetti({ particleCount: 90, spread: 75, origin: { y: 0.35 } });
-    const t = setTimeout(() => confetti({ particleCount: 60, spread: 110, origin: { y: 0.3 } }), 350);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => {
+      if (!document.hidden) confetti({ particleCount: 60, spread: 110, origin: { y: 0.3 } });
+    }, 350);
+    return () => {
+      clearTimeout(t);
+      confetti.reset();
+    };
   }, []);
 
   if (!summary) return null;

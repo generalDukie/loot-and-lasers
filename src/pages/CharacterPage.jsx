@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { useNavigate } from "react-router-dom";
 import { RACES, CLASSES } from "@/lib/gameData";
-import { computeTotalStats, computeTotalStatsNoBuffs, computeCombatPower } from "@/lib/statEngine";
+import { computeTotalStats, computeTotalStatsNoBuffs } from "@/lib/statEngine";
 import { spring } from "@/lib/goofyMotion";
 import { getGuildMembership } from "@/lib/guildUtils";
 import { getMyCharacter } from "@/lib/socialEngine";
@@ -16,7 +16,6 @@ import CollectiblesLog from "@/components/game/CollectiblesLog";
 import CharacterStats from "@/components/game/CharacterStats";
 import DerivedStatsPanel from "@/components/game/DerivedStatsPanel";
 import { useInventory } from "@/hooks/useInventory";
-import ClassStatChart from "@/components/game/ClassStatChart";
 import ActiveEffectsPanel from "@/components/game/ActiveEffectsPanel";
 import { useToast } from "@/components/ui/use-toast";
 import { Star, Backpack } from "lucide-react";
@@ -74,7 +73,6 @@ export default function CharacterPage() {
   const totalStats = computeTotalStats(character, equippedItems);
   const baseStats = computeTotalStats(character, []);
   const noBuffStats = computeTotalStatsNoBuffs(character, equippedItems);
-  const combatPower = computeCombatPower(character, equippedItems);
   const race = RACES[character.race];
   const cls = CLASSES[character.class];
   const fadeUp = (delay = 0) => ({ initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { ...spring, delay } });
@@ -83,7 +81,7 @@ export default function CharacterPage() {
     <div className="flex flex-col md:flex-row gap-4 md:h-[calc(100dvh-7rem)] md:overflow-hidden">
       {/* Left pane — identity, stats & lore (scrolls internally on desktop) */}
       <div className="md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-1 space-y-4">
-      <CharacterHeader character={character} guild={guild} combatPower={combatPower} equippedItems={equippedItems} />
+      <CharacterHeader character={character} guild={guild} equippedItems={equippedItems} />
 
       <motion.div {...fadeUp(0.05)}>
         <ActiveEffectsPanel character={character} onUpdate={(updater) => setCharacter(updater)} />
@@ -152,11 +150,6 @@ export default function CharacterPage() {
           <StatAllocator stats={character.stats} points={character.unspent_stat_points} allowRemove={false} onAdd={allocate} className={character.class} />
         </motion.div>
       )}
-
-      {/* Class stat scaling reference */}
-      <motion.div {...fadeUp(0.27)}>
-        <ClassStatChart className={character.class} />
-      </motion.div>
       </div>
 
       {/* Right pane — inventory & collections (each panel scrolls internally) */}

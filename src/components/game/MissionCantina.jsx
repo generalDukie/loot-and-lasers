@@ -1,23 +1,18 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getEffectiveFuelCost, DIFFICULTY_COLORS } from "@/lib/gameData";
+import { getEffectiveFuelCost, DIFFICULTY_COLORS, QUEST_GIVERS } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
-import { Lock, Fuel, Star, Clock } from "lucide-react";
+import { Lock, Fuel, Star, Clock, MapPin } from "lucide-react";
 import MissionDetailSheet from "@/components/game/MissionDetailSheet";
 import RiskGauge from "@/components/game/RiskGauge";
 
 const CANTINA_BG = "/assets/cantina-bg.png";
 
-const PATRONS = [
-  { emoji: "🤖", name: "CLANK", color: "#00E5FF" },
-  { emoji: "👽", name: "Zyx", color: "#9D5CFF" },
-  { emoji: "🐙", name: "Capt. Tentak", color: "#FF6B35" },
-  { emoji: "🧙", name: "Old Maru", color: "#FFD700" },
-  { emoji: "👻", name: "Wraith Vin", color: "#8BE8FF" },
-  { emoji: "🦊", name: "Rix", color: "#FF9E4F" },
-  { emoji: "🐉", name: "Drako", color: "#FF4D6D" },
-  { emoji: "🛸", name: "Skip", color: "#5CFFB0" },
-];
+const FALLBACK_PATRON = QUEST_GIVERS[0];
+
+function patronFor(mission, index) {
+  return mission?.patron || QUEST_GIVERS[index % QUEST_GIVERS.length] || FALLBACK_PATRON;
+}
 
 // Drifting neon orbs that give the cantina a playful, living backdrop
 const CANTINA_ORBS = [
@@ -54,6 +49,15 @@ export default function MissionCantina({ missions, characterLevel, character, cu
   const [hovered, setHovered] = useState(null);
   const [selected, setSelected] = useState(null);
   const n = missions.length;
+
+  const hoverMission = hovered !== null ? missions[hovered] : null;
+  const hoverPatron = hovered !== null ? patronFor(missions[hovered], hovered) : null;
+  const hoverFuelCost = hoverMission ? getEffectiveFuelCost(character, hoverMission) : 0;
+  const hoverLocked = hoverMission ? hoverMission.level_requirement > characterLevel : false;
+  const hoverLowFuel = hoverMission ? (currentFuel ?? 0) < hoverFuelCost : false;
+  const hoverScouting = busy && hoverMission && !hoverLocked && !hoverLowFuel;
+  const hoverAvailable = hoverMission && !hoverLocked && !hoverLowFuel;
+  const hoverDiffColor = hoverMission ? DIFFICULTY_COLORS[hoverMission.difficulty] : null;
 
   return (
     <div className="relative h-full w-full min-h-0 rounded-2xl overflow-hidden border border-border/60 shadow-2xl painted-panel painted-frame canvas-grain">
@@ -96,24 +100,25 @@ export default function MissionCantina({ missions, characterLevel, character, cu
 
       {/* Quest-giver NPCs */}
       {missions.map((m, i) => {
-        const patron = PATRONS[i % PATRONS.length];
+        const patron = patronFor(m, i);
         const x = n === 1 ? 50 : 10 + (i / (n - 1)) * 80;
         const fuelCost = getEffectiveFuelCost(character, m);
         const locked = m.level_requirement > characterLevel;
         const lowFuel = (currentFuel ?? 0) < fuelCost;
-        const scouting = busy && !locked && !lowFuel; // open for preview, launch blocked
         const available = !locked && !lowFuel;
-        const diffColor = DIFFICULTY_COLORS[m.difficulty];
 
         return (
           <button
             key={i}
-            className="absolute bottom-[6%] -translate-x-1/2 flex flex-col items-center group focus:outline-none disabled:cursor-not-allowed"
+            type="button"
+            className={`absolute bottom-[6%] -translate-x-1/2 z-40 flex flex-col items-center group focus:outline-none ${locked || lowFuel ? "cursor-not-allowed" : "cursor-pointer"}`}
             style={{ left: `${x}%` }}
             onMouseEnter={() => setHovered(i)}
             onMouseLeave={() => setHovered(null)}
+            onFocus={() => setHovered(i)}
+            onBlur={() => setHovered(null)}
             onClick={() => !locked && !lowFuel && setSelected(i)}
-            disabled={locked || lowFuel}
+            aria-disabled={locked || lowFuel}
           >
             {/* Avatar with glow ring */}
             <motion.div
@@ -158,7 +163,7 @@ export default function MissionCantina({ missions, characterLevel, character, cu
               </div>
             </motion.div>
 
-            {/* Name + reward teaser */}
+            {/* Patron name */}
             <div className="mt-2 flex flex-col items-center gap-1">
               <span
                 className="text-xs sm:text-sm font-display font-bold px-3 py-1 rounded-md truncate max-w-[7.5rem] sm:max-w-[9rem] bg-background/90 border canvas-grain shadow-md"
@@ -171,13 +176,6 @@ export default function MissionCantina({ missions, characterLevel, character, cu
                 {patron.name}
               </span>
               {available && (
-                <span className="text-[10px] sm:text-[11px] font-display font-bold px-2.5 py-0.5 rounded-full bg-background/85 border border-amber-400/40 text-amber-300 flex items-center gap-1 shadow">
-                  <Star className="w-3 h-3 text-cyan-400" />
-                  {m.rewards?.experience}
-                  <span className="text-purple-300">✨{m.rewards?.stardust}</span>
-                </span>
-              )}
-              {available && (
                 <span
                   className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-display font-bold tracking-wide uppercase mt-0.5"
                   style={{ color: patron.color, textShadow: `0 0 8px ${patron.color}` }}
@@ -187,69 +185,135 @@ export default function MissionCantina({ missions, characterLevel, character, cu
               )}
             </div>
 
-            {/* Hover speech bubble */}
-            <AnimatePresence>
-              {hovered === i && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.92 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.92 }}
-                  transition={{ duration: 0.16 }}
-                  className="absolute bottom-full mb-3 w-52 p-3 rounded-xl backdrop-blur-md shadow-2xl z-20 painted-panel border"
-                  style={{ borderColor: `${patron.color}55`, boxShadow: `0 12px 32px rgba(0,0,0,0.5), 0 0 20px ${patron.color}33` }}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h4 className="font-display font-semibold text-xs text-foreground leading-tight">{m.name}</h4>
-                    <span
-                      className="text-[9px] font-display font-bold uppercase px-1.5 py-0.5 rounded shrink-0"
-                      style={{ backgroundColor: diffColor + "20", color: diffColor }}
-                    >
-                      {m.difficulty}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground line-clamp-2 mb-2">{m.description}</p>
-                  <div className="flex items-center gap-1 mb-1"><RiskGauge risk={m.risk || 1} size={11} /></div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
-                    <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" /> {formatDuration(getEffectiveMissionDuration(character, m))}</span>
-                    <span className="flex items-center gap-0.5"><Star className="w-2.5 h-2.5 text-cyan-400" /><span className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent font-bold">{m.rewards?.experience}</span></span>
-                    <span className="flex items-center gap-0.5 text-purple-400 font-bold">✨ {m.rewards?.stardust}</span>
-                    <span className={`flex items-center gap-0.5 font-bold ${lowFuel ? "text-amber-400" : "text-blue-400"}`}>
-                      <Fuel className="w-2.5 h-2.5" /> {fuelCost}
-                    </span>
-                  </div>
-                  {locked && (
-                    <p className="text-[10px] text-destructive mt-1.5 font-medium">Lv.{m.level_requirement} required</p>
-                  )}
-                  {lowFuel && !locked && (
-                    <p className="text-[10px] text-amber-400 mt-1.5 font-medium">Not enough fuel</p>
-                  )}
-                  {scouting && (
-                    <p className="text-[10px] text-cyan-300 mt-1.5">🔭 Scouting — finish {mining ? "mining" : "mission"} to launch</p>
-                  )}
-                  {available && !scouting && (
-                    <p className="text-[10px] mt-2 font-display font-bold text-center" style={{ color: patron.color }}>
-                      Click to take the job
-                    </p>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
           </button>
         );
       })}
+
+      {/* Large centered quest preview — pointer-events-none so leaving the patron doesn't fight the panel */}
+      <AnimatePresence>
+        {hoverMission && hoverPatron && (
+          <motion.div
+            key={`preview-${hovered}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="absolute inset-0 z-30 flex items-start justify-center pt-6 sm:pt-8 pb-44 sm:pb-48 px-4 sm:px-6 pointer-events-none"
+          >
+            <div className="absolute inset-0 bg-background/55 backdrop-blur-[2px]" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 10 }}
+              transition={{ type: "spring", stiffness: 380, damping: 24 }}
+              className="relative w-full max-w-xl rounded-2xl border shadow-2xl painted-panel painted-frame canvas-grain p-5 sm:p-7"
+              style={{
+                borderColor: `${hoverPatron.color}66`,
+                boxShadow: `0 20px 50px rgba(0,0,0,0.55), 0 0 36px ${hoverPatron.color}33`,
+              }}
+            >
+              <div className="flex items-start gap-4 mb-4">
+                <div
+                  className="w-16 h-14 sm:w-20 sm:h-16 rounded-2xl flex items-center justify-center text-4xl sm:text-5xl border-[3px] shrink-0"
+                  style={{
+                    borderColor: hoverPatron.color,
+                    background: `linear-gradient(160deg, ${hoverPatron.color}33, rgba(10,12,20,0.9) 55%)`,
+                    boxShadow: `0 0 20px ${hoverPatron.color}55`,
+                  }}
+                >
+                  {hoverPatron.emoji}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-display tracking-widest uppercase mb-1" style={{ color: hoverPatron.color }}>
+                    {hoverPatron.name}
+                  </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="font-display font-bold text-xl sm:text-2xl leading-tight text-foreground">
+                      {hoverMission.name}
+                    </h3>
+                    <span
+                      className="text-[11px] font-display font-bold uppercase px-2.5 py-1 rounded-full shrink-0"
+                      style={{ backgroundColor: hoverDiffColor + "22", color: hoverDiffColor }}
+                    >
+                      {hoverMission.difficulty}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1.5">
+                    <MapPin className="w-3.5 h-3.5 shrink-0" /> {hoverMission.location}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 rounded-xl bg-muted/25 border border-border/40">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-display uppercase text-muted-foreground tracking-wide">Risk</span>
+                  <RiskGauge risk={hoverMission.risk || 1} size={18} />
+                </div>
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Clock className="w-4 h-4" />
+                  <span className="font-display font-semibold text-foreground">
+                    {formatDuration(getEffectiveMissionDuration(character, hoverMission))}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-base sm:text-lg text-foreground/90 leading-relaxed mb-5">
+                {hoverMission.description}
+              </p>
+
+              <div className="grid grid-cols-3 gap-2.5 sm:gap-3 text-center mb-4">
+                <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
+                  <Star className="w-5 h-5 mx-auto text-cyan-400" />
+                  <p className="text-lg sm:text-xl font-display font-bold mt-1.5 bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                    {hoverMission.rewards?.experience}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">XP</p>
+                </div>
+                <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
+                  <span className="text-lg block text-center">✨</span>
+                  <p className="text-lg sm:text-xl font-display font-bold mt-1.5 text-purple-400">{hoverMission.rewards?.stardust}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Stardust</p>
+                </div>
+                <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
+                  <Fuel className={`w-5 h-5 mx-auto ${hoverLowFuel ? "text-amber-400" : "text-blue-400"}`} />
+                  <p className={`text-lg sm:text-xl font-display font-bold mt-1.5 ${hoverLowFuel ? "text-amber-400" : "text-blue-400"}`}>{hoverFuelCost}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Fuel</p>
+                </div>
+              </div>
+
+              {hoverLocked && (
+                <p className="text-sm text-destructive font-medium text-center">Requires Level {hoverMission.level_requirement}</p>
+              )}
+              {hoverLowFuel && !hoverLocked && (
+                <p className="text-sm text-amber-400 font-medium text-center">Not enough fuel (need {hoverFuelCost})</p>
+              )}
+              {hoverScouting && (
+                <p className="text-sm text-cyan-300 text-center">
+                  Scouting — finish {mining ? "mining" : "mission"} to launch
+                </p>
+              )}
+              {hoverAvailable && !hoverScouting && (
+                <p className="text-sm font-display font-bold text-center tracking-wide" style={{ color: hoverPatron.color }}>
+                  Click the patron to take the job
+                </p>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Floor line */}
       <div className="absolute bottom-0 inset-x-0 h-12 bg-gradient-to-t from-background/90 to-transparent pointer-events-none" />
 
       {/* Hint */}
-      <p className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-display tracking-widest text-muted-foreground/70 uppercase">
-        {busy ? (mining ? "⛏️ Mining in progress" : "🔭 Scout the lounge — mission in progress") : "Tap a patron to hear their tale"}
+      <p className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-display tracking-widest text-muted-foreground/70 uppercase z-10">
+        {busy ? (mining ? "⛏️ Mining in progress" : "🔭 Scout the lounge — mission in progress") : missions.some((m) => m._lowFuel) ? "Low fuel — residual errands sized to your tank" : "Hover a patron for the full job · click to accept"}
       </p>
 
       {selected !== null && missions[selected] && (
         <MissionDetailSheet
           mission={missions[selected]}
-          patron={PATRONS[selected % PATRONS.length]}
+          patron={patronFor(missions[selected], selected)}
           characterLevel={characterLevel}
           character={character}
           currentFuel={currentFuel}

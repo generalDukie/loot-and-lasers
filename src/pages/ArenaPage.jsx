@@ -18,6 +18,7 @@ import {
 import ArenaOpponentCard from "@/components/game/ArenaOpponentCard";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import ArenaNewsFeed from "@/components/game/ArenaNewsFeed";
+import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
 import { Swords, Trophy, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
 
 // Resolve an opponent's equipped gear to full item records — real opponents
@@ -39,8 +40,11 @@ function fmtMs(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Mat
 async function fetchRealOpponents(char, maxReal = 1, excludeIds = []) {
   try {
     const chars = await api.entities.Character.list("-arena_rating", 60);
+    const myOwnerId = char.created_by_id;
     const candidates = chars
+      // Never match the active hero or any other character on the same account.
       .filter((c) => c.id !== char.id)
+      .filter((c) => !myOwnerId || c.created_by_id !== myOwnerId)
       .filter((c) => !excludeIds.includes(c.id))
       .filter((c) => Math.abs((c.level || 1) - (char.level || 1)) <= 6);
     if (!candidates.length) return [];
@@ -83,6 +87,7 @@ export default function ArenaPage() {
   const [refreshAt, setRefreshAt] = useState(Date.now() + ARENA_REFRESH_MS);
   const [now, setNow] = useState(Date.now());
   const [battleState, setBattleState] = useState(null);
+  const [completeSummary, setCompleteSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [catalogItems, setCatalogItems] = useState([]);
   const navigate = useNavigate();
@@ -163,6 +168,7 @@ export default function ArenaPage() {
     const { battle, opp, rewards, isFree, skipped } = battleState;
     const { percentage: collectPct } = getCollectionStats(character);
     const boostedXp = applyXpBonus(rewards.experience, collectPct);
+    const prevLevel = character.level;
     let newExp = (character.experience || 0) + boostedXp;
     let newLevel = character.level;
     let expToNext = character.experience_to_next_level;
@@ -233,16 +239,25 @@ export default function ArenaPage() {
     const replacement = (await buildOpponentPool(character, catalogItems, excludeIds))[0];
     setOpponents((prev) => prev.map((o) => (o.id === opp.id ? replacement : o)));
 
-    const rewTxt = isFree
-      ? `+${boostedXp} XP · +${rewards.stardust} ✨ · `
-      : `-${ARENA_PAID_BATTLE_COST} 💎 · `;
-    toast({
-      title: rewards.won ? "🎉 Victory!" : "Defeat",
-      description: `${rewTxt}${rewards.arena_rating_delta >= 0 ? "+" : ""}${rewards.arena_rating_delta} rating${newLevel > character.level ? ` · LEVEL UP! → ${newLevel}` : ""}`,
-    });
     if (discFound.length) {
       pushNotification({ owner_id: character.id, type: "system", title: "🔎 Discovery!", body: discFound.map((f) => `${f.emoji} ${f.name}`).join(" · ") });
     }
+
+    setCompleteSummary({
+      mode: "arena",
+      won: rewards.won,
+      title: rewards.won ? `Defeated ${opp.name}` : `Defeated by ${opp.name}`,
+      subtitle: `Lv ${opp.level} · ${opp.race} · ${opp.class}`,
+      xp: { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp },
+      stardust: { total: rewards.stardust || 0 },
+      ratingDelta: rewards.arena_rating_delta,
+      leveledUp: newLevel > prevLevel,
+      prevLevel,
+      newLevel,
+      statPoints: (newLevel - prevLevel) * 4,
+      discoveries: discFound,
+      note: !isFree ? `Paid battle (−${ARENA_PAID_BATTLE_COST} 💎) — rating only` : undefined,
+    });
   }
 
   if (loading) {
@@ -269,6 +284,9 @@ export default function ArenaPage() {
           playerItems={equippedItems}
           opponentItems={resolveOpponentItems(battleState.opp, catalogItems)}
         />
+      )}
+      {completeSummary && (
+        <CombatCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />
       )}
 
       {/* Header */}

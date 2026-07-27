@@ -2,11 +2,13 @@ import React from "react";
 import { FUEL_MAX, FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX } from "@/lib/gameData";
 import MissionCard from "@/components/game/MissionCard";
 import MissionCantina from "@/components/game/MissionCantina";
+import MissionExploreBackdrop from "@/components/game/MissionExploreBackdrop";
 import MissionLaunchOverlay from "@/components/game/MissionLaunchOverlay";
 import MissionCompleteOverlay from "@/components/game/MissionCompleteOverlay";
+import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import CantinaMusicToggle from "@/components/game/CantinaMusicToggle";
 import { useMissionManager } from "@/hooks/useMissionManager";
-import { Map, Rocket, Fuel, Shuffle } from "lucide-react";
+import { Map, Rocket, Fuel } from "lucide-react";
 
 export default function MissionsPage() {
   const {
@@ -16,15 +18,16 @@ export default function MissionsPage() {
     loading,
     claiming,
     completeSummary,
+    missionBattle,
     skipCost,
     gains,
     currentFuel,
     cantinaMissions,
     handleStart,
     handleClaim,
+    finishMissionBattle,
     handleSkip,
     handleBuyFuel,
-    shuffleMissions,
     setCompleteSummary,
     setLaunchAnim,
     navigate,
@@ -41,6 +44,15 @@ export default function MissionsPage() {
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
       {launchAnim && <MissionLaunchOverlay mission={launchAnim} onDone={() => setLaunchAnim(null)} />}
+      {missionBattle && (
+        <ArenaBattleOverlay
+          player={character}
+          opponent={missionBattle.enemy}
+          battle={missionBattle.battle}
+          onDone={finishMissionBattle}
+          playerItems={missionBattle.playerItems}
+        />
+      )}
       {completeSummary && <MissionCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />}
 
       <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between">
@@ -54,12 +66,6 @@ export default function MissionsPage() {
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <CantinaMusicToggle />
-          <button
-            onClick={shuffleMissions}
-            className="text-xs bg-accent/10 text-accent px-3 py-1 rounded-full font-medium flex items-center gap-1 hover:bg-accent/20 transition-colors"
-          >
-            <Shuffle className="w-3 h-3" /> Shuffle
-          </button>
           <span className="text-xs bg-amber-500/10 text-amber-400 px-3 py-1 rounded-full font-medium flex items-center gap-1">
             <Fuel className="w-3 h-3" /> {character.fuel ?? FUEL_MAX}/{character.max_fuel || FUEL_MAX}
           </span>
@@ -86,8 +92,8 @@ export default function MissionsPage() {
       )}
 
       {activeMission && (
-        <div className="shrink-0 max-h-[38%] overflow-y-auto">
-          <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide mb-1.5">ACTIVE MISSION</h2>
+        <div className="shrink-0">
+          <h2 className="text-[10px] font-display font-semibold text-muted-foreground tracking-wide mb-1">ACTIVE MISSION</h2>
           <MissionCard
             mission={activeMission}
             isActive={activeMission.status === "in_progress"}
@@ -106,18 +112,25 @@ export default function MissionsPage() {
 
       <div className="flex-1 min-h-0 flex flex-col">
         <h2 className="shrink-0 text-xs font-display font-semibold text-muted-foreground tracking-wide mb-1.5">
-          THE CANTINA
+          {activeMission ? "OUT ON ASSIGNMENT" : "THE CANTINA"}
         </h2>
         <div className="flex-1 min-h-0">
-          <MissionCantina
-            missions={cantinaMissions}
-            characterLevel={character.level}
-            character={character}
-            currentFuel={currentFuel}
-            onStart={handleStart}
-            busy={!!activeMission || !!character.mining_end_time}
-            mining={!!character.mining_end_time && !activeMission}
-          />
+          {activeMission ? (
+            <MissionExploreBackdrop
+              missionName={activeMission.name}
+              sceneIndex={activeMission.explore_scene}
+            />
+          ) : (
+            <MissionCantina
+              missions={cantinaMissions}
+              characterLevel={character.level}
+              character={character}
+              currentFuel={currentFuel}
+              onStart={handleStart}
+              busy={!!character.mining_end_time}
+              mining={!!character.mining_end_time}
+            />
+          )}
         </div>
       </div>
     </div>

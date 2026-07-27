@@ -18,8 +18,8 @@ const STAT_COLORS = {
 };
 
 // Read-only starting-stat chart for character creation — value + class-aware tip.
-export default function ClassStatsChart({ className, stats, raceBonusNote }) {
-  const cls = CLASSES[className];
+export default function ClassStatsChart({ characterClass, stats, raceBonusNote }) {
+  const cls = CLASSES[characterClass];
   const entries = Object.entries(stats || {});
   const maxVal = Math.max(1, ...entries.map(([, v]) => v || 0));
 
@@ -60,7 +60,7 @@ export default function ClassStatsChart({ className, stats, raceBonusNote }) {
               <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: colors.bar }} />
             </div>
             <p className="text-[10px] leading-snug" style={{ color: colors.text, opacity: 0.85 }}>
-              {getStatDescription(stat, className)}
+              {getStatDescription(stat, characterClass)}
             </p>
           </div>
         );

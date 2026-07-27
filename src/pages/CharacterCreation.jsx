@@ -277,7 +277,7 @@ export default function CharacterCreation() {
                         </div>
                         <div className="p-3 bg-muted/20 rounded-xl border border-border/40">
                           <ClassStatsChart
-                            className={form.class}
+                            characterClass={form.class}
                             stats={finalStats}
                             raceBonusNote={race ? `Includes ${race.name} racial bonuses on the preview values.` : null}
                           />
@@ -409,7 +409,7 @@ export default function CharacterCreation() {
                       </div>
                     </div>
                     <ClassStatsChart
-                      className={form.class}
+                      characterClass={form.class}
                       stats={finalStats}
                       raceBonusNote={`Includes ${race.name} racial bonuses.`}
                     />

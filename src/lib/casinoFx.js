@@ -3,6 +3,7 @@ import confetti from "canvas-confetti";
 // Celebratory confetti bursts shared across the Nebula Casino games.
 
 export function burstWin() {
+  if (document.hidden) return;
   confetti({
     particleCount: 70,
     spread: 75,
@@ -14,6 +15,7 @@ export function burstWin() {
 }
 
 export function burstBig() {
+  if (document.hidden) return;
   confetti({
     particleCount: 110,
     spread: 110,
@@ -22,34 +24,40 @@ export function burstBig() {
     colors: ["#A855F7", "#22C55E", "#FBBF24", "#3B82F6", "#ffffff"],
   });
   setTimeout(
-    () =>
+    () => {
+      if (document.hidden) return;
       confetti({
         particleCount: 50,
         angle: 90,
         spread: 60,
         origin: { y: 0.5 },
         colors: ["#FBBF24", "#ffffff"],
-      }),
+      });
+    },
     180
   );
 }
 
 export function burstJackpot() {
+  if (document.hidden) return;
   const end = Date.now() + 1100;
   (function frame() {
+    if (document.hidden || Date.now() >= end) return;
     confetti({ particleCount: 7, angle: 60, spread: 65, origin: { x: 0, y: 0.7 }, colors: ["#FBBF24", "#F59E0B", "#ffffff"] });
     confetti({ particleCount: 7, angle: 120, spread: 65, origin: { x: 1, y: 0.7 }, colors: ["#A855F7", "#FBBF24", "#ffffff"] });
-    if (Date.now() < end) requestAnimationFrame(frame);
+    requestAnimationFrame(frame);
   })();
   setTimeout(
-    () =>
+    () => {
+      if (document.hidden) return;
       confetti({
         particleCount: 160,
         spread: 130,
         startVelocity: 50,
         origin: { y: 0.55 },
         colors: ["#FBBF24", "#F59E0B", "#A855F7", "#ffffff"],
-      }),
+      });
+    },
     250
   );
 }

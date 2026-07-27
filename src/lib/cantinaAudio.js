@@ -1,4 +1,4 @@
-// Procedural cantina audio — upbeat synth melody + ambient crowd murmur.
+// Procedural cantina audio — fun upbeat lounge tune + crowd murmur.
 // Routes through the shared audio engine (master/music/sfx + volume settings).
 import { ensureAudio, getCtx, musicInput, track, stopOwned } from "@/lib/audioEngine";
 import { stopStationAmbient } from "@/lib/stationAmbient";
@@ -10,12 +10,13 @@ let playing = false;
 
 function playTone(freq, start, dur, type, gain) {
   const ctx = getCtx();
+  if (!ctx || !out) return;
   const osc = ctx.createOscillator();
   osc.type = type;
   osc.frequency.value = freq;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, start);
-  g.gain.linearRampToValueAtTime(gain, start + 0.02);
+  g.gain.linearRampToValueAtTime(gain, start + 0.015);
   g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
   osc.connect(g);
   g.connect(out);
@@ -23,9 +24,27 @@ function playTone(freq, start, dur, type, gain) {
   osc.stop(start + dur + 0.05);
 }
 
+function playKick(start) {
+  const ctx = getCtx();
+  if (!ctx || !out) return;
+  const osc = ctx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(140, start);
+  osc.frequency.exponentialRampToValueAtTime(48, start + 0.14);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, start);
+  g.gain.linearRampToValueAtTime(0.07, start + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
+  osc.connect(g);
+  g.connect(out);
+  osc.start(start);
+  osc.stop(start + 0.2);
+}
+
 function playHat(start) {
   const ctx = getCtx();
-  const bufferSize = Math.floor(ctx.sampleRate * 0.05);
+  if (!ctx || !out) return;
+  const bufferSize = Math.floor(ctx.sampleRate * 0.04);
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
@@ -33,15 +52,15 @@ function playHat(start) {
   src.buffer = buffer;
   const hp = ctx.createBiquadFilter();
   hp.type = "highpass";
-  hp.frequency.value = 6000;
+  hp.frequency.value = 7000;
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0.02, start);
-  g.gain.exponentialRampToValueAtTime(0.0001, start + 0.05);
+  g.gain.setValueAtTime(0.028, start);
+  g.gain.exponentialRampToValueAtTime(0.0001, start + 0.04);
   src.connect(hp);
   hp.connect(g);
   g.connect(out);
   src.start();
-  src.stop(start + 0.06);
+  src.stop(start + 0.05);
 }
 
 export function startCantina() {
@@ -50,7 +69,7 @@ export function startCantina() {
   const ctx = ensureAudio();
   if (!ctx) return;
   out = ctx.createGain();
-  out.gain.value = 0.12;
+  out.gain.value = 0.14;
   out.connect(musicInput());
   playing = true;
 
@@ -63,13 +82,13 @@ export function startCantina() {
   noiseSource.loop = true;
   const noiseFilter = ctx.createBiquadFilter();
   noiseFilter.type = "lowpass";
-  noiseFilter.frequency.value = 500;
+  noiseFilter.frequency.value = 520;
   const noiseGain = ctx.createGain();
-  noiseGain.gain.value = 0.015;
+  noiseGain.gain.value = 0.012;
   const lfo = ctx.createOscillator();
-  lfo.frequency.value = 0.2;
+  lfo.frequency.value = 0.22;
   const lfoGain = ctx.createGain();
-  lfoGain.gain.value = 0.015;
+  lfoGain.gain.value = 0.01;
   lfo.connect(lfoGain);
   lfoGain.connect(noiseGain.gain);
   noiseSource.connect(noiseFilter);
@@ -80,23 +99,31 @@ export function startCantina() {
   track(noiseSource, OWNER);
   track(lfo, OWNER);
 
-  // Upbeat pentatonic melody loop
-  const scale = [0, 3, 5, 7, 10, 12, 15];
-  const baseFreq = 220; // A3
+  // Bouncy lounge riff — major pentatonic with a walking bass + kick/hat groove.
+  const leadScale = [0, 2, 4, 7, 9, 12, 14, 16];
+  const bassPattern = [0, 0, 7, 5, 0, 4, 7, 9];
+  const baseFreq = 196; // G3
   let step = 0;
   const scheduleNote = () => {
     if (!playing) return;
     const t = ctx.currentTime + 0.02;
-    const note = scale[step % scale.length];
-    const oct = Math.floor(step / scale.length) % 2 ? 0 : 12;
-    const freq = baseFreq * Math.pow(2, (note + oct) / 12);
-    playTone(freq / 2, t, 0.26, "sine", 0.04);            // bass
-    playTone(freq, t, 0.2, "triangle", 0.025);            // lead
-    if (step % 2 === 1) playHat(t);                       // off-beat hat
+    const beat = step % 8;
+    const bassSemi = bassPattern[beat];
+    const bassFreq = baseFreq * Math.pow(2, bassSemi / 12);
+    playTone(bassFreq / 2, t, 0.22, "triangle", 0.05);
+    if (beat % 2 === 0) playKick(t);
+    playHat(t);
+
+    const leadSemi = leadScale[(step + Math.floor(step / 5)) % leadScale.length];
+    const leadFreq = baseFreq * Math.pow(2, (leadSemi + 12) / 12);
+    playTone(leadFreq, t, 0.16, "square", 0.018);
+    if (beat === 3 || beat === 7) {
+      playTone(leadFreq * 1.5, t + 0.08, 0.12, "triangle", 0.014);
+    }
     step++;
   };
   scheduleNote();
-  timer = setInterval(scheduleNote, 300);
+  timer = setInterval(scheduleNote, 240);
 }
 
 export function stopCantina() {

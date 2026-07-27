@@ -2,10 +2,10 @@ import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { playAttackSound } from "@/lib/arenaBattleSfx";
 import ArenaAbilityBurst from "@/components/game/ArenaAbilityBurst";
-import { weaponEmojiFor } from "@/lib/gameData";
+import { weaponEmojiFor, weaponCombatStyleFor } from "@/lib/gameData";
 
-// Attack motion + accent color per class (emoji comes from the equipped weapon).
-const WEAPONS = {
+// Class fallbacks when no weapon is equipped.
+const CLASS_FALLBACK = {
   Vanguard:           { type: "shoot", color: "#F87171", emoji: "🔫" },
   "Shadow Operative": { type: "stab",  color: "#A78BFA", emoji: "🗡️" },
   Technomancer:       { type: "shoot", color: "#60A5FA", emoji: "🔮" },
@@ -15,26 +15,31 @@ const WEAPONS = {
 
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 
-// Renders the fighter's weapon in-hand, animates it on attack (swing/stab/shoot),
-// and fires a class-specific ability burst + sound when a special triggers.
-// Icon comes from the equipped weapon (emoji / name heuristics) — never the
-// raw weapon name text.
-export default function ArenaWeaponVisual({ className, attacking, attackEvent, evIdx, side, weaponItem }) {
-  const base = WEAPONS[className] || WEAPONS.Vanguard;
+function resolveWeapon(className, weaponItem) {
+  const fallback = CLASS_FALLBACK[className] || CLASS_FALLBACK.Vanguard;
   const rarityColor = weaponItem?.rarity ? RARITY_COLORS[weaponItem.rarity] : null;
   const emoji =
     weaponItem?.emoji ||
-    weaponEmojiFor(weaponItem?.name, weaponItem?.base_name) ||
-    base.emoji;
-  const weapon = {
+    (weaponItem ? weaponEmojiFor(weaponItem.name, weaponItem.base_name) : null) ||
+    fallback.emoji;
+  const type = weaponItem
+    ? weaponCombatStyleFor(weaponItem.name, weaponItem.base_name, emoji)
+    : fallback.type;
+  return {
     emoji,
-    type: base.type,
-    color: rarityColor || base.color,
+    type,
+    color: rarityColor || fallback.color,
   };
+}
+
+// Renders the fighter's equipped weapon in-hand, animates it on attack
+// (swing/stab/shoot from the weapon itself), and fires class specials.
+export default function ArenaWeaponVisual({ className, attacking, attackEvent, evIdx, side, weaponItem }) {
+  const weapon = resolveWeapon(className, weaponItem);
   const dir = side === "player" ? 1 : -1;
-  // Gun-like glyphs face left by default; mirror the player's so barrels aim
-  // at the opponent. Symmetric glyphs (✨, 💥, 🔮) still look fine flipped.
-  const aimAtEnemy = side === "player";
+  // Only mirror gun-like glyphs (they face left by default). Melee icons are
+  // already readable without a flip.
+  const aimAtEnemy = side === "player" && weapon.type === "shoot";
   const evType = attackEvent?.type;
   const isAbility = evType === "ability" || evType === "drone";
   const isRegen = evType === "regen" && className === "Astral Warden";
@@ -64,8 +69,6 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
 
   return (
     <>
-      {/* Weapon in hand — facing is a plain CSS flip (never animated), bob/attack
-          sit on nested motion nodes so they can't wipe scaleX. */}
       <motion.div className="absolute pointer-events-none z-20" style={{ ...pos, fontSize: 38 }} animate={animate} transition={transition}>
         <div style={{ transform: aimAtEnemy ? "scaleX(-1)" : undefined, transformOrigin: "center" }}>
           <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}>
@@ -74,7 +77,6 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
         </div>
       </motion.div>
 
-      {/* Muzzle flash for ranged attacks */}
       <AnimatePresence>
         {attacking && weapon.type === "shoot" && (
           <motion.div
@@ -90,7 +92,6 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
         )}
       </AnimatePresence>
 
-      {/* Energy projectile for ranged attacks (suppressed during abilities) */}
       <AnimatePresence>
         {attacking && weapon.type === "shoot" && !showBurst && (
           <motion.div
@@ -106,7 +107,22 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
         )}
       </AnimatePresence>
 
-      {/* Class special ability burst */}
+      {/* Melee slash trails */}
+      <AnimatePresence>
+        {attacking && weapon.type === "swing" && (
+          <motion.div
+            key={`sw${evIdx}`}
+            className="absolute pointer-events-none z-20"
+            style={{ ...pos, top: 70, fontSize: 28 }}
+            initial={{ opacity: 0.9, rotate: dir > 0 ? -40 : 40, scale: 0.6 }}
+            animate={{ opacity: 0, rotate: dir > 0 ? 50 : -50, scale: 1.3, x: dir > 0 ? 24 : -24 }}
+            transition={{ duration: 0.35 }}
+          >
+            <span style={{ color: weapon.color, filter: `drop-shadow(0 0 6px ${weapon.color})` }}>✧</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {showBurst && <ArenaAbilityBurst key={`ab${evIdx}`} className={className} dir={dir} color={weapon.color} evIdx={evIdx} />}
     </>
   );

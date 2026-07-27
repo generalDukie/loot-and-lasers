@@ -156,13 +156,26 @@ export const MISSION_TEMPLATES = [
   { name: "Ghost Ship Investigation", location: "Wreck of the Pale Horizon", description: "A ship reappeared after being lost for 200 years. The crew is gone. The coffee is still warm. The navigation logs just say 'we're sorry' on loop. Go figure out what 'sorry' means here.", difficulty: "hard", sector: 3, duration_seconds: 570, risk: 4, rewards: { experience: 240, stardust: 480, item_rarity_chance: "epic" }, level_requirement: 6 },
   { name: "Nebula Beast Migration", location: "Veil Nebula Corridor", description: "Escort a pod of migrating space leviathans through a shipping lane. The leviathans are enormous, gentle, and deeply curious about your ship. They will absolutely try to taste it. Be polite.", difficulty: "medium", sector: 1, duration_seconds: 240, risk: 2, rewards: { experience: 80, stardust: 160, item_rarity_chance: "uncommon" }, level_requirement: 2 },
   { name: "Black Hole Survey", location: "Accretion Rim of X-7", description: "Take readings from just outside a black hole. The physics get weird. Your watch runs backwards. Your lunch is now your dinner. Don't lean too far over the railing. There is no railing.", difficulty: "elite", sector: 4, duration_seconds: 1050, risk: 5, rewards: { experience: 400, stardust: 800, item_rarity_chance: "legendary" }, level_requirement: 8 },
+  // Early-board filler — keeps the cantina stocked with 8 unique names from level 1.
+  { name: "Mail Run: Express Capsule", location: "Orbital Post Hub", description: "Deliver a sealed capsule that ticks when you shake it. The postal clerk says it's 'definitely not a bomb.' The postal clerk is sweating. A lot.", difficulty: "easy", sector: 1, duration_seconds: 75, risk: 1, rewards: { experience: 22, stardust: 45, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Sensor Calibration Sweep", location: "Relay Buoy Cluster 12", description: "Tap every buoy with a wrench until the network stops screaming in binary. Yes, you are the IT department of deep space. No, there is no help desk.", difficulty: "easy", sector: 1, duration_seconds: 100, risk: 1, rewards: { experience: 28, stardust: 55, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Lost Pet Retrieval", location: "Hangar Deck C", description: "Someone's pet void-ferret escaped into the vents. It has twelve eyes, zero manners, and your lunch. Bring gloves. Bring snacks. Bring regret.", difficulty: "easy", sector: 1, duration_seconds: 110, risk: 1, rewards: { experience: 26, stardust: 52, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Cantina Tab Collection", location: "Station Corridor 9", description: "Politely remind three patrons that drinks aren't free. One of them is a cyborg. One of them is armed. One of them is both and also your cousin.", difficulty: "easy", sector: 1, duration_seconds: 85, risk: 2, rewards: { experience: 32, stardust: 65, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Scrap Yard Sort", location: "Junk Moon Delta", description: "Sort 'valuable salvage' from 'cursed garbage' in a yard that rearranges itself when you blink. Wear boots you don't love.", difficulty: "easy", sector: 1, duration_seconds: 130, risk: 2, rewards: { experience: 38, stardust: 75, item_rarity_chance: "uncommon" }, level_requirement: 1 },
+  { name: "Comet Tail Sampling", location: "Approach Vector K-4", description: "Scoop ice from a comet's tail without getting flash-frozen into a motivational poster. The science team wants samples. The science team is very far away.", difficulty: "easy", sector: 1, duration_seconds: 140, risk: 2, rewards: { experience: 42, stardust: 85, item_rarity_chance: "uncommon" }, level_requirement: 1 },
+  { name: "Drone Herding Duty", location: "Fabrication Ring", description: "Round up a flock of maintenance drones that developed a personality and a union. They demand better oil. You demand they stop nesting in the airlocks.", difficulty: "medium", sector: 1, duration_seconds: 200, risk: 2, rewards: { experience: 58, stardust: 115, item_rarity_chance: "uncommon" }, level_requirement: 2 },
+  { name: "Static Storm Mapping", location: "Ion Flats", description: "Fly through a lightning field and draw a map that won't fry your console. Your hair will never be the same. Neither will your insurance.", difficulty: "medium", sector: 1, duration_seconds: 220, risk: 2, rewards: { experience: 62, stardust: 125, item_rarity_chance: "uncommon" }, level_requirement: 2 },
 ];
 
 // ═══════════════════════════════════════════
 // ITEM GENERATION
 // ═══════════════════════════════════════════
 const ITEM_NAMES = {
-  weapon: ["Plasma Rifle", "Ion Blaster", "Photon Cannon", "Pulse Repeater", "Neutrino Sniper", "Graviton Shotgun", "Phase Pistol", "Singularity Cannon"],
+  weapon: [
+    "Plasma Rifle", "Ion Blaster", "Photon Cannon", "Pulse Repeater", "Neutrino Sniper", "Graviton Shotgun", "Phase Pistol", "Singularity Cannon",
+    "Void Saber", "Photon Cleaver", "Starforged Blade", "Quantum Dagger", "Shadow Needle", "Phase Knife",
+    "Nebula Bow", "Ion Longbow", "Graviton Axe", "Titan Maul", "Arc Staff", "Psionic Wand",
+  ],
   armor: ["Nanoweave Suit", "Titan Plating", "Void Shell", "Quantum Mesh", "Stellar Guard", "Plasma Coat", "Crystal Carapace", "Shadow Shroud"],
   helmet: ["Neural Crown", "Scan Visor", "Astral Helm", "Combat HUD", "Psi Amplifier", "Void Mask", "Star Circlet", "Echo Chamber"],
   boots: ["Gravity Boots", "Phase Walkers", "Jet Treads", "Stealth Soles", "Mag-Lock Greaves", "Drift Runners", "Storm Striders", "Warp Steps"],
@@ -178,11 +191,11 @@ const ITEM_NAMES = {
 // ideal drop for that class. These appear in the shop and as loot.
 // ═══════════════════════════════════════════
 export const CLASS_WEAPONS = {
-  Vanguard:           { name: "Vanguard Assault Rifle", emoji: "🔫", flavor: "A rugged battle rifle that punches through armor with relentless fire." },
-  "Shadow Operative": { name: "Shadowstrike Silencer",  emoji: "🗡️", flavor: "A suppressed pistol that finds the gaps in any defense." },
-  Technomancer:       { name: "Arcane Pulse Caster",     emoji: "🔮", flavor: "Channels raw psionic energy into devastating energy bolts." },
-  "Astral Warden":    { name: "Cosmic Aegis Blaster",   emoji: "✨", flavor: "Radiates protective starlight with every shot." },
-  "Cosmic Engineer":  { name: "Plasma Multi-Cannon",    emoji: "💥", flavor: "Jury-rigged to fire everything from drones to EMPs." },
+  Vanguard:           { name: "Vanguard Assault Rifle", emoji: "🔫", style: "shoot", flavor: "A rugged battle rifle that punches through armor with relentless fire." },
+  "Shadow Operative": { name: "Shadowstrike Silencer",  emoji: "🗡️", style: "stab",  flavor: "A suppressed blade that finds the gaps in any defense." },
+  Technomancer:       { name: "Arcane Pulse Caster",     emoji: "🔮", style: "shoot", flavor: "Channels raw psionic energy into devastating energy bolts." },
+  "Astral Warden":    { name: "Cosmic Aegis Blaster",   emoji: "✨", style: "shoot", flavor: "Radiates protective starlight with every shot." },
+  "Cosmic Engineer":  { name: "Plasma Multi-Cannon",    emoji: "💥", style: "shoot", flavor: "Jury-rigged to fire everything from drones to EMPs." },
 };
 
 export const RARITY_MULTIPLIERS = { common: 1, uncommon: 1.3, rare: 1.7, epic: 2.2, legendary: 3 };
@@ -193,6 +206,11 @@ export const RARITY_MULTIPLIERS = { common: 1, uncommon: 1.3, rare: 1.7, epic: 2
 const LOOT_WEAPON_EMOJIS = {
   "Plasma Rifle": "🔫", "Ion Blaster": "⚡", "Photon Cannon": "💥", "Pulse Repeater": "🔫",
   "Neutrino Sniper": "🎯", "Graviton Shotgun": "💥", "Phase Pistol": "🔫", "Singularity Cannon": "🌌",
+  "Void Saber": "⚔️", "Photon Cleaver": "⚔️", "Starforged Blade": "⚔️",
+  "Quantum Dagger": "🗡️", "Shadow Needle": "🗡️", "Phase Knife": "🗡️",
+  "Nebula Bow": "🏹", "Ion Longbow": "🏹",
+  "Graviton Axe": "🪓", "Titan Maul": "🪓",
+  "Arc Staff": "🔮", "Psionic Wand": "🔮",
 };
 
 export function weaponEmojiFor(name, baseName) {
@@ -205,17 +223,32 @@ export function weaponEmojiFor(name, baseName) {
       if (name.includes(base)) return emoji;
     }
     const n = name.toLowerCase();
-    if (/sword|blade|saber|katana/.test(n)) return "⚔️";
-    if (/dagger|knife|silencer/.test(n)) return "🗡️";
+    if (/sword|blade|saber|katana|cleaver/.test(n)) return "⚔️";
+    if (/dagger|knife|needle|silencer/.test(n)) return "🗡️";
     if (/staff|wand|caster|rod/.test(n)) return "🔮";
-    if (/bow|crossbow/.test(n)) return "🏹";
-    if (/axe|hammer|mace/.test(n)) return "🪓";
+    if (/bow|crossbow|longbow/.test(n)) return "🏹";
+    if (/axe|hammer|mace|maul/.test(n)) return "🪓";
     if (/cannon|shotgun|launcher/.test(n)) return "💥";
     if (/sniper/.test(n)) return "🎯";
     if (/blaster|aegis/.test(n)) return "✨";
     if (/rifle|pistol|gun|repeater/.test(n)) return "🔫";
   }
-  return "🔫";
+  return "⚔️";
+}
+
+// Combat motion for arena visuals: swing / stab / shoot — derived from the
+// equipped weapon, not the fighter's class (so a Vanguard with a saber swings).
+export function weaponCombatStyleFor(name, baseName, emoji) {
+  for (const w of Object.values(CLASS_WEAPONS)) {
+    if (baseName === w.name || (name && name.includes(w.name))) return w.style || "shoot";
+  }
+  const e = emoji || weaponEmojiFor(name, baseName);
+  if (e === "⚔️" || e === "🪓") return "swing";
+  if (e === "🗡️" || e === "🔪") return "stab";
+  const n = `${baseName || ""} ${name || ""}`.toLowerCase();
+  if (/sword|blade|saber|katana|cleaver|axe|hammer|mace|maul|club/.test(n)) return "swing";
+  if (/dagger|knife|needle|silencer|rapier/.test(n)) return "stab";
+  return "shoot";
 }
 
 // Maximum items a character can hold (equipped + unequipped combined).
@@ -582,7 +615,7 @@ export const FUEL_MAX = 100;
 export const FUEL_CYCLE_MS = 24 * 60 * 60 * 1000;
 export const FUEL_PURCHASE_AMOUNT = 20;
 export const FUEL_PURCHASE_COST = 10; // nova crystals
-export const FUEL_PURCHASE_MAX = 5; // per 24h cycle
+export const FUEL_PURCHASE_MAX = 10; // per 24h cycle (200 fuel total)
 
 export function computeFuelCost(template) {
   // 1 fuel = 1 minute of mission time (30s = 0.5, 40s = 0.67, 60s = 1, etc.)
@@ -594,6 +627,10 @@ export function computeFuelCost(template) {
 // the early-game fuel discount, and the 0.5 minimum floor. Use this everywhere
 // a fuel cost is displayed so it matches the actual deduction.
 export function getEffectiveFuelCost(character, mission) {
+  // Residual / explicit fuel missions pin their cost so low-fuel offers stay runnable.
+  if (typeof mission?.fuel_cost === "number") {
+    return Math.max(0.5, Math.round(mission.fuel_cost * 100) / 100);
+  }
   // Fuel is charged per minute of the ACTUAL (effective) mission time, so it
   // matches the duration shown after warp/fuel-mount reductions.
   const effectiveSeconds = getEffectiveMissionDuration(character, mission);
@@ -613,7 +650,32 @@ export function checkFuelReset(character) {
 }
 
 // ═══════════════════════════════════════════
-// DAILY MISSIONS (randomized, risk-scaled — always generates 5 quests)
+// QUEST GIVERS — cantina patrons that rotate per mission offer
+// ═══════════════════════════════════════════
+export const QUEST_GIVERS = [
+  { emoji: "🤖", name: "CLANK", color: "#00E5FF" },
+  { emoji: "👽", name: "Zyx", color: "#9D5CFF" },
+  { emoji: "🐙", name: "Capt. Tentak", color: "#FF6B35" },
+  { emoji: "🧙", name: "Old Maru", color: "#FFD700" },
+  { emoji: "👻", name: "Wraith Vin", color: "#8BE8FF" },
+  { emoji: "🦊", name: "Rix", color: "#FF9E4F" },
+  { emoji: "🐉", name: "Drako", color: "#FF4D6D" },
+  { emoji: "🛸", name: "Skip", color: "#5CFFB0" },
+  { emoji: "🐺", name: "Grimma", color: "#A3A3A3" },
+  { emoji: "🧟", name: "Moss", color: "#84CC16" },
+  { emoji: "🦜", name: "Squawk", color: "#F472B6" },
+  { emoji: "🦎", name: "Slick", color: "#34D399" },
+];
+
+export function pickQuestGiver(rng = Math.random, excludeNames = []) {
+  const excluded = new Set(excludeNames || []);
+  const pool = QUEST_GIVERS.filter((g) => !excluded.has(g.name));
+  const list = pool.length ? pool : QUEST_GIVERS;
+  return list[Math.floor(rng() * list.length)];
+}
+
+// ═══════════════════════════════════════════
+// DAILY MISSIONS (randomized, risk-scaled — always offers 3 quests from a larger rotating pool)
 // ═══════════════════════════════════════════
 const COLLECTIBLES = [
   { name: "Void Geode", emoji: "🪨" },
@@ -660,8 +722,10 @@ export function generateDailyMissions(character) {
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   const base = shuffled.length ? shuffled : MISSION_TEMPLATES;
 
-  // Offer 3 quests; if fewer templates are unlocked, cycle the pool
-  // with fresh risk/duration/collectible rolls so each quest is distinct.
+  // Offer 3 quests drawn from the rotating template pool. Fresh risk/duration/
+  // collectible rolls keep each board distinct even when templates repeat.
+  // Quest givers are unique on the board — no two patrons offer jobs at once.
+  const givers = [...QUEST_GIVERS].sort(() => Math.random() - 0.5);
   return Array.from({ length: 3 }, (_, i) => {
     const t = base[i % base.length];
     const maxRisk = level <= 2 ? 3 : level <= 5 ? 4 : 5;
@@ -678,6 +742,7 @@ export function generateDailyMissions(character) {
     return {
       ...t,
       _seed: `${Date.now()}-${i}`,
+      patron: givers[i % givers.length],
       risk,
       difficulty: RISK_DIFFICULTY[risk],
       duration_seconds: duration,
@@ -692,31 +757,69 @@ export function generateDailyMissions(character) {
 }
 
 // ═══════════════════════════════════════════
-// LOW-FUEL FALLBACK — a short, level-agnostic errand offered when the player
-// can't afford any of their daily missions. Duration is scaled to spend most
-// of the remaining fuel (clamped 30s–5m, snapped to 15s) so a player with 0.5
-// fuel still gets a runnable 30-second mission regardless of level.
+// LOW-FUEL FALLBACK — level-agnostic errands sized to leftover fuel.
+// 0.5 fuel → 30s, 1 fuel → 60s, etc. (clamped 30s–5m). Always level_requirement 1
+// so a high-level player with scraps of fuel can still spend the remainder.
 // ═══════════════════════════════════════════
-export function generateLowFuelMission(character, currentFuel) {
-  const level = character?.level || 1;
-  const fuel = Math.max(0, currentFuel || 0);
-  const duration = Math.min(300, Math.max(30, Math.floor((fuel * 60) / 15) * 15));
-  const minutes = duration / 60;
-  return {
+const LOW_FUEL_TEMPLATES = [
+  {
     name: "Quick Salvage Sweep",
     description: "A fast burn through nearby debris — light on fuel, light on glory, but better than idling.",
     location: "Drift Sector 7",
+  },
+  {
+    name: "Scavenge the Dock Lights",
+    description: "Pop a few broken bay lamps for scrap wire. Tiny job, tiny tank — still counts.",
+    location: "Hangar Rim",
+  },
+  {
+    name: "Courier Hop: One Parcel",
+    description: "Drop a sealed envelope two decks over. The recipient tips in dust. Barely.",
+    location: "Station Corridor 3",
+  },
+];
+
+export function generateLowFuelMission(character, currentFuel, excludePatronNames = [], slot = 0) {
+  const level = character?.level || 1;
+  // Round to hundredths so 0.5 fuel is never lost to float noise.
+  const fuel = Math.round(Math.max(0, currentFuel || 0) * 100) / 100;
+  // Spend as much of the remainder as possible on a clean 15s-snapped timer.
+  const duration = Math.min(300, Math.max(30, Math.round((fuel * 60) / 15) * 15));
+  const fuelCost = Math.min(fuel, Math.round((duration / 60) * 100) / 100);
+  const minutes = duration / 60;
+  const tpl = LOW_FUEL_TEMPLATES[slot % LOW_FUEL_TEMPLATES.length];
+  return {
+    name: tpl.name,
+    description: tpl.description,
+    location: tpl.location,
     sector: 1,
     duration_seconds: duration,
     difficulty: "easy",
     risk: 1,
     level_requirement: 1,
+    // Pin cost to remainder so mounts/reductions can't push it above what you have.
+    fuel_cost: Math.max(0.5, fuelCost),
+    _lowFuel: true,
+    patron: pickQuestGiver(Math.random, excludePatronNames),
     rewards: {
       experience: Math.max(5, Math.round(level * 8 * minutes)),
       stardust: Math.max(10, Math.round(level * 16 * minutes)),
       item_rarity_chance: "common",
     },
   };
+}
+
+// Build 1–3 residual jobs that all fit in `currentFuel`, with unique patrons.
+export function generateLowFuelBoard(character, currentFuel, count = 3) {
+  const fuel = Math.round(Math.max(0, currentFuel || 0) * 100) / 100;
+  if (fuel < 0.5) return [];
+  const n = Math.min(count, LOW_FUEL_TEMPLATES.length);
+  const used = [];
+  return Array.from({ length: n }, (_, i) => {
+    const m = generateLowFuelMission(character, fuel, used, i);
+    if (m.patron?.name) used.push(m.patron.name);
+    return m;
+  });
 }
 
 // ═══════════════════════════════════════════
@@ -832,26 +935,38 @@ export const STAT_DESCRIPTIONS = {
   luck: "+0.3% Crit Chance per point (cap 35%)",
 };
 
-// Class-aware stat description: only the class's primary stat grants damage, so
-// Strength isn't labelled "physical damage" for a Technomancer, etc. Luck, dodge,
-// HP and armor mechanics are universal and shown the same for every class.
+// Class-aware stat description: only the class primary stat scales attack damage.
+// Off-stat Strength/Intellect must not imply physical/tech damage for the wrong class.
 export function getStatDescription(stat, className) {
   const cls = className ? CLASSES[className] : null;
   const isPrimary = stat === cls?.primaryStat;
-  if (stat === "luck") return "+0.3% Crit Chance per point (cap 35%)";
-  if (stat === "agility") return isPrimary
-    ? "Primary damage · +0.3% Dodge/pt (cap 40%)"
-    : "+0.3% Dodge per point (cap 40%)";
-  if (stat === "vitality") return isPrimary
-    ? "Primary damage · +8 HP & +0.5% Armor/pt"
-    : "+8 HP & +0.5% Armor per point";
-  if (stat === "strength") return isPrimary
-    ? "Primary damage · +1 Physical Damage/pt"
-    : "Off-stat — minor power contribution";
-  if (stat === "intellect") return isPrimary
-    ? "Primary damage · +1 Tech Damage/pt"
-    : "Off-stat — minor power contribution";
-  return STAT_DESCRIPTIONS[stat] || "";
+
+  switch (stat) {
+    case "luck":
+      return "+0.3% Crit Chance per point (cap 35%)";
+    case "agility":
+      return isPrimary
+        ? "Scales your attack damage · +0.3% Dodge/pt (cap 40%)"
+        : "+0.3% Dodge per point (cap 40%)";
+    case "vitality":
+      if (isPrimary) {
+        const dmg = className === "Astral Warden"
+          ? "Scales attack damage (reduced rate)"
+          : "Scales your attack damage";
+        return `${dmg} · +8 HP & +0.5% Armor/pt`;
+      }
+      return "+8 HP & +0.5% Armor per point";
+    case "strength":
+      return isPrimary
+        ? "Scales physical attack damage (+1/pt)"
+        : "Does not scale your attacks — minor combat power only";
+    case "intellect":
+      return isPrimary
+        ? "Scales tech attack damage (+1/pt)"
+        : "Does not scale your attacks — minor combat power only";
+    default:
+      return STAT_DESCRIPTIONS[stat] || "";
+  }
 }
 
 // ═══════════════════════════════════════════

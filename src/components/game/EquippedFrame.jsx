@@ -18,7 +18,7 @@ const FRAME_SLOTS = {
   ship_module: { label: "Ship Module", icon: "🚀" },
 };
 
-function SlotChip({ item, slot }) {
+function SlotChip({ item, slot, size }) {
   if (item) {
     const color = RARITY_COLORS[item.rarity] || "#9CA3AF";
     const statStr = item.stats
@@ -27,37 +27,38 @@ function SlotChip({ item, slot }) {
     return (
       <div
         className="rounded-lg border bg-card/60 p-0.5 flex items-center justify-center transition-transform hover:scale-110 hover:z-10"
-        style={{ borderColor: color + "70", boxShadow: `0 0 8px ${color}40` }}
+        style={{ borderColor: color + "70", boxShadow: `0 0 8px ${color}40`, width: size + 6, height: size + 6 }}
         title={`${item.name}\n${item.rarity} ${item.type}\n${statStr}`}
       >
-        <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={36} />
+        <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={size} />
       </div>
     );
   }
   return (
     <div
       className="rounded-lg border border-dashed border-border/25 bg-muted/5 p-0.5 flex items-center justify-center"
+      style={{ width: size + 6, height: size + 6 }}
       title={`${slot.label} slot empty`}
     >
-      <span className="text-base opacity-25">{slot.icon}</span>
+      <span className="opacity-25" style={{ fontSize: Math.max(12, size * 0.45) }}>{slot.icon}</span>
     </div>
   );
 }
 
-export default function EquippedFrame({ equippedItems, children }) {
+export default function EquippedFrame({ equippedItems, children, size = 36 }) {
   const bySlot = {};
   (equippedItems || []).forEach((it) => { bySlot[it.type] = it; });
   return (
     <div className="grid grid-cols-3 gap-1.5 items-center justify-items-center">
-      <SlotChip item={bySlot.weapon} slot={FRAME_SLOTS.weapon} />
-      <SlotChip item={bySlot.helmet} slot={FRAME_SLOTS.helmet} />
-      <SlotChip item={bySlot.neck} slot={FRAME_SLOTS.neck} />
-      <SlotChip item={bySlot.armor} slot={FRAME_SLOTS.armor} />
+      <SlotChip item={bySlot.weapon} slot={FRAME_SLOTS.weapon} size={size} />
+      <SlotChip item={bySlot.helmet} slot={FRAME_SLOTS.helmet} size={size} />
+      <SlotChip item={bySlot.neck} slot={FRAME_SLOTS.neck} size={size} />
+      <SlotChip item={bySlot.armor} slot={FRAME_SLOTS.armor} size={size} />
       {children}
-      <SlotChip item={bySlot.ship_module} slot={FRAME_SLOTS.ship_module} />
-      <SlotChip item={bySlot.boots} slot={FRAME_SLOTS.boots} />
-      <SlotChip item={bySlot.legs} slot={FRAME_SLOTS.legs} />
-      <SlotChip item={bySlot.accessory} slot={FRAME_SLOTS.accessory} />
+      <SlotChip item={bySlot.ship_module} slot={FRAME_SLOTS.ship_module} size={size} />
+      <SlotChip item={bySlot.boots} slot={FRAME_SLOTS.boots} size={size} />
+      <SlotChip item={bySlot.legs} slot={FRAME_SLOTS.legs} size={size} />
+      <SlotChip item={bySlot.accessory} slot={FRAME_SLOTS.accessory} size={size} />
     </div>
   );
 }

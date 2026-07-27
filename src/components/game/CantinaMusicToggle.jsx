@@ -1,26 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Volume2, VolumeX } from "lucide-react";
-import { startCantina, stopCantina, isCantinaPlaying } from "@/lib/cantinaAudio";
+import { isCantinaMuted, setCantinaMuted } from "@/lib/soundtrack";
 
+// Mute/unmute the cantina bed — soundtrack ownership stays with SoundtrackController.
 export default function CantinaMusicToggle() {
-  const [on, setOn] = useState(true);
-
-  // Sound is always on — start as soon as the audio context is allowed.
-  useEffect(() => {
-    startCantina();
-    setOn(isCantinaPlaying());
-    return () => { if (isCantinaPlaying()) stopCantina(); };
-  }, []);
+  const [on, setOn] = useState(() => !isCantinaMuted());
 
   function toggle() {
-    if (on) {
-      stopCantina();
-      setOn(false);
-    } else {
-      startCantina();
-      setOn(true);
-    }
+    const nextOn = !on;
+    setCantinaMuted(!nextOn);
+    setOn(nextOn);
   }
 
   return (

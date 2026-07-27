@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Exo+2:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Exo+2:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
 
 @layer base {
   :root {
@@ -174,71 +174,79 @@
 
 /* Deep space base */
 .stars-bg {
-  background-color: hsl(232 30% 4%);
+  background-color: hsl(232 32% 4%);
+  background-image:
+    radial-gradient(ellipse 90% 55% at 50% -10%, hsl(260 40% 14% / 0.45), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, hsl(195 50% 12% / 0.25), transparent 50%),
+    radial-gradient(ellipse 50% 35% at 0% 80%, hsl(285 45% 12% / 0.2), transparent 50%);
 }
 
-/* Nebula layer — slow drifting cosmic clouds */
+/* Nebula layer — soft drifting cosmic clouds, less blotchy */
 .nebula-bg {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 70% 45% at 18% 22%, hsl(285 65% 28% / 0.28), transparent 60%),
-    radial-gradient(ellipse 55% 40% at 82% 28%, hsl(195 85% 32% / 0.22), transparent 60%),
-    radial-gradient(ellipse 65% 50% at 50% 85%, hsl(325 60% 26% / 0.20), transparent 60%),
-    radial-gradient(ellipse 45% 35% at 90% 72%, hsl(260 60% 28% / 0.18), transparent 60%),
-    radial-gradient(ellipse 40% 30% at 8% 75%, hsl(210 70% 30% / 0.16), transparent 60%);
-  animation: nebula-drift 80s ease-in-out infinite alternate;
+    radial-gradient(ellipse 80% 50% at 15% 18%, hsl(285 55% 32% / 0.22), transparent 62%),
+    radial-gradient(ellipse 65% 45% at 85% 22%, hsl(195 75% 36% / 0.18), transparent 64%),
+    radial-gradient(ellipse 70% 55% at 48% 88%, hsl(320 50% 28% / 0.16), transparent 65%),
+    radial-gradient(ellipse 50% 40% at 92% 70%, hsl(255 50% 30% / 0.12), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 6% 72%, hsl(210 60% 32% / 0.12), transparent 58%);
+  filter: blur(0.5px);
+  animation: nebula-drift 90s ease-in-out infinite alternate;
 }
 @keyframes nebula-drift {
-  0%   { transform: translate(0, 0) scale(1); }
-  50%  { transform: translate(2%, -1.5%) scale(1.06); }
-  100% { transform: translate(-1.5%, 2%) scale(1.03); }
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.95; }
+  50%  { transform: translate(1.5%, -1%) scale(1.04); opacity: 1; }
+  100% { transform: translate(-1%, 1.5%) scale(1.02); opacity: 0.97; }
 }
 
-/* Star field — dense, multi-layered, twinkling */
+/* Star field — multi-depth, softer twinkle, less obvious tiling */
 .stars-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(1px 1px at 25px 12px, hsl(0 0% 100% / 0.8), transparent),
-    radial-gradient(1px 1px at 50px 48px, hsl(195 90% 82% / 0.6), transparent),
-    radial-gradient(1.5px 1.5px at 125px 24px, hsl(0 0% 100% / 0.5), transparent),
-    radial-gradient(1px 1px at 78px 70px, hsl(280 60% 82% / 0.55), transparent),
-    radial-gradient(2px 2px at 155px 58px, hsl(195 90% 82% / 0.45), transparent),
-    radial-gradient(1px 1px at 12px 90px, hsl(0 0% 100% / 0.6), transparent),
-    radial-gradient(1.5px 1.5px at 92px 100px, hsl(280 60% 82% / 0.4), transparent),
-    radial-gradient(1px 1px at 178px 40px, hsl(0 0% 100% / 0.7), transparent),
-    radial-gradient(1px 1px at 35px 65px, hsl(195 90% 82% / 0.5), transparent),
-    radial-gradient(2px 2px at 168px 88px, hsl(0 0% 100% / 0.35), transparent);
-  background-size: 200px 110px;
+    radial-gradient(1px 1px at 18px 14px, hsl(0 0% 100% / 0.75), transparent),
+    radial-gradient(1px 1px at 72px 41px, hsl(195 90% 85% / 0.45), transparent),
+    radial-gradient(1.5px 1.5px at 148px 22px, hsl(0 0% 100% / 0.4), transparent),
+    radial-gradient(1px 1px at 96px 78px, hsl(280 55% 85% / 0.4), transparent),
+    radial-gradient(2px 2px at 210px 64px, hsl(195 90% 82% / 0.35), transparent),
+    radial-gradient(1px 1px at 38px 108px, hsl(0 0% 100% / 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 168px 118px, hsl(280 55% 82% / 0.32), transparent),
+    radial-gradient(1px 1px at 248px 36px, hsl(0 0% 100% / 0.55), transparent),
+    radial-gradient(1px 1px at 54px 88px, hsl(195 80% 82% / 0.38), transparent),
+    radial-gradient(2px 2px at 226px 132px, hsl(0 0% 100% / 0.28), transparent),
+    radial-gradient(1px 1px at 128px 52px, hsl(45 80% 85% / 0.25), transparent);
+  background-size: 280px 160px;
   background-repeat: repeat;
-  animation: twinkle 6s ease-in-out infinite;
+  animation: twinkle 8s ease-in-out infinite;
 }
 .stars-layer-2 {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(1px 1px at 60px 20px, hsl(0 0% 100% / 0.5), transparent),
-    radial-gradient(2px 2px at 140px 50px, hsl(195 90% 82% / 0.35), transparent),
-    radial-gradient(1px 1px at 30px 75px, hsl(280 60% 82% / 0.4), transparent),
-    radial-gradient(1.5px 1.5px at 180px 95px, hsl(0 0% 100% / 0.45), transparent);
-  background-size: 220px 120px;
+    radial-gradient(1px 1px at 44px 28px, hsl(0 0% 100% / 0.4), transparent),
+    radial-gradient(2px 2px at 160px 70px, hsl(195 90% 82% / 0.28), transparent),
+    radial-gradient(1px 1px at 88px 120px, hsl(280 55% 82% / 0.32), transparent),
+    radial-gradient(1.5px 1.5px at 240px 40px, hsl(0 0% 100% / 0.35), transparent),
+    radial-gradient(1px 1px at 200px 150px, hsl(195 70% 80% / 0.22), transparent);
+  background-size: 320px 180px;
   background-repeat: repeat;
-  animation: twinkle 9s ease-in-out infinite reverse;
+  animation: twinkle 12s ease-in-out infinite reverse;
+  opacity: 0.85;
 }
 @keyframes twinkle {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.95; }
 }
 
 /* Space station scene — twinkling stars */
 @keyframes ss-twinkle { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
 .ss-star { animation: ss-twinkle 3s ease-in-out infinite; }
 
-/* Shooting stars — streaks across the void at every level of the scene */
+/* Shooting stars — quieter streaks */
 .shooting-stars {
   position: absolute;
   inset: 0;
@@ -248,17 +256,17 @@
 .shooting-star {
   position: absolute;
   left: -160px;
-  width: 140px;
-  height: 2px;
-  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.9));
+  width: 120px;
+  height: 1.5px;
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(200,230,255,0.75));
   border-radius: 9999px;
-  filter: drop-shadow(0 0 4px rgba(255,255,255,0.6));
+  filter: drop-shadow(0 0 3px rgba(180,220,255,0.45));
   opacity: 0;
-  animation: shoot 9s linear infinite;
+  animation: shoot 11s linear infinite;
 }
 @keyframes shoot {
-  0%   { transform: translate(0, 0) rotate(18deg); opacity: 0; }
-  8%   { opacity: 1; }
-  60%  { opacity: 1; }
-  100% { transform: translate(120vw, 38vh) rotate(18deg); opacity: 0; }
+  0%   { transform: translate(0, 0) rotate(16deg); opacity: 0; }
+  6%   { opacity: 0.85; }
+  55%  { opacity: 0.7; }
+  100% { transform: translate(120vw, 36vh) rotate(16deg); opacity: 0; }
 }

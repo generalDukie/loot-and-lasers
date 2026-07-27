@@ -30,7 +30,7 @@ function renderSection(id) {
           <p>Welcome to <span className="text-primary font-display font-bold">LOOT & LASERS</span>, operative. You command a space station drifting through the cosmos. Here's how to get going:</p>
           <H>Your First Steps</H>
           <ul className="space-y-1.5">
-            <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Cantina</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" /> fuel.</Li>
+            <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Crew Lounge</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" /> fuel.</Li>
             <Li>When a mission finishes, <b>claim</b> it for XP, stardust, and random loot. Level up to unlock harder sectors.</Li>
             <Li>Equip better gear on your <b>Character</b> page to raise your combat power.</Li>
             <Li>Spend <b>stat points</b> each level to shape your build.</Li>
@@ -38,7 +38,7 @@ function renderSection(id) {
             <Li>Toss unwanted gear into the <b>Black Hole</b> to reclaim stardust.</Li>
           </ul>
           <H>Where things live</H>
-          <p>The <b>station hub</b> on the home screen is your map — tap any glowing module to travel there. The <span className="text-amber-400">Cantina</span> gives quests, the <b>Nav Deck</b> is the dungeon, <b>Crew Quarters</b> is your character, and the <b>Ship Dock</b> holds your upgrades.</p>
+          <p>The <b>station hub</b> on the home screen is your map — tap any glowing module to travel there. The <span className="text-amber-400">Crew Lounge</span> gives quests, the <b>Nav Deck</b> is the dungeon, <b>Crew Quarters</b> is your character, and the <b>Ship Dock</b> holds your upgrades.</p>
           <p className="text-xs text-muted-foreground italic">Tip: this guide lives in <b>Settings → Codex</b> whenever you need a refresher.</p>
         </div>
       );
@@ -58,7 +58,7 @@ function renderSection(id) {
     case "missions":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>Missions are your steady engine for XP, stardust, and loot. Visit the <span className="text-amber-400">Cantina</span> to browse quests.</p>
+          <p>Missions are your steady engine for XP, stardust, and loot. Visit the <span className="text-amber-400">Crew Lounge</span> to browse quests.</p>
           <H>How a mission works</H>
           <ul className="space-y-1.5">
             <Li>Each quest shows its <b>risk</b>, <b>duration</b>, and <b>fuel cost</b>. Higher risk = bigger rewards but longer waits.</Li>

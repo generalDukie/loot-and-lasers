@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { formatReign } from "@/lib/nexusEngine";
 import { Trophy, Clock, Shield, Crown } from "lucide-react";
 
 export default function NexusHallOfFame() {

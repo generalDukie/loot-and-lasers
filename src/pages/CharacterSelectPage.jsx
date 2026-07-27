@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { Users, Plus, LogOut, Loader2, Check, LogIn } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { getMyCharacters, getMyCharacter, setActiveCharacter, bustMyCharacterCache } from "@/lib/socialEngine";
+import { getMyCharacters, getMyCharacter, setActiveCharacter } from "@/lib/socialEngine";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { fullName } from "@/lib/legacyName";
 import { popIn, staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";

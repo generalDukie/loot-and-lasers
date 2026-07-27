@@ -15,7 +15,7 @@ export const ALIEN_SPECIES = [
   { id: 8, name: "Solaris Moth", emoji: "🦋", color: "#FBBF24", rarity: "rare", lore: "Drawn to dying stars; its wings store solar fire." },
   { id: 9, name: "Void Crab", emoji: "🦀", color: "#8B5CF6", rarity: "uncommon", lore: "Armored scavenger that nests in wrecked hulls." },
   { id: 10, name: "Plasma Wisp", emoji: "💫", color: "#EC4899", rarity: "epic", lore: "A spark of pure energy that dances between dimensions." },
-  { id: 11, name: "Cthonian Worm", emoji: "🪱", color: "#78350F", rarity: "rare", lore: "Burrows through planetary cores, swallowing stone." },
+  { id: 11, name: "Core Worm", emoji: "🪱", color: "#78350F", rarity: "rare", lore: "Burrows through planetary cores, swallowing stone." },
   { id: 12, name: "Star Jelly", emoji: "🪼", color: "#F472B6", rarity: "uncommon", lore: "Floating bioluminescent drifter of the deep void." },
   { id: 13, name: "Magma Golem", emoji: "🗿", color: "#EF4444", rarity: "epic", lore: "A titan of cooled lava with a molten heart." },
   { id: 14, name: "Echo Specter", emoji: "👻", color: "#C4B5FD", rarity: "rare", lore: "A memory given form; it repeats your last words." },

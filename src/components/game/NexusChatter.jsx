@@ -67,6 +67,6 @@ function buildLines(nexus) {
     `The Nexus hasn't fallen in ${held}. ${name} stands firm.`,
   ];
   if (streak > 0) out.push(`${name} has repelled ${streak} assault${streak > 1 ? "s" : ""}. Legend grows.`);
-  if (vuln) out.push(`Whispers in the cantina: 'The Nexus is vulnerable — someone make a move.'`);
+  if (vuln) out.push(`Whispers in the lounge: 'The Nexus is vulnerable — someone make a move.'`);
   return out;
 }

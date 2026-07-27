@@ -2,10 +2,22 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { nanoid } from "nanoid";
 import { db, nowIso } from "./db.js";
+import { isEmailSendingEnabled, sendEmail, recordEmailFallback, getEmailConfigSummary } from "./email.js";
+import { getEmailLog } from "./emailLog.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "lootandlasers-dev-secret-change-me";
 const TOKEN_TTL = process.env.JWT_TTL || "30d";
 const APP_ID = process.env.APP_ID || "lootandlasers-local";
+const IS_PROD = process.env.NODE_ENV === "production";
+const EMAIL_SENDING_ENABLED = isEmailSendingEnabled();
+
+function devOnlyExtras(payload) {
+  // In production without SMTP configured we fall back to dev-style codes so
+  // the app can still be usable locally and in simple hosting sandboxes.
+  return IS_PROD && EMAIL_SENDING_ENABLED ? {} : payload;
+}
+
+const PUBLIC_CLIENT_URL = process.env.PUBLIC_CLIENT_URL || "http://localhost:8787";
 
 function publicUser(row) {
   if (!row) return null;
@@ -95,9 +107,23 @@ export function createAuthRouter(express) {
         VALUES (?, ?, ?, 'user', 0, ?, ?, ?, ?)
       `).run(id, email, hash, code, expires, ts, ts);
 
-      // Dev-friendly: echo OTP so local register works without email.
-      console.log(`[auth] OTP for ${email}: ${code}`);
-      res.json({ success: true, email, otp_required: true, otp_dev: code });
+      if (EMAIL_SENDING_ENABLED) {
+        await sendEmail({
+          type: "otp",
+          to: email,
+          subject: "Loot & Lasers verification code",
+          text: `Your verification code is: ${code}\n\nThis code expires in 15 minutes.\n\nIf you did not request this, you can ignore this message.`,
+        });
+      } else {
+        console.log(`[auth] OTP for ${email}: ${code}`);
+        recordEmailFallback({
+          type: "otp",
+          to: email,
+          subject: "Loot & Lasers verification code",
+          note: `code logged to server console`,
+        });
+      }
+      res.json({ success: true, email, otp_required: true, ...devOnlyExtras({ otp_dev: code }) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -129,7 +155,7 @@ export function createAuthRouter(express) {
     }
   });
 
-  router.post("/resend-otp", (req, res) => {
+  router.post("/resend-otp", async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const row = getUserByEmail(email);
     if (!row) return res.status(404).json({ error: "User not found" });
@@ -138,8 +164,29 @@ export function createAuthRouter(express) {
     const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     db.prepare("UPDATE users SET otp_code = ?, otp_expires_at = ?, updated_date = ? WHERE id = ?")
       .run(code, expires, nowIso(), row.id);
-    console.log(`[auth] OTP for ${email}: ${code}`);
-    res.json({ success: true, otp_dev: code });
+
+    if (EMAIL_SENDING_ENABLED) {
+      try {
+        await sendEmail({
+          type: "otp",
+          to: email,
+          subject: "Loot & Lasers verification code",
+          text: `Your verification code is: ${code}\n\nThis code expires in 15 minutes.\n\nIf you did not request this, you can ignore this message.`,
+        });
+      } catch (e) {
+        return res.status(500).json({ error: "Failed to send verification code" });
+      }
+    } else {
+      console.log(`[auth] OTP for ${email}: ${code}`);
+      recordEmailFallback({
+        type: "otp",
+        to: email,
+        subject: "Loot & Lasers verification code",
+        note: "code logged to server console",
+      });
+    }
+
+    res.json({ success: true, ...devOnlyExtras({ otp_dev: code }) });
   });
 
   router.post("/login", async (req, res) => {
@@ -182,7 +229,7 @@ export function createAuthRouter(express) {
     res.json({ success: true });
   });
 
-  router.post("/reset-password-request", (req, res) => {
+  router.post("/reset-password-request", async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const row = getUserByEmail(email);
     // Always succeed to avoid email enumeration
@@ -191,8 +238,30 @@ export function createAuthRouter(express) {
       const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       db.prepare("UPDATE users SET reset_token = ?, reset_expires_at = ?, updated_date = ? WHERE id = ?")
         .run(token, expires, nowIso(), row.id);
-      console.log(`[auth] Reset token for ${email}: ${token}`);
-      return res.json({ success: true, reset_token_dev: token });
+
+      if (EMAIL_SENDING_ENABLED) {
+        try {
+          await sendEmail({
+            type: "reset",
+            to: email,
+            subject: "Reset your Loot & Lasers password",
+            text: `We received a password reset request.\n\nTo reset your password, open this link:\n${PUBLIC_CLIENT_URL}/reset-password?token=${encodeURIComponent(token)}\n\nThis link expires in 1 hour.\n\nIf you did not request this, you can ignore this message.`,
+          });
+        } catch (e) {
+          console.error(`[auth] Failed to send reset email to ${email}:`, e);
+          return res.status(500).json({ error: "Failed to send reset email" });
+        }
+      } else {
+        console.log(`[auth] Reset token for ${email}: ${token}`);
+        recordEmailFallback({
+          type: "reset",
+          to: email,
+          subject: "Reset your Loot & Lasers password",
+          note: "token logged to server console",
+        });
+      }
+
+      return res.json({ success: true, ...devOnlyExtras({ reset_token_dev: token }) });
     }
     res.json({ success: true });
   });
@@ -243,6 +312,40 @@ export function createAuthRouter(express) {
         app_name: "Loot & Lasers",
       },
     });
+  });
+
+  function requireAdmin(req, res, next) {
+    if (!req.user || req.user.role !== "admin") {
+      return res.status(403).json({ error: "Admin only" });
+    }
+    next();
+  }
+
+  router.get("/admin/email-log", requireAuth, requireAdmin, (req, res) => {
+    const limit = Number(req.query.limit) || 50;
+    res.json({
+      config: getEmailConfigSummary(),
+      events: getEmailLog(limit),
+    });
+  });
+
+  router.post("/admin/email-test", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const to = req.user.email;
+      if (!to) return res.status(400).json({ error: "Admin account has no email" });
+      if (!EMAIL_SENDING_ENABLED) {
+        return res.status(503).json({ error: "SMTP is not configured (set SMTP_HOST)" });
+      }
+      await sendEmail({
+        type: "test",
+        to,
+        subject: "Loot & Lasers test email",
+        text: "This is a test email from your Loot & Lasers server. If you received this, SMTP is working.",
+      });
+      res.json({ success: true, to });
+    } catch (err) {
+      res.status(500).json({ error: err.message || "Failed to send test email" });
+    }
   });
 
   return router;

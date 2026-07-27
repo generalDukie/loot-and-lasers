@@ -1,46 +1,48 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { Newspaper } from "lucide-react";
 
-const NEWS_TTL_SEC = 500;
+const NEWS_TTL_MS = 24 * 60 * 60 * 1000; // keep events for 24 hours
 
-function timeAgo(iso, now) {
-  const s = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 1000));
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+function eventTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function isFresh(entry, now = Date.now()) {
+  const t = new Date(entry?.created_date).getTime();
+  if (Number.isNaN(t)) return false;
+  return now - t < NEWS_TTL_MS;
 }
 
 export default function ArenaNewsFeed() {
   const [news, setNews] = useState([]);
-  const [now, setNow] = useState(Date.now());
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      const n = await api.entities.GalaxyNews.list("-created_date", 20);
-      setNews(n || []);
+      // Drop anything older than 24h so wiped/stale events don't linger in the DB.
+      const cutoff = new Date(Date.now() - NEWS_TTL_MS).toISOString();
+      try {
+        await api.entities.GalaxyNews.deleteMany({ created_date: { $lt: cutoff } });
+      } catch { /* best-effort purge */ }
+
+      const n = await api.entities.GalaxyNews.list("-created_date", 40);
+      setNews((n || []).filter((entry) => isFresh(entry)));
     } catch { /* galaxy can stay quiet */ }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 20000);
+    const t = setInterval(load, 30000);
     return () => clearInterval(t);
-  }, []);
-
-  // Tick every second so the "Xs ago" counter counts up live, and
-  // entries auto-expire once they pass the TTL.
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const visible = news.filter(
-    (n) => (now - new Date(n.created_date).getTime()) / 1000 < NEWS_TTL_SEC
-  );
+  }, [load]);
 
   return (
     <div className="p-3 rounded-xl border border-border/50 bg-card/40">
@@ -48,11 +50,20 @@ export default function ArenaNewsFeed() {
         <Newspaper className="w-3.5 h-3.5 text-primary" /> GALAXY NEWS
       </h3>
       <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-        {visible.length === 0 && <p className="text-[11px] text-muted-foreground">The galaxy is quiet... for now.</p>}
+        {news.length === 0 && <p className="text-[11px] text-muted-foreground">The galaxy is quiet... for now.</p>}
         <AnimatePresence>
-          {visible.map((n) => (
-            <motion.div key={n.id} layout initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, height: 0 }} className="text-[11px] text-foreground/80 leading-snug">
-              <span className="text-muted-foreground">{timeAgo(n.created_date, now)}</span> — {n.message}
+          {news.map((n) => (
+            <motion.div
+              key={n.id}
+              layout
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, height: 0 }}
+              className="text-[11px] text-foreground/80 leading-snug"
+            >
+              <span className="text-muted-foreground">{eventTime(n.created_date)}</span>
+              {" — "}
+              {n.message}
             </motion.div>
           ))}
         </AnimatePresence>

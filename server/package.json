@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "smoke": "node scripts/smoke-test.mjs",
+    "backup:export": "node scripts/export-data.mjs",
+    "backup:import": "node scripts/import-data.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -14,6 +17,7 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "nanoid": "^5.1.5",
+    "nodemailer": "^6.9.14",
     "ws": "^8.18.3"
   }
 }

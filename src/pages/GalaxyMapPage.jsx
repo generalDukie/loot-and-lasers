@@ -18,7 +18,7 @@ import { getMyCharacter } from "@/lib/socialEngine";
 import DungeonMap from "@/components/game/DungeonMap";
 import DungeonPlanetView from "@/components/game/DungeonPlanetView";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
-import { Satellite, Skull, Rocket, Clock, Zap } from "lucide-react";
+import { Satellite, Skull, Rocket } from "lucide-react";
 
 import { todayET } from "@/lib/gameTime";
 
@@ -29,7 +29,6 @@ export default function GalaxyMapPage() {
   const [equippedItems, setEquippedItems] = useState([]);
   const [battleState, setBattleState] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [gearTotal, setGearTotal] = useState(0);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -58,7 +57,6 @@ export default function GalaxyMapPage() {
     // Equipped gear feeds combat — load it best-effort so a hiccup never
     // traps the page on the loading spinner.
     try { setEquippedItems((await api.entities.Item.filter({ character_id: char.id, is_equipped: true })) || []); } catch (e) {}
-    try { setGearTotal((await api.entities.Item.list(null, 500)).length); } catch (e) {}
   }, [navigate]);
 
   useEffect(() => { load(); }, [load]);
@@ -122,7 +120,7 @@ export default function GalaxyMapPage() {
     const update = {};
 
     if (won) {
-      const { percentage: collectPct } = getCollectionStats(character, gearTotal);
+      const { percentage: collectPct } = getCollectionStats(character);
       const boostedXp = applyXpBonus(rewards.experience, collectPct);
       let newExp = (character.experience || 0) + boostedXp;
       let newLevel = character.level;
@@ -175,6 +173,7 @@ export default function GalaxyMapPage() {
           : `⚔️ ${character.name} cleared enemy ${enemyIndex} on ${planet.name}.`,
         entry_type: "victory",
         character_name: character.name,
+        character_id: character.id,
       });
 
       toast({
@@ -188,6 +187,7 @@ export default function GalaxyMapPage() {
         message: `💀 ${character.name} fell to ${enemy.name} on ${planet.name}.`,
         entry_type: "defeat",
         character_name: character.name,
+        character_id: character.id,
       });
       toast({
         title: "You Fell",

@@ -6,7 +6,6 @@ import HubHeader from "@/components/game/HubHeader";
 import StationSideButton from "@/components/game/StationSideButton";
 import StationSplitButton from "@/components/game/StationSplitButton";
 import CommandHubMedallion from "@/components/game/CommandHubMedallion";
-import HubBottomNav from "@/components/game/HubBottomNav";
 import { useAuth } from "@/lib/AuthContext";
 import { useHubLayout } from "@/hooks/useHubLayout";
 import { useSiteConfig, HUB_GRID_SIZE } from "@/lib/SiteConfigContext";
@@ -16,8 +15,7 @@ import HubButtonEditor from "@/components/game/HubButtonEditor";
 import { BUILTIN_BUTTONS, getBuiltin, mergeBuiltin, BTN_SIZE_W } from "@/lib/hubButtons";
 import GameCanvas from "@/components/game/GameCanvas";
 
-const STATION_IMG =
-  "https://media.base44.com/images/public/6a62f636bad44979b2c073f6/512b107d9_2222222.png";
+const STATION_IMG = "/assets/station-hub.png";
 
 const NAV_ITEMS = [
   { label: "Nexus", icon: "⚡", to: "/nexus", color: "#A855F7" },
@@ -192,9 +190,10 @@ export default function SpaceStationHub({ character, children }) {
       {/* Full-screen station background */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${stationImg})` }} />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/30 to-background/85" />
-        {/* Subtle vignette */}
-        <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at center, transparent 40%, hsl(232 30% 4% / 0.5) 100%)" }} />
+        {/* Depth + quiet header band for UI readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/25 to-background/80" />
+        <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse 70% 55% at 50% 45%, transparent 35%, hsl(232 32% 4% / 0.45) 100%)" }} />
+        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background/50 to-transparent pointer-events-none" />
       </div>
 
       {/* Edit-mode grid lines */}

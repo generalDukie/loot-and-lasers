@@ -118,10 +118,7 @@ export function createEntityStore(type) {
     deleteMany(query = {}) {
       const matches = this.filter(query, null, 100000);
       const del = db.prepare("DELETE FROM entities WHERE type = ? AND id = ?");
-      const tx = db.transaction((items) => {
-        for (const item of items) del.run(type, item.id);
-      });
-      tx(matches);
+      for (const item of matches) del.run(type, item.id);
       for (const item of matches) broadcastEntity(type, "delete", item);
       return { deleted: matches.length };
     },
@@ -152,7 +149,7 @@ export const entities = Object.fromEntries(
   ENTITY_TYPES.map((t) => [t, createEntityStore(t)])
 );
 
-/** Base44-shaped service object used by shared/reward logic & functions. */
+/** Game service object for reward logic and server functions. */
 export function createService(user = null) {
   const asServiceRole = {
     entities,

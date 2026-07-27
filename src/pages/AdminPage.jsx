@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { useToast } from "@/components/ui/use-toast";
-import { Shield, Ban, Volume2, Filter, Send, Check, Gavel, Crown, Ticket, Gift, RefreshCw, Gem } from "lucide-react";
+import { Shield, Filter, Send, Gavel, Crown, Ticket, Gift, RefreshCw, Gem, Mail } from "lucide-react";
 import PlayerManager from "@/components/admin/PlayerManager";
 import GuildAdmin from "@/components/admin/GuildAdmin";
 import PromoCodeManager from "@/components/admin/PromoCodeManager";
 import GrantItemTab from "@/components/admin/GrantItemTab";
 import ServerRefreshTab from "@/components/admin/ServerRefreshTab";
 import NovaSpendStats from "@/components/admin/NovaSpendStats";
+import EmailLogTab from "@/components/admin/EmailLogTab";
 
 const TABS = [
   { key: "reports", label: "Reports", icon: Gavel },
@@ -18,6 +19,7 @@ const TABS = [
   { key: "grant", label: "Grant Item", icon: Gift },
   { key: "filter", label: "Filter", icon: Filter },
   { key: "mail", label: "System Mail", icon: Send },
+  { key: "email", label: "Email", icon: Mail },
   { key: "refresh", label: "Server", icon: RefreshCw },
   { key: "nova", label: "Nova Stats", icon: Gem },
 ];
@@ -60,6 +62,7 @@ export default function AdminPage() {
         {tab === "grant" && <GrantItemTab onAction={adminAction} />}
         {tab === "filter" && <FilterTab onSave={(words) => adminAction({ action: "edit_filter", words })} />}
         {tab === "mail" && <SystemMailTab onSend={(p) => adminAction({ action: "send_system_mail", ...p })} />}
+        {tab === "email" && <EmailLogTab />}
         {tab === "refresh" && <ServerRefreshTab />}
         {tab === "nova" && <NovaSpendStats />}
       </motion.div>

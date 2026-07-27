@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Gift, FlaskConical, Sliders } from "lucide-react";
-import { generateItem, CONSUMABLES, consumableItem } from "@/lib/gameData";
+import { generateItem, CONSUMABLES, consumableItem, weaponEmojiFor } from "@/lib/gameData";
 
 const TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
 const RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
@@ -28,6 +28,7 @@ export default function ItemGrantForm({ character, onAction, onGranted }) {
         flavor_text: "Admin-crafted gear.",
         sell_value: Math.max(10, level * 20),
         is_equipped: false,
+        ...(type === "weapon" ? { emoji: weaponEmojiFor(customName.trim() || `${rarity} ${type}`) } : {}),
       };
     } else {
       item = generateItem(rarity, Math.max(1, level), type);

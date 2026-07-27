@@ -1,4 +1,4 @@
-// Mirrors base44/shared/collectionBonus.ts
+// Collection bonus calculations for XP rewards.
 
 const SPECIES_COUNT = 30;
 const ARTIFACT_COUNT = 100;

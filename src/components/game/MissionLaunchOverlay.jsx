@@ -9,13 +9,13 @@ function formatTime(s) {
 }
 
 const GOOFY_LINES = [
-  "Calibrating the flux capacitor... again.",
+  "Calibrating the jump drive coils... again.",
   "Captain forgot the keys. Found them. In the ignition.",
   "Stowing space raccoons in the cargo hold.",
   "Checking if we have enough snacks. (We don't.)",
   "Flipping the 'GO FAST' switch to 'YES'.",
   "Telling the pilot a bedtime story for the jump.",
-  "Bribing the hyperspace tollbooth operator.",
+  "Bribing the FTL lane tollbooth operator.",
   "Wishing the pilot had slept more.",
 ];
 
@@ -203,7 +203,7 @@ export default function MissionLaunchOverlay({ mission, onDone }) {
               animate={phase < 2 ? { opacity: [0.4, 1, 0.4] } : { opacity: 0 }}
               transition={{ duration: 1, repeat: Infinity }}
             >
-              {phase === 0 ? "INITIATING LAUNCH SEQUENCE" : phase === 1 ? "JUMPING TO HYPERSPACE" : "WE HAVE LIFTOFF 🎉"}
+              {phase === 0 ? "INITIATING LAUNCH SEQUENCE" : phase === 1 ? "ENGAGING WARP DRIVE" : "WE HAVE LIFTOFF 🎉"}
             </motion.p>
 
             <h2 className="font-display font-bold text-2xl glow-cyan tracking-wide max-w-xs">{mission.name}</h2>

@@ -188,7 +188,7 @@ export default function ShopPage() {
               style={{ borderColor: color + "40", boxShadow: `0 0 12px ${color}10` }}
             >
               <div className="flex items-center gap-3 mb-3">
-                <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} />
+                <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} emoji={slot.emoji} />
                 <div className="min-w-0">
                   <h4 className="font-display font-semibold text-sm truncate" style={{ color }}>{slot.name}</h4>
                   <p className="text-[10px] text-muted-foreground capitalize">{slot.rarity} · {slot.type}</p>

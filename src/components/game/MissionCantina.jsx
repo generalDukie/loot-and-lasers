@@ -2,12 +2,11 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getEffectiveFuelCost, DIFFICULTY_COLORS } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
-import { Lock, Fuel, Zap, Star, Clock } from "lucide-react";
+import { Lock, Fuel, Star, Clock } from "lucide-react";
 import MissionDetailSheet from "@/components/game/MissionDetailSheet";
 import RiskGauge from "@/components/game/RiskGauge";
 
-const CANTINA_BG =
-  "https://media.base44.com/images/public/6a62f636bad44979b2c073f6/4294f70a6_generated_image.png";
+const CANTINA_BG = "/assets/cantina-bg.png";
 
 const PATRONS = [
   { emoji: "🤖", name: "CLANK", color: "#00E5FF" },
@@ -15,15 +14,9 @@ const PATRONS = [
   { emoji: "🐙", name: "Capt. Tentak", color: "#FF6B35" },
   { emoji: "🧙", name: "Old Maru", color: "#FFD700" },
   { emoji: "👻", name: "Wraith Vin", color: "#8BE8FF" },
-  { emoji: "🦊", name: "Vex", color: "#FF9E4F" },
+  { emoji: "🦊", name: "Rix", color: "#FF9E4F" },
   { emoji: "🐉", name: "Drako", color: "#FF4D6D" },
   { emoji: "🛸", name: "Skip", color: "#5CFFB0" },
-];
-
-const AMBIENT_PATRONS = [
-  { emoji: "🍻", x: 20, y: 46, delay: 0 },
-  { emoji: "🍷", x: 76, y: 44, delay: 1.1 },
-  { emoji: "🥃", x: 50, y: 47, delay: 0.5 },
 ];
 
 // Drifting neon orbs that give the cantina a playful, living backdrop
@@ -67,10 +60,11 @@ export default function MissionCantina({ missions, characterLevel, character, cu
       className="relative w-full rounded-2xl overflow-hidden border border-border/60 shadow-2xl painted-panel painted-frame canvas-grain"
       style={{ aspectRatio: "16/9", minHeight: 300 }}
     >
-      <img src={CANTINA_BG} alt="Space cantina" className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-t from-background/85 via-background/10 to-background/40" />
+      <img src={CANTINA_BG} alt="Station crew lounge" className="absolute inset-0 w-full h-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/15 to-background/45" />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 75% 60% at 50% 40%, transparent 40%, hsl(232 32% 4% / 0.35) 100%)" }} />
 
-      {/* Playful neon backdrop — drifting orbs + twinkling sparks */}
+      {/* Soft neon atmosphere — quieter than before so the art reads */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
         initial={{ opacity: 0 }}
@@ -80,41 +74,28 @@ export default function MissionCantina({ missions, characterLevel, character, cu
         {CANTINA_ORBS.map((o, i) => (
           <motion.div
             key={`orb-${i}`}
-            className="absolute rounded-full blur-xl"
+            className="absolute rounded-full blur-2xl"
             style={{ width: o.s, height: o.s, left: `${o.x}%`, top: `${o.y}%`, background: o.c }}
-            animate={{ y: [0, -16, 0], x: [0, 8, 0], scale: [1, 1.14, 1] }}
-            transition={{ duration: 6 + i, repeat: Infinity, ease: "easeInOut", delay: i * 0.4 }}
+            animate={{ y: [0, -10, 0], x: [0, 5, 0], scale: [1, 1.08, 1] }}
+            transition={{ duration: 7 + i, repeat: Infinity, ease: "easeInOut", delay: i * 0.4 }}
           />
         ))}
         {SPARKS.map((s, i) => (
           <motion.span
             key={`spark-${i}`}
             className="absolute rounded-full"
-            style={{ width: s.r, height: s.r, left: `${s.x}%`, top: `${s.y}%`, background: s.c, boxShadow: `0 0 6px ${s.c}` }}
-            animate={{ opacity: [0, 1, 0], scale: [0.4, 1.3, 0.4] }}
-            transition={{ duration: 2.4 + i * 0.3, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
+            style={{ width: s.r, height: s.r, left: `${s.x}%`, top: `${s.y}%`, background: s.c, boxShadow: `0 0 5px ${s.c}` }}
+            animate={{ opacity: [0, 0.7, 0], scale: [0.5, 1.15, 0.5] }}
+            transition={{ duration: 2.8 + i * 0.3, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
           />
         ))}
         <motion.div
           className="absolute inset-0"
-          style={{ background: "radial-gradient(circle at 50% 82%, rgba(157,108,255,0.18), transparent 60%)" }}
-          animate={{ opacity: [0.5, 0.9, 0.5] }}
+          style={{ background: "radial-gradient(circle at 50% 82%, rgba(157,108,255,0.12), transparent 60%)" }}
+          animate={{ opacity: [0.4, 0.7, 0.4] }}
           transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
         />
       </motion.div>
-
-      {/* Ambient patrons hanging out at the bar */}
-      {AMBIENT_PATRONS.map((p, i) => (
-        <motion.div
-          key={`amb-${i}`}
-          className="absolute text-2xl sm:text-3xl drop-shadow-lg pointer-events-none"
-          style={{ left: `${p.x}%`, top: `${p.y}%` }}
-          animate={{ y: [0, -3, 0], rotate: [-3, 3, -3] }}
-          transition={{ duration: 3 + p.delay, repeat: Infinity, ease: "easeInOut", delay: p.delay }}
-        >
-          {p.emoji}
-        </motion.div>
-      ))}
 
       {/* Quest-giver NPCs */}
       {missions.map((m, i) => {
@@ -228,7 +209,7 @@ export default function MissionCantina({ missions, characterLevel, character, cu
 
       {/* Hint */}
       <p className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-display tracking-widest text-muted-foreground/70 uppercase">
-        {busy ? (mining ? "⛏️ Mining in progress" : "🔭 Scout the cantina — mission in progress") : "Tap a patron to hear their tale"}
+        {busy ? (mining ? "⛏️ Mining in progress" : "🔭 Scout the lounge — mission in progress") : "Tap a patron to hear their tale"}
       </p>
 
       {selected !== null && missions[selected] && (

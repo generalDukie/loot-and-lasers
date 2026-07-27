@@ -4,8 +4,8 @@ import { api } from "@/api/gameClient";
 // wrapped in its own try/catch so a single failing entity can't block the
 // rest of the purge (or the character deletion itself).
 //
-// GalaxyNews is keyed by character_name (not character_id), so callers must
-// pass the name to fully clear a character's news footprint.
+// GalaxyNews is keyed by character_id (and legacy character_name), so callers
+// should pass the name to fully clear a character's news footprint.
 export async function purgeCharacter(characterId, characterName) {
   const byId = [
     ["Item", { character_id: characterId }],
@@ -34,7 +34,10 @@ export async function purgeCharacter(characterId, characterName) {
     }
   }
 
-  // GalaxyNews references the character by name, not id.
+  // GalaxyNews references the character by id (preferred) and legacy name.
+  try {
+    await api.entities.GalaxyNews.deleteMany({ character_id: characterId });
+  } catch (e) { /* best-effort */ }
   if (characterName) {
     try {
       await api.entities.GalaxyNews.deleteMany({ character_name: characterName });

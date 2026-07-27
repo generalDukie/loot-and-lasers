@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { MessageSquare, UserCircle, X, Crown } from "lucide-react";
+import { MessageSquare, UserCircle, X } from "lucide-react";
 
 export default function FriendRow({ friend, presence, onMessage, onProfile, onRemove }) {
   const status = presence?.status;

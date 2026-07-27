@@ -2,37 +2,39 @@ import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { playAttackSound } from "@/lib/arenaBattleSfx";
 import ArenaAbilityBurst from "@/components/game/ArenaAbilityBurst";
+import { weaponEmojiFor } from "@/lib/gameData";
 
-// Weapon per class — emoji, attack motion style, and accent color.
+// Attack motion + accent color per class (emoji comes from the equipped weapon).
 const WEAPONS = {
-  Vanguard:           { emoji: "🔫", type: "shoot", color: "#F87171" },
-  "Shadow Operative": { emoji: "🔫", type: "shoot", color: "#A78BFA" },
-  Technomancer:       { emoji: "🔫", type: "shoot", color: "#60A5FA" },
-  "Astral Warden":    { emoji: "🔫", type: "shoot", color: "#FBBF24" },
-  "Cosmic Engineer":  { emoji: "🔫", type: "shoot", color: "#4ADE80" },
+  Vanguard:           { type: "shoot", color: "#F87171", emoji: "🔫" },
+  "Shadow Operative": { type: "stab",  color: "#A78BFA", emoji: "🗡️" },
+  Technomancer:       { type: "shoot", color: "#60A5FA", emoji: "🔮" },
+  "Astral Warden":    { type: "shoot", color: "#FBBF24", emoji: "✨" },
+  "Cosmic Engineer":  { type: "shoot", color: "#4ADE80", emoji: "💥" },
 };
 
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 
-// All weapons are guns — the in-hand emoji always reflects a firearm.
-function weaponEmojiFor(name) {
-  if (!name) return null;
-  return "🔫";
-}
-
 // Renders the fighter's weapon in-hand, animates it on attack (swing/stab/shoot),
 // and fires a class-specific ability burst + sound when a special triggers.
-// When `weaponItem` (the equipped weapon Item record) is supplied, the in-hand
-// emoji + glow color reflect that item instead of the class default.
-export default function ArenaWeaponVisual({ className, attacking, attackEvent, evIdx, side, flip, weaponItem }) {
+// Icon comes from the equipped weapon (emoji / name heuristics) — never the
+// raw weapon name text.
+export default function ArenaWeaponVisual({ className, attacking, attackEvent, evIdx, side, weaponItem }) {
   const base = WEAPONS[className] || WEAPONS.Vanguard;
   const rarityColor = weaponItem?.rarity ? RARITY_COLORS[weaponItem.rarity] : null;
+  const emoji =
+    weaponItem?.emoji ||
+    weaponEmojiFor(weaponItem?.name, weaponItem?.base_name) ||
+    base.emoji;
   const weapon = {
-    emoji: (weaponItem?.name && weaponEmojiFor(weaponItem.name)) || base.emoji,
+    emoji,
     type: base.type,
     color: rarityColor || base.color,
   };
   const dir = side === "player" ? 1 : -1;
+  // Gun-like glyphs face left by default; mirror the player's so barrels aim
+  // at the opponent. Symmetric glyphs (✨, 💥, 🔮) still look fine flipped.
+  const aimAtEnemy = side === "player";
   const evType = attackEvent?.type;
   const isAbility = evType === "ability" || evType === "drone";
   const isRegen = evType === "regen" && className === "Astral Warden";
@@ -62,11 +64,14 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
 
   return (
     <>
-      {/* Weapon in hand — idle bob + attack motion */}
+      {/* Weapon in hand — facing is a plain CSS flip (never animated), bob/attack
+          sit on nested motion nodes so they can't wipe scaleX. */}
       <motion.div className="absolute pointer-events-none z-20" style={{ ...pos, fontSize: 38 }} animate={animate} transition={transition}>
-        <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }} style={{ transform: flip ? "scaleX(-1)" : undefined }}>
-          <span style={{ filter: `drop-shadow(0 0 6px ${weapon.color}99)` }}>{weapon.emoji}</span>
-        </motion.div>
+        <div style={{ transform: aimAtEnemy ? "scaleX(-1)" : undefined, transformOrigin: "center" }}>
+          <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}>
+            <span style={{ filter: `drop-shadow(0 0 6px ${weapon.color}99)`, display: "inline-block" }}>{weapon.emoji}</span>
+          </motion.div>
+        </div>
       </motion.div>
 
       {/* Muzzle flash for ranged attacks */}

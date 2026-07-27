@@ -32,7 +32,7 @@ export default function EquipmentSlots({ equippedItems }) {
           >
             {item ? (
               <div className="flex flex-col items-center text-center">
-                <GearVisual type={item.type} rarity={item.rarity} name={item.name} />
+                <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} />
                 <p className="text-[11px] font-semibold truncate w-full mt-1" style={{ color: rarityColor }}>{item.name}</p>
                 {item.stats && Object.keys(item.stats).length > 0 && (
                   <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 mt-1">

@@ -30,7 +30,7 @@ export default function ItemCard({ item, onEquip, onSell, onUse, compact = false
       style={{ borderColor: rarityColor + "40", boxShadow: `0 0 12px ${rarityColor}10` }}
     >
       <div className="flex items-center justify-center mb-3">
-        <GearVisual type={item.type} rarity={item.rarity} name={item.name} />
+        <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} />
       </div>
       <div className="flex items-start justify-between">
         <div>

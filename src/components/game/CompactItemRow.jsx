@@ -20,7 +20,7 @@ export default function CompactItemRow({ item, onEquip, onSell, onUse, selectabl
           {selected && <Check className="w-3 h-3 text-primary-foreground" />}
         </button>
       )}
-      <GearVisual type={item.type} rarity={item.rarity} name={item.name} size={32} />
+      <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={32} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <p className="text-xs font-semibold break-words leading-tight" style={{ color }}>{item.name}</p>

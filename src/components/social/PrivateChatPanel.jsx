@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Send, ArrowLeft, MessagesSquare, Search } from "lucide-react";
+import { Send, ArrowLeft, MessagesSquare } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { getConversations, getMessages, subscribePrivate, subscribeConversations, sendPrivate, markConversationRead } from "@/lib/chatEngine";
 import { getCharacterById, getCharactersByIds } from "@/lib/socialEngine";

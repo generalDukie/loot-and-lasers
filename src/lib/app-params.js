@@ -7,7 +7,6 @@ const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl =
   if (isNode) return defaultValue;
 
   const storageKey = `loot_${toSnakeCase(paramName)}`;
-  const legacyKey = `base44_${toSnakeCase(paramName)}`;
   const urlParams = new URLSearchParams(window.location.search);
   const searchParam = urlParams.get(paramName);
 
@@ -26,13 +25,12 @@ const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl =
     return defaultValue;
   }
 
-  return storage.getItem(storageKey) || storage.getItem(legacyKey) || null;
+  return storage.getItem(storageKey) || null;
 };
 
 const getAppParams = () => {
   if (getAppParamValue("clear_access_token") === "true") {
     storage.removeItem("loot_access_token");
-    storage.removeItem("base44_access_token");
     storage.removeItem("token");
   }
   return {

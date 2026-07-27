@@ -32,7 +32,7 @@ export default function CantinaMusicToggle() {
           ? "bg-primary/15 text-primary border-primary/40 border-glow-cyan"
           : "bg-muted/40 text-muted-foreground border-border/40 hover:text-foreground"
       }`}
-      title={on ? "Mute cantina music" : "Play cantina music"}
+      title={on ? "Mute lounge music" : "Play lounge music"}
     >
       {on ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
       {on ? "Music On" : "Music Off"}

@@ -2,12 +2,12 @@ import React from "react";
 import { motion } from "framer-motion";
 
 // Selectable feature option lists (shared with CharacterCreation)
-export const EYES = ["Oval Beams", "Star Pupils", "Three Eyes", "Visor Glow", "Wide Saucer", "Cyber Slits"];
-export const EARS = ["Pointed", "Finned", "Antennae", "Leaf", "Horns", "None"];
-export const MOUTHS = ["Smirk", "Fanged", "Beak", "Tentacle", "Pursed", "Wide Grin"];
+export const EYES = ["Standard Optics", "Prism Optics", "Multi-Lens", "Target Visor", "Wide Scan", "Combat Slits"];
+export const EARS = ["Tapered", "Finned", "Sensor Stalks", "Elongated", "Crest Horns", "None"];
+export const MOUTHS = ["Set Jaw", "Tusked", "Mandible", "Proboscis", "Closed", "Grim Line"];
 export const NOSES = ["Button", "Slits", "Trunk", "None", "Ridge", "Spike"];
-export const BROWS = ["Raised", "Angled", "Thick", "None", "Zigzag", "Soft"];
-export const MARKINGS = ["None", "Scar", "Mole Cluster", "Tribal Lines", "Freckles", "Cracks"];
+export const BROWS = ["Standard", "Tactical", "Heavy", "None", "Scarred", "Relaxed"];
+export const MARKINGS = ["None", "Battle Scar", "Plasma Burns", "War Paint", "Speckled", "Fractured"];
 
 // Comic-book cel-shaded constants
 const INK = "#120a1c"; // heavy saturated outline
@@ -37,6 +37,7 @@ function shade(hex, amt) {
 function Eyes({ style }) {
   const L = 72, R = 128, Y = 92;
   switch (style) {
+    case "Multi-Lens":
     case "Three Eyes":
       return (
         <g>
@@ -50,6 +51,7 @@ function Eyes({ style }) {
           ))}
         </g>
       );
+    case "Target Visor":
     case "Visor Glow":
       return (
         <g>
@@ -58,6 +60,7 @@ function Eyes({ style }) {
           <path d={`M${L - 4} ${Y - 3} l8 2 2 4 -8 -2 z`} fill="#fff" opacity="0.9" />
         </g>
       );
+    case "Wide Scan":
     case "Wide Saucer":
       return (
         <g>
@@ -71,6 +74,7 @@ function Eyes({ style }) {
           ))}
         </g>
       );
+    case "Combat Slits":
     case "Cyber Slits":
       return (
         <g>
@@ -82,6 +86,7 @@ function Eyes({ style }) {
           ))}
         </g>
       );
+    case "Prism Optics":
     case "Star Pupils":
       return (
         <g>
@@ -93,7 +98,7 @@ function Eyes({ style }) {
           ))}
         </g>
       );
-    default: // Oval Beams — big comic eyes
+    default: // Standard Optics
       return (
         <g>
           {[L, R].map((x, i) => (
@@ -113,6 +118,7 @@ function Eyes({ style }) {
 function Ears({ style, skin, dark }) {
   const Y = 108;
   switch (style) {
+    case "Tapered":
     case "Pointed":
       return (
         <g>
@@ -132,6 +138,7 @@ function Ears({ style, skin, dark }) {
           ))}
         </g>
       );
+    case "Sensor Stalks":
     case "Antennae":
       return (
         <g>
@@ -143,6 +150,7 @@ function Ears({ style, skin, dark }) {
           <path d="M143 14 l3 3 3 -1 -3 -3 z" fill="#fff" />
         </g>
       );
+    case "Elongated":
     case "Leaf":
       return (
         <g>
@@ -150,6 +158,7 @@ function Ears({ style, skin, dark }) {
           <path d={`M150 ${Y} q30 -16 32 -42 q-24 8 -32 42 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
         </g>
       );
+    case "Crest Horns":
     case "Horns":
       return (
         <g>
@@ -165,6 +174,7 @@ function Ears({ style, skin, dark }) {
 function Brows({ style }) {
   const Y = 66, L = 60, R = 140;
   switch (style) {
+    case "Tactical":
     case "Angled":
       return (
         <g>
@@ -172,6 +182,7 @@ function Brows({ style }) {
           <path d={`M${R} ${Y + 6} l-28 -12`} stroke={INK} strokeWidth="7" strokeLinecap="round" />
         </g>
       );
+    case "Heavy":
     case "Thick":
       return (
         <g>
@@ -179,6 +190,7 @@ function Brows({ style }) {
           <rect x={R - 29} y={Y - 5} width="34" height="10" rx="5" fill={INK} />
         </g>
       );
+    case "Scarred":
     case "Zigzag":
       return (
         <g>
@@ -186,6 +198,7 @@ function Brows({ style }) {
           <polyline points={`${R},${Y} ${R - 10},${Y - 6} ${R - 20},${Y} ${R - 30},${Y - 6}`} fill="none" stroke={INK} strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
         </g>
       );
+    case "Relaxed":
     case "Soft":
       return (
         <g>
@@ -225,6 +238,7 @@ function Nose({ style, dark }) {
 function Mouth({ style }) {
   const Y = 136;
   switch (style) {
+    case "Tusked":
     case "Fanged":
       return (
         <g>
@@ -233,8 +247,10 @@ function Mouth({ style }) {
           <path d="M108 136 l6 14 l6 -14 z" fill="#fff" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
         </g>
       );
+    case "Mandible":
     case "Beak":
       return <path d={`M100 ${Y - 9} l20 16 l-20 16 l-20 -16 z`} fill="#FFA42B" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />;
+    case "Proboscis":
     case "Tentacle":
       return (
         <g>
@@ -243,8 +259,10 @@ function Mouth({ style }) {
           ))}
         </g>
       );
+    case "Closed":
     case "Pursed":
       return <ellipse cx="100" cy={Y} rx="9" ry="6" fill="#5b1a1a" stroke={INK} strokeWidth={SW} />;
+    case "Grim Line":
     case "Wide Grin":
       return (
         <g>
@@ -253,21 +271,26 @@ function Mouth({ style }) {
           <path d="M84 136 l4 8 4 -8 z M108 136 l4 8 4 -8 z" fill={INK} />
         </g>
       );
-    default: // Smirk
+    default: // Set Jaw
       return <path d={`M78 ${Y} q22 18 44 -4`} fill="none" stroke={INK} strokeWidth="5" strokeLinecap="round" />;
   }
 }
 
 function Markings({ style, dark }) {
   switch (style) {
+    case "Battle Scar":
     case "Scar":
       return <g><path d="M118 70 l11 24" fill="none" stroke="#d8c4ff" strokeWidth="3.5" strokeLinecap="round" /><path d="M116 78 l8 0 M121 86 l8 0" stroke="#d8c4ff" strokeWidth="2.5" strokeLinecap="round" /></g>;
+    case "Plasma Burns":
     case "Mole Cluster":
       return <g><circle cx="116" cy="108" r="3.5" fill={dark} /><circle cx="125" cy="114" r="2.5" fill={dark} /><circle cx="109" cy="112" r="2.5" fill={dark} /></g>;
+    case "War Paint":
     case "Tribal Lines":
       return <g><path d="M56 108 l16 -7 l-9 14 z" fill="none" stroke="#d8c4ff" strokeWidth="3" strokeLinejoin="round" /><path d="M144 108 l-16 -7 l9 14 z" fill="none" stroke="#d8c4ff" strokeWidth="3" strokeLinejoin="round" /></g>;
+    case "Speckled":
     case "Freckles":
       return <g>{[90, 98, 106, 94, 102].map((x, i) => (<circle key={i} cx={x} cy={100 + (i % 2) * 4} r="2" fill={dark} opacity="0.75" />))}</g>;
+    case "Fractured":
     case "Cracks":
       return <g><path d="M100 54 l6 20 l-4 11 l7 13" fill="none" stroke="#9a8ab5" strokeWidth="3" strokeLinecap="round" /><path d="M107 85 l9 6 l-2 7" fill="none" stroke="#9a8ab5" strokeWidth="2.5" strokeLinecap="round" /></g>;
     default:
@@ -364,6 +387,7 @@ export default function CharacterAvatar({
   marking,
   cls,
   size = 180,
+  static: isStatic = false,
 }) {
   const skin = skinColor || "#67a832";
   const dark = shade(skin, -50);
@@ -381,8 +405,8 @@ export default function CharacterAvatar({
       style={{ width: size, height: size }}
     >
       <motion.div
-        animate={{ scaleY: [1, 0.97, 1] }}
-        transition={{ duration: 3, ease: [0.4, 0, 0.2, 1], repeat: Infinity }}
+        animate={isStatic ? undefined : { scaleY: [1, 0.97, 1] }}
+        transition={isStatic ? undefined : { duration: 3, ease: [0.4, 0, 0.2, 1], repeat: Infinity }}
         style={{ width: size, height: size, transformOrigin: "bottom center" }}
       >
         <svg viewBox="0 0 200 200" width={size} height={size} className="select-none">
@@ -419,8 +443,8 @@ export default function CharacterAvatar({
 
           {/* Face features */}
           <motion.g
-            animate={{ y: [0, -2.5, 0] }}
-            transition={{ duration: 3, ease: [0.4, 0, 0.2, 1], repeat: Infinity, delay: 0.15 }}
+            animate={isStatic ? undefined : { y: [0, -2.5, 0] }}
+            transition={isStatic ? undefined : { duration: 3, ease: [0.4, 0, 0.2, 1], repeat: Infinity, delay: 0.15 }}
           >
             <Brows style={eyebrows} />
             <Eyes style={eyeStyle} />

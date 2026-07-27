@@ -30,7 +30,7 @@ function SlotChip({ item, slot }) {
         style={{ borderColor: color + "70", boxShadow: `0 0 8px ${color}40` }}
         title={`${item.name}\n${item.rarity} ${item.type}\n${statStr}`}
       >
-        <GearVisual type={item.type} rarity={item.rarity} name={item.name} size={36} />
+        <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={36} />
       </div>
     );
   }

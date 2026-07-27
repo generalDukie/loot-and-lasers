@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { api } from "@/api/gameClient";
 import { useNavigate } from "react-router-dom";
 import SpaceStationHub from "@/components/game/SpaceStationHub";
 import NexusShowcase from "@/components/game/NexusShowcase";
@@ -29,8 +28,12 @@ export default function Home() {
     const dayKey = todayUTC();
     const shownFlag = `loot_daily_shown_${user?.id || "me"}_${dayKey}`;
     if (!localStorage.getItem(shownFlag)) {
-      localStorage.setItem(shownFlag, "1");
-      getProgress(character.id).then((prog) => { if (canClaimToday(prog)) setDailyOpen(true); });
+      getProgress(character.id)
+        .then((prog) => {
+          localStorage.setItem(shownFlag, "1");
+          if (canClaimToday(prog)) setDailyOpen(true);
+        })
+        .catch(() => {});
     }
     // One-time Codex guide on first login after character creation (per character).
     if (!localStorage.getItem(`loot_tutorial_${character.id}`)) {

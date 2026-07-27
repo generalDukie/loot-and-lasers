@@ -16,14 +16,14 @@ export const ARENA_BATTLE_COOLDOWN_MS = 5 * 60 * 1000; // 5-minute cooldown betw
 export const ARENA_SKIP_COST = 1; // nova crystals to skip the cooldown
 
 const BOT_NAMES = [
-  "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Vex'ara", "Cygnus",
-  "Mordok", "Lyra-9", "Thresh", "Zarvok", "Pixie-Δ", "Garruk", "Sylph",
+  "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
+  "Mordok", "Lyra-9", "Threx", "Zarvok", "Pixie-Δ", "Garrak", "Sylph",
   "Onyx-3", "Brak'tor", "Vesper", "Krellix", "Astra", "Mungo", "RustBeard",
   "VoidCaptain", "Nova", "Zara", "Keagan",
 ];
 const BOT_GUILDS = [
   "Void Reapers", "Stellar Syndicate", "Crimson Nebula", "Iron Orbit",
-  "Quantum Corsairs", "Solar Fang", "The Forgotten", "Nova Corps",
+  "Quantum Corsairs", "Solar Fang", "The Forgotten", "Stellar Guard",
   "Drift Cartel", "Star Wraiths",
 ];
 

@@ -12,8 +12,8 @@ export const DUNGEON_BATTLE_COOLDOWN_MS = 30 * 60 * 1000; // 30-minute cooldown 
 export const DUNGEON_SKIP_COST = 10; // Nova crystals to skip the cooldown
 
 const ENEMY_NAMES = [
-  "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Vex'ara", "Cygnus",
-  "Mordok", "Lyra-9", "Thresh", "Zarvok", "Pixie-Δ", "Garruk", "Sylph",
+  "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
+  "Mordok", "Lyra-9", "Threx", "Zarvok", "Pixie-Δ", "Garrak", "Sylph",
   "Onyx-3", "Brak'tor", "Vesper", "Krellix", "Astra", "Mungo", "RustBeard",
 ];
 

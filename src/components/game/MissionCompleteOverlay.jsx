@@ -120,7 +120,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
           {gearItem ? (
             <RewardCard icon={<Package className="w-5 h-5" />} accent={RARITY_COLORS[gearItem.rarity]}>
               <div className="flex items-center gap-2">
-                <GearVisual type={gearItem.type} rarity={gearItem.rarity} name={gearItem.name} size={36} />
+                <GearVisual type={gearItem.type} rarity={gearItem.rarity} name={gearItem.name} emoji={gearItem.emoji} size={36} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold leading-tight" style={{ color: RARITY_COLORS[gearItem.rarity] }}>{gearItem.name}</p>
                   <p className="text-[10px] text-muted-foreground capitalize">{gearItem.rarity} {gearTypeLabel(gearItem.type)}</p>

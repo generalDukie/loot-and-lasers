@@ -1,16 +1,10 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { RARITY_COLORS, CLASS_WEAPONS } from "@/lib/gameData";
-
-// Reverse lookup: item name → class weapon emoji
-const CLASS_WEAPON_EMOJIS = Object.values(CLASS_WEAPONS).reduce((acc, w) => {
-  acc[w.name] = w.emoji;
-  return acc;
-}, {});
+import { RARITY_COLORS, weaponEmojiFor } from "@/lib/gameData";
 
 // Animated visual per gear type — each piece gets its own playful motion.
 const GEAR = {
-  weapon: { emoji: "🔫", animate: { rotate: [-9, 9, -9] }, transition: { duration: 2.4, repeat: Infinity, ease: "easeInOut" } },
+  weapon: { emoji: "⚔️", animate: { rotate: [-9, 9, -9] }, transition: { duration: 2.4, repeat: Infinity, ease: "easeInOut" } },
   armor: { emoji: "🦺", animate: { scale: [1, 1.09, 1] }, transition: { duration: 2, repeat: Infinity, ease: "easeInOut" } },
   helmet: { emoji: "🪖", animate: { y: [0, -4, 0] }, transition: { duration: 2.2, repeat: Infinity, ease: "easeInOut" } },
   boots: { emoji: "🥾", animate: { x: [-3, 3, -3] }, transition: { duration: 0.85, repeat: Infinity, ease: "easeInOut" } },
@@ -22,10 +16,13 @@ const GEAR = {
   consumable: { emoji: "🧪", animate: { scale: [1, 1.12, 1] }, transition: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } },
 };
 
-export default function GearVisual({ type, rarity, name, size = 56 }) {
+export default function GearVisual({ type, rarity, name, emoji: emojiProp, size = 56 }) {
   const g = GEAR[type] || GEAR.material;
   const color = RARITY_COLORS[rarity] || "#9CA3AF";
-  const emoji = (type === "weapon" && name && CLASS_WEAPON_EMOJIS[name]) || g.emoji;
+  const emoji =
+    emojiProp ||
+    (type === "weapon" ? weaponEmojiFor(name) : null) ||
+    g.emoji;
   return (
     <div
       className="relative flex items-center justify-center rounded-xl"

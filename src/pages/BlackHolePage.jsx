@@ -270,7 +270,7 @@ export default function BlackHolePage() {
                 className="py-1.5 px-2 rounded-lg border bg-card/60 backdrop-blur-sm flex items-center gap-2 relative cursor-grab active:cursor-grabbing"
                 style={{ borderColor: (RARITY_COLORS[item.rarity] || "#9CA3AF") + "40", zIndex: item._sucking ? 40 : 0 }}
               >
-                <GearVisual type={item.type} rarity={item.rarity} size={34} />
+                <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={34} />
                 <div className="flex-1 min-w-0">
                   <h4 className="font-display font-semibold text-xs truncate leading-tight" style={{ color: RARITY_COLORS[item.rarity] }}>{item.name}</h4>
                   <p className="text-[11px] text-muted-foreground capitalize leading-tight">{item.rarity} · {item.type}</p>

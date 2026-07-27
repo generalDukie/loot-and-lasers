@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { api } from "@/api/gameClient";
 import { useNavigate } from "react-router-dom";
 import { getGuildMembership } from "@/lib/guildUtils";
-import { computeGuildPower } from "@/lib/guildEngine";
 import { getNexusState, isNexusVulnerable, ownsNexus } from "@/lib/nexusEngine";
 import { getMyCharacter } from "@/lib/socialEngine";
 import NexusOwnerPanel from "@/components/game/NexusOwnerPanel";

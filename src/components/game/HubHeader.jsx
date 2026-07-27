@@ -23,7 +23,7 @@ export default function HubHeader({ character, onOpenChat, rightExtras }) {
       <div className="relative flex items-center justify-between gap-2 px-3 py-2">
         <CharacterNavMenu character={character} large />
 
-        {/* Center: logo (clickable → hub) + clock */}
+        {/* Center: logo (clickable → hub) */}
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3 pointer-events-none">
           <div className="relative">
             <Link to="/" className="pointer-events-auto focus:outline-none flex flex-col items-center leading-none">
@@ -34,7 +34,7 @@ export default function HubHeader({ character, onOpenChat, rightExtras }) {
                 className="font-display font-black text-xl sm:text-3xl tracking-wider bg-gradient-to-r from-orange-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap"
               />
             </Link>
-            <div className={`absolute top-0 -right-1 sm:-right-2 text-white drop-shadow-[0_0_4px_rgba(255,255,255,0.4)] flex flex-col items-center origin-top-right ${editMode ? "pointer-events-auto" : "pointer-events-none"}`}>
+            <div className={`absolute top-0 -right-1 sm:-right-2 text-muted-foreground drop-shadow-[0_0_4px_rgba(255,255,255,0.25)] flex flex-col items-center origin-top-right ${editMode ? "pointer-events-auto" : "pointer-events-none"}`}>
               <DraggableElement id="return_to_hub" editMode={editMode} positions={positions} onSave={savePosition}>
                 <motion.div
                   animate={{ rotate: [-38, -26, -38], scale: [1, 1.18, 1] }}

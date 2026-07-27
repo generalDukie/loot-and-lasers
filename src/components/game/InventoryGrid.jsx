@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import CompactItemRow from "@/components/game/CompactItemRow";
 import StatCompareBubble, { powerRating } from "@/components/game/StatCompareBubble";
 import { staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
@@ -7,7 +7,7 @@ import { Filter, ArrowUp, ArrowDown } from "lucide-react";
 import { gearTypeLabel, computeStardustValue } from "@/lib/gameData";
 
 const TYPES = ["all", "weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module", "material", "consumable"];
-const EQUIPPABLE = ["weapon", "armor", "helmet", "boots", "accessory", "ship_module"];
+const EQUIPPABLE = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
 
 // Shared inventory grid used by both the Inventory page and the Character page.
 // Unequipped equippable items show a stat-compare bubble on hover.

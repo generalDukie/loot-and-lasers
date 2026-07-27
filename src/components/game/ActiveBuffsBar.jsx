@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FlaskConical, X, Rocket } from "lucide-react";
+import { FlaskConical, Rocket } from "lucide-react";
 import { getActiveBuffs, STAT_ICONS } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
 

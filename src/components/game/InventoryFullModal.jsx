@@ -5,7 +5,7 @@ import { computeStardustValue, RARITY_COLORS } from "@/lib/gameData";
 import { getPendingItem, clearPendingItem, subscribePending } from "@/lib/inventoryCap";
 import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
-import { Package, Orbit, Loader2, AlertTriangle } from "lucide-react";
+import { Orbit, Loader2, AlertTriangle } from "lucide-react";
 
 // Overlay shown when a loot pickup can't fit in the 10-slot inventory.
 // The player must dissolve an item (the new loot OR an existing spare) into the
@@ -127,7 +127,7 @@ export default function InventoryFullModal({ character }) {
             className="flex items-center gap-3 p-3 rounded-xl border mb-3"
             style={{ borderColor: pendingColor + "40", background: pendingColor + "08" }}
           >
-            <GearVisual type={pending.type} rarity={pending.rarity} name={pending.name} size={36} />
+            <GearVisual type={pending.type} rarity={pending.rarity} name={pending.name} emoji={pending.emoji} size={36} />
             <div className="min-w-0 flex-1">
               <p className="font-display font-semibold text-sm truncate" style={{ color: pendingColor }}>
                 {pending.name}
@@ -171,7 +171,7 @@ export default function InventoryFullModal({ character }) {
                     className="flex items-center gap-2 p-2 rounded-lg border bg-card/40"
                     style={{ borderColor: c + "30" }}
                   >
-                    <GearVisual type={item.type} rarity={item.rarity} name={item.name} size={32} />
+                    <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={32} />
                     <div className="min-w-0 flex-1">
                       <p className="font-display font-semibold text-xs truncate" style={{ color: c }}>
                         {item.name}

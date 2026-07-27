@@ -1,4 +1,4 @@
-// Mirrors base44/shared/achievements.ts
+// Game achievement definitions and evaluation.
 
 export const ACHIEVEMENTS = [
   { id: "first_blood", name: "First Blood", desc: "Win your first Arena battle", icon: "🩸", category: "Combat", title: "the Skirmisher", check: (c) => (c.arena_wins || 0) >= 1 },

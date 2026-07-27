@@ -6,14 +6,14 @@
 // ═══════════════════════════════════════════
 import { ALIEN_SPECIES, ARTIFACTS, RELICS } from "@/lib/collectibles";
 import { DUNGEON_PLANETS } from "@/lib/dungeonData";
+import { GEAR_CATALOG_TOTAL } from "@/lib/gameData";
 
-// Fixed totals for non-gear categories (gear is dynamic — passed at call time).
+// Fixed totals for non-gear categories (gear uses the static catalog size).
 export const COLLECTION_BASE_TOTAL =
   ALIEN_SPECIES.length + ARTIFACTS.length + RELICS.length + DUNGEON_PLANETS.length;
 
 // Computes the total collection percentage across all collectible categories.
-// gearTotal is the count of all Item records in the catalog.
-export function getCollectionStats(character, gearTotal = 0) {
+export function getCollectionStats(character, gearTotal = GEAR_CATALOG_TOTAL) {
   const species = (character?.discovered_species || []).length;
   const artifacts = (character?.collected_artifacts || []).length;
   const relics = (character?.collected_relics || []).length;

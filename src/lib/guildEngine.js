@@ -8,7 +8,7 @@ export const GUILD_WAR_COST = 100; // stardust war chest
 
 const RIVAL_GUILD_NAMES = [
   "Void Reapers", "Stellar Syndicate", "Crimson Nebula", "Iron Orbit",
-  "Quantum Corsairs", "Solar Fang", "The Forgotten", "Nova Corps",
+  "Quantum Corsairs", "Solar Fang", "The Forgotten", "Stellar Guard",
   "Drift Cartel", "Star Wraiths", "Eclipse Order", "Helix Marauders",
 ];
 const RIVAL_TAGS = ["VR", "SS", "CN", "IO", "QC", "SF", "TF", "NC", "DC", "SW", "EO", "HM"];

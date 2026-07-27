@@ -7,8 +7,8 @@ export const RACES = {
   Zyrathi: {
     name: "Zyrathi",
     emoji: "🐉",
-    tagline: "Ancient draconic warriors from the Ember Nebula",
-    lore: "Breathing fire since before fire was invented. Hoard shiny things, then aggressively deny hoarding them. Will absolutely fight a star because it looked at them funny. Their scales run hotter than your ex, and they've never let anyone forget it.",
+    tagline: "Scaled hotheads from the Ember Nebula",
+    lore: "Dragonfolk with armor for skin and a temper for fuel. They punch first, negotiate later, and insist the smoking crater was 'defensive.' Great at war. Terrible at dinner parties.",
     bonuses: { strength: 0.06, vitality: 0.04 },
     skinColors: ["#2D5A3D", "#8B4513", "#4A0E4E", "#1C3D5A"],
     eyeStyles: ["Slit Ember", "Twin Flame", "Void Gaze"],
@@ -17,8 +17,8 @@ export const RACES = {
   Cognati: {
     name: "Cognati",
     emoji: "🤖",
-    tagline: "Cybernetic entities born from an ancient AI network",
-    lore: "Accidentally became sentient and never shut up. Powered almost entirely by software updates. They calculate everything... except social cues. They reboot before making important decisions.",
+    tagline: "Walking spreadsheets with laser opinions",
+    lore: "Half chrome, half attitude, fully convinced they already simulated this conversation. They run the numbers, win the argument, then blue-screen when someone asks how their day was.",
     bonuses: { intellect: 0.06, agility: 0.04 },
     skinColors: ["#C0C0C0", "#1a1a2e", "#0D2137", "#3D3D3D"],
     eyeStyles: ["LED Array", "Holographic", "Scan Beam"],
@@ -27,8 +27,8 @@ export const RACES = {
   Luminae: {
     name: "Luminae",
     emoji: "🌟",
-    tagline: "Ethereal beings of living starlight",
-    lore: "Literally sparkle whether they want to or not. Bright enough to ruin everyone's night vision. They're convinced they're the galaxy's main characters. Can turn any room into a motivational poster.",
+    tagline: "Living disco balls with a hero complex",
+    lore: "Starlight given legs and an ego. They light up corridors, blind friends by accident, and somehow always land on their feet. Bring sunglasses. And maybe a mirror.",
     bonuses: { intellect: 0.04, luck: 0.06 },
     skinColors: ["#E8D5B7", "#C9B8FF", "#B8E6FF", "#FFE4B5"],
     eyeStyles: ["Star Burst", "Nebula Swirl", "Aurora Glow"],
@@ -37,8 +37,8 @@ export const RACES = {
   Grothak: {
     name: "Grothak",
     emoji: "💪",
-    tagline: "Massive stone-skinned giants from high-gravity worlds",
-    lore: "Living proof that muscles solve most problems. Too stubborn to realize they've lost. They call pebbles 'snacks.' Have never met a door they couldn't walk through.",
+    tagline: "High-gravity tanks who treat walls as suggestions",
+    lore: "Grew up where the air weighs more than your regrets. Slow to start, impossible to stop, and vaguely offended by doors. If it needs smashing, hire a Grothak. If it needs subtlety… also hire a Grothak, then apologize.",
     bonuses: { strength: 0.04, vitality: 0.06 },
     skinColors: ["#696969", "#8B7355", "#4A4A4A", "#5C4033"],
     eyeStyles: ["Deep Set", "Crystal Shard", "Magma Core"],
@@ -46,9 +46,9 @@ export const RACES = {
   },
   Synthara: {
     name: "Synthara",
-    emoji: "🦊",
-    tagline: "Shape-shifting infiltrators from the Shadow Reach",
-    lore: "Professionally uninvited guests. Borrow identities like other people borrow socks. Nobody remembers inviting them. Masters of 'Trust me, I'm supposed to be here.'",
+    emoji: "🎭",
+    tagline: "Face-swappers from the Shadow Reach",
+    lore: "Professional strangers. They borrow faces, walk into restricted zones, and leave with the goods plus your dignity. Trust them? Sure. Just count the spoons afterward.",
     bonuses: { agility: 0.06, luck: 0.04 },
     skinColors: ["#2E1A47", "#1A3C34", "#3D1F1F", "#1A1A3C"],
     eyeStyles: ["Shifting Iris", "Mirrored", "Phantom Glow"],
@@ -136,16 +136,16 @@ export const CLASSES = {
 // MISSIONS
 // ═══════════════════════════════════════════
 export const MISSION_TEMPLATES = [
-  { name: "Patrol the Outer Rim", location: "Nebula Station Alpha", description: "Stroll the rim like you own the place. Mostly squinting at blips that are, statistically, 99% space geese. Bring snacks and a thermos of questionable coffee.", difficulty: "easy", sector: 1, duration_seconds: 60, risk: 1, rewards: { experience: 25, stardust: 50, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Patrol the Rimward Sector", location: "Nebula Station Alpha", description: "Stroll the rim like you own the place. Mostly squinting at blips that are, statistically, 99% space geese. Bring snacks and a thermos of questionable coffee.", difficulty: "easy", sector: 1, duration_seconds: 60, risk: 1, rewards: { experience: 25, stardust: 50, item_rarity_chance: "common" }, level_requirement: 1 },
   { name: "Salvage Run: Derelict Freighter", location: "Wreck of the ISS Meridian", description: "The ISS Meridian went quiet forty years ago. The cargo? Still there. The crew? Also still there, sort of. Bring a crowbar, a strong denial gland, and maybe a spare pair of pants.", difficulty: "easy", sector: 1, duration_seconds: 120, risk: 2, rewards: { experience: 40, stardust: 80, item_rarity_chance: "uncommon" }, level_requirement: 1 },
   { name: "Asteroid Mining Operation", location: "Kelvari Belt", description: "Smack glowing space rocks until they confess their secrets. The rocks have started fighting back recently. Nobody knows why. It's a whole thing. Bring a bigger hammer.", difficulty: "medium", sector: 1, duration_seconds: 180, risk: 2, rewards: { experience: 65, stardust: 130, item_rarity_chance: "uncommon" }, level_requirement: 2 },
   { name: "Xeno-Archaeological Dig", location: "Planet Ashara IV", description: "Dig up ruins older than your grandpa's password. Whatever's buried down there keeps whispering your name in a language that shouldn't exist. It's probably fine. Probably.", difficulty: "medium", sector: 2, duration_seconds: 300, risk: 3, rewards: { experience: 100, stardust: 200, item_rarity_chance: "rare" }, level_requirement: 3 },
-  { name: "Escort the Diplomat", location: "Luminae Homeworld", description: "Ambassador Vex'tal is 'very important' and 'definitely not a war criminal.' Walk him through hostile territory while he critiques your posture. Do NOT, under any circumstances, let him order the seafood.", difficulty: "hard", sector: 2, duration_seconds: 420, risk: 3, rewards: { experience: 150, stardust: 300, item_rarity_chance: "rare" }, level_requirement: 4 },
+  { name: "Escort the Diplomat", location: "Luminae Homeworld", description: "Ambassador Zyr'tal is 'very important' and 'definitely not a war criminal.' Walk him through hostile territory while he critiques your posture. Do NOT, under any circumstances, let him order the seafood.", difficulty: "hard", sector: 2, duration_seconds: 420, risk: 3, rewards: { experience: 150, stardust: 300, item_rarity_chance: "rare" }, level_requirement: 4 },
   { name: "Infiltrate Pirate Stronghold", location: "Shadow Station Omega", description: "Sneak into the galaxy's worst-kept secret base, disable their shields, and try not to become someone's new parrot. Remember: stealth is just lying, but with extra steps and a turtleneck.", difficulty: "hard", sector: 3, duration_seconds: 600, risk: 4, rewards: { experience: 220, stardust: 450, item_rarity_chance: "epic" }, level_requirement: 5 },
   { name: "Void Rift Anomaly", location: "The Shattered Expanse", description: "A hole in spacetime is slowly eating the neighboring systems. Science says 'don't touch it.' We're paying you to touch it. A lot. With your hands. Good luck, you beautiful idiot.", difficulty: "elite", sector: 3, duration_seconds: 900, risk: 4, rewards: { experience: 350, stardust: 700, item_rarity_chance: "epic" }, level_requirement: 7 },
   { name: "Ancient AI Core Recovery", location: "Cognati Prime Archives", description: "Dive into a corrupted AI archive and rip out its glowing heart. The AI is unhappy about this. The AI has opinions. The AI has opinions AND lasers. This will be a conversation.", difficulty: "elite", sector: 4, duration_seconds: 1200, risk: 5, rewards: { experience: 500, stardust: 1000, item_rarity_chance: "legendary" }, level_requirement: 9 },
   { name: "Supernova Extraction", location: "Dying Star VX-9", description: "Harvest exotic matter from a star that is, cosmically speaking, about to throw the mother of all tantrums. The window is 'now-ish.' The star is 'also now-ish.' Please sync your watches. And your affairs.", difficulty: "legendary", sector: 4, duration_seconds: 1800, risk: 5, rewards: { experience: 800, stardust: 1500, item_rarity_chance: "legendary" }, level_requirement: 12 },
-  { name: "Smuggler's Run", location: "Kessel's Reach", description: "Move some 'perfectly legal' cargo past a patrol that's definitely not looking for exactly this. The manifest says 'agricultural supplies.' The agricultural supplies are humming. Don't ask.", difficulty: "easy", sector: 1, duration_seconds: 90, risk: 1, rewards: { experience: 30, stardust: 60, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Contraband Dash", location: "Keldris Reach", description: "Move some 'perfectly legal' cargo past a patrol that's definitely not looking for exactly this. The manifest says 'agricultural supplies.' The agricultural supplies are humming. Don't ask.", difficulty: "easy", sector: 1, duration_seconds: 90, risk: 1, rewards: { experience: 30, stardust: 60, item_rarity_chance: "common" }, level_requirement: 1 },
   { name: "Distress Signal: Freighter Vael", location: "Drift Sector 7", description: "A cargo ship sent a distress call consisting entirely of someone saying 'whoops' on a loop. Either they're very unlucky or very honest. Either way, they're paying.", difficulty: "easy", sector: 1, duration_seconds: 150, risk: 2, rewards: { experience: 45, stardust: 90, item_rarity_chance: "uncommon" }, level_requirement: 1 },
   { name: "Black Market Buy", location: "The Bazaar of Torment", description: "Meet a contact who insists on being called 'The Whisper' but whose real name is Gary. He's got rare goods and even rarer BO. Hold your breath and negotiate.", difficulty: "medium", sector: 1, duration_seconds: 210, risk: 2, rewards: { experience: 70, stardust: 140, item_rarity_chance: "uncommon" }, level_requirement: 2 },
   { name: "Bioluminescent Survey", location: "Glowlily Marshes of Vesh", description: "Catalogue glowing alien flora that communicates via color-coded mood lighting. Right now it's flashing 'annoyed pink.' You've been warned. Bring sunscreen. Emotional sunscreen.", difficulty: "medium", sector: 2, duration_seconds: 330, risk: 3, rewards: { experience: 110, stardust: 220, item_rarity_chance: "rare" }, level_requirement: 3 },
@@ -155,7 +155,7 @@ export const MISSION_TEMPLATES = [
   { name: "Diplomatic Incident Cleanup", location: "Cethylli Embassy Ring", description: "Two alien species are about to go to war over a mispronounced compliment. You have one hour to apologize in seven dialects, including one that doesn't have mouths. Bring phrasebooks and a sense of humility.", difficulty: "medium", sector: 2, duration_seconds: 270, risk: 3, rewards: { experience: 95, stardust: 190, item_rarity_chance: "rare" }, level_requirement: 3 },
   { name: "Ghost Ship Investigation", location: "Wreck of the Pale Horizon", description: "A ship reappeared after being lost for 200 years. The crew is gone. The coffee is still warm. The navigation logs just say 'we're sorry' on loop. Go figure out what 'sorry' means here.", difficulty: "hard", sector: 3, duration_seconds: 570, risk: 4, rewards: { experience: 240, stardust: 480, item_rarity_chance: "epic" }, level_requirement: 6 },
   { name: "Nebula Beast Migration", location: "Veil Nebula Corridor", description: "Escort a pod of migrating space leviathans through a shipping lane. The leviathans are enormous, gentle, and deeply curious about your ship. They will absolutely try to taste it. Be polite.", difficulty: "medium", sector: 1, duration_seconds: 240, risk: 2, rewards: { experience: 80, stardust: 160, item_rarity_chance: "uncommon" }, level_requirement: 2 },
-  { name: "Black Hole Survey", location: "Event Horizon of X-7", description: "Take readings from just outside a black hole. The physics get weird. Your watch runs backwards. Your lunch is now your dinner. Don't lean too far over the railing. There is no railing.", difficulty: "elite", sector: 4, duration_seconds: 1050, risk: 5, rewards: { experience: 400, stardust: 800, item_rarity_chance: "legendary" }, level_requirement: 8 },
+  { name: "Black Hole Survey", location: "Accretion Rim of X-7", description: "Take readings from just outside a black hole. The physics get weird. Your watch runs backwards. Your lunch is now your dinner. Don't lean too far over the railing. There is no railing.", difficulty: "elite", sector: 4, duration_seconds: 1050, risk: 5, rewards: { experience: 400, stardust: 800, item_rarity_chance: "legendary" }, level_requirement: 8 },
 ];
 
 // ═══════════════════════════════════════════
@@ -179,13 +179,44 @@ const ITEM_NAMES = {
 // ═══════════════════════════════════════════
 export const CLASS_WEAPONS = {
   Vanguard:           { name: "Vanguard Assault Rifle", emoji: "🔫", flavor: "A rugged battle rifle that punches through armor with relentless fire." },
-  "Shadow Operative": { name: "Shadowstrike Silencer",  emoji: "🔫", flavor: "A suppressed pistol that finds the gaps in any defense." },
-  Technomancer:       { name: "Arcane Pulse Caster",     emoji: "🔫", flavor: "Channels raw psionic energy into devastating energy bolts." },
-  "Astral Warden":    { name: "Cosmic Aegis Blaster",   emoji: "🔫", flavor: "Radiates protective starlight with every shot." },
-  "Cosmic Engineer":  { name: "Plasma Multi-Cannon",    emoji: "🔫", flavor: "Jury-rigged to fire everything from drones to EMPs." },
+  "Shadow Operative": { name: "Shadowstrike Silencer",  emoji: "🗡️", flavor: "A suppressed pistol that finds the gaps in any defense." },
+  Technomancer:       { name: "Arcane Pulse Caster",     emoji: "🔮", flavor: "Channels raw psionic energy into devastating energy bolts." },
+  "Astral Warden":    { name: "Cosmic Aegis Blaster",   emoji: "✨", flavor: "Radiates protective starlight with every shot." },
+  "Cosmic Engineer":  { name: "Plasma Multi-Cannon",    emoji: "💥", flavor: "Jury-rigged to fire everything from drones to EMPs." },
 };
 
 export const RARITY_MULTIPLIERS = { common: 1, uncommon: 1.3, rare: 1.7, epic: 2.2, legendary: 3 };
+
+// Resolve a weapon icon from its base/full name. Prefers class signature matches,
+// then known loot base names, then keyword heuristics — never falls back to the
+// raw text name (that used to render as a giant label in arena/inventory).
+const LOOT_WEAPON_EMOJIS = {
+  "Plasma Rifle": "🔫", "Ion Blaster": "⚡", "Photon Cannon": "💥", "Pulse Repeater": "🔫",
+  "Neutrino Sniper": "🎯", "Graviton Shotgun": "💥", "Phase Pistol": "🔫", "Singularity Cannon": "🌌",
+};
+
+export function weaponEmojiFor(name, baseName) {
+  if (baseName && LOOT_WEAPON_EMOJIS[baseName]) return LOOT_WEAPON_EMOJIS[baseName];
+  for (const w of Object.values(CLASS_WEAPONS)) {
+    if (baseName === w.name || (name && name.includes(w.name))) return w.emoji;
+  }
+  if (name) {
+    for (const [base, emoji] of Object.entries(LOOT_WEAPON_EMOJIS)) {
+      if (name.includes(base)) return emoji;
+    }
+    const n = name.toLowerCase();
+    if (/sword|blade|saber|katana/.test(n)) return "⚔️";
+    if (/dagger|knife|silencer/.test(n)) return "🗡️";
+    if (/staff|wand|caster|rod/.test(n)) return "🔮";
+    if (/bow|crossbow/.test(n)) return "🏹";
+    if (/axe|hammer|mace/.test(n)) return "🪓";
+    if (/cannon|shotgun|launcher/.test(n)) return "💥";
+    if (/sniper/.test(n)) return "🎯";
+    if (/blaster|aegis/.test(n)) return "✨";
+    if (/rifle|pistol|gun|repeater/.test(n)) return "🔫";
+  }
+  return "🔫";
+}
 
 // Maximum items a character can hold (equipped + unequipped combined).
 export const INVENTORY_CAP = 10;
@@ -312,6 +343,7 @@ function _rollItem(rarity, playerLevel, type, rng) {
 
   return {
     name: buildItemName(baseName, rarity, stats, r),
+    base_name: baseName,
     type: itemType,
     rarity,
     level_requirement: Math.max(1, playerLevel - 1),
@@ -319,6 +351,7 @@ function _rollItem(rarity, playerLevel, type, rng) {
     flavor_text: FLAVOR_TEXTS[Math.floor(r() * FLAVOR_TEXTS.length)],
     sell_value: Math.floor(10 * mult * playerLevel),
     is_equipped: false,
+    ...(itemType === "weapon" ? { emoji: weaponEmojiFor(baseName, baseName) } : {}),
   };
 }
 
@@ -338,6 +371,7 @@ export function generateClassWeapon(className, rarity, playerLevel, rng = Math.r
 
   return {
     name: buildItemName(w.name, rarity, stats, rng),
+    base_name: w.name,
     type: "weapon",
     rarity,
     level_requirement: Math.max(1, playerLevel - 1),
@@ -345,6 +379,7 @@ export function generateClassWeapon(className, rarity, playerLevel, rng = Math.r
     flavor_text: w.flavor,
     sell_value: Math.floor(15 * mult * playerLevel),
     is_equipped: false,
+    emoji: w.emoji,
   };
 }
 
@@ -1082,4 +1117,33 @@ export function getMaxTierTotal(mod, shipId) {
   if (sums.mission_duration_reduction) parts.push(`-${fmtPct(sums.mission_duration_reduction * mult)}% Time`);
   if (sums.inventory_cap_bonus) parts.push(`+${Math.round(sums.inventory_cap_bonus)} Inventory Slots`);
   return parts.join(" · ") || "Ship Upgrade";
+}
+
+// ═══════════════════════════════════════════
+// GEAR CATALOG — static base gear types for collection tracking
+// ═══════════════════════════════════════════
+function buildGearCatalog() {
+  const entries = [];
+  for (const [type, names] of Object.entries(ITEM_NAMES)) {
+    for (const name of names) {
+      entries.push({ id: `${type}:${name}`, name, type });
+    }
+  }
+  for (const w of Object.values(CLASS_WEAPONS)) {
+    entries.push({ id: `weapon:${w.name}`, name: w.name, type: "weapon" });
+  }
+  return entries;
+}
+
+export const GEAR_CATALOG = buildGearCatalog();
+export const GEAR_CATALOG_TOTAL = GEAR_CATALOG.length;
+
+export function gearCatalogKey(item) {
+  if (!item) return null;
+  if (item.base_name && item.type) return `${item.type}:${item.base_name}`;
+  if (item.type && item.name) {
+    const match = GEAR_CATALOG.find((e) => e.type === item.type && item.name.includes(e.name));
+    if (match) return match.id;
+  }
+  return item.id || null;
 }

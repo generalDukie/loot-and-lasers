@@ -162,7 +162,7 @@ export default function ArenaPage() {
 
   async function finishBattle() {
     const { battle, opp, rewards, isFree, skipped } = battleState;
-    const { percentage: collectPct } = getCollectionStats(character, catalogItems.length);
+    const { percentage: collectPct } = getCollectionStats(character);
     const boostedXp = applyXpBonus(rewards.experience, collectPct);
     let newExp = (character.experience || 0) + boostedXp;
     let newLevel = character.level;
@@ -215,15 +215,16 @@ export default function ArenaPage() {
       message: rewards.won ? `🚀 ${pname} defeated ${opp.name} in the Arena.` : `💀 ${opp.name} defeated ${pname} in the Arena.`,
       entry_type: rewards.won ? "victory" : "defeat",
       character_name: pname,
+      character_id: character.id,
     });
     if (rewards.won && newDiv !== prevDiv) {
-      void api.entities.GalaxyNews.create({ message: `👑 ${pname} has been promoted to ${newDiv}.`, entry_type: "rankup", character_name: pname });
+      void api.entities.GalaxyNews.create({ message: `👑 ${pname} has been promoted to ${newDiv}.`, entry_type: "rankup", character_name: pname, character_id: character.id });
     }
     if (rewards.won && [5, 10, 15, 20].includes(newStreak)) {
-      void api.entities.GalaxyNews.create({ message: `🔥 ${pname} is on a ${newStreak}-match win streak!`, entry_type: "streak", character_name: pname });
+      void api.entities.GalaxyNews.create({ message: `🔥 ${pname} is on a ${newStreak}-match win streak!`, entry_type: "streak", character_name: pname, character_id: character.id });
     }
     if (!rewards.won && prevStreak >= 5) {
-      void api.entities.GalaxyNews.create({ message: `💀 ${pname}'s ${prevStreak}-match win streak has ended.`, entry_type: "streak", character_name: pname });
+      void api.entities.GalaxyNews.create({ message: `💀 ${pname}'s ${prevStreak}-match win streak has ended.`, entry_type: "streak", character_name: pname, character_id: character.id });
     }
 
     // Feed Arena wins into the guild weekly challenge (fire-and-forget)

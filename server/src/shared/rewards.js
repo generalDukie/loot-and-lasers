@@ -46,8 +46,8 @@ export function expForLevel(level) {
   return Math.floor(60 * Math.pow(1.42, level - 1));
 }
 
-export async function applyCharacterRewards(base44, characterId, rewards) {
-  const ch = await base44.asServiceRole.entities.Character.get(characterId);
+export async function applyCharacterRewards(gameService, characterId, rewards) {
+  const ch = await gameService.asServiceRole.entities.Character.get(characterId);
   const patch = {};
   const items = [];
 
@@ -58,7 +58,7 @@ export async function applyCharacterRewards(base44, characterId, rewards) {
   if (rewards.nova_crystals) patch.nova_crystals = (ch.nova_crystals || 0) + rewards.nova_crystals;
   if (rewards.fuel) patch.fuel = Math.min(ch.max_fuel || 100, (ch.fuel || 0) + rewards.fuel);
   if (rewards.experience) {
-    const allItems = await base44.asServiceRole.entities.Item.filter({}, null, 500);
+    const allItems = await gameService.asServiceRole.entities.Item.filter({}, null, 500);
     const collectPct = getCollectionPercentage(ch, allItems.length);
     const boostedXp = applyXpBonus(rewards.experience, collectPct);
     let newExp = (ch.experience || 0) + boostedXp;
@@ -78,14 +78,14 @@ export async function applyCharacterRewards(base44, characterId, rewards) {
   }
 
   if (rewards.item_rarity) {
-    const owned = await base44.asServiceRole.entities.Item.filter({ character_id: ch.id });
+    const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
     if (owned.length >= getInventoryCap(ch)) {
       const comp = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 }[rewards.item_rarity] || 8;
       patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
       patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
     } else {
       const it = randomItem(rewards.item_rarity, ch.level || 1);
-      const created = await base44.asServiceRole.entities.Item.create({
+      const created = await gameService.asServiceRole.entities.Item.create({
         ...it, owner_id: ch.created_by_id, character_id: ch.id,
       });
       items.push(created);
@@ -94,13 +94,13 @@ export async function applyCharacterRewards(base44, characterId, rewards) {
   if (rewards.collectible) {
     const c = rewards.collectible;
     if (c.type === "consumable") {
-      const owned = await base44.asServiceRole.entities.Item.filter({ character_id: ch.id });
+      const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
       if (owned.length >= getInventoryCap(ch)) {
         const comp = c.sell_value || 25;
         patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
         patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
       } else {
-        const created = await base44.asServiceRole.entities.Item.create({
+        const created = await gameService.asServiceRole.entities.Item.create({
           name: c.name,
           type: "consumable",
           rarity: c.rarity || "uncommon",
@@ -121,7 +121,7 @@ export async function applyCharacterRewards(base44, characterId, rewards) {
     if (c.kind === "relic" && c.id) patch.collected_relics = [...(ch.collected_relics || []), c.id];
   }
 
-  await base44.asServiceRole.entities.Character.update(characterId, patch);
+  await gameService.asServiceRole.entities.Character.update(characterId, patch);
   return { patch, items };
 }
 
@@ -165,7 +165,7 @@ export const PROMO_CODES = {
   },
 };
 
-export async function redeemPromoCode(base44, character, code) {
+export async function redeemPromoCode(gameService, character, code) {
   const entry = PROMO_CODES[code];
   if (!entry) return { ok: false, status: 404, error: "Invalid promo code" };
   const redeemed = character.promo_codes_redeemed || [];
@@ -187,7 +187,7 @@ export async function redeemPromoCode(base44, character, code) {
     const lvl = entry.rewards.level || character.level || 1;
     for (const type of slots) {
       const it = randomItem("legendary", lvl, type);
-      const created = await base44.asServiceRole.entities.Item.create({
+      const created = await gameService.asServiceRole.entities.Item.create({
         ...it, owner_id: character.created_by_id, character_id: character.id, is_equipped: true,
       });
       items.push(created);
@@ -196,6 +196,6 @@ export async function redeemPromoCode(base44, character, code) {
     patch.equipped_items = equipped;
   }
   patch.promo_codes_redeemed = [...redeemed, code];
-  await base44.asServiceRole.entities.Character.update(character.id, patch);
+  await gameService.asServiceRole.entities.Character.update(character.id, patch);
   return { ok: true, patch, items, code, label: entry.label };
 }

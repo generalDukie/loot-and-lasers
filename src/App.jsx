@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -39,7 +41,13 @@ import { SiteConfigProvider } from '@/lib/SiteConfigContext';
 import EditableText from '@/components/admin/EditableText';
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, checkAppState } = useAuth();
+
+  useEffect(() => {
+    if (authError?.type === 'auth_required') {
+      navigateToLogin();
+    }
+  }, [authError, navigateToLogin]);
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -55,9 +63,21 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
-      navigateToLogin();
+    }
+    if (authError.type === 'auth_required') {
       return null;
+    }
+    if (authError.type === 'unknown') {
+      return (
+        <div className="fixed inset-0 flex items-center justify-center stars-bg p-4">
+          <div className="max-w-md w-full rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm p-6 text-center">
+            <EditableText textKey="app.title" default="LOOT & LASERS" as="h1" className="font-display font-bold text-2xl glow-cyan tracking-widest mb-3" />
+            <p className="text-sm text-muted-foreground mb-1">Could not reach the game server.</p>
+            <p className="text-xs text-destructive mb-4">{authError.message}</p>
+            <Button onClick={checkAppState}>Retry</Button>
+          </div>
+        </div>
+      );
     }
   }
 

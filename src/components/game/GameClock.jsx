@@ -19,10 +19,10 @@ export default function GameClock() {
   });
 
   return (
-    <div className="flex items-center gap-2" title="Eastern Time (game clock)">
-      <Clock className="w-4 h-4 text-white/80" />
-      <span className="font-display font-bold text-sm text-white tabular-nums">{time}</span>
-      <span className="text-[10px] text-white/70 font-display tracking-wide">EST</span>
+    <div className="flex items-center gap-1.5 pointer-events-none" title="Eastern Time (game clock)">
+      <Clock className="w-3.5 h-3.5 text-cyan-300/90" />
+      <span className="font-display font-bold text-xs sm:text-sm text-foreground tabular-nums tracking-wide">{time}</span>
+      <span className="text-[9px] sm:text-[10px] text-muted-foreground font-display tracking-wide">EST</span>
     </div>
   );
 }

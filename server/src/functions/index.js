@@ -23,7 +23,7 @@ export async function ClaimDailyLogin(user) {
   const character = await myCharacter(user);
   if (!character) return { status: 404, body: { error: "No character" } };
 
-  const base44 = svc(user);
+  const game = svc(user);
   const existing = entities.DailyLogin.filter({ character_id: character.id });
   let progress = existing[0];
   const today = todayET();
@@ -44,7 +44,7 @@ export async function ClaimDailyLogin(user) {
 
   const day = progress.current_day || 1;
   const rewardEntry = DAILY_REWARDS[(day - 1)] || DAILY_REWARDS[0];
-  const { patch, items } = await applyCharacterRewards(base44, character.id, rewardEntry.rewards || {});
+  const { patch, items } = await applyCharacterRewards(game, character.id, rewardEntry.rewards || {});
 
   const claimedDays = [...(progress.claimed_days || []), day];
   const wrapped = day >= 30;
@@ -102,7 +102,7 @@ export async function RedeemPromoCode(user, body) {
   const code = (body?.code || "").trim();
   if (!code) return { status: 400, body: { error: "Missing code" } };
 
-  const base44 = svc(user);
+  const game = svc(user);
   const found = entities.PromoCode.filter({ code });
   const pc = found[0];
   if (pc) {
@@ -112,12 +112,12 @@ export async function RedeemPromoCode(user, body) {
     if (pc.max_redemptions && pc.max_redemptions > 0 && redeemedBy.length >= pc.max_redemptions) {
       return { status: 410, body: { error: "Redemption limit reached" } };
     }
-    const { patch, items } = await applyCharacterRewards(base44, character.id, pc.rewards || {});
+    const { patch, items } = await applyCharacterRewards(game, character.id, pc.rewards || {});
     entities.PromoCode.update(pc.id, { redeemed_by: [...redeemedBy, character.id] });
     return { status: 200, body: { success: true, code, label: pc.label, patch, items } };
   }
 
-  const result = await redeemPromoCode(base44, character, code);
+  const result = await redeemPromoCode(game, character, code);
   if (!result.ok) return { status: result.status, body: { error: result.error } };
   return { status: 200, body: { success: true, ...result } };
 }
@@ -322,7 +322,7 @@ function daysBetween(a, b) { return Math.max(0, Math.round((new Date(b) - new Da
 function buildEvents(atkName, defName, atkStrength, defStrength, attackerWon) {
   const atkShare = atkStrength / (atkStrength + defStrength);
   const ev = [];
-  ev.push({ phase: "arrival", side: "attacker", emoji: "🛸", text: `${atkName}'s fleet drops out of hyperspace above the Galactic Command Nexus.` });
+  ev.push({ phase: "arrival", side: "attacker", emoji: "🛸", text: `${atkName}'s fleet drops out of warp above the Galactic Command Nexus.` });
   ev.push({ phase: "bombardment", side: "attacker", emoji: "💥", text: `Orbital laser batteries rain fire on ${defName}'s defensive platforms.` });
   ev.push({ phase: "turrets", side: "defender", emoji: "🛡️", text: `${defName}'s auto-turrets return fire, shredding attacker screens.` });
   if (atkShare > 0.5) ev.push({ phase: "breach", side: "attacker", emoji: "👾", text: `${atkName}'s alien assault marines breach the station corridors.` });

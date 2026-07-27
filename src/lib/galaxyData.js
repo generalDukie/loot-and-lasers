@@ -63,7 +63,7 @@ export const GALAXY_SECTORS = [
     color: "#EF4444",
     planets: [
       { name: "VX-9", type: "Dying Star", icon: "⭐", description: "A star moments from supernova. Exotic matter awaits." },
-      { name: "The Black Gate", type: "Singularity", icon: "🕳️", description: "An ancient megastructure orbiting a black hole." },
+      { name: "The Void Gate", type: "Singularity", icon: "🕳️", description: "An ancient megastructure orbiting a black hole." },
       { name: "World Zero", type: "Origin World", icon: "💫", description: "The first planet. Or so the legends say." },
     ],
   },

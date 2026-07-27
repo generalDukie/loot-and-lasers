@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { api } from "@/api/gameClient";
 import { ALIEN_SPECIES, ARTIFACTS, RELICS } from "@/lib/collectibles";
 import { DUNGEON_PLANETS } from "@/lib/dungeonData";
-import { RARITY_COLORS } from "@/lib/gameData";
+import { GEAR_CATALOG, RARITY_COLORS } from "@/lib/gameData";
 import { getCollectionStats } from "@/lib/collectionBonus";
 import SpeciesAvatar from "@/components/game/SpeciesAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Dna, Award, Scroll, Gem, Lock, Swords, Maximize2 } from "lucide-react";
+import { Dna, Award, Scroll, Gem, Swords, Maximize2 } from "lucide-react";
 
 const GEAR_EMOJI = { weapon: "⚔️", armor: "🛡️", helmet: "⛑️", boots: "🥾", legs: "🦵", neck: "📿", accessory: "💍", ship_module: "🚀", material: "📦", consumable: "🧪" };
 
@@ -42,22 +41,16 @@ function ProgressRow({ discovered, total, color = "hsl(var(--primary))" }) {
 
 export default function CollectiblesLog({ character }) {
   const [tab, setTab] = useState("species");
-  const [gearCatalog, setGearCatalog] = useState([]);
   const [open, setOpen] = useState(false);
   const species = character.discovered_species || [];
   const arts = character.collected_artifacts || [];
   const relics = character.collected_relics || [];
   const discoveredGear = character.discovered_gear || [];
   const clearedPlanets = Math.max(0, (character.dungeon_planet || 1) - 1);
+  const gearCatalog = GEAR_CATALOG;
 
-  useEffect(() => {
-    api.entities.Item.list(null, 250)
-      .then(setGearCatalog)
-      .catch(() => {});
-  }, []);
-
-  const gearDiscovered = gearCatalog.filter((g) => discoveredGear.includes(g.id)).length;
-  const totalStats = getCollectionStats(character, gearCatalog.length);
+  const gearDiscovered = discoveredGear.filter((id) => gearCatalog.some((g) => g.id === id)).length;
+  const totalStats = getCollectionStats(character);
 
   const tabCount = (key) =>
     key === "species" ? `${species.length}/${ALIEN_SPECIES.length}`
@@ -188,12 +181,12 @@ export default function CollectiblesLog({ character }) {
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                 {gearCatalog.map((it) => {
                   const found = discoveredGear.includes(it.id);
-                  const color = RARITY_COLORS[it.rarity] || "#9CA3AF";
+                  const color = "#22D3EE";
                   return (
                     <div key={it.id} className={`rounded-lg border p-2 flex flex-col items-center text-center ${found ? "bg-card/40" : "border-dashed border-border/20 bg-muted/5"}`} style={found ? { borderColor: color + "55" } : {}}>
                       <span className="text-2xl" style={{ filter: found ? "none" : "grayscale(1) opacity(0.4)" }}>{found ? (GEAR_EMOJI[it.type] || "📦") : "🔒"}</span>
                       <p className="text-[9px] font-display font-bold mt-1 truncate w-full" style={{ color: found ? color : "#6b7280" }}>{found ? it.name : "???"}</p>
-                      <p className="text-[8px] capitalize" style={{ color: found ? color : "#6b7280" }}>{found ? `${it.rarity} · Lv${it.level_requirement || 1}` : "Unknown"}</p>
+                      <p className="text-[8px] capitalize" style={{ color: found ? color : "#6b7280" }}>{found ? it.type.replace("_", " ") : "Unknown"}</p>
                     </div>
                   );
                 })}

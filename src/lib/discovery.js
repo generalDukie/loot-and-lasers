@@ -2,6 +2,7 @@
 // DISCOVERY — species/artifacts/relics found in battle
 // ═══════════════════════════════════════════
 import { ALIEN_SPECIES, ARTIFACTS, RELICS } from "@/lib/collectibles";
+import { gearCatalogKey } from "@/lib/gameData";
 
 // Map an enemy to a stable species id (enemies carry speciesId directly when generated).
 export function speciesIdForEnemy(enemy) {
@@ -52,9 +53,15 @@ export function processDiscovery(character, { win, speciesId, gearItems }) {
 
   if (win && gearItems && gearItems.length) {
     const gearSet = new Set(character.discovered_gear || []);
-    const newItems = gearItems.filter((g) => g.id && !gearSet.has(g.id));
+    const newItems = [];
+    for (const g of gearItems) {
+      const key = gearCatalogKey(g);
+      if (key && !gearSet.has(key)) {
+        gearSet.add(key);
+        newItems.push(g);
+      }
+    }
     if (newItems.length) {
-      newItems.forEach((g) => gearSet.add(g.id));
       updates.discovered_gear = [...gearSet];
       newItems.forEach((g) => found.push({ kind: "gear", emoji: GEAR_TYPE_EMOJI[g.type] || "📦", name: g.name }));
     } else if (gearSet.size !== (character.discovered_gear || []).length) {

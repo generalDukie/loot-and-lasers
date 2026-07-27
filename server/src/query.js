@@ -1,4 +1,4 @@
-/** Mongo-style matchers used by the Base44 SDK frontend. */
+/** Mongo-style matchers used by the entity query API. */
 
 function getPath(obj, key) {
   if (!key.includes(".")) return obj?.[key];
@@ -17,6 +17,10 @@ function matchValue(actual, expected) {
     if ("$exists" in expected) return expected.$exists ? actual !== undefined && actual !== null : actual === undefined || actual === null;
     // Nested object equality fallback
     return Object.keys(expected).every((k) => matchValue(actual?.[k], expected[k]));
+  }
+  // Mongo: { tags: "a" } matches when tags is an array containing "a"
+  if (Array.isArray(actual) && (expected === null || typeof expected !== "object")) {
+    return actual.includes(expected);
   }
   return actual === expected;
 }

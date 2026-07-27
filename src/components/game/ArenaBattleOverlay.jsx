@@ -52,6 +52,9 @@ function HpBar({ name, hp, max, color, align, emoji }) {
   const pct = Math.max(0, Math.min(100, (hp / max) * 100));
   const low = pct > 0 && pct < 25;
   const barColor = low ? "#FB7185" : color;
+  // Player (left): remaining HP hugs the center (right edge) — damage eats from the outer left.
+  // Opponent (right): remaining HP hugs the center (left edge) — damage eats from the outer right.
+  const fromOutside = align === "right" ? "justify-start" : "justify-end";
   return (
     <div className={align === "right" ? "text-right" : ""}>
       <div className={`flex items-center gap-1.5 mb-1 ${align === "right" ? "justify-end" : ""}`}>
@@ -60,9 +63,11 @@ function HpBar({ name, hp, max, color, align, emoji }) {
         {align === "right" && <span className="text-base">{emoji}</span>}
       </div>
       <div className={`relative h-4 sm:h-5 rounded-full bg-black/50 border-2 overflow-hidden ${low ? "animate-pulse" : ""}`} style={{ borderColor: `${color}55`, boxShadow: `0 0 10px ${color}55, inset 0 1px 0 rgba(255,255,255,0.1)` }}>
-        <motion.div className={`absolute top-0 ${align === "right" ? "left-0" : "right-0"} h-full rounded-full overflow-hidden`} style={{ background: `linear-gradient(180deg, ${barColor}, ${barColor}aa)` }} animate={{ width: `${pct}%` }} transition={{ duration: 0.4 }}>
-          <div className="absolute inset-x-0 top-0 h-1/2" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.35), transparent)" }} />
-        </motion.div>
+        <div className={`absolute inset-0 flex ${fromOutside}`}>
+          <motion.div className="relative h-full rounded-full overflow-hidden" style={{ background: `linear-gradient(180deg, ${barColor}, ${barColor}aa)` }} animate={{ width: `${pct}%` }} transition={{ duration: 0.4 }}>
+            <div className="absolute inset-x-0 top-0 h-1/2" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.35), transparent)" }} />
+          </motion.div>
+        </div>
         {[25, 50, 75].map((t) => (
           <div key={t} className="absolute top-0 bottom-0 w-px bg-black/20" style={{ left: `${t}%` }} />
         ))}
@@ -93,7 +98,7 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
           </div>
         </motion.div>
 
-        <ArenaWeaponVisual className={entity.class} attacking={lunge} attackEvent={attackEvent} evIdx={evIdx} side={side} flip={flip} weaponItem={weaponItem} />
+        <ArenaWeaponVisual className={entity.class} attacking={lunge} attackEvent={attackEvent} evIdx={evIdx} side={side} weaponItem={weaponItem} />
 
         <AnimatePresence>
           {hurt && (

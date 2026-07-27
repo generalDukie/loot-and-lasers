@@ -4,8 +4,16 @@
  */
 import { appParams } from "@/lib/app-params";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8787";
-const TOKEN_KEYS = ["loot_access_token", "token", "base44_access_token"];
+/** Empty in production build = same-origin; dev defaults to local API. */
+const API_BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:8787" : "");
+
+function wsBaseUrl() {
+  if (API_BASE) return API_BASE.replace(/^http/, "ws");
+  const proto = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss:" : "ws:";
+  const host = typeof window !== "undefined" ? window.location.host : "localhost:8787";
+  return `${proto}//${host}`;
+}
+const TOKEN_KEYS = ["loot_access_token", "token"];
 
 function readToken() {
   if (appParams.token) return appParams.token;
@@ -20,7 +28,6 @@ function writeToken(token) {
   if (token) {
     localStorage.setItem("loot_access_token", token);
     localStorage.setItem("token", token);
-    localStorage.removeItem("base44_access_token");
     appParams.token = token;
   } else {
     for (const key of TOKEN_KEYS) localStorage.removeItem(key);
@@ -132,7 +139,7 @@ function createEntity(type) {
       );
     },
     subscribe(handler) {
-      const wsBase = API_BASE.replace(/^http/, "ws");
+      const wsBase = wsBaseUrl();
       const token = readToken() || "";
       const ws = new WebSocket(
         `${wsBase}/ws?entity=${encodeURIComponent(type)}&token=${encodeURIComponent(token)}`
@@ -205,6 +212,12 @@ const auth = {
   setToken(token) {
     writeToken(token);
   },
+  clearToken() {
+    writeToken(null);
+  },
+  async getPublicSettings() {
+    return request("/api/auth/public-settings", { auth: false });
+  },
   async updateMe(patch) {
     return request("/api/auth/me", { method: "PATCH", body: patch });
   },
@@ -240,6 +253,12 @@ const auth = {
   },
   async loginWithProvider(_provider, _redirectPath = "/") {
     throw new Error("Social login is not available. Use email and password.");
+  },
+  async getEmailLog(limit = 50) {
+    return request(`/api/auth/admin/email-log?limit=${limit}`);
+  },
+  async sendTestEmail() {
+    return request("/api/auth/admin/email-test", { method: "POST" });
   },
 };
 

@@ -2,9 +2,9 @@
 // DUNGEON PLANETS — 10-world PvE crawl
 // ═══════════════════════════════════════════
 export const DUNGEON_PLANETS = [
-  { id: 1, name: "Verdant Expanse", icon: "🌍", color: "#22C55E", description: "Lush frontier world. The local fauna has teeth. Consider it a warm-up.", bossName: "Tharon Hive-Mother", bossEmoji: "👾", shipMod: "Plasma Drive" },
+  { id: 1, name: "Verdant Expanse", icon: "🌍", color: "#22C55E", description: "Lush frontier world. The local fauna has teeth. Consider it a warm-up.", bossName: "Tharon Brood Matriarch", bossEmoji: "👾", shipMod: "Plasma Drive" },
   { id: 2, name: "Ashen Reach", icon: "🏚️", color: "#3B82F6", description: "War-scarred ruins crawling with scavengers and worse. Watch the rooftops.", bossName: "Warden of Ash", bossEmoji: "🔥", shipMod: "Warp Coil" },
-  { id: 3, name: "Shadow Veil", icon: "🏴‍☠️", color: "#A855F7", description: "A nebula-smuggler's paradise. Everyone here wants your stardust and your organs.", bossName: "Captain Vex", bossEmoji: "💀", shipMod: "Phase Shift" },
+  { id: 3, name: "Shadow Veil", icon: "🏴‍☠️", color: "#A855F7", description: "A nebula-smuggler's paradise. Everyone here wants your stardust and your organs.", bossName: "Captain Zyrik", bossEmoji: "💀", shipMod: "Phase Shift" },
   { id: 4, name: "Shattered Expanse", icon: "🌀", color: "#F59E0B", description: "Spacetime is more of a suggestion here. Reality bites back.", bossName: "The Riftlord", bossEmoji: "🌀", shipMod: "Singularity Engine" },
   { id: 5, name: "Abyssal Core", icon: "🕳️", color: "#EF4444", description: "Where stars go to die. Something down there is eating the light itself.", bossName: "Void Devourer", bossEmoji: "🕳️", shipMod: "Void Sail" },
   { id: 6, name: "Frostfall Reach", icon: "❄️", color: "#06B6D4", description: "A frozen hellscape where the cold has learned to hunt in packs.", bossName: "Glacial Warden", bossEmoji: "🧊", shipMod: "Cryo Thruster" },

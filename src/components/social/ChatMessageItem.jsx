@@ -1,6 +1,5 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Flag } from "lucide-react";
 
 function timeAgo(iso) {
   if (!iso) return "";

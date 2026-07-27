@@ -6,11 +6,11 @@ import { useToast } from "@/components/ui/use-toast";
 import {
   getMyCharacter, searchCharacters, getFriends, getIncomingRequests, getOutgoingRequests,
   getBlocks, getCharactersByIds, getPresenceMap, sendFriendRequest, acceptRequest,
-  declineRequest, removeFriend, blockPlayer, unblockPlayer, getCharacterById, reportPlayer,
+  declineRequest, removeFriend, blockPlayer, unblockPlayer, reportPlayer,
 } from "@/lib/socialEngine";
 import FriendRow from "@/components/social/FriendRow";
 import PublicProfileSheet from "@/components/social/PublicProfileSheet";
-import { Users, UserPlus, Ban, Search, Check, X as XIcon, Send, UserCircle } from "lucide-react";
+import { Users, UserPlus, Ban, Search, Check, X as XIcon, UserCircle } from "lucide-react";
 
 const TABS = [
   { key: "friends", label: "Friends", icon: Users },

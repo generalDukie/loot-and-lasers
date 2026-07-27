@@ -4,7 +4,6 @@ import { appParams } from '@/lib/app-params';
 import { setCurrentUserId, setCurrentUser } from '@/lib/currentUser';
 
 const AuthContext = createContext();
-const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -24,16 +23,10 @@ export const AuthProvider = ({ children }) => {
       setIsLoadingPublicSettings(true);
       setAuthError(null);
 
-      const appId = appParams.appId || 'lootandlasers-local';
-      const res = await fetch(
-        `${API_BASE}/api/apps/public/prod/public-settings/by-id/${appId}`,
-        { headers: { 'X-App-Id': appId } }
-      );
-      if (!res.ok) throw new Error(`Public settings failed (${res.status})`);
-      const publicSettings = await res.json();
+      const publicSettings = await api.auth.getPublicSettings();
       setAppPublicSettings(publicSettings);
 
-      if (appParams.token || localStorage.getItem('loot_access_token') || localStorage.getItem('token') || localStorage.getItem('base44_access_token')) {
+      if (appParams.token || localStorage.getItem('loot_access_token') || localStorage.getItem('token')) {
         await checkUserAuth();
       } else {
         setIsLoadingAuth(false);
@@ -65,10 +58,14 @@ export const AuthProvider = ({ children }) => {
       setAuthChecked(true);
     } catch (error) {
       console.error('User auth check failed:', error);
+      setUser(null);
+      setCurrentUser(null);
+      setCurrentUserId(null);
       setIsLoadingAuth(false);
       setIsAuthenticated(false);
       setAuthChecked(true);
       if (error.status === 401 || error.status === 403) {
+        api.auth.clearToken();
         setAuthError({
           type: 'auth_required',
           message: 'Authentication required',

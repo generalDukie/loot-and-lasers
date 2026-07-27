@@ -6,10 +6,21 @@ import { authMiddleware, createAuthRouter, requireAuth, APP_ID, getUserById } fr
 import { entities } from "./entities.js";
 import { FUNCTION_HANDLERS } from "./functions/index.js";
 import { addSubscriber } from "./realtime.js";
+import { attachStaticApp, resolveStaticDir } from "./static.js";
 import "./db.js";
 
 const PORT = Number(process.env.PORT || 8787);
+const IS_PROD = process.env.NODE_ENV === "production";
 const app = express();
+
+if (process.env.TRUST_PROXY === "true") {
+  app.set("trust proxy", 1);
+}
+
+if (IS_PROD && (!process.env.JWT_SECRET || process.env.JWT_SECRET === "lootandlasers-dev-secret-change-me")) {
+  console.error("[fatal] Set JWT_SECRET to a strong random value in production.");
+  process.exit(1);
+}
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
@@ -21,18 +32,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/auth", createAuthRouter(express));
 
-// AuthContext public settings path (Base44-compatible)
-app.get("/api/apps/public/prod/public-settings/by-id/:appId", (_req, res) => {
-  res.json({
-    id: APP_ID,
-    public_settings: {
-      auth_required: true,
-      app_name: "Loot & Lasers",
-    },
-  });
-});
-
-// ── Entity CRUD (Base44-compatible surface) ──────────────────
+// ── Entity CRUD ──────────────────────────────────────────────
 function getStore(type) {
   return entities[type] || null;
 }
@@ -177,17 +177,7 @@ app.post("/api/functions/:name", requireAuth, async (req, res) => {
   }
 });
 
-// Alias used by some SDK versions
-app.post("/api/apps/:appId/functions/:name", requireAuth, async (req, res) => {
-  try {
-    const handler = FUNCTION_HANDLERS[req.params.name];
-    if (!handler) return res.status(404).json({ error: "Unknown function" });
-    const result = await handler(req.user, req.body || {});
-    res.status(result.status || 200).json(result.body);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+const servingStatic = attachStaticApp(app);
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws" });
@@ -203,4 +193,5 @@ wss.on("connection", (ws, req) => {
 server.listen(PORT, () => {
   console.log(`Loot & Lasers API listening on http://localhost:${PORT}`);
   console.log(`WebSocket: ws://localhost:${PORT}/ws`);
+  if (servingStatic) console.log(`Serving client from ${resolveStaticDir()}`);
 });

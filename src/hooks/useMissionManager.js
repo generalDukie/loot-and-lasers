@@ -17,6 +17,7 @@ import {
   getModEffectTotal,
   getEarlyXpMultiplier,
   randomConsumable,
+  GEAR_CATALOG_TOTAL,
 } from "@/lib/gameData";
 import { contributeMission, getGuildMembership } from "@/lib/guildUtils";
 import { processDiscovery } from "@/lib/discovery";
@@ -33,7 +34,7 @@ import confetti from "canvas-confetti";
 // Computes the actual stardust/XP a mission will grant, including ship-mod
 // bonuses, the early-game catch-up multiplier, and the Nexus owner perk.
 // Used both for the on-card reward preview and at claim time so they match.
-export function computeMissionGains(character, mission, nexusBonus, gearTotal) {
+export function computeMissionGains(character, mission, nexusBonus, gearTotal = GEAR_CATALOG_TOTAL) {
   const rewards = mission?.rewards || {};
   const bonusMult = nexusBonus ? 1.05 : 1;
   const stardustMult = 1 + getModEffectTotal(character, "mission_stardust_mult");
@@ -77,7 +78,6 @@ export function useMissionManager() {
   const [claiming, setClaiming] = useState(false);
   const [completeSummary, setCompleteSummary] = useState(null);
   const [nexusBonus, setNexusBonus] = useState(false);
-  const [gearTotal, setGearTotal] = useState(0);
   const claimingRef = useRef(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -121,7 +121,6 @@ export function useMissionManager() {
       }
       setNexusBonus(bonus);
     } catch (e) {}
-    try { setGearTotal((await api.entities.Item.list(null, 500)).length); } catch (e) {}
   }, [navigate]);
 
   useEffect(() => { load(); }, [load]);
@@ -141,7 +140,7 @@ export function useMissionManager() {
         setTimeout(() => confetti({ particleCount: 50, spread: 110, origin: { y: 0.4 } }), 400);
         toast({
           title: "🎉 MISSION COMPLETE!",
-          description: `${activeMission.name} — return to the cantina to claim your rewards!`,
+          description: `${activeMission.name} — return to the Crew Lounge to claim your rewards!`,
         });
         clearInterval(interval);
       }
@@ -209,7 +208,7 @@ export function useMissionManager() {
     setClaiming(true);
     try {
       const rewards = activeMission.rewards;
-      const { stardustGain, xpGain, collectionPct } = computeMissionGains(character, activeMission, nexusBonus, gearTotal);
+      const { stardustGain, xpGain, collectionPct } = computeMissionGains(character, activeMission, nexusBonus);
       let newExp = (character.experience || 0) + xpGain;
       let newLevel = character.level;
       let expToNext = character.experience_to_next_level;
@@ -320,7 +319,7 @@ export function useMissionManager() {
       claimingRef.current = false;
       setClaiming(false);
     }
-  }, [activeMission, character, nexusBonus, gearTotal]);
+  }, [activeMission, character, nexusBonus]);
 
   const handleSkip = useCallback(async () => {
     if (!activeMission || activeMission.status !== "in_progress") return;
@@ -360,7 +359,7 @@ export function useMissionManager() {
 
   // Derived view values
   const skipCost = activeMission ? skipCostFor(activeMission, now) : 0;
-  const gains = activeMission && character ? computeMissionGains(character, activeMission, nexusBonus, gearTotal) : null;
+  const gains = activeMission && character ? computeMissionGains(character, activeMission, nexusBonus) : null;
   const currentFuel = character ? (character.fuel ?? FUEL_MAX) : FUEL_MAX;
   const cantAffordAny = character && dailyMissions.length > 0 && dailyMissions.every((m) => currentFuel < getEffectiveFuelCost(character, m));
   const cantinaMissions = character && (!activeMission && cantAffordAny && currentFuel >= 0.5)

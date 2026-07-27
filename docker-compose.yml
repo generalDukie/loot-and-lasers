@@ -1,0 +1,28 @@
+services:
+  lootandlasers:
+    build: .
+    ports:
+      - "${PORT:-8787}:8787"
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      APP_ID: ${APP_ID:-lootandlasers-local}
+      SEED_EMAIL: ${SEED_EMAIL:-admin@loot.local}
+      SEED_PASSWORD: ${SEED_PASSWORD:-changeme}
+      RUN_SEED: ${RUN_SEED:-true}
+      TRUST_PROXY: "true"
+      # Used for password reset + verification links
+      PUBLIC_CLIENT_URL: ${PUBLIC_CLIENT_URL:-http://localhost:8787}
+      # SMTP (optional). If unset, OTP/reset flows fall back to dev console codes.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes:
+      - lootandlasers-data:/app/server/data
+    restart: unless-stopped
+
+volumes:
+  lootandlasers-data:

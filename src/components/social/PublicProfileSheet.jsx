@@ -10,14 +10,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { getGuildMembership, invitePlayerToGuild } from "@/lib/guildUtils";
 import { sendFriendRequest, getFriends, getOutgoingRequests } from "@/lib/socialEngine";
 
-function rankLabel(rating = 1000) {
-  if (rating >= 2200) return "Galactic Elite";
-  if (rating >= 1800) return "Star Marshal";
-  if (rating >= 1500) return "Void Knight";
-  if (rating >= 1200) return "Rookie Hunter";
-  return "Cadet";
-}
-
 export default function PublicProfileSheet({ target, myChar, onClose, onMessage, onBlock, onReport, friendStatus = "none" }) {
   const [guildTag, setGuildTag] = useState("");
   const [presence, setPresence] = useState(null);
@@ -173,9 +165,9 @@ export default function PublicProfileSheet({ target, myChar, onClose, onMessage,
         </div>
 
         <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-          <Mini label="Arena Rank" value={rankLabel(target.arena_rating)} />
           <Mini label="Rating" value={target.arena_rating || 1000} />
           <Mini label="Wins" value={target.arena_wins || 0} />
+          <Mini label="Losses" value={target.arena_losses || 0} />
         </div>
 
         <div className="mt-3">

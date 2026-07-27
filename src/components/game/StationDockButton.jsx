@@ -29,11 +29,9 @@ export default function StationDockButton({
       onMouseLeave={() => setOpen(false)}
     >
       <Link to={primary.to} className="group block focus:outline-none h-full">
-        <motion.div
-          whileHover={{ y: -3 }}
-          whileTap={{ scale: 0.97 }}
-          className={`relative h-full rounded-xl overflow-hidden border backdrop-blur-md transition-colors ${
-            featured ? "border-2 py-2.5 sm:py-3 px-1.5" : "border py-2 sm:py-2.5 px-1"
+        <div
+          className={`relative h-full rounded-xl overflow-hidden border backdrop-blur-md transition-transform duration-150 group-hover:-translate-y-0.5 group-active:scale-[0.98] ${
+            featured ? "border-2" : "border"
           }`}
           style={{
             borderColor: featured ? color : `${color}66`,
@@ -41,6 +39,9 @@ export default function StationDockButton({
             boxShadow: featured
               ? `0 4px 18px hsl(232 40% 2% / 0.55), 0 0 16px ${color}33`
               : `0 3px 12px hsl(232 40% 2% / 0.45), 0 0 8px ${color}18`,
+            padding: featured
+              ? "clamp(0.55rem, 0.9vw, 0.9rem) clamp(0.35rem, 0.6vw, 0.6rem)"
+              : "clamp(0.45rem, 0.75vw, 0.75rem) clamp(0.25rem, 0.5vw, 0.5rem)",
           }}
         >
           <div
@@ -49,49 +50,56 @@ export default function StationDockButton({
           />
           <div className="relative flex flex-col items-center justify-center gap-1 text-center">
             <span
-              className={`leading-none ${featured ? "text-xl sm:text-2xl" : "text-lg sm:text-xl"}`}
-              style={{ filter: `drop-shadow(0 0 6px ${color}55)` }}
+              className="leading-none"
+              style={{
+                fontSize: featured ? "clamp(1.25rem, 2vw, 1.85rem)" : "clamp(1.1rem, 1.7vw, 1.6rem)",
+                filter: `drop-shadow(0 0 6px ${color}55)`,
+              }}
             >
               {icon}
             </span>
             <p
-              className={`font-display font-bold tracking-wide leading-tight line-clamp-2 ${
-                featured ? "text-[10px] sm:text-xs" : "text-[9px] sm:text-[10px]"
-              }`}
-              style={{ color }}
+              className="font-display font-bold tracking-wide leading-tight line-clamp-2"
+              style={{
+                color,
+                fontSize: featured ? "clamp(0.65rem, 1vw, 0.9rem)" : "clamp(0.58rem, 0.9vw, 0.8rem)",
+              }}
             >
               {label}
             </p>
           </div>
-        </motion.div>
+        </div>
       </Link>
 
       <AnimatePresence>
         {open && isSplit && (
-          <motion.div
-            initial={{ opacity: 0, y: 6, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.96 }}
-            transition={{ duration: 0.14 }}
-            className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-[min(100%,11rem)] min-w-[8.5rem] rounded-lg overflow-hidden border backdrop-blur-md bg-background/95 shadow-xl"
-            style={{ borderColor: `${color}44` }}
-          >
-            {destinations.map((opt) => (
-              <Link
-                key={opt.to}
-                to={opt.to}
-                className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted/60 transition-colors"
-              >
-                <span className="text-sm leading-none">{opt.icon}</span>
-                <span
-                  className="font-display font-semibold text-[11px] tracking-wide"
-                  style={{ color: opt.color || color }}
+          // Positioning wrapper keeps centering; motion must not own translateX.
+          <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-full max-w-[11rem] min-w-[8.5rem]">
+            <motion.div
+              initial={{ opacity: 0, y: 6, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.96 }}
+              transition={{ duration: 0.14 }}
+              className="rounded-lg overflow-hidden border backdrop-blur-md bg-background/95 shadow-xl"
+              style={{ borderColor: `${color}44` }}
+            >
+              {destinations.map((opt) => (
+                <Link
+                  key={opt.to}
+                  to={opt.to}
+                  className="flex items-center justify-center gap-2 px-2.5 py-1.5 hover:bg-muted/60 transition-colors"
                 >
-                  {opt.label}
-                </span>
-              </Link>
-            ))}
-          </motion.div>
+                  <span className="text-sm leading-none">{opt.icon}</span>
+                  <span
+                    className="font-display font-semibold text-[11px] tracking-wide"
+                    style={{ color: opt.color || color }}
+                  >
+                    {opt.label}
+                  </span>
+                </Link>
+              ))}
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </motion.div>

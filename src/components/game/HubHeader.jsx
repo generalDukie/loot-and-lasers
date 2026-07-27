@@ -5,33 +5,47 @@ import { Mail, Users, Settings, MessageSquare, CornerUpLeft } from "lucide-react
 import CharacterNavMenu from "@/components/game/CharacterNavMenu";
 import GameClock from "@/components/game/GameClock";
 import SiteTitle from "@/components/admin/SiteTitle";
+import StationAmbientToggle from "@/components/game/StationAmbientToggle";
 import { useUnreadMailCount } from "@/hooks/useUnreadMailCount";
 
-// Shared station header — left nav, centered brand, right actions.
-// Layout is flex/absolute-center only (no drag offsets) so it scales cleanly.
+// Shared station header — 3-column grid so left / brand / right scale across
+// resolutions (including ultrawide) without crushing the center.
 export default function HubHeader({ character, onOpenChat, rightExtras }) {
   const unreadMail = useUnreadMailCount(character?.id);
   return (
-    <header className="sticky top-0 z-50 bg-background/80 border-b border-border/30 backdrop-blur-sm">
-      <div className="relative flex items-center justify-between gap-2 px-3 py-2 max-w-[1920px] mx-auto w-full">
-        <div className="min-w-0 shrink">
+    <header className="sticky top-0 z-50 bg-background/80 border-b border-border/30 backdrop-blur-sm shrink-0">
+      <div
+        className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3 w-full"
+        style={{
+          padding: "clamp(0.4rem, 0.7vw, 0.85rem) clamp(0.75rem, 1.8vw, 2rem)",
+        }}
+      >
+        <div className="min-w-0 justify-self-start">
           <CharacterNavMenu character={character} large />
         </div>
 
-        {/* Center brand */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
+        {/* Center brand — ambience sits above the title */}
+        <div className="justify-self-center flex flex-col items-center gap-1 px-1">
+          <div className="pointer-events-auto">
+            <StationAmbientToggle compact />
+          </div>
           <Link to="/" className="pointer-events-auto focus:outline-none flex flex-col items-center leading-none relative">
             <SiteTitle
               as="h1"
-              className="font-display font-black text-lg sm:text-2xl md:text-3xl tracking-wider bg-gradient-to-r from-orange-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap"
+              className="font-display font-black tracking-wider bg-gradient-to-r from-orange-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap"
+              style={{ fontSize: "clamp(1.05rem, 2.1vw, 2.15rem)" }}
             />
             <motion.div
               animate={{ rotate: [-38, -26, -38], scale: [1, 1.12, 1] }}
               transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute -right-8 sm:-right-10 top-0 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] flex flex-col items-center origin-top-right pointer-events-none"
+              className="absolute top-0 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.45)] flex flex-col items-center origin-top-right pointer-events-none"
+              style={{ right: "clamp(-2.4rem, -2.2vw, -1.6rem)" }}
             >
-              <CornerUpLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="text-[7px] sm:text-[9px] font-display tracking-[0.2em] uppercase mt-0.5 whitespace-nowrap hidden xs:inline sm:inline text-white">
+              <CornerUpLeft style={{ width: "clamp(0.85rem, 1.1vw, 1.15rem)", height: "clamp(0.85rem, 1.1vw, 1.15rem)" }} />
+              <span
+                className="font-display tracking-[0.2em] uppercase mt-0.5 whitespace-nowrap text-white"
+                style={{ fontSize: "clamp(0.45rem, 0.65vw, 0.6rem)" }}
+              >
                 Hub
               </span>
             </motion.div>
@@ -39,32 +53,62 @@ export default function HubHeader({ character, onOpenChat, rightExtras }) {
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div
+          className="justify-self-end flex items-center shrink-0"
+          style={{ gap: "clamp(0.25rem, 0.6vw, 0.6rem)" }}
+        >
           <div className="hidden md:block mr-1">
             <GameClock />
           </div>
           {rightExtras}
-          <Link to="/mail" className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors" title="Mail">
-            <Mail className="w-4 h-4" />
+          <HeaderIconLink to="/mail" title="Mail">
+            <Mail className="w-[1em] h-[1em]" />
             {unreadMail > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
                 {unreadMail}
               </span>
             )}
-          </Link>
+          </HeaderIconLink>
           {onOpenChat && (
-            <button onClick={onOpenChat} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors" title="Global Chat">
-              <MessageSquare className="w-4 h-4" />
-            </button>
+            <HeaderIconButton onClick={onOpenChat} title="Global Chat">
+              <MessageSquare className="w-[1em] h-[1em]" />
+            </HeaderIconButton>
           )}
-          <Link to="/friends" className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors" title="Friends">
-            <Users className="w-4 h-4" />
-          </Link>
-          <Link to="/settings" className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors" title="Settings">
-            <Settings className="w-4 h-4" />
-          </Link>
+          <HeaderIconLink to="/friends" title="Friends">
+            <Users className="w-[1em] h-[1em]" />
+          </HeaderIconLink>
+          <HeaderIconLink to="/settings" title="Settings">
+            <Settings className="w-[1em] h-[1em]" />
+          </HeaderIconLink>
         </div>
       </div>
     </header>
+  );
+}
+
+function HeaderIconLink({ to, title, children }) {
+  return (
+    <Link
+      to={to}
+      title={title}
+      className="relative rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex items-center justify-center"
+      style={{ padding: "clamp(0.4rem, 0.55vw, 0.6rem)", fontSize: "clamp(0.95rem, 1.15vw, 1.2rem)" }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function HeaderIconButton({ onClick, title, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="relative rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex items-center justify-center"
+      style={{ padding: "clamp(0.4rem, 0.55vw, 0.6rem)", fontSize: "clamp(0.95rem, 1.15vw, 1.2rem)" }}
+    >
+      {children}
+    </button>
   );
 }

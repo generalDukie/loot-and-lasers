@@ -1,9 +1,7 @@
 import React, { useState } from "react";
-import StationAmbientToggle from "@/components/game/StationAmbientToggle";
 import HubHeader from "@/components/game/HubHeader";
 import StationSplitButton from "@/components/game/StationSplitButton";
 import StationDockButton from "@/components/game/StationDockButton";
-import CommandHubMedallion from "@/components/game/CommandHubMedallion";
 import { useAuth } from "@/lib/AuthContext";
 import { useHubLayout } from "@/hooks/useHubLayout";
 import { useSiteConfig } from "@/lib/SiteConfigContext";
@@ -15,10 +13,10 @@ import GameCanvas from "@/components/game/GameCanvas";
 const STATION_IMG = "/assets/station-hub.png";
 
 const DOCK_ORDER = [
-  "cantina",
+  "hero_ship",
   "galactic_frontier",
   "arena",
-  "hero_ship",
+  "cantina",
   "bazaar",
   "social",
 ];
@@ -34,7 +32,7 @@ function renderDockButton(id, overrides, delay) {
       color={c.color}
       options={c.options}
       delay={delay}
-      featured={id === "hero_ship"}
+      featured={id === "cantina"}
     />
   );
 }
@@ -55,8 +53,6 @@ export default function SpaceStationHub({ character, children }) {
   const stationImg = theme?.station_background || STATION_IMG;
   const [editorOpen, setEditorOpen] = useState(false);
 
-  const commandDef = mergeBuiltin(getBuiltin("command_hub"), builtinOverrides.command_hub);
-
   return (
     <GameCanvas>
       {/* Full-screen station background */}
@@ -75,7 +71,12 @@ export default function SpaceStationHub({ character, children }) {
 
         <div className="relative z-10 flex-1 min-h-0 overflow-hidden flex flex-col">
           <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
-            <div className="mx-auto h-full w-full max-w-[1600px] px-3 sm:px-5 lg:px-8 pt-3 sm:pt-4 lg:pt-6 pb-3 sm:pb-4 flex flex-col gap-3 lg:gap-4 min-h-0">
+            <div
+              className="mx-auto h-full w-full flex flex-col gap-3 lg:gap-4 min-h-0"
+              style={{
+                padding: "clamp(0.65rem, 1.2vw, 1.5rem) clamp(0.75rem, 2vw, 2.5rem) clamp(0.65rem, 1vw, 1.1rem)",
+              }}
+            >
               {/* Open station art */}
               <div className="flex-1 min-h-[6rem]" aria-hidden />
 
@@ -90,18 +91,11 @@ export default function SpaceStationHub({ character, children }) {
                 </div>
               )}
 
-              {/* Command hub — centered, just above the destination dock */}
-              <div className="shrink-0 flex justify-center">
-                <CommandHubMedallion
-                  icon={commandDef.icon}
-                  color={commandDef.color}
-                  to={commandDef.options[0]?.to}
-                  delay={0.1}
-                />
-              </div>
-
-              {/* Bottom dock — compact tiles, one unbroken row, Crew Quarters center */}
-              <nav className="shrink-0 w-full flex flex-nowrap items-stretch gap-1.5 sm:gap-2 lg:gap-3">
+              {/* Bottom dock — equal flex tiles span the full stage width */}
+              <nav
+                className="shrink-0 w-full flex flex-nowrap items-stretch"
+                style={{ gap: "clamp(0.35rem, 0.8vw, 0.85rem)" }}
+              >
                 {DOCK_ORDER.map((id, i) => renderDockButton(id, builtinOverrides, 0.05 + i * 0.04))}
               </nav>
 
@@ -115,10 +109,6 @@ export default function SpaceStationHub({ character, children }) {
               )}
             </div>
           </div>
-
-          <div className="hidden lg:block absolute bottom-4 left-4 z-20 rounded-lg bg-background/85 border border-border/50 overflow-hidden">
-            <StationAmbientToggle />
-          </div>
         </div>
       </div>
 
@@ -130,7 +120,7 @@ export default function SpaceStationHub({ character, children }) {
           onAdd={addCustomButton}
           onUpdate={updateCustomButton}
           onRemove={removeCustomButton}
-          builtinButtons={BUILTIN_BUTTONS}
+          builtinButtons={BUILTIN_BUTTONS.filter((b) => b.id !== "command_hub")}
           builtinOverrides={builtinOverrides}
           onUpdateBuiltin={updateBuiltin}
           onResetBuiltin={resetBuiltin}

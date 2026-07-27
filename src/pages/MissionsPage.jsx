@@ -110,7 +110,7 @@ export default function MissionsPage() {
       {/* Cantina — quest-giving patrons */}
       <div>
         <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide mb-3">
-          {activeMission ? "THE CREW LOUNGE" : "THE CREW LOUNGE"}
+          {activeMission ? "THE CANTINA" : "THE CANTINA"}
         </h2>
         <MissionCantina
           missions={cantinaMissions}

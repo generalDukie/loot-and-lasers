@@ -1,6 +1,6 @@
 // Per-user station hub display preference (stored locally).
 // Scale modes:
-//   "auto"           — fit the whole design on screen (may letterbox)
+//   "auto"           — fit the design on standard screens; fill viewport on ultrawide
 //   "cover"          — fill the screen (may crop edges)
 //   "fill-width"     — scale to viewport width (may clip top/bottom)
 //   "contain-height" — scale to viewport height (may letterbox sides)

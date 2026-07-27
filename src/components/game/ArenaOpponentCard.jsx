@@ -2,7 +2,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { Swords, Zap, Trophy, Clock, User } from "lucide-react";
-import { avatarPropsFor, getDivision } from "@/lib/arenaEngine";
+import { avatarPropsFor } from "@/lib/arenaEngine";
 
 function lastOnline(mins) {
   if (mins < 60) return `${mins}m ago`;
@@ -12,7 +12,6 @@ function lastOnline(mins) {
 }
 
 export default function ArenaOpponentCard({ opponent, onChallenge, cooldownActive, skipCost, disabled }) {
-  const div = getDivision(opponent.arena_rating);
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -31,7 +30,9 @@ export default function ArenaOpponentCard({ opponent, onChallenge, cooldownActiv
 
       <div className="flex items-center gap-2 text-[11px] mt-1">
         <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-display font-bold">Lv {opponent.level}</span>
-        <span className="text-amber-300 font-display font-bold">{div.label}</span>
+        <span className="text-amber-300 font-display font-bold flex items-center gap-1">
+          <Trophy className="w-2.5 h-2.5" /> {opponent.arena_rating}
+        </span>
       </div>
       {opponent.guild && <p className="text-[10px] text-accent mt-0.5">{opponent.guild}</p>}
 

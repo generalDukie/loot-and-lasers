@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Rocket, Compass, Swords, Sparkles, ChevronRight } from "lucide-react";
 
 const TIPS = [
-  { icon: Compass, color: "#22D3EE", title: "Explore the Station", body: "Your hub is the map — tap any glowing module to travel. Crew Lounge for quests, Crew Quarters for your character, Ship Dock for upgrades." },
-  { icon: Rocket, color: "#FF9E4F", title: "Run Missions", body: "Visit the Crew Lounge, launch a quest using fuel, then claim it when the timer ends for XP, stardust, and loot." },
+  { icon: Compass, color: "#22D3EE", title: "Explore the Station", body: "Your hub is the map — tap any glowing module to travel. Cantina for quests, Hero / Ship for your character and vessel." },
+  { icon: Rocket, color: "#FF9E4F", title: "Run Missions", body: "Visit the Cantina, launch a quest using fuel, then claim it when the timer ends for XP, stardust, and loot." },
   { icon: Sparkles, color: "#C084FC", title: "Gear Up & Allocate", body: "Equip loot on your Character page and spend stat points each level to shape your build and raise combat power." },
   { icon: Swords, color: "#FF4D6D", title: "Test Your Might", body: "Jump into the Arena for automated PvP, or brave the Galaxy Dungeon for riskier rewards." },
 ];

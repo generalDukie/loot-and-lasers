@@ -1,4 +1,4 @@
-import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode } from "../shared/rewards.js";
+import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel } from "../shared/rewards.js";
 import { ACHIEVEMENTS, evaluateUnlocked } from "../shared/achievements.js";
 import { createService, entities } from "../entities.js";
 import { db, nowIso } from "../db.js";
@@ -592,6 +592,26 @@ export async function AdminModeration(user, body) {
     if (deltas.arena_attempts) {
       patch.arena_attempts_left = Math.max(0, (ch.arena_attempts_left || 0) + deltas.arena_attempts);
       patch.arena_attempts_date = todayET();
+    }
+    if (deltas.experience) {
+      let newExp = (ch.experience || 0) + deltas.experience;
+      let newLevel = ch.level || 1;
+      let expToNext = ch.experience_to_next_level || expForLevel(newLevel);
+      let statPoints = 0;
+      if (deltas.experience > 0) {
+        while (newExp >= expToNext) {
+          newExp -= expToNext;
+          newLevel++;
+          statPoints += 4;
+          expToNext = expForLevel(newLevel);
+        }
+      } else {
+        newExp = Math.max(0, newExp);
+      }
+      patch.experience = newExp;
+      patch.level = newLevel;
+      patch.experience_to_next_level = expToNext;
+      if (statPoints > 0) patch.unspent_stat_points = (ch.unspent_stat_points || 0) + statPoints;
     }
     const updated = entities.Character.update(character_id, patch);
     return { status: 200, body: { success: true, character: updated } };

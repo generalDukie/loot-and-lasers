@@ -27,15 +27,6 @@ const BOT_GUILDS = [
   "Drift Cartel", "Star Wraiths",
 ];
 
-const DIVISIONS = [
-  { name: "Bronze", min: 0 },
-  { name: "Silver", min: 1100 },
-  { name: "Gold", min: 1300 },
-  { name: "Platinum", min: 1550 },
-  { name: "Galactic", min: 1850 },
-  { name: "Legendary", min: 2200 },
-];
-
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 // The canonical class special name (from CLASSES[class].special.name) is the
@@ -57,18 +48,6 @@ export function avatarPropsFor(e) {
     eyebrows: e.eyebrows || e.appearance?.eyebrows,
     marking: e.marking || e.appearance?.marking,
   };
-}
-
-export function getDivision(rating) {
-  let idx = 0;
-  for (let i = 0; i < DIVISIONS.length; i++) if (rating >= DIVISIONS[i].min) idx = i;
-  const cur = DIVISIONS[idx];
-  const ceil = idx < DIVISIONS.length - 1 ? DIVISIONS[idx + 1].min : cur.min + 400;
-  const band = Math.max(1, ceil - cur.min);
-  const within = rating - cur.min;
-  const tierIdx = 3 - Math.min(3, Math.floor((within / band) * 4));
-  const tiers = ["IV", "III", "II", "I"];
-  return { name: cur.name, tier: tiers[tierIdx], label: `${cur.name} ${tiers[tierIdx]}` };
 }
 
 export function getSeason() {
@@ -186,8 +165,7 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
     const raceKey = pick(Object.keys(RACES));
     const classKey = pick(Object.keys(CLASSES));
     const level = Math.max(1, myLevel + Math.floor(Math.random() * 7) - 3);
-    // Opponent rating stays tightly within the player's rank bracket (±40)
-    // so challengers always face someone in the same or adjacent division tier.
+    // Opponent rating stays near the player's (±40) so fights stay competitive.
     const rating = Math.max(0, myRating + Math.floor(Math.random() * 80) - 40);
     const stats = botStats(level, CLASSES[classKey]);
     const w = getClassWeights(classKey);

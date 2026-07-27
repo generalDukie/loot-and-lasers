@@ -5,6 +5,7 @@ const FIELDS = [
   { key: "stardust", label: "Stardust", icon: "✨" },
   { key: "nova_crystals", label: "Nova Crystals", icon: "💎" },
   { key: "fuel", label: "Fuel", icon: "⛽" },
+  { key: "experience", label: "Experience", icon: "⭐" },
 ];
 
 export default function CurrencyAdjustForm({ character, onAction, onDone }) {

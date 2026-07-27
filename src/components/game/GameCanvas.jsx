@@ -41,9 +41,16 @@ export default function GameCanvas({ children, className = "" }) {
         height = vh;
         width = vh * RATIO;
       } else if (mode === "auto") {
-        const s = Math.min(vw / DESIGN_W, vh / DESIGN_H);
-        width = DESIGN_W * s;
-        height = DESIGN_H * s;
+        // Wider-than-16:9 (ultrawide): fill the viewport so UI reflows instead of letterboxing.
+        // Standard / taller screens: fit the design ratio as before.
+        if (vw / vh > RATIO * 1.02) {
+          width = vw;
+          height = vh;
+        } else {
+          const s = Math.min(vw / DESIGN_W, vh / DESIGN_H);
+          width = DESIGN_W * s;
+          height = DESIGN_H * s;
+        }
       } else {
         const s = Number(mode) || Math.min(vw / DESIGN_W, vh / DESIGN_H);
         width = DESIGN_W * s;

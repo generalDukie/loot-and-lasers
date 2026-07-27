@@ -140,7 +140,7 @@ export function useMissionManager() {
         setTimeout(() => confetti({ particleCount: 50, spread: 110, origin: { y: 0.4 } }), 400);
         toast({
           title: "🎉 MISSION COMPLETE!",
-          description: `${activeMission.name} — return to the Crew Lounge to claim your rewards!`,
+          description: `${activeMission.name} — return to the Cantina to claim your rewards!`,
         });
         clearInterval(interval);
       }

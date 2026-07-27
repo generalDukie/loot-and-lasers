@@ -9,8 +9,8 @@ export default function GrantItemTab({ onAction }) {
   const [selected, setSelected] = useState(null);
   const [searching, setSearching] = useState(false);
 
-  // currency deltas
-  const [deltas, setDeltas] = useState({ stardust: 0, nova_crystals: 0, fuel: 0, arena_attempts: 0 });
+  // currency / xp deltas
+  const [deltas, setDeltas] = useState({ stardust: 0, nova_crystals: 0, fuel: 0, arena_attempts: 0, experience: 0 });
 
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
@@ -30,7 +30,7 @@ export default function GrantItemTab({ onAction }) {
     const clean = Object.fromEntries(Object.entries(deltas).filter(([, v]) => v && v !== 0));
     if (!Object.keys(clean).length) return;
     await onAction({ action: "adjust_currency", character_id: selected.id, deltas: clean });
-    setDeltas({ stardust: 0, nova_crystals: 0, fuel: 0, arena_attempts: 0 });
+    setDeltas({ stardust: 0, nova_crystals: 0, fuel: 0, arena_attempts: 0, experience: 0 });
   }
 
   return (
@@ -95,16 +95,17 @@ export default function GrantItemTab({ onAction }) {
           <div className="painted-panel canvas-grain p-3 space-y-3">
             <div className="flex items-center gap-2">
               <Coins className="w-4 h-4 text-amber-400" />
-              <h2 className="font-display font-semibold text-sm">Grant Currency</h2>
+              <h2 className="font-display font-semibold text-sm">Grant Currency / XP</h2>
             </div>
             <div className="grid grid-cols-1 gap-2">
               <CurrencyRow icon="✨" color="text-cyan-400" label="Stardust" value={deltas.stardust} onChange={(v) => setDeltas({ ...deltas, stardust: v })} />
               <CurrencyRow icon={Gem} color="text-purple-400" label="Nova Crystals" value={deltas.nova_crystals} onChange={(v) => setDeltas({ ...deltas, nova_crystals: v })} />
               <CurrencyRow icon={Fuel} color="text-orange-400" label="Fuel" value={deltas.fuel} onChange={(v) => setDeltas({ ...deltas, fuel: v })} />
               <CurrencyRow icon={Swords} color="text-rose-400" label="Arena Attempts" value={deltas.arena_attempts} onChange={(v) => setDeltas({ ...deltas, arena_attempts: v })} />
+              <CurrencyRow icon="⭐" color="text-amber-300" label="Experience" value={deltas.experience} onChange={(v) => setDeltas({ ...deltas, experience: v })} />
             </div>
             <button onClick={grantCurrency} className="w-full painted-btn painted-btn-accent text-sm py-2 rounded-lg flex items-center justify-center gap-1.5">
-              <Send className="w-3.5 h-3.5" /> Grant Currency
+              <Send className="w-3.5 h-3.5" /> Grant
             </button>
           </div>
         </>

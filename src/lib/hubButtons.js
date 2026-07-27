@@ -4,7 +4,7 @@ export const BUILTIN_BUTTONS = [
   {
     id: "cantina",
     type: "split",
-    label: "Crew Lounge",
+    label: "Cantina",
     icon: "🍺",
     color: "#FF9E4F",
     desc: "Accept missions & bounties",
@@ -16,7 +16,7 @@ export const BUILTIN_BUTTONS = [
   {
     id: "hero_ship",
     type: "split",
-    label: "Crew Quarters",
+    label: "Hero / Ship",
     icon: "🛋️",
     color: "#5CFFB0",
     desc: "Your hero & vessel",

@@ -14,12 +14,11 @@ import {
   ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST, ARENA_REFRESH_MS, ARENA_REFRESH_COST,
   ARENA_BATTLE_COOLDOWN_MS, ARENA_SKIP_COST,
   computePower, generateOpponents, characterToOpponent, simulateBattle, computeRewards,
-  getDivision,
 } from "@/lib/arenaEngine";
 import ArenaOpponentCard from "@/components/game/ArenaOpponentCard";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import ArenaNewsFeed from "@/components/game/ArenaNewsFeed";
-import { Swords, Trophy, Zap, RefreshCw, Flame, Shield, Crown, Clock } from "lucide-react";
+import { Swords, Trophy, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
 
 // Resolve an opponent's equipped gear to full item records — real opponents
 // carry `equippedItems` directly; bots only carry `equippedItemIds` that must be
@@ -171,8 +170,6 @@ export default function ArenaPage() {
 
     const prevRating = character.arena_rating || 1000;
     const newRating = Math.max(0, prevRating + rewards.arena_rating_delta);
-    const prevDiv = getDivision(prevRating).label;
-    const newDiv = getDivision(newRating).label;
     const prevStreak = character.arena_streak || 0;
     const newStreak = rewards.won ? prevStreak + 1 : 0;
     const newMaxStreak = Math.max(character.arena_max_streak || 0, newStreak);
@@ -217,9 +214,6 @@ export default function ArenaPage() {
       character_name: pname,
       character_id: character.id,
     });
-    if (rewards.won && newDiv !== prevDiv) {
-      void api.entities.GalaxyNews.create({ message: `👑 ${pname} has been promoted to ${newDiv}.`, entry_type: "rankup", character_name: pname, character_id: character.id });
-    }
     if (rewards.won && [5, 10, 15, 20].includes(newStreak)) {
       void api.entities.GalaxyNews.create({ message: `🔥 ${pname} is on a ${newStreak}-match win streak!`, entry_type: "streak", character_name: pname, character_id: character.id });
     }
@@ -260,7 +254,6 @@ export default function ArenaPage() {
   }
 
   const power = computePower(character, equippedItems);
-  const division = getDivision(character.arena_rating || 0);
   const wins = character.arena_wins || 0;
   const losses = character.arena_losses || 0;
   const streak = character.arena_streak || 0;
@@ -284,9 +277,8 @@ export default function ArenaPage() {
           <Swords className="w-5 h-5 text-primary" /> Battle Arena
         </h1>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           <Stat icon={Trophy} label="Rating" value={character.arena_rating || 0} color="#FFD700" />
-          <Stat icon={Crown} label="Rank" value={division.label} color="#A855F7" />
           <Stat icon={Zap} label="Power" value={power} color="#22D3EE" />
           <Stat icon={Swords} label="W / L" value={`${wins} / ${losses}`} color="#60A5FA" />
           <Stat icon={Flame} label="Streak" value={streak} color="#FB7185" />

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, BookOpen, Coins, Rocket, Swords, Map as MapIcon, Orbit, Ship, Crown, Users,
-  Fuel, Trophy, Mail,
+  Fuel, Mail,
 } from "lucide-react";
 
 const SECTIONS = [
@@ -30,7 +30,7 @@ function renderSection(id) {
           <p>Welcome to <span className="text-primary font-display font-bold">LOOT & LASERS</span>, operative. You command a space station drifting through the cosmos. Here's how to get going:</p>
           <H>Your First Steps</H>
           <ul className="space-y-1.5">
-            <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Crew Lounge</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" /> fuel.</Li>
+            <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Cantina</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" /> fuel.</Li>
             <Li>When a mission finishes, <b>claim</b> it for XP, stardust, and random loot. Level up to unlock harder sectors.</Li>
             <Li>Equip better gear on your <b>Character</b> page to raise your combat power.</Li>
             <Li>Spend <b>stat points</b> each level to shape your build.</Li>
@@ -38,7 +38,7 @@ function renderSection(id) {
             <Li>Toss unwanted gear into the <b>Black Hole</b> to reclaim stardust.</Li>
           </ul>
           <H>Where things live</H>
-          <p>The <b>station hub</b> on the home screen is your map — tap any glowing module to travel there. The <span className="text-amber-400">Crew Lounge</span> gives quests, the <b>Nav Deck</b> is the dungeon, <b>Crew Quarters</b> is your character, and the <b>Ship Dock</b> holds your upgrades.</p>
+          <p>The <b>station hub</b> on the home screen is your map — tap any glowing module to travel there. The <span className="text-amber-400">Cantina</span> gives quests, the <b>Nav Deck</b> is the dungeon, <b>Hero / Ship</b> is your character and vessel.</p>
           <p className="text-xs text-muted-foreground italic">Tip: this guide lives in <b>Settings → Codex</b> whenever you need a refresher.</p>
         </div>
       );
@@ -49,8 +49,6 @@ function renderSection(id) {
           <p>The primary currency. Earned from missions, arena, dungeons, daily rewards, and dissolving gear in the Black Hole. Spent in the Shop, on ship mods, to refresh the arena, and to buy extra arena attempts.</p>
           <H>💎 Nova Crystals</H>
           <p>Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission wait times and buy extra arena attempts.</p>
-          <H><Trophy className="w-3 h-3 inline" /> Arena Tokens</H>
-          <p>Earned from arena battles regardless of outcome. Spendable on arena rewards.</p>
           <H><Fuel className="w-3 h-3 inline" /> Fuel</H>
           <p>Your mission energy. Each mission costs fuel based on its length and reward tier. You get a pool of 100 that <b>resets to full every 24 hours</b>. Need more sooner? Spend <b>Nova Crystals</b> to buy +20 fuel, up to 5 times per cycle.</p>
         </div>
@@ -58,7 +56,7 @@ function renderSection(id) {
     case "missions":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>Missions are your steady engine for XP, stardust, and loot. Visit the <span className="text-amber-400">Crew Lounge</span> to browse quests.</p>
+          <p>Missions are your steady engine for XP, stardust, and loot. Visit the <span className="text-amber-400">Cantina</span> to browse quests.</p>
           <H>How a mission works</H>
           <ul className="space-y-1.5">
             <Li>Each quest shows its <b>risk</b>, <b>duration</b>, and <b>fuel cost</b>. Higher risk = bigger rewards but longer waits.</Li>
@@ -76,14 +74,14 @@ function renderSection(id) {
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
           <p>The <b>Arena</b> is automated PvP — your stats and gear fight an opponent in a simulated battle. You get <b>5 attempts per day</b>.</p>
-          <H>Rating &amp; divisions</H>
+          <H>Rating</H>
           <ul className="space-y-1.5">
-            <Li>Winning raises your <b>rating</b>; losing lowers it. Rating decides your division (Bronze → Legendary).</Li>
-            <Li>Beating higher-rated opponents gives bonus rating and tokens.</Li>
+            <Li>Winning raises your <b>rating</b>; losing lowers it. Climb the leaderboard by rating alone.</Li>
+            <Li>Beating higher-rated opponents gives bonus rating.</Li>
             <Li>Chain wins for a <b>streak</b> — hit milestones for news feed glory.</Li>
           </ul>
           <H>Rewards</H>
-          <p>Every battle earns XP, stardust, and arena tokens. Wins give more. Out of attempts? Buy extras with stardust or Nova Crystals.</p>
+          <p>Free battles earn XP and stardust (wins give more). After your free quota, battles cost Nova Crystals and award rating only.</p>
           <H>Power</H>
           <p>Your combat power comes from level + attributes + equipped gear rarity. Upgrade gear and allocate stats to climb the ladder.</p>
         </div>

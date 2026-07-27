@@ -5,7 +5,6 @@ import { Mail, Users, Settings, MessageSquare, CornerUpLeft } from "lucide-react
 import CharacterNavMenu from "@/components/game/CharacterNavMenu";
 import GameClock from "@/components/game/GameClock";
 import SiteTitle from "@/components/admin/SiteTitle";
-import StationAmbientToggle from "@/components/game/StationAmbientToggle";
 import { useUnreadMailCount } from "@/hooks/useUnreadMailCount";
 
 // Shared station header — 3-column grid so left / brand / right scale across
@@ -24,11 +23,8 @@ export default function HubHeader({ character, onOpenChat, rightExtras }) {
           <CharacterNavMenu character={character} large />
         </div>
 
-        {/* Center brand — ambience sits above the title */}
-        <div className="justify-self-center flex flex-col items-center gap-1 px-1">
-          <div className="pointer-events-auto">
-            <StationAmbientToggle compact />
-          </div>
+        {/* Center brand */}
+        <div className="justify-self-center flex flex-col items-center px-1">
           <Link to="/" className="pointer-events-auto focus:outline-none flex flex-col items-center leading-none relative">
             <SiteTitle
               as="h1"

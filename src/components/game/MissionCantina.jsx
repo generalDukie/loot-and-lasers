@@ -56,11 +56,8 @@ export default function MissionCantina({ missions, characterLevel, character, cu
   const n = missions.length;
 
   return (
-    <div
-      className="relative w-full rounded-2xl overflow-hidden border border-border/60 shadow-2xl painted-panel painted-frame canvas-grain"
-      style={{ aspectRatio: "16/9", minHeight: 300 }}
-    >
-      <img src={CANTINA_BG} alt="Station crew lounge" className="absolute inset-0 w-full h-full object-cover" />
+    <div className="relative h-full w-full min-h-0 rounded-2xl overflow-hidden border border-border/60 shadow-2xl painted-panel painted-frame canvas-grain">
+      <img src={CANTINA_BG} alt="Station crew lounge" className="absolute inset-0 w-full h-full object-cover object-center" />
       <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/15 to-background/45" />
       <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse 75% 60% at 50% 40%, transparent 40%, hsl(232 32% 4% / 0.35) 100%)" }} />
 
@@ -104,60 +101,91 @@ export default function MissionCantina({ missions, characterLevel, character, cu
         const fuelCost = getEffectiveFuelCost(character, m);
         const locked = m.level_requirement > characterLevel;
         const lowFuel = (currentFuel ?? 0) < fuelCost;
-        const cannotStart = locked || lowFuel || busy;
         const scouting = busy && !locked && !lowFuel; // open for preview, launch blocked
+        const available = !locked && !lowFuel;
         const diffColor = DIFFICULTY_COLORS[m.difficulty];
 
         return (
           <button
             key={i}
-            className="absolute bottom-[10%] -translate-x-1/2 flex flex-col items-center group focus:outline-none"
+            className="absolute bottom-[6%] -translate-x-1/2 flex flex-col items-center group focus:outline-none disabled:cursor-not-allowed"
             style={{ left: `${x}%` }}
             onMouseEnter={() => setHovered(i)}
             onMouseLeave={() => setHovered(null)}
             onClick={() => !locked && !lowFuel && setSelected(i)}
             disabled={locked || lowFuel}
           >
-            {/* Quest marker / lock */}
+            {/* Avatar with glow ring */}
             <motion.div
               animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut", delay: i * 0.18 }}
-              className="mb-1"
-            >
-              {locked && (
-                <span className="text-muted-foreground/70 text-base">
-                  <Lock className="w-4 h-4" />
-                </span>
-              )}
-            </motion.div>
-
-            {/* Avatar */}
-            <motion.div
-              animate={{ y: [0, -5, 0], rotate: [-2, 2, -2] }}
               transition={{ duration: 2.2 + i * 0.3, repeat: Infinity, ease: "easeInOut" }}
-              whileHover={locked || lowFuel ? {} : { scale: 1.12 }}
+              whileHover={available ? { scale: 1.1, y: -10 } : {}}
+              whileTap={available ? { scale: 0.96 } : {}}
               className="relative"
             >
+              {available && (
+                <motion.span
+                  className="absolute -inset-3 rounded-[1.35rem] border-2 pointer-events-none"
+                  style={{ borderColor: `${patron.color}88` }}
+                  animate={{ scale: [1, 1.12, 1], opacity: [0.75, 0.2, 0.75] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
+                />
+              )}
               <div
-                className="w-14 h-11 sm:w-[68px] sm:h-14 rounded-full flex items-center justify-center text-2xl sm:text-3xl border-4 shadow-lg"
+                className="relative w-[5.5rem] h-[4.75rem] sm:w-28 sm:h-24 rounded-2xl flex items-center justify-center text-5xl sm:text-6xl border-[3px] transition-transform"
                 style={{
                   borderColor: locked ? "#555" : patron.color,
-                  background: "rgba(10,12,20,0.65)",
-                  filter: locked ? "grayscale(1)" : lowFuel ? "saturate(0.4)" : "none",
-                  boxShadow: locked || lowFuel ? "none" : `0 0 12px ${patron.color}55`,
+                  background: locked
+                    ? "rgba(10,12,20,0.75)"
+                    : `linear-gradient(160deg, ${patron.color}33, rgba(10,12,20,0.85) 55%)`,
+                  filter: locked ? "grayscale(1)" : lowFuel ? "saturate(0.45)" : "none",
+                  boxShadow: available
+                    ? `0 10px 28px rgba(0,0,0,0.45), 0 0 28px ${patron.color}66, inset 0 1px 0 ${patron.color}44`
+                    : "0 4px 12px rgba(0,0,0,0.35)",
                 }}
               >
-                {patron.emoji}
+                <motion.span
+                  animate={available ? { rotate: [-4, 4, -4] } : undefined}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  {patron.emoji}
+                </motion.span>
+                {locked && (
+                  <span className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded-full bg-background/90 border border-border/50 text-muted-foreground">
+                    <Lock className="w-3.5 h-3.5" />
+                  </span>
+                )}
               </div>
             </motion.div>
 
-            {/* Name plate */}
-            <span
-              className="mt-1 text-[9px] sm:text-[10px] font-display font-bold px-2 py-0.5 rounded truncate max-w-[78px] bg-background/80 border border-border/40 canvas-grain"
-              style={{ color: locked ? "#777" : patron.color }}
-            >
-              {patron.name}
-            </span>
+            {/* Name + reward teaser */}
+            <div className="mt-2 flex flex-col items-center gap-1">
+              <span
+                className="text-xs sm:text-sm font-display font-bold px-3 py-1 rounded-md truncate max-w-[7.5rem] sm:max-w-[9rem] bg-background/90 border canvas-grain shadow-md"
+                style={{
+                  color: locked ? "#777" : patron.color,
+                  borderColor: available ? `${patron.color}66` : "hsl(var(--border) / 0.4)",
+                  boxShadow: available ? `0 0 12px ${patron.color}33` : undefined,
+                }}
+              >
+                {patron.name}
+              </span>
+              {available && (
+                <span className="text-[10px] sm:text-[11px] font-display font-bold px-2.5 py-0.5 rounded-full bg-background/85 border border-amber-400/40 text-amber-300 flex items-center gap-1 shadow">
+                  <Star className="w-3 h-3 text-cyan-400" />
+                  {m.rewards?.experience}
+                  <span className="text-purple-300">✨{m.rewards?.stardust}</span>
+                </span>
+              )}
+              {available && (
+                <span
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-display font-bold tracking-wide uppercase mt-0.5"
+                  style={{ color: patron.color, textShadow: `0 0 8px ${patron.color}` }}
+                >
+                  Hear the job →
+                </span>
+              )}
+            </div>
 
             {/* Hover speech bubble */}
             <AnimatePresence>
@@ -167,7 +195,8 @@ export default function MissionCantina({ missions, characterLevel, character, cu
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.92 }}
                   transition={{ duration: 0.16 }}
-                  className="absolute bottom-full mb-3 w-48 p-3 rounded-xl backdrop-blur-md shadow-xl z-20 painted-panel"
+                  className="absolute bottom-full mb-3 w-52 p-3 rounded-xl backdrop-blur-md shadow-2xl z-20 painted-panel border"
+                  style={{ borderColor: `${patron.color}55`, boxShadow: `0 12px 32px rgba(0,0,0,0.5), 0 0 20px ${patron.color}33` }}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <h4 className="font-display font-semibold text-xs text-foreground leading-tight">{m.name}</h4>
@@ -196,6 +225,11 @@ export default function MissionCantina({ missions, characterLevel, character, cu
                   )}
                   {scouting && (
                     <p className="text-[10px] text-cyan-300 mt-1.5">🔭 Scouting — finish {mining ? "mining" : "mission"} to launch</p>
+                  )}
+                  {available && !scouting && (
+                    <p className="text-[10px] mt-2 font-display font-bold text-center" style={{ color: patron.color }}>
+                      Click to take the job
+                    </p>
                   )}
                 </motion.div>
               )}

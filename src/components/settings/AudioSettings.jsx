@@ -35,7 +35,7 @@ export default function AudioSettings() {
         <Row icon={Zap} label="SFX Volume" value={vols.sfx} onChange={(v) => setVolumes({ sfx: v })} />
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Cantina &amp; station ambience play automatically. Adjust levels to taste.
+        Station theme (Donovan McNab chant) and cantina music play automatically. Adjust levels to taste.
       </p>
     </div>
   );

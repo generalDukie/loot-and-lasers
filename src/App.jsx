@@ -125,7 +125,7 @@ function App() {
         <QueryClientProvider client={queryClientInstance}>
           <Router>
             <ScrollToTop />
-            <SpaceBackground />
+            <SpaceBackground fixed />
             <AuthenticatedApp />
           </Router>
           <Toaster />

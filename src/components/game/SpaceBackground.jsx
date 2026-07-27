@@ -12,20 +12,25 @@ const SHOOTERS = [
 ];
 
 /**
- * Background artwork rendered INSIDE the fixed 1920×1080 game canvas (not at the
- * viewport level). Fills the canvas absolutely (inset 0, 100% × 100%) so the
- * artwork scales as one unit with every HUD element — no independent cropping
- * or repositioning across aspect ratios.
+ * Animated starfield + nebula. Fills its positioned parent; nebula blobs use
+ * fixed pixel ellipses (not %-of-box) so ultrawide canvases scale/crop instead
+ * of stretching the backdrop.
  */
-export default function SpaceBackground() {
+export default function SpaceBackground({ className = "", fixed = false }) {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div
+      className={`${fixed ? "fixed inset-0 -z-10" : "absolute inset-0"} overflow-hidden pointer-events-none ${className}`}
+    >
       <div className="absolute inset-0 nebula-bg" />
       <div className="absolute inset-0 stars-layer" />
       <div className="absolute inset-0 stars-layer-2" />
       <div className="absolute inset-0 shooting-stars">
         {SHOOTERS.map((s, i) => (
-          <span key={i} className="shooting-star" style={{ top: s.top, animationDuration: `${s.dur}s`, animationDelay: `${s.delay}s` }} />
+          <span
+            key={i}
+            className="shooting-star"
+            style={{ top: s.top, animationDuration: `${s.dur}s`, animationDelay: `${s.delay}s` }}
+          />
         ))}
       </div>
     </div>

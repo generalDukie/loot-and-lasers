@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import HubHeader from "@/components/game/HubHeader";
 import StationSplitButton from "@/components/game/StationSplitButton";
 import StationDockButton from "@/components/game/StationDockButton";
+import SpaceBackground from "@/components/game/SpaceBackground";
 import { useAuth } from "@/lib/AuthContext";
 import { useHubLayout } from "@/hooks/useHubLayout";
 import { useSiteConfig } from "@/lib/SiteConfigContext";
@@ -9,6 +10,7 @@ import HubAdminTools from "@/components/game/HubAdminTools";
 import HubButtonEditor from "@/components/game/HubButtonEditor";
 import { BUILTIN_BUTTONS, getBuiltin, mergeBuiltin, BTN_SIZE_W } from "@/lib/hubButtons";
 import GameCanvas from "@/components/game/GameCanvas";
+import { startStationAmbient, stopStationAmbient } from "@/lib/stationAmbient";
 
 const STATION_IMG = "/assets/station-hub.png";
 
@@ -53,11 +55,22 @@ export default function SpaceStationHub({ character, children }) {
   const stationImg = theme?.station_background || STATION_IMG;
   const [editorOpen, setEditorOpen] = useState(false);
 
+  useEffect(() => {
+    startStationAmbient();
+    return () => stopStationAmbient();
+  }, []);
+
   return (
     <GameCanvas>
-      {/* Full-screen station background */}
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${stationImg})` }} />
+      {/* Starfall + station art — cover-scale (never stretch) on ultrawide */}
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <SpaceBackground />
+        <img
+          src={stationImg}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none"
+          draggable={false}
+        />
         <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/25 to-background/80" />
         <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse 70% 55% at 50% 45%, transparent 35%, hsl(232 32% 4% / 0.45) 100%)" }} />
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background/50 to-transparent pointer-events-none" />

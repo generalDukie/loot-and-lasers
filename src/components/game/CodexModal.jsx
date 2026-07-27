@@ -62,7 +62,7 @@ function renderSection(id) {
             <Li>Each quest shows its <b>risk</b>, <b>duration</b>, and <b>fuel cost</b>. Higher risk = bigger rewards but longer waits.</Li>
             <Li>Launch it — fuel is consumed and a timer starts. You can keep playing while it runs.</Li>
             <Li>When the timer ends, the mission is ready to <b>claim</b>. Claiming grants XP, stardust, a loot drop, and sometimes a collectible.</Li>
-            <Li>Impatient? Spend <b>Nova Crystals</b> to skip the remaining wait.</Li>
+            <Li>Impatient? Spend <b>Nova Crystals</b> to skip — cost scales with time left (5 💎 per remaining minute).</Li>
           </ul>
           <H>Fuel &amp; reset</H>
           <p>Your fuel pool refills to full every <b>24 hours</b>. You can spend <b>Nova Crystals</b> to buy +20 fuel, up to 5 times per cycle. Upgrade your <b>Reinforced Fuel Tank</b> for more capacity and <b>Fuel Injector Tune</b> to cut per-mission costs.</p>

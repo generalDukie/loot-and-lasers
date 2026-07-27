@@ -49,13 +49,18 @@ export function computeMissionGains(character, mission, nexusBonus, gearTotal = 
   };
 }
 
-// Skip cost scales with REMAINING mission time, not total — so skipping with a
-// minute left is cheap, while skipping at launch costs the full duration's worth.
+// Skip cost scales with REMAINING mission time — skipping near the end is cheap,
+// skipping at launch costs the full duration's worth (5 💎 per minute remaining).
+export const SKIP_CRYSTALS_PER_MINUTE = 5;
+
 export function skipCostFor(mission, nowMs = Date.now()) {
   if (!mission || !mission.end_time) return 0;
   const remainingMs = Math.max(0, new Date(mission.end_time).getTime() - nowMs);
-  const remainingMinutes = Math.ceil(remainingMs / 60000);
-  return Math.max(1, remainingMinutes * 5); // 5 💎 per remaining minute
+  if (remainingMs <= 0) return 0;
+  // Use fractional minutes so cost ticks down during short missions too
+  // (ceil-to-whole-minute first made sub-minute waits look like a flat fee).
+  const remainingMinutes = remainingMs / 60000;
+  return Math.max(1, Math.ceil(remainingMinutes * SKIP_CRYSTALS_PER_MINUTE));
 }
 
 function formatTime(s) {
@@ -324,6 +329,7 @@ export function useMissionManager() {
   const handleSkip = useCallback(async () => {
     if (!activeMission || activeMission.status !== "in_progress") return;
     const cost = skipCostFor(activeMission);
+    if (cost <= 0) return;
     if ((character.nova_crystals || 0) < cost) {
       toast({ title: "Not enough Nova Crystals", description: `Skip costs ${cost} 💎 — you have ${character.nova_crystals || 0}.`, variant: "destructive" });
       return;

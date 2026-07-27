@@ -11,7 +11,6 @@ import { Map, Rocket, Fuel, Shuffle } from "lucide-react";
 export default function MissionsPage() {
   const {
     character,
-    dailyMissions,
     activeMission,
     launchAnim,
     loading,
@@ -33,34 +32,34 @@ export default function MissionsPage() {
 
   if (loading || !character) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex-1 flex items-center justify-center py-20">
         <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
       {launchAnim && <MissionLaunchOverlay mission={launchAnim} onDone={() => setLaunchAnim(null)} />}
       {completeSummary && <MissionCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />}
 
-      <div className="flex items-center justify-between">
+      <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between">
         <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
           <Map className="w-5 h-5 text-primary" /> Missions
+          {activeMission && (
+            <span className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-medium font-body normal-case tracking-normal">
+              <Rocket className="w-3 h-3 inline mr-1" /> On Mission
+            </span>
+          )}
         </h1>
-        {activeMission && (
-          <span className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-medium">
-            <Rocket className="w-3 h-3 inline mr-1" /> On Mission
-          </span>
-        )}
-        <CantinaMusicToggle />
-        <button
-          onClick={shuffleMissions}
-          className="text-xs bg-accent/10 text-accent px-3 py-1 rounded-full font-medium flex items-center gap-1 hover:bg-accent/20 transition-colors"
-        >
-          <Shuffle className="w-3 h-3" /> Shuffle
-        </button>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <CantinaMusicToggle />
+          <button
+            onClick={shuffleMissions}
+            className="text-xs bg-accent/10 text-accent px-3 py-1 rounded-full font-medium flex items-center gap-1 hover:bg-accent/20 transition-colors"
+          >
+            <Shuffle className="w-3 h-3" /> Shuffle
+          </button>
           <span className="text-xs bg-amber-500/10 text-amber-400 px-3 py-1 rounded-full font-medium flex items-center gap-1">
             <Fuel className="w-3 h-3" /> {character.fuel ?? FUEL_MAX}/{character.max_fuel || FUEL_MAX}
           </span>
@@ -75,22 +74,20 @@ export default function MissionsPage() {
         </div>
       </div>
 
-      {/* Mining occupation notice */}
       {character.mining_end_time && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+        <div className="shrink-0 flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5">
           <span className="text-xl">⛏️</span>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <p className="font-display font-bold text-sm text-amber-300">Ship Deployed — Mining</p>
-            <p className="text-xs text-muted-foreground">Your ship is busy mining a stardust node. Missions are unavailable until you finish or cancel mining.</p>
+            <p className="text-xs text-muted-foreground truncate">Missions unavailable until mining finishes or is cancelled.</p>
           </div>
           <button onClick={() => navigate("/space-mining")} className="text-xs font-display font-semibold text-amber-300 hover:text-amber-200 whitespace-nowrap">View →</button>
         </div>
       )}
 
-      {/* Active Mission */}
       {activeMission && (
-        <div>
-          <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide mb-2">ACTIVE MISSION</h2>
+        <div className="shrink-0 max-h-[38%] overflow-y-auto">
+          <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide mb-1.5">ACTIVE MISSION</h2>
           <MissionCard
             mission={activeMission}
             isActive={activeMission.status === "in_progress"}
@@ -107,20 +104,21 @@ export default function MissionsPage() {
         </div>
       )}
 
-      {/* Cantina — quest-giving patrons */}
-      <div>
-        <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide mb-3">
-          {activeMission ? "THE CANTINA" : "THE CANTINA"}
+      <div className="flex-1 min-h-0 flex flex-col">
+        <h2 className="shrink-0 text-xs font-display font-semibold text-muted-foreground tracking-wide mb-1.5">
+          THE CANTINA
         </h2>
-        <MissionCantina
-          missions={cantinaMissions}
-          characterLevel={character.level}
-          character={character}
-          currentFuel={currentFuel}
-          onStart={handleStart}
-          busy={!!activeMission || !!character.mining_end_time}
-          mining={!!character.mining_end_time && !activeMission}
-        />
+        <div className="flex-1 min-h-0">
+          <MissionCantina
+            missions={cantinaMissions}
+            characterLevel={character.level}
+            character={character}
+            currentFuel={currentFuel}
+            onStart={handleStart}
+            busy={!!activeMission || !!character.mining_end_time}
+            mining={!!character.mining_end_time && !activeMission}
+          />
+        </div>
       </div>
     </div>
   );

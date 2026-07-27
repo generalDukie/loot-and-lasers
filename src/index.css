@@ -181,17 +181,20 @@
     radial-gradient(ellipse 50% 35% at 0% 80%, hsl(285 45% 12% / 0.2), transparent 50%);
 }
 
-/* Nebula layer — soft drifting cosmic clouds, less blotchy */
+/* Nebula layer — soft drifting cosmic clouds.
+   Ellipse sizes are in px (not % of the box) so ultrawide canvases don't
+   horizontally stretch the clouds; they stay circular/elliptical and the
+   layer simply reveals more of the field. */
 .nebula-bg {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 50% at 15% 18%, hsl(285 55% 32% / 0.22), transparent 62%),
-    radial-gradient(ellipse 65% 45% at 85% 22%, hsl(195 75% 36% / 0.18), transparent 64%),
-    radial-gradient(ellipse 70% 55% at 48% 88%, hsl(320 50% 28% / 0.16), transparent 65%),
-    radial-gradient(ellipse 50% 40% at 92% 70%, hsl(255 50% 30% / 0.12), transparent 60%),
-    radial-gradient(ellipse 45% 35% at 6% 72%, hsl(210 60% 32% / 0.12), transparent 58%);
+    radial-gradient(ellipse 720px 420px at 15% 18%, hsl(285 55% 32% / 0.22), transparent 62%),
+    radial-gradient(ellipse 640px 400px at 85% 22%, hsl(195 75% 36% / 0.18), transparent 64%),
+    radial-gradient(ellipse 780px 480px at 48% 88%, hsl(320 50% 28% / 0.16), transparent 65%),
+    radial-gradient(ellipse 560px 360px at 92% 70%, hsl(255 50% 30% / 0.12), transparent 60%),
+    radial-gradient(ellipse 520px 340px at 6% 72%, hsl(210 60% 32% / 0.12), transparent 58%);
   filter: blur(0.5px);
   animation: nebula-drift 90s ease-in-out infinite alternate;
 }
@@ -263,10 +266,13 @@
   filter: drop-shadow(0 0 3px rgba(180,220,255,0.45));
   opacity: 0;
   animation: shoot 11s linear infinite;
+  transform: rotate(16deg);
+  transform-origin: left center;
 }
+/* Animate left across the parent so streaks scale with the canvas on ultrawide. */
 @keyframes shoot {
-  0%   { transform: translate(0, 0) rotate(16deg); opacity: 0; }
+  0%   { left: -160px; opacity: 0; }
   6%   { opacity: 0.85; }
   55%  { opacity: 0.7; }
-  100% { transform: translate(120vw, 36vh) rotate(16deg); opacity: 0; }
+  100% { left: calc(100% + 160px); opacity: 0; }
 }

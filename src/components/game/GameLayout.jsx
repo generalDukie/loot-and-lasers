@@ -70,7 +70,7 @@ export default function GameLayout() {
         <SpaceBackground />
         <div className="relative z-10 h-full w-full flex flex-col">
           <TopBar character={character} onOpenChat={() => setChatOpen(true)} />
-          <main className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 pb-4">
+          <main className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 pb-4 flex flex-col">
             <PageErrorBoundary key={location.pathname}>
               <AnimatedPage>
                 <Outlet />

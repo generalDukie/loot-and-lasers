@@ -298,7 +298,7 @@ export default function GalaxyMapPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
       </div>
     );
@@ -309,7 +309,7 @@ export default function GalaxyMapPage() {
   const displayEnemy = patrol ? 1 : crawlEnemyIndex;
 
   return (
-    <div className="space-y-5">
+    <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
       {battleState && (
         <ArenaBattleOverlay
           player={character}
@@ -327,10 +327,16 @@ export default function GalaxyMapPage() {
         <CombatCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />
       )}
 
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
-          <Satellite className="w-5 h-5 text-primary" /> Galactic Frontier
-        </h1>
+      <div className="shrink-0 flex items-center justify-between flex-wrap gap-2">
+        <div className="min-w-0">
+          <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
+            <Satellite className="w-5 h-5 text-primary" /> Galactic Frontier
+          </h1>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Cooldown: {Math.round(DUNGEON_WIN_COOLDOWN_MS / 60000)}m wins · {Math.round(DUNGEON_LOSS_COOLDOWN_MS / 60000)}m losses
+            {inInfinite ? ` · Wormhole depth ${infiniteDepth}` : ""}
+          </p>
+        </div>
         <div className="flex items-center gap-4 text-xs">
           <span className="flex items-center gap-1.5" title="Free lives today (ET). After these, fights cost Nova Crystals.">
             {Array.from({ length: DUNGEON_DEATHS_PER_DAY }).map((_, i) => (
@@ -346,33 +352,35 @@ export default function GalaxyMapPage() {
         </div>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
-        Cooldown: {Math.round(DUNGEON_WIN_COOLDOWN_MS / 60000)}m after wins · {Math.round(DUNGEON_LOSS_COOLDOWN_MS / 60000)}m after losses
-        {inInfinite ? ` · Wormhole depth ${infiniteDepth}` : ""}
-      </p>
+      <div className="flex-1 min-h-0 flex flex-row gap-2 sm:gap-3 overflow-hidden">
+        <div className="flex-[1.85] min-w-0 min-h-0 flex flex-col overflow-hidden">
+          <DungeonMap
+            fill
+            planets={DUNGEON_PLANETS}
+            storyPlanetId={storyPlanetId}
+            inInfinite={inInfinite}
+            infiniteDepth={infiniteDepth}
+            selectedId={effectiveSelection}
+            onSelect={(id) => setSelectedPlanetId(id)}
+          />
+        </div>
 
-      <DungeonMap
-        planets={DUNGEON_PLANETS}
-        storyPlanetId={storyPlanetId}
-        inInfinite={inInfinite}
-        infiniteDepth={infiniteDepth}
-        selectedId={effectiveSelection}
-        onSelect={(id) => setSelectedPlanetId(id)}
-      />
-
-      <DungeonPlanetView
-        planet={planet}
-        currentEnemy={displayEnemy}
-        paidContinue={paidContinue}
-        continueCost={DUNGEON_CONTINUE_COST}
-        onFight={handleFight}
-        cooldownActive={cooldownActive}
-        cooldownRemaining={cooldownEnds - now}
-        cooldownSkipCost={DUNGEON_SKIP_COST}
-        onSkipCooldown={skipCooldown}
-        patrol={patrol}
-        onReturnToFront={() => setSelectedPlanetId(inInfinite ? WORMHOLE_ID : null)}
-      />
+        <div className="flex-1 min-w-0 min-h-0 max-w-[min(380px,38%)] flex flex-col overflow-hidden">
+          <DungeonPlanetView
+            planet={planet}
+            currentEnemy={displayEnemy}
+            paidContinue={paidContinue}
+            continueCost={DUNGEON_CONTINUE_COST}
+            onFight={handleFight}
+            cooldownActive={cooldownActive}
+            cooldownRemaining={cooldownEnds - now}
+            cooldownSkipCost={DUNGEON_SKIP_COST}
+            onSkipCooldown={skipCooldown}
+            patrol={patrol}
+            onReturnToFront={() => setSelectedPlanetId(inInfinite ? WORMHOLE_ID : null)}
+          />
+        </div>
+      </div>
     </div>
   );
 }

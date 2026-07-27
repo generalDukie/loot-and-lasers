@@ -80,7 +80,8 @@ function radialLabelOffset(pos) {
   };
 }
 
-function WormholeIcon({ unlocked, selected }) {
+function WormholeIcon({ unlocked, selected, animate = true }) {
+  const live = unlocked && animate;
   return (
     <div className="relative" style={{ width: 92, height: 92 }}>
       <div
@@ -92,7 +93,7 @@ function WormholeIcon({ unlocked, selected }) {
         }}
       />
 
-      {unlocked && (
+      {live && (
         <motion.div
           className="absolute inset-0 rounded-full pointer-events-none"
           style={{
@@ -104,7 +105,7 @@ function WormholeIcon({ unlocked, selected }) {
         />
       )}
 
-      {unlocked && [0, 1, 2].map((i) => (
+      {live && [0, 1, 2].map((i) => (
         <motion.span
           key={i}
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border pointer-events-none"
@@ -138,8 +139,8 @@ function WormholeIcon({ unlocked, selected }) {
 
         <motion.g
           style={{ transformOrigin: "50px 50px" }}
-          animate={unlocked ? { rotate: 360 } : { rotate: 0 }}
-          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+          animate={live ? { rotate: 360 } : { rotate: 0 }}
+          transition={live ? { duration: 10, repeat: Infinity, ease: "linear" } : { duration: 0 }}
         >
           <ellipse cx="50" cy="50" rx="40" ry="16" fill="none"
             stroke={unlocked ? WORMHOLE_CYAN : "#555"} strokeWidth="2"
@@ -147,8 +148,8 @@ function WormholeIcon({ unlocked, selected }) {
         </motion.g>
         <motion.g
           style={{ transformOrigin: "50px 50px" }}
-          animate={unlocked ? { rotate: -360 } : { rotate: 0 }}
-          transition={{ duration: 7, repeat: Infinity, ease: "linear" }}
+          animate={live ? { rotate: -360 } : { rotate: 0 }}
+          transition={live ? { duration: 7, repeat: Infinity, ease: "linear" } : { duration: 0 }}
         >
           <ellipse cx="50" cy="50" rx="34" ry="12" fill="none"
             stroke={unlocked ? WORMHOLE_COLOR : "#555"} strokeWidth="2.2"
@@ -156,8 +157,8 @@ function WormholeIcon({ unlocked, selected }) {
         </motion.g>
         <motion.g
           style={{ transformOrigin: "50px 50px" }}
-          animate={unlocked ? { rotate: 360 } : { rotate: 0 }}
-          transition={{ duration: 4.5, repeat: Infinity, ease: "linear" }}
+          animate={live ? { rotate: 360 } : { rotate: 0 }}
+          transition={live ? { duration: 4.5, repeat: Infinity, ease: "linear" } : { duration: 0 }}
         >
           <ellipse cx="50" cy="50" rx="26" ry="8" fill="none"
             stroke={unlocked ? "#E9D5FF" : "#555"} strokeWidth="1.6"
@@ -167,12 +168,12 @@ function WormholeIcon({ unlocked, selected }) {
         <motion.circle
           cx="50" cy="50" r="14"
           fill="url(#whCore)"
-          animate={unlocked ? { r: [12, 15, 12] } : undefined}
+          animate={live ? { r: [12, 15, 12] } : undefined}
           transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
         />
         <circle cx="50" cy="50" r="7" fill="#020010" opacity={unlocked ? 1 : 0.5} />
 
-        {unlocked && [0, 120, 240].map((deg, i) => (
+        {live && [0, 120, 240].map((deg, i) => (
           <motion.g
             key={deg}
             style={{ transformOrigin: "50px 50px" }}
@@ -198,7 +199,7 @@ function WormholeIcon({ unlocked, selected }) {
   );
 }
 
-const ZOOM_SCALE = 2.75;
+const ZOOM_SCALE = 2.4;
 
 export default function DungeonMap({
   planets,
@@ -207,6 +208,7 @@ export default function DungeonMap({
   infiniteDepth = 1,
   selectedId,
   onSelect,
+  fill = false,
 }) {
   const front = inInfinite ? null : Math.min(storyPlanetId, planets.length);
   const [zoomId, setZoomId] = useState(null);
@@ -248,36 +250,50 @@ export default function DungeonMap({
 
   const zooming = !!focusPos && !!zoomPlanet;
   const stageTransform = zooming
-    ? `translate(${(50 - focusPos.x) * ZOOM_SCALE}%, ${(50 - focusPos.y) * ZOOM_SCALE}%) scale(${ZOOM_SCALE})`
-    : "translate(0%, 0%) scale(1)";
+    ? `translate3d(${(50 - focusPos.x) * ZOOM_SCALE}%, ${(50 - focusPos.y) * ZOOM_SCALE}%, 0) scale(${ZOOM_SCALE})`
+    : "translate3d(0, 0, 0) scale(1)";
 
   return (
-    <div className="relative rounded-2xl p-3 border border-border/60 bg-gradient-to-b from-card/70 to-background/40 backdrop-blur-sm">
+    <div className={`relative rounded-2xl p-2 sm:p-3 border border-border/60 bg-gradient-to-b from-card/70 to-background/40 ${fill ? "h-full min-h-0 flex flex-col" : ""}`}>
       <div
-        className="relative w-full rounded-xl overflow-hidden border border-primary/25"
+        className={`relative w-full rounded-xl overflow-hidden border border-primary/25 ${fill ? "flex-1 min-h-0" : ""}`}
         style={{
-          aspectRatio: "16 / 9",
+          ...(fill ? {} : { aspectRatio: "16 / 9" }),
           background:
             `radial-gradient(ellipse at 50% 50%, rgba(192,132,252,0.22), transparent 36%), radial-gradient(ellipse at 20% 25%, rgba(34,211,238,0.08), transparent 35%), radial-gradient(ellipse at 80% 70%, rgba(168,85,247,0.08), transparent 40%), hsl(230 32% 5%)`,
           boxShadow: "inset 0 0 48px rgba(0,0,0,0.45)",
         }}
       >
-        {/* Stars */}
+        {/* Stars — freeze twinkles while zoomed (scaling animated layers is costly) */}
         <div className="absolute inset-0 pointer-events-none">
           {STARS.map((st, i) => (
-            <motion.span
-              key={i}
-              className="absolute rounded-full bg-white"
-              style={{
-                left: `${st.x}%`,
-                top: `${st.y}%`,
-                width: st.size,
-                height: st.size,
-                boxShadow: st.size > 1.5 ? "0 0 4px rgba(255,255,255,0.5)" : "none",
-              }}
-              animate={{ opacity: [st.opacity * 0.4, st.opacity, st.opacity * 0.4] }}
-              transition={{ duration: 2.6 + (i % 4) * 0.5, repeat: Infinity, ease: "easeInOut", delay: st.delay }}
-            />
+            zooming ? (
+              <span
+                key={i}
+                className="absolute rounded-full bg-white"
+                style={{
+                  left: `${st.x}%`,
+                  top: `${st.y}%`,
+                  width: st.size,
+                  height: st.size,
+                  opacity: st.opacity * 0.7,
+                }}
+              />
+            ) : (
+              <motion.span
+                key={i}
+                className="absolute rounded-full bg-white"
+                style={{
+                  left: `${st.x}%`,
+                  top: `${st.y}%`,
+                  width: st.size,
+                  height: st.size,
+                  boxShadow: st.size > 1.5 ? "0 0 4px rgba(255,255,255,0.5)" : "none",
+                }}
+                animate={{ opacity: [st.opacity * 0.4, st.opacity, st.opacity * 0.4] }}
+                transition={{ duration: 2.6 + (i % 4) * 0.5, repeat: Infinity, ease: "easeInOut", delay: st.delay }}
+              />
+            )
           ))}
         </div>
 
@@ -291,12 +307,14 @@ export default function DungeonMap({
           }}
         />
 
-        <motion.div
-          className="absolute inset-x-0 h-14 pointer-events-none"
-          style={{ background: "linear-gradient(to bottom, transparent, hsl(190 90% 60% / 0.07), transparent)" }}
-          animate={{ y: ["-20%", "125%"] }}
-          transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
-        />
+        {!zooming && (
+          <motion.div
+            className="absolute inset-x-0 h-14 pointer-events-none"
+            style={{ background: "linear-gradient(to bottom, transparent, hsl(190 90% 60% / 0.07), transparent)" }}
+            animate={{ y: ["-20%", "125%"] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+          />
+        )}
 
         <div
           className="absolute inset-0 pointer-events-none"
@@ -313,13 +331,17 @@ export default function DungeonMap({
           />
         )}
 
-        {/* Square stage — keeps the spiral circular and centered in the widescreen frame */}
+        {/* Square stage — CSS ease (not spring) keeps zoom cheap on the SVG layer */}
         <div className="absolute inset-0 z-[26] flex items-center justify-center pointer-events-none">
-          <motion.div
-            className={`relative aspect-square h-[94%] max-w-[94%] will-change-transform ${zooming ? "" : "pointer-events-auto"}`}
-            animate={{ transform: stageTransform }}
-            transition={{ type: "spring", stiffness: 160, damping: 22 }}
-            style={{ transformOrigin: "50% 50%" }}
+          <div
+            className={`relative aspect-square h-[94%] max-w-[94%] ${zooming ? "" : "pointer-events-auto"}`}
+            style={{
+              transform: stageTransform,
+              transformOrigin: "50% 50%",
+              transition: "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1)",
+              willChange: zooming ? "transform" : "auto",
+              contain: "layout paint",
+            }}
           >
             <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
               <defs>
@@ -328,13 +350,15 @@ export default function DungeonMap({
                   <stop offset="55%" stopColor="#A78BFA" stopOpacity="0.55" />
                   <stop offset="100%" stopColor="#C084FC" stopOpacity="0.8" />
                 </linearGradient>
-                <filter id="routeGlow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="0.7" result="b" />
-                  <feMerge>
-                    <feMergeNode in="b" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
+                {!zooming && (
+                  <filter id="routeGlow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="0.7" result="b" />
+                    <feMerge>
+                      <feMergeNode in="b" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                )}
               </defs>
 
               <path
@@ -343,28 +367,53 @@ export default function DungeonMap({
                 stroke="url(#spiralFade)"
                 strokeWidth="2.2"
                 strokeOpacity="0.22"
-                filter="url(#routeGlow)"
+                filter={zooming ? undefined : "url(#routeGlow)"}
               />
-              <motion.path
-                d={spiralGuidePath}
-                fill="none"
-                stroke={WORMHOLE_COLOR}
-                strokeWidth="0.45"
-                strokeDasharray="1.2 3.2"
-                strokeOpacity="0.35"
-                animate={{ strokeDashoffset: [0, -18] }}
-                transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-              />
+              {zooming ? (
+                <path
+                  d={spiralGuidePath}
+                  fill="none"
+                  stroke={WORMHOLE_COLOR}
+                  strokeWidth="0.45"
+                  strokeDasharray="1.2 3.2"
+                  strokeOpacity="0.35"
+                />
+              ) : (
+                <motion.path
+                  d={spiralGuidePath}
+                  fill="none"
+                  stroke={WORMHOLE_COLOR}
+                  strokeWidth="0.45"
+                  strokeDasharray="1.2 3.2"
+                  strokeOpacity="0.35"
+                  animate={{ strokeDashoffset: [0, -18] }}
+                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                />
+              )}
 
               {NODE_POS.slice(0, -1).map((a, i) => {
                 const b = NODE_POS[i + 1];
                 const unlocked = inInfinite || planets[i + 1].id <= (front || 0);
+                const stroke = unlocked ? planets[i].color : "#3d3d4a";
+                if (zooming) {
+                  return (
+                    <path
+                      key={i}
+                      d={segmentPath(a, b)}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={unlocked ? 0.7 : 0.45}
+                      strokeDasharray="2 1.8"
+                      strokeOpacity={unlocked ? 0.75 : 0.22}
+                    />
+                  );
+                }
                 return (
                   <motion.path
                     key={i}
                     d={segmentPath(a, b)}
                     fill="none"
-                    stroke={unlocked ? planets[i].color : "#3d3d4a"}
+                    stroke={stroke}
                     strokeWidth={unlocked ? 0.7 : 0.45}
                     strokeDasharray="2 1.8"
                     strokeOpacity={unlocked ? 0.75 : 0.22}
@@ -375,17 +424,28 @@ export default function DungeonMap({
                 );
               })}
 
-              <motion.path
-                d={segmentPath(NODE_POS[9], WORMHOLE_POS)}
-                fill="none"
-                stroke={inInfinite ? WORMHOLE_COLOR : "#3d3d4a"}
-                strokeWidth={1}
-                strokeDasharray="2 2"
-                strokeOpacity={inInfinite ? 0.85 : 0.25}
-                filter={inInfinite ? "url(#routeGlow)" : undefined}
-                animate={inInfinite ? { strokeDashoffset: [0, -14] } : undefined}
-                transition={{ duration: 1.3, repeat: Infinity, ease: "linear" }}
-              />
+              {zooming ? (
+                <path
+                  d={segmentPath(NODE_POS[9], WORMHOLE_POS)}
+                  fill="none"
+                  stroke={inInfinite ? WORMHOLE_COLOR : "#3d3d4a"}
+                  strokeWidth={1}
+                  strokeDasharray="2 2"
+                  strokeOpacity={inInfinite ? 0.85 : 0.25}
+                />
+              ) : (
+                <motion.path
+                  d={segmentPath(NODE_POS[9], WORMHOLE_POS)}
+                  fill="none"
+                  stroke={inInfinite ? WORMHOLE_COLOR : "#3d3d4a"}
+                  strokeWidth={1}
+                  strokeDasharray="2 2"
+                  strokeOpacity={inInfinite ? 0.85 : 0.25}
+                  filter={inInfinite ? "url(#routeGlow)" : undefined}
+                  animate={inInfinite ? { strokeDashoffset: [0, -14] } : undefined}
+                  transition={{ duration: 1.3, repeat: Infinity, ease: "linear" }}
+                />
+              )}
             </svg>
 
             {planets.map((p, i) => {
@@ -399,6 +459,7 @@ export default function DungeonMap({
               const clickable = state !== "locked";
               const label = radialLabelOffset(pos);
               const isFocus = zoomId === p.id;
+              if (zooming && !isFocus) return null;
               return (
                 <React.Fragment key={p.id}>
                   <button
@@ -420,14 +481,14 @@ export default function DungeonMap({
                         : "Locked"
                     }
                   >
-                    {state !== "locked" && (
+                    {state !== "locked" && !zooming && (
                       <span
                         className="absolute w-14 h-14 rounded-full pointer-events-none blur-md opacity-35"
                         style={{ background: `radial-gradient(circle, ${p.color}, transparent 70%)` }}
                       />
                     )}
 
-                    {(state === "current" || selected) && (
+                    {(state === "current" || selected) && !zooming && (
                       <motion.span
                         className="absolute w-11 h-11 rounded-full border-2"
                         style={{ borderColor: p.color }}
@@ -436,7 +497,7 @@ export default function DungeonMap({
                       />
                     )}
 
-                    <motion.div
+                    <div
                       className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-base sm:text-xl border-2"
                       style={{
                         borderColor: state === "locked" ? "#444" : selected || isFocus ? "#fff" : p.color,
@@ -446,14 +507,8 @@ export default function DungeonMap({
                             : `radial-gradient(circle at 35% 30%, ${p.color}55, ${p.color}18 55%, rgba(10,10,20,0.85))`,
                         boxShadow: state === "locked" ? "none" : `0 0 16px ${p.color}77`,
                         filter: state === "locked" ? "grayscale(1)" : "none",
+                        transform: isFocus ? "scale(1.12)" : undefined,
                       }}
-                      animate={
-                        isFocus
-                          ? { y: 0, rotate: 0, scale: 1.15 }
-                          : { y: [0, -5, 0], rotate: [-3, 3, -3], scale: 1 }
-                      }
-                      transition={{ duration: 2.4 + i * 0.3, repeat: isFocus ? 0 : Infinity, ease: "easeInOut" }}
-                      whileHover={clickable ? { scale: 1.08 } : undefined}
                     >
                       {state === "locked" ? (
                         <Lock className="w-4 h-4 text-muted-foreground" />
@@ -462,33 +517,34 @@ export default function DungeonMap({
                       ) : (
                         p.icon
                       )}
-                    </motion.div>
+                    </div>
                   </button>
 
-                  <div
-                    className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[11] flex flex-col items-center transition-opacity"
-                    style={{
-                      left: `${pos.x + label.x}%`,
-                      top: `${pos.y + label.y}%`,
-                      opacity: zooming && !isFocus ? 0.15 : 1,
-                    }}
-                  >
-                    <p
-                      className="text-[8px] sm:text-[9px] font-display font-bold tracking-wide px-1.5 py-0.5 rounded bg-background/85 border border-border/40 whitespace-nowrap"
+                  {!zooming && (
+                    <div
+                      className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[11] flex flex-col items-center"
                       style={{
-                        color: state === "locked" ? "#777" : p.color,
-                        borderColor: state === "locked" ? undefined : `${p.color}40`,
+                        left: `${pos.x + label.x}%`,
+                        top: `${pos.y + label.y}%`,
                       }}
                     >
-                      {p.id}. {p.name}
-                    </p>
-                    {state === "current" && !zooming && (
-                      <p className="text-[8px] text-primary font-display mt-0.5 tracking-wider">HERE · TAP</p>
-                    )}
-                    {state === "cleared" && selected && (
-                      <p className="text-[8px] text-amber-300 font-display mt-0.5 tracking-wider">PATROL</p>
-                    )}
-                  </div>
+                      <p
+                        className="text-[8px] sm:text-[9px] font-display font-bold tracking-wide px-1.5 py-0.5 rounded bg-background/85 border border-border/40 whitespace-nowrap"
+                        style={{
+                          color: state === "locked" ? "#777" : p.color,
+                          borderColor: state === "locked" ? undefined : `${p.color}40`,
+                        }}
+                      >
+                        {p.id}. {p.name}
+                      </p>
+                      {state === "current" && (
+                        <p className="text-[8px] text-primary font-display mt-0.5 tracking-wider">HERE · TAP</p>
+                      )}
+                      {state === "cleared" && selected && (
+                        <p className="text-[8px] text-amber-300 font-display mt-0.5 tracking-wider">PATROL</p>
+                      )}
+                    </div>
+                  )}
                 </React.Fragment>
               );
             })}
@@ -497,6 +553,7 @@ export default function DungeonMap({
               const unlocked = inInfinite;
               const selected = selectedId === WORMHOLE_ID;
               const isFocus = zoomId === WORMHOLE_ID;
+              if (zooming && !isFocus) return null;
               return (
                 <button
                   type="button"
@@ -511,68 +568,65 @@ export default function DungeonMap({
                   style={{
                     left: `${WORMHOLE_POS.x}%`,
                     top: `${WORMHOLE_POS.y}%`,
-                    opacity: zooming && !isFocus ? 0.25 : 1,
                   }}
                   title={unlocked ? `Inspect Wormhole · Depth ${infiniteDepth}` : "Clear World Zero to open the Wormhole"}
                 >
-                  <WormholeIcon unlocked={unlocked} selected={selected || isFocus} />
-                  <div
-                    className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 flex flex-col items-center whitespace-nowrap"
-                    style={{ opacity: zooming ? 0 : 1 }}
-                  >
-                    <motion.p
-                      className="text-[10px] sm:text-xs font-display font-black tracking-[0.14em] uppercase px-2.5 py-1 rounded-full bg-background/90 border"
-                      style={{
-                        color: unlocked ? WORMHOLE_COLOR : "#777",
-                        borderColor: unlocked ? `${WORMHOLE_COLOR}66` : "#444",
-                        boxShadow: unlocked ? `0 0 18px ${WORMHOLE_COLOR}55` : "none",
-                      }}
-                      animate={unlocked ? { opacity: [0.85, 1, 0.85] } : undefined}
-                      transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-                    >
-                      {unlocked ? `∞ Wormhole · Depth ${infiniteDepth}` : "∞ Wormhole Sealed"}
-                    </motion.p>
-                    {unlocked && selected && (
-                      <p className="text-[9px] font-display font-bold mt-1 tracking-[0.2em]" style={{ color: WORMHOLE_CYAN }}>
-                        ENTER
-                      </p>
-                    )}
-                    {!unlocked && (
-                      <p className="text-[8px] text-muted-foreground font-display mt-1 tracking-wide">
-                        Clear World Zero
-                      </p>
-                    )}
-                  </div>
+                  <WormholeIcon unlocked={unlocked} selected={selected || isFocus} animate={!zooming} />
+                  {!zooming && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 flex flex-col items-center whitespace-nowrap">
+                      <motion.p
+                        className="text-[10px] sm:text-xs font-display font-black tracking-[0.14em] uppercase px-2.5 py-1 rounded-full bg-background/90 border"
+                        style={{
+                          color: unlocked ? WORMHOLE_COLOR : "#777",
+                          borderColor: unlocked ? `${WORMHOLE_COLOR}66` : "#444",
+                          boxShadow: unlocked ? `0 0 18px ${WORMHOLE_COLOR}55` : "none",
+                        }}
+                        animate={unlocked ? { opacity: [0.85, 1, 0.85] } : undefined}
+                        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+                      >
+                        {unlocked ? `∞ Wormhole · Depth ${infiniteDepth}` : "∞ Wormhole Sealed"}
+                      </motion.p>
+                      {unlocked && selected && (
+                        <p className="text-[9px] font-display font-bold mt-1 tracking-[0.2em]" style={{ color: WORMHOLE_CYAN }}>
+                          ENTER
+                        </p>
+                      )}
+                      {!unlocked && (
+                        <p className="text-[8px] text-muted-foreground font-display mt-1 tracking-wide">
+                          Clear World Zero
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </button>
               );
             })()}
-          </motion.div>
+          </div>
         </div>
 
-        {/* Lore panel — prominent overlay while inspecting */}
+        {/* Lore panel — solid (no backdrop-blur) while inspecting */}
         <AnimatePresence>
           {zooming && zoomPlanet && (
             <motion.div
               key={String(zoomId)}
-              initial={{ opacity: 0, y: 28, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.97 }}
-              transition={{ type: "spring", stiffness: 280, damping: 22 }}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
               className="absolute z-[40] inset-x-3 bottom-3 sm:inset-x-auto sm:left-4 sm:right-auto sm:top-1/2 sm:-translate-y-1/2 sm:bottom-auto sm:w-[min(380px,46%)]"
               onClick={(e) => e.stopPropagation()}
             >
               <div
-                className="relative overflow-hidden rounded-2xl border-2 bg-background/95 backdrop-blur-xl px-4 py-4 sm:px-5 sm:py-5"
+                className="relative overflow-hidden rounded-2xl border-2 bg-background/98 px-4 py-4 sm:px-5 sm:py-5"
                 style={{
                   borderColor: `${zoomPlanet.color}99`,
-                  boxShadow: `0 0 0 1px ${zoomPlanet.color}33, 0 0 48px ${zoomPlanet.color}44, 0 24px 60px rgba(0,0,0,0.65)`,
+                  boxShadow: `0 0 0 1px ${zoomPlanet.color}33, 0 0 32px ${zoomPlanet.color}33, 0 16px 40px rgba(0,0,0,0.55)`,
                 }}
               >
-                {/* Accent wash */}
                 <div
                   className="absolute inset-0 pointer-events-none"
                   style={{
-                    background: `linear-gradient(145deg, ${zoomPlanet.color}28 0%, transparent 42%), radial-gradient(ellipse at 100% 0%, ${zoomPlanet.color}22, transparent 55%)`,
+                    background: `linear-gradient(145deg, ${zoomPlanet.color}22 0%, transparent 42%)`,
                   }}
                 />
                 <div
@@ -595,7 +649,7 @@ export default function DungeonMap({
                     style={{
                       borderColor: zoomPlanet.color,
                       background: `radial-gradient(circle at 35% 30%, ${zoomPlanet.color}88, ${zoomPlanet.color}28 55%, #0a0a14)`,
-                      boxShadow: `0 0 28px ${zoomPlanet.color}77`,
+                      boxShadow: `0 0 20px ${zoomPlanet.color}55`,
                     }}
                   >
                     {zoomPlanet.icon}
@@ -609,7 +663,7 @@ export default function DungeonMap({
                     </p>
                     <h3
                       className="font-display font-black text-xl sm:text-2xl tracking-wide leading-tight mt-0.5"
-                      style={{ color: zoomPlanet.color, textShadow: `0 0 24px ${zoomPlanet.color}66` }}
+                      style={{ color: zoomPlanet.color }}
                     >
                       {zoomPlanet.name}
                     </h3>
@@ -648,7 +702,7 @@ export default function DungeonMap({
           )}
         </AnimatePresence>
       </div>
-      <p className="mt-2 text-[10px] text-muted-foreground text-center">
+      <p className={`text-[10px] text-muted-foreground text-center ${fill ? "shrink-0 mt-1.5" : "mt-2"}`}>
         {zooming
           ? "Inspecting your current sector — pull back to return to the chart."
           : "Worlds 1–10 spiral into the Wormhole. Tap your current world to inspect its lore."}

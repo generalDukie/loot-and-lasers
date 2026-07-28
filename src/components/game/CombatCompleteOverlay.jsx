@@ -164,9 +164,26 @@ export default function CombatCompleteOverlay({ summary, onClose }) {
 
           {discoveries && discoveries.length > 0 && (
             <RewardCard icon={<Sparkles className="w-5 h-5" />} accent="#22C55E">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-display font-semibold text-green-300">DISCOVERABLES</span>
+                <span className="text-[9px] text-muted-foreground shrink-0">codex only · not inventory</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5 mb-1.5">
+                Logged to your collection — no gear or items were granted.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
                 {discoveries.map((d, i) => (
-                  <span key={i} className="text-xs flex items-center gap-1 text-green-300"><span>{d.emoji}</span>{d.name}</span>
+                  <span
+                    key={i}
+                    className="text-[11px] flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-200/90"
+                    title={d.kind === "gear" ? "Gear catalog entry (not added to bag)" : `${d.kind || "discoverable"} unlocked`}
+                  >
+                    <span>{d.emoji}</span>
+                    <span className="truncate max-w-[10rem]">{d.name}</span>
+                    {d.kind && (
+                      <span className="text-[9px] text-muted-foreground capitalize">· {d.kind === "gear" ? "catalog" : d.kind}</span>
+                    )}
+                  </span>
                 ))}
               </div>
             </RewardCard>

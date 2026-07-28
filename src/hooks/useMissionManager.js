@@ -126,8 +126,20 @@ function classifyClaimItems(items, rewards) {
   const gearItem = list.find((i) => i.type !== "material" && i.type !== "consumable") || null;
   const material = list.find((i) => i.type === "material") || null;
   const consumableItem = list.find((i) => i.type === "consumable") || null;
-  const collectible = rewards?.collectible
-    || (material ? { name: material.name, emoji: "🎁" } : null);
+  let collectible = null;
+  if (rewards?.collectible?.name) {
+    collectible = {
+      name: rewards.collectible.name,
+      emoji: rewards.collectible.emoji || "🎁",
+      rarity: material?.rarity || rewards.collectible.rarity || "common",
+    };
+  } else if (material) {
+    collectible = {
+      name: material.name,
+      emoji: "🎁",
+      rarity: material.rarity || "common",
+    };
+  }
   return { gearItem, collectible, consumableItem };
 }
 

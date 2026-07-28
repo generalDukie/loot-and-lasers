@@ -14,7 +14,7 @@ import {
 import { processDiscovery } from "@/lib/discovery";
 import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
 import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
-import { getMyCharacter } from "@/lib/socialEngine";
+import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import DungeonMap from "@/components/game/DungeonMap";
 import DungeonPlanetView from "@/components/game/DungeonPlanetView";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
@@ -25,7 +25,7 @@ import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
 import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 
 export default function GalaxyMapPage() {
-  const [character, setCharacter] = useState(null);
+  const [character, setCharacterState] = useState(null);
   const [equippedItems, setEquippedItems] = useState([]);
   const [battleState, setBattleState] = useState(null);
   const [completeSummary, setCompleteSummary] = useState(null);
@@ -35,19 +35,33 @@ export default function GalaxyMapPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Keep the shared character cache in sync so remounts don't wipe dungeon_deaths.
+  const setCharacter = useCallback((next) => {
+    setCharacterState((prev) => {
+      const value = typeof next === "function" ? next(prev) : next;
+      if (value) primeMyCharacterCache(value);
+      return value;
+    });
+  }, []);
+
   const load = useCallback(async () => {
-    const char = await getMyCharacter();
+    // Force a fresh read — cached characters often omit post-battle dungeon_deaths.
+    const char = await getMyCharacter({ force: true });
     if (!char) { navigate("/create-character"); return; }
     try {
       const sync = await api.functions.invoke("SyncDungeonState", {});
+      const synced = sync.character || sync.data?.character;
       const patch = sync.patch || sync.data?.patch;
-      if (patch) Object.assign(char, patch);
+      // Prefer the authoritative character from sync (includes today's death count
+      // even when patched:false). Fall back to patch-only merge.
+      if (synced) Object.assign(char, synced);
+      else if (patch) Object.assign(char, patch);
     } catch (e) { /* non-blocking */ }
     setCharacter(char);
     setSelectedPlanetId(null);
     setLoading(false);
     try { setEquippedItems((await api.entities.Item.filter({ character_id: char.id, is_equipped: true })) || []); } catch (e) {}
-  }, [navigate]);
+  }, [navigate, setCharacter]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -154,9 +168,10 @@ export default function GalaxyMapPage() {
       return;
     }
     const update = res.patch || res.data?.patch || {};
+    const fullChar = res.character || res.data?.character;
     const serverRewards = res.rewards || res.data?.rewards || {};
     const boostedXp = won ? (serverRewards.experience || 0) : 0;
-    const newLevel = update.level ?? character.level;
+    const newLevel = (fullChar || update).level ?? character.level;
     const unlockedShipMod = null;
     const items = res.items || res.data?.items || [];
     applyPendingLootFromResponse(res);
@@ -165,7 +180,7 @@ export default function GalaxyMapPage() {
     const milestoneItem = items.length > 1 ? items[items.length - 1] : null;
     let defeatNote;
     if (!won) {
-      const deathsNow = update.dungeon_deaths ?? (deaths + 1);
+      const deathsNow = (fullChar || update).dungeon_deaths ?? (deaths + 1);
       defeatNote = freeLivesLeft > 1
         ? `Death ${deathsNow}/${deathCap}. No rewards on defeat.`
         : freeLivesLeft === 1
@@ -194,7 +209,7 @@ export default function GalaxyMapPage() {
     }
 
     const { found: discFound } = processDiscovery(character, { win: won, speciesId: battleState.enemy.speciesId });
-    setCharacter((c) => ({ ...c, ...update }));
+    setCharacter((c) => ({ ...c, ...(fullChar || update) }));
     setBattleState(null);
     if (!wasPatrol && won && rewards.isBoss) {
       if (fightPlanet.id === DUNGEON_PLANETS.length) setSelectedPlanetId(WORMHOLE_ID);

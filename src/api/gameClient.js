@@ -4,8 +4,8 @@
  */
 import { appParams } from "@/lib/app-params";
 
-/** Empty in production build = same-origin; dev defaults to local API. */
-const API_BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:8787" : "");
+/** Empty = same-origin (Vite proxy in dev, API static in prod). Works on phone/LAN. */
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
 function wsBaseUrl() {
   if (API_BASE) return API_BASE.replace(/^http/, "ws");

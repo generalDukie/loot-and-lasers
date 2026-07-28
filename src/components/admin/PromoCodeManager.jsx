@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { api } from "@/api/gameClient";
 import { CONSUMABLES } from "@/lib/gameData";
 import { Ticket, Trash2, Plus, Power } from "lucide-react";
+import StardustIcon from "@/components/game/StardustIcon";
 
 export default function PromoCodeManager({ onAction }) {
   const [codes, setCodes] = useState([]);
@@ -55,7 +56,7 @@ export default function PromoCodeManager({ onAction }) {
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label" className="bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs" />
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          <label className="text-[10px] text-muted-foreground">✨ Stardust<input type="number" value={rewards.stardust} onChange={(e) => setRewards({ ...rewards, stardust: +e.target.value })} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>
+          <label className="text-[10px] text-muted-foreground"><span className="inline-flex items-center gap-1"><StardustIcon className="w-2.5 h-2.5" glow={false} /> Stardust</span><input type="number" value={rewards.stardust} onChange={(e) => setRewards({ ...rewards, stardust: +e.target.value })} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>
           <label className="text-[10px] text-muted-foreground">💎 Nova Crystals<input type="number" value={rewards.nova_crystals} onChange={(e) => setRewards({ ...rewards, nova_crystals: +e.target.value })} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>
           <label className="text-[10px] text-muted-foreground">⭐ Experience<input type="number" value={rewards.experience} onChange={(e) => setRewards({ ...rewards, experience: +e.target.value })} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>
           <label className="text-[10px] text-muted-foreground">🔁 Max Uses (0=∞)<input type="number" value={maxRed} onChange={(e) => setMaxRed(+e.target.value)} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs mt-0.5" /></label>

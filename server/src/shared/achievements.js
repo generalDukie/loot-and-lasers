@@ -23,8 +23,8 @@ export const ACHIEVEMENTS = [
   { id: "xenobiologist", name: "Xenobiologist", desc: "Discover 25 species", icon: "🧬", category: "Exploration", title: "the Xenobiologist", check: (c) => ((c.discovered_species || []).length) >= 25 },
   { id: "curator", name: "Curator", desc: "Collect 10 artifacts", icon: "🏺", category: "Exploration", title: "the Curator", check: (c) => ((c.collected_artifacts || []).length) >= 10 },
   { id: "relic_keeper", name: "Relic Keeper", desc: "Collect 5 relics", icon: "💎", category: "Exploration", title: "the Relic Keeper", check: (c) => ((c.collected_relics || []).length) >= 5 },
-  { id: "stardust_collector", name: "Stardust Collector", desc: "Earn 1,000 total stardust", icon: "💫", category: "Economy", title: "Stardust Collector", check: (c) => (c.total_stardust_earned || 0) >= 1000 },
-  { id: "star_baron", name: "Star Baron", desc: "Earn 100,000 total stardust", icon: "💰", category: "Economy", title: "Star Baron", check: (c) => (c.total_stardust_earned || 0) >= 100000 },
+  { id: "stardust_collector", name: "Stardust Collector", desc: "Earn 1,000 total stardust", icon: "✦", category: "Economy", title: "Stardust Collector", check: (c) => (c.total_stardust_earned || 0) >= 1000 },
+  { id: "star_baron", name: "Star Baron", desc: "Earn 100,000 total stardust", icon: "✦", category: "Economy", title: "Star Baron", check: (c) => (c.total_stardust_earned || 0) >= 100000 },
 ];
 
 export function evaluateUnlocked(character) {

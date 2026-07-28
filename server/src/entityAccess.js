@@ -6,6 +6,7 @@
 import { entities } from "./entities.js";
 import { expForLevel } from "./shared/rewards.js";
 import { CLASS_BASE_STATS, FUEL_MAX } from "./shared/economyFormulas.js";
+import { assertNameHasNoDigits, NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
 
 export function isAdmin(user) {
   return user?.role === "admin";
@@ -285,6 +286,11 @@ export function sanitizeCreatePayload(user, type, data = {}) {
       err.status = 400;
       throw err;
     }
+    if (/\d/.test(name)) {
+      const err = new Error(NAME_NO_DIGITS_MSG);
+      err.status = 400;
+      throw err;
+    }
     out.name = name;
 
     // Every new operative starts with a full fuel tank (admins included).
@@ -377,12 +383,28 @@ export function sanitizeCreatePayload(user, type, data = {}) {
  * Strip locked economy / reward fields from update payloads for non-admins.
  */
 export function sanitizeUpdatePayload(user, type, data = {}) {
-  if (isAdmin(user)) return { ...data };
+  if (isAdmin(user)) {
+    const out = { ...data };
+    if (type === "Character" && out.name != null) {
+      out.name = String(out.name).trim();
+      assertNameHasNoDigits(out.name);
+    }
+    return out;
+  }
   const out = { ...data };
 
   if (type === "Character") {
     for (const key of CHARACTER_ECONOMY_FIELDS) {
       delete out[key];
+    }
+    if (out.name != null) {
+      out.name = String(out.name).trim();
+      if (out.name.length < 2 || out.name.length > 24) {
+        const err = new Error("Name must be 2–24 characters");
+        err.status = 400;
+        throw err;
+      }
+      assertNameHasNoDigits(out.name);
     }
   }
 

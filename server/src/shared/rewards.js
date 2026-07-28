@@ -20,13 +20,8 @@ function pick(arr, rng = Math.random) {
   return arr[Math.floor(rng() * arr.length)];
 }
 
-function getInventoryCap(ch) {
-  const shipId = ch.active_ship || "scout";
-  const loadouts = ch.ship_mod_loadouts;
-  const ids = (loadouts && Array.isArray(loadouts[shipId])) ? loadouts[shipId] : (ch.ship_mods || []);
-  let bonus = 0;
-  for (let i = 1; i <= 10; i++) if (ids.includes(`cargo_hold_${i}`)) bonus += 1;
-  return Math.min(20, 10 + bonus);
+function getInventoryCap(_ch) {
+  return 10;
 }
 
 /** Live loot / shop gear roller — budgeted attributes by level, slot, and rarity. */

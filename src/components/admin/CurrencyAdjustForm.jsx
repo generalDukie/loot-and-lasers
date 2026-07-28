@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { Coins, ArrowUp, ArrowDown } from "lucide-react";
+import { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 const FIELDS = [
-  { key: "stardust", label: "Stardust", icon: "✨" },
+  { key: "stardust", label: "Stardust", icon: STARDUST_GLYPH },
   { key: "nova_crystals", label: "Nova Crystals", icon: "💎" },
   { key: "fuel", label: "Fuel", icon: "⛽" },
   { key: "experience", label: "Experience", icon: "⭐" },

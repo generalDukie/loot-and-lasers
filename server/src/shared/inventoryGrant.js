@@ -7,6 +7,22 @@ export function countBagOccupancy(ch) {
   return owned.filter((i) => !i.is_equipped).length;
 }
 
+/**
+ * Block unequipping into a full bag. Equipped→bag increases occupancy by 1.
+ * Slot swaps (equip another piece of the same type) keep bag size the same and are allowed.
+ */
+export function assertCanUnequipToBag(existing, patch) {
+  if (!existing || patch?.is_equipped !== false || !existing.is_equipped) return;
+  const ch = existing.character_id ? entities.Character.get(existing.character_id) : null;
+  if (!ch) return;
+  const cap = getInventoryCap(ch);
+  if (countBagOccupancy(ch) >= cap) {
+    const err = new Error("Inventory full — dissolve an item before unequipping");
+    err.status = 400;
+    throw err;
+  }
+}
+
 /** Grant an item, or return it as pending loot when the bag is at cap (no auto-dissolve). */
 export function grantItemOrPending(ch, itemPayload) {
   const cap = getInventoryCap(ch);

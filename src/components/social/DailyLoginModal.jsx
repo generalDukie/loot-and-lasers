@@ -76,11 +76,12 @@ export default function DailyLoginModal({ open, onClose, myChar, onClaimed }) {
               const isToday = entry.day === currentDay && claimable;
               const isPast = claimedSet.has(entry.day) || (entry.day < currentDay && !claimable);
               const locked = entry.day > currentDay || (entry.day === currentDay && !claimable && lastClaim === today);
+              const icon = rewardIcon(entry.rewards);
               return (
                 <div key={entry.day} className={`relative aspect-square rounded-lg border flex flex-col items-center justify-center p-1 text-center
                   ${claimed ? "border-green-500/40 bg-green-500/10" : isToday ? "border-amber-400/60 bg-amber-500/10 animate-pulse" : locked ? "border-border/20 bg-muted/10 opacity-50" : "border-border/30 bg-muted/15"}`}>
                   <span className="text-[8px] text-muted-foreground absolute top-0.5 left-1">D{entry.day}</span>
-                  <span className="text-base leading-none mt-1">{rewardIcon(entry.rewards)}</span>
+                  <span className={`text-base leading-none mt-1 ${icon === "✦" ? "glow-stardust" : ""}`}>{icon}</span>
                   <span className="text-[7px] text-muted-foreground leading-tight mt-0.5 line-clamp-2">{rewardLabel(entry.rewards)}</span>
                   {claimed && <Check className="absolute top-0.5 right-0.5 w-2.5 h-2.5 text-green-400" />}
                   {isToday && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-ping" />}

@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { getEffectiveFuelCost, FUEL_COLOR, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import { Clock, MapPin, Star, Fuel, Gem } from "lucide-react";
+import StardustIcon from "@/components/game/StardustIcon";
 
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`;
@@ -150,7 +151,7 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
       <div className="flex flex-wrap items-center gap-3 mt-3 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(mission.duration_seconds)}</span>
         <span className="flex items-center gap-1 font-bold" style={{ color: XP_COLOR }}><Star className="w-3 h-3" />{shownXp} XP</span>
-        <span className="flex items-center gap-1 font-bold" style={{ color: STARDUST_COLOR }}>✨ {shownSd}</span>
+        <span className="flex items-center gap-1 font-bold" style={{ color: STARDUST_COLOR }}><StardustIcon className="w-3 h-3" glow={false} /> {shownSd}</span>
         <span
           className="flex items-center gap-1 font-bold"
           style={{ color: insufficientFuel ? "#FBBF24" : FUEL_COLOR }}

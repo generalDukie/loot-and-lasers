@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import { db, nowIso } from "./db.js";
 import { matchesQuery, sortDocs, applyUpdate } from "./query.js";
 import { broadcastEntity } from "./realtime.js";
+import { clampStardust } from "./shared/economyFormulas.js";
 
 function rowToEntity(row) {
   if (!row) return null;
@@ -14,6 +15,15 @@ function rowToEntity(row) {
     created_date: row.created_date,
     updated_date: row.updated_date,
   };
+}
+
+/** Enforce currency ceilings before Character rows hit the DB. */
+function normalizeEntity(type, entity) {
+  if (type !== "Character" || !entity) return entity;
+  if (Object.prototype.hasOwnProperty.call(entity, "stardust")) {
+    entity.stardust = clampStardust(entity.stardust);
+  }
+  return entity;
 }
 
 function persist(type, entity, { emit = true, eventType = "update" } = {}) {
@@ -84,21 +94,21 @@ export function createEntityStore(type) {
 
     create(data = {}, opts = {}) {
       const ts = nowIso();
-      const entity = {
+      const entity = normalizeEntity(type, {
         ...data,
         id: data.id || nanoid(),
         created_by: data.created_by ?? opts.created_by ?? null,
         created_by_id: data.created_by_id ?? opts.created_by_id ?? null,
         created_date: data.created_date || ts,
         updated_date: ts,
-      };
+      });
       return persist(type, entity, { eventType: "create" });
     },
 
     update(id, update) {
       const existing = this.get(id);
       if (!existing) throw Object.assign(new Error(`${type} not found`), { status: 404 });
-      const merged = applyUpdate(existing, update);
+      const merged = normalizeEntity(type, applyUpdate(existing, update));
       merged.id = id;
       merged.created_date = existing.created_date;
       merged.created_by = existing.created_by;

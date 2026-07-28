@@ -8,6 +8,7 @@ import { Pickaxe, Clock, Zap } from "lucide-react";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { STARDUST_COLOR } from "@/lib/gameData";
 import PageStage from "@/components/game/PageStage";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 // Stardust yield = level × 12 × hours. Scales with both level and duration.
 export function computeMiningReward(level, hours) {
@@ -77,7 +78,7 @@ export default function SpaceMiningPage() {
       const res = await api.functions.invoke("StartMining", { hours });
       const patch = res.patch || res.data?.patch || {};
       setCharacter((c) => ({ ...c, ...patch }));
-      toast({ title: "Mining started!", description: `Collect ${patch.mining_reward || 0} ✨ in ${hours}h.` });
+      toast({ title: "Mining started!", description: `Collect ${patch.mining_reward || 0} ${STARDUST_GLYPH} in ${hours}h.` });
     } catch (e) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     }
@@ -91,7 +92,7 @@ export default function SpaceMiningPage() {
       const patch = res.patch || res.data?.patch || {};
       const r = res.stardust_gained ?? res.data?.stardust_gained ?? 0;
       setCharacter((c) => ({ ...c, ...patch }));
-      toast({ title: "Node collected!", description: `+${r} ✨ stardust harvested.` });
+      toast({ title: "Node collected!", description: `+${r} ${STARDUST_GLYPH} stardust harvested.` });
     } catch (e) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     }
@@ -118,7 +119,7 @@ export default function SpaceMiningPage() {
           <Pickaxe className="w-5 h-5 text-amber-300" /> Space Mining
         </h1>
         <span className="flex items-center gap-1.5 text-xs font-display font-bold" style={{ color: STARDUST_COLOR }}>
-          ✨ {character.stardust || 0}
+          <StardustIcon className="w-3.5 h-3.5" /> {character.stardust || 0}
         </span>
       </div>
 
@@ -185,8 +186,8 @@ export default function SpaceMiningPage() {
             </div>
 
             <div className="flex items-center justify-center gap-2 mb-5">
-              <span className="text-xs bg-accent/10 text-accent px-3 py-1 rounded-full font-display font-bold">
-                {reward} ✨ projected
+              <span className="text-xs bg-accent/10 text-accent px-3 py-1 rounded-full font-display font-bold inline-flex items-center gap-1">
+                {reward} <StardustIcon className="w-3 h-3" glow={false} /> projected
               </span>
               <span className="text-[10px] text-muted-foreground">
                 ({character.level} × 12 × {hours}h)
@@ -216,7 +217,7 @@ export default function SpaceMiningPage() {
                 <span className="flex items-center gap-1 text-amber-300 font-display font-bold">
                   <Clock className="w-3.5 h-3.5" /> {formatRemaining(remaining)}
                 </span>
-                <span className="text-accent font-display font-bold">{reward} ✨</span>
+                <span className="text-accent font-display font-bold inline-flex items-center gap-1">{reward} <StardustIcon className="w-3 h-3" glow={false} /></span>
               </div>
               <div className="h-2.5 rounded-full bg-muted/40 border border-border/50 overflow-hidden">
                 <motion.div
@@ -246,7 +247,7 @@ export default function SpaceMiningPage() {
             </motion.h2>
             <p className="text-xs text-muted-foreground mb-4">Your drone finished mining a stardust node.</p>
 
-            <div className="text-4xl font-display font-black text-accent mb-4 glow-cyan">+{reward} ✨</div>
+            <div className="text-4xl font-display font-black text-accent mb-4 glow-cyan flex items-center justify-center gap-1.5">+{reward} <StardustIcon className="w-8 h-8" /></div>
 
             <button
               onClick={collectMining}
@@ -256,7 +257,7 @@ export default function SpaceMiningPage() {
               {busy ? (
                 <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
               ) : (
-                "✨"
+                <StardustIcon className="w-4 h-4" glow={false} />
               )}
               Collect Stardust
             </button>

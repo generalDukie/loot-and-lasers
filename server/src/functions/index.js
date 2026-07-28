@@ -4,7 +4,7 @@ import { createService, entities } from "../entities.js";
 import { db, nowIso, withTransactionAsync } from "../db.js";
 import { getUserById } from "../auth.js";
 import { ECONOMY_HANDLERS } from "./economy.js";
-import { getInventoryCap } from "../shared/economyFormulas.js";
+import { getInventoryCap, STARDUST_MAX } from "../shared/economyFormulas.js";
 import { countBagOccupancy } from "../shared/inventoryGrant.js";
 
 const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
@@ -699,7 +699,10 @@ export async function AdminModeration(user, body) {
     if (!ch) return { status: 404, body: { error: "Character not found" } };
     const patch = {};
     if (deltas.stardust != null && deltas.stardust !== 0) {
-      patch.stardust = Math.max(0, (ch.stardust || 0) + Number(deltas.stardust));
+      patch.stardust = Math.min(
+        STARDUST_MAX,
+        Math.max(0, (ch.stardust || 0) + Number(deltas.stardust)),
+      );
       if (deltas.stardust > 0) {
         patch.total_stardust_earned = (ch.total_stardust_earned || 0) + Number(deltas.stardust);
       }

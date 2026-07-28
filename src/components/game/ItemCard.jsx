@@ -1,6 +1,7 @@
 import React from "react";
 import { RARITY_COLORS, STAT_ICONS, computeStardustValue, gearTypeLabel, STARDUST_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
+import StardustIcon from "@/components/game/StardustIcon";
 
 export default function ItemCard({ item, onEquip, onSell, onUse, compact = false }) {
   const rarityColor = RARITY_COLORS[item.rarity];
@@ -96,7 +97,7 @@ export default function ItemCard({ item, onEquip, onSell, onUse, compact = false
             className="text-xs px-3 py-1 rounded-lg font-medium transition-colors hover:opacity-90"
             style={{ color: STARDUST_COLOR, backgroundColor: `${STARDUST_COLOR}26` }}
           >
-            Dissolve (✨ {computeStardustValue(item)})
+            Dissolve (<StardustIcon className="w-3 h-3 inline align-text-bottom" glow={false} /> {computeStardustValue(item)})
           </button>
         )}
       </div>

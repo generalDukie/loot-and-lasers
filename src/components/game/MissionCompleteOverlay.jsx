@@ -4,7 +4,8 @@ import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, FUEL_COLOR, STARDUST_COLOR, X
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import confetti from "canvas-confetti";
-import { Star, Zap, Fuel, TrendingUp, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical, ArrowRight } from "lucide-react";
+import { Zap, Fuel, TrendingUp, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical, ArrowRight } from "lucide-react";
+import StardustIcon from "@/components/game/StardustIcon";
 
 // Shared chrome for level-up / empty panes (not rarity-coded).
 const SUMMARY_ACCENT = "#FBBF24";
@@ -122,7 +123,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
             )}
           </RewardCard>
 
-          <RewardCard icon={<Star className="w-5 h-5" />} accent={STARDUST_COLOR}>
+          <RewardCard icon={<StardustIcon className="w-5 h-5" />} accent={STARDUST_COLOR}>
             <div className="flex items-baseline justify-between">
               <span className="text-xs font-display font-semibold" style={{ color: STARDUST_COLOR }}>STARDUST</span>
               <span className="font-display font-bold text-lg" style={{ color: STARDUST_COLOR }}>+{stardust.total || 0}</span>

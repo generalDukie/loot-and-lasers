@@ -69,7 +69,7 @@ export function rewardIcon(rewards) {
   if (rewards.nova_crystals) return "💎";
   if (rewards.experience) return "📈";
   if (rewards.fuel) return "⚡";
-  if (rewards.stardust) return "✨";
+  if (rewards.stardust) return "✦";
   return "🪙";
 }
 
@@ -79,7 +79,7 @@ export function rewardLabel(rewards) {
   const parts = [];
   if (rewards.item_rarity) parts.push(`${rewards.item_rarity[0].toUpperCase()}${rewards.item_rarity.slice(1)} Crate`);
   if (rewards.experience) parts.push(`${rewards.experience}⭐XP`);
-  if (rewards.stardust) parts.push(`${rewards.stardust}✨`);
+  if (rewards.stardust) parts.push(`${rewards.stardust}✦`);
   if (rewards.nova_crystals) parts.push(`${rewards.nova_crystals}💎`);
   if (rewards.fuel) parts.push(`${rewards.fuel}⚡`);
   return parts.join(" · ") || "Reward";

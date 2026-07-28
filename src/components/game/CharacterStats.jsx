@@ -1,5 +1,6 @@
 import React from "react";
-import { CheckCircle2, Trophy, Skull, Swords, Clock } from "lucide-react";
+import { CheckCircle2, Trophy, Skull, Swords, Clock, Sparkles } from "lucide-react";
+import { STARDUST_COLOR } from "@/lib/gameData";
 
 function fmtHours(sec) {
   const s = sec || 0;
@@ -12,7 +13,7 @@ const STATS = [
   { key: "arena_wins", label: "Arena Wins", short: "Arena", icon: Trophy, color: "#FFD700", fmt: (v) => v || 0 },
   { key: "dungeon_clears", label: "Dungeon Clears", short: "Clears", icon: Skull, color: "#A855F7", fmt: (v) => v || 0 },
   { key: "highest_damage", label: "Highest Damage", short: "Peak DMG", icon: Swords, color: "#FB7185", fmt: (v) => v || 0 },
-  { key: "total_stardust_earned", label: "Stardust Earned", short: "Stardust", icon: "✨", color: "#22D3EE", fmt: (v) => v || 0 },
+  { key: "total_stardust_earned", label: "Stardust Earned", short: "Stardust", icon: Sparkles, color: STARDUST_COLOR, fmt: (v) => v || 0 },
   { key: "playtime_seconds", label: "Time Played", short: "Played", icon: Clock, color: "#C084FC", fmt: (v) => fmtHours(v) },
 ];
 

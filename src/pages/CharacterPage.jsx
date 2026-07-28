@@ -9,7 +9,8 @@ import { getGuildMembership } from "@/lib/guildUtils";
 import { getMyCharacter } from "@/lib/socialEngine";
 import StatBar from "@/components/game/StatBar";
 import CharacterHeader from "@/components/game/CharacterHeader";
-import InventoryGrid, { INVENTORY_DROPPABLE_ID } from "@/components/game/InventoryGrid";
+import InventorySlotBoard from "@/components/game/InventorySlotBoard";
+import { INVENTORY_DROPPABLE_ID } from "@/components/game/InventoryGrid";
 import CollectiblesLog from "@/components/game/CollectiblesLog";
 import DerivedStatsPanel from "@/components/game/DerivedStatsPanel";
 import { parseEquipDroppableId } from "@/components/game/EquippedFrame";
@@ -20,6 +21,7 @@ import {
   getAttributePurchaseCount,
   getNextAttributePointCost,
   getInventoryCap,
+  STARDUST_COLOR,
 } from "@/lib/gameData";
 import {
   loadInventoryOrder,
@@ -28,7 +30,8 @@ import {
   reorderIds,
 } from "@/lib/inventoryOrder";
 import { useToast } from "@/components/ui/use-toast";
-import { Star, Backpack } from "lucide-react";
+import { Sparkles, Backpack } from "lucide-react";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 export default function CharacterPage() {
   const [character, setCharacter] = useState(null);
@@ -54,8 +57,6 @@ export default function CharacterPage() {
     if (!char) { navigate("/create-character"); return; }
     characterRef.current = char;
     setCharacter(char);
-    // Render as soon as the operative is known; the guild badge is non-essential
-    // and must never block the page (or leave it stuck on the spinner).
     setLoading(false);
     try {
       const membership = await getGuildMembership(char.id);
@@ -70,7 +71,6 @@ export default function CharacterPage() {
     if (!character?.id) return;
     setBagOrder(loadInventoryOrder(character.id));
   }, [character?.id]);
-  // Merge freshly granted / looted ids into the local bag order.
   useEffect(() => {
     if (!character?.id) return;
     const ids = inv.items.filter((i) => !i.is_equipped).map((i) => i.id);
@@ -81,7 +81,6 @@ export default function CharacterPage() {
       return next;
     });
   }, [inv.items, character?.id]);
-  // Reload inventory when returning to this tab (e.g. after admin grant).
   useEffect(() => {
     const refresh = () => { if (characterRef.current) inv.load(); };
     const onVis = () => { if (document.visibilityState === "visible") refresh(); };
@@ -108,13 +107,12 @@ export default function CharacterPage() {
         lastBrokeToast.current = now;
         toast({
           title: "Not enough Stardust",
-          description: `Next ${stat} costs ✨${cost.toLocaleString()}`,
+          description: `Next ${stat} costs ${STARDUST_GLYPH}${cost.toLocaleString()}`,
           variant: "destructive",
         });
       }
       return;
     }
-    // Optimistic UI — server BuyAttribute is authoritative.
     const bought = getAttributePurchaseCount(char, stat);
     const byStat = {
       ...(char.attribute_purchases_by_stat || {}),
@@ -190,19 +188,16 @@ export default function CharacterPage() {
     const item = inv.items.find((i) => i.id === draggableId);
     if (!item) return;
 
-    // Equipped → bag = unequip
     if (fromEquip && toBag) {
       if (item.is_equipped) void handleEquip(item);
       return;
     }
 
-    // Bag → matching equip slot = equip
     if (fromBag && toEquip) {
       if (!item.is_equipped && item.type === toEquip) void handleEquip(item);
       return;
     }
 
-    // Reorder within bag
     if (fromBag && toBag && source.index !== destination.index) {
       const unequippedIds = inv.items.filter((i) => !i.is_equipped).map((i) => i.id);
       const ordered = mergeInventoryOrder(bagOrder, unequippedIds);
@@ -224,6 +219,7 @@ export default function CharacterPage() {
   const equippedItems = inv.items.filter((i) => i.is_equipped);
   const bagCount = inv.items.filter((i) => !i.is_equipped).length;
   const inventoryCap = getInventoryCap(character);
+  const bagSlots = Math.min(10, inventoryCap);
   const totalStats = computeTotalStats(character, equippedItems);
   const baseStats = computeTotalStats(character, []);
   const noBuffStats = computeTotalStatsNoBuffs(character, equippedItems);
@@ -232,14 +228,15 @@ export default function CharacterPage() {
     ATTR_STAT_KEYS.map((k) => [k, getNextAttributePointCost(character, k)]),
   );
   const canBuyAny = ATTR_STAT_KEYS.some((k) => sd >= costByStat[k]);
+  const cheapest = Math.min(...ATTR_STAT_KEYS.map((k) => costByStat[k]));
   const fadeUp = (delay = 0) => ({ initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { ...spring, delay } });
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
     <div className="flex flex-col md:flex-row gap-3 pt-1.5 md:flex-1 md:min-h-0 md:overflow-hidden">
-      {/* Left — header fills space above attributes */}
+      {/* Left — portrait/gear + bag slots underneath */}
       <div className="md:flex-1 md:min-h-0 md:overflow-hidden flex flex-col gap-2">
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-[1.15] min-h-0 flex flex-col">
           <CharacterHeader
             character={character}
             guild={guild}
@@ -255,33 +252,73 @@ export default function CharacterPage() {
         </div>
 
         <motion.div
-          {...fadeUp(0.05)}
-          className={`shrink-0 bg-card/50 backdrop-blur-sm border rounded-2xl px-3.5 py-2.5 flex flex-col ${
-            canBuyAny ? "border-primary/40 border-glow-cyan" : "border-border/50"
-          }`}
+          {...fadeUp(0.08)}
+          className="flex-1 min-h-[11rem] bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-3 flex flex-col"
         >
-          <div className="flex items-center justify-between gap-3 mb-2 shrink-0">
-            <h2 className="font-display font-semibold text-xs tracking-wide text-muted-foreground flex items-center gap-1.5">
-              <Star className="w-3.5 h-3.5 text-primary" /> ATTRIBUTES
-            </h2>
-            <div className="flex items-center gap-2 text-[10px]">
-              <span className="text-muted-foreground">
-                Total{" "}
-                <span className="font-display font-bold text-accent">
-                  {Object.values(totalStats).reduce((a, b) => a + (b || 0), 0)}
-                </span>
-              </span>
-              <span className="text-muted-foreground tabular-nums">
-                ✨{sd.toLocaleString()}
-              </span>
+          <h2 className="font-display font-semibold text-xs tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5 shrink-0">
+            <Backpack className="w-3.5 h-3.5 text-primary" /> INVENTORY
+            <span className={`ml-auto tabular-nums ${bagCount >= inventoryCap ? "text-amber-400" : ""}`}>
+              {bagCount}/{inventoryCap}
+            </span>
+          </h2>
+          <p className="text-[9px] text-muted-foreground/70 mb-2 italic shrink-0">
+            Double-click to equip · drag onto gear slots · hover to compare
+          </p>
+          <div className="flex-1 min-h-0">
+            <InventorySlotBoard
+              items={inv.items}
+              bagOrder={bagOrder}
+              slotCount={bagSlots}
+              onEquip={handleEquip}
+              onSell={handleSell}
+              onBulkSell={handleBulkSell}
+              onUse={handleUse}
+              onLock={inv.toggleLock}
+              characterClass={character.class}
+            />
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Right — stardust attribute upgrades (primary) */}
+      <div className="md:w-[42%] lg:w-[40%] xl:w-[38%] md:min-h-0 md:flex md:flex-col md:gap-3 space-y-3 md:space-y-0">
+        <motion.div
+          {...fadeUp(0.05)}
+          className={`bg-card/50 backdrop-blur-sm border rounded-2xl p-3.5 flex flex-col min-h-0 md:flex-1 ${
+            canBuyAny ? "border-primary/40" : "border-border/50"
+          }`}
+          style={canBuyAny ? { boxShadow: `0 0 24px ${STARDUST_COLOR}22` } : undefined}
+        >
+          <div className="flex items-start justify-between gap-3 mb-2 shrink-0">
+            <div>
+              <h2 className="font-display font-bold text-sm tracking-wide flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4" style={{ color: STARDUST_COLOR }} />
+                ATTRIBUTE UPGRADES
+              </h2>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Spend stardust to permanently raise an attribute. Hold to keep buying.
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Your stardust</p>
+              <p className="font-display font-black text-lg tabular-nums inline-flex items-center gap-1" style={{ color: STARDUST_COLOR }}>
+                <StardustIcon className="w-4 h-4" />
+                {sd.toLocaleString()}
+              </p>
+              {!canBuyAny && (
+                <p className="text-[9px] text-muted-foreground mt-0.5">
+                  Need {STARDUST_GLYPH}{cheapest.toLocaleString()}+
+                </p>
+              )}
             </div>
           </div>
 
           <TooltipProvider delayDuration={200}>
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 shrink-0">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col justify-start gap-1.5">
               {Object.entries(totalStats).map(([stat, val]) => (
                 <StatBar
                   key={stat}
+                  variant="hero"
                   stat={stat}
                   value={val}
                   base={baseStats[stat]}
@@ -293,7 +330,7 @@ export default function CharacterPage() {
               ))}
             </div>
 
-            <div className="mt-2.5 pt-2.5 border-t border-border/30 min-h-0">
+            <div className="mt-2 pt-2 border-t border-border/30 shrink-0">
               <DerivedStatsPanel
                 embedded
                 totalStats={totalStats}
@@ -303,40 +340,8 @@ export default function CharacterPage() {
             </div>
           </TooltipProvider>
         </motion.div>
-      </div>
 
-      {/* Right — inventory & collections */}
-      <div className="md:w-[44%] lg:w-[42%] xl:w-[40%] md:min-h-0 md:flex md:flex-col md:gap-3 space-y-3 md:space-y-0">
-        <motion.div {...fadeUp(0.35)} className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-4 flex flex-col min-h-0 md:flex-1">
-          <h2 className="font-display font-semibold text-xs tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
-            <Backpack className="w-3.5 h-3.5 text-primary" /> INVENTORY
-            <span className={`ml-auto tabular-nums ${bagCount >= inventoryCap ? "text-amber-400" : ""}`}>
-              {bagCount}/{inventoryCap}
-            </span>
-          </h2>
-          <p className="text-[9px] text-muted-foreground/70 mb-2 italic">
-            <span className="hidden [@media(hover:hover)_and_(pointer:fine)]:inline">
-              Drag an item to reorder or equip · drag equipped gear here to unequip · hover to compare.
-            </span>
-            <span className="[@media(hover:hover)_and_(pointer:fine)]:hidden">
-              Drag to reorder or equip · drag equipped gear here to unequip · tap gear to compare.
-            </span>
-          </p>
-          <div className="flex-1 min-h-0 flex flex-col -mr-1 pr-1">
-            <InventoryGrid
-              items={inv.items}
-              bagOrder={bagOrder}
-              onEquip={handleEquip}
-              onSell={handleSell}
-              onBulkSell={handleBulkSell}
-              onUse={handleUse}
-              onLock={inv.toggleLock}
-              characterClass={character.class}
-            />
-          </div>
-        </motion.div>
-
-        <motion.div {...fadeUp(0.4)} className="md:shrink-0">
+        <motion.div {...fadeUp(0.15)} className="md:shrink-0">
           <CollectiblesLog character={character} />
         </motion.div>
       </div>

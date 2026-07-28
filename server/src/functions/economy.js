@@ -120,14 +120,19 @@ export async function DissolveItem(user, body) {
       if (!item) httpErr(404, "Item not found");
       if (item.character_id !== ch.id) httpErr(403, "Not your item");
       if (item.locked) httpErr(400, "Item is locked");
-      if (item.is_equipped) httpErr(400, "Unequip item before dissolving");
 
       const gained = computeStardustValue(item);
-      entities.Item.delete(itemId);
       const patch = {
         stardust: (ch.stardust || 0) + gained,
         total_stardust_earned: (ch.total_stardust_earned || 0) + gained,
       };
+      // Allow dissolving equipped gear (needed when the bag is full and unequip is blocked).
+      if (item.is_equipped) {
+        const eq = { ...(ch.equipped_items || {}) };
+        if (eq[item.type] === item.id) delete eq[item.type];
+        patch.equipped_items = eq;
+      }
+      entities.Item.delete(itemId);
       const character = entities.Character.update(ch.id, patch);
       return { success: true, stardust_gained: gained, patch, character };
     });

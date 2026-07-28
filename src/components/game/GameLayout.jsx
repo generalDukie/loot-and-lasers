@@ -11,13 +11,11 @@ import ShellSidebar from "@/components/game/ShellSidebar";
 import ShellOperativePanel from "@/components/game/ShellOperativePanel";
 import ShellTopChrome from "@/components/game/ShellTopChrome";
 import InventoryFullModal from "@/components/game/InventoryFullModal";
-import GlobalChatPanel from "@/components/social/GlobalChatPanel";
 import DailyLoginModal from "@/components/social/DailyLoginModal";
-import PublicProfileSheet from "@/components/social/PublicProfileSheet";
 import NotificationCenter from "@/components/social/NotificationCenter";
-import { getCharacterById } from "@/lib/socialEngine";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { usePresence } from "@/hooks/usePresence";
+import { enforceInventoryCap } from "@/lib/inventoryCap";
 
 /** Desktop operative side panel (~15% narrower than the prior default clamp). */
 const DESKTOP_RAIL_W = "clamp(18.7rem, 15.7vw, 23.4rem)";
@@ -30,12 +28,15 @@ const MOBILE_RAIL_W = "min(27.2rem, 92vw)";
 export default function GameLayout() {
   const location = useLocation();
   const { character, setCharacter } = useMyCharacter();
-  const [chatOpen, setChatOpen] = useState(false);
   const [dailyOpen, setDailyOpen] = useState(false);
-  const [profile, setProfile] = useState(null);
   const [railOpen, setRailOpen] = useState(false);
 
   usePresence(character, "online");
+
+  // Force dissolve UI if the bag somehow exceeds the hard 10-item cap.
+  useEffect(() => {
+    if (character?.id) enforceInventoryCap(character);
+  }, [character?.id]);
 
   // Close mobile drawer on navigation.
   useEffect(() => {
@@ -58,11 +59,6 @@ export default function GameLayout() {
     }, 60000);
     return () => clearInterval(interval);
   }, [character?.id]);
-
-  async function onTagSender(msg) {
-    const c = await getCharacterById(msg.sender_id);
-    if (c) setProfile(c);
-  }
 
   const leftRail = (
     <aside
@@ -107,7 +103,6 @@ export default function GameLayout() {
             <div className="relative flex flex-col h-full min-h-0">
               <ShellTopChrome
                 character={character}
-                onOpenChat={() => setChatOpen(true)}
                 onToggleRail={() => setRailOpen((v) => !v)}
                 railOpen={railOpen}
               />
@@ -162,13 +157,12 @@ export default function GameLayout() {
 
       <AdminDock />
 
-      <GlobalChatPanel open={chatOpen} onClose={() => setChatOpen(false)} myChar={character} onTagSender={onTagSender} />
       <DailyLoginModal open={dailyOpen} onClose={() => setDailyOpen(false)} myChar={character} />
-      <InventoryFullModal character={character} />
+      <InventoryFullModal
+        character={character}
+        onCharacterChange={(patch) => setCharacter((c) => (c ? { ...c, ...patch } : c))}
+      />
       <NotificationCenter myChar={character} onOpenDaily={() => setDailyOpen(true)} />
-      {profile && (
-        <PublicProfileSheet target={profile} myChar={character} onClose={() => setProfile(null)} />
-      )}
     </>
   );
 }

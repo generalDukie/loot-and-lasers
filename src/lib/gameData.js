@@ -279,17 +279,12 @@ export function weaponCombatStyleFor(name, baseName, emoji) {
   return "shoot";
 }
 
-// Maximum unequipped items a character can hold in the bag.
+// Maximum unequipped items a character can hold in the bag (hard limit).
 export const INVENTORY_CAP = 10;
 
-// Dynamic inventory cap — the Cargo Hold ship upgrade adds +1 bag slot per tier
-// (up to +10), raising the cap from 10 to 20. Equipped gear does not count.
-// Slots are discrete so the ship's upgrade multiplier does NOT apply here.
-export function getInventoryCap(character) {
-  const ids = getActiveShipMods(character);
-  let bonus = 0;
-  SHIP_MODS.cargo_hold.tiers.forEach((t) => { if (ids.includes(t.id)) bonus += t.inventory_cap_bonus || 0; });
-  return Math.min(20, INVENTORY_CAP + bonus);
+/** Hard bag ceiling — unequipped items only. Never exceeds INVENTORY_CAP. */
+export function getInventoryCap(_character) {
+  return INVENTORY_CAP;
 }
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 
@@ -540,6 +535,15 @@ export function getStatPointsForLevelRange(_fromLevel, _toLevel) {
 // ═══════════════════════════════════════════
 // STARDUST (primary currency — earned via missions, arena, and dissolving gear in the Void)
 // ═══════════════════════════════════════════
+/** Hard wallet ceiling for character stardust balance. */
+export const STARDUST_MAX = 5_000_000_000_000;
+
+export function clampStardust(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(STARDUST_MAX, Math.max(0, Math.floor(n)));
+}
+
 export const STARDUST_PER_RARITY = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 };
 
 // Gear type weight — re-exported from itemGeneration (weapon/ship modules sell higher).
@@ -1091,7 +1095,10 @@ export function getEarlyFuelDiscount(level = 1) {
 // CURRENCY COLORS (icons, labels, costs)
 // ═══════════════════════════════════════════
 export const FUEL_COLOR = "#39FF14";
-export const STARDUST_COLOR = "#C084FC";
+/** Neon purple — stardust icons, labels, and costs. */
+export const STARDUST_COLOR = "#E879F9";
+/** Plain-text stand-in for toasts / notifications (no emoji sparkles). */
+export const STARDUST_GLYPH = "✦";
 /** Neon cyan — XP labels, bars, and reward panes (matches Arena experience). */
 export const XP_COLOR = "#00E5FF";
 

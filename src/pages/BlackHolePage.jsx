@@ -7,7 +7,8 @@ import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { Orbit } from "lucide-react";
-import { getPendingItem, clearPendingItem, subscribePending, getInventoryCap } from "@/lib/inventoryCap";
+import { getPendingItem, getPending, subscribePending, getInventoryCap, resolvePendingAfterFreeSlot, countItems } from "@/lib/inventoryCap";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 import { playBlackHoleSuck, playBlackHoleBurst } from "@/lib/blackHoleSfx";
 import { listDissolveJunk } from "@/lib/inventoryJunk";
 
@@ -30,16 +31,16 @@ function StardustBurst() {
           initial={{ opacity: 1, x: 0, y: 0, scale: 0.3 }}
           animate={{ opacity: 0, x: Math.cos(p.angle) * p.dist, y: Math.sin(p.angle) * p.dist, scale: p.scale }}
           transition={{ duration: 0.95, delay: p.delay, ease: "easeOut" }}
-          className="absolute text-amber-300"
-          style={{ filter: "drop-shadow(0 0 6px #fbbf24)" }}
-        >✨</motion.span>
+          className="absolute glow-stardust"
+          style={{ filter: "drop-shadow(0 0 6px #E879F9)" }}
+        >✦</motion.span>
       ))}
       <motion.div
         initial={{ scale: 0.2, opacity: 0.9 }}
         animate={{ scale: 2.4, opacity: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="absolute rounded-full"
-        style={{ width: 70, height: 70, background: "radial-gradient(circle, #fff 0%, #fbbf24 40%, transparent 70%)" }}
+        style={{ width: 70, height: 70, background: "radial-gradient(circle, #fff 0%, #E879F9 35%, #A855F7 55%, transparent 70%)" }}
       />
     </div>
   );
@@ -57,7 +58,7 @@ export default function BlackHolePage() {
   const holeRef = useRef(null);
   const cardRefs = useRef({});
 
-  useEffect(() => subscribePending(setPending), []);
+  useEffect(() => subscribePending((p) => setPending(p?.item ?? null)), []);
 
   const load = useCallback(async () => {
     const char = await getMyCharacter();
@@ -78,6 +79,21 @@ export default function BlackHolePage() {
     setTimeout(() => setBursts((b) => b.filter((x) => x !== id)), 1000);
   }
 
+  async function claimPendingIfPossible(char) {
+    if (!getPending()) return;
+    const bagCount = await countItems(char.id);
+    if (bagCount >= getInventoryCap(char) && getPending()?.mode !== "overflow") return;
+    const result = await resolvePendingAfterFreeSlot(char);
+    if (result?.patch) setCharacter((c) => ({ ...c, ...result.patch }));
+    if (result?.kind === "loot" && result.item) {
+      toast({ title: "📦 Item claimed!", description: `${result.item.name} joined your inventory.` });
+      await load();
+    } else if (result?.kind === "unequip" && result.item) {
+      toast({ title: "Unequipped", description: `${result.item.name} moved to your bag.` });
+      await load();
+    }
+  }
+
   async function toss(item) {
     const preview = computeStardustValue(item);
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, _sucking: true } : i));
@@ -89,19 +105,10 @@ export default function BlackHolePage() {
         const res = await api.functions.invoke("DissolveItem", { item_id: item.id });
         const patch = res.patch || res.data?.patch || {};
         const value = res.stardust_gained ?? res.data?.stardust_gained ?? preview;
-        toast({ title: "✨ Dissolved into stardust!", description: `+${value} stardust from ${item.name}` });
+        toast({ title: `${STARDUST_GLYPH} Dissolved into stardust!`, description: `+${value} stardust from ${item.name}` });
         setCharacter((c) => ({ ...c, ...patch }));
         setItems((prev) => prev.filter((i) => i.id !== item.id));
-        // If an item is waiting for room, claim it now that space opened up.
-        const p = getPendingItem();
-        if (p) {
-          const cnt = (await api.entities.Item.filter({ character_id: character.id })).length;
-          if (cnt < getInventoryCap(character)) {
-            await api.functions.invoke("AcceptPendingLoot", { item: p });
-            clearPendingItem();
-            toast({ title: "📦 Item claimed!", description: `${p.name} joined your inventory.` });
-          }
-        }
+        await claimPendingIfPossible({ ...character, ...patch });
       } catch (e) {
         toast({ title: "Dissolve failed", description: e?.message, variant: "destructive" });
         await load();
@@ -126,18 +133,10 @@ export default function BlackHolePage() {
         const patch = res.patch || res.data?.patch || {};
         const total = res.stardust_gained ?? res.data?.stardust_gained ?? previewTotal;
         const dissolved = res.dissolved || res.data?.dissolved || ids;
-        toast({ title: "✨ Junk dissolved!", description: `${dissolved.length} items → +${total} stardust` });
+        toast({ title: `${STARDUST_GLYPH} Junk dissolved!`, description: `${dissolved.length} items → +${total} stardust` });
         setCharacter((c) => ({ ...c, ...patch }));
         setItems((prev) => prev.filter((i) => !ids.includes(i.id)));
-        const p = getPendingItem();
-        if (p) {
-          const cnt = (await api.entities.Item.filter({ character_id: character.id })).length;
-          if (cnt < getInventoryCap(character)) {
-            await api.functions.invoke("AcceptPendingLoot", { item: p });
-            clearPendingItem();
-            toast({ title: "📦 Item claimed!", description: `${p.name} joined your inventory.` });
-          }
-        }
+        await claimPendingIfPossible({ ...character, ...patch });
       } catch (e) {
         toast({ title: "Dissolve failed", description: e?.message, variant: "destructive" });
         await load();
@@ -192,7 +191,7 @@ export default function BlackHolePage() {
           className="flex items-center gap-1.5 text-sm font-display font-bold px-3 py-1 rounded-full"
           style={{ color: STARDUST_COLOR, backgroundColor: `${STARDUST_COLOR}1a`, border: `1px solid ${STARDUST_COLOR}4d` }}
         >
-          ✨ {character.stardust || 0}
+          <StardustIcon className="w-3.5 h-3.5" /> {character.stardust || 0}
           <span className="text-[10px] font-normal" style={{ color: STARDUST_COLOR }}>stardust</span>
         </span>
       </motion.div>
@@ -297,7 +296,7 @@ export default function BlackHolePage() {
                 <div className="flex-1 min-w-0">
                   <h4 className="font-display font-semibold text-xs truncate leading-tight" style={{ color: RARITY_COLORS[item.rarity] }}>{item.name}</h4>
                   <p className="text-[11px] text-muted-foreground capitalize leading-tight">{item.rarity} · {item.type}</p>
-                  <p className="text-[11px] font-medium leading-tight" style={{ color: STARDUST_COLOR }}>✨ {computeStardustValue(item)}</p>
+                  <p className="text-[11px] font-medium leading-tight flex items-center gap-1" style={{ color: STARDUST_COLOR }}><StardustIcon className="w-3 h-3" glow={false} /> {computeStardustValue(item)}</p>
                 </div>
                 <motion.button
                   whileTap={{ scale: 0.9 }}

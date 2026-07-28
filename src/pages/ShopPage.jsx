@@ -21,9 +21,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { playHaggleWinGrowl } from "@/lib/shopHaggleSfx";
 import {
-  ShoppingBag, Sparkles, Clock, Gem, RefreshCw, ArrowUp, ArrowDown, Minus,
+  ShoppingBag, Clock, Gem, RefreshCw, ArrowUp, ArrowDown, Minus,
   Swords, FlaskConical, PackageOpen, Flame, MessageSquare,
 } from "lucide-react";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 function fmtCountdown(sec) {
   const h = Math.floor(sec / 3600);
@@ -203,7 +204,7 @@ export default function ShopPage() {
     if (!haggle && (character.stardust || 0) < previewCost) {
       toast({
         title: "Not enough stardust",
-        description: `Need ${previewCost} ✨ — you have ${character.stardust || 0}.`,
+        description: `Need ${previewCost} ${STARDUST_GLYPH} — you have ${character.stardust || 0}.`,
         variant: "destructive",
       });
       return;
@@ -211,7 +212,7 @@ export default function ShopPage() {
     if (haggle && (character.stardust || 0) < Math.ceil(previewCost * 0.85)) {
       toast({
         title: "Not enough stardust to haggle",
-        description: `Need ${Math.ceil(previewCost * 0.85)} ✨ if the deal lands.`,
+        description: `Need ${Math.ceil(previewCost * 0.85)} ${STARDUST_GLYPH} if the deal lands.`,
         variant: "destructive",
       });
       return;
@@ -322,7 +323,7 @@ export default function ShopPage() {
     if (busySlot) return;
     const cost = slot._cost ?? slot.sell_value ?? 25;
     if ((character.stardust || 0) < cost) {
-      toast({ title: "Not enough stardust", description: `Need ${cost} ✨ — you have ${character.stardust || 0}.`, variant: "destructive" });
+      toast({ title: "Not enough stardust", description: `Need ${cost} ${STARDUST_GLYPH} — you have ${character.stardust || 0}.`, variant: "destructive" });
       return;
     }
     setBusySlot(slot._slotId || `cons-${index}`);
@@ -395,7 +396,7 @@ export default function ShopPage() {
         <span className="flex flex-col gap-0.5">
           <span className="flex items-center gap-2 text-sm font-display font-bold">
             <span className="flex items-center gap-1" style={{ color: STARDUST_COLOR }}>
-              <Sparkles className="w-3.5 h-3.5" /> {slot.cost}
+              <StardustIcon className="w-3.5 h-3.5" /> {slot.cost}
             </span>
             {slot.nova_cost > 0 && (
               <span className="flex items-center gap-1 text-amber-300">
@@ -472,7 +473,7 @@ export default function ShopPage() {
               className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 tabular-nums"
               style={{ color: STARDUST_COLOR, border: `1px solid ${STARDUST_COLOR}4D` }}
             >
-              <Sparkles className="w-3.5 h-3.5" /> {(character.stardust || 0).toLocaleString()}
+              <StardustIcon className="w-3.5 h-3.5" /> {(character.stardust || 0).toLocaleString()}
             </span>
             <span className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 border border-border/50 text-muted-foreground tabular-nums">
               <Clock className="w-3.5 h-3.5 text-primary" /> {fmtCountdown(secondsLeft)}
@@ -680,7 +681,7 @@ export default function ShopPage() {
                   )}
                   <div className="mt-auto flex items-center justify-between">
                     <span className="flex items-center gap-1 text-sm font-display font-bold" style={{ color: STARDUST_COLOR }}>
-                      <Sparkles className="w-3.5 h-3.5" /> {cost}
+                      <StardustIcon className="w-3.5 h-3.5" /> {cost}
                     </span>
                     <button
                       onClick={() => buyConsumable({ ...slot, _cost: cost }, index)}

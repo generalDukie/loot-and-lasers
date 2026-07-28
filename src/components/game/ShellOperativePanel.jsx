@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { RACES, CLASSES, FUEL_COLOR, STARDUST_COLOR, XP_COLOR, formatFuelAmount } from "@/lib/gameData";
 import { fullName } from "@/lib/legacyName";
-import { Fuel, Gem, Sparkles } from "lucide-react";
+import { Fuel, Gem } from "lucide-react";
+import StardustIcon from "@/components/game/StardustIcon";
 
 /**
  * Persistent operative readout for the game shell — portrait, identity,
@@ -83,7 +84,7 @@ export default function ShellOperativePanel({ character }) {
           block
         />
         <CurrencyPill
-          icon={<Sparkles className="w-2.5 h-2.5 shrink-0" style={{ color: STARDUST_COLOR }} />}
+          icon={<StardustIcon className="w-2.5 h-2.5 shrink-0" glow={false} />}
           value={stardustLabel}
           color={STARDUST_COLOR}
           fontSize={currencyFontSize}

@@ -9,6 +9,7 @@ import { computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
 import { EQUIPPABLE_TYPES, listDissolveJunk } from "@/lib/inventoryJunk";
 import { sortItemsByOrder } from "@/lib/inventoryOrder";
 import { portalWhileDragging } from "@/lib/dndPortal";
+import StardustIcon from "@/components/game/StardustIcon";
 
 export const INVENTORY_DROPPABLE_ID = "inventory";
 
@@ -54,8 +55,8 @@ function UpgradeBadge({ item, eqSlot, characterClass }) {
   );
 }
 
-// Shared inventory grid. Desktop: hover compare. Mobile: tap compare panel.
-// Drag to reorder; drop equipped gear here to unequip (via parent DragDropContext).
+// Shared inventory grid. Desktop: hover compare · double-click to equip.
+// Mobile: tap compare panel. Drag to reorder; drop equipped gear here to unequip.
 export default function InventoryGrid({
   items,
   bagOrder,
@@ -201,6 +202,16 @@ export default function InventoryGrid({
                                 setPinnedId((p) => (p === item.id ? null : item.id));
                               }
                             }}
+                            onDoubleClick={(e) => {
+                              if (dragSnapshot.isDragging || bulkMode) return;
+                              if (!comparable || !onEquip) return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onEquip(item);
+                              setPinnedId(null);
+                              setHoveredId(null);
+                            }}
+                            title={comparable ? "Double-click to equip · drag to reorder or equip" : undefined}
                             className={`${isPinned ? "ring-1 ring-primary/60 rounded-lg" : ""} ${
                               dragSnapshot.isDragging
                                 ? "z-[9999] rounded-lg shadow-[0_12px_40px_rgba(0,0,0,0.55)] ring-2 ring-primary/50 bg-card/95 scale-[1.03] rotate-1 cursor-grabbing"
@@ -270,7 +281,7 @@ export default function InventoryGrid({
         <div className="shrink-0 flex flex-wrap items-center justify-center gap-2 p-2.5 rounded-xl border border-rose-500/30 bg-rose-500/5">
           <button onClick={() => setSelected(junkItems.map((i) => i.id))} className="text-[11px] px-2.5 py-1.5 rounded-lg border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition-colors font-semibold">Select junk</button>
           <button onClick={() => setSelected([])} className="text-[11px] px-2.5 py-1.5 rounded-lg border border-border/50 text-muted-foreground hover:text-foreground transition-colors">Clear</button>
-          <span className="text-[11px] px-2" style={{ color: STARDUST_COLOR }}>{selectedItems.length} selected · ✨{bulkTotal}</span>
+          <span className="text-[11px] px-2 inline-flex items-center gap-1" style={{ color: STARDUST_COLOR }}>{selectedItems.length} selected · <StardustIcon className="w-3 h-3" glow={false} />{bulkTotal}</span>
           <button
             onClick={doBulkSell}
             disabled={!selectedItems.length}

@@ -4,6 +4,8 @@ import { Ban, Volume2, RotateCcw, RefreshCw, Pencil, Check, X } from "lucide-rea
 import CurrencyAdjustForm from "./CurrencyAdjustForm";
 import ItemGrantForm from "./ItemGrantForm";
 import PromoteAdminButton from "./PromoteAdminButton";
+import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
+import StardustIcon from "@/components/game/StardustIcon";
 
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 
@@ -39,12 +41,16 @@ export default function PlayerDetail({ character, onAction, onRefresh }) {
   async function saveName() {
     const trimmed = nameDraft.trim();
     if (!trimmed || trimmed === character.name) { setEditingName(false); return; }
+    if (nameHasDigits(trimmed)) {
+      onAction?.({ action: "toast", message: NAME_NO_DIGITS_MSG, variant: "destructive" });
+      return;
+    }
     setSavingName(true);
     try {
       await api.entities.Character.update(character.id, { name: trimmed });
       onRefresh();
     } catch (e) {
-      onAction?.({ action: "toast", message: "Failed to rename player.", variant: "destructive" });
+      onAction?.({ action: "toast", message: e?.message || "Failed to rename player.", variant: "destructive" });
     } finally {
       setSavingName(false);
       setEditingName(false);
@@ -68,7 +74,7 @@ export default function PlayerDetail({ character, onAction, onRefresh }) {
               <input
                 autoFocus
                 value={nameDraft}
-                onChange={(e) => setNameDraft(e.target.value)}
+                onChange={(e) => setNameDraft(stripDigitsFromName(e.target.value))}
                 onKeyDown={(e) => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setEditingName(false); }}
                 maxLength={32}
                 className="bg-muted/40 border border-primary/50 rounded px-2 py-0.5 text-sm font-display font-bold outline-none w-44"
@@ -88,7 +94,7 @@ export default function PlayerDetail({ character, onAction, onRefresh }) {
           )}
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-right">
-          <span>✨ {(character.stardust || 0).toLocaleString()}</span>
+          <span className="inline-flex items-center justify-end gap-1"><StardustIcon className="w-3 h-3" glow={false} /> {(character.stardust || 0).toLocaleString()}</span>
           <span>💎 {(character.nova_crystals || 0).toLocaleString()}</span>
 
           <span>⛽ {character.fuel || 0}</span>

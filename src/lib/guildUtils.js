@@ -98,7 +98,7 @@ export async function contributeMission(character, mission) {
     await api.entities.GuildLog.create({
       guild_id: guild.id,
       entry_type: "levelup",
-      message: `Weekly Challenge complete! +${ch.reward_stardust} ✨ bonus (claim pending)`,
+      message: `Weekly Challenge complete! +${ch.reward_stardust} ✦ bonus (claim pending)`,
       character_name: character.name,
     });
   }
@@ -181,7 +181,7 @@ export async function contributeArenaWin(character) {
     await api.entities.GuildLog.create({
       guild_id: guild.id,
       entry_type: "levelup",
-      message: `Weekly Challenge complete! +${ch.reward_stardust} ✨ bonus (claim pending)`,
+      message: `Weekly Challenge complete! +${ch.reward_stardust} ✦ bonus (claim pending)`,
       character_name: character.name,
     });
   }

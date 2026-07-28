@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Swords, ChevronRight } from "lucide-react";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
+import StardustIcon from "@/components/game/StardustIcon";
 
 export default function GuildWarReplay({ war, onClose }) {
   const duels = war.battle_log || [];
@@ -49,7 +50,7 @@ export default function GuildWarReplay({ war, onClose }) {
             {war.attacker_guild_name} vs {war.defender_guild_name}
           </p>
           <div className="flex items-center justify-center gap-2 mt-2">
-            <span className="text-[10px] bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded-full">+{war.reward_stardust} ✨</span>
+            <span className="text-[10px] bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded-full inline-flex items-center gap-1">+{war.reward_stardust} <StardustIcon className="w-2.5 h-2.5" glow={false} /></span>
             <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">+{war.reward_guild_xp} Guild XP</span>
           </div>
         </div>

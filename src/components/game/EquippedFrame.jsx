@@ -179,6 +179,14 @@ function SlotChip({
               setHoverOpen((v) => !v);
             }
           }}
+          onDoubleClick={(e) => {
+            if (!item || !onEquip) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onEquip(item);
+            closeHover();
+          }}
+          title={item && onEquip ? "Double-click to unequip" : undefined}
         >
           {chipInner}
         </div>
@@ -246,7 +254,14 @@ function SlotChip({
                         width: size + 6,
                         height: size + 6,
                       }}
-                      title="Drag to unequip or swap"
+                      title="Double-click to unequip · drag to unequip or swap"
+                      onDoubleClick={(e) => {
+                        if (dragSnapshot.isDragging || !item || !onEquip) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onEquip(item);
+                        closeHover();
+                      }}
                     >
                       {chipInner}
                     </div>

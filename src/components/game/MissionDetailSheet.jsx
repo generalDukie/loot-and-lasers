@@ -5,6 +5,7 @@ import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { X, Star, Fuel, MapPin, Lock, Clock } from "lucide-react";
+import StardustIcon from "@/components/game/StardustIcon";
 
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`;
@@ -91,7 +92,7 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
               <p className="text-[9px]" style={{ color: XP_COLOR }}>XP</p>
             </div>
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
-              <span className="text-sm block text-center" style={{ color: STARDUST_COLOR }}>✨</span>
+              <StardustIcon className="w-3.5 h-3.5 mx-auto" />
               <p className="text-sm font-display font-bold mt-1" style={{ color: STARDUST_COLOR }}>{gains?.stardustGain ?? mission.rewards?.stardust}</p>
               <p className="text-[9px]" style={{ color: STARDUST_COLOR }}>Stardust</p>
             </div>

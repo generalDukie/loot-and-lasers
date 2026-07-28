@@ -5,6 +5,7 @@ import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import { Lock, Fuel, Star, Clock, MapPin } from "lucide-react";
 import MissionDetailSheet from "@/components/game/MissionDetailSheet";
+import StardustIcon from "@/components/game/StardustIcon";
 
 const CANTINA_BG = "/assets/cantina-bg.png";
 
@@ -261,7 +262,7 @@ export default function MissionCantina({ missions, characterLevel, character, cu
                   <p className="text-[10px] uppercase tracking-wide mt-0.5" style={{ color: XP_COLOR }}>XP</p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
-                  <span className="text-lg block text-center" style={{ color: STARDUST_COLOR }}>✨</span>
+                  <StardustIcon className="w-5 h-5 mx-auto" />
                   <p className="text-lg sm:text-xl font-display font-bold mt-1.5" style={{ color: STARDUST_COLOR }}>{hoverGains?.stardustGain ?? hoverMission.rewards?.stardust}</p>
                   <p className="text-[10px] uppercase tracking-wide mt-0.5" style={{ color: STARDUST_COLOR }}>Stardust</p>
                 </div>

@@ -3,6 +3,7 @@ import { Search, Gift, Coins, Gem, Fuel, Swords, User, ArrowUp, ArrowDown } from
 import { api } from "@/api/gameClient";
 import { getMyCharacter, getMyCharacters } from "@/lib/socialEngine";
 import ItemGrantForm from "@/components/admin/ItemGrantForm";
+import StardustIcon from "@/components/game/StardustIcon";
 
 export default function GrantItemTab({ onAction }) {
   const [query, setQuery] = useState("");
@@ -145,7 +146,7 @@ export default function GrantItemTab({ onAction }) {
               <h2 className="font-display font-semibold text-sm">Adjust Currency / XP</h2>
             </div>
             <div className="grid grid-cols-1 gap-2">
-              <CurrencyRow icon="✨" color="text-purple-400" label="Stardust" value={deltas.stardust} onChange={(v) => setDeltas({ ...deltas, stardust: v })} />
+              <CurrencyRow icon={StardustIcon} color="text-purple-400" label="Stardust" value={deltas.stardust} onChange={(v) => setDeltas({ ...deltas, stardust: v })} />
               <CurrencyRow icon={Gem} color="text-amber-400" label="Nova Crystals" value={deltas.nova_crystals} onChange={(v) => setDeltas({ ...deltas, nova_crystals: v })} />
               <CurrencyRow icon={Fuel} color="text-lime-400" label="Fuel" value={deltas.fuel} onChange={(v) => setDeltas({ ...deltas, fuel: v })} />
               <CurrencyRow icon={Swords} color="text-rose-400" label="Arena Attempts" value={deltas.arena_attempts} onChange={(v) => setDeltas({ ...deltas, arena_attempts: v })} />

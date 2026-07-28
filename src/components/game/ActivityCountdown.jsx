@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Rocket, Pickaxe } from "lucide-react";
 import { api } from "@/api/gameClient";
+import { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 function fmt(ms) {
   if (ms <= 0) return "Ready to collect!";
@@ -49,7 +50,7 @@ export default function ActivityCountdown({ character }) {
       label: "Space Mining", icon: Pickaxe, color: "#F59E0B", to: "/space-mining",
       remaining, complete: remaining <= 0,
       progress: durMs > 0 ? Math.min(100, Math.max(0, ((durMs - remaining) / durMs) * 100)) : 0,
-      reward: `+${reward} ✨`,
+      reward: `+${reward} ${STARDUST_GLYPH}`,
     };
   } else if (missionEnd) {
     const remaining = missionEnd - now;

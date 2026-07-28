@@ -14,6 +14,7 @@ import { api } from "@/api/gameClient";
 import GuildWarCard from "@/components/game/GuildWarCard";
 import GuildWarPicker from "@/components/game/GuildWarPicker";
 import GuildWarReplay from "@/components/game/GuildWarReplay";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 export default function GuildWars({ guild, character, membership, onResult }) {
   const [wars, setWars] = useState([]);
@@ -93,7 +94,7 @@ export default function GuildWars({ guild, character, membership, onResult }) {
     if ((character.stardust || 0) < GUILD_WAR_DECLARE_COST) {
       toast({
         title: "Not enough stardust",
-        description: `Requires ${GUILD_WAR_DECLARE_COST} ✨.`,
+        description: `Requires ${GUILD_WAR_DECLARE_COST} ${STARDUST_GLYPH}.`,
         variant: "destructive",
       });
       return;
@@ -169,7 +170,7 @@ export default function GuildWars({ guild, character, membership, onResult }) {
           onClick={() => setShowPicker(true)}
           className="w-full mt-4 text-xs px-4 py-2 rounded-lg font-display font-bold painted-btn flex items-center justify-center gap-1.5"
         >
-          <Flag className="w-3.5 h-3.5" /> Declare War · {GUILD_WAR_DECLARE_COST} ✨
+          <Flag className="w-3.5 h-3.5" /> Declare War · {GUILD_WAR_DECLARE_COST} <StardustIcon className="w-3.5 h-3.5" glow={false} />
         </button>
       )}
 

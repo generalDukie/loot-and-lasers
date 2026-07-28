@@ -5,6 +5,7 @@ import { db, nowIso } from "./db.js";
 import { entities } from "./entities.js";
 import { isEmailSendingEnabled, sendEmail, recordEmailFallback, getEmailConfigSummary } from "./email.js";
 import { getEmailLog } from "./emailLog.js";
+import { NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "lootandlasers-dev-secret-change-me";
 const TOKEN_TTL = process.env.JWT_TTL || "30d";
@@ -219,6 +220,16 @@ export function createAuthRouter(express) {
       if (key === "legacy_name") {
         const existing = getUserRowById(req.user.id);
         if (existing?.legacy_name) continue;
+        const legacy = String(req.body.legacy_name || "").trim();
+        if (legacy.length < 2 || legacy.length > 20) {
+          return res.status(400).json({ error: "Legacy name must be 2–20 characters" });
+        }
+        if (/\d/.test(legacy)) {
+          return res.status(400).json({ error: NAME_NO_DIGITS_MSG });
+        }
+        sets.push("legacy_name = ?");
+        vals.push(legacy);
+        continue;
       }
       if (key === "legacy_display") {
         const mode = req.body.legacy_display === "family" ? "family" : "surname";

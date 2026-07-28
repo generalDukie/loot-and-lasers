@@ -8,6 +8,7 @@ import { FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, SHOP_REFRE
 import { ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST } from "@/lib/arenaEngine";
 import { DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST } from "@/lib/dungeonEngine";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 const SECTIONS = [
   { id: "start", label: "Getting Started", icon: BookOpen, color: "#22D3EE" },
@@ -50,7 +51,7 @@ function renderSection(id) {
     case "currencies":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <H><span style={{ color: STARDUST_COLOR }}>✨ Stardust</span></H>
+          <H><span className="inline-flex items-center gap-1" style={{ color: STARDUST_COLOR }}><StardustIcon className="w-3.5 h-3.5 inline" /> Stardust</span></H>
           <p>The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, attribute buys, and arena challenger refreshes.</p>
           <H>💎 Nova Crystals</H>
           <p>Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free quotas ({ARENA_PAID_BATTLE_COST}💎 per arena battle, {DUNGEON_CONTINUE_COST}💎 per frontier fight).</p>
@@ -116,7 +117,7 @@ function renderSection(id) {
     case "market":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>The <b>Black Market</b> (Bazaar) sells rotating gear and stims for ✨ stardust. The Armory usually includes a class signature weapon.</p>
+          <p>The <b>Black Market</b> (Bazaar) sells rotating gear and stims for {STARDUST_GLYPH} stardust. The Armory usually includes a class signature weapon.</p>
           <H>Armory &amp; Stim Lab</H>
           <ul className="space-y-1.5">
             <Li>Both stalls refresh every <b>6 hours</b>. Spend <b>{SHOP_REFRESH_COST} Nova Crystals</b> to restock a stall early.</Li>
@@ -131,7 +132,7 @@ function renderSection(id) {
     case "blackhole":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>The <b>Void</b> recycles gear you no longer need. Dissolve an item and it turns into ✨ stardust — same payout whether you do it here or from your inventory.</p>
+          <p>The <b>Void</b> recycles gear you no longer need. Dissolve an item and it turns into {STARDUST_GLYPH} stardust — same payout whether you do it here or from your inventory.</p>
           <ul className="space-y-1.5">
             <Li>Only <b>unequipped</b> items can be dissolved.</Li>
             <Li>Yield scales with the item's <b>rarity</b>, <b>stats</b>, and <b>level requirement</b>, plus a per-type weight (weapons &amp; ship modules dissolve for more).</Li>

@@ -1,80 +1,125 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { computeStardustValue, RARITY_COLORS, STARDUST_COLOR } from "@/lib/gameData";
-import { getPendingItem, clearPendingItem, subscribePending } from "@/lib/inventoryCap";
+import { computeStardustValue, RARITY_COLORS, STARDUST_COLOR, getInventoryCap } from "@/lib/gameData";
+import {
+  getPending,
+  clearPendingItem,
+  subscribePending,
+  resolvePendingAfterFreeSlot,
+} from "@/lib/inventoryCap";
 import { prepareConsumableBuffs } from "@/hooks/useInventory";
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { useToast } from "@/components/ui/use-toast";
 import { Orbit, Loader2, AlertTriangle, FlaskConical } from "lucide-react";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 function isStim(item) {
   return item?.type === "consumable" && !!item.consumable;
 }
 
-// Overlay shown when a loot pickup can't fit in the inventory.
-// Resolve by tossing into the void for stardust, or using a stim to free a slot.
-// Can be minimized — a flashing bubble stays until resolved.
-// Equipped items are never offered for dissolution.
-export default function InventoryFullModal({ character }) {
-  const [pending, setPending] = useState(getPendingItem());
+function toastForResolve(toast, result) {
+  if (!result) return;
+  if (result.kind === "loot" && result.item) {
+    toast({ title: "📦 Item claimed!", description: `${result.item.name} added to inventory.` });
+  } else if (result.kind === "unequip" && result.item) {
+    toast({ title: "Unequipped", description: `${result.item.name} moved to your bag.` });
+  } else if (result.kind === "overflow_cleared") {
+    toast({ title: "Inventory clear", description: "Bag is within the 10-item limit." });
+  }
+}
+
+// Overlay when bag pressure must be resolved (new loot, blocked unequip, or over-cap).
+// Unequip / overflow cannot be dismissed — dissolve until the bag fits.
+export default function InventoryFullModal({ character, onCharacterChange }) {
+  const [pendingState, setPendingState] = useState(getPending());
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [minimized, setMinimized] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => subscribePending(setPending), []);
+  const mode = pendingState?.mode || null;
+  const pendingItem = pendingState?.item || null;
+  const mandatory = mode === "unequip" || mode === "overflow";
 
-  // Reset minimized state when a new pending item arrives.
-  useEffect(() => { if (pending) setMinimized(false); }, [pending]);
+  useEffect(() => subscribePending(setPendingState), []);
 
   useEffect(() => {
-    if (!pending || !character) return;
+    if (pendingState) setMinimized(false);
+  }, [pendingState]);
+
+  useEffect(() => {
+    if (!pendingState || !character) return;
     setLoadingItems(true);
     api.entities.Item.filter({ character_id: character.id })
       .then((list) => setItems(list || []))
       .finally(() => setLoadingItems(false));
-  }, [pending, character]);
+  }, [pendingState, character]);
 
-  if (!pending) return null;
+  if (!pendingState) return null;
 
-  async function toss(item, isNew) {
+  async function refreshBag() {
+    if (!character) return;
+    const list = await api.entities.Item.filter({ character_id: character.id });
+    setItems(list || []);
+  }
+
+  async function afterFreeSlot() {
+    const result = await resolvePendingAfterFreeSlot(character);
+    if (result?.patch) onCharacterChange?.(result.patch);
+    toastForResolve(toast, result);
+    if (getPending()) await refreshBag();
+    else setItems([]);
+  }
+
+  async function toss(item, isFocus) {
     if (!character || busyId) return;
-    setBusyId(item.id || "new");
+    setBusyId(item.id || "focus");
     try {
-      if (isNew) {
-        // Pending item is not persisted — dissolve via server for stardust only.
+      if (mode === "loot" && isFocus) {
         clearPendingItem();
         const res = await api.functions.invoke("DissolvePendingLoot", { item });
         const value = res.stardust_gained ?? res.data?.stardust_gained ?? computeStardustValue(item);
+        const patch = res.patch || res.data?.patch;
+        if (patch) onCharacterChange?.(patch);
         setItems([]);
-        toast({ title: `✨ Dissolved ${item.name}`, description: `+${value} stardust` });
+        toast({ title: `${STARDUST_GLYPH} Dissolved ${item.name}`, description: `+${value} stardust` });
         return;
       }
+
+      if (mode === "unequip" && isFocus && item.id) {
+        // Dissolve the equipped piece itself — frees nothing in bag, clears unequip pressure.
+        const res = await api.functions.invoke("DissolveItem", { item_id: item.id });
+        const value = res.stardust_gained ?? res.data?.stardust_gained ?? computeStardustValue(item);
+        const patch = res.patch || res.data?.patch || {};
+        onCharacterChange?.(patch);
+        clearPendingItem();
+        setItems([]);
+        toast({ title: `${STARDUST_GLYPH} Dissolved ${item.name}`, description: `+${value} stardust` });
+        return;
+      }
+
       const res = await api.functions.invoke("DissolveItem", { item_id: item.id });
       const value = res.stardust_gained ?? res.data?.stardust_gained ?? computeStardustValue(item);
-      await api.functions.invoke("AcceptPendingLoot", { item: pending });
-      clearPendingItem();
-      setItems([]);
-      toast({
-        title: `✨ Dissolved ${item.name}`,
-        description: `+${value} stardust · ${pending.name} added to inventory.`,
-      });
+      const patch = res.patch || res.data?.patch;
+      if (patch) onCharacterChange?.(patch);
+      toast({ title: `${STARDUST_GLYPH} Dissolved ${item.name}`, description: `+${value} stardust` });
+      await afterFreeSlot();
     } catch (e) {
       toast({ title: "Something went wrong", description: e?.message, variant: "destructive" });
+      await refreshBag();
     } finally {
       setBusyId(null);
     }
   }
 
-  async function useStim(item, isNew) {
+  async function useStim(item, isFocus) {
     if (!character || busyId || !isStim(item)) return;
-    setBusyId(item.id || "new-use");
+    setBusyId(item.id || "focus-use");
     try {
-      if (isNew) {
-        // Pending stim is not in DB — apply buffs client-side then discard pending.
+      if (mode === "loot" && isFocus) {
         const fresh = await api.entities.Character.get(character.id);
         const prepared = prepareConsumableBuffs(fresh, item);
         if (!prepared.ok) {
@@ -82,32 +127,47 @@ export default function InventoryFullModal({ character }) {
           return;
         }
         await api.entities.Character.update(character.id, { active_buffs: prepared.buffs });
+        onCharacterChange?.({ active_buffs: prepared.buffs });
         clearPendingItem();
         setItems([]);
         toast({ title: `🧪 Used ${item.name}`, description: "Buff applied — inventory pressure cleared." });
         return;
       }
+
+      if (mode === "unequip" && isFocus) {
+        toast({ title: "Can't use", description: "Unequip or dissolve this piece first.", variant: "destructive" });
+        return;
+      }
+
       await api.functions.invoke("UseConsumable", { item_id: item.id });
-      await api.functions.invoke("AcceptPendingLoot", { item: pending });
-      clearPendingItem();
-      setItems([]);
-      toast({
-        title: `🧪 Used ${item.name}`,
-        description: `${pending.name} added to inventory.`,
-      });
+      toast({ title: `🧪 Used ${item.name}`, description: "Slot freed." });
+      await afterFreeSlot();
     } catch (e) {
       toast({ title: "Something went wrong", description: e?.message, variant: "destructive" });
+      await refreshBag();
     } finally {
       setBusyId(null);
     }
   }
 
-  const pendingColor = RARITY_COLORS[pending.rarity] || "#9CA3AF";
+  const pendingColor = RARITY_COLORS[pendingItem?.rarity] || "#9CA3AF";
   const spareItems = items.filter((it) => !it.is_equipped && !it.locked);
+  const bagCount = items.filter((it) => !it.is_equipped).length;
+  const cap = getInventoryCap(character);
   const busy = busyId !== null;
 
-  // ── Minimized: flashing alert bubble ──
-  if (minimized) {
+  const title =
+    mode === "unequip" ? "Inventory Full — Unequip Blocked"
+      : mode === "overflow" ? "Inventory Over Capacity"
+        : "Inventory Full";
+  const subtitle =
+    mode === "unequip"
+      ? `Bag is full (${bagCount}/${cap}). Dissolve a spare item to unequip, or dissolve the equipped piece.`
+      : mode === "overflow"
+        ? `You have ${bagCount} bag items (max ${cap}). Dissolve until you are at or under the limit.`
+        : "Dissolve into the Void, or use a stim to free a slot.";
+
+  if (minimized && !mandatory) {
     return (
       <GameplayOverlayPortal className="!pointer-events-none">
         <motion.button
@@ -142,58 +202,67 @@ export default function InventoryFullModal({ character }) {
         >
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h2 className="font-display font-bold text-lg text-amber-300 glow-orange">Inventory Full</h2>
-              <p className="text-xs text-muted-foreground mt-1">
-                Dissolve into the Void, or use a stim to free a slot.
-              </p>
+              <h2 className="font-display font-bold text-lg text-amber-300 glow-orange">{title}</h2>
+              <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
             </div>
-            <button
-              onClick={() => setMinimized(true)}
-              className="text-[10px] px-2 py-1 rounded-lg bg-muted/30 hover:bg-muted/50 text-muted-foreground font-display font-semibold tracking-wide shrink-0"
-            >
-              Minimize
-            </button>
+            {!mandatory && (
+              <button
+                onClick={() => setMinimized(true)}
+                className="text-[10px] px-2 py-1 rounded-lg bg-muted/30 hover:bg-muted/50 text-muted-foreground font-display font-semibold tracking-wide shrink-0"
+              >
+                Minimize
+              </button>
+            )}
           </div>
 
-          {/* Pending item — waiting for room */}
-          <div
-            className="flex items-center gap-3 p-3 rounded-xl border mb-3"
-            style={{ borderColor: pendingColor + "40", background: pendingColor + "08" }}
-          >
-            <GearVisual type={pending.type} rarity={pending.rarity} name={pending.name} baseName={pending.base_name} level_requirement={pending.level_requirement} size={36} />
-            <div className="min-w-0 flex-1">
-              <p className="font-display font-semibold text-sm truncate" style={{ color: pendingColor }}>
-                {pending.name}
-              </p>
-              <p className="text-[10px] text-muted-foreground capitalize">
-                {pending.rarity} · {(pending.type || "").replace("_", " ")} · {computeStardustValue(pending)}✨ if dissolved
-              </p>
-            </div>
-            <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-display font-bold tracking-wide">
-              NEW
-            </span>
-            <div className="flex flex-col gap-1 shrink-0">
-              {isStim(pending) && (
+          {pendingItem && mode !== "overflow" && (
+            <div
+              className="flex items-center gap-3 p-3 rounded-xl border mb-3"
+              style={{ borderColor: pendingColor + "40", background: pendingColor + "08" }}
+            >
+              <GearVisual
+                type={pendingItem.type}
+                rarity={pendingItem.rarity}
+                name={pendingItem.name}
+                baseName={pendingItem.base_name}
+                level_requirement={pendingItem.level_requirement}
+                size={36}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-semibold text-sm truncate" style={{ color: pendingColor }}>
+                  {pendingItem.name}
+                </p>
+                <p className="text-[10px] text-muted-foreground capitalize inline-flex items-center gap-1">
+                  {pendingItem.rarity} · {(pendingItem.type || "").replace("_", " ")} · {computeStardustValue(pendingItem)}
+                  <StardustIcon className="w-2.5 h-2.5" glow={false} /> if dissolved
+                </p>
+              </div>
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-display font-bold tracking-wide">
+                {mode === "unequip" ? "EQUIPPED" : "NEW"}
+              </span>
+              <div className="flex flex-col gap-1 shrink-0">
+                {mode === "loot" && isStim(pendingItem) && (
+                  <button
+                    onClick={() => useStim(pendingItem, true)}
+                    disabled={busy}
+                    className="text-[10px] px-2.5 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
+                  >
+                    <FlaskConical className="w-3 h-3" /> Use
+                  </button>
+                )}
                 <button
-                  onClick={() => useStim(pending, true)}
+                  onClick={() => toss(pendingItem, true)}
                   disabled={busy}
-                  className="text-[10px] px-2.5 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
+                  className="text-[10px] px-2.5 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
                 >
-                  <FlaskConical className="w-3 h-3" /> Use
+                  <Orbit className="w-3 h-3" /> Dissolve
                 </button>
-              )}
-              <button
-                onClick={() => toss(pending, true)}
-                disabled={busy}
-                className="text-[10px] px-2.5 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
-              >
-                <Orbit className="w-3 h-3" /> Dissolve
-              </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <p className="text-[10px] font-display font-semibold tracking-widest text-muted-foreground mb-2">
-            OR FREE A SPARE SLOT
+            {mode === "overflow" ? "DISSOLVE UNTIL ≤ 10" : "OR FREE A SPARE SLOT"}
           </p>
 
           {loadingItems ? (
@@ -202,7 +271,11 @@ export default function InventoryFullModal({ character }) {
             </div>
           ) : spareItems.length === 0 ? (
             <p className="text-center text-xs text-muted-foreground italic py-4">
-              No spare items. Dissolve{isStim(pending) ? " or use" : ""} the new find above.
+              {mode === "unequip"
+                ? "No spare items. Dissolve the equipped piece above."
+                : mode === "overflow"
+                  ? "No dissolvable bag items found. Unlock an item or contact support."
+                  : `No spare items. Dissolve${isStim(pendingItem) ? " or use" : ""} the new find above.`}
             </p>
           ) : (
             <div className="max-h-[35vh] overflow-y-auto space-y-2 pr-1">
@@ -215,7 +288,14 @@ export default function InventoryFullModal({ character }) {
                     className="flex items-center gap-2 p-2 rounded-lg border bg-card/40"
                     style={{ borderColor: c + "30" }}
                   >
-                    <GearVisual type={item.type} rarity={item.rarity} name={item.name} baseName={item.base_name} level_requirement={item.level_requirement} size={32} />
+                    <GearVisual
+                      type={item.type}
+                      rarity={item.rarity}
+                      name={item.name}
+                      baseName={item.base_name}
+                      level_requirement={item.level_requirement}
+                      size={32}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="font-display font-semibold text-xs truncate" style={{ color: c }}>
                         {item.name}
@@ -224,9 +304,11 @@ export default function InventoryFullModal({ character }) {
                         {item.rarity} · {(item.type || "").replace("_", " ")}
                       </p>
                     </div>
-                    <span className="text-[10px] font-bold shrink-0" style={{ color: STARDUST_COLOR }}>✨ {val}</span>
+                    <span className="text-[10px] font-bold shrink-0 inline-flex items-center gap-1" style={{ color: STARDUST_COLOR }}>
+                      <StardustIcon className="w-2.5 h-2.5" glow={false} /> {val}
+                    </span>
                     <div className="flex flex-col gap-1 shrink-0">
-                      {isStim(item) && (
+                      {isStim(item) && mode !== "overflow" && (
                         <button
                           onClick={() => useStim(item, false)}
                           disabled={busy}
@@ -251,7 +333,7 @@ export default function InventoryFullModal({ character }) {
 
           {items.length > spareItems.length && (
             <p className="text-[9px] text-muted-foreground/60 italic mt-2 text-center">
-              Equipped and locked items are excluded.
+              Locked items are excluded{mode === "overflow" ? "" : "; equipped items are excluded from the spare list"}.
             </p>
           )}
         </motion.div>

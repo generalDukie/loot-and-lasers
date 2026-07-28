@@ -6,7 +6,8 @@ import { useNavigate, useOutletContext } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { getCasinoMaxStardustBet, STARDUST_COLOR } from "@/lib/gameData";
-import { Gem, Sparkles, Dice5 } from "lucide-react";
+import { Gem, Dice5 } from "lucide-react";
+import StardustIcon from "@/components/game/StardustIcon";
 import CrystalFlip from "@/components/casino/CrystalFlip";
 import CrystalJackpot from "@/components/casino/CrystalJackpot";
 import StardustDice from "@/components/casino/StardustDice";
@@ -93,14 +94,14 @@ export default function CasinoPage() {
         <p className="text-xs text-muted-foreground mb-3">Risk it for the glittering prize. The house always remembers.</p>
         <div className="flex items-center justify-center gap-3 mb-1 flex-wrap">
           <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/60 border border-border/50 text-sm font-display font-bold">
-            <Sparkles className="w-3.5 h-3.5" style={{ color: STARDUST_COLOR }} />{" "}
+            <StardustIcon className="w-3.5 h-3.5" />{" "}
             <span style={{ color: STARDUST_COLOR }}>{(character.stardust || 0).toLocaleString()}</span>
           </span>
           <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/60 border border-amber-500/30 text-sm font-display font-bold text-amber-300">
             <Gem className="w-3.5 h-3.5" /> {(character.nova_crystals || 0).toLocaleString()}
           </span>
-          <span className="text-[10px] text-muted-foreground">
-            Max stardust bet · {maxSdBet.toLocaleString()} ✨ (scales with SD/F)
+          <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+            Max stardust bet · {maxSdBet.toLocaleString()} <StardustIcon className="w-2.5 h-2.5" glow={false} /> (scales with SD/F)
           </span>
         </div>
       </motion.div>

@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Target, Clock, CheckCircle2 } from "lucide-react";
+import StardustIcon from "@/components/game/StardustIcon";
 
 export default function GuildWeeklyChallenge({ challenge, guild }) {
   if (!challenge) return null;
@@ -59,7 +60,7 @@ export default function GuildWeeklyChallenge({ challenge, guild }) {
       {/* Rewards */}
       <div className="flex items-center gap-2 mt-3">
         <div className="flex items-center gap-1 text-xs bg-accent/10 text-accent px-2.5 py-1 rounded-full font-medium">
-          ✨ {challenge.reward_stardust}
+          <StardustIcon className="w-3 h-3" glow={false} /> {challenge.reward_stardust}
         </div>
         <div className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full font-medium">
           <Target className="w-3 h-3" /> {challenge.reward_guild_xp} Guild XP

@@ -19,6 +19,7 @@ import {
   sanitizeUpdatePayload,
   scopeReadQuery,
 } from "./entityAccess.js";
+import { assertCanUnequipToBag } from "./shared/inventoryGrant.js";
 import "./db.js";
 
 const PORT = Number(process.env.PORT || 8787);
@@ -129,6 +130,7 @@ app.put("/api/entities/:type/:id", requireAuth, (req, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
     body = sanitizeUpdatePayload(req.user, req.params.type, body);
+    if (req.params.type === "Item") assertCanUnequipToBag(existing, body);
     const updated = store.update(req.params.id, body);
     res.json(updated);
   } catch (err) {
@@ -151,6 +153,7 @@ app.patch("/api/entities/:type/:id", requireAuth, (req, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
     body = sanitizeUpdatePayload(req.user, req.params.type, body);
+    if (req.params.type === "Item") assertCanUnequipToBag(existing, body);
     const updated = store.update(req.params.id, body);
     res.json(updated);
   } catch (err) {
@@ -217,6 +220,9 @@ app.post("/api/entities/:type/update-many", requireAuth, (req, res) => {
     delete body.id;
     body = sanitizeUpdatePayload(req.user, req.params.type, body);
     const matches = store.filter(query, null, 100000).filter((d) => canWriteDoc(req.user, req.params.type, d));
+    if (req.params.type === "Item" && body.is_equipped === false) {
+      for (const m of matches) assertCanUnequipToBag(m, body);
+    }
     const updated = matches.map((m) => store.update(m.id, body));
     res.json(updated);
   } catch (err) {

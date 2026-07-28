@@ -5,6 +5,8 @@ import { Flag, Search, Users } from "lucide-react";
 import { GUILD_MAX_MEMBERS } from "@/lib/gameData";
 import GuildRecruitingList from "@/components/game/GuildRecruitingList";
 import { requestToJoinGuild } from "@/lib/guildUtils";
+import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
+import StardustIcon from "@/components/game/StardustIcon";
 
 const GUILD_CREATE_COST = 500;
 
@@ -20,6 +22,7 @@ export default function GuildCreation({ character, onJoined }) {
 
   async function handleCreate() {
     if (!name.trim()) { setError("Guild needs a name."); return; }
+    if (nameHasDigits(name)) { setError(NAME_NO_DIGITS_MSG); return; }
     if ((character.stardust || 0) < GUILD_CREATE_COST) {
       setError(`You need ${GUILD_CREATE_COST} stardust to found a guild.`);
       return;
@@ -137,7 +140,7 @@ export default function GuildCreation({ character, onJoined }) {
           <>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Guild Name</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Nova Syndicate" maxLength={32}
+              <input value={name} onChange={(e) => setName(stripDigitsFromName(e.target.value))} placeholder="e.g. Nova Syndicate" maxLength={32}
                 className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30" />
             </div>
             <div>
@@ -153,7 +156,7 @@ export default function GuildCreation({ character, onJoined }) {
             <button onClick={handleCreate} disabled={busy || (character.stardust || 0) < GUILD_CREATE_COST}
               className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground py-2.5 rounded-lg font-display font-bold tracking-wide disabled:opacity-50 transition-colors">
               {busy ? <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> : <Flag className="w-4 h-4" />}
-              FOUND GUILD <span className="opacity-80">· ✨{GUILD_CREATE_COST}</span>
+              FOUND GUILD <span className="opacity-80 inline-flex items-center gap-1">· <StardustIcon className="w-3 h-3" glow={false} />{GUILD_CREATE_COST}</span>
             </button>
           </>
         ) : (

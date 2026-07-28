@@ -13,6 +13,7 @@ import {
   profileDisplayName,
   familyLabel,
 } from "@/lib/legacyName";
+import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
 
 const NAME_CHANGE_COST = 500;
 
@@ -49,6 +50,10 @@ export default function ProfileSettings() {
     if (!trimmed || trimmed === char.name) return;
     if (trimmed.length < 2) {
       toast({ title: "Name too short", description: "Need at least 2 characters.", variant: "destructive" });
+      return;
+    }
+    if (nameHasDigits(trimmed)) {
+      toast({ title: "Invalid name", description: NAME_NO_DIGITS_MSG, variant: "destructive" });
       return;
     }
     if ((char.nova_crystals || 0) < NAME_CHANGE_COST) {
@@ -182,7 +187,8 @@ export default function ProfileSettings() {
           <div className="h-10 flex items-center"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
         ) : (
           <form onSubmit={handleRename} className="space-y-2">
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="New operative name" className="h-10" maxLength={24} disabled={saving} />
+            <Input value={name} onChange={e => setName(stripDigitsFromName(e.target.value))} placeholder="New operative name" className="h-10" maxLength={24} disabled={saving} />
+            <p className="text-[10px] text-muted-foreground/60">Letters only — no numbers.</p>
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                 <Gem className="w-3 h-3 text-amber-400" /> Cost: {NAME_CHANGE_COST} · Balance: {char.nova_crystals || 0}

@@ -2,6 +2,7 @@ import React from "react";
 import { Clock, Check, Swords, ChevronRight } from "lucide-react";
 import { isWarReadyExpired } from "@/lib/guildEngine";
 import { STARDUST_COLOR } from "@/lib/gameData";
+import StardustIcon from "@/components/game/StardustIcon";
 
 function timeLeft(deadline) {
   const ms = new Date(deadline).getTime() - Date.now();
@@ -90,7 +91,7 @@ export default function GuildWarCard({ war, readies, character, membership, busy
             <span className="text-[10px] text-muted-foreground">
               {war.attacker_ready_count}v{war.defender_ready_count}
             </span>
-            <span className="text-[10px]" style={{ color: STARDUST_COLOR }}>{war.reward_stardust} ✨</span>
+            <span className="text-[10px] inline-flex items-center gap-1" style={{ color: STARDUST_COLOR }}>{war.reward_stardust} <StardustIcon className="w-2.5 h-2.5" glow={false} /></span>
           </div>
           <button
             onClick={onReplay}

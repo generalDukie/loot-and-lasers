@@ -5,6 +5,7 @@ import { api } from "@/api/gameClient";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
+import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
 
 // One-time setup modal: prompts the user for a permanent legacy (sur)name
 // that identifies their account across all characters. Once set it cannot
@@ -24,6 +25,10 @@ export default function LegacyNameModal({ open, onClose }) {
     }
     if (trimmed.length > 20) {
       toast({ title: "Too long", description: "Legacy name must be 20 characters or fewer.", variant: "destructive" });
+      return;
+    }
+    if (nameHasDigits(trimmed)) {
+      toast({ title: "Invalid name", description: NAME_NO_DIGITS_MSG, variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -72,7 +77,7 @@ export default function LegacyNameModal({ open, onClose }) {
             <form onSubmit={handleSubmit} className="space-y-3">
               <input
                 value={value}
-                onChange={(e) => setValue(e.target.value.slice(0, 20))}
+                onChange={(e) => setValue(stripDigitsFromName(e.target.value).slice(0, 20))}
                 placeholder="e.g. Voss, Nakamura, Khel…"
                 autoFocus
                 maxLength={20}

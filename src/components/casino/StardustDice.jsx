@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles } from "lucide-react";
 import { burstWin } from "@/lib/casinoFx";
 import { STARDUST_COLOR } from "@/lib/gameData";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 const FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
@@ -40,8 +40,8 @@ export default function StardustDice({ character, onSettle, busy, maxBet = 100 }
       setFace(dice - 1);
       setRolling(false);
       const label = won
-        ? `Rolled ${dice} — +${Math.abs(delta).toLocaleString()} ✨`
-        : `Rolled ${dice} — −${b.toLocaleString()} ✨`;
+        ? `Rolled ${dice} — +${Math.abs(delta).toLocaleString()} ${STARDUST_GLYPH}`
+        : `Rolled ${dice} — −${b.toLocaleString()} ${STARDUST_GLYPH}`;
       setResult({ won, dice, label });
       if (won) burstWin();
     } catch {
@@ -52,7 +52,7 @@ export default function StardustDice({ character, onSettle, busy, maxBet = 100 }
   return (
     <div className="painted-panel canvas-grain p-4">
       <div className="flex items-center gap-2 mb-1">
-        <Sparkles className="w-4 h-4" style={{ color: STARDUST_COLOR }} />
+        <StardustIcon className="w-4 h-4" />
         <h3 className="font-display font-bold text-sm" style={{ color: STARDUST_COLOR }}>Stardust Dice</h3>
         <span className="text-[9px] text-muted-foreground ml-auto">50% · 2× · max {MAX.toLocaleString()}</span>
       </div>

@@ -28,6 +28,7 @@ import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
 import { Swords, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
 
 import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
+import { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 function fmtMs(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
 async function guildTagForCharacter(characterId) {
@@ -153,7 +154,7 @@ export default function ArenaPage() {
       return;
     }
     if ((character.stardust || 0) < ARENA_REFRESH_COST) {
-      toast({ title: "Not enough stardust", description: `Instant refresh costs ${ARENA_REFRESH_COST} ✨.`, variant: "destructive" });
+      toast({ title: "Not enough stardust", description: `Instant refresh costs ${ARENA_REFRESH_COST} ${STARDUST_GLYPH}.`, variant: "destructive" });
       return;
     }
     const res = await api.functions.invoke("RefreshArenaOpponents", { charge: true });
@@ -381,7 +382,7 @@ export default function ArenaPage() {
             onClick={refreshOpponents}
             className="text-xs px-3 py-1.5 rounded-full font-display font-semibold flex items-center gap-1.5 transition-colors bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25"
           >
-            <RefreshCw className="w-3 h-3" /> {canFreeRefresh ? "Refresh" : `Refresh · ${ARENA_REFRESH_COST} ✨`}
+            <RefreshCw className="w-3 h-3" /> {canFreeRefresh ? "Refresh" : `Refresh · ${ARENA_REFRESH_COST} ${STARDUST_GLYPH}`}
             {!canFreeRefresh && <span className="text-muted-foreground font-body font-normal">{fmtMs(refreshAt - now)}</span>}
           </button>
         </div>

@@ -4,6 +4,7 @@ import { X, Search, Flag } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { GUILD_WAR_DECLARE_COST } from "@/lib/guildEngine";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
+import StardustIcon from "@/components/game/StardustIcon";
 
 export default function GuildWarPicker({ ownGuildId, onPick, onClose, busy }) {
   const [guilds, setGuilds] = useState([]);
@@ -44,8 +45,8 @@ export default function GuildWarPicker({ ownGuildId, onPick, onClose, busy }) {
           <Flag className="w-5 h-5 text-destructive" />
           <h3 className="font-display font-bold text-base">Declare War</h3>
         </div>
-        <p className="text-[11px] text-muted-foreground mb-3">
-          Choose a rival guild. Both sides have 24h to ready up before battle begins. Costs {GUILD_WAR_DECLARE_COST} ✨.
+        <p className="text-[11px] text-muted-foreground mb-3 inline-flex items-center gap-1 flex-wrap">
+          Choose a rival guild. Both sides have 24h to ready up before battle begins. Costs {GUILD_WAR_DECLARE_COST} <StardustIcon className="w-3 h-3" glow={false} />.
         </p>
         <div className="relative mb-3">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />

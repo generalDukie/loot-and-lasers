@@ -15,6 +15,7 @@ import GuildWars from "@/components/game/GuildWars";
 import GuildBattleHistory from "@/components/game/GuildBattleHistory";
 import { Users, Target, TrendingUp } from "lucide-react";
 import PageStage from "@/components/game/PageStage";
+import StardustIcon from "@/components/game/StardustIcon";
 
 export default function GuildPage() {
   const [character, setCharacter] = useState(null);
@@ -123,7 +124,7 @@ export default function GuildPage() {
 
   const stats = [
     { icon: Target, label: "Missions Run", value: totalMissions, color: "text-primary" },
-    { icon: "✨", label: "Stardust Earned", value: totalStardust.toLocaleString(), color: "text-purple-400" },
+    { icon: StardustIcon, label: "Stardust Earned", value: totalStardust.toLocaleString(), color: "text-purple-400" },
     { icon: TrendingUp, label: "Avg Level", value: avgLevel, color: "text-accent" },
     { icon: Users, label: "Members", value: members.length, color: "text-green-400" },
   ];

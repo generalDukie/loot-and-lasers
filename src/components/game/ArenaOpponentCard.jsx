@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { Swords, Zap, Trophy, Clock, User, Flame } from "lucide-react";
 import { avatarPropsFor, previewArenaMatch } from "@/lib/arenaEngine";
+import StardustIcon from "@/components/game/StardustIcon";
 
 function lastOnline(mins) {
   if (mins < 60) return `${mins}m ago`;
@@ -131,8 +132,8 @@ export default function ArenaOpponentCard({
               <p className="text-[8px] uppercase tracking-wide text-emerald-400/80 font-display mb-0.5">Win</p>
               <p className="font-display font-black text-sm text-emerald-300">{fmtDelta(onWin.arena_rating_delta)}</p>
               {freeBattle ? (
-                <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">
-                  {onWin.experience} XP · {onWin.stardust} ✨
+                <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight inline-flex items-center gap-1">
+                  {onWin.experience} XP · {onWin.stardust} <StardustIcon className="w-2.5 h-2.5" glow={false} />
                 </p>
               ) : (
                 <p className="text-[9px] text-muted-foreground mt-0.5">rating</p>

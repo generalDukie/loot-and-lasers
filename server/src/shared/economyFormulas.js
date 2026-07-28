@@ -109,6 +109,14 @@ export function computeNovaCrystalCost(item) {
 
 // ── Fuel ─────────────────────────────────────────────────────
 export const FUEL_MAX = 100;
+/** Hard wallet ceiling for character stardust balance. */
+export const STARDUST_MAX = 5_000_000_000_000;
+
+export function clampStardust(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(STARDUST_MAX, Math.max(0, Math.floor(n)));
+}
 export const FUEL_CYCLE_MS = 24 * 60 * 60 * 1000;
 export const FUEL_PURCHASE_AMOUNT = 20;
 export const FUEL_PURCHASE_COST = 10;
@@ -289,13 +297,8 @@ export function getModEffectTotal(character, effectKey) {
   return modTotal + (ship.inherent?.[effectKey] || 0);
 }
 
-export function getInventoryCap(character) {
-  const ids = getShipModIds(character, getActiveShipId(character));
-  let bonus = 0;
-  SHIP_MODS.cargo_hold.tiers.forEach((t) => {
-    if (ids.includes(t.id)) bonus += t.inventory_cap_bonus || 0;
-  });
-  return Math.min(20, 10 + bonus);
+export function getInventoryCap(_character) {
+  return 10;
 }
 
 export function getEffectiveMissionDuration(character, mission) {

@@ -4,7 +4,8 @@ import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, STARDUST_COLOR, XP_COLOR } fr
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import confetti from "canvas-confetti";
-import { Star, Zap, TrendingUp, Package, Sparkles, Trophy, Gift, FlaskConical, ArrowRight, Swords, Skull } from "lucide-react";
+import { Zap, TrendingUp, Package, Sparkles, Trophy, Gift, FlaskConical, ArrowRight, Swords, Skull } from "lucide-react";
+import StardustIcon from "@/components/game/StardustIcon";
 
 function RewardCard({ icon, accent, children }) {
   return (
@@ -96,7 +97,7 @@ export default function CombatCompleteOverlay({ summary, onClose }) {
           )}
 
           {(stardust?.total > 0 || (stardust?.total === 0 && note)) && (
-            <RewardCard icon={<Star className="w-5 h-5" />} accent={STARDUST_COLOR}>
+            <RewardCard icon={<StardustIcon className="w-5 h-5" />} accent={STARDUST_COLOR}>
               <div className="flex items-baseline justify-between">
                 <span className="text-xs font-display font-semibold" style={{ color: STARDUST_COLOR }}>STARDUST</span>
                 <span className="font-display font-bold text-lg" style={{ color: STARDUST_COLOR }}>+{stardust?.total || 0}</span>

@@ -80,6 +80,7 @@
 /* Sci-fi glow effects */
 .glow-cyan { text-shadow: 0 0 10px hsl(190 90% 50% / 0.5), 0 0 20px hsl(190 90% 50% / 0.2); }
 .glow-purple { text-shadow: 0 0 10px hsl(270 60% 55% / 0.5), 0 0 20px hsl(270 60% 55% / 0.2); }
+.glow-stardust { text-shadow: 0 0 8px #E879F9, 0 0 18px #E879F988, 0 0 28px #D946EF55; color: #E879F9; }
 .border-glow-cyan { box-shadow: 0 0 8px hsl(190 90% 50% / 0.15), inset 0 0 8px hsl(190 90% 50% / 0.05); }
 .border-glow-purple { box-shadow: 0 0 8px hsl(270 60% 55% / 0.15), inset 0 0 8px hsl(270 60% 55% / 0.05); }
 

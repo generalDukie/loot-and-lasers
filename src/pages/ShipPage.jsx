@@ -17,7 +17,8 @@ import {
 } from "@/lib/gameData";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
-import { Rocket, Gem, Sparkles, ChevronDown } from "lucide-react";
+import { Rocket, Gem, ChevronDown } from "lucide-react";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
 
 function HangarSection({ eyebrow, title, hint, action, children, delay = 0 }) {
@@ -125,7 +126,7 @@ export default function ShipPage() {
     const tier = progress.next;
     const cost = getTierCost(tier, targetId);
     if ((character.stardust || 0) < cost) {
-      toast({ title: "Not enough stardust", description: `Need ${cost.toLocaleString()} ✨ — you have ${character.stardust || 0}.`, variant: "destructive" });
+      toast({ title: "Not enough stardust", description: `Need ${cost.toLocaleString()} ${STARDUST_GLYPH} — you have ${character.stardust || 0}.`, variant: "destructive" });
       return;
     }
     setBuyingMod(catKey);
@@ -221,7 +222,7 @@ export default function ShipPage() {
               className="text-xs bg-background/70 backdrop-blur-sm px-3 py-1.5 rounded-full font-display font-semibold flex items-center gap-1.5 shadow-sm tabular-nums"
               style={{ color: STARDUST_COLOR, border: `1px solid ${STARDUST_COLOR}4D` }}
             >
-              <Sparkles className="w-3.5 h-3.5" /> {(character.stardust || 0).toLocaleString()}
+              <StardustIcon className="w-3.5 h-3.5" /> {(character.stardust || 0).toLocaleString()}
             </span>
             <span className="text-xs bg-background/70 backdrop-blur-sm border border-amber-400/35 text-amber-300 px-3 py-1.5 rounded-full font-display font-semibold flex items-center gap-1.5 shadow-sm tabular-nums">
               <Gem className="w-3.5 h-3.5" /> {(character.nova_crystals || 0).toLocaleString()}

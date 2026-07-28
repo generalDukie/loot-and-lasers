@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Fuel, Gem, Rocket } from "lucide-react";
+import { Fuel, Rocket } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
 import { FUEL_MOUNTS, MAX_FUEL_MOUNTS, getActiveFuelMounts } from "@/lib/fuelMounts";
 import { FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { useToast } from "@/components/ui/use-toast";
+import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 function useCountdown(expiresAt) {
   const [now, setNow] = useState(Date.now());
@@ -53,7 +54,7 @@ export default function FuelStation({ character, onUpdate, embedded = false }) {
 
   async function handleBuy(mount) {
     if ((character.stardust || 0) < mount.stardust) {
-      toast({ title: "Not enough stardust", description: `Need ${mount.stardust} ✨ — you have ${character.stardust || 0}.`, variant: "destructive" });
+      toast({ title: "Not enough stardust", description: `Need ${mount.stardust} ${STARDUST_GLYPH} — you have ${character.stardust || 0}.`, variant: "destructive" });
       return;
     }
     if (mount.crystals && (character.nova_crystals || 0) < mount.crystals) {
@@ -145,7 +146,7 @@ export default function FuelStation({ character, onUpdate, embedded = false }) {
                   <span className="w-4 h-4 border-2 border-amber-300 border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    <span className="flex items-center gap-1" style={{ color: STARDUST_COLOR }}><Gem className="w-3 h-3 opacity-0" />✨ {mount.stardust}</span>
+                    <span className="flex items-center gap-1" style={{ color: STARDUST_COLOR }}><StardustIcon className="w-3 h-3" glow={false} /> {mount.stardust}</span>
                     {mount.crystals > 0 && <span className="flex items-center gap-1 text-primary">💎 {mount.crystals}</span>}
                   </>
                 )}

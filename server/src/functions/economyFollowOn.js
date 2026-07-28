@@ -14,6 +14,7 @@ import {
   randomConsumable,
   getInventoryCap,
   computeStardustValue,
+  clampStardust,
   FUEL_MAX,
   STARTER_SHIP,
   SHIP_TYPES,
@@ -58,6 +59,7 @@ import {
   NAME_CHANGE_COST,
   GUILD_WAR_SIM_COST,
 } from "../shared/economyFormulas.js";
+import { assertNameHasNoDigits } from "../shared/nameRules.js";
 
 function httpErr(status, message) {
   const e = new Error(message);
@@ -583,7 +585,7 @@ export const CasinoSettle = wrap((user, body) => {
 
   // Re-read inside the transaction so concurrent patches can't stale-overwrite.
   const live = entities.Character.get(ch.id) || ch;
-  const nextStardust = Math.max(0, (live.stardust || 0) + deltaStardust);
+  const nextStardust = clampStardust((live.stardust || 0) + deltaStardust);
   const nextCrystals = Math.max(0, (live.nova_crystals || 0) + deltaCrystals);
   const patch = {
     stardust: nextStardust,
@@ -662,6 +664,7 @@ export const CreateGuild = wrap((user, body) => {
   const ch = requireMyChar(user);
   const name = String(body.name || "").trim();
   if (!name) httpErr(400, "Guild needs a name");
+  assertNameHasNoDigits(name, "Guild name");
   const tag = String(body.tag || "").trim().toUpperCase().slice(0, 4);
   const description = String(body.description || "").trim();
   if ((ch.stardust || 0) < GUILD_CREATE_COST) httpErr(400, "Not enough stardust");
@@ -783,6 +786,7 @@ export const RenameCharacter = wrap((user, body) => {
   const ch = requireMyChar(user);
   const name = String(body?.name || "").trim();
   if (!name || name.length < 2 || name.length > 24) httpErr(400, "Name must be 2–24 characters");
+  assertNameHasNoDigits(name);
   if ((ch.nova_crystals || 0) < NAME_CHANGE_COST) httpErr(400, "Not enough Nova Crystals");
   const taken = entities.Character.filter({ name }, null, 5).filter((c) => c.id !== ch.id);
   if (taken.length) httpErr(409, "Name taken");

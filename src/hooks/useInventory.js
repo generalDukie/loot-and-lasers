@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/api/gameClient";
-import { MAX_BUFF_STACKS, MAX_ACTIVE_STAT_TYPES } from "@/lib/gameData";
+import { MAX_BUFF_STACKS, MAX_ACTIVE_STAT_TYPES, getInventoryCap } from "@/lib/gameData";
+import { enforceInventoryCap, setPendingUnequip } from "@/lib/inventoryCap";
 
 /**
  * Pure stim apply — validates stack / distinct-stat caps and returns the next
@@ -73,6 +74,7 @@ export function useInventory(character, onCharacterChange) {
     try {
       const all = await api.entities.Item.filter({ character_id: character.id });
       setItems(all || []);
+      await enforceInventoryCap(character);
     } catch (e) {
       // Rate-limited or transient — keep the last-known inventory rather than
       // throwing up to the page and leaving it stuck on a loading spinner.
@@ -89,6 +91,11 @@ export function useInventory(character, onCharacterChange) {
     const snapshot = items;
 
     if (item.is_equipped) {
+      const bagCount = items.filter((i) => !i.is_equipped).length;
+      if (bagCount >= getInventoryCap(character)) {
+        setPendingUnequip(item);
+        return;
+      }
       const eq = { ...(character.equipped_items || {}) };
       delete eq[item.type];
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_equipped: false } : i)));
@@ -98,6 +105,11 @@ export function useInventory(character, onCharacterChange) {
         await api.entities.Character.update(character.id, { equipped_items: eq });
       } catch (e) {
         setItems(snapshot);
+        onCharacterChange?.({ equipped_items: character.equipped_items || {} });
+        if (/inventory full/i.test(e?.message || "")) {
+          setPendingUnequip(item);
+          return;
+        }
         throw e;
       }
     } else {
@@ -110,8 +122,9 @@ export function useInventory(character, onCharacterChange) {
       }));
       onCharacterChange?.({ equipped_items: eq });
       try {
-        if (cur) await api.entities.Item.update(cur.id, { is_equipped: false });
+        // Equip first so a full bag still has room to receive the displaced piece.
         await api.entities.Item.update(item.id, { is_equipped: true });
+        if (cur) await api.entities.Item.update(cur.id, { is_equipped: false });
         await api.entities.Character.update(character.id, { equipped_items: eq });
       } catch (e) {
         setItems(snapshot);

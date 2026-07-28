@@ -11,6 +11,7 @@ import CrystalFlip from "@/components/casino/CrystalFlip";
 import CrystalJackpot from "@/components/casino/CrystalJackpot";
 import StardustDice from "@/components/casino/StardustDice";
 import StardustWheel from "@/components/casino/StardustWheel";
+import PageStage from "@/components/game/PageStage";
 
 /** Nova crystal tables stay locked until Crystal Store IAP is live. */
 const NOVA_CASINO_OPEN = false;
@@ -83,7 +84,7 @@ export default function CasinoPage() {
   const maxSdBet = getCasinoMaxStardustBet(character.level || 1);
 
   return (
-    <div className="space-y-5 max-w-2xl mx-auto">
+    <PageStage className="space-y-5">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2 mb-1">
           <Dice5 className="w-5 h-5 text-amber-300" /> Nebula Casino
@@ -103,14 +104,14 @@ export default function CasinoPage() {
         </div>
       </motion.div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="game-stage-grid">
         {NOVA_CASINO_OPEN ? (
           <>
             <CrystalFlip character={character} onSettle={settle} busy={busy} />
             <CrystalJackpot character={character} onSettle={settle} busy={busy} />
           </>
         ) : (
-          <div className="sm:col-span-2 painted-panel canvas-grain p-4 border border-amber-500/25 relative overflow-hidden">
+          <div className="col-span-full painted-panel canvas-grain p-4 border border-amber-500/25 relative overflow-hidden">
             <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]" />
             <div className="relative flex flex-col sm:flex-row sm:items-center gap-3">
               <Gem className="w-8 h-8 text-amber-300/70 shrink-0" />
@@ -133,6 +134,6 @@ export default function CasinoPage() {
           ? "Nova Crystal bets are capped at 100 per play. Play responsibly, operative."
           : "Earn Nova from Weekly Ops & daily login — don't gamble what the void won't refill."}
       </p>
-    </div>
+    </PageStage>
   );
 }

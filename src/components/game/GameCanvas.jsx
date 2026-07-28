@@ -1,19 +1,15 @@
 import React, { useState, useLayoutEffect } from "react";
 import { getDisplayScale, getDisplayAnchor } from "@/lib/displayScale";
 
-// Dynamic game canvas. The screen is authored around a 16:9 design ratio but
-// the container is sized in real pixels (no transform: scale) so the browser
-// re-flows layout naturally — no rasterized stretching, no sub-pixel blur, no
-// stray scrollbars. The scale mode (see displayScale.js) controls how the
-// 16:9 design maps onto the viewport:
-//   "auto"           — fit whole design, letterbox the remainder
+// Dynamic game canvas. Layout reflows in real pixels (no transform: scale) so
+// UI stays sharp at every resolution. Scale modes (see displayScale.js):
+//   "auto"           — fill the viewport on all aspect ratios (16:9, 21:9, …)
 //   "cover"          — fill the screen, crop overflow
-//   "fill-width"     — match viewport width (height follows ratio)
-//   "contain-height" — match viewport height (width follows ratio)
+//   "fill-width"     — match viewport width (height follows 16:9 ratio)
+//   "contain-height" — match viewport height (may letterbox sides)
 //   number           — fixed zoom factor (e.g. 1.5)
 // Anchor places the canvas left / center / right when it is narrower than the
-// viewport (handy on ultrawide). Position is set via absolute coordinates so
-// flex justification never leaks overflow into the document.
+// viewport (fixed-zoom / contain-height modes on ultrawide).
 const DESIGN_W = 1920;
 const DESIGN_H = 1080;
 const RATIO = DESIGN_W / DESIGN_H;
@@ -41,34 +37,29 @@ export default function GameCanvas({ children, className = "" }) {
         height = vh;
         width = vh * RATIO;
       } else if (mode === "auto") {
-        // Wider-than-16:9 (ultrawide): fill the viewport so UI reflows instead of letterboxing.
-        // Standard / taller screens: fit the design ratio as before.
-        if (vw / vh > RATIO * 1.02) {
-          width = vw;
-          height = vh;
-        } else {
-          const s = Math.min(vw / DESIGN_W, vh / DESIGN_H);
-          width = DESIGN_W * s;
-          height = DESIGN_H * s;
-        }
+        // Always fill the viewport — UI reflows naturally on 16:9, 21:9, and taller screens.
+        width = vw;
+        height = vh;
       } else {
         const s = Number(mode) || Math.min(vw / DESIGN_W, vh / DESIGN_H);
         width = DESIGN_W * s;
         height = DESIGN_H * s;
       }
 
-      // Horizontal anchor — only meaningful when the canvas is narrower than
-      // the viewport; when it overflows we re-center so edges stay clipped.
       let left;
-      if (width <= vw) {
+      let top;
+      if (mode === "auto") {
+        left = 0;
+        top = 0;
+      } else if (width <= vw) {
         if (anchor === "left") left = 0;
         else if (anchor === "right") left = vw - width;
         else left = (vw - width) / 2;
+        top = (vh - height) / 2;
       } else {
         left = (vw - width) / 2;
+        top = (vh - height) / 2;
       }
-      // Vertical: always center (top/bottom clip symmetrically on cover).
-      const top = (vh - height) / 2;
 
       setDims({ width, height, left, top });
     };
@@ -96,6 +87,8 @@ export default function GameCanvas({ children, className = "" }) {
           height: dims.height,
           left: dims.left,
           top: dims.top,
+          "--game-canvas-w": `${dims.width}px`,
+          "--game-canvas-h": `${dims.height}px`,
         }}
       >
         {children}

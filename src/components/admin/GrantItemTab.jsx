@@ -48,7 +48,8 @@ export default function GrantItemTab({ onAction }) {
         .filter(([, v]) => v !== 0),
     );
     if (!Object.keys(clean).length) return;
-    await onAction({ action: "adjust_currency", character_id: selected.id, deltas: clean });
+    const res = await onAction({ action: "adjust_currency", character_id: selected.id, deltas: clean });
+    if (res?.character) setSelected(res.character);
     setDeltas({ stardust: 0, nova_crystals: 0, fuel: 0, arena_attempts: 0, experience: 0 });
   }
 

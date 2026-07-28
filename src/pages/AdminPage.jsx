@@ -10,6 +10,7 @@ import GrantItemTab from "@/components/admin/GrantItemTab";
 import ServerRefreshTab from "@/components/admin/ServerRefreshTab";
 import NovaSpendStats from "@/components/admin/NovaSpendStats";
 import EmailLogTab from "@/components/admin/EmailLogTab";
+import PageStage from "@/components/game/PageStage";
 
 const TABS = [
   { key: "reports", label: "Reports", icon: Gavel },
@@ -42,7 +43,7 @@ export default function AdminPage() {
         });
       } else if (payload.action === "adjust_currency") {
         const parts = Object.entries(payload.deltas || {})
-          .filter(([, v]) => v)
+          .filter(([, v]) => v != null && v !== 0)
           .map(([k, v]) => `${v > 0 ? "+" : ""}${v} ${k.replace(/_/g, " ")}`);
         toast({
           title: "Currency updated",
@@ -69,7 +70,7 @@ export default function AdminPage() {
   if (!isAdmin) return <div className="text-center text-sm text-muted-foreground py-20">Admin access required.</div>;
 
   return (
-    <div className="space-y-4">
+    <PageStage className="space-y-4">
       <div className="flex items-center gap-2"><Shield className="w-5 h-5 text-primary" /><h1 className="font-display font-bold text-xl tracking-wider">Admin · Moderation</h1></div>
       <div className="flex flex-wrap gap-1 p-1 rounded-xl bg-muted/20 border border-border/30">
         {TABS.map((t) => (
@@ -89,7 +90,7 @@ export default function AdminPage() {
         {tab === "refresh" && <ServerRefreshTab />}
         {tab === "nova" && <NovaSpendStats />}
       </motion.div>
-    </div>
+    </PageStage>
   );
 }
 

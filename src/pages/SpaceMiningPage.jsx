@@ -7,6 +7,7 @@ import { Slider } from "@/components/ui/slider";
 import { Pickaxe, Clock, Zap } from "lucide-react";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { STARDUST_COLOR } from "@/lib/gameData";
+import PageStage from "@/components/game/PageStage";
 
 // Stardust yield = level × 12 × hours. Scales with both level and duration.
 export function computeMiningReward(level, hours) {
@@ -111,7 +112,7 @@ export default function SpaceMiningPage() {
   }
 
   return (
-    <div className="space-y-5 max-w-2xl mx-auto">
+    <PageStage className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
           <Pickaxe className="w-5 h-5 text-amber-300" /> Space Mining
@@ -277,6 +278,6 @@ export default function SpaceMiningPage() {
           <p className="text-[9px] text-muted-foreground tracking-wide">MAX (24h)</p>
         </div>
       </div>
-    </div>
+    </PageStage>
   );
 }

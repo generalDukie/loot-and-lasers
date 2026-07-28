@@ -105,7 +105,7 @@ export default function GuildCreation({ character, onJoined }) {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="max-w-xl w-full">
       <div className="text-center mb-6">
         <h1 className="font-display font-bold text-2xl glow-cyan tracking-wider flex items-center justify-center gap-2">
           <Users className="w-6 h-6 text-primary" /> FORM A GUILD

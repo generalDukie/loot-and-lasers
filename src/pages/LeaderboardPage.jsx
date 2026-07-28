@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { blockPlayer, reportPlayer } from "@/lib/socialEngine";
 import PublicProfileSheet from "@/components/social/PublicProfileSheet";
 import { Trophy, Crown, Swords } from "lucide-react";
+import PageStage from "@/components/game/PageStage";
 
 const MEDAL = ["#FFD700", "#C0C0C0", "#CD7F32"];
 const PODIUM_HEIGHT = ["h-24", "h-36", "h-20"];
@@ -60,7 +61,7 @@ export default function LeaderboardPage() {
   const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
 
   return (
-    <div className="space-y-6">
+    <PageStage className="space-y-6">
       <motion.div
         initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 420, damping: 16 }}
@@ -111,7 +112,7 @@ export default function LeaderboardPage() {
       </div>
 
       {/* Remaining ranks */}
-      <div className="space-y-2 max-w-2xl mx-auto">
+      <div className="space-y-2 w-full">
         {rest.map((c, i) => {
           const rank = i + 4;
           const emoji = RACES[c.race]?.emoji || "🛸";
@@ -150,6 +151,6 @@ export default function LeaderboardPage() {
           onReport={async (t) => { await reportPlayer(me?.id, t, "Inappropriate profile", "profile"); toast({ title: "Report submitted" }); setProfile(null); }}
         />
       )}
-    </div>
+    </PageStage>
   );
 }

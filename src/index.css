@@ -52,6 +52,28 @@
   }
   body {
     @apply bg-background text-foreground font-body;
+    width: 100%;
+    min-height: 100%;
+  }
+  html {
+    width: 100%;
+    min-height: 100%;
+  }
+  #root {
+    width: 100%;
+    min-height: 100%;
+  }
+}
+
+@layer utilities {
+  /* Full-bleed in-game page column — use instead of max-w-* mx-auto on gameplay pages */
+  .game-stage {
+    @apply w-full min-h-0 flex-1 flex flex-col;
+  }
+  /* Responsive card grid that expands on ultrawide without leaving side gutters */
+  .game-stage-grid {
+    @apply w-full grid gap-4 sm:gap-5;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
   }
 }
 

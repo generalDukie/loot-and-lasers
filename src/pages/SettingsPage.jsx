@@ -13,6 +13,7 @@ import DisplaySettings from "@/components/settings/DisplaySettings";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { departFromGuild } from "@/lib/guildUtils";
 import { purgeCharacter } from "@/lib/purgeCharacter";
+import PageStage from "@/components/game/PageStage";
 
 export default function SettingsPage() {
   const [deleting, setDeleting] = useState(false);
@@ -73,114 +74,107 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto space-y-6">
+    <PageStage className="space-y-6">
       <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
         <Settings className="w-5 h-5 text-primary" /> Settings
       </h1>
 
-      {/* Codex / Guide */}
-      <button
-        onClick={() => setCodexOpen(true)}
-        className="w-full flex items-center gap-3 p-4 painted-panel canvas-grain text-left hover:brightness-110 transition"
-      >
-        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <BookOpen className="w-5 h-5 text-primary" />
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 w-full auto-rows-min">
+        {/* Codex / Guide */}
+        <button
+          onClick={() => setCodexOpen(true)}
+          className="w-full flex items-center gap-3 p-4 painted-panel canvas-grain text-left hover:brightness-110 transition"
+        >
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <BookOpen className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <p className="font-display font-semibold text-sm">Codex &amp; Guide</p>
+            <p className="text-xs text-muted-foreground">How things work · New player tutorial</p>
+          </div>
+        </button>
+
+        {/* Daily login rewards */}
+        <button
+          onClick={() => setDailyOpen(true)}
+          className="w-full flex items-center gap-3 p-4 painted-panel canvas-grain text-left hover:brightness-110 transition"
+        >
+          <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+            <Gift className="w-5 h-5 text-amber-300" />
+          </div>
+          <div>
+            <p className="font-display font-semibold text-sm">Daily Login Rewards</p>
+            <p className="text-xs text-muted-foreground">Re-open today's reward calendar</p>
+          </div>
+        </button>
+
+        <CharacterSwitcher />
+        <ProfileSettings />
+        <ChangePasswordForm />
+        <AudioSettings />
+        <DisplaySettings />
+
+        <div className="painted-panel canvas-grain p-4 md:col-span-2 2xl:col-span-1">
+          <div className="flex items-center gap-2 mb-3">
+            <Ticket className="w-4 h-4 text-accent" />
+            <h2 className="font-display font-semibold text-sm">Promo Code</h2>
+          </div>
+          <form onSubmit={handleRedeem} className="flex gap-2">
+            <Input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Enter code"
+              className="h-10"
+              disabled={redeeming}
+            />
+            <button
+              type="submit"
+              disabled={redeeming || !code.trim()}
+              className="painted-btn painted-btn-accent px-4 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {redeeming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ticket className="w-3.5 h-3.5" />}
+              Redeem
+            </button>
+          </form>
+          {redeemed.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {redeemed.map((c) => (
+                <span key={c} className="text-[10px] bg-accent/10 text-accent px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Check className="w-2.5 h-2.5" /> {c}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-        <div>
-          <p className="font-display font-semibold text-sm">Codex &amp; Guide</p>
-          <p className="text-xs text-muted-foreground">How things work · New player tutorial</p>
-        </div>
-      </button>
-      <CodexModal open={codexOpen} onClose={() => setCodexOpen(false)} />
 
-      {/* Daily login rewards — re-openable in case the daily popup was skipped */}
-      <button
-        onClick={() => setDailyOpen(true)}
-        className="w-full flex items-center gap-3 p-4 painted-panel canvas-grain text-left hover:brightness-110 transition"
-      >
-        <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-          <Gift className="w-5 h-5 text-amber-300" />
-        </div>
-        <div>
-          <p className="font-display font-semibold text-sm">Daily Login Rewards</p>
-          <p className="text-xs text-muted-foreground">Re-open today's reward calendar</p>
-        </div>
-      </button>
-      <DailyLoginModal open={dailyOpen} onClose={() => setDailyOpen(false)} myChar={myChar} />
-
-      {/* Operatives — switch / purchase character slots */}
-      <CharacterSwitcher />
-
-      {/* Profile */}
-      <ProfileSettings />
-
-      {/* Change password */}
-      <ChangePasswordForm />
-
-      {/* Audio */}
-      <AudioSettings />
-
-      {/* Display — hub resolution / scale */}
-      <DisplaySettings />
-
-      {/* Promo code */}
-      <div className="painted-panel canvas-grain p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Ticket className="w-4 h-4 text-accent" />
-          <h2 className="font-display font-semibold text-sm">Promo Code</h2>
-        </div>
-        <form onSubmit={handleRedeem} className="flex gap-2">
-          <Input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Enter code"
-            className="h-10"
-            disabled={redeeming}
-          />
+        <div className="bg-card/50 border border-border/50 rounded-2xl divide-y divide-border/50 md:col-span-2 2xl:col-span-3">
           <button
-            type="submit"
-            disabled={redeeming || !code.trim()}
-            className="painted-btn painted-btn-accent px-4 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 p-4 text-sm text-left hover:bg-muted/20 transition-colors"
           >
-            {redeeming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ticket className="w-3.5 h-3.5" />}
-            Redeem
+            <LogOut className="w-4 h-4 text-muted-foreground" />
+            <div>
+              <p className="font-medium">Log Out</p>
+              <p className="text-xs text-muted-foreground">Sign out of your account</p>
+            </div>
           </button>
-        </form>
-        {redeemed.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {redeemed.map((c) => (
-              <span key={c} className="text-[10px] bg-accent/10 text-accent px-2 py-0.5 rounded-full flex items-center gap-1">
-                <Check className="w-2.5 h-2.5" /> {c}
-              </span>
-            ))}
-          </div>
-        )}
+
+          <button
+            onClick={handleDeleteCharacter}
+            disabled={deleting}
+            className="w-full flex items-center gap-3 p-4 text-sm text-left hover:bg-destructive/5 transition-colors text-destructive"
+          >
+            <Trash2 className="w-4 h-4" />
+            <div>
+              <p className="font-medium">Delete Character</p>
+              <p className="text-xs opacity-70">Permanently erase your operative and all progress</p>
+            </div>
+          </button>
+        </div>
       </div>
 
-      <div className="bg-card/50 border border-border/50 rounded-2xl divide-y divide-border/50">
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 p-4 text-sm text-left hover:bg-muted/20 transition-colors"
-        >
-          <LogOut className="w-4 h-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium">Log Out</p>
-            <p className="text-xs text-muted-foreground">Sign out of your account</p>
-          </div>
-        </button>
-
-        <button
-          onClick={handleDeleteCharacter}
-          disabled={deleting}
-          className="w-full flex items-center gap-3 p-4 text-sm text-left hover:bg-destructive/5 transition-colors text-destructive"
-        >
-          <Trash2 className="w-4 h-4" />
-          <div>
-            <p className="font-medium">Delete Character</p>
-            <p className="text-xs opacity-70">Permanently erase your operative and all progress</p>
-          </div>
-        </button>
-      </div>
-    </div>
+      <CodexModal open={codexOpen} onClose={() => setCodexOpen(false)} />
+      <DailyLoginModal open={dailyOpen} onClose={() => setDailyOpen(false)} myChar={myChar} />
+    </PageStage>
   );
 }

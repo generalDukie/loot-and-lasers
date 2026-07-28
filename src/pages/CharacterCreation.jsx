@@ -12,6 +12,7 @@ import CharacterAvatar, { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/c
 import ArrowSelector from "@/components/game/ArrowSelector";
 import { popIn, staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
 import { ChevronRight, ChevronLeft, Rocket, Check, X, Loader2, Dices } from "lucide-react";
+import GameCanvas from "@/components/game/GameCanvas";
 
 const RACE_ACCENT = {
   Zyrathi: "#FF6B1A",
@@ -226,8 +227,9 @@ export default function CharacterCreation() {
     : null;
 
   return (
-    <div className={`stars-bg flex justify-center p-3 sm:p-4 ${step === 1 ? "min-h-screen h-[100dvh] overflow-hidden" : "min-h-screen items-center py-4"}`}>
-      <div className={`w-full flex flex-col ${step === 1 ? "max-w-5xl h-full max-h-[100dvh]" : "max-w-2xl"}`}>
+    <GameCanvas>
+    <div className={`stars-bg h-full w-full flex justify-center p-3 sm:p-4 ${step === 1 ? "overflow-hidden" : "items-center py-4"}`}>
+      <div className={`w-full flex flex-col ${step === 1 ? "max-w-[min(100%,72rem)] h-full max-h-full" : "max-w-3xl"}`}>
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -640,5 +642,6 @@ export default function CharacterCreation() {
         </div>
       </div>
     </div>
+    </GameCanvas>
   );
 }

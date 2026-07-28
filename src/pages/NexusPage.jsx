@@ -10,6 +10,7 @@ import NexusBattleOverlay from "@/components/game/NexusBattleOverlay";
 import NexusHallOfFame from "@/components/game/NexusHallOfFame";
 import NexusChatter from "@/components/game/NexusChatter";
 import { Orbit } from "lucide-react";
+import PageStage from "@/components/game/PageStage";
 
 export default function NexusPage() {
   const [character, setCharacter] = useState(null);
@@ -63,7 +64,7 @@ export default function NexusPage() {
   const isOwner = ownsNexus(nexus, guild?.id);
 
   return (
-    <div className="space-y-6">
+    <PageStage className="space-y-6">
       {battle && (
         <NexusBattleOverlay
           result={battle}
@@ -105,6 +106,6 @@ export default function NexusPage() {
       )}
 
       <NexusHallOfFame />
-    </div>
+    </PageStage>
   );
 }

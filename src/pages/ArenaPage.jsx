@@ -317,7 +317,7 @@ export default function ArenaPage() {
   const streak = character.arena_streak || 0;
 
   return (
-    <div className="relative -mx-3 sm:-mx-4 px-3 sm:px-4 pb-6 min-h-[70vh]">
+    <div className="relative flex-1 min-h-0 flex flex-col -mx-3 sm:-mx-4 px-3 sm:px-4 pb-3">
       {/* Dim arena atmosphere behind the lobby */}
       <div className="absolute inset-0 -z-10 overflow-hidden rounded-2xl opacity-[0.55] pointer-events-none">
         <ArenaBackdrop />

@@ -15,8 +15,23 @@ export default function CurrencyAdjustForm({ character, onAction, onDone }) {
   async function apply(sign) {
     const amt = Math.abs(+amount || 0) * sign;
     if (!amt) return;
-    await onAction({ action: "adjust_currency", character_id: character.id, deltas: { [currency]: amt } });
-    onDone && onDone();
+    const res = await onAction({
+      action: "adjust_currency",
+      character_id: character.id,
+      deltas: { [currency]: amt },
+    });
+    if (res?.success) onDone?.(res.character);
+  }
+
+  async function removeAll() {
+    const current = Number(character[currency]) || 0;
+    if (!current) return;
+    const res = await onAction({
+      action: "adjust_currency",
+      character_id: character.id,
+      deltas: { [currency]: -current },
+    });
+    if (res?.success) onDone?.(res.character);
   }
 
   return (
@@ -31,6 +46,7 @@ export default function CurrencyAdjustForm({ character, onAction, onDone }) {
       <div className="flex gap-1.5">
         <button onClick={() => apply(1)} className="flex-1 flex items-center justify-center gap-1 text-xs py-1.5 rounded-lg bg-green-500/15 text-green-300"><ArrowUp className="w-3 h-3" />Add</button>
         <button onClick={() => apply(-1)} className="flex-1 flex items-center justify-center gap-1 text-xs py-1.5 rounded-lg bg-red-500/15 text-red-300"><ArrowDown className="w-3 h-3" />Remove</button>
+        <button onClick={removeAll} className="flex-1 text-xs py-1.5 rounded-lg bg-red-500/10 text-red-200/80 border border-red-500/20 hover:bg-red-500/20">Clear</button>
       </div>
     </div>
   );

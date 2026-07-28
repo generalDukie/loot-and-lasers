@@ -28,7 +28,6 @@ import {
 } from "@/lib/inventoryOrder";
 import { useToast } from "@/components/ui/use-toast";
 import { Star, Backpack } from "lucide-react";
-import AdminSelfGrant from "@/components/admin/AdminSelfGrant";
 
 export default function CharacterPage() {
   const [character, setCharacter] = useState(null);
@@ -234,7 +233,7 @@ export default function CharacterPage() {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-    <div className="flex flex-col md:flex-row gap-3 pt-1.5 md:h-[calc(100dvh-7rem)] md:overflow-hidden">
+    <div className="flex flex-col md:flex-row gap-3 pt-1.5 md:flex-1 md:min-h-0 md:overflow-hidden">
       {/* Left — header fills space above attributes */}
       <div className="md:flex-1 md:min-h-0 md:overflow-hidden flex flex-col gap-2">
         <div className="flex-1 min-h-0 flex flex-col">
@@ -328,9 +327,6 @@ export default function CharacterPage() {
               onLock={inv.toggleLock}
               characterClass={character.class}
             />
-          </div>
-          <div className="mt-3 shrink-0">
-            <AdminSelfGrant character={character} onGranted={() => inv.load()} />
           </div>
         </motion.div>
 

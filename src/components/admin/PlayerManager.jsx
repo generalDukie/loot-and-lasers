@@ -17,6 +17,15 @@ export default function PlayerManager({ onAction }) {
   }
   searchRef.current = search;
 
+  async function refreshCharacter(charId) {
+    if (!charId) return;
+    try {
+      const fresh = await api.entities.Character.get(charId);
+      setTarget((t) => (t?.id === charId ? fresh : t));
+      setResults((prev) => prev.map((c) => (c.id === charId ? fresh : c)));
+    } catch { /* ignore */ }
+  }
+
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
     const t = setTimeout(() => searchRef.current(query), 300);
@@ -41,7 +50,7 @@ export default function PlayerManager({ onAction }) {
         {results.length === 0 && query.trim() && <p className="text-xs text-muted-foreground italic text-center py-4">No players found.</p>}
         {results.length === 0 && !query.trim() && <p className="text-xs text-muted-foreground italic text-center py-4">Type a name to search players.</p>}
       </div>
-      {target && <PlayerDetail character={target} onAction={onAction} onRefresh={search} />}
+      {target && <PlayerDetail character={target} onAction={onAction} onRefresh={() => refreshCharacter(target.id)} />}
     </div>
   );
 }

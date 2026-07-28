@@ -110,7 +110,7 @@ export default function GameLayout() {
 
               <div className="flex-1 min-h-0 flex relative">
                 {/* Desktop permanent left rail */}
-                <div className="hidden lg:flex w-[19.5rem] xl:w-[21rem] shrink-0 min-h-0">
+                <div className="hidden lg:flex w-[clamp(15rem,13vw,19rem)] shrink-0 min-h-0">
                   {leftRail}
                 </div>
 

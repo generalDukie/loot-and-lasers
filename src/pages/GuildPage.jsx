@@ -14,6 +14,7 @@ import GuildWeeklyChallenge from "@/components/game/GuildWeeklyChallenge";
 import GuildWars from "@/components/game/GuildWars";
 import GuildBattleHistory from "@/components/game/GuildBattleHistory";
 import { Users, Target, TrendingUp } from "lucide-react";
+import PageStage from "@/components/game/PageStage";
 
 export default function GuildPage() {
   const [character, setCharacter] = useState(null);
@@ -132,7 +133,7 @@ export default function GuildPage() {
   const refresh = () => loadAll(character);
 
   return (
-    <div className="space-y-6">
+    <PageStage className="space-y-6">
       <GuildHeader
         guild={guild}
         memberCount={members.length}
@@ -158,7 +159,7 @@ export default function GuildPage() {
       <GuildWeeklyChallenge challenge={challenge} guild={guild} />
 
       {/* Collective progression */}
-      <motion.div {...fadeUp(0.1)} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <motion.div {...fadeUp(0.1)} className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
         {stats.map((s) => {
           const isEmoji = typeof s.icon === 'string';
           const Icon = isEmoji ? null : s.icon;
@@ -188,6 +189,6 @@ export default function GuildPage() {
           <GuildLog entries={log} />
         </motion.div>
       </div>
-    </div>
+    </PageStage>
   );
 }

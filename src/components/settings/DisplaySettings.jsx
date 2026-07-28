@@ -2,9 +2,8 @@ import React, { useState } from "react";
 import { Monitor, AlignHorizontalJustifyCenter } from "lucide-react";
 import { DISPLAY_OPTIONS, ANCHOR_OPTIONS, getDisplayScale, setDisplayScale, getDisplayAnchor, setDisplayAnchor } from "@/lib/displayScale";
 
-// Station hub resolution / scale preference. Lets the player match the hub to
-// their screen (auto-fit, fill, or a fixed zoom) and anchor it horizontally —
-// handy on ultrawide monitors where the 16:9 canvas leaves side bars.
+// Display scale applies to the station hub and in-game shell (GameCanvas).
+// Auto fills the viewport on 16:9, 21:9, and all other aspect ratios.
 export default function DisplaySettings() {
   const [val, setVal] = useState(() => getDisplayScale());
   const [anchor, setAnchorVal] = useState(() => getDisplayAnchor());
@@ -17,7 +16,9 @@ export default function DisplaySettings() {
         <Monitor className="w-4 h-4 text-primary" />
         <h2 className="font-display font-semibold text-sm">Display</h2>
       </div>
-      <p className="text-xs text-muted-foreground mb-2">Station hub resolution — match it to your screen.</p>
+      <p className="text-xs text-muted-foreground mb-2">
+        How the game fills your monitor — default fills edge-to-edge on 16:9 and ultrawide (21:9).
+      </p>
       <div className="flex flex-wrap gap-1.5 mb-4">
         {DISPLAY_OPTIONS.map((o) => (
           <button

@@ -9,6 +9,7 @@ import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { fullName } from "@/lib/legacyName";
 import { popIn, staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
 import SiteTitle from "@/components/admin/SiteTitle";
+import GameCanvas from "@/components/game/GameCanvas";
 
 const MAX_SLOTS = 3;
 
@@ -63,20 +64,23 @@ export default function CharacterSelectPage() {
 
   if (chars === null) {
     return (
-      <div className="min-h-screen stars-bg flex items-center justify-center">
-        <div className="text-center">
-          <SiteTitle as="h1" className="font-display font-bold text-3xl glow-cyan tracking-widest mb-4" />
-          <Loader2 className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto" />
+      <GameCanvas>
+        <div className="h-full w-full stars-bg flex items-center justify-center">
+          <div className="text-center">
+            <SiteTitle as="h1" className="font-display font-bold text-3xl glow-cyan tracking-widest mb-4" />
+            <Loader2 className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto" />
+          </div>
         </div>
-      </div>
+      </GameCanvas>
     );
   }
 
   return (
-    <div className="min-h-screen stars-bg flex items-center justify-center p-4">
+    <GameCanvas>
+      <div className="h-full w-full stars-bg flex items-center justify-center p-4 sm:p-6 lg:p-10">
       <motion.div
         {...popIn}
-        className="w-full max-w-2xl"
+        className="w-full max-w-5xl"
       >
         <div className="text-center mb-8">
           <h1 className="font-display font-bold text-2xl md:text-3xl glow-cyan tracking-wider">SELECT YOUR OPERATIVE</h1>
@@ -163,6 +167,7 @@ export default function CharacterSelectPage() {
           </div>
         </div>
       </motion.div>
-    </div>
+      </div>
+    </GameCanvas>
   );
 }

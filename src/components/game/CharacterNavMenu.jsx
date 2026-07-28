@@ -1,12 +1,11 @@
 import React, { useState, useRef } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Zap } from "lucide-react";
+import { UserRound } from "lucide-react";
 import HubCharacterChip from "@/components/game/HubCharacterChip";
 import CurrencyStack from "@/components/game/CurrencyStack";
 import EquippedFrame from "@/components/game/EquippedFrame";
 import { useEquippedItems } from "@/hooks/useEquippedItems";
-import { computePower } from "@/lib/arenaEngine";
 import { PRIMARY_STATS, computeTotalStats, computeDerivedStats } from "@/lib/statEngine";
 import { STAT_ICONS } from "@/lib/gameData";
 import { NAV_GROUPS } from "@/lib/navGroups";
@@ -30,7 +29,6 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
   const enter = () => { clearTimeout(closeTimer.current); setOpen(true); };
   const leave = () => { closeTimer.current = setTimeout(() => setOpen(false), 150); };
 
-  const power = character ? computePower(character, equippedItems) : 0;
   const totals = character ? computeTotalStats(character, equippedItems) : {};
   const derived = character ? computeDerivedStats(totals, character) : {};
   const filled = equippedItems.length;
@@ -97,25 +95,16 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
 
               <div className="px-2.5 pt-2.5 pb-2">
                 <EquippedFrame equippedItems={equippedItems} size={28}>
-                  <div
-                    className="w-[34px] h-[34px] rounded-lg border border-cyan-400/40 bg-cyan-500/10 flex flex-col items-center justify-center"
-                    title={`Power ${power}`}
-                  >
-                    <Zap className="w-3 h-3 text-cyan-300" />
-                    <span className="font-display font-black text-[8px] text-cyan-300 leading-none mt-0.5">
-                      {power}
-                    </span>
+                  <div className="w-[34px] h-[34px] rounded-lg border border-cyan-400/40 bg-cyan-500/10 flex items-center justify-center">
+                    <UserRound className="w-4 h-4 text-cyan-300" />
                   </div>
                 </EquippedFrame>
               </div>
 
               <div className="mx-2.5 mb-2.5 rounded-lg border border-border/50 bg-card/70 px-2.5 py-2">
-                <div className="flex items-center justify-between mb-2">
+                <div className="mb-2">
                   <span className="text-[8px] font-display font-bold tracking-[0.16em] text-muted-foreground/70">
                     STATS
-                  </span>
-                  <span className="inline-flex items-center gap-0.5 text-[9px] font-display font-bold text-cyan-300">
-                    <Zap className="w-2.5 h-2.5" /> {power}
                   </span>
                 </div>
                 <div className="grid grid-cols-5 gap-1">

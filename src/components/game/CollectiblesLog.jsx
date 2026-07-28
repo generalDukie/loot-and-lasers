@@ -5,6 +5,7 @@ import { DUNGEON_PLANETS } from "@/lib/dungeonData";
 import { GEAR_CATALOG, RARITY_COLORS } from "@/lib/gameData";
 import { getCollectionStats } from "@/lib/collectionBonus";
 import SpeciesAvatar from "@/components/game/SpeciesAvatar";
+import CharacterStats from "@/components/game/CharacterStats";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Dna, Award, Scroll, Gem, Swords, Maximize2 } from "lucide-react";
 
@@ -61,6 +62,11 @@ export default function CollectiblesLog({ character }) {
 
   const fullContent = (
     <div>
+      <div className="mb-4">
+        <p className="text-[10px] font-display font-bold tracking-[0.16em] text-muted-foreground mb-2">CAREER</p>
+        <CharacterStats character={character} />
+      </div>
+
       {/* Total collection + XP bonus */}
       <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3">
         <div className="flex items-center justify-between mb-1">
@@ -218,6 +224,10 @@ export default function CollectiblesLog({ character }) {
               <motion.div className="h-full rounded-full bg-primary" initial={{ width: 0 }} animate={{ width: `${totalStats.percentage}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">✨ XP Bonus: +{totalStats.percentage}%</p>
+          </div>
+
+          <div className="mb-2">
+            <CharacterStats character={character} dense />
           </div>
 
           <div className="flex gap-1.5 flex-wrap">

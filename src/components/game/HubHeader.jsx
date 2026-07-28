@@ -29,20 +29,10 @@ export default function HubHeader({ character, onOpenChat, rightExtras }) {
         {/* Center brand */}
         <div className="justify-self-center flex flex-col items-center px-1">
           {onHub ? (
-            <div className="flex flex-col items-center leading-none">
-              <SiteTitle
-                as="h1"
-                className="font-display font-black tracking-wider bg-gradient-to-r from-orange-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap"
-                style={{ fontSize: "clamp(1.05rem, 2.1vw, 2.15rem)" }}
-              />
-            </div>
+            <BrandMark />
           ) : (
-            <Link to="/" className="pointer-events-auto focus:outline-none flex flex-col items-center leading-none relative">
-              <SiteTitle
-                as="h1"
-                className="font-display font-black tracking-wider bg-gradient-to-r from-orange-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap"
-                style={{ fontSize: "clamp(1.05rem, 2.1vw, 2.15rem)" }}
-              />
+            <Link to="/" className="pointer-events-auto focus:outline-none flex flex-col items-center leading-none relative group">
+              <BrandMark interactive />
               <motion.div
                 animate={{ rotate: [-38, -26, -38], scale: [1, 1.12, 1] }}
                 transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
@@ -93,6 +83,42 @@ export default function HubHeader({ character, onOpenChat, rightExtras }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function BrandMark({ interactive = false }) {
+  const size = { fontSize: "clamp(1.05rem, 2.1vw, 2.15rem)" };
+  const base =
+    "font-display font-black tracking-[0.14em] whitespace-nowrap leading-none";
+  return (
+    <div className={`relative inline-flex flex-col items-center leading-none ${interactive ? "group" : ""}`}>
+      {/* Soft bloom behind the wordmark */}
+      <span className="absolute inset-0 pointer-events-none select-none" aria-hidden>
+        <SiteTitle
+          as="span"
+          className={`${base} block text-primary/70 blur-[7px] opacity-60 ${
+            interactive ? "group-hover:opacity-80 transition-opacity" : ""
+          }`}
+          style={size}
+        />
+      </span>
+      <SiteTitle
+        as="h1"
+        className={`${base} relative bg-gradient-to-r from-cyan-200 via-primary to-violet-400 bg-clip-text text-transparent ${
+          interactive ? "group-hover:brightness-110 transition-[filter]" : ""
+        }`}
+        style={{
+          ...size,
+          filter: "drop-shadow(0 0 10px hsl(190 90% 50% / 0.35)) drop-shadow(0 0 18px hsl(270 60% 55% / 0.2))",
+        }}
+      />
+      {/* Thin laser underline */}
+      <span
+        className="mt-1 h-px w-[72%] rounded-full bg-gradient-to-r from-transparent via-primary to-transparent opacity-70"
+        style={{ boxShadow: "0 0 8px hsl(190 90% 50% / 0.55)" }}
+        aria-hidden
+      />
+    </div>
   );
 }
 

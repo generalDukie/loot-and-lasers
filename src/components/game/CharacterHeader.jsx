@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { RACES, CLASSES } from "@/lib/gameData";
+import { RACES, CLASSES, getActiveBuffs } from "@/lib/gameData";
+import { getActiveFuelMounts } from "@/lib/fuelMounts";
 import { spring } from "@/lib/goofyMotion";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import EquippedFrame from "@/components/game/EquippedFrame";
-import { Star, Target, TrendingUp, Users, Save, BookOpen } from "lucide-react";
+import ActiveEffectsPanel from "@/components/game/ActiveEffectsPanel";
+import { Users, Save } from "lucide-react";
 import { profileDisplayName, normalizeLegacyDisplay, LEGACY_DISPLAY_FAMILY } from "@/lib/legacyName";
 
-export default function CharacterHeader({ character, guild, equippedItems }) {
+const paneClass = "bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl";
+
+export default function CharacterHeader({ character, guild, equippedItems, onUpdate }) {
   const [bio, setBio] = useState("");
   const [saving, setSaving] = useState(false);
   const race = RACES[character.race];
@@ -24,112 +28,159 @@ export default function CharacterHeader({ character, guild, equippedItems }) {
   }
 
   const bioDirty = bio !== (character.bio || "");
+  const showOperative =
+    normalizeLegacyDisplay(character.legacy_display) === LEGACY_DISPLAY_FAMILY
+    && character.legacy_name
+    && character.name;
+  const hasActiveEffects =
+    getActiveBuffs(character).length > 0 || getActiveFuelMounts(character).length > 0;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ ...spring }}
-      className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-6 relative overflow-hidden border-glow-cyan"
-    >
-      <div className="absolute -top-20 -left-10 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ background: "radial-gradient(circle, hsl(190 90% 50% / 0.18), transparent 70%)" }} />
-      <div className="absolute -bottom-24 -right-10 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ background: "radial-gradient(circle, hsl(270 60% 55% / 0.18), transparent 70%)" }} />
-
-      <div className="flex flex-col items-center gap-5 relative">
-        <div className="shrink-0 mx-auto">
-          <EquippedFrame equippedItems={equippedItems}>
-            <motion.div className="relative" animate={{ y: [0, -6, 0] }} transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}>
-              <div className="absolute inset-0 rounded-xl blur-xl" style={{ background: "radial-gradient(circle, hsl(270 60% 55% / 0.35), transparent 70%)" }} />
-              <CharacterAvatar race={character.race} skinColor={character.appearance?.skin_color} eyeStyle={character.appearance?.eye_style} ears={character.appearance?.ears} mouth={character.appearance?.mouth} nose={character.appearance?.nose} eyebrows={character.appearance?.eyebrows} marking={character.appearance?.marking} cls={character.class} size={160} />
-            </motion.div>
-          </EquippedFrame>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-start gap-5 w-full">
-        <div className="flex-1 min-w-0 w-full">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="font-display font-bold text-xl glow-cyan tracking-wider">{profileDisplayName(character)}</h1>
-            <span className="text-lg">{race?.emoji}</span>
-            <span className="text-lg">{cls?.emoji}</span>
-          </div>
-          {normalizeLegacyDisplay(character.legacy_display) === LEGACY_DISPLAY_FAMILY && character.legacy_name && character.name && (
-            <p className="text-xs text-muted-foreground/80 mt-0.5">Operative {character.name}</p>
-          )}
-          <p className="text-sm text-muted-foreground mt-0.5">{race?.name} · {cls?.name}</p>
-          {character.active_title && (
-            <span className="inline-block mt-1 text-[11px] font-display font-semibold tracking-wide text-amber-300/90 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30">「{character.active_title}」</span>
-          )}
-
-          {/* Guild */}
-          <div className="flex items-center gap-1.5 mt-1.5 text-xs">
-            <Users className="w-3.5 h-3.5 text-accent" />
-            {guild ? (
-              <span className="text-accent font-display font-semibold">[{guild.tag}] {guild.name}</span>
-            ) : (
-              <span className="text-muted-foreground/60 italic">No guild — find one on the Guild page</span>
+    <div className="h-full min-h-0 flex flex-col gap-2">
+      <div className="flex-1 min-h-0 flex gap-2 items-stretch">
+        {/* Lore — left pane */}
+        <motion.aside
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...spring }}
+          className={`w-[34%] max-w-[15rem] min-w-0 min-h-0 shrink-0 ${paneClass} p-3 overflow-y-auto flex flex-col`}
+        >
+          <h2 className="font-display font-semibold text-xs tracking-wide text-muted-foreground mb-2 shrink-0">
+            LORE
+          </h2>
+          <div className="space-y-2.5 text-[10px] leading-relaxed text-muted-foreground">
+            <div>
+              <p className="text-[9px] font-display font-bold tracking-wide text-primary mb-0.5">
+                {race?.emoji} {race?.name}
+              </p>
+              <p>{race?.lore}</p>
+            </div>
+            <div className="border-t border-border/30 pt-2">
+              <p className="text-[9px] font-display font-bold tracking-wide text-accent mb-0.5">
+                {cls?.emoji} {cls?.name}
+              </p>
+              <p>{cls?.description}</p>
+            </div>
+            {cls?.special && (
+              <div className="border-t border-border/30 pt-2">
+                <p className="text-[9px] font-display font-bold tracking-wide text-primary mb-0.5">
+                  {cls.special.name}
+                </p>
+                <p>{cls.special.effect}</p>
+              </div>
             )}
           </div>
+        </motion.aside>
 
-          {/* Level */}
-          <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-primary/10 border border-primary/30">
-            <Star className="w-3.5 h-3.5 text-primary" />
-            <span className="font-display font-bold text-sm text-primary">LEVEL {character.level}</span>
+        {/* Portrait + identity — center pane */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...spring, delay: 0.04 }}
+          className={`flex-1 min-w-0 min-h-0 ${paneClass} p-3 flex gap-3 overflow-hidden`}
+        >
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center gap-2 overflow-y-auto">
+            <EquippedFrame equippedItems={equippedItems} size={32}>
+              <div className="relative">
+                <div
+                  className="rounded-xl overflow-hidden border border-primary/35 bg-muted/15"
+                  style={{ boxShadow: "0 0 14px hsl(190 90% 50% / 0.18)" }}
+                >
+                  <CharacterAvatar
+                    race={character.race}
+                    skinColor={character.appearance?.skin_color}
+                    eyeStyle={character.appearance?.eye_style}
+                    ears={character.appearance?.ears}
+                    mouth={character.appearance?.mouth}
+                    nose={character.appearance?.nose}
+                    eyebrows={character.appearance?.eyebrows}
+                    marking={character.appearance?.marking}
+                    cls={character.class}
+                    size={128}
+                  />
+                </div>
+                <span className="absolute -bottom-1.5 -right-1.5 min-w-[26px] h-[26px] px-1 rounded-full bg-primary text-primary-foreground font-display font-black text-[11px] flex items-center justify-center border-2 border-background shadow-md tabular-nums">
+                  {character.level}
+                </span>
+              </div>
+            </EquippedFrame>
+
+            <div className="w-full max-w-[18rem] text-center min-w-0">
+              <h1 className="font-display font-bold text-lg tracking-wide leading-tight truncate">
+                {profileDisplayName(character)}
+              </h1>
+              {showOperative && (
+                <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">Operative {character.name}</p>
+              )}
+              {character.active_title && (
+                <p className="text-[10px] font-display font-semibold text-amber-400/90 truncate mt-0.5">
+                  {character.active_title}
+                </p>
+              )}
+              {guild ? (
+                <p className="inline-flex items-center justify-center gap-0.5 text-[10px] text-accent mt-1.5 max-w-full">
+                  <Users className="w-3 h-3 shrink-0" />
+                  <span className="font-display font-semibold truncate">[{guild.tag}] {guild.name}</span>
+                </p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground/50 mt-1.5">No guild</p>
+              )}
+            </div>
+
+            <div className="w-full max-w-[18rem]">
+              <div className="flex items-center justify-between text-[9px] text-muted-foreground mb-1">
+                <span className="font-display font-semibold tracking-wide">Experience</span>
+                <span className="tabular-nums">
+                  {(character.experience || 0).toLocaleString()} / {(character.experience_to_next_level || 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden border border-border/30">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${expPct}%` }}
+                  transition={{ duration: 0.7 }}
+                  className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+                />
+              </div>
+            </div>
           </div>
 
-          {/* XP */}
-          <div className="mt-3">
-            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-              <span>Experience</span>
-              <span>{character.experience} / {character.experience_to_next_level}</span>
-            </div>
-            <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
-              <motion.div initial={{ width: 0 }} animate={{ width: `${expPct}%` }} transition={{ duration: 0.8 }} className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-purple-500" />
-            </div>
+          {/* Stims + fuel — right side of same pane */}
+          <div className="w-[7.5rem] sm:w-[8.5rem] shrink-0 min-h-0 self-stretch border-l border-border/30 pl-2.5">
+            {hasActiveEffects ? (
+              <ActiveEffectsPanel character={character} onUpdate={onUpdate} embedded="side" />
+            ) : (
+              <div className="h-full flex flex-col">
+                <p className="text-[8px] font-display font-bold tracking-wide text-muted-foreground flex items-center gap-0.5 mb-1">
+                  EFFECTS
+                </p>
+                <p className="text-[9px] text-muted-foreground/50 italic leading-snug">No active stims or fuel.</p>
+              </div>
+            )}
           </div>
-
-          {/* Bio editor */}
-          <div className="mt-4">
-            <p className="text-[10px] font-display tracking-wide text-muted-foreground mb-1 flex items-center gap-1"><BookOpen className="w-3 h-3" /> BIO (visible to others)</p>
-            <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value.slice(0, 280))}
-              placeholder="Share your legend... who are you, where have you been, what do you hunt?"
-              rows={2}
-              className="w-full text-xs bg-background/60 border border-border/50 rounded-lg p-2 resize-none focus:outline-none focus:border-primary/50"
-            />
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-[9px] text-muted-foreground/60">{bio.length}/280</span>
-              <button
-                onClick={saveBio}
-                disabled={!bioDirty || saving}
-                className="text-[10px] px-2.5 py-1 rounded-md painted-btn flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <Save className="w-3 h-3" /> {saving ? "Saving..." : "Save Bio"}
-              </button>
-            </div>
-          </div>
-        </div>
-        </div>
+        </motion.div>
       </div>
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-3 gap-3 mt-5">
-        <div className="bg-muted/20 rounded-xl p-3 text-center border border-border/30">
-          <span className="text-base block text-center text-accent mb-1">✨</span>
-          <p className="font-display font-bold text-sm">{character.stardust?.toLocaleString()}</p>
-          <p className="text-[10px] text-muted-foreground">Stardust</p>
-        </div>
-        <div className="bg-muted/20 rounded-xl p-3 text-center border border-border/30">
-          <Target className="w-4 h-4 text-primary mx-auto mb-1" />
-          <p className="font-display font-bold text-sm">{character.missions_completed || 0}</p>
-          <p className="text-[10px] text-muted-foreground">Missions</p>
-        </div>
-        <div className="bg-muted/20 rounded-xl p-3 text-center border border-border/30">
-          <TrendingUp className="w-4 h-4 text-accent mx-auto mb-1" />
-          <p className="font-display font-bold text-sm">Sector {character.highest_sector || 1}</p>
-          <p className="text-[10px] text-muted-foreground">Highest</p>
-        </div>
+      {/* Bio — full width below */}
+      <div className={`shrink-0 flex items-center gap-2 px-3 py-2 ${paneClass}`}>
+        <input
+          type="text"
+          value={bio}
+          onChange={(e) => setBio(e.target.value.slice(0, 280))}
+          placeholder="Bio — visible to others…"
+          className="flex-1 min-w-0 text-[11px] bg-background/50 border border-border/40 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-primary/40 transition-colors"
+        />
+        <span className="text-[8px] text-muted-foreground/45 tabular-nums shrink-0 w-7 text-right">{bio.length}</span>
+        <button
+          type="button"
+          onClick={saveBio}
+          disabled={!bioDirty || saving}
+          className="text-[10px] px-2.5 py-1.5 rounded-lg border border-border/50 bg-background/50 hover:bg-muted/30 hover:border-primary/30 flex items-center gap-1 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <Save className="w-3 h-3" />
+          Save
+        </button>
       </div>
-    </motion.div>
+    </div>
   );
 }

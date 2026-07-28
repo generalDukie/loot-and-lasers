@@ -12,7 +12,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 
 const OFFENSIVE = [
   { key: "damage",     label: "Damage",          icon: Swords,      color: "#F59E0B", fmt: (v) => v },
-  { key: "critChance", label: "Crit Chance",     icon: Zap,         color: "#FBBF24", fmt: (v) => `${v}% · 2× dmg` },
+  { key: "critChance", label: "Crit Chance",     icon: Zap,         color: "#FBBF24", fmt: (v) => `${v}% · 2×` },
 ];
 
 const DEFENSIVE = [
@@ -21,9 +21,6 @@ const DEFENSIVE = [
   { key: "armor",       label: "Armor",             icon: ShieldCheck, color: "#A78BFA", fmt: (v) => `${v}%` },
 ];
 
-// Builds a class-specific formula breakdown for the hovered stat, plugging in
-// the character's actual attribute values so players can see exactly how the
-// number is derived.
 function statTooltip(key, d, totalStats, character) {
   const level = d.level;
   const s = (k) => totalStats?.[k] || 0;
@@ -59,7 +56,7 @@ function statTooltip(key, d, totalStats, character) {
   }
 }
 
-function StatCell({ label, icon: Icon, color, value, fmt, tooltip, boost }) {
+function StatCell({ label, icon: Icon, color, value, fmt, tooltip, boost, compact }) {
   const boostLabel =
     boost > 0
       ? Number.isInteger(boost)
@@ -69,18 +66,27 @@ function StatCell({ label, icon: Icon, color, value, fmt, tooltip, boost }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="relative p-3 rounded-xl bg-muted/20 border border-border/40 flex items-center gap-2.5 cursor-help">
+        <div
+          className={`relative flex-1 min-w-0 rounded-lg bg-muted/20 border border-border/40 flex items-center cursor-help ${
+            compact ? "px-2 py-1.5 gap-1.5" : "p-3 gap-2.5 rounded-xl"
+          }`}
+        >
           {boostLabel && (
-            <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full bg-accent/20 border border-accent/50 text-accent text-[9px] font-bold leading-none flex items-center gap-0.5 shadow-sm">
-              <FlaskConical className="w-2.5 h-2.5" /> {boostLabel}
+            <span className="absolute -top-1.5 -right-1.5 px-1 py-px rounded-full bg-accent/20 border border-accent/50 text-accent text-[8px] font-bold leading-none flex items-center gap-0.5 shadow-sm">
+              <FlaskConical className="w-2 h-2" /> {boostLabel}
             </span>
           )}
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: color + "18" }}>
-            <Icon className="w-4 h-4" style={{ color }} />
+          <div
+            className={`rounded-md flex items-center justify-center shrink-0 ${compact ? "w-6 h-6" : "w-9 h-9"}`}
+            style={{ backgroundColor: color + "18" }}
+          >
+            <Icon className={compact ? "w-3 h-3" : "w-4 h-4"} style={{ color }} />
           </div>
           <div className="min-w-0">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wide truncate">{label}</p>
-            <p className="font-display font-bold text-sm truncate" style={{ color }}>{fmt(value)}</p>
+            <p className="text-[8px] text-muted-foreground uppercase tracking-wide truncate leading-none">{label}</p>
+            <p className={`font-display font-bold truncate leading-tight ${compact ? "text-[11px] mt-0.5" : "text-sm"}`} style={{ color }}>
+              {fmt(value)}
+            </p>
           </div>
         </div>
       </TooltipTrigger>
@@ -93,16 +99,14 @@ function StatCell({ label, icon: Icon, color, value, fmt, tooltip, boost }) {
 
 function SectionLabel({ icon: Icon, children, color }) {
   return (
-    <p className="text-[9px] font-display tracking-wide uppercase mb-2 flex items-center gap-1" style={{ color }}>
-      <Icon className="w-3 h-3" /> {children}
+    <p className="text-[8px] font-display tracking-wide uppercase mb-1 flex items-center gap-1" style={{ color }}>
+      <Icon className="w-2.5 h-2.5" /> {children}
     </p>
   );
 }
 
-export default function DerivedStatsPanel({ totalStats, noBuffStats, character }) {
+export default function DerivedStatsPanel({ totalStats, noBuffStats, character, embedded = false }) {
   const d = computeDerivedStats(totalStats, character);
-  // Baseline combat stats with NO active stims — the delta shows each stim's
-  // contribution to the displayed number.
   const b = computeDerivedStats(noBuffStats || totalStats, character);
   const stimActive = (getActiveBuffs(character) || []).length > 0;
 
@@ -114,40 +118,53 @@ export default function DerivedStatsPanel({ totalStats, noBuffStats, character }
       color={color}
       value={d[key]}
       fmt={fmt}
+      compact={embedded}
       boost={Math.max(0, Math.round((d[key] - b[key]) * 10) / 10)}
       tooltip={statTooltip(key, d, totalStats, character)}
     />
   );
 
+  const body = (
+    <>
+      <div className={`flex items-center justify-between gap-2 ${embedded ? "mb-1.5" : "mb-4"}`}>
+        <h2
+          className={`font-display font-semibold tracking-wide text-muted-foreground flex items-center gap-1.5 ${
+            embedded ? "text-[11px]" : "text-sm"
+          }`}
+        >
+          <Swords className={`text-primary ${embedded ? "w-3 h-3" : "w-4 h-4"}`} /> COMBAT
+        </h2>
+        <span className="text-[9px] text-muted-foreground/80 capitalize flex items-center gap-1.5 shrink-0">
+          {stimActive && (
+            <span className="flex items-center gap-0.5 text-accent font-semibold">
+              <FlaskConical className="w-2.5 h-2.5" /> Stim
+            </span>
+          )}
+          <span className="hidden sm:inline">
+            via <span className="text-primary font-semibold">{d.primaryStat}</span>
+          </span>
+        </span>
+      </div>
+
+      <SectionLabel icon={Swords} color="#F59E0B">Offensive</SectionLabel>
+      <div className={`flex flex-nowrap gap-1.5 ${embedded ? "mb-1.5" : "mb-4 gap-2.5"}`}>
+        {OFFENSIVE.map(renderCell)}
+      </div>
+
+      <SectionLabel icon={Shield} color="#A78BFA">Defensive</SectionLabel>
+      <div className={`flex flex-nowrap gap-1.5 ${embedded ? "" : "gap-2.5"}`}>
+        {DEFENSIVE.map(renderCell)}
+      </div>
+    </>
+  );
+
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display font-semibold text-sm tracking-wide text-muted-foreground flex items-center gap-2">
-            <Swords className="w-4 h-4 text-primary" /> COMBAT STATS
-          </h2>
-          <span className="text-[10px] text-muted-foreground/80 capitalize flex items-center gap-1">
-            {stimActive && (
-              <span className="flex items-center gap-0.5 text-accent font-semibold">
-                <FlaskConical className="w-3 h-3" /> Stim active
-              </span>
-            )}
-            Scales with <span className="text-primary font-semibold">{d.primaryStat}</span>
-          </span>
-        </div>
-
-        {/* Offensive */}
-        <SectionLabel icon={Swords} color="#F59E0B">Offensive</SectionLabel>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-4">
-          {OFFENSIVE.map(renderCell)}
-        </div>
-
-        {/* Defensive */}
-        <SectionLabel icon={Shield} color="#A78BFA">Defensive</SectionLabel>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-          {DEFENSIVE.map(renderCell)}
-        </div>
-      </div>
+      {embedded ? (
+        <div className="min-h-0">{body}</div>
+      ) : (
+        <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-5">{body}</div>
+      )}
     </TooltipProvider>
   );
 }

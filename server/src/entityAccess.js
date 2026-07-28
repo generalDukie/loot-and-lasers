@@ -4,10 +4,76 @@
  * mutations require ownership (or admin).
  */
 import { entities } from "./entities.js";
+import { expForLevel } from "./shared/rewards.js";
+import { CLASS_BASE_STATS } from "./shared/economyFormulas.js";
 
 export function isAdmin(user) {
   return user?.role === "admin";
 }
+
+/** Character fields that only server functions / admins may mutate. */
+export const CHARACTER_ECONOMY_FIELDS = new Set([
+  "stardust",
+  "nova_crystals",
+  "total_stardust_earned",
+  "experience",
+  "level",
+  "experience_to_next_level",
+  "unspent_stat_points",
+  "stats",
+  "attribute_purchases",
+  "attribute_purchases_by_stat",
+  "fuel",
+  "max_fuel",
+  "fuel_purchases",
+  "fuel_updated_at",
+  "fuel_reset_at",
+  "active_fuel_mounts",
+  "active_mission_id",
+  "mission_end_time",
+  "missions_completed",
+  "mining_end_time",
+  "mining_reward",
+  "shop_meta",
+  "weekly_nova_quests",
+  "arena_rating",
+  "arena_wins",
+  "arena_losses",
+  "arena_streak",
+  "arena_max_streak",
+  "arena_battles",
+  "arena_battles_today",
+  "arena_battles_date",
+  "arena_last_battle_at",
+  "arena_cooldown_at",
+  "arena_attempts",
+  "arena_attempts_left",
+  "arena_attempts_date",
+  "dungeon_deaths",
+  "dungeon_deaths_date",
+  "dungeon_clears",
+  "dungeon_nodes_cleared",
+  "dungeon_cooldown_until",
+  "dungeon_cooldown_at",
+  "dungeon_cooldown_ms",
+  "dungeon_planet",
+  "dungeon_enemy",
+  "dungeon_extra_lives",
+  "owned_ships",
+  "ship_mod_loadouts",
+  "ship_mods",
+  "active_ship",
+  "highest_sector",
+  "discovered_species",
+  "collected_artifacts",
+  "collected_relics",
+  "promo_codes_redeemed",
+  "highest_damage",
+  "arena_cooldown_at",
+]);
+
+/** Non-admin Item.update may only touch these fields. */
+export const ITEM_ALLOWED_UPDATE_FIELDS = new Set(["is_equipped", "locked"]);
 
 /** Character ids belonging to this auth user. */
 export function characterIdsForUser(userId) {
@@ -150,9 +216,12 @@ export function canCreateType(user, type, data = {}) {
   if (ADMIN_WRITE_TYPES.has(type)) return false;
 
   switch (type) {
-    case "Character":
     case "Item":
     case "Mission":
+      // Loot / missions only via server functions for non-admins.
+      return false;
+
+    case "Character":
     case "DailyLogin":
     case "HubLayout":
     case "Mail":
@@ -182,8 +251,20 @@ export function canCreateType(user, type, data = {}) {
 }
 
 /**
+ * Can this user delete this document via entity CRUD?
+ * Items/Missions: non-admins must use DissolveItem / UseConsumable / mission functions.
+ */
+export function canDeleteDoc(user, type, doc) {
+  if (!user || !doc) return false;
+  if (isAdmin(user)) return true;
+  if (type === "Item" || type === "Mission") return false;
+  return canWriteDoc(user, type, doc);
+}
+
+/**
  * Strip client-controlled ownership / id forges on create.
  * Rejects client-supplied ids (Critical #3) unless admin.
+ * Character.create forces economy defaults for non-admins.
  */
 export function sanitizeCreatePayload(user, type, data = {}) {
   const out = { ...data };
@@ -197,6 +278,57 @@ export function sanitizeCreatePayload(user, type, data = {}) {
   // Character always belongs to caller
   if (type === "Character") {
     out.created_by_id = user.id;
+
+    if (!isAdmin(user)) {
+      const existingCount = entities.Character.filter({ created_by_id: user.id }, null, 50).length;
+      const now = new Date().toISOString();
+      const clientNova = Number(out.nova_crystals) || 0;
+
+      out.level = 1;
+      out.experience = 0;
+      out.experience_to_next_level = expForLevel(1);
+      out.stardust = 0;
+      out.total_stardust_earned = 0;
+      out.unspent_stat_points = 0;
+      out.attribute_purchases = 0;
+      out.attribute_purchases_by_stat = {
+        strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
+      };
+      out.fuel = 100;
+      out.max_fuel = 100;
+      out.fuel_purchases = 0;
+      out.fuel_reset_at = now;
+      out.fuel_updated_at = now;
+      out.missions_completed = 0;
+      out.highest_sector = 1;
+      out.active_mission_id = "";
+      out.mission_end_time = "";
+      if (!out.equipped_items || typeof out.equipped_items !== "object") {
+        out.equipped_items = {};
+      }
+      // Force class base stats — never trust client progression attributes.
+      const base = CLASS_BASE_STATS[out.class];
+      if (base) out.stats = { ...base };
+      // First character may start with up to 100 nova from client; otherwise force 0.
+      out.nova_crystals = existingCount === 0 ? Math.min(100, Math.max(0, clientNova)) : 0;
+
+      // Strip other locked progression fields if client forged them.
+      for (const key of CHARACTER_ECONOMY_FIELDS) {
+        if (
+          key === "level" || key === "experience" || key === "experience_to_next_level"
+          || key === "stardust" || key === "total_stardust_earned"
+          || key === "unspent_stat_points" || key === "attribute_purchases"
+          || key === "attribute_purchases_by_stat" || key === "fuel" || key === "max_fuel"
+          || key === "fuel_purchases" || key === "fuel_reset_at" || key === "fuel_updated_at"
+          || key === "missions_completed" || key === "highest_sector"
+          || key === "active_mission_id" || key === "mission_end_time"
+          || key === "nova_crystals" || key === "stats"
+        ) {
+          continue;
+        }
+        delete out[key];
+      }
+    }
   }
 
   // Item / mission must attach to caller's character when character_id provided
@@ -226,6 +358,33 @@ export function sanitizeCreatePayload(user, type, data = {}) {
     const err = new Error("Forbidden");
     err.status = 403;
     throw err;
+  }
+
+  return out;
+}
+
+/**
+ * Strip locked economy / reward fields from update payloads for non-admins.
+ */
+export function sanitizeUpdatePayload(user, type, data = {}) {
+  if (isAdmin(user)) return { ...data };
+  const out = { ...data };
+
+  if (type === "Character") {
+    for (const key of CHARACTER_ECONOMY_FIELDS) {
+      delete out[key];
+    }
+  }
+
+  if (type === "Item") {
+    for (const key of Object.keys(out)) {
+      if (!ITEM_ALLOWED_UPDATE_FIELDS.has(key)) delete out[key];
+    }
+  }
+
+  if (type === "Mail") {
+    delete out.rewards;
+    delete out.has_rewards;
   }
 
   return out;
@@ -293,6 +452,17 @@ export function scopeReadQuery(user, type, query = {}) {
 export function assertCanWrite(user, type, doc) {
   if (canWriteDoc(user, type, doc)) return;
   const err = new Error("Forbidden");
+  err.status = 403;
+  throw err;
+}
+
+export function assertCanDelete(user, type, doc) {
+  if (canDeleteDoc(user, type, doc)) return;
+  const err = new Error(
+    type === "Item"
+      ? "Use DissolveItem or UseConsumable"
+      : "Forbidden"
+  );
   err.status = 403;
   throw err;
 }

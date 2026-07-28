@@ -4,7 +4,6 @@ import { Swords, Flag, Clock } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import {
   GUILD_WAR_DECLARE_COST,
-  declareGuildWar,
   listGuildWars,
   getWarReadies,
   toggleReady,
@@ -101,10 +100,7 @@ export default function GuildWars({ guild, character, membership, onResult }) {
     }
     setBusy(true);
     try {
-      await declareGuildWar(guild, defenderGuild, character);
-      await api.entities.Character.update(character.id, {
-        stardust: (character.stardust || 0) - GUILD_WAR_DECLARE_COST,
-      });
+      await api.functions.invoke("DeclareGuildWar", { defender_guild_id: defenderGuild.id });
       setShowPicker(false);
       await loadWars();
       if (onResult) onResult();

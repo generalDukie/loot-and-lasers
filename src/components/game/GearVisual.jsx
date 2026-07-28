@@ -29,7 +29,8 @@ export default function GearVisual({
   const uid = useId().replace(/:/g, "");
   const color = rarityColor(rarity);
   const glow = rarityGlowStrength(rarity);
-  const motion = MOTION[type] || MOTION.material;
+  // Don't name this `motion` — it shadows framer-motion's `motion` and breaks <motion.div>.
+  const kitMotion = MOTION[type] || MOTION.material;
   const lv = levelRequirement ?? levelRequirementCamel ?? 1;
 
   return (
@@ -45,8 +46,8 @@ export default function GearVisual({
       <motion.div
         className="relative"
         style={{ width: size * 0.88, height: size * 0.88 }}
-        animate={isStatic ? undefined : motion.animate}
-        transition={isStatic ? undefined : motion.transition}
+        animate={isStatic ? undefined : kitMotion.animate}
+        transition={isStatic ? undefined : kitMotion.transition}
       >
         <GearArtSvg
           type={type}

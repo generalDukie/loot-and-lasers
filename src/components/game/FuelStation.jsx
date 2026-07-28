@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Fuel, Gem, Rocket } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
-import { FUEL_MOUNTS, MAX_FUEL_MOUNTS, getActiveFuelMounts, getFuelMountById } from "@/lib/fuelMounts";
+import { FUEL_MOUNTS, MAX_FUEL_MOUNTS, getActiveFuelMounts } from "@/lib/fuelMounts";
 import { useToast } from "@/components/ui/use-toast";
 
 function useCountdown(expiresAt) {
@@ -68,33 +68,16 @@ export default function FuelStation({ character, onUpdate, embedded = false }) {
     }
     setBuying(mount.id);
     try {
-      let entry;
-      if (!activeMount) {
-        entry = {
-          id: mount.id, name: mount.name, emoji: mount.emoji, speed: mount.speed,
-          expires_at: new Date(now + durationMs).toISOString(),
-        };
-      } else {
-        // Only the TIMER stacks (capped at 3× the new mount's base duration).
-        // Speed does NOT stack — the stronger of the two wins.
-        const baseExpiry = Math.max(now, new Date(activeMount.expires_at).getTime());
-        const newExpiry = Math.min(baseExpiry + durationMs, now + durationMs * MAX_FUEL_MOUNTS);
-        const speed = Math.max(activeMount.speed || 0, mount.speed);
-        const rep = mount.speed >= (activeMount.speed || 0) ? mount : (getFuelMountById(activeMount.id) || mount);
-        entry = { id: rep.id, name: rep.name, emoji: rep.emoji, speed, expires_at: new Date(newExpiry).toISOString() };
-      }
-      const patch = {
-        stardust: (character.stardust || 0) - mount.stardust,
-        nova_crystals: (character.nova_crystals || 0) - (mount.crystals || 0),
-        active_fuel_mounts: [entry],
-      };
-      await api.entities.Character.update(character.id, patch);
+      const res = await api.functions.invoke("BuyFuelMount", { mount_id: mount.id });
+      const patch = res.patch || res.data?.patch || {};
+      const entry = res.mount || res.data?.mount || patch.active_fuel_mounts?.[0];
       onUpdate((c) => ({ ...c, ...patch }));
       void trackNovaSpend(character, mount.crystals || 0, "fuel_mount");
       const extended = !!activeMount;
+      const speed = entry?.speed ?? mount.speed;
       toast({
         title: `${mount.emoji} ${mount.name} engaged!`,
-        description: `-${Math.round(entry.speed * 100)}% mission time${extended ? " · timer extended" : ""}.`,
+        description: `-${Math.round(speed * 100)}% mission time${extended ? " · timer extended" : ""}.`,
       });
     } catch (e) {
       toast({ title: "Purchase failed", description: e.message, variant: "destructive" });

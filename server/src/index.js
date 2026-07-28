@@ -10,10 +10,13 @@ import { attachStaticApp, resolveStaticDir } from "./static.js";
 import {
   assertCanCreate,
   assertCanWrite,
+  assertCanDelete,
   canWriteDoc,
+  canDeleteDoc,
   isAdmin,
   queryIsConstrained,
   sanitizeCreatePayload,
+  sanitizeUpdatePayload,
   scopeReadQuery,
 } from "./entityAccess.js";
 import "./db.js";
@@ -118,17 +121,14 @@ app.put("/api/entities/:type/:id", requireAuth, (req, res) => {
     const existing = store.get(req.params.id);
     if (!existing) return res.status(404).json({ error: "Not found" });
     assertCanWrite(req.user, req.params.type, existing);
-    const body = { ...(req.body || {}) };
+    let body = { ...(req.body || {}) };
     delete body.created_by_id;
     delete body.created_by;
     delete body.id;
-    if (req.params.type === "Mail" && !isAdmin(req.user)) {
-      delete body.rewards;
-      delete body.has_rewards;
-    }
     if (req.params.type === "PromoCode" && !isAdmin(req.user)) {
       return res.status(403).json({ error: "Forbidden" });
     }
+    body = sanitizeUpdatePayload(req.user, req.params.type, body);
     const updated = store.update(req.params.id, body);
     res.json(updated);
   } catch (err) {
@@ -143,17 +143,14 @@ app.patch("/api/entities/:type/:id", requireAuth, (req, res) => {
     const existing = store.get(req.params.id);
     if (!existing) return res.status(404).json({ error: "Not found" });
     assertCanWrite(req.user, req.params.type, existing);
-    const body = { ...(req.body || {}) };
+    let body = { ...(req.body || {}) };
     delete body.created_by_id;
     delete body.created_by;
     delete body.id;
-    if (req.params.type === "Mail" && !isAdmin(req.user)) {
-      delete body.rewards;
-      delete body.has_rewards;
-    }
     if (req.params.type === "PromoCode" && !isAdmin(req.user)) {
       return res.status(403).json({ error: "Forbidden" });
     }
+    body = sanitizeUpdatePayload(req.user, req.params.type, body);
     const updated = store.update(req.params.id, body);
     res.json(updated);
   } catch (err) {
@@ -167,7 +164,10 @@ app.delete("/api/entities/:type/:id", requireAuth, (req, res) => {
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
     const existing = store.get(req.params.id);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    assertCanWrite(req.user, req.params.type, existing);
+    if (!isAdmin(req.user) && req.params.type === "Item") {
+      return res.status(403).json({ error: "Use DissolveItem or UseConsumable" });
+    }
+    assertCanDelete(req.user, req.params.type, existing);
     const deleted = store.delete(req.params.id);
     if (!deleted) return res.status(404).json({ error: "Not found" });
     res.json({ success: true });
@@ -180,11 +180,18 @@ app.post("/api/entities/:type/delete-many", requireAuth, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
+    if (!isAdmin(req.user) && (req.params.type === "Item" || req.params.type === "Mission")) {
+      return res.status(403).json({
+        error: req.params.type === "Item"
+          ? "Use DissolveItem or UseConsumable"
+          : "Forbidden",
+      });
+    }
     const query = req.body?.query || req.body || {};
     if (!queryIsConstrained(query)) {
       return res.status(400).json({ error: "delete-many requires a constrained query" });
     }
-    const matches = store.filter(query, null, 100000).filter((d) => canWriteDoc(req.user, req.params.type, d));
+    const matches = store.filter(query, null, 100000).filter((d) => canDeleteDoc(req.user, req.params.type, d));
     let deleted = 0;
     for (const item of matches) {
       store.delete(item.id);
@@ -204,10 +211,11 @@ app.post("/api/entities/:type/update-many", requireAuth, (req, res) => {
     if (!queryIsConstrained(query)) {
       return res.status(400).json({ error: "update-many requires a constrained query" });
     }
-    const body = { ...update };
+    let body = { ...update };
     delete body.created_by_id;
     delete body.created_by;
     delete body.id;
+    body = sanitizeUpdatePayload(req.user, req.params.type, body);
     const matches = store.filter(query, null, 100000).filter((d) => canWriteDoc(req.user, req.params.type, d));
     const updated = matches.map((m) => store.update(m.id, body));
     res.json(updated);

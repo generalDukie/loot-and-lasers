@@ -94,14 +94,11 @@ export async function contributeMission(character, mission) {
   // Weekly challenge progress (missions + arena wins both count)
   const ch = await addChallengeProgress(guild, 1);
   if (ch?.completed && ch.reward_stardust) {
-    const fresh = await api.entities.Character.get(character.id);
-    await api.entities.Character.update(character.id, {
-      stardust: (fresh.stardust || 0) + ch.reward_stardust,
-    });
+    // TODO: grant via ClaimGuildChallengeReward / ClaimMission — Character.stardust is server-locked.
     await api.entities.GuildLog.create({
       guild_id: guild.id,
       entry_type: "levelup",
-      message: `Weekly Challenge complete! +${ch.reward_stardust} ✨ bonus`,
+      message: `Weekly Challenge complete! +${ch.reward_stardust} ✨ bonus (claim pending)`,
       character_name: character.name,
     });
   }
@@ -180,14 +177,11 @@ export async function contributeArenaWin(character) {
 
   const ch = await addChallengeProgress(guild, 1);
   if (ch?.completed && ch.reward_stardust) {
-    const fresh = await api.entities.Character.get(character.id);
-    await api.entities.Character.update(character.id, {
-      stardust: (fresh.stardust || 0) + ch.reward_stardust,
-    });
+    // TODO: grant via ClaimGuildChallengeReward — Character.stardust is server-locked.
     await api.entities.GuildLog.create({
       guild_id: guild.id,
       entry_type: "levelup",
-      message: `Weekly Challenge complete! +${ch.reward_stardust} ✨ bonus`,
+      message: `Weekly Challenge complete! +${ch.reward_stardust} ✨ bonus (claim pending)`,
       character_name: character.name,
     });
   }

@@ -114,16 +114,15 @@ export default function ArenaPage() {
   const load = useCallback(async () => {
     const char = await getMyCharacter();
     if (!char) { navigate("/create-character"); return; }
-    const today = todayET();
     // arena_attempts_left tracks FREE BATTLES remaining today. Reset to the cap
     // each new day; battles after the free quota cost nova crystals.
     let left = char.arena_attempts_left ?? ARENA_DAILY_FREE_BATTLES;
-    if (char.arena_attempts_date !== today) {
-      left = ARENA_DAILY_FREE_BATTLES;
-      try { await api.entities.Character.update(char.id, { arena_attempts_left: left, arena_attempts_date: today }); } catch (e) {}
-      char.arena_attempts_left = left;
-      char.arena_attempts_date = today;
-    }
+    try {
+      const sync = await api.functions.invoke("SyncArenaDay", {});
+      const patch = sync.patch || sync.data?.patch;
+      if (patch) Object.assign(char, patch);
+      left = char.arena_attempts_left ?? ARENA_DAILY_FREE_BATTLES;
+    } catch (e) { /* non-blocking */ }
     let items = [];
     try { items = await api.entities.Item.list(null, 250); } catch (e) {}
     setCatalogItems(items);
@@ -157,10 +156,10 @@ export default function ArenaPage() {
       toast({ title: "Not enough stardust", description: `Instant refresh costs ${ARENA_REFRESH_COST} ✨.`, variant: "destructive" });
       return;
     }
-    const upd = { stardust: (character.stardust || 0) - ARENA_REFRESH_COST };
-    await api.entities.Character.update(character.id, upd);
+    const res = await api.functions.invoke("RefreshArenaOpponents", { charge: true });
+    const upd = res.patch || res.data?.patch || {};
     setCharacter((c) => ({ ...c, ...upd }));
-    setOpponents(await buildOpponentPool(character, catalogItems));
+    setOpponents(await buildOpponentPool({ ...character, ...upd }, catalogItems));
   }
 
   // When the player is on cooldown, each challenger's button becomes a
@@ -202,54 +201,41 @@ export default function ArenaPage() {
   async function finishBattle() {
     const { battle, opp, rewards, isFree, skipped } = battleState;
     const { percentage: collectPct } = getCollectionStats(character);
-    const boostedXp = rewards.won ? applyXpBonus(rewards.experience, collectPct) : 0;
     const prevLevel = character.level;
-    let newExp = (character.experience || 0) + boostedXp;
-    let newLevel = character.level;
-    let expToNext = character.experience_to_next_level;
-    while (newExp >= expToNext) { newExp -= expToNext; newLevel++; expToNext = getExpForLevel(newLevel); }
-
-    const prevRating = character.arena_rating || 1000;
-    const newRating = Math.max(0, prevRating + rewards.arena_rating_delta);
     const prevStreak = character.arena_streak || 0;
-    const newStreak = rewards.won ? prevStreak + 1 : 0;
-    const newMaxStreak = Math.max(character.arena_max_streak || 0, newStreak);
-    const stardustGain = rewards.won ? (rewards.stardust || 0) : 0;
-
     const maxPlayerHit = Math.max(0, ...battle.events.filter((e) => e.attacker === "player" && e.damage).map((e) => e.damage));
-    // First 10 battles/day are free (xp + stardust + rating on wins). After that each
-    // battle costs nova crystals and yields rating only — unlimited climbing.
-    const update = {
-      experience: newExp,
-      level: newLevel,
-      experience_to_next_level: expToNext,
-      stardust: (character.stardust || 0) + stardustGain,
-      total_stardust_earned: (character.total_stardust_earned || 0) + stardustGain,
-      highest_damage: Math.max(character.highest_damage || 0, maxPlayerHit),
-      arena_rating: newRating,
-      arena_wins: (character.arena_wins || 0) + (rewards.won ? 1 : 0),
-      arena_losses: (character.arena_losses || 0) + (rewards.won ? 0 : 1),
-      arena_streak: newStreak,
-      arena_max_streak: newMaxStreak,
-      arena_battles: (character.arena_battles || 0) + 1,
-      arena_attempts_left: Math.max(0, freeBattlesLeft - (isFree ? 1 : 0)),
-      arena_cooldown_at: new Date().toISOString(),
-      unspent_stat_points: (character.unspent_stat_points || 0) + getStatPointsForLevelRange(character.level, newLevel),
-    };
     const skipCost = skipped ? ARENA_SKIP_COST : 0;
     const battleCost = isFree ? 0 : ARENA_PAID_BATTLE_COST;
-    if (skipCost || battleCost) update.nova_crystals = (character.nova_crystals || 0) - skipCost - battleCost;
+
+    let res;
+    try {
+      res = await api.functions.invoke("FinishArenaBattle", {
+        won: rewards.won,
+        is_free: isFree,
+        skipped: !!skipped,
+        skip_cooldown: !!skipped,
+        opponent: { arena_rating: opp.arena_rating, id: opp.id, speciesId: opp.speciesId },
+        max_hit: maxPlayerHit,
+        species_id: opp.speciesId,
+      });
+    } catch (e) {
+      toast({ title: "Could not settle arena battle", description: e?.message || "Try again.", variant: "destructive" });
+      setBattleState(null);
+      await load();
+      return;
+    }
+    const update = res.patch || res.data?.patch || {};
+    const serverRewards = res.rewards || res.data?.rewards || rewards;
+    const boostedXp = serverRewards.experience || 0;
+    const stardustGain = rewards.won ? (serverRewards.stardust || 0) : 0;
+    const newLevel = update.level ?? character.level;
+    const newRating = update.arena_rating ?? (character.arena_rating || 1000);
+    const newStreak = update.arena_streak ?? (rewards.won ? prevStreak + 1 : 0);
     const oppItems = resolveOpponentItems(opp, catalogItems);
     const gearItems = oppItems.map((it) => ({
       id: it.id, name: it.name, type: it.type, rarity: it.rarity, base_name: it.base_name,
     }));
-    const { updates: discUpdates, found: discFound } = processDiscovery(character, { win: rewards.won, speciesId: opp.speciesId, gearItems });
-    Object.assign(update, discUpdates);
-    if (rewards.won) {
-      const weekly = progressWeeklyNovaQuest(character, "arena", 1);
-      if (weekly) update.weekly_nova_quests = weekly;
-    }
-    await api.entities.Character.update(character.id, update);
+    const { found: discFound } = processDiscovery(character, { win: rewards.won, speciesId: opp.speciesId, gearItems });
     if ((skipCost || 0) + (battleCost || 0)) void trackNovaSpend(character, (skipCost || 0) + (battleCost || 0), "arena");
 
     // Galaxy news (fire-and-forget so a feed hiccup never blocks rewards)

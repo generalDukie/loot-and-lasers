@@ -3,43 +3,35 @@ import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
 import { useNavigate } from "react-router-dom";
 import {
-  generateItem,
-  rollItemRarity,
-  getExpForLevel,
-  getEffectiveFuelCost,
   FUEL_MAX,
   MISSION_MIN_FUEL,
   FUEL_PURCHASE_AMOUNT,
   FUEL_PURCHASE_COST,
   FUEL_PURCHASE_MAX,
-  checkFuelReset,
   generateDailyMissions,
   generateLowFuelBoard,
   getModEffectTotal,
+  getEffectiveFuelCost,
+  getStatPointsForLevelRange,
+  GEAR_CATALOG_TOTAL,
   computeMissionXpFromFuel,
   computeMissionStardustFromFuel,
   normalizeMissionEfficiency,
-  getStatPointsForLevelRange,
-  randomConsumable,
-  GEAR_CATALOG_TOTAL,
 } from "@/lib/gameData";
 import { contributeMission, getGuildMembership } from "@/lib/guildUtils";
 import { processDiscovery } from "@/lib/discovery";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { pushNotification } from "@/lib/notificationEngine";
 import { getNexusOwnerGuildId } from "@/lib/nexusEngine";
-import { addItemWithCap } from "@/lib/inventoryCap";
-import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
-import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import { useToast } from "@/components/ui/use-toast";
 import { playMissionComplete } from "@/lib/audioEngine";
 import { generateMissionEncounter } from "@/lib/missionCombat";
 import { simulateBattle } from "@/lib/arenaEngine";
-import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
 import { pickMissionExploreSceneIndex } from "@/components/game/MissionExploreBackdrop";
+import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import confetti from "canvas-confetti";
 
-// Computes stardust/XP for a mission.
+// Computes stardust/XP for a mission (UI preview only — server awards on claim).
 // XP  = fuel × XP/fuel(level) × xp efficiency (0.90–1.10)
 // SD  = fuel × SD/fuel(level) × stardust efficiency (0.90–1.10)
 // then ship / nexus / collection bonuses.
@@ -127,6 +119,16 @@ function rollCantinaBoard(character) {
   return generateDailyMissions(character);
 }
 
+function classifyClaimItems(items, rewards) {
+  const list = Array.isArray(items) ? items : [];
+  const gearItem = list.find((i) => i.type !== "material" && i.type !== "consumable") || null;
+  const material = list.find((i) => i.type === "material") || null;
+  const consumableItem = list.find((i) => i.type === "consumable") || null;
+  const collectible = rewards?.collectible
+    || (material ? { name: material.name, emoji: "🎁" } : null);
+  return { gearItem, collectible, consumableItem };
+}
+
 // Encapsulates the full mission lifecycle: fuel cycle, daily quest generation,
 // active-mission polling, launch/claim/skip, fuel purchase, reward computation,
 // loot rolls, discoveries, and guild/Nexus side-effects. The view layer consumes
@@ -155,12 +157,12 @@ export function useMissionManager() {
     const char = await getMyCharacter();
     if (!char) { navigate("/create-character"); return; }
 
-    // Refill fuel to full once the 24h cycle elapses
-    const resetPatch = checkFuelReset(char);
-    if (resetPatch) {
-      try { await api.entities.Character.update(char.id, resetPatch); } catch (e) {}
-      Object.assign(char, resetPatch);
-    }
+    // Server-authoritative 24h fuel cycle refill
+    try {
+      const res = await api.functions.invoke("SyncFuelCycle", {});
+      const patch = res.patch || res.data?.patch || {};
+      if (patch && Object.keys(patch).length) Object.assign(char, patch);
+    } catch (e) { /* best-effort */ }
 
     // Same 3 patrons stay until one mission is finished — never reshuffle on load.
     const saved = readSavedCantinaBoard(char.id);
@@ -182,7 +184,7 @@ export function useMissionManager() {
         if (missions.length > 0) {
           const m = missions[0];
           if (m.status === "in_progress" && new Date(m.end_time) <= new Date()) {
-            await api.entities.Mission.update(m.id, { status: "completed" });
+            // Local UX only — ClaimMission completes server-side when claimed.
             m.status = "completed";
           }
           setActiveMission(m);
@@ -241,46 +243,35 @@ export function useMissionManager() {
       toast({ title: "⛽ Not enough fuel!", description: `Need ${fuelCost} fuel — only ${currentFuel} in the tank.`, variant: "destructive" });
       return;
     }
-    const startNow = new Date();
-    const duration = getEffectiveMissionDuration(character, template);
-    const endTime = new Date(startNow.getTime() + duration * 1000);
 
-    // Pre-roll the loot drop at launch so the advertised drop (shown on the
-    // active mission card) is exactly what claim will grant.
-    const LOOT_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
-    const lootType = LOOT_TYPES[template.name.length % 8];
-    const lootRarity = rollItemRarity(template.rewards.item_rarity_chance, character.level);
-    // Not every mission yields gear — level nudges drop rate slightly.
-    const lootDrops = Math.random() < Math.min(0.85, 0.4 + Math.min(0.25, (character.level || 1) * 0.01));
-
-    const mission = await api.entities.Mission.create({
-      character_id: character.id,
-      name: template.name,
-      description: template.description,
-      location: template.location,
-      sector: template.sector,
-      duration_seconds: duration,
-      status: "in_progress",
-      start_time: startNow.toISOString(),
-      end_time: endTime.toISOString(),
-      rewards: { ...template.rewards, loot_rarity: lootRarity, loot_type: lootType, loot_drops: lootDrops },
-      level_requirement: template.level_requirement,
-      patron: template.patron || null,
-      explore_scene: pickMissionExploreSceneIndex(),
-    });
-
-    await api.entities.Character.update(character.id, {
-      active_mission_id: mission.id,
-      mission_end_time: endTime.toISOString(),
-      fuel: currentFuel - fuelCost,
-      fuel_updated_at: startNow.toISOString(),
-    });
-
-    setActiveMission(mission);
-    setCharacter(c => ({ ...c, fuel: currentFuel - fuelCost, fuel_updated_at: startNow.toISOString() }));
-    setLaunchAnim(mission);
-    pushNotification({ owner_id: character.id, type: "system", title: "🚀 Mission Launched!", body: `${template.name} — returning in ${formatTime(duration)} · -${fuelCost} ⛽` });
-  }, [activeMission, character, toast]);
+    try {
+      const res = await api.functions.invoke("LaunchMission", {
+        template: {
+          ...template,
+          explore_scene: pickMissionExploreSceneIndex(),
+        },
+      });
+      const patch = res.patch || res.data?.patch || {};
+      const mission = res.mission || res.data?.mission;
+      if (!mission) throw new Error("No mission returned");
+      setActiveMission(mission);
+      setCharacter((c) => ({ ...c, ...patch }));
+      setLaunchAnim(mission);
+      const duration = mission.duration_seconds || template.duration_seconds;
+      const spent = patch.fuel != null
+        ? Math.round(((character.fuel ?? FUEL_MAX) - patch.fuel) * 100) / 100
+        : fuelCost;
+      pushNotification({
+        owner_id: character.id,
+        type: "system",
+        title: "🚀 Mission Launched!",
+        body: `${template.name} — returning in ${formatTime(duration)} · -${spent} ⛽`,
+      });
+    } catch (e) {
+      toast({ title: "Launch failed", description: e?.message || "Try again.", variant: "destructive" });
+      await load();
+    }
+  }, [activeMission, character, toast, load]);
 
   // Soft end-mission fight — used by claim and by skip-to-fight.
   const startMissionBattle = useCallback(async (mission) => {
@@ -311,18 +302,28 @@ export function useMissionManager() {
 
   const finishMissionBattle = useCallback(async () => {
     if (!missionBattle || !activeMission) return;
+    // Consume the claim lock immediately so double-clicks on VIEW REWARDS cannot
+    // fire two ClaimMission calls (second 409 used to toast over a successful claim).
+    if (!claimingRef.current) return;
+    claimingRef.current = false;
     const { battle, enemy } = missionBattle;
     const won = battle?.winner === "player";
+    const missionSnapshot = activeMission;
     setMissionBattle(null);
 
     if (!won) {
       try {
-        await api.entities.Mission.update(activeMission.id, { status: "failed" });
-        await api.entities.Character.update(character.id, { active_mission_id: "", mission_end_time: "" });
-      } catch (e) {}
-      setActiveMission(null);
-      setCharacter((c) => ({ ...c, active_mission_id: "", mission_end_time: "" }));
-      commitCantinaBoard(character.id, rollCantinaBoard({ ...character, fuel: character.fuel }));
+        const res = await api.functions.invoke("FailMission", { mission_id: missionSnapshot.id });
+        const patch = res.patch || res.data?.patch || {};
+        setActiveMission(null);
+        setCharacter((c) => ({ ...c, ...patch }));
+        try {
+          commitCantinaBoard(character.id, rollCantinaBoard({ ...character, ...patch }));
+        } catch { /* board regen is best-effort */ }
+      } catch (e) {
+        toast({ title: "Could not resolve mission", description: e?.message, variant: "destructive" });
+        await load();
+      }
       toast({
         title: "Defeated — no rewards",
         description: "The encounter went south. Fuel is spent, but you walk away empty-handed.",
@@ -334,80 +335,56 @@ export function useMissionManager() {
     }
 
     try {
-      const rewards = activeMission.rewards;
-      const { stardustGain, xpGain, collectionPct, stardustBase, xpBase, efficiency, xpEfficiency } = computeMissionGains(character, activeMission, nexusBonus);
-      let newExp = (character.experience || 0) + xpGain;
-      let newLevel = character.level;
-      let expToNext = character.experience_to_next_level;
+      const res = await api.functions.invoke("ClaimMission", {
+        mission_id: missionSnapshot.id,
+        won: true,
+        species_id: enemy?.speciesId || null,
+        nexus_bonus: nexusBonus,
+      });
+      const patch = res.patch || res.data?.patch || {};
+      const gains = res.gains || res.data?.gains || {};
+      const items = res.items || res.data?.items || [];
+      const rewards = missionSnapshot.rewards || {};
 
-      while (newExp >= expToNext) {
-        newExp -= expToNext;
-        newLevel++;
-        expToNext = getExpForLevel(newLevel);
+      const { gearItem, collectible, consumableItem } = classifyClaimItems(items, rewards);
+      const prevLevel = character.level || 1;
+      const newLevel = patch.level ?? character.level ?? prevLevel;
+      const leveledUp = newLevel > prevLevel;
+      const stardustGain = gains.stardust ?? 0;
+      const xpGain = gains.experience ?? 0;
+      const collectionPct = gains.collectionPct ?? 0;
+      const stardustBase = gains.stardustBase ?? stardustGain;
+      const xpBase = gains.xpBase ?? xpGain;
+      const efficiency = gains.efficiency ?? 1;
+      const xpEfficiency = gains.xpEfficiency ?? 1;
+      let fuelSpent = gains.fuelSpent;
+      if (fuelSpent == null) {
+        try { fuelSpent = getEffectiveFuelCost(character, missionSnapshot); }
+        catch { fuelSpent = 0; }
       }
 
-      const charUpdate = {
-        experience: newExp,
-        level: newLevel,
-        experience_to_next_level: expToNext,
-        stardust: (character.stardust || 0) + stardustGain,
-        total_stardust_earned: (character.total_stardust_earned || 0) + stardustGain,
-        unspent_stat_points: (character.unspent_stat_points || 0) + getStatPointsForLevelRange(character.level, newLevel),
-        missions_completed: (character.missions_completed || 0) + 1,
-        highest_sector: Math.max(character.highest_sector || 1, activeMission.sector),
-        active_mission_id: "",
-        mission_end_time: "",
-      };
+      let discFound = [];
+      try {
+        discFound = processDiscovery(character, {
+          win: true,
+          speciesId: enemy?.speciesId || null,
+          gearItems: gearItem ? [gearItem] : [],
+        }).found || [];
+      } catch { /* discovery UI only */ }
 
-      const { updates: discUpdates, found: discFound } = processDiscovery(character, { win: true, speciesId: enemy?.speciesId || null });
-      Object.assign(charUpdate, discUpdates);
-      const weekly = progressWeeklyNovaQuest(character, "missions", 1);
-      if (weekly) charUpdate.weekly_nova_quests = weekly;
-      await api.entities.Character.update(character.id, charUpdate);
-      await api.entities.Mission.update(activeMission.id, { status: "claimed" });
+      let shipXpMult = 0;
+      let shipSdMult = 0;
+      try {
+        shipXpMult = getModEffectTotal(character, "mission_xp_mult") || 0;
+        shipSdMult = getModEffectTotal(character, "mission_stardust_mult") || 0;
+      } catch { /* preview chips only */ }
 
-      const dropsGear = rewards.loot_drops !== false;
-      let gearItem = null;
-      if (dropsGear) {
-        const rarity = rewards.loot_rarity || rollItemRarity(rewards.item_rarity_chance, character.level);
-        gearItem = generateItem(rarity, character.level, rewards.loot_type);
-        await addItemWithCap(character, {
-          ...gearItem,
-          owner_id: character.created_by_id,
-          character_id: character.id,
-        });
-      }
-
-      if (rewards.collectible) {
-        const junkStats = 1 + Math.floor(Math.random() * 4);
-        await addItemWithCap(character, {
-          owner_id: character.created_by_id,
-          character_id: character.id,
-          name: rewards.collectible.name,
-          type: "material",
-          rarity: "uncommon",
-          level_requirement: Math.max(1, character.level),
-          stats: { luck: junkStats },
-          flavor_text: "A curious trinket recovered on mission.",
-          sell_value: 15,
-          is_equipped: false,
-        });
-      }
-
-      let consumableItem = null;
-      if (Math.random() < 0.15) {
-        const { _cost, ...consItem } = randomConsumable();
-        await addItemWithCap(character, { ...consItem, owner_id: character.created_by_id, character_id: character.id });
-        consumableItem = consItem;
-      }
-
-      const leveledUp = newLevel > character.level;
       setCompleteSummary({
-        mission: activeMission,
+        mission: missionSnapshot,
         xp: {
           base: xpBase,
           efficiency: xpEfficiency,
-          shipMult: getModEffectTotal(character, "mission_xp_mult"),
+          shipMult: shipXpMult,
           collectionPct,
           total: xpGain,
         },
@@ -415,52 +392,67 @@ export function useMissionManager() {
           base: stardustBase,
           efficiency,
           nexus: nexusBonus,
-          shipMult: getModEffectTotal(character, "mission_stardust_mult"),
+          shipMult: shipSdMult,
           total: stardustGain,
         },
         leveledUp,
         newLevel,
-        statPoints: getStatPointsForLevelRange(character.level, newLevel),
+        statPoints: getStatPointsForLevelRange(prevLevel, newLevel),
         gearItem,
-        collectible: rewards.collectible || null,
+        collectible,
         consumableItem,
         discoveries: discFound,
-        fuelSpent: getEffectiveFuelCost(character, activeMission),
+        fuelSpent,
       });
       if (discFound.length) {
-        pushNotification({ owner_id: character.id, type: "system", title: "🔎 Discovery!", body: discFound.map((f) => `${f.emoji} ${f.name}`).join(" · ") });
+        pushNotification({
+          owner_id: character.id,
+          type: "system",
+          title: "🔎 Discovery!",
+          body: discFound.map((f) => `${f.emoji || "✨"} ${f.name}`).join(" · "),
+        });
       }
 
-      contributeMission({ ...character, level: newLevel }, activeMission);
+      void contributeMission({ ...character, ...patch, level: newLevel }, missionSnapshot).catch(() => {});
 
       setActiveMission(null);
-      const updatedChar = { ...character, ...charUpdate };
+      const updatedChar = { ...character, ...patch };
       setCharacter(updatedChar);
-      commitCantinaBoard(updatedChar.id, rollCantinaBoard(updatedChar));
+      try {
+        commitCantinaBoard(updatedChar.id, rollCantinaBoard(updatedChar));
+      } catch { /* keep prior board */ }
+    } catch (e) {
+      toast({ title: "Claim failed", description: e?.message || "Try again.", variant: "destructive" });
+      await load();
     } finally {
       claimingRef.current = false;
       setClaiming(false);
     }
-  }, [missionBattle, activeMission, character, nexusBonus, toast, commitCantinaBoard]);
+  }, [missionBattle, activeMission, character, nexusBonus, toast, commitCantinaBoard, load]);
 
   const handleSkip = useCallback(async () => {
     if (!activeMission || activeMission.status !== "in_progress") return;
     if (claimingRef.current || missionBattle) return;
-    const cost = skipCostFor(activeMission);
-    if (cost <= 0) return;
-    if ((character.nova_crystals || 0) < cost) {
-      toast({ title: "Not enough Nova Crystals", description: `Skip costs ${cost} 💎 — you have ${character.nova_crystals || 0}.`, variant: "destructive" });
+    const previewCost = skipCostFor(activeMission);
+    if (previewCost <= 0) return;
+    if ((character.nova_crystals || 0) < previewCost) {
+      toast({ title: "Not enough Nova Crystals", description: `Skip costs ${previewCost} 💎 — you have ${character.nova_crystals || 0}.`, variant: "destructive" });
       return;
     }
-    const completed = { ...activeMission, status: "completed" };
-    await api.entities.Character.update(character.id, { nova_crystals: (character.nova_crystals || 0) - cost });
-    await api.entities.Mission.update(activeMission.id, { status: "completed" });
-    setActiveMission(completed);
-    setCharacter(c => ({ ...c, nova_crystals: (c.nova_crystals || 0) - cost }));
-    void trackNovaSpend(character, cost, "mission_skip");
-    // Skip buys the wait — jump straight into the claim fight.
-    await startMissionBattle(completed);
-  }, [activeMission, character, missionBattle, toast, startMissionBattle]);
+    try {
+      const res = await api.functions.invoke("SkipMission", { mission_id: activeMission.id });
+      const patch = res.patch || res.data?.patch || {};
+      const mission = res.mission || res.data?.mission || { ...activeMission, status: "completed" };
+      const cost = res.skip_cost ?? res.data?.skip_cost ?? previewCost;
+      setActiveMission({ ...mission, status: "completed" });
+      setCharacter((c) => ({ ...c, ...patch }));
+      void trackNovaSpend(character, cost, "mission_skip");
+      await startMissionBattle({ ...mission, status: "completed" });
+    } catch (e) {
+      toast({ title: "Skip failed", description: e?.message || "Try again.", variant: "destructive" });
+      await load();
+    }
+  }, [activeMission, character, missionBattle, toast, startMissionBattle, load]);
 
   const handleBuyFuel = useCallback(async () => {
     if ((character.fuel_purchases || 0) >= FUEL_PURCHASE_MAX) return;
@@ -468,16 +460,17 @@ export function useMissionManager() {
       toast({ title: "Not enough Nova Crystals", description: `Need ${FUEL_PURCHASE_COST} 💎 to refuel.`, variant: "destructive" });
       return;
     }
-    const upd = {
-      nova_crystals: (character.nova_crystals || 0) - FUEL_PURCHASE_COST,
-      fuel: (character.fuel || 0) + FUEL_PURCHASE_AMOUNT,
-      fuel_purchases: (character.fuel_purchases || 0) + 1,
-    };
-    await api.entities.Character.update(character.id, upd);
-    setCharacter((c) => ({ ...c, ...upd }));
-    void trackNovaSpend(character, FUEL_PURCHASE_COST, "fuel_purchase");
-    toast({ title: `⛽ +${FUEL_PURCHASE_AMOUNT} Fuel`, description: `-${FUEL_PURCHASE_COST} 💎` });
-  }, [character, toast]);
+    try {
+      const res = await api.functions.invoke("BuyFuel", {});
+      const patch = res.patch || res.data?.patch || {};
+      setCharacter((c) => ({ ...c, ...patch }));
+      void trackNovaSpend(character, FUEL_PURCHASE_COST, "fuel_purchase");
+      toast({ title: `⛽ +${FUEL_PURCHASE_AMOUNT} Fuel`, description: `-${FUEL_PURCHASE_COST} 💎` });
+    } catch (e) {
+      toast({ title: "Refuel failed", description: e?.message || "Try again.", variant: "destructive" });
+      await load();
+    }
+  }, [character, toast, load]);
 
   // Derived view values
   const skipCost = activeMission ? skipCostFor(activeMission, now) : 0;

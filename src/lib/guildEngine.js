@@ -204,9 +204,12 @@ export async function applyWarResult(guild, members, rival, simulation, characte
   });
 
   const fresh = await api.entities.Character.get(character.id);
-  await api.entities.Character.update(character.id, {
-    stardust: (fresh.stardust || 0) - GUILD_WAR_COST + rewards.stardust,
+  const payout = await api.functions.invoke("ApplyGuildWarResult", {
+    won: playerWon,
+    reward_stardust: rewards.stardust,
   });
+  const patch = payout.patch || payout.data?.patch || {};
+  Object.assign(fresh, patch);
 
   await api.entities.GuildBattle.create({
     attacker_guild_id: guild.id,

@@ -63,8 +63,9 @@ export default function ShipPage() {
     const milePatch = buildScoutMilestonePatch(char);
     if (milePatch) {
       try {
-        await api.entities.Character.update(char.id, milePatch);
-        next = { ...char, ...milePatch };
+        const res = await api.functions.invoke("ClaimScoutMilestone", {});
+        const patch = res.patch || res.data?.patch || {};
+        next = { ...char, ...patch };
         toast({
           title: "🛠️ Scout bay tuned!",
           description: `Lv ${SCOUT_MILESTONE_LEVEL} milestone — free Reinforced Fuel Tank T1 installed.`,
@@ -81,16 +82,8 @@ export default function ShipPage() {
   async function handleActivate(shipId) {
     setBuyingShip(shipId);
     try {
-      const loadouts = { ...(character.ship_mod_loadouts || {}) };
-      const newMods = loadouts[shipId] || [];
-      const newMax = computeMaxFuelForLoadout(newMods, shipId);
-      const patch = {
-        active_ship: shipId,
-        max_fuel: newMax,
-        fuel: Math.min(character.fuel ?? FUEL_MAX, newMax),
-        fuel_updated_at: new Date().toISOString(),
-      };
-      await api.entities.Character.update(character.id, patch);
+      const res = await api.functions.invoke("ActivateShip", { ship_id: shipId });
+      const patch = res.patch || res.data?.patch || {};
       setCharacter((c) => ({ ...c, ...patch }));
       toast({ title: `🚀 ${SHIP_TYPES[shipId].name} activated` });
     } catch (err) {
@@ -108,14 +101,8 @@ export default function ShipPage() {
     }
     setBuyingShip(shipId);
     try {
-      const loadouts = { ...(character.ship_mod_loadouts || {}) };
-      if (!Array.isArray(loadouts[shipId])) loadouts[shipId] = [];
-      const patch = {
-        nova_crystals: (character.nova_crystals || 0) - ship.cost,
-        owned_ships: [...(character.owned_ships || [STARTER_SHIP]), shipId],
-        ship_mod_loadouts: loadouts,
-      };
-      await api.entities.Character.update(character.id, patch);
+      const res = await api.functions.invoke("BuyShip", { ship_id: shipId });
+      const patch = res.patch || res.data?.patch || {};
       setCharacter((c) => ({ ...c, ...patch }));
       setEditingShipId(shipId);
       void trackNovaSpend(character, ship.cost, "ship_purchase");
@@ -142,23 +129,8 @@ export default function ShipPage() {
     }
     setBuyingMod(catKey);
     try {
-      const loadouts = { ...(character.ship_mod_loadouts || {}) };
-      const current = Array.isArray(loadouts[targetId])
-        ? loadouts[targetId]
-        : getShipModIds(character, targetId);
-      const newMods = [...current, tier.id];
-      loadouts[targetId] = newMods;
-      const patch = {
-        stardust: (character.stardust || 0) - cost,
-        ship_mod_loadouts: loadouts,
-      };
-      if (tier.max_fuel_bonus && targetId === getActiveShipId(character)) {
-        const newMax = computeMaxFuelForLoadout(newMods, targetId);
-        patch.max_fuel = newMax;
-        patch.fuel = Math.min((character.fuel ?? FUEL_MAX) + (newMax - (character.max_fuel || FUEL_MAX)), newMax);
-        patch.fuel_updated_at = new Date().toISOString();
-      }
-      await api.entities.Character.update(character.id, patch);
+      const res = await api.functions.invoke("BuyShipMod", { category_key: catKey, ship_id: targetId });
+      const patch = res.patch || res.data?.patch || {};
       setCharacter((c) => ({ ...c, ...patch }));
       toast({ title: "🛠️ Mod Installed!", description: `${SHIP_MODS[catKey].name} — ${getTierEffectLabel(tier, targetId)}` });
     } catch (err) {

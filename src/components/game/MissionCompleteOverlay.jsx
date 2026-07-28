@@ -45,16 +45,18 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
   }, []);
 
   if (!summary) return null;
-  const { mission, xp, stardust, leveledUp, newLevel, statPoints, gearItem, collectible, consumableItem, discoveries, fuelSpent } = summary;
+  const { mission, leveledUp, newLevel, gearItem, collectible, consumableItem, discoveries, fuelSpent } = summary;
   const m = mission || {};
+  const xp = summary.xp || { base: 0, total: 0, shipMult: 0, collectionPct: 0 };
+  const stardust = summary.stardust || { base: 0, total: 0, shipMult: 0, nexus: false };
 
   const xpChips = [];
-  if (xp.shipMult > 0) xpChips.push(`+${pct(xp.shipMult)}% ship`);
-  if (xp.collectionPct > 0) xpChips.push(`+${xp.collectionPct}% collection`);
+  if ((xp.shipMult || 0) > 0) xpChips.push(`+${pct(xp.shipMult)}% ship`);
+  if ((xp.collectionPct || 0) > 0) xpChips.push(`+${xp.collectionPct}% collection`);
 
   const sdChips = [];
   if (stardust.nexus) sdChips.push("+5% nexus");
-  if (stardust.shipMult > 0) sdChips.push(`+${pct(stardust.shipMult)}% ship`);
+  if ((stardust.shipMult || 0) > 0) sdChips.push(`+${pct(stardust.shipMult)}% ship`);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={onClose}>
@@ -83,7 +85,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
           <RewardCard icon={<Zap className="w-5 h-5" />} accent="#00E5FF">
             <div className="flex items-baseline justify-between">
               <span className="text-xs font-display font-semibold text-cyan-300">EXPERIENCE</span>
-              <span className="font-display font-bold text-cyan-400 text-lg">+{xp.total}</span>
+              <span className="font-display font-bold text-cyan-400 text-lg">+{xp.total || 0}</span>
             </div>
             {xpChips.length > 0 && (
               <div className="flex flex-wrap items-center gap-1 mt-1">
@@ -96,7 +98,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
           <RewardCard icon={<Star className="w-5 h-5" />} accent="#A855F7">
             <div className="flex items-baseline justify-between">
               <span className="text-xs font-display font-semibold text-purple-300">STARDUST</span>
-              <span className="font-display font-bold text-purple-400 text-lg">+{stardust.total}</span>
+              <span className="font-display font-bold text-purple-400 text-lg">+{stardust.total || 0}</span>
             </div>
             {sdChips.length > 0 && (
               <div className="flex flex-wrap items-center gap-1 mt-1">

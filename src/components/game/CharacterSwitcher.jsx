@@ -74,11 +74,11 @@ export default function CharacterSwitcher() {
     }
     setPurchasing(true);
     try {
-      await api.entities.Character.update(active.id, { nova_crystals: (active.nova_crystals || 0) - SLOT_COST });
+      await api.functions.invoke("BuyCharacterSlot", {});
       void trackNovaSpend(active, SLOT_COST, "character_slot");
-      await api.auth.updateMe({ purchased_slots: purchased + 1 });
       await checkUserAuth();
       bustMyCharacterCache();
+      toast({ title: "Slot unlocked!", description: "You can create another operative." });
       navigate("/create-character");
     } catch (e) {
       toast({ title: "Purchase failed", description: e.message || "Try again.", variant: "destructive" });

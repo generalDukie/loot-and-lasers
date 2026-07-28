@@ -64,7 +64,6 @@ export default function CharacterPage() {
   async function doAllocate(stat) {
     const char = characterRef.current;
     if (!char) return;
-    const bought = getAttributePurchaseCount(char, stat);
     const cost = getNextAttributePointCost(char, stat);
     const sd = char.stardust || 0;
     if (sd < cost) {
@@ -79,28 +78,32 @@ export default function CharacterPage() {
       }
       return;
     }
+    // Optimistic UI — server BuyAttribute is authoritative.
+    const bought = getAttributePurchaseCount(char, stat);
     const byStat = {
       ...(char.attribute_purchases_by_stat || {}),
       [stat]: bought + 1,
     };
-    // Fill missing keys from derived counts so the map stays complete after first buy.
     for (const k of ATTR_STAT_KEYS) {
       if (typeof byStat[k] !== "number") byStat[k] = getAttributePurchaseCount(char, k);
     }
     byStat[stat] = bought + 1;
     const totalBought = ATTR_STAT_KEYS.reduce((s, k) => s + (byStat[k] || 0), 0);
-    const upd = {
+    const optimistic = {
       stats: { ...char.stats, [stat]: (char.stats[stat] || 0) + 1 },
       stardust: sd - cost,
       attribute_purchases_by_stat: byStat,
       attribute_purchases: totalBought,
-      unspent_stat_points: 0,
     };
-    const next = { ...char, ...upd };
+    const next = { ...char, ...optimistic };
     characterRef.current = next;
     setCharacter(next);
     try {
-      await api.entities.Character.update(char.id, upd);
+      const res = await api.functions.invoke("BuyAttribute", { stat });
+      const patch = res.patch || res.data?.patch || {};
+      const synced = { ...characterRef.current, ...patch };
+      characterRef.current = synced;
+      setCharacter(synced);
     } catch (e) {
       toast({ title: "Purchase failed", description: e.message, variant: "destructive" });
       await load();
@@ -111,6 +114,32 @@ export default function CharacterPage() {
     const res = await inv.useConsumable(item);
     if (res && !res.ok && res.reason) {
       toast({ title: "Can't use", description: res.reason, variant: "destructive" });
+    }
+  }
+
+  async function handleSell(item) {
+    try {
+      await inv.sell(item);
+    } catch (e) {
+      toast({ title: "Could not dissolve", description: e?.message || "Try again.", variant: "destructive" });
+    }
+  }
+
+  async function handleBulkSell(items) {
+    try {
+      return await inv.bulkSell(items);
+    } catch (e) {
+      toast({ title: "Could not dissolve junk", description: e?.message || "Try again.", variant: "destructive" });
+      return 0;
+    }
+  }
+
+  async function handleEquip(item) {
+    try {
+      await inv.equip(item);
+    } catch (e) {
+      toast({ title: "Equip failed", description: e?.message || "Try again.", variant: "destructive" });
+      await load();
     }
   }
 
@@ -215,9 +244,9 @@ export default function CharacterPage() {
           <div className="flex-1 min-h-0 flex flex-col -mr-1 pr-1">
             <InventoryGrid
               items={inv.items}
-              onEquip={inv.equip}
-              onSell={inv.sell}
-              onBulkSell={inv.bulkSell}
+              onEquip={handleEquip}
+              onSell={handleSell}
+              onBulkSell={handleBulkSell}
               onUse={handleUse}
               onLock={inv.toggleLock}
               characterClass={character.class}

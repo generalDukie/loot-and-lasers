@@ -26,42 +26,14 @@ export default function GuildCreation({ character, onJoined }) {
     }
     setBusy(true); setError("");
     try {
-      await api.entities.Character.update(character.id, {
-        stardust: (character.stardust || 0) - GUILD_CREATE_COST,
-      });
-      const g = await api.entities.Guild.create({
+      await api.functions.invoke("CreateGuild", {
         name: name.trim(),
         tag: tag.trim().toUpperCase().slice(0, 4),
         description: description.trim(),
-        leader_id: character.id,
-        leader_name: character.name,
-        level: 1,
-        experience: 0,
-        experience_to_next: 1000,
-        total_missions: 0,
-        total_stardust: 0,
-        member_count: 1,
-      });
-      await api.entities.GuildMember.create({
-        guild_id: g.id,
-        character_id: character.id,
-        character_name: character.name,
-        character_level: character.level,
-        character_race: character.race,
-        role: "leader",
-        contributed_missions: 0,
-        contributed_stardust: 0,
-        joined_date: new Date().toISOString(),
-      });
-      await api.entities.GuildLog.create({
-        guild_id: g.id,
-        entry_type: "create",
-        message: "founded the guild",
-        character_name: character.name,
       });
       onJoined();
     } catch (e) {
-      setError("Could not create guild. That name may be taken.");
+      setError(e?.message || "Could not create guild. That name may be taken.");
       setBusy(false);
     }
   }

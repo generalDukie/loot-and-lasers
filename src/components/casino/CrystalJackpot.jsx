@@ -36,21 +36,26 @@ export default function CrystalJackpot({ character, onSettle, busy }) {
     if (balance < b) { setResult({ won: false, label: "Not enough crystals" }); return; }
     setSpinning(true); setResult(null);
     await new Promise((r) => setTimeout(r, 1200));
-    const won = Math.random() < JACKPOT_CHANCE;
-    const net = won ? b * (JACKPOT_MULT - 1) : -b;
-    await onSettle(net, 0);
-    const finalReels = won
-      ? ["💎", "💎", "💎"]
-      : [
-          SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-          SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-          SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-        ];
-    setReels(finalReels);
-    setSpinning(false);
-    const label = won ? `JACKPOT! +${b * JACKPOT_MULT} 💎` : `Lost ${b} 💎`;
-    setResult({ won, label });
-    if (won) burstJackpot();
+    try {
+      const res = await onSettle("jackpot", b);
+      const outcome = res.outcome || res.data?.outcome || {};
+      const won = !!outcome.won;
+      const finalReels = won
+        ? ["💎", "💎", "💎"]
+        : [
+            SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+            SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+            SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+          ];
+      setReels(finalReels);
+      setSpinning(false);
+      const label = won ? `JACKPOT! +${b * JACKPOT_MULT} 💎` : `Lost ${b} 💎`;
+      setResult({ won, label });
+      if (won) burstJackpot();
+    } catch (e) {
+      setSpinning(false);
+      setResult({ won: false, label: e?.message || "Sealed" });
+    }
   }
 
   return (

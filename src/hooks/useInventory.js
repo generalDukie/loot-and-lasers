@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/api/gameClient";
-import { computeStardustValue, MAX_BUFF_STACKS, MAX_ACTIVE_STAT_TYPES } from "@/lib/gameData";
+import { MAX_BUFF_STACKS, MAX_ACTIVE_STAT_TYPES } from "@/lib/gameData";
 
 /**
  * Pure stim apply — validates stack / distinct-stat caps and returns the next
  * active_buffs list. Does not mutate inventory. Used by useConsumable and the
- * inventory-full modal Use action.
+ * inventory-full modal Use action (pending / non-persisted items).
  */
 export function prepareConsumableBuffs(character, item, sourceBuffs) {
   if (!character || item?.type !== "consumable" || !item.consumable) {
@@ -122,24 +122,33 @@ export function useInventory(character, onCharacterChange) {
 
   const sell = useCallback(async (item) => {
     if (!character) return;
-    const value = computeStardustValue(item);
-    await api.entities.Item.delete(item.id);
-    const newSd = (character.stardust || 0) + value;
-    await api.entities.Character.update(character.id, { stardust: newSd });
-    onCharacterChange?.({ stardust: newSd });
-    await load();
+    try {
+      const res = await api.functions.invoke("DissolveItem", { item_id: item.id });
+      const patch = res.patch || res.data?.patch || {};
+      onCharacterChange?.(patch);
+      await load();
+    } catch (e) {
+      await load();
+      throw e;
+    }
   }, [character, load, onCharacterChange]);
 
   const useConsumable = useCallback(async (item) => {
     if (!character) return { ok: false };
+    // Client pre-check for friendly toast messages; server remains authoritative.
     const prepared = prepareConsumableBuffs(character, item, buffsRef.current);
     if (!prepared.ok) return prepared;
-    buffsRef.current = prepared.buffs;
-    await api.entities.Character.update(character.id, { active_buffs: prepared.buffs });
-    await api.entities.Item.delete(item.id);
-    onCharacterChange?.({ active_buffs: prepared.buffs });
-    await load();
-    return { ok: true };
+    try {
+      const res = await api.functions.invoke("UseConsumable", { item_id: item.id });
+      const patch = res.patch || res.data?.patch || {};
+      if (patch.active_buffs) buffsRef.current = patch.active_buffs;
+      onCharacterChange?.(patch);
+      await load();
+      return { ok: true };
+    } catch (e) {
+      await load();
+      return { ok: false, reason: e?.message || "Failed to use stim." };
+    }
   }, [character, load, onCharacterChange]);
 
   const toggleLock = useCallback(async (item) => {
@@ -150,13 +159,19 @@ export function useInventory(character, onCharacterChange) {
 
   const bulkSell = useCallback(async (itemList) => {
     if (!character || !itemList?.length) return 0;
-    const total = itemList.reduce((sum, it) => sum + computeStardustValue(it), 0);
-    await api.entities.Item.deleteMany({ id: { $in: itemList.map((i) => i.id) } });
-    const newSd = (character.stardust || 0) + total;
-    await api.entities.Character.update(character.id, { stardust: newSd });
-    onCharacterChange?.({ stardust: newSd });
-    await load();
-    return total;
+    try {
+      const res = await api.functions.invoke("DissolveJunk", {
+        item_ids: itemList.map((i) => i.id),
+      });
+      const patch = res.patch || res.data?.patch || {};
+      const gained = res.stardust_gained ?? res.data?.stardust_gained ?? 0;
+      onCharacterChange?.(patch);
+      await load();
+      return gained;
+    } catch (e) {
+      await load();
+      throw e;
+    }
   }, [character, load, onCharacterChange]);
 
   return { items, load, equip, sell, bulkSell, useConsumable, toggleLock };

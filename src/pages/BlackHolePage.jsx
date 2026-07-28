@@ -79,26 +79,32 @@ export default function BlackHolePage() {
   }
 
   async function toss(item) {
-    const value = computeStardustValue(item);
+    const preview = computeStardustValue(item);
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, _sucking: true } : i));
     playBlackHoleSuck();
     // Stardust erupts from the hole as the item finishes dissolving.
     setTimeout(() => spawnBurst(), 1250);
     setTimeout(async () => {
-      await api.entities.Item.delete(item.id);
-      await api.entities.Character.update(character.id, { stardust: (character.stardust || 0) + value });
-      toast({ title: "✨ Dissolved into stardust!", description: `+${value} stardust from ${item.name}` });
-      setCharacter(c => ({ ...c, stardust: (c.stardust || 0) + value }));
-      setItems(prev => prev.filter(i => i.id !== item.id));
-      // If an item is waiting for room, claim it now that space opened up.
-      const p = getPendingItem();
-      if (p) {
-        const cnt = (await api.entities.Item.filter({ character_id: character.id })).length;
-        if (cnt < getInventoryCap(character)) {
-          await api.entities.Item.create(p);
-          clearPendingItem();
-          toast({ title: "📦 Item claimed!", description: `${p.name} joined your inventory.` });
+      try {
+        const res = await api.functions.invoke("DissolveItem", { item_id: item.id });
+        const patch = res.patch || res.data?.patch || {};
+        const value = res.stardust_gained ?? res.data?.stardust_gained ?? preview;
+        toast({ title: "✨ Dissolved into stardust!", description: `+${value} stardust from ${item.name}` });
+        setCharacter((c) => ({ ...c, ...patch }));
+        setItems((prev) => prev.filter((i) => i.id !== item.id));
+        // If an item is waiting for room, claim it now that space opened up.
+        const p = getPendingItem();
+        if (p) {
+          const cnt = (await api.entities.Item.filter({ character_id: character.id })).length;
+          if (cnt < getInventoryCap(character)) {
+            await api.functions.invoke("AcceptPendingLoot", { item: p });
+            clearPendingItem();
+            toast({ title: "📦 Item claimed!", description: `${p.name} joined your inventory.` });
+          }
         }
+      } catch (e) {
+        toast({ title: "Dissolve failed", description: e?.message, variant: "destructive" });
+        await load();
       }
     }, 1400);
   }
@@ -110,24 +116,31 @@ export default function BlackHolePage() {
       return;
     }
     const ids = junk.map((i) => i.id);
-    const total = junk.reduce((s, i) => s + computeStardustValue(i), 0);
+    const previewTotal = junk.reduce((s, i) => s + computeStardustValue(i), 0);
     setItems((prev) => prev.map((i) => (ids.includes(i.id) ? { ...i, _sucking: true } : i)));
     playBlackHoleSuck();
     setTimeout(() => spawnBurst(), 1250);
     setTimeout(async () => {
-      await api.entities.Item.deleteMany({ id: { $in: ids } });
-      await api.entities.Character.update(character.id, { stardust: (character.stardust || 0) + total });
-      toast({ title: "✨ Junk dissolved!", description: `${junk.length} items → +${total} stardust` });
-      setCharacter((c) => ({ ...c, stardust: (c.stardust || 0) + total }));
-      setItems((prev) => prev.filter((i) => !ids.includes(i.id)));
-      const p = getPendingItem();
-      if (p) {
-        const cnt = (await api.entities.Item.filter({ character_id: character.id })).length;
-        if (cnt < getInventoryCap(character)) {
-          await api.entities.Item.create(p);
-          clearPendingItem();
-          toast({ title: "📦 Item claimed!", description: `${p.name} joined your inventory.` });
+      try {
+        const res = await api.functions.invoke("DissolveJunk", { item_ids: ids });
+        const patch = res.patch || res.data?.patch || {};
+        const total = res.stardust_gained ?? res.data?.stardust_gained ?? previewTotal;
+        const dissolved = res.dissolved || res.data?.dissolved || ids;
+        toast({ title: "✨ Junk dissolved!", description: `${dissolved.length} items → +${total} stardust` });
+        setCharacter((c) => ({ ...c, ...patch }));
+        setItems((prev) => prev.filter((i) => !ids.includes(i.id)));
+        const p = getPendingItem();
+        if (p) {
+          const cnt = (await api.entities.Item.filter({ character_id: character.id })).length;
+          if (cnt < getInventoryCap(character)) {
+            await api.functions.invoke("AcceptPendingLoot", { item: p });
+            clearPendingItem();
+            toast({ title: "📦 Item claimed!", description: `${p.name} joined your inventory.` });
+          }
         }
+      } catch (e) {
+        toast({ title: "Dissolve failed", description: e?.message, variant: "destructive" });
+        await load();
       }
     }, 1400);
   }

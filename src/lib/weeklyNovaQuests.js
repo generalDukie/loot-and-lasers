@@ -80,16 +80,8 @@ export function weeklyNovaSecondsLeft() {
 export async function claimWeeklyNovaQuest(character, questId) {
   const quest = WEEKLY_NOVA_QUESTS.find((q) => q.id === questId);
   if (!quest) throw new Error("Unknown quest");
-  const fresh = await api.entities.Character.get(character.id);
-  const state = ensureWeeklyNovaState(fresh);
-  if (state.claimed.includes(questId)) throw new Error("Already claimed");
-  if ((state[quest.key] || 0) < quest.goal) throw new Error("Quest not complete");
-
-  const nextState = { ...state, claimed: [...state.claimed, questId] };
-  const patch = {
-    weekly_nova_quests: nextState,
-    nova_crystals: (fresh.nova_crystals || 0) + quest.reward,
-  };
-  await api.entities.Character.update(character.id, patch);
-  return { patch, quest, character: { ...fresh, ...patch } };
+  const res = await api.functions.invoke("ClaimWeeklyNovaQuest", { quest_id: questId });
+  const patch = res.patch || res.data?.patch || {};
+  const fresh = { ...character, ...patch };
+  return { patch, quest: res.quest || res.data?.quest || quest, character: fresh };
 }

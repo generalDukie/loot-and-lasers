@@ -53,11 +53,9 @@ export default function ProfileSettings() {
     }
     setSaving(true);
     try {
-      await api.entities.Character.update(char.id, {
-        name: trimmed,
-        nova_crystals: (char.nova_crystals || 0) - NAME_CHANGE_COST,
-      });
-      setChar(c => ({ ...c, name: trimmed, nova_crystals: (c.nova_crystals || 0) - NAME_CHANGE_COST }));
+      const res = await api.functions.invoke("RenameCharacter", { name: trimmed });
+      const patch = res.patch || res.data?.patch || {};
+      setChar((c) => ({ ...c, ...patch }));
       void trackNovaSpend(char, NAME_CHANGE_COST, "rename");
       toast({ title: "✏️ Operative renamed", description: `-${NAME_CHANGE_COST} 💎 — new identity: ${trimmed}` });
     } catch (err) {

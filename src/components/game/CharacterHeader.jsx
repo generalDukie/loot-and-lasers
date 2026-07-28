@@ -17,7 +17,10 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
   const [saving, setSaving] = useState(false);
   const race = RACES[character.race];
   const cls = CLASSES[character.class];
-  const expPct = Math.min(100, (character.experience / character.experience_to_next_level) * 100);
+  const expToNext = character.experience_to_next_level || 0;
+  const expPct = expToNext > 0
+    ? Math.min(100, ((character.experience || 0) / expToNext) * 100)
+    : 0;
 
   useEffect(() => { setBio(character.bio || ""); }, [character.id, character.bio]);
 

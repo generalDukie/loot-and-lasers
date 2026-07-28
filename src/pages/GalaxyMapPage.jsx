@@ -38,18 +38,11 @@ export default function GalaxyMapPage() {
   const load = useCallback(async () => {
     const char = await getMyCharacter();
     if (!char) { navigate("/create-character"); return; }
-    const today = todayET();
-    if (char.dungeon_deaths_date !== today) {
-      try { await api.entities.Character.update(char.id, { dungeon_deaths: 0, dungeon_deaths_date: today, dungeon_extra_lives: 0 }); } catch (e) {}
-      char.dungeon_deaths = 0;
-      char.dungeon_deaths_date = today;
-      char.dungeon_extra_lives = 0;
-    }
-    if ((char.ship_mods || []).includes("Genesis Core") && (char.dungeon_planet || 1) <= 10) {
-      try { await api.entities.Character.update(char.id, { dungeon_planet: 11, dungeon_enemy: 1 }); } catch (e) {}
-      char.dungeon_planet = 11;
-      char.dungeon_enemy = 1;
-    }
+    try {
+      const sync = await api.functions.invoke("SyncDungeonState", {});
+      const patch = sync.patch || sync.data?.patch;
+      if (patch) Object.assign(char, patch);
+    } catch (e) { /* non-blocking */ }
     setCharacter(char);
     setSelectedPlanetId(null);
     setLoading(false);
@@ -98,8 +91,8 @@ export default function GalaxyMapPage() {
       toast({ title: "Not enough Nova Crystals", description: `Skip costs ${DUNGEON_SKIP_COST} 💎.`, variant: "destructive" });
       return;
     }
-    const upd = { nova_crystals: (character.nova_crystals || 0) - DUNGEON_SKIP_COST, dungeon_cooldown_at: null, dungeon_cooldown_ms: null };
-    await api.entities.Character.update(character.id, upd);
+    const res = await api.functions.invoke("SkipDungeonCooldown", {});
+    const upd = res.patch || res.data?.patch || {};
     setCharacter((c) => ({ ...c, ...upd }));
     void trackNovaSpend(character, DUNGEON_SKIP_COST, "dungeon_skip");
   }
@@ -110,15 +103,14 @@ export default function GalaxyMapPage() {
       toast({ title: "Battle Cooldown", description: `Wait or skip with ${DUNGEON_SKIP_COST} 💎.`, variant: "destructive" });
       return;
     }
-    let crystals = character.nova_crystals || 0;
     if (paidContinue) {
-      if (crystals < DUNGEON_CONTINUE_COST) {
+      if ((character.nova_crystals || 0) < DUNGEON_CONTINUE_COST) {
         toast({ title: "Not enough Nova Crystals", description: `Continue costs ${DUNGEON_CONTINUE_COST} 💎.`, variant: "destructive" });
         return;
       }
-      crystals -= DUNGEON_CONTINUE_COST;
-      await api.entities.Character.update(character.id, { nova_crystals: crystals });
-      setCharacter((c) => ({ ...c, nova_crystals: crystals }));
+      const pay = await api.functions.invoke("PayDungeonContinue", {});
+      const payPatch = pay.patch || pay.data?.patch || {};
+      setCharacter((c) => ({ ...c, ...payPatch }));
       void trackNovaSpend(character, DUNGEON_CONTINUE_COST, "dungeon_continue");
     }
 
@@ -139,135 +131,70 @@ export default function GalaxyMapPage() {
   async function finishBattle() {
     const { enemy, battle, rewards, enemyIndex: fightIndex, patrol: wasPatrol, planet: fightPlanet, viewingWormhole: wasWormhole } = battleState;
     const won = battle.winner === "player";
-    const today = todayET();
     const maxPlayerHit = Math.max(0, ...battle.events.filter((e) => e.attacker === "player" && e.damage).map((e) => e.damage));
-    const update = {};
     const prevLevel = character.level;
-    let boostedXp = 0;
     let collectPct = 0;
-    let newLevel = character.level;
-    let unlockedShipMod = null;
-    let gearItem = null;
-    let droppedConsumable = null;
-    let milestoneItem = null;
-    let defeatNote;
-
     ({ percentage: collectPct } = getCollectionStats(character));
-    boostedXp = won ? applyXpBonus(rewards.experience || 0, collectPct) : 0;
-    if (won && boostedXp > 0) {
-      let newExp = (character.experience || 0) + boostedXp;
-      let expToNext = character.experience_to_next_level;
-      while (newExp >= expToNext) { newExp -= expToNext; newLevel++; expToNext = getExpForLevel(newLevel); }
-      update.experience = newExp;
-      update.level = newLevel;
-      update.experience_to_next_level = expToNext;
-      update.unspent_stat_points = (character.unspent_stat_points || 0) + getStatPointsForLevelRange(character.level, newLevel);
+
+    let res;
+    try {
+      res = await api.functions.invoke("FinishDungeonBattle", {
+        won,
+        planet_id: fightPlanet.id,
+        enemy_index: fightIndex,
+        patrol: wasPatrol,
+        viewing_wormhole: wasWormhole,
+        species_id: enemy.speciesId,
+        max_hit: maxPlayerHit,
+      });
+    } catch (e) {
+      toast({ title: "Could not settle dungeon fight", description: e?.message || "Try again.", variant: "destructive" });
+      setBattleState(null);
+      await load();
+      return;
+    }
+    const update = res.patch || res.data?.patch || {};
+    const serverRewards = res.rewards || res.data?.rewards || {};
+    const boostedXp = won ? (serverRewards.experience || 0) : 0;
+    const newLevel = update.level ?? character.level;
+    const unlockedShipMod = null;
+    const items = res.items || res.data?.items || [];
+    const gearItem = items[0] || null;
+    const droppedConsumable = items.find((i) => i.type === "consumable") || null;
+    const milestoneItem = items.length > 1 ? items[items.length - 1] : null;
+    let defeatNote;
+    if (!won) {
+      const deathsNow = update.dungeon_deaths ?? (deaths + 1);
+      defeatNote = freeLivesLeft > 1
+        ? `Death ${deathsNow}/${deathCap}. No rewards on defeat.`
+        : freeLivesLeft === 1
+        ? `Last free life spent. Further fights cost ${DUNGEON_CONTINUE_COST} 💎.`
+        : `Next fight costs ${DUNGEON_CONTINUE_COST} 💎.`;
     }
 
     if (won) {
-      update.stardust = (character.stardust || 0) + (rewards.stardust || 0);
-      update.total_stardust_earned = (character.total_stardust_earned || 0) + (rewards.stardust || 0);
-
-      if (!wasPatrol) {
-        update.dungeon_clears = (character.dungeon_clears || 0) + (rewards.isBoss ? 1 : 0);
-
-        if (rewards.isBoss) {
-          if (fightPlanet.id > DUNGEON_PLANETS.length) {
-            // Infinite wormhole boss — go deeper, no story ship mods.
-            update.dungeon_planet = (character.dungeon_planet || fightPlanet.id) + 1;
-            update.dungeon_enemy = 1;
-          } else if (fightPlanet.id === DUNGEON_PLANETS.length) {
-            // World Zero — story finale. Grant Genesis Core and open the Wormhole.
-            if (fightPlanet.shipModCat || fightPlanet.shipMod) {
-              const grant = grantFrontierShipMod(character, fightPlanet);
-              update.ship_mods = grant.ship_mods;
-              if (grant.ship_mod_loadouts) update.ship_mod_loadouts = grant.ship_mod_loadouts;
-              unlockedShipMod = grant.unlockedLabel;
-              if (grant.consolationStardust) {
-                update.stardust = (update.stardust ?? character.stardust ?? 0) + grant.consolationStardust;
-                update.total_stardust_earned = (update.total_stardust_earned ?? character.total_stardust_earned ?? 0) + grant.consolationStardust;
-              }
-            }
-            update.dungeon_planet = DUNGEON_PLANETS.length + 1;
-            update.dungeon_enemy = 1;
-            update.highest_sector = Math.max(character.highest_sector || 1, DUNGEON_PLANETS.length);
-          } else {
-            update.dungeon_planet = fightPlanet.id + 1;
-            update.dungeon_enemy = 1;
-            update.highest_sector = Math.max(character.highest_sector || 1, fightPlanet.id + 1);
-            if (fightPlanet.shipModCat || fightPlanet.shipMod) {
-              const grant = grantFrontierShipMod(character, fightPlanet);
-              update.ship_mods = grant.ship_mods;
-              if (grant.ship_mod_loadouts) update.ship_mod_loadouts = grant.ship_mod_loadouts;
-              unlockedShipMod = grant.unlockedLabel;
-              if (grant.consolationStardust) {
-                update.stardust = (update.stardust ?? character.stardust ?? 0) + grant.consolationStardust;
-                update.total_stardust_earned = (update.total_stardust_earned ?? character.total_stardust_earned ?? 0) + grant.consolationStardust;
-              }
-            }
-          }
-        } else {
-          update.dungeon_enemy = Math.min(DUNGEON_ENEMIES_PER_PLANET, fightIndex + 1);
-        }
-      }
-
-      if (rewards.item) {
-        gearItem = rewards.item;
-        await addItemWithCap(character, { ...rewards.item, owner_id: character.created_by_id, character_id: character.id });
-      }
-      if (Math.random() < (wasPatrol ? 0.1 : 0.2)) {
-        droppedConsumable = consumableItem(randomConsumable());
-        await addItemWithCap(character, { ...droppedConsumable, owner_id: character.created_by_id, character_id: character.id });
-      }
-
-      const mile = rollMilestoneChest(character, character.level);
-      update.dungeon_nodes_cleared = mile.nodesCleared;
-      if (mile.item) {
-        milestoneItem = mile.item;
-        await addItemWithCap(character, { ...mile.item, owner_id: character.created_by_id, character_id: character.id });
-      }
-
       void api.entities.GalaxyNews.create({
         message: wasPatrol
           ? `🛰️ ${character.name} patrolled ${fightPlanet.name} and defeated ${enemy.name}.`
           : rewards.isBoss
-          ? (unlockedShipMod
-              ? `👑 ${character.name} conquered ${fightPlanet.bossName} and unlocked ${unlockedShipMod}!`
-              : `👑 ${character.name} conquered ${fightPlanet.bossName}!`)
+          ? `👑 ${character.name} conquered ${fightPlanet.bossName}!`
           : `⚔️ ${character.name} cleared enemy ${fightIndex} on ${fightPlanet.name}.`,
         entry_type: "victory",
         character_name: character.name,
         character_id: character.id,
       });
     } else {
-      update.dungeon_deaths = Math.min(deathCap, deaths + 1);
-      update.dungeon_deaths_date = today;
       void api.entities.GalaxyNews.create({
         message: `💀 ${character.name} fell to ${enemy.name} on ${fightPlanet.name}.`,
         entry_type: "defeat",
         character_name: character.name,
         character_id: character.id,
       });
-      defeatNote = freeLivesLeft > 1
-        ? `Death ${deaths + 1}/${deathCap}. No rewards on defeat.`
-        : freeLivesLeft === 1
-        ? `Last free life spent. Further fights cost ${DUNGEON_CONTINUE_COST} 💎.`
-        : `Next fight costs ${DUNGEON_CONTINUE_COST} 💎.`;
     }
 
-    update.highest_damage = Math.max(character.highest_damage || 0, maxPlayerHit);
-    update.dungeon_cooldown_at = new Date().toISOString();
-    update.dungeon_cooldown_ms = dungeonCooldownMs(won);
-    const { updates: discUpdates, found: discFound } = processDiscovery(character, { win: won, speciesId: battleState.enemy.speciesId });
-    Object.assign(update, discUpdates);
-    if (won) {
-      const weekly = progressWeeklyNovaQuest(character, "dungeon", 1);
-      if (weekly) update.weekly_nova_quests = weekly;
-    }
-    await api.entities.Character.update(character.id, update);
+    const { found: discFound } = processDiscovery(character, { win: won, speciesId: battleState.enemy.speciesId });
     setCharacter((c) => ({ ...c, ...update }));
     setBattleState(null);
-    // After World Zero, drop the player on the Wormhole. After other story bosses, clear patrol selection.
     if (!wasPatrol && won && rewards.isBoss) {
       if (fightPlanet.id === DUNGEON_PLANETS.length) setSelectedPlanetId(WORMHOLE_ID);
       else if (!wasWormhole) setSelectedPlanetId(null);
@@ -282,8 +209,8 @@ export default function GalaxyMapPage() {
             : (rewards.isBoss ? `Defeated ${enemy.name}` : `Cleared enemy ${fightIndex}`))
         : `Fell to ${enemy.name}`,
       subtitle: `${fightPlanet.name}${rewards.isBoss ? " · Boss" : ""}${wasPatrol ? " · Patrol" : ""}`,
-      xp: boostedXp > 0 ? { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
-      stardust: won ? { total: rewards.stardust || 0 } : undefined,
+      xp: boostedXp > 0 ? { base: serverRewards.base_experience || rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
+      stardust: won ? { total: serverRewards.stardust ?? rewards.stardust ?? 0 } : undefined,
       leveledUp: newLevel > prevLevel,
       prevLevel,
       newLevel,

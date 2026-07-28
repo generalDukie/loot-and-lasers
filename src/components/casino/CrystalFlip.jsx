@@ -5,7 +5,7 @@ import { burstWin } from "@/lib/casinoFx";
 
 const MAX = 100;
 
-// Bet Nova Crystals on a coin flip — 25% chance to double, capped at 100/bet.
+// Bet Nova Crystals on a coin flip — server rolls (25% to double).
 export default function CrystalFlip({ character, onSettle, busy }) {
   const [bet, setBet] = useState(10);
   const [result, setResult] = useState(null);
@@ -18,11 +18,17 @@ export default function CrystalFlip({ character, onSettle, busy }) {
     if (balance < b) { setResult({ won: false, label: "Not enough crystals" }); return; }
     setFlipping(true); setResult(null);
     await new Promise((r) => setTimeout(r, 1000));
-    const won = Math.random() < 0.25;
-    await onSettle(won ? b : -b, 0);
-    setFlipping(false);
-    setResult({ won, label: won ? `Doubled! +${b} 💎` : `Lost ${b} 💎` });
-    if (won) burstWin();
+    try {
+      const res = await onSettle("flip", b);
+      const outcome = res.outcome || res.data?.outcome || {};
+      const won = !!outcome.won;
+      setFlipping(false);
+      setResult({ won, label: won ? `Doubled! +${b} 💎` : `Lost ${b} 💎` });
+      if (won) burstWin();
+    } catch (e) {
+      setFlipping(false);
+      setResult({ won: false, label: e?.message || "Sealed" });
+    }
   }
 
   return (
@@ -38,31 +44,15 @@ export default function CrystalFlip({ character, onSettle, busy }) {
         <button onClick={() => setBet(Math.min(MAX, balance))} className="text-[10px] px-2 py-1 rounded bg-muted/40 border border-border/40">Max</button>
         <button onClick={play} disabled={busy || flipping} className="ml-auto painted-btn px-3 py-1.5 text-xs disabled:opacity-40">Flip</button>
       </div>
-      <div className="h-16 flex items-center justify-center">
-        <AnimatePresence mode="wait">
-          {flipping ? (
+      <div className="h-14 flex items-center justify-center">
+        <AnimatePresence>
+          {result && !flipping && (
             <motion.div
-              key="f"
-              animate={{ rotateY: [0, 1440], y: [0, -10, 0] }}
-              transition={{ rotateY: { duration: 1, ease: "easeOut" }, y: { duration: 0.5, repeat: Infinity } }}
-              className="text-4xl"
-              style={{ transformStyle: "preserve-3d" }}
-            >🪙</motion.div>
-          ) : result ? (
-            <motion.div
-              key="r"
-              className="flex flex-col items-center"
               initial={{ scale: 0.3, opacity: 0 }}
-              animate={result.won
-                ? { scale: [0.3, 1.25, 1], opacity: 1 }
-                : { scale: [0.3, 1.1, 1], opacity: 1, x: [0, -8, 8, -5, 5, 0] }
-              }
-              transition={{ duration: result.won ? 0.6 : 0.5 }}
-            >
-              <span className={`text-3xl ${result.won ? "" : "grayscale opacity-60"}`}>{result.won ? "💎" : "🪙"}</span>
-              <span className={`font-display font-bold text-sm mt-1 ${result.won ? "text-green-400 glow-green" : "text-red-400"}`}>{result.label}</span>
-            </motion.div>
-          ) : null}
+              animate={{ scale: [0.3, 1.2, 1], opacity: 1 }}
+              className={`font-display font-bold text-sm ${result.won ? "text-green-400" : "text-red-400"}`}
+            >{result.label}</motion.div>
+          )}
         </AnimatePresence>
       </div>
     </div>

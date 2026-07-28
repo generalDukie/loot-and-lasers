@@ -5,25 +5,15 @@ import { trackNovaSpend } from "@/lib/novaTracker";
 import { useNavigate } from "react-router-dom";
 import {
   getShopWindow,
-  generateShopInventory,
-  generateHotDeal,
   RARITY_COLORS,
   STAT_ICONS,
-  consumableItem,
-  generateShopConsumableSlots,
-  randomConsumable,
-  normalizeShopMeta,
-  shopGearSeed,
-  shopConsSeed,
   SHOP_REFRESH_COST,
   gearTypeLabel,
   getStatColor,
   getVendorLine,
-  rollHaggle,
 } from "@/lib/gameData";
 import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 import { powerRating } from "@/components/game/StatCompareBubble";
-import { addItemWithCap } from "@/lib/inventoryCap";
 import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
@@ -104,21 +94,12 @@ function StatDeltaRow({ slot, equipped }) {
   );
 }
 
-function stripShopFields(slot) {
-  const {
-    _slotId, cost, nova_cost, _hotDeal, _bundle, bundle_items, _cost,
-    ...itemData
-  } = slot;
-  return itemData;
-}
-
 export default function ShopPage() {
   const [character, setCharacter] = useState(null);
   const [equipped, setEquipped] = useState([]);
   const [loading, setLoading] = useState(true);
   const [shopMeta, setShopMeta] = useState(null);
   const [now, setNow] = useState(Date.now());
-  const [consumableSlots, setConsumableSlots] = useState([]);
   const [gearRefreshing, setGearRefreshing] = useState(false);
   const [consRefreshing, setConsRefreshing] = useState(false);
   const [busySlot, setBusySlot] = useState(null);
@@ -127,21 +108,40 @@ export default function ShopPage() {
   const win = getShopWindow();
   const dayKey = todayET();
 
+  const applyShopResult = useCallback((res, baseChar) => {
+    const patch = res.patch || res.data?.patch || {};
+    const meta = res.shop_meta || res.data?.shop_meta || patch.shop_meta;
+    if (meta) setShopMeta(meta);
+    setCharacter((c) => {
+      const prev = baseChar || c;
+      return { ...prev, ...patch, ...(meta ? { shop_meta: meta } : {}) };
+    });
+    return { patch, meta };
+  }, []);
+
+  const [shopError, setShopError] = useState(null);
+
   const load = useCallback(async () => {
     const char = await getMyCharacter();
     if (!char) { navigate("/create-character"); return; }
-    const meta = normalizeShopMeta(char, getShopWindow(), todayET());
-    if (
-      !char.shop_meta
-      || char.shop_meta.window_idx !== meta.window_idx
-      || char.shop_meta.hot_day !== meta.hot_day
-    ) {
-      try {
-        await api.entities.Character.update(char.id, { shop_meta: meta });
-      } catch (e) { /* best-effort */ }
+    setShopError(null);
+    try {
+      const res = await api.functions.invoke("EnsureShop", {});
+      const patch = res.patch || res.data?.patch || {};
+      const meta = res.shop_meta || res.data?.shop_meta || patch.shop_meta;
+      if (!meta?.gear_stock?.length) {
+        throw new Error("Shop stock missing — is the API running the latest economy handlers?");
+      }
+      setShopMeta(meta);
+      setCharacter({ ...char, ...patch, shop_meta: meta });
+    } catch (e) {
+      const msg = e?.message || "Could not load stock.";
+      setShopError(msg);
+      toast({ title: "Shop unavailable", description: msg, variant: "destructive" });
+      setCharacter(char);
+      // Keep any prior meta so we don't trap the page on the loading spinner.
+      setShopMeta((prev) => prev || char.shop_meta || null);
     }
-    setCharacter({ ...char, shop_meta: meta });
-    setShopMeta(meta);
     try {
       const items = (await api.entities.Item.filter({ character_id: char.id, is_equipped: true })) || [];
       setEquipped(items);
@@ -149,7 +149,7 @@ export default function ShopPage() {
       setEquipped([]);
     }
     setLoading(false);
-  }, [navigate]);
+  }, [navigate, toast]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -157,20 +157,23 @@ export default function ShopPage() {
     return () => clearInterval(t);
   }, []);
 
+  // When the shop window or hot-deal day rolls over, re-ensure stock from server.
+  const bootstrapped = React.useRef(false);
   useEffect(() => {
-    if (!shopMeta) return;
-    setConsumableSlots(generateShopConsumableSlots(shopConsSeed(shopMeta, win)));
-  }, [shopMeta?.cons_refresh, shopMeta?.window_idx, win.idx]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!shopMeta) return;
-    const fresh = normalizeShopMeta({ shop_meta: shopMeta }, win, todayET());
-    if (fresh.window_idx === shopMeta.window_idx && fresh.hot_day === shopMeta.hot_day) return;
-    setShopMeta(fresh);
-    if (character) {
-      setCharacter((c) => ({ ...c, shop_meta: fresh }));
-      api.entities.Character.update(character.id, { shop_meta: fresh }).catch(() => {});
+    if (!character || !shopMeta) return;
+    if (!bootstrapped.current) {
+      bootstrapped.current = true;
+      return;
     }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.functions.invoke("EnsureShop", {});
+        if (cancelled) return;
+        applyShopResult(res);
+      } catch (e) { /* best-effort */ }
+    })();
+    return () => { cancelled = true; };
   }, [win.idx, dayKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const equippedByType = useMemo(
@@ -178,63 +181,26 @@ export default function ShopPage() {
     [equipped],
   );
 
-  const inventory = useMemo(() => {
-    if (!shopMeta || !character) return [];
-    return generateShopInventory(shopGearSeed(shopMeta, win), character.level || 1);
-  }, [shopMeta, character, win.idx]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const hotDeal = useMemo(() => {
-    if (!character) return null;
-    return generateHotDeal(dayKey, character.level || 1);
-  }, [dayKey, character]);
+  const inventory = shopMeta?.gear_stock || [];
+  const hotDeal = shopMeta?.hot_deal || null;
+  const consumableSlots = shopMeta?.cons_stock || [];
 
   const vendorLine = useMemo(
     () => getVendorLine((win.idx || 0) * 17 + dayKey.length * 3),
     [win.idx, dayKey],
   );
 
-  async function saveMeta(nextMeta, extraCharPatch = {}) {
-    setShopMeta(nextMeta);
-    setCharacter((c) => ({ ...c, ...extraCharPatch, shop_meta: nextMeta }));
-    await api.entities.Character.update(character.id, { shop_meta: nextMeta, ...extraCharPatch });
-  }
-
-  async function grantItems(payloads) {
-    let anyCreated = false;
-    let lastName = payloads[0]?.name || "Item";
-    for (const payload of payloads) {
-      const created = await addItemWithCap(character, {
-        ...payload,
-        owner_id: character.created_by_id,
-        character_id: character.id,
-        is_equipped: false,
-      });
-      if (created) anyCreated = true;
-      lastName = payload.name || lastName;
-    }
-    return { anyCreated, lastName };
-  }
-
   async function purchaseGearSlot(slot, { haggle = false, isHot = false } = {}) {
     if (!shopMeta || busySlot) return;
     if (isHot && shopMeta.hot_purchased) return;
     if (!isHot && shopMeta.purchased?.[slot._slotId]) return;
 
-    let stardustCost = slot.cost || 0;
-    let haggleNote = null;
-    if (haggle) {
-      const outcome = rollHaggle();
-      stardustCost = Math.max(1, Math.round(stardustCost * outcome.mult));
-      haggleNote = outcome.label;
-    }
+    const previewCost = slot.cost || 0;
     const novaCost = slot.nova_cost || 0;
-
-    if ((character.stardust || 0) < stardustCost) {
+    if (!haggle && (character.stardust || 0) < previewCost) {
       toast({
         title: "Not enough stardust",
-        description: haggleNote
-          ? `${haggleNote}. Need ✨${stardustCost.toLocaleString()}.`
-          : `Need ${stardustCost} ✨ — you have ${character.stardust || 0}.`,
+        description: `Need ${previewCost} ✨ — you have ${character.stardust || 0}.`,
         variant: "destructive",
       });
       return;
@@ -246,31 +212,22 @@ export default function ShopPage() {
 
     setBusySlot(slot._slotId);
     try {
-      const upd = { stardust: (character.stardust || 0) - stardustCost };
-      if (novaCost) upd.nova_crystals = (character.nova_crystals || 0) - novaCost;
+      const res = await api.functions.invoke("BuyShopGear", {
+        slot_id: slot._slotId,
+        haggle,
+        is_hot: isHot,
+      });
+      const patch = res.patch || res.data?.patch || {};
+      const meta = patch.shop_meta || shopMeta;
+      const items = res.items || res.data?.items || [];
+      const haggleNote = res.haggle_note ?? res.data?.haggle_note;
+      const anyCreated = items.length > 0;
+      const lastName = items[0]?.name || slot.name;
 
-      const nextMeta = { ...shopMeta };
-      if (isHot) {
-        nextMeta.hot_day = dayKey;
-        nextMeta.hot_purchased = true;
-      } else {
-        nextMeta.purchased = { ...shopMeta.purchased, [slot._slotId]: true };
-      }
-      upd.shop_meta = nextMeta;
-
-      await api.entities.Character.update(character.id, upd);
+      if (meta) setShopMeta(meta);
+      setCharacter((c) => ({ ...c, ...patch }));
       if (novaCost) void trackNovaSpend(character, novaCost, "shop_buy_legendary");
 
-      let payloads;
-      if (slot._bundle === "scrap_crate" && Array.isArray(slot.bundle_items)) {
-        payloads = slot.bundle_items;
-      } else {
-        payloads = [stripShopFields(slot)];
-      }
-      const { anyCreated, lastName } = await grantItems(payloads);
-
-      setShopMeta(nextMeta);
-      setCharacter((c) => ({ ...c, ...upd }));
       toast({
         title: anyCreated ? (haggle ? "🤝 Deal struck!" : "🛒 Purchased!") : "📦 Inventory full!",
         description: [
@@ -282,6 +239,7 @@ export default function ShopPage() {
       });
     } catch (e) {
       toast({ title: "Purchase failed", description: e.message, variant: "destructive" });
+      await load();
     } finally {
       setBusySlot(null);
     }
@@ -295,17 +253,13 @@ export default function ShopPage() {
     }
     setGearRefreshing(true);
     try {
-      const crystals = (character.nova_crystals || 0) - SHOP_REFRESH_COST;
-      const next = {
-        ...shopMeta,
-        gear_refresh: shopMeta.gear_refresh + 1,
-        purchased: {},
-      };
-      await saveMeta(next, { nova_crystals: crystals });
+      const res = await api.functions.invoke("RefreshShop", { which: "gear" });
+      applyShopResult(res);
       void trackNovaSpend(character, SHOP_REFRESH_COST, "shop_refresh_gear");
       toast({ title: "🔄 Armory restocked", description: "Fresh gear on the tables. Hot Deal unchanged." });
     } catch (e) {
       toast({ title: "Refresh failed", description: e.message, variant: "destructive" });
+      await load();
     } finally {
       setGearRefreshing(false);
     }
@@ -319,13 +273,13 @@ export default function ShopPage() {
     }
     setConsRefreshing(true);
     try {
-      const crystals = (character.nova_crystals || 0) - SHOP_REFRESH_COST;
-      const next = { ...shopMeta, cons_refresh: shopMeta.cons_refresh + 1 };
-      await saveMeta(next, { nova_crystals: crystals });
+      const res = await api.functions.invoke("RefreshShop", { which: "consumables" });
+      applyShopResult(res);
       void trackNovaSpend(character, SHOP_REFRESH_COST, "shop_refresh_cons");
       toast({ title: "🔄 Stim Lab restocked", description: "New stims on the rack." });
     } catch (e) {
       toast({ title: "Refresh failed", description: e.message, variant: "destructive" });
+      await load();
     } finally {
       setConsRefreshing(false);
     }
@@ -338,29 +292,20 @@ export default function ShopPage() {
       toast({ title: "Not enough stardust", description: `Need ${cost} ✨ — you have ${character.stardust || 0}.`, variant: "destructive" });
       return;
     }
-    setBusySlot(slot._slotId);
+    setBusySlot(slot._slotId || `cons-${index}`);
     try {
-      const sd = (character.stardust || 0) - cost;
-      await api.entities.Character.update(character.id, { stardust: sd });
+      const body = slot._slotId != null
+        ? { slot_id: slot._slotId }
+        : { slot_index: index };
+      const res = await api.functions.invoke("BuyShopConsumable", body);
+      const patch = res.patch || res.data?.patch || {};
+      const meta = patch.shop_meta;
+      const items = res.items || res.data?.items || [];
+      const anyCreated = items.length > 0;
 
-      let payloads;
-      if (slot._bundle === "stim_trio" && Array.isArray(slot.bundle_items)) {
-        payloads = slot.bundle_items.map((d) => consumableItem(d));
-      } else {
-        payloads = [consumableItem(slot)];
-      }
-      const { anyCreated } = await grantItems(payloads);
+      if (meta) setShopMeta(meta);
+      setCharacter((c) => ({ ...c, ...patch }));
 
-      setCharacter((c) => ({ ...c, stardust: sd }));
-      const fresh = randomConsumable();
-      setConsumableSlots((prev) => {
-        const next = [...prev];
-        next[index] = {
-          ...fresh,
-          _slotId: `cons-${shopConsSeed(shopMeta, win)}-${index}-${Date.now()}`,
-        };
-        return next;
-      });
       toast({
         title: anyCreated ? "🛒 Purchased!" : "📦 Inventory full!",
         description: anyCreated
@@ -369,15 +314,31 @@ export default function ShopPage() {
       });
     } catch (e) {
       toast({ title: "Purchase failed", description: e.message, variant: "destructive" });
+      await load();
     } finally {
       setBusySlot(null);
     }
   }
 
-  if (loading || !shopMeta || !character) {
+  if (loading || !character) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!shopMeta?.gear_stock?.length) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-20 text-center px-4">
+        <ShoppingBag className="w-8 h-8 text-fuchsia-300/80" />
+        <p className="font-display font-bold text-sm text-foreground">Black Market is offline</p>
+        <p className="text-xs text-muted-foreground max-w-sm">
+          {shopError || "Could not load bazaar stock. Restart the game API (npm run server) and retry."}
+        </p>
+        <button type="button" onClick={() => { setLoading(true); load(); }} className="painted-btn px-4 py-2 text-xs">
+          Retry
+        </button>
       </div>
     );
   }
@@ -644,9 +605,10 @@ export default function ShopPage() {
               const stat = slot.consumable?.stat || "all";
               const tint = isTrio ? "#FBBF24" : getStatColor(stat);
               const icon = isTrio ? "📦" : (stat === "all" ? "✨" : (STAT_ICONS[stat] || "🧪"));
+              const slotKey = slot._slotId || `cons-${index}`;
               return (
                 <div
-                  key={slot._slotId}
+                  key={slotKey}
                   className="p-4 rounded-xl border bg-background/50 backdrop-blur-sm flex flex-col"
                   style={{ borderColor: `${tint}55`, boxShadow: `0 0 14px ${tint}12` }}
                 >
@@ -680,12 +642,12 @@ export default function ShopPage() {
                     </span>
                     <button
                       onClick={() => buyConsumable({ ...slot, _cost: cost }, index)}
-                      disabled={!affordable || busySlot === slot._slotId}
+                      disabled={!affordable || busySlot === slotKey}
                       className={`text-xs px-3 py-1.5 rounded-lg font-display font-semibold tracking-wide transition-colors ${
                         affordable ? "bg-primary/15 text-primary hover:bg-primary/25 painted-btn" : "bg-muted/40 text-muted-foreground/50"
                       }`}
                     >
-                      {busySlot === slot._slotId ? "…" : isTrio ? "Open" : "Buy"}
+                      {busySlot === slotKey ? "…" : isTrio ? "Open" : "Buy"}
                     </button>
                   </div>
                 </div>

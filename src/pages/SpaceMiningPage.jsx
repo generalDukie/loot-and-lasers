@@ -72,11 +72,10 @@ export default function SpaceMiningPage() {
     }
     setBusy(true);
     try {
-      const end = new Date(Date.now() + hours * 3600 * 1000).toISOString();
-      const r = computeMiningReward(character.level, hours);
-      await api.entities.Character.update(character.id, { mining_end_time: end, mining_reward: r });
-      setCharacter((c) => ({ ...c, mining_end_time: end, mining_reward: r }));
-      toast({ title: "Mining started!", description: `Collect ${r} ✨ in ${hours}h.` });
+      const res = await api.functions.invoke("StartMining", { hours });
+      const patch = res.patch || res.data?.patch || {};
+      setCharacter((c) => ({ ...c, ...patch }));
+      toast({ title: "Mining started!", description: `Collect ${patch.mining_reward || 0} ✨ in ${hours}h.` });
     } catch (e) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     }
@@ -86,21 +85,10 @@ export default function SpaceMiningPage() {
   async function collectMining() {
     setBusy(true);
     try {
-      const fresh = await api.entities.Character.get(character.id);
-      const r = fresh.mining_reward || 0;
-      await api.entities.Character.update(character.id, {
-        stardust: (fresh.stardust || 0) + r,
-        total_stardust_earned: (fresh.total_stardust_earned || 0) + r,
-        mining_end_time: null,
-        mining_reward: 0,
-      });
-      setCharacter((c) => ({
-        ...c,
-        stardust: (fresh.stardust || 0) + r,
-        total_stardust_earned: (fresh.total_stardust_earned || 0) + r,
-        mining_end_time: null,
-        mining_reward: 0,
-      }));
+      const res = await api.functions.invoke("CollectMining", {});
+      const patch = res.patch || res.data?.patch || {};
+      const r = res.stardust_gained ?? res.data?.stardust_gained ?? 0;
+      setCharacter((c) => ({ ...c, ...patch }));
       toast({ title: "Node collected!", description: `+${r} ✨ stardust harvested.` });
     } catch (e) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -111,8 +99,9 @@ export default function SpaceMiningPage() {
   async function cancelMining() {
     setBusy(true);
     try {
-      await api.entities.Character.update(character.id, { mining_end_time: null, mining_reward: 0 });
-      setCharacter((c) => ({ ...c, mining_end_time: null, mining_reward: 0 }));
+      const res = await api.functions.invoke("CancelMining", {});
+      const patch = res.patch || res.data?.patch || {};
+      setCharacter((c) => ({ ...c, ...patch }));
       toast({ title: "Mining aborted", description: "Drone recalled — no stardust recovered. Let it finish to collect the full yield." });
     } catch (e) {
       toast({ title: "Error", description: e.message, variant: "destructive" });

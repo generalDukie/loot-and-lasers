@@ -51,12 +51,13 @@ export default function ActiveEffectsPanel({ character, onUpdate, embedded = fal
   async function removeMount(mount) {
     const key = `mount-${mount.id}-${mount.expires_at}`;
     setRemoving(key);
-    const raw = (character.active_fuel_mounts || []).filter(
-      (m) => !(m.id === mount.id && m.expires_at === mount.expires_at)
-    );
     try {
-      await api.entities.Character.update(character.id, { active_fuel_mounts: raw });
-      onUpdate((c) => ({ ...c, active_fuel_mounts: raw }));
+      const res = await api.functions.invoke("DismissFuelMount", {
+        mount_id: mount.id,
+        expires_at: mount.expires_at,
+      });
+      const patch = res.patch || res.data?.patch || {};
+      onUpdate((c) => ({ ...c, ...patch }));
       toast({ title: "Fuel mount removed", description: mount.name });
     } catch (e) {
       toast({ title: "Failed to remove", description: e.message, variant: "destructive" });

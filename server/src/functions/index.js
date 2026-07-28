@@ -3,6 +3,7 @@ import { ACHIEVEMENTS, evaluateUnlocked } from "../shared/achievements.js";
 import { createService, entities } from "../entities.js";
 import { db, nowIso, withTransactionAsync } from "../db.js";
 import { getUserById } from "../auth.js";
+import { ECONOMY_HANDLERS } from "./economy.js";
 
 const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
 
@@ -770,4 +771,5 @@ export const FUNCTION_HANDLERS = {
   SendMessage,
   ResolveNexusAssault,
   AdminModeration,
+  ...ECONOMY_HANDLERS,
 };

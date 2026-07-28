@@ -48,10 +48,11 @@ function formatDuration(seconds) {
 export default function MissionCantina({ missions, characterLevel, character, currentFuel, onStart, busy, mining }) {
   const [hovered, setHovered] = useState(null);
   const [selected, setSelected] = useState(null);
-  const n = missions.length;
+  const board = Array.isArray(missions) ? missions : [];
+  const n = board.length;
 
-  const hoverMission = hovered !== null ? missions[hovered] : null;
-  const hoverPatron = hovered !== null ? patronFor(missions[hovered], hovered) : null;
+  const hoverMission = hovered !== null ? board[hovered] : null;
+  const hoverPatron = hovered !== null ? patronFor(board[hovered], hovered) : null;
   const hoverFuelCost = hoverMission ? getEffectiveFuelCost(character, hoverMission) : 0;
   const hoverGains = hoverMission && character ? computeMissionGains(character, hoverMission, false) : null;
   const hoverLocked = hoverMission ? hoverMission.level_requirement > characterLevel : false;
@@ -99,7 +100,7 @@ export default function MissionCantina({ missions, characterLevel, character, cu
       </motion.div>
 
       {/* Quest-giver NPCs */}
-      {missions.map((m, i) => {
+      {board.map((m, i) => {
         const patron = patronFor(m, i);
         const x = n === 1 ? 50 : 10 + (i / (n - 1)) * 80;
         const fuelCost = getEffectiveFuelCost(character, m);
@@ -297,13 +298,13 @@ export default function MissionCantina({ missions, characterLevel, character, cu
 
       {/* Hint */}
       <p className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-display tracking-widest text-muted-foreground/70 uppercase z-10">
-        {busy ? (mining ? "⛏️ Mining in progress" : "🔭 Scout the lounge — mission in progress") : missions.some((m) => m._lowFuel) ? "Low fuel — residual errands sized to your tank" : "Hover a patron for the full job · click to accept"}
+        {busy ? (mining ? "⛏️ Mining in progress" : "🔭 Scout the lounge — mission in progress") : board.some((m) => m._lowFuel) ? "Low fuel — residual errands sized to your tank" : "Hover a patron for the full job · click to accept"}
       </p>
 
-      {selected !== null && missions[selected] && (
+      {selected !== null && board[selected] && (
         <MissionDetailSheet
-          mission={missions[selected]}
-          patron={patronFor(missions[selected], selected)}
+          mission={board[selected]}
+          patron={patronFor(board[selected], selected)}
           characterLevel={characterLevel}
           character={character}
           currentFuel={currentFuel}

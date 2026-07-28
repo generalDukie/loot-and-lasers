@@ -53,5 +53,6 @@ export async function addItemWithCap(character, itemPayload) {
     return null;
   }
   const finalPayload = ensureUniqueItemName(itemPayload, all.map((i) => i.name));
-  return await api.entities.Item.create(finalPayload);
+  const res = await api.functions.invoke("AcceptPendingLoot", { item: finalPayload });
+  return res.item || res.data?.item || null;
 }

@@ -30,25 +30,19 @@ export default function CasinoPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Apply a net currency delta atomically — reads the freshest balance first
-  // so rapid plays can't overdraw. Nova wins stay blocked while crystal tables are sealed.
-  async function settle(deltaCrystals, deltaStardust) {
-    if (!NOVA_CASINO_OPEN && deltaCrystals > 0) {
-      toast({ title: "Crystal tables sealed", description: "Nova payouts are disabled until the Crystal Store opens.", variant: "destructive" });
-      return;
-    }
+  // Server-authoritative casino settle — games roll outcomes server-side.
+  async function settle(game, bet, extra = {}) {
     setBusy(true);
     try {
-      const fresh = await api.entities.Character.get(character.id);
-      const upd = {
-        stardust: Math.max(0, (fresh.stardust || 0) + deltaStardust),
-        nova_crystals: Math.max(0, (fresh.nova_crystals || 0) + deltaCrystals),
-      };
-      await api.entities.Character.update(character.id, upd);
-      setCharacter((c) => ({ ...c, ...upd }));
-      if (deltaCrystals < 0) void trackNovaSpend(fresh, -deltaCrystals, "casino");
+      const res = await api.functions.invoke("CasinoSettle", { game, bet, ...extra });
+      const upd = res.patch || res.data?.patch || {};
+      if (Object.keys(upd).length) setCharacter((c) => ({ ...c, ...upd }));
+      const deltaCrystals = res.delta_crystals ?? res.data?.delta_crystals ?? 0;
+      if (deltaCrystals < 0) void trackNovaSpend(character, -deltaCrystals, "casino");
+      return res;
     } catch (e) {
       toast({ title: "Wager failed", description: e.message, variant: "destructive" });
+      throw e;
     } finally {
       setBusy(false);
     }

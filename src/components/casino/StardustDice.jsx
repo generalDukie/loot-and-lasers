@@ -6,7 +6,7 @@ import { burstWin } from "@/lib/casinoFx";
 const MAX = 1000;
 const FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
-// Bet Stardust on a d6 roll — pick High (4–6) or Low (1–3). 50% to double.
+// Bet Stardust on a d6 roll — pick High (4–6) or Low (1–3). Server rolls.
 export default function StardustDice({ character, onSettle, busy }) {
   const [bet, setBet] = useState(100);
   const [result, setResult] = useState(null);
@@ -15,7 +15,6 @@ export default function StardustDice({ character, onSettle, busy }) {
   const balance = character?.stardust ?? 0;
   const b = Math.min(MAX, Math.max(1, Math.floor(bet) || 1));
 
-  // Tumble the die face rapidly while rolling for a real "rolling" feel.
   useEffect(() => {
     if (!rolling) return;
     const iv = setInterval(() => setFace(Math.floor(Math.random() * 6)), 90);
@@ -27,15 +26,20 @@ export default function StardustDice({ character, onSettle, busy }) {
     if (balance < b) { setResult({ won: false, dice: 1, label: "Not enough stardust" }); return; }
     setRolling(true); setResult(null);
     await new Promise((r) => setTimeout(r, 900));
-    const dice = 1 + Math.floor(Math.random() * 6);
-    const high = dice >= 4;
-    const won = (choice === "high" && high) || (choice === "low" && !high);
-    await onSettle(0, won ? b : -b);
-    setFace(dice - 1);
-    setRolling(false);
-    const label = won ? `Rolled ${dice} — +${b} ✨` : `Rolled ${dice} — -${b} ✨`;
-    setResult({ won, dice, label });
-    if (won) burstWin();
+    try {
+      const res = await onSettle("dice", b, { choice });
+      const outcome = res.outcome || res.data?.outcome || {};
+      const dice = outcome.dice || 1;
+      const won = !!outcome.won;
+      const delta = res.delta_stardust ?? res.data?.delta_stardust ?? (won ? b : -b);
+      setFace(dice - 1);
+      setRolling(false);
+      const label = won ? `Rolled ${dice} — +${Math.abs(delta)} ✨` : `Rolled ${dice} — -${b} ✨`;
+      setResult({ won, dice, label });
+      if (won) burstWin();
+    } catch {
+      setRolling(false);
+    }
   }
 
   return (

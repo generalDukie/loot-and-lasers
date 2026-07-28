@@ -44,27 +44,17 @@ export default function InventoryFullModal({ character }) {
     setBusyId(item.id || "new");
     try {
       if (isNew) {
+        // Pending item is not persisted — dissolve via server for stardust only.
         clearPendingItem();
-        const value = computeStardustValue(item);
-        const fresh = await api.entities.Character.get(character.id);
-        await api.entities.Character.update(character.id, {
-          stardust: (fresh.stardust || 0) + value,
-        });
+        const res = await api.functions.invoke("DissolvePendingLoot", { item });
+        const value = res.stardust_gained ?? res.data?.stardust_gained ?? computeStardustValue(item);
         setItems([]);
         toast({ title: `✨ Dissolved ${item.name}`, description: `+${value} stardust` });
         return;
       }
-      const fresh = await api.entities.Character.get(character.id);
-      const value = computeStardustValue(item);
-      const update = { stardust: (fresh.stardust || 0) + value };
-      if (item.is_equipped) {
-        const eq = { ...(fresh.equipped_items || {}) };
-        delete eq[item.type];
-        update.equipped_items = eq;
-      }
-      await api.entities.Character.update(character.id, update);
-      await api.entities.Item.delete(item.id);
-      await api.entities.Item.create(pending);
+      const res = await api.functions.invoke("DissolveItem", { item_id: item.id });
+      const value = res.stardust_gained ?? res.data?.stardust_gained ?? computeStardustValue(item);
+      await api.functions.invoke("AcceptPendingLoot", { item: pending });
       clearPendingItem();
       setItems([]);
       toast({
@@ -82,21 +72,22 @@ export default function InventoryFullModal({ character }) {
     if (!character || busyId || !isStim(item)) return;
     setBusyId(item.id || "new-use");
     try {
-      const fresh = await api.entities.Character.get(character.id);
-      const prepared = prepareConsumableBuffs(fresh, item);
-      if (!prepared.ok) {
-        toast({ title: "Can't use", description: prepared.reason, variant: "destructive" });
-        return;
-      }
-      await api.entities.Character.update(character.id, { active_buffs: prepared.buffs });
       if (isNew) {
+        // Pending stim is not in DB — apply buffs client-side then discard pending.
+        const fresh = await api.entities.Character.get(character.id);
+        const prepared = prepareConsumableBuffs(fresh, item);
+        if (!prepared.ok) {
+          toast({ title: "Can't use", description: prepared.reason, variant: "destructive" });
+          return;
+        }
+        await api.entities.Character.update(character.id, { active_buffs: prepared.buffs });
         clearPendingItem();
         setItems([]);
         toast({ title: `🧪 Used ${item.name}`, description: "Buff applied — inventory pressure cleared." });
         return;
       }
-      await api.entities.Item.delete(item.id);
-      await api.entities.Item.create(pending);
+      await api.functions.invoke("UseConsumable", { item_id: item.id });
+      await api.functions.invoke("AcceptPendingLoot", { item: pending });
       clearPendingItem();
       setItems([]);
       toast({

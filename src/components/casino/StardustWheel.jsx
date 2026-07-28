@@ -5,25 +5,18 @@ import { burstWin, burstBig } from "@/lib/casinoFx";
 
 const MAX = 1000;
 
-// Weighted wheel tiers — [probability, multiplier, label]. House edge ~15%.
+// Visual tiers for the wheel (server uses matching probabilities).
 const TIERS = [
-  { p: 0.50, mult: 0, label: "Nothing", color: "#6B7280" },
-  { p: 0.30, mult: 1, label: "Push", color: "#9CA3AF" },
-  { p: 0.12, mult: 2, label: "2×", color: "#22C55E" },
-  { p: 0.06, mult: 3, label: "3×", color: "#3B82F6" },
-  { p: 0.018, mult: 5, label: "5×", color: "#A855F7" },
-  { p: 0.002, mult: 20, label: "20×", color: "#F59E0B" },
+  { mult: 0, label: "Nothing", color: "#6B7280" },
+  { mult: 1, label: "Push", color: "#9CA3AF" },
+  { mult: 2, label: "2×", color: "#22C55E" },
+  { mult: 3, label: "3×", color: "#3B82F6" },
+  { mult: 5, label: "5×", color: "#A855F7" },
+  { mult: 20, label: "20×", color: "#F59E0B" },
 ];
 const SEG = 360 / TIERS.length;
 
-function spin() {
-  const r = Math.random();
-  let acc = 0;
-  for (const t of TIERS) { acc += t.p; if (r <= acc) return t; }
-  return TIERS[0];
-}
-
-// Spin the wheel for a stardust multiplier — mostly lose, rare big hit.
+// Spin the wheel for a stardust multiplier — server rolls outcome.
 export default function StardustWheel({ character, onSettle, busy }) {
   const [bet, setBet] = useState(100);
   const [result, setResult] = useState(null);
@@ -37,22 +30,27 @@ export default function StardustWheel({ character, onSettle, busy }) {
     if (balance < b) { setResult({ tier: TIERS[0], label: "Not enough stardust" }); return; }
     setSpinning(true); setResult(null);
 
-    const tier = spin();
-    const idx = TIERS.indexOf(tier);
-    // Bring the winning segment's center to the top pointer.
-    const targetMod = (360 - (idx * SEG + SEG / 2) + 360) % 360;
-    const delta = (targetMod - (rotation % 360) + 360) % 360;
-    const newRotation = rotation + 360 * 5 + delta;
-    setRotation(newRotation);
+    try {
+      const res = await onSettle("wheel", b);
+      const outcome = res.outcome || res.data?.outcome || {};
+      const mult = outcome.mult ?? 0;
+      const tier = TIERS.find((t) => t.mult === mult) || TIERS[0];
+      const idx = TIERS.indexOf(tier);
+      const targetMod = (360 - (idx * SEG + SEG / 2) + 360) % 360;
+      const delta = (targetMod - (rotation % 360) + 360) % 360;
+      const newRotation = rotation + 360 * 5 + delta;
+      setRotation(newRotation);
 
-    await new Promise((r) => setTimeout(r, 1050));
-    const net = b * (tier.mult - 1);
-    if (net !== 0) await onSettle(0, net);
-    setSpinning(false);
-    const label = tier.mult === 0 ? `Lost ${b} ✨` : tier.mult === 1 ? "Push" : `+${net} ✨ (${tier.label})`;
-    setResult({ tier, label });
-    if (tier.mult >= 5) burstBig();
-    else if (tier.mult >= 2) burstWin();
+      await new Promise((r) => setTimeout(r, 1050));
+      const net = res.delta_stardust ?? res.data?.delta_stardust ?? b * (mult - 1);
+      setSpinning(false);
+      const label = mult === 0 ? `Lost ${b} ✨` : mult === 1 ? "Push" : `+${net} ✨ (${tier.label})`;
+      setResult({ tier, label });
+      if (mult >= 5) burstBig();
+      else if (mult >= 2) burstWin();
+    } catch {
+      setSpinning(false);
+    }
   }
 
   return (

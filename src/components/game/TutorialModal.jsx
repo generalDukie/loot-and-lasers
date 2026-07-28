@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Rocket, Compass, Swords, Sparkles, ChevronRight } from "lucide-react";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 const TIPS = [
   { icon: Compass, color: "#22D3EE", title: "Explore the Station", body: "Your hub is the map — tap any glowing module to travel. Cantina for quests, Hero / Ship for your character and vessel." },
@@ -21,15 +22,16 @@ export default function TutorialModal({ open, onClose }) {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+        <GameplayOverlayPortal
+          as={motion.div}
+          className="z-[90] flex items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         >
           <div className="absolute inset-0 bg-background/85 backdrop-blur-sm" onClick={onClose} />
           <motion.div
             initial={{ y: 40, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 40, opacity: 0, scale: 0.96 }}
             transition={{ type: "spring", stiffness: 340, damping: 26 }}
-            className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border/60 painted-panel canvas-grain"
+            className="relative w-full max-w-lg max-h-[90%] overflow-y-auto rounded-2xl border border-border/60 painted-panel canvas-grain"
           >
             <div className="flex items-center justify-between p-4 border-b border-border/40">
               <div className="flex items-center gap-2">
@@ -72,7 +74,7 @@ export default function TutorialModal({ open, onClose }) {
               </motion.button>
             </div>
           </motion.div>
-        </motion.div>
+        </GameplayOverlayPortal>
       )}
     </AnimatePresence>
   );

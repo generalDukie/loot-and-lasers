@@ -5,6 +5,7 @@ import { computeStardustValue, RARITY_COLORS, STARDUST_COLOR } from "@/lib/gameD
 import { getPendingItem, clearPendingItem, subscribePending } from "@/lib/inventoryCap";
 import { prepareConsumableBuffs } from "@/hooks/useInventory";
 import GearVisual from "@/components/game/GearVisual";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { useToast } from "@/components/ui/use-toast";
 import { Orbit, Loader2, AlertTriangle, FlaskConical } from "lucide-react";
 
@@ -108,28 +109,31 @@ export default function InventoryFullModal({ character }) {
   // ── Minimized: flashing alert bubble ──
   if (minimized) {
     return (
-      <motion.button
-        initial={{ y: -60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        onClick={() => setMinimized(false)}
-        className="fixed top-3 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-2 px-4 py-2 rounded-full border-2 border-amber-400 bg-card shadow-xl animate-pulse"
-        style={{ animationDuration: "0.8s" }}
-      >
-        <AlertTriangle className="w-4 h-4 text-amber-400" />
-        <span className="font-display font-bold text-xs text-amber-300">
-          Inventory Full — tap to resolve
-        </span>
-      </motion.button>
+      <GameplayOverlayPortal className="!pointer-events-none">
+        <motion.button
+          initial={{ y: -60, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          onClick={() => setMinimized(false)}
+          className="pointer-events-auto absolute top-3 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-2 px-4 py-2 rounded-full border-2 border-amber-400 bg-card shadow-xl animate-pulse"
+          style={{ animationDuration: "0.8s" }}
+        >
+          <AlertTriangle className="w-4 h-4 text-amber-400" />
+          <span className="font-display font-bold text-xs text-amber-300">
+            Inventory Full — tap to resolve
+          </span>
+        </motion.button>
+      </GameplayOverlayPortal>
     );
   }
 
   return (
     <AnimatePresence>
-      <motion.div
+      <GameplayOverlayPortal
+        as={motion.div}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 backdrop-blur-md p-4"
+        className="z-[80] flex items-center justify-center bg-black/85 backdrop-blur-md p-4"
       >
         <motion.div
           initial={{ scale: 0.9, y: 20 }}
@@ -251,7 +255,7 @@ export default function InventoryFullModal({ character }) {
             </p>
           )}
         </motion.div>
-      </motion.div>
+      </GameplayOverlayPortal>
     </AnimatePresence>
   );
 }

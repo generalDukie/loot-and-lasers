@@ -1,14 +1,16 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Swords, ChevronRight } from "lucide-react";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 export default function GuildWarReplay({ war, onClose }) {
   const duels = war.battle_log || [];
   const [openDuel, setOpenDuel] = useState(null);
 
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3"
+    <GameplayOverlayPortal
+      as={motion.div}
+      className="z-50 flex items-center justify-center p-3"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -127,6 +129,6 @@ export default function GuildWarReplay({ war, onClose }) {
           Continue
         </button>
       </motion.div>
-    </motion.div>
+    </GameplayOverlayPortal>
   );
 }

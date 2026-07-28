@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { getEffectiveFuelCost, ITEM_DROP_RATES, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { X, Star, Fuel, MapPin, Lock, Clock } from "lucide-react";
 
 function formatDuration(seconds) {
@@ -30,8 +31,9 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
   const dropRates = ITEM_DROP_RATES[rarityChance] || ITEM_DROP_RATES.common;
 
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3"
+    <GameplayOverlayPortal
+      as={motion.div}
+      className="z-50 flex items-center justify-center p-3"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -147,6 +149,6 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
           </motion.button>
         </div>
       </motion.div>
-    </motion.div>
+    </GameplayOverlayPortal>
   );
 }

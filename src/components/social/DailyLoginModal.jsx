@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Gift, Check } from "lucide-react";
 import { DAILY_REWARDS, getProgress, canClaimToday, claimDaily, rewardIcon, rewardLabel, todayUTC } from "@/lib/dailyLoginEngine";
 import { useToast } from "@/components/ui/use-toast";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 export default function DailyLoginModal({ open, onClose, myChar, onClaimed }) {
   const [progress, setProgress] = useState(null);
@@ -51,10 +52,16 @@ export default function DailyLoginModal({ open, onClose, myChar, onClaimed }) {
 
   return (
     <AnimatePresence>
-      <motion.div className="fixed inset-0 z-[80] flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <GameplayOverlayPortal
+        as={motion.div}
+        className="z-[80] flex items-center justify-center p-4"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      >
         <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
         <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60 }}
-          className="relative w-full max-w-lg rounded-2xl border border-border/60 painted-panel canvas-grain p-5 max-h-[90vh] overflow-y-auto">
+          className="relative w-full max-w-lg rounded-2xl border border-border/60 painted-panel canvas-grain p-5 max-h-[90%] overflow-y-auto">
           <button onClick={onClose} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground z-10"><X className="w-4 h-4" /></button>
 
           <div className="text-center mb-4">
@@ -93,7 +100,7 @@ export default function DailyLoginModal({ open, onClose, myChar, onClaimed }) {
           </button>
           <p className="text-[10px] text-muted-foreground text-center mt-2">Missing a day doesn't reset your streak — continue from the next reward.</p>
         </motion.div>
-      </motion.div>
+      </GameplayOverlayPortal>
     </AnimatePresence>
   );
 }

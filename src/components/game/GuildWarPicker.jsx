@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { X, Search, Flag } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { GUILD_WAR_DECLARE_COST } from "@/lib/guildEngine";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 export default function GuildWarPicker({ ownGuildId, onPick, onClose, busy }) {
   const [guilds, setGuilds] = useState([]);
@@ -19,8 +20,9 @@ export default function GuildWarPicker({ ownGuildId, onPick, onClose, busy }) {
   const filtered = guilds.filter((g) => g.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3"
+    <GameplayOverlayPortal
+      as={motion.div}
+      className="z-50 flex items-center justify-center p-3"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -79,6 +81,6 @@ export default function GuildWarPicker({ ownGuildId, onPick, onClose, busy }) {
           </div>
         )}
       </motion.div>
-    </motion.div>
+    </GameplayOverlayPortal>
   );
 }

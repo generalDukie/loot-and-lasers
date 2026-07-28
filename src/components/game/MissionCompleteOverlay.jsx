@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, STARDUST_COLOR, FUEL_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import confetti from "canvas-confetti";
 import { Star, Zap, Fuel, TrendingUp, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical, ArrowRight } from "lucide-react";
 
@@ -59,13 +60,13 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
   if ((stardust.shipMult || 0) > 0) sdChips.push(`+${pct(stardust.shipMult)}% ship`);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={onClose}>
+    <GameplayOverlayPortal className="z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 24 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg max-h-[88vh] overflow-y-auto rounded-2xl border border-border/60 painted-panel painted-frame canvas-grain p-5"
+        className="relative w-full max-w-lg max-h-[88%] overflow-y-auto rounded-2xl border border-border/60 painted-panel painted-frame canvas-grain p-5"
       >
         <div className="text-center mb-4">
           <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.05, type: "spring", stiffness: 300 }}>
@@ -177,6 +178,6 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
 
         <button onClick={onClose} className="w-full mt-4 painted-btn py-2.5 text-sm">Continue</button>
       </motion.div>
-    </div>
+    </GameplayOverlayPortal>
   );
 }

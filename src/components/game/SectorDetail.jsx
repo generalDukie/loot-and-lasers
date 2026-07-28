@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { DANGER_COLORS, DANGER_LABELS } from "@/lib/galaxyData";
 import { spring } from "@/lib/goofyMotion";
 import { RARITY_COLORS } from "@/lib/gameData";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { Shield, Gem, Orbit, X } from "lucide-react";
 
 export default function SectorDetail({ sector, locked, onClose }) {
@@ -10,14 +11,15 @@ export default function SectorDetail({ sector, locked, onClose }) {
   const rarityColor = RARITY_COLORS[sector.loot_rarity];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md"
+    <GameplayOverlayPortal
+      className="z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md"
       onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.85, opacity: 0, y: 24 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={spring}
-        className="w-full max-w-lg bg-card/90 border border-border/60 rounded-2xl overflow-hidden border-glow-cyan max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-lg bg-card/90 border border-border/60 rounded-2xl overflow-hidden border-glow-cyan max-h-[85%] overflow-y-auto"
         onClick={e => e.stopPropagation()}
         style={{ boxShadow: `0 0 30px ${sector.color}20` }}
       >
@@ -96,6 +98,6 @@ export default function SectorDetail({ sector, locked, onClose }) {
           )}
         </div>
       </motion.div>
-    </div>
+    </GameplayOverlayPortal>
   );
 }

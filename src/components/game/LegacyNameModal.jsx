@@ -4,6 +4,7 @@ import { Lock, Loader2 } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 // One-time setup modal: prompts the user for a permanent legacy (sur)name
 // that identifies their account across all characters. Once set it cannot
@@ -41,8 +42,9 @@ export default function LegacyNameModal({ open, onClose }) {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+        <GameplayOverlayPortal
+          as={motion.div}
+          className="z-[90] flex items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         >
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
@@ -90,7 +92,7 @@ export default function LegacyNameModal({ open, onClose }) {
               </button>
             </form>
           </motion.div>
-        </motion.div>
+        </GameplayOverlayPortal>
       )}
     </AnimatePresence>
   );

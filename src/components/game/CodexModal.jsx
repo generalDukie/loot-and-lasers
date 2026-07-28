@@ -7,6 +7,7 @@ import {
 import { FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, SHOP_REFRESH_COST, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST } from "@/lib/arenaEngine";
 import { DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST } from "@/lib/dungeonEngine";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 const SECTIONS = [
   { id: "start", label: "Getting Started", icon: BookOpen, color: "#22D3EE" },
@@ -202,15 +203,16 @@ export default function CodexModal({ open, onClose }) {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+        <GameplayOverlayPortal
+          as={motion.div}
+          className="z-[80] flex items-center justify-center p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         >
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
           <motion.div
             initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
             transition={{ type: "spring", stiffness: 360, damping: 26 }}
-            className="relative w-full max-w-2xl max-h-[88vh] flex flex-col rounded-2xl border border-border/60 painted-panel canvas-grain"
+            className="relative w-full max-w-2xl max-h-[88%] flex flex-col rounded-2xl border border-border/60 painted-panel canvas-grain"
           >
             <div className="flex items-center justify-between p-4 border-b border-border/40">
               <div className="flex items-center gap-2">
@@ -249,7 +251,7 @@ export default function CodexModal({ open, onClose }) {
               {renderSection(active)}
             </div>
           </motion.div>
-        </motion.div>
+        </GameplayOverlayPortal>
       )}
     </AnimatePresence>
   );

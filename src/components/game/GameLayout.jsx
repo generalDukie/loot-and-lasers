@@ -139,12 +139,19 @@ export default function GameLayout() {
                   {leftRail}
                 </div>
 
-                <main className="flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden pl-0 pr-3 sm:pr-4 lg:pr-6 pb-3 pt-2 flex flex-col">
-                  <PageErrorBoundary key={location.pathname}>
-                    <AnimatedPage>
-                      <Outlet context={{ character, setCharacter }} />
-                    </AnimatedPage>
-                  </PageErrorBoundary>
+                <main className="relative flex-1 min-w-0 min-h-0 flex flex-col pl-0 pr-3 sm:pr-4 lg:pr-6 pb-3 pt-2">
+                  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
+                    <PageErrorBoundary key={location.pathname}>
+                      <AnimatedPage>
+                        <Outlet context={{ character, setCharacter }} />
+                      </AnimatedPage>
+                    </PageErrorBoundary>
+                  </div>
+                  {/* Overlay host covers the gameplay column only (not the side nav). */}
+                  <div
+                    id="gameplay-overlay-root"
+                    className="pointer-events-none absolute inset-0 z-[60]"
+                  />
                 </main>
               </div>
             </div>

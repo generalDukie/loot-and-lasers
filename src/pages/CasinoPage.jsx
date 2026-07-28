@@ -84,13 +84,14 @@ export default function CasinoPage() {
   const maxSdBet = getCasinoMaxStardustBet(character.level || 1);
 
   return (
-    <PageStage className="space-y-5">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2 mb-1">
+    <PageStage className="items-center">
+      <div className="w-full max-w-4xl mx-auto space-y-5">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center">
+        <h1 className="font-display font-bold text-xl tracking-wider inline-flex items-center justify-center gap-2 mb-1">
           <Dice5 className="w-5 h-5 text-amber-300" /> Nebula Casino
         </h1>
         <p className="text-xs text-muted-foreground mb-3">Risk it for the glittering prize. The house always remembers.</p>
-        <div className="flex items-center gap-3 mb-1 flex-wrap">
+        <div className="flex items-center justify-center gap-3 mb-1 flex-wrap">
           <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/60 border border-border/50 text-sm font-display font-bold">
             <Sparkles className="w-3.5 h-3.5" style={{ color: STARDUST_COLOR }} />{" "}
             <span style={{ color: STARDUST_COLOR }}>{(character.stardust || 0).toLocaleString()}</span>
@@ -104,29 +105,35 @@ export default function CasinoPage() {
         </div>
       </motion.div>
 
-      <div className="game-stage-grid">
-        {NOVA_CASINO_OPEN ? (
-          <>
-            <CrystalFlip character={character} onSettle={settle} busy={busy} />
-            <CrystalJackpot character={character} onSettle={settle} busy={busy} />
-          </>
-        ) : (
-          <div className="col-span-full painted-panel canvas-grain p-4 border border-amber-500/25 relative overflow-hidden">
-            <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]" />
-            <div className="relative flex flex-col sm:flex-row sm:items-center gap-3">
-              <Gem className="w-8 h-8 text-amber-300/70 shrink-0" />
-              <div className="min-w-0">
-                <h3 className="font-display font-bold text-sm text-amber-200">Crystal tables sealed</h3>
-                <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
-                  Nova Crystal games are locked until the Crystal Store is live — they were minting hard currency.
-                  Stardust games below are still open.
-                </p>
-              </div>
+      {!NOVA_CASINO_OPEN && (
+        <div className="painted-panel canvas-grain p-4 border border-amber-500/25 relative overflow-hidden">
+          <div className="absolute inset-0 bg-background/55 backdrop-blur-[1px]" />
+          <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3 text-center sm:text-left">
+            <Gem className="w-8 h-8 text-amber-300/70 shrink-0 mx-auto sm:mx-0" />
+            <div className="min-w-0">
+              <h3 className="font-display font-bold text-sm text-amber-200">Crystal tables sealed</h3>
+              <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+                Nova Crystal games are locked until the Crystal Store is live — they were minting hard currency.
+                Stardust games below are still open.
+              </p>
             </div>
           </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap justify-center gap-4 sm:gap-5">
+        {NOVA_CASINO_OPEN && (
+          <>
+            <div className="w-full max-w-sm"><CrystalFlip character={character} onSettle={settle} busy={busy} /></div>
+            <div className="w-full max-w-sm"><CrystalJackpot character={character} onSettle={settle} busy={busy} /></div>
+          </>
         )}
-        <StardustDice character={character} onSettle={settle} busy={busy} maxBet={maxSdBet} />
-        <StardustWheel character={character} onSettle={settle} busy={busy} maxBet={maxSdBet} />
+        <div className="w-full max-w-sm">
+          <StardustDice character={character} onSettle={settle} busy={busy} maxBet={maxSdBet} />
+        </div>
+        <div className="w-full max-w-sm">
+          <StardustWheel character={character} onSettle={settle} busy={busy} maxBet={maxSdBet} />
+        </div>
       </div>
 
       <p className="text-[10px] text-muted-foreground/70 text-center italic">
@@ -134,6 +141,7 @@ export default function CasinoPage() {
           ? "Nova Crystal bets are capped at 100 per play. Play responsibly, operative."
           : "Earn Nova from Weekly Ops & daily login — don't gamble what the void won't refill."}
       </p>
+      </div>
     </PageStage>
   );
 }

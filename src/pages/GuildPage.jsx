@@ -110,7 +110,11 @@ export default function GuildPage() {
   if (!character) return null;
 
   if (!membership) {
-    return <GuildCreation character={character} onJoined={() => loadAll(character)} />;
+    return (
+      <PageStage className="items-center justify-center py-6 px-2">
+        <GuildCreation character={character} onJoined={() => loadAll(character)} />
+      </PageStage>
+    );
   }
 
   const totalMissions = members.reduce((a, m) => a + (m.contributed_missions || 0), 0);

@@ -4,6 +4,7 @@ import { X, UserPlus, MessageSquare, Ban, Flag, Shield, Users } from "lucide-rea
 import CharacterStats from "@/components/game/CharacterStats";
 import EquipmentSlots from "@/components/game/EquipmentSlots";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { api } from "@/api/gameClient";
 import { presenceStatus } from "@/hooks/usePresence";
 import { useToast } from "@/components/ui/use-toast";
@@ -126,8 +127,11 @@ export default function PublicProfileSheet({ target, myChar, onClose, onMessage,
   const statusColor = status === "online" ? "#34D399" : status === "in_mission" ? "#FBBF24" : "#6B7280";
 
   return (
-    <motion.div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <GameplayOverlayPortal
+      as={motion.div}
+      className="z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    >
       <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
       <motion.div
         initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
@@ -206,7 +210,7 @@ export default function PublicProfileSheet({ target, myChar, onClose, onMessage,
           )}
         </div>
       </motion.div>
-    </motion.div>
+    </GameplayOverlayPortal>
   );
 }
 

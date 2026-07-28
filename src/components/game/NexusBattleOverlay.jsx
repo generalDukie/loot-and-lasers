@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 const PHASE_MS = 1900;
 
@@ -23,8 +24,9 @@ export default function NexusBattleOverlay({ result, attackerGuild, onDone }) {
   const atkPct = Math.round((result.attacker_strength / (result.attacker_strength + result.defender_strength)) * 100);
 
   return (
-    <motion.div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-3"
+    <GameplayOverlayPortal
+      as={motion.div}
+      className="z-[60] flex items-center justify-center p-3"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -126,7 +128,7 @@ export default function NexusBattleOverlay({ result, attackerGuild, onDone }) {
           </button>
         )}
       </motion.div>
-    </motion.div>
+    </GameplayOverlayPortal>
   );
 }
 

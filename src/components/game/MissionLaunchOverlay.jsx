@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, Clock } from "lucide-react";
+import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 function formatTime(s) {
   if (s < 60) return `${s}s`;
@@ -39,8 +40,9 @@ export default function MissionLaunchOverlay({ mission, onDone }) {
 
   return (
     <AnimatePresence>
-      <motion.div
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden"
+      <GameplayOverlayPortal
+        as={motion.div}
+        className="z-50 flex flex-col items-center justify-center overflow-hidden"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -213,7 +215,7 @@ export default function MissionLaunchOverlay({ mission, onDone }) {
             </div>
           </motion.div>
         </div>
-      </motion.div>
+      </GameplayOverlayPortal>
     </AnimatePresence>
   );
 }

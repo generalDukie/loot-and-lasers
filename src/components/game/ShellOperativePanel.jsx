@@ -7,12 +7,12 @@ import { Fuel, Gem, Sparkles } from "lucide-react";
 
 /**
  * Persistent operative readout for the game shell — portrait, identity,
- * XP, and currencies. Read-only; links to character sheet.
+ * XP, and currencies. Compact so nav can fill the rail without scrolling.
  */
 export default function ShellOperativePanel({ character }) {
   if (!character) {
     return (
-      <div className="p-3 text-[11px] text-muted-foreground italic">
+      <div className="p-2.5 text-[10px] text-muted-foreground italic">
         No operative loaded.
       </div>
     );
@@ -33,16 +33,16 @@ export default function ShellOperativePanel({ character }) {
   const currencyFontSize = railCurrencyFontSize(fuelLabel, stardustLabel, novaLabel);
 
   return (
-    <div className="flex flex-col gap-2.5 p-3 min-h-0 overflow-y-auto">
+    <div className="flex flex-col gap-2 p-2.5 shrink-0">
       <Link
         to="/character"
-        className="group flex flex-col items-center text-center px-1"
+        className="group flex flex-col items-center text-center"
         title="Open character sheet"
       >
-        <div className="relative shrink-0 mb-2">
+        <div className="relative shrink-0 mb-1">
           <div
-            className="rounded-xl overflow-hidden border border-primary/45"
-            style={{ boxShadow: "0 0 16px hsl(190 90% 50% / 0.32)" }}
+            className="rounded-lg overflow-hidden border border-primary/45"
+            style={{ boxShadow: "0 0 12px hsl(190 90% 50% / 0.28)" }}
           >
             <CharacterAvatar
               race={character.race}
@@ -54,27 +54,27 @@ export default function ShellOperativePanel({ character }) {
               eyebrows={ap.eyebrows}
               marking={ap.marking}
               cls={character.class}
-              size={88}
+              size={80}
             />
           </div>
-          <span className="absolute -bottom-1.5 -right-1.5 min-w-[26px] h-[26px] px-1 rounded-full bg-primary text-primary-foreground font-display font-black text-[11px] flex items-center justify-center border-2 border-background tabular-nums">
+          <span className="absolute -bottom-1 -right-1 min-w-[22px] h-[22px] px-0.5 rounded-full bg-primary text-primary-foreground font-display font-black text-[10px] flex items-center justify-center border-2 border-background tabular-nums">
             {character.level}
           </span>
         </div>
         <p className="font-display font-bold text-sm leading-tight truncate w-full group-hover:text-primary transition-colors">
           {fullName(character)}
         </p>
-        <p className="text-[10px] text-muted-foreground truncate w-full mt-0.5">
+        <p className="text-[10px] text-muted-foreground truncate w-full">
           {race?.emoji} {race?.name || character.race} · {cls?.emoji} {cls?.name || character.class}
         </p>
         {character.active_title && (
-          <p className="text-[9px] font-display text-amber-400/85 truncate w-full mt-0.5">
+          <p className="text-[9px] font-display text-amber-400/85 truncate w-full">
             {character.active_title}
           </p>
         )}
       </Link>
 
-      <div className="flex flex-col items-stretch gap-1 px-1 w-full min-w-0">
+      <div className="flex flex-col gap-1 w-full min-w-0">
         <CurrencyPill
           icon={<Fuel className="w-2.5 h-2.5 shrink-0" style={{ color: FUEL_COLOR }} />}
           value={fuelLabel}
@@ -101,10 +101,9 @@ export default function ShellOperativePanel({ character }) {
         </Link>
       </div>
 
-      {/* XP */}
       <div>
         <div className="flex items-center justify-between text-[8px] text-muted-foreground mb-0.5 px-0.5">
-          <span className="font-display font-semibold tracking-wide">EXPERIENCE</span>
+          <span className="font-display font-semibold tracking-wide">XP</span>
           <span className="tabular-nums">
             {(character.experience || 0).toLocaleString()} / {expToNext.toLocaleString()}
           </span>
@@ -123,17 +122,17 @@ export default function ShellOperativePanel({ character }) {
 /** Shrink font only once values are long enough to crowd the rail. */
 function railCurrencyFontSize(...labels) {
   const maxLen = Math.max(...labels.map((label) => String(label).length));
-  if (maxLen <= 6) return 10;
-  if (maxLen <= 8) return 9;
-  if (maxLen <= 10) return 8;
-  if (maxLen <= 12) return 7;
-  return 6;
+  if (maxLen <= 6) return 11;
+  if (maxLen <= 8) return 10;
+  if (maxLen <= 10) return 9;
+  if (maxLen <= 12) return 8;
+  return 7;
 }
 
 function CurrencyPill({ icon, value, color, interactive, fontSize = 10, block }) {
   return (
     <span
-      className={`${block ? "flex w-full" : "inline-flex"} items-center justify-center gap-1 min-w-0 px-2 py-1 rounded-md border border-border/40 bg-muted/25 tabular-nums font-display font-semibold leading-none whitespace-nowrap overflow-hidden ${
+      className={`${block ? "flex w-full" : "inline-flex"} items-center justify-center gap-1 min-w-0 px-1.5 py-1 rounded-md border border-border/40 bg-muted/25 tabular-nums font-display font-semibold leading-none whitespace-nowrap overflow-hidden ${
         interactive ? "hover:border-amber-400/45 transition-colors" : ""
       }`}
       style={{ color, fontSize: `${fontSize}px` }}

@@ -3,7 +3,7 @@ import { getDisplayScale, getDisplayAnchor } from "@/lib/displayScale";
 
 // Dynamic game canvas. Layout reflows in real pixels (no transform: scale) so
 // UI stays sharp at every resolution. Scale modes (see displayScale.js):
-//   "auto"           — fill the viewport on all aspect ratios (16:9, 21:9, …)
+//   "auto"           — fit the 16:9 design inside the viewport (letterbox/pillarbox)
 //   "cover"          — fill the screen, crop overflow
 //   "fill-width"     — match viewport width (height follows 16:9 ratio)
 //   "contain-height" — match viewport height (may letterbox sides)
@@ -37,9 +37,10 @@ export default function GameCanvas({ children, className = "" }) {
         height = vh;
         width = vh * RATIO;
       } else if (mode === "auto") {
-        // Always fill the viewport — UI reflows naturally on 16:9, 21:9, and taller screens.
-        width = vw;
-        height = vh;
+        // Always preserve 16:9 — scale to fit, letterbox/pillarbox the remainder.
+        const s = Math.min(vw / DESIGN_W, vh / DESIGN_H);
+        width = DESIGN_W * s;
+        height = DESIGN_H * s;
       } else {
         const s = Number(mode) || Math.min(vw / DESIGN_W, vh / DESIGN_H);
         width = DESIGN_W * s;
@@ -48,18 +49,14 @@ export default function GameCanvas({ children, className = "" }) {
 
       let left;
       let top;
-      if (mode === "auto") {
-        left = 0;
-        top = 0;
-      } else if (width <= vw) {
+      if (width <= vw) {
         if (anchor === "left") left = 0;
         else if (anchor === "right") left = vw - width;
         else left = (vw - width) / 2;
-        top = (vh - height) / 2;
       } else {
         left = (vw - width) / 2;
-        top = (vh - height) / 2;
       }
+      top = (vh - height) / 2;
 
       setDims({ width, height, left, top });
     };

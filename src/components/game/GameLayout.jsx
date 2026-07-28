@@ -19,6 +19,10 @@ import { getCharacterById } from "@/lib/socialEngine";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { usePresence } from "@/hooks/usePresence";
 
+/** Desktop operative side panel (~15% narrower than the prior default clamp). */
+const DESKTOP_RAIL_W = "clamp(18.7rem, 15.7vw, 23.4rem)";
+const MOBILE_RAIL_W = "min(27.2rem, 92vw)";
+
 /**
  * Persistent application shell for all in-game routes.
  * Outer frame, left nav, and operative panel stay mounted; only <Outlet /> swaps.
@@ -62,7 +66,7 @@ export default function GameLayout() {
 
   const leftRail = (
     <aside
-      className="flex flex-col min-h-0 h-full border-r"
+      className="flex flex-col min-h-0 h-full w-full border-r"
       style={{
         borderColor: "hsl(210 18% 22%)",
         background: `
@@ -73,7 +77,7 @@ export default function GameLayout() {
       }}
     >
       <div
-        className="shrink-0 px-2.5 py-1.5 border-b flex items-center justify-between"
+        className="shrink-0 px-3 py-2 border-b flex items-center justify-between"
         style={{ borderColor: "hsl(210 18% 22%)" }}
       >
         <span className="text-[7px] font-display font-bold tracking-[0.2em] text-primary/80">
@@ -85,10 +89,10 @@ export default function GameLayout() {
           aria-hidden
         />
       </div>
-      <div className="shrink-0 max-h-[48%] overflow-y-auto border-b" style={{ borderColor: "hsl(210 18% 22%)" }}>
+      <div className="shrink-0 border-b" style={{ borderColor: "hsl(210 18% 22%)" }}>
         <ShellOperativePanel character={character} />
       </div>
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <ShellSidebar onNavigate={() => setRailOpen(false)} />
       </div>
     </aside>
@@ -108,9 +112,12 @@ export default function GameLayout() {
                 railOpen={railOpen}
               />
 
-              <div className="flex-1 min-h-0 flex relative">
-                {/* Desktop permanent left rail */}
-                <div className="hidden lg:flex w-[clamp(15rem,13vw,19rem)] shrink-0 min-h-0">
+              <div className="flex-1 min-h-0 flex relative min-w-0 gap-[12px] sm:gap-[16px] lg:gap-[24px]">
+                {/* Desktop operative console — in layout flow; main content cannot overlap */}
+                <div
+                  className="hidden lg:block shrink-0 min-h-0"
+                  style={{ width: DESKTOP_RAIL_W }}
+                >
                   {leftRail}
                 </div>
 
@@ -124,15 +131,15 @@ export default function GameLayout() {
                   />
                 )}
                 <div
-                  className={`lg:hidden absolute inset-y-0 left-0 z-40 w-[min(22rem,92vw)] min-h-0 transform transition-transform duration-200 ${
+                  className={`lg:hidden absolute inset-y-0 left-0 z-40 min-h-0 transform transition-transform duration-200 ${
                     railOpen ? "translate-x-0" : "-translate-x-full"
                   }`}
+                  style={{ width: MOBILE_RAIL_W }}
                 >
                   {leftRail}
                 </div>
 
-                {/* Central content — only this region remounts per route */}
-                <main className="flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden px-3 sm:px-4 lg:px-6 pb-3 pt-2 flex flex-col">
+                <main className="flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden pl-0 pr-3 sm:pr-4 lg:pr-6 pb-3 pt-2 flex flex-col">
                   <PageErrorBoundary key={location.pathname}>
                     <AnimatedPage>
                       <Outlet context={{ character, setCharacter }} />

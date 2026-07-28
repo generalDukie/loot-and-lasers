@@ -1,6 +1,6 @@
 // Per-user station hub display preference (stored locally).
 // Scale modes:
-//   "auto"           — fill the viewport on every aspect ratio (default)
+//   "auto"           — fit the 16:9 design inside the viewport (default)
 //   "cover"          — fill the screen (may crop edges)
 //   "fill-width"     — scale to viewport width (may clip top/bottom)
 //   "contain-height" — scale to viewport height (may letterbox sides)
@@ -13,7 +13,7 @@ const KEY = "loot_display_scale";
 const ANCHOR_KEY = "loot_display_anchor";
 
 export const DISPLAY_OPTIONS = [
-  { value: "auto", label: "Fill screen" },
+  { value: "auto", label: "16:9 fit" },
   { value: "cover", label: "Fill screen" },
   { value: "fill-width", label: "Fill width" },
   { value: "contain-height", label: "Fill height" },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, Gift, Coins, Gem, Fuel, Send, Swords, User } from "lucide-react";
+import { Search, Gift, Coins, Gem, Fuel, Swords, User, ArrowUp, ArrowDown } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { getMyCharacter, getMyCharacters } from "@/lib/socialEngine";
 import ItemGrantForm from "@/components/admin/ItemGrantForm";
@@ -21,6 +21,8 @@ export default function GrantItemTab({ onAction }) {
         const [active, all] = await Promise.all([getMyCharacter({ force: true }), getMyCharacters()]);
         setMyChars(all || []);
         setActiveId(active?.id || null);
+        // Default recipient = active operative so self-grants work without searching.
+        if (active) setSelected(active);
       } catch { /* ignore */ }
     })();
   }, []);
@@ -38,9 +40,13 @@ export default function GrantItemTab({ onAction }) {
     return () => clearTimeout(t);
   }, [query]);
 
-  async function grantCurrency() {
+  async function applyCurrency(sign) {
     if (!selected) return;
-    const clean = Object.fromEntries(Object.entries(deltas).filter(([, v]) => v && v !== 0));
+    const clean = Object.fromEntries(
+      Object.entries(deltas)
+        .map(([k, v]) => [k, Math.abs(Number(v) || 0) * sign])
+        .filter(([, v]) => v !== 0),
+    );
     if (!Object.keys(clean).length) return;
     await onAction({ action: "adjust_currency", character_id: selected.id, deltas: clean });
     setDeltas({ stardust: 0, nova_crystals: 0, fuel: 0, arena_attempts: 0, experience: 0 });
@@ -120,15 +126,21 @@ export default function GrantItemTab({ onAction }) {
             <ItemGrantForm
               character={selected}
               onAction={onAction}
-              onGranted={() => {}}
+              onGranted={() => {
+                /* inventory refreshes on character sheet focus */
+              }}
             />
+            <p className="text-[10px] text-muted-foreground text-center">
+              Gear goes to <span className="text-foreground font-medium">{selected.name}</span>
+              {selected.id === activeId ? " (your active operative)" : ""}. Open their character sheet to see it.
+            </p>
           </div>
 
-          {/* Currency grant */}
+          {/* Currency adjust */}
           <div className="painted-panel canvas-grain p-3 space-y-3">
             <div className="flex items-center gap-2">
               <Coins className="w-4 h-4 text-amber-400" />
-              <h2 className="font-display font-semibold text-sm">Grant Currency / XP</h2>
+              <h2 className="font-display font-semibold text-sm">Adjust Currency / XP</h2>
             </div>
             <div className="grid grid-cols-1 gap-2">
               <CurrencyRow icon="✨" color="text-purple-400" label="Stardust" value={deltas.stardust} onChange={(v) => setDeltas({ ...deltas, stardust: v })} />
@@ -137,9 +149,14 @@ export default function GrantItemTab({ onAction }) {
               <CurrencyRow icon={Swords} color="text-rose-400" label="Arena Attempts" value={deltas.arena_attempts} onChange={(v) => setDeltas({ ...deltas, arena_attempts: v })} />
               <CurrencyRow icon="⭐" color="text-amber-300" label="Experience" value={deltas.experience} onChange={(v) => setDeltas({ ...deltas, experience: v })} />
             </div>
-            <button onClick={grantCurrency} className="w-full painted-btn painted-btn-accent text-sm py-2 rounded-lg flex items-center justify-center gap-1.5">
-              <Send className="w-3.5 h-3.5" /> Grant
-            </button>
+            <div className="flex gap-1.5">
+              <button onClick={() => applyCurrency(1)} className="flex-1 painted-btn painted-btn-accent text-sm py-2 rounded-lg flex items-center justify-center gap-1.5">
+                <ArrowUp className="w-3.5 h-3.5" /> Add
+              </button>
+              <button onClick={() => applyCurrency(-1)} className="flex-1 text-sm py-2 rounded-lg flex items-center justify-center gap-1.5 bg-red-500/15 text-red-300 border border-red-500/30 hover:bg-red-500/25 transition-colors">
+                <ArrowDown className="w-3.5 h-3.5" /> Remove
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -156,8 +173,9 @@ function CurrencyRow({ icon, color, label, value, onChange }) {
       <span className="text-xs text-muted-foreground w-28 shrink-0">{label}</span>
       <input
         type="number"
+        min="0"
         value={value}
-        onChange={(e) => onChange(+e.target.value)}
+        onChange={(e) => onChange(Math.max(0, +e.target.value || 0))}
         className="flex-1 bg-muted/30 border border-border/40 rounded-lg px-2 py-1.5 text-sm text-center"
       />
     </div>

@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { UserRound } from "lucide-react";
 import HubCharacterChip from "@/components/game/HubCharacterChip";
 import CurrencyStack from "@/components/game/CurrencyStack";
+import CharacterAvatar from "@/components/game/CharacterAvatar";
 import EquippedFrame from "@/components/game/EquippedFrame";
 import { useEquippedItems } from "@/hooks/useEquippedItems";
 import { PRIMARY_STATS, computePermanentTotalStats, computeDerivedStats } from "@/lib/statEngine";
@@ -34,7 +34,8 @@ function useDesktopHover() {
   return desktopHover;
 }
 
-// Character portrait + currencies. Hover (desktop) or tap (touch) expands page nav + loadout.
+// Character portrait + currencies. Hover (desktop) or tap (touch) expands page nav
+// with a loadout panel beside it — same avatar art as the banner chip.
 export default function CharacterNavMenu({ character, large = false, xpPct: xpPctProp }) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -108,6 +109,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
   const totals = character ? computePermanentTotalStats(character, equippedItems) : {};
   const derived = character ? computeDerivedStats(totals, character) : {};
   const filled = equippedItems.length;
+  const ap = character?.appearance || {};
 
   return (
     <div
@@ -140,7 +142,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
             className="fixed z-[80] flex flex-col sm:flex-row items-stretch sm:items-start gap-2"
             style={{ top: menuPos.top, left: menuPos.left }}
           >
-            {/* Vertical list — no max-height / no scroll */}
+            {/* Vertical page nav */}
             <div className="w-[13.5rem] shrink-0 rounded-xl border border-border/60 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel p-1.5">
               {NAV_GROUPS.map((g, gi) => (
                 <React.Fragment key={g.name}>
@@ -172,6 +174,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
               ))}
             </div>
 
+            {/* Loadout extension — same avatar as the banner chip */}
             <Link
               to="/character"
               title="View loadout & inventory"
@@ -189,8 +192,22 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
 
               <div className="px-2 pt-2 pb-1.5">
                 <EquippedFrame equippedItems={equippedItems} size={40}>
-                  <div className="w-[30px] h-[30px] rounded-lg border border-cyan-400/40 bg-cyan-500/10 flex items-center justify-center">
-                    <UserRound className="w-3.5 h-3.5 text-cyan-300" />
+                  <div
+                    className="rounded-lg overflow-hidden border border-cyan-400/40"
+                    style={{ boxShadow: "0 0 8px hsl(190 90% 50% / 0.25)" }}
+                  >
+                    <CharacterAvatar
+                      race={character.race}
+                      skinColor={ap.skin_color}
+                      eyeStyle={ap.eye_style}
+                      ears={ap.ears}
+                      mouth={ap.mouth}
+                      nose={ap.nose}
+                      eyebrows={ap.eyebrows}
+                      marking={ap.marking}
+                      cls={character.class}
+                      size={30}
+                    />
                   </div>
                 </EquippedFrame>
               </div>

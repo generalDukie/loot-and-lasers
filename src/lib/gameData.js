@@ -1076,6 +1076,17 @@ export const FUEL_PURCHASE_MAX = 10; // per 24h cycle (200 fuel total)
 /** Smallest chargeable fuel unit (L1–5 short jobs = 15s = 0.25 fuel). */
 export const MISSION_MIN_FUEL = 0.25;
 
+/** Canonical 2-decimal fuel value for comparisons and display. */
+export function normalizeFuelAmount(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+/** Display fuel with up to 2 decimals — matches cantina / mission UI. */
+export function formatFuelAmount(n) {
+  const v = normalizeFuelAmount(n);
+  return Number.isInteger(v) ? String(v) : v.toFixed(2);
+}
+
 export function computeFuelCost(template) {
   // 1 fuel = 1 minute of mission time (30s = 0.5, 40s = 0.67, 60s = 1, etc.)
   const durationSeconds = Math.floor(template.duration_seconds || 60);

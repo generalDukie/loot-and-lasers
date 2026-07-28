@@ -33,13 +33,26 @@ export function pickMissionExploreSceneIndex() {
   return Math.floor(Math.random() * MISSION_EXPLORE_SCENES.length);
 }
 
-export function getMissionExploreScene(index) {
-  const i = ((Number(index) || 0) % MISSION_EXPLORE_SCENES.length + MISSION_EXPLORE_SCENES.length) % MISSION_EXPLORE_SCENES.length;
+function stableSceneIndexFromSeed(seed) {
+  const s = String(seed || "");
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % MISSION_EXPLORE_SCENES.length;
+}
+
+export function getMissionExploreScene(index, seed) {
+  const n = Number(index);
+  const i = Number.isFinite(n)
+    ? ((Math.floor(n) % MISSION_EXPLORE_SCENES.length) + MISSION_EXPLORE_SCENES.length) % MISSION_EXPLORE_SCENES.length
+    : stableSceneIndexFromSeed(seed);
   return MISSION_EXPLORE_SCENES[i];
 }
 
-export default function MissionExploreBackdrop({ missionName, sceneIndex }) {
-  const scene = getMissionExploreScene(sceneIndex);
+export default function MissionExploreBackdrop({ missionName, sceneIndex, sceneSeed }) {
+  const scene = getMissionExploreScene(sceneIndex, sceneSeed);
 
   return (
     <div className="relative h-full w-full min-h-0 rounded-2xl overflow-hidden border border-border/60 shadow-2xl painted-panel painted-frame">

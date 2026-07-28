@@ -40,6 +40,14 @@ export default function AdminPage() {
           title: "Gear granted",
           description: `${data.item.name} → ${data.character_name || "character"}`,
         });
+      } else if (payload.action === "adjust_currency") {
+        const parts = Object.entries(payload.deltas || {})
+          .filter(([, v]) => v)
+          .map(([k, v]) => `${v > 0 ? "+" : ""}${v} ${k.replace(/_/g, " ")}`);
+        toast({
+          title: "Currency updated",
+          description: parts.length ? parts.join(" · ") : "Balances adjusted.",
+        });
       } else if (payload.action === "set_role") {
         toast({
           title: data?.role === "admin" ? "Account promoted" : "Account demoted",
@@ -63,9 +71,9 @@ export default function AdminPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2"><Shield className="w-5 h-5 text-primary" /><h1 className="font-display font-bold text-xl tracking-wider">Admin · Moderation</h1></div>
-      <div className="flex gap-1 p-1 rounded-xl bg-muted/20 border border-border/30">
+      <div className="flex flex-wrap gap-1 p-1 rounded-xl bg-muted/20 border border-border/30">
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-display font-semibold ${tab === t.key ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}><t.icon className="w-3.5 h-3.5" /> {t.label}</button>
+          <button key={t.key} onClick={() => setTab(t.key)} className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-display font-semibold ${tab === t.key ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}><t.icon className="w-3.5 h-3.5" /> {t.label}</button>
         ))}
       </div>
 

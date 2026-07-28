@@ -28,6 +28,7 @@ import {
 } from "@/lib/inventoryOrder";
 import { useToast } from "@/components/ui/use-toast";
 import { Star, Backpack } from "lucide-react";
+import AdminSelfGrant from "@/components/admin/AdminSelfGrant";
 
 export default function CharacterPage() {
   const [character, setCharacter] = useState(null);
@@ -327,6 +328,9 @@ export default function CharacterPage() {
               onLock={inv.toggleLock}
               characterClass={character.class}
             />
+          </div>
+          <div className="mt-3 shrink-0">
+            <AdminSelfGrant character={character} onGranted={() => inv.load()} />
           </div>
         </motion.div>
 

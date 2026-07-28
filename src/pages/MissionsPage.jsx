@@ -1,5 +1,5 @@
 import React from "react";
-import { FUEL_MAX, FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, FUEL_COLOR } from "@/lib/gameData";
+import { FUEL_MAX, FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, FUEL_COLOR, formatFuelAmount } from "@/lib/gameData";
 import MissionCard from "@/components/game/MissionCard";
 import MissionCantina from "@/components/game/MissionCantina";
 import MissionExploreBackdrop from "@/components/game/MissionExploreBackdrop";
@@ -81,7 +81,7 @@ export default function MissionsPage() {
             className="text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1"
             style={{ color: FUEL_COLOR, backgroundColor: `${FUEL_COLOR}18`, border: `1px solid ${FUEL_COLOR}40` }}
           >
-            <Fuel className="w-3 h-3" /> {character.fuel ?? FUEL_MAX}/{character.max_fuel || FUEL_MAX}
+            <Fuel className="w-3 h-3" /> {formatFuelAmount(character.fuel ?? FUEL_MAX)}/{character.max_fuel || FUEL_MAX}
           </span>
           <button
             onClick={handleBuyFuel}
@@ -133,6 +133,7 @@ export default function MissionsPage() {
             <MissionExploreBackdrop
               missionName={activeMission.name}
               sceneIndex={activeMission.explore_scene}
+              sceneSeed={activeMission.id || activeMission.name}
             />
           ) : (
             <MissionCantina

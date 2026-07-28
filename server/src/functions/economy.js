@@ -399,6 +399,14 @@ export async function LaunchMission(user, body) {
       const startNow = new Date();
       const endTime = new Date(startNow.getTime() + duration * 1000);
 
+      // Client may send explore_scene; otherwise pick one so the active-mission
+      // backdrop rotates instead of always landing on scene 0.
+      const EXPLORE_SCENE_COUNT = 6;
+      const rawScene = Number(template.explore_scene);
+      const exploreScene = Number.isFinite(rawScene)
+        ? ((Math.floor(rawScene) % EXPLORE_SCENE_COUNT) + EXPLORE_SCENE_COUNT) % EXPLORE_SCENE_COUNT
+        : Math.floor(Math.random() * EXPLORE_SCENE_COUNT);
+
       const mission = entities.Mission.create({
         character_id: ch.id,
         name: template.name,
@@ -420,6 +428,7 @@ export async function LaunchMission(user, body) {
         fuel_cost: fuelCost,
         stardust_efficiency: sdEff,
         xp_efficiency: xpEff,
+        explore_scene: exploreScene,
       }, { created_by_id: user.id, created_by: user.email });
 
       const patch = {

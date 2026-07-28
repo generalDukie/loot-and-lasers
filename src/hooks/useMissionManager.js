@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   FUEL_MAX,
   MISSION_MIN_FUEL,
@@ -17,10 +17,11 @@ import {
   computeMissionXpFromFuel,
   computeMissionStardustFromFuel,
   normalizeMissionEfficiency,
+  normalizeFuelAmount,
 } from "@/lib/gameData";
 import { contributeMission, getGuildMembership } from "@/lib/guildUtils";
 import { processDiscovery } from "@/lib/discovery";
-import { getMyCharacter } from "@/lib/socialEngine";
+import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { pushNotification } from "@/lib/notificationEngine";
 import { getNexusOwnerGuildId } from "@/lib/nexusEngine";
 import { useToast } from "@/components/ui/use-toast";
@@ -134,7 +135,20 @@ function classifyClaimItems(items, rewards) {
 // loot rolls, discoveries, and guild/Nexus side-effects. The view layer consumes
 // the returned state + handlers and stays free of orchestration logic.
 export function useMissionManager() {
-  const [character, setCharacter] = useState(null);
+  const outlet = useOutletContext() || {};
+  const setSharedCharacter = outlet.setCharacter;
+  const [character, setLocalCharacter] = useState(null);
+
+  const setCharacter = useCallback((next) => {
+    setLocalCharacter((prev) => {
+      const value = typeof next === "function" ? next(prev) : next;
+      if (value) {
+        primeMyCharacterCache(value);
+        setSharedCharacter?.(value);
+      }
+      return value;
+    });
+  }, [setSharedCharacter]);
   const [dailyMissions, setDailyMissions] = useState([]);
   const [activeMission, setActiveMission] = useState(null);
   const [launchAnim, setLaunchAnim] = useState(null);
@@ -485,7 +499,7 @@ export function useMissionManager() {
   // Derived view values
   const skipCost = activeMission ? skipCostFor(activeMission, now) : 0;
   const gains = activeMission && character ? computeMissionGains(character, activeMission, nexusBonus) : null;
-  const currentFuel = character ? Math.round((character.fuel ?? FUEL_MAX) * 100) / 100 : FUEL_MAX;
+  const currentFuel = character ? normalizeFuelAmount(character.fuel ?? FUEL_MAX) : FUEL_MAX;
   const cantinaMissions = dailyMissions;
 
   return {

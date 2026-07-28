@@ -1,4 +1,4 @@
-import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, getStatPointsForLevelRange } from "../shared/rewards.js";
+import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, getStatPointsForLevelRange, randomItem } from "../shared/rewards.js";
 import { ACHIEVEMENTS, evaluateUnlocked } from "../shared/achievements.js";
 import { createService, entities } from "../entities.js";
 import { db, nowIso, withTransactionAsync } from "../db.js";
@@ -623,13 +623,24 @@ export async function AdminModeration(user, body) {
   }
 
   if (action === "give_item") {
-    const { character_id, item } = body;
-    if (!item || !item.name || !item.type || !item.rarity) {
-      return { status: 400, body: { error: "item requires name, type, rarity" } };
-    }
+    const { character_id } = body;
     const ch = entities.Character.get(character_id);
     if (!ch) return { status: 404, body: { error: "Character not found" } };
+
+    // Prefer a full client item payload; otherwise roll server-side from type/rarity/level.
+    let item = body.item;
+    if (!item || !item.name || !item.type || !item.rarity) {
+      const type = item?.type || body.type;
+      const rarity = item?.rarity || body.rarity || "rare";
+      const level = Math.max(1, Number(item?.level_requirement || body.level || ch.level) || 1);
+      if (!type) {
+        return { status: 400, body: { error: "item requires name, type, rarity (or type + rarity to generate)" } };
+      }
+      item = randomItem(rarity, level, type);
+    }
+
     // Strip client-forged ids / ownership — grant always targets the chosen character.
+    // Admin grants ignore inventory cap (unlike mission/shop loot).
     const {
       id: _ignoreId,
       character_id: _ignoreChar,
@@ -643,33 +654,45 @@ export async function AdminModeration(user, body) {
     } = item;
     const created = entities.Item.create({
       ...safeItem,
-      owner_id: ch.created_by_id,
+      name: String(safeItem.name || "Granted Item").trim() || "Granted Item",
+      type: safeItem.type,
+      rarity: safeItem.rarity,
+      owner_id: ch.created_by_id || user.id,
       character_id: ch.id,
       created_by_id: user.id,
       created_by: user.email,
       is_equipped: false,
       locked: !!safeItem.locked,
     });
-    return { status: 200, body: { success: true, item: created, character_name: ch.name } };
+    return { status: 200, body: { success: true, item: created, character_name: ch.name, character_id: ch.id } };
   }
 
   if (action === "adjust_currency") {
     const { character_id, deltas } = body;
+    if (!deltas || typeof deltas !== "object") {
+      return { status: 400, body: { error: "deltas required" } };
+    }
     const ch = entities.Character.get(character_id);
     if (!ch) return { status: 404, body: { error: "Character not found" } };
     const patch = {};
-    if (deltas.stardust) {
-      patch.stardust = Math.max(0, (ch.stardust || 0) + deltas.stardust);
-      if (deltas.stardust > 0) patch.total_stardust_earned = (ch.total_stardust_earned || 0) + deltas.stardust;
+    if (deltas.stardust != null && deltas.stardust !== 0) {
+      patch.stardust = Math.max(0, (ch.stardust || 0) + Number(deltas.stardust));
+      if (deltas.stardust > 0) {
+        patch.total_stardust_earned = (ch.total_stardust_earned || 0) + Number(deltas.stardust);
+      }
     }
-    if (deltas.nova_crystals) patch.nova_crystals = Math.max(0, (ch.nova_crystals || 0) + deltas.nova_crystals);
-    if (deltas.fuel) patch.fuel = Math.max(0, Math.min(ch.max_fuel || 100, (ch.fuel || 0) + deltas.fuel));
-    if (deltas.arena_attempts) {
-      patch.arena_attempts_left = Math.max(0, (ch.arena_attempts_left || 0) + deltas.arena_attempts);
+    if (deltas.nova_crystals != null && deltas.nova_crystals !== 0) {
+      patch.nova_crystals = Math.max(0, (ch.nova_crystals || 0) + Number(deltas.nova_crystals));
+    }
+    if (deltas.fuel != null && deltas.fuel !== 0) {
+      patch.fuel = Math.max(0, Math.min(ch.max_fuel || 100, (ch.fuel || 0) + Number(deltas.fuel)));
+    }
+    if (deltas.arena_attempts != null && deltas.arena_attempts !== 0) {
+      patch.arena_attempts_left = Math.max(0, (ch.arena_attempts_left || 0) + Number(deltas.arena_attempts));
       patch.arena_attempts_date = todayET();
     }
-    if (deltas.experience) {
-      let newExp = (ch.experience || 0) + deltas.experience;
+    if (deltas.experience != null && deltas.experience !== 0) {
+      let newExp = (ch.experience || 0) + Number(deltas.experience);
       let newLevel = ch.level || 1;
       let expToNext = ch.experience_to_next_level || expForLevel(newLevel);
       const prevLevel = newLevel;
@@ -688,8 +711,11 @@ export async function AdminModeration(user, body) {
       patch.experience_to_next_level = expToNext;
       if (statPoints > 0) patch.unspent_stat_points = (ch.unspent_stat_points || 0) + statPoints;
     }
+    if (!Object.keys(patch).length) {
+      return { status: 400, body: { error: "No currency deltas provided" } };
+    }
     const updated = entities.Character.update(character_id, patch);
-    return { status: 200, body: { success: true, character: updated } };
+    return { status: 200, body: { success: true, character: updated, character_name: ch.name } };
   }
 
   if (action === "reset_player") {

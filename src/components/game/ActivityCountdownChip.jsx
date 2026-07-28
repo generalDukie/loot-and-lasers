@@ -26,7 +26,8 @@ export default function ActivityCountdownChip({ character }) {
   if (!character) return null;
 
   const miningEnd = character.mining_end_time ? new Date(character.mining_end_time).getTime() : 0;
-  const missionEnd = character.mission_end_time ? new Date(character.mission_end_time).getTime() : 0;
+  const hasActiveMission = Boolean(character.active_mission_id && character.mission_end_time);
+  const missionEnd = hasActiveMission ? new Date(character.mission_end_time).getTime() : 0;
 
   let active = null;
   if (miningEnd) {
@@ -40,17 +41,20 @@ export default function ActivityCountdownChip({ character }) {
       complete: remaining <= 0,
       label: remaining <= 0 ? "Mining Complete" : "Mining in Progress",
     };
-  } else if (missionEnd) {
+  } else if (hasActiveMission) {
     const remaining = missionEnd - now;
-    active = {
-      icon: Rocket,
-      color: "#00E5FF",
-      soft: "rgba(0,229,255,0.14)",
-      to: "/missions",
-      remaining,
-      complete: remaining <= 0,
-      label: remaining <= 0 ? "Mission Complete" : "Mission in Progress",
-    };
+    // Banner CTA only when the mission timer is done — not during the run.
+    if (remaining <= 0) {
+      active = {
+        icon: Rocket,
+        color: "#22C55E",
+        soft: "rgba(34,197,94,0.14)",
+        to: "/missions",
+        remaining,
+        complete: true,
+        label: "Mission Complete",
+      };
+    }
   }
   if (!active) return null;
 

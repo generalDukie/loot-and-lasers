@@ -15,33 +15,46 @@ export default function ItemGrantForm({ character, onAction, onGranted }) {
   const [custom, setCustom] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customStats, setCustomStats] = useState({ strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 });
+  const [busy, setBusy] = useState(false);
 
   async function grantGear() {
-    let item;
-    if (custom) {
-      item = {
-        name: customName.trim() || `${rarity} ${type}`,
-        type,
-        rarity,
-        level_requirement: Math.max(1, level),
-        stats: Object.fromEntries(Object.entries(customStats).filter(([, v]) => v && v !== 0)),
-        flavor_text: "Admin-crafted gear.",
-        sell_value: Math.max(10, level * 20),
-        is_equipped: false,
-        ...(type === "weapon" ? { emoji: weaponEmojiFor(customName.trim() || `${rarity} ${type}`) } : {}),
-      };
-    } else {
-      item = generateItem(rarity, Math.max(1, level), type);
+    if (!character?.id || busy) return;
+    setBusy(true);
+    try {
+      let item;
+      if (custom) {
+        item = {
+          name: customName.trim() || `${rarity} ${type}`,
+          type,
+          rarity,
+          level_requirement: Math.max(1, level),
+          stats: Object.fromEntries(Object.entries(customStats).filter(([, v]) => v && v !== 0)),
+          flavor_text: "Admin-crafted gear.",
+          sell_value: Math.max(10, level * 20),
+          is_equipped: false,
+          ...(type === "weapon" ? { emoji: weaponEmojiFor(customName.trim() || `${rarity} ${type}`) } : {}),
+        };
+      } else {
+        item = generateItem(rarity, Math.max(1, level), type);
+      }
+      const res = await onAction({ action: "give_item", character_id: character.id, item });
+      if (res?.item) onGranted?.(res.item);
+    } finally {
+      setBusy(false);
     }
-    const res = await onAction({ action: "give_item", character_id: character.id, item });
-    if (res?.item) onGranted?.(res.item);
   }
   async function grantConsumable() {
+    if (!character?.id || busy) return;
     const def = CONSUMABLES[consumableIdx];
     if (!def) return;
-    const item = consumableItem(def);
-    const res = await onAction({ action: "give_item", character_id: character.id, item });
-    if (res?.item) onGranted?.(res.item);
+    setBusy(true);
+    try {
+      const item = consumableItem(def);
+      const res = await onAction({ action: "give_item", character_id: character.id, item });
+      if (res?.item) onGranted?.(res.item);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -77,14 +90,31 @@ export default function ItemGrantForm({ character, onAction, onGranted }) {
               </div>
             </div>
           )}
-          <button onClick={grantGear} className="w-full painted-btn text-xs py-1.5 rounded-lg flex items-center justify-center gap-1.5"><Gift className="w-3.5 h-3.5" />Grant Gear</button>
+          <p className="text-[10px] text-muted-foreground text-center">
+            Granting to <span className="text-foreground font-semibold">{character.name}</span>
+          </p>
+          <button
+            type="button"
+            onClick={grantGear}
+            disabled={busy}
+            className="w-full painted-btn text-xs py-1.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            <Gift className="w-3.5 h-3.5" />{busy ? "Granting…" : "Grant Gear"}
+          </button>
         </>
       ) : (
         <>
           <select value={consumableIdx} onChange={(e) => setConsumableIdx(+e.target.value)} className="w-full bg-muted/40 border border-border/40 rounded px-2 py-1.5 text-xs">
             {CONSUMABLES.map((c, i) => <option key={i} value={i}>{c.name}</option>)}
           </select>
-          <button onClick={grantConsumable} className="w-full painted-btn painted-btn-accent text-xs py-1.5 rounded-lg flex items-center justify-center gap-1.5"><FlaskConical className="w-3.5 h-3.5" />Spawn Consumable</button>
+          <button
+            type="button"
+            onClick={grantConsumable}
+            disabled={busy}
+            className="w-full painted-btn painted-btn-accent text-xs py-1.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            <FlaskConical className="w-3.5 h-3.5" />{busy ? "Spawning…" : "Spawn Consumable"}
+          </button>
         </>
       )}
     </div>

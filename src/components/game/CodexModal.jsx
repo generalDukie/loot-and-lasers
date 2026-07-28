@@ -120,7 +120,7 @@ function renderSection(id) {
           <ul className="space-y-1.5">
             <Li>Both stalls refresh every <b>6 hours</b>. Spend <b>{SHOP_REFRESH_COST} Nova Crystals</b> to restock a stall early.</Li>
             <Li>Compare listed gear to what you have equipped before buying.</Li>
-            <Li><b>Haggle</b> on armory pieces — about 40% of the time you get 10% off; if it fails, they yank the listing (no purchase).</Li>
+            <Li><b>Haggle</b> on armory pieces — about 40% of the time you get 15–20% off; if it fails, they yank the listing (no purchase).</Li>
             <Li>Rare <b>Scrap Crates</b> (2 commons) and <b>Stim Trios</b> show up as bundle deals.</Li>
           </ul>
           <H>Hot Deal</H>

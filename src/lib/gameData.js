@@ -613,11 +613,13 @@ export function getVendorLine(seed = 0) {
   return VENDOR_LINES[i];
 }
 
-/** Haggle: ~40% buy at 10% off; otherwise listing is yanked (no purchase). */
+/** Haggle: ~40% buy at 15–20% off; otherwise listing is yanked (no purchase). */
 export function rollHaggle(rng = Math.random) {
-  const roll = typeof rng === "function" ? rng() : Math.random();
-  if (roll < 0.4) {
-    return { ok: true, mult: 0.9, key: "deal", label: "They blinked — 10% off" };
+  const r = typeof rng === "function" ? rng : Math.random;
+  if (r() < 0.4) {
+    const pct = 15 + Math.floor(r() * 6); // 15–20 inclusive
+    const mult = 1 - pct / 100;
+    return { ok: true, mult, key: "deal", pct, label: `They blinked — ${pct}% off` };
   }
   return {
     ok: false,

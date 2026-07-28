@@ -205,10 +205,10 @@ export default function ShopPage() {
       });
       return;
     }
-    if (haggle && (character.stardust || 0) < Math.ceil(previewCost * 0.9)) {
+    if (haggle && (character.stardust || 0) < Math.ceil(previewCost * 0.85)) {
       toast({
         title: "Not enough stardust to haggle",
-        description: `Need ${Math.ceil(previewCost * 0.9)} ✨ if the deal lands.`,
+        description: `Need ${Math.ceil(previewCost * 0.85)} ✨ if the deal lands.`,
         variant: "destructive",
       });
       return;
@@ -373,7 +373,7 @@ export default function ShopPage() {
     const wasYanked = isHot ? hotYanked : !!yanked[slot._slotId];
     const owned = isHot ? (hotSold || hotYanked) : !!(purchased[slot._slotId] || yanked[slot._slotId]);
     const affordable = (character.stardust || 0) >= slot.cost && (!slot.nova_cost || (character.nova_crystals || 0) >= slot.nova_cost);
-    const canHaggleAfford = (character.stardust || 0) >= Math.ceil(slot.cost * 0.9);
+    const canHaggleAfford = (character.stardust || 0) >= Math.ceil(slot.cost * 0.85);
     const goneLabel = wasYanked ? "Yanked" : "Sold";
     return (
       <div className="mt-auto flex items-end justify-between gap-2 pt-1">
@@ -395,7 +395,7 @@ export default function ShopPage() {
               type="button"
               onClick={() => purchaseGearSlot(slot, { haggle: true, isHot })}
               disabled={!canHaggleAfford || busySlot === slot._slotId}
-              title="~40% chance −10% off; otherwise they yank the listing"
+              title="~40% chance 15–20% off; otherwise they yank the listing"
               className="text-[10px] px-2 py-1.5 rounded-lg font-display font-semibold tracking-wide border border-fuchsia-400/35 text-fuchsia-300 hover:bg-fuchsia-500/15 disabled:opacity-40"
             >
               Haggle

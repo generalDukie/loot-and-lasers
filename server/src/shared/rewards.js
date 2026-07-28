@@ -59,6 +59,7 @@ function lerpWaypoints(level, points) {
   return yB + slope * (L - xB);
 }
 
+/** XP to next: waypoint chart through 500, then closed-form forever. */
 const XP_TO_NEXT_WAYPOINTS = [
   [1, 40], [5, 50], [10, 120], [15, 150], [25, 335],
   [50, 1135], [75, 1810], [100, 2590], [150, 4460],
@@ -66,18 +67,34 @@ const XP_TO_NEXT_WAYPOINTS = [
   [400, 159000], [450, 190000], [500, 228000],
 ];
 
+export function expForLevel(level) {
+  const L = Math.max(1, Math.floor(level || 1));
+  if (L <= 500) {
+    return Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
+  }
+  return Math.max(1, Math.round(2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
+}
+
 const MISSION_XP_PER_FUEL_WAYPOINTS = [
   [1, 10], [10, 16], [25, 29], [50, 57], [75, 90], [100, 130],
   [150, 223], [200, 334], [250, 461], [300, 603], [350, 758],
   [400, 927], [450, 1108], [500, 1301],
 ];
 
-export function expForLevel(level) {
-  return Math.max(1, Math.round(lerpWaypoints(level, XP_TO_NEXT_WAYPOINTS)));
-}
+const MISSION_SD_PER_FUEL_WAYPOINTS = [
+  [1, 4], [5, 5], [10, 8], [15, 12], [20, 18], [25, 25],
+  [50, 60], [75, 120], [100, 225], [150, 600], [200, 1500],
+  [250, 3500], [300, 7500], [325, 10135], [350, 13693],
+  [375, 18502], [400, 25000], [425, 31746], [450, 40311],
+  [475, 51188], [500, 65000],
+];
 
 export function getMissionXpPerFuel(level = 1) {
   return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS)));
+}
+
+export function getMissionStardustPerFuel(level = 1) {
+  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS)));
 }
 
 /** Scale flat XP grants (dailies/promos) with the XP/fuel chart. */
@@ -88,20 +105,12 @@ export function scaleXpReward(baseXp, level = 1) {
   return Math.max(base > 0 ? 1 : 0, Math.round(base * (rate / atOne)));
 }
 
-export function getStatPointsForLevel(level) {
-  const L = Math.max(1, level || 1);
-  if (L <= 50) return 4;
-  if (L <= 100) return 3;
-  if (L <= 200) return 2;
-  return 1;
+export function getStatPointsForLevel(_level) {
+  return 0;
 }
 
-export function getStatPointsForLevelRange(fromLevel, toLevel) {
-  const from = Math.max(1, fromLevel || 1);
-  const to = Math.max(from, toLevel || from);
-  let pts = 0;
-  for (let L = from + 1; L <= to; L++) pts += getStatPointsForLevel(L);
-  return pts;
+export function getStatPointsForLevelRange(_fromLevel, _toLevel) {
+  return 0;
 }
 
 export async function applyCharacterRewards(gameService, characterId, rewards) {

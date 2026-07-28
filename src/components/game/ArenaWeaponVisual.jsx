@@ -10,6 +10,7 @@ const CLASS_FALLBACK = {
   "Shadow Operative": { type: "stab",  color: "#A78BFA", emoji: "🗡️" },
   Technomancer:       { type: "shoot", color: "#60A5FA", emoji: "🔮" },
   "Astral Warden":    { type: "shoot", color: "#FBBF24", emoji: "✨" },
+  "Void Runner":      { type: "stab",  color: "#22D3EE", emoji: "☄️" },
   "Cosmic Engineer":  { type: "shoot", color: "#4ADE80", emoji: "💥" },
 };
 

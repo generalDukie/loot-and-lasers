@@ -10,9 +10,9 @@ import { ArenaBackdrop, ArenaFloor } from "@/components/game/ArenaBackdrop";
 import ArenaWeaponVisual from "@/components/game/ArenaWeaponVisual";
 
 const STAT_COLORS = { STR: "#F87171", AGI: "#4ADE80", INT: "#60A5FA", VIT: "#FBBF24", LUK: "#C084FC" };
-const MOD_COLORS = { dmg: "#F87171", armor: "#FBBF24", crit: "#C084FC", dodge: "#4ADE80" };
+const MOD_COLORS = { dmg: "#F87171", armor: "#FBBF24", tech: "#38BDF8", crit: "#C084FC", dodge: "#4ADE80" };
 // DMG is driven by each class's primary stat (Technomancer/Cosmic Engineer → Intellect,
-// Shadow Operative → Agility, Astral Warden → Vitality, Vanguard → Strength), so the
+// Shadow Operative/Void Runner → Agility, Vanguard/Astral Warden → Strength), so the
 // DMG readout is colored to match whichever stat it actually scales from.
 const PRIMARY_STAT_COLOR = { strength: "#F87171", agility: "#4ADE80", intellect: "#60A5FA", vitality: "#FBBF24", luck: "#C084FC" };
 
@@ -20,7 +20,16 @@ function computeDisplayStats(entity) {
   const totalStats = computeTotalStats(entity, []);
   const cls = CLASSES[entity.class] || CLASSES.Vanguard;
   const d = computeDerivedStats(totalStats, entity);
-  return { totalStats, dmg: d.damage, armor: d.armor, crit: d.critChance, dodge: d.dodgeChance, primaryStat: d.primaryStat, classEmoji: cls.emoji };
+  return {
+    totalStats,
+    dmg: d.damage,
+    armor: d.armor,
+    techResist: d.techResist,
+    crit: d.critChance,
+    dodge: d.dodgeChance,
+    primaryStat: d.primaryStat,
+    classEmoji: cls.emoji,
+  };
 }
 
 // Per-event pacing: quiet turns (regen/dodge) resolve fast, big hits (crit/ability/drone) linger.
@@ -82,7 +91,7 @@ function HpBar({ name, hp, max, color, align, emoji }) {
 
 function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent, evIdx, big, weaponItem }) {
   const dir = side === "player" ? 1 : -1;
-  const { totalStats, dmg, armor, crit, dodge, primaryStat, classEmoji } = computeDisplayStats(entity);
+  const { totalStats, dmg, armor, techResist, crit, dodge, primaryStat, classEmoji } = computeDisplayStats(entity);
   const dmgColor = PRIMARY_STAT_COLOR[primaryStat] || MOD_COLORS.dmg;
   return (
     <div className="flex flex-col items-center" style={{ width: 248 }}>
@@ -177,11 +186,43 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
         <div className="flex flex-col gap-0.5 text-sm font-display font-bold w-max whitespace-nowrap">
           {(() => {
             const lines = {
-              strength: <span key="str"><span style={{ color: STAT_COLORS.STR }}>STR {totalStats.strength || 0}</span>{primaryStat === "strength" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}</span>,
-              agility: <span key="agi"><span style={{ color: STAT_COLORS.AGI }}>AGI {totalStats.agility || 0}</span> <span style={{ color: MOD_COLORS.dodge }}>· DODGE {dodge}%</span>{primaryStat === "agility" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}</span>,
-              intellect: <span key="int"><span style={{ color: STAT_COLORS.INT }}>INT {totalStats.intellect || 0}</span>{primaryStat === "intellect" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}</span>,
-              vitality: <span key="vit"><span style={{ color: STAT_COLORS.VIT }}>VIT {totalStats.vitality || 0}</span> <span style={{ color: MOD_COLORS.armor }}>· ARM {armor}%</span>{primaryStat === "vitality" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}</span>,
-              luck: <span key="luk"><span style={{ color: STAT_COLORS.LUK }}>LUK {totalStats.luck || 0}</span> <span style={{ color: MOD_COLORS.crit }}>· CRIT {crit}%</span></span>,
+              strength: (
+                <span key="str">
+                  <span style={{ color: STAT_COLORS.STR }}>STR {totalStats.strength || 0}</span>
+                  {primaryStat === "strength" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}
+                  {primaryStat !== "strength" && armor > 0 && (
+                    <span style={{ color: MOD_COLORS.armor }}> · ARM {armor}%</span>
+                  )}
+                </span>
+              ),
+              agility: (
+                <span key="agi">
+                  <span style={{ color: STAT_COLORS.AGI }}>AGI {totalStats.agility || 0}</span>
+                  <span style={{ color: MOD_COLORS.dodge }}> · DODGE {dodge}%</span>
+                  {primaryStat === "agility" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}
+                </span>
+              ),
+              intellect: (
+                <span key="int">
+                  <span style={{ color: STAT_COLORS.INT }}>INT {totalStats.intellect || 0}</span>
+                  {primaryStat === "intellect" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}
+                  {primaryStat !== "intellect" && techResist > 0 && (
+                    <span style={{ color: MOD_COLORS.tech }}> · TECH {techResist}%</span>
+                  )}
+                </span>
+              ),
+              vitality: (
+                <span key="vit">
+                  <span style={{ color: STAT_COLORS.VIT }}>VIT {totalStats.vitality || 0}</span>
+                  {primaryStat === "vitality" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}
+                </span>
+              ),
+              luck: (
+                <span key="luk">
+                  <span style={{ color: STAT_COLORS.LUK }}>LUK {totalStats.luck || 0}</span>
+                  <span style={{ color: MOD_COLORS.crit }}> · CRIT {crit}%</span>
+                </span>
+              ),
             };
             // Agility-based damage classes (Shadow Operative) show their DMG
             // line first so the damage readout leads the stat block in combat.

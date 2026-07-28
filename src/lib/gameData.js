@@ -105,15 +105,29 @@ export const CLASSES = {
   "Astral Warden": {
     name: "Astral Warden",
     emoji: "🛡️",
-    tagline: "Extremely durable survivor with shields and regeneration",
-    description: "Not a healer — a survivor. Astral Wardens are nigh-impossible to kill, layering shields, regeneration, and damage reduction to simply refuse to die.",
-    primaryStat: "vitality",
-    secondaryStat: "intellect",
-    baseStats: { strength: 8, agility: 6, intellect: 10, vitality: 14, luck: 2 },
+    tagline: "Strength-fueled survivor with shields and regeneration",
+    description: "Not a healer — a survivor. Astral Wardens smash through fights with raw strength while layering shields and regeneration to simply refuse to die.",
+    primaryStat: "strength",
+    secondaryStat: "vitality",
+    baseStats: { strength: 13, agility: 6, intellect: 7, vitality: 12, luck: 2 },
     special: {
       name: "Cosmic Barrier",
       effect: "Begins every battle with a shield equal to 20% of max Health. Regenerates 2% of max Health at the start of every turn. Shield cannot be restored once broken.",
       identity: "The class that simply refuses to die.",
+    },
+  },
+  "Void Runner": {
+    name: "Void Runner",
+    emoji: "☄️",
+    tagline: "Blazing agility — strikes come in pairs",
+    description: "Born in the slipstreams between stars, Void Runners fight at a tempo others can't match. They weave, feint, and land a twin strike before the enemy finishes blinking.",
+    primaryStat: "agility",
+    secondaryStat: "luck",
+    baseStats: { strength: 6, agility: 14, intellect: 7, vitality: 6, luck: 7 },
+    special: {
+      name: "Twin Fang",
+      effect: "Every 3rd attack hits twice — each strike deals 70% weapon damage.",
+      identity: "Speed kills. Twice.",
     },
   },
   "Cosmic Engineer": {
@@ -195,6 +209,7 @@ export const CLASS_WEAPONS = {
   "Shadow Operative": { name: "Shadowstrike Silencer",  emoji: "🗡️", style: "stab",  flavor: "A suppressed blade that finds the gaps in any defense." },
   Technomancer:       { name: "Arcane Pulse Caster",     emoji: "🔮", style: "shoot", flavor: "Channels raw psionic energy into devastating energy bolts." },
   "Astral Warden":    { name: "Cosmic Aegis Blaster",   emoji: "✨", style: "shoot", flavor: "Radiates protective starlight with every shot." },
+  "Void Runner":      { name: "Slipstream Needles",    emoji: "☄️", style: "stab",  flavor: "Twin monofilament blades that strike before the echo arrives." },
   "Cosmic Engineer":  { name: "Plasma Multi-Cannon",    emoji: "💥", style: "shoot", flavor: "Jury-rigged to fire everything from drones to EMPs." },
 };
 
@@ -429,28 +444,75 @@ export function generateItem(rarity, playerLevel, type) {
 }
 
 // ═══════════════════════════════════════════
-// ATTRIBUTE POINTS
+// ATTRIBUTE POINTS — bought with Stardust (unlimited)
+// Free level-up points removed; each permanent +1 costs escalating SD.
 // ═══════════════════════════════════════════
-export const STAT_POINTS_START = 10;
-/** @deprecated Prefer getStatPointsForLevel — kept for older call sites. */
-export const STAT_POINTS_PER_LEVEL = 4;
+export const STAT_POINTS_START = 0;
+/** @deprecated Attributes are purchased with Stardust — level-ups grant 0. */
+export const STAT_POINTS_PER_LEVEL = 0;
 
-/** Stat points granted when reaching `level` (level-up into this level). */
-export function getStatPointsForLevel(level) {
-  const L = Math.max(1, level || 1);
-  if (L <= 50) return 4;
-  if (L <= 100) return 3;
-  if (L <= 200) return 2;
-  return 1;
+/** Design chart waypoints (1-indexed purchase → Stardust cost). */
+const ATTR_PURCHASE_COST_WAYPOINTS = [
+  [1, 10],
+  [10, 15],
+  [20, 25],
+  [30, 40],
+  [40, 65],
+  [50, 100],
+  [75, 225],
+  [100, 500],
+  [150, 1_500],
+  [200, 4_000],
+  [300, 20_000],
+  [400, 75_000],
+  [500, 225_000],
+  [600, 600_000],
+  [650, 1_000_000],
+];
+
+/**
+ * Stardust cost for purchase number `n` (1 = first bought point).
+ * Charted range uses waypoints; beyond 650: Cost(n) = ROUND(10 * (1 + (n-1)/97.54)^5.657).
+ */
+export function getAttributePointCost(purchaseNumber) {
+  const n = Math.max(1, Math.floor(purchaseNumber || 1));
+  if (n <= 650) {
+    return Math.max(1, Math.round(lerpWaypoints(n, ATTR_PURCHASE_COST_WAYPOINTS)));
+  }
+  return Math.max(1, Math.round(10 * (1 + (n - 1) / 97.54) ** 5.657));
 }
 
-/** Total unspent points to award when leveling from `fromLevel` → `toLevel`. */
-export function getStatPointsForLevelRange(fromLevel, toLevel) {
-  const from = Math.max(1, fromLevel || 1);
-  const to = Math.max(from, toLevel || from);
-  let pts = 0;
-  for (let L = from + 1; L <= to; L++) pts += getStatPointsForLevel(L);
-  return pts;
+/**
+ * How many attribute points this character has already bought.
+ * Prefers `attribute_purchases`; migrates from stats vs class base if missing.
+ */
+export function getAttributePurchaseCount(character) {
+  if (!character) return 0;
+  if (typeof character.attribute_purchases === "number" && Number.isFinite(character.attribute_purchases)) {
+    return Math.max(0, Math.floor(character.attribute_purchases));
+  }
+  const base = CLASSES[character.class]?.baseStats || {};
+  const stats = character.stats || {};
+  let bought = 0;
+  for (const k of ["strength", "agility", "intellect", "vitality", "luck"]) {
+    bought += Math.max(0, (stats[k] || 0) - (base[k] || 0));
+  }
+  return bought;
+}
+
+/** Cost of the next +1 attribute (what the player pays now). */
+export function getNextAttributePointCost(character) {
+  return getAttributePointCost(getAttributePurchaseCount(character) + 1);
+}
+
+/** Level-ups no longer grant free attribute points (Stardust sink instead). */
+export function getStatPointsForLevel(_level) {
+  return 0;
+}
+
+/** @deprecated Always 0 — kept so level-up call sites stay stable. */
+export function getStatPointsForLevelRange(_fromLevel, _toLevel) {
+  return 0;
 }
 
 // ═══════════════════════════════════════════
@@ -620,8 +682,13 @@ function lerpWaypoints(level, points) {
   return yB + slope * (L - xB);
 }
 
-// Design chart: XP needed for current level → next.
-// Target pacing: 1→50 ~3d, 50→100 ~1wk, 100→200 ~2wk, then progressively slower.
+/**
+ * XP needed to advance from level L → L+1.
+ * Uses the design waypoint chart through 500 (matches published table),
+ * then the closed form forever after:
+ *   ROUND(2.106 × L^1.532 × (1 + (L/266)^3.683))
+ * Pacing: 1→50 ~3d, 50→100 ~1wk, 100→200 ~2wk, then progressively slower.
+ */
 const XP_TO_NEXT_WAYPOINTS = [
   [1, 40],
   [5, 50],
@@ -641,6 +708,14 @@ const XP_TO_NEXT_WAYPOINTS = [
   [500, 228000],
 ];
 
+export function getExpForLevel(level) {
+  const L = Math.max(1, Math.floor(level || 1));
+  if (L <= 500) {
+    return Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
+  }
+  return Math.max(1, Math.round(2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
+}
+
 // Design chart: mission XP granted per 1 fuel spent.
 const MISSION_XP_PER_FUEL_WAYPOINTS = [
   [1, 10],
@@ -659,12 +734,31 @@ const MISSION_XP_PER_FUEL_WAYPOINTS = [
   [500, 1301],
 ];
 
-// Stardust per fuel (SD/F) — parallel to XP/fuel, ~1.5× for currency weight.
-const MISSION_SD_PER_FUEL_WAYPOINTS = MISSION_XP_PER_FUEL_WAYPOINTS.map(([lvl, xp]) => [lvl, Math.round(xp * 1.5)]);
-
-export function getExpForLevel(level) {
-  return Math.max(1, Math.round(lerpWaypoints(level, XP_TO_NEXT_WAYPOINTS)));
-}
+// Design chart: stardust per 1 fuel (SD/F) — independent of XP/fuel.
+// L1–300 from mission chart; L300–500 from arena/economy high-band chart.
+const MISSION_SD_PER_FUEL_WAYPOINTS = [
+  [1, 4],
+  [5, 5],
+  [10, 8],
+  [15, 12],
+  [20, 18],
+  [25, 25],
+  [50, 60],
+  [75, 120],
+  [100, 225],
+  [150, 600],
+  [200, 1_500],
+  [250, 3_500],
+  [300, 7_500],
+  [325, 10_135],
+  [350, 13_693],
+  [375, 18_502],
+  [400, 25_000],
+  [425, 31_746],
+  [450, 40_311],
+  [475, 51_188],
+  [500, 65_000],
+];
 
 /** Mission XP per 1 fuel at this level (design chart). */
 export function getMissionXpPerFuel(level = 1) {
@@ -674,6 +768,16 @@ export function getMissionXpPerFuel(level = 1) {
 /** Mission stardust per 1 fuel at this level (SD/F). */
 export function getMissionStardustPerFuel(level = 1) {
   return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS)));
+}
+
+/** Arena win Stardust = SD/F(playerLevel) × 5/3 (≈1.667). */
+export function getArenaStardustReward(level = 1) {
+  return Math.max(1, Math.round((getMissionStardustPerFuel(level) * 5) / 3));
+}
+
+/** Arena win XP = XP/F(playerLevel) × 5/7 (≈0.714). */
+export function getArenaXpReward(level = 1) {
+  return Math.max(1, Math.round((getMissionXpPerFuel(level) * 5) / 7));
 }
 
 /** Per-mission efficiency roll — 0.90 to 1.10 inclusive-ish. */
@@ -1082,42 +1186,38 @@ export function gearTypeLabel(type) {
 }
 
 export const STAT_DESCRIPTIONS = {
-  strength: "+1 Physical Damage per point",
-  agility: "+0.3% Dodge per point (cap 40%)",
-  intellect: "+1 Tech Damage per point",
-  vitality: "+8 HP & +0.5% Armor per point",
+  strength: "Damage (STR class) or Armor vs physical (other classes)",
+  agility: "Dodge for all · Damage for AGI classes (slightly lower)",
+  intellect: "Damage (INT class) or Tech Resist vs tech (other classes)",
+  vitality: "+8 HP per point",
   luck: "+0.3% Crit Chance per point (cap 35%)",
 };
 
-// Class-aware stat description: only the class primary stat scales attack damage.
-// Off-stat Strength/Intellect must not imply physical/tech damage for the wrong class.
+// Class-aware attribute roles (STR / AGI / INT mapping).
 export function getStatDescription(stat, className) {
   const cls = className ? CLASSES[className] : null;
   const isPrimary = stat === cls?.primaryStat;
+  const primary = cls?.primaryStat;
 
   switch (stat) {
     case "luck":
       return "+0.3% Crit Chance per point (cap 35%)";
     case "agility":
       return isPrimary
-        ? "Scales your attack damage · +0.3% Dodge/pt (cap 40%)"
+        ? "Scales your attack damage (slightly lower rate) · +0.3% Dodge/pt (cap 40%)"
         : "+0.3% Dodge per point (cap 40%)";
     case "vitality":
-      if (isPrimary) {
-        const dmg = className === "Astral Warden"
-          ? "Scales attack damage (reduced rate)"
-          : "Scales your attack damage";
-        return `${dmg} · +8 HP & +0.5% Armor/pt`;
-      }
-      return "+8 HP & +0.5% Armor per point";
+      return isPrimary
+        ? "Scales attack damage · +8 HP/pt"
+        : "+8 HP per point";
     case "strength":
-      return isPrimary
-        ? "Scales physical attack damage (+1/pt)"
-        : "Does not scale your attacks — minor combat power only";
+      if (isPrimary) return "Scales physical attack damage (+1/pt)";
+      if (primary === "strength") return "Already your damage stat — no armor from Strength";
+      return "+0.5% Armor per point vs physical (STR-class) damage (cap 50%)";
     case "intellect":
-      return isPrimary
-        ? "Scales tech attack damage (+1/pt)"
-        : "Does not scale your attacks — minor combat power only";
+      if (isPrimary) return "Scales tech attack damage (+1/pt)";
+      if (primary === "intellect") return "Already your damage stat — no tech resist from Intellect";
+      return "+0.5% Tech Resist per point vs tech (INT-class) damage (cap 50%)";
     default:
       return STAT_DESCRIPTIONS[stat] || "";
   }

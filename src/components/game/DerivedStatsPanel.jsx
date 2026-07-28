@@ -1,11 +1,12 @@
 import React from "react";
-import { Heart, Swords, Shield, Zap, Wind, ShieldCheck, FlaskConical } from "lucide-react";
+import { Heart, Swords, Shield, Zap, Wind, ShieldCheck, Cpu, FlaskConical } from "lucide-react";
 import {
   computeDerivedStats,
   CLASS_ATK_MULT,
   CRIT_CAP,
   DODGE_CAP,
   ARMOR_CAP,
+  TECH_RESIST_CAP,
 } from "@/lib/statEngine";
 import { getActiveBuffs } from "@/lib/gameData";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
@@ -19,6 +20,7 @@ const DEFENSIVE = [
   { key: "health",      label: "Max Health",        icon: Heart,       color: "#FB7185", fmt: (v) => v },
   { key: "dodgeChance", label: "Dodge Chance",      icon: Wind,        color: "#34D399", fmt: (v) => `${v}%` },
   { key: "armor",       label: "Armor",             icon: ShieldCheck, color: "#A78BFA", fmt: (v) => `${v}%` },
+  { key: "techResist",  label: "Tech Resist",       icon: Cpu,         color: "#38BDF8", fmt: (v) => `${v}%` },
 ];
 
 function statTooltip(key, d, totalStats, character) {
@@ -32,12 +34,15 @@ function statTooltip(key, d, totalStats, character) {
       const base = Math.round(statVal * 2 * atkMult);
       const lvlBonus = level * 3;
       const multPart = atkMult !== 1 ? ` × ${atkMult}` : "";
-      const note = atkMult !== 1 ? " (Astral Warden trades raw offense for durability)" : "";
+      const note =
+        atkMult === 0.9
+          ? " (AGI damage is slightly lower)"
+          : "";
       return `${stat.toUpperCase()} ${statVal} × 2${multPart} + Lv${level} × 3\n= ${base} + ${lvlBonus} = ${d.damage}${note}`;
     }
     case "critChance": {
       const luk = s("luck");
-      return `5% base + ${luk} LUK × 0.5%\n= ${(5 + luk * 0.5).toFixed(1)}% (cap ${CRIT_CAP}%)\nCrits deal 2× damage`;
+      return `3% base + ${luk} LUK × 0.3%\n= ${(3 + luk * 0.3).toFixed(1)}% (cap ${CRIT_CAP}%)\nCrits deal 2× damage`;
     }
     case "health": {
       const vit = s("vitality");
@@ -48,8 +53,18 @@ function statTooltip(key, d, totalStats, character) {
       return `5% base + ${agi} AGI × 0.3%\n= ${(5 + agi * 0.3).toFixed(1)}% (cap ${DODGE_CAP}%)`;
     }
     case "armor": {
-      const vit = s("vitality");
-      return `${vit} VIT × 0.5%\n= ${(vit * 0.5).toFixed(1)}% (cap ${ARMOR_CAP}%)\nFlat damage reduction per hit`;
+      if (d.archetype === "str") {
+        return `STR classes convert Strength into damage,\nnot armor. Invest in AGI / INT for defenses.`;
+      }
+      const str = s("strength");
+      return `${str} STR × 0.5%\n= ${(str * 0.5).toFixed(1)}% (cap ${ARMOR_CAP}%)\nReduces physical (STR-class) damage`;
+    }
+    case "techResist": {
+      if (d.archetype === "int") {
+        return `INT classes convert Intellect into damage,\nnot tech resist. Invest in STR / AGI for defenses.`;
+      }
+      const intel = s("intellect");
+      return `${intel} INT × 0.5%\n= ${(intel * 0.5).toFixed(1)}% (cap ${TECH_RESIST_CAP}%)\nReduces tech (INT-class) damage`;
     }
     default:
       return "";
@@ -82,7 +97,7 @@ function StatCell({ label, icon: Icon, color, value, fmt, tooltip, boost, compac
           >
             <Icon className={compact ? "w-3 h-3" : "w-4 h-4"} style={{ color }} />
           </div>
-          <div className="min-w-0">
+          <div className="min-h-0 min-w-0">
             <p className="text-[8px] text-muted-foreground uppercase tracking-wide truncate leading-none">{label}</p>
             <p className={`font-display font-bold truncate leading-tight ${compact ? "text-[11px] mt-0.5" : "text-sm"}`} style={{ color }}>
               {fmt(value)}

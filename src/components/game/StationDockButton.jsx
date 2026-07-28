@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Compact hub dock tile — equal-width, icon + label, optional hover destinations.
+// All tiles share the same “featured” Cantina treatment (strong border + glow).
 export default function StationDockButton({
   icon,
   label,
@@ -10,7 +11,6 @@ export default function StationDockButton({
   to,
   options = [],
   delay = 0,
-  featured = false,
 }) {
   const [open, setOpen] = useState(false);
   const destinations = options.length ? options : to ? [{ label, icon, to, color }] : [];
@@ -30,18 +30,12 @@ export default function StationDockButton({
     >
       <Link to={primary.to} className="group block focus:outline-none h-full">
         <div
-          className={`relative h-full rounded-xl overflow-hidden border backdrop-blur-md transition-transform duration-150 group-hover:-translate-y-0.5 group-active:scale-[0.98] ${
-            featured ? "border-2" : "border"
-          }`}
+          className="relative h-full rounded-xl overflow-hidden border-2 backdrop-blur-md transition-transform duration-150 group-hover:-translate-y-0.5 group-active:scale-[0.98]"
           style={{
-            borderColor: featured ? color : `${color}66`,
-            background: `linear-gradient(180deg, ${color}${featured ? "28" : "18"}, hsl(232 30% 6% / 0.9))`,
-            boxShadow: featured
-              ? `0 4px 18px hsl(232 40% 2% / 0.55), 0 0 16px ${color}33`
-              : `0 3px 12px hsl(232 40% 2% / 0.45), 0 0 8px ${color}18`,
-            padding: featured
-              ? "clamp(0.55rem, 0.9vw, 0.9rem) clamp(0.35rem, 0.6vw, 0.6rem)"
-              : "clamp(0.45rem, 0.75vw, 0.75rem) clamp(0.25rem, 0.5vw, 0.5rem)",
+            borderColor: color,
+            background: `linear-gradient(180deg, ${color}28, hsl(232 30% 6% / 0.9))`,
+            boxShadow: `0 4px 18px hsl(232 40% 2% / 0.55), 0 0 16px ${color}33`,
+            padding: "clamp(0.55rem, 0.9vw, 0.9rem) clamp(0.35rem, 0.6vw, 0.6rem)",
           }}
         >
           <div
@@ -52,7 +46,7 @@ export default function StationDockButton({
             <span
               className="leading-none"
               style={{
-                fontSize: featured ? "clamp(1.25rem, 2vw, 1.85rem)" : "clamp(1.1rem, 1.7vw, 1.6rem)",
+                fontSize: "clamp(1.25rem, 2vw, 1.85rem)",
                 filter: `drop-shadow(0 0 6px ${color}55)`,
               }}
             >
@@ -62,7 +56,7 @@ export default function StationDockButton({
               className="font-display font-bold tracking-wide leading-tight line-clamp-2"
               style={{
                 color,
-                fontSize: featured ? "clamp(0.65rem, 1vw, 0.9rem)" : "clamp(0.58rem, 0.9vw, 0.8rem)",
+                fontSize: "clamp(0.65rem, 1vw, 0.9rem)",
               }}
             >
               {label}

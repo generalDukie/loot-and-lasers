@@ -121,7 +121,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-xs font-display font-semibold text-green-300">LEVEL UP</span>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">+{statPoints} attribute points to spend</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Keep earning Stardust to buy attributes</p>
                 </div>
                 <span className="font-display font-bold text-green-400 text-lg flex items-center gap-1">{newLevel - 1} <ArrowRight className="w-4 h-4" /> {newLevel}</span>
               </div>

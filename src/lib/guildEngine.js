@@ -22,7 +22,7 @@ const CHALLENGE_TIERS = [
   { title: "Apex Crusade", baseGoal: 80, stardust: 2400, guildXp: 2600 },
 ];
 
-const FIGHTER_CLASSES = ["Vanguard", "Technomancer", "Shadow Operative", "Astral Warden", "Cosmic Engineer"];
+const FIGHTER_CLASSES = ["Vanguard", "Technomancer", "Shadow Operative", "Astral Warden", "Void Runner", "Cosmic Engineer"];
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 

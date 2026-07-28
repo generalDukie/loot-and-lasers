@@ -47,11 +47,10 @@ export function markAllReadByType(characterId, type) {
   );
 }
 
-// Keep a single unread "unspent attribute points" notification alive while the
-// character has points to spend. Clears it when the pool is empty.
+// Legacy helper — free attribute points were removed (Stardust sink).
+// Clears any leftover "stat_points" notifications.
 export async function syncStatPointsNotification(character) {
   if (!character?.id) return;
-  const pts = character.unspent_stat_points || 0;
   let existing = [];
   try {
     const all = await api.entities.AppNotification.filter({ owner_id: character.id }, "-created_date", 80);
@@ -59,39 +58,7 @@ export async function syncStatPointsNotification(character) {
   } catch (e) {
     return;
   }
-
-  if (pts <= 0) {
-    await Promise.all(
-      existing.filter((n) => !n.read).map((n) => api.entities.AppNotification.update(n.id, { read: true }).catch(() => {}))
-    );
-    return;
-  }
-
-  const title = "⭐ Attribute Points Available";
-  const body = `You have ${pts} unspent attribute point${pts === 1 ? "" : "s"}. Open Hero to allocate them.`;
-
-  const open = existing.find((n) => !n.read);
-  if (open) {
-    if (open.title !== title || open.body !== body) {
-      await api.entities.AppNotification.update(open.id, { title, body }).catch(() => {});
-    }
-    await Promise.all(
-      existing.filter((n) => n.id !== open.id && !n.read).map((n) => api.entities.AppNotification.update(n.id, { read: true }).catch(() => {}))
-    );
-    return;
-  }
-
-  const reuse = existing[0];
-  if (reuse) {
-    await api.entities.AppNotification.update(reuse.id, { read: false, title, body }).catch(() => {});
-    return;
-  }
-
-  await pushNotification({
-    owner_id: character.id,
-    type: "stat_points",
-    title,
-    body,
-    related_id: "stat_points",
-  }).catch(() => {});
+  await Promise.all(
+    existing.filter((n) => !n.read).map((n) => api.entities.AppNotification.update(n.id, { read: true }).catch(() => {}))
+  );
 }

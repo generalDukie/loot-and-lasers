@@ -1,7 +1,20 @@
 // ═══════════════════════════════════════════
-// DUNGEON ENGINE — enemy generation + rewards
+// DUNGEON ENGINE — enemy generation + DRU rewards
 // ═══════════════════════════════════════════
-import { RACES, CLASSES, generateItem, rollItemRarity, SHIP_MODS, getActiveShipId, getActiveShipMods, scaleCombatXp } from "@/lib/gameData";
+// 1 DRU = mission rewards for 1 fuel at the enemy's level.
+//   Stardust = DRU × SD/F(enemyLevel)
+//   XP       = DRU × XP/F(enemyLevel) × 0.87
+import {
+  RACES,
+  CLASSES,
+  generateItem,
+  rollItemRarity,
+  SHIP_MODS,
+  getActiveShipId,
+  getActiveShipMods,
+  getMissionXpPerFuel,
+  getMissionStardustPerFuel,
+} from "@/lib/gameData";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 
 export const DUNGEON_ENEMIES_PER_PLANET = 10;
@@ -19,6 +32,40 @@ export const DUNGEON_SKIP_COST = 10; // Nova crystals to skip the cooldown
 export const DUNGEON_PATROL_REWARD_MULT = 0.4;
 /** Milestone chest every N node clears */
 export const DUNGEON_MILESTONE_EVERY = 5;
+
+/** XP is slightly leaner than missions so ~25% of career XP comes from the Frontier. */
+export const DUNGEON_XP_DRU_MULT = 0.87;
+
+/** Total DRU budget per story dungeon (index = planet id 1–10). */
+export const DUNGEON_TOTAL_DRU = [0, 60, 70, 80, 90, 100, 110, 120, 135, 150, 175];
+
+/** Share of dungeon DRU per enemy slot (1–9 regular, 10 boss). Sums to 1.0. */
+export const DUNGEON_ENEMY_DRU_SHARE = [
+  0,
+  0.05, 0.06, 0.07, 0.08, 0.09,
+  0.1, 0.11, 0.12, 0.14, 0.18,
+];
+
+/**
+ * Fixed enemy levels per story dungeon (rows = dungeon 1–10, cols = E1–E9 + Boss).
+ * Design chart — combat power and DRU rates both key off these levels.
+ */
+export const DUNGEON_ENEMY_LEVELS = [
+  null,
+  [10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+  [20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+  [30, 31, 32, 33, 34, 35, 36, 37, 38, 39],
+  [40, 42, 43, 45, 46, 48, 49, 51, 52, 54],
+  [55, 57, 58, 60, 61, 63, 64, 66, 67, 69],
+  [70, 72, 74, 76, 78, 80, 82, 84, 86, 88],
+  [90, 93, 95, 98, 100, 103, 105, 108, 110, 113],
+  [115, 118, 120, 123, 125, 128, 130, 133, 135, 138],
+  [140, 143, 146, 149, 152, 155, 158, 161, 164, 167],
+  [170, 173, 177, 180, 183, 187, 190, 193, 197, 200],
+];
+
+/** Relative offsets used to extend the L170–200 band into wormhole depths. */
+const D10_LEVEL_OFFSETS = [0, 3, 7, 10, 13, 17, 20, 23, 27, 30];
 
 const FALLBACK_NAMES = [
   "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
@@ -49,8 +96,51 @@ function pickClass(planet, isBoss, rng) {
   return pool.length ? pick(pool, rng) : pick(Object.keys(CLASSES), rng);
 }
 
-// Deterministic enemy for a given planet + enemy index, scaled to the player.
-export function generateDungeonEnemy(planet, enemyIndex, charLevel) {
+/** Story band 1–10, or extrapolated wormhole band (>10). */
+export function getDungeonBand(planetId) {
+  return Math.max(1, Math.floor(planetId || 1));
+}
+
+/** Total DRU for a dungeon band (wormhole grows past D10). */
+export function getDungeonTotalDru(planetId) {
+  const band = getDungeonBand(planetId);
+  if (band <= 10) return DUNGEON_TOTAL_DRU[band];
+  const depth = band - 10;
+  return Math.round(175 + depth * 25);
+}
+
+/** DRU awarded for defeating enemyIndex (1–10) on this planet. */
+export function getEnemyDru(planetId, enemyIndex) {
+  const idx = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, enemyIndex || 1));
+  const share = DUNGEON_ENEMY_DRU_SHARE[idx];
+  return Math.round(getDungeonTotalDru(planetId) * share * 100) / 100;
+}
+
+/** Combat / reward level for enemyIndex (1–10) on this planet. */
+export function getDungeonEnemyLevel(planetId, enemyIndex) {
+  const idx = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, enemyIndex || 1));
+  const band = getDungeonBand(planetId);
+  if (band <= 10) return DUNGEON_ENEMY_LEVELS[band][idx - 1];
+  const depth = band - 10;
+  const start = 200 + (depth - 1) * 35 + 3; // first enemy after D10 boss @ 200
+  return start + D10_LEVEL_OFFSETS[idx - 1];
+}
+
+/**
+ * Convert DRU at an enemy level into Stardust / XP.
+ * 1 DRU ≡ 1 fuel of mission rewards at that level (XP × 0.87).
+ */
+export function druToRewards(dru, enemyLevel) {
+  const lvl = Math.max(1, enemyLevel || 1);
+  const units = Math.max(0, Number(dru) || 0);
+  return {
+    stardust: Math.max(units > 0 ? 1 : 0, Math.round(units * getMissionStardustPerFuel(lvl))),
+    experience: Math.max(units > 0 ? 1 : 0, Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_DRU_MULT)),
+  };
+}
+
+// Deterministic enemy for a given planet + enemy index.
+export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
   const seed = planet.id * 1000 + enemyIndex * 37 + 7;
   const rng = mulberry32(seed);
   const isBoss = enemyIndex === DUNGEON_ENEMIES_PER_PLANET;
@@ -60,7 +150,7 @@ export function generateDungeonEnemy(planet, enemyIndex, charLevel) {
   const race = RACES[raceKey];
   const cls = CLASSES[classKey];
 
-  const level = Math.max(1, Math.floor(planet.id * 3 + enemyIndex + charLevel * 0.2));
+  const level = getDungeonEnemyLevel(planet.id, enemyIndex);
   const base = cls.baseStats;
   const bonus = Math.floor(level * (isBoss ? 1.9 : 1.2));
   const stats = {};
@@ -109,27 +199,25 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
   const isBoss = enemyIndex === DUNGEON_ENEMIES_PER_PLANET;
   const patrol = !!opts.patrol;
   const mult = patrol ? DUNGEON_PATROL_REWARD_MULT : 1;
-  const pl = Math.max(1, charLevel || 1);
-  // Story worlds ~ their id band; wormhole / infinite use depth as content level.
-  const contentLevel = Math.max(1, planet?.id > 10
-    ? 10 + Math.max(0, (planet.id - 10))
-    : (planet?.id || 1) * 5);
+  const enemyLevel = getDungeonEnemyLevel(planet?.id, enemyIndex);
+  const dru = getEnemyDru(planet?.id, enemyIndex) * mult;
 
   if (!won) {
-    const raw = Math.round((12 + (planet.id || 1) * 6 + enemyIndex * 2) * (patrol ? 0.5 : 1));
+    // Consolation XP only — ~30% of the win XP payout.
+    const { experience } = druToRewards(dru * 0.3, enemyLevel);
     return {
-      experience: scaleCombatXp(raw, pl, contentLevel),
+      experience,
       stardust: 0,
       item: null,
       isBoss,
       patrol,
       consolation: true,
+      dru: Math.round(dru * 0.3 * 100) / 100,
+      enemyLevel,
     };
   }
 
-  const rawXp = Math.round((55 + (planet.id || 1) * 40 + enemyIndex * 22 + (isBoss ? 320 : 0)) * mult);
-  let experience = scaleCombatXp(rawXp, pl, contentLevel);
-  let stardust = Math.round((45 + (planet.id || 1) * 30 + enemyIndex * 15 + (isBoss ? 600 : 0)) * mult);
+  const { experience, stardust } = druToRewards(dru, enemyLevel);
 
   let item = null;
   if (!patrol && isBoss) {
@@ -141,7 +229,16 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
     item = generateItem(rarity, Math.max(1, charLevel));
   }
 
-  return { experience, stardust, item, isBoss, patrol, consolation: false };
+  return {
+    experience,
+    stardust,
+    item,
+    isBoss,
+    patrol,
+    consolation: false,
+    dru: Math.round(dru * 100) / 100,
+    enemyLevel,
+  };
 }
 
 export function dungeonCooldownMs(won) {

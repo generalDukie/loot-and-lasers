@@ -13,6 +13,7 @@ import CollectiblesLog from "@/components/game/CollectiblesLog";
 import DerivedStatsPanel from "@/components/game/DerivedStatsPanel";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInventory } from "@/hooks/useInventory";
+import { getAttributePurchaseCount, getNextAttributePointCost } from "@/lib/gameData";
 import { useToast } from "@/components/ui/use-toast";
 import { Star, Backpack } from "lucide-react";
 
@@ -20,6 +21,7 @@ export default function CharacterPage() {
   const [character, setCharacter] = useState(null);
   const [guild, setGuild] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [allocating, setAllocating] = useState(false);
   const navigate = useNavigate();
 
   const inv = useInventory(character, (patch) => setCharacter((c) => ({ ...c, ...patch })));
@@ -42,11 +44,34 @@ export default function CharacterPage() {
   useEffect(() => { if (character) inv.load(); }, [character?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function allocate(stat) {
-    if (!character || (character.unspent_stat_points || 0) <= 0) return;
+    if (!character || allocating) return;
+    const bought = getAttributePurchaseCount(character);
+    const cost = getNextAttributePointCost(character);
+    const sd = character.stardust || 0;
+    if (sd < cost) {
+      toast({
+        title: "Not enough Stardust",
+        description: `Next point costs ✨${cost.toLocaleString()}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    setAllocating(true);
     const newStats = { ...character.stats, [stat]: (character.stats[stat] || 0) + 1 };
-    const upd = { stats: newStats, unspent_stat_points: (character.unspent_stat_points || 0) - 1 };
-    await api.entities.Character.update(character.id, upd);
-    setCharacter((c) => ({ ...c, ...upd }));
+    const upd = {
+      stats: newStats,
+      stardust: sd - cost,
+      attribute_purchases: bought + 1,
+      unspent_stat_points: 0,
+    };
+    try {
+      await api.entities.Character.update(character.id, upd);
+      setCharacter((c) => ({ ...c, ...upd }));
+    } catch (e) {
+      toast({ title: "Purchase failed", description: e.message, variant: "destructive" });
+    } finally {
+      setAllocating(false);
+    }
   }
 
   async function handleUse(item) {
@@ -69,6 +94,8 @@ export default function CharacterPage() {
   const totalStats = computeTotalStats(character, equippedItems);
   const baseStats = computeTotalStats(character, []);
   const noBuffStats = computeTotalStatsNoBuffs(character, equippedItems);
+  const nextAttrCost = getNextAttributePointCost(character);
+  const canBuyAttr = (character.stardust || 0) >= nextAttrCost && !allocating;
   const fadeUp = (delay = 0) => ({ initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { ...spring, delay } });
 
   return (
@@ -87,7 +114,7 @@ export default function CharacterPage() {
         <motion.div
           {...fadeUp(0.05)}
           className={`shrink-0 bg-card/50 backdrop-blur-sm border rounded-2xl px-3.5 py-2.5 flex flex-col ${
-            character.unspent_stat_points > 0 ? "border-primary/40 border-glow-cyan" : "border-border/50"
+            canBuyAttr ? "border-primary/40 border-glow-cyan" : "border-border/50"
           }`}
         >
           <div className="flex items-center justify-between gap-3 mb-2 shrink-0">
@@ -101,14 +128,17 @@ export default function CharacterPage() {
                   {Object.values(totalStats).reduce((a, b) => a + (b || 0), 0)}
                 </span>
               </span>
+              <span className="text-muted-foreground tabular-nums">
+                ✨{(character.stardust || 0).toLocaleString()}
+              </span>
               <span
                 className={`font-display font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
-                  character.unspent_stat_points > 0
+                  canBuyAttr
                     ? "bg-primary/15 text-primary border border-primary/30"
                     : "bg-muted/40 text-muted-foreground border border-border/40"
                 }`}
               >
-                {character.unspent_stat_points || 0} unspent
+                Next ✨{nextAttrCost.toLocaleString()}
               </span>
             </div>
           </div>
@@ -123,7 +153,7 @@ export default function CharacterPage() {
                   base={baseStats[stat]}
                   className={character.class}
                   onAdd={allocate}
-                  canAdd={(character.unspent_stat_points || 0) > 0}
+                  canAdd={canBuyAttr}
                 />
               ))}
             </div>

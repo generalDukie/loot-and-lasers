@@ -30,9 +30,9 @@ export default function StationSplitButton({
           transition={{ type: "spring", stiffness: 400, damping: 14 }}
           className="relative w-full rounded-xl overflow-hidden border-2 backdrop-blur-md transition-colors"
           style={{
-            borderColor: color + "66",
-            background: `linear-gradient(135deg, ${color}1f, hsl(232 30% 6% / 0.88))`,
-            boxShadow: `0 4px 14px hsl(232 40% 2% / 0.5), 0 0 10px ${color}1a`,
+            borderColor: color,
+            background: `linear-gradient(180deg, ${color}28, hsl(232 30% 6% / 0.9))`,
+            boxShadow: `0 4px 18px hsl(232 40% 2% / 0.55), 0 0 16px ${color}33`,
           }}
         >
           <div

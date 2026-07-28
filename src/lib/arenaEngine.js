@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════
 // ARENA ENGINE — async PvP simulation
 // ═══════════════════════════════════════════
-import { RACES, CLASSES, generateItem, generateClassWeapon, scaleCombatXp } from "@/lib/gameData";
+import { RACES, CLASSES, generateItem, generateClassWeapon, getArenaStardustReward, getArenaXpReward } from "@/lib/gameData";
 import { computeTotalStats, computeDerivedStats, getClassWeights, CLASS_ATK_MULT } from "@/lib/statEngine";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 
@@ -355,6 +355,8 @@ function buildFighter(c, items, side) {
     crit: derived.critChance / 100,   // convert % → 0-1 for battle rolls
     dodge: derived.dodgeChance / 100,
     armor: derived.armor / 100,
+    techResist: (derived.techResist || 0) / 100,
+    damageType: derived.damageType || "physical",
     stats,
     attackCount: 0,        // per-fighter turn counter (drives class specials)
     shadowstepBuff: false, // Shadow Operative — Shadowstep damage boost pending
@@ -447,19 +449,24 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
       const unstoppable = attacker.className === "Vanguard" && attacker.attackCount % 4 === 0;       // 200% dmg, ignores 25% armor
       const overcharge = attacker.className === "Technomancer" && attacker.attackCount % 3 === 0;   // guaranteed crit, ignores 20% armor
       const shadowstep = attacker.className === "Shadow Operative" && attacker.shadowstepBuff;     // +25% dmg after a dodge
+      const twinFang = attacker.className === "Void Runner" && attacker.attackCount % 3 === 0;     // double strike @ 70% each
 
       let crit = overcharge ? true : Math.random() < attacker.crit;
       let base = attacker.atk * (0.85 + Math.random() * 0.3) * tempo;
       if (unstoppable) base *= 2;
       if (shadowstep) base *= 1.25;
+      if (twinFang) base *= 0.7;
       let dmg = Math.max(1, Math.floor(base * (crit ? 2 : 1)));
 
-      // Armor reduction from the stat engine (Vitality-based %), with specials
-      // that partially ignore armor/shields.
-      let armorReduction = defender.armor || 0;
-      if (unstoppable) armorReduction *= 0.75;
-      if (overcharge) armorReduction *= 0.8;
-      dmg = Math.max(1, Math.floor(dmg * (1 - armorReduction)));
+      // Physical (STR/AGI) hits armor; tech (INT) hits tech resist.
+      // Class specials partially ignore the relevant mitigation.
+      let mitigation =
+        attacker.damageType === "tech"
+          ? defender.techResist || 0
+          : defender.armor || 0;
+      if (unstoppable) mitigation *= 0.75;
+      if (overcharge) mitigation *= 0.8;
+      dmg = Math.max(1, Math.floor(dmg * (1 - mitigation)));
 
       const res = applyDamage(defender, dmg);
       attacker.shadowstepBuff = false; // consumed
@@ -467,6 +474,7 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
       const abilityName = unstoppable ? "Unstoppable"
         : overcharge ? "Overcharge"
         : shadowstep ? "Shadowstep"
+        : twinFang ? "Twin Fang"
         : useAbility ? classSpecialName(attacker.className)
         : null;
 
@@ -480,6 +488,26 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
         dodged: false,
         ability: abilityName,
       });
+
+      // Void Runner — Twin Fang: second strike at 70% (same roll band, fresh crit chance)
+      if (twinFang && defender.hp > 0) {
+        let base2 = attacker.atk * (0.85 + Math.random() * 0.3) * tempo * 0.7;
+        let crit2 = Math.random() < attacker.crit;
+        let dmg2 = Math.max(1, Math.floor(base2 * (crit2 ? 2 : 1)));
+        let mit2 = attacker.damageType === "tech" ? defender.techResist || 0 : defender.armor || 0;
+        dmg2 = Math.max(1, Math.floor(dmg2 * (1 - mit2)));
+        const res2 = applyDamage(defender, dmg2);
+        events.push({
+          type: "ability",
+          attacker: attacker.side,
+          defender: defender.side,
+          damage: res2.hpDamage,
+          shieldHit: res2.shieldHit,
+          crit: crit2,
+          dodged: false,
+          ability: "Twin Fang",
+        });
+      }
     }
     [attacker, defender] = [defender, attacker];
   }
@@ -514,23 +542,16 @@ export function eloRatingDelta(playerRating, oppRating, won, k = ARENA_ELO_K) {
 function lootForOutcome(player, opp, won, free) {
   if (!free) return { experience: 0, stardust: 0 };
   const pl = player.level || 1;
-  const oppLevel = opp.level || 1;
-  const levelDiff = oppLevel - pl;
-  const ratingDiff = (opp.arena_rating || 1000) - (player.arena_rating || 1000);
-  // Slight loot tilt toward tougher matchups so farming down isn't optimal.
-  const challengeBonus = Math.max(0, Math.floor(ratingDiff / 40)) + Math.max(0, levelDiff);
-  const contentLevel = Math.max(1, Math.round((pl + oppLevel) / 2));
+  // Design: Arena SD = SD/F × 5/3, Arena XP = XP/F × 5/7 (win amounts).
+  const winSd = getArenaStardustReward(pl);
+  const winXp = getArenaXpReward(pl);
   if (won) {
-    const rawXp = 36 + oppLevel * 7 + Math.max(0, levelDiff * 4) + challengeBonus * 3;
-    return {
-      experience: scaleCombatXp(rawXp, pl, contentLevel),
-      stardust: 50 + oppLevel * 12 + challengeBonus * 4,
-    };
+    return { experience: winXp, stardust: winSd };
   }
-  const rawXp = 10 + oppLevel * 2.5 + Math.max(0, Math.floor(challengeBonus / 2));
+  // Consolation stardust only — no XP on arena losses.
   return {
-    experience: scaleCombatXp(rawXp, pl, contentLevel),
-    stardust: 15 + oppLevel * 2 + Math.max(0, Math.floor(challengeBonus / 2)),
+    experience: 0,
+    stardust: Math.max(1, Math.round(winSd * 0.3)),
   };
 }
 

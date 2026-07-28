@@ -68,7 +68,7 @@ export const BUILTIN_BUTTONS = [
       { label: "Shop", icon: "🛒", to: "/shop", color: "#4ADE80" },
       { label: "Mining", icon: "⛏️", to: "/space-mining", color: "#60A5FA" },
       { label: "Crystals", icon: "💎", to: "/crystal-store", color: "#FFD700" },
-      { label: "Black Hole", icon: "🌀", to: "/black-hole", color: "#9D6BFF" },
+      { label: "Void", icon: "🌀", to: "/black-hole", color: "#9D6BFF" },
     ],
   },
   {

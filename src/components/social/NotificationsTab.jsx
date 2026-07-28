@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { markRead, subscribeNotifications, syncStatPointsNotification } from "@/lib/notificationEngine";
+import { markRead, subscribeNotifications } from "@/lib/notificationEngine";
 import { Bell, Users, MessageSquare, Mail, Gift, CheckCheck, Star } from "lucide-react";
 import NotificationActions from "@/components/social/NotificationActions";
 
@@ -44,7 +44,6 @@ export default function NotificationsTab({ myChar }) {
 
   async function handleMarkRead(item) {
     if (item.read) return;
-    if (item.type === "stat_points" && (myChar.unspent_stat_points || 0) > 0) return;
     await markRead(item.id);
     setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
   }
@@ -54,7 +53,6 @@ export default function NotificationsTab({ myChar }) {
       { owner_id: myChar.id, read: false },
       { $set: { read: true } }
     );
-    await syncStatPointsNotification(myChar);
     await load();
   }
 

@@ -31,7 +31,6 @@ function renderDockButton(id, overrides, delay) {
       color={c.color}
       options={c.options}
       delay={delay}
-      featured={id === "cantina"}
     />
   );
 }

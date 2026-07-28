@@ -56,6 +56,7 @@ const ABILITY_FREQS = {
   "Shadow Operative": [440, 554, 622],
   Technomancer: [330, 415, 494],
   "Astral Warden": [392, 494, 587],
+  "Void Runner": [523, 659, 784],
   "Cosmic Engineer": [294, 370, 440],
 };
 

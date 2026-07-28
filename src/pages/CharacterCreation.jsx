@@ -136,6 +136,7 @@ export default function CharacterCreation() {
         nova_crystals: startCrystals,
         stats: baseStats,
         unspent_stat_points: 0,
+        attribute_purchases: 0,
         stardust: 0,
         appearance: {
           skin_color: form.skinColor || race.skinColors[0],

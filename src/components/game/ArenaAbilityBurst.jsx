@@ -80,6 +80,35 @@ export default function ArenaAbilityBurst({ className, dir, color, evIdx }) {
     );
   }
 
+  if (className === "Void Runner") {
+    // Twin cyan afterimage flashes — double strike
+    return (
+      <>
+        {[0, 1].map((i) => (
+          <motion.div
+            key={`${evIdx}-vr-${i}`}
+            className="absolute pointer-events-none z-30 flex items-center justify-center"
+            style={{ inset: 0 }}
+            initial={{ opacity: 0, scale: 0.6, x: dir * -10 }}
+            animate={{ opacity: [0, 1, 0], scale: [0.6, 1.15, 1.3], x: dir * (20 + i * 28) }}
+            transition={{ duration: 0.4, delay: i * 0.12, ease: "easeOut" }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 72,
+                borderRadius: "40%",
+                border: `2px solid ${color}`,
+                boxShadow: `0 0 16px ${color}`,
+                background: `${color}22`,
+              }}
+            />
+          </motion.div>
+        ))}
+      </>
+    );
+  }
+
   if (className === "Cosmic Engineer") {
     // Green combat drone projectile flying toward the target
     return (

@@ -33,7 +33,7 @@ function renderSection(id) {
             <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Cantina</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" /> fuel.</Li>
             <Li>When a mission finishes, <b>claim</b> it for XP, stardust, and random loot. Level up to unlock harder sectors.</Li>
             <Li>Equip better gear on your <b>Character</b> page to raise your combat power.</Li>
-            <Li>Spend <b>stat points</b> each level to shape your build.</Li>
+            <Li>Spend <b>Stardust</b> to buy attribute points anytime — cost rises with each purchase.</Li>
             <Li>Try the <b>Arena</b> for PvP, or brave the <b>Galaxy Dungeon</b> for risky loot.</Li>
             <Li>Toss unwanted gear into the <b>Black Hole</b> to reclaim stardust.</Li>
           </ul>
@@ -81,9 +81,17 @@ function renderSection(id) {
             <Li>Chain wins for a <b>streak</b> — hit milestones for news feed glory.</Li>
           </ul>
           <H>Rewards</H>
-          <p>Free battles earn XP and stardust (wins give more). After your free quota, battles cost Nova Crystals and award rating only.</p>
+          <p>Free battles earn XP and stardust on a <b>win</b>; losses grant a small stardust consolation only (no XP). After your free quota, battles cost Nova Crystals and award rating only.</p>
           <H>Power</H>
-          <p>Your combat power comes from level + attributes + equipped gear rarity. Upgrade gear and allocate stats to climb the ladder.</p>
+          <p>Your combat power comes from level + attributes + equipped gear rarity. Buy attributes with Stardust and upgrade gear to climb the ladder.</p>
+          <H>Attributes</H>
+          <ul className="space-y-1.5">
+            <Li><b>Strength</b> — damage for STR classes; armor vs physical damage for everyone else.</Li>
+            <Li><b>Agility</b> — dodge for all; also damage for AGI classes (slightly lower rate).</Li>
+            <Li><b>Intellect</b> — damage for INT classes; tech resist vs tech damage for everyone else.</Li>
+            <Li><b>Vitality</b> — HP for all classes.</Li>
+            <Li><b>Luck</b> — crit chance for all.</Li>
+          </ul>
         </div>
       );
     case "galaxy":
@@ -93,7 +101,8 @@ function renderSection(id) {
           <ul className="space-y-1.5">
             <Li>Fight enemies in sequence — battles are auto-simulated like the arena.</Li>
             <Li>Defeating the <b>boss</b> clears the planet and advances you to the next.</Li>
-            <Li>Loot and stardust drop from victories; bosses give the best hauls.</Li>
+            <Li>Rewards use <b>DRU</b> (Dungeon Reward Units): 1 DRU ≈ 1 fuel of mission payout at the enemy's level. XP pays at 87% of that rate.</Li>
+            <Li>Loot and ship-mod unlocks drop from victories; bosses give the best hauls.</Li>
           </ul>
           <p className="text-xs text-muted-foreground">Your dungeon progress and highest sector are shown in your public stats.</p>
         </div>

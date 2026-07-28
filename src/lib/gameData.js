@@ -15,7 +15,7 @@ export const RACES = {
     emoji: "🐉",
     tagline: "Scaled hotheads from the Ember Nebula",
     lore: "Dragonfolk with armor for skin and a temper for fuel. They punch first, negotiate later, and insist the smoking crater was 'defensive.' Great at war. Terrible at dinner parties.",
-    bonuses: { strength: 0.06, vitality: 0.04 },
+    bonuses: { strength: 0.03, vitality: 0.02 },
     skinColors: ["#2D5A3D", "#8B4513", "#4A0E4E", "#1C3D5A"],
     eyeStyles: ["Slit Ember", "Twin Flame", "Void Gaze"],
     markings: ["Tribal Scars", "Heat Lines", "Scale Crown", "None"],
@@ -25,7 +25,7 @@ export const RACES = {
     emoji: "🤖",
     tagline: "Walking spreadsheets with laser opinions",
     lore: "Half chrome, half attitude, fully convinced they already simulated this conversation. They run the numbers, win the argument, then blue-screen when someone asks how their day was.",
-    bonuses: { intellect: 0.06, agility: 0.04 },
+    bonuses: { intellect: 0.03, agility: 0.02 },
     skinColors: ["#C0C0C0", "#1a1a2e", "#0D2137", "#3D3D3D"],
     eyeStyles: ["LED Array", "Holographic", "Scan Beam"],
     markings: ["Circuit Lines", "Data Streams", "Chrome Plating", "None"],
@@ -35,7 +35,7 @@ export const RACES = {
     emoji: "🌟",
     tagline: "Living disco balls with a hero complex",
     lore: "Starlight given legs and an ego. They light up corridors, blind friends by accident, and somehow always land on their feet. Bring sunglasses. And maybe a mirror.",
-    bonuses: { intellect: 0.04, luck: 0.06 },
+    bonuses: { intellect: 0.02, luck: 0.03 },
     skinColors: ["#E8D5B7", "#C9B8FF", "#B8E6FF", "#FFE4B5"],
     eyeStyles: ["Star Burst", "Nebula Swirl", "Aurora Glow"],
     markings: ["Light Veins", "Star Map", "Constellation", "None"],
@@ -45,7 +45,7 @@ export const RACES = {
     emoji: "💪",
     tagline: "High-gravity tanks who treat walls as suggestions",
     lore: "Grew up where the air weighs more than your regrets. Slow to start, impossible to stop, and vaguely offended by doors. If it needs smashing, hire a Grothak. If it needs subtlety… also hire a Grothak, then apologize.",
-    bonuses: { strength: 0.04, vitality: 0.06 },
+    bonuses: { strength: 0.02, vitality: 0.03 },
     skinColors: ["#696969", "#8B7355", "#4A4A4A", "#5C4033"],
     eyeStyles: ["Deep Set", "Crystal Shard", "Magma Core"],
     markings: ["Crack Lines", "Moss Growth", "Gem Inlays", "None"],
@@ -55,7 +55,7 @@ export const RACES = {
     emoji: "🎭",
     tagline: "Face-swappers from the Shadow Reach",
     lore: "Professional strangers. They borrow faces, walk into restricted zones, and leave with the goods plus your dignity. Trust them? Sure. Just count the spoons afterward.",
-    bonuses: { agility: 0.06, luck: 0.04 },
+    bonuses: { agility: 0.03, luck: 0.02 },
     skinColors: ["#2E1A47", "#1A3C34", "#3D1F1F", "#1A1A3C"],
     eyeStyles: ["Shifting Iris", "Mirrored", "Phantom Glow"],
     markings: ["Shadow Wisps", "Phase Lines", "Mimic Spots", "None"],
@@ -885,10 +885,15 @@ const XP_TO_NEXT_WAYPOINTS = [
 
 export function getExpForLevel(level) {
   const L = Math.max(1, Math.floor(level || 1));
+  let xp;
   if (L <= 500) {
-    return Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
+    xp = Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
+  } else {
+    xp = Math.max(1, Math.round(2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
   }
-  return Math.max(1, Math.round(2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
+  // Early easing only: −20 XP total across levels 1–5 (−4 each). Formula/waypoints unchanged.
+  if (L <= 5) xp = Math.max(1, xp - 4);
+  return xp;
 }
 
 // Design chart: mission XP granted per 1 fuel spent.
@@ -944,6 +949,30 @@ export function getMissionXpPerFuel(level = 1) {
 export function getMissionStardustPerFuel(level = 1) {
   return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS)));
 }
+
+/** Max stardust casino bet scales with SD/F (25× rate, floor 100, cap 250k). */
+export const CASINO_STARDUST_BET_SD_MULT = 25;
+export const CASINO_MAX_STARDUST_BET_CAP = 250_000;
+export const CASINO_MIN_STARDUST_BET_FLOOR = 100;
+
+export function getCasinoMaxStardustBet(level = 1) {
+  const sdf = getMissionStardustPerFuel(level);
+  return Math.min(
+    CASINO_MAX_STARDUST_BET_CAP,
+    Math.max(CASINO_MIN_STARDUST_BET_FLOOR, sdf * CASINO_STARDUST_BET_SD_MULT),
+  );
+}
+
+/** Stardust wheel tiers — probabilities must sum to 1; server is authoritative. */
+export const CASINO_WHEEL_TIERS = [
+  { p: 0.50, mult: 0, label: "Bust", color: "#6B7280" },
+  { p: 0.22, mult: 1, label: "Push", color: "#9CA3AF" },
+  { p: 0.15, mult: 2, label: "2×", color: "#22C55E" },
+  { p: 0.08, mult: 3, label: "3×", color: "#3B82F6" },
+  { p: 0.04, mult: 5, label: "5×", color: "#A855F7" },
+  { p: 0.008, mult: 10, label: "10×", color: "#F59E0B" },
+  { p: 0.002, mult: 25, label: "25×", color: "#F97316" },
+];
 
 /** Arena win Stardust = SD/F(playerLevel) × 5/3 (≈1.667). */
 export function getArenaStardustReward(level = 1) {
@@ -1067,8 +1096,10 @@ export function checkFuelReset(character) {
   const max = character.max_fuel || FUEL_MAX;
   const resetAt = character.fuel_reset_at ? new Date(character.fuel_reset_at) : null;
   const now = Date.now();
-  if (!resetAt || now - resetAt.getTime() >= FUEL_CYCLE_MS) {
-    return { fuel: max, fuel_reset_at: new Date(now).toISOString(), fuel_purchases: 0 };
+  const fuelVal = Number(character.fuel);
+  const fuelMissing = character.fuel == null || !Number.isFinite(fuelVal);
+  if (fuelMissing || !resetAt || now - resetAt.getTime() >= FUEL_CYCLE_MS) {
+    return { fuel: max, max_fuel: max, fuel_reset_at: new Date(now).toISOString(), fuel_purchases: 0 };
   }
   return null;
 }

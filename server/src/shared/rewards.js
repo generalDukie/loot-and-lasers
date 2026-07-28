@@ -76,10 +76,15 @@ const XP_TO_NEXT_WAYPOINTS = [
 
 export function expForLevel(level) {
   const L = Math.max(1, Math.floor(level || 1));
+  let xp;
   if (L <= 500) {
-    return Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
+    xp = Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
+  } else {
+    xp = Math.max(1, Math.round(2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
   }
-  return Math.max(1, Math.round(2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
+  // Early easing only: −20 XP total across levels 1–5 (−4 each). Formula/waypoints unchanged.
+  if (L <= 5) xp = Math.max(1, xp - 4);
+  return xp;
 }
 
 const MISSION_XP_PER_FUEL_WAYPOINTS = [

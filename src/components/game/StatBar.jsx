@@ -12,11 +12,18 @@ const STAT_SHORT = {
   luck: "LCK",
 };
 
-const HOLD_DELAY_MS = 1000;
-const HOLD_REPEAT_MS = 120;
+const HOLD_START_RATE = 2;   // clicks / sec right after the first press
+const HOLD_END_RATE = 10;    // clicks / sec at full speed
+const HOLD_RAMP_MS = 3000;   // time to reach full speed
+
+function holdIntervalMs(elapsedMs) {
+  const t = Math.min(1, Math.max(0, elapsedMs) / HOLD_RAMP_MS);
+  const rate = HOLD_START_RATE + (HOLD_END_RATE - HOLD_START_RATE) * t;
+  return Math.round(1000 / rate);
+}
 
 // Primary attribute chip — value, gear bonus, and point-allocation button.
-// Click = +1. Hold 1s = keep buying until release.
+// Click = +1. Hold = keep buying; rate starts slow and ramps to 10/s over ~3s.
 export default function StatBar({
   stat,
   value,
@@ -34,6 +41,7 @@ export default function StatBar({
   const delayRef = useRef(null);
   const repeatRef = useRef(null);
   const holdingRef = useRef(false);
+  const holdStartRef = useRef(0);
   const canAddRef = useRef(canAdd);
   const onAddRef = useRef(onAdd);
 
@@ -42,13 +50,13 @@ export default function StatBar({
 
   useEffect(() => () => {
     clearTimeout(delayRef.current);
-    clearInterval(repeatRef.current);
+    clearTimeout(repeatRef.current);
   }, []);
 
   function clearHold() {
     holdingRef.current = false;
     clearTimeout(delayRef.current);
-    clearInterval(repeatRef.current);
+    clearTimeout(repeatRef.current);
     delayRef.current = null;
     repeatRef.current = null;
   }
@@ -59,18 +67,35 @@ export default function StatBar({
     return true;
   }
 
+  function scheduleNext() {
+    if (!holdingRef.current) return;
+    const elapsed = Date.now() - holdStartRef.current;
+    repeatRef.current = setTimeout(() => {
+      if (!holdingRef.current || !fireAdd()) {
+        clearHold();
+        return;
+      }
+      scheduleNext();
+    }, holdIntervalMs(elapsed));
+  }
+
   function startHold(e) {
     e.preventDefault();
     e.stopPropagation();
     if (!canAdd || !onAdd) return;
+    clearHold();
     holdingRef.current = true;
+    holdStartRef.current = Date.now();
     fireAdd();
+    // First repeat at the slow start rate, then ramp via scheduleNext.
     delayRef.current = setTimeout(() => {
       if (!holdingRef.current) return;
-      repeatRef.current = setInterval(() => {
-        if (!holdingRef.current || !fireAdd()) clearHold();
-      }, HOLD_REPEAT_MS);
-    }, HOLD_DELAY_MS);
+      if (!fireAdd()) {
+        clearHold();
+        return;
+      }
+      scheduleNext();
+    }, holdIntervalMs(0));
   }
 
   return (

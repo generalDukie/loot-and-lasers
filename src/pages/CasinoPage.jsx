@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
-import { getMyCharacter } from "@/lib/socialEngine";
+import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
+import { getCasinoMaxStardustBet } from "@/lib/gameData";
 import { Gem, Sparkles, Dice5 } from "lucide-react";
 import CrystalFlip from "@/components/casino/CrystalFlip";
 import CrystalJackpot from "@/components/casino/CrystalJackpot";
@@ -15,28 +16,50 @@ import StardustWheel from "@/components/casino/StardustWheel";
 const NOVA_CASINO_OPEN = false;
 
 export default function CasinoPage() {
-  const [character, setCharacter] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const outlet = useOutletContext() || {};
+  const [localCharacter, setLocalCharacter] = useState(null);
+  const character = outlet.character || localCharacter;
+  const setSharedCharacter = outlet.setCharacter;
+  const [loading, setLoading] = useState(!outlet.character);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const load = useCallback(async () => {
-    const char = await getMyCharacter();
-    if (!char) { navigate("/create-character"); return; }
-    setCharacter(char);
-    setLoading(false);
-  }, [navigate]);
+  const applyCharacter = useCallback((next) => {
+    if (!next) return;
+    primeMyCharacterCache(next);
+    if (typeof setSharedCharacter === "function") setSharedCharacter(next);
+    setLocalCharacter(next);
+  }, [setSharedCharacter]);
 
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(async () => {
+    const char = await getMyCharacter({ force: true });
+    if (!char) { navigate("/create-character"); return; }
+    applyCharacter(char);
+    setLoading(false);
+  }, [navigate, applyCharacter]);
+
+  useEffect(() => {
+    if (outlet.character) {
+      setLocalCharacter(outlet.character);
+      setLoading(false);
+      return;
+    }
+    load();
+  }, [outlet.character, load]);
 
   // Server-authoritative casino settle — games roll outcomes server-side.
   async function settle(game, bet, extra = {}) {
     setBusy(true);
     try {
       const res = await api.functions.invoke("CasinoSettle", { game, bet, ...extra });
-      const upd = res.patch || res.data?.patch || {};
-      if (Object.keys(upd).length) setCharacter((c) => ({ ...c, ...upd }));
+      const patch = res.patch || res.data?.patch || {};
+      const updated = res.character || res.data?.character;
+      if (updated && updated.id) {
+        applyCharacter(updated);
+      } else if (Object.keys(patch).length) {
+        applyCharacter({ ...(character || {}), ...patch });
+      }
       const deltaCrystals = res.delta_crystals ?? res.data?.delta_crystals ?? 0;
       if (deltaCrystals < 0) void trackNovaSpend(character, -deltaCrystals, "casino");
       return res;
@@ -57,6 +80,8 @@ export default function CasinoPage() {
   }
   if (!character) return null;
 
+  const maxSdBet = getCasinoMaxStardustBet(character.level || 1);
+
   return (
     <div className="space-y-5 max-w-2xl mx-auto">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
@@ -64,12 +89,15 @@ export default function CasinoPage() {
           <Dice5 className="w-5 h-5 text-amber-300" /> Nebula Casino
         </h1>
         <p className="text-xs text-muted-foreground mb-3">Risk it for the glittering prize. The house always remembers.</p>
-        <div className="flex items-center gap-3 mb-1">
+        <div className="flex items-center gap-3 mb-1 flex-wrap">
           <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/60 border border-border/50 text-sm font-display font-bold">
             <Sparkles className="w-3.5 h-3.5 text-accent" /> {(character.stardust || 0).toLocaleString()}
           </span>
           <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card/60 border border-amber-500/30 text-sm font-display font-bold text-amber-300">
             <Gem className="w-3.5 h-3.5" /> {(character.nova_crystals || 0).toLocaleString()}
+          </span>
+          <span className="text-[10px] text-muted-foreground">
+            Max stardust bet · {maxSdBet.toLocaleString()} ✨ (scales with SD/F)
           </span>
         </div>
       </motion.div>
@@ -95,8 +123,8 @@ export default function CasinoPage() {
             </div>
           </div>
         )}
-        <StardustDice character={character} onSettle={settle} busy={busy} />
-        <StardustWheel character={character} onSettle={settle} busy={busy} />
+        <StardustDice character={character} onSettle={settle} busy={busy} maxBet={maxSdBet} />
+        <StardustWheel character={character} onSettle={settle} busy={busy} maxBet={maxSdBet} />
       </div>
 
       <p className="text-[10px] text-muted-foreground/70 text-center italic">

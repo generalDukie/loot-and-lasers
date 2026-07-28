@@ -18,10 +18,66 @@ const STAT_COLORS = {
 };
 
 // Read-only starting-stat chart for character creation — value + class-aware tip.
-export default function ClassStatsChart({ characterClass, stats, raceBonusNote }) {
+export default function ClassStatsChart({ characterClass, stats, raceBonusNote, compact = false }) {
   const cls = CLASSES[characterClass];
   const entries = Object.entries(stats || {});
   const maxVal = Math.max(1, ...entries.map(([, v]) => v || 0));
+
+  if (compact) {
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-[10px] font-display font-bold text-muted-foreground tracking-[0.14em]">STARTING STATS</h4>
+          {cls && (
+            <span className="text-[9px] text-muted-foreground">
+              Primary:{" "}
+              <span className="font-semibold" style={{ color: (STAT_COLORS[cls.primaryStat] || {}).text }}>
+                {STAT_LABELS[cls.primaryStat]}
+              </span>
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-1">
+          {entries.map(([stat, val]) => {
+            const colors = STAT_COLORS[stat] || STAT_COLORS.strength;
+            const isPrimary = cls?.primaryStat === stat;
+            const isSecondary = cls?.secondaryStat === stat;
+            const pct = Math.round(((val || 0) / maxVal) * 100);
+            return (
+              <div
+                key={stat}
+                className="rounded-lg px-2 py-1.5 border"
+                style={{
+                  background: colors.soft,
+                  borderColor: isPrimary ? colors.bar + "88" : isSecondary ? colors.bar + "44" : "hsl(var(--border) / 0.35)",
+                }}
+                title={getStatDescription(stat, characterClass)}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] leading-none">{STAT_ICONS[stat]}</span>
+                  <span className="text-[10px] font-display font-semibold tracking-wide flex-1 truncate" style={{ color: colors.text }}>
+                    {STAT_LABELS[stat]}
+                    {isPrimary && <span className="ml-1 text-[8px] uppercase tracking-wider opacity-80">Pri</span>}
+                    {isSecondary && !isPrimary && <span className="ml-1 text-[8px] uppercase tracking-wider opacity-60">Sec</span>}
+                  </span>
+                  <span className="font-display font-bold text-xs tabular-nums" style={{ color: colors.text }}>{val}</span>
+                  <div className="w-14 h-1 rounded-full bg-black/25 overflow-hidden shrink-0">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: colors.bar }} />
+                  </div>
+                </div>
+                <p className="text-[9px] leading-snug mt-0.5 line-clamp-2" style={{ color: colors.text, opacity: 0.82 }}>
+                  {getStatDescription(stat, characterClass)}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        {raceBonusNote && (
+          <p className="text-[9px] text-muted-foreground pt-0.5 leading-snug">{raceBonusNote}</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">

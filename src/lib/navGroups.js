@@ -5,19 +5,19 @@ export const NAV_GROUPS = [
   {
     name: "Explore",
     items: [
-      { to: "/character", label: "Hero", icon: User, color: "#00E5FF" },
+      { to: "/character", label: "Hero", icon: User, color: "#5CFFB0" },
       { to: "/missions", label: "Cantina", icon: Beer, color: "#FF8C00" },
       { to: "/galaxy-map", label: "Galaxy", icon: Orbit, color: "#ba55d3" },
-      { to: "/ship", label: "Ship Hangar", icon: Rocket, color: "#22D3EE" },
+      { to: "/ship", label: "Ship Hangar", icon: Rocket, color: "#FBBF24" },
     ],
   },
   {
     name: "Social",
     items: [
       { to: "/friends", label: "Friends", icon: Users, color: "#A855F7" },
-      { to: "/messages", label: "Chat", icon: MessageSquare, color: "#22D3EE" },
+      { to: "/messages", label: "Chat", icon: MessageSquare, color: "#C084FC" },
       { to: "/mail", label: "Mail", icon: Mail, color: "#F59E0B" },
-      { to: "/guild", label: "Guild", icon: Users, color: "#00ffff" },
+      { to: "/guild", label: "Guild", icon: Users, color: "#F59E0B" },
     ],
   },
   {

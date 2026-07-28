@@ -23,23 +23,36 @@ export function useMyCharacter() {
 
   useEffect(() => {
     let active = true;
-    getMyCharacter()
-      .then((c) => {
+    (async () => {
+      try {
+        let c = await getMyCharacter();
+        if (!active) return;
+        // Backfill missing fuel (e.g. older creates) via the 24h cycle sync.
+        if (c && (c.fuel == null || !Number.isFinite(Number(c.fuel)))) {
+          try {
+            const res = await api.functions.invoke("SyncFuelCycle", {});
+            const patch = res.patch || res.data?.patch || {};
+            const updated = res.character || res.data?.character;
+            if (updated?.id) c = updated;
+            else if (Object.keys(patch).length) c = { ...c, ...patch };
+            if (c) primeMyCharacterCache(c);
+          } catch { /* best-effort */ }
+        }
         if (!active) return;
         idRef.current = c?.id || null;
         setActiveCharacterId(c?.id);
         setCharacter(c);
-      })
-      .catch(() => {})
-      .finally(() => active && setLoading(false));
+      } catch {
+        /* ignore */
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
 
     const unsub = api.entities.Character.subscribe((event) => {
       if (event.type !== "update") return;
       const id = idRef.current;
       if (!id || event.data?.id !== id) return;
-      // The event already carries the freshest character — prime the cache with
-      // it instead of busting, so menu navigation stops refetching on every
-      // update (which was the main source of rate-limit stalls).
       primeMyCharacterCache(event.data);
       setCharacter(event.data);
     });
@@ -57,6 +70,7 @@ export function useMyCharacter() {
       const value = typeof next === "function" ? next(prev) : next;
       idRef.current = value?.id || null;
       setActiveCharacterId(value?.id);
+      if (value) primeMyCharacterCache(value);
       return value;
     });
   }, []);

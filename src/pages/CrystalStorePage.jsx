@@ -7,7 +7,7 @@ import { Gem, Sparkles, Crown, Check } from "lucide-react";
 import WeeklyNovaQuests from "@/components/game/WeeklyNovaQuests";
 
 const PACKAGES = [
-  { id: "pouch", name: "Starter Pouch", crystals: 500, price: "$4.99", bonus: null, color: "#22D3EE" },
+  { id: "pouch", name: "Starter Pouch", crystals: 500, price: "$4.99", bonus: null, color: "#2DD4BF" },
   { id: "cluster", name: "Cosmic Cluster", crystals: 1200, price: "$9.99", bonus: "+20%", color: "#A855F7", popular: true },
   { id: "vault", name: "Stellar Vault", crystals: 2800, price: "$19.99", bonus: "+25%", color: "#F59E0B" },
   { id: "motherlode", name: "Galactic Motherlode", crystals: 6000, price: "$39.99", bonus: "+33%", color: "#EF4444" },

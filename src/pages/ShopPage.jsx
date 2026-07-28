@@ -520,13 +520,13 @@ export default function ShopPage() {
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] via-card/40 to-transparent p-4 sm:p-5 shadow-[0_16px_40px_rgba(0,0,0,0.25)]"
+          className="rounded-2xl border border-teal-400/20 bg-gradient-to-br from-teal-500/[0.07] via-card/40 to-transparent p-4 sm:p-5 shadow-[0_16px_40px_rgba(0,0,0,0.25)]"
         >
           <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
             <div>
-              <p className="text-[9px] font-display font-bold tracking-[0.2em] uppercase text-cyan-300/80 mb-0.5">Stall A</p>
+              <p className="text-[9px] font-display font-bold tracking-[0.2em] uppercase text-teal-300/80 mb-0.5">Stall A</p>
               <h2 className="font-display font-bold text-base tracking-wide text-foreground flex items-center gap-2">
-                <Swords className="w-4 h-4 text-cyan-300" /> Armory
+                <Swords className="w-4 h-4 text-teal-300" /> Armory
               </h2>
               <p className="text-[11px] text-muted-foreground mt-0.5">Haggle if you dare · crates sometimes</p>
             </div>

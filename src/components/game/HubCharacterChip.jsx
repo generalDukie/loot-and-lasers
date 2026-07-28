@@ -59,7 +59,15 @@ function StimIcon({ buff, now, large }) {
 
 // Compact character identity chip — portrait + level badge + name + XP bar.
 // Supports a `large` variant for the hub hero corner.
-export default function HubCharacterChip({ character, xpPct, large = false }) {
+// When `asMenuTrigger`, renders a button that toggles the page nav (touch-friendly).
+export default function HubCharacterChip({
+  character,
+  xpPct,
+  large = false,
+  asMenuTrigger = false,
+  menuOpen = false,
+  onMenuToggle,
+}) {
   const now = useNow();
   if (!character) return null;
   const ap = character.appearance || {};
@@ -73,11 +81,13 @@ export default function HubCharacterChip({ character, xpPct, large = false }) {
     ? "min-w-[24px] h-[24px] px-1 text-[11px]"
     : "min-w-[16px] h-[16px] px-1 text-[9px]";
 
-  return (
-    <Link to="/character" className="block group focus:outline-none">
+  const shellClass = `block group focus:outline-none ${asMenuTrigger ? "text-left" : ""}`;
+  const body = (
       <motion.div
         transition={{ type: "spring", stiffness: 400, damping: 15 }}
-        className={`flex items-center gap-${large ? 3 : 2} rounded-xl bg-background/90 border border-border/60 ${pad} shadow-lg group-hover:border-primary/50 transition-colors`}
+        className={`flex items-center gap-${large ? 3 : 2} rounded-xl bg-background/90 border ${
+          menuOpen ? "border-primary/55" : "border-border/60"
+        } ${pad} shadow-lg group-hover:border-primary/50 transition-colors`}
       >
         {/* Portrait + level badge */}
         <div className="relative shrink-0">
@@ -164,6 +174,26 @@ export default function HubCharacterChip({ character, xpPct, large = false }) {
           })()}
         </div>
       </motion.div>
+  );
+
+  if (asMenuTrigger) {
+    return (
+      <button
+        type="button"
+        className={shellClass}
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+        onClick={() => onMenuToggle?.()}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <Link to="/character" className={shellClass}>
+      {body}
     </Link>
   );
 }

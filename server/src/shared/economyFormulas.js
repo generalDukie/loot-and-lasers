@@ -119,8 +119,10 @@ export function checkFuelReset(character) {
   const max = character.max_fuel || FUEL_MAX;
   const resetAt = character.fuel_reset_at ? new Date(character.fuel_reset_at) : null;
   const now = Date.now();
-  if (!resetAt || now - resetAt.getTime() >= FUEL_CYCLE_MS) {
-    return { fuel: max, fuel_reset_at: new Date(now).toISOString(), fuel_purchases: 0 };
+  const fuelVal = Number(character.fuel);
+  const fuelMissing = character.fuel == null || !Number.isFinite(fuelVal);
+  if (fuelMissing || !resetAt || now - resetAt.getTime() >= FUEL_CYCLE_MS) {
+    return { fuel: max, max_fuel: max, fuel_reset_at: new Date(now).toISOString(), fuel_purchases: 0 };
   }
   return null;
 }
@@ -866,15 +868,31 @@ export function progressWeeklyNovaQuest(character, key, amount = 1) {
 
 // ── Casino ───────────────────────────────────────────────────
 export const NOVA_CASINO_OPEN = false;
-export const CASINO_MAX_STARDUST_BET = 1000;
 export const CASINO_MAX_NOVA_BET = 100;
+/** Max stardust bet ≈ 25× mission SD/F (floored at 100, capped). */
+export const CASINO_STARDUST_BET_SD_MULT = 25;
+export const CASINO_MAX_STARDUST_BET_CAP = 250_000;
+export const CASINO_MIN_STARDUST_BET_FLOOR = 100;
+
+export function getCasinoMaxStardustBet(level = 1) {
+  const sdf = getMissionStardustPerFuel(level);
+  return Math.min(
+    CASINO_MAX_STARDUST_BET_CAP,
+    Math.max(CASINO_MIN_STARDUST_BET_FLOOR, sdf * CASINO_STARDUST_BET_SD_MULT),
+  );
+}
+
+/** @deprecated Prefer getCasinoMaxStardustBet(level) — kept as L1 floor reference. */
+export const CASINO_MAX_STARDUST_BET = CASINO_MIN_STARDUST_BET_FLOOR;
+
 export const CASINO_WHEEL_TIERS = [
-  { p: 0.50, mult: 0 },
-  { p: 0.30, mult: 1 },
-  { p: 0.12, mult: 2 },
-  { p: 0.06, mult: 3 },
-  { p: 0.018, mult: 5 },
-  { p: 0.002, mult: 20 },
+  { p: 0.50, mult: 0, label: "Bust" },
+  { p: 0.22, mult: 1, label: "Push" },
+  { p: 0.15, mult: 2, label: "2×" },
+  { p: 0.08, mult: 3, label: "3×" },
+  { p: 0.04, mult: 5, label: "5×" },
+  { p: 0.008, mult: 10, label: "10×" },
+  { p: 0.002, mult: 25, label: "25×" },
 ];
 
 export const GUILD_CREATE_COST = 500;

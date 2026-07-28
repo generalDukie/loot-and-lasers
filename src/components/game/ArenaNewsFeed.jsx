@@ -49,7 +49,7 @@ export default function ArenaNewsFeed() {
         background: "radial-gradient(ellipse 70% 50% at 0% 0%, rgba(34,211,238,0.1), transparent 55%)",
       }} />
       <div className="relative p-4">
-        <h3 className="font-display font-bold text-xs tracking-[0.18em] flex items-center gap-2 mb-3 text-cyan-300/90">
+        <h3 className="font-display font-bold text-xs tracking-[0.18em] flex items-center gap-2 mb-3 text-teal-300/90">
           <Newspaper className="w-3.5 h-3.5" /> GALAXY NEWS
         </h3>
         <div className="space-y-2 max-h-56 overflow-y-auto pr-1">

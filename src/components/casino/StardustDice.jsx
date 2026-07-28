@@ -3,17 +3,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { burstWin } from "@/lib/casinoFx";
 
-const MAX = 1000;
 const FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 // Bet Stardust on a d6 roll — pick High (4–6) or Low (1–3). Server rolls.
-export default function StardustDice({ character, onSettle, busy }) {
-  const [bet, setBet] = useState(100);
+export default function StardustDice({ character, onSettle, busy, maxBet = 100 }) {
+  const MAX = Math.max(1, Math.floor(maxBet) || 100);
+  const [bet, setBet] = useState(Math.min(100, MAX));
   const [result, setResult] = useState(null);
   const [rolling, setRolling] = useState(false);
   const [face, setFace] = useState(0);
   const balance = character?.stardust ?? 0;
-  const b = Math.min(MAX, Math.max(1, Math.floor(bet) || 1));
+  const b = Math.min(MAX, Math.max(1, Math.floor(Number(bet)) || 1));
+
+  useEffect(() => {
+    setBet((prev) => Math.min(MAX, Math.max(1, Math.floor(Number(prev)) || 1)));
+  }, [MAX]);
 
   useEffect(() => {
     if (!rolling) return;
@@ -34,7 +38,9 @@ export default function StardustDice({ character, onSettle, busy }) {
       const delta = res.delta_stardust ?? res.data?.delta_stardust ?? (won ? b : -b);
       setFace(dice - 1);
       setRolling(false);
-      const label = won ? `Rolled ${dice} — +${Math.abs(delta)} ✨` : `Rolled ${dice} — -${b} ✨`;
+      const label = won
+        ? `Rolled ${dice} — +${Math.abs(delta).toLocaleString()} ✨`
+        : `Rolled ${dice} — −${b.toLocaleString()} ✨`;
       setResult({ won, dice, label });
       if (won) burstWin();
     } catch {
@@ -51,12 +57,12 @@ export default function StardustDice({ character, onSettle, busy }) {
       </div>
       <p className="text-[11px] text-muted-foreground mb-3 leading-snug">Roll a die. Call High (4–6) or Low (1–3) — call it right to double your stardust.</p>
       <div className="flex items-center gap-2 mb-3">
-        <input type="number" min={1} max={MAX} value={bet} onChange={(e) => setBet(e.target.value)} className="w-20 bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-sm" />
-        <button onClick={() => setBet(Math.min(MAX, balance))} className="text-[10px] px-2 py-1 rounded bg-muted/40 border border-border/40">Max</button>
+        <input type="number" min={1} max={MAX} value={bet} onChange={(e) => setBet(e.target.value)} className="w-24 bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-sm" />
+        <button type="button" onClick={() => setBet(Math.min(MAX, balance))} className="text-[10px] px-2 py-1 rounded bg-muted/40 border border-border/40">Max</button>
       </div>
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => roll("low")} disabled={busy || rolling} className="flex-1 painted-btn py-1.5 text-xs disabled:opacity-40">Low (1–3)</button>
-        <button onClick={() => roll("high")} disabled={busy || rolling} className="flex-1 painted-btn py-1.5 text-xs disabled:opacity-40">High (4–6)</button>
+        <button type="button" onClick={() => roll("low")} disabled={busy || rolling} className="flex-1 painted-btn py-1.5 text-xs disabled:opacity-40">Low (1–3)</button>
+        <button type="button" onClick={() => roll("high")} disabled={busy || rolling} className="flex-1 painted-btn py-1.5 text-xs disabled:opacity-40">High (4–6)</button>
       </div>
       <div className="h-16 flex items-center justify-center">
         <AnimatePresence mode="wait">

@@ -134,7 +134,7 @@ export default function PrivateChatPanel({ myChar, initialRecipientId, onTagSend
             <>
               <div className="flex items-center gap-2 p-2 border-b border-border/20">
                 <button onClick={() => { setActiveId(null); setOther(null); }} className="sm:hidden text-muted-foreground"><ArrowLeft className="w-4 h-4" /></button>
-                <div className="w-7 h-7 rounded-full bg-muted/40 border border-border/40 flex items-center justify-center text-xs font-bold" style={{ color: "#22D3EE" }}>
+                <div className="w-7 h-7 rounded-full bg-muted/40 border border-border/40 flex items-center justify-center text-xs font-bold" style={{ color: "#2DD4BF" }}>
                   {(other.name)[0]?.toUpperCase()}
                   <span className="absolute -bottom-0 -right-0 w-2.5 h-2.5 rounded-full border-2 border-card" style={{ background: statusColor }} />
                 </div>

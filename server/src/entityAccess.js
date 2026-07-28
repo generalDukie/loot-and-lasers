@@ -5,7 +5,7 @@
  */
 import { entities } from "./entities.js";
 import { expForLevel } from "./shared/rewards.js";
-import { CLASS_BASE_STATS } from "./shared/economyFormulas.js";
+import { CLASS_BASE_STATS, FUEL_MAX } from "./shared/economyFormulas.js";
 
 export function isAdmin(user) {
   return user?.role === "admin";
@@ -279,9 +279,24 @@ export function sanitizeCreatePayload(user, type, data = {}) {
   if (type === "Character") {
     out.created_by_id = user.id;
 
+    const name = String(out.name || "").trim();
+    if (name.length < 2 || name.length > 24) {
+      const err = new Error("Name must be 2–24 characters");
+      err.status = 400;
+      throw err;
+    }
+    out.name = name;
+
+    // Every new operative starts with a full fuel tank (admins included).
+    const now = new Date().toISOString();
+    out.fuel = FUEL_MAX;
+    out.max_fuel = FUEL_MAX;
+    out.fuel_purchases = 0;
+    out.fuel_reset_at = now;
+    out.fuel_updated_at = now;
+
     if (!isAdmin(user)) {
       const existingCount = entities.Character.filter({ created_by_id: user.id }, null, 50).length;
-      const now = new Date().toISOString();
       const clientNova = Number(out.nova_crystals) || 0;
 
       out.level = 1;
@@ -294,11 +309,6 @@ export function sanitizeCreatePayload(user, type, data = {}) {
       out.attribute_purchases_by_stat = {
         strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
       };
-      out.fuel = 100;
-      out.max_fuel = 100;
-      out.fuel_purchases = 0;
-      out.fuel_reset_at = now;
-      out.fuel_updated_at = now;
       out.missions_completed = 0;
       out.highest_sector = 1;
       out.active_mission_id = "";

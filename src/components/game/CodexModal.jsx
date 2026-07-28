@@ -9,11 +9,11 @@ import { ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST } from "@/lib/arenaEng
 import { DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST } from "@/lib/dungeonEngine";
 
 const SECTIONS = [
-  { id: "start", label: "Getting Started", icon: BookOpen, color: "#22D3EE" },
+  { id: "start", label: "Getting Started", icon: BookOpen, color: "#2DD4BF" },
   { id: "currencies", label: "Currencies", icon: Coins, color: "#FFD700" },
   { id: "missions", label: "Missions & Fuel", icon: Rocket, color: "#FF9E4F" },
   { id: "combat", label: "Combat & Arena", icon: Swords, color: "#FF4D6D" },
-  { id: "galaxy", label: "Galaxy Dungeon", icon: MapIcon, color: "#00E5FF" },
+  { id: "galaxy", label: "Galaxy Dungeon", icon: MapIcon, color: "#C084FC" },
   { id: "market", label: "Black Market", icon: ShoppingBag, color: "#4ADE80" },
   { id: "blackhole", label: "Void", icon: Orbit, color: "#9D6BFF" },
   { id: "ship", label: "Ship Hangar", icon: Ship, color: "#FFD700" },
@@ -37,7 +37,7 @@ function renderSection(id) {
             <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Cantina</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" /> fuel.</Li>
             <Li>When a mission finishes, <b>claim</b> it for XP, stardust, and random loot. Level up to unlock harder sectors.</Li>
             <Li>Equip better gear on your <b>Character</b> page to raise your combat power.</Li>
-            <Li>Spend <b>Stardust</b> to buy attribute points anytime — each attribute has its own rising cost. Tap once or hold (~1s) to keep buying.</Li>
+            <Li>Spend <b>Stardust</b> to buy attribute points anytime — each attribute has its own rising cost. Tap once or hold to keep buying (starts slow, ramps up to ~10/sec).</Li>
             <Li>Try the <b>Arena</b> for PvP, or brave the <b>Galaxy Dungeon</b> for risky loot.</Li>
             <Li>Dissolve unwanted gear in the <b>Void</b> (or from your inventory) to reclaim stardust.</Li>
           </ul>

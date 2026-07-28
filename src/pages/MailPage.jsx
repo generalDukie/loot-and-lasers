@@ -207,7 +207,7 @@ function MailDetail({ mail, onClaim, onDelete, onRestore, onUnread, onReply, onA
           <h3 className="font-display font-bold text-base">{mail.subject}</h3>
           <p className="text-xs text-muted-foreground">From {mail.from_name} · {new Date(mail.created_date).toLocaleString()}</p>
         </div>
-        <span className={`text-[9px] px-2 py-0.5 rounded-full ${mail.mail_type === "system" ? "bg-purple-500/15 text-purple-300" : "bg-cyan-500/15 text-cyan-300"}`}>{mail.mail_type}</span>
+        <span className={`text-[9px] px-2 py-0.5 rounded-full ${mail.mail_type === "system" ? "bg-purple-500/15 text-purple-300" : "bg-teal-500/15 text-teal-300"}`}>{mail.mail_type}</span>
       </div>
       <p className="text-sm text-foreground/80 whitespace-pre-wrap">{mail.body}</p>
 

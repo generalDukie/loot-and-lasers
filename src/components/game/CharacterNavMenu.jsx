@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { UserRound } from "lucide-react";
@@ -18,38 +18,105 @@ const STAT_SHORT = {
   luck: "LCK",
 };
 
-// Character portrait + currencies. Hovering expands page nav + a gear/stats loadout bubble.
+/** True when the device can reliably hover (mouse/trackpad). */
+function useDesktopHover() {
+  const [desktopHover, setDesktopHover] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  });
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setDesktopHover(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return desktopHover;
+}
+
+// Character portrait + currencies. Hover (desktop) or tap (touch) expands page nav + loadout.
 export default function CharacterNavMenu({ character, large = false, xpPct: xpPctProp }) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef(null);
+  const rootRef = useRef(null);
+  const desktopHover = useDesktopHover();
   const equippedItems = useEquippedItems(character?.id);
   const xpPct = xpPctProp ?? (character?.experience_to_next_level > 0
     ? Math.min(100, ((character.experience || 0) / character.experience_to_next_level) * 100)
     : 0);
-  const enter = () => { clearTimeout(closeTimer.current); setOpen(true); };
-  const leave = () => { closeTimer.current = setTimeout(() => setOpen(false), 150); };
+
+  const enter = () => {
+    if (!desktopHover) return;
+    clearTimeout(closeTimer.current);
+    setOpen(true);
+  };
+  const leave = () => {
+    if (!desktopHover) return;
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  };
+  const close = () => {
+    clearTimeout(closeTimer.current);
+    setOpen(false);
+  };
+  const toggle = () => {
+    clearTimeout(closeTimer.current);
+    setOpen((v) => !v);
+  };
+
+  // Touch / coarse pointer: dismiss on outside tap or Escape.
+  useEffect(() => {
+    if (!open || desktopHover) return undefined;
+    const onPointerDown = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) close();
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, desktopHover]);
+
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
 
   const totals = character ? computePermanentTotalStats(character, equippedItems) : {};
   const derived = character ? computeDerivedStats(totals, character) : {};
   const filled = equippedItems.length;
 
   return (
-    <div className="relative" onMouseEnter={enter} onMouseLeave={leave}>
+    <div
+      ref={rootRef}
+      className="relative"
+      onMouseEnter={enter}
+      onMouseLeave={leave}
+    >
       <div className="flex items-stretch gap-2">
-        <HubCharacterChip character={character} xpPct={xpPct} large={large} />
+        <HubCharacterChip
+          character={character}
+          xpPct={xpPct}
+          large={large}
+          asMenuTrigger={!desktopHover}
+          menuOpen={open}
+          onMenuToggle={toggle}
+        />
         <CurrencyStack character={character} large={large} />
       </div>
 
       <AnimatePresence>
         {open && character && (
           <motion.div
+            role="menu"
+            aria-label="Page navigation"
             initial={{ opacity: 0, y: -8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full mt-1 left-0 z-50 flex items-start gap-2"
+            className="absolute top-full mt-1 left-0 z-50 flex flex-col sm:flex-row items-stretch sm:items-start gap-2 w-[min(calc(100vw-1rem),24rem)] sm:w-auto max-h-[min(70vh,34rem)] overflow-y-auto overscroll-contain"
           >
-            <div className="w-52 rounded-xl border border-border/60 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel p-2">
+            <div className="w-full sm:w-52 shrink-0 rounded-xl border border-border/60 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel p-2">
               {NAV_GROUPS.map((g, gi) => (
                 <React.Fragment key={g.name}>
                   {gi > 0 && <div className="h-px bg-border/40 my-1 mx-1" />}
@@ -61,6 +128,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
                       key={to}
                       to={to}
                       title={label}
+                      onClick={close}
                       className={({ isActive }) =>
                         `flex items-center gap-2.5 rounded-xl px-2 py-2 transition-all ${
                           isActive ? "bg-primary/15 border-glow-cyan" : "hover:bg-muted/40"
@@ -82,7 +150,8 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
             <Link
               to="/character"
               title="View loadout & inventory"
-              className="w-[11.5rem] rounded-xl border border-border/70 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel overflow-hidden hover:border-primary/45 transition-colors block"
+              onClick={close}
+              className="w-full sm:w-[11.5rem] shrink-0 rounded-xl border border-border/70 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel overflow-hidden hover:border-primary/45 transition-colors block"
             >
               <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/50 bg-muted/20">
                 <span className="text-[9px] font-display font-bold tracking-[0.18em] text-muted-foreground">

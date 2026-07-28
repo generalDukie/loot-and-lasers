@@ -104,18 +104,18 @@ function BrandMark({ interactive = false }) {
       </span>
       <SiteTitle
         as="h1"
-        className={`${base} relative bg-gradient-to-r from-cyan-200 via-primary to-violet-400 bg-clip-text text-transparent ${
+        className={`${base} relative bg-gradient-to-r from-teal-100 via-primary to-amber-200/90 bg-clip-text text-transparent ${
           interactive ? "group-hover:brightness-110 transition-[filter]" : ""
         }`}
         style={{
           ...size,
-          filter: "drop-shadow(0 0 10px hsl(190 90% 50% / 0.35)) drop-shadow(0 0 18px hsl(270 60% 55% / 0.2))",
+          filter: "drop-shadow(0 0 10px hsl(172 62% 46% / 0.35)) drop-shadow(0 0 18px hsl(38 90% 56% / 0.18))",
         }}
       />
       {/* Thin laser underline */}
       <span
         className="mt-1 h-px w-[72%] rounded-full bg-gradient-to-r from-transparent via-primary to-transparent opacity-70"
-        style={{ boxShadow: "0 0 8px hsl(190 90% 50% / 0.55)" }}
+        style={{ boxShadow: "0 0 8px hsl(172 62% 46% / 0.45)" }}
         aria-hidden
       />
     </div>

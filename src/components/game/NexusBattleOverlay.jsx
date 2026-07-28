@@ -52,7 +52,7 @@ export default function NexusBattleOverlay({ result, attackerGuild, onDone }) {
         <div className="relative h-2 rounded-full bg-muted/50 overflow-hidden mb-4">
           <motion.div
             className="h-full rounded-full"
-            style={{ background: "linear-gradient(90deg, #22D3EE, #A855F7)" }}
+            style={{ background: "linear-gradient(90deg, #2DD4BF, #C084FC)" }}
             animate={{ width: `${atkPct}%` }}
             transition={{ duration: 0.6 }}
           />
@@ -131,7 +131,7 @@ export default function NexusBattleOverlay({ result, attackerGuild, onDone }) {
 }
 
 function Combatant({ name, tag, side, won, done }) {
-  const color = side === "attacker" ? "#22D3EE" : "#FB7185";
+  const color = side === "attacker" ? "#2DD4BF" : "#FB7185";
   return (
     <div className={`text-center p-2 rounded-xl border ${won && done ? "border-amber-400/60 bg-amber-500/5" : "border-border/40 bg-muted/10"}`}>
       <motion.div

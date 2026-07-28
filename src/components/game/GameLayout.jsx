@@ -59,7 +59,7 @@ export default function GameLayout() {
           <main className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden px-4 sm:px-6 lg:px-8 pb-4 flex flex-col">
             <PageErrorBoundary key={location.pathname}>
               <AnimatedPage>
-                <Outlet />
+                <Outlet context={{ character, setCharacter }} />
               </AnimatedPage>
             </PageErrorBoundary>
           </main>

@@ -44,9 +44,9 @@ import {
   ensureWeeklyNovaState,
   progressWeeklyNovaQuest,
   NOVA_CASINO_OPEN,
-  CASINO_MAX_STARDUST_BET,
   CASINO_MAX_NOVA_BET,
   CASINO_WHEEL_TIERS,
+  getCasinoMaxStardustBet,
   GUILD_CREATE_COST,
   GUILD_WAR_DECLARE_COST,
   GUILD_WAR_READY_HOURS,
@@ -535,12 +535,13 @@ export const CasinoSettle = wrap((user, body) => {
   const bet = Math.floor(Number(body.bet) || 0);
   if (bet < 1) httpErr(400, "Invalid bet");
 
+  const maxStardustBet = getCasinoMaxStardustBet(ch.level || 1);
   let deltaCrystals = 0;
   let deltaStardust = 0;
   let outcome = {};
 
   if (game === "dice" || game === "stardust_dice") {
-    if (bet > CASINO_MAX_STARDUST_BET) httpErr(400, "Bet too high");
+    if (bet > maxStardustBet) httpErr(400, `Bet too high (max ${maxStardustBet})`);
     if ((ch.stardust || 0) < bet) httpErr(400, "Not enough stardust");
     const choice = String(body.choice || "").toLowerCase();
     if (choice !== "high" && choice !== "low") httpErr(400, "Choose high or low");
@@ -548,36 +549,36 @@ export const CasinoSettle = wrap((user, body) => {
     const high = dice >= 4;
     const won = (choice === "high" && high) || (choice === "low" && !high);
     deltaStardust = won ? bet : -bet;
-    outcome = { dice, won, choice };
+    outcome = { dice, won, choice, payout_mult: won ? 2 : 0 };
   } else if (game === "wheel" || game === "stardust_wheel") {
-    if (bet > CASINO_MAX_STARDUST_BET) httpErr(400, "Bet too high");
+    if (bet > maxStardustBet) httpErr(400, `Bet too high (max ${maxStardustBet})`);
     if ((ch.stardust || 0) < bet) httpErr(400, "Not enough stardust");
     const tier = rollWheelTier();
-    deltaStardust = bet * (tier.mult - 1);
-    outcome = { mult: tier.mult };
+    // Net change: bust −bet, push 0, Nx → +(N−1)×bet (stake returned × N).
+    deltaStardust = Math.round(bet * (tier.mult - 1));
+    outcome = { mult: tier.mult, payout_mult: tier.mult, label: tier.label || null };
   } else if (game === "flip" || game === "crystal_flip") {
     if (!NOVA_CASINO_OPEN) httpErr(400, "Crystal tables sealed");
     if (bet > CASINO_MAX_NOVA_BET) httpErr(400, "Bet too high");
     if ((ch.nova_crystals || 0) < bet) httpErr(400, "Not enough Nova Crystals");
     const won = Math.random() < 0.25;
     deltaCrystals = won ? bet : -bet;
-    outcome = { won };
+    outcome = { won, payout_mult: won ? 2 : 0 };
   } else if (game === "jackpot" || game === "crystal_jackpot") {
     if (!NOVA_CASINO_OPEN) httpErr(400, "Crystal tables sealed");
     if (bet > CASINO_MAX_NOVA_BET) httpErr(400, "Bet too high");
     if ((ch.nova_crystals || 0) < bet) httpErr(400, "Not enough Nova Crystals");
     const won = Math.random() < 0.01;
     deltaCrystals = won ? bet * (25 - 1) : -bet;
-    outcome = { won, mult: won ? 25 : 0 };
+    outcome = { won, mult: won ? 25 : 0, payout_mult: won ? 25 : 0 };
   } else if (body.currency && body.wager != null && body.payout_mult != null) {
-    // Fallback capped settle
     const currency = String(body.currency).toLowerCase();
     const wager = Math.floor(Number(body.wager) || 0);
     let mult = Number(body.payout_mult) || 0;
     if (currency === "stardust") {
-      if (wager > CASINO_MAX_STARDUST_BET) httpErr(400, "Bet too high");
+      if (wager > maxStardustBet) httpErr(400, `Bet too high (max ${maxStardustBet})`);
       if ((ch.stardust || 0) < wager) httpErr(400, "Not enough stardust");
-      mult = Math.min(20, Math.max(0, mult));
+      mult = Math.min(25, Math.max(0, mult));
       deltaStardust = Math.round(wager * (mult - 1));
     } else if (currency === "nova" || currency === "nova_crystals") {
       if (!NOVA_CASINO_OPEN && mult > 0) httpErr(400, "Crystal tables sealed");
@@ -595,18 +596,36 @@ export const CasinoSettle = wrap((user, body) => {
 
   if (deltaCrystals > 0 && !NOVA_CASINO_OPEN) httpErr(400, "Crystal tables sealed");
 
+  // Re-read inside the transaction so concurrent patches can't stale-overwrite.
+  const live = entities.Character.get(ch.id) || ch;
+  const nextStardust = Math.max(0, (live.stardust || 0) + deltaStardust);
+  const nextCrystals = Math.max(0, (live.nova_crystals || 0) + deltaCrystals);
   const patch = {
-    stardust: Math.max(0, (ch.stardust || 0) + deltaStardust),
-    nova_crystals: Math.max(0, (ch.nova_crystals || 0) + deltaCrystals),
+    stardust: nextStardust,
+    nova_crystals: nextCrystals,
   };
+  if (deltaStardust > 0) {
+    patch.total_stardust_earned = (live.total_stardust_earned || 0) + deltaStardust;
+  }
+
   if (deltaStardust === 0 && deltaCrystals === 0) {
-    return { success: true, push: true, outcome, patch: {}, character: ch };
+    return {
+      success: true,
+      push: true,
+      outcome,
+      max_bet: maxStardustBet,
+      delta_stardust: 0,
+      delta_crystals: 0,
+      patch: {},
+      character: live,
+    };
   }
   const character = entities.Character.update(ch.id, patch);
   return {
     success: true,
     delta_stardust: deltaStardust,
     delta_crystals: deltaCrystals,
+    max_bet: maxStardustBet,
     outcome,
     patch,
     character,
@@ -778,7 +797,7 @@ export const ClaimScoutMilestone = wrap((user) => {
 export const RenameCharacter = wrap((user, body) => {
   const ch = requireMyChar(user);
   const name = String(body?.name || "").trim();
-  if (!name || name.length > 24) httpErr(400, "Invalid name");
+  if (!name || name.length < 2 || name.length > 24) httpErr(400, "Name must be 2–24 characters");
   if ((ch.nova_crystals || 0) < NAME_CHANGE_COST) httpErr(400, "Not enough Nova Crystals");
   const taken = entities.Character.filter({ name }, null, 5).filter((c) => c.id !== ch.id);
   if (taken.length) httpErr(409, "Name taken");

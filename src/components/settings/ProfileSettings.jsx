@@ -47,6 +47,10 @@ export default function ProfileSettings() {
     if (!char) return;
     const trimmed = name.trim();
     if (!trimmed || trimmed === char.name) return;
+    if (trimmed.length < 2) {
+      toast({ title: "Name too short", description: "Need at least 2 characters.", variant: "destructive" });
+      return;
+    }
     if ((char.nova_crystals || 0) < NAME_CHANGE_COST) {
       toast({ title: "Not enough Nova Crystals", description: `Renaming costs ${NAME_CHANGE_COST} 💎 — you have ${char.nova_crystals || 0}.`, variant: "destructive" });
       return;
@@ -183,7 +187,7 @@ export default function ProfileSettings() {
               <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                 <Gem className="w-3 h-3 text-amber-400" /> Cost: {NAME_CHANGE_COST} · Balance: {char.nova_crystals || 0}
               </span>
-              <button type="submit" disabled={saving || !name.trim() || name.trim() === char.name} className="painted-btn px-4 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50">
+              <button type="submit" disabled={saving || name.trim().length < 2 || name.trim() === char.name} className="painted-btn px-4 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50">
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Pencil className="w-3.5 h-3.5" />}
                 Rename
               </button>

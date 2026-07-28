@@ -31,7 +31,7 @@ export default function ShipTypeCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={`relative overflow-hidden rounded-2xl border bg-card/35 backdrop-blur-sm p-4 flex flex-col transition-shadow hover:shadow-[0_10px_30px_rgba(0,0,0,0.28)] ${
-        active ? "border-glow-cyan shadow-[0_0_24px_hsl(190_90%_50%/0.15)]" : locked ? "border-border/25" : "border-border/45"
+        active ? "border-glow-cyan shadow-[0_0_24px_hsl(172_62%_46%/0.15)]" : locked ? "border-border/25" : "border-border/45"
       }`}
     >
       {/* Ghost bay preview for locked hulls */}

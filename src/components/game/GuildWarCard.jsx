@@ -23,14 +23,14 @@ export default function GuildWarCard({ war, readies, character, membership, busy
     <div className="rounded-xl border border-border/50 bg-card/40 p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex-1 text-center min-w-0">
-          <p className="font-display font-bold text-xs truncate" style={{ color: isAttacker ? "#22D3EE" : undefined }}>
+          <p className="font-display font-bold text-xs truncate" style={{ color: isAttacker ? "#2DD4BF" : undefined }}>
             {war.attacker_guild_name}
           </p>
           <p className="text-[9px] text-muted-foreground">{isAttacker ? "Your guild" : "Attacker"}</p>
         </div>
         <span className="font-display font-bold text-xs text-muted-foreground">VS</span>
         <div className="flex-1 text-center min-w-0">
-          <p className="font-display font-bold text-xs truncate" style={{ color: !isAttacker ? "#22D3EE" : undefined }}>
+          <p className="font-display font-bold text-xs truncate" style={{ color: !isAttacker ? "#2DD4BF" : undefined }}>
             {war.defender_guild_name}
           </p>
           <p className="text-[9px] text-muted-foreground">{!isAttacker ? "Your guild" : "Defender"}</p>

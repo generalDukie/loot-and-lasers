@@ -83,10 +83,10 @@ export default function CombatCompleteOverlay({ summary, onClose }) {
 
         <div className="space-y-2">
           {(xp?.total > 0 || (xp?.total === 0 && note)) && (
-            <RewardCard icon={<Zap className="w-5 h-5" />} accent="#00E5FF">
+            <RewardCard icon={<Zap className="w-5 h-5" />} accent="#2DD4BF">
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-display font-semibold text-cyan-300">EXPERIENCE</span>
-                <span className="font-display font-bold text-cyan-400 text-lg">+{xp?.total || 0}</span>
+                <span className="text-xs font-display font-semibold text-teal-300">EXPERIENCE</span>
+                <span className="font-display font-bold text-teal-400 text-lg">+{xp?.total || 0}</span>
               </div>
               {xp?.base != null && xp.base !== xp.total && (
                 <p className="text-[10px] text-muted-foreground mt-1">base {xp.base}{xp.collectionPct > 0 ? ` · +${xp.collectionPct}% collection` : ""}</p>

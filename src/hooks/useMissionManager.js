@@ -8,6 +8,7 @@ import {
   getExpForLevel,
   getEffectiveFuelCost,
   FUEL_MAX,
+  MISSION_MIN_FUEL,
   FUEL_PURCHASE_AMOUNT,
   FUEL_PURCHASE_COST,
   FUEL_PURCHASE_MAX,
@@ -117,7 +118,7 @@ function writeCantinaBoard(characterId, board) {
 // Fresh board after a mission finishes — residual tank gets residual jobs, else normal dailies.
 function rollCantinaBoard(character) {
   const fuel = Math.round((character?.fuel ?? FUEL_MAX) * 100) / 100;
-  if (fuel >= 0.5) {
+  if (fuel >= MISSION_MIN_FUEL) {
     const probe = generateDailyMissions(character);
     const cheapest = Math.min(...probe.map((m) => getEffectiveFuelCost(character, m)));
     if (fuel < cheapest) return generateLowFuelBoard(character, fuel, 3);
@@ -249,8 +250,8 @@ export function useMissionManager() {
     const LOOT_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
     const lootType = LOOT_TYPES[template.name.length % 8];
     const lootRarity = rollItemRarity(template.rewards.item_rarity_chance, character.level);
-    // Not every mission yields gear — higher-risk runs drop loot more often.
-    const lootDrops = Math.random() < Math.min(0.85, 0.35 + (template.risk || 1) * 0.1);
+    // Not every mission yields gear — level nudges drop rate slightly.
+    const lootDrops = Math.random() < Math.min(0.85, 0.4 + Math.min(0.25, (character.level || 1) * 0.01));
 
     const mission = await api.entities.Mission.create({
       character_id: character.id,
@@ -263,9 +264,7 @@ export function useMissionManager() {
       start_time: startNow.toISOString(),
       end_time: endTime.toISOString(),
       rewards: { ...template.rewards, loot_rarity: lootRarity, loot_type: lootType, loot_drops: lootDrops },
-      difficulty: template.difficulty,
       level_requirement: template.level_requirement,
-      risk: template.risk || 1,
       patron: template.patron || null,
       explore_scene: pickMissionExploreSceneIndex(),
     });
@@ -283,10 +282,10 @@ export function useMissionManager() {
     pushNotification({ owner_id: character.id, type: "system", title: "🚀 Mission Launched!", body: `${template.name} — returning in ${formatTime(duration)} · -${fuelCost} ⛽` });
   }, [activeMission, character, toast]);
 
-  // Claim opens a soft end-mission fight first — rewards only apply on a win.
-  const handleClaim = useCallback(async () => {
+  // Soft end-mission fight — used by claim and by skip-to-fight.
+  const startMissionBattle = useCallback(async (mission) => {
     if (claimingRef.current || missionBattle) return;
-    if (!activeMission || activeMission.status !== "completed") return;
+    if (!mission || !character) return;
     claimingRef.current = true;
     setClaiming(true);
     try {
@@ -294,7 +293,7 @@ export function useMissionManager() {
       try {
         playerItems = (await api.entities.Item.filter({ character_id: character.id, is_equipped: true })) || [];
       } catch (e) {}
-      const enemy = generateMissionEncounter(character, activeMission);
+      const enemy = generateMissionEncounter(character, mission);
       const battle = simulateBattle(character, enemy, playerItems);
       setMissionBattle({ enemy, battle, playerItems });
     } catch (e) {
@@ -302,7 +301,13 @@ export function useMissionManager() {
       setClaiming(false);
       toast({ title: "Battle failed to start", description: "Try claiming again.", variant: "destructive" });
     }
-  }, [activeMission, character, missionBattle, toast]);
+  }, [character, missionBattle, toast]);
+
+  // Claim opens a soft end-mission fight first — rewards only apply on a win.
+  const handleClaim = useCallback(async () => {
+    if (!activeMission || activeMission.status !== "completed") return;
+    await startMissionBattle(activeMission);
+  }, [activeMission, startMissionBattle]);
 
   const finishMissionBattle = useCallback(async () => {
     if (!missionBattle || !activeMission) return;
@@ -440,19 +445,22 @@ export function useMissionManager() {
 
   const handleSkip = useCallback(async () => {
     if (!activeMission || activeMission.status !== "in_progress") return;
+    if (claimingRef.current || missionBattle) return;
     const cost = skipCostFor(activeMission);
     if (cost <= 0) return;
     if ((character.nova_crystals || 0) < cost) {
       toast({ title: "Not enough Nova Crystals", description: `Skip costs ${cost} 💎 — you have ${character.nova_crystals || 0}.`, variant: "destructive" });
       return;
     }
+    const completed = { ...activeMission, status: "completed" };
     await api.entities.Character.update(character.id, { nova_crystals: (character.nova_crystals || 0) - cost });
     await api.entities.Mission.update(activeMission.id, { status: "completed" });
-    setActiveMission(m => (m ? { ...m, status: "completed" } : null));
+    setActiveMission(completed);
     setCharacter(c => ({ ...c, nova_crystals: (c.nova_crystals || 0) - cost }));
     void trackNovaSpend(character, cost, "mission_skip");
-    toast({ title: "⏭️ Mission Skipped!", description: `-${cost} 💎 — ready to claim.` });
-  }, [activeMission, character, toast]);
+    // Skip buys the wait — jump straight into the claim fight.
+    await startMissionBattle(completed);
+  }, [activeMission, character, missionBattle, toast, startMissionBattle]);
 
   const handleBuyFuel = useCallback(async () => {
     if ((character.fuel_purchases || 0) >= FUEL_PURCHASE_MAX) return;

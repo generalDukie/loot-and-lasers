@@ -22,7 +22,7 @@ import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
 import { Satellite, Skull, Rocket } from "lucide-react";
 import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
 
-import { todayET } from "@/lib/gameTime";
+import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 
 export default function GalaxyMapPage() {
   const [character, setCharacter] = useState(null);
@@ -153,8 +153,8 @@ export default function GalaxyMapPage() {
     let defeatNote;
 
     ({ percentage: collectPct } = getCollectionStats(character));
-    boostedXp = applyXpBonus(rewards.experience || 0, collectPct);
-    if (boostedXp > 0) {
+    boostedXp = won ? applyXpBonus(rewards.experience || 0, collectPct) : 0;
+    if (won && boostedXp > 0) {
       let newExp = (character.experience || 0) + boostedXp;
       let expToNext = character.experience_to_next_level;
       while (newExp >= expToNext) { newExp -= expToNext; newLevel++; expToNext = getExpForLevel(newLevel); }
@@ -249,7 +249,7 @@ export default function GalaxyMapPage() {
         character_id: character.id,
       });
       defeatNote = freeLivesLeft > 1
-        ? `Death ${deaths + 1}/${deathCap}. Small XP consolation applied.`
+        ? `Death ${deaths + 1}/${deathCap}. No rewards on defeat.`
         : freeLivesLeft === 1
         ? `Last free life spent. Further fights cost ${DUNGEON_CONTINUE_COST} 💎.`
         : `Next fight costs ${DUNGEON_CONTINUE_COST} 💎.`;
@@ -281,7 +281,7 @@ export default function GalaxyMapPage() {
             ? `Patrolled — defeated ${enemy.name}`
             : (rewards.isBoss ? `Defeated ${enemy.name}` : `Cleared enemy ${fightIndex}`))
         : `Fell to ${enemy.name}`,
-      subtitle: `${fightPlanet.name}${rewards.isBoss ? " · Boss" : ""}${wasPatrol ? " · Patrol" : ""}${!won && rewards.consolation ? " · Consolation XP" : ""}`,
+      subtitle: `${fightPlanet.name}${rewards.isBoss ? " · Boss" : ""}${wasPatrol ? " · Patrol" : ""}`,
       xp: boostedXp > 0 ? { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
       stardust: won ? { total: rewards.stardust || 0 } : undefined,
       leveledUp: newLevel > prevLevel,
@@ -338,12 +338,17 @@ export default function GalaxyMapPage() {
           </p>
         </div>
         <div className="flex items-center gap-4 text-xs">
-          <span className="flex items-center gap-1.5" title="Free lives today (ET). After these, fights cost Nova Crystals.">
-            {Array.from({ length: DUNGEON_DEATHS_PER_DAY }).map((_, i) => (
-              <Skull key={i} className={`w-4 h-4 ${i < freeLivesLeft ? "text-red-400" : "text-muted/30"}`} />
-            ))}
-            <span className="text-muted-foreground ml-1">
-              {freeLivesLeft > 0 ? `${freeLivesLeft} left` : "0 left · paid"}
+          <span className="flex flex-col items-end gap-0.5" title="Free lives today (ET midnight). After these, fights cost Nova Crystals.">
+            <span className="flex items-center gap-1.5">
+              {Array.from({ length: DUNGEON_DEATHS_PER_DAY }).map((_, i) => (
+                <Skull key={i} className={`w-4 h-4 ${i < freeLivesLeft ? "text-red-400" : "text-muted/30"}`} />
+              ))}
+              <span className="text-muted-foreground ml-1">
+                {freeLivesLeft > 0 ? `${freeLivesLeft} left` : "0 left · paid"}
+              </span>
+            </span>
+            <span className="text-[9px] text-muted-foreground/80 font-display tracking-wide">
+              resets {formatEtaShort(msUntilNextETMidnight(now))}
             </span>
           </span>
           <span className="flex items-center gap-1 text-accent" title="Active ship mod tiers / catalogued frontier relics">
@@ -353,7 +358,8 @@ export default function GalaxyMapPage() {
       </div>
 
       <div className="flex-1 min-h-0 flex flex-row gap-2 sm:gap-3 overflow-hidden">
-        <div className="flex-[1.85] min-w-0 min-h-0 flex flex-col overflow-hidden">
+        {/* Map stays under the planet pane so spiral nodes can't steal Fight clicks */}
+        <div className="relative z-0 flex-[1.85] min-w-0 min-h-0 flex flex-col overflow-hidden isolate">
           <DungeonMap
             fill
             planets={DUNGEON_PLANETS}
@@ -365,7 +371,7 @@ export default function GalaxyMapPage() {
           />
         </div>
 
-        <div className="flex-1 min-w-0 min-h-0 max-w-[min(380px,38%)] flex flex-col overflow-hidden">
+        <div className="relative z-10 flex-1 min-w-0 min-h-0 max-w-[min(380px,38%)] flex flex-col overflow-hidden isolate">
           <DungeonPlanetView
             planet={planet}
             currentEnemy={displayEnemy}

@@ -1,45 +1,41 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { playAttackSound } from "@/lib/arenaBattleSfx";
 import ArenaAbilityBurst from "@/components/game/ArenaAbilityBurst";
-import { weaponEmojiFor, weaponCombatStyleFor } from "@/lib/gameData";
+import GearArtSvg from "@/components/game/GearArtSvg";
+import { rarityColor } from "@/lib/artStyle";
+import { weaponCombatStyleFor } from "@/lib/gameData";
 
-// Class fallbacks when no weapon is equipped.
 const CLASS_FALLBACK = {
-  Vanguard:           { type: "shoot", color: "#F87171", emoji: "🔫" },
-  "Shadow Operative": { type: "stab",  color: "#A78BFA", emoji: "🗡️" },
-  Technomancer:       { type: "shoot", color: "#60A5FA", emoji: "🔮" },
-  "Astral Warden":    { type: "shoot", color: "#FBBF24", emoji: "✨" },
-  "Void Runner":      { type: "stab",  color: "#22D3EE", emoji: "☄️" },
-  "Cosmic Engineer":  { type: "shoot", color: "#4ADE80", emoji: "💥" },
+  Vanguard: { type: "shoot", color: "#F87171", rarity: "uncommon" },
+  "Shadow Operative": { type: "stab", color: "#A78BFA", rarity: "uncommon" },
+  Technomancer: { type: "shoot", color: "#60A5FA", rarity: "uncommon" },
+  "Astral Warden": { type: "shoot", color: "#FBBF24", rarity: "uncommon" },
+  "Void Runner": { type: "stab", color: "#22D3EE", rarity: "uncommon" },
+  "Cosmic Engineer": { type: "shoot", color: "#4ADE80", rarity: "uncommon" },
 };
-
-const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 
 function resolveWeapon(className, weaponItem) {
   const fallback = CLASS_FALLBACK[className] || CLASS_FALLBACK.Vanguard;
-  const rarityColor = weaponItem?.rarity ? RARITY_COLORS[weaponItem.rarity] : null;
-  const emoji =
-    weaponItem?.emoji ||
-    (weaponItem ? weaponEmojiFor(weaponItem.name, weaponItem.base_name) : null) ||
-    fallback.emoji;
+  const rarity = weaponItem?.rarity || fallback.rarity;
+  const color = weaponItem?.rarity ? rarityColor(weaponItem.rarity) : fallback.color;
   const type = weaponItem
-    ? weaponCombatStyleFor(weaponItem.name, weaponItem.base_name, emoji)
+    ? weaponCombatStyleFor(weaponItem.name, weaponItem.base_name)
     : fallback.type;
   return {
-    emoji,
     type,
-    color: rarityColor || fallback.color,
+    color,
+    rarity,
+    name: weaponItem?.name,
+    baseName: weaponItem?.base_name,
+    levelRequirement: weaponItem?.level_requirement || 1,
   };
 }
 
-// Renders the fighter's equipped weapon in-hand, animates it on attack
-// (swing/stab/shoot from the weapon itself), and fires class specials.
 export default function ArenaWeaponVisual({ className, attacking, attackEvent, evIdx, side, weaponItem }) {
   const weapon = resolveWeapon(className, weaponItem);
+  const uid = useId().replace(/:/g, "");
   const dir = side === "player" ? 1 : -1;
-  // Only mirror gun-like glyphs (they face left by default). Melee icons are
-  // already readable without a flip.
   const aimAtEnemy = side === "player" && weapon.type === "shoot";
   const evType = attackEvent?.type;
   const isAbility = evType === "ability" || evType === "drone";
@@ -49,7 +45,7 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
   useEffect(() => {
     if (!attackEvent) return;
     playAttackSound(weapon.type, isAbility || isRegen, className);
-  }, [evIdx]);
+  }, [evIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pos = side === "player" ? { right: 0, top: 98 } : { left: 0, top: 98 };
 
@@ -70,10 +66,17 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
 
   return (
     <>
-      <motion.div className="absolute pointer-events-none z-20" style={{ ...pos, fontSize: 38 }} animate={animate} transition={transition}>
-        <div style={{ transform: aimAtEnemy ? "scaleX(-1)" : undefined, transformOrigin: "center" }}>
-          <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}>
-            <span style={{ filter: `drop-shadow(0 0 6px ${weapon.color}99)`, display: "inline-block" }}>{weapon.emoji}</span>
+      <motion.div className="absolute pointer-events-none z-20" style={{ ...pos, width: 44, height: 44 }} animate={animate} transition={transition}>
+        <div style={{ transform: aimAtEnemy ? "scaleX(-1)" : undefined, transformOrigin: "center", width: 44, height: 44, filter: `drop-shadow(0 0 6px ${weapon.color}99)` }}>
+          <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }} style={{ width: 44, height: 44 }}>
+            <GearArtSvg
+              type="weapon"
+              rarity={weapon.rarity}
+              name={weapon.name}
+              baseName={weapon.baseName}
+              levelRequirement={weapon.levelRequirement}
+              uid={`arena-${uid}`}
+            />
           </motion.div>
         </div>
       </motion.div>
@@ -108,7 +111,6 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
         )}
       </AnimatePresence>
 
-      {/* Melee slash trails */}
       <AnimatePresence>
         {attacking && weapon.type === "swing" && (
           <motion.div

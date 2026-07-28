@@ -11,12 +11,11 @@ function pick(arr) {
 }
 
 // Soft end-of-mission foe — scaled well under the player so wins are near-certain
-// without hard-coding the result. Higher mission risk nudges them slightly harder.
+// without hard-coding the result.
 export function generateMissionEncounter(character, mission) {
   const playerLevel = character?.level || 1;
-  const risk = mission?.risk || 1;
-  // ~55–70% of player level; risk adds a small bump but stays below the hero.
-  const level = Math.max(1, Math.floor(playerLevel * (0.5 + risk * 0.04)));
+  // ~55–70% of player level; stays below the hero.
+  const level = Math.max(1, Math.floor(playerLevel * (0.55 + Math.random() * 0.15)));
   const raceKey = pick(Object.keys(RACES));
   const classKey = pick(Object.keys(CLASSES));
   const race = RACES[raceKey];

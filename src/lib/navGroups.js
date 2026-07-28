@@ -8,7 +8,7 @@ export const NAV_GROUPS = [
       { to: "/character", label: "Hero", icon: User, color: "#00E5FF" },
       { to: "/missions", label: "Cantina", icon: Beer, color: "#FF8C00" },
       { to: "/galaxy-map", label: "Galaxy", icon: Orbit, color: "#ba55d3" },
-      { to: "/ship", label: "Ship", icon: Rocket, color: "#22D3EE" },
+      { to: "/ship", label: "Ship Hangar", icon: Rocket, color: "#22D3EE" },
     ],
   },
   {
@@ -32,7 +32,7 @@ export const NAV_GROUPS = [
   {
     name: "Trade",
     items: [
-      { to: "/shop", label: "Market", icon: ShoppingBag, color: "#ba55d3" },
+      { to: "/shop", label: "Black Market", icon: ShoppingBag, color: "#ba55d3" },
       { to: "/casino", label: "Casino", icon: Dice5, color: "#F59E0B" },
       { to: "/black-hole", label: "Void", icon: Orbit, color: "#9D6BFF" },
       { to: "/space-mining", label: "Mine", icon: Pickaxe, color: "#F59E0B" },

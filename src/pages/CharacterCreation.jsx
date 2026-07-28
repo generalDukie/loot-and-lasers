@@ -6,11 +6,20 @@ import { RACES, CLASSES, getExpForLevel } from "@/lib/gameData";
 import { bustMyCharacterCache } from "@/lib/socialEngine";
 import RaceCard from "@/components/game/RaceCard";
 import ClassCard from "@/components/game/ClassCard";
+import ClassEmblem from "@/components/game/ClassEmblem";
 import ClassStatsChart from "@/components/game/ClassStatsChart";
 import CharacterAvatar, { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 import ArrowSelector from "@/components/game/ArrowSelector";
 import { popIn, staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
 import { ChevronRight, ChevronLeft, Rocket, Check, X, Loader2 } from "lucide-react";
+
+const RACE_ACCENT = {
+  Zyrathi: "#FF6B1A",
+  Cognati: "#00E5FF",
+  Luminae: "#C9B8FF",
+  Grothak: "#FF8C42",
+  Synthara: "#9D6BFF",
+};
 
 const STEPS = ["Race", "Class", "Looks", "Launch"];
 
@@ -137,6 +146,7 @@ export default function CharacterCreation() {
         stats: baseStats,
         unspent_stat_points: 0,
         attribute_purchases: 0,
+        attribute_purchases_by_stat: { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 },
         stardust: 0,
         appearance: {
           skin_color: form.skinColor || race.skinColors[0],
@@ -241,9 +251,40 @@ export default function CharacterCreation() {
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="mt-4 p-3 bg-muted/30 rounded-xl overflow-hidden"
+                        className="mt-4 rounded-xl overflow-hidden border border-border/40"
+                        style={{
+                          background: `linear-gradient(135deg, ${(RACE_ACCENT[race.name] || "#22D3EE")}14, transparent 55%), hsl(var(--muted) / 0.3)`,
+                        }}
                       >
-                        <p className="text-xs text-muted-foreground">{race.lore}</p>
+                        <div className="flex gap-3 p-3 items-start">
+                          <div
+                            className="shrink-0 rounded-xl border p-1 hidden sm:block"
+                            style={{
+                              borderColor: `${RACE_ACCENT[race.name] || "#22D3EE"}55`,
+                              boxShadow: `0 0 18px ${(RACE_ACCENT[race.name] || "#22D3EE")}30`,
+                            }}
+                          >
+                            <CharacterAvatar
+                              race={race.name}
+                              skinColor={form.skinColor || race.skinColors[0]}
+                              eyeStyle={form.eyeStyle || EYES[0]}
+                              ears={form.ears || EARS[0]}
+                              mouth={form.mouth || MOUTHS[0]}
+                              nose={form.nose || NOSES[0]}
+                              eyebrows={form.eyebrows || BROWS[0]}
+                              marking={form.marking || MARKINGS[0]}
+                              size={88}
+                              static
+                              uid={`lore-${race.name}`}
+                            />
+                          </div>
+                          <div className="min-w-0 pt-0.5">
+                            <p className="text-xs font-display font-semibold tracking-wide text-foreground/90 mb-1">
+                              {race.emoji} {race.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{race.lore}</p>
+                          </div>
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -269,15 +310,21 @@ export default function CharacterCreation() {
                         exit={{ opacity: 0, height: 0 }}
                         className="mt-4 space-y-4 overflow-hidden"
                       >
-                        <div className="p-3 bg-muted/30 rounded-xl">
-                          <p className="text-xs text-muted-foreground">{cls.description}</p>
-                          {cls.special && (
-                            <div className="mt-2 pt-2 border-t border-border/40">
-                              <p className="text-xs font-display font-semibold text-primary">{cls.special.name}</p>
-                              <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{cls.special.effect}</p>
-                              <p className="text-[10px] text-accent/80 italic mt-1">{cls.special.identity}</p>
-                            </div>
-                          )}
+                        <div className="p-3 bg-muted/30 rounded-xl border border-border/30 flex gap-3 items-start">
+                          <ClassEmblem cls={cls} size={72} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-display font-semibold tracking-wide text-foreground/90 mb-1">
+                              {cls.emoji} {cls.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{cls.description}</p>
+                            {cls.special && (
+                              <div className="mt-2 pt-2 border-t border-border/40">
+                                <p className="text-xs font-display font-semibold text-primary">{cls.special.name}</p>
+                                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{cls.special.effect}</p>
+                                <p className="text-[10px] text-accent/80 italic mt-1">{cls.special.identity}</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div className="p-3 bg-muted/20 rounded-xl border border-border/40">
                           <ClassStatsChart

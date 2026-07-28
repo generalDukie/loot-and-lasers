@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FlaskConical, Rocket, X, Zap } from "lucide-react";
 import { api } from "@/api/gameClient";
-import { getActiveBuffs, STAT_ICONS } from "@/lib/gameData";
+import { getActiveBuffs, STAT_ICONS, getStatColor } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -115,6 +115,7 @@ export default function ActiveEffectsPanel({ character, onUpdate, embedded = fal
 
 function BuffRow({ buff, statLabel, compact, loading, onRemove }) {
   const remaining = useCountdown(buff.expires_at);
+  const color = getStatColor(buff.stat);
   if (compact) {
     return (
       <motion.div
@@ -122,13 +123,14 @@ function BuffRow({ buff, statLabel, compact, loading, onRemove }) {
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="flex items-center gap-1 rounded-md border border-accent/35 bg-accent/10 px-1.5 py-0.5 w-full min-w-0"
+        className="flex items-center gap-1 rounded-md border px-1.5 py-0.5 w-full min-w-0"
+        style={{ borderColor: `${color}59`, backgroundColor: `${color}1a` }}
       >
-        <FlaskConical className="w-2.5 h-2.5 text-accent shrink-0" />
-        <span className="text-[9px] font-display font-semibold text-accent truncate">
+        <FlaskConical className="w-2.5 h-2.5 shrink-0" style={{ color }} />
+        <span className="text-[9px] font-display font-semibold truncate" style={{ color }}>
           +{Math.round((buff.mult || 0) * 100)}% {statLabel}
         </span>
-        <span className="text-[8px] text-muted-foreground tabular-nums shrink-0">{remaining}</span>
+        <span className="text-[10px] font-display font-black tabular-nums shrink-0 px-1 py-px rounded-sm" style={{ color, backgroundColor: "rgba(0,0,0,0.45)" }}>{remaining}</span>
         <button
           onClick={onRemove}
           disabled={loading}
@@ -136,7 +138,7 @@ function BuffRow({ buff, statLabel, compact, loading, onRemove }) {
           className="shrink-0 p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
         >
           {loading ? (
-            <span className="w-2 h-2 border-2 border-accent border-t-transparent rounded-full animate-spin block" />
+            <span className="w-2 h-2 border-2 border-t-transparent rounded-full animate-spin block" style={{ borderColor: color, borderTopColor: "transparent" }} />
           ) : (
             <X className="w-2.5 h-2.5" />
           )}
@@ -150,14 +152,15 @@ function BuffRow({ buff, statLabel, compact, loading, onRemove }) {
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="flex items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1.5"
+      className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5"
+      style={{ borderColor: `${color}66`, backgroundColor: `${color}1a` }}
     >
-      <FlaskConical className="w-3.5 h-3.5 text-accent shrink-0" />
+      <FlaskConical className="w-3.5 h-3.5 shrink-0" style={{ color }} />
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-display font-semibold text-accent leading-tight truncate">
+        <p className="text-[11px] font-display font-semibold leading-tight truncate" style={{ color }}>
           +{Math.round((buff.mult || 0) * 100)}% {statLabel}
         </p>
-        <p className="text-[9px] text-muted-foreground leading-tight truncate">
+        <p className="text-[10px] font-display font-black leading-tight truncate tabular-nums" style={{ color }}>
           {buff.name} · {remaining}
         </p>
       </div>
@@ -168,7 +171,7 @@ function BuffRow({ buff, statLabel, compact, loading, onRemove }) {
         className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
       >
         {loading ? (
-          <span className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          <span className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: color, borderTopColor: "transparent" }} />
         ) : (
           <X className="w-3.5 h-3.5" />
         )}
@@ -192,7 +195,7 @@ function MountRow({ mount, compact, loading, onRemove }) {
         <span className="text-[9px] font-display font-semibold text-amber-300 truncate">
           -{Math.round((mount.speed || 0) * 100)}% time
         </span>
-        <span className="text-[8px] text-muted-foreground tabular-nums shrink-0">{remaining}</span>
+        <span className="text-[10px] font-display font-black text-amber-300 tabular-nums shrink-0 px-1 py-px rounded-sm bg-black/45">{remaining}</span>
         <button
           onClick={onRemove}
           disabled={loading}

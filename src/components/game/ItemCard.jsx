@@ -30,7 +30,7 @@ export default function ItemCard({ item, onEquip, onSell, onUse, compact = false
       style={{ borderColor: rarityColor + "40", boxShadow: `0 0 12px ${rarityColor}10` }}
     >
       <div className="flex items-center justify-center mb-3">
-        <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} />
+        <GearVisual type={item.type} rarity={item.rarity} name={item.name} baseName={item.base_name} level_requirement={item.level_requirement} />
       </div>
       <div className="flex items-start justify-between">
         <div>
@@ -95,7 +95,7 @@ export default function ItemCard({ item, onEquip, onSell, onUse, compact = false
             onClick={() => onSell(item)}
             className="text-xs bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-1 rounded-lg font-medium transition-colors"
           >
-            Sell (✨ {computeStardustValue(item)})
+            Dissolve (✨ {computeStardustValue(item)})
           </button>
         )}
       </div>

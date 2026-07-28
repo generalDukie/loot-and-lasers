@@ -1,7 +1,6 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, DIFFICULTY_COLORS } from "@/lib/gameData";
-import RiskGauge from "@/components/game/RiskGauge";
+import { RARITY_COLORS, STAT_ICONS, gearTypeLabel } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import confetti from "canvas-confetti";
 import { Star, Zap, Fuel, TrendingUp, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical, ArrowRight } from "lucide-react";
@@ -48,19 +47,12 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
   if (!summary) return null;
   const { mission, xp, stardust, leveledUp, newLevel, statPoints, gearItem, collectible, consumableItem, discoveries, fuelSpent } = summary;
   const m = mission || {};
-  const diffColor = DIFFICULTY_COLORS[m.difficulty] || "#9CA3AF";
 
   const xpChips = [];
-  if (xp.efficiency != null && xp.efficiency !== 1) {
-    xpChips.push(`${xp.efficiency < 1 ? "" : "+"}${Math.round((xp.efficiency - 1) * 100)}% run`);
-  }
   if (xp.shipMult > 0) xpChips.push(`+${pct(xp.shipMult)}% ship`);
   if (xp.collectionPct > 0) xpChips.push(`+${xp.collectionPct}% collection`);
 
   const sdChips = [];
-  if (stardust.efficiency != null && stardust.efficiency !== 1) {
-    sdChips.push(`${stardust.efficiency < 1 ? "" : "+"}${Math.round((stardust.efficiency - 1) * 100)}% run`);
-  }
   if (stardust.nexus) sdChips.push("+5% nexus");
   if (stardust.shipMult > 0) sdChips.push(`+${pct(stardust.shipMult)}% ship`);
 
@@ -83,10 +75,8 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
 
         <div className="flex flex-wrap items-center justify-center gap-1.5 mb-4 text-[10px]">
           <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground"><MapPin className="w-3 h-3" />{m.location}</span>
-          <span className="px-2 py-0.5 rounded-full font-semibold" style={{ background: diffColor + "22", color: diffColor }}>{m.difficulty}</span>
           {m.sector && <span className="px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground">Sector {m.sector}</span>}
           <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground"><Clock className="w-3 h-3" />{fmtDuration(m.duration_seconds)}</span>
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/40"><RiskGauge risk={m.risk || 1} size={11} /></span>
         </div>
 
         <div className="space-y-2">
@@ -131,7 +121,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
           {gearItem ? (
             <RewardCard icon={<Package className="w-5 h-5" />} accent={RARITY_COLORS[gearItem.rarity]}>
               <div className="flex items-center gap-2">
-                <GearVisual type={gearItem.type} rarity={gearItem.rarity} name={gearItem.name} emoji={gearItem.emoji} size={36} />
+                <GearVisual type={gearItem.type} rarity={gearItem.rarity} name={gearItem.name} baseName={gearItem.base_name} level_requirement={gearItem.level_requirement} size={36} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold leading-tight" style={{ color: RARITY_COLORS[gearItem.rarity] }}>{gearItem.name}</p>
                   <p className="text-[10px] text-muted-foreground capitalize">{gearItem.rarity} {gearTypeLabel(gearItem.type)}</p>

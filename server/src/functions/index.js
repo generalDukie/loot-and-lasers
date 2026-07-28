@@ -625,6 +625,7 @@ export async function AdminModeration(user, body) {
     const updated = entities.Character.update(character_id, {
       level: 1, experience: 0, experience_to_next_level: expForLevel(1),
       stardust: 0, nova_crystals: 0, unspent_stat_points: 0, attribute_purchases: 0,
+      attribute_purchases_by_stat: { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 },
       discovered_species: [], collected_artifacts: [], collected_relics: [],
       arena_wins: 0, arena_losses: 0, arena_rating: 1000,
       arena_streak: 0, arena_max_streak: 0, arena_battles: 0,

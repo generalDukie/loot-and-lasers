@@ -9,8 +9,9 @@ import { getMyCharacter } from "@/lib/socialEngine";
 import { Orbit } from "lucide-react";
 import { getPendingItem, clearPendingItem, subscribePending, getInventoryCap } from "@/lib/inventoryCap";
 import { playBlackHoleSuck, playBlackHoleBurst } from "@/lib/blackHoleSfx";
+import { listDissolveJunk } from "@/lib/inventoryJunk";
 
-// Stardust particle burst — emitted from the Black Hole when an item dissolves.
+// Stardust particle burst — emitted from the Void when an item dissolves.
 function StardustBurst() {
   const particles = useMemo(
     () => Array.from({ length: 16 }, (_, i) => ({
@@ -64,7 +65,8 @@ export default function BlackHolePage() {
     setCharacter(char);
     setLoading(false);
     // Spare gear loads best-effort so a hiccup never traps the page.
-    try { setItems((await api.entities.Item.filter({ character_id: char.id, is_equipped: false })) || []); } catch (e) {}
+    // Need equipped + spare so Dissolve Junk can compare common gear to worn pieces.
+    try { setItems((await api.entities.Item.filter({ character_id: char.id })) || []); } catch (e) {}
   }, [navigate]);
 
   useEffect(() => { load(); }, [load]);
@@ -102,9 +104,9 @@ export default function BlackHolePage() {
   }
 
   async function sellJunk() {
-    const junk = items.filter((i) => !i.locked && !i._sucking && (i.rarity === "common" || i.type === "material"));
+    const junk = listDissolveJunk(items, character?.class).filter((i) => !i._sucking);
     if (!junk.length) {
-      toast({ title: "No junk to dissolve", description: "No common gear or materials to feed the void." });
+      toast({ title: "No junk to dissolve", description: "No unequippables or worse common gear to feed the void." });
       return;
     }
     const ids = junk.map((i) => i.id);
@@ -171,7 +173,7 @@ export default function BlackHolePage() {
         className="flex items-center justify-between"
       >
         <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
-          <Orbit className="w-5 h-5 text-accent" /> Black Hole
+          <Orbit className="w-5 h-5 text-accent" /> Void
         </h1>
         <span className="flex items-center gap-1.5 text-sm font-display font-bold px-3 py-1 rounded-full bg-accent/10 text-accent border border-accent/30">
           ✨ {character.stardust || 0}
@@ -190,7 +192,7 @@ export default function BlackHolePage() {
         </div>
       )}
 
-      {/* The Black Hole — drag target */}
+      {/* The Void — drag target */}
       <div
         ref={holeRef}
         className={`relative rounded-2xl overflow-hidden painted-panel canvas-grain flex items-center justify-center transition-shadow duration-300 ${holeActive ? "shadow-[0_0_40px_rgba(157,108,255,0.6)]" : ""}`}
@@ -223,32 +225,33 @@ export default function BlackHolePage() {
       </div>
 
       {(() => {
-        const junkCount = items.filter((i) => !i.locked && (i.rarity === "common" || i.type === "material")).length;
+        const junkCount = listDissolveJunk(items, character?.class).length;
         return (
           <div className="flex justify-end">
             <button
               onClick={sellJunk}
               disabled={junkCount === 0}
+              title="Unequippables + common gear worse than equipped"
               className="text-xs bg-amber-500/10 text-amber-300 border border-amber-500/30 px-3 py-1.5 rounded-lg font-display font-semibold hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              Toss Junk ({junkCount})
+              Dissolve Junk ({junkCount})
             </button>
           </div>
         );
       })()}
 
-      {items.length === 0 ? (
+      {items.filter((i) => !i.is_equipped).length === 0 ? (
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
           className="bg-card/50 border border-border/50 rounded-2xl p-8 text-center painted-panel"
         >
           <p className="text-sm text-muted-foreground">No spare gear to dissolve.</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Complete missions or buy from the shop to find items.</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Complete missions or buy from the Black Market to find items.</p>
         </motion.div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           <AnimatePresence>
-            {items.map(item => (
+            {items.filter((i) => !i.is_equipped).map(item => (
               <motion.div
                 key={item.id}
                 layout
@@ -274,7 +277,7 @@ export default function BlackHolePage() {
                 className="py-1.5 px-2 rounded-lg border bg-card/60 backdrop-blur-sm flex items-center gap-2 relative cursor-grab active:cursor-grabbing"
                 style={{ borderColor: (RARITY_COLORS[item.rarity] || "#9CA3AF") + "40", zIndex: item._sucking ? 40 : 0 }}
               >
-                <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={34} />
+                <GearVisual type={item.type} rarity={item.rarity} name={item.name} baseName={item.base_name} level_requirement={item.level_requirement} size={34} />
                 <div className="flex-1 min-w-0">
                   <h4 className="font-display font-semibold text-xs truncate leading-tight" style={{ color: RARITY_COLORS[item.rarity] }}>{item.name}</h4>
                   <p className="text-[11px] text-muted-foreground capitalize leading-tight">{item.rarity} · {item.type}</p>
@@ -286,7 +289,7 @@ export default function BlackHolePage() {
                   onClick={() => toss(item)}
                   className="shrink-0 text-[11px] bg-accent/15 hover:bg-accent/25 text-accent px-2.5 py-1 rounded-md font-display font-semibold tracking-wide"
                 >
-                  Toss
+                  Dissolve
                 </motion.button>
               </motion.div>
             ))}

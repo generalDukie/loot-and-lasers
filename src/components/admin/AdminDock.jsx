@@ -16,11 +16,11 @@ export default function AdminDock() {
       initial={{ x: 60, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 260, damping: 22, delay: 0.2 }}
-      className="fixed right-0 top-1/2 -translate-y-1/2 z-40 flex items-stretch"
+      className="fixed right-0 top-1/2 -translate-y-1/2 z-40 flex items-stretch pointer-events-none"
     >
       <button
         onClick={() => setCollapsed((c) => !c)}
-        className="self-center w-5 py-3 rounded-l-lg bg-primary/20 border border-l border-y border-primary/40 text-primary hover:bg-primary/30 transition-colors"
+        className="pointer-events-auto self-center w-5 py-3 rounded-l-lg bg-primary/20 border border-l border-y border-primary/40 text-primary hover:bg-primary/30 transition-colors"
         title={collapsed ? "Show admin dock" : "Hide admin dock"}
       >
         {collapsed ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -33,7 +33,7 @@ export default function AdminDock() {
             animate={{ width: "auto", opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="overflow-hidden"
+            className="overflow-hidden pointer-events-auto"
           >
             <div className="flex flex-col gap-1.5 p-1.5 rounded-l-xl border border-r-0 border-border/60 bg-card/90 backdrop-blur-xl shadow-2xl">
               <Link

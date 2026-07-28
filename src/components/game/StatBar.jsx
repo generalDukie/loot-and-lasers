@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { STAT_ICONS, CLASSES, getStatDescription } from "@/lib/gameData";
+import { STAT_ICONS, CLASSES, getStatDescription, STAT_COLORS } from "@/lib/gameData";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 const STAT_SHORT = {
@@ -12,21 +12,66 @@ const STAT_SHORT = {
   luck: "LCK",
 };
 
-const STAT_COLORS = {
-  strength: "#F59E0B",
-  agility: "#34D399",
-  intellect: "#60A5FA",
-  vitality: "#FB7185",
-  luck: "#C084FC",
-};
+const HOLD_DELAY_MS = 1000;
+const HOLD_REPEAT_MS = 120;
 
 // Primary attribute chip — value, gear bonus, and point-allocation button.
-export default function StatBar({ stat, value, base, className, onAdd, canAdd = false }) {
+// Click = +1. Hold 1s = keep buying until release.
+export default function StatBar({
+  stat,
+  value,
+  base,
+  className,
+  onAdd,
+  canAdd = false,
+  cost,
+}) {
   const safeBase = base ?? value;
   const bonus = Math.max(0, (value || 0) - (safeBase || 0));
   const desc = getStatDescription(stat, className);
   const color = STAT_COLORS[stat] || "#94A3B8";
   const isPrimary = CLASSES[className]?.primaryStat === stat;
+  const delayRef = useRef(null);
+  const repeatRef = useRef(null);
+  const holdingRef = useRef(false);
+  const canAddRef = useRef(canAdd);
+  const onAddRef = useRef(onAdd);
+
+  useEffect(() => { canAddRef.current = canAdd; }, [canAdd]);
+  useEffect(() => { onAddRef.current = onAdd; }, [onAdd]);
+
+  useEffect(() => () => {
+    clearTimeout(delayRef.current);
+    clearInterval(repeatRef.current);
+  }, []);
+
+  function clearHold() {
+    holdingRef.current = false;
+    clearTimeout(delayRef.current);
+    clearInterval(repeatRef.current);
+    delayRef.current = null;
+    repeatRef.current = null;
+  }
+
+  function fireAdd() {
+    if (!canAddRef.current || !onAddRef.current) return false;
+    onAddRef.current(stat);
+    return true;
+  }
+
+  function startHold(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!canAdd || !onAdd) return;
+    holdingRef.current = true;
+    fireAdd();
+    delayRef.current = setTimeout(() => {
+      if (!holdingRef.current) return;
+      repeatRef.current = setInterval(() => {
+        if (!holdingRef.current || !fireAdd()) clearHold();
+      }, HOLD_REPEAT_MS);
+    }, HOLD_DELAY_MS);
+  }
 
   return (
     <Tooltip>
@@ -62,19 +107,24 @@ export default function StatBar({ stat, value, base, className, onAdd, canAdd = 
             <motion.button
               type="button"
               whileTap={canAdd ? { scale: 0.9 } : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (canAdd) onAdd(stat);
-              }}
+              onPointerDown={startHold}
+              onPointerUp={clearHold}
+              onPointerLeave={clearHold}
+              onPointerCancel={clearHold}
+              onContextMenu={(e) => e.preventDefault()}
               disabled={!canAdd}
-              className={`mt-0.5 w-full h-6 rounded-lg border text-[10px] font-display font-bold tracking-wide flex items-center justify-center gap-0.5 transition-colors ${
+              className={`mt-0.5 w-full min-h-6 rounded-lg border text-[9px] font-display font-bold tracking-wide flex items-center justify-center gap-0.5 transition-colors select-none touch-none ${
                 canAdd
                   ? "border-primary/40 bg-primary/15 text-primary hover:bg-primary/25 hover:border-primary/60"
                   : "border-border/35 bg-muted/20 text-muted-foreground/40 cursor-not-allowed"
               }`}
-              aria-label={`Add point to ${stat}`}
+              aria-label={`Buy ${stat} point${cost != null ? ` for ${cost} stardust` : ""}. Hold to keep buying.`}
+              title={cost != null ? `✨${cost.toLocaleString()} · hold to auto-buy` : "Hold to auto-buy"}
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="w-3 h-3 shrink-0" />
+              {cost != null && (
+                <span className="tabular-nums">✨{cost.toLocaleString()}</span>
+              )}
             </motion.button>
           )}
         </div>

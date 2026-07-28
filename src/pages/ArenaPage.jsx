@@ -27,7 +27,7 @@ import { ArenaBackdrop } from "@/components/game/ArenaBackdrop";
 import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
 import { Swords, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
 
-import { todayET } from "@/lib/gameTime";
+import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 function fmtMs(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
 async function guildTagForCharacter(characterId) {
@@ -202,7 +202,7 @@ export default function ArenaPage() {
   async function finishBattle() {
     const { battle, opp, rewards, isFree, skipped } = battleState;
     const { percentage: collectPct } = getCollectionStats(character);
-    const boostedXp = applyXpBonus(rewards.experience, collectPct);
+    const boostedXp = rewards.won ? applyXpBonus(rewards.experience, collectPct) : 0;
     const prevLevel = character.level;
     let newExp = (character.experience || 0) + boostedXp;
     let newLevel = character.level;
@@ -214,16 +214,17 @@ export default function ArenaPage() {
     const prevStreak = character.arena_streak || 0;
     const newStreak = rewards.won ? prevStreak + 1 : 0;
     const newMaxStreak = Math.max(character.arena_max_streak || 0, newStreak);
+    const stardustGain = rewards.won ? (rewards.stardust || 0) : 0;
 
     const maxPlayerHit = Math.max(0, ...battle.events.filter((e) => e.attacker === "player" && e.damage).map((e) => e.damage));
-    // First 10 battles/day are free (xp + stardust + rating). After that each
+    // First 10 battles/day are free (xp + stardust + rating on wins). After that each
     // battle costs nova crystals and yields rating only — unlimited climbing.
     const update = {
       experience: newExp,
       level: newLevel,
       experience_to_next_level: expToNext,
-      stardust: (character.stardust || 0) + rewards.stardust,
-      total_stardust_earned: (character.total_stardust_earned || 0) + rewards.stardust,
+      stardust: (character.stardust || 0) + stardustGain,
+      total_stardust_earned: (character.total_stardust_earned || 0) + stardustGain,
       highest_damage: Math.max(character.highest_damage || 0, maxPlayerHit),
       arena_rating: newRating,
       arena_wins: (character.arena_wins || 0) + (rewards.won ? 1 : 0),
@@ -302,15 +303,17 @@ export default function ArenaPage() {
       won: rewards.won,
       title: rewards.won ? `Defeated ${opp.name}` : `Defeated by ${opp.name}`,
       subtitle: `Lv ${opp.level} · ${opp.race} · ${opp.class}`,
-      xp: { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp },
-      stardust: { total: rewards.stardust || 0 },
+      xp: rewards.won && boostedXp > 0 ? { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
+      stardust: rewards.won && stardustGain > 0 ? { total: stardustGain } : undefined,
       ratingDelta: rewards.arena_rating_delta,
       leveledUp: newLevel > prevLevel,
       prevLevel,
       newLevel,
       statPoints: getStatPointsForLevelRange(prevLevel, newLevel),
       discoveries: discFound,
-      note: !isFree ? `Paid battle (−${ARENA_PAID_BATTLE_COST} 💎) — rating only` : undefined,
+      note: !rewards.won
+        ? "No rewards on defeat"
+        : (!isFree ? `Paid battle (−${ARENA_PAID_BATTLE_COST} 💎) — rating only` : undefined),
     });
   }
 
@@ -380,7 +383,7 @@ export default function ArenaPage() {
               <Stat icon={Zap} label="Power" value={power} color="#22D3EE" />
               <Stat icon={Swords} label="W / L" value={`${wins} / ${losses}`} color="#60A5FA" />
               <Stat icon={Flame} label="Streak" value={streak} color="#FB7185" />
-              <Stat icon={Shield} label="Free Battles" value={`${freeBattlesLeft}/${ARENA_DAILY_FREE_BATTLES}`} color="#FBBF24" />
+              <Stat icon={Shield} label="Free Battles" value={`${freeBattlesLeft}/${ARENA_DAILY_FREE_BATTLES}`} hint={`resets ${formatEtaShort(msUntilNextETMidnight(now))}`} color="#FBBF24" />
             </div>
           </div>
         </motion.div>
@@ -446,7 +449,7 @@ export default function ArenaPage() {
   );
 }
 
-function Stat({ icon: Icon, label, value, color }) {
+function Stat({ icon: Icon, label, value, hint, color }) {
   return (
     <div className="p-2.5 rounded-xl bg-background/45 border border-border/50 flex items-center gap-2.5 backdrop-blur-sm">
       <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}22`, color }}>
@@ -455,6 +458,7 @@ function Stat({ icon: Icon, label, value, color }) {
       <div className="min-w-0">
         <p className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</p>
         <p className="font-display font-bold text-sm truncate" style={{ color }}>{value}</p>
+        {hint && <p className="text-[9px] text-muted-foreground/80 leading-tight truncate">{hint}</p>}
       </div>
     </div>
   );

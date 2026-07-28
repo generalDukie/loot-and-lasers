@@ -5,9 +5,9 @@ import { RACES, CLASSES, generateItem, generateClassWeapon, getArenaStardustRewa
 import { computeTotalStats, computeDerivedStats, getClassWeights, CLASS_ATK_MULT } from "@/lib/statEngine";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 
-// First 10 arena battles each day are free (grant xp + stardust + rating).
-// Beyond that, each battle costs nova crystals and yields rating only, but can
-// be fought indefinitely to climb the leaderboard.
+// First 10 arena battles each day are free (grant xp + stardust + rating on wins only).
+// Losses never grant XP or stardust. Beyond the free quota, each battle costs nova
+// crystals and yields rating only, but can be fought indefinitely to climb.
 export const ARENA_DAILY_FREE_BATTLES = 10;
 export const ARENA_PAID_BATTLE_COST = 5; // nova crystals per battle after the free quota
 export const ARENA_REFRESH_MS = 5 * 60 * 1000;
@@ -47,15 +47,16 @@ function classSpecialName(className) {
 const POWER_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
 
 export function avatarPropsFor(e) {
+  const a = e?.appearance || {};
   return {
     race: e.race,
-    skinColor: e.skinColor || e.appearance?.skin_color,
-    eyeStyle: e.eyeStyle || e.appearance?.eye_style,
-    ears: e.ears || e.appearance?.ears,
-    mouth: e.mouth || e.appearance?.mouth,
-    nose: e.nose || e.appearance?.nose,
-    eyebrows: e.eyebrows || e.appearance?.eyebrows,
-    marking: e.marking || e.appearance?.marking,
+    skinColor: e.skinColor || a.skinColor || a.skin_color,
+    eyeStyle: e.eyeStyle || a.eyeStyle || a.eye_style,
+    ears: e.ears || a.ears,
+    mouth: e.mouth || a.mouth,
+    nose: e.nose || a.nose,
+    eyebrows: e.eyebrows || a.eyebrows,
+    marking: e.marking || a.marking,
   };
 }
 
@@ -540,18 +541,12 @@ export function eloRatingDelta(playerRating, oppRating, won, k = ARENA_ELO_K) {
 }
 
 function lootForOutcome(player, opp, won, free) {
-  if (!free) return { experience: 0, stardust: 0 };
+  if (!free || !won) return { experience: 0, stardust: 0 };
   const pl = player.level || 1;
   // Design: Arena SD = SD/F × 5/3, Arena XP = XP/F × 5/7 (win amounts).
-  const winSd = getArenaStardustReward(pl);
-  const winXp = getArenaXpReward(pl);
-  if (won) {
-    return { experience: winXp, stardust: winSd };
-  }
-  // Consolation stardust only — no XP on arena losses.
   return {
-    experience: 0,
-    stardust: Math.max(1, Math.round(winSd * 0.3)),
+    experience: getArenaXpReward(pl),
+    stardust: getArenaStardustReward(pl),
   };
 }
 

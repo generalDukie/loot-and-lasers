@@ -16,13 +16,13 @@ export const BUILTIN_BUTTONS = [
   {
     id: "hero_ship",
     type: "split",
-    label: "Hero / Ship",
+    label: "Hero / Ship Hangar",
     icon: "🛋️",
     color: "#5CFFB0",
     desc: "Your hero & vessel",
     options: [
       { label: "Hero", icon: "🦸", to: "/character", color: "#5CFFB0" },
-      { label: "Ship", icon: "🚀", to: "/ship", color: "#FFD700" },
+      { label: "Ship Hangar", icon: "🚀", to: "/ship", color: "#FFD700" },
     ],
   },
   {
@@ -63,9 +63,9 @@ export const BUILTIN_BUTTONS = [
     label: "Bazaar",
     icon: "🛍️",
     color: "#9D6BFF",
-    desc: "Shop, mine & risk it all",
+    desc: "Black Market, mine & risk it all",
     options: [
-      { label: "Shop", icon: "🛒", to: "/shop", color: "#4ADE80" },
+      { label: "Black Market", icon: "🛒", to: "/shop", color: "#4ADE80" },
       { label: "Mining", icon: "⛏️", to: "/space-mining", color: "#60A5FA" },
       { label: "Crystals", icon: "💎", to: "/crystal-store", color: "#FFD700" },
       { label: "Void", icon: "🌀", to: "/black-hole", color: "#9D6BFF" },

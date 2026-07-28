@@ -176,7 +176,7 @@ export function computeGuildBattleRewards(playerGuild, rivalGuild, playerWon) {
   // Keep win payout below declare cost so wars aren't net-positive farming.
   const base = 120 + (rivalGuild.level || 1) * 25;
   if (playerWon) return { stardust: base, guild_xp: Math.round(base * 0.8) };
-  return { stardust: Math.round(base * 0.1), guild_xp: Math.round(base * 0.15) };
+  return { stardust: 0, guild_xp: 0 };
 }
 
 export async function applyWarResult(guild, members, rival, simulation, character) {

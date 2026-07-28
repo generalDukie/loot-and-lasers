@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { ART_INK, ART_RIM, ART_SW, RACE_ACCENT, shade, paintStops } from "@/lib/artStyle";
 
 // Selectable feature option lists (shared with CharacterCreation)
 export const EYES = ["Standard Optics", "Prism Optics", "Multi-Lens", "Target Visor", "Wide Scan", "Combat Slits"];
@@ -9,41 +10,20 @@ export const NOSES = ["Button", "Slits", "Trunk", "None", "Ridge", "Spike"];
 export const BROWS = ["Standard", "Tactical", "Heavy", "None", "Scarred", "Relaxed"];
 export const MARKINGS = ["None", "Battle Scar", "Plasma Burns", "War Paint", "Speckled", "Fractured"];
 
-// Comic-book cel-shaded constants
-const INK = "#120a1c"; // heavy saturated outline
-const SW = 5; // thick cartoon outline
-const RIM = "#ffffff"; // rim-light edge
-
-// Race-specific accent palettes
-const RACE_ACCENT = {
-  Zyrathi: { a: "#FF6B1A", b: "#C9300A" },
-  Cognati: { a: "#00E5FF", b: "#1A6B8A" },
-  Luminae: { a: "#FFE9A8", b: "#C9B8FF" },
-  Grothak: { a: "#FF8C42", b: "#8B7355" },
-  Synthara: { a: "#9D6BFF", b: "#2E1A47" },
-};
-
-function shade(hex, amt) {
-  if (!hex) return "#888";
-  let c = hex.replace("#", "");
-  if (c.length === 3) c = c.split("").map((x) => x + x).join("");
-  const num = parseInt(c, 16);
-  let r = Math.max(0, Math.min(255, ((num >> 16) & 255) + amt));
-  let g = Math.max(0, Math.min(255, ((num >> 8) & 255) + amt));
-  let b = Math.max(0, Math.min(255, (num & 255) + amt));
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-}
+const INK = ART_INK;
+const SW = ART_SW;
+const RIM = ART_RIM;
 
 function Eyes({ style }) {
-  const L = 72, R = 128, Y = 92;
+  const L = 70, R = 130, Y = 90;
   switch (style) {
     case "Multi-Lens":
     case "Three Eyes":
       return (
         <g>
-          {[{ x: L, y: Y }, { x: 100, y: 78 }, { x: R, y: Y }].map((e, i) => (
+          {[{ x: L, y: Y }, { x: 100, y: 74 }, { x: R, y: Y }].map((e, i) => (
             <g key={i}>
-              <ellipse cx={e.x} cy={e.y} rx="14" ry="17" fill="#fff" stroke={INK} strokeWidth={SW} />
+              <ellipse cx={e.x} cy={e.y} rx="15" ry="18" fill="#fff" stroke={INK} strokeWidth={SW} />
               <circle cx={e.x} cy={e.y + 3} r="8" fill="#00B8D4" stroke={INK} strokeWidth="2" />
               <circle cx={e.x} cy={e.y + 3} r="4" fill={INK} />
               <path d={`M${e.x - 3} ${e.y - 4} l4 2 2 4 -4 -2 z`} fill="#fff" />
@@ -55,8 +35,8 @@ function Eyes({ style }) {
     case "Visor Glow":
       return (
         <g>
-          <rect x={L - 16} y={Y - 10} width={R - L + 32} height="20" rx="10" fill="#0a0f1e" stroke={INK} strokeWidth={SW} />
-          <rect x={L - 12} y={Y - 6} width={R - L + 24} height="12" rx="6" fill="#00E5FF" />
+          <rect x={L - 18} y={Y - 12} width={R - L + 36} height="24" rx="12" fill="#0a0f1e" stroke={INK} strokeWidth={SW} />
+          <rect x={L - 14} y={Y - 7} width={R - L + 28} height="14" rx="7" fill="#00E5FF" />
           <path d={`M${L - 4} ${Y - 3} l8 2 2 4 -8 -2 z`} fill="#fff" opacity="0.9" />
         </g>
       );
@@ -66,10 +46,9 @@ function Eyes({ style }) {
         <g>
           {[L, R].map((x, i) => (
             <g key={i}>
-              <circle cx={x} cy={Y} r="18" fill="#1a1a2e" stroke={INK} strokeWidth={SW} />
+              <circle cx={x} cy={Y} r="19" fill="#1a1a2e" stroke={INK} strokeWidth={SW} />
               <circle cx={x - 5} cy={Y - 5} r="7" fill="#fff" />
               <circle cx={x + 5} cy={Y + 5} r="4" fill="#00E5FF" />
-              <path d={`M${x - 7} ${Y - 8} l3 4 4 1 -3 -4 z`} fill="#fff" />
             </g>
           ))}
         </g>
@@ -80,8 +59,8 @@ function Eyes({ style }) {
         <g>
           {[L, R].map((x, i) => (
             <g key={i}>
-              <rect x={x - 13} y={Y - 6} width="26" height="12" rx="6" fill="#00E5FF" stroke={INK} strokeWidth={SW} />
-              <rect x={x - 9} y={Y - 2} width="18" height="4" rx="2" fill="#fff" />
+              <rect x={x - 14} y={Y - 7} width="28" height="14" rx="7" fill="#00E5FF" stroke={INK} strokeWidth={SW} />
+              <rect x={x - 10} y={Y - 2} width="20" height="5" rx="2" fill="#fff" />
             </g>
           ))}
         </g>
@@ -92,22 +71,21 @@ function Eyes({ style }) {
         <g>
           {[L, R].map((x, i) => (
             <g key={i}>
-              <ellipse cx={x} cy={Y} rx="15" ry="18" fill="#fff" stroke={INK} strokeWidth={SW} />
+              <ellipse cx={x} cy={Y} rx="16" ry="19" fill="#fff" stroke={INK} strokeWidth={SW} />
               <path d={`M${x} ${Y - 9} l2.5 6 6 1 -4.5 4.5 1.5 6 -5.5 -3.5 -5.5 3.5 1.5 -6 -4.5 -4.5 6 -1 z`} fill="#7C3AED" stroke={INK} strokeWidth="1.5" strokeLinejoin="round" />
             </g>
           ))}
         </g>
       );
-    default: // Standard Optics
+    default:
       return (
         <g>
           {[L, R].map((x, i) => (
             <g key={i}>
-              <ellipse cx={x} cy={Y} rx="14" ry="18" fill="#fff" stroke={INK} strokeWidth={SW} />
+              <ellipse cx={x} cy={Y} rx="15" ry="19" fill="#fff" stroke={INK} strokeWidth={SW} />
               <circle cx={x} cy={Y + 4} r="9" fill="#00B8D4" stroke={INK} strokeWidth="2" />
               <circle cx={x} cy={Y + 4} r="4.5" fill={INK} />
               <path d={`M${x - 4} ${Y - 4} l5 2 2 5 -5 -2 z`} fill="#fff" />
-              <path d={`M${x + 6} ${Y - 8} l1.5 3 3 1.5 -3 1.5 -1.5 3 -1.5 -3 -3 -1.5 3 -1.5 z`} fill="#fff" />
             </g>
           ))}
         </g>
@@ -115,16 +93,16 @@ function Eyes({ style }) {
   }
 }
 
-function Ears({ style, skin, dark }) {
+function Ears({ style, skin }) {
   const Y = 108;
   switch (style) {
     case "Tapered":
     case "Pointed":
       return (
         <g>
-          <path d={`M50 ${Y} l-30 -30 l8 30 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d={`M150 ${Y} l30 -30 l-8 30 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d={`M44 ${Y - 6} l-10 -8`} stroke={shade(skin, 30)} strokeWidth="3" strokeLinecap="round" />
+          <path d={`M48 ${Y} l-32 -34 l10 34 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d={`M152 ${Y} l32 -34 l-10 34 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d={`M42 ${Y - 8} l-12 -10`} stroke={shade(skin, 30)} strokeWidth="3" strokeLinecap="round" />
         </g>
       );
     case "Finned":
@@ -132,8 +110,8 @@ function Ears({ style, skin, dark }) {
         <g>
           {[0, 1, 2].map((i) => (
             <g key={i}>
-              <path d={`M48 ${Y - 10 + i * 10} q-24 -6 -32 3`} fill="none" stroke={INK} strokeWidth="5" strokeLinecap="round" />
-              <path d={`M152 ${Y - 10 + i * 10} q24 -6 32 3`} fill="none" stroke={INK} strokeWidth="5" strokeLinecap="round" />
+              <path d={`M46 ${Y - 12 + i * 11} q-26 -8 -34 4`} fill="none" stroke={INK} strokeWidth="5" strokeLinecap="round" />
+              <path d={`M154 ${Y - 12 + i * 11} q26 -8 34 4`} fill="none" stroke={INK} strokeWidth="5" strokeLinecap="round" />
             </g>
           ))}
         </g>
@@ -142,28 +120,26 @@ function Ears({ style, skin, dark }) {
     case "Antennae":
       return (
         <g>
-          <line x1="72" y1="58" x2="54" y2="20" stroke={INK} strokeWidth="5" strokeLinecap="round" />
-          <circle cx="53" cy="18" r="8" fill="#00E5FF" stroke={INK} strokeWidth={SW} />
-          <path d="M49 14 l3 3 3 -1 -3 -3 z" fill="#fff" />
-          <line x1="128" y1="58" x2="146" y2="20" stroke={INK} strokeWidth="5" strokeLinecap="round" />
-          <circle cx="147" cy="18" r="8" fill="#00E5FF" stroke={INK} strokeWidth={SW} />
-          <path d="M143 14 l3 3 3 -1 -3 -3 z" fill="#fff" />
+          <line x1="70" y1="56" x2="50" y2="16" stroke={INK} strokeWidth="5" strokeLinecap="round" />
+          <circle cx="49" cy="14" r="9" fill="#00E5FF" stroke={INK} strokeWidth={SW} />
+          <line x1="130" y1="56" x2="150" y2="16" stroke={INK} strokeWidth="5" strokeLinecap="round" />
+          <circle cx="151" cy="14" r="9" fill="#00E5FF" stroke={INK} strokeWidth={SW} />
         </g>
       );
     case "Elongated":
     case "Leaf":
       return (
         <g>
-          <path d={`M50 ${Y} q-30 -16 -32 -42 q24 8 32 42 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d={`M150 ${Y} q30 -16 32 -42 q-24 8 -32 42 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d={`M48 ${Y} q-34 -18 -36 -46 q28 10 36 46 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d={`M152 ${Y} q34 -18 36 -46 q-28 10 -36 46 z`} fill={skin} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
         </g>
       );
     case "Crest Horns":
     case "Horns":
       return (
         <g>
-          <path d={`M62 54 q-14 -34 8 -48 q10 22 -8 48 z`} fill="#f4e4bc" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d={`M138 54 q14 -34 -8 -48 q-10 22 8 48 z`} fill="#f4e4bc" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d="M60 52 q-16 -40 10 -54 q12 26 -10 54 z" fill="#f4e4bc" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d="M140 52 q16 -40 -10 -54 q-12 26 10 54 z" fill="#f4e4bc" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
         </g>
       );
     default:
@@ -172,38 +148,38 @@ function Ears({ style, skin, dark }) {
 }
 
 function Brows({ style }) {
-  const Y = 66, L = 60, R = 140;
+  const Y = 64, L = 56, R = 144;
   switch (style) {
     case "Tactical":
     case "Angled":
       return (
         <g>
-          <path d={`M${L} ${Y + 6} l28 -12`} stroke={INK} strokeWidth="7" strokeLinecap="round" />
-          <path d={`M${R} ${Y + 6} l-28 -12`} stroke={INK} strokeWidth="7" strokeLinecap="round" />
+          <path d={`M${L} ${Y + 8} l32 -14`} stroke={INK} strokeWidth="7" strokeLinecap="round" />
+          <path d={`M${R} ${Y + 8} l-32 -14`} stroke={INK} strokeWidth="7" strokeLinecap="round" />
         </g>
       );
     case "Heavy":
     case "Thick":
       return (
         <g>
-          <rect x={L - 5} y={Y - 5} width="34" height="10" rx="5" fill={INK} />
-          <rect x={R - 29} y={Y - 5} width="34" height="10" rx="5" fill={INK} />
+          <rect x={L - 4} y={Y - 4} width="36" height="11" rx="5" fill={INK} />
+          <rect x={R - 32} y={Y - 4} width="36" height="11" rx="5" fill={INK} />
         </g>
       );
     case "Scarred":
     case "Zigzag":
       return (
         <g>
-          <polyline points={`${L},${Y} ${L + 10},${Y - 6} ${L + 20},${Y} ${L + 30},${Y - 6}`} fill="none" stroke={INK} strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
-          <polyline points={`${R},${Y} ${R - 10},${Y - 6} ${R - 20},${Y} ${R - 30},${Y - 6}`} fill="none" stroke={INK} strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points={`${L},${Y} ${L + 10},${Y - 7} ${L + 20},${Y} ${L + 32},${Y - 7}`} fill="none" stroke={INK} strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points={`${R},${Y} ${R - 10},${Y - 7} ${R - 20},${Y} ${R - 32},${Y - 7}`} fill="none" stroke={INK} strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
         </g>
       );
     case "Relaxed":
     case "Soft":
       return (
         <g>
-          <path d={`M${L} ${Y + 4} q14 -9 30 0`} fill="none" stroke={INK} strokeWidth="6" strokeLinecap="round" />
-          <path d={`M${R} ${Y + 4} q-14 -9 -30 0`} fill="none" stroke={INK} strokeWidth="6" strokeLinecap="round" />
+          <path d={`M${L} ${Y + 4} q16 -10 34 0`} fill="none" stroke={INK} strokeWidth="6" strokeLinecap="round" />
+          <path d={`M${R} ${Y + 4} q-16 -10 -34 0`} fill="none" stroke={INK} strokeWidth="6" strokeLinecap="round" />
         </g>
       );
     case "None":
@@ -211,8 +187,8 @@ function Brows({ style }) {
     default:
       return (
         <g>
-          <path d={`M${L} ${Y - 2} q14 -7 30 0`} fill="none" stroke={INK} strokeWidth="6" strokeLinecap="round" />
-          <path d={`M${R} ${Y - 2} q-14 -7 -30 0`} fill="none" stroke={INK} strokeWidth="6" strokeLinecap="round" />
+          <path d={`M${L} ${Y} q16 -8 34 0`} fill="none" stroke={INK} strokeWidth="6" strokeLinecap="round" />
+          <path d={`M${R} ${Y} q-16 -8 -34 0`} fill="none" stroke={INK} strokeWidth="6" strokeLinecap="round" />
         </g>
       );
   }
@@ -221,58 +197,57 @@ function Brows({ style }) {
 function Nose({ style, dark }) {
   switch (style) {
     case "Slits":
-      return <g><ellipse cx="94" cy="104" rx="3.5" ry="7" fill={INK} /><ellipse cx="106" cy="104" rx="3.5" ry="7" fill={INK} /></g>;
+      return <g><ellipse cx="93" cy="106" rx="4" ry="8" fill={INK} /><ellipse cx="107" cy="106" rx="4" ry="8" fill={INK} /></g>;
     case "Trunk":
-      return <path d="M100 100 q-7 18 0 32 q6 6 11 0 q-6 -14 0 -32" fill="none" stroke={INK} strokeWidth="3.5" strokeLinecap="round" />;
+      return <path d="M100 102 q-8 20 0 36 q7 7 12 0 q-7 -16 0 -36" fill="none" stroke={INK} strokeWidth="3.5" strokeLinecap="round" />;
     case "Ridge":
-      return <path d="M100 82 l0 34" stroke={INK} strokeWidth="3.5" strokeLinecap="round" />;
+      return <path d="M100 80 l0 38" stroke={INK} strokeWidth="3.5" strokeLinecap="round" />;
     case "Spike":
-      return <path d="M100 94 l8 16 l-16 0 z" fill={shade(dark, 20)} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />;
+      return <path d="M100 96 l9 18 l-18 0 z" fill={shade(dark, 20)} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />;
     case "None":
       return null;
     default:
-      return <ellipse cx="100" cy="104" rx="8" ry="7" fill={shade(dark, 35)} stroke={INK} strokeWidth={SW} />;
+      return <ellipse cx="100" cy="106" rx="9" ry="8" fill={shade(dark, 35)} stroke={INK} strokeWidth={SW} />;
   }
 }
 
 function Mouth({ style }) {
-  const Y = 136;
+  const Y = 138;
   switch (style) {
     case "Tusked":
     case "Fanged":
       return (
         <g>
-          <path d={`M76 ${Y} q24 20 48 0 q-24 12 -48 0 z`} fill="#5b1a1a" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d="M86 136 l6 14 l6 -14 z" fill="#fff" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
-          <path d="M108 136 l6 14 l6 -14 z" fill="#fff" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+          <path d={`M74 ${Y} q26 22 52 0 q-26 14 -52 0 z`} fill="#5b1a1a" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d="M84 138 l7 16 l7 -16 z" fill="#fff" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+          <path d="M108 138 l7 16 l7 -16 z" fill="#fff" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
         </g>
       );
     case "Mandible":
     case "Beak":
-      return <path d={`M100 ${Y - 9} l20 16 l-20 16 l-20 -16 z`} fill="#FFA42B" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />;
+      return <path d={`M100 ${Y - 10} l22 18 l-22 18 l-22 -18 z`} fill="#FFA42B" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />;
     case "Proboscis":
     case "Tentacle":
       return (
         <g>
-          {[76, 88, 100, 112, 124].map((x, i) => (
-            <path key={i} d={`M${x} ${Y} q6 14 -3 23 q9 -3 6 -16`} fill="none" stroke={INK} strokeWidth="3.5" strokeLinecap="round" />
+          {[74, 87, 100, 113, 126].map((x, i) => (
+            <path key={i} d={`M${x} ${Y} q7 16 -3 26`} fill="none" stroke={INK} strokeWidth="3.5" strokeLinecap="round" />
           ))}
         </g>
       );
     case "Closed":
     case "Pursed":
-      return <ellipse cx="100" cy={Y} rx="9" ry="6" fill="#5b1a1a" stroke={INK} strokeWidth={SW} />;
+      return <ellipse cx="100" cy={Y} rx="10" ry="7" fill="#5b1a1a" stroke={INK} strokeWidth={SW} />;
     case "Grim Line":
     case "Wide Grin":
       return (
         <g>
-          <path d={`M74 ${Y} q26 24 52 0 q-26 13 -52 0 z`} fill="#fff" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d={`M74 ${Y} l52 0`} stroke={INK} strokeWidth="2.5" />
-          <path d="M84 136 l4 8 4 -8 z M108 136 l4 8 4 -8 z" fill={INK} />
+          <path d={`M72 ${Y} q28 26 56 0 q-28 14 -56 0 z`} fill="#fff" stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d={`M72 ${Y} l56 0`} stroke={INK} strokeWidth="2.5" />
         </g>
       );
-    default: // Set Jaw
-      return <path d={`M78 ${Y} q22 18 44 -4`} fill="none" stroke={INK} strokeWidth="5" strokeLinecap="round" />;
+    default:
+      return <path d={`M76 ${Y} q24 20 48 -4`} fill="none" stroke={INK} strokeWidth="5" strokeLinecap="round" />;
   }
 }
 
@@ -280,100 +255,174 @@ function Markings({ style, dark }) {
   switch (style) {
     case "Battle Scar":
     case "Scar":
-      return <g><path d="M118 70 l11 24" fill="none" stroke="#d8c4ff" strokeWidth="3.5" strokeLinecap="round" /><path d="M116 78 l8 0 M121 86 l8 0" stroke="#d8c4ff" strokeWidth="2.5" strokeLinecap="round" /></g>;
+      return <g><path d="M118 68 l12 26" fill="none" stroke="#d8c4ff" strokeWidth="3.5" strokeLinecap="round" /><path d="M116 76 l9 0 M122 86 l9 0" stroke="#d8c4ff" strokeWidth="2.5" strokeLinecap="round" /></g>;
     case "Plasma Burns":
     case "Mole Cluster":
-      return <g><circle cx="116" cy="108" r="3.5" fill={dark} /><circle cx="125" cy="114" r="2.5" fill={dark} /><circle cx="109" cy="112" r="2.5" fill={dark} /></g>;
+      return <g><circle cx="116" cy="110" r="3.5" fill={dark} /><circle cx="126" cy="116" r="2.5" fill={dark} /><circle cx="108" cy="114" r="2.5" fill={dark} /></g>;
     case "War Paint":
     case "Tribal Lines":
-      return <g><path d="M56 108 l16 -7 l-9 14 z" fill="none" stroke="#d8c4ff" strokeWidth="3" strokeLinejoin="round" /><path d="M144 108 l-16 -7 l9 14 z" fill="none" stroke="#d8c4ff" strokeWidth="3" strokeLinejoin="round" /></g>;
+      return <g><path d="M54 110 l18 -8 l-10 16 z" fill="none" stroke="#d8c4ff" strokeWidth="3" strokeLinejoin="round" /><path d="M146 110 l-18 -8 l10 16 z" fill="none" stroke="#d8c4ff" strokeWidth="3" strokeLinejoin="round" /></g>;
     case "Speckled":
     case "Freckles":
-      return <g>{[90, 98, 106, 94, 102].map((x, i) => (<circle key={i} cx={x} cy={100 + (i % 2) * 4} r="2" fill={dark} opacity="0.75" />))}</g>;
+      return <g>{[88, 96, 104, 92, 100].map((x, i) => (<circle key={i} cx={x} cy={102 + (i % 2) * 5} r="2.2" fill={dark} opacity="0.75" />))}</g>;
     case "Fractured":
     case "Cracks":
-      return <g><path d="M100 54 l6 20 l-4 11 l7 13" fill="none" stroke="#9a8ab5" strokeWidth="3" strokeLinecap="round" /><path d="M107 85 l9 6 l-2 7" fill="none" stroke="#9a8ab5" strokeWidth="2.5" strokeLinecap="round" /></g>;
+      return <g><path d="M100 52 l7 22 l-5 12 l8 14" fill="none" stroke="#9a8ab5" strokeWidth="3" strokeLinecap="round" /><path d="M108 84 l10 7 l-2 8" fill="none" stroke="#9a8ab5" strokeWidth="2.5" strokeLinecap="round" /></g>;
     default:
       return null;
   }
 }
 
-function RaceBase({ race, skin, dark, light }) {
+/** Exaggerated race silhouettes — unique read at small sizes. */
+function RaceBase({ race, skin, dark, light, paintId }) {
+  const paint = `url(#paint-${paintId || race})`;
+  const acc = RACE_ACCENT[race] || RACE_ACCENT.Cognati;
+
   switch (race) {
     case "Zyrathi":
+      // Horned dragonfolk — big snout, scale plates, ember crest
       return (
         <g>
-          <path d="M100 150 q-50 0 -50 -8 q0 30 50 30 q50 0 50 -30 q0 8 -50 8 z" fill={RACE_ACCENT.Zyrathi.a} opacity="0.4" />
-          <path d="M100 44 q-52 0 -52 48 q0 24 8 36 q0 22 44 22 q44 0 44 -22 q8 -12 8 -36 q0 -48 -52 -48 z" fill={`url(#paint-${race})`} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d="M100 120 q-18 8 -12 26 q12 6 24 0 q6 -18 -12 -26 z" fill={shade(skin, -16)} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <circle cx="92" cy="142" r="2.4" fill={INK} />
-          <circle cx="108" cy="142" r="2.4" fill={INK} />
-          {[[68, 92], [132, 92], [76, 112], [124, 112], [100, 128]].map(([x, y], i) => (
-            <path key={i} d={`M${x - 8} ${y} q8 -8 16 0`} fill="none" stroke={dark} strokeWidth="2" opacity="0.6" />
+          <ellipse cx="100" cy="168" rx="48" ry="14" fill={acc.a} opacity="0.35" />
+          {/* Triple horns */}
+          <path d="M58 48 L48 8 L72 42 Z" fill={shade(skin, 25)} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d="M100 40 L100 2 L114 40 Z" fill={acc.a} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d="M142 48 L152 8 L128 42 Z" fill={shade(skin, 25)} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          {/* Oversized oval head */}
+          <path d="M100 38 Q44 42 40 100 Q42 158 100 168 Q158 158 160 100 Q156 42 100 38 Z" fill={paint} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          {/* Snout plate */}
+          <path d="M100 118 Q72 122 68 148 Q100 162 132 148 Q128 122 100 118 Z" fill={shade(skin, -18)} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <circle cx="90" cy="142" r="3" fill={INK} />
+          <circle cx="110" cy="142" r="3" fill={INK} />
+          {/* Scale arcs */}
+          {[[62, 88], [138, 88], [70, 112], [130, 112], [100, 130]].map(([x, y], i) => (
+            <path key={i} d={`M${x - 10} ${y} q10 -9 20 0`} fill="none" stroke={dark} strokeWidth="2.5" opacity="0.65" />
           ))}
-          {[
-            { x: 78, d: -8 },
-            { x: 100, d: 0 },
-            { x: 122, d: 8 },
-          ].map((s, i) => (
-            <path key={i} d={`M${s.x} 46 l${s.d} -26 l${s.d === 0 ? 11 : -s.d + 5} 26 z`} fill={shade(skin, 30)} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          ))}
+          <path d="M52 70 Q100 58 148 70" fill="none" stroke={acc.glow} strokeWidth="3" opacity="0.5" />
         </g>
       );
+
     case "Cognati":
+      // Chrome android — faceted panel head, antenna, LED seams
       return (
         <g>
-          <line x1="100" y1="42" x2="100" y2="22" stroke={INK} strokeWidth="5" strokeLinecap="round" />
-          <circle cx="100" cy="20" r="6" fill={RACE_ACCENT.Cognati.a} stroke={INK} strokeWidth={SW} />
-          <path d="M100 42 q-46 0 -46 14 l0 44 q0 18 8 30 q4 22 38 22 q34 0 38 -22 q8 -12 8 -30 l0 -44 q0 -14 -46 -14 z" fill={`url(#paint-${race})`} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <line x1="100" y1="42" x2="100" y2="164" stroke={RACE_ACCENT.Cognati.a} strokeWidth="3" />
-          <path d="M64 62 q-7 26 0 54" fill="none" stroke={RACE_ACCENT.Cognati.a} strokeWidth="3.5" strokeLinecap="round" />
-          <path d="M136 62 q7 26 0 54" fill="none" stroke={RACE_ACCENT.Cognati.a} strokeWidth="3.5" strokeLinecap="round" />
-          {[[60, 70], [140, 70], [60, 132], [140, 132]].map(([x, y], i) => (
-            <circle key={i} cx={x} cy={y} r="4" fill={dark} stroke={INK} strokeWidth="2" />
+          <line x1="100" y1="40" x2="100" y2="14" stroke={INK} strokeWidth="6" strokeLinecap="round" />
+          <circle cx="100" cy="12" r="8" fill={acc.a} stroke={INK} strokeWidth={SW} />
+          <circle cx="100" cy="12" r="3" fill="#fff" opacity="0.9" />
+          {/* Hex-ish chassis head */}
+          <path d="M100 40 L148 58 L152 118 L100 168 L48 118 L52 58 Z" fill={paint} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d="M100 40 L100 168" stroke={acc.a} strokeWidth="3.5" opacity="0.85" />
+          <path d="M62 70 Q54 100 62 130" fill="none" stroke={acc.a} strokeWidth="3" strokeLinecap="round" />
+          <path d="M138 70 Q146 100 138 130" fill="none" stroke={acc.a} strokeWidth="3" strokeLinecap="round" />
+          {[[58, 66], [142, 66], [56, 128], [144, 128]].map(([x, y], i) => (
+            <circle key={i} cx={x} cy={y} r="5" fill={dark} stroke={INK} strokeWidth="2" />
           ))}
+          <rect x="78" y="48" width="44" height="8" rx="3" fill={acc.glow} opacity="0.55" stroke={INK} strokeWidth="2" />
         </g>
       );
+
     case "Luminae":
+      // Starfolk — soft halo, pointed crown, constellation sparkles
       return (
         <g>
-          <circle cx="100" cy="100" r="80" fill={RACE_ACCENT.Luminae.a} opacity="0.14" />
-          <circle cx="100" cy="100" r="62" fill={RACE_ACCENT.Luminae.b} opacity="0.22" />
-          <path d="M100 40 q-16 -20 -26 -7 q-22 8 -22 66 q0 60 48 60 q48 0 48 -60 q0 -58 -22 -66 q-10 -13 -26 7 z" fill={`url(#paint-${race})`} stroke={shade(light, 12)} strokeWidth={SW} strokeLinejoin="round" />
-          {[[62, 56], [100, 28], [138, 56]].map(([x, y], i) => (
-            <path key={i} d={`M${x} ${y} q5 -18 8 -4 q5 -14 8 4 z`} fill={RACE_ACCENT.Luminae.a} stroke={shade(light, 12)} strokeWidth="2" />
+          <circle cx="100" cy="100" r="88" fill={acc.a} opacity="0.16" />
+          <circle cx="100" cy="100" r="70" fill={acc.b} opacity="0.22" />
+          {/* Flame-soft head */}
+          <path d="M100 36 Q78 18 58 42 Q42 70 44 112 Q48 160 100 170 Q152 160 156 112 Q158 70 142 42 Q122 18 100 36 Z" fill={paint} stroke={shade(light, 20)} strokeWidth={SW} strokeLinejoin="round" />
+          {/* Crown flares */}
+          {[[62, 40], [100, 22], [138, 40]].map(([x, y], i) => (
+            <path key={i} d={`M${x} ${y} q6 -20 10 -4 q6 -16 10 4 z`} fill={acc.a} stroke={shade(light, 12)} strokeWidth="2.5" />
           ))}
-          {[[56, 76], [144, 76], [70, 140], [130, 140]].map(([x, y], i) => (
-            <path key={i} d={`M${x} ${y} l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 z`} fill="#fff" opacity="0.9" />
+          {[[50, 78], [150, 78], [64, 148], [136, 148], [100, 52]].map(([x, y], i) => (
+            <path key={i} d={`M${x} ${y} l2 5 5 1.5 -5 1.5 -2 5 -2 -5 -5 -1.5 5 -1.5 z`} fill="#fff" opacity="0.95" />
           ))}
         </g>
       );
+
     case "Grothak":
+      // High-g tank — massive block head, gem brow, moss cracks
       return (
         <g>
-          <path d="M100 46 q-60 0 -60 52 q0 18 10 30 q-4 28 50 28 q54 0 50 -28 q10 -12 10 -30 q0 -52 -60 -52 z" fill={`url(#paint-${race})`} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d="M50 84 q50 -16 100 0" fill="none" stroke={dark} strokeWidth="8" opacity="0.7" strokeLinecap="round" />
-          <path d="M100 58 l9 13 l-9 13 l-9 -13 z" fill={RACE_ACCENT.Grothak.a} stroke={INK} strokeWidth="2" strokeLinejoin="round" />
-          <path d="M70 128 l6 16 l-3 8" fill="none" stroke={dark} strokeWidth="2.5" opacity="0.5" strokeLinecap="round" />
-          <path d="M130 124 l-4 14 l3 10" fill="none" stroke={dark} strokeWidth="2.5" opacity="0.5" strokeLinecap="round" />
-          <path d="M56 100 q-6 -8 -2 -14" fill="none" stroke="#6b8e3d" strokeWidth="3" strokeLinecap="round" />
-          <path d="M144 100 q6 -8 2 -14" fill="none" stroke="#6b8e3d" strokeWidth="3" strokeLinecap="round" />
+          <path d="M100 42 Q28 48 24 108 Q28 168 100 176 Q172 168 176 108 Q172 48 100 42 Z" fill={paint} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d="M36 88 Q100 70 164 88" fill="none" stroke={dark} strokeWidth="10" opacity="0.65" strokeLinecap="round" />
+          <path d="M100 52 L114 72 L100 92 L86 72 Z" fill={acc.a} stroke={INK} strokeWidth="3" strokeLinejoin="round" />
+          <path d="M58 130 l8 20 l-4 10" fill="none" stroke={dark} strokeWidth="3" opacity="0.55" strokeLinecap="round" />
+          <path d="M142 126 l-6 18 l4 12" fill="none" stroke={dark} strokeWidth="3" opacity="0.55" strokeLinecap="round" />
+          <path d="M40 108 q-8 -10 -4 -18" fill="none" stroke="#6b8e3d" strokeWidth="4" strokeLinecap="round" />
+          <path d="M160 108 q8 -10 4 -18" fill="none" stroke="#6b8e3d" strokeWidth="4" strokeLinecap="round" />
+          <ellipse cx="100" cy="150" rx="28" ry="10" fill={dark} opacity="0.25" />
         </g>
       );
+
     case "Synthara":
+      // Shadow morph — teardrop face, phase wisps, sly asymmetry
       return (
         <g>
-          <path d="M52 96 q-18 -6 -20 8 q14 4 20 -8 z" fill={RACE_ACCENT.Synthara.a} opacity="0.45" />
-          <path d="M148 96 q18 -6 20 8 q-14 4 -20 -8 z" fill={RACE_ACCENT.Synthara.a} opacity="0.45" />
-          <path d="M100 42 q-48 0 -48 56 q0 34 24 50 q10 22 24 22 q14 0 24 -22 q24 -16 24 -50 q0 -56 -48 -56 z" fill={`url(#paint-${race})`} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
-          <path d="M56 92 q44 -18 88 0" fill="none" stroke={dark} strokeWidth="4.5" opacity="0.5" strokeLinecap="round" />
-          <path d="M54 112 q-10 20 0 34" fill="none" stroke={RACE_ACCENT.Synthara.a} strokeWidth="3.5" opacity="0.5" strokeLinecap="round" />
-          <path d="M146 112 q10 20 0 34" fill="none" stroke={RACE_ACCENT.Synthara.a} strokeWidth="3.5" opacity="0.5" strokeLinecap="round" />
+          <path d="M40 96 Q18 88 14 108 Q28 118 42 108 Z" fill={acc.a} opacity="0.55" />
+          <path d="M160 96 Q182 88 186 108 Q172 118 158 108 Z" fill={acc.a} opacity="0.55" />
+          <path d="M100 36 Q46 44 42 108 Q48 158 100 174 Q152 158 158 108 Q154 44 100 36 Z" fill={paint} stroke={INK} strokeWidth={SW} strokeLinejoin="round" />
+          <path d="M52 94 Q100 74 148 94" fill="none" stroke={dark} strokeWidth="5" opacity="0.45" strokeLinecap="round" />
+          <path d="M48 118 Q36 148 52 160" fill="none" stroke={acc.glow} strokeWidth="4" opacity="0.55" strokeLinecap="round" />
+          <path d="M152 118 Q164 148 148 160" fill="none" stroke={acc.glow} strokeWidth="4" opacity="0.55" strokeLinecap="round" />
+          <path d="M88 48 Q100 58 118 50" fill="none" stroke={acc.a} strokeWidth="2.5" opacity="0.7" />
         </g>
       );
+
     default:
-      return <ellipse cx="100" cy="100" rx="56" ry="64" fill={`url(#paint-${race})`} stroke={INK} strokeWidth={SW} />;
+      return <ellipse cx="100" cy="100" rx="58" ry="66" fill={paint} stroke={INK} strokeWidth={SW} />;
   }
+}
+
+function BlinkLids({ skin }) {
+  const [closed, setClosed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let waitTimer;
+    let openTimer;
+    let secondTimer;
+
+    function schedule() {
+      const gapMs = 2000 + Math.random() * 3000; // 2–5s between blinks
+      waitTimer = setTimeout(() => {
+        if (cancelled) return;
+        const doubleBlink = Math.random() < 0.22;
+        setClosed(true);
+        openTimer = setTimeout(() => {
+          if (cancelled) return;
+          setClosed(false);
+          if (doubleBlink) {
+            secondTimer = setTimeout(() => {
+              if (cancelled) return;
+              setClosed(true);
+              openTimer = setTimeout(() => {
+                if (cancelled) return;
+                setClosed(false);
+                schedule();
+              }, 110);
+            }, 90);
+          } else {
+            schedule();
+          }
+        }, 120);
+      }, gapMs);
+    }
+
+    schedule();
+    return () => {
+      cancelled = true;
+      clearTimeout(waitTimer);
+      clearTimeout(openTimer);
+      clearTimeout(secondTimer);
+    };
+  }, []);
+
+  return (
+    <>
+      <motion.rect x="52" y="76" width="42" rx="10" fill={skin} initial={false} animate={{ height: closed ? 32 : 0 }} transition={{ duration: closed ? 0.045 : 0.08, ease: "easeOut" }} />
+      <motion.rect x="106" y="76" width="42" rx="10" fill={skin} initial={false} animate={{ height: closed ? 32 : 0 }} transition={{ duration: closed ? 0.045 : 0.08, ease: "easeOut" }} />
+    </>
+  );
 }
 
 export default function CharacterAvatar({
@@ -388,66 +437,65 @@ export default function CharacterAvatar({
   cls,
   size = 180,
   static: isStatic = false,
+  uid,
 }) {
   const skin = skinColor || "#67a832";
   const dark = shade(skin, -50);
   const light = shade(skin, 34);
   const accent = (RACE_ACCENT[race] || RACE_ACCENT.Cognati).a;
-
+  const gid = uid || race || "avatar";
   const featureKey = `${race}-${skinColor}-${eyeStyle}-${eyebrows}-${ears}-${nose}-${mouth}-${marking}`;
+  const stops = paintStops(skin, light, dark);
 
   return (
     <motion.div
       key={featureKey}
-      initial={{ scale: 0.8, opacity: 0 }}
+      initial={{ scale: 0.88, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 400, damping: 15 }}
+      transition={{ type: "spring", stiffness: 280, damping: 18 }}
       style={{ width: size, height: size }}
     >
       <motion.div
-        animate={isStatic ? undefined : { scaleY: [1, 0.97, 1] }}
-        transition={isStatic ? undefined : { duration: 3, ease: [0.4, 0, 0.2, 1], repeat: Infinity }}
+        animate={
+          isStatic
+            ? undefined
+            : {
+                y: [0, -3, 0],
+                scaleY: [1, 0.985, 1],
+                scaleX: [1, 1.01, 1],
+              }
+        }
+        transition={isStatic ? undefined : { duration: 3.6, ease: "easeInOut", repeat: Infinity }}
         style={{ width: size, height: size, transformOrigin: "bottom center" }}
       >
-        <svg viewBox="0 0 200 200" width={size} height={size} className="select-none">
+        <svg viewBox="0 0 200 200" width={size} height={size} className="select-none overflow-visible">
           <defs>
-            {/* Cel-shaded hard-stop gradient — 3 flat bands for a comic look */}
-            <linearGradient id={`paint-${race}`} x1="0" y1="0" x2="0.35" y2="1">
-              <stop offset="0%" stopColor={light} />
-              <stop offset="42%" stopColor={light} />
-              <stop offset="46%" stopColor={skin} />
-              <stop offset="74%" stopColor={skin} />
-              <stop offset="78%" stopColor={dark} />
-              <stop offset="100%" stopColor={dark} />
+            <linearGradient id={`paint-${gid}`} x1="0" y1="0" x2="0.35" y2="1">
+              {stops.map((s) => (
+                <stop key={s.offset} offset={s.offset} stopColor={s.color} />
+              ))}
             </linearGradient>
-            <radialGradient id={`aura-${race}`} cx="50%" cy="50%" r="55%">
+            <radialGradient id={`aura-${gid}`} cx="50%" cy="50%" r="55%">
               <stop offset="0%" stopColor={accent} stopOpacity="0.45" />
               <stop offset="100%" stopColor={accent} stopOpacity="0" />
             </radialGradient>
           </defs>
 
-          {/* Painted aura backdrop */}
-          <ellipse cx="100" cy="100" rx="84" ry="90" fill={`url(#aura-${race})`} />
+          <ellipse cx="100" cy="100" rx="84" ry="90" fill={`url(#aura-${gid})`} />
 
-          {/* Neck */}
           <rect x="84" y="150" width="32" height="46" rx="12" fill={dark} opacity="0.6" />
 
-          {/* Ears (behind head) */}
-          <Ears style={ears} skin={skin} dark={dark} />
-
-          {/* Head */}
-          <RaceBase race={race} skin={skin} dark={dark} light={light} />
-
-          {/* Rim-light edge along the head crown */}
+          <Ears style={ears} skin={skin} />
+          <RaceBase race={race} skin={skin} dark={dark} light={light} paintId={gid} />
           <path d="M100 44 q-52 0 -52 48" fill="none" stroke={RIM} strokeWidth="3" strokeLinecap="round" opacity="0.5" />
 
-          {/* Face features */}
           <motion.g
-            animate={isStatic ? undefined : { y: [0, -2.5, 0] }}
-            transition={isStatic ? undefined : { duration: 3, ease: [0.4, 0, 0.2, 1], repeat: Infinity, delay: 0.15 }}
+            animate={isStatic ? undefined : { y: [0, -1.5, 0] }}
+            transition={isStatic ? undefined : { duration: 3.6, ease: "easeInOut", repeat: Infinity, delay: 0.15 }}
           >
             <Brows style={eyebrows} />
             <Eyes style={eyeStyle} />
+            {!isStatic && <BlinkLids skin={skin} />}
             <Nose style={nose} dark={dark} />
             <Mouth style={mouth} />
             <Markings style={marking} dark={dark} />

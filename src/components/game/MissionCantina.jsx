@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getEffectiveFuelCost, DIFFICULTY_COLORS, QUEST_GIVERS, formatEfficiencyPct, normalizeMissionEfficiency } from "@/lib/gameData";
+import { getEffectiveFuelCost, QUEST_GIVERS } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import { Lock, Fuel, Star, Clock, MapPin } from "lucide-react";
 import MissionDetailSheet from "@/components/game/MissionDetailSheet";
-import RiskGauge from "@/components/game/RiskGauge";
 
 const CANTINA_BG = "/assets/cantina-bg.png";
 
@@ -59,7 +58,6 @@ export default function MissionCantina({ missions, characterLevel, character, cu
   const hoverLowFuel = hoverMission ? (currentFuel ?? 0) < hoverFuelCost : false;
   const hoverScouting = busy && hoverMission && !hoverLocked && !hoverLowFuel;
   const hoverAvailable = hoverMission && !hoverLocked && !hoverLowFuel;
-  const hoverDiffColor = hoverMission ? DIFFICULTY_COLORS[hoverMission.difficulty] : null;
 
   return (
     <div className="relative h-full w-full min-h-0 rounded-2xl overflow-hidden border border-border/60 shadow-2xl painted-panel painted-frame canvas-grain">
@@ -233,12 +231,6 @@ export default function MissionCantina({ missions, characterLevel, character, cu
                     <h3 className="font-display font-bold text-xl sm:text-2xl leading-tight text-foreground">
                       {hoverMission.name}
                     </h3>
-                    <span
-                      className="text-[11px] font-display font-bold uppercase px-2.5 py-1 rounded-full shrink-0"
-                      style={{ backgroundColor: hoverDiffColor + "22", color: hoverDiffColor }}
-                    >
-                      {hoverMission.difficulty}
-                    </span>
                   </div>
                   <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1.5">
                     <MapPin className="w-3.5 h-3.5 shrink-0" /> {hoverMission.location}
@@ -246,11 +238,7 @@ export default function MissionCantina({ missions, characterLevel, character, cu
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 rounded-xl bg-muted/25 border border-border/40">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-display uppercase text-muted-foreground tracking-wide">Risk</span>
-                  <RiskGauge risk={hoverMission.risk || 1} size={18} />
-                </div>
+              <div className="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl bg-muted/25 border border-border/40">
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Clock className="w-4 h-4" />
                   <span className="font-display font-semibold text-foreground">
@@ -270,17 +258,11 @@ export default function MissionCantina({ missions, characterLevel, character, cu
                     {hoverGains?.xpGain ?? hoverMission.rewards?.experience}
                   </p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">XP</p>
-                  <p className={`text-[10px] font-semibold mt-0.5 ${normalizeMissionEfficiency(hoverMission.xp_efficiency) >= 1 ? "text-cyan-400/80" : "text-rose-400/80"}`}>
-                    {formatEfficiencyPct(hoverMission.xp_efficiency)} /fuel
-                  </p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
                   <span className="text-lg block text-center">✨</span>
                   <p className="text-lg sm:text-xl font-display font-bold mt-1.5 text-purple-400">{hoverGains?.stardustGain ?? hoverMission.rewards?.stardust}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Stardust</p>
-                  <p className={`text-[10px] font-semibold mt-0.5 ${normalizeMissionEfficiency(hoverMission.stardust_efficiency) >= 1 ? "text-purple-400/80" : "text-rose-400/80"}`}>
-                    {formatEfficiencyPct(hoverMission.stardust_efficiency)} /fuel
-                  </p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
                   <Fuel className={`w-5 h-5 mx-auto ${hoverLowFuel ? "text-amber-400" : "text-blue-400"}`} />

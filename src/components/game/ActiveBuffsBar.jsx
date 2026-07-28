@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FlaskConical, Rocket } from "lucide-react";
-import { getActiveBuffs, STAT_ICONS } from "@/lib/gameData";
+import { getActiveBuffs, STAT_ICONS, getStatColor } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
 
 // Live countdown label for a buff expiry.
@@ -22,23 +22,25 @@ function useCountdown(expiresAt) {
 
 function BuffChip({ buff }) {
   const remaining = useCountdown(buff.expires_at);
+  const color = getStatColor(buff.stat);
   const statLabel = buff.stat === "all" ? "ALL" : (STAT_ICONS[buff.stat] + " " + buff.stat);
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8 }}
-      className="flex items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1.5"
+      className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5"
+      style={{ borderColor: `${color}66`, backgroundColor: `${color}1a` }}
       title={`${buff.name} · expires in ${remaining}`}
     >
-      <FlaskConical className="w-3.5 h-3.5 text-accent shrink-0" />
+      <FlaskConical className="w-3.5 h-3.5 shrink-0" style={{ color }} />
       <div className="min-w-0">
-        <p className="text-[11px] font-display font-semibold text-accent leading-tight truncate">
+        <p className="text-[11px] font-display font-semibold leading-tight truncate" style={{ color }}>
           +{Math.round((buff.mult || 0) * 100)}% {statLabel}
         </p>
         <p className="text-[9px] text-muted-foreground leading-tight truncate">{buff.name}</p>
       </div>
-      <span className="text-[10px] font-mono text-accent/80 shrink-0 tabular-nums">{remaining}</span>
+      <span className="text-[11px] font-display font-black shrink-0 tabular-nums px-1 py-px rounded-sm" style={{ color, backgroundColor: "rgba(0,0,0,0.45)" }}>{remaining}</span>
     </motion.div>
   );
 }

@@ -1,42 +1,62 @@
-import React from "react";
+import React, { useId } from "react";
 import { motion } from "framer-motion";
-import { RARITY_COLORS, weaponEmojiFor } from "@/lib/gameData";
+import { rarityColor, rarityGlowStrength } from "@/lib/artStyle";
+import GearArtSvg from "@/components/game/GearArtSvg";
 
-// Animated visual per gear type — each piece gets its own playful motion.
-const GEAR = {
-  weapon: { emoji: "⚔️", animate: { rotate: [-9, 9, -9] }, transition: { duration: 2.4, repeat: Infinity, ease: "easeInOut" } },
-  armor: { emoji: "🦺", animate: { scale: [1, 1.09, 1] }, transition: { duration: 2, repeat: Infinity, ease: "easeInOut" } },
-  helmet: { emoji: "🪖", animate: { y: [0, -4, 0] }, transition: { duration: 2.2, repeat: Infinity, ease: "easeInOut" } },
-  boots: { emoji: "🥾", animate: { x: [-3, 3, -3] }, transition: { duration: 0.85, repeat: Infinity, ease: "easeInOut" } },
-  legs: { emoji: "🦵", animate: { y: [0, -3, 0] }, transition: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } },
-  neck: { emoji: "📿", animate: { rotate: [0, 360] }, transition: { duration: 6, repeat: Infinity, ease: "linear" } },
-  accessory: { emoji: "💍", animate: { rotate: [0, 360] }, transition: { duration: 5, repeat: Infinity, ease: "linear" } },
-  ship_module: { emoji: "⚙️", animate: { rotate: [0, 360] }, transition: { duration: 4, repeat: Infinity, ease: "linear" } },
-  material: { emoji: "🪨", animate: { y: [0, -3, 0] }, transition: { duration: 2.5, repeat: Infinity, ease: "easeInOut" } },
-  consumable: { emoji: "🧪", animate: { scale: [1, 1.12, 1] }, transition: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } },
+const MOTION = {
+  weapon: { animate: { rotate: [-8, 8, -8] }, transition: { duration: 2.4, repeat: Infinity, ease: "easeInOut" } },
+  armor: { animate: { scale: [1, 1.06, 1] }, transition: { duration: 2, repeat: Infinity, ease: "easeInOut" } },
+  helmet: { animate: { y: [0, -3, 0] }, transition: { duration: 2.2, repeat: Infinity, ease: "easeInOut" } },
+  boots: { animate: { x: [-2, 2, -2] }, transition: { duration: 0.85, repeat: Infinity, ease: "easeInOut" } },
+  legs: { animate: { y: [0, -2, 0] }, transition: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } },
+  neck: { animate: { rotate: [0, 8, -8, 0] }, transition: { duration: 4, repeat: Infinity, ease: "easeInOut" } },
+  accessory: { animate: { rotate: [0, 360] }, transition: { duration: 8, repeat: Infinity, ease: "linear" } },
+  ship_module: { animate: { rotate: [0, 360] }, transition: { duration: 6, repeat: Infinity, ease: "linear" } },
+  material: { animate: { y: [0, -2, 0] }, transition: { duration: 2.5, repeat: Infinity, ease: "easeInOut" } },
+  consumable: { animate: { scale: [1, 1.08, 1] }, transition: { duration: 1.8, repeat: Infinity, ease: "easeInOut" } },
 };
 
-export default function GearVisual({ type, rarity, name, emoji: emojiProp, size = 56 }) {
-  const g = GEAR[type] || GEAR.material;
-  const color = RARITY_COLORS[rarity] || "#9CA3AF";
-  const emoji =
-    emojiProp ||
-    (type === "weapon" ? weaponEmojiFor(name) : null) ||
-    g.emoji;
+export default function GearVisual({
+  type,
+  rarity,
+  name,
+  baseName,
+  level_requirement: levelRequirement,
+  levelRequirement: levelRequirementCamel,
+  size = 56,
+  static: isStatic = false,
+}) {
+  const uid = useId().replace(/:/g, "");
+  const color = rarityColor(rarity);
+  const glow = rarityGlowStrength(rarity);
+  const motion = MOTION[type] || MOTION.material;
+  const lv = levelRequirement ?? levelRequirementCamel ?? 1;
+
   return (
     <div
       className="relative flex items-center justify-center rounded-xl"
-      style={{ width: size, height: size, background: `radial-gradient(circle, ${color}22, transparent 70%)` }}
+      style={{
+        width: size,
+        height: size,
+        background: `radial-gradient(circle, ${color}28, transparent 72%)`,
+        boxShadow: `0 0 ${glow.blur}px ${color}${glow.outer}, inset 0 0 8px ${color}${glow.inset}`,
+      }}
     >
-      <div className="absolute inset-0 rounded-xl" style={{ boxShadow: `0 0 14px ${color}40, inset 0 0 8px ${color}20` }} />
-      <motion.span
-        className="relative leading-none"
-        style={{ fontSize: size * 0.55, filter: `drop-shadow(0 0 4px ${color}99)` }}
-        animate={g.animate}
-        transition={g.transition}
+      <motion.div
+        className="relative"
+        style={{ width: size * 0.88, height: size * 0.88 }}
+        animate={isStatic ? undefined : motion.animate}
+        transition={isStatic ? undefined : motion.transition}
       >
-        {emoji}
-      </motion.span>
+        <GearArtSvg
+          type={type}
+          rarity={rarity}
+          name={name}
+          baseName={baseName}
+          levelRequirement={lv}
+          uid={uid}
+        />
+      </motion.div>
     </div>
   );
 }

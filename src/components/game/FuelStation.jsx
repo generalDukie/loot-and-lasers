@@ -43,7 +43,7 @@ function ActiveMountChip({ mount }) {
   );
 }
 
-export default function FuelStation({ character, onUpdate }) {
+export default function FuelStation({ character, onUpdate, embedded = false }) {
   const [buying, setBuying] = useState(null);
   const { toast } = useToast();
   const active = getActiveFuelMounts(character);
@@ -105,16 +105,25 @@ export default function FuelStation({ character, onUpdate }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide flex items-center gap-1.5">
-          <Fuel className="w-3.5 h-3.5 text-amber-400" /> FUEL STATION
-        </h2>
-        {activeSpeed > 0 && (
+      {!embedded && (
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide flex items-center gap-1.5">
+            <Fuel className="w-3.5 h-3.5 text-amber-400" /> FUEL STATION
+          </h2>
+          {activeSpeed > 0 && (
+            <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+              <Rocket className="w-3 h-3" /> -{Math.round(activeSpeed * 100)}% Mission Time
+            </span>
+          )}
+        </div>
+      )}
+      {embedded && activeSpeed > 0 && (
+        <div className="flex justify-end mb-2">
           <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-1 rounded-full font-medium flex items-center gap-1">
-            <Rocket className="w-3 h-3" /> -{Math.round(activeSpeed * 100)}% Mission Time
+            <Rocket className="w-3 h-3" /> -{Math.round(activeSpeed * 100)}% Mission Time active
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {activeMount && (
         <div className="flex flex-wrap gap-1.5 mb-3">
@@ -124,24 +133,24 @@ export default function FuelStation({ character, onUpdate }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className={`grid gap-2 ${embedded ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 gap-3"}`}>
         {FUEL_MOUNTS.map((mount) => {
           const canAfford =
             (character.stardust || 0) >= mount.stardust &&
             (!mount.crystals || (character.nova_crystals || 0) >= mount.crystals);
           const disabled = !canAfford || buying === mount.id;
           return (
-            <div key={mount.id} className="painted-panel canvas-grain p-4 flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-center text-2xl shrink-0 border-glow-cyan">
+            <div key={mount.id} className={`flex items-center gap-3 ${embedded ? "rounded-xl border border-amber-400/20 bg-amber-500/5 px-3 py-2.5" : "painted-panel canvas-grain p-4"}`}>
+              <div className={`rounded-xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-center shrink-0 ${embedded ? "w-9 h-9 text-lg" : "w-12 h-12 text-2xl border-glow-cyan"}`}>
                 {mount.emoji}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="font-display font-bold text-sm text-foreground truncate">{mount.name}</p>
+                  <p className={`font-display font-bold text-foreground truncate ${embedded ? "text-xs" : "text-sm"}`}>{mount.name}</p>
                   <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 shrink-0">-{Math.round(mount.speed * 100)}%</span>
                 </div>
-                <p className="text-[10px] text-muted-foreground leading-tight line-clamp-1">{mount.desc}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">⏱ {mount.duration_hours}h duration</p>
+                {!embedded && <p className="text-[10px] text-muted-foreground leading-tight line-clamp-1">{mount.desc}</p>}
+                <p className="text-[10px] text-muted-foreground mt-0.5">⏱ {mount.duration_hours}h</p>
               </div>
               <button
                 onClick={() => handleBuy(mount)}
@@ -162,7 +171,7 @@ export default function FuelStation({ character, onUpdate }) {
         })}
       </div>
       <p className="text-[10px] text-muted-foreground mt-2">
-        Additional purchases extend the active timer (up to {MAX_FUEL_MOUNTS}×) — the speed bonus does not stack; the strongest mount's speed applies.
+        Temporary only — extends the timer (up to {MAX_FUEL_MOUNTS}×). Speed does not stack; strongest mount wins.
       </p>
     </div>
   );

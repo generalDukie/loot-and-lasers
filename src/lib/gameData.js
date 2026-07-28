@@ -1,4 +1,5 @@
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
+import { todayET } from "@/lib/gameTime";
 
 // ═══════════════════════════════════════════
 // RACES
@@ -59,6 +60,13 @@ export const RACES = {
 // ═══════════════════════════════════════════
 // CLASSES
 // ═══════════════════════════════════════════
+/** Starting attributes by primary type (always sum to 50). */
+export const CLASS_TYPE_BASE_STATS = {
+  strength:  { strength: 15, agility: 8,  intellect: 6,  vitality: 14, luck: 7  },
+  agility:   { strength: 7,  agility: 15, intellect: 7,  vitality: 11, luck: 10 },
+  intellect: { strength: 6,  agility: 8,  intellect: 15, vitality: 13, luck: 8  },
+};
+
 export const CLASSES = {
   Vanguard: {
     name: "Vanguard",
@@ -67,7 +75,7 @@ export const CLASSES = {
     description: "Slow, heavy-hitting powerhouse. Vanguards wade into the thick of it with massive weapons and the armor to shrug off anything thrown back.",
     primaryStat: "strength",
     secondaryStat: "vitality",
-    baseStats: { strength: 12, agility: 8, intellect: 6, vitality: 10, luck: 4 },
+    baseStats: { ...CLASS_TYPE_BASE_STATS.strength },
     special: {
       name: "Unstoppable",
       effect: "Every 4th attack deals 200% damage and ignores 25% of the target's armor.",
@@ -81,7 +89,7 @@ export const CLASSES = {
     description: "Operating from the shadows, these elite agents weave between blows and answer every dodge with a killing strike.",
     primaryStat: "agility",
     secondaryStat: "luck",
-    baseStats: { strength: 7, agility: 14, intellect: 8, vitality: 5, luck: 6 },
+    baseStats: { ...CLASS_TYPE_BASE_STATS.agility },
     special: {
       name: "Shadowstep",
       effect: "Every successful dodge grants +25% damage on the next attack (resets after the attack).",
@@ -95,7 +103,7 @@ export const CLASSES = {
     description: "Blending psionic arts with overclocked tech, Technomancers unleash explosive bursts that punch straight through defenses.",
     primaryStat: "intellect",
     secondaryStat: "luck",
-    baseStats: { strength: 5, agility: 7, intellect: 14, vitality: 6, luck: 8 },
+    baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
     special: {
       name: "Overcharge",
       effect: "Every 3rd spell is guaranteed to critically strike and ignores 20% of the target's armor/shields.",
@@ -109,7 +117,7 @@ export const CLASSES = {
     description: "Not a healer — a survivor. Astral Wardens smash through fights with raw strength while layering shields and regeneration to simply refuse to die.",
     primaryStat: "strength",
     secondaryStat: "vitality",
-    baseStats: { strength: 13, agility: 6, intellect: 7, vitality: 12, luck: 2 },
+    baseStats: { ...CLASS_TYPE_BASE_STATS.strength },
     special: {
       name: "Cosmic Barrier",
       effect: "Begins every battle with a shield equal to 20% of max Health. Regenerates 2% of max Health at the start of every turn. Shield cannot be restored once broken.",
@@ -123,7 +131,7 @@ export const CLASSES = {
     description: "Born in the slipstreams between stars, Void Runners fight at a tempo others can't match. They weave, feint, and land a twin strike before the enemy finishes blinking.",
     primaryStat: "agility",
     secondaryStat: "luck",
-    baseStats: { strength: 6, agility: 14, intellect: 7, vitality: 6, luck: 7 },
+    baseStats: { ...CLASS_TYPE_BASE_STATS.agility },
     special: {
       name: "Twin Fang",
       effect: "Every 3rd attack hits twice — each strike deals 70% weapon damage.",
@@ -137,7 +145,7 @@ export const CLASSES = {
     description: "If it can be built, hacked, or jury-rigged, a Cosmic Engineer is already deploying it. Drones, poisons, burns, and EMPs turn the fight into a war of attrition they always win.",
     primaryStat: "intellect",
     secondaryStat: "luck",
-    baseStats: { strength: 6, agility: 10, intellect: 12, vitality: 7, luck: 5 },
+    baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
     special: {
       name: "Combat Drone",
       effect: "Deploys a drone at the start of combat that fires every other turn for 30% weapon damage. The drone cannot be targeted or destroyed.",
@@ -482,27 +490,48 @@ export function getAttributePointCost(purchaseNumber) {
   return Math.max(1, Math.round(10 * (1 + (n - 1) / 97.54) ** 5.657));
 }
 
+export const ATTR_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
+
 /**
- * How many attribute points this character has already bought.
- * Prefers `attribute_purchases`; migrates from stats vs class base if missing.
+ * Purchases already bought for one attribute (each stat has its own cost curve).
+ * Prefers `attribute_purchases_by_stat[stat]`; else derives from stats vs class base.
  */
-export function getAttributePurchaseCount(character) {
+export function getAttributePurchaseCount(character, stat) {
   if (!character) return 0;
+  if (stat) {
+    const by = character.attribute_purchases_by_stat;
+    if (by && typeof by[stat] === "number" && Number.isFinite(by[stat])) {
+      return Math.max(0, Math.floor(by[stat]));
+    }
+    const base = CLASSES[character.class]?.baseStats || {};
+    return Math.max(0, (character.stats?.[stat] || 0) - (base[stat] || 0));
+  }
+  // Total across all stats (legacy / sync helper).
+  if (
+    character.attribute_purchases_by_stat
+    && typeof character.attribute_purchases_by_stat === "object"
+  ) {
+    return ATTR_STAT_KEYS.reduce(
+      (sum, k) => sum + getAttributePurchaseCount(character, k),
+      0,
+    );
+  }
   if (typeof character.attribute_purchases === "number" && Number.isFinite(character.attribute_purchases)) {
     return Math.max(0, Math.floor(character.attribute_purchases));
   }
-  const base = CLASSES[character.class]?.baseStats || {};
-  const stats = character.stats || {};
-  let bought = 0;
-  for (const k of ["strength", "agility", "intellect", "vitality", "luck"]) {
-    bought += Math.max(0, (stats[k] || 0) - (base[k] || 0));
-  }
-  return bought;
+  return ATTR_STAT_KEYS.reduce(
+    (sum, k) => sum + getAttributePurchaseCount(character, k),
+    0,
+  );
 }
 
-/** Cost of the next +1 attribute (what the player pays now). */
-export function getNextAttributePointCost(character) {
-  return getAttributePointCost(getAttributePurchaseCount(character) + 1);
+/** Cost of the next +1 for a specific attribute (each stat scales independently). */
+export function getNextAttributePointCost(character, stat) {
+  if (!stat) {
+    // Cheapest next buy among all stats — useful for “can afford anything?” checks.
+    return Math.min(...ATTR_STAT_KEYS.map((k) => getNextAttributePointCost(character, k)));
+  }
+  return getAttributePointCost(getAttributePurchaseCount(character, stat) + 1);
 }
 
 /** Level-ups no longer grant free attribute points (Stardust sink instead). */
@@ -516,7 +545,7 @@ export function getStatPointsForLevelRange(_fromLevel, _toLevel) {
 }
 
 // ═══════════════════════════════════════════
-// STARDUST (primary currency — earned via missions, arena, and dissolving gear in the Black Hole)
+// STARDUST (primary currency — earned via missions, arena, and dissolving gear in the Void)
 // ═══════════════════════════════════════════
 export const STARDUST_PER_RARITY = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 };
 
@@ -556,9 +585,10 @@ export function computeNovaCrystalCost(item) {
 }
 
 // ═══════════════════════════════════════════
-// ROTATING SHOP (refreshes every 6 hours) — spend stardust
+// ROTATING SHOP / BLACK MARKET (6h armory+stims; daily hot deal)
 // ═══════════════════════════════════════════
 const SHOP_WINDOW_MS = 6 * 60 * 60 * 1000;
+const SHOP_GEAR_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
 
 function mulberry32(a) {
   return function () {
@@ -577,44 +607,193 @@ export function getShopWindow() {
   return { idx, startsAt, endsAt, secondsLeft: Math.max(0, Math.floor((endsAt - ms) / 1000)) };
 }
 
+/** Nova cost to reroll a market stall. */
+export const SHOP_REFRESH_COST = 10;
+
+const VENDOR_LINES = [
+  "Cash only. No names. No receipts.",
+  "If the badge asks, you found it in a wreck.",
+  "Hot piece under the tarp — don't make me shout.",
+  "Everything's clean. Relatively.",
+  "You blink, someone else buys it.",
+  "I don't do refunds. I do introductions.",
+  "Price is a suggestion. Manners aren't.",
+  "Smells like ozone and opportunity in here.",
+  "Don't touch the crate unless you're buying the crate.",
+  "Whisper what you need. I'll pretend I didn't hear.",
+  "Armory's honest. My smile isn't.",
+  "Come back after midnight — same junk, better stories.",
+];
+
+export function getVendorLine(seed = 0) {
+  const i = Math.abs(Math.floor(seed)) % VENDOR_LINES.length;
+  return VENDOR_LINES[i];
+}
+
+/** Haggle outcome — stardust multiplier for one purchase. */
+export function rollHaggle(rng = Math.random) {
+  const roll = typeof rng === "function" ? rng() : Math.random();
+  if (roll < 0.35) return { mult: 0.9, key: "deal", label: "They blinked — 10% off" };
+  if (roll < 0.75) return { mult: 1.0, key: "flat", label: "Firm price" };
+  return { mult: 1.05, key: "markup", label: "They smirked — +5%" };
+}
+
+/**
+ * Persistable market state for the current 6h window + daily hot deal.
+ * Window fields reset every 6h; hot_day / hot_purchased follow ET midnight.
+ */
+export function normalizeShopMeta(character, win = getShopWindow(), day = todayET()) {
+  const prev = character?.shop_meta || {};
+  const hot_day = day;
+  const hot_purchased = prev.hot_day === day ? !!prev.hot_purchased : false;
+  if (!prev.window_idx || prev.window_idx !== win.idx) {
+    return {
+      window_idx: win.idx,
+      gear_refresh: 0,
+      cons_refresh: 0,
+      purchased: {},
+      hot_day,
+      hot_purchased,
+    };
+  }
+  return {
+    window_idx: win.idx,
+    gear_refresh: Math.max(0, Math.floor(prev.gear_refresh || 0)),
+    cons_refresh: Math.max(0, Math.floor(prev.cons_refresh || 0)),
+    purchased: prev.purchased && typeof prev.purchased === "object" ? { ...prev.purchased } : {},
+    hot_day,
+    hot_purchased,
+  };
+}
+
+export function shopGearSeed(meta, win = getShopWindow()) {
+  return (win?.idx || 0) + (meta?.gear_refresh || 0);
+}
+
+export function shopConsSeed(meta, win = getShopWindow()) {
+  return (win?.idx || 0) + (meta?.cons_refresh || 0);
+}
+
+function pickShopGearType(r) {
+  return SHOP_GEAR_TYPES[Math.floor(r() * SHOP_GEAR_TYPES.length)];
+}
+
+function priceShopItem(item, mult = 1.2) {
+  const cost = Math.max(5, Math.round(computeStardustValue(item) * mult));
+  const nova_cost = computeNovaCrystalCost(item);
+  return { cost, nova_cost };
+}
+
+function makeScrapCrate(seed, i, r, playerLevel) {
+  const a = _rollItem("common", Math.max(1, playerLevel), pickShopGearType(r), r);
+  const b = _rollItem("common", Math.max(1, playerLevel), pickShopGearType(r), r);
+  const base = priceShopItem(a, 1.1).cost + priceShopItem(b, 1.1).cost;
+  return {
+    name: "Scrap Crate",
+    type: "material",
+    rarity: "common",
+    emoji: "📦",
+    stats: {},
+    level_requirement: 1,
+    flavor_text: "Two common scraps, no questions asked.",
+    _slotId: `${seed}-crate-${i}`,
+    _bundle: "scrap_crate",
+    bundle_items: [a, b],
+    cost: Math.max(8, Math.round(base * 0.82)),
+    nova_cost: 0,
+  };
+}
+
+/**
+ * Armory stock (6 pieces). ~8% chance a filler slot is a scrap crate bundle.
+ */
 export function generateShopInventory(seed, playerLevel) {
   const rng = mulberry32(seed * 7919 + 13);
   const r = () => rng();
-  const types = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
   const slots = [];
-  for (let i = 0; i < 6; i++) {
-    const type = types[Math.floor(r() * types.length)];
+
+  for (let i = 0; i < 5; i++) {
+    if (r() < 0.08) {
+      slots.push(makeScrapCrate(seed, i, r, playerLevel));
+      continue;
+    }
+    const type = pickShopGearType(r);
     const roll = r();
     const rarity = clampRarityByLevel(
       roll < 0.4 ? "common" : roll < 0.7 ? "uncommon" : roll < 0.88 ? "rare" : roll < 0.97 ? "epic" : "legendary",
       playerLevel
     );
     const item = _rollItem(rarity, Math.max(1, playerLevel), type, r);
-    // Shop prices scale with the same stardust value curve so costs track the economy.
-    const cost = Math.max(5, Math.round(computeStardustValue(item) * 1.2));
-    const nova_cost = computeNovaCrystalCost(item);
+    const { cost, nova_cost } = priceShopItem(item, 1.2);
     slots.push({ ...item, _slotId: `${seed}-${i}`, cost, nova_cost });
   }
-  // Class-specific signature weapon — premium slot, biased to higher rarity.
+
+  // Class signature weapon — random class each restock.
   const classKeys = Object.keys(CLASS_WEAPONS);
-  const className = classKeys[Math.floor(r() * classKeys.length)];
+  const cwClass = classKeys[Math.floor(r() * classKeys.length)];
   const cwRoll = r();
   const cwRarity = clampRarityByLevel(
     cwRoll < 0.25 ? "uncommon" : cwRoll < 0.60 ? "rare" : cwRoll < 0.88 ? "epic" : "legendary",
     playerLevel
   );
-  const cwItem = generateClassWeapon(className, cwRarity, Math.max(1, playerLevel), r);
-  const cwCost = Math.max(5, Math.round(computeStardustValue(cwItem) * 1.35));
-  slots.push({ ...cwItem, _slotId: `${seed}-cw`, cost: cwCost, nova_cost: computeNovaCrystalCost(cwItem) });
+  const cwItem = generateClassWeapon(cwClass, cwRarity, Math.max(1, playerLevel), r);
+  const cwPriced = priceShopItem(cwItem, 1.35);
+  slots.push({ ...cwItem, _slotId: `${seed}-cw`, cost: cwPriced.cost, nova_cost: cwPriced.nova_cost });
   return slots;
 }
 
-// Shop consumables — 6 random stims per window, legendary appears 1% of the time.
-// Each slot has a stable _slotId so purchases can be tracked and replaced individually.
+/** One spotlight piece per ET day — not affected by Armory restock. */
+export function generateHotDeal(dayKey, playerLevel) {
+  const dayNum = String(dayKey || todayET()).split("-").reduce((a, p) => a + Number(p || 0), 0);
+  const rng = mulberry32(dayNum * 104729 + 77);
+  const r = () => rng();
+  const type = pickShopGearType(r);
+  const roll = r();
+  const rarity = clampRarityByLevel(
+    roll < 0.15 ? "uncommon" : roll < 0.45 ? "rare" : roll < 0.78 ? "epic" : "legendary",
+    playerLevel
+  );
+  const item = _rollItem(rarity, Math.max(1, playerLevel), type, r);
+  const { cost, nova_cost } = priceShopItem(item, 1.05); // slight list discount vs normal
+  return {
+    ...item,
+    _slotId: `hot-${dayKey}`,
+    _hotDeal: true,
+    cost,
+    nova_cost,
+  };
+}
+
+function makeStimTrio(seed, i, rng) {
+  const picks = [];
+  for (let n = 0; n < 3; n++) {
+    const pool = CONSUMABLES.filter((c) => c.rarity !== "legendary");
+    picks.push(pool[Math.floor(rng() * pool.length)]);
+  }
+  const raw = picks.reduce((s, p) => s + (p._cost || p.sell_value || 25), 0);
+  return {
+    name: "Stim Trio",
+    type: "consumable",
+    rarity: "rare",
+    flavor_text: "Three stims, one handshake.",
+    consumable: { stat: "all", mult: 0, duration_hours: 0, tier: "bundle" },
+    _slotId: `cons-${seed}-trio-${i}`,
+    _bundle: "stim_trio",
+    bundle_items: picks,
+    _cost: Math.max(30, Math.round(raw * 0.85)),
+    sell_value: Math.round(raw * 0.4),
+  };
+}
+
+// Shop consumables — 6 slots; ~10% chance a slot is a Stim Trio bundle.
 export function generateShopConsumableSlots(seed) {
   const rng = mulberry32(seed * 4099 + 7);
   const slots = [];
   for (let i = 0; i < 6; i++) {
+    if (rng() < 0.10) {
+      slots.push(makeStimTrio(seed, i, rng));
+      continue;
+    }
     const r = rng();
     let def;
     if (r < 0.01) {
@@ -863,6 +1042,8 @@ export const FUEL_CYCLE_MS = 24 * 60 * 60 * 1000;
 export const FUEL_PURCHASE_AMOUNT = 20;
 export const FUEL_PURCHASE_COST = 10; // nova crystals
 export const FUEL_PURCHASE_MAX = 10; // per 24h cycle (200 fuel total)
+/** Smallest chargeable fuel unit (L1–5 short jobs = 15s = 0.25 fuel). */
+export const MISSION_MIN_FUEL = 0.25;
 
 export function computeFuelCost(template) {
   // 1 fuel = 1 minute of mission time (30s = 0.5, 40s = 0.67, 60s = 1, etc.)
@@ -876,13 +1057,13 @@ export function computeFuelCost(template) {
 export function getEffectiveFuelCost(character, mission) {
   // Residual / explicit fuel missions pin their cost so low-fuel offers stay runnable.
   if (typeof mission?.fuel_cost === "number") {
-    return Math.max(0.5, Math.round(mission.fuel_cost * 100) / 100);
+    return Math.max(MISSION_MIN_FUEL, Math.round(mission.fuel_cost * 100) / 100);
   }
   // Fuel is charged per minute of the ACTUAL (effective) mission time, so it
   // matches the duration shown after warp/fuel-mount reductions.
   const effectiveSeconds = getEffectiveMissionDuration(character, mission);
   const raw = effectiveSeconds / 60 - getModEffectTotal(character, "fuel_cost_reduction");
-  return Math.max(0.5, Math.round(raw * 100) / 100);
+  return Math.max(MISSION_MIN_FUEL, Math.round(raw * 100) / 100);
 }
 
 // Returns a patch refilling fuel to max once the 24h cycle elapses, else null.
@@ -922,7 +1103,7 @@ export function pickQuestGiver(rng = Math.random, excludeNames = []) {
 }
 
 // ═══════════════════════════════════════════
-// DAILY MISSIONS (randomized, risk-scaled — always offers 3 quests from a larger rotating pool)
+// DAILY MISSIONS (randomized — always offers 3 quests from a larger rotating pool)
 // ═══════════════════════════════════════════
 const COLLECTIBLES = [
   { name: "Void Geode", emoji: "🪨" },
@@ -937,28 +1118,31 @@ const COLLECTIBLES = [
 const RISK_DIFFICULTY = { 1: "easy", 2: "medium", 3: "medium", 4: "hard", 5: "elite" };
 const RISK_RARITY = { 1: "common", 2: "uncommon", 3: "rare", 4: "epic", 5: "legendary" };
 
-// Level → max mission duration (seconds) via waypoints:
-//   L1=30s, L5=150s (2.5m), L10=300s (5m), L15=600s (10m), L25=1200s (20m, cap).
-// Each daily quest occupies a tier (¼, ½, full) of this value, so at L25 the
-// three quests land on 5m / 10m / 20m and lower levels scale down proportionally.
-const MISSION_DURATION_WAYPOINTS = [
-  { lvl: 1, sec: 30 },
-  { lvl: 5, sec: 150 },
-  { lvl: 10, sec: 300 },
-  { lvl: 15, sec: 600 },
-  { lvl: 25, sec: 1200 },
+// Design chart — mission duration brackets by level (fuel = minutes).
+//   L1–5:   15s–45s   (0.25–0.75 fuel)
+//   L6–10:  1–2.5 min (1–2.5 fuel)
+//   L11–15: 2.5–10 min
+//   L16+:   5–20 min
+const MISSION_DURATION_BRACKETS = [
+  { maxLevel: 5, minSec: 15, maxSec: 45 },
+  { maxLevel: 10, minSec: 60, maxSec: 150 },
+  { maxLevel: 15, minSec: 150, maxSec: 600 },
+  { maxLevel: Infinity, minSec: 300, maxSec: 1200 },
 ];
 const MISSION_MAX_DURATION = 1200;
-function levelMissionDuration(level) {
+
+export function getMissionDurationBracket(level = 1) {
   const lvl = Math.max(1, level || 1);
-  if (lvl >= 25) return MISSION_MAX_DURATION;
-  let i = 0;
-  while (i < MISSION_DURATION_WAYPOINTS.length - 1 && MISSION_DURATION_WAYPOINTS[i + 1].lvl < lvl) i++;
-  const a = MISSION_DURATION_WAYPOINTS[i];
-  const b = MISSION_DURATION_WAYPOINTS[i + 1] || a;
-  if (b.lvl === a.lvl || lvl <= a.lvl) return a.sec;
-  const t = (lvl - a.lvl) / (b.lvl - a.lvl);
-  return Math.round(a.sec + (b.sec - a.sec) * t);
+  return MISSION_DURATION_BRACKETS.find((b) => lvl <= b.maxLevel) || MISSION_DURATION_BRACKETS[MISSION_DURATION_BRACKETS.length - 1];
+}
+
+/** Snap seconds to a clean 15s tick within the level's min/max. */
+export function rollMissionDurationSeconds(level = 1, unit = Math.random()) {
+  const { minSec, maxSec } = getMissionDurationBracket(level);
+  const t = Math.min(1, Math.max(0, Number(unit) || 0));
+  const raw = minSec + (maxSec - minSec) * t;
+  const snapped = Math.round(raw / 15) * 15;
+  return Math.min(MISSION_MAX_DURATION, Math.max(minSec, snapped));
 }
 
 export function generateDailyMissions(character) {
@@ -969,41 +1153,33 @@ export function generateDailyMissions(character) {
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   const base = shuffled.length ? shuffled : MISSION_TEMPLATES;
 
-  // Offer 3 quests drawn from the rotating template pool. Fresh risk/duration/
-  // collectible rolls keep each board distinct even when templates repeat.
-  // Quest givers are unique on the board — no two patrons offer jobs at once.
+  // Offer 3 quests drawn from the rotating template pool. Duration is rolled
+  // once within the level bracket (no short/mid/long variants). Quest givers
+  // are unique on the board — no two patrons offer jobs at once.
   const givers = [...QUEST_GIVERS].sort(() => Math.random() - 0.5);
   return Array.from({ length: 3 }, (_, i) => {
     const t = base[i % base.length];
-    const maxRisk = level <= 2 ? 3 : level <= 5 ? 4 : 5;
-    const risk = 1 + Math.floor(Math.random() * maxRisk);
-    // Mission duration scales with level via waypoints: 30s@L1, 2.5m@L5,
-    // 5m@L10, 10m@L15, 20m@L25 (cap). The 3 daily quests each occupy a
-    // different tier (¼, ½, full of the level's max) so at L25 they land on
-    // 5m / 10m / 20m, and lower levels scale down proportionally.
-    const baseMax = levelMissionDuration(level);
-    const tierFactor = [0.25, 0.5, 1.0][i] ?? 1.0;
-    const duration = Math.min(MISSION_MAX_DURATION, Math.max(30, Math.round((baseMax * tierFactor) / 15) * 15));
+    // Single duration within the level's min–max (not tiered variants).
+    const duration = rollMissionDurationSeconds(level);
     const collectible = COLLECTIBLES[Math.floor(Math.random() * COLLECTIBLES.length)];
-    const sdEff = rollMissionEfficiency();
-    const xpEff = rollMissionEfficiency();
+    const { difficulty: _d, risk: _r, rewards: _oldRewards, ...tpl } = t;
     const draft = {
-      ...t,
+      ...tpl,
       _seed: `${Date.now()}-${i}`,
       patron: givers[i % givers.length],
-      risk,
-      difficulty: RISK_DIFFICULTY[risk],
       duration_seconds: duration,
-      stardust_efficiency: sdEff,
-      xp_efficiency: xpEff,
+      stardust_efficiency: 1,
+      xp_efficiency: 1,
     };
     const fuelEst = getEffectiveFuelCost(character, draft);
+    // Loot floor scales gently with level — no risk rating.
+    const rarityKey = level >= 12 ? "epic" : level >= 7 ? "rare" : level >= 3 ? "uncommon" : "common";
     return {
       ...draft,
       rewards: {
-        experience: computeMissionXpFromFuel(fuelEst, level, xpEff),
-        stardust: computeMissionStardustFromFuel(fuelEst, level, sdEff),
-        item_rarity_chance: RISK_RARITY[risk],
+        experience: computeMissionXpFromFuel(fuelEst, level, 1),
+        stardust: computeMissionStardustFromFuel(fuelEst, level, 1),
+        item_rarity_chance: rarityKey,
         collectible,
       },
     };
@@ -1038,30 +1214,26 @@ export function generateLowFuelMission(character, currentFuel, excludePatronName
   // Round to hundredths so 0.5 fuel is never lost to float noise.
   const fuel = Math.round(Math.max(0, currentFuel || 0) * 100) / 100;
   // Spend as much of the remainder as possible on a clean 15s-snapped timer.
-  const duration = Math.min(300, Math.max(30, Math.round((fuel * 60) / 15) * 15));
+  const duration = Math.min(300, Math.max(15, Math.round((fuel * 60) / 15) * 15));
   const fuelCost = Math.min(fuel, Math.round((duration / 60) * 100) / 100);
   const tpl = LOW_FUEL_TEMPLATES[slot % LOW_FUEL_TEMPLATES.length];
-  const sdEff = rollMissionEfficiency();
-  const xpEff = rollMissionEfficiency();
-  const pinnedFuel = Math.max(0.5, fuelCost);
+  const pinnedFuel = Math.max(MISSION_MIN_FUEL, fuelCost);
   return {
     name: tpl.name,
     description: tpl.description,
     location: tpl.location,
     sector: 1,
     duration_seconds: duration,
-    difficulty: "easy",
-    risk: 1,
     level_requirement: 1,
     // Pin cost to remainder so mounts/reductions can't push it above what you have.
     fuel_cost: pinnedFuel,
-    stardust_efficiency: sdEff,
-    xp_efficiency: xpEff,
+    stardust_efficiency: 1,
+    xp_efficiency: 1,
     _lowFuel: true,
     patron: pickQuestGiver(Math.random, excludePatronNames),
     rewards: {
-      experience: computeMissionXpFromFuel(pinnedFuel, level, xpEff),
-      stardust: computeMissionStardustFromFuel(pinnedFuel, level, sdEff),
+      experience: computeMissionXpFromFuel(pinnedFuel, level, 1),
+      stardust: computeMissionStardustFromFuel(pinnedFuel, level, 1),
       item_rarity_chance: "common",
     },
   };
@@ -1070,7 +1242,7 @@ export function generateLowFuelMission(character, currentFuel, excludePatronName
 // Build 1–3 residual jobs that all fit in `currentFuel`, with unique patrons.
 export function generateLowFuelBoard(character, currentFuel, count = 3) {
   const fuel = Math.round(Math.max(0, currentFuel || 0) * 100) / 100;
-  if (fuel < 0.5) return [];
+  if (fuel < MISSION_MIN_FUEL) return [];
   const n = Math.min(count, LOW_FUEL_TEMPLATES.length);
   const used = [];
   return Array.from({ length: n }, (_, i) => {
@@ -1176,6 +1348,20 @@ export const STAT_ICONS = {
   vitality: "❤️",
   luck: "🍀",
 };
+
+/** Attribute accent colors — stims, chips, and attribute UI share these. */
+export const STAT_COLORS = {
+  strength: "#F59E0B",
+  agility: "#34D399",
+  intellect: "#60A5FA",
+  vitality: "#FB7185",
+  luck: "#C084FC",
+  all: "#FBBF24",
+};
+
+export function getStatColor(stat) {
+  return STAT_COLORS[stat] || STAT_COLORS.all;
+}
 
 // Display label for an item's gear type. The stored type stays lowercase
 // ("accessory"); only the visible label changes to "Ring".
@@ -1348,30 +1534,44 @@ export const STARTER_SHIP = "scout";
 /** Highest hull gate (dreadnought). Individual ships use unlock_level. */
 export const SHIP_UNLOCK_LEVEL = 200;
 
+/** Early Scout bay tune — free Fuel Tank T1 so the hangar teaches upgrades before Frigate. */
+export const SCOUT_MILESTONE_LEVEL = 20;
+export const SCOUT_MILESTONE_MOD_ID = "fuel_tank_1";
+
+/** Hull order — each step’s mods are +8% stronger (and pricier) than the prior hull’s same tier. */
+export const SHIP_TIER_ORDER = ["scout", "frigate", "cruiser", "dreadnought"];
+export const SHIP_UPGRADE_STEP = 1.08;
+/** Mod install cost rises a bit faster than power (~+10%/hull). */
+export const SHIP_COST_STEP = 1.10;
+
 export const SHIP_TYPES = {
   scout: {
     name: "Recon Scout", emoji: "🛩️", cost: 0, unlock_level: 1,
     desc: "Standard-issue exploration vessel. Reliable, if unremarkable.",
     inherent: {},
     upgrade_mult: 1.0,
+    cost_mult: 1.0,
   },
   frigate: {
     name: "Storm Frigate", emoji: "🚀", cost: 5000, unlock_level: 50,
     desc: "Military-grade frigate with reinforced hull plating and salvage magnets.",
     inherent: { mission_stardust_mult: 0.05 },
-    upgrade_mult: 1.2,
+    upgrade_mult: SHIP_UPGRADE_STEP,
+    cost_mult: SHIP_COST_STEP,
   },
   cruiser: {
     name: "Galaxy Cruiser", emoji: "🛳️", cost: 15000, unlock_level: 100,
     desc: "Long-range endurance cruiser with an overcharged AI core.",
     inherent: { mission_xp_mult: 0.05, mission_duration_reduction: 0.03 },
-    upgrade_mult: 1.4,
+    upgrade_mult: SHIP_UPGRADE_STEP ** 2,
+    cost_mult: SHIP_COST_STEP ** 2,
   },
   dreadnought: {
     name: "Void Dreadnought", emoji: "🛸", cost: 40000, unlock_level: 200,
     desc: "Capital-class warship. The ultimate command vessel.",
     inherent: { mission_stardust_mult: 0.10, mission_xp_mult: 0.10, fuel_cost_reduction: 1 },
-    upgrade_mult: 1.6,
+    upgrade_mult: SHIP_UPGRADE_STEP ** 3,
+    cost_mult: SHIP_COST_STEP ** 3,
   },
 };
 
@@ -1380,9 +1580,19 @@ export function getShipUnlockLevel(shipId) {
   return SHIP_TYPES[shipId]?.unlock_level || 1;
 }
 
-// Upgraded hulls amplify every installed mod's effect — +20% per ship tier.
+// Higher hulls amplify every installed mod — +8% vs the previous hull’s same tier.
 export function getShipUpgradeMult(shipId) {
   return SHIP_TYPES[shipId]?.upgrade_mult ?? 1;
+}
+
+export function getShipCostMult(shipId) {
+  return SHIP_TYPES[shipId]?.cost_mult ?? 1;
+}
+
+/** Stardust price for installing a mod tier on a given hull. */
+export function getTierCost(tier, shipId) {
+  if (!tier) return 0;
+  return Math.max(1, Math.round((tier.cost || 0) * getShipCostMult(shipId)));
 }
 
 export function getActiveShipId(character) {
@@ -1393,13 +1603,18 @@ export function getActiveShipType(character) {
   return SHIP_TYPES[getActiveShipId(character)] || SHIP_TYPES[STARTER_SHIP];
 }
 
-// Mods installed on the currently active ship (per-ship loadout).
-export function getActiveShipMods(character) {
-  const id = getActiveShipId(character);
+/** Mod IDs on a specific hull (defaults to active). Inactive hulls keep their own loadout. */
+export function getShipModIds(character, shipId) {
+  const id = shipId || getActiveShipId(character);
   const loadouts = character?.ship_mod_loadouts;
   if (loadouts && Array.isArray(loadouts[id])) return loadouts[id];
-  // Legacy fallback for characters that used the old flat ship_mods array.
-  return character?.ship_mods || [];
+  if (id === getActiveShipId(character)) return character?.ship_mods || [];
+  return [];
+}
+
+// Mods installed on the currently active ship (per-ship loadout).
+export function getActiveShipMods(character) {
+  return getShipModIds(character, getActiveShipId(character));
 }
 
 export function computeMaxFuelForLoadout(modIds, shipId) {
@@ -1412,8 +1627,9 @@ export function computeMaxFuelForLoadout(modIds, shipId) {
   return FUEL_MAX + Math.round(bonus * mult);
 }
 
-export function getInstalledMods(character) {
-  const ids = getActiveShipMods(character);
+export function getInstalledMods(character, shipId) {
+  const id = shipId || getActiveShipId(character);
+  const ids = getShipModIds(character, id);
   const out = [];
   Object.entries(SHIP_MODS).forEach(([catKey, cat]) => {
     cat.tiers.forEach((tier) => {
@@ -1431,17 +1647,17 @@ export function getModEffectTotal(character, effectKey) {
   return modTotal + (ship.inherent?.[effectKey] || 0);
 }
 
-export function getCategoryProgress(character, catKey) {
+export function getCategoryProgress(character, catKey, shipId) {
   const cat = SHIP_MODS[catKey];
   if (!cat) return { installed: 0, next: null, maxed: false };
-  const ids = getActiveShipMods(character);
+  const ids = getShipModIds(character, shipId);
   const installed = cat.tiers.filter((t) => ids.includes(t.id)).length;
   return { installed, next: installed < cat.tiers.length ? cat.tiers[installed] : null, maxed: installed >= cat.tiers.length };
 }
 
 export function getShipInherentLabel(ship) {
-  if (!ship?.inherent) return "";
-  const inh = ship.inherent;
+  if (!ship?.inherent && !(ship?.upgrade_mult > 1)) return "";
+  const inh = ship.inherent || {};
   const parts = [];
   if (inh.mission_stardust_mult) parts.push(`+${Math.round(inh.mission_stardust_mult * 100)}% Stardust`);
   if (inh.mission_xp_mult) parts.push(`+${Math.round(inh.mission_xp_mult * 100)}% XP`);
@@ -1450,6 +1666,40 @@ export function getShipInherentLabel(ship) {
   const mult = ship?.upgrade_mult;
   if (mult && mult > 1) parts.push(`+${Math.round((mult - 1) * 100)}% Upgrade Power`);
   return parts.join(" · ");
+}
+
+/** Lv 20 Scout milestone status (free first fuel-tank tier). */
+export function getScoutMilestoneStatus(character) {
+  const level = SCOUT_MILESTONE_LEVEL;
+  const claimed = !!character?.ship_milestones?.scout_bay;
+  const eligible = (character?.level || 1) >= level;
+  return { level, claimed, eligible, ready: eligible && !claimed };
+}
+
+/**
+ * Grant free Fuel Tank T1 on the Scout loadout once.
+ * Returns a character patch, or null if nothing to do.
+ */
+export function buildScoutMilestonePatch(character) {
+  const status = getScoutMilestoneStatus(character);
+  if (!status.ready) return null;
+  const loadouts = { ...(character.ship_mod_loadouts || {}) };
+  const scoutMods = Array.isArray(loadouts[STARTER_SHIP])
+    ? [...loadouts[STARTER_SHIP]]
+    : [...getShipModIds(character, STARTER_SHIP)];
+  if (!scoutMods.includes(SCOUT_MILESTONE_MOD_ID)) scoutMods.push(SCOUT_MILESTONE_MOD_ID);
+  loadouts[STARTER_SHIP] = scoutMods;
+  const patch = {
+    ship_mod_loadouts: loadouts,
+    ship_milestones: { ...(character.ship_milestones || {}), scout_bay: true },
+  };
+  if (getActiveShipId(character) === STARTER_SHIP) {
+    const newMax = computeMaxFuelForLoadout(scoutMods, STARTER_SHIP);
+    patch.max_fuel = newMax;
+    patch.fuel = Math.min((character.fuel ?? FUEL_MAX) + (newMax - (character.max_fuel || FUEL_MAX)), newMax);
+    patch.fuel_updated_at = new Date().toISOString();
+  }
+  return patch;
 }
 
 export function getTierEffectLabel(tier, shipId) {

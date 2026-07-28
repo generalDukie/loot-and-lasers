@@ -143,7 +143,7 @@ export default function ArenaOpponentCard({
               <p className="font-display font-black text-sm text-rose-300">{fmtDelta(onLoss.arena_rating_delta)}</p>
               {freeBattle ? (
                 <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">
-                  {onLoss.stardust} ✨
+                  no loot
                 </p>
               ) : (
                 <p className="text-[9px] text-muted-foreground mt-0.5">rating</p>

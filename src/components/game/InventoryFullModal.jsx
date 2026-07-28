@@ -149,7 +149,7 @@ export default function InventoryFullModal({ character }) {
             <div>
               <h2 className="font-display font-bold text-lg text-amber-300 glow-orange">Inventory Full</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Toss into the void, or use a stim to free a slot.
+                Dissolve into the Void, or use a stim to free a slot.
               </p>
             </div>
             <button
@@ -165,7 +165,7 @@ export default function InventoryFullModal({ character }) {
             className="flex items-center gap-3 p-3 rounded-xl border mb-3"
             style={{ borderColor: pendingColor + "40", background: pendingColor + "08" }}
           >
-            <GearVisual type={pending.type} rarity={pending.rarity} name={pending.name} emoji={pending.emoji} size={36} />
+            <GearVisual type={pending.type} rarity={pending.rarity} name={pending.name} baseName={pending.base_name} level_requirement={pending.level_requirement} size={36} />
             <div className="min-w-0 flex-1">
               <p className="font-display font-semibold text-sm truncate" style={{ color: pendingColor }}>
                 {pending.name}
@@ -192,7 +192,7 @@ export default function InventoryFullModal({ character }) {
                 disabled={busy}
                 className="text-[10px] px-2.5 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
               >
-                <Orbit className="w-3 h-3" /> Toss
+                <Orbit className="w-3 h-3" /> Dissolve
               </button>
             </div>
           </div>
@@ -207,7 +207,7 @@ export default function InventoryFullModal({ character }) {
             </div>
           ) : spareItems.length === 0 ? (
             <p className="text-center text-xs text-muted-foreground italic py-4">
-              No spare items. Toss{isStim(pending) ? " or use" : ""} the new find above.
+              No spare items. Dissolve{isStim(pending) ? " or use" : ""} the new find above.
             </p>
           ) : (
             <div className="max-h-[35vh] overflow-y-auto space-y-2 pr-1">
@@ -220,7 +220,7 @@ export default function InventoryFullModal({ character }) {
                     className="flex items-center gap-2 p-2 rounded-lg border bg-card/40"
                     style={{ borderColor: c + "30" }}
                   >
-                    <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={32} />
+                    <GearVisual type={item.type} rarity={item.rarity} name={item.name} baseName={item.base_name} level_requirement={item.level_requirement} size={32} />
                     <div className="min-w-0 flex-1">
                       <p className="font-display font-semibold text-xs truncate" style={{ color: c }}>
                         {item.name}
@@ -245,7 +245,7 @@ export default function InventoryFullModal({ character }) {
                         disabled={busy}
                         className="text-[10px] px-2.5 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
                       >
-                        <Orbit className="w-3 h-3" /> Toss
+                        <Orbit className="w-3 h-3" /> Dissolve
                       </button>
                     </div>
                   </div>

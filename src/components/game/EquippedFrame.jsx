@@ -32,7 +32,7 @@ function SlotChip({ item, slot, size, showcase }) {
         style={{ borderColor: color + "70", boxShadow: `0 0 ${showcase ? 12 : 8}px ${color}${showcase ? "55" : "40"}`, width: size + 6, height: size + 6 }}
         title={`${item.name}\n${item.rarity} ${item.type}\n${statStr}`}
       >
-        <GearVisual type={item.type} rarity={item.rarity} name={item.name} emoji={item.emoji} size={size} />
+        <GearVisual type={item.type} rarity={item.rarity} name={item.name} baseName={item.base_name} level_requirement={item.level_requirement} size={size} />
       </div>
     );
   }
@@ -49,7 +49,7 @@ function SlotChip({ item, slot, size, showcase }) {
   );
 }
 
-export default function EquippedFrame({ equippedItems, children, size = 36, showcase = false }) {
+export default function EquippedFrame({ equippedItems, children, size = 53, showcase = false }) {
   const bySlot = {};
   (equippedItems || []).forEach((it) => { bySlot[it.type] = it; });
   return (

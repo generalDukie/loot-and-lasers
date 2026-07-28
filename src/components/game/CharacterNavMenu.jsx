@@ -94,7 +94,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
               </div>
 
               <div className="px-2.5 pt-2.5 pb-2">
-                <EquippedFrame equippedItems={equippedItems} size={28}>
+                <EquippedFrame equippedItems={equippedItems} size={45}>
                   <div className="w-[34px] h-[34px] rounded-lg border border-cyan-400/40 bg-cyan-500/10 flex items-center justify-center">
                     <UserRound className="w-4 h-4 text-cyan-300" />
                   </div>

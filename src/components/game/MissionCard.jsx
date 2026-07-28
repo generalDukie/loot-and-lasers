@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { DIFFICULTY_COLORS, getEffectiveFuelCost } from "@/lib/gameData";
+import { getEffectiveFuelCost } from "@/lib/gameData";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import { Clock, MapPin, Star, Fuel, Gem } from "lucide-react";
-import RiskGauge from "@/components/game/RiskGauge";
 
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`;
@@ -84,7 +83,6 @@ function CountdownTimer({ endTime, duration_seconds, onComplete, compact }) {
 }
 
 export default function MissionCard({ mission, onStart, onClaim, isActive, isCompleted, characterLevel, character, currentFuel, onSkip, skipCost, claiming, previewStardust, previewXp }) {
-  const diffColor = DIFFICULTY_COLORS[mission.difficulty];
   const locked = mission.level_requirement > characterLevel;
   const fuelCost = getEffectiveFuelCost(character, mission);
   const insufficientFuel = !isActive && !isCompleted && (currentFuel ?? 0) < fuelCost;
@@ -102,12 +100,6 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
       }`}>
         <div className="flex items-center gap-2 min-w-0 mb-1.5">
           <h3 className="font-display font-semibold text-xs tracking-wide truncate flex-1">{mission.name}</h3>
-          <span
-            className="text-[9px] font-display font-bold uppercase px-1.5 py-0.5 rounded-full shrink-0"
-            style={{ backgroundColor: diffColor + "15", color: diffColor }}
-          >
-            {mission.difficulty}
-          </span>
         </div>
 
         {isActive && mission.end_time && (
@@ -119,7 +111,7 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
             onClick={onSkip}
             className="mt-1.5 w-full text-[11px] px-3 py-1.5 rounded-lg font-display font-semibold tracking-wide bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors flex items-center justify-center gap-1"
           >
-            <Gem className="w-3 h-3" /> Skip · {skipCost} 💎
+            <Gem className="w-3 h-3" /> Skip · Fight · {skipCost} 💎
           </button>
         )}
 
@@ -149,17 +141,8 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
             <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <MapPin className="w-3 h-3" /> {mission.location}
             </span>
-            <span className="flex items-center gap-1 text-[11px]">
-              <RiskGauge risk={mission.risk || 1} size={12} />
-            </span>
           </div>
         </div>
-        <span
-          className="text-[10px] font-display font-bold uppercase px-2 py-0.5 rounded-full shrink-0"
-          style={{ backgroundColor: diffColor + "15", color: diffColor }}
-        >
-          {mission.difficulty}
-        </span>
       </div>
 
       <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{mission.description}</p>

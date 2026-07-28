@@ -2,8 +2,11 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, BookOpen, Coins, Rocket, Swords, Map as MapIcon, Orbit, Ship, Crown, Users,
-  Fuel, Mail,
+  Fuel, Mail, ShoppingBag,
 } from "lucide-react";
+import { FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, SHOP_REFRESH_COST } from "@/lib/gameData";
+import { ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST } from "@/lib/arenaEngine";
+import { DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST } from "@/lib/dungeonEngine";
 
 const SECTIONS = [
   { id: "start", label: "Getting Started", icon: BookOpen, color: "#22D3EE" },
@@ -11,8 +14,9 @@ const SECTIONS = [
   { id: "missions", label: "Missions & Fuel", icon: Rocket, color: "#FF9E4F" },
   { id: "combat", label: "Combat & Arena", icon: Swords, color: "#FF4D6D" },
   { id: "galaxy", label: "Galaxy Dungeon", icon: MapIcon, color: "#00E5FF" },
-  { id: "blackhole", label: "Black Hole", icon: Orbit, color: "#9D6BFF" },
-  { id: "ship", label: "Ship & Mods", icon: Ship, color: "#FFD700" },
+  { id: "market", label: "Black Market", icon: ShoppingBag, color: "#4ADE80" },
+  { id: "blackhole", label: "Void", icon: Orbit, color: "#9D6BFF" },
+  { id: "ship", label: "Ship Hangar", icon: Ship, color: "#FFD700" },
   { id: "guilds", label: "Guilds & Nexus", icon: Crown, color: "#A855F7" },
   { id: "social", label: "Social & Mail", icon: Users, color: "#34D399" },
 ];
@@ -33,12 +37,12 @@ function renderSection(id) {
             <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Cantina</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" /> fuel.</Li>
             <Li>When a mission finishes, <b>claim</b> it for XP, stardust, and random loot. Level up to unlock harder sectors.</Li>
             <Li>Equip better gear on your <b>Character</b> page to raise your combat power.</Li>
-            <Li>Spend <b>Stardust</b> to buy attribute points anytime — cost rises with each purchase.</Li>
+            <Li>Spend <b>Stardust</b> to buy attribute points anytime — each attribute has its own rising cost. Tap once or hold (~1s) to keep buying.</Li>
             <Li>Try the <b>Arena</b> for PvP, or brave the <b>Galaxy Dungeon</b> for risky loot.</Li>
-            <Li>Toss unwanted gear into the <b>Black Hole</b> to reclaim stardust.</Li>
+            <Li>Dissolve unwanted gear in the <b>Void</b> (or from your inventory) to reclaim stardust.</Li>
           </ul>
           <H>Where things live</H>
-          <p>The <b>station hub</b> on the home screen is your map — tap any glowing module to travel there. The <span className="text-amber-400">Cantina</span> gives quests, the <b>Nav Deck</b> is the dungeon, <b>Hero / Ship</b> is your character and vessel.</p>
+          <p>The <b>station hub</b> on the home screen is your map — tap any glowing module to travel there. The <span className="text-amber-400">Cantina</span> gives quests, the <b>Nav Deck</b> is the dungeon, <b>Hero / Ship Hangar</b> is your character and vessel.</p>
           <p className="text-xs text-muted-foreground italic">Tip: this guide lives in <b>Settings → Codex</b> whenever you need a refresher.</p>
         </div>
       );
@@ -46,11 +50,11 @@ function renderSection(id) {
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
           <H>✨ Stardust</H>
-          <p>The primary currency. Earned from missions, arena, dungeons, daily rewards, and dissolving gear in the Black Hole. Spent in the Shop, on ship mods, to refresh the arena, and to buy extra arena attempts.</p>
+          <p>The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, attribute buys, and arena challenger refreshes.</p>
           <H>💎 Nova Crystals</H>
-          <p>Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission wait times and buy extra arena attempts.</p>
+          <p>Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free quotas ({ARENA_PAID_BATTLE_COST}💎 per arena battle, {DUNGEON_CONTINUE_COST}💎 per frontier fight).</p>
           <H><Fuel className="w-3 h-3 inline" /> Fuel</H>
-          <p>Your mission energy. Each mission costs fuel based on its length and reward tier. You get a pool of 100 that <b>resets to full every 24 hours</b>. Need more sooner? Spend <b>Nova Crystals</b> to buy +20 fuel, up to 5 times per cycle.</p>
+          <p>Your mission energy. Each mission costs fuel based on its length. You get a pool of 100 that <b>resets to full every 24 hours</b>. Need more sooner? Spend <b>{FUEL_PURCHASE_COST} Nova Crystals</b> to buy +{FUEL_PURCHASE_AMOUNT} fuel, up to <b>{FUEL_PURCHASE_MAX} times</b> per cycle.</p>
         </div>
       );
     case "missions":
@@ -59,21 +63,21 @@ function renderSection(id) {
           <p>Missions are your steady engine for XP, stardust, and loot. Visit the <span className="text-amber-400">Cantina</span> to browse quests.</p>
           <H>How a mission works</H>
           <ul className="space-y-1.5">
-            <Li>Each quest shows its <b>risk</b>, <b>duration</b>, and <b>fuel cost</b>. Higher risk = bigger rewards but longer waits.</Li>
+            <Li>Each quest shows its <b>duration</b> and <b>fuel cost</b>. Longer jobs pay more.</Li>
             <Li>Launch it — fuel is consumed and a timer starts. You can keep playing while it runs.</Li>
             <Li>When the timer ends, the mission is ready to <b>claim</b>. Claiming grants XP, stardust, a loot drop, and sometimes a collectible.</Li>
             <Li>Impatient? Spend <b>Nova Crystals</b> to skip — cost scales with time left (5 💎 per remaining minute).</Li>
           </ul>
           <H>Fuel &amp; reset</H>
-          <p>Your fuel pool refills to full every <b>24 hours</b>. You can spend <b>Nova Crystals</b> to buy +20 fuel, up to 5 times per cycle. Upgrade your <b>Reinforced Fuel Tank</b> for more capacity and <b>Fuel Injector Tune</b> to cut per-mission costs.</p>
+          <p>Your fuel pool refills to full every <b>24 hours</b>. You can spend <b>{FUEL_PURCHASE_COST} Nova Crystals</b> to buy +{FUEL_PURCHASE_AMOUNT} fuel, up to <b>{FUEL_PURCHASE_MAX} times</b> per cycle. Upgrade your <b>Reinforced Fuel Tank</b> for more capacity and <b>Fuel Injector Tune</b> to cut per-mission costs.</p>
           <H>Ship bonuses</H>
-          <p>Your active ship and its mods apply at launch (fuel/time reduction) and at claim (stardust/XP boosts). Check the Ship Dock.</p>
+          <p>Your active ship and its mods apply at launch (fuel/time reduction) and at claim (stardust/XP boosts). Check the Ship Hangar.</p>
         </div>
       );
     case "combat":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>The <b>Arena</b> is automated PvP — your stats and gear fight an opponent in a simulated battle. You get <b>5 attempts per day</b>.</p>
+          <p>The <b>Arena</b> is automated PvP — your stats and gear fight an opponent in a simulated battle. You get <b>{ARENA_DAILY_FREE_BATTLES} free battles per day</b> (resets at midnight Eastern). After that, each fight costs <b>{ARENA_PAID_BATTLE_COST} Nova Crystals</b> and awards rating only.</p>
           <H>Rating</H>
           <ul className="space-y-1.5">
             <Li>Winning raises your <b>rating</b>; losing lowers it. Climb the leaderboard by rating alone.</Li>
@@ -81,9 +85,9 @@ function renderSection(id) {
             <Li>Chain wins for a <b>streak</b> — hit milestones for news feed glory.</Li>
           </ul>
           <H>Rewards</H>
-          <p>Free battles earn XP and stardust on a <b>win</b>; losses grant a small stardust consolation only (no XP). After your free quota, battles cost Nova Crystals and award rating only.</p>
+          <p>Free battles earn XP and stardust on a <b>win</b> only — losses grant nothing (rating still changes). After your free quota, battles cost Nova Crystals and award rating only.</p>
           <H>Power</H>
-          <p>Your combat power comes from level + attributes + equipped gear rarity. Buy attributes with Stardust and upgrade gear to climb the ladder.</p>
+          <p>Your combat power comes from level + attributes + equipped gear rarity. Buy attributes with Stardust (each attribute has its own cost curve) and upgrade gear to climb the ladder.</p>
           <H>Attributes</H>
           <ul className="space-y-1.5">
             <Li><b>Strength</b> — damage for STR classes; armor vs physical damage for everyone else.</Li>
@@ -97,20 +101,36 @@ function renderSection(id) {
     case "galaxy":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>The <b>Galaxy Map</b> (Nav Deck) is a turn-based dungeon crawl across planets. Each planet has enemies to clear and a boss to defeat.</p>
+          <p>The <b>Galaxy Map</b> (Nav Deck) is a turn-based dungeon crawl across planets. Each planet has enemies to clear and a boss to defeat. You get <b>{DUNGEON_DEATHS_PER_DAY} free lives per day</b> (midnight Eastern); further fights cost <b>{DUNGEON_CONTINUE_COST} Nova Crystals</b>.</p>
           <ul className="space-y-1.5">
             <Li>Fight enemies in sequence — battles are auto-simulated like the arena.</Li>
             <Li>Defeating the <b>boss</b> clears the planet and advances you to the next.</Li>
             <Li>Rewards use <b>DRU</b> (Dungeon Reward Units): 1 DRU ≈ 1 fuel of mission payout at the enemy's level. XP pays at 87% of that rate.</Li>
             <Li>Loot and ship-mod unlocks drop from victories; bosses give the best hauls.</Li>
+            <Li>Losses grant <b>no</b> XP or stardust — only a longer cooldown (and a spent life).</Li>
           </ul>
           <p className="text-xs text-muted-foreground">Your dungeon progress and highest sector are shown in your public stats.</p>
+        </div>
+      );
+    case "market":
+      return (
+        <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
+          <p>The <b>Black Market</b> (Bazaar) sells rotating gear and stims for ✨ stardust. The Armory usually includes a class signature weapon.</p>
+          <H>Armory &amp; Stim Lab</H>
+          <ul className="space-y-1.5">
+            <Li>Both stalls refresh every <b>6 hours</b>. Spend <b>{SHOP_REFRESH_COST} Nova Crystals</b> to restock a stall early.</Li>
+            <Li>Compare listed gear to what you have equipped before buying.</Li>
+            <Li><b>Haggle</b> on armory pieces — about a third of the time you get 10% off, sometimes the price sticks, and occasionally they bump it +5%.</Li>
+            <Li>Rare <b>Scrap Crates</b> (2 commons) and <b>Stim Trios</b> show up as bundle deals.</Li>
+          </ul>
+          <H>Hot Deal</H>
+          <p>One spotlight piece per day (midnight Eastern). It does <b>not</b> change when you restock the Armory — buy it or wait for tomorrow.</p>
         </div>
       );
     case "blackhole":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>The <b>Black Hole</b> recycles gear you no longer need. Toss an item in and it dissolves into ✨ stardust.</p>
+          <p>The <b>Void</b> recycles gear you no longer need. Dissolve an item and it turns into ✨ stardust — same payout whether you do it here or from your inventory.</p>
           <ul className="space-y-1.5">
             <Li>Only <b>unequipped</b> items can be dissolved.</Li>
             <Li>Yield scales with the item's <b>rarity</b>, <b>stats</b>, and <b>level requirement</b>, plus a per-type weight (weapons &amp; ship modules dissolve for more).</Li>
@@ -121,7 +141,7 @@ function renderSection(id) {
     case "ship":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>Your <b>ship</b> passively boosts missions. Visit the Ship Dock to buy permanent <b>mods</b> with stardust.</p>
+          <p>Your <b>ship</b> passively boosts missions. Visit the Ship Hangar to buy permanent <b>mods</b> with stardust.</p>
           <H>Upgrade categories</H>
           <ul className="space-y-1.5">
             <Li><b>Reinforced Fuel Tank</b> — more max fuel.</Li>
@@ -131,7 +151,9 @@ function renderSection(id) {
             <Li><b>Neural Accelerator</b> — more XP from missions.</Li>
           </ul>
           <H>Ships</H>
-          <p>Each ship keeps its own mod loadout. Hulls unlock with major milestones — Frigate at 50, Cruiser at 100, Dreadnought at 200 — each with inherent bonuses that stack with your mods.</p>
+          <p>Each ship keeps its own mod loadout — buy a new hull and keep flying your old one while you outfit the bay. Higher hulls cost a bit more to upgrade, but each mod tier runs <b>~8% stronger</b> than the same tier on the previous hull. Locked hulls show a bay preview and level progress. At <b>Lv 20</b> your Scout gets a free Fuel Tank tune. Full hulls unlock at 50 / 100 / 200.</p>
+          <H>Fuel mounts</H>
+          <p>Temporary mission-speed boosts bought from the hangar’s Fuel Mounts drawer. They do not replace permanent hull upgrades.</p>
         </div>
       );
     case "guilds":

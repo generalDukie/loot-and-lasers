@@ -203,16 +203,14 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
   const dru = getEnemyDru(planet?.id, enemyIndex) * mult;
 
   if (!won) {
-    // Consolation XP only — ~30% of the win XP payout.
-    const { experience } = druToRewards(dru * 0.3, enemyLevel);
     return {
-      experience,
+      experience: 0,
       stardust: 0,
       item: null,
       isBoss,
       patrol,
-      consolation: true,
-      dru: Math.round(dru * 0.3 * 100) / 100,
+      consolation: false,
+      dru: 0,
       enemyLevel,
     };
   }

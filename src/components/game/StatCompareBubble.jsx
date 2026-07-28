@@ -1,5 +1,5 @@
 import React from "react";
-import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle, Coins, Power } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle, Power } from "lucide-react";
 import { STAT_ICONS, RARITY_COLORS, computeStardustValue, CLASSES } from "@/lib/gameData";
 
 const STATS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -30,7 +30,7 @@ export function powerRating(item, className) {
 // Rich RPG-style comparison tooltip. Shows the hovered item side by side with
 // the currently equipped item in the same slot, with stat deltas, % changes,
 // a power rating, an overall verdict, and quick action buttons.
-export default function StatCompareBubble({ item, equipped, onEquip, onSell, onLock, characterClass }) {
+export default function StatCompareBubble({ item, equipped, onEquip, onSell, onLock, characterClass, className = "" }) {
   const color = RARITY_COLORS[item.rarity] || "#9CA3AF";
   const myPower = powerRating(item, characterClass);
   const eqPower = equipped ? powerRating(equipped, characterClass) : 0;
@@ -39,7 +39,7 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
   const locked = !!item.locked;
 
   return (
-    <div className="w-72 rounded-xl border border-border/60 bg-popover/95 backdrop-blur-md p-3 shadow-2xl border-glow-cyan pointer-events-auto">
+    <div className={`w-72 max-w-full rounded-xl border border-border/60 bg-popover/95 backdrop-blur-md p-3 shadow-2xl border-glow-cyan pointer-events-auto ${className}`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -151,14 +151,9 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
           </button>
         )}
         {onSell && !item.is_equipped && !locked && (
-          <>
-            <button onClick={() => onSell(item)} className="flex items-center gap-1 text-[10px] bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 px-2 py-1 rounded-md font-medium transition-colors">
-              <Coins className="w-3 h-3" /> Sell {computeStardustValue(item)}✨
-            </button>
-            <button onClick={() => onSell(item)} className="flex items-center gap-1 text-[10px] bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1 rounded-md font-medium transition-colors">
-              <Recycle className="w-3 h-3" /> Salvage
-            </button>
-          </>
+          <button onClick={() => onSell(item)} className="flex items-center gap-1 text-[10px] bg-accent/15 hover:bg-accent/25 text-accent px-2 py-1 rounded-md font-medium transition-colors">
+            <Recycle className="w-3 h-3" /> Dissolve {computeStardustValue(item)}✨
+          </button>
         )}
         {locked && (
           <span className="text-[10px] text-amber-400/80 px-2 py-1 flex items-center gap-1"><Lock className="w-3 h-3" /> Locked</span>

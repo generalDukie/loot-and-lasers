@@ -80,7 +80,7 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
           className={`flex-1 min-w-0 min-h-0 ${paneClass} p-3 flex gap-3 overflow-hidden`}
         >
           <div className="flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center gap-2 overflow-y-auto">
-            <EquippedFrame equippedItems={equippedItems} size={32}>
+            <EquippedFrame equippedItems={equippedItems} size={53}>
               <div className="relative">
                 <div
                   className="rounded-xl overflow-hidden border border-primary/35 bg-muted/15"

@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Rocket, Sparkles } from "lucide-react";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { fullName } from "@/lib/legacyName";
-import { getActiveBuffs, STAT_ICONS, MAX_ACTIVE_STAT_TYPES } from "@/lib/gameData";
+import { getActiveBuffs, STAT_ICONS, MAX_ACTIVE_STAT_TYPES, getStatColor } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
 
 // Ticks every second so countdown labels stay live.
@@ -23,24 +23,34 @@ function remainingLabel(expiresAt, now) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   const s = Math.floor((ms % 60000) / 1000);
-  if (h > 0) return m > 0 ? `${h}h${m}m` : `${h}h`;
-  if (m > 0) return `${m}m`;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (m > 0) return s > 0 && m < 5 ? `${m}m ${s}s` : `${m}m`;
   return `${s}s`;
 }
 
 function StimIcon({ buff, now, large }) {
   const isOmni = buff.stat === "all";
   const icon = isOmni ? null : (STAT_ICONS[buff.stat] || "🧪");
+  const color = getStatColor(buff.stat);
   const pct = Math.round((buff.mult || 0) * 100);
   const title = `${buff.name || buff.stat} · +${pct}% · ${remainingLabel(buff.expires_at, now)} left`;
   return (
-    <span className="flex flex-col items-center leading-none" title={title}>
+    <span className="flex flex-col items-center leading-none gap-0.5" title={title}>
       {isOmni ? (
-        <Sparkles className={large ? "w-3 h-3 text-amber-300" : "w-2.5 h-2.5 text-amber-300"} />
+        <Sparkles className={large ? "w-3.5 h-3.5" : "w-3 h-3"} style={{ color }} />
       ) : (
-        <span className={large ? "text-[11px]" : "text-[9px]"} aria-hidden>{icon}</span>
+        <span className={large ? "text-[12px]" : "text-[11px]"} aria-hidden>{icon}</span>
       )}
-      <span className={`tabular-nums font-bold text-accent mt-0.5 ${large ? "text-[8px]" : "text-[7px]"}`}>
+      <span
+        className={`tabular-nums font-display font-black tracking-tight px-1 py-px rounded-sm ${
+          large ? "text-[10px]" : "text-[9px]"
+        }`}
+        style={{
+          color,
+          backgroundColor: "rgba(0,0,0,0.55)",
+          textShadow: `0 0 6px ${color}66`,
+        }}
+      >
         {remainingLabel(buff.expires_at, now)}
       </span>
     </span>
@@ -139,7 +149,14 @@ export default function HubCharacterChip({ character, xpPct, large = false }) {
                         <span className="absolute -top-1 -right-1.5 tabular-nums font-bold leading-none text-amber-300 text-[6px]">×{mounts.length}</span>
                       )}
                     </span>
-                    <span className={`tabular-nums font-bold mt-0.5 ${large ? "text-[8px]" : "text-[7px]"}`}>{remainingLabel(mountExpiry, now)}</span>
+                    <span
+                      className={`tabular-nums font-display font-black tracking-tight mt-0.5 px-1 py-px rounded-sm ${
+                        large ? "text-[10px]" : "text-[9px]"
+                      }`}
+                      style={{ color: "#FBBF24", backgroundColor: "rgba(0,0,0,0.55)" }}
+                    >
+                      {remainingLabel(mountExpiry, now)}
+                    </span>
                   </span>
                 )}
               </div>

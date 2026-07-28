@@ -1,9 +1,8 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { getEffectiveFuelCost, DIFFICULTY_COLORS, ITEM_DROP_RATES, formatEfficiencyPct, normalizeMissionEfficiency } from "@/lib/gameData";
+import { getEffectiveFuelCost, ITEM_DROP_RATES } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
-import RiskGauge from "@/components/game/RiskGauge";
 import { X, Star, Fuel, MapPin, Lock, Clock } from "lucide-react";
 
 function formatDuration(seconds) {
@@ -21,7 +20,6 @@ const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 
 export default function MissionDetailSheet({ mission, patron, characterLevel, character, currentFuel, busy, mining, onStart, onClose }) {
-  const diffColor = DIFFICULTY_COLORS[mission.difficulty];
   const locked = mission.level_requirement > characterLevel;
   const fuelCost = getEffectiveFuelCost(character, mission);
   const gains = character ? computeMissionGains(character, mission, false) : null;
@@ -71,18 +69,10 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
           </div>
         </div>
 
-        {/* Risk + difficulty */}
-        <div className="flex items-center justify-between gap-2 mb-3 p-2 rounded-lg bg-muted/20 border border-border/30">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-display uppercase text-muted-foreground tracking-wide">Risk</span>
-            <RiskGauge risk={mission.risk || 1} size={16} />
-          </div>
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Clock className="w-3 h-3" />
-            <span className="font-display font-semibold text-foreground">{formatDuration(getEffectiveMissionDuration(character, mission))}</span>
-          </div>
-          <span className="text-[10px] font-display font-bold uppercase px-2 py-0.5 rounded-full" style={{ backgroundColor: diffColor + "20", color: diffColor }}>
-            {mission.difficulty}
+        <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-muted/20 border border-border/30">
+          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-[11px] font-display font-semibold text-foreground">
+            {formatDuration(getEffectiveMissionDuration(character, mission))}
           </span>
         </div>
 
@@ -97,17 +87,11 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
               <Star className="w-3.5 h-3.5 mx-auto text-cyan-400" />
               <p className="text-sm font-display font-bold mt-1 bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">{gains?.xpGain ?? mission.rewards?.experience}</p>
               <p className="text-[9px] text-muted-foreground">XP</p>
-              <p className={`text-[9px] font-semibold mt-0.5 ${normalizeMissionEfficiency(mission.xp_efficiency) >= 1 ? "text-cyan-400/80" : "text-rose-400/80"}`}>
-                {formatEfficiencyPct(mission.xp_efficiency)}
-              </p>
             </div>
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
               <span className="text-sm block text-center">✨</span>
               <p className="text-sm font-display font-bold mt-1 text-purple-400">{gains?.stardustGain ?? mission.rewards?.stardust}</p>
               <p className="text-[9px] text-muted-foreground">Stardust</p>
-              <p className={`text-[9px] font-semibold mt-0.5 ${normalizeMissionEfficiency(mission.stardust_efficiency) >= 1 ? "text-purple-400/80" : "text-rose-400/80"}`}>
-                {formatEfficiencyPct(mission.stardust_efficiency)}
-              </p>
             </div>
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
               <Fuel className="w-3.5 h-3.5 mx-auto text-blue-400" />

@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { getEffectiveFuelCost, ITEM_DROP_RATES, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
+import { getEffectiveFuelCost, ITEM_DROP_RATES, FUEL_COLOR, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
@@ -86,9 +86,9 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
           <p className="text-[10px] font-display font-semibold text-muted-foreground tracking-widest uppercase mb-2">Rewards</p>
           <div className="grid grid-cols-3 gap-2 text-center mb-2">
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
-              <Star className="w-3.5 h-3.5 mx-auto text-cyan-400" />
-              <p className="text-sm font-display font-bold mt-1 bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">{gains?.xpGain ?? mission.rewards?.experience}</p>
-              <p className="text-[9px] text-muted-foreground">XP</p>
+              <Star className="w-3.5 h-3.5 mx-auto" style={{ color: XP_COLOR }} />
+              <p className="text-sm font-display font-bold mt-1" style={{ color: XP_COLOR }}>{gains?.xpGain ?? mission.rewards?.experience}</p>
+              <p className="text-[9px]" style={{ color: XP_COLOR }}>XP</p>
             </div>
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
               <span className="text-sm block text-center" style={{ color: STARDUST_COLOR }}>✨</span>

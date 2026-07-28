@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
-import { RACES, CLASSES, FUEL_COLOR, STARDUST_COLOR, formatFuelAmount } from "@/lib/gameData";
+import { RACES, CLASSES, FUEL_COLOR, STARDUST_COLOR, XP_COLOR, formatFuelAmount } from "@/lib/gameData";
 import { fullName } from "@/lib/legacyName";
 import { Fuel, Gem, Sparkles } from "lucide-react";
 
@@ -103,15 +103,15 @@ export default function ShellOperativePanel({ character }) {
 
       <div>
         <div className="flex items-center justify-between text-[8px] text-muted-foreground mb-0.5 px-0.5">
-          <span className="font-display font-semibold tracking-wide">XP</span>
+          <span className="font-display font-semibold tracking-wide" style={{ color: XP_COLOR }}>XP</span>
           <span className="tabular-nums">
             {(character.experience || 0).toLocaleString()} / {expToNext.toLocaleString()}
           </span>
         </div>
         <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden border border-border/30">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
-            style={{ width: `${expPct}%` }}
+            className="h-full rounded-full"
+            style={{ width: `${expPct}%`, background: `linear-gradient(90deg, ${XP_COLOR}, #38BDF8)` }}
           />
         </div>
       </div>

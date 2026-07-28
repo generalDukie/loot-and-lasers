@@ -316,26 +316,39 @@ export function getEffectiveFuelCost(character, mission) {
 }
 
 // ── Mission XP / SD ──────────────────────────────────────────
-export function normalizeMissionEfficiency(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 1;
-  return Math.min(1.1, Math.max(0.9, Math.round(n * 100) / 100));
+/** Mission reward variance band by player level (±fraction around 1.0). */
+export function getMissionRewardVariance(playerLevel = 1) {
+  return (Math.max(1, Number(playerLevel) || 1) <= 10) ? 0.25 : 0.10;
 }
 
-export function rollMissionEfficiency(rng = Math.random) {
-  const raw = 0.9 + rng() * 0.2;
+/**
+ * Per-mission efficiency roll — independent for XP and Stardust.
+ * Levels 1–10: ±25% (0.75–1.25). Level 11+: ±10% (0.90–1.10).
+ */
+export function rollMissionEfficiency(playerLevel = 1, rng = Math.random) {
+  const r = typeof rng === "function" ? rng : Math.random;
+  const v = getMissionRewardVariance(playerLevel);
+  const raw = (1 - v) + r() * (2 * v);
   return Math.round(raw * 100) / 100;
+}
+
+/** Clamp / default efficiency for the player's variance band. */
+export function normalizeMissionEfficiency(value, playerLevel = 1) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  const v = getMissionRewardVariance(playerLevel);
+  return Math.min(1 + v, Math.max(1 - v, Math.round(n * 100) / 100));
 }
 
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
-  const eff = normalizeMissionEfficiency(efficiency);
+  const eff = normalizeMissionEfficiency(efficiency, level);
   return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionXpPerFuel(level) * eff));
 }
 
 export function computeMissionStardustFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
-  const eff = normalizeMissionEfficiency(efficiency);
+  const eff = normalizeMissionEfficiency(efficiency, level);
   return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionStardustPerFuel(level) * eff));
 }
 

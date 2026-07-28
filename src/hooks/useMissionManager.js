@@ -34,8 +34,8 @@ import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import confetti from "canvas-confetti";
 
 // Computes stardust/XP for a mission (UI preview only — server awards on claim).
-// XP  = fuel × XP/fuel(level) × xp efficiency (0.90–1.10)
-// SD  = fuel × SD/fuel(level) × stardust efficiency (0.90–1.10)
+// XP  = fuel × XP/fuel(level) × xp efficiency (L1–10 ±25%, L11+ ±10%)
+// SD  = fuel × SD/fuel(level) × stardust efficiency (independent roll, same bands)
 // then ship / nexus / collection bonuses.
 export function computeMissionGains(character, mission, nexusBonus, gearTotal = GEAR_CATALOG_TOTAL) {
   const bonusMult = nexusBonus ? 1.05 : 1;
@@ -43,10 +43,11 @@ export function computeMissionGains(character, mission, nexusBonus, gearTotal = 
   const xpMult = 1 + getModEffectTotal(character, "mission_xp_mult");
   const { percentage } = getCollectionStats(character, gearTotal);
   const fuelCost = getEffectiveFuelCost(character, mission);
-  const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency);
-  const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency);
-  const chartXp = computeMissionXpFromFuel(fuelCost, character.level, xpEff);
-  const chartSd = computeMissionStardustFromFuel(fuelCost, character.level, sdEff);
+  const level = character.level || 1;
+  const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency, level);
+  const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency, level);
+  const chartXp = computeMissionXpFromFuel(fuelCost, level, xpEff);
+  const chartSd = computeMissionStardustFromFuel(fuelCost, level, sdEff);
   const baseXp = Math.round(chartXp * xpMult);
   return {
     bonusMult,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { RACES, CLASSES, getActiveBuffs } from "@/lib/gameData";
+import { RACES, CLASSES, getActiveBuffs, XP_COLOR } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
 import { spring } from "@/lib/goofyMotion";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
@@ -140,7 +140,7 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
 
             <div className="w-full max-w-[18rem]">
               <div className="flex items-center justify-between text-[9px] text-muted-foreground mb-1">
-                <span className="font-display font-semibold tracking-wide">Experience</span>
+                <span className="font-display font-semibold tracking-wide" style={{ color: XP_COLOR }}>Experience</span>
                 <span className="tabular-nums">
                   {(character.experience || 0).toLocaleString()} / {(character.experience_to_next_level || 0).toLocaleString()}
                 </span>
@@ -150,7 +150,8 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
                   initial={{ width: 0 }}
                   animate={{ width: `${expPct}%` }}
                   transition={{ duration: 0.7 }}
-                  className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+                  className="h-full rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${XP_COLOR}, #38BDF8)` }}
                 />
               </div>
             </div>

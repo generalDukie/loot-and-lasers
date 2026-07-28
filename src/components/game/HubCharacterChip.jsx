@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Rocket, Sparkles } from "lucide-react";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { fullName } from "@/lib/legacyName";
-import { getActiveBuffs, STAT_ICONS, MAX_ACTIVE_STAT_TYPES, getStatColor } from "@/lib/gameData";
+import { getActiveBuffs, STAT_ICONS, MAX_ACTIVE_STAT_TYPES, getStatColor, XP_COLOR } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
 
 // Ticks every second so countdown labels stay live.
@@ -120,7 +120,8 @@ export default function HubCharacterChip({
           </p>
           <div className={`mt-1 ${barH} rounded-full bg-muted/50 overflow-hidden border border-border/30`}>
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+              className="h-full rounded-full"
+              style={{ background: `linear-gradient(90deg, ${XP_COLOR}, #38BDF8)` }}
               initial={{ width: 0 }}
               animate={{ width: `${xpPct}%` }}
               transition={{ duration: 0.6, ease: "easeOut" }}

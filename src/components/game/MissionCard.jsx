@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { getEffectiveFuelCost, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
+import { getEffectiveFuelCost, FUEL_COLOR, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import { Clock, MapPin, Star, Fuel, Gem } from "lucide-react";
 
@@ -149,7 +149,7 @@ export default function MissionCard({ mission, onStart, onClaim, isActive, isCom
 
       <div className="flex flex-wrap items-center gap-3 mt-3 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(mission.duration_seconds)}</span>
-        <span className="flex items-center gap-1"><Star className="w-3 h-3 text-cyan-400" /><span className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent font-bold">{shownXp} XP</span></span>
+        <span className="flex items-center gap-1 font-bold" style={{ color: XP_COLOR }}><Star className="w-3 h-3" />{shownXp} XP</span>
         <span className="flex items-center gap-1 font-bold" style={{ color: STARDUST_COLOR }}>✨ {shownSd}</span>
         <span
           className="flex items-center gap-1 font-bold"

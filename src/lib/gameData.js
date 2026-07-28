@@ -863,6 +863,8 @@ function lerpWaypoints(level, points) {
  * then the closed form forever after:
  *   ROUND(2.106 × L^1.532 × (1 + (L/266)^3.683))
  * Pacing: 1→50 ~3d, 50→100 ~1wk, 100→200 ~2wk, then progressively slower.
+ *
+ * Levels 1–4 are hand-curated overrides; Level 5+ uses the formula below unchanged.
  */
 const XP_TO_NEXT_WAYPOINTS = [
   [1, 40],
@@ -883,8 +885,8 @@ const XP_TO_NEXT_WAYPOINTS = [
   [500, 228000],
 ];
 
-export function getExpForLevel(level) {
-  const L = Math.max(1, Math.floor(level || 1));
+/** Existing XP-to-next formula (waypoints + closed form + L≤5 −20 easing). Do not alter. */
+function existingExpForLevelFormula(L) {
   let xp;
   if (L <= 500) {
     xp = Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
@@ -894,6 +896,17 @@ export function getExpForLevel(level) {
   // Early easing only: −20 XP each for levels 1–5. Formula/waypoints unchanged.
   if (L <= 5) xp = Math.max(1, xp - 20);
   return xp;
+}
+
+export function getExpForLevel(level) {
+  const L = Math.max(1, Math.floor(level || 1));
+  switch (L) {
+    case 1: return 10;
+    case 2: return 15;
+    case 3: return 25;
+    case 4: return 40;
+    default: return existingExpForLevelFormula(L);
+  }
 }
 
 // Design chart: mission XP granted per 1 fuel spent.
@@ -984,43 +997,54 @@ export function getArenaXpReward(level = 1) {
   return Math.max(1, Math.round((getMissionXpPerFuel(level) * 5) / 7));
 }
 
-/** Per-mission efficiency roll — 0.90 to 1.10 inclusive-ish. */
-export function rollMissionEfficiency(rng = Math.random) {
-  const raw = 0.9 + rng() * 0.2;
+/** Mission reward variance band by player level (±fraction around 1.0). */
+export function getMissionRewardVariance(playerLevel = 1) {
+  return (Math.max(1, Number(playerLevel) || 1) <= 10) ? 0.25 : 0.10;
+}
+
+/**
+ * Per-mission efficiency roll — independent for XP and Stardust.
+ * Levels 1–10: ±25% (0.75–1.25). Level 11+: ±10% (0.90–1.10).
+ */
+export function rollMissionEfficiency(playerLevel = 1, rng = Math.random) {
+  const r = typeof rng === "function" ? rng : Math.random;
+  const v = getMissionRewardVariance(playerLevel);
+  const raw = (1 - v) + r() * (2 * v);
   return Math.round(raw * 100) / 100;
 }
 
-/** Clamp / default efficiency for older missions missing the field. */
-export function normalizeMissionEfficiency(value) {
+/** Clamp / default efficiency for the player's variance band. */
+export function normalizeMissionEfficiency(value, playerLevel = 1) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 1;
-  return Math.min(1.1, Math.max(0.9, Math.round(n * 100) / 100));
+  const v = getMissionRewardVariance(playerLevel);
+  return Math.min(1 + v, Math.max(1 - v, Math.round(n * 100) / 100));
 }
 
 /** Display helper: 1.09 → "+9%", 0.93 → "-7%". */
-export function formatEfficiencyPct(efficiency) {
-  const pct = Math.round((normalizeMissionEfficiency(efficiency) - 1) * 100);
+export function formatEfficiencyPct(efficiency, playerLevel = 1) {
+  const pct = Math.round((normalizeMissionEfficiency(efficiency, playerLevel) - 1) * 100);
   if (pct === 0) return "±0%";
   return pct > 0 ? `+${pct}%` : `${pct}%`;
 }
 
 /**
- * Mission XP = Fuel × Level XP/F × efficiency (0.90–1.10).
- * Before ship/collection bonuses.
+ * Mission XP = Fuel × Level XP/F × efficiency (level-banded variance).
+ * Before ship/collection bonuses. Base XP/F chart is unchanged.
  */
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
-  const eff = normalizeMissionEfficiency(efficiency);
+  const eff = normalizeMissionEfficiency(efficiency, level);
   return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionXpPerFuel(level) * eff));
 }
 
 /**
- * Mission Stardust = Fuel × Level SD/F × efficiency (0.90–1.10).
- * Before ship/nexus bonuses.
+ * Mission Stardust = Fuel × Level SD/F × efficiency (level-banded variance).
+ * Before ship/nexus bonuses. Base SD/F chart is unchanged.
  */
 export function computeMissionStardustFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
-  const eff = normalizeMissionEfficiency(efficiency);
+  const eff = normalizeMissionEfficiency(efficiency, level);
   return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionStardustPerFuel(level) * eff));
 }
 
@@ -1068,6 +1092,8 @@ export function getEarlyFuelDiscount(level = 1) {
 // ═══════════════════════════════════════════
 export const FUEL_COLOR = "#39FF14";
 export const STARDUST_COLOR = "#C084FC";
+/** Neon cyan — XP labels, bars, and reward panes (matches Arena experience). */
+export const XP_COLOR = "#00E5FF";
 
 // ═══════════════════════════════════════════
 // FUEL (mission energy)
@@ -1167,31 +1193,34 @@ const COLLECTIBLES = [
 const RISK_DIFFICULTY = { 1: "easy", 2: "medium", 3: "medium", 4: "hard", 5: "elite" };
 const RISK_RARITY = { 1: "common", 2: "uncommon", 3: "rare", 4: "epic", 5: "legendary" };
 
-// Design chart — mission duration brackets by level (fuel = minutes).
-//   L1–5:   15s–45s   (0.25–0.75 fuel)
-//   L6–10:  1–2.5 min (1–2.5 fuel)
-//   L11–15: 2.5–10 min
-//   L16+:   5–20 min
-const MISSION_DURATION_BRACKETS = [
-  { maxLevel: 5, minSec: 15, maxSec: 45 },
-  { maxLevel: 10, minSec: 60, maxSec: 150 },
-  { maxLevel: 15, minSec: 150, maxSec: 600 },
-  { maxLevel: Infinity, minSec: 300, maxSec: 1200 },
+// Design chart — mission duration by level (fuel cost = duration in minutes).
+// L1–5 stay very short; L6–20 ramp smoothly to the 5–20 min endgame band.
+// L20+ stays clamped at 5–20 min. All values are 15s increments.
+const MISSION_DURATION_BY_LEVEL = [
+  null, // level 0 unused
+  [15, 45], [15, 45], [15, 45], [15, 45], [15, 45],       // 1–5
+  [30, 75], [30, 90], [45, 105], [45, 135], [60, 150],     // 6–10
+  [75, 240], [90, 330], [105, 420], [135, 510], [150, 600], // 11–15
+  [180, 720], [210, 840], [240, 960], [270, 1080], [300, 1200], // 16–20
 ];
-const MISSION_MAX_DURATION = 1200;
+const MISSION_MAX_DURATION = 1200; // 20 minutes — hard cap for L20+
 
 export function getMissionDurationBracket(level = 1) {
-  const lvl = Math.max(1, level || 1);
-  return MISSION_DURATION_BRACKETS.find((b) => lvl <= b.maxLevel) || MISSION_DURATION_BRACKETS[MISSION_DURATION_BRACKETS.length - 1];
+  const lvl = Math.max(1, Math.floor(Number(level) || 1));
+  const idx = Math.min(20, lvl);
+  const pair = MISSION_DURATION_BY_LEVEL[idx] || [300, 1200];
+  return { minSec: pair[0], maxSec: pair[1] };
 }
 
 /** Snap seconds to a clean 15s tick within the level's min/max. */
 export function rollMissionDurationSeconds(level = 1, unit = Math.random()) {
   const { minSec, maxSec } = getMissionDurationBracket(level);
+  const lo = Math.round(minSec / 15) * 15;
+  const hi = Math.round(maxSec / 15) * 15;
+  const steps = Math.max(0, Math.round((hi - lo) / 15));
   const t = Math.min(1, Math.max(0, Number(unit) || 0));
-  const raw = minSec + (maxSec - minSec) * t;
-  const snapped = Math.round(raw / 15) * 15;
-  return Math.min(MISSION_MAX_DURATION, Math.max(minSec, snapped));
+  const idx = Math.round(steps * t);
+  return Math.min(MISSION_MAX_DURATION, lo + idx * 15);
 }
 
 export function generateDailyMissions(character) {
@@ -1217,8 +1246,9 @@ export function generateDailyMissions(character) {
       _seed: `${Date.now()}-${i}`,
       patron: givers[i % givers.length],
       duration_seconds: duration,
-      stardust_efficiency: 1,
-      xp_efficiency: 1,
+      // Independent XP / Stardust variance rolls (level-banded).
+      stardust_efficiency: rollMissionEfficiency(level),
+      xp_efficiency: rollMissionEfficiency(level),
     };
     const fuelEst = getEffectiveFuelCost(character, draft);
     // Loot floor scales gently with level — no risk rating.
@@ -1226,8 +1256,8 @@ export function generateDailyMissions(character) {
     return {
       ...draft,
       rewards: {
-        experience: computeMissionXpFromFuel(fuelEst, level, 1),
-        stardust: computeMissionStardustFromFuel(fuelEst, level, 1),
+        experience: computeMissionXpFromFuel(fuelEst, level, draft.xp_efficiency),
+        stardust: computeMissionStardustFromFuel(fuelEst, level, draft.stardust_efficiency),
         item_rarity_chance: rarityKey,
         collectible,
       },
@@ -1267,6 +1297,8 @@ export function generateLowFuelMission(character, currentFuel, excludePatronName
   const fuelCost = Math.min(fuel, Math.round((duration / 60) * 100) / 100);
   const tpl = LOW_FUEL_TEMPLATES[slot % LOW_FUEL_TEMPLATES.length];
   const pinnedFuel = Math.max(MISSION_MIN_FUEL, fuelCost);
+  const sdEff = rollMissionEfficiency(level);
+  const xpEff = rollMissionEfficiency(level);
   return {
     name: tpl.name,
     description: tpl.description,
@@ -1276,13 +1308,13 @@ export function generateLowFuelMission(character, currentFuel, excludePatronName
     level_requirement: 1,
     // Pin cost to remainder so mounts/reductions can't push it above what you have.
     fuel_cost: pinnedFuel,
-    stardust_efficiency: 1,
-    xp_efficiency: 1,
+    stardust_efficiency: sdEff,
+    xp_efficiency: xpEff,
     _lowFuel: true,
     patron: pickQuestGiver(Math.random, excludePatronNames),
     rewards: {
-      experience: computeMissionXpFromFuel(pinnedFuel, level, 1),
-      stardust: computeMissionStardustFromFuel(pinnedFuel, level, 1),
+      experience: computeMissionXpFromFuel(pinnedFuel, level, xpEff),
+      stardust: computeMissionStardustFromFuel(pinnedFuel, level, sdEff),
       item_rarity_chance: "common",
     },
   };

@@ -66,7 +66,9 @@ function lerpWaypoints(level, points) {
   return yB + slope * (L - xB);
 }
 
-/** XP to next: waypoint chart through 500, then closed-form forever. */
+/** XP to next: waypoint chart through 500, then closed-form forever.
+ * Levels 1–4 are hand-curated overrides; Level 5+ uses the formula below unchanged.
+ */
 const XP_TO_NEXT_WAYPOINTS = [
   [1, 40], [5, 50], [10, 120], [15, 150], [25, 335],
   [50, 1135], [75, 1810], [100, 2590], [150, 4460],
@@ -74,8 +76,8 @@ const XP_TO_NEXT_WAYPOINTS = [
   [400, 159000], [450, 190000], [500, 228000],
 ];
 
-export function expForLevel(level) {
-  const L = Math.max(1, Math.floor(level || 1));
+/** Existing XP-to-next formula (waypoints + closed form + L≤5 −20 easing). Do not alter. */
+function existingExpForLevelFormula(L) {
   let xp;
   if (L <= 500) {
     xp = Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
@@ -85,6 +87,17 @@ export function expForLevel(level) {
   // Early easing only: −20 XP each for levels 1–5. Formula/waypoints unchanged.
   if (L <= 5) xp = Math.max(1, xp - 20);
   return xp;
+}
+
+export function expForLevel(level) {
+  const L = Math.max(1, Math.floor(level || 1));
+  switch (L) {
+    case 1: return 10;
+    case 2: return 15;
+    case 3: return 25;
+    case 4: return 40;
+    default: return existingExpForLevelFormula(L);
+  }
 }
 
 const MISSION_XP_PER_FUEL_WAYPOINTS = [

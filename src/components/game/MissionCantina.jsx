@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getEffectiveFuelCost, QUEST_GIVERS, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
+import { getEffectiveFuelCost, QUEST_GIVERS, FUEL_COLOR, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import { Lock, Fuel, Star, Clock, MapPin } from "lucide-react";
@@ -254,11 +254,11 @@ export default function MissionCantina({ missions, characterLevel, character, cu
 
               <div className="grid grid-cols-3 gap-2.5 sm:gap-3 text-center mb-4">
                 <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
-                  <Star className="w-5 h-5 mx-auto text-cyan-400" />
-                  <p className="text-lg sm:text-xl font-display font-bold mt-1.5 bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                  <Star className="w-5 h-5 mx-auto" style={{ color: XP_COLOR }} />
+                  <p className="text-lg sm:text-xl font-display font-bold mt-1.5" style={{ color: XP_COLOR }}>
                     {hoverGains?.xpGain ?? hoverMission.rewards?.experience}
                   </p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">XP</p>
+                  <p className="text-[10px] uppercase tracking-wide mt-0.5" style={{ color: XP_COLOR }}>XP</p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
                   <span className="text-lg block text-center" style={{ color: STARDUST_COLOR }}>✨</span>

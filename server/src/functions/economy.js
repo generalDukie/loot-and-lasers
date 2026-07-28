@@ -88,10 +88,11 @@ function computeMissionGains(character, mission, nexusBonus) {
   const xpMult = 1 + getModEffectTotal(character, "mission_xp_mult");
   const percentage = getCollectionPercentage(character, 0);
   const fuelCost = getEffectiveFuelCost(character, mission);
-  const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency);
-  const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency);
-  const chartXp = computeMissionXpFromFuel(fuelCost, character.level, xpEff);
-  const chartSd = computeMissionStardustFromFuel(fuelCost, character.level, sdEff);
+  const level = character.level || 1;
+  const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency, level);
+  const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency, level);
+  const chartXp = computeMissionXpFromFuel(fuelCost, level, xpEff);
+  const chartSd = computeMissionStardustFromFuel(fuelCost, level, sdEff);
   const baseXp = Math.round(chartXp * xpMult);
   return {
     bonusMult,
@@ -370,12 +371,13 @@ export async function LaunchMission(user, body) {
       const currentFuel = Math.round((ch.fuel ?? FUEL_MAX) * 100) / 100;
       if (currentFuel < fuelCost) httpErr(400, "Not enough fuel");
 
+      const level = ch.level || 1;
       const sdEff = template.stardust_efficiency != null
-        ? normalizeMissionEfficiency(template.stardust_efficiency)
-        : rollMissionEfficiency();
+        ? normalizeMissionEfficiency(template.stardust_efficiency, level)
+        : rollMissionEfficiency(level);
       const xpEff = template.xp_efficiency != null
-        ? normalizeMissionEfficiency(template.xp_efficiency)
-        : rollMissionEfficiency();
+        ? normalizeMissionEfficiency(template.xp_efficiency, level)
+        : rollMissionEfficiency(level);
 
       const LOOT_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
       const lootType = LOOT_TYPES[String(template.name).length % 8];

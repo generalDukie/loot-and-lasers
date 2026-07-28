@@ -1,12 +1,12 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
+import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, FUEL_COLOR, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import confetti from "canvas-confetti";
 import { Star, Zap, Fuel, TrendingUp, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical, ArrowRight } from "lucide-react";
 
-// Shared chrome for XP / level-up panes (not rarity-coded).
+// Shared chrome for level-up / empty panes (not rarity-coded).
 const SUMMARY_ACCENT = "#FBBF24";
 const EMPTY_GEAR_ACCENT = "#6B7280";
 
@@ -101,16 +101,22 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
         </div>
 
         <div className="space-y-2">
-          <RewardCard icon={<Zap className="w-5 h-5" />}>
+          <RewardCard icon={<Zap className="w-5 h-5" />} accent={XP_COLOR}>
             <div className="flex items-baseline justify-between">
-              <span className="text-xs font-display font-semibold text-amber-200">EXPERIENCE</span>
-              <span className="font-display font-bold text-amber-300 text-lg">+{xp.total || 0}</span>
+              <span className="text-xs font-display font-semibold" style={{ color: XP_COLOR }}>EXPERIENCE</span>
+              <span className="font-display font-bold text-lg" style={{ color: XP_COLOR }}>+{xp.total || 0}</span>
             </div>
             {xpChips.length > 0 && (
               <div className="flex flex-wrap items-center gap-1 mt-1">
                 <span className="text-[10px] text-muted-foreground">base {xp.base}</span>
                 {xpChips.map((c) => (
-                  <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-200/90">{c}</span>
+                  <span
+                    key={c}
+                    className="text-[10px] px-1.5 py-0.5 rounded"
+                    style={{ backgroundColor: `${XP_COLOR}1a`, color: XP_COLOR }}
+                  >
+                    {c}
+                  </span>
                 ))}
               </div>
             )}

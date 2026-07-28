@@ -6,6 +6,7 @@ import { withTransactionAsync, db, nowIso } from "../db.js";
 import { getUserById } from "../auth.js";
 import { randomItem } from "../shared/rewards.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
+import { collectGrant, grantItemOrPending } from "../shared/inventoryGrant.js";
 import {
   todayET,
   applyXpToCharacter,
@@ -88,23 +89,8 @@ function wrap(fn) {
   };
 }
 
-function grantOrCompensate(ch, itemPayload, patch) {
-  const cap = getInventoryCap(ch);
-  const owned = entities.Item.filter({ character_id: ch.id }, null, 500);
-  const unequipped = owned.filter((i) => !i.is_equipped).length;
-  if (unequipped >= cap) {
-    const comp = computeStardustValue(itemPayload);
-    patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
-    patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
-    return { item: null, compensated: comp };
-  }
-  const created = entities.Item.create({
-    ...itemPayload,
-    owner_id: ch.created_by_id,
-    character_id: ch.id,
-    is_equipped: false,
-  });
-  return { item: created, compensated: 0 };
+function grantOrCompensate(ch, itemPayload, _patch) {
+  return grantItemOrPending(ch, itemPayload);
 }
 
 function stripShopNoise(item) {
@@ -306,6 +292,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
   applyXpToCharacter(ch, boostedXp, patch);
 
   const itemsGranted = [];
+  const pendingLoot = [];
   let unlockedShipMod = null;
   if (won) {
     patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + stardust;
@@ -358,14 +345,12 @@ export const FinishDungeonBattle = wrap((user, body) => {
       gear = randomItem(rarity, Math.max(1, ch.level || 1));
     }
     if (gear) {
-      const g = grantOrCompensate(ch, stripShopNoise(gear), patch);
-      if (g.item) itemsGranted.push(g.item);
+      collectGrant(grantOrCompensate(ch, stripShopNoise(gear), patch), itemsGranted, pendingLoot);
     }
 
     if (Math.random() < (patrol ? 0.1 : 0.2)) {
       const cons = stripShopNoise(randomConsumable());
-      const g = grantOrCompensate(ch, cons, patch);
-      if (g.item) itemsGranted.push(g.item);
+      collectGrant(grantOrCompensate(ch, cons, patch), itemsGranted, pendingLoot);
     }
 
     const nextNodes = (ch.dungeon_nodes_cleared || 0) + 1;
@@ -373,8 +358,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
     if (nextNodes % DUNGEON_MILESTONE_EVERY === 0) {
       const rarity = rollItemRarity(Math.random() < 0.35 ? "rare" : "uncommon", ch.level || 1);
       const mile = randomItem(rarity, Math.max(1, ch.level || 1));
-      const g = grantOrCompensate(ch, stripShopNoise(mile), patch);
-      if (g.item) itemsGranted.push(g.item);
+      collectGrant(grantOrCompensate(ch, stripShopNoise(mile), patch), itemsGranted, pendingLoot);
     }
 
     const weekly = progressWeeklyNovaQuest(
@@ -406,6 +390,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
     won,
     rewards: { stardust, experience: boostedXp, base_experience: experience, dru: Math.round(dru * 100) / 100, enemyLevel, isBoss, patrol },
     items: itemsGranted,
+    pending_loot: pendingLoot,
     ship_mod: unlockedShipMod,
     patch,
     character,
@@ -833,7 +818,7 @@ export const AcceptPendingLoot = wrap((user, body) => {
   if (!raw || typeof raw !== "object") httpErr(400, "Missing item");
   const cap = getInventoryCap(ch);
   const owned = entities.Item.filter({ character_id: ch.id }, null, 500);
-  if (owned.filter((i) => !i.is_equipped).length >= cap) httpErr(400, "Inventory full");
+  if (owned.length >= cap) httpErr(400, "Inventory full");
   const rarity = ["common", "uncommon", "rare", "epic", "legendary"].includes(raw.rarity)
     ? raw.rarity
     : "common";

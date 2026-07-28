@@ -33,10 +33,16 @@ export function subscribePending(fn) {
   return () => listeners.delete(fn);
 }
 
-// Count unequipped items owned by a character — equipped gear doesn't count
-// against the inventory cap.
+/** Pull pending loot from a server function response and open the full-inventory modal. */
+export function applyPendingLootFromResponse(res) {
+  const list = res?.pending_loot || res?.data?.pending_loot;
+  if (!Array.isArray(list) || list.length === 0) return false;
+  if (!pending) setPendingItem(list[0]);
+  return true;
+}
+
 export async function countItems(characterId) {
-  const items = await api.entities.Item.filter({ character_id: characterId, is_equipped: { $ne: true } });
+  const items = await api.entities.Item.filter({ character_id: characterId });
   return items.length;
 }
 
@@ -44,11 +50,8 @@ export async function countItems(characterId) {
 // If full, stashes the payload as pending (triggers the InventoryFullModal)
 // and returns null.
 export async function addItemWithCap(character, itemPayload) {
-  // Fetch every owned item once: count unequipped for the cap check AND gather
-  // all names so the new item can be given a unique name before creation.
   const all = await api.entities.Item.filter({ character_id: character.id });
-  const unequipped = all.filter((i) => !i.is_equipped).length;
-  if (unequipped >= getInventoryCap(character)) {
+  if (all.length >= getInventoryCap(character)) {
     setPendingItem(itemPayload);
     return null;
   }

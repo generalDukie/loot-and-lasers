@@ -6,34 +6,35 @@ import GearArtSvg from "@/components/game/GearArtSvg";
 import { rarityColor } from "@/lib/artStyle";
 import { weaponCombatStyleFor } from "@/lib/gameData";
 
-const CLASS_FALLBACK = {
-  Vanguard: { type: "shoot", color: "#F87171", rarity: "uncommon" },
-  "Shadow Operative": { type: "stab", color: "#A78BFA", rarity: "uncommon" },
-  Technomancer: { type: "shoot", color: "#60A5FA", rarity: "uncommon" },
-  "Astral Warden": { type: "shoot", color: "#FBBF24", rarity: "uncommon" },
-  "Void Runner": { type: "stab", color: "#22D3EE", rarity: "uncommon" },
-  "Cosmic Engineer": { type: "shoot", color: "#4ADE80", rarity: "uncommon" },
+// When no weapon is equipped, arena combat defaults to bare hands.
+const BARE_HANDS = {
+  type: "swing",   // drives animation + SFX
+  color: "#F87171",
+  rarity: "common",
+  name: "Fist",
+  baseName: "Fist",
+  levelRequirement: 1,
 };
 
-function resolveWeapon(className, weaponItem) {
-  const fallback = CLASS_FALLBACK[className] || CLASS_FALLBACK.Vanguard;
-  const rarity = weaponItem?.rarity || fallback.rarity;
-  const color = weaponItem?.rarity ? rarityColor(weaponItem.rarity) : fallback.color;
-  const type = weaponItem
-    ? weaponCombatStyleFor(weaponItem.name, weaponItem.base_name)
-    : fallback.type;
+function resolveWeapon(weaponItem) {
+  if (!weaponItem) return { ...BARE_HANDS };
+
+  const rarity = weaponItem.rarity || BARE_HANDS.rarity;
+  const color = weaponItem.rarity ? rarityColor(weaponItem.rarity) : BARE_HANDS.color;
+  const type = weaponCombatStyleFor(weaponItem.name, weaponItem.base_name);
   return {
     type,
     color,
     rarity,
-    name: weaponItem?.name,
-    baseName: weaponItem?.base_name,
-    levelRequirement: weaponItem?.level_requirement || 1,
+    name: weaponItem.name,
+    baseName: weaponItem.base_name,
+    levelRequirement: weaponItem.level_requirement || 1,
   };
 }
 
 export default function ArenaWeaponVisual({ className, attacking, attackEvent, evIdx, side, weaponItem }) {
-  const weapon = resolveWeapon(className, weaponItem);
+  const weapon = resolveWeapon(weaponItem);
+  const isBareHands = !weaponItem;
   const uid = useId().replace(/:/g, "");
   const dir = side === "player" ? 1 : -1;
   const aimAtEnemy = side === "player" && weapon.type === "shoot";
@@ -69,14 +70,33 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
       <motion.div className="absolute pointer-events-none z-20" style={{ ...pos, width: 44, height: 44 }} animate={animate} transition={transition}>
         <div style={{ transform: aimAtEnemy ? "scaleX(-1)" : undefined, transformOrigin: "center", width: 44, height: 44, filter: `drop-shadow(0 0 6px ${weapon.color}99)` }}>
           <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }} style={{ width: 44, height: 44 }}>
-            <GearArtSvg
-              type="weapon"
-              rarity={weapon.rarity}
-              name={weapon.name}
-              baseName={weapon.baseName}
-              levelRequirement={weapon.levelRequirement}
-              uid={`arena-${uid}`}
-            />
+            {isBareHands ? (
+              <span
+                className="select-none"
+                style={{
+                  display: "block",
+                  width: 44,
+                  height: 44,
+                  fontSize: 30,
+                  lineHeight: "44px",
+                  textAlign: "center",
+                  transform: "translateY(2px)",
+                  filter: `drop-shadow(0 0 3px ${weapon.color}AA)`,
+                }}
+                aria-hidden
+              >
+                🥊
+              </span>
+            ) : (
+              <GearArtSvg
+                type="weapon"
+                rarity={weapon.rarity}
+                name={weapon.name}
+                baseName={weapon.baseName}
+                levelRequirement={weapon.levelRequirement}
+                uid={`arena-${uid}`}
+              />
+            )}
           </motion.div>
         </div>
       </motion.div>

@@ -339,6 +339,11 @@ export function computeMissionStardustFromFuel(fuelCost, level = 1, efficiency =
   return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionStardustPerFuel(level) * eff));
 }
 
+/** Mission junk trinket vendor/dissolve value — ~1× SD/F at completion level. */
+export function computeMissionJunkSellValue(level = 1) {
+  return Math.max(1, Math.round(getMissionStardustPerFuel(level)));
+}
+
 export const SKIP_CRYSTALS_PER_MINUTE = 5;
 
 export function skipCostFor(mission, nowMs = Date.now()) {

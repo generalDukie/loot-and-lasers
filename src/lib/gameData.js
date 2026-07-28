@@ -1024,6 +1024,11 @@ export function computeMissionStardustFromFuel(fuelCost, level = 1, efficiency =
   return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionStardustPerFuel(level) * eff));
 }
 
+/** Mission junk trinket vendor/dissolve value — ~1× SD/F at completion level. */
+export function computeMissionJunkSellValue(level = 1) {
+  return Math.max(1, Math.round(getMissionStardustPerFuel(level)));
+}
+
 /**
  * Passthrough for non-mission grants. Pacing lives in getExpForLevel + XP/fuel.
  * Kept so call sites stay stable.

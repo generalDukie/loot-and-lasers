@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
+import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   FUEL_MAX,
@@ -358,6 +359,7 @@ export function useMissionManager() {
       const patch = res.patch || res.data?.patch || {};
       const gains = res.gains || res.data?.gains || {};
       const items = res.items || res.data?.items || [];
+      applyPendingLootFromResponse(res);
       const rewards = missionSnapshot.rewards || {};
 
       const { gearItem, collectible, consumableItem } = classifyClaimItems(items, rewards);

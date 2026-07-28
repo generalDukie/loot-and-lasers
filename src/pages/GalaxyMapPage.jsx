@@ -12,7 +12,7 @@ import {
   generateDungeonEnemy, computeDungeonRewards, dungeonCooldownMs, rollMilestoneChest, grantFrontierShipMod,
 } from "@/lib/dungeonEngine";
 import { processDiscovery } from "@/lib/discovery";
-import { addItemWithCap } from "@/lib/inventoryCap";
+import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
 import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import { getMyCharacter } from "@/lib/socialEngine";
 import DungeonMap from "@/components/game/DungeonMap";
@@ -159,6 +159,7 @@ export default function GalaxyMapPage() {
     const newLevel = update.level ?? character.level;
     const unlockedShipMod = null;
     const items = res.items || res.data?.items || [];
+    applyPendingLootFromResponse(res);
     const gearItem = items[0] || null;
     const droppedConsumable = items.find((i) => i.type === "consumable") || null;
     const milestoneItem = items.length > 1 ? items[items.length - 1] : null;

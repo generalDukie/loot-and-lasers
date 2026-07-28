@@ -24,6 +24,7 @@ import {
   rollMissionEfficiency,
   computeMissionXpFromFuel,
   computeMissionStardustFromFuel,
+  computeMissionJunkSellValue,
   skipCostFor,
   SHOP_REFRESH_COST,
   getShopWindow,
@@ -42,6 +43,7 @@ import {
   randomConsumable,
   progressWeeklyNovaQuest,
 } from "../shared/economyFormulas.js";
+import { collectGrant, grantItemOrPending } from "../shared/inventoryGrant.js";
 import { ECONOMY_FOLLOW_ON_HANDLERS } from "./economyFollowOn.js";
 
 function httpErr(status, message) {
@@ -68,23 +70,8 @@ function applyFuelResetIfNeeded(ch) {
   return { ch: updated, resetPatch: reset };
 }
 
-function grantOrCompensate(ch, itemPayload, patch) {
-  const cap = getInventoryCap(ch);
-  const owned = entities.Item.filter({ character_id: ch.id }, null, 500);
-  const unequipped = owned.filter((i) => !i.is_equipped).length;
-  if (unequipped >= cap) {
-    const comp = computeStardustValue(itemPayload);
-    patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
-    patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
-    return { item: null, compensated: comp };
-  }
-  const created = entities.Item.create({
-    ...itemPayload,
-    owner_id: ch.created_by_id,
-    character_id: ch.id,
-    is_equipped: false,
-  });
-  return { item: created, compensated: 0 };
+function grantOrCompensate(ch, itemPayload, _patch) {
+  return grantItemOrPending(ch, itemPayload);
 }
 
 function stripShopFields(slot) {
@@ -502,32 +489,30 @@ export async function ClaimMission(user, body) {
       if (weekly) patch.weekly_nova_quests = weekly;
 
       const items = [];
+      const pendingLoot = [];
       const rewards = mission.rewards || {};
       if (rewards.loot_drops !== false) {
         const rarity = rewards.loot_rarity || rollItemRarity(rewards.item_rarity_chance || "common", ch.level || 1);
         const gear = randomItem(rarity, ch.level || 1, rewards.loot_type);
-        const { item } = grantOrCompensate(ch, gear, patch);
-        if (item) items.push(item);
+        collectGrant(grantOrCompensate(ch, gear, patch), items, pendingLoot);
       }
 
       if (rewards.collectible?.name) {
-        const junkStats = 1 + Math.floor(Math.random() * 4);
-        const { item } = grantOrCompensate(ch, {
+        const level = Math.max(1, ch.level || 1);
+        collectGrant(grantOrCompensate(ch, {
           name: rewards.collectible.name,
           type: "material",
-          rarity: "uncommon",
-          level_requirement: Math.max(1, ch.level || 1),
-          stats: { luck: junkStats },
+          rarity: "common",
+          level_requirement: level,
+          stats: {},
           flavor_text: "A curious trinket recovered on mission.",
-          sell_value: 15,
-        }, patch);
-        if (item) items.push(item);
+          sell_value: computeMissionJunkSellValue(level),
+        }, patch), items, pendingLoot);
       }
 
       if (Math.random() < 0.15) {
         const { _cost, ...consItem } = randomConsumable();
-        const { item } = grantOrCompensate(ch, consItem, patch);
-        if (item) items.push(item);
+        collectGrant(grantOrCompensate(ch, consItem, patch), items, pendingLoot);
       }
 
       entities.Mission.update(mission.id, { status: "claimed" });
@@ -538,6 +523,7 @@ export async function ClaimMission(user, body) {
         patch,
         character,
         items,
+        pending_loot: pendingLoot,
         gains: {
           stardust: gains.stardustGain,
           experience: gains.xpGain,
@@ -713,9 +699,9 @@ export async function BuyShopGear(user, body) {
         : [stripShopFields(slot)];
 
       const items = [];
+      const pendingLoot = [];
       for (const p of payloads) {
-        const { item } = grantOrCompensate(ch, p, patch);
-        if (item) items.push(item);
+        collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot);
       }
 
       const character = entities.Character.update(ch.id, patch);
@@ -726,6 +712,7 @@ export async function BuyShopGear(user, body) {
         cost: stardustCost,
         nova_cost: novaCost,
         items,
+        pending_loot: pendingLoot,
         patch,
         character,
       };
@@ -773,9 +760,9 @@ export async function BuyShopConsumable(user, body) {
         : [stripShopFields(slot)];
 
       const items = [];
+      const pendingLoot = [];
       for (const p of payloads) {
-        const { item } = grantOrCompensate(ch, p, patch);
-        if (item) items.push(item);
+        collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot);
       }
 
       // Replace purchased slot with a fresh stim (client UX parity).
@@ -789,7 +776,7 @@ export async function BuyShopConsumable(user, body) {
       patch.shop_meta = { ...meta, cons_stock: nextStock };
 
       const character = entities.Character.update(ch.id, patch);
-      return { success: true, cost, items, patch, character };
+      return { success: true, cost, items, pending_loot: pendingLoot, patch, character };
     });
     return { status: 200, body: result };
   } catch (err) {

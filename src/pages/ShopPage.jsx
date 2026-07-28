@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
+import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
 import { useNavigate } from "react-router-dom";
 import {
   getShopWindow,
@@ -230,6 +231,7 @@ export default function ShopPage() {
       const patch = res.patch || res.data?.patch || {};
       const meta = patch.shop_meta || shopMeta;
       const items = res.items || res.data?.items || [];
+      const hadPending = applyPendingLootFromResponse(res);
       const haggleNote = res.haggle_note ?? res.data?.haggle_note;
       const haggleFailed = !!(res.haggle_failed ?? res.data?.haggle_failed);
       const anyCreated = items.length > 0;
@@ -324,6 +326,7 @@ export default function ShopPage() {
       const patch = res.patch || res.data?.patch || {};
       const meta = patch.shop_meta;
       const items = res.items || res.data?.items || [];
+      const hadPending = applyPendingLootFromResponse(res);
       const anyCreated = items.length > 0;
 
       if (meta) setShopMeta(meta);

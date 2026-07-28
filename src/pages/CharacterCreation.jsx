@@ -244,15 +244,6 @@ export default function CharacterCreation() {
           >
             <X className="w-4 h-4" /> Cancel
           </button>
-          <button
-            type="button"
-            onClick={randomizeLooks}
-            disabled={loading || !form.race}
-            className="absolute left-0 top-0 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary disabled:opacity-40 transition-colors"
-            title={form.race ? "Randomize appearance" : "Pick a race first"}
-          >
-            <Dices className="w-4 h-4" /> Randomize
-          </button>
           <h1 className={`font-display font-bold glow-cyan tracking-wider ${step === 1 ? "text-xl md:text-2xl" : "text-2xl md:text-3xl"}`}>BUILD YOUR OPERATIVE</h1>
           <p className={`text-muted-foreground ${step === 1 ? "text-xs mt-1" : "text-sm mt-2"}`}>Pick a species, pick a job, make a face. Try not to explode on day one.</p>
         </motion.div>
@@ -460,7 +451,7 @@ export default function CharacterCreation() {
                         className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border border-border/50 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
                         title="Randomize appearance"
                       >
-                        <Dices className="w-3 h-3" /> Shuffle
+                        <Dices className="w-3 h-3" /> Randomize
                       </button>
                     </div>
                   </div>
@@ -596,18 +587,6 @@ export default function CharacterCreation() {
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronLeft className="w-4 h-4" /> Back
-          </motion.button>
-
-          <motion.button
-            {...btnPress}
-            type="button"
-            onClick={randomizeLooks}
-            disabled={loading || !form.race}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary px-3 py-2 rounded-lg border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-40"
-            title={form.race ? "Randomize appearance" : "Pick a race first"}
-          >
-            <Dices className="w-4 h-4" />
-            <span className="font-display font-semibold tracking-wide text-xs">Randomize</span>
           </motion.button>
 
           <div className="flex items-center gap-3">

@@ -714,20 +714,28 @@ export async function AdminModeration(user, body) {
   }
 
   if (action === "set_role") {
-    const { character_id, role } = body;
-    const ch = entities.Character.get(character_id);
-    if (!ch) return { status: 404, body: { error: "Character not found" } };
+    // Admin is account-scoped (users.role), never per-character.
+    const { character_id, user_id, role } = body;
+    let targetUserId = user_id || null;
+    if (!targetUserId && character_id) {
+      const ch = entities.Character.get(character_id);
+      if (!ch) return { status: 404, body: { error: "Character not found" } };
+      targetUserId = ch.created_by_id;
+    }
+    if (!targetUserId) return { status: 400, body: { error: "user_id or character_id required" } };
+    const target = getUserById(targetUserId);
+    if (!target) return { status: 404, body: { error: "Account not found" } };
     const targetRole = role === "admin" ? "admin" : "user";
-    if (ch.created_by_id === user.id) {
+    if (targetUserId === user.id) {
       return { status: 400, body: { error: "You cannot change your own role" } };
     }
     db.prepare("UPDATE users SET role = ?, updated_date = ? WHERE id = ?")
-      .run(targetRole, nowIso(), ch.created_by_id);
-    const updated = getUserById(ch.created_by_id);
+      .run(targetRole, nowIso(), targetUserId);
+    const updated = getUserById(targetUserId);
     // Keep entity mirror in sync if present
-    const userEnt = entities.User.get(ch.created_by_id);
-    if (userEnt) entities.User.update(ch.created_by_id, { role: targetRole });
-    return { status: 200, body: { success: true, role: updated.role } };
+    const userEnt = entities.User.get(targetUserId);
+    if (userEnt) entities.User.update(targetUserId, { role: targetRole });
+    return { status: 200, body: { success: true, role: updated.role, user_id: targetUserId, email: updated.email } };
   }
 
   if (action === "transfer_guild") {

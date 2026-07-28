@@ -24,8 +24,17 @@ export default function PlayerDetail({ character, onAction, onRefresh }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(character.name);
   const [savingName, setSavingName] = useState(false);
+  const [accountEmail, setAccountEmail] = useState(null);
 
   useEffect(() => { setNameDraft(character.name); setEditingName(false); }, [character.id, character.name]);
+
+  useEffect(() => {
+    setAccountEmail(null);
+    if (!character?.created_by_id) return;
+    api.entities.User.get(character.created_by_id)
+      .then((u) => setAccountEmail(u?.email || null))
+      .catch(() => setAccountEmail(null));
+  }, [character?.id, character?.created_by_id]);
 
   async function saveName() {
     const trimmed = nameDraft.trim();
@@ -74,6 +83,9 @@ export default function PlayerDetail({ character, onAction, onRefresh }) {
             </div>
           )}
           <p className="text-[11px] text-muted-foreground">Lv{character.level} · {character.race} {character.class}</p>
+          {accountEmail && (
+            <p className="text-[10px] text-muted-foreground/70 truncate" title={accountEmail}>Account · {accountEmail}</p>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-right">
           <span>✨ {(character.stardust || 0).toLocaleString()}</span>

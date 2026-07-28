@@ -18,6 +18,7 @@ import { powerRating } from "@/components/game/StatCompareBubble";
 import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
+import { playHaggleWinGrowl } from "@/lib/shopHaggleSfx";
 import {
   ShoppingBag, Sparkles, Clock, Gem, RefreshCw, ArrowUp, ArrowDown, Minus,
   Swords, FlaskConical, PackageOpen, Flame, MessageSquare,
@@ -245,6 +246,8 @@ export default function ShopPage() {
         });
         return;
       }
+
+      if (haggle) playHaggleWinGrowl();
 
       if (novaCost && anyCreated) void trackNovaSpend(character, novaCost, "shop_buy_legendary");
 

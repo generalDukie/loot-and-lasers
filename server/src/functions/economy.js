@@ -231,10 +231,16 @@ export async function BuyFuel(user) {
       if ((ch.nova_crystals || 0) < FUEL_PURCHASE_COST) httpErr(400, "Not enough Nova Crystals");
 
       const max = ch.max_fuel || FUEL_MAX;
+      const fuel = ch.fuel || 0;
+      // Need room for a full pack — otherwise Nova would burn with little/no fuel gained.
+      if (fuel > max - FUEL_PURCHASE_AMOUNT) {
+        httpErr(400, `Tank too full — need ${max - FUEL_PURCHASE_AMOUNT} fuel or less to buy +${FUEL_PURCHASE_AMOUNT}`);
+      }
+
       const patch = {
         ...(resetPatch || {}),
         nova_crystals: (ch.nova_crystals || 0) - FUEL_PURCHASE_COST,
-        fuel: Math.min(max, (ch.fuel || 0) + FUEL_PURCHASE_AMOUNT),
+        fuel: Math.min(max, fuel + FUEL_PURCHASE_AMOUNT),
         fuel_purchases: purchases + 1,
         fuel_updated_at: new Date().toISOString(),
       };

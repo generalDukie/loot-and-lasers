@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { Droppable, Draggable } from "@hello-pangea/dnd";
 import { motion } from "framer-motion";
 import CompactItemRow from "@/components/game/CompactItemRow";
 import StatCompareBubble, { powerRating } from "@/components/game/StatCompareBubble";
-import { staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
-import { ArrowUp, ArrowDown, Trash2, X } from "lucide-react";
+import { btnPress } from "@/lib/juicyMotion";
+import { ArrowUp, ArrowDown, Trash2, X, GripVertical } from "lucide-react";
 import { computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
 import { EQUIPPABLE_TYPES, listDissolveJunk } from "@/lib/inventoryJunk";
+import { sortItemsByOrder } from "@/lib/inventoryOrder";
+
+export const INVENTORY_DROPPABLE_ID = "inventory";
 
 /** True when the device can reliably hover (mouse/trackpad desktop). */
 function useDesktopHover() {
@@ -50,8 +54,18 @@ function UpgradeBadge({ item, eqSlot, characterClass }) {
 }
 
 // Shared inventory grid. Desktop: hover compare. Mobile: tap compare panel.
-// Dissolve Junk one-clicks unequippables + common gear worse than equipped.
-export default function InventoryGrid({ items, onEquip, onSell, onUse, onLock, onBulkSell, characterClass }) {
+// Drag to reorder; drop equipped gear here to unequip (via parent DragDropContext).
+export default function InventoryGrid({
+  items,
+  bagOrder,
+  onEquip,
+  onSell,
+  onUse,
+  onLock,
+  onBulkSell,
+  characterClass,
+  dragEnabled = true,
+}) {
   const desktopHover = useDesktopHover();
   const [hoveredId, setHoveredId] = useState(null);
   const [pinnedId, setPinnedId] = useState(null);
@@ -60,7 +74,10 @@ export default function InventoryGrid({ items, onEquip, onSell, onUse, onLock, o
   const [busyJunk, setBusyJunk] = useState(false);
   const rootRef = useRef(null);
   const equipped = items.filter((i) => i.is_equipped);
-  const unequipped = items.filter((i) => !i.is_equipped);
+  const unequipped = useMemo(
+    () => sortItemsByOrder(items.filter((i) => !i.is_equipped), bagOrder),
+    [items, bagOrder]
+  );
 
   const selectableItems = unequipped.filter((i) => !i.locked);
   const selectedItems = selectableItems.filter((i) => selected.includes(i.id));
@@ -104,6 +121,8 @@ export default function InventoryGrid({ items, onEquip, onSell, onUse, onLock, o
     if (!desktopHover) setPinnedId(null);
   };
 
+  const canDrag = dragEnabled && !bulkMode;
+
   return (
     <div ref={rootRef} className="flex flex-col h-full min-h-0 gap-3">
       {pinnedItem && EQUIPPABLE_TYPES.includes(pinnedItem.type) && !bulkMode && (
@@ -128,80 +147,113 @@ export default function InventoryGrid({ items, onEquip, onSell, onUse, onLock, o
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {unequipped.length === 0 ? (
-          <div className="bg-card/50 border border-border/50 rounded-2xl p-8 text-center painted-panel canvas-grain">
-            <p className="text-sm text-muted-foreground">No items in backpack.</p>
-          </div>
-        ) : (
-          <motion.div
-            variants={staggerParent}
-            initial="initial"
-            animate="animate"
-            className="grid gap-2 sm:grid-cols-2 pb-1"
+      <Droppable droppableId={INVENTORY_DROPPABLE_ID} isDropDisabled={!dragEnabled}>
+        {(dropProvided, dropSnapshot) => (
+          <div
+            ref={dropProvided.innerRef}
+            {...dropProvided.droppableProps}
+            className={`flex-1 min-h-0 overflow-y-auto rounded-xl transition-colors ${
+              dropSnapshot.isDraggingOver ? "bg-primary/10 ring-1 ring-primary/40" : ""
+            }`}
           >
-            {unequipped.map((item) => {
-              const comparable = !bulkMode && EQUIPPABLE_TYPES.includes(item.type);
-              const isSelectable = bulkMode && !item.locked;
-              const isSelected = selected.includes(item.id);
-              const showHoverBubble = desktopHover && comparable && hoveredId === item.id;
-              const isPinned = !desktopHover && pinnedId === item.id;
-              const eqSlot = equipped.find((i) => i.type === item.type) || null;
-              return (
-                <motion.div
-                  key={item.id}
-                  variants={staggerChild}
-                  layout
-                  onMouseEnter={() => {
-                    if (desktopHover && comparable) setHoveredId(item.id);
-                  }}
-                  onMouseLeave={() => {
-                    if (desktopHover) setHoveredId((h) => (h === item.id ? null : h));
-                  }}
-                  onClick={() => {
-                    if (isSelectable) {
-                      toggleSelect(item.id);
-                      return;
-                    }
-                    if (!desktopHover && comparable) {
-                      setPinnedId((p) => (p === item.id ? null : item.id));
-                    }
-                  }}
-                  className={isPinned ? "ring-1 ring-primary/60 rounded-lg" : undefined}
-                >
-                  <div className="relative">
-                    <CompactItemRow
-                      item={item}
-                      onEquip={comparable ? onEquip : null}
-                      onSell={onSell}
-                      onUse={onUse}
-                      selectable={isSelectable}
-                      selected={isSelected}
-                      onToggleSelect={() => toggleSelect(item.id)}
-                    />
-                    {comparable && <UpgradeBadge item={item} eqSlot={eqSlot} characterClass={characterClass} />}
-                    {showHoverBubble && (
-                      <div
-                        className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-[60] pointer-events-auto"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <StatCompareBubble
-                          item={item}
-                          equipped={eqSlot}
-                          onEquip={onEquip}
-                          onSell={onSell}
-                          onLock={onLock}
-                          characterClass={characterClass}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
+            {unequipped.length === 0 ? (
+              <div className="bg-card/50 border border-border/50 rounded-2xl p-8 text-center painted-panel canvas-grain min-h-[6rem] flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">
+                  {dropSnapshot.isDraggingOver ? "Drop here to unequip" : "No items in backpack."}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 pb-1">
+                {unequipped.map((item, index) => {
+                  const comparable = !bulkMode && EQUIPPABLE_TYPES.includes(item.type);
+                  const isSelectable = bulkMode && !item.locked;
+                  const isSelected = selected.includes(item.id);
+                  const showHoverBubble = desktopHover && comparable && hoveredId === item.id && !dropSnapshot.isDraggingOver;
+                  const isPinned = !desktopHover && pinnedId === item.id;
+                  const eqSlot = equipped.find((i) => i.type === item.type) || null;
+                  return (
+                    <Draggable
+                      key={item.id}
+                      draggableId={item.id}
+                      index={index}
+                      isDragDisabled={!canDrag}
+                    >
+                      {(dragProvided, dragSnapshot) => (
+                        <div
+                          ref={dragProvided.innerRef}
+                          {...dragProvided.draggableProps}
+                          onMouseEnter={() => {
+                            if (desktopHover && comparable && !dragSnapshot.isDragging) setHoveredId(item.id);
+                          }}
+                          onMouseLeave={() => {
+                            if (desktopHover) setHoveredId((h) => (h === item.id ? null : h));
+                          }}
+                          onClick={() => {
+                            if (dragSnapshot.isDragging) return;
+                            if (isSelectable) {
+                              toggleSelect(item.id);
+                              return;
+                            }
+                            if (!desktopHover && comparable) {
+                              setPinnedId((p) => (p === item.id ? null : item.id));
+                            }
+                          }}
+                          className={`${isPinned ? "ring-1 ring-primary/60 rounded-lg" : ""} ${
+                            dragSnapshot.isDragging ? "z-50 opacity-95" : ""
+                          }`}
+                          style={dragProvided.draggableProps.style}
+                        >
+                          <div className="relative flex items-stretch gap-0.5">
+                            {canDrag && (
+                              <div
+                                {...dragProvided.dragHandleProps}
+                                className="shrink-0 flex items-center px-0.5 rounded-l-lg text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing"
+                                title="Drag to reorder"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1 relative">
+                              <CompactItemRow
+                                item={item}
+                                onEquip={comparable ? onEquip : null}
+                                onSell={onSell}
+                                onUse={onUse}
+                                selectable={isSelectable}
+                                selected={isSelected}
+                                onToggleSelect={() => toggleSelect(item.id)}
+                              />
+                              {comparable && <UpgradeBadge item={item} eqSlot={eqSlot} characterClass={characterClass} />}
+                              {showHoverBubble && !dragSnapshot.isDragging && (
+                                <div
+                                  className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-[60] pointer-events-auto"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <StatCompareBubble
+                                    item={item}
+                                    equipped={eqSlot}
+                                    onEquip={onEquip}
+                                    onSell={onSell}
+                                    onLock={onLock}
+                                    characterClass={characterClass}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </Draggable>
+                  );
+                })}
+                {dropProvided.placeholder}
+              </div>
+            )}
+            {unequipped.length === 0 && dropProvided.placeholder}
+          </div>
         )}
-      </div>
+      </Droppable>
 
       {bulkMode && (
         <div className="shrink-0 flex flex-wrap items-center justify-center gap-2 p-2.5 rounded-xl border border-rose-500/30 bg-rose-500/5">

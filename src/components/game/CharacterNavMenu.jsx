@@ -64,17 +64,18 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
     setOpen((v) => !v);
   };
 
-  // Pin the panel under the chip in viewport space so GameCanvas overflow
-  // doesn't clip it — and keep it compact so nothing needs scrolling.
+  // Pin under the chip in viewport space so GameCanvas overflow:hidden can't clip it.
   useLayoutEffect(() => {
     if (!open || !rootRef.current) return undefined;
     const place = () => {
       const r = rootRef.current.getBoundingClientRect();
       const pad = 8;
-      const maxW = Math.min(window.innerWidth - pad * 2, 420);
       let left = r.left;
-      if (left + maxW > window.innerWidth - pad) left = Math.max(pad, window.innerWidth - pad - maxW);
-      setMenuPos({ top: r.bottom + 4, left });
+      const approxW = 420;
+      if (left + approxW > window.innerWidth - pad) {
+        left = Math.max(pad, window.innerWidth - pad - approxW);
+      }
+      setMenuPos({ top: r.bottom + 4, left: Math.max(pad, left) });
     };
     place();
     window.addEventListener("resize", place);
@@ -132,43 +133,42 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
           <motion.div
             role="menu"
             aria-label="Page navigation"
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.12 }}
-            className="fixed z-[80] flex items-start gap-1.5"
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="fixed z-[80] flex flex-col sm:flex-row items-stretch sm:items-start gap-2"
             style={{ top: menuPos.top, left: menuPos.left }}
           >
-            {/* Dense two-column nav — fits under the banner without scrolling */}
-            <div className="w-[15.5rem] rounded-xl border border-border/60 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel p-1.5">
+            {/* Vertical list — no max-height / no scroll */}
+            <div className="w-[13.5rem] shrink-0 rounded-xl border border-border/60 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel p-1.5">
               {NAV_GROUPS.map((g, gi) => (
-                <div key={g.name} className={gi > 0 ? "mt-1 pt-1 border-t border-border/40" : ""}>
-                  <span className="block text-[7px] font-display font-bold tracking-widest text-muted-foreground/50 px-1.5 mb-0.5">
+                <React.Fragment key={g.name}>
+                  {gi > 0 && <div className="h-px bg-border/40 my-0.5 mx-1" />}
+                  <span className="block text-[7px] font-display font-bold tracking-widest text-muted-foreground/50 px-2 mb-0.5">
                     {g.name.toUpperCase()}
                   </span>
-                  <div className="grid grid-cols-2 gap-0.5">
-                    {g.items.map(({ to, label, icon: Icon, color }) => (
-                      <NavLink
-                        key={to}
-                        to={to}
-                        title={label}
-                        onClick={close}
-                        className={({ isActive }) =>
-                          `flex items-center gap-1.5 rounded-lg px-1.5 py-1 transition-all ${
-                            isActive ? "bg-primary/15 border-glow-cyan" : "hover:bg-muted/40"
-                          }`
-                        }
-                      >
-                        {({ isActive }) => (
-                          <>
-                            <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "glow-cyan" : ""}`} style={{ color }} />
-                            <span className="font-display font-semibold text-[10px] tracking-wide truncate">{label}</span>
-                          </>
-                        )}
-                      </NavLink>
-                    ))}
-                  </div>
-                </div>
+                  {g.items.map(({ to, label, icon: Icon, color }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      title={label}
+                      onClick={close}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 rounded-lg px-2 py-1.5 transition-all ${
+                          isActive ? "bg-primary/15 border-glow-cyan" : "hover:bg-muted/40"
+                        }`
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <Icon className={`w-4 h-4 shrink-0 ${isActive ? "glow-cyan" : ""}`} style={{ color }} />
+                          <span className="font-display font-semibold text-xs tracking-wide whitespace-nowrap">{label}</span>
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
+                </React.Fragment>
               ))}
             </div>
 
@@ -176,10 +176,10 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
               to="/character"
               title="View loadout & inventory"
               onClick={close}
-              className="w-[9.75rem] shrink-0 rounded-xl border border-border/70 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel overflow-hidden hover:border-primary/45 transition-colors block"
+              className="w-[10.5rem] shrink-0 rounded-xl border border-border/70 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel overflow-hidden hover:border-primary/45 transition-colors block"
             >
-              <div className="flex items-center justify-between gap-1 px-2 py-1.5 border-b border-border/50 bg-muted/20">
-                <span className="text-[8px] font-display font-bold tracking-[0.16em] text-muted-foreground">
+              <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 border-b border-border/50 bg-muted/20">
+                <span className="text-[8px] font-display font-bold tracking-[0.18em] text-muted-foreground">
                   LOADOUT
                 </span>
                 <span className="text-[8px] font-display font-semibold text-muted-foreground/80">
@@ -187,39 +187,47 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
                 </span>
               </div>
 
-              <div className="px-1.5 pt-1.5 pb-1">
-                <EquippedFrame equippedItems={equippedItems} size={36}>
-                  <div className="w-[28px] h-[28px] rounded-md border border-cyan-400/40 bg-cyan-500/10 flex items-center justify-center">
+              <div className="px-2 pt-2 pb-1.5">
+                <EquippedFrame equippedItems={equippedItems} size={40}>
+                  <div className="w-[30px] h-[30px] rounded-lg border border-cyan-400/40 bg-cyan-500/10 flex items-center justify-center">
                     <UserRound className="w-3.5 h-3.5 text-cyan-300" />
                   </div>
                 </EquippedFrame>
               </div>
 
-              <div className="mx-1.5 mb-1.5 rounded-lg border border-border/50 bg-card/70 px-1.5 py-1.5">
+              <div className="mx-2 mb-2 rounded-lg border border-border/50 bg-card/70 px-2 py-1.5">
+                <div className="mb-1.5">
+                  <span className="text-[7px] font-display font-bold tracking-[0.16em] text-muted-foreground/70">
+                    STATS
+                  </span>
+                </div>
                 <div className="grid grid-cols-5 gap-0.5">
                   {PRIMARY_STATS.map((key) => (
                     <div
                       key={key}
-                      className="rounded bg-muted/30 border border-border/40 px-0.5 py-0.5 text-center"
+                      className="rounded-md bg-muted/30 border border-border/40 px-0.5 py-0.5 text-center"
                       title={key}
                     >
                       <div className="text-[9px] leading-none">{STAT_ICONS[key]}</div>
+                      <div className="text-[6px] font-display font-bold tracking-wide text-muted-foreground mt-0.5">
+                        {STAT_SHORT[key]}
+                      </div>
                       <div className="text-[9px] font-display font-bold text-foreground leading-tight">
                         {totals[key] || 0}
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-1 grid grid-cols-3 gap-0.5 text-center">
-                  <div className="rounded bg-muted/25 border border-border/35 px-0.5 py-0.5">
+                <div className="mt-1.5 grid grid-cols-3 gap-0.5 text-center">
+                  <div className="rounded-md bg-muted/25 border border-border/35 px-0.5 py-0.5">
                     <p className="text-[6px] font-display tracking-wide text-muted-foreground">DMG</p>
                     <p className="text-[9px] font-display font-bold text-foreground">{derived.damage ?? 0}</p>
                   </div>
-                  <div className="rounded bg-muted/25 border border-border/35 px-0.5 py-0.5">
+                  <div className="rounded-md bg-muted/25 border border-border/35 px-0.5 py-0.5">
                     <p className="text-[6px] font-display tracking-wide text-muted-foreground">HP</p>
                     <p className="text-[9px] font-display font-bold text-foreground">{derived.health ?? 0}</p>
                   </div>
-                  <div className="rounded bg-muted/25 border border-border/35 px-0.5 py-0.5">
+                  <div className="rounded-md bg-muted/25 border border-border/35 px-0.5 py-0.5">
                     <p className="text-[6px] font-display tracking-wide text-muted-foreground">ARM</p>
                     <p className="text-[9px] font-display font-bold text-foreground">
                       {typeof derived.armor === "number" ? `${derived.armor.toFixed(1)}%` : (derived.armor ?? 0)}

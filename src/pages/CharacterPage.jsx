@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
+import { DragDropContext } from "@hello-pangea/dnd";
 import { api } from "@/api/gameClient";
 import { useNavigate } from "react-router-dom";
 import { computeTotalStats, computeTotalStatsNoBuffs } from "@/lib/statEngine";
@@ -8,9 +9,10 @@ import { getGuildMembership } from "@/lib/guildUtils";
 import { getMyCharacter } from "@/lib/socialEngine";
 import StatBar from "@/components/game/StatBar";
 import CharacterHeader from "@/components/game/CharacterHeader";
-import InventoryGrid from "@/components/game/InventoryGrid";
+import InventoryGrid, { INVENTORY_DROPPABLE_ID } from "@/components/game/InventoryGrid";
 import CollectiblesLog from "@/components/game/CollectiblesLog";
 import DerivedStatsPanel from "@/components/game/DerivedStatsPanel";
+import { parseEquipDroppableId } from "@/components/game/EquippedFrame";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInventory } from "@/hooks/useInventory";
 import {
@@ -18,6 +20,12 @@ import {
   getAttributePurchaseCount,
   getNextAttributePointCost,
 } from "@/lib/gameData";
+import {
+  loadInventoryOrder,
+  saveInventoryOrder,
+  mergeInventoryOrder,
+  reorderIds,
+} from "@/lib/inventoryOrder";
 import { useToast } from "@/components/ui/use-toast";
 import { Star, Backpack } from "lucide-react";
 
@@ -25,6 +33,7 @@ export default function CharacterPage() {
   const [character, setCharacter] = useState(null);
   const [guild, setGuild] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [bagOrder, setBagOrder] = useState([]);
   const navigate = useNavigate();
   const characterRef = useRef(null);
   const allocateQueue = useRef(Promise.resolve());
@@ -56,6 +65,21 @@ export default function CharacterPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (character) inv.load(); }, [character?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { characterRef.current = character; }, [character]);
+  useEffect(() => {
+    if (!character?.id) return;
+    setBagOrder(loadInventoryOrder(character.id));
+  }, [character?.id]);
+  // Merge freshly granted / looted ids into the local bag order.
+  useEffect(() => {
+    if (!character?.id) return;
+    const ids = inv.items.filter((i) => !i.is_equipped).map((i) => i.id);
+    setBagOrder((prev) => {
+      const next = mergeInventoryOrder(prev, ids);
+      if (next.length === prev.length && next.every((id, i) => id === prev[i])) return prev;
+      saveInventoryOrder(character.id, next);
+      return next;
+    });
+  }, [inv.items, character?.id]);
   // Reload inventory when returning to this tab (e.g. after admin grant).
   useEffect(() => {
     const refresh = () => { if (characterRef.current) inv.load(); };
@@ -154,6 +178,39 @@ export default function CharacterPage() {
     }
   }
 
+  function onDragEnd(result) {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+
+    const fromEquip = parseEquipDroppableId(source.droppableId);
+    const toEquip = parseEquipDroppableId(destination.droppableId);
+    const fromBag = source.droppableId === INVENTORY_DROPPABLE_ID;
+    const toBag = destination.droppableId === INVENTORY_DROPPABLE_ID;
+    const item = inv.items.find((i) => i.id === draggableId);
+    if (!item) return;
+
+    // Equipped → bag = unequip
+    if (fromEquip && toBag) {
+      if (item.is_equipped) void handleEquip(item);
+      return;
+    }
+
+    // Bag → matching equip slot = equip
+    if (fromBag && toEquip) {
+      if (!item.is_equipped && item.type === toEquip) void handleEquip(item);
+      return;
+    }
+
+    // Reorder within bag
+    if (fromBag && toBag && source.index !== destination.index) {
+      const unequippedIds = inv.items.filter((i) => !i.is_equipped).map((i) => i.id);
+      const ordered = mergeInventoryOrder(bagOrder, unequippedIds);
+      const next = reorderIds(ordered, source.index, destination.index);
+      setBagOrder(next);
+      if (character?.id) saveInventoryOrder(character.id, next);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -175,6 +232,7 @@ export default function CharacterPage() {
   const fadeUp = (delay = 0) => ({ initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { ...spring, delay } });
 
   return (
+    <DragDropContext onDragEnd={onDragEnd}>
     <div className="flex flex-col md:flex-row gap-3 pt-1.5 md:h-[calc(100dvh-7rem)] md:overflow-hidden">
       {/* Left — header fills space above attributes */}
       <div className="md:flex-1 md:min-h-0 md:overflow-hidden flex flex-col gap-2">
@@ -183,6 +241,8 @@ export default function CharacterPage() {
             character={character}
             guild={guild}
             equippedItems={equippedItems}
+            onEquip={handleEquip}
+            onLock={inv.toggleLock}
             onUpdate={(updater) => setCharacter((c) => {
               const next = typeof updater === "function" ? updater(c) : updater;
               characterRef.current = next;
@@ -249,12 +309,17 @@ export default function CharacterPage() {
             <Backpack className="w-3.5 h-3.5 text-primary" /> INVENTORY
           </h2>
           <p className="text-[9px] text-muted-foreground/70 mb-2 italic">
-            <span className="hidden [@media(hover:hover)_and_(pointer:fine)]:inline">Hover gear to compare with the equipped piece.</span>
-            <span className="[@media(hover:hover)_and_(pointer:fine)]:hidden">Tap gear to compare with the equipped piece.</span>
+            <span className="hidden [@media(hover:hover)_and_(pointer:fine)]:inline">
+              Drag the grip to reorder · drag equipped gear here to unequip · hover to compare.
+            </span>
+            <span className="[@media(hover:hover)_and_(pointer:fine)]:hidden">
+              Drag to reorder · drag equipped gear here to unequip · tap gear to compare.
+            </span>
           </p>
           <div className="flex-1 min-h-0 flex flex-col -mr-1 pr-1">
             <InventoryGrid
               items={inv.items}
+              bagOrder={bagOrder}
               onEquip={handleEquip}
               onSell={handleSell}
               onBulkSell={handleBulkSell}
@@ -270,5 +335,6 @@ export default function CharacterPage() {
         </motion.div>
       </div>
     </div>
+    </DragDropContext>
   );
 }

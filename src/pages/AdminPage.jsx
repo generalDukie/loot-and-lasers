@@ -40,6 +40,13 @@ export default function AdminPage() {
           title: "Gear granted",
           description: `${data.item.name} → ${data.character_name || "character"}`,
         });
+      } else if (payload.action === "set_role") {
+        toast({
+          title: data?.role === "admin" ? "Account promoted" : "Account demoted",
+          description: data?.email
+            ? `${data.email} is now ${data.role} (all characters on that login).`
+            : `Role is now ${data?.role || "updated"}.`,
+        });
       } else {
         toast({ title: "Done" });
       }

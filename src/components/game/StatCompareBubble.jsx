@@ -65,6 +65,8 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
               {powerDelta > 0 ? <TrendingUp className="w-3 h-3" /> : powerDelta < 0 ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
               {powerDelta > 0 ? `+${powerDelta}` : powerDelta < 0 ? powerDelta : "="}
             </span>
+          ) : item.is_equipped ? (
+            <span className="text-[10px] text-primary font-bold">EQ</span>
           ) : (
             <span className="text-[10px] text-green-400 font-bold">NEW</span>
           )}
@@ -133,7 +135,11 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
       )}
 
       {/* Verdict */}
-      {equipped ? (
+      {item.is_equipped && !equipped ? (
+        <p className="text-[10px] text-primary mt-2 pt-2 border-t border-border/40 font-display font-bold tracking-wide">
+          CURRENTLY EQUIPPED
+        </p>
+      ) : equipped ? (
         <p className={`text-[10px] font-display font-bold mt-2 pt-2 border-t border-border/40 flex items-center gap-1 ${verdict === "better" ? "text-green-400" : verdict === "worse" ? "text-red-400" : "text-muted-foreground"}`}>
           {verdict === "better" ? <TrendingUp className="w-3 h-3" /> : verdict === "worse" ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
           {verdict === "better" ? "BETTER OVERALL" : verdict === "worse" ? "WORSE OVERALL" : "EVEN"}
@@ -148,6 +154,11 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
         {onEquip && !item.is_equipped && (
           <button onClick={() => onEquip(item)} className="flex items-center gap-1 text-[10px] bg-primary/15 hover:bg-primary/25 text-primary px-2 py-1 rounded-md font-medium transition-colors">
             <Swords className="w-3 h-3" /> Equip
+          </button>
+        )}
+        {onEquip && item.is_equipped && (
+          <button onClick={() => onEquip(item)} className="flex items-center gap-1 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground px-2 py-1 rounded-md font-medium transition-colors">
+            Unequip
           </button>
         )}
         {onSell && !item.is_equipped && !locked && (

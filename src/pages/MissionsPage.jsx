@@ -41,6 +41,17 @@ export default function MissionsPage() {
     );
   }
 
+  const maxFuel = character.max_fuel || FUEL_MAX;
+  const fuelNow = character.fuel ?? 0;
+  const tankTooFull = fuelNow > maxFuel - FUEL_PURCHASE_AMOUNT;
+  const outOfFuelBuys = (character.fuel_purchases || 0) >= FUEL_PURCHASE_MAX;
+  const buyFuelDisabled = outOfFuelBuys || tankTooFull;
+  const buyFuelTitle = outOfFuelBuys
+    ? "No refuels left this cycle"
+    : tankTooFull
+      ? `Need ${maxFuel - FUEL_PURCHASE_AMOUNT} fuel or less to buy +${FUEL_PURCHASE_AMOUNT}`
+      : `Buy ${FUEL_PURCHASE_AMOUNT} fuel for ${FUEL_PURCHASE_COST} 💎 (${FUEL_PURCHASE_MAX - (character.fuel_purchases || 0)} left)`;
+
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
       {launchAnim && <MissionLaunchOverlay mission={launchAnim} onDone={() => setLaunchAnim(null)} />}
@@ -74,8 +85,8 @@ export default function MissionsPage() {
           </span>
           <button
             onClick={handleBuyFuel}
-            disabled={(character.fuel_purchases || 0) >= FUEL_PURCHASE_MAX}
-            title={(character.fuel_purchases || 0) >= FUEL_PURCHASE_MAX ? "No refuels left this cycle" : `Buy ${FUEL_PURCHASE_AMOUNT} fuel for ${FUEL_PURCHASE_COST} 💎 (${FUEL_PURCHASE_MAX - (character.fuel_purchases || 0)} left)`}
+            disabled={buyFuelDisabled}
+            title={buyFuelTitle}
             className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/20 transition-colors"
           >
             +{FUEL_PURCHASE_AMOUNT} · {FUEL_PURCHASE_COST}💎 ({FUEL_PURCHASE_MAX - (character.fuel_purchases || 0)})

@@ -12,7 +12,7 @@ import { profileDisplayName, normalizeLegacyDisplay, LEGACY_DISPLAY_FAMILY } fro
 
 const paneClass = "bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl";
 
-export default function CharacterHeader({ character, guild, equippedItems, onUpdate }) {
+export default function CharacterHeader({ character, guild, equippedItems, onUpdate, onEquip, onLock }) {
   const [bio, setBio] = useState("");
   const [saving, setSaving] = useState(false);
   const race = RACES[character.race];
@@ -83,7 +83,15 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
           className={`flex-1 min-w-0 min-h-0 ${paneClass} p-3 flex gap-3 overflow-hidden`}
         >
           <div className="flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center gap-2 overflow-y-auto">
-            <EquippedFrame equippedItems={equippedItems} size={53}>
+            <EquippedFrame
+              equippedItems={equippedItems}
+              size={53}
+              interactive
+              showHoverStats
+              characterClass={character.class}
+              onEquip={onEquip}
+              onLock={onLock}
+            >
               <div className="relative">
                 <div
                   className="rounded-xl overflow-hidden border border-primary/35 bg-muted/15"

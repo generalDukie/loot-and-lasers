@@ -456,6 +456,16 @@ export function useMissionManager() {
 
   const handleBuyFuel = useCallback(async () => {
     if ((character.fuel_purchases || 0) >= FUEL_PURCHASE_MAX) return;
+    const maxFuel = character.max_fuel || FUEL_MAX;
+    const fuel = character.fuel ?? 0;
+    if (fuel > maxFuel - FUEL_PURCHASE_AMOUNT) {
+      toast({
+        title: "Tank too full",
+        description: `Burn down to ${maxFuel - FUEL_PURCHASE_AMOUNT} or less before buying +${FUEL_PURCHASE_AMOUNT} fuel.`,
+        variant: "destructive",
+      });
+      return;
+    }
     if ((character.nova_crystals || 0) < FUEL_PURCHASE_COST) {
       toast({ title: "Not enough Nova Crystals", description: `Need ${FUEL_PURCHASE_COST} 💎 to refuel.`, variant: "destructive" });
       return;

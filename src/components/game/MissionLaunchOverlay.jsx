@@ -56,7 +56,7 @@ export default function MissionLaunchOverlay({ mission, onDone }) {
         />
         <motion.div
           className="absolute w-[500px] h-[500px] rounded-full blur-3xl"
-          style={{ background: "radial-gradient(circle, hsl(172 62% 45% / 0.35), transparent 60%)", bottom: "5%", right: "-5%" }}
+          style={{ background: "radial-gradient(circle, hsl(190 90% 45% / 0.35), transparent 60%)", bottom: "5%", right: "-5%" }}
           animate={{ x: [0, -50, 0], y: [0, -30, 0], scale: [1.1, 1, 1.1] }}
           transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
         />
@@ -76,7 +76,7 @@ export default function MissionLaunchOverlay({ mission, onDone }) {
               style={{
                 width: 1 + Math.random() * 3,
                 height: 1 + Math.random() * 3,
-                background: i % 3 === 0 ? "hsl(172 62% 78%)" : i % 3 === 1 ? "hsl(38 85% 72%)" : "white",
+                background: i % 3 === 0 ? "hsl(190 90% 80%)" : i % 3 === 1 ? "hsl(280 60% 80%)" : "white",
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
               }}
@@ -153,7 +153,7 @@ export default function MissionLaunchOverlay({ mission, onDone }) {
             {/* Thrust glow */}
             <motion.div
               className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-12 h-16 rounded-full blur-xl"
-              style={{ background: "radial-gradient(circle, hsl(172 62% 55%), hsl(38 90% 56%) 50%, transparent 70%)" }}
+              style={{ background: "radial-gradient(circle, hsl(190 90% 60%), hsl(270 60% 55%) 50%, transparent 70%)" }}
               initial={{ opacity: 0, scaleY: 0.5 }}
               animate={phase >= 1 ? { opacity: [0.5, 1, 0.6, 0.9], scaleY: [0.5, 1.3, 0.7, 1.1] } : { opacity: 0 }}
               transition={{ duration: 0.4, repeat: phase >= 1 && phase < 2 ? Infinity : 0, repeatType: "reverse" }}

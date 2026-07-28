@@ -49,7 +49,7 @@ export default function NexusOwnerPanel({ nexus, now }) {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
-            <Stat icon={Users} label="Members" value={nexus.owner_member_count || 0} color="#2DD4BF" />
+            <Stat icon={Users} label="Members" value={nexus.owner_member_count || 0} color="#22D3EE" />
             <Stat icon={Clock} label="Time Held" value={formatReign(nexus.captured_at, now)} color="#A855F7" />
             <Stat icon={Shield} label="Defenses" value={nexus.defense_streak || 0} color="#34D399" />
             <Stat icon={Trophy} label="Server Rank" value="#1" color="#FFD700" />

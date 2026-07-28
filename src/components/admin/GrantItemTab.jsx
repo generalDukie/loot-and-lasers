@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Search, Gift, Coins, Gem, Fuel, Send, Swords } from "lucide-react";
+import { Search, Gift, Coins, Gem, Fuel, Send, Swords, User } from "lucide-react";
 import { api } from "@/api/gameClient";
+import { getMyCharacter, getMyCharacters } from "@/lib/socialEngine";
 import ItemGrantForm from "@/components/admin/ItemGrantForm";
 
 export default function GrantItemTab({ onAction }) {
@@ -8,16 +9,28 @@ export default function GrantItemTab({ onAction }) {
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState(null);
   const [searching, setSearching] = useState(false);
+  const [myChars, setMyChars] = useState([]);
+  const [activeId, setActiveId] = useState(null);
 
   // currency / xp deltas
   const [deltas, setDeltas] = useState({ stardust: 0, nova_crystals: 0, fuel: 0, arena_attempts: 0, experience: 0 });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [active, all] = await Promise.all([getMyCharacter({ force: true }), getMyCharacters()]);
+        setMyChars(all || []);
+        setActiveId(active?.id || null);
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
     setSearching(true);
     const t = setTimeout(async () => {
       try {
-        const chars = await api.entities.Character.list("-created_date", 500);
+        const chars = await api.entities.Character.list("-created_date", 2000);
         const q = query.trim().toLowerCase();
         setResults(chars.filter((c) => (c.name || "").toLowerCase().includes(q)));
       } finally { setSearching(false); }
@@ -38,6 +51,26 @@ export default function GrantItemTab({ onAction }) {
       {/* Character search */}
       <div className="painted-panel canvas-grain p-3 space-y-2">
         <label className="text-xs font-display font-semibold text-muted-foreground">RECIPIENT</label>
+        {myChars.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {myChars.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { setSelected(c); setQuery(""); setResults([]); }}
+                className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 ${
+                  selected?.id === c.id
+                    ? "bg-primary/20 border-primary/50 text-primary"
+                    : "bg-muted/25 border-border/30 text-muted-foreground hover:bg-muted/40"
+                }`}
+              >
+                <User className="w-3 h-3" />
+                {c.name}
+                {c.id === activeId && <span className="text-[9px] opacity-70">(active)</span>}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="relative">
           <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -98,9 +131,9 @@ export default function GrantItemTab({ onAction }) {
               <h2 className="font-display font-semibold text-sm">Grant Currency / XP</h2>
             </div>
             <div className="grid grid-cols-1 gap-2">
-              <CurrencyRow icon="✨" color="text-teal-400" label="Stardust" value={deltas.stardust} onChange={(v) => setDeltas({ ...deltas, stardust: v })} />
-              <CurrencyRow icon={Gem} color="text-purple-400" label="Nova Crystals" value={deltas.nova_crystals} onChange={(v) => setDeltas({ ...deltas, nova_crystals: v })} />
-              <CurrencyRow icon={Fuel} color="text-orange-400" label="Fuel" value={deltas.fuel} onChange={(v) => setDeltas({ ...deltas, fuel: v })} />
+              <CurrencyRow icon="✨" color="text-purple-400" label="Stardust" value={deltas.stardust} onChange={(v) => setDeltas({ ...deltas, stardust: v })} />
+              <CurrencyRow icon={Gem} color="text-amber-400" label="Nova Crystals" value={deltas.nova_crystals} onChange={(v) => setDeltas({ ...deltas, nova_crystals: v })} />
+              <CurrencyRow icon={Fuel} color="text-lime-400" label="Fuel" value={deltas.fuel} onChange={(v) => setDeltas({ ...deltas, fuel: v })} />
               <CurrencyRow icon={Swords} color="text-rose-400" label="Arena Attempts" value={deltas.arena_attempts} onChange={(v) => setDeltas({ ...deltas, arena_attempts: v })} />
               <CurrencyRow icon="⭐" color="text-amber-300" label="Experience" value={deltas.experience} onChange={(v) => setDeltas({ ...deltas, experience: v })} />
             </div>

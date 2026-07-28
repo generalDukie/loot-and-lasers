@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Fuel, Gem, Plus, Sparkles } from "lucide-react";
+import { FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 
 // Vertical stack of compact currency pills (Fuel, Stardust, Crystals).
 // Stretches to match the adjacent character portrait height; `large` scales
@@ -20,14 +21,14 @@ export default function CurrencyStack({ character, large = false }) {
   return (
     <div className="flex flex-col h-full gap-0.5">
       <div className="flex-1 flex items-center gap-1.5 px-2 rounded-lg bg-background/90 border border-border/50">
-        <Fuel className={`${ic} shrink-0`} style={{ color: "#39FF14" }} />
-        <span className={`font-display font-bold ${txc} tabular-nums leading-none text-white`}>{fuel.toLocaleString()}</span>
-        <span className={`${lbc} text-white/80 uppercase tracking-wider hidden sm:inline leading-none`}>Fuel</span>
+        <Fuel className={`${ic} shrink-0`} style={{ color: FUEL_COLOR }} />
+        <span className={`font-display font-bold ${txc} tabular-nums leading-none`} style={{ color: FUEL_COLOR }}>{fuel.toLocaleString()}</span>
+        <span className={`${lbc} uppercase tracking-wider hidden sm:inline leading-none`} style={{ color: FUEL_COLOR }}>Fuel</span>
       </div>
       <div className="flex-1 flex items-center gap-1.5 px-2 rounded-lg bg-background/90 border border-border/50">
-        <Sparkles className={`${ic} shrink-0`} style={{ color: "#C084FC" }} />
-        <span className={`font-display font-bold ${txc} tabular-nums leading-none text-white`}>{stardust.toLocaleString()}</span>
-        <span className={`${lbc} text-white/80 uppercase tracking-wider hidden sm:inline leading-none`}>Stardust</span>
+        <Sparkles className={`${ic} shrink-0`} style={{ color: STARDUST_COLOR }} />
+        <span className={`font-display font-bold ${txc} tabular-nums leading-none`} style={{ color: STARDUST_COLOR }}>{stardust.toLocaleString()}</span>
+        <span className={`${lbc} uppercase tracking-wider hidden sm:inline leading-none`} style={{ color: STARDUST_COLOR }}>Stardust</span>
       </div>
       <Link to="/crystal-store" className="group flex-1 flex items-center gap-1.5 px-2 rounded-lg bg-background/90 border border-amber-500/30 hover:bg-amber-500/15 transition-colors">
         <Gem className={`${ic} shrink-0`} style={{ color: "#FFD700" }} />

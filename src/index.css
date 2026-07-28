@@ -6,45 +6,43 @@
 
 @layer base {
   :root {
-    --background: 235 22% 6%;
-    --foreground: 40 12% 93%;
-    --card: 235 20% 9%;
-    --card-foreground: 40 12% 93%;
-    --popover: 235 20% 9%;
-    --popover-foreground: 40 12% 93%;
-    /* Teal primary (was ice cyan) — still sci-fi, less blue wash */
-    --primary: 172 62% 46%;
-    --primary-foreground: 235 22% 6%;
-    /* Warmer violet secondary */
-    --secondary: 285 52% 58%;
-    --secondary-foreground: 40 12% 98%;
-    --muted: 235 16% 14%;
-    --muted-foreground: 40 8% 58%;
-    --accent: 285 52% 58%;
-    --accent-foreground: 40 12% 98%;
+    --background: 230 25% 6%;
+    --foreground: 210 40% 92%;
+    --card: 230 25% 9%;
+    --card-foreground: 210 40% 92%;
+    --popover: 230 25% 9%;
+    --popover-foreground: 210 40% 92%;
+    --primary: 190 90% 50%;
+    --primary-foreground: 230 25% 6%;
+    --secondary: 270 60% 55%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 230 20% 14%;
+    --muted-foreground: 210 15% 55%;
+    --accent: 270 60% 55%;
+    --accent-foreground: 210 40% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 235 14% 18%;
-    --input: 235 14% 18%;
-    --ring: 172 62% 46%;
-    --chart-1: 172 62% 46%;
-    --chart-2: 285 52% 58%;
-    --chart-3: 38 90% 56%;
-    --chart-4: 150 55% 48%;
+    --border: 230 20% 18%;
+    --input: 230 20% 18%;
+    --ring: 190 90% 50%;
+    --chart-1: 190 90% 50%;
+    --chart-2: 270 60% 55%;
+    --chart-3: 150 60% 50%;
+    --chart-4: 45 90% 60%;
     --chart-5: 0 70% 55%;
     --radius: 0.75rem;
     --font-heading: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
     --font-body: 'Exo 2', ui-sans-serif, system-ui, sans-serif;
     --font-display: 'Orbitron', ui-sans-serif, system-ui, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    --sidebar-background: 235 22% 8%;
-    --sidebar-foreground: 40 12% 93%;
-    --sidebar-primary: 172 62% 46%;
-    --sidebar-primary-foreground: 235 22% 6%;
-    --sidebar-accent: 235 16% 14%;
-    --sidebar-accent-foreground: 40 12% 93%;
-    --sidebar-border: 235 14% 18%;
-    --sidebar-ring: 172 62% 46%;
+    --sidebar-background: 230 25% 8%;
+    --sidebar-foreground: 210 40% 92%;
+    --sidebar-primary: 190 90% 50%;
+    --sidebar-primary-foreground: 230 25% 6%;
+    --sidebar-accent: 230 20% 14%;
+    --sidebar-accent-foreground: 210 40% 92%;
+    --sidebar-border: 230 20% 18%;
+    --sidebar-ring: 190 90% 50%;
   }
 }
 
@@ -57,11 +55,11 @@
   }
 }
 
-/* Sci-fi glow effects — keyed to teal primary + violet accent */
-.glow-cyan { text-shadow: 0 0 10px hsl(172 62% 46% / 0.5), 0 0 20px hsl(172 62% 46% / 0.2); }
-.glow-purple { text-shadow: 0 0 10px hsl(285 52% 58% / 0.5), 0 0 20px hsl(285 52% 58% / 0.2); }
-.border-glow-cyan { box-shadow: 0 0 8px hsl(172 62% 46% / 0.15), inset 0 0 8px hsl(172 62% 46% / 0.05); }
-.border-glow-purple { box-shadow: 0 0 8px hsl(285 52% 58% / 0.15), inset 0 0 8px hsl(285 52% 58% / 0.05); }
+/* Sci-fi glow effects */
+.glow-cyan { text-shadow: 0 0 10px hsl(190 90% 50% / 0.5), 0 0 20px hsl(190 90% 50% / 0.2); }
+.glow-purple { text-shadow: 0 0 10px hsl(270 60% 55% / 0.5), 0 0 20px hsl(270 60% 55% / 0.2); }
+.border-glow-cyan { box-shadow: 0 0 8px hsl(190 90% 50% / 0.15), inset 0 0 8px hsl(190 90% 50% / 0.05); }
+.border-glow-purple { box-shadow: 0 0 8px hsl(270 60% 55% / 0.15), inset 0 0 8px hsl(270 60% 55% / 0.05); }
 
 /* ═══════════════════════════════════════════ */
 /* Hand-painted fantasy-cartoon art direction */
@@ -70,13 +68,13 @@
 /* Painterly panel — layered gradient, bevelled rim, soft cast shadow */
 .painted-panel {
   background:
-    linear-gradient(180deg, hsl(235 20% 11%) 0%, hsl(238 24% 7%) 100%);
-  border: 1px solid hsl(235 14% 20%);
+    linear-gradient(180deg, hsl(230 24% 11%) 0%, hsl(232 30% 7%) 100%);
+  border: 1px solid hsl(230 20% 20%);
   border-radius: 1.1rem;
   box-shadow:
-    0 10px 28px hsl(238 40% 2% / 0.6),
+    0 10px 28px hsl(232 40% 2% / 0.6),
     inset 0 1px 0 hsl(0 0% 100% / 0.06),
-    inset 0 0 0 1px hsl(235 14% 16% / 0.8);
+    inset 0 0 0 1px hsl(230 20% 16% / 0.8);
 }
 
 /* Decorative illustrated frame — glowing corner studs */
@@ -88,34 +86,34 @@
   width: 16px;
   height: 16px;
   pointer-events: none;
-  border: 2px solid hsl(172 62% 46% / 0.55);
+  border: 2px solid hsl(190 90% 50% / 0.55);
   border-radius: 4px;
-  filter: drop-shadow(0 0 3px hsl(172 62% 46% / 0.4));
+  filter: drop-shadow(0 0 3px hsl(190 90% 50% / 0.4));
 }
 .painted-frame::before { top: 9px; left: 9px; border-right: 0; border-bottom: 0; border-top-left-radius: 8px; }
 .painted-frame::after { bottom: 9px; right: 9px; border-left: 0; border-top: 0; border-bottom-right-radius: 8px; }
 
 /* Large readable painted button — chunky bevel, tactile press */
 .painted-btn {
-  background: linear-gradient(180deg, hsl(172 62% 52%) 0%, hsl(174 60% 38%) 100%);
-  border: 2px solid hsl(174 55% 28%);
-  color: hsl(235 22% 6%);
+  background: linear-gradient(180deg, hsl(190 90% 56%) 0%, hsl(192 90% 42%) 100%);
+  border: 2px solid hsl(192 90% 30%);
+  color: hsl(232 30% 6%);
   border-radius: 0.75rem;
-  box-shadow: 0 5px 0 hsl(174 55% 24%), inset 0 1px 0 hsl(0 0% 100% / 0.35);
+  box-shadow: 0 5px 0 hsl(192 90% 26%), inset 0 1px 0 hsl(0 0% 100% / 0.35);
   font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: 0.04em;
   transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
 }
-.painted-btn:hover { box-shadow: 0 5px 0 hsl(174 55% 24%), 0 0 14px hsl(172 62% 46% / 0.35); }
+.painted-btn:hover { box-shadow: 0 5px 0 hsl(192 90% 26%), 0 0 14px hsl(190 90% 50% / 0.35); }
 .painted-btn:active {
   transform: translateY(4px);
-  box-shadow: 0 1px 0 hsl(174 55% 24%), inset 0 1px 0 hsl(0 0% 100% / 0.3);
+  box-shadow: 0 1px 0 hsl(192 90% 26%), inset 0 1px 0 hsl(0 0% 100% / 0.3);
 }
 .painted-btn-accent {
-  background: linear-gradient(180deg, hsl(285 52% 64%) 0%, hsl(288 50% 46%) 100%);
-  border-color: hsl(288 48% 34%);
-  box-shadow: 0 5px 0 hsl(288 48% 28%), inset 0 1px 0 hsl(0 0% 100% / 0.3);
+  background: linear-gradient(180deg, hsl(270 60% 62%) 0%, hsl(272 60% 46%) 100%);
+  border-color: hsl(272 60% 34%);
+  box-shadow: 0 5px 0 hsl(272 60% 30%), inset 0 1px 0 hsl(0 0% 100% / 0.3);
 }
 
 /* Canvas grain — subtle painterly paper texture overlay */
@@ -143,13 +141,13 @@
 .metal-grid {
   background-color: transparent;
   background-image:
-    linear-gradient(hsl(172 62% 46% / 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(285 52% 58% / 0.028) 1px, transparent 1px);
+    linear-gradient(hsl(190 90% 50% / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(270 60% 55% / 0.03) 1px, transparent 1px);
   background-size: 30px 30px, 30px 30px;
 }
 
 /* Neon glow text variants */
-.glow-violet { text-shadow: 0 0 10px hsl(285 70% 62% / 0.5), 0 0 20px hsl(285 70% 62% / 0.2); }
+.glow-violet { text-shadow: 0 0 10px hsl(270 90% 60% / 0.5), 0 0 20px hsl(270 90% 60% / 0.2); }
 .glow-green { text-shadow: 0 0 10px hsl(120 100% 50% / 0.5), 0 0 20px hsl(120 100% 50% / 0.2); }
 .glow-orange { text-shadow: 0 0 10px hsl(30 100% 55% / 0.5), 0 0 20px hsl(30 100% 55% / 0.2); }
 
@@ -170,17 +168,17 @@
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: hsl(235 22% 6%); }
-::-webkit-scrollbar-thumb { background: hsl(235 14% 22%); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: hsl(172 62% 46% / 0.45); }
+::-webkit-scrollbar-track { background: hsl(230 25% 6%); }
+::-webkit-scrollbar-thumb { background: hsl(230 20% 22%); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(190 90% 50% / 0.5); }
 
-/* Deep space base — warmer violet / amber nebula, less cyan cast */
+/* Deep space base */
 .stars-bg {
-  background-color: hsl(238 28% 4%);
+  background-color: hsl(232 32% 4%);
   background-image:
-    radial-gradient(ellipse 90% 55% at 50% -10%, hsl(275 38% 14% / 0.48), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 100% 100%, hsl(28 45% 14% / 0.2), transparent 50%),
-    radial-gradient(ellipse 50% 35% at 0% 80%, hsl(168 35% 12% / 0.18), transparent 50%);
+    radial-gradient(ellipse 90% 55% at 50% -10%, hsl(260 40% 14% / 0.45), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, hsl(195 50% 12% / 0.25), transparent 50%),
+    radial-gradient(ellipse 50% 35% at 0% 80%, hsl(285 45% 12% / 0.2), transparent 50%);
 }
 
 /* Nebula layer — soft drifting cosmic clouds.
@@ -192,11 +190,11 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 720px 420px at 15% 18%, hsl(285 55% 34% / 0.24), transparent 62%),
-    radial-gradient(ellipse 640px 400px at 85% 22%, hsl(32 70% 40% / 0.14), transparent 64%),
-    radial-gradient(ellipse 780px 480px at 48% 88%, hsl(320 48% 28% / 0.16), transparent 65%),
-    radial-gradient(ellipse 560px 360px at 92% 70%, hsl(168 45% 28% / 0.12), transparent 60%),
-    radial-gradient(ellipse 520px 340px at 6% 72%, hsl(255 50% 30% / 0.14), transparent 58%);
+    radial-gradient(ellipse 720px 420px at 15% 18%, hsl(285 55% 32% / 0.22), transparent 62%),
+    radial-gradient(ellipse 640px 400px at 85% 22%, hsl(195 75% 36% / 0.18), transparent 64%),
+    radial-gradient(ellipse 780px 480px at 48% 88%, hsl(320 50% 28% / 0.16), transparent 65%),
+    radial-gradient(ellipse 560px 360px at 92% 70%, hsl(255 50% 30% / 0.12), transparent 60%),
+    radial-gradient(ellipse 520px 340px at 6% 72%, hsl(210 60% 32% / 0.12), transparent 58%);
   filter: blur(0.5px);
   animation: nebula-drift 90s ease-in-out infinite alternate;
 }

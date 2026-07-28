@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { STAT_ICONS, CLASSES, getStatDescription, STAT_COLORS } from "@/lib/gameData";
+import { STAT_ICONS, CLASSES, getStatDescription, STAT_COLORS, STARDUST_COLOR } from "@/lib/gameData";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 const STAT_SHORT = {
@@ -140,9 +140,10 @@ export default function StatBar({
               disabled={!canAdd}
               className={`mt-0.5 w-full min-h-6 rounded-lg border text-[9px] font-display font-bold tracking-wide flex items-center justify-center gap-0.5 transition-colors select-none touch-none ${
                 canAdd
-                  ? "border-primary/40 bg-primary/15 text-primary hover:bg-primary/25 hover:border-primary/60"
+                  ? "border-border/40 bg-muted/20 hover:bg-muted/35"
                   : "border-border/35 bg-muted/20 text-muted-foreground/40 cursor-not-allowed"
               }`}
+              style={canAdd ? { color: STARDUST_COLOR, borderColor: `${STARDUST_COLOR}66`, backgroundColor: `${STARDUST_COLOR}22` } : undefined}
               aria-label={`Buy ${stat} point${cost != null ? ` for ${cost} stardust` : ""}. Hold to keep buying.`}
               title={cost != null ? `✨${cost.toLocaleString()} · hold to auto-buy` : "Hold to auto-buy"}
             >

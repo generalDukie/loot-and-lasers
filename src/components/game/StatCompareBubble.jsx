@@ -1,6 +1,6 @@
 import React from "react";
 import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle, Power } from "lucide-react";
-import { STAT_ICONS, RARITY_COLORS, computeStardustValue, CLASSES } from "@/lib/gameData";
+import { STAT_ICONS, RARITY_COLORS, computeStardustValue, CLASSES, STARDUST_COLOR } from "@/lib/gameData";
 
 const STATS = ["strength", "agility", "intellect", "vitality", "luck"];
 
@@ -151,7 +151,7 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
           </button>
         )}
         {onSell && !item.is_equipped && !locked && (
-          <button onClick={() => onSell(item)} className="flex items-center gap-1 text-[10px] bg-accent/15 hover:bg-accent/25 text-accent px-2 py-1 rounded-md font-medium transition-colors">
+          <button onClick={() => onSell(item)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md font-medium transition-colors hover:opacity-90" style={{ color: STARDUST_COLOR, backgroundColor: `${STARDUST_COLOR}26` }}>
             <Recycle className="w-3 h-3" /> Dissolve {computeStardustValue(item)}✨
           </button>
         )}

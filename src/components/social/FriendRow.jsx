@@ -31,7 +31,7 @@ export default function FriendRow({ friend, presence, onMessage, onProfile, onRe
       initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
       className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/15 border border-border/20 hover:border-primary/30 transition-colors"
     >
-      <div className="relative w-10 h-10 rounded-lg bg-muted/40 border border-border/40 flex items-center justify-center font-display font-bold shrink-0" style={{ color: "#2DD4BF" }}>
+      <div className="relative w-10 h-10 rounded-lg bg-muted/40 border border-border/40 flex items-center justify-center font-display font-bold shrink-0" style={{ color: "#22D3EE" }}>
         {(friend.name || "?")[0]?.toUpperCase()}
         <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card" style={{ background: dotColor }} />
       </div>

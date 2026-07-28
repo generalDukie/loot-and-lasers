@@ -33,15 +33,15 @@ export default function ItemGrantForm({ character, onAction, onGranted }) {
     } else {
       item = generateItem(rarity, Math.max(1, level), type);
     }
-    await onAction({ action: "give_item", character_id: character.id, item });
-    onGranted && onGranted();
+    const res = await onAction({ action: "give_item", character_id: character.id, item });
+    if (res?.item) onGranted?.(res.item);
   }
   async function grantConsumable() {
     const def = CONSUMABLES[consumableIdx];
     if (!def) return;
     const item = consumableItem(def);
-    await onAction({ action: "give_item", character_id: character.id, item });
-    onGranted && onGranted();
+    const res = await onAction({ action: "give_item", character_id: character.id, item });
+    if (res?.item) onGranted?.(res.item);
   }
 
   return (

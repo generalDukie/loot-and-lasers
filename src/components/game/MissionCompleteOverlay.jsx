@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import { RARITY_COLORS, STAT_ICONS, gearTypeLabel } from "@/lib/gameData";
+import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, STARDUST_COLOR, FUEL_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import confetti from "canvas-confetti";
 import { Star, Zap, Fuel, TrendingUp, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical, ArrowRight } from "lucide-react";
@@ -95,15 +95,15 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
             )}
           </RewardCard>
 
-          <RewardCard icon={<Star className="w-5 h-5" />} accent="#A855F7">
+          <RewardCard icon={<Star className="w-5 h-5" />} accent={STARDUST_COLOR}>
             <div className="flex items-baseline justify-between">
-              <span className="text-xs font-display font-semibold text-purple-300">STARDUST</span>
-              <span className="font-display font-bold text-purple-400 text-lg">+{stardust.total || 0}</span>
+              <span className="text-xs font-display font-semibold" style={{ color: STARDUST_COLOR }}>STARDUST</span>
+              <span className="font-display font-bold text-lg" style={{ color: STARDUST_COLOR }}>+{stardust.total || 0}</span>
             </div>
             {sdChips.length > 0 && (
               <div className="flex flex-wrap items-center gap-1 mt-1">
                 <span className="text-[10px] text-muted-foreground">base {stardust.base}</span>
-                {sdChips.map((c) => <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300">{c}</span>)}
+                {sdChips.map((c) => <span key={c} className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: `${STARDUST_COLOR}1a`, color: STARDUST_COLOR }}>{c}</span>)}
               </div>
             )}
           </RewardCard>
@@ -170,7 +170,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
             </RewardCard>
           )}
 
-          <div className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground pt-1">
+          <div className="flex items-center justify-center gap-1 text-[10px] pt-1" style={{ color: FUEL_COLOR }}>
             <Fuel className="w-3 h-3" /> {fuelSpent} fuel spent
           </div>
         </div>

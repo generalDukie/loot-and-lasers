@@ -44,8 +44,8 @@ export default function ActivityCountdownChip({ character }) {
     const remaining = missionEnd - now;
     active = {
       icon: Rocket,
-      color: "#2DD4BF",
-      soft: "rgba(45,212,191,0.14)",
+      color: "#00E5FF",
+      soft: "rgba(0,229,255,0.14)",
       to: "/missions",
       remaining,
       complete: remaining <= 0,

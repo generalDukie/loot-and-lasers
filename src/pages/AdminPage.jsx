@@ -34,8 +34,16 @@ export default function AdminPage() {
   async function adminAction(payload) {
     try {
       const res = await api.functions.invoke("AdminModeration", payload);
-      toast({ title: "Done" });
-      return res.data;
+      const data = res.data ?? res;
+      if (payload.action === "give_item" && data?.item) {
+        toast({
+          title: "Gear granted",
+          description: `${data.item.name} → ${data.character_name || "character"}`,
+        });
+      } else {
+        toast({ title: "Done" });
+      }
+      return data;
     } catch (e) {
       toast({ title: "Failed", description: e?.response?.data?.error || e.message, variant: "destructive" });
       return null;

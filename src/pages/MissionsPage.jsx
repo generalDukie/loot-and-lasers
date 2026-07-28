@@ -1,5 +1,5 @@
 import React from "react";
-import { FUEL_MAX, FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX } from "@/lib/gameData";
+import { FUEL_MAX, FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, FUEL_COLOR } from "@/lib/gameData";
 import MissionCard from "@/components/game/MissionCard";
 import MissionCantina from "@/components/game/MissionCantina";
 import MissionExploreBackdrop from "@/components/game/MissionExploreBackdrop";
@@ -66,7 +66,10 @@ export default function MissionsPage() {
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <CantinaMusicToggle />
-          <span className="text-xs bg-amber-500/10 text-amber-400 px-3 py-1 rounded-full font-medium flex items-center gap-1">
+          <span
+            className="text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1"
+            style={{ color: FUEL_COLOR, backgroundColor: `${FUEL_COLOR}18`, border: `1px solid ${FUEL_COLOR}40` }}
+          >
             <Fuel className="w-3 h-3" /> {character.fuel ?? FUEL_MAX}/{character.max_fuel || FUEL_MAX}
           </span>
           <button

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { computeStardustValue, RARITY_COLORS } from "@/lib/gameData";
+import { computeStardustValue, RARITY_COLORS, STARDUST_COLOR } from "@/lib/gameData";
 import { getPendingItem, clearPendingItem, subscribePending } from "@/lib/inventoryCap";
 import { prepareConsumableBuffs } from "@/hooks/useInventory";
 import GearVisual from "@/components/game/GearVisual";
@@ -220,7 +220,7 @@ export default function InventoryFullModal({ character }) {
                         {item.rarity} · {(item.type || "").replace("_", " ")}
                       </p>
                     </div>
-                    <span className="text-[10px] text-accent font-bold shrink-0">✨ {val}</span>
+                    <span className="text-[10px] font-bold shrink-0" style={{ color: STARDUST_COLOR }}>✨ {val}</span>
                     <div className="flex flex-col gap-1 shrink-0">
                       {isStim(item) && (
                         <button

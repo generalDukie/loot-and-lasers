@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { burstWin, burstBig } from "@/lib/casinoFx";
-import { CASINO_WHEEL_TIERS } from "@/lib/gameData";
+import { CASINO_WHEEL_TIERS, STARDUST_COLOR } from "@/lib/gameData";
 
 const TIER_COLORS = {
   0: "#6B7280",
@@ -85,8 +85,8 @@ export default function StardustWheel({ character, onSettle, busy, maxBet = 100 
   return (
     <div className="painted-panel canvas-grain p-4">
       <div className="flex items-center gap-2 mb-1">
-        <Sparkles className="w-4 h-4 text-accent" />
-        <h3 className="font-display font-bold text-sm">Stardust Wheel</h3>
+        <Sparkles className="w-4 h-4" style={{ color: STARDUST_COLOR }} />
+        <h3 className="font-display font-bold text-sm" style={{ color: STARDUST_COLOR }}>Stardust Wheel</h3>
         <span className="text-[9px] text-muted-foreground ml-auto">up to 25× · max {MAX.toLocaleString()}</span>
       </div>
       <p className="text-[11px] text-muted-foreground mb-3 leading-snug">

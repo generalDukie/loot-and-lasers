@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getEffectiveFuelCost, QUEST_GIVERS } from "@/lib/gameData";
+import { getEffectiveFuelCost, QUEST_GIVERS, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import { Lock, Fuel, Star, Clock, MapPin } from "lucide-react";
@@ -17,21 +17,21 @@ function patronFor(mission, index) {
 // Drifting neon orbs that give the cantina a playful, living backdrop
 const CANTINA_ORBS = [
   { x: 8, y: 18, s: 120, c: "rgba(157,108,255,0.32)" },
-  { x: 82, y: 14, s: 90, c: "rgba(45,212,191,0.26)" },
+  { x: 82, y: 14, s: 90, c: "rgba(0,229,255,0.28)" },
   { x: 60, y: 70, s: 140, c: "rgba(255,107,26,0.20)" },
-  { x: 28, y: 78, s: 80, c: "rgba(251,191,36,0.20)" },
+  { x: 28, y: 78, s: 80, c: "rgba(0,229,255,0.22)" },
   { x: 92, y: 60, s: 70, c: "rgba(157,108,255,0.26)" },
 ];
 
 // Twinkling sparks scattered across the cantina
 const SPARKS = [
-  { x: 14, y: 22, r: 4, c: "#2DD4BF" },
+  { x: 14, y: 22, r: 4, c: "#00E5FF" },
   { x: 44, y: 12, r: 3, c: "#9D6BFF" },
   { x: 70, y: 30, r: 5, c: "#FFB347" },
-  { x: 36, y: 40, r: 3, c: "#FBBF24" },
+  { x: 36, y: 40, r: 3, c: "#00E5FF" },
   { x: 88, y: 36, r: 4, c: "#9D6BFF" },
   { x: 22, y: 64, r: 3, c: "#5CFFB0" },
-  { x: 64, y: 58, r: 4, c: "#C084FC" },
+  { x: 64, y: 58, r: 4, c: "#00E5FF" },
   { x: 52, y: 80, r: 3, c: "#FFB347" },
 ];
 
@@ -254,21 +254,21 @@ export default function MissionCantina({ missions, characterLevel, character, cu
 
               <div className="grid grid-cols-3 gap-2.5 sm:gap-3 text-center mb-4">
                 <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
-                  <Star className="w-5 h-5 mx-auto text-teal-400" />
-                  <p className="text-lg sm:text-xl font-display font-bold mt-1.5 bg-gradient-to-r from-teal-400 to-amber-400 bg-clip-text text-transparent">
+                  <Star className="w-5 h-5 mx-auto text-cyan-400" />
+                  <p className="text-lg sm:text-xl font-display font-bold mt-1.5 bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
                     {hoverGains?.xpGain ?? hoverMission.rewards?.experience}
                   </p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">XP</p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
-                  <span className="text-lg block text-center">✨</span>
-                  <p className="text-lg sm:text-xl font-display font-bold mt-1.5 text-purple-400">{hoverGains?.stardustGain ?? hoverMission.rewards?.stardust}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Stardust</p>
+                  <span className="text-lg block text-center" style={{ color: STARDUST_COLOR }}>✨</span>
+                  <p className="text-lg sm:text-xl font-display font-bold mt-1.5" style={{ color: STARDUST_COLOR }}>{hoverGains?.stardustGain ?? hoverMission.rewards?.stardust}</p>
+                  <p className="text-[10px] uppercase tracking-wide mt-0.5" style={{ color: STARDUST_COLOR }}>Stardust</p>
                 </div>
                 <div className="p-3 rounded-xl bg-muted/25 border border-border/40">
-                  <Fuel className={`w-5 h-5 mx-auto ${hoverLowFuel ? "text-amber-400" : "text-blue-400"}`} />
-                  <p className={`text-lg sm:text-xl font-display font-bold mt-1.5 ${hoverLowFuel ? "text-amber-400" : "text-blue-400"}`}>{hoverFuelCost}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Fuel</p>
+                  <Fuel className={`w-5 h-5 mx-auto ${hoverLowFuel ? "text-amber-400" : ""}`} style={hoverLowFuel ? undefined : { color: FUEL_COLOR }} />
+                  <p className={`text-lg sm:text-xl font-display font-bold mt-1.5 ${hoverLowFuel ? "text-amber-400" : ""}`} style={hoverLowFuel ? undefined : { color: FUEL_COLOR }}>{hoverFuelCost}</p>
+                  <p className={`text-[10px] uppercase tracking-wide mt-0.5 ${hoverLowFuel ? "text-amber-400" : ""}`} style={hoverLowFuel ? undefined : { color: FUEL_COLOR }}>Fuel</p>
                 </div>
               </div>
 
@@ -279,7 +279,7 @@ export default function MissionCantina({ missions, characterLevel, character, cu
                 <p className="text-sm text-amber-400 font-medium text-center">Not enough fuel (need {hoverFuelCost})</p>
               )}
               {hoverScouting && (
-                <p className="text-sm text-teal-300 text-center">
+                <p className="text-sm text-cyan-300 text-center">
                   Scouting — finish {mining ? "mining" : "mission"} to launch
                 </p>
               )}

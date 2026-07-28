@@ -1,5 +1,5 @@
 import React from "react";
-import { RARITY_COLORS, STAT_ICONS, computeStardustValue, gearTypeLabel } from "@/lib/gameData";
+import { RARITY_COLORS, STAT_ICONS, computeStardustValue, gearTypeLabel, STARDUST_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 
 export default function ItemCard({ item, onEquip, onSell, onUse, compact = false }) {
@@ -93,7 +93,8 @@ export default function ItemCard({ item, onEquip, onSell, onUse, compact = false
         {onSell && !item.is_equipped && (
           <button
             onClick={() => onSell(item)}
-            className="text-xs bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-1 rounded-lg font-medium transition-colors"
+            className="text-xs px-3 py-1 rounded-lg font-medium transition-colors hover:opacity-90"
+            style={{ color: STARDUST_COLOR, backgroundColor: `${STARDUST_COLOR}26` }}
           >
             Dissolve (✨ {computeStardustValue(item)})
           </button>

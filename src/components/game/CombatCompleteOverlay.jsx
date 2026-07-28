@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import { RARITY_COLORS, STAT_ICONS, gearTypeLabel } from "@/lib/gameData";
+import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, STARDUST_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import confetti from "canvas-confetti";
 import { Star, Zap, TrendingUp, Package, Sparkles, Trophy, Gift, FlaskConical, ArrowRight, Swords, Skull } from "lucide-react";
@@ -83,10 +83,10 @@ export default function CombatCompleteOverlay({ summary, onClose }) {
 
         <div className="space-y-2">
           {(xp?.total > 0 || (xp?.total === 0 && note)) && (
-            <RewardCard icon={<Zap className="w-5 h-5" />} accent="#2DD4BF">
+            <RewardCard icon={<Zap className="w-5 h-5" />} accent="#00E5FF">
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-display font-semibold text-teal-300">EXPERIENCE</span>
-                <span className="font-display font-bold text-teal-400 text-lg">+{xp?.total || 0}</span>
+                <span className="text-xs font-display font-semibold text-cyan-300">EXPERIENCE</span>
+                <span className="font-display font-bold text-cyan-400 text-lg">+{xp?.total || 0}</span>
               </div>
               {xp?.base != null && xp.base !== xp.total && (
                 <p className="text-[10px] text-muted-foreground mt-1">base {xp.base}{xp.collectionPct > 0 ? ` · +${xp.collectionPct}% collection` : ""}</p>
@@ -95,10 +95,10 @@ export default function CombatCompleteOverlay({ summary, onClose }) {
           )}
 
           {(stardust?.total > 0 || (stardust?.total === 0 && note)) && (
-            <RewardCard icon={<Star className="w-5 h-5" />} accent="#A855F7">
+            <RewardCard icon={<Star className="w-5 h-5" />} accent={STARDUST_COLOR}>
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-display font-semibold text-purple-300">STARDUST</span>
-                <span className="font-display font-bold text-purple-400 text-lg">+{stardust?.total || 0}</span>
+                <span className="text-xs font-display font-semibold" style={{ color: STARDUST_COLOR }}>STARDUST</span>
+                <span className="font-display font-bold text-lg" style={{ color: STARDUST_COLOR }}>+{stardust?.total || 0}</span>
               </div>
             </RewardCard>
           )}

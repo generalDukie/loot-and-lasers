@@ -1,7 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Check, Lock, Loader2, Sparkles } from "lucide-react";
-import { getTierEffectLabel, getMaxTierTotal, getTierCost } from "@/lib/gameData";
+import { getTierEffectLabel, getMaxTierTotal, getTierCost, STARDUST_COLOR } from "@/lib/gameData";
 
 const CAT_TINT = {
   Propulsion: "#38BDF8",
@@ -89,9 +89,9 @@ export default function ShipModCard({ mod, progress, stardust, onBuy, buying, sh
             {buying ? (
               <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Installing…</>
             ) : stardust < nextCost ? (
-              <><Lock className="w-3.5 h-3.5" /> {nextCost.toLocaleString()} <Sparkles className="w-3.5 h-3.5" /></>
+              <span className="flex items-center gap-1.5" style={{ color: STARDUST_COLOR }}><Lock className="w-3.5 h-3.5" /> {nextCost.toLocaleString()} <Sparkles className="w-3.5 h-3.5" /></span>
             ) : (
-              <>Install · {nextCost.toLocaleString()} <Sparkles className="w-3.5 h-3.5" /></>
+              <span className="flex items-center gap-1.5" style={{ color: STARDUST_COLOR }}>Install · {nextCost.toLocaleString()} <Sparkles className="w-3.5 h-3.5" /></span>
             )}
           </button>
         </>

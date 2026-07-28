@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { burstWin } from "@/lib/casinoFx";
+import { STARDUST_COLOR } from "@/lib/gameData";
 
 const FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
@@ -51,8 +52,8 @@ export default function StardustDice({ character, onSettle, busy, maxBet = 100 }
   return (
     <div className="painted-panel canvas-grain p-4">
       <div className="flex items-center gap-2 mb-1">
-        <Sparkles className="w-4 h-4 text-accent" />
-        <h3 className="font-display font-bold text-sm">Stardust Dice</h3>
+        <Sparkles className="w-4 h-4" style={{ color: STARDUST_COLOR }} />
+        <h3 className="font-display font-bold text-sm" style={{ color: STARDUST_COLOR }}>Stardust Dice</h3>
         <span className="text-[9px] text-muted-foreground ml-auto">50% · 2× · max {MAX.toLocaleString()}</span>
       </div>
       <p className="text-[11px] text-muted-foreground mb-3 leading-snug">Roll a die. Call High (4–6) or Low (1–3) — call it right to double your stardust.</p>

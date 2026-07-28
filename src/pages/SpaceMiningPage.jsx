@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Pickaxe, Clock, Zap } from "lucide-react";
 import { getMyCharacter } from "@/lib/socialEngine";
+import { STARDUST_COLOR } from "@/lib/gameData";
 
 // Stardust yield = level × 12 × hours. Scales with both level and duration.
 export function computeMiningReward(level, hours) {
@@ -115,7 +116,7 @@ export default function SpaceMiningPage() {
         <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
           <Pickaxe className="w-5 h-5 text-amber-300" /> Space Mining
         </h1>
-        <span className="flex items-center gap-1.5 text-xs text-accent font-display font-bold">
+        <span className="flex items-center gap-1.5 text-xs font-display font-bold" style={{ color: STARDUST_COLOR }}>
           ✨ {character.stardust || 0}
         </span>
       </div>

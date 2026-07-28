@@ -47,7 +47,7 @@ export default function GuildWarReplay({ war, onClose }) {
             {war.attacker_guild_name} vs {war.defender_guild_name}
           </p>
           <div className="flex items-center justify-center gap-2 mt-2">
-            <span className="text-[10px] bg-accent/10 text-accent px-2 py-0.5 rounded-full">+{war.reward_stardust} ✨</span>
+            <span className="text-[10px] bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded-full">+{war.reward_stardust} ✨</span>
             <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">+{war.reward_guild_xp} Guild XP</span>
           </div>
         </div>

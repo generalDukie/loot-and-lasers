@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { getEffectiveFuelCost, ITEM_DROP_RATES } from "@/lib/gameData";
+import { getEffectiveFuelCost, ITEM_DROP_RATES, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import { X, Star, Fuel, MapPin, Lock, Clock } from "lucide-react";
@@ -84,19 +84,19 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
           <p className="text-[10px] font-display font-semibold text-muted-foreground tracking-widest uppercase mb-2">Rewards</p>
           <div className="grid grid-cols-3 gap-2 text-center mb-2">
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
-              <Star className="w-3.5 h-3.5 mx-auto text-teal-400" />
-              <p className="text-sm font-display font-bold mt-1 bg-gradient-to-r from-teal-400 to-amber-400 bg-clip-text text-transparent">{gains?.xpGain ?? mission.rewards?.experience}</p>
+              <Star className="w-3.5 h-3.5 mx-auto text-cyan-400" />
+              <p className="text-sm font-display font-bold mt-1 bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">{gains?.xpGain ?? mission.rewards?.experience}</p>
               <p className="text-[9px] text-muted-foreground">XP</p>
             </div>
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
-              <span className="text-sm block text-center">✨</span>
-              <p className="text-sm font-display font-bold mt-1 text-purple-400">{gains?.stardustGain ?? mission.rewards?.stardust}</p>
-              <p className="text-[9px] text-muted-foreground">Stardust</p>
+              <span className="text-sm block text-center" style={{ color: STARDUST_COLOR }}>✨</span>
+              <p className="text-sm font-display font-bold mt-1" style={{ color: STARDUST_COLOR }}>{gains?.stardustGain ?? mission.rewards?.stardust}</p>
+              <p className="text-[9px]" style={{ color: STARDUST_COLOR }}>Stardust</p>
             </div>
             <div className="p-2 rounded-lg bg-muted/20 border border-border/30">
-              <Fuel className="w-3.5 h-3.5 mx-auto text-blue-400" />
-              <p className="text-sm font-display font-bold mt-1 text-blue-400">{fuelCost}</p>
-              <p className="text-[9px] text-muted-foreground">Fuel</p>
+              <Fuel className={`w-3.5 h-3.5 mx-auto ${lowFuel ? "text-amber-400" : ""}`} style={lowFuel ? undefined : { color: FUEL_COLOR }} />
+              <p className={`text-sm font-display font-bold mt-1 ${lowFuel ? "text-amber-400" : ""}`} style={lowFuel ? undefined : { color: FUEL_COLOR }}>{fuelCost}</p>
+              <p className={`text-[9px] ${lowFuel ? "text-amber-400" : ""}`} style={lowFuel ? undefined : { color: FUEL_COLOR }}>Fuel</p>
             </div>
           </div>
 
@@ -134,7 +134,7 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
             </p>
           )}
           {lowFuel && !locked && <p className="text-xs text-amber-400 font-medium mb-2">Not enough fuel (need {fuelCost})</p>}
-          {busy && !locked && !lowFuel && <p className="text-xs text-teal-300 mb-2">{mining ? "⛏️ Mining in progress — scout now, launch when free" : "🔭 Mission in progress — scout now, launch when free"}</p>}
+          {busy && !locked && !lowFuel && <p className="text-xs text-cyan-300 mb-2">{mining ? "⛏️ Mining in progress — scout now, launch when free" : "🔭 Mission in progress — scout now, launch when free"}</p>}
           <motion.button
             whileTap={{ scale: 0.96 }}
             onClick={() => { if (!disabled) { onStart(mission); onClose(); } }}

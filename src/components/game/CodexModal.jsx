@@ -4,16 +4,16 @@ import {
   X, BookOpen, Coins, Rocket, Swords, Map as MapIcon, Orbit, Ship, Crown, Users,
   Fuel, Mail, ShoppingBag,
 } from "lucide-react";
-import { FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, SHOP_REFRESH_COST } from "@/lib/gameData";
+import { FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, SHOP_REFRESH_COST, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST } from "@/lib/arenaEngine";
 import { DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST } from "@/lib/dungeonEngine";
 
 const SECTIONS = [
-  { id: "start", label: "Getting Started", icon: BookOpen, color: "#2DD4BF" },
+  { id: "start", label: "Getting Started", icon: BookOpen, color: "#22D3EE" },
   { id: "currencies", label: "Currencies", icon: Coins, color: "#FFD700" },
   { id: "missions", label: "Missions & Fuel", icon: Rocket, color: "#FF9E4F" },
   { id: "combat", label: "Combat & Arena", icon: Swords, color: "#FF4D6D" },
-  { id: "galaxy", label: "Galaxy Dungeon", icon: MapIcon, color: "#C084FC" },
+  { id: "galaxy", label: "Galaxy Dungeon", icon: MapIcon, color: "#00E5FF" },
   { id: "market", label: "Black Market", icon: ShoppingBag, color: "#4ADE80" },
   { id: "blackhole", label: "Void", icon: Orbit, color: "#9D6BFF" },
   { id: "ship", label: "Ship Hangar", icon: Ship, color: "#FFD700" },
@@ -34,10 +34,10 @@ function renderSection(id) {
           <p>Welcome to <span className="text-primary font-display font-bold">LOOT & LASERS</span>, operative. You command a space station drifting through the cosmos. Here's how to get going:</p>
           <H>Your First Steps</H>
           <ul className="space-y-1.5">
-            <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Cantina</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" /> fuel.</Li>
+            <Li><b>Missions</b> are your main income — head to the <span className="text-amber-400">Cantina</span>, pick a quest, and launch it using <Fuel className="w-3 h-3 inline" style={{ color: FUEL_COLOR }} /> <span style={{ color: FUEL_COLOR }}>fuel</span>.</Li>
             <Li>When a mission finishes, <b>claim</b> it for XP, stardust, and random loot. Level up to unlock harder sectors.</Li>
             <Li>Equip better gear on your <b>Character</b> page to raise your combat power.</Li>
-            <Li>Spend <b>Stardust</b> to buy attribute points anytime — each attribute has its own rising cost. Tap once or hold to keep buying (starts slow, ramps up to ~10/sec).</Li>
+            <Li>Spend <b>Stardust</b> to buy attribute points anytime — each attribute has its own rising cost. Tap once or hold (~1s) to keep buying.</Li>
             <Li>Try the <b>Arena</b> for PvP, or brave the <b>Galaxy Dungeon</b> for risky loot.</Li>
             <Li>Dissolve unwanted gear in the <b>Void</b> (or from your inventory) to reclaim stardust.</Li>
           </ul>
@@ -49,11 +49,11 @@ function renderSection(id) {
     case "currencies":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <H>✨ Stardust</H>
+          <H><span style={{ color: STARDUST_COLOR }}>✨ Stardust</span></H>
           <p>The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, attribute buys, and arena challenger refreshes.</p>
           <H>💎 Nova Crystals</H>
           <p>Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free quotas ({ARENA_PAID_BATTLE_COST}💎 per arena battle, {DUNGEON_CONTINUE_COST}💎 per frontier fight).</p>
-          <H><Fuel className="w-3 h-3 inline" /> Fuel</H>
+          <H><Fuel className="w-3 h-3 inline" style={{ color: FUEL_COLOR }} /> <span style={{ color: FUEL_COLOR }}>Fuel</span></H>
           <p>Your mission energy. Each mission costs fuel based on its length. You get a pool of 100 that <b>resets to full every 24 hours</b>. Need more sooner? Spend <b>{FUEL_PURCHASE_COST} Nova Crystals</b> to buy +{FUEL_PURCHASE_AMOUNT} fuel, up to <b>{FUEL_PURCHASE_MAX} times</b> per cycle.</p>
         </div>
       );

@@ -4,6 +4,7 @@ import { Fuel, Gem, Rocket } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
 import { FUEL_MOUNTS, MAX_FUEL_MOUNTS, getActiveFuelMounts } from "@/lib/fuelMounts";
+import { FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { useToast } from "@/components/ui/use-toast";
 
 function useCountdown(expiresAt) {
@@ -91,7 +92,7 @@ export default function FuelStation({ character, onUpdate, embedded = false }) {
       {!embedded && (
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-xs font-display font-semibold text-muted-foreground tracking-wide flex items-center gap-1.5">
-            <Fuel className="w-3.5 h-3.5 text-amber-400" /> FUEL STATION
+            <Fuel className="w-3.5 h-3.5" style={{ color: FUEL_COLOR }} /> FUEL STATION
           </h2>
           {activeSpeed > 0 && (
             <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-1 rounded-full font-medium flex items-center gap-1">
@@ -144,7 +145,7 @@ export default function FuelStation({ character, onUpdate, embedded = false }) {
                   <span className="w-4 h-4 border-2 border-amber-300 border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    <span className="flex items-center gap-1"><Gem className="w-3 h-3 opacity-0" />✨ {mount.stardust}</span>
+                    <span className="flex items-center gap-1" style={{ color: STARDUST_COLOR }}><Gem className="w-3 h-3 opacity-0" />✨ {mount.stardust}</span>
                     {mount.crystals > 0 && <span className="flex items-center gap-1 text-primary">💎 {mount.crystals}</span>}
                   </>
                 )}

@@ -56,6 +56,17 @@ export default function CharacterPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (character) inv.load(); }, [character?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { characterRef.current = character; }, [character]);
+  // Reload inventory when returning to this tab (e.g. after admin grant).
+  useEffect(() => {
+    const refresh = () => { if (characterRef.current) inv.load(); };
+    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [inv.load]);
 
   function allocate(stat) {
     allocateQueue.current = allocateQueue.current.then(() => doAllocate(stat)).catch(() => {});

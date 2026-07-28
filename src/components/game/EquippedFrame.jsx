@@ -63,8 +63,8 @@ export default function EquippedFrame({ equippedItems, children, size = 53, show
           <div
             className="absolute inset-[-6px] rounded-2xl pointer-events-none"
             style={{
-              background: "radial-gradient(circle, hsl(172 62% 46% / 0.12) 0%, hsl(285 52% 58% / 0.08) 45%, transparent 70%)",
-              boxShadow: "inset 0 0 24px hsl(172 62% 46% / 0.08), 0 0 20px hsl(285 52% 58% / 0.12)",
+              background: "radial-gradient(circle, hsl(190 90% 50% / 0.12) 0%, hsl(270 60% 55% / 0.08) 45%, transparent 70%)",
+              boxShadow: "inset 0 0 24px hsl(190 90% 50% / 0.08), 0 0 20px hsl(270 60% 55% / 0.12)",
             }}
           />
           <div className="absolute inset-[-2px] rounded-xl border border-primary/25 pointer-events-none" />

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { useNavigate } from "react-router-dom";
-import { computeStardustValue, RARITY_COLORS } from "@/lib/gameData";
+import { computeStardustValue, RARITY_COLORS, STARDUST_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
@@ -188,9 +188,12 @@ export default function BlackHolePage() {
         <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
           <Orbit className="w-5 h-5 text-accent" /> Void
         </h1>
-        <span className="flex items-center gap-1.5 text-sm font-display font-bold px-3 py-1 rounded-full bg-accent/10 text-accent border border-accent/30">
+        <span
+          className="flex items-center gap-1.5 text-sm font-display font-bold px-3 py-1 rounded-full"
+          style={{ color: STARDUST_COLOR, backgroundColor: `${STARDUST_COLOR}1a`, border: `1px solid ${STARDUST_COLOR}4d` }}
+        >
           ✨ {character.stardust || 0}
-          <span className="text-[10px] text-muted-foreground font-normal">stardust</span>
+          <span className="text-[10px] font-normal" style={{ color: STARDUST_COLOR }}>stardust</span>
         </span>
       </motion.div>
 
@@ -294,7 +297,7 @@ export default function BlackHolePage() {
                 <div className="flex-1 min-w-0">
                   <h4 className="font-display font-semibold text-xs truncate leading-tight" style={{ color: RARITY_COLORS[item.rarity] }}>{item.name}</h4>
                   <p className="text-[11px] text-muted-foreground capitalize leading-tight">{item.rarity} · {item.type}</p>
-                  <p className="text-[11px] text-accent font-medium leading-tight">✨ {computeStardustValue(item)}</p>
+                  <p className="text-[11px] font-medium leading-tight" style={{ color: STARDUST_COLOR }}>✨ {computeStardustValue(item)}</p>
                 </div>
                 <motion.button
                   whileTap={{ scale: 0.9 }}

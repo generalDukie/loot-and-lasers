@@ -82,8 +82,8 @@ export function expForLevel(level) {
   } else {
     xp = Math.max(1, Math.round(2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
   }
-  // Early easing only: −20 XP total across levels 1–5 (−4 each). Formula/waypoints unchanged.
-  if (L <= 5) xp = Math.max(1, xp - 4);
+  // Early easing only: −20 XP each for levels 1–5. Formula/waypoints unchanged.
+  if (L <= 5) xp = Math.max(1, xp - 20);
   return xp;
 }
 

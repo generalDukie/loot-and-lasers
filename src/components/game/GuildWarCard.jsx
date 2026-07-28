@@ -1,6 +1,7 @@
 import React from "react";
 import { Clock, Check, Swords, ChevronRight } from "lucide-react";
 import { isWarReadyExpired } from "@/lib/guildEngine";
+import { STARDUST_COLOR } from "@/lib/gameData";
 
 function timeLeft(deadline) {
   const ms = new Date(deadline).getTime() - Date.now();
@@ -23,14 +24,14 @@ export default function GuildWarCard({ war, readies, character, membership, busy
     <div className="rounded-xl border border-border/50 bg-card/40 p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex-1 text-center min-w-0">
-          <p className="font-display font-bold text-xs truncate" style={{ color: isAttacker ? "#2DD4BF" : undefined }}>
+          <p className="font-display font-bold text-xs truncate" style={{ color: isAttacker ? "#22D3EE" : undefined }}>
             {war.attacker_guild_name}
           </p>
           <p className="text-[9px] text-muted-foreground">{isAttacker ? "Your guild" : "Attacker"}</p>
         </div>
         <span className="font-display font-bold text-xs text-muted-foreground">VS</span>
         <div className="flex-1 text-center min-w-0">
-          <p className="font-display font-bold text-xs truncate" style={{ color: !isAttacker ? "#2DD4BF" : undefined }}>
+          <p className="font-display font-bold text-xs truncate" style={{ color: !isAttacker ? "#22D3EE" : undefined }}>
             {war.defender_guild_name}
           </p>
           <p className="text-[9px] text-muted-foreground">{!isAttacker ? "Your guild" : "Defender"}</p>
@@ -89,7 +90,7 @@ export default function GuildWarCard({ war, readies, character, membership, busy
             <span className="text-[10px] text-muted-foreground">
               {war.attacker_ready_count}v{war.defender_ready_count}
             </span>
-            <span className="text-[10px] text-accent">{war.reward_stardust} ✨</span>
+            <span className="text-[10px]" style={{ color: STARDUST_COLOR }}>{war.reward_stardust} ✨</span>
           </div>
           <button
             onClick={onReplay}

@@ -118,7 +118,7 @@ export default function GuildPage() {
 
   const stats = [
     { icon: Target, label: "Missions Run", value: totalMissions, color: "text-primary" },
-    { icon: "✨", label: "Stardust Earned", value: totalStardust.toLocaleString(), color: "text-accent" },
+    { icon: "✨", label: "Stardust Earned", value: totalStardust.toLocaleString(), color: "text-purple-400" },
     { icon: TrendingUp, label: "Avg Level", value: avgLevel, color: "text-accent" },
     { icon: Users, label: "Members", value: members.length, color: "text-green-400" },
   ];

@@ -11,6 +11,7 @@ import {
   gearTypeLabel,
   getStatColor,
   getVendorLine,
+  STARDUST_COLOR,
 } from "@/lib/gameData";
 import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 import { powerRating } from "@/components/game/StatCompareBubble";
@@ -379,7 +380,7 @@ export default function ShopPage() {
       <div className="mt-auto flex items-end justify-between gap-2 pt-1">
         <span className="flex flex-col gap-0.5">
           <span className="flex items-center gap-2 text-sm font-display font-bold">
-            <span className="flex items-center gap-1 text-accent">
+            <span className="flex items-center gap-1" style={{ color: STARDUST_COLOR }}>
               <Sparkles className="w-3.5 h-3.5" /> {slot.cost}
             </span>
             {slot.nova_cost > 0 && (
@@ -453,7 +454,10 @@ export default function ShopPage() {
             <span className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 border border-amber-400/35 text-amber-300 tabular-nums">
               <Gem className="w-3.5 h-3.5" /> {(character.nova_crystals || 0).toLocaleString()}
             </span>
-            <span className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 border border-accent/30 text-accent tabular-nums">
+            <span
+              className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 tabular-nums"
+              style={{ color: STARDUST_COLOR, border: `1px solid ${STARDUST_COLOR}4D` }}
+            >
               <Sparkles className="w-3.5 h-3.5" /> {(character.stardust || 0).toLocaleString()}
             </span>
             <span className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 border border-border/50 text-muted-foreground tabular-nums">
@@ -520,13 +524,13 @@ export default function ShopPage() {
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-teal-400/20 bg-gradient-to-br from-teal-500/[0.07] via-card/40 to-transparent p-4 sm:p-5 shadow-[0_16px_40px_rgba(0,0,0,0.25)]"
+          className="rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] via-card/40 to-transparent p-4 sm:p-5 shadow-[0_16px_40px_rgba(0,0,0,0.25)]"
         >
           <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
             <div>
-              <p className="text-[9px] font-display font-bold tracking-[0.2em] uppercase text-teal-300/80 mb-0.5">Stall A</p>
+              <p className="text-[9px] font-display font-bold tracking-[0.2em] uppercase text-cyan-300/80 mb-0.5">Stall A</p>
               <h2 className="font-display font-bold text-base tracking-wide text-foreground flex items-center gap-2">
-                <Swords className="w-4 h-4 text-teal-300" /> Armory
+                <Swords className="w-4 h-4 text-cyan-300" /> Armory
               </h2>
               <p className="text-[11px] text-muted-foreground mt-0.5">Haggle if you dare · crates sometimes</p>
             </div>
@@ -661,7 +665,7 @@ export default function ShopPage() {
                     </p>
                   )}
                   <div className="mt-auto flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-sm font-display font-bold text-accent">
+                    <span className="flex items-center gap-1 text-sm font-display font-bold" style={{ color: STARDUST_COLOR }}>
                       <Sparkles className="w-3.5 h-3.5" /> {cost}
                     </span>
                     <button

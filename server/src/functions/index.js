@@ -629,13 +629,28 @@ export async function AdminModeration(user, body) {
     }
     const ch = entities.Character.get(character_id);
     if (!ch) return { status: 404, body: { error: "Character not found" } };
+    // Strip client-forged ids / ownership — grant always targets the chosen character.
+    const {
+      id: _ignoreId,
+      character_id: _ignoreChar,
+      owner_id: _ignoreOwner,
+      created_by_id: _ignoreCb,
+      created_by: _ignoreBy,
+      created_date: _ignoreCd,
+      updated_date: _ignoreUd,
+      is_equipped: _ignoreEq,
+      ...safeItem
+    } = item;
     const created = entities.Item.create({
-      ...item,
+      ...safeItem,
       owner_id: ch.created_by_id,
       character_id: ch.id,
+      created_by_id: user.id,
+      created_by: user.email,
       is_equipped: false,
+      locked: !!safeItem.locked,
     });
-    return { status: 200, body: { success: true, item: created } };
+    return { status: 200, body: { success: true, item: created, character_name: ch.name } };
   }
 
   if (action === "adjust_currency") {

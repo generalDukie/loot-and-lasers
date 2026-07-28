@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { UserRound } from "lucide-react";
@@ -37,6 +37,7 @@ function useDesktopHover() {
 // Character portrait + currencies. Hover (desktop) or tap (touch) expands page nav + loadout.
 export default function CharacterNavMenu({ character, large = false, xpPct: xpPctProp }) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const closeTimer = useRef(null);
   const rootRef = useRef(null);
   const desktopHover = useDesktopHover();
@@ -62,6 +63,27 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
     clearTimeout(closeTimer.current);
     setOpen((v) => !v);
   };
+
+  // Pin the panel under the chip in viewport space so GameCanvas overflow
+  // doesn't clip it — and keep it compact so nothing needs scrolling.
+  useLayoutEffect(() => {
+    if (!open || !rootRef.current) return undefined;
+    const place = () => {
+      const r = rootRef.current.getBoundingClientRect();
+      const pad = 8;
+      const maxW = Math.min(window.innerWidth - pad * 2, 420);
+      let left = r.left;
+      if (left + maxW > window.innerWidth - pad) left = Math.max(pad, window.innerWidth - pad - maxW);
+      setMenuPos({ top: r.bottom + 4, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
 
   // Touch / coarse pointer: dismiss on outside tap or Escape.
   useEffect(() => {
@@ -110,40 +132,43 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
           <motion.div
             role="menu"
             aria-label="Page navigation"
-            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.97 }}
-            transition={{ duration: 0.15 }}
-            className="absolute top-full mt-1 left-0 z-50 flex flex-col sm:flex-row items-stretch sm:items-start gap-2 w-[min(calc(100vw-1rem),24rem)] sm:w-auto max-h-[min(70vh,34rem)] overflow-y-auto overscroll-contain"
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.12 }}
+            className="fixed z-[80] flex items-start gap-1.5"
+            style={{ top: menuPos.top, left: menuPos.left }}
           >
-            <div className="w-full sm:w-52 shrink-0 rounded-xl border border-border/60 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel p-2">
+            {/* Dense two-column nav — fits under the banner without scrolling */}
+            <div className="w-[15.5rem] rounded-xl border border-border/60 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel p-1.5">
               {NAV_GROUPS.map((g, gi) => (
-                <React.Fragment key={g.name}>
-                  {gi > 0 && <div className="h-px bg-border/40 my-1 mx-1" />}
-                  <span className="block text-[8px] font-display font-bold tracking-widest text-muted-foreground/50 px-2 mb-0.5">
+                <div key={g.name} className={gi > 0 ? "mt-1 pt-1 border-t border-border/40" : ""}>
+                  <span className="block text-[7px] font-display font-bold tracking-widest text-muted-foreground/50 px-1.5 mb-0.5">
                     {g.name.toUpperCase()}
                   </span>
-                  {g.items.map(({ to, label, icon: Icon, color }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      title={label}
-                      onClick={close}
-                      className={({ isActive }) =>
-                        `flex items-center gap-2.5 rounded-xl px-2 py-2 transition-all ${
-                          isActive ? "bg-primary/15 border-glow-cyan" : "hover:bg-muted/40"
-                        }`
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <Icon className={`w-5 h-5 shrink-0 ${isActive ? "glow-cyan" : ""}`} style={{ color }} />
-                          <span className="font-display font-semibold text-sm tracking-wide whitespace-nowrap">{label}</span>
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-                </React.Fragment>
+                  <div className="grid grid-cols-2 gap-0.5">
+                    {g.items.map(({ to, label, icon: Icon, color }) => (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        title={label}
+                        onClick={close}
+                        className={({ isActive }) =>
+                          `flex items-center gap-1.5 rounded-lg px-1.5 py-1 transition-all ${
+                            isActive ? "bg-primary/15 border-glow-cyan" : "hover:bg-muted/40"
+                          }`
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? "glow-cyan" : ""}`} style={{ color }} />
+                            <span className="font-display font-semibold text-[10px] tracking-wide truncate">{label}</span>
+                          </>
+                        )}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -151,60 +176,52 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
               to="/character"
               title="View loadout & inventory"
               onClick={close}
-              className="w-full sm:w-[11.5rem] shrink-0 rounded-xl border border-border/70 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel overflow-hidden hover:border-primary/45 transition-colors block"
+              className="w-[9.75rem] shrink-0 rounded-xl border border-border/70 bg-background/95 backdrop-blur-xl shadow-2xl painted-panel overflow-hidden hover:border-primary/45 transition-colors block"
             >
-              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/50 bg-muted/20">
-                <span className="text-[9px] font-display font-bold tracking-[0.18em] text-muted-foreground">
+              <div className="flex items-center justify-between gap-1 px-2 py-1.5 border-b border-border/50 bg-muted/20">
+                <span className="text-[8px] font-display font-bold tracking-[0.16em] text-muted-foreground">
                   LOADOUT
                 </span>
-                <span className="text-[9px] font-display font-semibold text-muted-foreground/80">
+                <span className="text-[8px] font-display font-semibold text-muted-foreground/80">
                   {filled}/8
                 </span>
               </div>
 
-              <div className="px-2.5 pt-2.5 pb-2">
-                <EquippedFrame equippedItems={equippedItems} size={45}>
-                  <div className="w-[34px] h-[34px] rounded-lg border border-cyan-400/40 bg-cyan-500/10 flex items-center justify-center">
-                    <UserRound className="w-4 h-4 text-cyan-300" />
+              <div className="px-1.5 pt-1.5 pb-1">
+                <EquippedFrame equippedItems={equippedItems} size={36}>
+                  <div className="w-[28px] h-[28px] rounded-md border border-cyan-400/40 bg-cyan-500/10 flex items-center justify-center">
+                    <UserRound className="w-3.5 h-3.5 text-cyan-300" />
                   </div>
                 </EquippedFrame>
               </div>
 
-              <div className="mx-2.5 mb-2.5 rounded-lg border border-border/50 bg-card/70 px-2.5 py-2">
-                <div className="mb-2">
-                  <span className="text-[8px] font-display font-bold tracking-[0.16em] text-muted-foreground/70">
-                    STATS
-                  </span>
-                </div>
-                <div className="grid grid-cols-5 gap-1">
+              <div className="mx-1.5 mb-1.5 rounded-lg border border-border/50 bg-card/70 px-1.5 py-1.5">
+                <div className="grid grid-cols-5 gap-0.5">
                   {PRIMARY_STATS.map((key) => (
                     <div
                       key={key}
-                      className="rounded-md bg-muted/30 border border-border/40 px-0.5 py-1 text-center"
+                      className="rounded bg-muted/30 border border-border/40 px-0.5 py-0.5 text-center"
                       title={key}
                     >
-                      <div className="text-[10px] leading-none">{STAT_ICONS[key]}</div>
-                      <div className="text-[7px] font-display font-bold tracking-wide text-muted-foreground mt-0.5">
-                        {STAT_SHORT[key]}
-                      </div>
-                      <div className="text-[10px] font-display font-bold text-foreground leading-tight">
+                      <div className="text-[9px] leading-none">{STAT_ICONS[key]}</div>
+                      <div className="text-[9px] font-display font-bold text-foreground leading-tight">
                         {totals[key] || 0}
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-2 grid grid-cols-3 gap-1 text-center">
-                  <div className="rounded-md bg-muted/25 border border-border/35 px-1 py-1">
-                    <p className="text-[7px] font-display tracking-wide text-muted-foreground">DMG</p>
-                    <p className="text-[10px] font-display font-bold text-foreground">{derived.damage ?? 0}</p>
+                <div className="mt-1 grid grid-cols-3 gap-0.5 text-center">
+                  <div className="rounded bg-muted/25 border border-border/35 px-0.5 py-0.5">
+                    <p className="text-[6px] font-display tracking-wide text-muted-foreground">DMG</p>
+                    <p className="text-[9px] font-display font-bold text-foreground">{derived.damage ?? 0}</p>
                   </div>
-                  <div className="rounded-md bg-muted/25 border border-border/35 px-1 py-1">
-                    <p className="text-[7px] font-display tracking-wide text-muted-foreground">HP</p>
-                    <p className="text-[10px] font-display font-bold text-foreground">{derived.health ?? 0}</p>
+                  <div className="rounded bg-muted/25 border border-border/35 px-0.5 py-0.5">
+                    <p className="text-[6px] font-display tracking-wide text-muted-foreground">HP</p>
+                    <p className="text-[9px] font-display font-bold text-foreground">{derived.health ?? 0}</p>
                   </div>
-                  <div className="rounded-md bg-muted/25 border border-border/35 px-1 py-1">
-                    <p className="text-[7px] font-display tracking-wide text-muted-foreground">ARM</p>
-                    <p className="text-[10px] font-display font-bold text-foreground">
+                  <div className="rounded bg-muted/25 border border-border/35 px-0.5 py-0.5">
+                    <p className="text-[6px] font-display tracking-wide text-muted-foreground">ARM</p>
+                    <p className="text-[9px] font-display font-bold text-foreground">
                       {typeof derived.armor === "number" ? `${derived.armor.toFixed(1)}%` : (derived.armor ?? 0)}
                     </p>
                   </div>

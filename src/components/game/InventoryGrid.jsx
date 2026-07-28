@@ -4,7 +4,7 @@ import CompactItemRow from "@/components/game/CompactItemRow";
 import StatCompareBubble, { powerRating } from "@/components/game/StatCompareBubble";
 import { staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
 import { ArrowUp, ArrowDown, Trash2, X } from "lucide-react";
-import { computeStardustValue } from "@/lib/gameData";
+import { computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
 import { EQUIPPABLE_TYPES, listDissolveJunk } from "@/lib/inventoryJunk";
 
 /** True when the device can reliably hover (mouse/trackpad desktop). */
@@ -207,7 +207,7 @@ export default function InventoryGrid({ items, onEquip, onSell, onUse, onLock, o
         <div className="shrink-0 flex flex-wrap items-center justify-center gap-2 p-2.5 rounded-xl border border-rose-500/30 bg-rose-500/5">
           <button onClick={() => setSelected(junkItems.map((i) => i.id))} className="text-[11px] px-2.5 py-1.5 rounded-lg border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition-colors font-semibold">Select junk</button>
           <button onClick={() => setSelected([])} className="text-[11px] px-2.5 py-1.5 rounded-lg border border-border/50 text-muted-foreground hover:text-foreground transition-colors">Clear</button>
-          <span className="text-[11px] text-muted-foreground px-2">{selectedItems.length} selected · ✨{bulkTotal}</span>
+          <span className="text-[11px] px-2" style={{ color: STARDUST_COLOR }}>{selectedItems.length} selected · ✨{bulkTotal}</span>
           <button
             onClick={doBulkSell}
             disabled={!selectedItems.length}

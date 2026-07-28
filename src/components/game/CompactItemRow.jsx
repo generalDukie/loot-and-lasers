@@ -1,5 +1,5 @@
 import React from "react";
-import { RARITY_COLORS, STAT_ICONS, computeStardustValue } from "@/lib/gameData";
+import { RARITY_COLORS, STAT_ICONS, computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import { Check } from "lucide-react";
 
@@ -47,7 +47,8 @@ export default function CompactItemRow({ item, onEquip, onSell, onUse, selectabl
           <button
             onClick={(e) => { e.stopPropagation(); onSell(item); }}
             title={`Dissolve for ${computeStardustValue(item)} stardust`}
-            className="text-[10px] bg-accent/15 hover:bg-accent/25 text-accent px-1.5 py-0.5 rounded font-medium transition-colors"
+            className="text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors hover:opacity-90"
+            style={{ color: STARDUST_COLOR, backgroundColor: `${STARDUST_COLOR}26` }}
           >
             ✨{computeStardustValue(item)}
           </button>

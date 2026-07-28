@@ -1,5 +1,6 @@
 import React, { useId } from "react";
 import { motion } from "framer-motion";
+import { FUEL_COLOR } from "@/lib/gameData";
 
 export const SHIP_HULL_THEME = {
   scout: {
@@ -197,9 +198,9 @@ export default function ShipHangarHero({
 
           <div className="mt-3 flex items-center gap-2 max-w-xs">
             <div className="flex-1 h-2 rounded-full bg-black/40 border border-white/10 overflow-hidden">
-              <div className="h-full rounded-full transition-all" style={{ width: `${fuelPct}%`, background: theme.accent }} />
+              <div className="h-full rounded-full transition-all" style={{ width: `${fuelPct}%`, background: FUEL_COLOR }} />
             </div>
-            <span className="text-[10px] font-mono tabular-nums shrink-0" style={{ color: theme.accent }}>
+            <span className="text-[10px] font-mono tabular-nums shrink-0" style={{ color: FUEL_COLOR }}>
               {fuel}/{maxFuel} ⛽
             </span>
           </div>

@@ -89,10 +89,10 @@ const AuthenticatedApp = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-        <Route path="/" element={<Home />} />
         <Route path="/select-character" element={<CharacterSelectPage />} />
         <Route path="/create-character" element={<CharacterCreation />} />
         <Route element={<GameLayout />}>
+          <Route path="/" element={<Home />} />
           <Route path="/character" element={<CharacterPage />} />
           <Route path="/missions" element={<MissionsPage />} />
           <Route path="/galaxy-map" element={<GalaxyMapPage />} />

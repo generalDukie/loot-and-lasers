@@ -1,11 +1,11 @@
 import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-/** Mount point id — GameLayout places this over the main gameplay column only. */
+/** Mount point id — GameLayout places this over the full shell (nav + chrome + content). */
 export const GAMEPLAY_OVERLAY_ROOT_ID = "gameplay-overlay-root";
 
 /**
- * Portal UI into the gameplay content area so overlays center without the side nav.
+ * Portal UI into the shell overlay host so modals cover the side nav and top chrome.
  * Falls back to fixed fullscreen on document.body when the shell host is missing.
  *
  * Pass `as={motion.div}` (and motion props) when the scrim itself should animate.

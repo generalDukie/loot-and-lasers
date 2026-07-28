@@ -34,6 +34,7 @@ import {
   shopGearSeed,
   shopConsSeed,
   generateSimpleGearStock,
+  generateSimpleGearSlot,
   generateSimpleConsStock,
   generateSimpleHotDeal,
   prepareConsumableBuffs,
@@ -624,6 +625,42 @@ export async function EnsureShop(user) {
   }
 }
 
+function replaceArmoryListing(meta, win, ch, slotId, isHot) {
+  const nextMeta = { ...meta };
+  const level = ch.level || 1;
+  const day = meta.hot_day || todayET();
+  if (isHot) {
+    const fresh = generateSimpleHotDeal(day, level, randomItem);
+    nextMeta.hot_deal = {
+      ...fresh,
+      _slotId: `hot-${day}-${Date.now()}`,
+    };
+    nextMeta.hot_purchased = false;
+    nextMeta.hot_yanked = false;
+    return nextMeta;
+  }
+
+  const stock = [...(meta.gear_stock || [])];
+  const idx = stock.findIndex((s) => s._slotId === slotId);
+  if (idx >= 0) {
+    stock[idx] = generateSimpleGearSlot(
+      level,
+      randomItem,
+      `${shopGearSeed(meta, win)}-r-${idx}-${Date.now()}`,
+    );
+  }
+  nextMeta.gear_stock = stock;
+  if (nextMeta.purchased?.[slotId]) {
+    const { [slotId]: _gone, ...rest } = nextMeta.purchased;
+    nextMeta.purchased = rest;
+  }
+  if (nextMeta.yanked?.[slotId]) {
+    const { [slotId]: _gone, ...rest } = nextMeta.yanked;
+    nextMeta.yanked = rest;
+  }
+  return nextMeta;
+}
+
 // ── BuyShopGear ──────────────────────────────────────────────
 export async function BuyShopGear(user, body) {
   const slotId = body?.slot_id;
@@ -658,12 +695,8 @@ export async function BuyShopGear(user, body) {
         const outcome = rollHaggle();
         haggleNote = outcome.label;
         if (!outcome.ok) {
-          const nextMeta = { ...meta };
-          if (isHot) {
-            nextMeta.hot_yanked = true;
-          } else {
-            nextMeta.yanked = { ...(meta.yanked || {}), [slotId]: true };
-          }
+          // Haggle fail — listing is gone; restock the stall immediately.
+          const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot);
           const patch = { shop_meta: nextMeta };
           const character = entities.Character.update(ch.id, patch);
           return {
@@ -683,12 +716,8 @@ export async function BuyShopGear(user, body) {
       if ((ch.stardust || 0) < stardustCost) httpErr(400, "Not enough stardust");
       if (novaCost && (ch.nova_crystals || 0) < novaCost) httpErr(400, "Not enough Nova Crystals");
 
-      const nextMeta = { ...meta };
-      if (isHot) {
-        nextMeta.hot_purchased = true;
-      } else {
-        nextMeta.purchased = { ...(meta.purchased || {}), [slotId]: true };
-      }
+      // Buy / successful haggle — grant item, then restock that stall slot.
+      const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot);
 
       const patch = {
         stardust: (ch.stardust || 0) - stardustCost,

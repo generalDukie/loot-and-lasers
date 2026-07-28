@@ -104,7 +104,7 @@ export default function GameLayout() {
         <SpaceBackground />
         <div className="relative z-10 h-full w-full min-h-0">
           <PersistentGameFrame>
-            <div className="flex flex-col h-full min-h-0">
+            <div className="relative flex flex-col h-full min-h-0">
               <ShellTopChrome
                 character={character}
                 onOpenChat={() => setChatOpen(true)}
@@ -147,13 +147,14 @@ export default function GameLayout() {
                       </AnimatedPage>
                     </PageErrorBoundary>
                   </div>
-                  {/* Overlay host covers the gameplay column only (not the side nav). */}
-                  <div
-                    id="gameplay-overlay-root"
-                    className="pointer-events-none absolute inset-0 z-[60]"
-                  />
                 </main>
               </div>
+
+              {/* Overlay host covers the full shell (top chrome + side nav + content). */}
+              <div
+                id="gameplay-overlay-root"
+                className="pointer-events-none absolute inset-0 z-[60]"
+              />
             </div>
           </PersistentGameFrame>
         </div>

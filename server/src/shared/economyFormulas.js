@@ -464,25 +464,30 @@ function clampRarityByLevel(rarity, playerLevel = 1) {
 }
 
 /** Minimal shop gear stock (MVP) — 6 slots, cost = stardustValue * 1.2. */
+export function generateSimpleGearSlot(playerLevel, randomItemFn, slotId, rng = Math.random) {
+  const r = typeof rng === "function" ? rng : Math.random;
+  const type = SHOP_GEAR_TYPES[Math.floor(r() * SHOP_GEAR_TYPES.length)];
+  const roll = r();
+  const rarity = clampRarityByLevel(
+    roll < 0.4 ? "common" : roll < 0.7 ? "uncommon" : roll < 0.88 ? "rare" : roll < 0.97 ? "epic" : "legendary",
+    playerLevel
+  );
+  const item = randomItemFn(rarity, Math.max(1, playerLevel), type);
+  const cost = Math.max(5, Math.round(computeStardustValue(item) * 1.2));
+  const nova_cost = computeNovaCrystalCost(item);
+  return {
+    ...item,
+    _slotId: slotId,
+    cost,
+    nova_cost,
+  };
+}
+
 export function generateSimpleGearStock(seed, playerLevel, randomItemFn) {
   const rng = mulberry32(seed * 7919 + 13);
   const slots = [];
   for (let i = 0; i < 6; i++) {
-    const type = SHOP_GEAR_TYPES[Math.floor(rng() * SHOP_GEAR_TYPES.length)];
-    const roll = rng();
-    const rarity = clampRarityByLevel(
-      roll < 0.4 ? "common" : roll < 0.7 ? "uncommon" : roll < 0.88 ? "rare" : roll < 0.97 ? "epic" : "legendary",
-      playerLevel
-    );
-    const item = randomItemFn(rarity, Math.max(1, playerLevel), type);
-    const cost = Math.max(5, Math.round(computeStardustValue(item) * 1.2));
-    const nova_cost = computeNovaCrystalCost(item);
-    slots.push({
-      ...item,
-      _slotId: `${seed}-${i}`,
-      cost,
-      nova_cost,
-    });
+    slots.push(generateSimpleGearSlot(playerLevel, randomItemFn, `${seed}-${i}`, rng));
   }
   return slots;
 }

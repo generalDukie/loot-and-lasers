@@ -2,69 +2,75 @@ import React from "react";
 import { Heart, Swords, Shield, Zap, Wind, ShieldCheck, Cpu, FlaskConical } from "lucide-react";
 import {
   computeDerivedStats,
-  CLASS_ATK_MULT,
   CRIT_CAP,
   DODGE_CAP,
   ARMOR_CAP,
   TECH_RESIST_CAP,
+  CRIT_MULT,
+  getBaseDamageFromPrimary,
 } from "@/lib/statEngine";
 import { getActiveBuffs } from "@/lib/gameData";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 const OFFENSIVE = [
   { key: "damage",     label: "Damage",          icon: Swords,      color: "#F59E0B", fmt: (v) => v },
-  { key: "critChance", label: "Crit Chance",     icon: Zap,         color: "#FBBF24", fmt: (v) => `${v}% · 2×` },
+  { key: "critChance", label: "Crit Chance",     icon: Zap,         color: "#FBBF24", fmt: (v) => `${Number(v).toFixed(1)}% · ${CRIT_MULT}×` },
 ];
 
 const DEFENSIVE = [
   { key: "health",      label: "Max Health",        icon: Heart,       color: "#FB7185", fmt: (v) => v },
-  { key: "dodgeChance", label: "Dodge Chance",      icon: Wind,        color: "#34D399", fmt: (v) => `${v}%` },
-  { key: "armor",       label: "Armor",             icon: ShieldCheck, color: "#A78BFA", fmt: (v) => `${v}%` },
-  { key: "techResist",  label: "Tech Resist",       icon: Cpu,         color: "#38BDF8", fmt: (v) => `${v}%` },
+  { key: "dodgeChance", label: "Dodge Chance",      icon: Wind,        color: "#34D399", fmt: (v) => `${Number(v).toFixed(1)}%` },
+  { key: "armor",       label: "Armor",             icon: ShieldCheck, color: "#A78BFA", fmt: (v) => `${Number(v).toFixed(1)}%` },
+  { key: "techResist",  label: "Tech Resist",       icon: Cpu,         color: "#38BDF8", fmt: (v) => `${Number(v).toFixed(1)}%` },
 ];
 
-function statTooltip(key, d, totalStats, character) {
+function fmtPct(v) {
+  return `${Number(v).toFixed(2)}%`;
+}
+
+function softCapHint(level, maxPct) {
+  return `Soft-capped by level (pre-100 ceiling) · hard cap ${maxPct}%`;
+}
+
+function statTooltip(key, d, totalStats) {
   const level = d.level;
   const s = (k) => totalStats?.[k] || 0;
   switch (key) {
     case "damage": {
       const stat = d.primaryStat;
-      const statVal = s(stat) || 5;
-      const atkMult = CLASS_ATK_MULT[character?.class] ?? 1.0;
-      const base = Math.round(statVal * 2 * atkMult);
-      const lvlBonus = level * 3;
-      const multPart = atkMult !== 1 ? ` × ${atkMult}` : "";
-      const note =
-        atkMult === 0.9
-          ? " (AGI damage is slightly lower)"
-          : "";
-      return `${stat.toUpperCase()} ${statVal} × 2${multPart} + Lv${level} × 3\n= ${base} + ${lvlBonus} = ${d.damage}${note}`;
+      const statVal = s(stat);
+      const base = getBaseDamageFromPrimary(statVal);
+      const note = d.archetype === "agi"
+        ? `\nAGI variance 80–105% × universal 90–110% (sheet shows ~avg)`
+        : `\nUniversal variance 90–110% per hit`;
+      const typeLabel = d.damageType === "tech" ? "Tech" : d.damageType === "agility" ? "Agility" : "Strength";
+      return `${stat.toUpperCase()} ${statVal}\n15 + 0.0032 × ${statVal}^1.727\n≈ ${base.toFixed(1)} → sheet ${d.damage}\nType: ${typeLabel}${note}`;
     }
     case "critChance": {
       const luk = s("luck");
-      return `3% base + ${luk} LUK × 0.3%\n= ${(3 + luk * 0.3).toFixed(1)}% (cap ${CRIT_CAP}%)\nCrits deal 2× damage`;
+      return `Luck ${luk} · Level ${level}\n${fmtPct(d.critChance)} (cap ${CRIT_CAP}%)\n${softCapHint(level, CRIT_CAP)}\nCrits deal ${CRIT_MULT}× damage`;
     }
     case "health": {
       const vit = s("vitality");
-      return `${vit} VIT × 8 + Lv${level} × 20 + 80\n= ${vit * 8} + ${level * 20} + 80 = ${d.health}`;
+      return `round(50 + 2.5×${vit} + 0.008×${vit}²)\n= ${d.health} Max HP\nNo separate level HP term`;
     }
     case "dodgeChance": {
       const agi = s("agility");
-      return `5% base + ${agi} AGI × 0.3%\n= ${(5 + agi * 0.3).toFixed(1)}% (cap ${DODGE_CAP}%)`;
+      return `Agility ${agi} · Level ${level}\n${fmtPct(d.dodgeChance)} (cap ${DODGE_CAP}%)\n${softCapHint(level, DODGE_CAP)}\nApplies vs Strength, Agility, and Tech damage`;
     }
     case "armor": {
       if (d.archetype === "str") {
-        return `STR classes convert Strength into damage,\nnot armor. Invest in AGI / INT for defenses.`;
+        return `Strength classes convert Strength into damage.\nAttribute Armor = 0%\nInvest in Agility / Intellect for defenses.`;
       }
       const str = s("strength");
-      return `${str} STR × 0.5%\n= ${(str * 0.5).toFixed(1)}% (cap ${ARMOR_CAP}%)\nReduces physical (STR-class) damage`;
+      return `Strength ${str} · Level ${level}\n${fmtPct(d.armor)} (cap ${ARMOR_CAP}%)\n${softCapHint(level, ARMOR_CAP)}\nReduces Strength damage only`;
     }
     case "techResist": {
       if (d.archetype === "int") {
-        return `INT classes convert Intellect into damage,\nnot tech resist. Invest in STR / AGI for defenses.`;
+        return `Intellect classes convert Intellect into Tech damage.\nAttribute Tech Resist = 0%\nInvest in Strength / Agility for defenses.`;
       }
       const intel = s("intellect");
-      return `${intel} INT × 0.5%\n= ${(intel * 0.5).toFixed(1)}% (cap ${TECH_RESIST_CAP}%)\nReduces tech (INT-class) damage`;
+      return `Intellect ${intel} · Level ${level}\n${fmtPct(d.techResist)} (cap ${TECH_RESIST_CAP}%)\n${softCapHint(level, TECH_RESIST_CAP)}\nReduces Tech damage only`;
     }
     default:
       return "";
@@ -105,7 +111,7 @@ function StatCell({ label, icon: Icon, color, value, fmt, tooltip, boost, compac
           </div>
         </div>
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-[220px] whitespace-pre-line text-left font-mono text-[10px] leading-relaxed">
+      <TooltipContent side="bottom" className="max-w-[240px] whitespace-pre-line text-left font-mono text-[10px] leading-relaxed">
         {tooltip}
       </TooltipContent>
     </Tooltip>
@@ -121,8 +127,11 @@ function SectionLabel({ icon: Icon, children, color }) {
 }
 
 export default function DerivedStatsPanel({ totalStats, noBuffStats, character, embedded = false }) {
-  const d = computeDerivedStats(totalStats, character);
-  const b = computeDerivedStats(noBuffStats || totalStats, character);
+  // Permanent totals drive the displayed combat numbers; stim-buffed totals
+  // only contribute the optional boost badge (preview of temporary modifiers).
+  const permanent = noBuffStats || totalStats;
+  const d = computeDerivedStats(permanent, character);
+  const stimmed = computeDerivedStats(totalStats, character);
   const stimActive = (getActiveBuffs(character) || []).length > 0;
 
   const renderCell = ({ key, label, icon, color, fmt }) => (
@@ -134,8 +143,8 @@ export default function DerivedStatsPanel({ totalStats, noBuffStats, character, 
       value={d[key]}
       fmt={fmt}
       compact={embedded}
-      boost={Math.max(0, Math.round((d[key] - b[key]) * 10) / 10)}
-      tooltip={statTooltip(key, d, totalStats, character)}
+      boost={stimActive ? Math.max(0, Math.round((stimmed[key] - d[key]) * 10) / 10) : 0}
+      tooltip={statTooltip(key, d, permanent)}
     />
   );
 

@@ -2,7 +2,15 @@
 // ARENA ENGINE — async PvP simulation
 // ═══════════════════════════════════════════
 import { RACES, CLASSES, generateItem, generateClassWeapon, getArenaStardustReward, getArenaXpReward } from "@/lib/gameData";
-import { computeTotalStats, computeDerivedStats, getClassWeights, CLASS_ATK_MULT } from "@/lib/statEngine";
+import {
+  computeTotalStats,
+  computePermanentTotalStats,
+  computeDerivedStats,
+  getClassWeights,
+  rollBasicAttackDamage,
+  mitigationForDamageType,
+  CRIT_MULT,
+} from "@/lib/statEngine";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 
 // First 10 arena battles each day are free (grant xp + stardust + rating on wins only).
@@ -341,9 +349,8 @@ export function snapshotOpponent(opp) {
 }
 
 function buildFighter(c, items, side) {
-  // Uses the shared stat engine so the character sheet's combat stats exactly
-  // match what happens in battle — no duplicate formula drift.
-  const stats = computeTotalStats(c, items);
+  // Permanent totals only — stims stay off the combat attribute pipeline.
+  const stats = computePermanentTotalStats(c, items);
   const cls = CLASSES[c.class] || CLASSES.Vanguard;
   const derived = computeDerivedStats(stats, c);
   const className = cls.name;
@@ -352,12 +359,15 @@ function buildFighter(c, items, side) {
   return {
     side, name: c.name, className,
     hp: derived.health, maxHp: derived.health,
-    atk: derived.damage,
+    atk: derived.damage, // sheet average; per-hit damage is rolled from primary
+    primaryValue: derived.primaryValue,
+    archetype: derived.archetype,
     crit: derived.critChance / 100,   // convert % → 0-1 for battle rolls
+    critMult: derived.critMult || CRIT_MULT,
     dodge: derived.dodgeChance / 100,
-    armor: derived.armor / 100,
-    techResist: (derived.techResist || 0) / 100,
-    damageType: derived.damageType || "physical",
+    armorPercent: derived.armor || 0,       // 0–100
+    techResistPercent: derived.techResist || 0,
+    damageType: derived.damageType || "strength",
     stats,
     attackCount: 0,        // per-fighter turn counter (drives class specials)
     shadowstepBuff: false, // Shadow Operative — Shadowstep damage boost pending
@@ -367,38 +377,58 @@ function buildFighter(c, items, side) {
   };
 }
 
+/**
+ * Resolve one basic hit after dodge has already failed:
+ * raw damage (class formula + variance) → crit → mitigation → round.
+ * Class specials multiply raw damage before crit (existing ability identity).
+ */
+function resolveBasicHit(attacker, defender, { abilityMult = 1, forceCrit = false, mitigationScale = 1 } = {}) {
+  let damage = rollBasicAttackDamage(attacker.archetype, attacker.primaryValue) * abilityMult;
+  const crit = forceCrit || Math.random() < attacker.crit;
+  if (crit) damage *= attacker.critMult || CRIT_MULT;
+
+  let mit = mitigationForDamageType(
+    attacker.damageType,
+    defender.armorPercent,
+    defender.techResistPercent,
+  );
+  mit *= mitigationScale;
+  damage *= (1 - mit);
+
+  const finalDamage = Math.max(0, Math.round(damage));
+  return { finalDamage, crit };
+}
+
 // Applies damage to a fighter, absorbing it through the Astral Warden shield first.
 function applyDamage(target, dmg) {
+  const amount = Math.max(0, dmg || 0);
   if (target.shield > 0 && !target.shieldBroken) {
-    if (dmg >= target.shield) {
-      const overflow = dmg - target.shield;
+    if (amount >= target.shield) {
+      const overflow = amount - target.shield;
       target.shield = 0;
       target.shieldBroken = true;
-      target.hp -= overflow;
+      target.hp = Math.max(0, target.hp - overflow);
       return { hpDamage: overflow, shieldHit: false, shieldBroken: true };
     }
-    target.shield -= dmg;
+    target.shield -= amount;
     return { hpDamage: 0, shieldHit: true, shieldBroken: false };
   }
-  target.hp -= dmg;
-  return { hpDamage: dmg, shieldHit: false, shieldBroken: false };
+  target.hp = Math.max(0, target.hp - amount);
+  return { hpDamage: amount, shieldHit: false, shieldBroken: false };
 }
 
 export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
   const A = buildFighter(player, playerItems, "player");
   const B = buildFighter(opp, oppItems, "opponent");
-  // B lacks items; small level-based attack compensation (only when no items provided)
-  if (!oppItems || oppItems.length === 0) B.atk += (opp.level || 1) * 2;
+  // Ungeared bots: bump primary so their damage formula still scales with level.
+  if (!oppItems || oppItems.length === 0) {
+    B.primaryValue += (opp.level || 1) * 2;
+  }
 
   const events = [];
   let attacker = A.stats.agility >= B.stats.agility ? A : B;
   let defender = attacker === A ? B : A;
   let round = 0;
-
-  // Per-battle tempo: randomizes how long the duel takes. Closer-level fights
-  // tend to drag out (lower tempo), lopsided matchups resolve faster (higher tempo).
-  const levelGap = Math.abs((player.level || 1) - (opp.level || 1));
-  const tempo = (0.78 + Math.random() * 0.55) + Math.min(0.25, levelGap * 0.02);
 
   while (A.hp > 0 && B.hp > 0 && round < 45) {
     round++;
@@ -415,9 +445,9 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
       }
     }
 
-    // Cosmic Engineer — Combat Drone: fires every other turn for 30% weapon damage (untargetable)
+    // Cosmic Engineer — Combat Drone: every other turn, 40% of sheet average damage (no dodge/crit/mit)
     if (attacker.className === "Cosmic Engineer" && attacker.attackCount % 2 === 0 && defender.hp > 0) {
-      const droneDmg = Math.max(1, Math.floor(attacker.atk * 0.4));
+      const droneDmg = Math.max(1, Math.round(attacker.atk * 0.4));
       const res = applyDamage(defender, droneDmg);
       events.push({
         type: "drone",
@@ -433,6 +463,7 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
     }
 
     const useAbility = round % 4 === 0;
+    // STEP 2 — Dodge (before damage / crit / mitigation)
     const dodgeRoll = Math.random();
 
     if (dodgeRoll < defender.dodge) {
@@ -447,29 +478,26 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
       if (defender.className === "Shadow Operative") defender.shadowstepBuff = true;
     } else {
       // Class specials keyed off this fighter's own attack count
-      const unstoppable = attacker.className === "Vanguard" && attacker.attackCount % 4 === 0;       // 200% dmg, ignores 25% armor
-      const overcharge = attacker.className === "Technomancer" && attacker.attackCount % 3 === 0;   // guaranteed crit, ignores 20% armor
-      const shadowstep = attacker.className === "Shadow Operative" && attacker.shadowstepBuff;     // +25% dmg after a dodge
-      const twinFang = attacker.className === "Void Runner" && attacker.attackCount % 3 === 0;     // double strike @ 70% each
+      const unstoppable = attacker.className === "Vanguard" && attacker.attackCount % 4 === 0;
+      const overcharge = attacker.className === "Technomancer" && attacker.attackCount % 3 === 0;
+      const shadowstep = attacker.className === "Shadow Operative" && attacker.shadowstepBuff;
+      const twinFang = attacker.className === "Void Runner" && attacker.attackCount % 3 === 0;
 
-      let crit = overcharge ? true : Math.random() < attacker.crit;
-      let base = attacker.atk * (0.85 + Math.random() * 0.3) * tempo;
-      if (unstoppable) base *= 2;
-      if (shadowstep) base *= 1.25;
-      if (twinFang) base *= 0.7;
-      let dmg = Math.max(1, Math.floor(base * (crit ? 2 : 1)));
+      let abilityMult = 1;
+      if (unstoppable) abilityMult *= 2;
+      if (shadowstep) abilityMult *= 1.25;
+      if (twinFang) abilityMult *= 0.7;
 
-      // Physical (STR/AGI) hits armor; tech (INT) hits tech resist.
-      // Class specials partially ignore the relevant mitigation.
-      let mitigation =
-        attacker.damageType === "tech"
-          ? defender.techResist || 0
-          : defender.armor || 0;
-      if (unstoppable) mitigation *= 0.75;
-      if (overcharge) mitigation *= 0.8;
-      dmg = Math.max(1, Math.floor(dmg * (1 - mitigation)));
+      let mitigationScale = 1;
+      if (unstoppable) mitigationScale *= 0.75;
+      if (overcharge) mitigationScale *= 0.8;
 
-      const res = applyDamage(defender, dmg);
+      const hit = resolveBasicHit(attacker, defender, {
+        abilityMult,
+        forceCrit: overcharge,
+        mitigationScale,
+      });
+      const res = applyDamage(defender, hit.finalDamage);
       attacker.shadowstepBuff = false; // consumed
 
       const abilityName = unstoppable ? "Unstoppable"
@@ -485,26 +513,22 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
         defender: defender.side,
         damage: res.hpDamage,
         shieldHit: res.shieldHit,
-        crit,
+        crit: hit.crit,
         dodged: false,
         ability: abilityName,
       });
 
-      // Void Runner — Twin Fang: second strike at 70% (same roll band, fresh crit chance)
+      // Void Runner — Twin Fang: second strike (fresh variance + crit; same mitigation rules)
       if (twinFang && defender.hp > 0) {
-        let base2 = attacker.atk * (0.85 + Math.random() * 0.3) * tempo * 0.7;
-        let crit2 = Math.random() < attacker.crit;
-        let dmg2 = Math.max(1, Math.floor(base2 * (crit2 ? 2 : 1)));
-        let mit2 = attacker.damageType === "tech" ? defender.techResist || 0 : defender.armor || 0;
-        dmg2 = Math.max(1, Math.floor(dmg2 * (1 - mit2)));
-        const res2 = applyDamage(defender, dmg2);
+        const hit2 = resolveBasicHit(attacker, defender, { abilityMult: 0.7 });
+        const res2 = applyDamage(defender, hit2.finalDamage);
         events.push({
           type: "ability",
           attacker: attacker.side,
           defender: defender.side,
           damage: res2.hpDamage,
           shieldHit: res2.shieldHit,
-          crit: crit2,
+          crit: hit2.crit,
           dodged: false,
           ability: "Twin Fang",
         });

@@ -1,5 +1,10 @@
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { todayET } from "@/lib/gameTime";
+import {
+  EQUIPMENT_SLOTS,
+  rollItemStats,
+  computeItemVendorValue,
+} from "@/lib/itemGeneration";
 
 // ═══════════════════════════════════════════
 // RACES
@@ -71,8 +76,8 @@ export const CLASSES = {
   Vanguard: {
     name: "Vanguard",
     emoji: "⚔️",
-    tagline: "Heavy hitter with high armor and reliable damage",
-    description: "Slow, heavy-hitting powerhouse. Vanguards wade into the thick of it with massive weapons and the armor to shrug off anything thrown back.",
+    tagline: "Heavy hitter with reliable Strength damage",
+    description: "Slow, heavy-hitting powerhouse. Vanguards wade into the thick of it with massive weapons — Strength fuels their damage, not armor.",
     primaryStat: "strength",
     secondaryStat: "vitality",
     baseStats: { ...CLASS_TYPE_BASE_STATS.strength },
@@ -99,8 +104,8 @@ export const CLASSES = {
   Technomancer: {
     name: "Technomancer",
     emoji: "⚡",
-    tagline: "High burst damage that partially ignores armor",
-    description: "Blending psionic arts with overclocked tech, Technomancers unleash explosive bursts that punch straight through defenses.",
+    tagline: "High burst Tech damage that partially pierces resists",
+    description: "Blending psionic arts with overclocked tech, Technomancers unleash explosive Tech bursts. Intellect fuels damage — not Tech Resistance.",
     primaryStat: "intellect",
     secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
@@ -385,63 +390,51 @@ export function ensureUniqueItemName(item, existingNames) {
 
 function _rollItem(rarity, playerLevel, type, rng) {
   const r = rng || Math.random;
-  const itemType = type || ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"][Math.floor(r() * 8)];
-  const names = ITEM_NAMES[itemType];
+  const itemType = type || EQUIPMENT_SLOTS[Math.floor(r() * EQUIPMENT_SLOTS.length)];
+  const names = ITEM_NAMES[itemType] || ITEM_NAMES.weapon;
   const baseName = names[Math.floor(r() * names.length)];
-  const mult = RARITY_MULTIPLIERS[rarity];
-  const baseValue = Math.max(1, Math.floor(playerLevel * 2 * mult));
+  const itemLevel = Math.max(1, playerLevel || 1);
+  const { stats } = rollItemStats({ itemLevel, type: itemType, rarity, rng: r });
 
-  const stats = {};
-  const statKeys = ["strength", "agility", "intellect", "vitality", "luck"];
-  const numStats = rarity === "common" ? 1 : rarity === "uncommon" ? 2 : rarity === "rare" ? 3 : rarity === "epic" ? 4 : 5;
-  const chosenStats = [...statKeys].sort(() => r() - 0.5).slice(0, numStats);
-  chosenStats.forEach(s => { stats[s] = Math.max(1, Math.floor((r() * baseValue) + 1)); });
-
-  return {
+  const item = {
     name: buildItemName(baseName, rarity, stats, r),
     base_name: baseName,
     type: itemType,
     rarity,
-    level_requirement: Math.max(1, playerLevel - 1),
+    level_requirement: itemLevel,
     stats,
     flavor_text: FLAVOR_TEXTS[Math.floor(r() * FLAVOR_TEXTS.length)],
-    sell_value: Math.floor(10 * mult * playerLevel),
     is_equipped: false,
     ...(itemType === "weapon" ? { emoji: weaponEmojiFor(baseName, baseName) } : {}),
   };
+  item.sell_value = computeItemVendorValue(item);
+  return item;
 }
 
-// Generates a class-specific signature weapon — stats heavily favour the
-// class's primary stat, with a smaller secondary bonus.
+// Class signature weapons keep name/flavor/emoji, but stats use the same
+// randomized budget system as other gear (no class-forced primary bias).
 export function generateClassWeapon(className, rarity, playerLevel, rng = Math.random) {
   const w = CLASS_WEAPONS[className] || CLASS_WEAPONS.Vanguard;
-  const cls = CLASSES[className] || CLASSES.Vanguard;
-  const mult = RARITY_MULTIPLIERS[rarity];
-  const baseValue = Math.max(1, Math.floor(playerLevel * 2 * mult));
-
-  const stats = {};
-  const primary = cls.primaryStat || "strength";
-  const secondary = cls.secondaryStat || "luck";
-  stats[primary] = Math.max(2, Math.floor(baseValue * 0.7) + 1);
-  stats[secondary] = Math.max(1, Math.floor(baseValue * 0.3) + 1);
-
-  return {
+  const itemLevel = Math.max(1, playerLevel || 1);
+  const { stats } = rollItemStats({ itemLevel, type: "weapon", rarity, rng });
+  const item = {
     name: buildItemName(w.name, rarity, stats, rng),
     base_name: w.name,
     type: "weapon",
     rarity,
-    level_requirement: Math.max(1, playerLevel - 1),
+    level_requirement: itemLevel,
     stats,
     flavor_text: w.flavor,
-    sell_value: Math.floor(15 * mult * playerLevel),
     is_equipped: false,
     emoji: w.emoji,
   };
+  item.sell_value = computeItemVendorValue(item);
+  return item;
 }
 
 export function generateItem(rarity, playerLevel, type) {
-  // 20% chance for a class-specific signature weapon when rolling a weapon
-  // (or when the type is random and lands on a weapon).
+  // 20% chance for a class-signature weapon skin when rolling a weapon
+  // (stats remain fully randomized — no class-locked attributes).
   const rollingWeapon = !type || type === "weapon";
   if (rollingWeapon && Math.random() < 0.20) {
     const classKeys = Object.keys(CLASS_WEAPONS);
@@ -549,29 +542,19 @@ export function getStatPointsForLevelRange(_fromLevel, _toLevel) {
 // ═══════════════════════════════════════════
 export const STARDUST_PER_RARITY = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 };
 
-// Gear type weight — weapons/ship modules dissolve for more than materials/consumables.
-export const STARDUST_TYPE_WEIGHT = {
-  weapon: 1.4,
-  armor: 1.2,
-  helmet: 1.0,
-  boots: 1.0,
-  legs: 1.0,
-  neck: 1.1,
-  accessory: 1.15,
-  ship_module: 1.35,
-  material: 0.5,
-  consumable: 0.6,
-};
+// Gear type weight — re-exported from itemGeneration (weapon/ship modules sell higher).
+export { ITEM_SELL_TYPE_WEIGHT as STARDUST_TYPE_WEIGHT } from "@/lib/itemGeneration";
+export {
+  getFullSetAttributeBudget,
+  getItemStatBudget,
+  rollItemStats,
+  computeItemVendorValue,
+} from "@/lib/itemGeneration";
 
-// Stardust yielded by dissolving an item — scales with rarity, stats, and item level,
-// and varies per gear type so every kind of loot has a distinct salvage value.
+// Stardust yielded by dissolving an item — scales with rolled attribute budget,
+// rarity, and gear slot (see itemGeneration.computeItemVendorValue).
 export function computeStardustValue(item) {
-  const base = STARDUST_PER_RARITY[item.rarity] ?? 8;
-  const statSum = item.stats ? Object.values(item.stats).reduce((a, b) => a + (b || 0), 0) : 0;
-  const statBonus = statSum * 2;
-  const levelMult = 1 + (item.level_requirement || 1) * 0.15;
-  const typeWeight = STARDUST_TYPE_WEIGHT[item.type] ?? 1;
-  return Math.max(1, Math.round((base + statBonus) * levelMult * typeWeight));
+  return computeItemVendorValue(item);
 }
 
 // Nova-crystal cost for premium gear — legendary items require both currencies,
@@ -630,30 +613,39 @@ export function getVendorLine(seed = 0) {
   return VENDOR_LINES[i];
 }
 
-/** Haggle outcome — stardust multiplier for one purchase. */
+/** Haggle: ~40% buy at 10% off; otherwise listing is yanked (no purchase). */
 export function rollHaggle(rng = Math.random) {
   const roll = typeof rng === "function" ? rng() : Math.random();
-  if (roll < 0.35) return { mult: 0.9, key: "deal", label: "They blinked — 10% off" };
-  if (roll < 0.75) return { mult: 1.0, key: "flat", label: "Firm price" };
-  return { mult: 1.05, key: "markup", label: "They smirked — +5%" };
+  if (roll < 0.4) {
+    return { ok: true, mult: 0.9, key: "deal", label: "They blinked — 10% off" };
+  }
+  return {
+    ok: false,
+    mult: 0,
+    key: "refused",
+    label: "Deal soured — they yanked the listing",
+  };
 }
 
 /**
  * Persistable market state for the current 6h window + daily hot deal.
- * Window fields reset every 6h; hot_day / hot_purchased follow ET midnight.
+ * Window fields reset every 6h; hot_day / hot_purchased / hot_yanked follow ET midnight.
  */
 export function normalizeShopMeta(character, win = getShopWindow(), day = todayET()) {
   const prev = character?.shop_meta || {};
   const hot_day = day;
   const hot_purchased = prev.hot_day === day ? !!prev.hot_purchased : false;
+  const hot_yanked = prev.hot_day === day ? !!prev.hot_yanked : false;
   if (!prev.window_idx || prev.window_idx !== win.idx) {
     return {
       window_idx: win.idx,
       gear_refresh: 0,
       cons_refresh: 0,
       purchased: {},
+      yanked: {},
       hot_day,
       hot_purchased,
+      hot_yanked,
     };
   }
   return {
@@ -661,8 +653,10 @@ export function normalizeShopMeta(character, win = getShopWindow(), day = todayE
     gear_refresh: Math.max(0, Math.floor(prev.gear_refresh || 0)),
     cons_refresh: Math.max(0, Math.floor(prev.cons_refresh || 0)),
     purchased: prev.purchased && typeof prev.purchased === "object" ? { ...prev.purchased } : {},
+    yanked: prev.yanked && typeof prev.yanked === "object" ? { ...prev.yanked } : {},
     hot_day,
     hot_purchased,
+    hot_yanked,
   };
 }
 
@@ -1372,11 +1366,11 @@ export function gearTypeLabel(type) {
 }
 
 export const STAT_DESCRIPTIONS = {
-  strength: "Damage (STR class) or Armor vs physical (other classes)",
-  agility: "Dodge for all · Damage for AGI classes (slightly lower)",
-  intellect: "Damage (INT class) or Tech Resist vs tech (other classes)",
-  vitality: "+8 HP per point",
-  luck: "+0.3% Crit Chance per point (cap 35%)",
+  strength: "Damage (STR class) or Armor vs Strength damage (other classes)",
+  agility: "Dodge for all · Damage for AGI classes (bypasses Armor & Tech Resist)",
+  intellect: "Tech Damage (INT class) or Tech Resist (other classes)",
+  vitality: "Max HP — round(50 + 2.5×VIT + 0.008×VIT²)",
+  luck: "Crit Chance (soft-capped by level, hard cap 30%, 1.5× dmg)",
 };
 
 // Class-aware attribute roles (STR / AGI / INT mapping).
@@ -1387,23 +1381,21 @@ export function getStatDescription(stat, className) {
 
   switch (stat) {
     case "luck":
-      return "+0.3% Crit Chance per point (cap 35%)";
+      return "Crit Chance from Luck (cap 30%, soft-capped before Lv100, 1.5× crit)";
     case "agility":
       return isPrimary
-        ? "Scales your attack damage (slightly lower rate) · +0.3% Dodge/pt (cap 40%)"
-        : "+0.3% Dodge per point (cap 40%)";
+        ? "Scales Agility damage (bypasses Armor & Tech Resist) · Dodge (cap 25%)"
+        : "Dodge Chance (cap 25%, soft-capped before Lv100)";
     case "vitality":
-      return isPrimary
-        ? "Scales attack damage · +8 HP/pt"
-        : "+8 HP per point";
+      return "Max HP = round(50 + 2.5×VIT + 0.008×VIT²)";
     case "strength":
-      if (isPrimary) return "Scales physical attack damage (+1/pt)";
-      if (primary === "strength") return "Already your damage stat — no armor from Strength";
-      return "+0.5% Armor per point vs physical (STR-class) damage (cap 50%)";
+      if (isPrimary) return "Scales Strength damage";
+      if (primary === "strength") return "Already your damage stat — no Armor from Strength";
+      return "Armor vs Strength damage (cap 30%, soft-capped before Lv100)";
     case "intellect":
-      if (isPrimary) return "Scales tech attack damage (+1/pt)";
-      if (primary === "intellect") return "Already your damage stat — no tech resist from Intellect";
-      return "+0.5% Tech Resist per point vs tech (INT-class) damage (cap 50%)";
+      if (isPrimary) return "Scales Tech damage";
+      if (primary === "intellect") return "Already your damage stat — no Tech Resist from Intellect";
+      return "Tech Resist vs Tech damage (cap 30%, soft-capped before Lv100)";
     default:
       return STAT_DESCRIPTIONS[stat] || "";
   }

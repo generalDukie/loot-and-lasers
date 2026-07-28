@@ -1,17 +1,24 @@
 import { getCollectionPercentage, applyXpBonus } from "./collectionBonus.js";
+import {
+  EQUIPMENT_SLOTS,
+  rollItemStats,
+  computeItemVendorValue,
+} from "./itemGeneration.js";
 
-const ITEM_TYPES = ["weapon", "armor", "helmet", "boots", "accessory", "ship_module"];
 const ITEM_NAMES = {
-  weapon: ["Plasma Cutter", "Void Lance", "Pulse Blaster", "Quantum Repeater"],
-  armor: ["Aegis Plate", "Nebula Weave", "Carbon Carapace", "Flux Barrier"],
-  helmet: ["Sensor Crown", "Visor of Foresight", "Neural Helm", "Starlit Mask"],
-  boots: ["Gravity Greaves", "Photon Striders", "Comet Steps", "Drift Walkers"],
-  accessory: ["Phase Ring", "Chrono Charm", "Lucky Comet", "Soul Capacitor"],
-  ship_module: ["Warp Coil", "Shield Matrix", "Targeting Array", "Singularity Core"],
+  weapon: ["Plasma Cutter", "Void Lance", "Pulse Blaster", "Quantum Repeater", "Starforged Blade", "Ion Carbine"],
+  armor: ["Aegis Plate", "Nebula Weave", "Carbon Carapace", "Flux Barrier", "Void Shell", "Titan Plating"],
+  helmet: ["Sensor Crown", "Visor of Foresight", "Neural Helm", "Starlit Mask", "Breach Visor"],
+  boots: ["Gravity Greaves", "Photon Striders", "Comet Steps", "Drift Walkers", "Mag-Lock Treads"],
+  legs: ["Void Greaves", "Plasma Leggings", "Titan Leg Plates", "Phase Treads", "Graviton Greaves"],
+  neck: ["Quantum Amulet", "Void Collar", "Nebula Pendant", "Star Choker", "Plasma Torc"],
+  accessory: ["Phase Ring", "Chrono Charm", "Lucky Comet", "Soul Capacitor", "Orbit Band"],
+  ship_module: ["Warp Coil", "Shield Matrix", "Targeting Array", "Singularity Core", "Nav Beacon"],
 };
-const STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
 
-function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function pick(arr, rng = Math.random) {
+  return arr[Math.floor(rng() * arr.length)];
+}
 
 function getInventoryCap(ch) {
   const shipId = ch.active_ship || "scout";
@@ -22,24 +29,24 @@ function getInventoryCap(ch) {
   return Math.min(20, 10 + bonus);
 }
 
-export function randomItem(rarity, level = 1, type) {
-  const t = type || pick(ITEM_TYPES);
+/** Live loot / shop gear roller — budgeted attributes by level, slot, and rarity. */
+export function randomItem(rarity, level = 1, type, rng = Math.random) {
+  const itemLevel = Math.max(1, level || 1);
+  const t = type && EQUIPMENT_SLOTS.includes(type)
+    ? type
+    : pick(EQUIPMENT_SLOTS, rng);
   const names = ITEM_NAMES[t] || ITEM_NAMES.weapon;
-  const statCount = rarity === "legendary" ? 5 : rarity === "epic" ? 4 : rarity === "rare" ? 3 : rarity === "uncommon" ? 2 : 1;
-  const stats = {};
-  for (let i = 0; i < statCount; i++) {
-    const k = pick(STAT_KEYS);
-    stats[k] = (stats[k] || 0) + (level + Math.floor(Math.random() * 8) + 2);
-  }
-  return {
-    name: pick(names),
+  const { stats } = rollItemStats({ itemLevel, type: t, rarity, rng });
+  const item = {
+    name: pick(names, rng),
     type: t,
     rarity,
-    level_requirement: Math.max(1, level - 2),
+    level_requirement: itemLevel,
     stats,
-    sell_value: { common: 10, uncommon: 30, rare: 80, epic: 200, legendary: 500 }[rarity] || 10,
     is_equipped: false,
   };
+  item.sell_value = computeItemVendorValue(item);
+  return item;
 }
 
 function lerpWaypoints(level, points) {

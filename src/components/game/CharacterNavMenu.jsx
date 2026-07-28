@@ -6,7 +6,7 @@ import HubCharacterChip from "@/components/game/HubCharacterChip";
 import CurrencyStack from "@/components/game/CurrencyStack";
 import EquippedFrame from "@/components/game/EquippedFrame";
 import { useEquippedItems } from "@/hooks/useEquippedItems";
-import { PRIMARY_STATS, computeTotalStats, computeDerivedStats } from "@/lib/statEngine";
+import { PRIMARY_STATS, computePermanentTotalStats, computeDerivedStats } from "@/lib/statEngine";
 import { STAT_ICONS } from "@/lib/gameData";
 import { NAV_GROUPS } from "@/lib/navGroups";
 
@@ -29,7 +29,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
   const enter = () => { clearTimeout(closeTimer.current); setOpen(true); };
   const leave = () => { closeTimer.current = setTimeout(() => setOpen(false), 150); };
 
-  const totals = character ? computeTotalStats(character, equippedItems) : {};
+  const totals = character ? computePermanentTotalStats(character, equippedItems) : {};
   const derived = character ? computeDerivedStats(totals, character) : {};
   const filled = equippedItems.length;
 
@@ -136,7 +136,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
                   <div className="rounded-md bg-muted/25 border border-border/35 px-1 py-1">
                     <p className="text-[7px] font-display tracking-wide text-muted-foreground">ARM</p>
                     <p className="text-[10px] font-display font-bold text-foreground">
-                      {typeof derived.armor === "number" ? `${Math.round(derived.armor)}%` : (derived.armor ?? 0)}
+                      {typeof derived.armor === "number" ? `${derived.armor.toFixed(1)}%` : (derived.armor ?? 0)}
                     </p>
                   </div>
                 </div>

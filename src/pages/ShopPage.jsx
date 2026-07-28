@@ -192,8 +192,8 @@ export default function ShopPage() {
 
   async function purchaseGearSlot(slot, { haggle = false, isHot = false } = {}) {
     if (!shopMeta || busySlot) return;
-    if (isHot && shopMeta.hot_purchased) return;
-    if (!isHot && shopMeta.purchased?.[slot._slotId]) return;
+    if (isHot && (shopMeta.hot_purchased || shopMeta.hot_yanked)) return;
+    if (!isHot && (shopMeta.purchased?.[slot._slotId] || shopMeta.yanked?.[slot._slotId])) return;
 
     const previewCost = slot.cost || 0;
     const novaCost = slot.nova_cost || 0;
@@ -201,6 +201,14 @@ export default function ShopPage() {
       toast({
         title: "Not enough stardust",
         description: `Need ${previewCost} ✨ — you have ${character.stardust || 0}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (haggle && (character.stardust || 0) < Math.ceil(previewCost * 0.9)) {
+      toast({
+        title: "Not enough stardust to haggle",
+        description: `Need ${Math.ceil(previewCost * 0.9)} ✨ if the deal lands.`,
         variant: "destructive",
       });
       return;
@@ -221,15 +229,26 @@ export default function ShopPage() {
       const meta = patch.shop_meta || shopMeta;
       const items = res.items || res.data?.items || [];
       const haggleNote = res.haggle_note ?? res.data?.haggle_note;
+      const haggleFailed = !!(res.haggle_failed ?? res.data?.haggle_failed);
       const anyCreated = items.length > 0;
       const lastName = items[0]?.name || slot.name;
 
       if (meta) setShopMeta(meta);
       setCharacter((c) => ({ ...c, ...patch }));
-      if (novaCost) void trackNovaSpend(character, novaCost, "shop_buy_legendary");
+
+      if (haggleFailed) {
+        toast({
+          title: "Haggle failed",
+          description: haggleNote || "They yanked the listing.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (novaCost && anyCreated) void trackNovaSpend(character, novaCost, "shop_buy_legendary");
 
       toast({
-        title: anyCreated ? (haggle ? "🤝 Deal struck!" : "🛒 Purchased!") : "📦 Inventory full!",
+        title: anyCreated ? (haggle ? "Deal struck!" : "Purchased!") : "Inventory full!",
         description: [
           haggleNote,
           anyCreated
@@ -346,12 +365,16 @@ export default function ShopPage() {
   const secondsLeft = Math.max(0, Math.floor((win.endsAt - now) / 1000));
   const hotEta = formatEtaShort(msUntilNextETMidnight(now));
   const purchased = shopMeta.purchased || {};
+  const yanked = shopMeta.yanked || {};
   const hotSold = !!shopMeta.hot_purchased;
+  const hotYanked = !!shopMeta.hot_yanked;
 
   function renderGearActions(slot, { isHot = false } = {}) {
-    const owned = isHot ? hotSold : !!purchased[slot._slotId];
+    const wasYanked = isHot ? hotYanked : !!yanked[slot._slotId];
+    const owned = isHot ? (hotSold || hotYanked) : !!(purchased[slot._slotId] || yanked[slot._slotId]);
     const affordable = (character.stardust || 0) >= slot.cost && (!slot.nova_cost || (character.nova_crystals || 0) >= slot.nova_cost);
     const canHaggleAfford = (character.stardust || 0) >= Math.ceil(slot.cost * 0.9);
+    const goneLabel = wasYanked ? "Yanked" : "Sold";
     return (
       <div className="mt-auto flex items-end justify-between gap-2 pt-1">
         <span className="flex flex-col gap-0.5">
@@ -372,7 +395,7 @@ export default function ShopPage() {
               type="button"
               onClick={() => purchaseGearSlot(slot, { haggle: true, isHot })}
               disabled={!canHaggleAfford || busySlot === slot._slotId}
-              title="Negotiate: 35% chance −10%, 40% firm, 25% +5%"
+              title="~40% chance −10% off; otherwise they yank the listing"
               className="text-[10px] px-2 py-1.5 rounded-lg font-display font-semibold tracking-wide border border-fuchsia-400/35 text-fuchsia-300 hover:bg-fuchsia-500/15 disabled:opacity-40"
             >
               Haggle
@@ -390,7 +413,7 @@ export default function ShopPage() {
                   : "bg-muted/40 text-muted-foreground/50"
             }`}
           >
-            {owned ? "Sold" : busySlot === slot._slotId ? "…" : slot._bundle ? "Open" : "Buy"}
+            {owned ? goneLabel : busySlot === slot._slotId ? "…" : slot._bundle ? "Open" : "Buy"}
           </motion.button>
         </div>
       </div>
@@ -465,13 +488,13 @@ export default function ShopPage() {
               const eq = equippedByType[slot.type] || null;
               return (
                 <div
-                  className={`relative flex flex-col sm:flex-row gap-4 p-4 rounded-xl border bg-background/55 ${hotSold ? "opacity-70" : ""}`}
+                  className={`relative flex flex-col sm:flex-row gap-4 p-4 rounded-xl border bg-background/55 ${hotSold || hotYanked ? "opacity-70" : ""}`}
                   style={{ borderColor: color + "66", boxShadow: `0 0 22px ${color}22` }}
                 >
-                  {hotSold && (
+                  {(hotSold || hotYanked) && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-xl">
                       <span className="text-xs font-display font-black tracking-[0.2em] uppercase text-muted-foreground border border-border/60 bg-card/80 px-3 py-1 rounded-full">
-                        Claimed today
+                        {hotYanked ? "Yanked today" : "Claimed today"}
                       </span>
                     </div>
                   )}
@@ -521,7 +544,8 @@ export default function ShopPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {inventory.map((slot) => {
               const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
-              const owned = !!purchased[slot._slotId];
+              const wasYanked = !!yanked[slot._slotId];
+              const owned = !!purchased[slot._slotId] || wasYanked;
               const eq = equippedByType[slot.type] || null;
               const better = !owned && !slot._bundle && eq && powerRating(slot, character.class) > powerRating(eq, character.class);
               return (
@@ -538,7 +562,7 @@ export default function ShopPage() {
                   {owned && (
                     <div className="absolute inset-0 bg-black/35 z-10 flex items-center justify-center">
                       <span className="text-xs font-display font-black tracking-[0.2em] uppercase text-muted-foreground border border-border/60 bg-card/80 px-3 py-1 rounded-full">
-                        Sold
+                        {wasYanked ? "Yanked" : "Sold"}
                       </span>
                     </div>
                   )}

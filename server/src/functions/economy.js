@@ -639,11 +639,11 @@ export async function BuyShopGear(user, body) {
 
       let slot;
       if (isHot) {
-        if (meta.hot_purchased) httpErr(409, "Hot deal already purchased");
+        if (meta.hot_purchased || meta.hot_yanked) httpErr(409, "Hot deal already gone");
         slot = meta.hot_deal;
         if (!slot || slot._slotId !== slotId) httpErr(404, "Hot deal slot not found");
       } else {
-        if (meta.purchased?.[slotId]) httpErr(409, "Already purchased");
+        if (meta.purchased?.[slotId] || meta.yanked?.[slotId]) httpErr(409, "Already gone");
         slot = (meta.gear_stock || []).find((s) => s._slotId === slotId);
         if (!slot) httpErr(404, "Slot not found");
       }
@@ -651,9 +651,30 @@ export async function BuyShopGear(user, body) {
       let stardustCost = slot.cost || 0;
       let haggleNote = null;
       if (haggle) {
+        if (slot._bundle) httpErr(400, "Can't haggle bundles");
         const outcome = rollHaggle();
-        stardustCost = Math.max(1, Math.round(stardustCost * outcome.mult));
         haggleNote = outcome.label;
+        if (!outcome.ok) {
+          const nextMeta = { ...meta };
+          if (isHot) {
+            nextMeta.hot_yanked = true;
+          } else {
+            nextMeta.yanked = { ...(meta.yanked || {}), [slotId]: true };
+          }
+          const patch = { shop_meta: nextMeta };
+          const character = entities.Character.update(ch.id, patch);
+          return {
+            success: true,
+            haggle_failed: true,
+            haggle_note: haggleNote,
+            cost: 0,
+            nova_cost: 0,
+            items: [],
+            patch,
+            character,
+          };
+        }
+        stardustCost = Math.max(1, Math.round(stardustCost * outcome.mult));
       }
       const novaCost = slot.nova_cost || 0;
       if ((ch.stardust || 0) < stardustCost) httpErr(400, "Not enough stardust");
@@ -685,6 +706,7 @@ export async function BuyShopGear(user, body) {
       const character = entities.Character.update(ch.id, patch);
       return {
         success: true,
+        haggle_failed: false,
         haggle_note: haggleNote,
         cost: stardustCost,
         nova_cost: novaCost,
@@ -782,6 +804,7 @@ export async function RefreshShop(user, body) {
           ...meta,
           gear_refresh: (meta.gear_refresh || 0) + 1,
           purchased: {},
+          yanked: {},
         };
         meta.gear_stock = generateSimpleGearStock(shopGearSeed(meta, win), ch.level || 1, randomItem);
       } else {

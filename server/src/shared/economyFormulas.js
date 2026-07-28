@@ -8,6 +8,10 @@ import {
   getMissionStardustPerFuel,
   getStatPointsForLevelRange,
 } from "./rewards.js";
+import {
+  computeItemVendorValue,
+  ITEM_SELL_TYPE_WEIGHT,
+} from "./itemGeneration.js";
 
 // ── Classes (baseStats only) ─────────────────────────────────
 const CLASS_TYPE_BASE_STATS = {
@@ -88,26 +92,10 @@ export function getNextAttributePointCost(character, stat) {
 // ── Stardust dissolve ────────────────────────────────────────
 export const STARDUST_PER_RARITY = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 };
 
-export const STARDUST_TYPE_WEIGHT = {
-  weapon: 1.4,
-  armor: 1.2,
-  helmet: 1.0,
-  boots: 1.0,
-  legs: 1.0,
-  neck: 1.1,
-  accessory: 1.15,
-  ship_module: 1.35,
-  material: 0.5,
-  consumable: 0.6,
-};
+export const STARDUST_TYPE_WEIGHT = { ...ITEM_SELL_TYPE_WEIGHT };
 
 export function computeStardustValue(item) {
-  const base = STARDUST_PER_RARITY[item.rarity] ?? 8;
-  const statSum = item.stats ? Object.values(item.stats).reduce((a, b) => a + (b || 0), 0) : 0;
-  const statBonus = statSum * 2;
-  const levelMult = 1 + (item.level_requirement || 1) * 0.15;
-  const typeWeight = STARDUST_TYPE_WEIGHT[item.type] ?? 1;
-  return Math.max(1, Math.round((base + statBonus) * levelMult * typeWeight));
+  return computeItemVendorValue(item);
 }
 
 export const NOVA_CRYSTAL_PER_RARITY = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 10 };
@@ -375,25 +363,35 @@ export function todayET(now = new Date()) {
   return now.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
+/** Haggle: ~40% buy at 10% off; otherwise listing is yanked (no purchase). */
 export function rollHaggle(rng = Math.random) {
   const roll = typeof rng === "function" ? rng() : Math.random();
-  if (roll < 0.35) return { mult: 0.9, key: "deal", label: "They blinked — 10% off" };
-  if (roll < 0.75) return { mult: 1.0, key: "flat", label: "Firm price" };
-  return { mult: 1.05, key: "markup", label: "They smirked — +5%" };
+  if (roll < 0.4) {
+    return { ok: true, mult: 0.9, key: "deal", label: "They blinked — 10% off" };
+  }
+  return {
+    ok: false,
+    mult: 0,
+    key: "refused",
+    label: "Deal soured — they yanked the listing",
+  };
 }
 
 export function normalizeShopMeta(character, win = getShopWindow(), day = todayET()) {
   const prev = character?.shop_meta || {};
   const hot_day = day;
   const hot_purchased = prev.hot_day === day ? !!prev.hot_purchased : false;
+  const hot_yanked = prev.hot_day === day ? !!prev.hot_yanked : false;
   if (!prev.window_idx || prev.window_idx !== win.idx) {
     return {
       window_idx: win.idx,
       gear_refresh: 0,
       cons_refresh: 0,
       purchased: {},
+      yanked: {},
       hot_day,
       hot_purchased,
+      hot_yanked,
     };
   }
   return {
@@ -401,8 +399,10 @@ export function normalizeShopMeta(character, win = getShopWindow(), day = todayE
     gear_refresh: Math.max(0, Math.floor(prev.gear_refresh || 0)),
     cons_refresh: Math.max(0, Math.floor(prev.cons_refresh || 0)),
     purchased: prev.purchased && typeof prev.purchased === "object" ? { ...prev.purchased } : {},
+    yanked: prev.yanked && typeof prev.yanked === "object" ? { ...prev.yanked } : {},
     hot_day,
     hot_purchased,
+    hot_yanked,
     gear_stock: prev.gear_stock,
     cons_stock: prev.cons_stock,
     hot_deal: prev.hot_deal,

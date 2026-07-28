@@ -90,11 +90,11 @@ function renderSection(id) {
           <p>Your combat power comes from level + attributes + equipped gear rarity. Buy attributes with Stardust (each attribute has its own cost curve) and upgrade gear to climb the ladder.</p>
           <H>Attributes</H>
           <ul className="space-y-1.5">
-            <Li><b>Strength</b> — damage for STR classes; armor vs physical damage for everyone else.</Li>
-            <Li><b>Agility</b> — dodge for all; also damage for AGI classes (slightly lower rate).</Li>
-            <Li><b>Intellect</b> — damage for INT classes; tech resist vs tech damage for everyone else.</Li>
-            <Li><b>Vitality</b> — HP for all classes.</Li>
-            <Li><b>Luck</b> — crit chance for all.</Li>
+            <Li><b>Strength</b> — Strength damage for STR classes; Armor vs Strength damage for AGI/INT (STR classes get 0% Armor from Strength).</Li>
+            <Li><b>Agility</b> — Dodge for all; Agility damage for AGI classes (bypasses Armor &amp; Tech Resist).</Li>
+            <Li><b>Intellect</b> — Tech damage for INT classes; Tech Resist for STR/AGI (INT classes get 0% Tech Resist from Intellect).</Li>
+            <Li><b>Vitality</b> — Max HP for all: round(50 + 2.5×VIT + 0.008×VIT²).</Li>
+            <Li><b>Luck</b> — Crit Chance for all (cap 30%, soft-capped before Lv100, 1.5× crit damage).</Li>
           </ul>
         </div>
       );
@@ -120,7 +120,7 @@ function renderSection(id) {
           <ul className="space-y-1.5">
             <Li>Both stalls refresh every <b>6 hours</b>. Spend <b>{SHOP_REFRESH_COST} Nova Crystals</b> to restock a stall early.</Li>
             <Li>Compare listed gear to what you have equipped before buying.</Li>
-            <Li><b>Haggle</b> on armory pieces — about a third of the time you get 10% off, sometimes the price sticks, and occasionally they bump it +5%.</Li>
+            <Li><b>Haggle</b> on armory pieces — about 40% of the time you get 10% off; if it fails, they yank the listing (no purchase).</Li>
             <Li>Rare <b>Scrap Crates</b> (2 commons) and <b>Stim Trios</b> show up as bundle deals.</Li>
           </ul>
           <H>Hot Deal</H>

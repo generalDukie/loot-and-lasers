@@ -4,7 +4,7 @@ import confetti from "canvas-confetti";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { avatarPropsFor } from "@/lib/arenaEngine";
 import { Swords, Zap, ChevronRight } from "lucide-react";
-import { computeTotalStats, computeDerivedStats } from "@/lib/statEngine";
+import { computePermanentTotalStats, computeDerivedStats } from "@/lib/statEngine";
 import { CLASSES } from "@/lib/gameData";
 import { ArenaBackdrop, ArenaFloor } from "@/components/game/ArenaBackdrop";
 import ArenaWeaponVisual from "@/components/game/ArenaWeaponVisual";
@@ -17,7 +17,7 @@ const MOD_COLORS = { dmg: "#F87171", armor: "#FBBF24", tech: "#38BDF8", crit: "#
 const PRIMARY_STAT_COLOR = { strength: "#F87171", agility: "#4ADE80", intellect: "#60A5FA", vitality: "#FBBF24", luck: "#C084FC" };
 
 function computeDisplayStats(entity) {
-  const totalStats = computeTotalStats(entity, []);
+  const totalStats = computePermanentTotalStats(entity, []);
   const cls = CLASSES[entity.class] || CLASSES.Vanguard;
   const d = computeDerivedStats(totalStats, entity);
   return {
@@ -190,15 +190,18 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
                 <span key="str">
                   <span style={{ color: STAT_COLORS.STR }}>STR {totalStats.strength || 0}</span>
                   {primaryStat === "strength" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}
-                  {primaryStat !== "strength" && armor > 0 && (
-                    <span style={{ color: MOD_COLORS.armor }}> · ARM {armor}%</span>
+                  {primaryStat !== "strength" && (
+                    <span style={{ color: MOD_COLORS.armor }}> · ARM {Number(armor).toFixed(1)}%</span>
+                  )}
+                  {primaryStat === "strength" && (
+                    <span style={{ color: MOD_COLORS.armor }}> · ARM 0%</span>
                   )}
                 </span>
               ),
               agility: (
                 <span key="agi">
                   <span style={{ color: STAT_COLORS.AGI }}>AGI {totalStats.agility || 0}</span>
-                  <span style={{ color: MOD_COLORS.dodge }}> · DODGE {dodge}%</span>
+                  <span style={{ color: MOD_COLORS.dodge }}> · DODGE {Number(dodge).toFixed(1)}%</span>
                   {primaryStat === "agility" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}
                 </span>
               ),
@@ -206,8 +209,11 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
                 <span key="int">
                   <span style={{ color: STAT_COLORS.INT }}>INT {totalStats.intellect || 0}</span>
                   {primaryStat === "intellect" && <span style={{ color: dmgColor }}> · DMG {dmg}</span>}
-                  {primaryStat !== "intellect" && techResist > 0 && (
-                    <span style={{ color: MOD_COLORS.tech }}> · TECH {techResist}%</span>
+                  {primaryStat !== "intellect" && (
+                    <span style={{ color: MOD_COLORS.tech }}> · TECH {Number(techResist).toFixed(1)}%</span>
+                  )}
+                  {primaryStat === "intellect" && (
+                    <span style={{ color: MOD_COLORS.tech }}> · TECH 0%</span>
                   )}
                 </span>
               ),
@@ -220,7 +226,7 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
               luck: (
                 <span key="luk">
                   <span style={{ color: STAT_COLORS.LUK }}>LUK {totalStats.luck || 0}</span>
-                  <span style={{ color: MOD_COLORS.crit }}> · CRIT {crit}%</span>
+                  <span style={{ color: MOD_COLORS.crit }}> · CRIT {Number(crit).toFixed(1)}%</span>
                 </span>
               ),
             };

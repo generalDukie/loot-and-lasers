@@ -146,9 +146,9 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
           {verdict === "better" ? "BETTER OVERALL" : verdict === "worse" ? "WORSE OVERALL" : "EVEN"}
           <span className="text-muted-foreground/60 font-normal"> vs {equipped.name}</span>
         </p>
-      ) : (
+      ) : ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"].includes(item.type) ? (
         <p className="text-[10px] text-green-400 mt-2 pt-2 border-t border-border/40">Empty slot — equip for pure gain!</p>
-      )}
+      ) : null}
 
       {/* Actions */}
       <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/40">

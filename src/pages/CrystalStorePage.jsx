@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
-import { getMyCharacter } from "@/lib/socialEngine";
+import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { Gem, Sparkles, Crown, Check } from "lucide-react";
 import WeeklyNovaQuests from "@/components/game/WeeklyNovaQuests";
 
@@ -21,19 +21,36 @@ const USES = [
 ];
 
 export default function CrystalStorePage() {
-  const [character, setCharacter] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const outlet = useOutletContext() || {};
+  const setSharedCharacter = outlet.setCharacter;
+  const [localCharacter, setLocalCharacter] = useState(null);
+  const character = outlet.character || localCharacter;
+  const [loading, setLoading] = useState(!outlet.character);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const applyCharacter = useCallback((next) => {
+    if (!next) return;
+    primeMyCharacterCache(next);
+    if (typeof setSharedCharacter === "function") setSharedCharacter(next);
+    setLocalCharacter(next);
+  }, [setSharedCharacter]);
 
   const load = useCallback(async () => {
     const char = await getMyCharacter();
     if (!char) { navigate("/create-character"); return; }
-    setCharacter(char);
+    applyCharacter(char);
     setLoading(false);
-  }, [navigate]);
+  }, [navigate, applyCharacter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (outlet.character) {
+      setLocalCharacter(outlet.character);
+      setLoading(false);
+      return;
+    }
+    load();
+  }, [outlet.character, load]);
 
   function handleBuy(pkg) {
     toast({
@@ -42,7 +59,7 @@ export default function CrystalStorePage() {
     });
   }
 
-  if (loading) {
+  if (loading || !character) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
@@ -65,7 +82,7 @@ export default function CrystalStorePage() {
         </span>
       </motion.div>
 
-      <WeeklyNovaQuests character={character} onClaimed={setCharacter} />
+      <WeeklyNovaQuests character={character} onClaimed={applyCharacter} />
 
       {/* Packages */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

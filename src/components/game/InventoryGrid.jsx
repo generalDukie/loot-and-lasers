@@ -3,6 +3,7 @@ import { Droppable, Draggable } from "@hello-pangea/dnd";
 import { motion } from "framer-motion";
 import CompactItemRow from "@/components/game/CompactItemRow";
 import StatCompareBubble, { powerRating } from "@/components/game/StatCompareBubble";
+import GearInspectPortal from "@/components/game/GearInspectPortal";
 import { btnPress } from "@/lib/juicyMotion";
 import { ArrowUp, ArrowDown, Trash2, X, GripVertical } from "lucide-react";
 import { computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
@@ -75,6 +76,19 @@ export default function InventoryGrid({
   const [selected, setSelected] = useState([]);
   const [busyJunk, setBusyJunk] = useState(false);
   const rootRef = useRef(null);
+  const hoverAnchorRef = useRef(null);
+  const hoverCloseTimer = useRef(null);
+
+  const clearHoverClose = () => {
+    clearTimeout(hoverCloseTimer.current);
+    hoverCloseTimer.current = null;
+  };
+  const scheduleHoverClose = () => {
+    clearHoverClose();
+    hoverCloseTimer.current = setTimeout(() => setHoveredId(null), 140);
+  };
+  useEffect(() => () => clearHoverClose(), []);
+
   const equipped = items.filter((i) => i.is_equipped);
   const unequipped = useMemo(
     () => sortItemsByOrder(items.filter((i) => !i.is_equipped), bagOrder),
@@ -116,6 +130,12 @@ export default function InventoryGrid({
     : null;
   const pinnedEq = pinnedItem
     ? equipped.find((i) => i.type === pinnedItem.type) || null
+    : null;
+  const hoveredItem = desktopHover && !bulkMode && hoveredId
+    ? unequipped.find((i) => i.id === hoveredId)
+    : null;
+  const hoveredEq = hoveredItem
+    ? equipped.find((i) => i.type === hoveredItem.type) || null
     : null;
 
   const wrapAction = (fn) => (item) => {
@@ -170,7 +190,6 @@ export default function InventoryGrid({
                   const comparable = !bulkMode && EQUIPPABLE_TYPES.includes(item.type);
                   const isSelectable = bulkMode && !item.locked;
                   const isSelected = selected.includes(item.id);
-                  const showHoverBubble = desktopHover && comparable && hoveredId === item.id && !dropSnapshot.isDraggingOver;
                   const isPinned = !desktopHover && pinnedId === item.id;
                   const eqSlot = equipped.find((i) => i.type === item.type) || null;
                   return (
@@ -186,11 +205,15 @@ export default function InventoryGrid({
                             ref={dragProvided.innerRef}
                             {...dragProvided.draggableProps}
                             {...(canDrag ? dragProvided.dragHandleProps : {})}
-                            onMouseEnter={() => {
-                              if (desktopHover && comparable && !dragSnapshot.isDragging) setHoveredId(item.id);
+                            onMouseEnter={(e) => {
+                              if (desktopHover && comparable && !dragSnapshot.isDragging) {
+                                clearHoverClose();
+                                hoverAnchorRef.current = e.currentTarget;
+                                setHoveredId(item.id);
+                              }
                             }}
                             onMouseLeave={() => {
-                              if (desktopHover) setHoveredId((h) => (h === item.id ? null : h));
+                              if (desktopHover) scheduleHoverClose();
                             }}
                             onClick={() => {
                               if (dragSnapshot.isDragging) return;
@@ -245,21 +268,6 @@ export default function InventoryGrid({
                                   onToggleSelect={() => toggleSelect(item.id)}
                                 />
                                 {comparable && <UpgradeBadge item={item} eqSlot={eqSlot} characterClass={characterClass} />}
-                                {showHoverBubble && !dragSnapshot.isDragging && (
-                                  <div
-                                    className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-[60] pointer-events-auto"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <StatCompareBubble
-                                      item={item}
-                                      equipped={eqSlot}
-                                      onEquip={onEquip}
-                                      onSell={onSell}
-                                      onLock={onLock}
-                                      characterClass={characterClass}
-                                    />
-                                  </div>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -276,6 +284,27 @@ export default function InventoryGrid({
           </div>
         )}
       </Droppable>
+
+      {hoveredItem && EQUIPPABLE_TYPES.includes(hoveredItem.type) && (
+        <GearInspectPortal
+          anchorRef={hoverAnchorRef}
+          open
+          onClose={scheduleHoverClose}
+          onKeepOpen={() => {
+            clearHoverClose();
+            setHoveredId(hoveredItem.id);
+          }}
+        >
+          <StatCompareBubble
+            item={hoveredItem}
+            equipped={hoveredEq}
+            onEquip={onEquip}
+            onSell={onSell}
+            onLock={onLock}
+            characterClass={characterClass}
+          />
+        </GearInspectPortal>
+      )}
 
       {bulkMode && (
         <div className="shrink-0 flex flex-wrap items-center justify-center gap-2 p-2.5 rounded-xl border border-rose-500/30 bg-rose-500/5">

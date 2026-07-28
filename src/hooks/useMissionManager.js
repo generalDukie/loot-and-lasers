@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
-import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
+import { applyPendingLootFromResponse, countItems, getInventoryCap } from "@/lib/inventoryCap";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   FUEL_MAX,
@@ -172,6 +172,7 @@ export function useMissionManager() {
   const [completeSummary, setCompleteSummary] = useState(null);
   const [missionBattle, setMissionBattle] = useState(null);
   const [nexusBonus, setNexusBonus] = useState(false);
+  const [inventoryFullOpen, setInventoryFullOpen] = useState(false);
   const claimingRef = useRef(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -273,6 +274,12 @@ export function useMissionManager() {
     }
 
     try {
+      const bagCount = await countItems(character.id);
+      if (bagCount >= getInventoryCap(character)) {
+        setInventoryFullOpen(true);
+        return;
+      }
+
       const res = await api.functions.invoke("LaunchMission", {
         template: {
           ...template,
@@ -296,10 +303,14 @@ export function useMissionManager() {
         body: `${template.name} — returning in ${formatTime(duration)} · -${spent} ⛽`,
       });
     } catch (e) {
+      if (/inventory full/i.test(e?.message || "")) {
+        setInventoryFullOpen(true);
+        return;
+      }
       toast({ title: "Launch failed", description: e?.message || "Try again.", variant: "destructive" });
       await load();
     }
-  }, [activeMission, character, toast, load]);
+  }, [activeMission, character, toast, load, setCharacter]);
 
   // Soft end-mission fight — used by claim and by skip-to-fight.
   const startMissionBattle = useCallback(async (mission) => {
@@ -542,6 +553,8 @@ export function useMissionManager() {
     handleBuyFuel,
     setCompleteSummary,
     setLaunchAnim,
+    inventoryFullOpen,
+    setInventoryFullOpen,
     navigate,
   };
 }

@@ -24,14 +24,18 @@ function getInventoryCap(_ch) {
   return 10;
 }
 
-/** Live loot / shop gear roller — budgeted attributes by level, slot, and rarity. */
-export function randomItem(rarity, level = 1, type, rng = Math.random) {
+/**
+ * Live loot / shop gear roller — budgeted attributes by level, slot, and rarity.
+ * Pass `className` (player class) so Common–Epic use the per-item 60/40 favored pool.
+ * Legendary ignores class and stays fully class-neutral.
+ */
+export function randomItem(rarity, level = 1, type, rng = Math.random, className) {
   const itemLevel = Math.max(1, level || 1);
   const t = type && EQUIPMENT_SLOTS.includes(type)
     ? type
     : pick(EQUIPMENT_SLOTS, rng);
   const names = ITEM_NAMES[t] || ITEM_NAMES.weapon;
-  const { stats } = rollItemStats({ itemLevel, type: t, rarity, rng });
+  const { stats } = rollItemStats({ itemLevel, type: t, rarity, rng, className });
   const item = {
     name: pick(names, rng),
     type: t,
@@ -42,6 +46,12 @@ export function randomItem(rarity, level = 1, type, rng = Math.random) {
   };
   item.sell_value = computeItemVendorValue(item);
   return item;
+}
+
+/** Bind randomItem to a player's class for shop stock / loot helpers. */
+export function randomItemForClass(className) {
+  return (rarity, level, type, rng) =>
+    randomItem(rarity, level, type, typeof rng === "function" ? rng : Math.random, className);
 }
 
 function lerpWaypoints(level, points) {
@@ -173,7 +183,7 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
       patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
       patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
     } else {
-      const it = randomItem(rewards.item_rarity, ch.level || 1);
+      const it = randomItem(rewards.item_rarity, ch.level || 1, undefined, Math.random, ch.class);
       const created = await gameService.asServiceRole.entities.Item.create({
         ...it, owner_id: ch.created_by_id, character_id: ch.id,
       });
@@ -305,7 +315,7 @@ export async function redeemPromoCode(gameService, character, code) {
     const equipped = { ...(ch.equipped_items || {}) };
     const lvl = r.level || ch.level || 1;
     for (const type of slots) {
-      const it = randomItem("legendary", lvl, type);
+      const it = randomItem("legendary", lvl, type, Math.random, ch.class);
       const created = await gameService.asServiceRole.entities.Item.create({
         ...it, owner_id: ch.created_by_id, character_id: ch.id, is_equipped: true,
       });

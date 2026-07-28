@@ -234,9 +234,9 @@ export default function CharacterPage() {
   return (
     <DragDropContext onDragEnd={onDragEnd}>
     <div className="flex flex-col md:flex-row gap-3 pt-1.5 md:flex-1 md:min-h-0 md:overflow-hidden">
-      {/* Left — portrait/gear + bag slots underneath */}
+      {/* Left — large centered hero + compact backpack */}
       <div className="md:flex-1 md:min-h-0 md:overflow-hidden flex flex-col gap-2">
-        <div className="flex-[1.15] min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
           <CharacterHeader
             character={character}
             guild={guild}
@@ -253,30 +253,28 @@ export default function CharacterPage() {
 
         <motion.div
           {...fadeUp(0.08)}
-          className="flex-1 min-h-[11rem] bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-3 flex flex-col"
+          className="shrink-0 bg-card/40 backdrop-blur-sm border border-border/50 rounded-2xl px-2.5 py-2"
         >
-          <h2 className="font-display font-semibold text-xs tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5 shrink-0">
-            <Backpack className="w-3.5 h-3.5 text-primary" /> INVENTORY
-            <span className={`ml-auto tabular-nums ${bagCount >= inventoryCap ? "text-amber-400" : ""}`}>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Backpack className="w-3.5 h-3.5 text-amber-600/90" />
+            <h2 className="font-display font-semibold text-[10px] tracking-wider text-muted-foreground">
+              BACKPACK
+            </h2>
+            <span className={`ml-auto text-[10px] tabular-nums font-display ${bagCount >= inventoryCap ? "text-amber-400" : "text-muted-foreground"}`}>
               {bagCount}/{inventoryCap}
             </span>
-          </h2>
-          <p className="text-[9px] text-muted-foreground/70 mb-2 italic shrink-0">
-            Double-click to equip · drag onto gear slots · hover to compare
-          </p>
-          <div className="flex-1 min-h-0">
-            <InventorySlotBoard
-              items={inv.items}
-              bagOrder={bagOrder}
-              slotCount={bagSlots}
-              onEquip={handleEquip}
-              onSell={handleSell}
-              onBulkSell={handleBulkSell}
-              onUse={handleUse}
-              onLock={inv.toggleLock}
-              characterClass={character.class}
-            />
           </div>
+          <InventorySlotBoard
+            items={inv.items}
+            bagOrder={bagOrder}
+            slotCount={bagSlots}
+            onEquip={handleEquip}
+            onSell={handleSell}
+            onBulkSell={handleBulkSell}
+            onUse={handleUse}
+            onLock={inv.toggleLock}
+            characterClass={character.class}
+          />
         </motion.div>
       </div>
 
@@ -289,7 +287,7 @@ export default function CharacterPage() {
           }`}
           style={canBuyAny ? { boxShadow: `0 0 24px ${STARDUST_COLOR}22` } : undefined}
         >
-          <div className="flex items-start justify-between gap-3 mb-2 shrink-0">
+          <div className="flex items-start justify-between gap-3 mb-1.5 shrink-0">
             <div>
               <h2 className="font-display font-bold text-sm tracking-wide flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4" style={{ color: STARDUST_COLOR }} />
@@ -314,23 +312,24 @@ export default function CharacterPage() {
           </div>
 
           <TooltipProvider delayDuration={200}>
-            <div className="flex-1 min-h-0 overflow-hidden flex flex-col justify-start gap-1.5">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col gap-1">
               {Object.entries(totalStats).map(([stat, val]) => (
-                <StatBar
-                  key={stat}
-                  variant="hero"
-                  stat={stat}
-                  value={val}
-                  base={baseStats[stat]}
-                  className={character.class}
-                  onAdd={allocate}
-                  canAdd={sd >= costByStat[stat]}
-                  cost={costByStat[stat]}
-                />
+                <div key={stat} className="flex-1 min-h-0">
+                  <StatBar
+                    variant="hero"
+                    stat={stat}
+                    value={val}
+                    base={baseStats[stat]}
+                    className={character.class}
+                    onAdd={allocate}
+                    canAdd={sd >= costByStat[stat]}
+                    cost={costByStat[stat]}
+                  />
+                </div>
               ))}
             </div>
 
-            <div className="mt-2 pt-2 border-t border-border/30 shrink-0">
+            <div className="mt-1.5 pt-1.5 border-t border-border/30 shrink-0">
               <DerivedStatsPanel
                 embedded
                 totalStats={totalStats}

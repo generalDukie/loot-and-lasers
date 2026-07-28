@@ -138,14 +138,14 @@ export function pickGearForBot(_catalogItems, classKey, level) {
   const weaponRarity = rollBotRarity(gearLevel);
   const weaponBase = Math.random() < 0.6
     ? generateClassWeapon(classKey, weaponRarity, gearLevel)
-    : generateItem(weaponRarity, gearLevel, "weapon");
+    : generateItem(weaponRarity, gearLevel, "weapon", classKey);
   items.push({ ...weaponBase, id: botGearId("weapon"), is_equipped: true });
 
   const extras = [...BOT_EXTRA_SLOTS].sort(() => Math.random() - 0.5);
   const extraCount = 1 + Math.floor(Math.random() * 2);
   for (let i = 0; i < extraCount; i++) {
     const type = extras[i];
-    const piece = generateItem(rollBotRarity(gearLevel), gearLevel, type);
+    const piece = generateItem(rollBotRarity(gearLevel), gearLevel, type, classKey);
     items.push({ ...piece, id: botGearId(type), is_equipped: true });
   }
   return items;

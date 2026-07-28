@@ -35,7 +35,7 @@ export default function ItemGrantForm({ character, onAction, onGranted }) {
           ...(type === "weapon" ? { emoji: weaponEmojiFor(customName.trim() || `${rarity} ${type}`) } : {}),
         };
       } else {
-        item = generateItem(rarity, Math.max(1, level), type);
+        item = generateItem(rarity, Math.max(1, level), type, character.class);
       }
       const res = await onAction({ action: "give_item", character_id: character.id, item });
       if (res?.item) onGranted?.(res.item);

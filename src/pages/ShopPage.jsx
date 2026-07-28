@@ -18,13 +18,14 @@ import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 import { powerRating } from "@/components/game/StatCompareBubble";
 import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
-import { getMyCharacter } from "@/lib/socialEngine";
+import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { playHaggleWinGrowl } from "@/lib/shopHaggleSfx";
 import {
   ShoppingBag, Clock, Gem, RefreshCw, ArrowUp, ArrowDown, Minus,
   Swords, FlaskConical, PackageOpen, Flame, MessageSquare,
 } from "lucide-react";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
+import FitScaleFrame from "@/components/game/FitScaleFrame";
 
 function fmtCountdown(sec) {
   const h = Math.floor(sec / 3600);
@@ -77,14 +78,14 @@ function StatDeltaRow({ slot, equipped }) {
   const keys = Object.keys(slot.stats).filter((k) => (slot.stats[k] || 0) > 0 || (equipped?.stats?.[k] || 0) > 0);
   if (!keys.length) return null;
   return (
-    <div className="flex flex-wrap gap-x-2.5 gap-y-1 mb-2">
+    <div className="flex flex-wrap gap-x-2 gap-y-0.5 mb-1.5">
       {keys.map((stat) => {
         const v = slot.stats[stat] || 0;
         const e = equipped?.stats?.[stat] || 0;
         const d = v - e;
         const color = getStatColor(stat);
         return (
-          <span key={stat} className="text-[10px] tabular-nums font-medium" style={{ color }} title={equipped ? `Equipped ${e}` : "No piece equipped"}>
+          <span key={stat} className="text-[9px] tabular-nums font-medium" style={{ color }} title={equipped ? `Equipped ${e}` : "No piece equipped"}>
             {STAT_ICONS[stat]} {v}
             {equipped ? (
               <span className={d > 0 ? "text-green-400" : d < 0 ? "text-red-400" : "text-muted-foreground"}>
@@ -118,7 +119,9 @@ export default function ShopPage() {
     if (meta) setShopMeta(meta);
     setCharacter((c) => {
       const prev = baseChar || c;
-      return { ...prev, ...patch, ...(meta ? { shop_meta: meta } : {}) };
+      const next = { ...prev, ...patch, ...(meta ? { shop_meta: meta } : {}) };
+      if (next?.created_by_id) primeMyCharacterCache(next);
+      return next;
     });
     return { patch, meta };
   }, []);
@@ -392,27 +395,27 @@ export default function ShopPage() {
     const canHaggleAfford = (character.stardust || 0) >= Math.ceil(slot.cost * 0.85);
     const goneLabel = wasYanked ? "Yanked" : "Sold";
     return (
-      <div className="mt-auto flex items-end justify-between gap-2 pt-1">
+      <div className="mt-auto flex items-end justify-between gap-2 pt-0.5">
         <span className="flex flex-col gap-0.5">
-          <span className="flex items-center gap-2 text-sm font-display font-bold">
+          <span className="flex items-center gap-1.5 text-xs font-display font-bold">
             <span className="flex items-center gap-1" style={{ color: STARDUST_COLOR }}>
-              <StardustIcon className="w-3.5 h-3.5" /> {slot.cost}
+              <StardustIcon className="w-3 h-3" /> {slot.cost}
             </span>
             {slot.nova_cost > 0 && (
               <span className="flex items-center gap-1 text-amber-300">
-                <Gem className="w-3.5 h-3.5" /> {slot.nova_cost}
+                <Gem className="w-3 h-3" /> {slot.nova_cost}
               </span>
             )}
           </span>
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {!owned && !slot._bundle && (
             <button
               type="button"
               onClick={() => purchaseGearSlot(slot, { haggle: true, isHot })}
               disabled={!canHaggleAfford || busySlot === slot._slotId}
               title="~40% chance 15–20% off; otherwise they yank the listing"
-              className="text-[10px] px-2 py-1.5 rounded-lg font-display font-semibold tracking-wide border border-fuchsia-400/35 text-fuchsia-300 hover:bg-fuchsia-500/15 disabled:opacity-40"
+              className="text-[9px] px-1.5 py-1 rounded-md font-display font-semibold tracking-wide border border-fuchsia-400/35 text-fuchsia-300 hover:bg-fuchsia-500/15 disabled:opacity-40"
             >
               Haggle
             </button>
@@ -421,7 +424,7 @@ export default function ShopPage() {
             whileTap={{ scale: 0.9 }}
             onClick={() => purchaseGearSlot(slot, { isHot })}
             disabled={owned || !affordable || busySlot === slot._slotId}
-            className={`text-xs px-3 py-1.5 rounded-lg font-display font-semibold tracking-wide transition-colors ${
+            className={`text-[10px] px-2.5 py-1 rounded-md font-display font-semibold tracking-wide transition-colors ${
               owned
                 ? "bg-muted text-muted-foreground"
                 : affordable
@@ -437,268 +440,257 @@ export default function ShopPage() {
   }
 
   return (
-    <div className="relative -mx-1 px-1 pb-8">
+    <div className="relative flex-1 min-h-0 overflow-hidden -mx-1 px-1 flex flex-col">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-3xl" aria-hidden>
         <div className="absolute inset-0 bg-gradient-to-b from-violet-950/35 via-transparent to-amber-950/20" />
         <div className="absolute -top-20 left-1/4 w-72 h-72 rounded-full bg-fuchsia-500/10 blur-3xl" />
         <div className="absolute top-40 right-0 w-64 h-64 rounded-full bg-cyan-500/10 blur-3xl" />
       </div>
 
-      <div className="space-y-7">
-        <motion.header
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-end justify-between flex-wrap gap-3 pt-1"
-        >
-          <div className="min-w-0">
-            <p className="text-[9px] font-display font-bold tracking-[0.28em] uppercase text-fuchsia-300/80 mb-1">
-              Under the table
-            </p>
-            <h1 className="font-display font-black text-2xl sm:text-3xl tracking-wide text-foreground flex items-center gap-2.5">
-              <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-fuchsia-500/15 border border-fuchsia-400/30 text-fuchsia-300 shadow-[0_0_18px_rgba(232,121,249,0.25)]">
-                <ShoppingBag className="w-4 h-4" />
-              </span>
-              Black Market
-            </h1>
-            <p className="mt-2 flex items-start gap-1.5 text-[11px] text-fuchsia-200/80 italic max-w-md leading-relaxed">
-              <MessageSquare className="w-3.5 h-3.5 shrink-0 mt-0.5 text-fuchsia-400/80" />
-              “{vendorLine}”
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <span className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 border border-amber-400/35 text-amber-300 tabular-nums">
-              <Gem className="w-3.5 h-3.5" /> {(character.nova_crystals || 0).toLocaleString()}
-            </span>
-            <span
-              className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 tabular-nums"
-              style={{ color: STARDUST_COLOR, border: `1px solid ${STARDUST_COLOR}4D` }}
-            >
-              <StardustIcon className="w-3.5 h-3.5" /> {(character.stardust || 0).toLocaleString()}
-            </span>
-            <span className="flex items-center gap-1.5 text-xs font-display font-semibold px-3 py-1.5 rounded-full bg-background/70 border border-border/50 text-muted-foreground tabular-nums">
-              <Clock className="w-3.5 h-3.5 text-primary" /> {fmtCountdown(secondsLeft)}
-            </span>
-          </div>
-        </motion.header>
-
-        {/* ——— Daily Hot Deal ——— */}
-        {hotDeal && (
-          <motion.section
-            initial={{ opacity: 0, y: 10 }}
+      <FitScaleFrame>
+        <div className="flex flex-col gap-2.5 pb-1">
+          <motion.header
+            initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative overflow-hidden rounded-2xl border border-orange-400/40 bg-gradient-to-br from-orange-500/15 via-card/50 to-fuchsia-500/10 p-4 sm:p-5 shadow-[0_0_40px_rgba(251,146,60,0.12)]"
+            className="flex items-center justify-between flex-wrap gap-2"
           >
-            <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-              <div>
-                <p className="text-[9px] font-display font-bold tracking-[0.2em] uppercase text-orange-300 mb-0.5 flex items-center gap-1">
-                  <Flame className="w-3 h-3" /> Hot Deal · daily
-                </p>
-                <h2 className="font-display font-bold text-base tracking-wide text-foreground">
-                  One piece. No restock. Resets {hotEta}.
-                </h2>
-              </div>
-              <span className="text-[10px] font-display font-semibold px-2 py-1 rounded-full border border-orange-400/40 text-orange-300 bg-orange-500/10 tabular-nums">
-                ET midnight · {hotEta}
+            <div className="min-w-0">
+              <p className="text-[8px] font-display font-bold tracking-[0.28em] uppercase text-fuchsia-300/80">
+                Under the table
+              </p>
+              <h1 className="font-display font-black text-xl tracking-wide text-foreground flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-fuchsia-500/15 border border-fuchsia-400/30 text-fuchsia-300">
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                </span>
+                Black Market
+              </h1>
+              <p className="mt-0.5 flex items-start gap-1 text-[10px] text-fuchsia-200/80 italic max-w-md leading-snug">
+                <MessageSquare className="w-3 h-3 shrink-0 mt-0.5 text-fuchsia-400/80" />
+                “{vendorLine}”
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              <span className="flex items-center gap-1 text-[11px] font-display font-semibold px-2 py-1 rounded-full bg-background/70 border border-amber-400/35 text-amber-300 tabular-nums">
+                <Gem className="w-3 h-3" /> {(character.nova_crystals || 0).toLocaleString()}
+              </span>
+              <span
+                className="flex items-center gap-1 text-[11px] font-display font-semibold px-2 py-1 rounded-full bg-background/70 tabular-nums"
+                style={{ color: STARDUST_COLOR, border: `1px solid ${STARDUST_COLOR}4D` }}
+              >
+                <StardustIcon className="w-3 h-3" /> {(character.stardust || 0).toLocaleString()}
+              </span>
+              <span className="flex items-center gap-1 text-[11px] font-display font-semibold px-2 py-1 rounded-full bg-background/70 border border-border/50 text-muted-foreground tabular-nums">
+                <Clock className="w-3 h-3 text-primary" /> {fmtCountdown(secondsLeft)}
               </span>
             </div>
-            {(() => {
-              const slot = hotDeal;
-              const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
-              const eq = equippedByType[slot.type] || null;
-              return (
-                <div
-                  className={`relative flex flex-col sm:flex-row gap-4 p-4 rounded-xl border bg-background/55 ${hotSold || hotYanked ? "opacity-70" : ""}`}
-                  style={{ borderColor: color + "66", boxShadow: `0 0 22px ${color}22` }}
-                >
-                  {(hotSold || hotYanked) && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-xl">
-                      <span className="text-xs font-display font-black tracking-[0.2em] uppercase text-muted-foreground border border-border/60 bg-card/80 px-3 py-1 rounded-full">
-                        {hotYanked ? "Yanked today" : "Claimed today"}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-3 min-w-0 sm:w-1/2">
-                    <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} baseName={slot.base_name} level_requirement={slot.level_requirement} size={56} />
-                    <div className="min-w-0">
-                      <h4 className="font-display font-bold text-base truncate" style={{ color }}>{slot.name}</h4>
-                      <p className="text-[10px] text-muted-foreground capitalize">{slot.rarity} · {gearTypeLabel(slot.type)}</p>
-                      <div className="mt-1.5"><CompareBadge slot={slot} equipped={eq} characterClass={character.class} /></div>
-                    </div>
-                  </div>
-                  <div className="flex-1 flex flex-col min-w-0">
-                    <StatDeltaRow slot={slot} equipped={eq} />
-                    {renderGearActions(slot, { isHot: true })}
-                  </div>
-                </div>
-              );
-            })()}
-          </motion.section>
-        )}
+          </motion.header>
 
-        {/* ——— Armory ——— */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] via-card/40 to-transparent p-4 sm:p-5 shadow-[0_16px_40px_rgba(0,0,0,0.25)]"
-        >
-          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-            <div>
-              <p className="text-[9px] font-display font-bold tracking-[0.2em] uppercase text-cyan-300/80 mb-0.5">Stall A</p>
-              <h2 className="font-display font-bold text-base tracking-wide text-foreground flex items-center gap-2">
-                <Swords className="w-4 h-4 text-cyan-300" /> Armory
-              </h2>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Haggle if you dare · crates sometimes</p>
-            </div>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={refreshGear}
-              disabled={gearRefreshing}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-display font-semibold tracking-wide bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-400/30 transition-colors disabled:opacity-50"
+          {hotDeal && (
+            <motion.section
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative overflow-hidden rounded-xl border border-orange-400/40 bg-gradient-to-br from-orange-500/15 via-card/50 to-fuchsia-500/10 p-2.5 shadow-[0_0_28px_rgba(251,146,60,0.1)]"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${gearRefreshing ? "animate-spin" : ""}`} />
-              Restock · <Gem className="w-3 h-3" /> {SHOP_REFRESH_COST}
-            </motion.button>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {inventory.map((slot) => {
-              const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
-              const wasYanked = !!yanked[slot._slotId];
-              const owned = !!purchased[slot._slotId] || wasYanked;
-              const eq = equippedByType[slot.type] || null;
-              const better = !owned && !slot._bundle && eq && powerRating(slot, character.class) > powerRating(eq, character.class);
-              return (
-                <motion.div
-                  key={slot._slotId}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: owned ? 0.72 : 1, y: 0 }}
-                  whileHover={owned ? undefined : { y: -3 }}
-                  className={`relative p-4 rounded-xl border bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden ${
-                    owned ? "opacity-70" : better ? "ring-1 ring-green-400/35" : ""
-                  }`}
-                  style={{ borderColor: color + "45", boxShadow: owned ? undefined : `0 0 16px ${color}14` }}
-                >
-                  {owned && (
-                    <div className="absolute inset-0 bg-black/35 z-10 flex items-center justify-center">
-                      <span className="text-xs font-display font-black tracking-[0.2em] uppercase text-muted-foreground border border-border/60 bg-card/80 px-3 py-1 rounded-full">
-                        {wasYanked ? "Yanked" : "Sold"}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-3 mb-2">
-                    {slot._bundle ? (
-                      <div className="w-11 h-11 rounded-xl border border-amber-400/40 bg-amber-500/10 flex items-center justify-center text-2xl">📦</div>
-                    ) : (
-                      <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} baseName={slot.base_name} level_requirement={slot.level_requirement} />
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-1.5">
+                <p className="text-[8px] font-display font-bold tracking-[0.2em] uppercase text-orange-300 flex items-center gap-1">
+                  <Flame className="w-3 h-3" /> Hot Deal · resets {hotEta}
+                </p>
+              </div>
+              {(() => {
+                const slot = hotDeal;
+                const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
+                const eq = equippedByType[slot.type] || null;
+                return (
+                  <div
+                    className={`relative flex flex-col sm:flex-row gap-2.5 p-2.5 rounded-lg border bg-background/55 ${hotSold || hotYanked ? "opacity-70" : ""}`}
+                    style={{ borderColor: color + "66", boxShadow: `0 0 16px ${color}18` }}
+                  >
+                    {(hotSold || hotYanked) && (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-lg">
+                        <span className="text-[10px] font-display font-black tracking-[0.2em] uppercase text-muted-foreground border border-border/60 bg-card/80 px-2.5 py-0.5 rounded-full">
+                          {hotYanked ? "Yanked today" : "Claimed today"}
+                        </span>
+                      </div>
                     )}
-                    <div className="min-w-0 flex-1">
-                      <h4 className="font-display font-semibold text-sm truncate" style={{ color }}>{slot.name}</h4>
-                      <p className="text-[10px] text-muted-foreground capitalize">
-                        {slot._bundle ? "bundle · 2 commons" : `${slot.rarity} · ${gearTypeLabel(slot.type)}`}
-                      </p>
+                    <div className="flex items-center gap-2 min-w-0 sm:w-[42%]">
+                      <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} baseName={slot.base_name} level_requirement={slot.level_requirement} size={40} />
+                      <div className="min-w-0">
+                        <h4 className="font-display font-bold text-sm truncate" style={{ color }}>{slot.name}</h4>
+                        <p className="text-[9px] text-muted-foreground capitalize">{slot.rarity} · {gearTypeLabel(slot.type)}</p>
+                        <div className="mt-1"><CompareBadge slot={slot} equipped={eq} characterClass={character.class} /></div>
+                      </div>
+                    </div>
+                    <div className="flex-1 flex flex-col min-w-0 justify-between">
+                      <StatDeltaRow slot={slot} equipped={eq} />
+                      {renderGearActions(slot, { isHot: true })}
                     </div>
                   </div>
-                  <div className="mb-2">
-                    <CompareBadge slot={slot} equipped={eq} characterClass={character.class} />
-                  </div>
-                  {slot._bundle ? (
-                    <p className="text-[10px] text-muted-foreground mb-2">{slot.flavor_text}</p>
-                  ) : (
-                    <StatDeltaRow slot={slot} equipped={eq} />
-                  )}
-                  {renderGearActions(slot)}
-                </motion.div>
-              );
-            })}
-          </div>
-        </motion.section>
+                );
+              })()}
+            </motion.section>
+          )}
 
-        {/* ——— Stim Lab ——— */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="rounded-2xl border border-amber-400/20 bg-gradient-to-br from-amber-500/[0.08] via-card/40 to-violet-500/[0.05] p-4 sm:p-5 shadow-[0_16px_40px_rgba(0,0,0,0.25)]"
-        >
-          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-            <div>
-              <p className="text-[9px] font-display font-bold tracking-[0.2em] uppercase text-amber-300/80 mb-0.5">Stall B</p>
-              <h2 className="font-display font-bold text-base tracking-wide text-foreground flex items-center gap-2">
-                <FlaskConical className="w-4 h-4 text-amber-300" /> Stim Lab
-              </h2>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Timed buffs · occasional Stim Trio packs</p>
-            </div>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={refreshConsumables}
-              disabled={consRefreshing}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-display font-semibold tracking-wide bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 border border-violet-400/30 transition-colors disabled:opacity-50"
+          <div className="grid gap-2.5 lg:grid-cols-2 items-start">
+            <motion.section
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] via-card/40 to-transparent p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${consRefreshing ? "animate-spin" : ""}`} />
-              Restock · <Gem className="w-3 h-3" /> {SHOP_REFRESH_COST}
-            </motion.button>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {consumableSlots.map((slot, index) => {
-              const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
-              const cost = slot._cost ?? slot.sell_value ?? 25;
-              const affordable = (character.stardust || 0) >= cost;
-              const isTrio = slot._bundle === "stim_trio";
-              const stat = slot.consumable?.stat || "all";
-              const tint = isTrio ? "#FBBF24" : getStatColor(stat);
-              const icon = isTrio ? "📦" : (stat === "all" ? "✨" : (STAT_ICONS[stat] || "🧪"));
-              const slotKey = slot._slotId || `cons-${index}`;
-              return (
-                <div
-                  key={slotKey}
-                  className="p-4 rounded-xl border bg-background/50 backdrop-blur-sm flex flex-col"
-                  style={{ borderColor: `${tint}55`, boxShadow: `0 0 14px ${tint}12` }}
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div
-                      className="w-11 h-11 rounded-xl border flex items-center justify-center text-xl shrink-0"
-                      style={{ backgroundColor: `${tint}18`, borderColor: `${tint}44` }}
-                    >
-                      {icon}
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="font-display font-semibold text-sm truncate" style={{ color }}>{slot.name}</h4>
-                      <p className="text-[10px] text-muted-foreground capitalize">
-                        {isTrio ? "bundle · 3 stims" : `${slot.rarity} · stim`}
-                      </p>
-                    </div>
-                  </div>
-                  {isTrio ? (
-                    <p className="text-xs text-amber-200/90 mb-3 leading-snug">
-                      {(slot.bundle_items || []).map((b) => b.name.replace(/ Stim$/, "")).join(" · ")}
-                    </p>
-                  ) : (
-                    <p className="text-xs font-medium mb-3" style={{ color: tint }}>
-                      +{Math.round((slot.consumable?.mult || 0) * 100)}% {stat === "all" ? "ALL stats" : stat}
-                      <span className="text-muted-foreground font-normal"> · {slot.consumable?.duration_hours}h</span>
-                    </p>
-                  )}
-                  <div className="mt-auto flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-sm font-display font-bold" style={{ color: STARDUST_COLOR }}>
-                      <StardustIcon className="w-3.5 h-3.5" /> {cost}
-                    </span>
-                    <button
-                      onClick={() => buyConsumable({ ...slot, _cost: cost }, index)}
-                      disabled={!affordable || busySlot === slotKey}
-                      className={`text-xs px-3 py-1.5 rounded-lg font-display font-semibold tracking-wide transition-colors ${
-                        affordable ? "bg-primary/15 text-primary hover:bg-primary/25 painted-btn" : "bg-muted/40 text-muted-foreground/50"
-                      }`}
-                    >
-                      {busySlot === slotKey ? "…" : isTrio ? "Open" : "Buy"}
-                    </button>
-                  </div>
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <div>
+                  <h2 className="font-display font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5">
+                    <Swords className="w-3.5 h-3.5 text-cyan-300" /> Armory
+                  </h2>
+                  <p className="text-[9px] text-muted-foreground">Haggle · crates sometimes</p>
                 </div>
-              );
-            })}
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={refreshGear}
+                  disabled={gearRefreshing}
+                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md font-display font-semibold tracking-wide bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-400/30 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${gearRefreshing ? "animate-spin" : ""}`} />
+                  Restock · <Gem className="w-2.5 h-2.5" /> {SHOP_REFRESH_COST}
+                </motion.button>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {inventory.map((slot) => {
+                  const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
+                  const wasYanked = !!yanked[slot._slotId];
+                  const owned = !!purchased[slot._slotId] || wasYanked;
+                  const eq = equippedByType[slot.type] || null;
+                  const better = !owned && !slot._bundle && eq && powerRating(slot, character.class) > powerRating(eq, character.class);
+                  return (
+                    <motion.div
+                      key={slot._slotId}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: owned ? 0.72 : 1, y: 0 }}
+                      className={`relative p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden ${
+                        owned ? "opacity-70" : better ? "ring-1 ring-green-400/35" : ""
+                      }`}
+                      style={{ borderColor: color + "45", boxShadow: owned ? undefined : `0 0 12px ${color}12` }}
+                    >
+                      {owned && (
+                        <div className="absolute inset-0 bg-black/35 z-10 flex items-center justify-center">
+                          <span className="text-[9px] font-display font-black tracking-[0.2em] uppercase text-muted-foreground border border-border/60 bg-card/80 px-2 py-0.5 rounded-full">
+                            {wasYanked ? "Yanked" : "Sold"}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mb-1.5">
+                        {slot._bundle ? (
+                          <div className="w-9 h-9 rounded-lg border border-amber-400/40 bg-amber-500/10 flex items-center justify-center text-lg">📦</div>
+                        ) : (
+                          <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} baseName={slot.base_name} level_requirement={slot.level_requirement} size={36} />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-display font-semibold text-xs truncate" style={{ color }}>{slot.name}</h4>
+                          <p className="text-[9px] text-muted-foreground capitalize">
+                            {slot._bundle ? "bundle · 2 commons" : `${slot.rarity} · ${gearTypeLabel(slot.type)}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mb-1">
+                        <CompareBadge slot={slot} equipped={eq} characterClass={character.class} />
+                      </div>
+                      {slot._bundle ? (
+                        <p className="text-[9px] text-muted-foreground mb-1.5 line-clamp-2">{slot.flavor_text}</p>
+                      ) : (
+                        <StatDeltaRow slot={slot} equipped={eq} />
+                      )}
+                      {renderGearActions(slot)}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.section>
+
+            <motion.section
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-amber-400/20 bg-gradient-to-br from-amber-500/[0.08] via-card/40 to-violet-500/[0.05] p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <div>
+                  <h2 className="font-display font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5">
+                    <FlaskConical className="w-3.5 h-3.5 text-amber-300" /> Stim Lab
+                  </h2>
+                  <p className="text-[9px] text-muted-foreground">Timed buffs · Stim Trios</p>
+                </div>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={refreshConsumables}
+                  disabled={consRefreshing}
+                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md font-display font-semibold tracking-wide bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 border border-violet-400/30 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${consRefreshing ? "animate-spin" : ""}`} />
+                  Restock · <Gem className="w-2.5 h-2.5" /> {SHOP_REFRESH_COST}
+                </motion.button>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {consumableSlots.map((slot, index) => {
+                  const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
+                  const cost = slot._cost ?? slot.sell_value ?? 25;
+                  const affordable = (character.stardust || 0) >= cost;
+                  const isTrio = slot._bundle === "stim_trio";
+                  const stat = slot.consumable?.stat || "all";
+                  const tint = isTrio ? "#FBBF24" : getStatColor(stat);
+                  const icon = isTrio ? "📦" : (stat === "all" ? "✨" : (STAT_ICONS[stat] || "🧪"));
+                  const slotKey = slot._slotId || `cons-${index}`;
+                  return (
+                    <div
+                      key={slotKey}
+                      className="p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col"
+                      style={{ borderColor: `${tint}55`, boxShadow: `0 0 10px ${tint}10` }}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div
+                          className="w-9 h-9 rounded-lg border flex items-center justify-center text-base shrink-0"
+                          style={{ backgroundColor: `${tint}18`, borderColor: `${tint}44` }}
+                        >
+                          {icon}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-display font-semibold text-xs truncate" style={{ color }}>{slot.name}</h4>
+                          <p className="text-[9px] text-muted-foreground capitalize">
+                            {isTrio ? "bundle · 3 stims" : `${slot.rarity} · stim`}
+                          </p>
+                        </div>
+                      </div>
+                      {isTrio ? (
+                        <p className="text-[9px] text-amber-200/90 mb-2 leading-snug line-clamp-2">
+                          {(slot.bundle_items || []).map((b) => b.name.replace(/ Stim$/, "")).join(" · ")}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] font-medium mb-2" style={{ color: tint }}>
+                          +{Math.round((slot.consumable?.mult || 0) * 100)}% {stat === "all" ? "ALL" : stat}
+                          <span className="text-muted-foreground font-normal"> · {slot.consumable?.duration_hours}h</span>
+                        </p>
+                      )}
+                      <div className="mt-auto flex items-center justify-between">
+                        <span className="flex items-center gap-1 text-xs font-display font-bold" style={{ color: STARDUST_COLOR }}>
+                          <StardustIcon className="w-3 h-3" /> {cost}
+                        </span>
+                        <button
+                          onClick={() => buyConsumable({ ...slot, _cost: cost }, index)}
+                          disabled={!affordable || busySlot === slotKey}
+                          className={`text-[10px] px-2.5 py-1 rounded-md font-display font-semibold tracking-wide transition-colors ${
+                            affordable ? "bg-primary/15 text-primary hover:bg-primary/25 painted-btn" : "bg-muted/40 text-muted-foreground/50"
+                          }`}
+                        >
+                          {busySlot === slotKey ? "…" : isTrio ? "Open" : "Buy"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.section>
           </div>
-        </motion.section>
-      </div>
+        </div>
+      </FitScaleFrame>
     </div>
   );
 }

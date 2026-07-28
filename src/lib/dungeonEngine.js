@@ -193,11 +193,12 @@ export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
 
 /**
  * Rewards for clearing (or failing) a dungeon enemy.
- * @param {{ patrol?: boolean }} opts — patrol = cleared-world farm (reduced payout, no ship mods)
+ * @param {{ patrol?: boolean, className?: string }} opts — patrol = cleared-world farm (reduced payout, no ship mods)
  */
 export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts = {}) {
   const isBoss = enemyIndex === DUNGEON_ENEMIES_PER_PLANET;
   const patrol = !!opts.patrol;
+  const className = opts.className;
   const mult = patrol ? DUNGEON_PATROL_REWARD_MULT : 1;
   const enemyLevel = getDungeonEnemyLevel(planet?.id, enemyIndex);
   const dru = getEnemyDru(planet?.id, enemyIndex) * mult;
@@ -221,10 +222,10 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
   if (!patrol && isBoss) {
     const tier = Math.min(3, Math.floor(((planet.id || 1) - 1) / 3));
     const rarities = ["rare", "epic", "epic", "legendary"];
-    item = generateItem(rollItemRarity(rarities[tier], charLevel), Math.max(1, charLevel));
+    item = generateItem(rollItemRarity(rarities[tier], charLevel), Math.max(1, charLevel), undefined, className);
   } else if (Math.random() < (patrol ? 0.12 : 0.25)) {
     const rarity = rollItemRarity(Math.random() < 0.12 ? "uncommon" : "common", charLevel);
-    item = generateItem(rarity, Math.max(1, charLevel));
+    item = generateItem(rarity, Math.max(1, charLevel), undefined, className);
   }
 
   return {
@@ -248,7 +249,10 @@ export function rollMilestoneChest(character, charLevel) {
   const next = (character.dungeon_nodes_cleared || 0) + 1;
   if (next % DUNGEON_MILESTONE_EVERY !== 0) return { nodesCleared: next, item: null };
   const rarity = rollItemRarity(Math.random() < 0.35 ? "rare" : "uncommon", charLevel);
-  return { nodesCleared: next, item: generateItem(rarity, Math.max(1, charLevel)) };
+  return {
+    nodesCleared: next,
+    item: generateItem(rarity, Math.max(1, charLevel), undefined, character?.class),
+  };
 }
 
 /**

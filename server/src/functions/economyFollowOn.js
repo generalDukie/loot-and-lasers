@@ -341,10 +341,10 @@ export const FinishDungeonBattle = wrap((user, body) => {
     if (!patrol && isBoss) {
       const tier = Math.min(3, Math.floor((planetId - 1) / 3));
       const rarities = ["rare", "epic", "epic", "legendary"];
-      gear = randomItem(rollItemRarity(rarities[tier], ch.level || 1), Math.max(1, ch.level || 1));
+      gear = randomItem(rollItemRarity(rarities[tier], ch.level || 1), Math.max(1, ch.level || 1), undefined, Math.random, ch.class);
     } else if (Math.random() < (patrol ? 0.12 : 0.25)) {
       const rarity = rollItemRarity(Math.random() < 0.12 ? "uncommon" : "common", ch.level || 1);
-      gear = randomItem(rarity, Math.max(1, ch.level || 1));
+      gear = randomItem(rarity, Math.max(1, ch.level || 1), undefined, Math.random, ch.class);
     }
     if (gear) {
       collectGrant(grantOrCompensate(ch, stripShopNoise(gear), patch), itemsGranted, pendingLoot);
@@ -359,7 +359,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
     patch.dungeon_nodes_cleared = nextNodes;
     if (nextNodes % DUNGEON_MILESTONE_EVERY === 0) {
       const rarity = rollItemRarity(Math.random() < 0.35 ? "rare" : "uncommon", ch.level || 1);
-      const mile = randomItem(rarity, Math.max(1, ch.level || 1));
+      const mile = randomItem(rarity, Math.max(1, ch.level || 1), undefined, Math.random, ch.class);
       collectGrant(grantOrCompensate(ch, stripShopNoise(mile), patch), itemsGranted, pendingLoot);
     }
 

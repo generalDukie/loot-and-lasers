@@ -1,16 +1,32 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/api/gameClient";
-import { getMyCharacter, bustMyCharacterCache, primeMyCharacterCache } from "@/lib/socialEngine";
+import {
+  getMyCharacter,
+  bustMyCharacterCache,
+  primeMyCharacterCache,
+  subscribeMyCharacterCache,
+} from "@/lib/socialEngine";
 import { setActiveCharacterId } from "@/lib/activeCharacter";
 
 // Returns the current user's character and keeps it live: it subscribes to
-// Character realtime updates so currencies (stardust, fuel, nova crystals,
-// arena tokens) refresh the moment a backend function grants them, without
-// waiting for a manual refetch or page reload.
+// Character realtime updates AND to local cache primes so currencies (stardust,
+// fuel, nova crystals) refresh in the shell the moment any page claims/spends.
 export function useMyCharacter() {
   const [character, setCharacter] = useState(null);
   const [loading, setLoading] = useState(true);
   const idRef = useRef(null);
+
+  const applyFresh = useCallback((fresh) => {
+    if (!fresh?.id) return;
+    if (idRef.current && fresh.id !== idRef.current) return;
+    idRef.current = fresh.id;
+    setActiveCharacterId(fresh.id);
+    setCharacter((prev) => {
+      if (!prev || prev.id !== fresh.id) return fresh;
+      // Merge so partial patches from callers still refresh currencies live.
+      return { ...prev, ...fresh };
+    });
+  }, []);
 
   const refresh = useCallback(async () => {
     bustMyCharacterCache();
@@ -35,7 +51,7 @@ export function useMyCharacter() {
             const updated = res.character || res.data?.character;
             if (updated?.id) c = updated;
             else if (Object.keys(patch).length) c = { ...c, ...patch };
-            if (c) primeMyCharacterCache(c);
+            if (c) primeMyCharacterCache(c, { emit: false });
           } catch { /* best-effort */ }
         }
         if (!active) return;
@@ -49,20 +65,25 @@ export function useMyCharacter() {
       }
     })();
 
-    const unsub = api.entities.Character.subscribe((event) => {
+    const unsubWs = api.entities.Character.subscribe((event) => {
       if (event.type !== "update") return;
       const id = idRef.current;
       if (!id || event.data?.id !== id) return;
-      primeMyCharacterCache(event.data);
-      setCharacter(event.data);
+      primeMyCharacterCache(event.data, { emit: false });
+      applyFresh(event.data);
+    });
+
+    const unsubCache = subscribeMyCharacterCache((fresh) => {
+      applyFresh(fresh);
     });
 
     return () => {
       active = false;
       setActiveCharacterId(null);
-      unsub?.();
+      unsubWs?.();
+      unsubCache?.();
     };
-  }, []);
+  }, [applyFresh]);
 
   // Keep React state + the global active-character id in sync (pages call setCharacter after claims).
   const setCharacterSynced = useCallback((next) => {
@@ -70,7 +91,8 @@ export function useMyCharacter() {
       const value = typeof next === "function" ? next(prev) : next;
       idRef.current = value?.id || null;
       setActiveCharacterId(value?.id);
-      if (value) primeMyCharacterCache(value);
+      // emit:false — this hook already owns React state; avoid a notify loop.
+      if (value) primeMyCharacterCache(value, { emit: false });
       return value;
     });
   }, []);

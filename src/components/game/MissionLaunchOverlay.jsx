@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, Clock } from "lucide-react";
-import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 
 function formatTime(s) {
   if (s < 60) return `${s}s`;
@@ -20,10 +19,13 @@ const GOOFY_LINES = [
   "Wishing the pilot had slept more.",
 ];
 
+/**
+ * Decorative launch sequence — sits over the mission explore image only.
+ * pointer-events-none so the active mission bar / skip stay usable immediately.
+ */
 export default function MissionLaunchOverlay({ mission, onDone }) {
   const [phase, setPhase] = useState(0);
   const [lineIdx, setLineIdx] = useState(0);
-  // Keep the latest callback without re-triggering the timers on every parent render.
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
 
@@ -31,106 +33,119 @@ export default function MissionLaunchOverlay({ mission, onDone }) {
     const t1 = setTimeout(() => setPhase(1), 800);
     const t2 = setTimeout(() => setPhase(2), 1700);
     const t3 = setTimeout(() => onDoneRef.current?.(), 3000);
-    const lineTimer = setInterval(() => setLineIdx(i => (i + 1) % GOOFY_LINES.length), 700);
+    const lineTimer = setInterval(() => setLineIdx((i) => (i + 1) % GOOFY_LINES.length), 700);
     return () => {
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       clearInterval(lineTimer);
     };
   }, []);
 
   return (
     <AnimatePresence>
-      <GameplayOverlayPortal
-        as={motion.div}
-        className="z-50 flex flex-col items-center justify-center overflow-hidden"
+      <motion.div
+        className="absolute inset-0 z-20 flex flex-col items-center justify-center overflow-hidden rounded-2xl pointer-events-none"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3 }}
+        aria-hidden
       >
-        {/* Nebula background */}
-        <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at center, hsl(270 60% 20% / 0.6), hsl(230 25% 6%) 70%)" }} />
+        {/* Soft veil — keep the explore art visible underneath */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, hsl(270 55% 18% / 0.45), hsl(230 25% 6% / 0.55) 75%)",
+          }}
+        />
         <motion.div
-          className="absolute w-[600px] h-[600px] rounded-full blur-3xl"
-          style={{ background: "radial-gradient(circle, hsl(280 70% 40% / 0.4), transparent 60%)", top: "10%", left: "-10%" }}
-          animate={{ x: [0, 60, 0], y: [0, 40, 0], scale: [1, 1.15, 1] }}
+          className="absolute w-[420px] h-[420px] rounded-full blur-3xl"
+          style={{
+            background: "radial-gradient(circle, hsl(280 70% 40% / 0.35), transparent 60%)",
+            top: "5%",
+            left: "-8%",
+          }}
+          animate={{ x: [0, 40, 0], y: [0, 28, 0], scale: [1, 1.12, 1] }}
           transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
         />
         <motion.div
-          className="absolute w-[500px] h-[500px] rounded-full blur-3xl"
-          style={{ background: "radial-gradient(circle, hsl(190 90% 45% / 0.35), transparent 60%)", bottom: "5%", right: "-5%" }}
-          animate={{ x: [0, -50, 0], y: [0, -30, 0], scale: [1.1, 1, 1.1] }}
+          className="absolute w-[360px] h-[360px] rounded-full blur-3xl"
+          style={{
+            background: "radial-gradient(circle, hsl(190 90% 45% / 0.3), transparent 60%)",
+            bottom: "0%",
+            right: "-5%",
+          }}
+          animate={{ x: [0, -36, 0], y: [0, -22, 0], scale: [1.08, 1, 1.08] }}
           transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
         />
-        <motion.div
-          className="absolute w-[400px] h-[400px] rounded-full blur-3xl"
-          style={{ background: "radial-gradient(circle, hsl(320 70% 50% / 0.25), transparent 60%)", top: "40%", right: "20%" }}
-          animate={{ x: [0, 30, 0], y: [0, 50, 0], scale: [1, 1.2, 1] }}
-          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-        />
 
-        {/* Nebula dust specks */}
+        {/* Nebula dust */}
         <div className="absolute inset-0">
-          {Array.from({ length: 40 }).map((_, i) => (
+          {Array.from({ length: 28 }).map((_, i) => (
             <motion.div
               key={i}
               className="absolute rounded-full"
               style={{
-                width: 1 + Math.random() * 3,
-                height: 1 + Math.random() * 3,
+                width: 1 + (i % 3),
+                height: 1 + (i % 3),
                 background: i % 3 === 0 ? "hsl(190 90% 80%)" : i % 3 === 1 ? "hsl(280 60% 80%)" : "white",
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
+                left: `${(i * 37) % 100}%`,
+                top: `${(i * 53) % 100}%`,
               }}
-              animate={{ opacity: [0.2, 0.8, 0.2], scale: [1, 1.5, 1] }}
-              transition={{ duration: 2 + Math.random() * 3, repeat: Infinity, delay: Math.random() * 2 }}
+              animate={{ opacity: [0.2, 0.75, 0.2], scale: [1, 1.4, 1] }}
+              transition={{ duration: 2 + (i % 4), repeat: Infinity, delay: (i % 5) * 0.2 }}
             />
           ))}
         </div>
 
-        {/* Hyperspace star streaks */}
+        {/* Hyperspace streaks */}
         <div className="absolute inset-0">
-          {Array.from({ length: 50 }).map((_, i) => {
-            const angle = (i / 50) * Math.PI * 2;
-            const dist = 200 + Math.random() * 400;
+          {Array.from({ length: 36 }).map((_, i) => {
+            const angle = (i / 36) * Math.PI * 2;
+            const dist = 140 + (i % 5) * 55;
             const x = Math.cos(angle) * dist;
             const y = Math.sin(angle) * dist;
             return (
               <motion.div
                 key={i}
                 className="absolute left-1/2 top-1/2 h-px bg-gradient-to-r from-transparent via-primary to-transparent"
-                style={{ width: 30 + Math.random() * 50 }}
+                style={{ width: 24 + (i % 4) * 12 }}
                 initial={{ x: 0, y: 0, opacity: 0 }}
                 animate={phase >= 1 ? { x, y, opacity: [0, 1, 0] } : { opacity: 0 }}
-                transition={{ duration: 1.2, delay: Math.random() * 0.3, ease: "easeOut" }}
+                transition={{ duration: 1.1, delay: (i % 8) * 0.04, ease: "easeOut" }}
               />
             );
           })}
         </div>
 
-        {/* Expanding ring */}
         {phase >= 1 && (
           <motion.div
-            className="absolute left-1/2 top-1/2 rounded-full border-2 border-primary/40"
+            className="absolute left-1/2 top-1/2 rounded-full border-2 border-primary/35"
             initial={{ width: 0, height: 0, x: "-50%", y: "-50%", opacity: 1 }}
-            animate={{ width: 600, height: 600, opacity: 0 }}
-            transition={{ duration: 1.5, ease: "easeOut" }}
+            animate={{ width: 480, height: 480, opacity: 0 }}
+            transition={{ duration: 1.4, ease: "easeOut" }}
           />
         )}
 
-        {/* Liftoff spark burst */}
         {phase >= 2 && (
-          <div className="absolute left-1/2 top-1/2 z-20 pointer-events-none">
-            {Array.from({ length: 18 }).map((_, i) => {
-              const angle = (i / 18) * Math.PI * 2;
-              const dist = 80 + Math.random() * 120;
+          <div className="absolute left-1/2 top-1/2 z-20">
+            {Array.from({ length: 14 }).map((_, i) => {
+              const angle = (i / 14) * Math.PI * 2;
+              const dist = 70 + (i % 4) * 28;
               return (
                 <motion.span
                   key={i}
-                  className="absolute text-lg"
+                  className="absolute text-base"
                   initial={{ x: 0, y: 0, opacity: 1, scale: 0 }}
-                  animate={{ x: Math.cos(angle) * dist, y: Math.sin(angle) * dist, opacity: 0, scale: [0, 1.4, 0] }}
-                  transition={{ duration: 1, ease: "easeOut", delay: Math.random() * 0.1 }}
+                  animate={{
+                    x: Math.cos(angle) * dist,
+                    y: Math.sin(angle) * dist,
+                    opacity: 0,
+                    scale: [0, 1.3, 0],
+                  }}
+                  transition={{ duration: 0.9, ease: "easeOut", delay: (i % 5) * 0.02 }}
                 >
                   {["✨", "⭐", "💫", "🎉"][i % 4]}
                 </motion.span>
@@ -139,83 +154,102 @@ export default function MissionLaunchOverlay({ mission, onDone }) {
           </div>
         )}
 
-        {/* Content */}
-        <div className="relative z-10 flex flex-col items-center">
-          {/* Goofy ship with wobble */}
+        <div className="relative z-10 flex flex-col items-center px-3">
           <motion.div
             className="relative"
-            initial={{ y: 20, scale: 0.6, opacity: 0 }}
+            initial={{ y: 16, scale: 0.65, opacity: 0 }}
             animate={
-              phase === 0 ? { y: 20, scale: 0.6, opacity: 1 } :
-              phase === 1 ? { y: -20, scale: 1, opacity: 1 } :
-              { y: -170, scale: [1, 1.3, 0.4], opacity: [1, 1, 0] }
+              phase === 0
+                ? { y: 16, scale: 0.65, opacity: 1 }
+                : phase === 1
+                  ? { y: -12, scale: 1, opacity: 1 }
+                  : { y: -120, scale: [1, 1.25, 0.35], opacity: [1, 1, 0] }
             }
             transition={{ type: "spring", stiffness: 200, damping: 14 }}
           >
-            {/* Thrust glow */}
             <motion.div
-              className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-12 h-16 rounded-full blur-xl"
-              style={{ background: "radial-gradient(circle, hsl(190 90% 60%), hsl(270 60% 55%) 50%, transparent 70%)" }}
+              className="absolute -bottom-5 left-1/2 -translate-x-1/2 w-10 h-14 rounded-full blur-xl"
+              style={{
+                background:
+                  "radial-gradient(circle, hsl(190 90% 60%), hsl(270 60% 55%) 50%, transparent 70%)",
+              }}
               initial={{ opacity: 0, scaleY: 0.5 }}
-              animate={phase >= 1 ? { opacity: [0.5, 1, 0.6, 0.9], scaleY: [0.5, 1.3, 0.7, 1.1] } : { opacity: 0 }}
-              transition={{ duration: 0.4, repeat: phase >= 1 && phase < 2 ? Infinity : 0, repeatType: "reverse" }}
+              animate={
+                phase >= 1
+                  ? { opacity: [0.5, 1, 0.6, 0.9], scaleY: [0.5, 1.25, 0.7, 1.05] }
+                  : { opacity: 0 }
+              }
+              transition={{
+                duration: 0.4,
+                repeat: phase >= 1 && phase < 2 ? Infinity : 0,
+                repeatType: "reverse",
+              }}
             />
-            {/* Ship body — wobbly */}
             <motion.div
-              className="relative flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 border-2 border-primary border-glow-cyan"
+              className="relative flex items-center justify-center w-16 h-16 rounded-full bg-primary/15 border-2 border-primary border-glow-cyan backdrop-blur-sm"
               animate={{ rotate: [-4, 4, -4] }}
               transition={{ duration: 0.5, repeat: Infinity, ease: "easeInOut" }}
             >
-              <span className="text-4xl">🚀</span>
+              <span className="text-3xl">🚀</span>
             </motion.div>
-            {/* Little floating buddy */}
             {phase >= 1 && (
               <motion.div
-                className="absolute -right-6 -top-2 text-2xl"
+                className="absolute -right-5 -top-1 text-xl"
                 initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: 1, scale: 1, y: [0, -6, 0] }}
-                transition={{ opacity: { duration: 0.3 }, scale: { duration: 0.3 }, y: { duration: 1.5, repeat: Infinity } }}
+                animate={{ opacity: 1, scale: 1, y: [0, -5, 0] }}
+                transition={{
+                  opacity: { duration: 0.3 },
+                  scale: { duration: 0.3 },
+                  y: { duration: 1.5, repeat: Infinity },
+                }}
               >
                 🐙
               </motion.div>
             )}
           </motion.div>
 
-          {/* Text */}
           <motion.div
-            className="mt-8 text-center px-4"
-            initial={{ opacity: 0, y: 10 }}
-            animate={phase >= 0 ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.4 }}
+            className="mt-5 text-center max-w-sm"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
           >
-            {/* Goofy status line — cycles */}
             <motion.p
               key={lineIdx}
-              className="font-body italic text-xs text-muted-foreground mb-3 h-4"
-              initial={{ opacity: 0, y: -4 }}
+              className="font-body italic text-[11px] text-muted-foreground mb-2 h-4 drop-shadow"
+              initial={{ opacity: 0, y: -3 }}
               animate={{ opacity: [0, 1, 1, 0], y: 0 }}
               transition={{ duration: 0.7, times: [0, 0.15, 0.85, 1] }}
             >
               {GOOFY_LINES[lineIdx]}
             </motion.p>
 
-            {/* Phase label */}
             <motion.p
-              className="font-display font-bold text-sm tracking-[0.3em] text-primary glow-cyan mb-2"
-              animate={phase < 2 ? { opacity: [0.4, 1, 0.4] } : { opacity: 0 }}
+              className="font-display font-bold text-[11px] tracking-[0.28em] text-primary glow-cyan mb-1.5"
+              animate={phase < 2 ? { opacity: [0.45, 1, 0.45] } : { opacity: 0 }}
               transition={{ duration: 1, repeat: Infinity }}
             >
-              {phase === 0 ? "INITIATING LAUNCH SEQUENCE" : phase === 1 ? "ENGAGING WARP DRIVE" : "WE HAVE LIFTOFF 🎉"}
+              {phase === 0
+                ? "INITIATING LAUNCH SEQUENCE"
+                : phase === 1
+                  ? "ENGAGING WARP DRIVE"
+                  : "WE HAVE LIFTOFF 🎉"}
             </motion.p>
 
-            <h2 className="font-display font-bold text-2xl glow-cyan tracking-wide max-w-xs">{mission.name}</h2>
-            <div className="flex items-center gap-4 justify-center mt-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {mission.location}</span>
-              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {formatTime(mission.duration_seconds)}</span>
+            <h2 className="font-display font-bold text-lg sm:text-xl glow-cyan tracking-wide drop-shadow-md">
+              {mission.name}
+            </h2>
+            <div className="flex items-center gap-3 justify-center mt-2 text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3 h-3" /> {mission.location}
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {formatTime(mission.duration_seconds)}
+              </span>
             </div>
           </motion.div>
         </div>
-      </GameplayOverlayPortal>
+      </motion.div>
     </AnimatePresence>
   );
 }

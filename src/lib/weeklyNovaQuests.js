@@ -1,5 +1,6 @@
 import { api } from "@/api/gameClient";
 import { getWeekKey, weekEndDate } from "@/lib/guildEngine";
+import { primeMyCharacterCache } from "@/lib/socialEngine";
 
 /** Weekly F2P Nova drip — earn by playing, claim from Crystal Store. */
 export const WEEKLY_NOVA_QUESTS = [
@@ -82,6 +83,9 @@ export async function claimWeeklyNovaQuest(character, questId) {
   if (!quest) throw new Error("Unknown quest");
   const res = await api.functions.invoke("ClaimWeeklyNovaQuest", { quest_id: questId });
   const patch = res.patch || res.data?.patch || {};
-  const fresh = { ...character, ...patch };
+  const updated = res.character || res.data?.character;
+  const fresh = updated?.id ? { ...character, ...updated } : { ...character, ...patch };
+  // Notify shell currency readout (left rail) immediately.
+  primeMyCharacterCache(fresh);
   return { patch, quest: res.quest || res.data?.quest || quest, character: fresh };
 }

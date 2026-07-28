@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { Droppable, Draggable } from "@hello-pangea/dnd";
-import { RARITY_COLORS, STAT_ICONS } from "@/lib/gameData";
+import { RARITY_COLORS } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import StatCompareBubble from "@/components/game/StatCompareBubble";
+import GearInspectPortal from "@/components/game/GearInspectPortal";
 import { portalWhileDragging } from "@/lib/dndPortal";
 
 // Equipped gear arranged as a 3x3 frame around the portrait (all 8 slots
@@ -51,40 +51,13 @@ function useDesktopHover() {
 }
 
 function HoverStatsPortal({ anchorRef, open, item, characterClass, onEquip, onLock, onClose, onKeepOpen }) {
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (!open || !anchorRef.current) return undefined;
-    const place = () => {
-      const r = anchorRef.current.getBoundingClientRect();
-      const pad = 8;
-      const bubbleW = 288;
-      let left = r.right + 10;
-      if (left + bubbleW > window.innerWidth - pad) left = Math.max(pad, r.left - bubbleW - 10);
-      let top = r.top;
-      const approxH = 320;
-      if (top + approxH > window.innerHeight - pad) {
-        top = Math.max(pad, window.innerHeight - pad - approxH);
-      }
-      setPos({ top, left });
-    };
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [open, anchorRef, item?.id]);
-
-  if (!open || !item || typeof document === "undefined") return null;
-
-  return createPortal(
-    <div
-      className="fixed z-[90] pointer-events-auto"
-      style={{ top: pos.top, left: pos.left }}
-      onMouseEnter={onKeepOpen}
-      onMouseLeave={onClose}
+  if (!item) return null;
+  return (
+    <GearInspectPortal
+      anchorRef={anchorRef}
+      open={open}
+      onClose={onClose}
+      onKeepOpen={onKeepOpen}
     >
       <StatCompareBubble
         item={item}
@@ -93,8 +66,7 @@ function HoverStatsPortal({ anchorRef, open, item, characterClass, onEquip, onLo
         onLock={onLock}
         characterClass={characterClass}
       />
-    </div>,
-    document.body
+    </GearInspectPortal>
   );
 }
 
@@ -138,14 +110,27 @@ function SlotChip({
   useEffect(() => () => clearTimeout(closeTimer.current), []);
 
   const chipInner = item ? (
-    <GearVisual
-      type={item.type}
-      rarity={item.rarity}
-      name={item.name}
-      baseName={item.base_name}
-      level_requirement={item.level_requirement}
-      size={size}
-    />
+    <div className="relative flex items-center justify-center">
+      <GearVisual
+        type={item.type}
+        rarity={item.rarity}
+        name={item.name}
+        baseName={item.base_name}
+        level_requirement={item.level_requirement}
+        size={size}
+      />
+      {/* Quality always visible — full details on hover */}
+      <span
+        className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[7px] font-display font-black uppercase tracking-wider px-1 rounded-sm leading-none border z-[1]"
+        style={{
+          color: RARITY_COLORS[item.rarity] || "#9CA3AF",
+          borderColor: `${RARITY_COLORS[item.rarity] || "#9CA3AF"}88`,
+          background: "hsl(222 22% 8% / 0.92)",
+        }}
+      >
+        {(item.rarity || "common").slice(0, 1)}
+      </span>
+    </div>
   ) : (
     <span className={showcase ? "opacity-35" : "opacity-25"} style={{ fontSize: Math.max(12, size * 0.45) }}>
       {slot.icon}
@@ -297,6 +282,7 @@ export default function EquippedFrame({
   equippedItems,
   children,
   size = 53,
+  portraitSize,
   showcase = false,
   interactive = false,
   showHoverStats = false,
@@ -315,26 +301,40 @@ export default function EquippedFrame({
     onEquip,
     onLock,
   };
+
+  // Explicit 3×3 tracks so gear forms a ring around the portrait instead of
+  // collapsing into auto-sized columns that bunch beside a large avatar.
+  const chipOuter = size + 6;
+  const center = Math.max(chipOuter, Math.round(portraitSize || size * 2.4));
+  const gap = showcase ? 14 : 8;
+
   return (
-    <div className={`grid grid-cols-3 items-center justify-items-center ${showcase ? "gap-2" : "gap-1.5"}`}>
+    <div
+      className="grid place-items-center"
+      style={{
+        gridTemplateColumns: `${chipOuter}px ${center}px ${chipOuter}px`,
+        gridTemplateRows: `${chipOuter}px ${center}px ${chipOuter}px`,
+        gap,
+      }}
+    >
       <SlotChip item={bySlot.weapon} slotType="weapon" {...chipProps} />
       <SlotChip item={bySlot.helmet} slotType="helmet" {...chipProps} />
       <SlotChip item={bySlot.neck} slotType="neck" {...chipProps} />
       <SlotChip item={bySlot.armor} slotType="armor" {...chipProps} />
       {showcase ? (
-        <div className="relative flex items-center justify-center">
+        <div className="relative flex items-center justify-center w-full h-full">
           <div
             className="absolute inset-[-6px] rounded-2xl pointer-events-none"
             style={{
-              background: "radial-gradient(circle, hsl(190 90% 50% / 0.12) 0%, hsl(270 60% 55% / 0.08) 45%, transparent 70%)",
-              boxShadow: "inset 0 0 24px hsl(190 90% 50% / 0.08), 0 0 20px hsl(270 60% 55% / 0.12)",
+              background: "radial-gradient(circle, hsl(190 90% 50% / 0.14) 0%, hsl(270 60% 55% / 0.1) 45%, transparent 70%)",
+              boxShadow: "inset 0 0 28px hsl(190 90% 50% / 0.1), 0 0 28px hsl(270 60% 55% / 0.14)",
             }}
           />
-          <div className="absolute inset-[-2px] rounded-xl border border-primary/25 pointer-events-none" />
+          <div className="absolute inset-[-2px] rounded-xl border border-primary/30 pointer-events-none" />
           {children}
         </div>
       ) : (
-        children
+        <div className="flex items-center justify-center w-full h-full">{children}</div>
       )}
       <SlotChip item={bySlot.ship_module} slotType="ship_module" {...chipProps} />
       <SlotChip item={bySlot.boots} slotType="boots" {...chipProps} />

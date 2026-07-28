@@ -114,14 +114,14 @@ export default function StatBar({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`relative flex items-center gap-2.5 rounded-xl border px-2.5 py-1.5 min-w-0 transition-colors ${
+            className={`relative flex items-center gap-2 rounded-lg border px-2 py-1 h-full min-h-0 min-w-0 transition-colors ${
               isPrimary
                 ? "border-primary/50 bg-primary/8 shadow-[0_0_14px_hsl(190_90%_50%/0.1)]"
                 : "border-border/45 bg-muted/15"
             } ${canAdd ? "hover:bg-muted/25" : ""}`}
           >
             <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-xl shrink-0"
+              className="w-8 h-8 rounded-md flex items-center justify-center text-lg shrink-0"
               style={{ backgroundColor: `${color}22`, boxShadow: `0 0 10px ${color}28` }}
             >
               {STAT_ICONS[stat]}
@@ -130,7 +130,7 @@ export default function StatBar({
             <div className="min-w-0 flex-1 flex items-baseline gap-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="font-display font-bold text-xs tracking-wide truncate" style={{ color }}>
+                  <p className="font-display font-bold text-[11px] tracking-wide truncate" style={{ color }}>
                     {STAT_LABELS[stat] || stat}
                   </p>
                   {isPrimary && (
@@ -139,12 +139,12 @@ export default function StatBar({
                     </span>
                   )}
                 </div>
-                <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className="font-display font-black text-2xl tabular-nums leading-none" style={{ color }}>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-display font-black text-xl tabular-nums leading-none" style={{ color }}>
                     {value || 0}
                   </span>
                   {bonus > 0 && (
-                    <span className="text-[10px] font-bold text-green-400 tabular-nums">+{bonus} gear</span>
+                    <span className="text-[9px] font-bold text-green-400 tabular-nums">+{bonus} gear</span>
                   )}
                 </div>
               </div>
@@ -160,7 +160,7 @@ export default function StatBar({
                 onPointerCancel={clearHold}
                 onContextMenu={(e) => e.preventDefault()}
                 disabled={!canAdd}
-                className={`shrink-0 min-w-[6.25rem] rounded-lg border-2 px-2.5 py-1.5 flex flex-col items-center justify-center gap-px select-none touch-none transition-all ${
+                className={`shrink-0 min-w-[5.75rem] rounded-md border-2 px-2 py-1 flex flex-col items-center justify-center gap-px select-none touch-none transition-all ${
                   canAdd
                     ? "hover:brightness-110"
                     : "opacity-55 cursor-not-allowed grayscale-[0.35]"
@@ -185,13 +185,13 @@ export default function StatBar({
                     : (cost != null ? `Need ${STARDUST_GLYPH}${cost.toLocaleString()} stardust` : "Cannot buy")
                 }
               >
-                <span className="flex items-center gap-0.5 font-display font-black text-xs tracking-wide">
-                  <Plus className="w-3.5 h-3.5" strokeWidth={3} />
+                <span className="flex items-center gap-0.5 font-display font-black text-[11px] tracking-wide">
+                  <Plus className="w-3 h-3" strokeWidth={3} />
                   Upgrade
                 </span>
                 {cost != null && (
-                  <span className="tabular-nums text-[11px] font-display font-bold inline-flex items-center gap-0.5">
-                    <StardustIcon className="w-3 h-3" glow={canAdd} />
+                  <span className="tabular-nums text-[10px] font-display font-bold inline-flex items-center gap-0.5">
+                    <StardustIcon className="w-2.5 h-2.5" glow={canAdd} />
                     {cost.toLocaleString()}
                   </span>
                 )}

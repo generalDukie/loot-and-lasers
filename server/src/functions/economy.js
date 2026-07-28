@@ -3,7 +3,7 @@
  */
 import { entities } from "../entities.js";
 import { withTransactionAsync } from "../db.js";
-import { randomItem } from "../shared/rewards.js";
+import { randomItem, randomItemForClass } from "../shared/rewards.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
 import {
   ATTR_STAT_KEYS,
@@ -44,7 +44,7 @@ import {
   randomConsumable,
   progressWeeklyNovaQuest,
 } from "../shared/economyFormulas.js";
-import { collectGrant, grantItemOrPending } from "../shared/inventoryGrant.js";
+import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import { ECONOMY_FOLLOW_ON_HANDLERS } from "./economyFollowOn.js";
 
 function httpErr(status, message) {
@@ -363,6 +363,9 @@ export async function LaunchMission(user, body) {
       if (ch.mining_end_time && new Date(ch.mining_end_time) > new Date()) {
         httpErr(409, "Mining in progress");
       }
+      if (countBagOccupancy(ch) >= getInventoryCap(ch)) {
+        httpErr(400, "Inventory full — clear bag space before launching a mission");
+      }
 
       const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch);
       ch = resetCh;
@@ -501,7 +504,7 @@ export async function ClaimMission(user, body) {
       const rewards = mission.rewards || {};
       if (rewards.loot_drops !== false) {
         const rarity = rewards.loot_rarity || rollItemRarity(rewards.item_rarity_chance || "common", ch.level || 1);
-        const gear = randomItem(rarity, ch.level || 1, rewards.loot_type);
+        const gear = randomItem(rarity, ch.level || 1, rewards.loot_type, Math.random, ch.class);
         collectGrant(grantOrCompensate(ch, gear, patch), items, pendingLoot);
       }
 
@@ -593,11 +596,12 @@ function buildShopStock(ch, meta, win) {
   const gearSeed = shopGearSeed(meta, win);
   const consSeed = shopConsSeed(meta, win);
   const day = meta.hot_day || todayET();
+  const forClass = randomItemForClass(ch.class);
   return {
     ...meta,
-    gear_stock: generateSimpleGearStock(gearSeed, level, randomItem),
+    gear_stock: generateSimpleGearStock(gearSeed, level, forClass),
     cons_stock: generateSimpleConsStock(consSeed),
-    hot_deal: generateSimpleHotDeal(day, level, randomItem),
+    hot_deal: generateSimpleHotDeal(day, level, forClass),
   };
 }
 
@@ -634,8 +638,9 @@ function replaceArmoryListing(meta, win, ch, slotId, isHot) {
   const nextMeta = { ...meta };
   const level = ch.level || 1;
   const day = meta.hot_day || todayET();
+  const forClass = randomItemForClass(ch.class);
   if (isHot) {
-    const fresh = generateSimpleHotDeal(day, level, randomItem);
+    const fresh = generateSimpleHotDeal(day, level, forClass);
     nextMeta.hot_deal = {
       ...fresh,
       _slotId: `hot-${day}-${Date.now()}`,
@@ -650,7 +655,7 @@ function replaceArmoryListing(meta, win, ch, slotId, isHot) {
   if (idx >= 0) {
     stock[idx] = generateSimpleGearSlot(
       level,
-      randomItem,
+      forClass,
       `${shopGearSeed(meta, win)}-r-${idx}-${Date.now()}`,
     );
   }
@@ -844,7 +849,7 @@ export async function RefreshShop(user, body) {
           purchased: {},
           yanked: {},
         };
-        meta.gear_stock = generateSimpleGearStock(shopGearSeed(meta, win), ch.level || 1, randomItem);
+        meta.gear_stock = generateSimpleGearStock(shopGearSeed(meta, win), ch.level || 1, randomItemForClass(ch.class));
       } else {
         meta = {
           ...meta,

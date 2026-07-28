@@ -638,7 +638,7 @@ export async function AdminModeration(user, body) {
       if (!type) {
         return { status: 400, body: { error: "item requires name, type, rarity (or type + rarity to generate)" } };
       }
-      item = randomItem(rarity, level, type);
+      item = randomItem(rarity, level, type, Math.random, ch.class);
     }
 
     // Cap counts unequipped bag items only — equipped gear does not use a slot.

@@ -22,7 +22,7 @@ function isFresh(entry, now = Date.now()) {
   return now - t < NEWS_TTL_MS;
 }
 
-export default function ArenaNewsFeed() {
+export default function ArenaNewsFeed({ compact = false }) {
   const [news, setNews] = useState([]);
 
   const load = useCallback(async () => {
@@ -43,33 +43,37 @@ export default function ArenaNewsFeed() {
     return () => clearInterval(t);
   }, [load]);
 
+  const visible = compact ? news.slice(0, 3) : news;
+
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-border/60 painted-panel painted-frame canvas-grain">
+    <div className="relative overflow-hidden rounded-xl border border-border/60 painted-panel painted-frame canvas-grain">
       <div className="absolute inset-0 pointer-events-none opacity-60" style={{
         background: "radial-gradient(ellipse 70% 50% at 0% 0%, rgba(34,211,238,0.1), transparent 55%)",
       }} />
-      <div className="relative p-4">
-        <h3 className="font-display font-bold text-xs tracking-[0.18em] flex items-center gap-2 mb-3 text-cyan-300/90">
+      <div className={`relative ${compact ? "p-2.5" : "p-4"}`}>
+        <h3 className={`font-display font-bold tracking-[0.18em] flex items-center gap-2 text-cyan-300/90 ${compact ? "text-[10px] mb-1.5" : "text-xs mb-3"}`}>
           <Newspaper className="w-3.5 h-3.5" /> GALAXY NEWS
         </h3>
-        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-          {news.length === 0 && (
+        <div className={`space-y-1.5 ${compact ? "" : "max-h-56 overflow-y-auto pr-1"}`}>
+          {visible.length === 0 && (
             <p className="text-[11px] text-muted-foreground italic">The galaxy is quiet... for now.</p>
           )}
           <AnimatePresence>
-            {news.map((n) => (
+            {visible.map((n) => (
               <motion.div
                 key={n.id}
                 layout
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, height: 0 }}
-                className="rounded-lg border border-border/40 bg-background/30 px-2.5 py-2 text-[11px] text-foreground/85 leading-snug"
+                className={`rounded-lg border border-border/40 bg-background/30 text-[11px] text-foreground/85 leading-snug ${compact ? "px-2 py-1.5" : "px-2.5 py-2"}`}
               >
-                <span className="text-muted-foreground font-display text-[10px] tracking-wide">
-                  {eventTime(n.created_date)}
-                </span>
-                <p className="mt-0.5">{n.message}</p>
+                {!compact && (
+                  <span className="text-muted-foreground font-display text-[10px] tracking-wide">
+                    {eventTime(n.created_date)}
+                  </span>
+                )}
+                <p className={compact ? "" : "mt-0.5"}>{n.message}</p>
               </motion.div>
             ))}
           </AnimatePresence>

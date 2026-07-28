@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { useToast } from "@/components/ui/use-toast";
 import { getMail, sendPlayerMail, claimMailReward, markMailRead, deleteMail, restoreMail } from "@/lib/mailEngine";
-import { getFriends, getCharactersByIds, getMyCharacter } from "@/lib/socialEngine";
+import { getFriends, getCharactersByIds, getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { getGuildMembership, acceptGuildInvite, acceptGuildRequest, declineGuildRequest } from "@/lib/guildUtils";
 import { Mail, Inbox, Send, Cog, Trash2, Gift, Plus, Reply, Undo2, X, UserPlus, UserCheck } from "lucide-react";
 
@@ -74,6 +74,12 @@ export default function MailPage() {
   async function claim(m) {
     try {
       const res = await claimMailReward(m.id);
+      const patch = res?.applied || res?.patch || {};
+      if (me && Object.keys(patch).length) {
+        const next = { ...me, ...patch };
+        primeMyCharacterCache(next);
+        setMe(next);
+      }
       toast({ title: "Rewards claimed!", description: summarize(res.applied) });
       load();
     } catch (e) {
@@ -83,7 +89,22 @@ export default function MailPage() {
 
   async function claimAll() {
     const unclaimed = mails.filter((m) => m.has_rewards && !m.claimed && m.folder !== "deleted");
-    for (const m of unclaimed) { try { await claimMailReward(m.id); } catch (_) {} }
+    let lastPatch = {};
+    for (const m of unclaimed) {
+      try {
+        const res = await claimMailReward(m.id);
+        const patch = res?.applied || res?.patch || {};
+        lastPatch = { ...lastPatch, ...patch };
+      } catch (_) {}
+    }
+    if (me && Object.keys(lastPatch).length) {
+      // Re-fetch nova/stardust accurately after multiple claims (patches are absolute values).
+      const fresh = await getMyCharacter({ force: true });
+      if (fresh) {
+        primeMyCharacterCache(fresh);
+        setMe(fresh);
+      }
+    }
     toast({ title: "All rewards claimed", description: `${unclaimed.length} mail(s)` });
     load();
   }

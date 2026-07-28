@@ -138,7 +138,7 @@ export default function GalaxyMapPage() {
     const fightPlanet = viewingWormhole ? getInfinitePlanet(infiniteDepth) : planet;
     const enemy = generateDungeonEnemy(fightPlanet, fightIndex, character.level);
     const battle = simulateBattle(character, enemy, equippedItems);
-    const rewards = computeDungeonRewards(fightPlanet, fightIndex, character.level, battle.winner === "player", { patrol });
+    const rewards = computeDungeonRewards(fightPlanet, fightIndex, character.level, battle.winner === "player", { patrol, className: character.class });
     setBattleState({ enemy, battle, rewards, enemyIndex: fightIndex, patrol, planet: viewingWormhole ? getWormholePlanet(infiniteDepth) : fightPlanet, viewingWormhole });
   }
 

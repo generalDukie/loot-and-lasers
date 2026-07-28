@@ -98,12 +98,36 @@ export function bustMyCharacterCache() {
   _meInFlight = null;
 }
 
-// Refresh the cache with a known-fresh payload (e.g. a realtime update event)
-// WITHOUT busting it — so navigating between menus within the TTL serves the
-// latest data instantly instead of refetching and re-tripping the rate limiter.
-export function primeMyCharacterCache(char) {
+/** Listeners notified when the active character cache is primed with fresh data. */
+const _characterCacheListeners = new Set();
+
+/**
+ * Subscribe to cache primes so the shell (and any shared character state) can
+ * update live when a page merges currency after a claim/spend.
+ * @returns {() => void} unsubscribe
+ */
+export function subscribeMyCharacterCache(listener) {
+  if (typeof listener !== "function") return () => {};
+  _characterCacheListeners.add(listener);
+  return () => _characterCacheListeners.delete(listener);
+}
+
+/**
+ * Refresh the cache with a known-fresh payload (e.g. after a claim/spend or
+ * realtime update) WITHOUT busting it — so navigating between menus within the
+ * TTL serves the latest data instantly.
+ *
+ * @param {object} char
+ * @param {{ emit?: boolean }} [opts] — set emit:false when the caller already
+ *   updated React state (avoids a redundant notify loop).
+ */
+export function primeMyCharacterCache(char, opts = {}) {
   if (!char || !char.created_by_id) return;
   _meCache = { userId: char.created_by_id, char, at: Date.now() };
+  if (opts.emit === false) return;
+  for (const fn of _characterCacheListeners) {
+    try { fn(char); } catch { /* ignore listener errors */ }
+  }
 }
 
 // All characters owned by the current user (max 3 — 1 free + 2 purchased slots).

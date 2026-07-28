@@ -383,13 +383,13 @@ export function ensureUniqueItemName(item, existingNames) {
   return { ...item, name };
 }
 
-function _rollItem(rarity, playerLevel, type, rng) {
+function _rollItem(rarity, playerLevel, type, rng, className) {
   const r = rng || Math.random;
   const itemType = type || EQUIPMENT_SLOTS[Math.floor(r() * EQUIPMENT_SLOTS.length)];
   const names = ITEM_NAMES[itemType] || ITEM_NAMES.weapon;
   const baseName = names[Math.floor(r() * names.length)];
   const itemLevel = Math.max(1, playerLevel || 1);
-  const { stats } = rollItemStats({ itemLevel, type: itemType, rarity, rng: r });
+  const { stats } = rollItemStats({ itemLevel, type: itemType, rarity, rng: r, className });
 
   const item = {
     name: buildItemName(baseName, rarity, stats, r),
@@ -406,12 +406,12 @@ function _rollItem(rarity, playerLevel, type, rng) {
   return item;
 }
 
-// Class signature weapons keep name/flavor/emoji, but stats use the same
-// randomized budget system as other gear (no class-forced primary bias).
+// Class signature weapons keep name/flavor/emoji; attribute pool uses the same
+// class-aware Common–Epic rules (and class-neutral Legendary) as other gear.
 export function generateClassWeapon(className, rarity, playerLevel, rng = Math.random) {
   const w = CLASS_WEAPONS[className] || CLASS_WEAPONS.Vanguard;
   const itemLevel = Math.max(1, playerLevel || 1);
-  const { stats } = rollItemStats({ itemLevel, type: "weapon", rarity, rng });
+  const { stats } = rollItemStats({ itemLevel, type: "weapon", rarity, rng, className });
   const item = {
     name: buildItemName(w.name, rarity, stats, rng),
     base_name: w.name,
@@ -427,16 +427,23 @@ export function generateClassWeapon(className, rarity, playerLevel, rng = Math.r
   return item;
 }
 
-export function generateItem(rarity, playerLevel, type) {
-  // 20% chance for a class-signature weapon skin when rolling a weapon
-  // (stats remain fully randomized — no class-locked attributes).
+/**
+ * @param {string} [playerClass] Player class for Common–Epic 60/40 favored pools.
+ *   When omitted, generation stays class-neutral (Total pool only).
+ */
+export function generateItem(rarity, playerLevel, type, playerClass) {
+  // 20% chance for a class-signature weapon skin when rolling a weapon.
+  // Skin class may be cosmetic-random; stat pool uses playerClass when provided.
   const rollingWeapon = !type || type === "weapon";
   if (rollingWeapon && Math.random() < 0.20) {
     const classKeys = Object.keys(CLASS_WEAPONS);
-    const className = classKeys[Math.floor(Math.random() * classKeys.length)];
-    return generateClassWeapon(className, rarity, playerLevel);
+    const skinClass = playerClass && CLASS_WEAPONS[playerClass]
+      ? playerClass
+      : classKeys[Math.floor(Math.random() * classKeys.length)];
+    // Prefer player class for pool bias; fall back to skin class so bots still bias.
+    return generateClassWeapon(playerClass || skinClass, rarity, playerLevel);
   }
-  return _rollItem(rarity, playerLevel, type, Math.random);
+  return _rollItem(rarity, playerLevel, type, Math.random, playerClass);
 }
 
 // ═══════════════════════════════════════════
@@ -684,9 +691,9 @@ function priceShopItem(item, mult = 1.2) {
   return { cost, nova_cost };
 }
 
-function makeScrapCrate(seed, i, r, playerLevel) {
-  const a = _rollItem("common", Math.max(1, playerLevel), pickShopGearType(r), r);
-  const b = _rollItem("common", Math.max(1, playerLevel), pickShopGearType(r), r);
+function makeScrapCrate(seed, i, r, playerLevel, playerClass) {
+  const a = _rollItem("common", Math.max(1, playerLevel), pickShopGearType(r), r, playerClass);
+  const b = _rollItem("common", Math.max(1, playerLevel), pickShopGearType(r), r, playerClass);
   const base = priceShopItem(a, 1.1).cost + priceShopItem(b, 1.1).cost;
   return {
     name: "Scrap Crate",
@@ -706,15 +713,16 @@ function makeScrapCrate(seed, i, r, playerLevel) {
 
 /**
  * Armory stock (6 pieces). ~8% chance a filler slot is a scrap crate bundle.
+ * @param {string} [playerClass] Class for Common–Epic 60/40 pool selection.
  */
-export function generateShopInventory(seed, playerLevel) {
+export function generateShopInventory(seed, playerLevel, playerClass) {
   const rng = mulberry32(seed * 7919 + 13);
   const r = () => rng();
   const slots = [];
 
   for (let i = 0; i < 5; i++) {
     if (r() < 0.08) {
-      slots.push(makeScrapCrate(seed, i, r, playerLevel));
+      slots.push(makeScrapCrate(seed, i, r, playerLevel, playerClass));
       continue;
     }
     const type = pickShopGearType(r);
@@ -723,14 +731,16 @@ export function generateShopInventory(seed, playerLevel) {
       roll < 0.4 ? "common" : roll < 0.7 ? "uncommon" : roll < 0.88 ? "rare" : roll < 0.97 ? "epic" : "legendary",
       playerLevel
     );
-    const item = _rollItem(rarity, Math.max(1, playerLevel), type, r);
+    const item = _rollItem(rarity, Math.max(1, playerLevel), type, r, playerClass);
     const { cost, nova_cost } = priceShopItem(item, 1.2);
     slots.push({ ...item, _slotId: `${seed}-${i}`, cost, nova_cost });
   }
 
-  // Class signature weapon — random class each restock.
+  // Class signature weapon — prefer the player's class for skin + pool bias.
   const classKeys = Object.keys(CLASS_WEAPONS);
-  const cwClass = classKeys[Math.floor(r() * classKeys.length)];
+  const cwClass = playerClass && CLASS_WEAPONS[playerClass]
+    ? playerClass
+    : classKeys[Math.floor(r() * classKeys.length)];
   const cwRoll = r();
   const cwRarity = clampRarityByLevel(
     cwRoll < 0.25 ? "uncommon" : cwRoll < 0.60 ? "rare" : cwRoll < 0.88 ? "epic" : "legendary",
@@ -743,7 +753,7 @@ export function generateShopInventory(seed, playerLevel) {
 }
 
 /** One spotlight piece per ET day — not affected by Armory restock. */
-export function generateHotDeal(dayKey, playerLevel) {
+export function generateHotDeal(dayKey, playerLevel, playerClass) {
   const dayNum = String(dayKey || todayET()).split("-").reduce((a, p) => a + Number(p || 0), 0);
   const rng = mulberry32(dayNum * 104729 + 77);
   const r = () => rng();
@@ -753,7 +763,7 @@ export function generateHotDeal(dayKey, playerLevel) {
     roll < 0.15 ? "uncommon" : roll < 0.45 ? "rare" : roll < 0.78 ? "epic" : "legendary",
     playerLevel
   );
-  const item = _rollItem(rarity, Math.max(1, playerLevel), type, r);
+  const item = _rollItem(rarity, Math.max(1, playerLevel), type, r, playerClass);
   const { cost, nova_cost } = priceShopItem(item, 1.05); // slight list discount vs normal
   return {
     ...item,

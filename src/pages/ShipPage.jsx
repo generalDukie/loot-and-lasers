@@ -16,7 +16,7 @@ import {
   STARDUST_COLOR,
 } from "@/lib/gameData";
 import { useToast } from "@/components/ui/use-toast";
-import { getMyCharacter } from "@/lib/socialEngine";
+import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { Rocket, Gem, ChevronDown } from "lucide-react";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
@@ -50,13 +50,21 @@ function HangarSection({ eyebrow, title, hint, action, children, delay = 0 }) {
 }
 
 export default function ShipPage() {
-  const [character, setCharacter] = useState(null);
+  const [character, setCharacterState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [buyingMod, setBuyingMod] = useState(null);
   const [buyingShip, setBuyingShip] = useState(null);
   const [editingShipId, setEditingShipId] = useState(null);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const setCharacter = useCallback((next) => {
+    setCharacterState((prev) => {
+      const value = typeof next === "function" ? next(prev) : next;
+      if (value) primeMyCharacterCache(value);
+      return value;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     const char = await getMyCharacter();

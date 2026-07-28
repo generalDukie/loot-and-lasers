@@ -191,7 +191,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
               </div>
 
               <div className="px-2 pt-2 pb-1.5">
-                <EquippedFrame equippedItems={equippedItems} size={40}>
+                <EquippedFrame equippedItems={equippedItems} size={40} portraitSize={36}>
                   <div
                     className="rounded-lg overflow-hidden border border-cyan-400/40"
                     style={{ boxShadow: "0 0 8px hsl(190 90% 50% / 0.25)" }}

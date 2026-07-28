@@ -16,6 +16,7 @@ import NotificationCenter from "@/components/social/NotificationCenter";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { usePresence } from "@/hooks/usePresence";
 import { enforceInventoryCap } from "@/lib/inventoryCap";
+import { primeMyCharacterCache } from "@/lib/socialEngine";
 
 /** Desktop operative side panel (~15% narrower than the prior default clamp). */
 const DESKTOP_RAIL_W = "clamp(18.7rem, 15.7vw, 23.4rem)";
@@ -157,7 +158,18 @@ export default function GameLayout() {
 
       <AdminDock />
 
-      <DailyLoginModal open={dailyOpen} onClose={() => setDailyOpen(false)} myChar={character} />
+      <DailyLoginModal
+        open={dailyOpen}
+        onClose={() => setDailyOpen(false)}
+        myChar={character}
+        onClaimed={(res) => {
+          const patch = res?.applied || res?.patch || {};
+          if (!character || !Object.keys(patch).length) return;
+          const next = { ...character, ...patch };
+          primeMyCharacterCache(next);
+          setCharacter(next);
+        }}
+      />
       <InventoryFullModal
         character={character}
         onCharacterChange={(patch) => setCharacter((c) => (c ? { ...c, ...patch } : c))}

@@ -4,6 +4,7 @@ import { Droppable, Draggable } from "@hello-pangea/dnd";
 import { RARITY_COLORS, STAT_ICONS } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import StatCompareBubble from "@/components/game/StatCompareBubble";
+import { portalWhileDragging } from "@/lib/dndPortal";
 
 // Equipped gear arranged as a 3x3 frame around the portrait (all 8 slots
 // fill the perimeter, portrait sits in the centre):
@@ -228,19 +229,30 @@ function SlotChip({
           >
             {item ? (
               <Draggable draggableId={item.id} index={0}>
-                {(dragProvided, dragSnapshot) => (
-                  <div
-                    ref={dragProvided.innerRef}
-                    {...dragProvided.draggableProps}
-                    {...dragProvided.dragHandleProps}
-                    className={`flex items-center justify-center cursor-grab active:cursor-grabbing ${
-                      dragSnapshot.isDragging ? "opacity-90 scale-110 z-50" : "hover:scale-110"
-                    }`}
-                    style={dragProvided.draggableProps.style}
-                  >
-                    {chipInner}
-                  </div>
-                )}
+                {(dragProvided, dragSnapshot) => {
+                  const node = (
+                    <div
+                      ref={dragProvided.innerRef}
+                      {...dragProvided.draggableProps}
+                      {...dragProvided.dragHandleProps}
+                      className={`flex items-center justify-center cursor-grab active:cursor-grabbing rounded-lg ${
+                        dragSnapshot.isDragging
+                          ? "opacity-100 scale-125 shadow-[0_10px_28px_rgba(0,0,0,0.5)] ring-2 ring-primary/60 bg-card/95 cursor-grabbing"
+                          : "hover:scale-110"
+                      }`}
+                      style={{
+                        ...dragProvided.draggableProps.style,
+                        ...(dragSnapshot.isDragging ? { zIndex: 9999 } : null),
+                        width: size + 6,
+                        height: size + 6,
+                      }}
+                      title="Drag to unequip or swap"
+                    >
+                      {chipInner}
+                    </div>
+                  );
+                  return portalWhileDragging(dragProvided.draggableProps.style, node);
+                }}
               </Draggable>
             ) : (
               chipInner

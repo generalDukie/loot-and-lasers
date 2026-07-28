@@ -133,7 +133,8 @@ export default function GrantItemTab({ onAction }) {
             />
             <p className="text-[10px] text-muted-foreground text-center">
               Gear goes to <span className="text-foreground font-medium">{selected.name}</span>
-              {selected.id === activeId ? " (your active operative)" : ""}. Open their character sheet to see it.
+              {selected.id === activeId ? " (your active operative)" : ""}. Cap is unequipped bag slots only
+              — grants fail if their bag is full. Open their character sheet to see it.
             </p>
           </div>
 

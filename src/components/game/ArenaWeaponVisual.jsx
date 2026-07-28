@@ -37,7 +37,8 @@ export default function ArenaWeaponVisual({ className, attacking, attackEvent, e
   const isBareHands = !weaponItem;
   const uid = useId().replace(/:/g, "");
   const dir = side === "player" ? 1 : -1;
-  const aimAtEnemy = side === "player" && weapon.type === "shoot";
+  // Gear art defaults face left; on the player (left) side flip so the tip aims at the enemy.
+  const aimAtEnemy = side === "player";
   const evType = attackEvent?.type;
   const isAbility = evType === "ability" || evType === "drone";
   const isRegen = evType === "regen" && className === "Astral Warden";

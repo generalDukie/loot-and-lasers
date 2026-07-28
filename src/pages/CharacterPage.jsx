@@ -222,6 +222,8 @@ export default function CharacterPage() {
   if (!character) return null;
 
   const equippedItems = inv.items.filter((i) => i.is_equipped);
+  const bagCount = inv.items.filter((i) => !i.is_equipped).length;
+  const inventoryCap = getInventoryCap(character);
   const totalStats = computeTotalStats(character, equippedItems);
   const baseStats = computeTotalStats(character, []);
   const noBuffStats = computeTotalStatsNoBuffs(character, equippedItems);
@@ -308,16 +310,16 @@ export default function CharacterPage() {
         <motion.div {...fadeUp(0.35)} className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-4 flex flex-col min-h-0 md:flex-1">
           <h2 className="font-display font-semibold text-xs tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
             <Backpack className="w-3.5 h-3.5 text-primary" /> INVENTORY
-            <span className={`ml-auto tabular-nums ${inv.items.length >= getInventoryCap(character) ? "text-amber-400" : ""}`}>
-              {inv.items.length}/{getInventoryCap(character)}
+            <span className={`ml-auto tabular-nums ${bagCount >= inventoryCap ? "text-amber-400" : ""}`}>
+              {bagCount}/{inventoryCap}
             </span>
           </h2>
           <p className="text-[9px] text-muted-foreground/70 mb-2 italic">
             <span className="hidden [@media(hover:hover)_and_(pointer:fine)]:inline">
-              Drag the grip to reorder · drag equipped gear here to unequip · hover to compare.
+              Drag an item to reorder or equip · drag equipped gear here to unequip · hover to compare.
             </span>
             <span className="[@media(hover:hover)_and_(pointer:fine)]:hidden">
-              Drag to reorder · drag equipped gear here to unequip · tap gear to compare.
+              Drag to reorder or equip · drag equipped gear here to unequip · tap gear to compare.
             </span>
           </p>
           <div className="flex-1 min-h-0 flex flex-col -mr-1 pr-1">

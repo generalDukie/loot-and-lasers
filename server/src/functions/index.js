@@ -4,6 +4,8 @@ import { createService, entities } from "../entities.js";
 import { db, nowIso, withTransactionAsync } from "../db.js";
 import { getUserById } from "../auth.js";
 import { ECONOMY_HANDLERS } from "./economy.js";
+import { getInventoryCap } from "../shared/economyFormulas.js";
+import { countBagOccupancy } from "../shared/inventoryGrant.js";
 
 const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
 
@@ -639,8 +641,7 @@ export async function AdminModeration(user, body) {
       item = randomItem(rarity, level, type);
     }
 
-    // Strip client-forged ids / ownership — grant always targets the chosen character.
-    // Admin grants ignore inventory cap (unlike mission/shop loot).
+    // Cap counts unequipped bag items only — equipped gear does not use a slot.
     const {
       id: _ignoreId,
       character_id: _ignoreChar,
@@ -652,6 +653,18 @@ export async function AdminModeration(user, body) {
       is_equipped: _ignoreEq,
       ...safeItem
     } = item;
+    const cap = getInventoryCap(ch);
+    const bagCount = countBagOccupancy(ch);
+    if (bagCount >= cap) {
+      return {
+        status: 400,
+        body: {
+          error: `Inventory full (${bagCount}/${cap}) — only unequipped items count. Free a bag slot first.`,
+          inventory_count: bagCount,
+          inventory_cap: cap,
+        },
+      };
+    }
     const created = entities.Item.create({
       ...safeItem,
       name: String(safeItem.name || "Granted Item").trim() || "Granted Item",
@@ -664,7 +677,17 @@ export async function AdminModeration(user, body) {
       is_equipped: false,
       locked: !!safeItem.locked,
     });
-    return { status: 200, body: { success: true, item: created, character_name: ch.name, character_id: ch.id } };
+    return {
+      status: 200,
+      body: {
+        success: true,
+        item: created,
+        character_name: ch.name,
+        character_id: ch.id,
+        inventory_count: bagCount + 1,
+        inventory_cap: cap,
+      },
+    };
   }
 
   if (action === "adjust_currency") {

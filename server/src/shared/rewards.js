@@ -159,7 +159,8 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
 
   if (rewards.item_rarity) {
     const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
-    if (owned.length >= getInventoryCap(ch)) {
+    const bagCount = owned.filter((i) => !i.is_equipped).length;
+    if (bagCount >= getInventoryCap(ch)) {
       const comp = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 }[rewards.item_rarity] || 8;
       patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
       patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
@@ -175,7 +176,8 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
     const c = rewards.collectible;
     if (c.type === "consumable") {
       const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
-      if (owned.length >= getInventoryCap(ch)) {
+      const bagCount = owned.filter((i) => !i.is_equipped).length;
+      if (bagCount >= getInventoryCap(ch)) {
         const comp = c.sell_value || 25;
         patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
         patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;

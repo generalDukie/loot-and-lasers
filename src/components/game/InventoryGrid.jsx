@@ -8,6 +8,7 @@ import { ArrowUp, ArrowDown, Trash2, X, GripVertical } from "lucide-react";
 import { computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
 import { EQUIPPABLE_TYPES, listDissolveJunk } from "@/lib/inventoryJunk";
 import { sortItemsByOrder } from "@/lib/inventoryOrder";
+import { portalWhileDragging } from "@/lib/dndPortal";
 
 export const INVENTORY_DROPPABLE_ID = "inventory";
 
@@ -178,72 +179,82 @@ export default function InventoryGrid({
                       index={index}
                       isDragDisabled={!canDrag}
                     >
-                      {(dragProvided, dragSnapshot) => (
-                        <div
-                          ref={dragProvided.innerRef}
-                          {...dragProvided.draggableProps}
-                          onMouseEnter={() => {
-                            if (desktopHover && comparable && !dragSnapshot.isDragging) setHoveredId(item.id);
-                          }}
-                          onMouseLeave={() => {
-                            if (desktopHover) setHoveredId((h) => (h === item.id ? null : h));
-                          }}
-                          onClick={() => {
-                            if (dragSnapshot.isDragging) return;
-                            if (isSelectable) {
-                              toggleSelect(item.id);
-                              return;
-                            }
-                            if (!desktopHover && comparable) {
-                              setPinnedId((p) => (p === item.id ? null : item.id));
-                            }
-                          }}
-                          className={`${isPinned ? "ring-1 ring-primary/60 rounded-lg" : ""} ${
-                            dragSnapshot.isDragging ? "z-50 opacity-95" : ""
-                          }`}
-                          style={dragProvided.draggableProps.style}
-                        >
-                          <div className="relative flex items-stretch gap-0.5">
-                            {canDrag && (
-                              <div
-                                {...dragProvided.dragHandleProps}
-                                className="shrink-0 flex items-center px-0.5 rounded-l-lg text-muted-foreground/50 hover:text-muted-foreground cursor-grab active:cursor-grabbing"
-                                title="Drag to reorder"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <GripVertical className="w-3.5 h-3.5" />
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1 relative">
-                              <CompactItemRow
-                                item={item}
-                                onEquip={comparable ? onEquip : null}
-                                onSell={onSell}
-                                onUse={onUse}
-                                selectable={isSelectable}
-                                selected={isSelected}
-                                onToggleSelect={() => toggleSelect(item.id)}
-                              />
-                              {comparable && <UpgradeBadge item={item} eqSlot={eqSlot} characterClass={characterClass} />}
-                              {showHoverBubble && !dragSnapshot.isDragging && (
+                      {(dragProvided, dragSnapshot) => {
+                        const node = (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            {...(canDrag ? dragProvided.dragHandleProps : {})}
+                            onMouseEnter={() => {
+                              if (desktopHover && comparable && !dragSnapshot.isDragging) setHoveredId(item.id);
+                            }}
+                            onMouseLeave={() => {
+                              if (desktopHover) setHoveredId((h) => (h === item.id ? null : h));
+                            }}
+                            onClick={() => {
+                              if (dragSnapshot.isDragging) return;
+                              if (isSelectable) {
+                                toggleSelect(item.id);
+                                return;
+                              }
+                              if (!desktopHover && comparable) {
+                                setPinnedId((p) => (p === item.id ? null : item.id));
+                              }
+                            }}
+                            className={`${isPinned ? "ring-1 ring-primary/60 rounded-lg" : ""} ${
+                              dragSnapshot.isDragging
+                                ? "z-[9999] rounded-lg shadow-[0_12px_40px_rgba(0,0,0,0.55)] ring-2 ring-primary/50 bg-card/95 scale-[1.03] rotate-1 cursor-grabbing"
+                                : canDrag
+                                  ? "cursor-grab active:cursor-grabbing"
+                                  : ""
+                            }`}
+                            style={{
+                              ...dragProvided.draggableProps.style,
+                              ...(dragSnapshot.isDragging ? { zIndex: 9999 } : null),
+                            }}
+                          >
+                            <div className="relative flex items-stretch gap-0.5 pointer-events-auto">
+                              {canDrag && (
                                 <div
-                                  className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-[60] pointer-events-auto"
-                                  onClick={(e) => e.stopPropagation()}
+                                  className="shrink-0 flex items-center px-0.5 rounded-l-lg text-muted-foreground/50"
+                                  title="Drag to reorder or equip"
+                                  aria-hidden
                                 >
-                                  <StatCompareBubble
-                                    item={item}
-                                    equipped={eqSlot}
-                                    onEquip={onEquip}
-                                    onSell={onSell}
-                                    onLock={onLock}
-                                    characterClass={characterClass}
-                                  />
+                                  <GripVertical className="w-3.5 h-3.5" />
                                 </div>
                               )}
+                              <div className="min-w-0 flex-1 relative">
+                                <CompactItemRow
+                                  item={item}
+                                  onEquip={comparable ? onEquip : null}
+                                  onSell={onSell}
+                                  onUse={onUse}
+                                  selectable={isSelectable}
+                                  selected={isSelected}
+                                  onToggleSelect={() => toggleSelect(item.id)}
+                                />
+                                {comparable && <UpgradeBadge item={item} eqSlot={eqSlot} characterClass={characterClass} />}
+                                {showHoverBubble && !dragSnapshot.isDragging && (
+                                  <div
+                                    className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-[60] pointer-events-auto"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <StatCompareBubble
+                                      item={item}
+                                      equipped={eqSlot}
+                                      onEquip={onEquip}
+                                      onSell={onSell}
+                                      onLock={onLock}
+                                      characterClass={characterClass}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                        return portalWhileDragging(dragProvided.draggableProps.style, node);
+                      }}
                     </Draggable>
                   );
                 })}

@@ -18,9 +18,10 @@ export function Toaster() {
           <Toast
             key={id}
             {...props}
+            data-state={open === false ? "closed" : "open"}
             onMouseEnter={() => pauseToast(id)}
             onMouseLeave={() => resumeToast(id)}
-            className={`duration-2000 ${open === false ? "opacity-0 pointer-events-none" : ""}`}
+            className={open === false ? "pointer-events-none" : undefined}
           >
             <div className="grid gap-1">
               {title && <ToastTitle>{title}</ToastTitle>}

@@ -279,12 +279,12 @@ export function weaponCombatStyleFor(name, baseName, emoji) {
   return "shoot";
 }
 
-// Maximum items a character can hold (equipped + unequipped combined).
+// Maximum unequipped items a character can hold in the bag.
 export const INVENTORY_CAP = 10;
 
-// Dynamic inventory cap — the Cargo Hold ship upgrade adds +1 slot per tier
-// (up to +10), raising the cap from 10 to 20. Slots are discrete so the ship's
-// upgrade multiplier does NOT apply here.
+// Dynamic inventory cap — the Cargo Hold ship upgrade adds +1 bag slot per tier
+// (up to +10), raising the cap from 10 to 20. Equipped gear does not count.
+// Slots are discrete so the ship's upgrade multiplier does NOT apply here.
 export function getInventoryCap(character) {
   const ids = getActiveShipMods(character);
   let bonus = 0;

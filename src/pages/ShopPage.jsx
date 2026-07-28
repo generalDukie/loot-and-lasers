@@ -231,23 +231,31 @@ export default function ShopPage() {
       const patch = res.patch || res.data?.patch || {};
       const meta = patch.shop_meta || shopMeta;
       const items = res.items || res.data?.items || [];
-      const hadPending = applyPendingLootFromResponse(res);
+      applyPendingLootFromResponse(res);
       const haggleNote = res.haggle_note ?? res.data?.haggle_note;
-      const haggleFailed = !!(res.haggle_failed ?? res.data?.haggle_failed);
       const anyCreated = items.length > 0;
       const lastName = items[0]?.name || slot.name;
-
-      if (meta) setShopMeta(meta);
-      setCharacter((c) => ({ ...c, ...patch }));
+      // Prefer the explicit flag; fall back to yanked meta if an older response shape omits it.
+      const yankedByHaggle = !!(
+        haggle
+        && !anyCreated
+        && (isHot ? meta?.hot_yanked : meta?.yanked?.[slot._slotId])
+      );
+      const haggleFailed = !!(res.haggle_failed ?? res.data?.haggle_failed) || yankedByHaggle;
 
       if (haggleFailed) {
+        if (meta) setShopMeta(meta);
+        setCharacter((c) => ({ ...c, ...patch }));
         toast({
           title: "Haggle failed",
-          description: haggleNote || "They yanked the listing.",
+          description: haggleNote || "Deal soured — they yanked the listing.",
           variant: "destructive",
         });
         return;
       }
+
+      if (meta) setShopMeta(meta);
+      setCharacter((c) => ({ ...c, ...patch }));
 
       if (haggle) playHaggleWinGrowl();
 

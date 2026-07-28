@@ -1,11 +1,16 @@
 import { entities } from "../entities.js";
 import { getInventoryCap } from "./economyFormulas.js";
 
-/** Grant an item, or return it as pending loot when at cap (no auto-dissolve). */
+/** Bag occupancy — equipped gear does not consume inventory slots. */
+export function countBagOccupancy(ch) {
+  const owned = entities.Item.filter({ character_id: ch.id }, null, 500);
+  return owned.filter((i) => !i.is_equipped).length;
+}
+
+/** Grant an item, or return it as pending loot when the bag is at cap (no auto-dissolve). */
 export function grantItemOrPending(ch, itemPayload) {
   const cap = getInventoryCap(ch);
-  const owned = entities.Item.filter({ character_id: ch.id }, null, 500);
-  if (owned.length >= cap) {
+  if (countBagOccupancy(ch) >= cap) {
     return { item: null, pending: itemPayload, compensated: 0 };
   }
   const created = entities.Item.create({

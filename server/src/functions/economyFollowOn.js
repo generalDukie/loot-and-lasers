@@ -6,7 +6,7 @@ import { withTransactionAsync, db, nowIso } from "../db.js";
 import { getUserById } from "../auth.js";
 import { randomItem } from "../shared/rewards.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
-import { collectGrant, grantItemOrPending } from "../shared/inventoryGrant.js";
+import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import {
   todayET,
   applyXpToCharacter,
@@ -817,8 +817,7 @@ export const AcceptPendingLoot = wrap((user, body) => {
   const raw = body?.item;
   if (!raw || typeof raw !== "object") httpErr(400, "Missing item");
   const cap = getInventoryCap(ch);
-  const owned = entities.Item.filter({ character_id: ch.id }, null, 500);
-  if (owned.length >= cap) httpErr(400, "Inventory full");
+  if (countBagOccupancy(ch) >= cap) httpErr(400, "Inventory full");
   const rarity = ["common", "uncommon", "rare", "epic", "legendary"].includes(raw.rarity)
     ? raw.rarity
     : "common";

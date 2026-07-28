@@ -34,8 +34,8 @@ export function markRead(id) {
 }
 
 // Create an in-app notification shown in the bottom-right NotificationCenter
-// (blue bell). Prefer this over floating toasts for game feedback — toast()
-// also routes here while a character is active.
+// (blue bell). toast() also pushes here while a character is active, and
+// still shows a floating toast with a fade-out.
 export function pushNotification({ owner_id, type = "system", title, body, related_id }) {
   return api.entities.AppNotification.create({ owner_id, type, title, body, related_id });
 }

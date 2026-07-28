@@ -3,8 +3,8 @@ import { getActiveCharacterId } from "@/lib/activeCharacter";
 import { pushNotification, emitLocalAlert } from "@/lib/notificationEngine";
 
 const TOAST_LIMIT = 20;
-const TOAST_DURATION = 10000; // auto-dismiss after 10s — paused while hovered
-const TOAST_REMOVE_DELAY = 2400; // unmount after the fade-out finishes
+const TOAST_DURATION = 8000; // visible duration — paused while hovered
+const TOAST_REMOVE_DELAY = 500; // unmount after the fade-out finishes
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -148,12 +148,6 @@ function toast({ ...props }) {
     }).catch(() => {});
     // Immediate bell feedback without waiting on websocket debounce.
     emitLocalAlert({ title, body });
-    const id = genId();
-    return {
-      id,
-      dismiss: () => {},
-      update: () => {},
-    };
   }
 
   const id = genId();

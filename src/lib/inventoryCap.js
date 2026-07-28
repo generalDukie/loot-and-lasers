@@ -42,16 +42,18 @@ export function applyPendingLootFromResponse(res) {
 }
 
 export async function countItems(characterId) {
-  const items = await api.entities.Item.filter({ character_id: characterId });
+  // Equipped gear does not consume bag slots.
+  const items = await api.entities.Item.filter({ character_id: characterId, is_equipped: { $ne: true } });
   return items.length;
 }
 
-// Try to add an item. If the inventory has room, creates it and returns it.
+// Try to add an item. If the bag has room, creates it and returns it.
 // If full, stashes the payload as pending (triggers the InventoryFullModal)
 // and returns null.
 export async function addItemWithCap(character, itemPayload) {
   const all = await api.entities.Item.filter({ character_id: character.id });
-  if (all.length >= getInventoryCap(character)) {
+  const bagCount = all.filter((i) => !i.is_equipped).length;
+  if (bagCount >= getInventoryCap(character)) {
     setPendingItem(itemPayload);
     return null;
   }

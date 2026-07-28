@@ -10,6 +10,19 @@ fs.mkdirSync(dataDir, { recursive: true });
 const dbPath = process.env.DB_PATH || path.join(dataDir, "game.db");
 export const db = new DatabaseSync(dbPath);
 
+/** Run async fn inside a SQLite transaction (BEGIN IMMEDIATE). */
+export async function withTransactionAsync(fn) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const result = await fn();
+    db.exec("COMMIT");
+    return result;
+  } catch (err) {
+    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+    throw err;
+  }
+}
+
 db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;

@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { nanoid } from "nanoid";
 import { db, nowIso } from "./db.js";
+import { entities } from "./entities.js";
 import { isEmailSendingEnabled, sendEmail, recordEmailFallback, getEmailConfigSummary } from "./email.js";
 import { getEmailLog } from "./emailLog.js";
 
@@ -209,7 +210,7 @@ export function createAuthRouter(express) {
   });
 
   router.patch("/me", requireAuth, (req, res) => {
-    const allowed = ["legacy_name", "legacy_display", "active_character_id", "purchased_slots"];
+    const allowed = ["legacy_name", "legacy_display", "active_character_id"];
     const sets = [];
     const vals = [];
     for (const key of allowed) {
@@ -224,6 +225,15 @@ export function createAuthRouter(express) {
         sets.push("legacy_display = ?");
         vals.push(mode);
         continue;
+      }
+      if (key === "active_character_id") {
+        const charId = req.body.active_character_id;
+        if (charId) {
+          const c = entities.Character.get(charId);
+          if (!c || c.created_by_id !== req.user.id) {
+            return res.status(403).json({ error: "Character does not belong to you" });
+          }
+        }
       }
       sets.push(`${key} = ?`);
       vals.push(req.body[key]);

@@ -21,6 +21,12 @@ import {
 } from "./entityAccess.js";
 import { assertCanUnequipToBag } from "./shared/inventoryGrant.js";
 import "./db.js";
+import { ensureDefaultSchedules } from "./scheduling/bootstrap.js";
+import { startScheduler } from "./scheduling/worker.js";
+import { createTimeRouter, createScheduleRouter } from "./routes/time.js";
+import { createEntitlementRouter } from "./routes/entitlements.js";
+import { migrateLegacyEntitlements } from "./entitlements/migrate.js";
+import "./entitlements/hooks.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const IS_PROD = process.env.NODE_ENV === "production";
@@ -44,6 +50,9 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth", createAuthRouter(express));
+app.use("/api/time", createTimeRouter(express));
+app.use("/api/schedules", createScheduleRouter(express));
+app.use("/api/entitlements", createEntitlementRouter(express));
 
 // ── Entity CRUD ──────────────────────────────────────────────
 function getStore(type) {
@@ -285,4 +294,15 @@ server.listen(PORT, () => {
   console.log(`Loot & Lasers API listening on http://localhost:${PORT}`);
   console.log(`WebSocket: ws://localhost:${PORT}/ws`);
   if (servingStatic) console.log(`Serving client from ${resolveStaticDir()}`);
+  try {
+    ensureDefaultSchedules();
+    startScheduler({ intervalMs: Number(process.env.SCHEDULE_TICK_MS) || 15_000 });
+  } catch (err) {
+    console.error("[scheduler] failed to start:", err);
+  }
+  migrateLegacyEntitlements()
+    .then((r) => {
+      if (!r?.skipped) console.log("[entitlements] legacy migration:", r);
+    })
+    .catch((err) => console.error("[entitlements] migration failed:", err));
 });

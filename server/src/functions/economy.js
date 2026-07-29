@@ -47,10 +47,12 @@ import {
 } from "../shared/economyFormulas.js";
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import { ECONOMY_FOLLOW_ON_HANDLERS } from "./economyFollowOn.js";
+import { clock, TimeErrors } from "../shared/time/index.js";
 
-function httpErr(status, message) {
+function httpErr(status, message, code) {
   const e = new Error(message);
   e.status = status;
+  if (code) e.code = code;
   throw e;
 }
 
@@ -357,11 +359,17 @@ export async function LaunchMission(user, body) {
     return { status: 400, body: { error: "Missing template fields" } };
   }
 
+  // Server-authoritative duration bounds — never trust raw client timers.
+  const rawDuration = Math.floor(Number(template.duration_seconds));
+  if (!Number.isFinite(rawDuration) || rawDuration < 30 || rawDuration > 7200) {
+    return { status: 400, body: { error: "Invalid mission duration", code: "INVALID_DURATION" } };
+  }
+
   try {
     const result = await withTransactionAsync(async () => {
       let ch = requireMyChar(user);
       if (ch.active_mission_id) httpErr(409, "Already on a mission");
-      if (ch.mining_end_time && new Date(ch.mining_end_time) > new Date()) {
+      if (ch.mining_end_time && new Date(ch.mining_end_time).getTime() > clock.nowMs()) {
         httpErr(409, "Mining in progress");
       }
       if (countBagOccupancy(ch) >= getInventoryCap(ch)) {
@@ -373,7 +381,7 @@ export async function LaunchMission(user, body) {
 
       const draft = {
         ...template,
-        duration_seconds: template.duration_seconds,
+        duration_seconds: rawDuration,
         fuel_cost: typeof template.fuel_cost === "number" ? template.fuel_cost : undefined,
       };
       const duration = getEffectiveMissionDuration(ch, draft);
@@ -395,7 +403,7 @@ export async function LaunchMission(user, body) {
       const lootRarity = rollItemRarity(chance, ch.level || 1);
       const lootDrops = Math.random() < Math.min(0.85, 0.4 + Math.min(0.25, (ch.level || 1) * 0.01));
 
-      const startNow = new Date();
+      const startNow = clock.now();
       const endTime = new Date(startNow.getTime() + duration * 1000);
 
       // Client may send explore_scene; otherwise pick one so the active-mission
@@ -442,7 +450,7 @@ export async function LaunchMission(user, body) {
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
     throw err;
   }
 }
@@ -463,10 +471,10 @@ export async function ClaimMission(user, body) {
         httpErr(409, "Mission already resolved");
       }
 
-      const now = Date.now();
+      const now = clock.nowMs();
       if (mission.status === "in_progress") {
         if (mission.end_time && new Date(mission.end_time).getTime() > now) {
-          httpErr(400, "Mission not finished yet");
+          httpErr(400, "Mission not finished yet", TimeErrors.COOLDOWN_ACTIVE);
         }
         mission = entities.Mission.update(mission.id, { status: "completed" });
       }
@@ -555,7 +563,7 @@ export async function ClaimMission(user, body) {
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
     throw err;
   }
 }

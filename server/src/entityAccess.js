@@ -7,6 +7,7 @@ import { entities } from "./entities.js";
 import { expForLevel } from "./shared/rewards.js";
 import { CLASS_BASE_STATS, FUEL_MAX } from "./shared/economyFormulas.js";
 import { assertNameHasNoDigits, NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
+import { assertCanCreateCharacter, EntitlementError } from "./entitlements/index.js";
 
 export function isAdmin(user) {
   return user?.role === "admin";
@@ -71,6 +72,15 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "promo_codes_redeemed",
   "highest_damage",
   "arena_cooldown_at",
+  // Time-sensitive / entitlement fields — server functions only
+  "active_buffs",
+  "playtime_seconds",
+  "unlocked_titles",
+  "unlocked_achievements",
+  "active_title",
+  "discovered_gear",
+  "equipped_cosmetics",
+  "active_cosmetic_frame",
 ]);
 
 /** Non-admin Item.update may only touch these fields. */
@@ -303,6 +313,17 @@ export function sanitizeCreatePayload(user, type, data = {}) {
 
     if (!isAdmin(user)) {
       const existingCount = entities.Character.filter({ created_by_id: user.id }, null, 50).length;
+      try {
+        assertCanCreateCharacter(user.id, existingCount);
+      } catch (err) {
+        if (err instanceof EntitlementError || err.code === "CHARACTER_SLOT_LIMIT_REACHED") {
+          const e = new Error(err.message || "Character slot limit reached");
+          e.status = 409;
+          e.code = err.code || "CHARACTER_SLOT_LIMIT_REACHED";
+          throw e;
+        }
+        throw err;
+      }
       const clientNova = Number(out.nova_crystals) || 0;
 
       out.level = 1;

@@ -8,6 +8,8 @@
     "start": "node src/index.js",
     "seed": "node src/seed.js",
     "smoke": "node scripts/smoke-test.mjs",
+    "test:time": "node scripts/test-time.mjs",
+    "test:entitlements": "node scripts/test-entitlements.mjs",
     "backup:export": "node scripts/export-data.mjs",
     "backup:import": "node scripts/import-data.mjs"
   },

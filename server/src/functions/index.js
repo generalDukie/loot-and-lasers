@@ -6,12 +6,15 @@ import { getUserById } from "../auth.js";
 import { ECONOMY_HANDLERS } from "./economy.js";
 import { getInventoryCap, STARDUST_MAX } from "../shared/economyFormulas.js";
 import { countBagOccupancy } from "../shared/inventoryGrant.js";
+import { todayET, clock, TimeErrors } from "../shared/time/index.js";
+import {
+  grantEntitlement,
+  titleEntitlementKeyForAchievement,
+  grantProductBundle,
+} from "../entitlements/index.js";
+import { ACHIEVEMENTS } from "../shared/achievements.js";
 
 const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
-
-function todayET() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
 
 async function myCharacter(user) {
   const list = entities.Character.filter({ created_by_id: user.id }, "-created_date", 1);
@@ -120,9 +123,10 @@ export async function ClaimMailReward(user, body) {
         err.status = 409;
         throw err;
       }
-      if (mail.expires_at && new Date(mail.expires_at) < new Date()) {
+      if (mail.expires_at && new Date(mail.expires_at).getTime() < clock.nowMs()) {
         const err = new Error("This mail has expired.");
         err.status = 403;
+        err.code = TimeErrors.MAIL_EXPIRED;
         throw err;
       }
 
@@ -181,6 +185,24 @@ export async function RedeemPromoCode(user, body) {
 
   const result = await redeemPromoCode(game, character, code);
   if (!result.ok) return { status: result.status, body: { error: result.error } };
+
+  // Founders promo also grants account entitlements (idempotent).
+  if (/^foundersonly$/i.test(code) && character.created_by_id) {
+    try {
+      await grantProductBundle({
+        productId: "promo.founders_only",
+        accountId: character.created_by_id,
+        sourceType: "promotion",
+        idempotencyKey: `promo:FoundersOnly:${character.created_by_id}`,
+        externalProvider: "promotion",
+        externalTransactionId: `promo:FoundersOnly:${character.created_by_id}`,
+        createdBy: user.email || user.id,
+      });
+    } catch {
+      /* already granted */
+    }
+  }
+
   return { status: 200, body: { success: true, ...result } };
 }
 
@@ -192,11 +214,32 @@ export async function SyncAchievements(user, body = {}) {
   const patch = { ...achPatch };
   const titles = new Set(patch.unlocked_titles || character.unlocked_titles || []);
 
+  // Mirror new achievement titles into character-scoped entitlements.
+  for (const achId of newly_unlocked || []) {
+    const a = ACHIEVEMENTS.find((x) => x.id === achId);
+    if (!a?.title || !character.created_by_id) continue;
+    try {
+      await grantEntitlement({
+        entitlementKey: titleEntitlementKeyForAchievement(achId),
+        accountId: character.created_by_id,
+        characterId: character.id,
+        quantity: 1,
+        sourceType: "achievement",
+        sourceReferenceType: "achievement",
+        sourceReferenceId: achId,
+        idempotencyKey: `achievement-title:${character.id}:${achId}`,
+        createdBy: "system",
+      });
+    } catch {
+      /* already owned / unknown — ignore */
+    }
+  }
+
   if (body.title !== undefined) {
     if (body.title === "" || titles.has(body.title)) {
       patch.active_title = body.title;
     } else {
-      return { status: 403, body: { error: "Title not unlocked" } };
+      return { status: 403, body: { error: "Title not unlocked", code: "ENTITLEMENT_NOT_OWNED" } };
     }
   }
 

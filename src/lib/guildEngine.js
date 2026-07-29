@@ -26,24 +26,65 @@ const FIGHTER_CLASSES = ["Vanguard", "Technomancer", "Shadow Operative", "Astral
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+/** ET Monday-based week key — matches server getWeekKey (America/New_York). */
 export function getWeekKey(date = new Date()) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = (d.getUTCDay() + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - dayNum + 3);
-  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
-  const week = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
-  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+  const zone = "America/New_York";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+  const y = Number(map.year);
+  const m = Number(map.month);
+  const d = Number(map.day);
+  const wd = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[map.weekday] ?? 0;
+  const sinceMon = (wd + 6) % 7;
+  // Approximate Monday by UTC noon walk (good enough for week label; server is authoritative)
+  const noonGuess = Date.UTC(y, m - 1, d - sinceMon, 12, 0, 0);
+  const monParts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(noonGuess));
+  const mp = Object.fromEntries(monParts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+  const my = Number(mp.year);
+  const mm = Number(mp.month);
+  const md = Number(mp.day);
+  const monday = new Date(Date.UTC(my, mm - 1, md));
+  const dayNum = (monday.getUTCDay() + 6) % 7;
+  monday.setUTCDate(monday.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(monday.getUTCFullYear(), 0, 4));
+  const week =
+    1 +
+    Math.round(
+      ((monday - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7
+    );
+  return `${monday.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
+/** Next Monday 00:00 America/New_York as ISO UTC (matches server weekEndUtc). */
 export function weekEndDate() {
-  const now = new Date();
-  const dayNum = (now.getDay() + 6) % 7; // Mon=0..Sun=6
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - dayNum);
-  monday.setHours(0, 0, 0, 0);
-  const nextMonday = new Date(monday);
-  nextMonday.setDate(monday.getDate() + 7);
-  return nextMonday.toISOString();
+  const zone = "America/New_York";
+  const now = Date.now();
+  // Find next ET midnight that is a Monday
+  let t = now;
+  for (let i = 0; i < 8 * 24; i++) {
+    t += 60 * 60 * 1000;
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(t));
+    const map = Object.fromEntries(parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+    if (map.weekday === "Mon" && map.hour === "00" && map.minute === "00") {
+      // Snap to that hour boundary
+      return new Date(Math.floor(t / 3600000) * 3600000).toISOString();
+    }
+  }
+  // Fallback: +7d from now
+  return new Date(now + 7 * 86400000).toISOString();
 }
 
 // ── Weekly challenges ──

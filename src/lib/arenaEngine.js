@@ -11,7 +11,24 @@ import {
   mitigationForDamageType,
   CRIT_MULT,
 } from "@/lib/statEngine";
-import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
+import {
+  onCombatStart,
+  onTurnStart,
+  activateKineticTantrum,
+  beginNormalAttackModifiers,
+  endNormalAttackModifiers,
+  tryPhantomSignalMiss,
+  overclockDealtMultiplier,
+  overclockTakenMultiplier,
+  gainOverclockStack,
+  removeOverclockStacks,
+  applyDamageWithBarrier,
+  maybeOrbitalAssistant,
+  hasStimInjector,
+  OVERCLOCK_CRIT_STACK_LOSS,
+  passiveNameForClass,
+} from "@/lib/classPassives";
+import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
 
 // First 10 arena battles each day are free (grant xp + stardust + rating on wins only).
 // Losses never grant XP or stardust. Beyond the free quota, each battle costs nova
@@ -355,62 +372,67 @@ function buildFighter(c, items, side) {
   const derived = computeDerivedStats(stats, c);
   const className = cls.name;
   return {
-    side, name: c.name, className,
-    hp: derived.health, maxHp: derived.health,
+    side,
+    name: c.name,
+    className,
+    hp: derived.health,
+    maxHp: derived.health,
+    barrier: 0,
     primaryValue: derived.primaryValue,
     archetype: derived.archetype,
-    crit: derived.critChance / 100,   // convert % → 0-1 for battle rolls
+    /** Sheet expected attack (no variance) — used by secondary effects like Fire Support. */
+    standardAttack: derived.damage,
+    crit: derived.critChance / 100,
     critMult: derived.critMult || CRIT_MULT,
     dodge: derived.dodgeChance / 100,
-    armorPercent: derived.armor || 0,       // 0–100
+    armorPercent: derived.armor || 0,
     techResistPercent: derived.techResist || 0,
     damageType: derived.damageType || "strength",
     stats,
-    // Placeholder for future class passives. The current authoritative combat engine does not apply any.
-    passive: null,
+    passive: passiveNameForClass(className),
+    passiveState: null,
   };
 }
 
 /**
- * Resolve one basic hit after dodge has already failed:
- * raw damage (class formula + variance) → crit → mitigation → round.
- * Class specials multiply raw damage before crit (existing ability identity).
+ * Resolve one basic hit after dodge/miss has already been resolved:
+ * raw → optional outgoing mult (Overclock) → crit → mitigation → incoming taken mult → round.
  */
-function resolveBasicHit(attacker, defender, { canCrit = true, forceCrit = false, damageTypeForMitigation = attacker.damageType, rng = Math.random } = {}) {
-  // Base damage roll uses the existing formula + variance (no armor/DR yet).
+function resolveBasicHit(attacker, defender, {
+  canCrit = true,
+  forceCrit = false,
+  critChanceBonus = 0,
+  critMultOverride = null,
+  damageTypeForMitigation = attacker.damageType,
+  outgoingMult = 1,
+  incomingTakenMult = 1,
+  rng = Math.random,
+} = {}) {
   let damage = rollBasicAttackDamage(attacker.archetype, attacker.primaryValue, rng);
+  damage *= outgoingMult;
 
-  // Crit step (canCrit controls whether crit is allowed for this damage event).
   let crit = false;
   if (canCrit) {
-    crit = forceCrit || rng() < attacker.crit;
-    if (crit) damage *= attacker.critMult || CRIT_MULT;
+    const critChance = Math.max(0, (attacker.crit || 0) + (critChanceBonus || 0));
+    crit = forceCrit || rng() < critChance;
+    if (crit) {
+      const mult = critMultOverride != null ? critMultOverride : (attacker.critMult || CRIT_MULT);
+      damage *= mult;
+    }
   }
 
-  // Resistance step (after crit). Unknown damageTypeForMitigation yields 0 mitigation in mitigationForDamageType.
   const mit = mitigationForDamageType(
     damageTypeForMitigation,
     defender.armorPercent,
     defender.techResistPercent,
   );
   damage *= (1 - mit);
+  damage *= incomingTakenMult;
 
   const finalDamage = Math.max(0, Math.round(damage));
   return { finalDamage, crit };
 }
 
-// Applies damage to a fighter, absorbing it through the Astral Warden shield first.
-function applyDamage(target, dmg) {
-  const amount = Math.max(0, dmg || 0);
-  target.hp = Math.max(0, target.hp - amount);
-  return { hpDamage: amount, shieldHit: false };
-}
-
-// Healing is NOT an attack:
-// - cannot Crit
-// - cannot Dodge
-// - not reduced by Might/Tech Resistance
-// - clamps to missing HP only
 function applyHealing(target, healAmount) {
   const amount = Math.max(0, healAmount || 0);
   const missing = Math.max(0, (target.maxHp || 0) - target.hp);
@@ -419,127 +441,221 @@ function applyHealing(target, healAmount) {
   return { healed };
 }
 
+function damageTypeEnumFor(attacker, forcedDamageTypeEnum) {
+  if (forcedDamageTypeEnum) return forcedDamageTypeEnum;
+  if (attacker.damageType === "strength") return "MIGHT";
+  if (attacker.damageType === "tech") return "TECH";
+  return "REFLEX";
+}
+
+function mitigationTypeForEnum(damageTypeEnum) {
+  if (damageTypeEnum === "MIGHT") return "strength";
+  if (damageTypeEnum === "TECH") return "tech";
+  if (damageTypeEnum === "REFLEX") return "agility";
+  return "true";
+}
+
+/**
+ * Execute one normal attack from attacker → defender.
+ * Returns { killed, events appended to shared events array }.
+ */
+function resolveNormalAttack(attacker, defender, events, {
+  rng,
+  forcedDamageTypeEnum = null,
+  forcedCanDodge = true,
+}) {
+  const damageTypeEnum = damageTypeEnumFor(attacker, forcedDamageTypeEnum);
+  const canCritBase = damageTypeEnum !== "TRUE";
+  const mitigationType = mitigationTypeForEnum(damageTypeEnum);
+  const mods = beginNormalAttackModifiers(attacker);
+
+  // Phantom Signal: forced miss (not a dodge) — does not trigger Kinetic Tantrum.
+  if (forcedCanDodge !== false) {
+    const phantom = tryPhantomSignalMiss(defender, events);
+    if (phantom.forcedMiss) {
+      const last = events[events.length - 1];
+      if (last) {
+        last.attacker = attacker.side;
+        last.defender = defender.side;
+      }
+      endNormalAttackModifiers(attacker, mods, events);
+      return { killed: false, outcome: "miss" };
+    }
+  }
+
+  // Dodge (skipped on guaranteed hit / Strong Kinetic Tantrum).
+  const canDodge = forcedCanDodge && !mods.guaranteedHit;
+  if (canDodge) {
+    const dodgeRoll = rng();
+    if (dodgeRoll < defender.dodge) {
+      events.push({
+        type: "dodge",
+        attacker: attacker.side,
+        defender: defender.side,
+        dodged: true,
+        missed: false,
+        damageType: damageTypeEnum,
+        canDodge: true,
+        canCrit: canCritBase,
+        damage: 0,
+        crit: false,
+        shieldHit: false,
+        ability: attacker.passive,
+        isNormalAttack: true,
+        text: `${defender.name} dodges!`,
+      });
+
+      // Dodge-specific hooks (Kinetic Tantrum).
+      if (defender.className === "Vanguard") {
+        activateKineticTantrum(defender, "normal", events);
+      }
+      if (attacker.className === "Vanguard") {
+        activateKineticTantrum(attacker, "strong", events);
+      }
+
+      endNormalAttackModifiers(attacker, mods, events);
+      return { killed: false, outcome: "dodge" };
+    }
+  }
+
+  const hit = resolveBasicHit(attacker, defender, {
+    canCrit: canCritBase,
+    forceCrit: mods.guaranteedCrit,
+    critChanceBonus: mods.critBonusFlat,
+    critMultOverride: mods.critMultOverride,
+    damageTypeForMitigation: mitigationType,
+    outgoingMult: overclockDealtMultiplier(attacker),
+    incomingTakenMult: overclockTakenMultiplier(defender),
+    rng,
+  });
+
+  const res = applyDamageWithBarrier(defender, hit.finalDamage, events, { isDamagingHit: true });
+
+  events.push({
+    type: "attack",
+    attacker: attacker.side,
+    defender: defender.side,
+    damage: res.hpDamage,
+    barrierAbsorbed: res.barrierAbsorbed,
+    shieldHit: res.shieldHit,
+    crit: hit.crit,
+    dodged: false,
+    missed: false,
+    ability: attacker.passive,
+    damageType: damageTypeEnum,
+    canDodge,
+    canCrit: canCritBase,
+    finalDamage: hit.finalDamage,
+    isNormalAttack: true,
+    guaranteedHit: !!mods.guaranteedHit,
+    guaranteedCrit: !!mods.guaranteedCrit,
+    critMultOverride: mods.critMultOverride,
+    kineticMode: mods.kineticMode,
+  });
+
+  // Enemy Crit vs Technomancer removes Overclock stacks after crit is confirmed.
+  if (hit.crit && defender.className === "Technomancer") {
+    removeOverclockStacks(defender, OVERCLOCK_CRIT_STACK_LOSS, events);
+  }
+
+  endNormalAttackModifiers(attacker, mods, events);
+
+  // After normal attack: Overclock gain, Orbital Assistant.
+  if (attacker.className === "Technomancer") {
+    gainOverclockStack(attacker, events);
+  }
+  maybeOrbitalAssistant(attacker, defender, events, rng);
+
+  return { killed: defender.hp <= 0, outcome: "hit" };
+}
+
+/**
+ * Build opening turn order when Stim Injector is active.
+ * Returns null for normal initiative alternating.
+ */
+function buildStimTurnPlan(A, B, rng) {
+  const aStim = hasStimInjector(A);
+  const bStim = hasStimInjector(B);
+  if (!aStim && !bStim) return null;
+  let runner;
+  let other;
+  if (aStim && bStim) {
+    runner = rng() < 0.5 ? A : B;
+    other = runner === A ? B : A;
+  } else if (aStim) {
+    runner = A;
+    other = B;
+  } else {
+    runner = B;
+    other = A;
+  }
+  // Opening: runner, runner, other, then alternate starting with runner.
+  return {
+    kind: "stim_injector",
+    runnerSide: runner.side,
+    queue: [runner, runner, other],
+    afterAlternateAttacker: runner,
+  };
+}
+
 export function simulateBattle(player, opp, playerItems = [], oppItems = [], opts = {}) {
   const { rng = Math.random } = opts || {};
-  const forcedDamageTypeEnum = opts?.forceDamageTypeEnum ?? null; // "MIGHT" | "REFLEX" | "TECH" | "TRUE"
+  const forcedDamageTypeEnum = opts?.forceDamageTypeEnum ?? null;
   const forcedCanDodge = typeof opts?.forceCanDodge === "boolean" ? opts.forceCanDodge : true;
 
-  // Snapshot both combatants immediately when combat starts.
   const A = buildFighter(player, playerItems, "player");
   const B = buildFighter(opp, oppItems, "opponent");
 
   const events = [];
+  events.push(...onCombatStart(A, rng));
+  events.push(...onCombatStart(B, rng));
 
-  // Initiative: single pure 50/50 roll (no stat influence).
-  const playerGoesFirst = rng() < 0.5;
-  let attacker = playerGoesFirst ? A : B;
-  let defender = playerGoesFirst ? B : A;
-  const initiativeFirstSide = attacker.side;
+  const stimPlan = buildStimTurnPlan(A, B, rng);
+  let attacker;
+  let defender;
+  let initiativeFirstSide;
+  let stimQueue = null;
+
+  if (stimPlan) {
+    stimQueue = [...stimPlan.queue];
+    attacker = stimQueue.shift();
+    defender = attacker === A ? B : A;
+    initiativeFirstSide = stimPlan.runnerSide;
+    events.push({
+      type: "passive",
+      passive: "Dirty Tricks",
+      kind: "stim_injector_turn_order",
+      side: stimPlan.runnerSide,
+      text: `Stim Injector overrides opening turns`,
+    });
+  } else {
+    const playerGoesFirst = rng() < 0.5;
+    attacker = playerGoesFirst ? A : B;
+    defender = playerGoesFirst ? B : A;
+    initiativeFirstSide = attacker.side;
+  }
 
   let round = 0;
-  // With only standard attacks, combat should end quickly; we keep a high safety cap.
   while (A.hp > 0 && B.hp > 0 && round < 5000) {
     round++;
 
-    const damageTypeEnum = forcedDamageTypeEnum ?? (
-      attacker.damageType === "strength"
-        ? "MIGHT"
-        : attacker.damageType === "tech"
-          ? "TECH"
-          : "REFLEX"
-    );
-    const canDodge = forcedCanDodge;
-    const canCrit = damageTypeEnum !== "TRUE";
-    const mitigationType = damageTypeEnum === "MIGHT"
-      ? "strength"
-      : damageTypeEnum === "TECH"
-        ? "tech"
-        : damageTypeEnum === "REFLEX"
-          ? "agility"
-          : "true";
+    events.push(...onTurnStart(attacker, rng));
 
-    // STEP 4 — Dodge (before Crit / Resistance).
-    if (canDodge) {
-      const dodgeRoll = rng();
-      if (dodgeRoll < defender.dodge) {
-        events.push({
-          type: "dodge",
-          attacker: attacker.side,
-          defender: defender.side,
-          dodged: true,
-          damageType: damageTypeEnum,
-          canDodge,
-          canCrit,
-          damage: 0,
-          crit: false,
-          shieldHit: false,
-          ability: null,
-          text: `${defender.name} dodges!`,
-        });
-      } else {
-        // STEP 5/6/7 — Crit → Resistance → nearest-whole-number rounding.
-        const hit = resolveBasicHit(attacker, defender, {
-          canCrit,
-          damageTypeForMitigation: mitigationType,
-          rng,
-        });
-        const res = applyDamage(defender, hit.finalDamage);
+    const result = resolveNormalAttack(attacker, defender, events, {
+      rng,
+      forcedDamageTypeEnum,
+      forcedCanDodge,
+    });
 
-        events.push({
-          type: "attack",
-          attacker: attacker.side,
-          defender: defender.side,
-          damage: res.hpDamage,
-          shieldHit: false,
-          crit: hit.crit,
-          dodged: false,
-          ability: null,
-          damageType: damageTypeEnum,
-          canDodge,
-          canCrit,
-          finalDamage: hit.finalDamage,
-        });
+    if (result.killed || A.hp <= 0 || B.hp <= 0) break;
 
-        // STEP 10 — End combat immediately on death.
-        if (defender.hp <= 0) break;
-        // Strict alternating turns.
-        [attacker, defender] = [defender, attacker];
-        continue;
-      }
-      // Strict alternating turns after a dodge.
-      [attacker, defender] = [defender, attacker];
+    if (stimQueue && stimQueue.length > 0) {
+      attacker = stimQueue.shift();
+      defender = attacker === A ? B : A;
       continue;
     }
 
-    {
-      // STEP 5/6/7 — Crit → Resistance → nearest-whole-number rounding.
-      const hit = resolveBasicHit(attacker, defender, {
-        canCrit,
-        damageTypeForMitigation: mitigationType,
-        rng,
-      });
-      const res = applyDamage(defender, hit.finalDamage);
-
-      events.push({
-        type: "attack",
-        attacker: attacker.side,
-        defender: defender.side,
-        damage: res.hpDamage,
-        shieldHit: false,
-        crit: hit.crit,
-        dodged: false,
-        ability: null,
-        damageType: damageTypeEnum,
-        canDodge,
-        canCrit,
-        finalDamage: hit.finalDamage,
-      });
-
-      // STEP 10 — End combat immediately on death.
-      if (defender.hp <= 0) break;
-    }
-
-    // Strict alternating turns.
+    // Normal alternating after stim opening (or always when no stim).
     [attacker, defender] = [defender, attacker];
   }
 
@@ -550,6 +666,8 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = [], opt
     playerMaxHp: A.maxHp,
     opponentMaxHp: B.maxHp,
     initiativeFirstSide,
+    playerEnd: { hp: A.hp, barrier: A.barrier, passiveState: { ...A.passiveState } },
+    opponentEnd: { hp: B.hp, barrier: B.barrier, passiveState: { ...B.passiveState } },
   };
 }
 

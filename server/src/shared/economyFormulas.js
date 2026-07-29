@@ -13,7 +13,17 @@ import {
   computeItemVendorValue,
   ITEM_SELL_TYPE_WEIGHT,
 } from "./itemGeneration.js";
+import { todayET as todayETFromClock, getWeekKey as getWeekKeyFromClock, clock } from "./time/index.js";
 
+/** Clock-backed daily key (America/New_York). */
+export function todayET(now = clock.now()) {
+  return todayETFromClock(now);
+}
+
+/** Clock-backed weekly key (ET Monday week). */
+export function getWeekKey(date = clock.now()) {
+  return getWeekKeyFromClock(date);
+}
 // ── Classes (baseStats only) ─────────────────────────────────
 const CLASS_TYPE_BASE_STATS = {
   strength:  { strength: 15, agility: 8,  intellect: 6,  vitality: 14, luck: 7  },
@@ -308,8 +318,24 @@ export function getModEffectTotal(character, effectKey) {
   return modTotal + (ship.inherent?.[effectKey] || 0);
 }
 
-export function getInventoryCap(_character) {
-  return 10;
+export function getInventoryCap(character) {
+  const base = 10;
+  const modBonus = Math.round(getModEffectTotal(character, "inventory_cap_bonus") || 0);
+  let entBonus = 0;
+  const accountId = character?.created_by_id;
+  if (accountId) {
+    // Lazy import avoids circular init with entitlements ↔ economyFormulas.
+    try {
+      // eslint-disable-next-line no-undef
+      const resolveMod = globalThis.__llResolveInventoryExpansion;
+      if (typeof resolveMod === "function") {
+        entBonus = resolveMod(accountId);
+      }
+    } catch {
+      entBonus = 0;
+    }
+  }
+  return base + modBonus + entBonus;
 }
 
 export function getEffectiveMissionDuration(character, mission) {
@@ -385,16 +411,18 @@ export function skipCostFor(mission, nowMs = Date.now()) {
 export const SHOP_REFRESH_COST = 10;
 const SHOP_WINDOW_MS = 6 * 60 * 60 * 1000;
 
-export function getShopWindow(nowMs = Date.now()) {
+export function getShopWindow(nowMs = clock.nowMs()) {
   const ms = nowMs;
   const idx = Math.floor(ms / SHOP_WINDOW_MS);
   const startsAt = idx * SHOP_WINDOW_MS;
   const endsAt = startsAt + SHOP_WINDOW_MS;
-  return { idx, startsAt, endsAt, secondsLeft: Math.max(0, Math.floor((endsAt - ms) / 1000)) };
-}
-
-export function todayET(now = new Date()) {
-  return now.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  return {
+    idx,
+    startsAt,
+    endsAt,
+    secondsLeft: Math.max(0, Math.floor((endsAt - ms) / 1000)),
+    rotationPeriodId: `shop-rotation:global:${idx}`,
+  };
 }
 
 /** Haggle: ~40% buy at 15–20% off; otherwise listing is yanked (no purchase). */
@@ -869,15 +897,6 @@ export const WEEKLY_NOVA_QUESTS = [
   { id: "dungeon", key: "dungeon", goal: 3, reward: 7 },
   { id: "missions", key: "missions", goal: 5, reward: 5 },
 ];
-
-export function getWeekKey(date = new Date()) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = (d.getUTCDay() + 6) % 7;
-  d.setUTCDate(d.getUTCDate() - dayNum + 3);
-  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
-  const week = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
-  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
 
 export function ensureWeeklyNovaState(character) {
   const week = getWeekKey();

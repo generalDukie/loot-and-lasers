@@ -17,6 +17,7 @@ import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { usePresence } from "@/hooks/usePresence";
 import { enforceInventoryCap } from "@/lib/inventoryCap";
 import { primeMyCharacterCache } from "@/lib/socialEngine";
+import { applyServerTimeSync, lastTimeSyncAgeMs } from "@/lib/gameTime";
 
 /** Desktop operative side panel (~15% narrower than the prior default clamp). */
 const DESKTOP_RAIL_W = "clamp(18.7rem, 15.7vw, 23.4rem)";
@@ -33,6 +34,32 @@ export default function GameLayout() {
   const [railOpen, setRailOpen] = useState(false);
 
   usePresence(character, "online");
+
+  // Sync server clock offset for display countdowns (never authoritative).
+  useEffect(() => {
+    let cancelled = false;
+    async function sync() {
+      try {
+        const data = await api.time.now();
+        if (!cancelled) applyServerTimeSync(data);
+      } catch {
+        /* offline / unauth — keep last offset */
+      }
+    }
+    sync();
+    const id = setInterval(() => {
+      if (lastTimeSyncAgeMs() > 60_000) sync();
+    }, 60_000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") sync();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   // Force dissolve UI if the bag somehow exceeds the hard 10-item cap.
   useEffect(() => {

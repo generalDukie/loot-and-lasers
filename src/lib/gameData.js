@@ -88,9 +88,9 @@ export const CLASSES = {
     secondaryStat: "vitality",
     baseStats: { ...CLASS_TYPE_BASE_STATS.strength },
     special: {
-      name: "Unstoppable",
-      effect: "Every 4th attack deals 200% damage and ignores 25% of the target's armor.",
-      identity: "Slow, heavy-hitting powerhouse.",
+      name: "Kinetic Tantrum",
+      effect: "When an enemy dodges you, your next attack is a guaranteed hit and Crit at 2.0×. When you dodge, your next attack is a guaranteed Crit (still can be dodged).",
+      identity: "Punish every dodge with overwhelming force.",
     },
   },
   "Shadow Operative": {
@@ -102,9 +102,9 @@ export const CLASSES = {
     secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.agility },
     special: {
-      name: "Shadowstep",
-      effect: "Every successful dodge grants +25% damage on the next attack (resets after the attack).",
-      identity: "Rewards evasive, high-risk gameplay.",
+      name: "Phantom Signal",
+      effect: "The first two attacks against you at combat start are forced misses (not dodges).",
+      identity: "Leave only a hologram for the opening volleys.",
     },
   },
   Technomancer: {
@@ -116,9 +116,9 @@ export const CLASSES = {
     secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
     special: {
-      name: "Overcharge",
-      effect: "Every 3rd spell is guaranteed to critically strike and ignores 20% of the target's armor/shields.",
-      identity: "Explosive burst damage.",
+      name: "Overclock",
+      effect: "Each normal attack adds a stack (+12.5% damage dealt, +5% damage taken). Enemy Crits remove 3 stacks.",
+      identity: "Push the core until it screams.",
     },
   },
   "Astral Warden": {
@@ -130,8 +130,8 @@ export const CLASSES = {
     secondaryStat: "vitality",
     baseStats: { ...CLASS_TYPE_BASE_STATS.strength },
     special: {
-      name: "Cosmic Barrier",
-      effect: "Begins every battle with a shield equal to 20% of max Health. Regenerates 2% of max Health at the start of every turn. Shield cannot be restored once broken.",
+      name: "Astral Barrier",
+      effect: "10% chance at the start of each turn to raise a barrier equal to 15% Max HP (restores to full if already active).",
       identity: "The class that simply refuses to die.",
     },
   },
@@ -144,9 +144,9 @@ export const CLASSES = {
     secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.agility },
     special: {
-      name: "Twin Fang",
-      effect: "Every 3rd attack hits twice — each strike deals 70% weapon damage.",
-      identity: "Speed kills. Twice.",
+      name: "Dirty Tricks",
+      effect: "At combat start, randomly gain Flashbang (+7.5% Dodge uncapped), Targeting Beacon (+7.5% Crit uncapped), or Stim Injector (two opening attacks before the opponent).",
+      identity: "Never fight fair.",
     },
   },
   "Cosmic Engineer": {
@@ -158,8 +158,8 @@ export const CLASSES = {
     secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
     special: {
-      name: "Combat Drone",
-      effect: "Deploys a drone at the start of combat that fires every other turn for 30% weapon damage. The drone cannot be targeted or destroyed.",
+      name: "Orbital Assistant",
+      effect: "Every second turn after your attack: Fire Support (60% True Damage), Defensive Protocol (−25% next hit), or Acquire Target (+40% Crit next attack, uncapped).",
       identity: "Wins through gadgets and sustained pressure.",
     },
   },
@@ -289,8 +289,14 @@ export function weaponCombatStyleFor(name, baseName, emoji) {
 export const INVENTORY_CAP = 10;
 
 /** Hard bag ceiling — unequipped items only. Never exceeds INVENTORY_CAP. */
-export function getInventoryCap(_character) {
-  return INVENTORY_CAP;
+export function getInventoryCap(character) {
+  const base = INVENTORY_CAP;
+  try {
+    const modBonus = Math.round(getModEffectTotal(character, "inventory_cap_bonus") || 0);
+    return base + modBonus;
+  } catch {
+    return base;
+  }
 }
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 

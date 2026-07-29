@@ -61,11 +61,30 @@ import {
   GUILD_WAR_SIM_COST,
 } from "../shared/economyFormulas.js";
 import { assertNameHasNoDigits } from "../shared/nameRules.js";
+import {
+  grantEntitlement,
+  resolveCharacterSlotCapacity,
+  consumeEntitlement,
+  resolveQuantity,
+  EntitlementErrors,
+} from "../entitlements/index.js";
 
-function httpErr(status, message) {
+function httpErr(status, message, code) {
   const e = new Error(message);
   e.status = status;
+  if (code) e.code = code;
   throw e;
+}
+
+function syncPurchasedSlotsColumn(accountId) {
+  const slots = resolveCharacterSlotCapacity(accountId);
+  const purchased = Math.max(0, slots.capacity - slots.base);
+  db.prepare("UPDATE users SET purchased_slots = ?, updated_date = ? WHERE id = ?").run(
+    purchased,
+    nowIso(),
+    accountId
+  );
+  return { ...slots, purchased };
 }
 
 /** Prefer user's active_character_id when owned; else newest character. */
@@ -86,7 +105,10 @@ function wrap(fn) {
       const result = await withTransactionAsync(async () => fn(user, body || {}));
       return { status: 200, body: result };
     } catch (err) {
-      if (err.status) return { status: err.status, body: { error: err.message } };
+      if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+      if (err.code && String(err.code).startsWith("ENTITLEMENT_")) {
+        return { status: 400, body: { error: err.message, code: err.code } };
+      }
       throw err;
     }
   };
@@ -629,21 +651,37 @@ export const CasinoSettle = wrap((user, body) => {
 });
 
 // ── Character slot ───────────────────────────────────────────
-export const BuyCharacterSlot = wrap((user) => {
+export const BuyCharacterSlot = wrap(async (user) => {
   const ch = requireMyChar(user);
   const freshUser = getUserById(user.id);
-  const purchased = freshUser?.purchased_slots || 0;
-  const totalSlots = Math.min(CHARACTER_MAX_SLOTS, 1 + purchased);
-  if (totalSlots >= CHARACTER_MAX_SLOTS) httpErr(400, "Max slots reached");
+  const slots = resolveCharacterSlotCapacity(user.id);
+  if (slots.capacity >= CHARACTER_MAX_SLOTS) {
+    httpErr(400, "Max slots reached", EntitlementErrors.CHARACTER_SLOT_LIMIT_REACHED);
+  }
   if ((ch.nova_crystals || 0) < CHARACTER_SLOT_COST) httpErr(400, "Not enough Nova Crystals");
+
   const patch = { nova_crystals: (ch.nova_crystals || 0) - CHARACTER_SLOT_COST };
   const character = entities.Character.update(ch.id, patch);
-  const nextPurchased = purchased + 1;
-  db.prepare("UPDATE users SET purchased_slots = ?, updated_date = ? WHERE id = ?")
-    .run(nextPurchased, nowIso(), user.id);
+
+  await grantEntitlement({
+    entitlementKey: "account.character_slot",
+    accountId: user.id,
+    quantity: 1,
+    sourceType: "direct_purchase",
+    sourceReferenceType: "nova_purchase",
+    sourceReferenceId: `nova.character_slot:${ch.id}:${Date.now()}`,
+    externalProvider: "internal_nova",
+    externalProductId: "nova.character_slot",
+    externalTransactionId: `nova-slot:${user.id}:${slots.extra + 1}`,
+    idempotencyKey: `nova-slot:${user.id}:${slots.extra + 1}`,
+    createdBy: user.email || user.id,
+  });
+
+  const synced = syncPurchasedSlotsColumn(user.id);
   return {
     success: true,
-    purchased_slots: nextPurchased,
+    purchased_slots: synced.purchased,
+    character_slots: synced,
     patch,
     character,
     user: getUserById(user.id),
@@ -791,20 +829,39 @@ export const ClaimScoutMilestone = wrap((user) => {
   return { success: true, patch, character };
 });
 
-export const RenameCharacter = wrap((user, body) => {
+export const RenameCharacter = wrap(async (user, body) => {
   const ch = requireMyChar(user);
   const name = String(body?.name || "").trim();
   if (!name || name.length < 2 || name.length > 24) httpErr(400, "Name must be 2–24 characters");
   assertNameHasNoDigits(name);
-  if ((ch.nova_crystals || 0) < NAME_CHANGE_COST) httpErr(400, "Not enough Nova Crystals");
   const taken = entities.Character.filter({ name }, null, 5).filter((c) => c.id !== ch.id);
   if (taken.length) httpErr(409, "Name taken");
-  const patch = {
-    name,
-    nova_crystals: (ch.nova_crystals || 0) - NAME_CHANGE_COST,
-  };
+
+  const tokens = resolveQuantity({ entitlementKey: "account.rename_token", accountId: user.id });
+  const useToken = body?.pay_with_nova !== true && tokens.quantity > 0;
+
+  let patch;
+  if (useToken) {
+    await consumeEntitlement({
+      entitlementKey: "account.rename_token",
+      accountId: user.id,
+      quantity: 1,
+      operationId: body?.idempotencyKey || `rename-token:${user.id}:${ch.id}:${name}`,
+      reason: "character_rename",
+      target: { characterId: ch.id, name },
+      createdBy: user.email || user.id,
+    });
+    patch = { name };
+  } else {
+    if ((ch.nova_crystals || 0) < NAME_CHANGE_COST) httpErr(400, "Not enough Nova Crystals");
+    patch = {
+      name,
+      nova_crystals: (ch.nova_crystals || 0) - NAME_CHANGE_COST,
+    };
+  }
+
   const character = entities.Character.update(ch.id, patch);
-  return { success: true, patch, character };
+  return { success: true, patch, character, used_rename_token: !!useToken && tokens.quantity > 0 };
 });
 
 /** Dissolve a client-held pending loot payload for stardust (not in DB). */

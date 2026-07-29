@@ -205,6 +205,8 @@ db.exec(`
   }
 })();
 
+import { clock } from "./shared/time/clock.js";
+
 export function nowIso() {
-  return new Date().toISOString();
+  return clock.nowIso();
 }

@@ -14,7 +14,10 @@
     "server:start": "npm --prefix server run start",
     "server:seed": "npm --prefix server run seed",
     "start:prod": "npm run build && npm --prefix server run start",
-    "test:api": "node server/scripts/smoke-test.mjs"
+    "test:api": "node server/scripts/smoke-test.mjs",
+    "test:time": "node server/scripts/test-time.mjs",
+    "test:entitlements": "node server/scripts/test-entitlements.mjs",
+    "test:passives": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-class-passives.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",

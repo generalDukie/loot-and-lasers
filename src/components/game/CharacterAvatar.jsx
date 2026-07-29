@@ -1,14 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
 import { ART_INK, ART_RIM, ART_SW, RACE_ACCENT, shade, paintStops } from "@/lib/artStyle";
 
-// Selectable feature option lists (shared with CharacterCreation)
-export const EYES = ["Standard Optics", "Prism Optics", "Multi-Lens", "Target Visor", "Wide Scan", "Combat Slits"];
-export const EARS = ["Tapered", "Finned", "Sensor Stalks", "Elongated", "Crest Horns", "None"];
-export const MOUTHS = ["Set Jaw", "Tusked", "Mandible", "Proboscis", "Closed", "Grim Line"];
-export const NOSES = ["Button", "Slits", "Trunk", "None", "Ridge", "Spike"];
-export const BROWS = ["Standard", "Tactical", "Heavy", "None", "Scarred", "Relaxed"];
-export const MARKINGS = ["None", "Battle Scar", "Plasma Burns", "War Paint", "Speckled", "Fractured"];
+export { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS };
 
 const INK = ART_INK;
 const SW = ART_SW;

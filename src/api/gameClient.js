@@ -272,12 +272,84 @@ const functions = {
   },
 };
 
+const time = {
+  now() {
+    return request("/api/time/now");
+  },
+  zones() {
+    return request("/api/time/zones");
+  },
+  listSchedules() {
+    return request("/api/schedules");
+  },
+  listScheduleAudit(limit = 50) {
+    return request(`/api/schedules/audit?limit=${limit}`);
+  },
+  previewSchedule(body) {
+    return request("/api/schedules/preview", { method: "POST", body });
+  },
+  createSchedule(body) {
+    return request("/api/schedules", { method: "POST", body });
+  },
+  pauseSchedule(id) {
+    return request(`/api/schedules/${id}/pause`, { method: "POST" });
+  },
+  resumeSchedule(id) {
+    return request(`/api/schedules/${id}/resume`, { method: "POST" });
+  },
+  tickSchedules() {
+    return request("/api/schedules/tick", { method: "POST" });
+  },
+};
+
+const entitlements = {
+  me(characterId) {
+    const q = characterId ? `?characterId=${encodeURIComponent(characterId)}` : "";
+    return request(`/api/entitlements/me${q}`);
+  },
+  definitions() {
+    return request("/api/entitlements/definitions");
+  },
+  check(key, characterId) {
+    const q = characterId ? `?characterId=${encodeURIComponent(characterId)}` : "";
+    return request(`/api/entitlements/check/${encodeURIComponent(key)}${q}`);
+  },
+  claimPurchase(body) {
+    return request("/api/entitlements/claim-purchase", { method: "POST", body });
+  },
+  adminSearch(params = {}) {
+    const q = new URLSearchParams(params).toString();
+    return request(`/api/entitlements/admin/search?${q}`);
+  },
+  adminGet(id) {
+    return request(`/api/entitlements/admin/${id}`);
+  },
+  adminGrant(body) {
+    return request("/api/entitlements/admin/grant", { method: "POST", body });
+  },
+  adminRevoke(id, body) {
+    return request(`/api/entitlements/admin/${id}/revoke`, { method: "POST", body });
+  },
+  adminRestore(id, body) {
+    return request(`/api/entitlements/admin/${id}/restore`, { method: "POST", body });
+  },
+  adminAudit(params = {}) {
+    const q = new URLSearchParams(params).toString();
+    return request(`/api/entitlements/admin/audit?${q}`);
+  },
+  adminProducts() {
+    return request("/api/entitlements/admin/products");
+  },
+};
+
 const entitiesProxy = entityProxy();
 
 export const api = {
   auth,
   entities: entitiesProxy,
   functions,
+  time,
+  entitlements,
   asServiceRole: {
     entities: entitiesProxy,
   },

@@ -26,9 +26,13 @@ import { startScheduler } from "./scheduling/worker.js";
 import { createTimeRouter, createScheduleRouter } from "./routes/time.js";
 import { createEntitlementRouter } from "./routes/entitlements.js";
 import { createRewardRouter } from "./routes/rewards.js";
+import { createArenaRouter } from "./arena/index.js";
+import { createAuditRouter } from "./audit/index.js";
 import { migrateLegacyEntitlements } from "./entitlements/migrate.js";
 import "./entitlements/hooks.js";
 import "./rewards/store.js";
+import "./arena/store.js";
+import "./audit/store.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const IS_PROD = process.env.NODE_ENV === "production";
@@ -56,6 +60,8 @@ app.use("/api/time", createTimeRouter(express));
 app.use("/api/schedules", createScheduleRouter(express));
 app.use("/api/entitlements", createEntitlementRouter(express));
 app.use("/api/rewards", createRewardRouter(express));
+app.use("/api/arena", createArenaRouter(express));
+app.use("/api/audit", createAuditRouter(express));
 
 // ── Entity CRUD ──────────────────────────────────────────────
 function getStore(type) {

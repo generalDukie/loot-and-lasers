@@ -7,6 +7,13 @@ import { randomItem, randomItemForClass } from "../shared/rewards.js";
 import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
 import {
+  auditShopPurchase,
+  recordCurrencyChange,
+  recordItemOwnershipChange,
+  ActorTypes,
+  newCorrelationId,
+} from "../audit/index.js";
+import {
   ATTR_STAT_KEYS,
   getNextAttributePointCost,
   computeStardustValue,
@@ -149,6 +156,30 @@ export async function DissolveItem(user, body) {
       }
       entities.Item.delete(itemId);
       const character = entities.Character.update(ch.id, patch);
+      const corr = newCorrelationId();
+      recordItemOwnershipChange({
+        user,
+        action: "item_destroyed",
+        item,
+        previousOwnerCharacterId: ch.id,
+        newOwnerCharacterId: null,
+        previousLocation: item.is_equipped ? "equipped" : "inventory",
+        newLocation: "dissolved",
+        correlationId: corr,
+        actorType: ActorTypes.PLAYER,
+      });
+      recordCurrencyChange({
+        user,
+        character: ch,
+        currencyType: "stardust",
+        before: ch.stardust || 0,
+        after: patch.stardust,
+        amount: gained,
+        reasonCode: "item_dissolve",
+        source: "dissolve",
+        correlationId: corr,
+        actorType: ActorTypes.PLAYER,
+      });
       return { success: true, stardust_gained: gained, patch, character };
     });
     return { status: 200, body: result };
@@ -857,6 +888,21 @@ export async function BuyShopGear(user, body) {
       }
 
       const character = entities.Character.update(ch.id, patch);
+      if (!haggleNote || true) {
+        // Always audit successful purchases (haggle fail returns earlier).
+        auditShopPurchase({
+          user,
+          character: ch,
+          beforeStardust: ch.stardust || 0,
+          afterStardust: patch.stardust ?? ch.stardust,
+          beforeNova: ch.nova_crystals || 0,
+          afterNova: patch.nova_crystals ?? ch.nova_crystals,
+          item: items[0] || null,
+          cost: stardustCost,
+          novaCost,
+          correlationId: newCorrelationId(),
+        });
+      }
       return {
         success: true,
         haggle_failed: false,

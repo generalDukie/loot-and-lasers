@@ -72,6 +72,10 @@ import {
   resolveQuantity,
   EntitlementErrors,
 } from "../entitlements/index.js";
+import {
+  completeDirectChallenge,
+} from "../arena/index.js";
+import { ArenaError } from "../arena/errors.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -178,6 +182,120 @@ export const SkipArenaCooldown = wrap((user) => {
 });
 
 export const FinishArenaBattle = wrap((user, body) => {
+  // Direct challenges: settle rating via challenge snapshot (idempotent), then apply economy.
+  if (body.challenge_id || body.challengeId) {
+    const challengeId = body.challenge_id || body.challengeId;
+    let dc;
+    try {
+      dc = completeDirectChallenge(user, {
+        challengeId,
+        won: !!body.won,
+        policyVersion: body.policyVersion,
+      });
+    } catch (err) {
+      if (err instanceof ArenaError) httpErr(err.status || 400, err.message, err.code);
+      throw err;
+    }
+
+    const ch = dc.character || requireMyChar(user);
+    const won = !!body.won;
+    const today = todayET();
+    let freeLeft = ch.arena_attempts_left ?? ARENA_DAILY_FREE_BATTLES;
+    let attemptsDate = ch.arena_attempts_date;
+    if (attemptsDate !== today) {
+      freeLeft = ARENA_DAILY_FREE_BATTLES;
+      attemptsDate = today;
+    }
+    // On idempotent replay of challenge completion, skip re-consuming free attempts / nova.
+    if (dc.replayed) {
+      return {
+        success: true,
+        rewards: {
+          won,
+          free: false,
+          experience: 0,
+          stardust: 0,
+          arena_rating_delta: dc.ratingDelta,
+          direct_challenge: true,
+          replayed: true,
+        },
+        is_free: false,
+        nova_spent: 0,
+        patch: {},
+        character: ch,
+        challenge_id: challengeId,
+        newly_unlocked: [],
+        replayed: true,
+      };
+    }
+
+    const isFree = body.is_free != null ? !!body.is_free : freeLeft > 0;
+    const useFree = isFree && freeLeft > 0;
+    const skipCooldown = !!body.skip_cooldown || !!body.skipped;
+    let novaCost = 0;
+    if (skipCooldown) novaCost += ARENA_SKIP_COST;
+    if (!useFree) novaCost += ARENA_PAID_BATTLE_COST;
+    if (novaCost > 0 && (ch.nova_crystals || 0) < novaCost) httpErr(400, "Not enough Nova Crystals");
+
+    // Economy rewards scaled down for zero-rating / reduced farming wins.
+    const ratingEligible = (dc.ratingDelta || 0) > 0 || !won;
+    const rewardMult = !won ? 0 : ratingEligible ? 1 : 0.25;
+    const baseRewards = computeArenaRewards(
+      ch,
+      { arena_rating: dc.challenge?.opponentRatingAtStart || 1000 },
+      won,
+      useFree
+    );
+    const experience = Math.round((baseRewards.experience || 0) * rewardMult);
+    const stardust = Math.round((baseRewards.stardust || 0) * rewardMult);
+    const collectPct = getCollectionPercentage(ch, 0);
+    const boostedXp = won ? applyXpBonus(experience, collectPct) : 0;
+
+    const patch = { ...(dc.patch || {}) };
+    applyXpToCharacter(ch, boostedXp, patch);
+    if (stardust > 0) {
+      patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + stardust;
+      patch.total_stardust_earned =
+        (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + stardust;
+    }
+    patch.arena_attempts_left = Math.max(0, freeLeft - (useFree ? 1 : 0));
+    patch.arena_attempts_date = attemptsDate;
+    if (novaCost > 0) {
+      patch.nova_crystals = (patch.nova_crystals ?? ch.nova_crystals ?? 0) - novaCost;
+    }
+    const maxHit = Number(body.max_hit) || 0;
+    if (maxHit > 0) patch.highest_damage = Math.max(ch.highest_damage || 0, maxHit);
+    const opp = body.opponent || {};
+    if (won) mergeSpeciesDiscovery(ch, patch, opp.speciesId ?? opp.species_id ?? body.species_id);
+    if (won && (dc.ratingDelta || 0) > 0) {
+      const weekly = progressWeeklyNovaQuest(ch, "arena", 1);
+      if (weekly) patch.weekly_nova_quests = weekly;
+    }
+    const ach = mergeAchievementUnlocks(ch, patch);
+    Object.assign(patch, ach.patch);
+
+    const character = entities.Character.update(ch.id, patch);
+    return {
+      success: true,
+      rewards: {
+        won,
+        free: useFree,
+        experience: boostedXp,
+        stardust,
+        arena_rating_delta: dc.ratingDelta,
+        collectionPct: collectPct,
+        direct_challenge: true,
+        zero_reward_reason: dc.result?.calc?.zeroRewardReason || null,
+      },
+      is_free: useFree,
+      nova_spent: novaCost,
+      patch,
+      character,
+      challenge_id: challengeId,
+      newly_unlocked: ach.newly_unlocked,
+    };
+  }
+
   const ch = requireMyChar(user);
   const won = !!body.won;
   const today = todayET();

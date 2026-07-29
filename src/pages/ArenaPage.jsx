@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
-import { useNavigate } from "react-router-dom";
+import { trackStardustSpend } from "@/lib/stardustTracker";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { getStatPointsForLevelRange } from "@/lib/gameData";
 import { contributeArenaWin, getGuildMembership } from "@/lib/guildUtils";
@@ -18,6 +19,7 @@ import {
   computePower, generateOpponents, characterToOpponent, simulateBattle, computeRewards,
   rankArenaCandidates, pickRankedCandidates, resolveOpponentItems,
 } from "@/lib/arenaEngine";
+import { defenseSnapshotToOpponent } from "@/lib/arenaChallenge";
 import { loadArenaHistory, recordArenaMatch, resolveRevengeOpponent } from "@/lib/arenaHistory";
 import ArenaOpponentCard from "@/components/game/ArenaOpponentCard";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
@@ -111,7 +113,9 @@ export default function ArenaPage() {
   const [matchHistory, setMatchHistory] = useState([]);
   const [revengeBusyId, setRevengeBusyId] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+  const directChallengeConsumed = useRef(false);
 
   const setCharacter = useCallback((next) => {
     setCharacterState((prev) => {
@@ -156,6 +160,69 @@ export default function ArenaPage() {
   const cooldownEnds = character?.arena_cooldown_at ? new Date(character.arena_cooldown_at).getTime() + ARENA_BATTLE_COOLDOWN_MS : 0;
   const cooldownActive = now < cooldownEnds;
 
+  // Launch a leaderboard direct challenge once the arena has loaded.
+  useEffect(() => {
+    if (loading || !character || directChallengeConsumed.current) return;
+    const dc = location.state?.directChallenge;
+    if (!dc?.challengeId || !dc?.defenseSnapshot) return;
+    directChallengeConsumed.current = true;
+    navigate(location.pathname, { replace: true, state: {} });
+
+    const opp = defenseSnapshotToOpponent(dc.defenseSnapshot);
+    if (!opp) {
+      toast({ title: "Challenge failed", description: "Defense snapshot missing.", variant: "destructive" });
+      return;
+    }
+
+    if (dc.preview?.warningCode === "OPPONENT_TOO_LOW_FOR_RATING_GAIN") {
+      toast({
+        title: "No ranking points on victory",
+        description: `You still risk ${Math.abs(dc.preview.estimatedLossChange || 0)} rating if you lose.`,
+      });
+    }
+
+    const skipping = cooldownActive;
+    const isFree = freeBattlesLeft > 0;
+    const totalCost = (skipping ? ARENA_SKIP_COST : 0) + (isFree ? 0 : ARENA_PAID_BATTLE_COST);
+    if (totalCost > 0 && (character.nova_crystals || 0) < totalCost) {
+      toast({
+        title: "Not enough Nova Crystals",
+        description: `Need ${totalCost} 💎 to fight now. Challenge stays active until it expires.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    const oppItems = opp.equippedItems || [];
+    const battle = simulateBattle(character, opp, equippedItems, oppItems);
+    const estWin = dc.preview?.estimatedWinChange;
+    const rewards = {
+      ...computeRewards(character, opp, battle.winner === "player", isFree),
+      arena_rating_delta:
+        battle.winner === "player"
+          ? (estWin ?? 0)
+          : (dc.preview?.estimatedLossChange ?? -6),
+    };
+    setBattleState({
+      battle,
+      opp: { ...opp, equippedItems: oppItems },
+      rewards,
+      isFree,
+      skipped: skipping,
+      challengeId: dc.challengeId,
+      policyVersion: dc.policyVersion,
+    });
+  }, [
+    loading,
+    character,
+    location.state,
+    location.pathname,
+    navigate,
+    toast,
+    cooldownActive,
+    freeBattlesLeft,
+    equippedItems,
+  ]);
+
   async function refreshOpponents() {
     if (canFreeRefresh) {
       setOpponents(await buildOpponentPool(character, catalogItems));
@@ -169,6 +236,7 @@ export default function ArenaPage() {
     const res = await api.functions.invoke("RefreshArenaOpponents", { charge: true });
     const upd = res.patch || res.data?.patch || {};
     setCharacter((c) => ({ ...c, ...upd }));
+    void trackStardustSpend(character, ARENA_REFRESH_COST, "arena_refresh");
     setOpponents(await buildOpponentPool({ ...character, ...upd }, catalogItems));
   }
 
@@ -209,7 +277,7 @@ export default function ArenaPage() {
   }
 
   async function finishBattle() {
-    const { battle, opp, rewards, isFree, skipped } = battleState;
+    const { battle, opp, rewards, isFree, skipped, challengeId, policyVersion } = battleState;
     const { percentage: collectPct } = getCollectionStats(character);
     const prevLevel = character.level;
     const prevStreak = character.arena_streak || 0;
@@ -224,9 +292,12 @@ export default function ArenaPage() {
         is_free: isFree,
         skipped: !!skipped,
         skip_cooldown: !!skipped,
-        opponent: { arena_rating: opp.arena_rating, id: opp.id, speciesId: opp.speciesId },
+        opponent: { arena_rating: opp.arena_rating, id: opp.realCharacterId || opp.id, speciesId: opp.speciesId },
         max_hit: maxPlayerHit,
         species_id: opp.speciesId,
+        ...(challengeId
+          ? { challenge_id: challengeId, policyVersion }
+          : {}),
       });
     } catch (e) {
       toast({ title: "Could not settle arena battle", description: e?.message || "Try again.", variant: "destructive" });
@@ -273,7 +344,7 @@ export default function ArenaPage() {
       characterId: character.id,
       opp,
       won: rewards.won,
-      ratingDelta: rewards.arena_rating_delta,
+      ratingDelta: serverRewards.arena_rating_delta ?? rewards.arena_rating_delta,
       ratingAfter: newRating,
     }).then(async () => {
       setMatchHistory(await loadArenaHistory(character.id));
@@ -303,7 +374,7 @@ export default function ArenaPage() {
       subtitle: `Lv ${opp.level} · ${opp.race} · ${opp.class}`,
       xp: rewards.won && boostedXp > 0 ? { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
       stardust: rewards.won && stardustGain > 0 ? { total: stardustGain } : undefined,
-      ratingDelta: rewards.arena_rating_delta,
+      ratingDelta: serverRewards.arena_rating_delta ?? rewards.arena_rating_delta,
       leveledUp: newLevel > prevLevel,
       prevLevel,
       newLevel,

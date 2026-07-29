@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
+import { trackStardustSpend } from "@/lib/stardustTracker";
 import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
 import { useNavigate } from "react-router-dom";
 import {
@@ -264,6 +265,8 @@ export default function ShopPage() {
       if (haggle) playHaggleWinGrowl();
 
       if (novaCost && anyCreated) void trackNovaSpend(character, novaCost, "shop_buy_legendary");
+      const sdSpent = Math.max(0, (character.stardust || 0) - (patch.stardust ?? character.stardust ?? 0));
+      if (sdSpent > 0) void trackStardustSpend(character, sdSpent, "shop_buy");
 
       toast({
         title: anyCreated ? (haggle ? "Deal struck!" : "Purchased!") : "Inventory full!",
@@ -343,6 +346,8 @@ export default function ShopPage() {
 
       if (meta) setShopMeta(meta);
       setCharacter((c) => ({ ...c, ...patch }));
+      const sdSpent = Math.max(0, (character.stardust || 0) - (patch.stardust ?? character.stardust ?? 0));
+      if (sdSpent > 0) void trackStardustSpend(character, sdSpent, "shop_consumable");
 
       toast({
         title: anyCreated ? "🛒 Purchased!" : "📦 Inventory full!",

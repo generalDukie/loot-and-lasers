@@ -39,12 +39,17 @@ export default function PromoteAdminButton({ character, onAction }) {
   async function toggle() {
     if (!character?.created_by_id || isSelfAccount) return;
     const next = isOwnerAdmin ? "user" : "admin";
+    const reason = window.prompt(
+      next === "admin" ? "Reason for promoting this account to admin?" : "Reason for demoting this account?"
+    );
+    if (!reason) return;
     setBusy(true);
     await onAction({
       action: "set_role",
       user_id: character.created_by_id,
       character_id: character.id,
       role: next,
+      reason,
     });
     try {
       const u = await api.entities.User.get(character.created_by_id);

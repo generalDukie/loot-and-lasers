@@ -37,7 +37,7 @@ export default function ItemGrantForm({ character, onAction, onGranted }) {
       } else {
         item = generateItem(rarity, Math.max(1, level), type, character.class);
       }
-      const res = await onAction({ action: "give_item", character_id: character.id, item });
+      const res = await onAction({ action: "give_item", character_id: character.id, item, reason: "admin_grant" });
       if (res?.item) onGranted?.(res.item);
     } finally {
       setBusy(false);
@@ -50,7 +50,7 @@ export default function ItemGrantForm({ character, onAction, onGranted }) {
     setBusy(true);
     try {
       const item = consumableItem(def);
-      const res = await onAction({ action: "give_item", character_id: character.id, item });
+      const res = await onAction({ action: "give_item", character_id: character.id, item, reason: "admin_grant" });
       if (res?.item) onGranted?.(res.item);
     } finally {
       setBusy(false);

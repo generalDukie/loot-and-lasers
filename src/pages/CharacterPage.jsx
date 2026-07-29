@@ -32,6 +32,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { Sparkles, Backpack } from "lucide-react";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
+import { trackStardustSpend } from "@/lib/stardustTracker";
 
 export default function CharacterPage() {
   const [character, setCharacter] = useState(null);
@@ -138,6 +139,7 @@ export default function CharacterPage() {
       const synced = { ...characterRef.current, ...patch };
       characterRef.current = synced;
       setCharacter(synced);
+      void trackStardustSpend(char, cost, "attribute");
     } catch (e) {
       toast({ title: "Purchase failed", description: e.message, variant: "destructive" });
       await load();

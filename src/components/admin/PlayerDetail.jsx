@@ -108,7 +108,7 @@ export default function PlayerDetail({ character, onAction, onRefresh }) {
         </div>
         <button onClick={() => onAction({ action: "ban", character_id: character.id, reason: "admin" })} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-destructive/15 text-destructive"><Ban className="w-3 h-3" />Ban</button>
         <button onClick={() => onAction({ action: "unban", character_id: character.id })} className="text-xs px-2 py-1 rounded-lg bg-green-500/15 text-green-300">Unban</button>
-        <button onClick={async () => { if (confirm(`Reset ${character.name} to level 1? This wipes their inventory and progress.`)) { await onAction({ action: "reset_player", character_id: character.id }); onRefresh(); loadInv(); } }} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-red-500/15 text-red-300"><RotateCcw className="w-3 h-3" />Reset</button>
+        <button onClick={async () => { if (confirm(`Reset ${character.name} to level 1? This wipes their inventory and progress.`)) { const reason = window.prompt("Reason for player reset?"); if (!reason) return; await onAction({ action: "reset_player", character_id: character.id, reason }); onRefresh(); loadInv(); } }} className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-red-500/15 text-red-300"><RotateCcw className="w-3 h-3" />Reset</button>
       </div>
 
       <PromoteAdminButton character={character} onAction={onAction} />

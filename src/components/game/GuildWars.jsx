@@ -15,6 +15,7 @@ import GuildWarCard from "@/components/game/GuildWarCard";
 import GuildWarPicker from "@/components/game/GuildWarPicker";
 import GuildWarReplay from "@/components/game/GuildWarReplay";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
+import { trackStardustSpend } from "@/lib/stardustTracker";
 
 export default function GuildWars({ guild, character, membership, onResult }) {
   const [wars, setWars] = useState([]);
@@ -102,6 +103,7 @@ export default function GuildWars({ guild, character, membership, onResult }) {
     setBusy(true);
     try {
       await api.functions.invoke("DeclareGuildWar", { defender_guild_id: defenderGuild.id });
+      void trackStardustSpend(character, GUILD_WAR_DECLARE_COST, "guild_war");
       setShowPicker(false);
       await loadWars();
       if (onResult) onResult();

@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
+import { trackStardustSpend } from "@/lib/stardustTracker";
 import ShipModCard from "@/components/game/ShipModCard";
 import ShipTypeCard from "@/components/game/ShipTypeCard";
 import ShipHangarHero, { SHIP_HULL_THEME } from "@/components/game/ShipHangarHero";
@@ -142,6 +143,7 @@ export default function ShipPage() {
       const res = await api.functions.invoke("BuyShipMod", { category_key: catKey, ship_id: targetId });
       const patch = res.patch || res.data?.patch || {};
       setCharacter((c) => ({ ...c, ...patch }));
+      void trackStardustSpend(character, cost, "ship_mod");
       toast({ title: "🛠️ Mod Installed!", description: `${SHIP_MODS[catKey].name} — ${getTierEffectLabel(tier, targetId)}` });
     } catch (err) {
       toast({ title: "Install failed", description: err.message, variant: "destructive" });

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
+import { trackStardustSpend } from "@/lib/stardustTracker";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
@@ -63,7 +64,9 @@ export default function CasinoPage() {
         applyCharacter({ ...(character || {}), ...patch });
       }
       const deltaCrystals = res.delta_crystals ?? res.data?.delta_crystals ?? 0;
+      const deltaStardust = res.delta_stardust ?? res.data?.delta_stardust ?? 0;
       if (deltaCrystals < 0) void trackNovaSpend(character, -deltaCrystals, "casino");
+      if (deltaStardust < 0) void trackStardustSpend(character, -deltaStardust, "casino");
       return res;
     } catch (e) {
       toast({ title: "Wager failed", description: e.message, variant: "destructive" });

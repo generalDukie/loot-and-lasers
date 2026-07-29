@@ -22,6 +22,13 @@ import {
   RewardSources,
   RewardErrors,
 } from "../rewards/index.js";
+import {
+  auditAdminModeration,
+  recordCurrencyChange,
+  recordItemOwnershipChange,
+  ActorTypes,
+  newCorrelationId,
+} from "../audit/index.js";
 
 const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
 
@@ -704,53 +711,114 @@ export async function ResolveNexusAssault(user, body) {
 // ── AdminModeration ──────────────────────────────────────────
 export async function AdminModeration(user, body) {
   if (user.role !== "admin") return { status: 403, body: { error: "Admin only" } };
+
+  try {
+    return await withTransactionAsync(async () => {
+      const result = await adminModerationInner(user, body || {});
+      return result;
+    });
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    throw err;
+  }
+}
+
+async function adminModerationInner(user, body) {
   const action = body.action;
 
   if (action === "mute") {
     const { character_id, minutes, reason } = body;
+    if (!reason) return { status: 400, body: { error: "reason required" } };
     const until = new Date(Date.now() + (minutes || 30) * 60000).toISOString();
     const list = entities.PlayerModeration.filter({ character_id });
     let rec = list[0];
+    const before = rec ? { ...rec } : null;
     if (rec) rec = entities.PlayerModeration.update(rec.id, { chat_muted_until: until, notes: reason || rec.notes });
     else rec = entities.PlayerModeration.create({ character_id, chat_muted_until: until, chat_banned: false, notes: reason || "" });
+    const ch = entities.Character.get(character_id);
+    auditAdminModeration(user, "mute", {
+      characterId: character_id,
+      targetAccountId: ch?.created_by_id,
+      reason,
+      beforeState: before,
+      afterState: { chat_muted_until: until },
+      changeSet: { minutes: minutes || 30 },
+    });
     return { status: 200, body: { success: true, moderation: rec } };
   }
 
   if (action === "ban") {
     const { character_id, reason } = body;
+    if (!reason) return { status: 400, body: { error: "reason required" } };
     const list = entities.PlayerModeration.filter({ character_id });
     let rec = list[0];
+    const before = rec ? { chat_banned: rec.chat_banned } : { chat_banned: false };
     if (rec) rec = entities.PlayerModeration.update(rec.id, { chat_banned: true, chat_banned_reason: reason || "" });
     else rec = entities.PlayerModeration.create({ character_id, chat_banned: true, chat_banned_reason: reason || "" });
+    const ch = entities.Character.get(character_id);
+    auditAdminModeration(user, "ban", {
+      characterId: character_id,
+      targetAccountId: ch?.created_by_id,
+      reason,
+      beforeState: before,
+      afterState: { chat_banned: true },
+    });
     return { status: 200, body: { success: true, moderation: rec } };
   }
 
   if (action === "unban" || action === "unmute") {
-    const { character_id } = body;
+    const { character_id, reason } = body;
     const list = entities.PlayerModeration.filter({ character_id });
     if (list[0]) {
       const patch = action === "unban" ? { chat_banned: false, chat_banned_reason: "" } : { chat_muted_until: null };
+      const before = { ...list[0] };
       const rec = entities.PlayerModeration.update(list[0].id, patch);
+      const ch = entities.Character.get(character_id);
+      auditAdminModeration(user, action, {
+        characterId: character_id,
+        targetAccountId: ch?.created_by_id,
+        reason: reason || action,
+        beforeState: before,
+        afterState: patch,
+      });
       return { status: 200, body: { success: true, moderation: rec } };
     }
     return { status: 200, body: { success: true } };
   }
 
   if (action === "delete_message") {
+    const existing = entities.ChatMessage.get(body.message_id);
     const rec = entities.ChatMessage.update(body.message_id, { deleted: true, deleted_by: user.id, content: "[removed]" });
+    auditAdminModeration(user, "delete_message", {
+      targetType: "chat_message",
+      targetId: body.message_id,
+      reason: body.reason || "message_removed",
+      beforeState: existing ? { deleted: !!existing.deleted, content_len: (existing.content || "").length } : null,
+      afterState: { deleted: true },
+      subjectType: "chat_message",
+      subjectId: body.message_id,
+    });
     return { status: 200, body: { success: true, message: rec } };
   }
 
   if (action === "edit_filter") {
     const list = entities.ModerationConfig.filter({ singleton: true });
     let rec = list[0];
+    const before = rec ? { wordCount: (rec.filtered_words || []).length } : { wordCount: 0 };
     if (rec) rec = entities.ModerationConfig.update(rec.id, { filtered_words: body.words });
     else rec = entities.ModerationConfig.create({ singleton: true, filtered_words: body.words });
+    auditAdminModeration(user, "edit_filter", {
+      targetType: "moderation_config",
+      targetId: rec.id,
+      reason: body.reason || "filter_update",
+      beforeState: before,
+      afterState: { wordCount: (body.words || []).length },
+    });
     return { status: 200, body: { success: true, config: rec } };
   }
 
   if (action === "send_system_mail") {
-    const { subject, body: mailBody, rewards, recipients, expires_days } = body;
+    const { subject, body: mailBody, rewards, recipients, expires_days, reason } = body;
     let recipientIds = recipients || [];
     if (recipients === "all") {
       recipientIds = entities.Character.list("-created_date", 2000).map((c) => c.id);
@@ -774,20 +842,42 @@ export async function AdminModeration(user, body) {
       expires_at: expiresAt,
     }));
     const created = entities.Mail.bulkCreate(records);
+    auditAdminModeration(user, "send_system_mail", {
+      reason: reason || (hasRewards ? "compensation_mail" : "system_mail"),
+      hasRewards,
+      changeSet: {
+        recipientCount: created.length,
+        hasRewards,
+        subject: subject || "System Notice",
+        rewardKeys: hasRewards ? Object.keys(rewards) : [],
+      },
+      subjectType: "mail_batch",
+      subjectId: created[0]?.id || null,
+    });
     return { status: 200, body: { success: true, count: created.length } };
   }
 
   if (action === "resolve_report") {
+    const existing = entities.Report.get(body.report_id);
     const rec = entities.Report.update(body.report_id, { status: "resolved", action_taken: body.action_taken || "" });
+    auditAdminModeration(user, "resolve_report", {
+      actionOverride: null,
+      targetType: "report",
+      targetId: body.report_id,
+      reason: body.action_taken || "resolved",
+      beforeState: existing ? { status: existing.status } : null,
+      afterState: { status: "resolved" },
+    });
+    // resolve_report isn't in map — use admin_player_edit via custom call
     return { status: 200, body: { success: true, report: rec } };
   }
 
   if (action === "give_item") {
-    const { character_id } = body;
+    const { character_id, reason } = body;
+    if (!reason) return { status: 400, body: { error: "reason required for item grants" } };
     const ch = entities.Character.get(character_id);
     if (!ch) return { status: 404, body: { error: "Character not found" } };
 
-    // Prefer a full client item payload; otherwise roll server-side from type/rarity/level.
     let item = body.item;
     if (!item || !item.name || !item.type || !item.rarity) {
       const type = item?.type || body.type;
@@ -799,7 +889,6 @@ export async function AdminModeration(user, body) {
       item = randomItem(rarity, level, type, Math.random, ch.class);
     }
 
-    // Cap counts unequipped bag items only — equipped gear does not use a slot.
     const {
       id: _ignoreId,
       character_id: _ignoreChar,
@@ -835,6 +924,29 @@ export async function AdminModeration(user, body) {
       is_equipped: false,
       locked: !!safeItem.locked,
     });
+    const corr = newCorrelationId();
+    recordItemOwnershipChange({
+      user,
+      action: "item_granted_by_admin",
+      item: created,
+      previousOwnerCharacterId: null,
+      newOwnerCharacterId: ch.id,
+      previousLocation: "system_storage",
+      newLocation: "inventory",
+      correlationId: corr,
+      reasonText: reason,
+      actorType: ActorTypes.ADMINISTRATOR,
+    });
+    auditAdminModeration(user, "give_item", {
+      characterId: ch.id,
+      targetAccountId: ch.created_by_id,
+      subjectType: "item",
+      subjectId: created.id,
+      reason,
+      correlationId: corr,
+      changeSet: { itemName: created.name, rarity: created.rarity, type: created.type },
+      afterState: { itemId: created.id },
+    });
     return {
       status: 200,
       body: {
@@ -849,12 +961,21 @@ export async function AdminModeration(user, body) {
   }
 
   if (action === "adjust_currency") {
-    const { character_id, deltas } = body;
+    const { character_id, deltas, reason } = body;
+    if (!reason) return { status: 400, body: { error: "reason required for currency adjustments" } };
     if (!deltas || typeof deltas !== "object") {
       return { status: 400, body: { error: "deltas required" } };
     }
     const ch = entities.Character.get(character_id);
     if (!ch) return { status: 404, body: { error: "Character not found" } };
+    const before = {
+      stardust: ch.stardust || 0,
+      nova_crystals: ch.nova_crystals || 0,
+      fuel: ch.fuel || 0,
+      arena_attempts_left: ch.arena_attempts_left || 0,
+      experience: ch.experience || 0,
+      level: ch.level || 1,
+    };
     const patch = {};
     if (deltas.stardust != null && deltas.stardust !== 0) {
       patch.stardust = Math.min(
@@ -899,13 +1020,56 @@ export async function AdminModeration(user, body) {
       return { status: 400, body: { error: "No currency deltas provided" } };
     }
     const updated = entities.Character.update(character_id, patch);
+    const corr = newCorrelationId();
+    for (const key of ["stardust", "nova_crystals", "fuel"]) {
+      if (deltas[key] != null && deltas[key] !== 0) {
+        recordCurrencyChange({
+          user,
+          character: ch,
+          currencyType: key,
+          before: before[key],
+          after: updated[key],
+          amount: Number(deltas[key]),
+          reasonCode: "admin_adjust",
+          reasonText: reason,
+          correlationId: corr,
+          actorType: ActorTypes.ADMINISTRATOR,
+          administratorNote: reason,
+          source: "admin_moderation",
+        });
+      }
+    }
+    auditAdminModeration(user, "adjust_currency", {
+      characterId: ch.id,
+      targetAccountId: ch.created_by_id,
+      reason,
+      deltas,
+      beforeState: before,
+      afterState: {
+        stardust: updated.stardust,
+        nova_crystals: updated.nova_crystals,
+        fuel: updated.fuel,
+        level: updated.level,
+        experience: updated.experience,
+        arena_attempts_left: updated.arena_attempts_left,
+      },
+      changeSet: { deltas },
+      correlationId: corr,
+    });
     return { status: 200, body: { success: true, character: updated, character_name: ch.name } };
   }
 
   if (action === "reset_player") {
-    const { character_id } = body;
+    const { character_id, reason } = body;
+    if (!reason) return { status: 400, body: { error: "reason required for player reset" } };
     const ch = entities.Character.get(character_id);
     if (!ch) return { status: 404, body: { error: "Character not found" } };
+    const before = {
+      level: ch.level,
+      stardust: ch.stardust,
+      nova_crystals: ch.nova_crystals,
+      arena_rating: ch.arena_rating,
+    };
     entities.Item.deleteMany({ character_id });
     const updated = entities.Character.update(character_id, {
       level: 1, experience: 0, experience_to_next_level: expForLevel(1),
@@ -920,12 +1084,19 @@ export async function AdminModeration(user, body) {
       highest_damage: 0, total_stardust_earned: 0,
       promo_codes_redeemed: [], active_buffs: [],
     });
+    auditAdminModeration(user, "reset_player", {
+      characterId: ch.id,
+      targetAccountId: ch.created_by_id,
+      reason,
+      beforeState: before,
+      afterState: { level: 1, stardust: 0, nova_crystals: 0, arena_rating: 1000 },
+    });
     return { status: 200, body: { success: true, character: updated } };
   }
 
   if (action === "set_role") {
-    // Admin is account-scoped (users.role), never per-character.
-    const { character_id, user_id, role } = body;
+    const { character_id, user_id, role, reason } = body;
+    if (!reason) return { status: 400, body: { error: "reason required for role changes" } };
     let targetUserId = user_id || null;
     if (!targetUserId && character_id) {
       const ch = entities.Character.get(character_id);
@@ -939,12 +1110,20 @@ export async function AdminModeration(user, body) {
     if (targetUserId === user.id) {
       return { status: 400, body: { error: "You cannot change your own role" } };
     }
+    const beforeRole = target.role;
     db.prepare("UPDATE users SET role = ?, updated_date = ? WHERE id = ?")
       .run(targetRole, nowIso(), targetUserId);
     const updated = getUserById(targetUserId);
-    // Keep entity mirror in sync if present
     const userEnt = entities.User.get(targetUserId);
     if (userEnt) entities.User.update(targetUserId, { role: targetRole });
+    auditAdminModeration(user, "set_role", {
+      targetType: "account",
+      targetId: targetUserId,
+      targetAccountId: targetUserId,
+      reason,
+      beforeState: { role: beforeRole },
+      afterState: { role: targetRole },
+    });
     return { status: 200, body: { success: true, role: updated.role, user_id: targetUserId, email: updated.email } };
   }
 

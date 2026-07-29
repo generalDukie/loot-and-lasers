@@ -18,6 +18,8 @@
     "test:time": "node server/scripts/test-time.mjs",
     "test:entitlements": "node server/scripts/test-entitlements.mjs",
     "test:rewards": "node server/scripts/test-rewards.mjs",
+    "test:arena": "node server/scripts/test-arena.mjs",
+    "test:audit": "node server/scripts/test-audit.mjs",
     "test:passives": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-class-passives.mjs"
   },
   "dependencies": {

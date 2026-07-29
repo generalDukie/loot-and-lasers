@@ -20,6 +20,7 @@ import { requireRewardDefinition } from "./definitions.js";
 import { applyCharacterRewards } from "../shared/rewards.js";
 import { createService, entities } from "../entities.js";
 import { nanoid } from "nanoid";
+import { auditRewardClaimBridge } from "../audit/index.js";
 
 function hashRequest(parts) {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32);
@@ -293,6 +294,22 @@ export async function executeRewardClaim(opts) {
     claimKey,
     rewardSource,
   });
+
+  try {
+    auditRewardClaimBridge({
+      claim: {
+        id: claim.id,
+        claimKey,
+        accountId,
+        characterId,
+        rewardSource,
+        correlationId,
+      },
+      action: "reward_claimed",
+    });
+  } catch {
+    /* central audit bridge is non-blocking for reward claims (domain audit remains) */
+  }
 
   return { claim, created: true, idempotentReplay: false, result: delivered };
 }

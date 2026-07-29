@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { X, UserPlus, MessageSquare, Ban, Flag, Shield, Users } from "lucide-react";
+import { X, UserPlus, MessageSquare, Ban, Flag, Shield, Users, Swords } from "lucide-react";
 import CharacterStats from "@/components/game/CharacterStats";
 import EquipmentSlots from "@/components/game/EquipmentSlots";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
@@ -12,7 +12,18 @@ import { getGuildMembership, invitePlayerToGuild } from "@/lib/guildUtils";
 import { sendFriendRequest, getFriends, getOutgoingRequests } from "@/lib/socialEngine";
 import { profileDisplayName, normalizeLegacyDisplay, LEGACY_DISPLAY_FAMILY } from "@/lib/legacyName";
 
-export default function PublicProfileSheet({ target, myChar, onClose, onMessage, onBlock, onReport, friendStatus = "none" }) {
+export default function PublicProfileSheet({
+  target,
+  myChar,
+  onClose,
+  onMessage,
+  onBlock,
+  onReport,
+  onChallenge,
+  challengePreview,
+  challengeBusy = false,
+  friendStatus = "none",
+}) {
   const [guildTag, setGuildTag] = useState("");
   const [presence, setPresence] = useState(null);
   const [equipped, setEquipped] = useState([]);
@@ -178,6 +189,37 @@ export default function PublicProfileSheet({ target, myChar, onClose, onMessage,
           <Mini label="Losses" value={target.arena_losses || 0} />
         </div>
 
+        {challengePreview && target.id !== myChar?.id && (
+          <div className="mt-3 p-2.5 rounded-lg bg-muted/15 border border-border/25 text-[11px] space-y-1">
+            <p className="font-display font-semibold text-muted-foreground tracking-wide">ARENA CHALLENGE</p>
+            {challengePreview.challengeAllowed ? (
+              <>
+                <p>
+                  Win{" "}
+                  <span className="text-emerald-400 font-semibold">
+                    {challengePreview.estimatedWinChange >= 0 ? "+" : ""}
+                    {challengePreview.estimatedWinChange}
+                  </span>
+                  {" · "}
+                  Loss{" "}
+                  <span className="text-rose-400 font-semibold">{challengePreview.estimatedLossChange}</span>
+                </p>
+                {challengePreview.warningCode === "OPPONENT_TOO_LOW_FOR_RATING_GAIN" && (
+                  <p className="text-amber-400">No ranking points for victory — you still risk rating on a loss.</p>
+                )}
+                {challengePreview.warningCode === "ARENA_REPEAT_OPPONENT_REDUCED_REWARD" && (
+                  <p className="text-amber-400">Reduced rating vs this rival today.</p>
+                )}
+                {challengePreview.warningCode === "ARENA_REPEAT_OPPONENT_NO_RATING" && (
+                  <p className="text-amber-400">No further rating gains vs this account today.</p>
+                )}
+              </>
+            ) : (
+              <p className="text-muted-foreground">{challengePreview.error || "Challenge unavailable"}</p>
+            )}
+          </div>
+        )}
+
         <div className="mt-3">
           <CharacterStats character={target} hideStardust />
         </div>
@@ -194,6 +236,27 @@ export default function PublicProfileSheet({ target, myChar, onClose, onMessage,
         <div className="grid grid-cols-2 gap-2 mt-4">
           {target.id !== myChar?.id && (
             <>
+              {onChallenge && (
+                <Action
+                  icon={Swords}
+                  label={
+                    challengeBusy
+                      ? "Starting…"
+                      : challengePreview && !challengePreview.challengeAllowed
+                        ? "Unavailable"
+                        : "Challenge"
+                  }
+                  color="#F59E0B"
+                  disabled={
+                    challengeBusy ||
+                    (challengePreview && !challengePreview.challengeAllowed) ||
+                    (myChar?.created_by_id &&
+                      target.created_by_id &&
+                      myChar.created_by_id === target.created_by_id)
+                  }
+                  onClick={() => onChallenge?.(target)}
+                />
+              )}
               <Action icon={MessageSquare} label="Message" color="#22D3EE" onClick={() => onMessage?.(target)} />
               {friendState === "none" && (
                 <Action icon={UserPlus} label={sendingFriend ? "Sending…" : "Add Friend"} color="#A855F7" onClick={handleAddFriend} />
@@ -223,9 +286,14 @@ function Mini({ label, value }) {
   );
 }
 
-function Action({ icon: Icon, label, color, onClick }) {
+function Action({ icon: Icon, label, color, onClick, disabled = false }) {
   return (
-    <button onClick={onClick} className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-muted/20 border border-border/30 hover:border-primary/40 transition-colors">
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-muted/20 border border-border/30 hover:border-primary/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+    >
       <Icon className="w-3.5 h-3.5" style={{ color }} />
       <span>{label}</span>
     </button>

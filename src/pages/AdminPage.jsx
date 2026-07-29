@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { useToast } from "@/components/ui/use-toast";
-import { Shield, Filter, Send, Gavel, Crown, Ticket, Gift, RefreshCw, Gem, Mail, Clock, KeyRound, Coins } from "lucide-react";
+import { Shield, Filter, Send, Gavel, Crown, Ticket, Gift, RefreshCw, Mail, Clock, KeyRound, Coins, ScrollText } from "lucide-react";
 import PlayerManager from "@/components/admin/PlayerManager";
 import GuildAdmin from "@/components/admin/GuildAdmin";
 import PromoCodeManager from "@/components/admin/PromoCodeManager";
@@ -13,6 +13,7 @@ import EmailLogTab from "@/components/admin/EmailLogTab";
 import SchedulesTab from "@/components/admin/SchedulesTab";
 import EntitlementsTab from "@/components/admin/EntitlementsTab";
 import RewardsTab from "@/components/admin/RewardsTab";
+import AuditLogsTab from "@/components/admin/AuditLogsTab";
 import PageStage from "@/components/game/PageStage";
 
 const TABS = [
@@ -22,13 +23,14 @@ const TABS = [
   { key: "promo", label: "Promo Codes", icon: Ticket },
   { key: "grant", label: "Grant Item", icon: Gift },
   { key: "rewards", label: "Rewards", icon: Coins },
+  { key: "audit", label: "Audit", icon: ScrollText },
   { key: "filter", label: "Filter", icon: Filter },
   { key: "mail", label: "System Mail", icon: Send },
   { key: "email", label: "Email", icon: Mail },
   { key: "schedules", label: "Schedules", icon: Clock },
   { key: "entitlements", label: "Entitlements", icon: KeyRound },
   { key: "refresh", label: "Server", icon: RefreshCw },
-  { key: "nova", label: "Nova Stats", icon: Gem },
+  { key: "nova", label: "Economy", icon: Coins },
 ];
 
 export default function AdminPage() {
@@ -96,6 +98,7 @@ export default function AdminPage() {
         {tab === "schedules" && <SchedulesTab />}
         {tab === "entitlements" && <EntitlementsTab />}
         {tab === "rewards" && <RewardsTab />}
+        {tab === "audit" && <AuditLogsTab />}
         {tab === "refresh" && <ServerRefreshTab />}
         {tab === "nova" && <NovaSpendStats />}
       </motion.div>

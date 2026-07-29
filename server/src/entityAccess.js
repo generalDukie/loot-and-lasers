@@ -139,6 +139,7 @@ export function canWriteDoc(user, type, doc) {
     case "DailyLogin":
     case "HubLayout":
     case "NovaSpendEvent":
+    case "StardustSpendEvent":
     case "PlayerPresence":
       if (ownsDocViaCreatedBy(user, doc)) return true;
       if (doc.character_id && characterOwnedByUser(user, doc.character_id)) return true;
@@ -254,6 +255,7 @@ export function canCreateType(user, type, data = {}) {
     case "ArenaMatch":
     case "PlayerPresence":
     case "NovaSpendEvent":
+    case "StardustSpendEvent":
     case "NexusAssault":
       return true;
     default:

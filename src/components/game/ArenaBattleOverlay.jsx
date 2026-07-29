@@ -6,6 +6,7 @@ import { avatarPropsFor } from "@/lib/arenaEngine";
 import { Swords, Zap, ChevronRight } from "lucide-react";
 import { computePermanentTotalStats, computeDerivedStats } from "@/lib/statEngine";
 import { CLASSES } from "@/lib/gameData";
+import { resolveAbilityBanner } from "@/lib/classPassives";
 import { ArenaBackdrop, ArenaFloor } from "@/components/game/ArenaBackdrop";
 import ArenaWeaponVisual from "@/components/game/ArenaWeaponVisual";
 
@@ -37,6 +38,8 @@ function eventDuration(ev) {
   if (!ev) return 900;
   if (ev.type === "regen") return 560;
   if (ev.dodged) return 640;
+  if (ev.type === "passive" || (ev.type === "miss" && ev.missKind === "phantom_signal")) return 1250;
+  if (ev.type === "secondary" && ev.passive) return 1180;
   if (ev.crit || ev.type === "ability" || ev.type === "drone") return 1180;
   return 900;
 }
@@ -265,12 +268,12 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
     if (idx >= battle.events.length) { setPhase("outro"); return; }
     const ev = battle.events[idx];
     const dur = eventDuration(ev);
-    // Trigger dramatic ability banner when a class special fires.
+    // Class passive / ability callout (name + rolled variant when applicable).
     let bannerTimer;
-    if (ev && (ev.type === "ability" || ev.type === "drone") && ev.ability) {
-      const fighter = ev.attacker === "player" ? player : opponent;
-      setAbilityBanner({ name: ev.ability, className: fighter.class, side: ev.attacker });
-      bannerTimer = setTimeout(() => setAbilityBanner(null), 1500);
+    const banner = resolveAbilityBanner(ev, player, opponent);
+    if (banner) {
+      setAbilityBanner(banner);
+      bannerTimer = setTimeout(() => setAbilityBanner(null), 1400);
     }
     const land = setTimeout(() => {
       if (ev && ev.heal) {
@@ -295,7 +298,7 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
       setIdx((i) => i + 1);
     }, dur);
     return () => { clearTimeout(land); clearTimeout(next); clearTimeout(bannerTimer); };
-  }, [phase, idx, battle.events, shake]);
+  }, [phase, idx, battle.events, shake, player, opponent]);
 
   useEffect(() => {
     if (phase !== "outro") return;
@@ -387,47 +390,54 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
       </div>
 
       <AnimatePresence>
-        {/* Dramatic ability announcement banner — fires when a class special triggers */}
+        {/* Class ability callout — per-class color, shows rolled variant when applicable */}
         {abilityBanner && (
           <motion.div
-            key={`${abilityBanner.name}-${idx}`}
-            className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            key={`${abilityBanner.name}-${abilityBanner.detail || ""}-${idx}`}
+            className={`absolute z-40 pointer-events-none flex flex-col items-center ${
+              abilityBanner.side === "player"
+                ? "left-4 sm:left-10 top-[38%]"
+                : "right-4 sm:right-10 top-[38%]"
+            }`}
+            initial={{ opacity: 0, y: 16, scale: 0.85 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.9 }}
+            transition={{ duration: 0.28, ease: "easeOut" }}
           >
             <motion.div
-              className="absolute inset-0"
-              style={{ background: `radial-gradient(ellipse at center, ${abilityBanner.side === "player" ? "rgba(34,211,238,0.15)" : "rgba(251,113,133,0.15)"}, transparent 65%)` }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            />
-            <motion.div
-              initial={{ scale: 0.3, y: 30, opacity: 0 }}
-              animate={{ scale: [0.3, 1.2, 1], y: 0, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ duration: 0.45, ease: "easeOut" }}
-              className="relative text-center"
+              className="rounded-xl px-4 py-2.5 border-2 backdrop-blur-md text-center max-w-[11rem] sm:max-w-[14rem]"
+              style={{
+                color: abilityBanner.color,
+                borderColor: `${abilityBanner.color}99`,
+                background: `linear-gradient(180deg, ${abilityBanner.color}22, ${abilityBanner.color}0a)`,
+                boxShadow: `0 0 22px ${abilityBanner.color}55`,
+              }}
+              animate={{ scale: [1, 1.04, 1] }}
+              transition={{ duration: 0.55 }}
             >
-              <motion.div
-                className="text-5xl mb-1"
-                animate={{ rotate: [0, -10, 10, 0] }}
-                transition={{ duration: 0.5 }}
-              >
-                {CLASSES[abilityBanner.className]?.emoji}
-              </motion.div>
+              <div className="text-2xl leading-none mb-1">
+                {CLASSES[abilityBanner.className]?.emoji || "✦"}
+              </div>
               <p
-                className="font-display font-black text-2xl sm:text-3xl tracking-widest"
+                className="font-display font-black text-sm sm:text-base tracking-wide leading-tight"
                 style={{
-                  color: abilityBanner.side === "player" ? "#22D3EE" : "#FB7185",
-                  textShadow: `0 0 14px currentColor, 0 0 28px currentColor`,
+                  color: abilityBanner.color,
+                  textShadow: `0 0 10px ${abilityBanner.color}`,
                 }}
               >
                 {abilityBanner.name}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-1 tracking-wider uppercase">{abilityBanner.className}</p>
+              {abilityBanner.detail && (
+                <p
+                  className="mt-1 text-[11px] sm:text-xs font-display font-semibold tracking-wider uppercase"
+                  style={{ color: abilityBanner.color, opacity: 0.95 }}
+                >
+                  {abilityBanner.detail}
+                </p>
+              )}
+              <p className="text-[9px] mt-1 tracking-wider uppercase opacity-70" style={{ color: abilityBanner.color }}>
+                {abilityBanner.className}
+              </p>
             </motion.div>
           </motion.div>
         )}

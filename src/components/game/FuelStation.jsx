@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Fuel, Rocket } from "lucide-react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
+import { trackStardustSpend } from "@/lib/stardustTracker";
 import { FUEL_MOUNTS, MAX_FUEL_MOUNTS, getActiveFuelMounts } from "@/lib/fuelMounts";
 import { FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { useToast } from "@/components/ui/use-toast";
@@ -75,6 +76,7 @@ export default function FuelStation({ character, onUpdate, embedded = false }) {
       const entry = res.mount || res.data?.mount || patch.active_fuel_mounts?.[0];
       onUpdate((c) => ({ ...c, ...patch }));
       void trackNovaSpend(character, mount.crystals || 0, "fuel_mount");
+      if (mount.stardust) void trackStardustSpend(character, mount.stardust, "fuel_mount");
       const extended = !!activeMount;
       const speed = entry?.speed ?? mount.speed;
       toast({

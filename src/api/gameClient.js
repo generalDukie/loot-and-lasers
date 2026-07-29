@@ -369,6 +369,59 @@ const rewards = {
   },
 };
 
+const arena = {
+  previewChallenge(body) {
+    return request("/api/arena/challenges/preview", { method: "POST", body });
+  },
+  createChallenge(body) {
+    return request("/api/arena/challenges", { method: "POST", body });
+  },
+  getChallenge(id) {
+    return request(`/api/arena/challenges/${encodeURIComponent(id)}`);
+  },
+  completeChallenge(id, body) {
+    return request(`/api/arena/challenges/${encodeURIComponent(id)}/complete`, {
+      method: "POST",
+      body,
+    });
+  },
+};
+
+const audit = {
+  search(params = {}) {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v != null && v !== "") q.set(k, String(v));
+    });
+    return request(`/api/audit/admin/search?${q}`);
+  },
+  get(id) {
+    return request(`/api/audit/admin/${encodeURIComponent(id)}`);
+  },
+  timeline(accountId, params = {}) {
+    const q = new URLSearchParams(params).toString();
+    return request(`/api/audit/admin/timeline/${encodeURIComponent(accountId)}${q ? `?${q}` : ""}`);
+  },
+  correlation(correlationId) {
+    return request(`/api/audit/admin/correlation/${encodeURIComponent(correlationId)}`);
+  },
+  itemProvenance(itemId) {
+    return request(`/api/audit/admin/item/${encodeURIComponent(itemId)}/provenance`);
+  },
+  annotate(id, body) {
+    return request(`/api/audit/admin/${encodeURIComponent(id)}/annotations`, {
+      method: "POST",
+      body,
+    });
+  },
+  export(body) {
+    return request("/api/audit/admin/export", { method: "POST", body });
+  },
+  integrity(id) {
+    return request(`/api/audit/admin/${encodeURIComponent(id)}/integrity`);
+  },
+};
+
 const entitiesProxy = entityProxy();
 
 export const api = {
@@ -378,6 +431,8 @@ export const api = {
   time,
   entitlements,
   rewards,
+  arena,
+  audit,
   asServiceRole: {
     entities: entitiesProxy,
   },

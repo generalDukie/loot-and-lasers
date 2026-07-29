@@ -7,6 +7,7 @@ import GuildRecruitingList from "@/components/game/GuildRecruitingList";
 import { requestToJoinGuild } from "@/lib/guildUtils";
 import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
 import StardustIcon from "@/components/game/StardustIcon";
+import { trackStardustSpend } from "@/lib/stardustTracker";
 
 const GUILD_CREATE_COST = 5000;
 
@@ -34,6 +35,7 @@ export default function GuildCreation({ character, onJoined }) {
         tag: tag.trim().toUpperCase().slice(0, 4),
         description: description.trim(),
       });
+      void trackStardustSpend(character, GUILD_CREATE_COST, "guild_create");
       onJoined();
     } catch (e) {
       setError(e?.message || "Could not create guild. That name may be taken.");

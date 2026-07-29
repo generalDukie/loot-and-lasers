@@ -15,8 +15,128 @@ export const PASSIVE_BY_CLASS = Object.freeze({
   "Cosmic Engineer": "Orbital Assistant",
 });
 
+/** Distinct combat UI color per class (ability callouts). */
+export const CLASS_ABILITY_COLORS = Object.freeze({
+  Vanguard: "#F97316",
+  "Astral Warden": "#C084FC",
+  "Shadow Operative": "#94A3B8",
+  "Void Runner": "#34D399",
+  Technomancer: "#38BDF8",
+  "Cosmic Engineer": "#FBBF24",
+});
+
 export const DIRTY_TRICKS = Object.freeze(["flashbang", "targeting_beacon", "stim_injector"]);
 export const ORBITAL_EFFECTS = Object.freeze(["fire_support", "defensive_protocol", "acquire_target"]);
+
+const DIRTY_TRICK_LABELS = Object.freeze({
+  flashbang: "Flashbang",
+  targeting_beacon: "Targeting Beacon",
+  stim_injector: "Stim Injector",
+});
+
+const ORBITAL_LABELS = Object.freeze({
+  fire_support: "Fire Support",
+  defensive_protocol: "Defensive Protocol",
+  acquire_target: "Acquire Target",
+});
+
+/** Passive event kinds that should flash on the combat screen. */
+const BANNER_KINDS = new Set([
+  "dirty_trick_selected",
+  "orbital_assistant_activated",
+  "kinetic_tantrum_normal",
+  "kinetic_tantrum_strong",
+  "astral_barrier_created",
+  "astral_barrier_restored",
+  "phantom_signal_armed",
+  "phantom_signal_miss",
+  "overclock_stack_gained",
+  "overclock_stacks_removed",
+  "defensive_protocol_applied",
+  "acquire_target_applied",
+]);
+
+function titleCaseKey(key) {
+  if (!key) return null;
+  return String(key).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Build a combat-UI banner payload from a battle event.
+ * Returns null when the event should not announce.
+ */
+export function resolveAbilityBanner(ev, player, opponent) {
+  if (!ev) return null;
+
+  if ((ev.type === "ability" || ev.type === "drone") && ev.ability) {
+    const side = ev.attacker === "opponent" ? "opponent" : "player";
+    const fighter = side === "player" ? player : opponent;
+    const className = fighter?.class || fighter?.className || null;
+    return {
+      name: ev.ability,
+      detail: null,
+      className,
+      side,
+      color: CLASS_ABILITY_COLORS[className] || (side === "player" ? "#22D3EE" : "#FB7185"),
+    };
+  }
+
+  const kind = ev.kind || ev.missKind || ev.secondaryKind;
+  const isPassiveish =
+    ev.type === "passive" ||
+    (ev.type === "miss" && ev.missKind === "phantom_signal") ||
+    (ev.type === "secondary" && ev.passive);
+  if (!isPassiveish || !BANNER_KINDS.has(kind)) return null;
+
+  let resolvedSide = "player";
+  if (ev.side === "player" || ev.side === "opponent") {
+    resolvedSide = ev.side;
+  } else if (ev.type === "miss" && (ev.defender === "player" || ev.defender === "opponent")) {
+    resolvedSide = ev.defender;
+  } else if (ev.attacker === "player" || ev.attacker === "opponent") {
+    resolvedSide = ev.attacker;
+  }
+
+  const fighter = resolvedSide === "player" ? player : opponent;
+  const className = fighter?.class || fighter?.className || null;
+  const name = ev.passive || PASSIVE_BY_CLASS[className] || "Class Ability";
+
+  let detail = null;
+  if (kind === "dirty_trick_selected") {
+    detail = DIRTY_TRICK_LABELS[ev.dirtyTrick] || titleCaseKey(ev.dirtyTrick);
+  } else if (kind === "orbital_assistant_activated") {
+    detail = ORBITAL_LABELS[ev.effect] || titleCaseKey(ev.effect);
+  } else if (kind === "kinetic_tantrum_strong") {
+    detail = "Strong";
+  } else if (kind === "kinetic_tantrum_normal") {
+    detail = "Normal";
+  } else if (kind === "astral_barrier_created") {
+    detail = "Raised";
+  } else if (kind === "astral_barrier_restored") {
+    detail = "Restored";
+  } else if (kind === "phantom_signal_armed") {
+    detail = `${ev.charges ?? 2} charges`;
+  } else if (kind === "phantom_signal_miss") {
+    detail = `Miss · ${ev.chargesRemaining ?? 0} left`;
+  } else if (kind === "overclock_stack_gained") {
+    detail = `Stack ${ev.stacks}`;
+  } else if (kind === "overclock_stacks_removed") {
+    detail = `−${ev.removed} → ${ev.stacks}`;
+  } else if (kind === "defensive_protocol_applied") {
+    detail = ORBITAL_LABELS.defensive_protocol;
+  } else if (kind === "acquire_target_applied") {
+    detail = ORBITAL_LABELS.acquire_target;
+  }
+
+  return {
+    name,
+    detail,
+    className,
+    side: resolvedSide,
+    color: CLASS_ABILITY_COLORS[className] || (resolvedSide === "player" ? "#22D3EE" : "#FB7185"),
+    kind,
+  };
+}
 
 export const OVERCLOCK_DEALT_PER_STACK = 0.125;
 export const OVERCLOCK_TAKEN_PER_STACK = 0.05;

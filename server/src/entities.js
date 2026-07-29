@@ -150,7 +150,7 @@ const ENTITY_TYPES = [
   "FriendRequest", "Friendship", "GalaxyNews", "Guild", "GuildBattle",
   "GuildChallenge", "GuildLog", "GuildMember", "GuildWar", "GuildWarReady",
   "HubLayout", "Item", "Mail", "Mission", "ModerationConfig", "Nexus",
-  "NexusAssault", "NexusHallOfFame", "NovaSpendEvent", "PlayerModeration",
+  "NexusAssault", "NexusHallOfFame", "NovaSpendEvent", "StardustSpendEvent", "PlayerModeration",
   "PlayerPresence", "PrivateConversation", "PrivateMessage", "PromoCode",
   "Report", "SiteConfig", "User",
 ];

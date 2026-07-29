@@ -414,5 +414,6 @@ export function computeItemVendorValue(item) {
   }
   const rarityF = RARITY_SELL_FACTOR[item.rarity] ?? 0.9;
   const typeW = ITEM_SELL_TYPE_WEIGHT[item.type] ?? 1;
-  return Math.max(1, Math.round(statSum * rarityF * typeW));
+  // 10× stardust resolution — apply once at vendor exit (not to Nova).
+  return Math.max(1, Math.round(statSum * rarityF * typeW * 10));
 }

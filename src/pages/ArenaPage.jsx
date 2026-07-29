@@ -10,6 +10,7 @@ import { processDiscovery } from "@/lib/discovery";
 import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { pushNotification } from "@/lib/notificationEngine";
+import { toastNewAchievements } from "@/lib/achievementToasts";
 import {
   ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST, ARENA_REFRESH_MS, ARENA_REFRESH_COST,
   ARENA_BATTLE_COOLDOWN_MS, ARENA_SKIP_COST, ARENA_CHALLENGER_SLOTS, ARENA_MAX_REAL_OPPONENTS,
@@ -235,6 +236,8 @@ export default function ArenaPage() {
       return;
     }
     const update = res.patch || res.data?.patch || {};
+    const fullChar = res.character || res.data?.character;
+    toastNewAchievements(res, toast);
     const serverRewards = res.rewards || res.data?.rewards || rewards;
     const boostedXp = serverRewards.experience || 0;
     const stardustGain = rewards.won ? (serverRewards.stardust || 0) : 0;
@@ -277,7 +280,7 @@ export default function ArenaPage() {
       setMatchHistory(await loadArenaHistory(character.id));
     });
 
-    setCharacter((c) => ({ ...c, ...update }));
+    setCharacter((c) => ({ ...c, ...(fullChar || update) }));
     setFreeBattlesLeft((a) => Math.max(0, a - (isFree ? 1 : 0)));
     setBattleState(null);
     // Replace the just-fought challenger with a fresh mixed (real+bots) pick,

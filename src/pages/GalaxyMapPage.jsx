@@ -13,6 +13,7 @@ import {
 } from "@/lib/dungeonEngine";
 import { processDiscovery } from "@/lib/discovery";
 import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
+import { toastNewAchievements } from "@/lib/achievementToasts";
 import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import DungeonMap from "@/components/game/DungeonMap";
@@ -169,6 +170,7 @@ export default function GalaxyMapPage() {
     }
     const update = res.patch || res.data?.patch || {};
     const fullChar = res.character || res.data?.character;
+    toastNewAchievements(res, toast);
     const serverRewards = res.rewards || res.data?.rewards || {};
     const boostedXp = won ? (serverRewards.experience || 0) : 0;
     const newLevel = (fullChar || update).level ?? character.level;

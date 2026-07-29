@@ -19,7 +19,7 @@ import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/Ch
 export const ARENA_DAILY_FREE_BATTLES = 10;
 export const ARENA_PAID_BATTLE_COST = 5; // nova crystals per battle after the free quota
 export const ARENA_REFRESH_MS = 5 * 60 * 1000;
-export const ARENA_REFRESH_COST = 50; // stardust
+export const ARENA_REFRESH_COST = 500; // stardust (10× scale)
 export const ARENA_BATTLE_COOLDOWN_MS = 5 * 60 * 1000; // 5-minute cooldown between battles
 export const ARENA_SKIP_COST = 1; // nova crystals to skip the cooldown
 export const ARENA_CHALLENGER_SLOTS = 3;

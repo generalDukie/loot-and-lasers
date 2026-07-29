@@ -324,7 +324,7 @@ export default function ShopPage() {
 
   async function buyConsumable(slot, index) {
     if (busySlot) return;
-    const cost = slot._cost ?? slot.sell_value ?? 25;
+    const cost = slot._cost ?? slot.sell_value ?? 250;
     if ((character.stardust || 0) < cost) {
       toast({ title: "Not enough stardust", description: `Need ${cost} ${STARDUST_GLYPH} — you have ${character.stardust || 0}.`, variant: "destructive" });
       return;
@@ -489,10 +489,10 @@ export default function ShopPage() {
             <motion.section
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="relative overflow-hidden rounded-xl border border-orange-400/40 bg-gradient-to-br from-orange-500/15 via-card/50 to-fuchsia-500/10 p-2.5 shadow-[0_0_28px_rgba(251,146,60,0.1)]"
+              className="relative overflow-hidden rounded-xl border border-orange-500/55 bg-gradient-to-br from-orange-500/18 via-card/50 to-fuchsia-500/12 p-3.5 shadow-[0_0_40px_rgba(251,146,60,0.18)]"
             >
               <div className="flex items-center justify-between gap-2 flex-wrap mb-1.5">
-                <p className="text-[8px] font-display font-bold tracking-[0.2em] uppercase text-orange-300 flex items-center gap-1">
+                <p className="text-[10px] font-display font-black tracking-[0.18em] uppercase text-orange-200 flex items-center gap-1 bg-orange-500/10 border border-orange-400/25 px-2 py-0.5 rounded-md">
                   <Flame className="w-3 h-3" /> Hot Deal · resets {hotEta}
                 </p>
               </div>
@@ -513,9 +513,9 @@ export default function ShopPage() {
                       </div>
                     )}
                     <div className="flex items-center gap-2 min-w-0 sm:w-[42%]">
-                      <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} baseName={slot.base_name} level_requirement={slot.level_requirement} size={40} />
+                      <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} baseName={slot.base_name} level_requirement={slot.level_requirement} size={44} />
                       <div className="min-w-0">
-                        <h4 className="font-display font-bold text-sm truncate" style={{ color }}>{slot.name}</h4>
+                        <h4 className="font-display font-bold text-base truncate" style={{ color }}>{slot.name}</h4>
                         <p className="text-[9px] text-muted-foreground capitalize">{slot.rarity} · {gearTypeLabel(slot.type)}</p>
                         <div className="mt-1"><CompareBadge slot={slot} equipped={eq} characterClass={character.class} /></div>
                       </div>
@@ -530,11 +530,11 @@ export default function ShopPage() {
             </motion.section>
           )}
 
-          <div className="grid gap-2.5 lg:grid-cols-2 items-start">
+          <div className="grid gap-2.5 lg:grid-cols-2 items-stretch">
             <motion.section
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] via-card/40 to-transparent p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
+              className="rounded-xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] via-card/40 to-transparent p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)] flex flex-col h-full min-h-0"
             >
               <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                 <div>
@@ -554,7 +554,7 @@ export default function ShopPage() {
                 </motion.button>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2 auto-rows-fr flex-1 min-h-0">
                 {inventory.map((slot) => {
                   const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
                   const wasYanked = !!yanked[slot._slotId];
@@ -566,7 +566,7 @@ export default function ShopPage() {
                       key={slot._slotId}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: owned ? 0.72 : 1, y: 0 }}
-                      className={`relative p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden ${
+                      className={`relative h-full p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden ${
                         owned ? "opacity-70" : better ? "ring-1 ring-green-400/35" : ""
                       }`}
                       style={{ borderColor: color + "45", boxShadow: owned ? undefined : `0 0 12px ${color}12` }}
@@ -609,7 +609,7 @@ export default function ShopPage() {
             <motion.section
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl border border-amber-400/20 bg-gradient-to-br from-amber-500/[0.08] via-card/40 to-violet-500/[0.05] p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
+              className="rounded-xl border border-amber-400/20 bg-gradient-to-br from-amber-500/[0.08] via-card/40 to-violet-500/[0.05] p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)] flex flex-col h-full min-h-0"
             >
               <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                 <div>
@@ -629,10 +629,10 @@ export default function ShopPage() {
                 </motion.button>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2 auto-rows-fr flex-1 min-h-0">
                 {consumableSlots.map((slot, index) => {
                   const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
-                  const cost = slot._cost ?? slot.sell_value ?? 25;
+                  const cost = slot._cost ?? slot.sell_value ?? 250;
                   const affordable = (character.stardust || 0) >= cost;
                   const isTrio = slot._bundle === "stim_trio";
                   const stat = slot.consumable?.stat || "all";
@@ -642,7 +642,7 @@ export default function ShopPage() {
                   return (
                     <div
                       key={slotKey}
-                      className="p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col"
+                      className="h-full p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col"
                       style={{ borderColor: `${tint}55`, boxShadow: `0 0 10px ${tint}10` }}
                     >
                       <div className="flex items-center gap-2 mb-1.5">

@@ -1,5 +1,5 @@
 import React from "react";
-import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle, Power } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle } from "lucide-react";
 import { STAT_ICONS, RARITY_COLORS, computeStardustValue, CLASSES, STARDUST_COLOR } from "@/lib/gameData";
 import StardustIcon from "@/components/game/StardustIcon";
 
@@ -56,30 +56,12 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
         </button>
       </div>
 
-      {/* Power rating */}
-      <div className="flex items-center justify-between mt-2 px-2 py-1.5 rounded-lg bg-muted/20 border border-border/30">
-        <span className="flex items-center gap-1 text-[10px] font-display tracking-wide text-muted-foreground"><Power className="w-3 h-3" /> POWER</span>
-        <span className="flex items-center gap-1.5">
-          <span className="font-display font-bold text-sm" style={{ color }}>{myPower}</span>
-          {equipped ? (
-            <span className={`flex items-center gap-0.5 text-[10px] font-bold ${powerDelta > 0 ? "text-green-400" : powerDelta < 0 ? "text-red-400" : "text-muted-foreground"}`}>
-              {powerDelta > 0 ? <TrendingUp className="w-3 h-3" /> : powerDelta < 0 ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-              {powerDelta > 0 ? `+${powerDelta}` : powerDelta < 0 ? powerDelta : "="}
-            </span>
-          ) : item.is_equipped ? (
-            <span className="text-[10px] text-primary font-bold">EQ</span>
-          ) : (
-            <span className="text-[10px] text-green-400 font-bold">NEW</span>
-          )}
-        </span>
-      </div>
-
       {/* Currently equipped gear — the exact piece this item would replace */}
       {equipped ? (
         <div className="mt-2 rounded-lg bg-muted/15 border border-border/30 p-2">
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-display font-semibold text-muted-foreground tracking-wide">CURRENTLY EQUIPPED</p>
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground"><Power className="w-3 h-3" />{eqPower}</span>
+            <span className="text-[10px] text-primary font-bold">EQ</span>
           </div>
           <p className="text-[11px] font-display font-semibold truncate mt-0.5" style={{ color: RARITY_COLORS[equipped.rarity] || "#9CA3AF" }}>{equipped.name}</p>
           {equipped.stats && Object.keys(equipped.stats).length > 0 && (

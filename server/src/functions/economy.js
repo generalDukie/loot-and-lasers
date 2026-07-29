@@ -4,6 +4,7 @@
 import { entities } from "../entities.js";
 import { withTransactionAsync } from "../db.js";
 import { randomItem, randomItemForClass } from "../shared/rewards.js";
+import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
 import {
   ATTR_STAT_KEYS,
@@ -527,6 +528,10 @@ export async function ClaimMission(user, body) {
       }
 
       entities.Mission.update(mission.id, { status: "claimed" });
+
+      const ach = mergeAchievementUnlocks(ch, patch);
+      Object.assign(patch, ach.patch);
+
       const character = entities.Character.update(ch.id, patch);
       return {
         success: true,
@@ -535,6 +540,7 @@ export async function ClaimMission(user, body) {
         character,
         items,
         pending_loot: pendingLoot,
+        newly_unlocked: ach.newly_unlocked,
         gains: {
           stardust: gains.stardustGain,
           experience: gains.xpGain,
@@ -792,7 +798,7 @@ export async function BuyShopConsumable(user, body) {
       }
       if (!slot || idx < 0) httpErr(404, "Consumable slot not found");
 
-      const cost = slot._cost ?? slot.sell_value ?? 25;
+      const cost = slot._cost ?? slot.sell_value ?? 250;
       if ((ch.stardust || 0) < cost) httpErr(400, "Not enough stardust");
 
       const patch = { stardust: (ch.stardust || 0) - cost };
@@ -812,7 +818,7 @@ export async function BuyShopConsumable(user, body) {
       nextStock[idx] = {
         ...fresh,
         _slotId: `cons-${shopConsSeed(meta, win)}-${idx}-${Date.now()}`,
-        _cost: fresh._cost ?? fresh.sell_value ?? 25,
+        _cost: fresh._cost ?? fresh.sell_value ?? 250,
       };
       patch.shop_meta = { ...meta, cons_stock: nextStock };
 

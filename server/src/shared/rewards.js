@@ -1,9 +1,13 @@
 import { getCollectionPercentage, applyXpBonus } from "./collectionBonus.js";
+import { mergeAchievementUnlocks } from "./achievements.js";
 import {
   EQUIPMENT_SLOTS,
   rollItemStats,
   computeItemVendorValue,
 } from "./itemGeneration.js";
+
+/** Global XP & Stardust numerical resolution (unit size ×10). Not Nova/Fuel. */
+export const XP_STARDUST_SCALE = 10;
 
 const ITEM_NAMES = {
   weapon: ["Plasma Cutter", "Void Lance", "Pulse Blaster", "Quantum Repeater", "Starforged Blade", "Ion Carbine"],
@@ -96,13 +100,15 @@ function existingExpForLevelFormula(L) {
 
 export function expForLevel(level) {
   const L = Math.max(1, Math.floor(level || 1));
+  let xp;
   switch (L) {
-    case 1: return 10;
-    case 2: return 15;
-    case 3: return 25;
-    case 4: return 40;
-    default: return existingExpForLevelFormula(L);
+    case 1: xp = 10; break;
+    case 2: xp = 15; break;
+    case 3: xp = 25; break;
+    case 4: xp = 40; break;
+    default: xp = existingExpForLevelFormula(L);
   }
+  return xp * XP_STARDUST_SCALE;
 }
 
 const MISSION_XP_PER_FUEL_WAYPOINTS = [
@@ -120,11 +126,11 @@ const MISSION_SD_PER_FUEL_WAYPOINTS = [
 ];
 
 export function getMissionXpPerFuel(level = 1) {
-  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS)));
+  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
 }
 
 export function getMissionStardustPerFuel(level = 1) {
-  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS)));
+  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
 }
 
 /** Scale flat XP grants (dailies/promos) with the XP/fuel chart. */
@@ -179,7 +185,13 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
     const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
     const bagCount = owned.filter((i) => !i.is_equipped).length;
     if (bagCount >= getInventoryCap(ch)) {
-      const comp = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 }[rewards.item_rarity] || 8;
+      const comp = {
+        common: 8 * XP_STARDUST_SCALE,
+        uncommon: 20 * XP_STARDUST_SCALE,
+        rare: 50 * XP_STARDUST_SCALE,
+        epic: 120 * XP_STARDUST_SCALE,
+        legendary: 280 * XP_STARDUST_SCALE,
+      }[rewards.item_rarity] || (8 * XP_STARDUST_SCALE);
       patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
       patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
     } else {
@@ -196,7 +208,7 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
       const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
       const bagCount = owned.filter((i) => !i.is_equipped).length;
       if (bagCount >= getInventoryCap(ch)) {
-        const comp = c.sell_value || 25;
+        const comp = c.sell_value || (25 * XP_STARDUST_SCALE);
         patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
         patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
       } else {
@@ -208,7 +220,7 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
           stats: {},
           consumable: c.consumable,
           flavor_text: c.flavor_text || "Granted via promo code.",
-          sell_value: c.sell_value || 25,
+          sell_value: c.sell_value || (25 * XP_STARDUST_SCALE),
           is_equipped: false,
           owner_id: ch.created_by_id,
           character_id: ch.id,
@@ -221,40 +233,43 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
     if (c.kind === "relic" && c.id) patch.collected_relics = [...(ch.collected_relics || []), c.id];
   }
 
+  const ach = mergeAchievementUnlocks(ch, patch);
+  Object.assign(patch, ach.patch);
+
   await gameService.asServiceRole.entities.Character.update(characterId, patch);
-  return { patch, items };
+  return { patch, items, newly_unlocked: ach.newly_unlocked };
 }
 
 export const DAILY_REWARDS = [
-  { day: 1, rewards: { stardust: 50 } },
-  { day: 2, rewards: { experience: 80 } },
-  { day: 3, rewards: { stardust: 60 } },
+  { day: 1, rewards: { stardust: 500 } },
+  { day: 2, rewards: { experience: 800 } },
+  { day: 3, rewards: { stardust: 600 } },
   { day: 4, rewards: { fuel: 25 } },
   { day: 5, rewards: { item_rarity: "rare" } },
   { day: 6, rewards: { nova_crystals: 3 } },
-  { day: 7, rewards: { stardust: 150 } },
-  { day: 8, rewards: { stardust: 80 } },
-  { day: 9, rewards: { experience: 100 } },
-  { day: 10, rewards: { collectible: { type: "consumable", name: "Minor Strength Stim", rarity: "uncommon", consumable: { stat: "strength", mult: 0.05, duration_hours: 6, tier: "minor" }, flavor_text: "Boosts Strength by 5% for 6 hours.", sell_value: 25 } } },
-  { day: 11, rewards: { stardust: 100 } },
+  { day: 7, rewards: { stardust: 1500 } },
+  { day: 8, rewards: { stardust: 800 } },
+  { day: 9, rewards: { experience: 1000 } },
+  { day: 10, rewards: { collectible: { type: "consumable", name: "Minor Strength Stim", rarity: "uncommon", consumable: { stat: "strength", mult: 0.05, duration_hours: 6, tier: "minor" }, flavor_text: "Boosts Strength by 5% for 6 hours.", sell_value: 250 } } },
+  { day: 11, rewards: { stardust: 1000 } },
   { day: 12, rewards: { fuel: 30 } },
   { day: 13, rewards: { nova_crystals: 4 } },
-  { day: 14, rewards: { experience: 120 } },
+  { day: 14, rewards: { experience: 1200 } },
   { day: 15, rewards: { item_rarity: "rare" } },
-  { day: 16, rewards: { stardust: 200 } },
-  { day: 17, rewards: { stardust: 120 } },
-  { day: 18, rewards: { collectible: { type: "consumable", name: "Minor Agility Stim", rarity: "uncommon", consumable: { stat: "agility", mult: 0.05, duration_hours: 6, tier: "minor" }, flavor_text: "Boosts Agility by 5% for 6 hours.", sell_value: 25 } } },
-  { day: 19, rewards: { experience: 150 } },
+  { day: 16, rewards: { stardust: 2000 } },
+  { day: 17, rewards: { stardust: 1200 } },
+  { day: 18, rewards: { collectible: { type: "consumable", name: "Minor Agility Stim", rarity: "uncommon", consumable: { stat: "agility", mult: 0.05, duration_hours: 6, tier: "minor" }, flavor_text: "Boosts Agility by 5% for 6 hours.", sell_value: 250 } } },
+  { day: 19, rewards: { experience: 1500 } },
   { day: 20, rewards: { nova_crystals: 8 } },
-  { day: 21, rewards: { item_rarity: "rare", stardust: 150 } },
-  { day: 22, rewards: { experience: 200 } },
-  { day: 23, rewards: { collectible: { type: "consumable", name: "Major Vitality Stim", rarity: "rare", consumable: { stat: "vitality", mult: 0.15, duration_hours: 12, tier: "major" }, flavor_text: "Boosts Vitality by 15% for 12 hours.", sell_value: 60 } } },
-  { day: 24, rewards: { stardust: 200 } },
+  { day: 21, rewards: { item_rarity: "rare", stardust: 1500 } },
+  { day: 22, rewards: { experience: 2000 } },
+  { day: 23, rewards: { collectible: { type: "consumable", name: "Major Vitality Stim", rarity: "rare", consumable: { stat: "vitality", mult: 0.15, duration_hours: 12, tier: "major" }, flavor_text: "Boosts Vitality by 15% for 12 hours.", sell_value: 600 } } },
+  { day: 24, rewards: { stardust: 2000 } },
   { day: 25, rewards: { item_rarity: "epic" } },
   { day: 26, rewards: { nova_crystals: 10 } },
-  { day: 27, rewards: { experience: 250 } },
-  { day: 28, rewards: { stardust: 300 } },
-  { day: 29, rewards: { stardust: 300, fuel: 40 } },
+  { day: 27, rewards: { experience: 2500 } },
+  { day: 28, rewards: { stardust: 3000 } },
+  { day: 29, rewards: { stardust: 3000, fuel: 40 } },
   { day: 30, rewards: { item_rarity: "legendary" } },
 ];
 
@@ -266,7 +281,7 @@ export const PROMO_CODES = {
   },
   XP90K: {
     label: "90,000 Experience Dump",
-    rewards: { experience: 90000 },
+    rewards: { experience: 900000 },
   },
 };
 

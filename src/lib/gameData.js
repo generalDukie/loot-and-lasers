@@ -6,6 +6,12 @@ import {
   computeItemVendorValue,
 } from "@/lib/itemGeneration";
 
+/**
+ * Global XP & Stardust numerical resolution (unit size ×10).
+ * Apply once at formula exits / configured amounts — not Nova or Fuel.
+ */
+export const XP_STARDUST_SCALE = 10;
+
 // ═══════════════════════════════════════════
 // RACES
 // ═══════════════════════════════════════════
@@ -163,35 +169,35 @@ export const CLASSES = {
 // MISSIONS
 // ═══════════════════════════════════════════
 export const MISSION_TEMPLATES = [
-  { name: "Patrol the Rimward Sector", location: "Nebula Station Alpha", description: "Stroll the rim like you own the place. Mostly squinting at blips that are, statistically, 99% space geese. Bring snacks and a thermos of questionable coffee.", difficulty: "easy", sector: 1, duration_seconds: 60, risk: 1, rewards: { experience: 25, stardust: 50, item_rarity_chance: "common" }, level_requirement: 1 },
-  { name: "Salvage Run: Derelict Freighter", location: "Wreck of the ISS Meridian", description: "The ISS Meridian went quiet forty years ago. The cargo? Still there. The crew? Also still there, sort of. Bring a crowbar, a strong denial gland, and maybe a spare pair of pants.", difficulty: "easy", sector: 1, duration_seconds: 120, risk: 2, rewards: { experience: 40, stardust: 80, item_rarity_chance: "uncommon" }, level_requirement: 1 },
-  { name: "Asteroid Mining Operation", location: "Kelvari Belt", description: "Smack glowing space rocks until they confess their secrets. The rocks have started fighting back recently. Nobody knows why. It's a whole thing. Bring a bigger hammer.", difficulty: "medium", sector: 1, duration_seconds: 180, risk: 2, rewards: { experience: 65, stardust: 130, item_rarity_chance: "uncommon" }, level_requirement: 2 },
-  { name: "Xeno-Archaeological Dig", location: "Planet Ashara IV", description: "Dig up ruins older than your grandpa's password. Whatever's buried down there keeps whispering your name in a language that shouldn't exist. It's probably fine. Probably.", difficulty: "medium", sector: 2, duration_seconds: 300, risk: 3, rewards: { experience: 100, stardust: 200, item_rarity_chance: "rare" }, level_requirement: 3 },
-  { name: "Escort the Diplomat", location: "Luminae Homeworld", description: "Ambassador Zyr'tal is 'very important' and 'definitely not a war criminal.' Walk him through hostile territory while he critiques your posture. Do NOT, under any circumstances, let him order the seafood.", difficulty: "hard", sector: 2, duration_seconds: 420, risk: 3, rewards: { experience: 150, stardust: 300, item_rarity_chance: "rare" }, level_requirement: 4 },
-  { name: "Infiltrate Pirate Stronghold", location: "Shadow Station Omega", description: "Sneak into the galaxy's worst-kept secret base, disable their shields, and try not to become someone's new parrot. Remember: stealth is just lying, but with extra steps and a turtleneck.", difficulty: "hard", sector: 3, duration_seconds: 600, risk: 4, rewards: { experience: 220, stardust: 450, item_rarity_chance: "epic" }, level_requirement: 5 },
-  { name: "Void Rift Anomaly", location: "The Shattered Expanse", description: "A hole in spacetime is slowly eating the neighboring systems. Science says 'don't touch it.' We're paying you to touch it. A lot. With your hands. Good luck, you beautiful idiot.", difficulty: "elite", sector: 3, duration_seconds: 900, risk: 4, rewards: { experience: 350, stardust: 700, item_rarity_chance: "epic" }, level_requirement: 7 },
-  { name: "Ancient AI Core Recovery", location: "Cognati Prime Archives", description: "Dive into a corrupted AI archive and rip out its glowing heart. The AI is unhappy about this. The AI has opinions. The AI has opinions AND lasers. This will be a conversation.", difficulty: "elite", sector: 4, duration_seconds: 1200, risk: 5, rewards: { experience: 500, stardust: 1000, item_rarity_chance: "legendary" }, level_requirement: 9 },
-  { name: "Supernova Extraction", location: "Dying Star VX-9", description: "Harvest exotic matter from a star that is, cosmically speaking, about to throw the mother of all tantrums. The window is 'now-ish.' The star is 'also now-ish.' Please sync your watches. And your affairs.", difficulty: "legendary", sector: 4, duration_seconds: 1800, risk: 5, rewards: { experience: 800, stardust: 1500, item_rarity_chance: "legendary" }, level_requirement: 12 },
-  { name: "Contraband Dash", location: "Keldris Reach", description: "Move some 'perfectly legal' cargo past a patrol that's definitely not looking for exactly this. The manifest says 'agricultural supplies.' The agricultural supplies are humming. Don't ask.", difficulty: "easy", sector: 1, duration_seconds: 90, risk: 1, rewards: { experience: 30, stardust: 60, item_rarity_chance: "common" }, level_requirement: 1 },
-  { name: "Distress Signal: Freighter Vael", location: "Drift Sector 7", description: "A cargo ship sent a distress call consisting entirely of someone saying 'whoops' on a loop. Either they're very unlucky or very honest. Either way, they're paying.", difficulty: "easy", sector: 1, duration_seconds: 150, risk: 2, rewards: { experience: 45, stardust: 90, item_rarity_chance: "uncommon" }, level_requirement: 1 },
-  { name: "Black Market Buy", location: "The Bazaar of Torment", description: "Meet a contact who insists on being called 'The Whisper' but whose real name is Gary. He's got rare goods and even rarer BO. Hold your breath and negotiate.", difficulty: "medium", sector: 1, duration_seconds: 210, risk: 2, rewards: { experience: 70, stardust: 140, item_rarity_chance: "uncommon" }, level_requirement: 2 },
-  { name: "Bioluminescent Survey", location: "Glowlily Marshes of Vesh", description: "Catalogue glowing alien flora that communicates via color-coded mood lighting. Right now it's flashing 'annoyed pink.' You've been warned. Bring sunscreen. Emotional sunscreen.", difficulty: "medium", sector: 2, duration_seconds: 330, risk: 3, rewards: { experience: 110, stardust: 220, item_rarity_chance: "rare" }, level_requirement: 3 },
-  { name: "Prison Break: Vault Helix", description: "Spring a wrongly-accused scientist from a maximum-security asteroid prison. The warden is a massive fan of his work and won't stop asking for selfies. Escape plan includes 'sorry, we're late for a thing.'", location: "Vault Helix Penal Colony", difficulty: "hard", sector: 2, duration_seconds: 450, risk: 3, rewards: { experience: 160, stardust: 320, item_rarity_chance: "rare" }, level_requirement: 4 },
-  { name: "Hunt the Rogue Synthetic", location: "Ferro Wastes", description: "A combat android went rogue and is now living in a junkyard, writing poetry. It's actually quite good. You still have to decommission it. Bring tissues. And a really big magnet.", difficulty: "hard", sector: 3, duration_seconds: 540, risk: 4, rewards: { experience: 230, stardust: 460, item_rarity_chance: "epic" }, level_requirement: 5 },
-  { name: "Quasar Heist", location: "Banking Nexus of Cygnus", description: "Rob the most secure vault in the galaxy. The vault's AI has been bored for 300 years and might actually help you just for the entertainment. Don't disappoint it. It remembers faces.", difficulty: "elite", sector: 3, duration_seconds: 810, risk: 4, rewards: { experience: 360, stardust: 720, item_rarity_chance: "epic" }, level_requirement: 7 },
-  { name: "Diplomatic Incident Cleanup", location: "Cethylli Embassy Ring", description: "Two alien species are about to go to war over a mispronounced compliment. You have one hour to apologize in seven dialects, including one that doesn't have mouths. Bring phrasebooks and a sense of humility.", difficulty: "medium", sector: 2, duration_seconds: 270, risk: 3, rewards: { experience: 95, stardust: 190, item_rarity_chance: "rare" }, level_requirement: 3 },
-  { name: "Ghost Ship Investigation", location: "Wreck of the Pale Horizon", description: "A ship reappeared after being lost for 200 years. The crew is gone. The coffee is still warm. The navigation logs just say 'we're sorry' on loop. Go figure out what 'sorry' means here.", difficulty: "hard", sector: 3, duration_seconds: 570, risk: 4, rewards: { experience: 240, stardust: 480, item_rarity_chance: "epic" }, level_requirement: 6 },
-  { name: "Nebula Beast Migration", location: "Veil Nebula Corridor", description: "Escort a pod of migrating space leviathans through a shipping lane. The leviathans are enormous, gentle, and deeply curious about your ship. They will absolutely try to taste it. Be polite.", difficulty: "medium", sector: 1, duration_seconds: 240, risk: 2, rewards: { experience: 80, stardust: 160, item_rarity_chance: "uncommon" }, level_requirement: 2 },
-  { name: "Black Hole Survey", location: "Accretion Rim of X-7", description: "Take readings from just outside a black hole. The physics get weird. Your watch runs backwards. Your lunch is now your dinner. Don't lean too far over the railing. There is no railing.", difficulty: "elite", sector: 4, duration_seconds: 1050, risk: 5, rewards: { experience: 400, stardust: 800, item_rarity_chance: "legendary" }, level_requirement: 8 },
+  { name: "Patrol the Rimward Sector", location: "Nebula Station Alpha", description: "Stroll the rim like you own the place. Mostly squinting at blips that are, statistically, 99% space geese. Bring snacks and a thermos of questionable coffee.", difficulty: "easy", sector: 1, duration_seconds: 60, risk: 1, rewards: { experience: 250, stardust: 500, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Salvage Run: Derelict Freighter", location: "Wreck of the ISS Meridian", description: "The ISS Meridian went quiet forty years ago. The cargo? Still there. The crew? Also still there, sort of. Bring a crowbar, a strong denial gland, and maybe a spare pair of pants.", difficulty: "easy", sector: 1, duration_seconds: 120, risk: 2, rewards: { experience: 400, stardust: 800, item_rarity_chance: "uncommon" }, level_requirement: 1 },
+  { name: "Asteroid Mining Operation", location: "Kelvari Belt", description: "Smack glowing space rocks until they confess their secrets. The rocks have started fighting back recently. Nobody knows why. It's a whole thing. Bring a bigger hammer.", difficulty: "medium", sector: 1, duration_seconds: 180, risk: 2, rewards: { experience: 650, stardust: 1300, item_rarity_chance: "uncommon" }, level_requirement: 2 },
+  { name: "Xeno-Archaeological Dig", location: "Planet Ashara IV", description: "Dig up ruins older than your grandpa's password. Whatever's buried down there keeps whispering your name in a language that shouldn't exist. It's probably fine. Probably.", difficulty: "medium", sector: 2, duration_seconds: 300, risk: 3, rewards: { experience: 1000, stardust: 2000, item_rarity_chance: "rare" }, level_requirement: 3 },
+  { name: "Escort the Diplomat", location: "Luminae Homeworld", description: "Ambassador Zyr'tal is 'very important' and 'definitely not a war criminal.' Walk him through hostile territory while he critiques your posture. Do NOT, under any circumstances, let him order the seafood.", difficulty: "hard", sector: 2, duration_seconds: 420, risk: 3, rewards: { experience: 1500, stardust: 3000, item_rarity_chance: "rare" }, level_requirement: 4 },
+  { name: "Infiltrate Pirate Stronghold", location: "Shadow Station Omega", description: "Sneak into the galaxy's worst-kept secret base, disable their shields, and try not to become someone's new parrot. Remember: stealth is just lying, but with extra steps and a turtleneck.", difficulty: "hard", sector: 3, duration_seconds: 600, risk: 4, rewards: { experience: 2200, stardust: 4500, item_rarity_chance: "epic" }, level_requirement: 5 },
+  { name: "Void Rift Anomaly", location: "The Shattered Expanse", description: "A hole in spacetime is slowly eating the neighboring systems. Science says 'don't touch it.' We're paying you to touch it. A lot. With your hands. Good luck, you beautiful idiot.", difficulty: "elite", sector: 3, duration_seconds: 900, risk: 4, rewards: { experience: 3500, stardust: 7000, item_rarity_chance: "epic" }, level_requirement: 7 },
+  { name: "Ancient AI Core Recovery", location: "Cognati Prime Archives", description: "Dive into a corrupted AI archive and rip out its glowing heart. The AI is unhappy about this. The AI has opinions. The AI has opinions AND lasers. This will be a conversation.", difficulty: "elite", sector: 4, duration_seconds: 1200, risk: 5, rewards: { experience: 5000, stardust: 10000, item_rarity_chance: "legendary" }, level_requirement: 9 },
+  { name: "Supernova Extraction", location: "Dying Star VX-9", description: "Harvest exotic matter from a star that is, cosmically speaking, about to throw the mother of all tantrums. The window is 'now-ish.' The star is 'also now-ish.' Please sync your watches. And your affairs.", difficulty: "legendary", sector: 4, duration_seconds: 1800, risk: 5, rewards: { experience: 8000, stardust: 15000, item_rarity_chance: "legendary" }, level_requirement: 12 },
+  { name: "Contraband Dash", location: "Keldris Reach", description: "Move some 'perfectly legal' cargo past a patrol that's definitely not looking for exactly this. The manifest says 'agricultural supplies.' The agricultural supplies are humming. Don't ask.", difficulty: "easy", sector: 1, duration_seconds: 90, risk: 1, rewards: { experience: 300, stardust: 600, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Distress Signal: Freighter Vael", location: "Drift Sector 7", description: "A cargo ship sent a distress call consisting entirely of someone saying 'whoops' on a loop. Either they're very unlucky or very honest. Either way, they're paying.", difficulty: "easy", sector: 1, duration_seconds: 150, risk: 2, rewards: { experience: 450, stardust: 900, item_rarity_chance: "uncommon" }, level_requirement: 1 },
+  { name: "Black Market Buy", location: "The Bazaar of Torment", description: "Meet a contact who insists on being called 'The Whisper' but whose real name is Gary. He's got rare goods and even rarer BO. Hold your breath and negotiate.", difficulty: "medium", sector: 1, duration_seconds: 210, risk: 2, rewards: { experience: 700, stardust: 1400, item_rarity_chance: "uncommon" }, level_requirement: 2 },
+  { name: "Bioluminescent Survey", location: "Glowlily Marshes of Vesh", description: "Catalogue glowing alien flora that communicates via color-coded mood lighting. Right now it's flashing 'annoyed pink.' You've been warned. Bring sunscreen. Emotional sunscreen.", difficulty: "medium", sector: 2, duration_seconds: 330, risk: 3, rewards: { experience: 1100, stardust: 2200, item_rarity_chance: "rare" }, level_requirement: 3 },
+  { name: "Prison Break: Vault Helix", description: "Spring a wrongly-accused scientist from a maximum-security asteroid prison. The warden is a massive fan of his work and won't stop asking for selfies. Escape plan includes 'sorry, we're late for a thing.'", location: "Vault Helix Penal Colony", difficulty: "hard", sector: 2, duration_seconds: 450, risk: 3, rewards: { experience: 1600, stardust: 3200, item_rarity_chance: "rare" }, level_requirement: 4 },
+  { name: "Hunt the Rogue Synthetic", location: "Ferro Wastes", description: "A combat android went rogue and is now living in a junkyard, writing poetry. It's actually quite good. You still have to decommission it. Bring tissues. And a really big magnet.", difficulty: "hard", sector: 3, duration_seconds: 540, risk: 4, rewards: { experience: 2300, stardust: 4600, item_rarity_chance: "epic" }, level_requirement: 5 },
+  { name: "Quasar Heist", location: "Banking Nexus of Cygnus", description: "Rob the most secure vault in the galaxy. The vault's AI has been bored for 300 years and might actually help you just for the entertainment. Don't disappoint it. It remembers faces.", difficulty: "elite", sector: 3, duration_seconds: 810, risk: 4, rewards: { experience: 3600, stardust: 7200, item_rarity_chance: "epic" }, level_requirement: 7 },
+  { name: "Diplomatic Incident Cleanup", location: "Cethylli Embassy Ring", description: "Two alien species are about to go to war over a mispronounced compliment. You have one hour to apologize in seven dialects, including one that doesn't have mouths. Bring phrasebooks and a sense of humility.", difficulty: "medium", sector: 2, duration_seconds: 270, risk: 3, rewards: { experience: 950, stardust: 1900, item_rarity_chance: "rare" }, level_requirement: 3 },
+  { name: "Ghost Ship Investigation", location: "Wreck of the Pale Horizon", description: "A ship reappeared after being lost for 200 years. The crew is gone. The coffee is still warm. The navigation logs just say 'we're sorry' on loop. Go figure out what 'sorry' means here.", difficulty: "hard", sector: 3, duration_seconds: 570, risk: 4, rewards: { experience: 2400, stardust: 4800, item_rarity_chance: "epic" }, level_requirement: 6 },
+  { name: "Nebula Beast Migration", location: "Veil Nebula Corridor", description: "Escort a pod of migrating space leviathans through a shipping lane. The leviathans are enormous, gentle, and deeply curious about your ship. They will absolutely try to taste it. Be polite.", difficulty: "medium", sector: 1, duration_seconds: 240, risk: 2, rewards: { experience: 800, stardust: 1600, item_rarity_chance: "uncommon" }, level_requirement: 2 },
+  { name: "Black Hole Survey", location: "Accretion Rim of X-7", description: "Take readings from just outside a black hole. The physics get weird. Your watch runs backwards. Your lunch is now your dinner. Don't lean too far over the railing. There is no railing.", difficulty: "elite", sector: 4, duration_seconds: 1050, risk: 5, rewards: { experience: 4000, stardust: 8000, item_rarity_chance: "legendary" }, level_requirement: 8 },
   // Early-board filler — keeps the cantina stocked with 8 unique names from level 1.
-  { name: "Mail Run: Express Capsule", location: "Orbital Post Hub", description: "Deliver a sealed capsule that ticks when you shake it. The postal clerk says it's 'definitely not a bomb.' The postal clerk is sweating. A lot.", difficulty: "easy", sector: 1, duration_seconds: 75, risk: 1, rewards: { experience: 22, stardust: 45, item_rarity_chance: "common" }, level_requirement: 1 },
-  { name: "Sensor Calibration Sweep", location: "Relay Buoy Cluster 12", description: "Tap every buoy with a wrench until the network stops screaming in binary. Yes, you are the IT department of deep space. No, there is no help desk.", difficulty: "easy", sector: 1, duration_seconds: 100, risk: 1, rewards: { experience: 28, stardust: 55, item_rarity_chance: "common" }, level_requirement: 1 },
-  { name: "Lost Pet Retrieval", location: "Hangar Deck C", description: "Someone's pet void-ferret escaped into the vents. It has twelve eyes, zero manners, and your lunch. Bring gloves. Bring snacks. Bring regret.", difficulty: "easy", sector: 1, duration_seconds: 110, risk: 1, rewards: { experience: 26, stardust: 52, item_rarity_chance: "common" }, level_requirement: 1 },
-  { name: "Cantina Tab Collection", location: "Station Corridor 9", description: "Politely remind three patrons that drinks aren't free. One of them is a cyborg. One of them is armed. One of them is both and also your cousin.", difficulty: "easy", sector: 1, duration_seconds: 85, risk: 2, rewards: { experience: 32, stardust: 65, item_rarity_chance: "common" }, level_requirement: 1 },
-  { name: "Scrap Yard Sort", location: "Junk Moon Delta", description: "Sort 'valuable salvage' from 'cursed garbage' in a yard that rearranges itself when you blink. Wear boots you don't love.", difficulty: "easy", sector: 1, duration_seconds: 130, risk: 2, rewards: { experience: 38, stardust: 75, item_rarity_chance: "uncommon" }, level_requirement: 1 },
-  { name: "Comet Tail Sampling", location: "Approach Vector K-4", description: "Scoop ice from a comet's tail without getting flash-frozen into a motivational poster. The science team wants samples. The science team is very far away.", difficulty: "easy", sector: 1, duration_seconds: 140, risk: 2, rewards: { experience: 42, stardust: 85, item_rarity_chance: "uncommon" }, level_requirement: 1 },
-  { name: "Drone Herding Duty", location: "Fabrication Ring", description: "Round up a flock of maintenance drones that developed a personality and a union. They demand better oil. You demand they stop nesting in the airlocks.", difficulty: "medium", sector: 1, duration_seconds: 200, risk: 2, rewards: { experience: 58, stardust: 115, item_rarity_chance: "uncommon" }, level_requirement: 2 },
-  { name: "Static Storm Mapping", location: "Ion Flats", description: "Fly through a lightning field and draw a map that won't fry your console. Your hair will never be the same. Neither will your insurance.", difficulty: "medium", sector: 1, duration_seconds: 220, risk: 2, rewards: { experience: 62, stardust: 125, item_rarity_chance: "uncommon" }, level_requirement: 2 },
+  { name: "Mail Run: Express Capsule", location: "Orbital Post Hub", description: "Deliver a sealed capsule that ticks when you shake it. The postal clerk says it's 'definitely not a bomb.' The postal clerk is sweating. A lot.", difficulty: "easy", sector: 1, duration_seconds: 75, risk: 1, rewards: { experience: 220, stardust: 450, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Sensor Calibration Sweep", location: "Relay Buoy Cluster 12", description: "Tap every buoy with a wrench until the network stops screaming in binary. Yes, you are the IT department of deep space. No, there is no help desk.", difficulty: "easy", sector: 1, duration_seconds: 100, risk: 1, rewards: { experience: 280, stardust: 550, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Lost Pet Retrieval", location: "Hangar Deck C", description: "Someone's pet void-ferret escaped into the vents. It has twelve eyes, zero manners, and your lunch. Bring gloves. Bring snacks. Bring regret.", difficulty: "easy", sector: 1, duration_seconds: 110, risk: 1, rewards: { experience: 260, stardust: 520, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Cantina Tab Collection", location: "Station Corridor 9", description: "Politely remind three patrons that drinks aren't free. One of them is a cyborg. One of them is armed. One of them is both and also your cousin.", difficulty: "easy", sector: 1, duration_seconds: 85, risk: 2, rewards: { experience: 320, stardust: 650, item_rarity_chance: "common" }, level_requirement: 1 },
+  { name: "Scrap Yard Sort", location: "Junk Moon Delta", description: "Sort 'valuable salvage' from 'cursed garbage' in a yard that rearranges itself when you blink. Wear boots you don't love.", difficulty: "easy", sector: 1, duration_seconds: 130, risk: 2, rewards: { experience: 380, stardust: 750, item_rarity_chance: "uncommon" }, level_requirement: 1 },
+  { name: "Comet Tail Sampling", location: "Approach Vector K-4", description: "Scoop ice from a comet's tail without getting flash-frozen into a motivational poster. The science team wants samples. The science team is very far away.", difficulty: "easy", sector: 1, duration_seconds: 140, risk: 2, rewards: { experience: 420, stardust: 850, item_rarity_chance: "uncommon" }, level_requirement: 1 },
+  { name: "Drone Herding Duty", location: "Fabrication Ring", description: "Round up a flock of maintenance drones that developed a personality and a union. They demand better oil. You demand they stop nesting in the airlocks.", difficulty: "medium", sector: 1, duration_seconds: 200, risk: 2, rewards: { experience: 580, stardust: 1150, item_rarity_chance: "uncommon" }, level_requirement: 2 },
+  { name: "Static Storm Mapping", location: "Ion Flats", description: "Fly through a lightning field and draw a map that won't fry your console. Your hair will never be the same. Neither will your insurance.", difficulty: "medium", sector: 1, duration_seconds: 220, risk: 2, rewards: { experience: 620, stardust: 1250, item_rarity_chance: "uncommon" }, level_requirement: 2 },
 ];
 
 // ═══════════════════════════════════════════
@@ -479,10 +485,14 @@ const ATTR_PURCHASE_COST_WAYPOINTS = [
  */
 export function getAttributePointCost(purchaseNumber) {
   const n = Math.max(1, Math.floor(purchaseNumber || 1));
+  let cost;
   if (n <= 650) {
-    return Math.max(1, Math.round(lerpWaypoints(n, ATTR_PURCHASE_COST_WAYPOINTS)));
+    cost = Math.max(1, Math.round(lerpWaypoints(n, ATTR_PURCHASE_COST_WAYPOINTS)));
+  } else {
+    // Shape unchanged: ROUND(10 × (1 + (n-1)/97.54)^5.657); scale is applied once below.
+    cost = Math.max(1, Math.round(10 * (1 + (n - 1) / 97.54) ** 5.657));
   }
-  return Math.max(1, Math.round(10 * (1 + (n - 1) / 97.54) ** 5.657));
+  return cost * XP_STARDUST_SCALE;
 }
 
 export const ATTR_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -543,7 +553,7 @@ export function getStatPointsForLevelRange(_fromLevel, _toLevel) {
 // STARDUST (primary currency — earned via missions, arena, and dissolving gear in the Void)
 // ═══════════════════════════════════════════
 /** Hard wallet ceiling for character stardust balance. */
-export const STARDUST_MAX = 5_000_000_000_000;
+export const STARDUST_MAX = 5_000_000_000_000 * XP_STARDUST_SCALE;
 
 export function clampStardust(amount) {
   const n = Number(amount);
@@ -551,7 +561,13 @@ export function clampStardust(amount) {
   return Math.min(STARDUST_MAX, Math.max(0, Math.floor(n)));
 }
 
-export const STARDUST_PER_RARITY = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 };
+export const STARDUST_PER_RARITY = {
+  common: 8 * XP_STARDUST_SCALE,
+  uncommon: 20 * XP_STARDUST_SCALE,
+  rare: 50 * XP_STARDUST_SCALE,
+  epic: 120 * XP_STARDUST_SCALE,
+  legendary: 280 * XP_STARDUST_SCALE,
+};
 
 // Gear type weight — re-exported from itemGeneration (weapon/ship modules sell higher).
 export { ITEM_SELL_TYPE_WEIGHT as STARDUST_TYPE_WEIGHT } from "@/lib/itemGeneration";
@@ -686,7 +702,7 @@ function pickShopGearType(r) {
 }
 
 function priceShopItem(item, mult = 1.2) {
-  const cost = Math.max(5, Math.round(computeStardustValue(item) * mult));
+  const cost = Math.max(5 * XP_STARDUST_SCALE, Math.round(computeStardustValue(item) * mult));
   const nova_cost = computeNovaCrystalCost(item);
   return { cost, nova_cost };
 }
@@ -914,13 +930,15 @@ function existingExpForLevelFormula(L) {
 
 export function getExpForLevel(level) {
   const L = Math.max(1, Math.floor(level || 1));
+  let xp;
   switch (L) {
-    case 1: return 10;
-    case 2: return 15;
-    case 3: return 25;
-    case 4: return 40;
-    default: return existingExpForLevelFormula(L);
+    case 1: xp = 10; break;
+    case 2: xp = 15; break;
+    case 3: xp = 25; break;
+    case 4: xp = 40; break;
+    default: xp = existingExpForLevelFormula(L);
   }
+  return xp * XP_STARDUST_SCALE;
 }
 
 // Design chart: mission XP granted per 1 fuel spent.
@@ -969,18 +987,18 @@ const MISSION_SD_PER_FUEL_WAYPOINTS = [
 
 /** Mission XP per 1 fuel at this level (design chart). */
 export function getMissionXpPerFuel(level = 1) {
-  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS)));
+  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
 }
 
 /** Mission stardust per 1 fuel at this level (SD/F). */
 export function getMissionStardustPerFuel(level = 1) {
-  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS)));
+  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
 }
 
-/** Max stardust casino bet scales with SD/F (25× rate, floor 100, cap 250k). */
+/** Max stardust casino bet scales with SD/F (25× rate, floor 100, cap 250k) — floors/caps at 10× scale. */
 export const CASINO_STARDUST_BET_SD_MULT = 25;
-export const CASINO_MAX_STARDUST_BET_CAP = 250_000;
-export const CASINO_MIN_STARDUST_BET_FLOOR = 100;
+export const CASINO_MAX_STARDUST_BET_CAP = 250_000 * XP_STARDUST_SCALE;
+export const CASINO_MIN_STARDUST_BET_FLOOR = 100 * XP_STARDUST_SCALE;
 
 export function getCasinoMaxStardustBet(level = 1) {
   const sdf = getMissionStardustPerFuel(level);
@@ -1356,11 +1374,11 @@ export function generateLowFuelBoard(character, currentFuel, count = 3) {
 // character.active_buffs { stat, mult, expires_at, name }.
 // ═══════════════════════════════════════════
 export const CONSUMABLE_TIERS = {
-  common:    { mult: 0.05, duration_hours: 2,  label: "Minor",    rarity: "common",    cost: 40,  sell_value: 15 },
-  uncommon:  { mult: 0.10, duration_hours: 6,  label: "Standard", rarity: "uncommon", cost: 80,  sell_value: 25 },
-  rare:      { mult: 0.15, duration_hours: 10, label: "Major",    rarity: "rare",     cost: 220, sell_value: 60 },
-  epic:      { mult: 0.20, duration_hours: 15, label: "Prime",    rarity: "epic",     cost: 500, sell_value: 120 },
-  legendary: { mult: 0.20, duration_hours: 24, label: "Mythic",  rarity: "legendary", cost: 1200, sell_value: 300, allStats: true },
+  common:    { mult: 0.05, duration_hours: 2,  label: "Minor",    rarity: "common",    cost: 400,  sell_value: 150 },
+  uncommon:  { mult: 0.10, duration_hours: 6,  label: "Standard", rarity: "uncommon", cost: 800,  sell_value: 250 },
+  rare:      { mult: 0.15, duration_hours: 10, label: "Major",    rarity: "rare",     cost: 2200, sell_value: 600 },
+  epic:      { mult: 0.20, duration_hours: 15, label: "Prime",    rarity: "epic",     cost: 5000, sell_value: 1200 },
+  legendary: { mult: 0.20, duration_hours: 24, label: "Mythic",  rarity: "legendary", cost: 12000, sell_value: 3000, allStats: true },
 };
 
 // Maximum times a stim's duration can be extended by stacking the same stim.
@@ -1517,16 +1535,16 @@ export const SHIP_MODS = {
     category: "Propulsion",
     desc: "Expands your fuel reserves for longer expeditions before refuelling.",
     tiers: [
-      { id: "fuel_tank_1", cost: 200, max_fuel_bonus: 2 },
-      { id: "fuel_tank_2", cost: 450, max_fuel_bonus: 2 },
-      { id: "fuel_tank_3", cost: 800, max_fuel_bonus: 2 },
-      { id: "fuel_tank_4", cost: 1250, max_fuel_bonus: 2 },
-      { id: "fuel_tank_5", cost: 1800, max_fuel_bonus: 2 },
-      { id: "fuel_tank_6", cost: 2500, max_fuel_bonus: 2 },
-      { id: "fuel_tank_7", cost: 3400, max_fuel_bonus: 2 },
-      { id: "fuel_tank_8", cost: 4500, max_fuel_bonus: 2 },
-      { id: "fuel_tank_9", cost: 5600, max_fuel_bonus: 2 },
-      { id: "fuel_tank_10", cost: 6800, max_fuel_bonus: 2 },
+      { id: "fuel_tank_1", cost: 2000, max_fuel_bonus: 2 },
+      { id: "fuel_tank_2", cost: 4500, max_fuel_bonus: 2 },
+      { id: "fuel_tank_3", cost: 8000, max_fuel_bonus: 2 },
+      { id: "fuel_tank_4", cost: 12500, max_fuel_bonus: 2 },
+      { id: "fuel_tank_5", cost: 18000, max_fuel_bonus: 2 },
+      { id: "fuel_tank_6", cost: 25000, max_fuel_bonus: 2 },
+      { id: "fuel_tank_7", cost: 34000, max_fuel_bonus: 2 },
+      { id: "fuel_tank_8", cost: 45000, max_fuel_bonus: 2 },
+      { id: "fuel_tank_9", cost: 56000, max_fuel_bonus: 2 },
+      { id: "fuel_tank_10", cost: 68000, max_fuel_bonus: 2 },
     ],
   },
   fuel_efficiency: {
@@ -1535,16 +1553,16 @@ export const SHIP_MODS = {
     category: "Propulsion",
     desc: "Optimises combustion so every launch burns less fuel.",
     tiers: [
-      { id: "fuel_efficiency_1", cost: 350, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_2", cost: 700, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_3", cost: 1100, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_4", cost: 1600, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_5", cost: 2200, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_6", cost: 2900, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_7", cost: 3700, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_8", cost: 4600, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_9", cost: 5600, fuel_cost_reduction: 1 },
-      { id: "fuel_efficiency_10", cost: 6800, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_1", cost: 3500, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_2", cost: 7000, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_3", cost: 11000, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_4", cost: 16000, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_5", cost: 22000, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_6", cost: 29000, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_7", cost: 37000, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_8", cost: 46000, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_9", cost: 56000, fuel_cost_reduction: 1 },
+      { id: "fuel_efficiency_10", cost: 68000, fuel_cost_reduction: 1 },
     ],
   },
   warp_drive: {
@@ -1553,16 +1571,16 @@ export const SHIP_MODS = {
     category: "Propulsion",
     desc: "Folds space to shorten every mission's travel time.",
     tiers: [
-      { id: "warp_drive_1", cost: 500, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_2", cost: 950, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_3", cost: 1450, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_4", cost: 2000, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_5", cost: 2600, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_6", cost: 3300, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_7", cost: 4100, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_8", cost: 5000, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_9", cost: 6000, mission_duration_reduction: 0.005 },
-      { id: "warp_drive_10", cost: 7100, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_1", cost: 5000, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_2", cost: 9500, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_3", cost: 14500, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_4", cost: 20000, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_5", cost: 26000, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_6", cost: 33000, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_7", cost: 41000, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_8", cost: 50000, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_9", cost: 60000, mission_duration_reduction: 0.005 },
+      { id: "warp_drive_10", cost: 71000, mission_duration_reduction: 0.005 },
     ],
   },
   stardust_magnet: {
@@ -1571,16 +1589,16 @@ export const SHIP_MODS = {
     category: "Harvesting",
     desc: "Magnetic hull plating draws extra stardust from mission rewards.",
     tiers: [
-      { id: "stardust_magnet_1", cost: 300, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_2", cost: 650, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_3", cost: 1050, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_4", cost: 1500, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_5", cost: 2000, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_6", cost: 2550, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_7", cost: 3150, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_8", cost: 3800, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_9", cost: 4500, mission_stardust_mult: 0.005 },
-      { id: "stardust_magnet_10", cost: 5300, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_1", cost: 3000, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_2", cost: 6500, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_3", cost: 10500, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_4", cost: 15000, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_5", cost: 20000, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_6", cost: 25500, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_7", cost: 31500, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_8", cost: 38000, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_9", cost: 45000, mission_stardust_mult: 0.005 },
+      { id: "stardust_magnet_10", cost: 53000, mission_stardust_mult: 0.005 },
     ],
   },
   neural_accel: {
@@ -1589,16 +1607,16 @@ export const SHIP_MODS = {
     category: "Computing",
     desc: "Boosts your shipboard AI for faster combat learning and XP gain.",
     tiers: [
-      { id: "neural_accel_1", cost: 400, mission_xp_mult: 0.005 },
-      { id: "neural_accel_2", cost: 800, mission_xp_mult: 0.005 },
-      { id: "neural_accel_3", cost: 1250, mission_xp_mult: 0.005 },
-      { id: "neural_accel_4", cost: 1750, mission_xp_mult: 0.005 },
-      { id: "neural_accel_5", cost: 2300, mission_xp_mult: 0.005 },
-      { id: "neural_accel_6", cost: 2900, mission_xp_mult: 0.005 },
-      { id: "neural_accel_7", cost: 3550, mission_xp_mult: 0.005 },
-      { id: "neural_accel_8", cost: 4250, mission_xp_mult: 0.005 },
-      { id: "neural_accel_9", cost: 5000, mission_xp_mult: 0.005 },
-      { id: "neural_accel_10", cost: 5800, mission_xp_mult: 0.005 },
+      { id: "neural_accel_1", cost: 4000, mission_xp_mult: 0.005 },
+      { id: "neural_accel_2", cost: 8000, mission_xp_mult: 0.005 },
+      { id: "neural_accel_3", cost: 12500, mission_xp_mult: 0.005 },
+      { id: "neural_accel_4", cost: 17500, mission_xp_mult: 0.005 },
+      { id: "neural_accel_5", cost: 23000, mission_xp_mult: 0.005 },
+      { id: "neural_accel_6", cost: 29000, mission_xp_mult: 0.005 },
+      { id: "neural_accel_7", cost: 35500, mission_xp_mult: 0.005 },
+      { id: "neural_accel_8", cost: 42500, mission_xp_mult: 0.005 },
+      { id: "neural_accel_9", cost: 50000, mission_xp_mult: 0.005 },
+      { id: "neural_accel_10", cost: 58000, mission_xp_mult: 0.005 },
     ],
   },
   cargo_hold: {
@@ -1607,16 +1625,16 @@ export const SHIP_MODS = {
     category: "Storage",
     desc: "Expands your cargo bay so you can carry more gear before your inventory fills.",
     tiers: [
-      { id: "cargo_hold_1", cost: 600, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_2", cost: 1200, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_3", cost: 1900, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_4", cost: 2700, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_5", cost: 3600, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_6", cost: 4600, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_7", cost: 5700, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_8", cost: 6900, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_9", cost: 8200, inventory_cap_bonus: 1 },
-      { id: "cargo_hold_10", cost: 9600, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_1", cost: 6000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_2", cost: 12000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_3", cost: 19000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_4", cost: 27000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_5", cost: 36000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_6", cost: 46000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_7", cost: 57000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_8", cost: 69000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_9", cost: 82000, inventory_cap_bonus: 1 },
+      { id: "cargo_hold_10", cost: 96000, inventory_cap_bonus: 1 },
     ],
   },
 };
@@ -1649,21 +1667,21 @@ export const SHIP_TYPES = {
     cost_mult: 1.0,
   },
   frigate: {
-    name: "Storm Frigate", emoji: "🚀", cost: 5000, unlock_level: 50,
+    name: "Storm Frigate", emoji: "🚀", cost: 50000, unlock_level: 50,
     desc: "Military-grade frigate with reinforced hull plating and salvage magnets.",
     inherent: { mission_stardust_mult: 0.05 },
     upgrade_mult: SHIP_UPGRADE_STEP,
     cost_mult: SHIP_COST_STEP,
   },
   cruiser: {
-    name: "Galaxy Cruiser", emoji: "🛳️", cost: 15000, unlock_level: 100,
+    name: "Galaxy Cruiser", emoji: "🛳️", cost: 150000, unlock_level: 100,
     desc: "Long-range endurance cruiser with an overcharged AI core.",
     inherent: { mission_xp_mult: 0.05, mission_duration_reduction: 0.03 },
     upgrade_mult: SHIP_UPGRADE_STEP ** 2,
     cost_mult: SHIP_COST_STEP ** 2,
   },
   dreadnought: {
-    name: "Void Dreadnought", emoji: "🛸", cost: 40000, unlock_level: 200,
+    name: "Void Dreadnought", emoji: "🛸", cost: 400000, unlock_level: 200,
     desc: "Capital-class warship. The ultimate command vessel.",
     inherent: { mission_stardust_mult: 0.10, mission_xp_mult: 0.10, fuel_cost_reduction: 1 },
     upgrade_mult: SHIP_UPGRADE_STEP ** 3,

@@ -4,9 +4,9 @@
 import { api } from "@/api/gameClient";
 import { simulateBattle } from "@/lib/arenaEngine";
 
-export const GUILD_WAR_COST = 500; // stardust war chest (legacy sim path)
+export const GUILD_WAR_COST = 5000; // stardust war chest (legacy sim path)
 export const GUILD_WAR_READY_HOURS = 24;
-export const GUILD_WAR_DECLARE_COST = 500; // stardust — declare is a real sink, not a farm
+export const GUILD_WAR_DECLARE_COST = 5000; // stardust — declare is a real sink, not a farm
 
 const RIVAL_GUILD_NAMES = [
   "Void Reapers", "Stellar Syndicate", "Crimson Nebula", "Iron Orbit",
@@ -16,10 +16,10 @@ const RIVAL_GUILD_NAMES = [
 const RIVAL_TAGS = ["VR", "SS", "CN", "IO", "QC", "SF", "TF", "NC", "DC", "SW", "EO", "HM"];
 
 const CHALLENGE_TIERS = [
-  { title: "Weekly Operations", baseGoal: 20, stardust: 500, guildXp: 600 },
-  { title: "Strike Directive", baseGoal: 35, stardust: 900, guildXp: 1000 },
-  { title: "Galactic Offensive", baseGoal: 55, stardust: 1500, guildXp: 1600 },
-  { title: "Apex Crusade", baseGoal: 80, stardust: 2400, guildXp: 2600 },
+  { title: "Weekly Operations", baseGoal: 20, stardust: 5000, guildXp: 600 },
+  { title: "Strike Directive", baseGoal: 35, stardust: 9000, guildXp: 1000 },
+  { title: "Galactic Offensive", baseGoal: 55, stardust: 15000, guildXp: 1600 },
+  { title: "Apex Crusade", baseGoal: 80, stardust: 24000, guildXp: 2600 },
 ];
 
 const FIGHTER_CLASSES = ["Vanguard", "Technomancer", "Shadow Operative", "Astral Warden", "Void Runner", "Cosmic Engineer"];
@@ -174,7 +174,7 @@ export function simulateGuildBattle(attackerGuild, attackerMembers, defenderGuil
 
 export function computeGuildBattleRewards(playerGuild, rivalGuild, playerWon) {
   // Keep win payout below declare cost so wars aren't net-positive farming.
-  const base = 120 + (rivalGuild.level || 1) * 25;
+  const base = (120 + (rivalGuild.level || 1) * 25) * 10;
   if (playerWon) return { stardust: base, guild_xp: Math.round(base * 0.8) };
   return { stardust: 0, guild_xp: 0 };
 }
@@ -356,7 +356,7 @@ export function simulateGauntlet(attackerFighters, defenderFighters) {
 
 function computeWarRewards(totalFighters, winnerSide) {
   // Prestige payout — kept under declare cost so declaring stays a sink.
-  const base = 80 + totalFighters * 15;
+  const base = (80 + totalFighters * 15) * 10;
   return { stardust: base, guild_xp: Math.round(base * 0.8) };
 }
 

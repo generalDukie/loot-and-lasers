@@ -7,7 +7,7 @@ import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { Orbit } from "lucide-react";
-import { getPendingItem, getPending, subscribePending, getInventoryCap, resolvePendingAfterFreeSlot, countItems } from "@/lib/inventoryCap";
+import { getPendingItem, getPending, subscribePending, getInventoryCap, tryClaimPendingIfSpaceAvailable, countItems } from "@/lib/inventoryCap";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 import { playBlackHoleSuck, playBlackHoleBurst } from "@/lib/blackHoleSfx";
 import { listDissolveJunk } from "@/lib/inventoryJunk";
@@ -83,7 +83,7 @@ export default function BlackHolePage() {
     if (!getPending()) return;
     const bagCount = await countItems(char.id);
     if (bagCount >= getInventoryCap(char) && getPending()?.mode !== "overflow") return;
-    const result = await resolvePendingAfterFreeSlot(char);
+    const result = await tryClaimPendingIfSpaceAvailable(char);
     if (result?.patch) setCharacter((c) => ({ ...c, ...result.patch }));
     if (result?.kind === "loot" && result.item) {
       toast({ title: "📦 Item claimed!", description: `${result.item.name} joined your inventory.` });

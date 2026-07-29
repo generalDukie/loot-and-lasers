@@ -8,7 +8,7 @@ import { requestToJoinGuild } from "@/lib/guildUtils";
 import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
 import StardustIcon from "@/components/game/StardustIcon";
 
-const GUILD_CREATE_COST = 500;
+const GUILD_CREATE_COST = 5000;
 
 export default function GuildCreation({ character, onJoined }) {
   const [mode, setMode] = useState("create");

@@ -27,12 +27,59 @@ export const ACHIEVEMENTS = [
   { id: "curator", name: "Curator", desc: "Collect 10 artifacts", icon: "🏺", category: "Exploration", title: "the Curator", check: (c) => ((c.collected_artifacts || []).length) >= 10 },
   { id: "relic_keeper", name: "Relic Keeper", desc: "Collect 5 relics", icon: "💎", category: "Exploration", title: "the Relic Keeper", check: (c) => ((c.collected_relics || []).length) >= 5 },
 
-  { id: "stardust_collector", name: "Stardust Collector", desc: "Earn 1,000 total stardust", icon: "✦", category: "Economy", title: "Stardust Collector", check: (c) => (c.total_stardust_earned || 0) >= 1000 },
-  { id: "star_baron", name: "Star Baron", desc: "Earn 100,000 total stardust", icon: "✦", category: "Economy", title: "Star Baron", check: (c) => (c.total_stardust_earned || 0) >= 100000 },
+  { id: "stardust_collector", name: "Stardust Collector", desc: "Earn 10,000 total stardust", icon: "💫", category: "Economy", title: "Stardust Collector", check: (c) => (c.total_stardust_earned || 0) >= 10000 },
+  { id: "star_baron", name: "Star Baron", desc: "Earn 1,000,000 total stardust", icon: "👑", category: "Economy", title: "Star Baron", check: (c) => (c.total_stardust_earned || 0) >= 1000000 },
 ];
 
 export const ACHIEVEMENT_CATEGORIES = ["Combat", "Progression", "Exploration", "Economy"];
 
+const PROGRESS_TARGETS = {
+  first_blood: (c) => [c.arena_wins, 1],
+  ten_kills: (c) => [c.arena_wins, 10],
+  fifty_kills: (c) => [c.arena_wins, 50],
+  centurion: (c) => [c.arena_wins, 100],
+  hot_streak: (c) => [c.arena_max_streak, 5],
+  unstoppable: (c) => [c.arena_max_streak, 10],
+  rising_star: (c) => [c.arena_rating, 1500],
+  living_legend: (c) => [c.arena_rating, 2000],
+  brawler: (c) => [c.arena_battles, 25],
+  initiate: (c) => [c.level, 10],
+  veteran: (c) => [c.level, 50],
+  ascendant: (c) => [c.level, 100],
+  operative: (c) => [c.missions_completed, 50],
+  wayfarer: (c) => [c.missions_completed, 500],
+  spelunker: (c) => [c.dungeon_clears, 1],
+  delver: (c) => [c.dungeon_clears, 25],
+  depths_walker: (c) => [c.dungeon_clears, 100],
+  frontier_scout: (c) => [c.highest_sector, 5],
+  pathfinder: (c) => [c.highest_sector, 10],
+  xenobiologist: (c) => [(c.discovered_species || []).length, 25],
+  curator: (c) => [(c.collected_artifacts || []).length, 10],
+  relic_keeper: (c) => [(c.collected_relics || []).length, 5],
+  stardust_collector: (c) => [c.total_stardust_earned, 10000],
+  star_baron: (c) => [c.total_stardust_earned, 1000000],
+};
+
 export function evaluateUnlocked(character) {
   return ACHIEVEMENTS.filter((a) => { try { return a.check(character); } catch { return false; } }).map((a) => a.id);
+}
+
+/** Progress toward a locked achievement — { current, target } or null. */
+export function getAchievementProgress(achievement, character) {
+  const fn = PROGRESS_TARGETS[achievement?.id];
+  if (!fn || !character) return null;
+  const [raw, target] = fn(character);
+  const current = Math.max(0, Number(raw) || 0);
+  if (!target) return null;
+  return { current: Math.min(current, target), target };
+}
+
+export function formatAchievementProgress(achievement, character) {
+  const p = getAchievementProgress(achievement, character);
+  if (!p) return null;
+  const { current, target } = p;
+  if (achievement.id === "stardust_collector" || achievement.id === "star_baron") {
+    return `${current.toLocaleString()} / ${target.toLocaleString()}`;
+  }
+  return `${current} / ${target}`;
 }

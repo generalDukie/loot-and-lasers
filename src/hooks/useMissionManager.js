@@ -23,6 +23,7 @@ import {
 import { contributeMission, getGuildMembership } from "@/lib/guildUtils";
 import { processDiscovery } from "@/lib/discovery";
 import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
+import { toastNewAchievements } from "@/lib/achievementToasts";
 import { pushNotification } from "@/lib/notificationEngine";
 import { getNexusOwnerGuildId } from "@/lib/nexusEngine";
 import { useToast } from "@/components/ui/use-toast";
@@ -381,6 +382,8 @@ export function useMissionManager() {
         nexus_bonus: nexusBonus,
       });
       const patch = res.patch || res.data?.patch || {};
+      const fullChar = res.character || res.data?.character;
+      toastNewAchievements(res, toast);
       const gains = res.gains || res.data?.gains || {};
       const items = res.items || res.data?.items || [];
       applyPendingLootFromResponse(res);
@@ -456,7 +459,7 @@ export function useMissionManager() {
       void contributeMission({ ...character, ...patch, level: newLevel }, missionSnapshot).catch(() => {});
 
       setActiveMission(null);
-      const updatedChar = { ...character, ...patch };
+      const updatedChar = { ...character, ...(fullChar || patch) };
       setCharacter(updatedChar);
       try {
         commitCantinaBoard(updatedChar.id, rollCantinaBoard(updatedChar));

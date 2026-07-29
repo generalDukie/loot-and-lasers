@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/api/gameClient";
 import { MAX_BUFF_STACKS, MAX_ACTIVE_STAT_TYPES, getInventoryCap } from "@/lib/gameData";
-import { enforceInventoryCap, setPendingUnequip } from "@/lib/inventoryCap";
+import { enforceInventoryCap, setPendingUnequip, tryClaimPendingIfSpaceAvailable } from "@/lib/inventoryCap";
 
 /**
  * Pure stim apply — validates stack / distinct-stat caps and returns the next
@@ -140,6 +140,7 @@ export function useInventory(character, onCharacterChange) {
       const patch = res.patch || res.data?.patch || {};
       onCharacterChange?.(patch);
       await load();
+      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
     } catch (e) {
       await load();
       throw e;
@@ -157,6 +158,7 @@ export function useInventory(character, onCharacterChange) {
       if (patch.active_buffs) buffsRef.current = patch.active_buffs;
       onCharacterChange?.(patch);
       await load();
+      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
       return { ok: true };
     } catch (e) {
       await load();
@@ -180,6 +182,7 @@ export function useInventory(character, onCharacterChange) {
       const gained = res.stardust_gained ?? res.data?.stardust_gained ?? 0;
       onCharacterChange?.(patch);
       await load();
+      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
       return gained;
     } catch (e) {
       await load();

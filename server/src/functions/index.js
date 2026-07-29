@@ -1,5 +1,5 @@
 import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, getStatPointsForLevelRange, randomItem } from "../shared/rewards.js";
-import { ACHIEVEMENTS, evaluateUnlocked } from "../shared/achievements.js";
+import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { createService, entities } from "../entities.js";
 import { db, nowIso, withTransactionAsync } from "../db.js";
 import { getUserById } from "../auth.js";
@@ -188,22 +188,9 @@ export async function SyncAchievements(user, body = {}) {
   const character = await myCharacter(user);
   if (!character) return { status: 404, body: { error: "No character" } };
 
-  const unlocked = evaluateUnlocked(character);
-  const existing = new Set(character.unlocked_achievements || []);
-  const titles = new Set(character.unlocked_titles || []);
-  for (const id of unlocked) {
-    const a = ACHIEVEMENTS.find((x) => x.id === id);
-    if (a?.title) titles.add(a.title);
-  }
-
-  const patch = {};
-  const sortArr = (arr) => [...arr].sort();
-  if (JSON.stringify(sortArr(unlocked)) !== JSON.stringify(sortArr([...existing]))) {
-    patch.unlocked_achievements = unlocked;
-  }
-  if (JSON.stringify(sortArr([...titles])) !== JSON.stringify(sortArr(character.unlocked_titles || []))) {
-    patch.unlocked_titles = [...titles];
-  }
+  const { patch: achPatch, newly_unlocked } = mergeAchievementUnlocks(character);
+  const patch = { ...achPatch };
+  const titles = new Set(patch.unlocked_titles || character.unlocked_titles || []);
 
   if (body.title !== undefined) {
     if (body.title === "" || titles.has(body.title)) {
@@ -223,7 +210,7 @@ export async function SyncAchievements(user, body = {}) {
     body: {
       success: true,
       character: updated,
-      newly_unlocked: unlocked.filter((id) => !existing.has(id)),
+      newly_unlocked,
     },
   };
 }

@@ -88,6 +88,21 @@ export async function enforceInventoryCap(character) {
   return false;
 }
 
+/** If bag has room, finish pending loot / unequip / clear overflow. */
+export async function tryClaimPendingIfSpaceAvailable(character) {
+  const p = pending;
+  if (!p || !character?.id) return null;
+
+  if (p.mode === "overflow") {
+    return resolvePendingAfterFreeSlot(character);
+  }
+
+  const bagCount = await countItems(character.id);
+  if (bagCount >= getInventoryCap(character)) return null;
+
+  return resolvePendingAfterFreeSlot(character);
+}
+
 /**
  * After freeing a bag slot, finish whatever was waiting (claim loot or complete unequip).
  * Returns a short result for UI toasts; null if nothing pending / overflow still over.

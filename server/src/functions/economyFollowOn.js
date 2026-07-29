@@ -6,6 +6,7 @@ import { withTransactionAsync, db, nowIso } from "../db.js";
 import { getUserById } from "../auth.js";
 import { randomItem } from "../shared/rewards.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
+import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import {
   todayET,
@@ -212,6 +213,9 @@ export const FinishArenaBattle = wrap((user, body) => {
     if (weekly) patch.weekly_nova_quests = weekly;
   }
 
+  const ach = mergeAchievementUnlocks(ch, patch);
+  Object.assign(patch, ach.patch);
+
   const character = entities.Character.update(ch.id, patch);
   return {
     success: true,
@@ -220,6 +224,7 @@ export const FinishArenaBattle = wrap((user, body) => {
     nova_spent: novaCost,
     patch,
     character,
+    newly_unlocked: ach.newly_unlocked,
   };
 });
 
@@ -386,6 +391,9 @@ export const FinishDungeonBattle = wrap((user, body) => {
   patch.dungeon_cooldown_ms = cdMs;
   patch.dungeon_cooldown_until = new Date(Date.now() + cdMs).toISOString();
 
+  const ach = mergeAchievementUnlocks(ch, patch);
+  Object.assign(patch, ach.patch);
+
   const character = entities.Character.update(ch.id, patch);
   return {
     success: true,
@@ -396,6 +404,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
     ship_mod: unlockedShipMod,
     patch,
     character,
+    newly_unlocked: ach.newly_unlocked,
   };
 });
 
@@ -851,7 +860,7 @@ export const ApplyGuildWarResult = wrap((user, body) => {
   const won = !!body.won;
   const rewardSd = Math.max(0, Math.floor(Number(body.reward_stardust) || 0));
   // Cap forged rewards — max payout mirrors client computeGuildBattleRewards scale.
-  const capped = Math.min(rewardSd, 5000);
+  const capped = Math.min(rewardSd, 5000 * 10);
   const delta = -GUILD_WAR_SIM_COST + capped;
   const next = (ch.stardust || 0) + delta;
   if (next < 0) httpErr(400, "Not enough stardust for war chest");

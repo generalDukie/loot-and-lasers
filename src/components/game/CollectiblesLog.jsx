@@ -43,9 +43,10 @@ function ProgressRow({ discovered, total, color = "hsl(var(--primary))" }) {
 export default function CollectiblesLog({ character }) {
   const [tab, setTab] = useState("species");
   const [open, setOpen] = useState(false);
-  const species = character.discovered_species || [];
-  const arts = character.collected_artifacts || [];
-  const relics = character.collected_relics || [];
+  // Normalize IDs to numbers so `includes(sp.id)` etc works even if the backend stores strings.
+  const species = (character.discovered_species || []).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  const arts = (character.collected_artifacts || []).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  const relics = (character.collected_relics || []).map((x) => Number(x)).filter((n) => Number.isFinite(n));
   const discoveredGear = character.discovered_gear || [];
   const clearedPlanets = Math.max(0, (character.dungeon_planet || 1) - 1);
   const gearCatalog = GEAR_CATALOG;
@@ -242,7 +243,7 @@ export default function CollectiblesLog({ character }) {
         </button>
       </DialogTrigger>
 
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col top-4 translate-y-0">
         <DialogHeader>
           <DialogTitle className="font-display flex items-center gap-2">
             <Scroll className="w-4 h-4 text-accent" /> Cosmic Vault

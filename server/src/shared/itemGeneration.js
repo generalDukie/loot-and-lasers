@@ -2,19 +2,19 @@
  * Equipment attribute budget system (V1).
  * Items roll only the five core attributes; combat %/HP/damage are derived elsewhere.
  *
- * Full-set budget anchors → normal slot = full/8.4 → × slot × rarity → allocate.
+ * Full-set budget anchors ? normal slot = full/8.4 ? ? slot ? rarity ? allocate.
  *
- * Common–Epic: optional per-item 60/40 Favored vs Total pool when a player class
- * is provided. Legendary: always all five stats, class-neutral, ≥10% floor each.
+ * Common?Epic: optional per-item 60/40 Favored vs Total pool when a player class
+ * is provided. Legendary: always all five stats, class-neutral, ?10% floor each.
  */
 
 export const ITEM_ATTR_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
 
-/** Full five-stat pool — identical for every class. */
+/** Full five-stat pool ? identical for every class. */
 export const TOTAL_STAT_POOL = ["strength", "agility", "intellect", "vitality", "luck"];
 
 /**
- * Class-favored attribute pools (Common–Epic only).
+ * Class-favored attribute pools (Common?Epic only).
  * Keys are archetypes: strength / agility / intellect.
  */
 export const CLASS_FAVORED_STAT_POOLS = {
@@ -23,7 +23,7 @@ export const CLASS_FAVORED_STAT_POOLS = {
   intellect: ["intellect", "vitality", "luck"],
 };
 
-/** Map playable class names → archetype for favored-pool lookup. */
+/** Map playable class names ? archetype for favored-pool lookup. */
 export const CLASS_ARCHETYPE_BY_NAME = {
   Vanguard: "strength",
   "Astral Warden": "strength",
@@ -33,7 +33,7 @@ export const CLASS_ARCHETYPE_BY_NAME = {
   "Cosmic Engineer": "intellect",
 };
 
-/** Chance the entire Common–Epic item uses the Favored Stat Pool (else Total). */
+/** Chance the entire Common?Epic item uses the Favored Stat Pool (else Total). */
 export const FAVORED_POOL_CHANCE = 0.6;
 
 /** Legendary: each attribute receives at least this share of the total budget. */
@@ -50,7 +50,7 @@ export const EQUIPMENT_SLOTS = [
   "ship_module",
 ];
 
-/** Slot budget multipliers — Weapon & Ship Module are ~20% stronger. */
+/** Slot budget multipliers ? Weapon & Ship Module are ~20% stronger. */
 export const SLOT_STAT_MULT = {
   helmet: 1.0,
   armor: 1.0,
@@ -62,7 +62,7 @@ export const SLOT_STAT_MULT = {
   ship_module: 1.2,
 };
 
-/** Total slot-budget units in a full set: 6×1.0 + 2×1.2 = 8.4 */
+/** Total slot-budget units in a full set: 6?1.0 + 2?1.2 = 8.4 */
 export const FULL_SET_SLOT_UNITS = 8.4;
 
 export const RARITY_ATTR_COUNT = {
@@ -81,7 +81,7 @@ export const RARITY_BUDGET_MULT = {
   legendary: 1.35,
 };
 
-/** Full equipped-set attribute totals (balance anchors). Level 1 uses mid of 10–15. */
+/** Full equipped-set attribute totals (balance anchors). Level 1 uses mid of 10?15. */
 export const FULL_SET_BUDGET_ANCHORS = [
   [1, 12.5],
   [10, 245],
@@ -135,7 +135,7 @@ export function getRarityAttributeCount(rarity) {
 
 /**
  * Final attribute budget for one item (before random variance).
- * FinalItemStatBudget = NormalSlotBudget × SlotMult × RarityMult
+ * FinalItemStatBudget = NormalSlotBudget ? SlotMult ? RarityMult
  */
 export function getItemStatBudget(itemLevel, type, rarity) {
   const base = getNormalSlotBudget(itemLevel);
@@ -179,8 +179,8 @@ export function getFavoredStatPool(classNameOrArchetype) {
 /**
  * Pick which attributes appear on an item.
  *
- * Legendary: always all five (class-neutral — no 60/40).
- * Common–Epic with class context: ONE 60/40 roll for the whole item, then
+ * Legendary: always all five (class-neutral ? no 60/40).
+ * Common?Epic with class context: ONE 60/40 roll for the whole item, then
  * select all unique attrs from that single chosen pool.
  * Without class context: neutral shuffle from Total Stat Pool (legacy behavior).
  *
@@ -190,7 +190,7 @@ export function selectItemAttributes(rarity, rng = Math.random, options = {}) {
   const count = getRarityAttributeCount(rarity);
   const className = options.className;
 
-  // Legendary — completely separate: all five, no pool mode.
+  // Legendary ? completely separate: all five, no pool mode.
   if (rarity === "legendary" || count >= ITEM_ATTR_KEYS.length) {
     return { attrs: [...ITEM_ATTR_KEYS], poolMode: "legendary" };
   }
@@ -200,7 +200,7 @@ export function selectItemAttributes(rarity, rng = Math.random, options = {}) {
   let poolMode;
 
   if (favored) {
-    // ONE roll per item — not per attribute.
+    // ONE roll per item ? not per attribute.
     if (rng() < FAVORED_POOL_CHANCE) {
       pool = favored;
       poolMode = "favored";
@@ -213,7 +213,7 @@ export function selectItemAttributes(rarity, rng = Math.random, options = {}) {
     poolMode = "neutral";
   }
 
-  // Rare/Epic favored: pool has exactly 3 → use all three unique attrs.
+  // Rare/Epic favored: pool has exactly 3 ? use all three unique attrs.
   if (count >= pool.length) {
     return { attrs: shuffleInPlace([...pool], rng), poolMode };
   }
@@ -265,7 +265,7 @@ export function allocateStatBudget(attrs, budget, rng = Math.random) {
   const values = [...floors];
   for (let k = 0; k < remainder; k++) values[byFrac[k].i] += 1;
 
-  // Every selected attr gets ≥1 when the budget allows.
+  // Every selected attr gets ?1 when the budget allows.
   if (total >= n) {
     for (let i = 0; i < n; i++) {
       if (values[i] >= 1) continue;
@@ -300,7 +300,7 @@ export function allocateLegendaryStatBudget(budget, rng = Math.random) {
   const reserved = minEach * n;
   const leftover = total - reserved;
 
-  // Free-form remainder weights — allow 0 extra on some stats.
+  // Free-form remainder weights ? allow 0 extra on some stats.
   const extras = new Array(n).fill(0);
   if (leftover > 0) {
     const raw = keys.map(() => rng());
@@ -341,8 +341,8 @@ export function allocateLegendaryStatBudget(budget, rng = Math.random) {
 }
 
 /**
- * Apply ±variancePct around the target budget, then allocate.
- * Pass `className` for Common–Epic class-aware pool selection.
+ * Apply ?variancePct around the target budget, then allocate.
+ * Pass `className` for Common?Epic class-aware pool selection.
  * Returns { stats, budget, attributes, targetBudget, poolMode }.
  */
 export function rollItemStats({
@@ -397,7 +397,7 @@ export const ITEM_SELL_TYPE_WEIGHT = {
 };
 
 /**
- * Stardust vendor/dissolve value — scales with attribute budget, rarity, and slot.
+ * Stardust vendor/dissolve value ? scales with attribute budget, rarity, and slot.
  * Level is already reflected in the rolled budget, so we avoid a second steep level curve.
  */
 export function computeItemVendorValue(item) {
@@ -414,5 +414,6 @@ export function computeItemVendorValue(item) {
   }
   const rarityF = RARITY_SELL_FACTOR[item.rarity] ?? 0.9;
   const typeW = ITEM_SELL_TYPE_WEIGHT[item.type] ?? 1;
-  return Math.max(1, Math.round(statSum * rarityF * typeW));
+  // 10x stardust resolution ? apply once at vendor exit (not to Nova).
+  return Math.max(1, Math.round(statSum * rarityF * typeW * 10));
 }

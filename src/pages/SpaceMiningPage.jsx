@@ -12,7 +12,7 @@ import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 // Stardust yield = level × 12 × hours. Scales with both level and duration.
 export function computeMiningReward(level, hours) {
-  return Math.round((level || 1) * 12 * hours);
+  return Math.round((level || 1) * 12 * hours) * 10;
 }
 
 function formatRemaining(ms) {

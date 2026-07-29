@@ -144,7 +144,9 @@ export default function StatBar({
                     {value || 0}
                   </span>
                   {bonus > 0 && (
-                    <span className="text-[9px] font-bold text-green-400 tabular-nums">+{bonus} gear</span>
+                    <span className="text-[11px] font-black text-green-300 tabular-nums px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/35 shadow-sm">
+                      +{bonus}
+                    </span>
                   )}
                 </div>
               </div>

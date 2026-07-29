@@ -6,7 +6,8 @@ import {
   getPending,
   clearPendingItem,
   subscribePending,
-  resolvePendingAfterFreeSlot,
+  tryClaimPendingIfSpaceAvailable,
+  countItems,
 } from "@/lib/inventoryCap";
 import { prepareConsumableBuffs } from "@/hooks/useInventory";
 import GearVisual from "@/components/game/GearVisual";
@@ -47,8 +48,8 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
   useEffect(() => subscribePending(setPendingState), []);
 
   useEffect(() => {
-    if (pendingState) setMinimized(false);
-  }, [pendingState]);
+    if (pendingState?.mode) setMinimized(false);
+  }, [pendingState?.mode, pendingState?.item?.name]);
 
   useEffect(() => {
     if (!pendingState || !character) return;
@@ -57,6 +58,37 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
       .then((list) => setItems(list || []))
       .finally(() => setLoadingItems(false));
   }, [pendingState, character]);
+
+  // While minimized, keep bag count fresh and auto-claim when the player frees a slot elsewhere.
+  useEffect(() => {
+    if (!pendingState || !character || mandatory) return;
+
+    async function syncAndMaybeClaim() {
+      const list = await api.entities.Item.filter({ character_id: character.id });
+      setItems(list || []);
+      const bag = (list || []).filter((i) => !i.is_equipped).length;
+      const cap = getInventoryCap(character);
+      if (bag >= cap) return;
+      const result = await tryClaimPendingIfSpaceAvailable(character);
+      if (!result) return;
+      if (result.patch) onCharacterChange?.(result.patch);
+      toastForResolve(toast, result);
+      if (!getPending()) setItems([]);
+    }
+
+    if (minimized) {
+      syncAndMaybeClaim();
+      const id = setInterval(syncAndMaybeClaim, 2000);
+      const onFocus = () => { syncAndMaybeClaim(); };
+      window.addEventListener("focus", onFocus);
+      return () => {
+        clearInterval(id);
+        window.removeEventListener("focus", onFocus);
+      };
+    }
+
+    return undefined;
+  }, [minimized, mandatory, pendingState, character, toast, onCharacterChange]);
 
   if (!pendingState) return null;
 
@@ -67,11 +99,34 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
   }
 
   async function afterFreeSlot() {
-    const result = await resolvePendingAfterFreeSlot(character);
+    const result = await tryClaimPendingIfSpaceAvailable(character);
     if (result?.patch) onCharacterChange?.(result.patch);
     toastForResolve(toast, result);
     if (getPending()) await refreshBag();
     else setItems([]);
+  }
+
+  async function claimToInventory() {
+    if (!character || busyId) return;
+    setBusyId("claim");
+    try {
+      const bag = await countItems(character.id);
+      if (bag >= getInventoryCap(character)) {
+        toast({ title: "Still full", description: "Free a bag slot first.", variant: "destructive" });
+        await refreshBag();
+        return;
+      }
+      const result = await tryClaimPendingIfSpaceAvailable(character);
+      if (result?.patch) onCharacterChange?.(result.patch);
+      toastForResolve(toast, result);
+      if (!getPending()) setItems([]);
+      else await refreshBag();
+    } catch (e) {
+      toast({ title: "Could not claim item", description: e?.message, variant: "destructive" });
+      await refreshBag();
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function toss(item, isFocus) {
@@ -155,6 +210,7 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
   const bagCount = items.filter((it) => !it.is_equipped).length;
   const cap = getInventoryCap(character);
   const busy = busyId !== null;
+  const hasSpareSlot = bagCount < cap;
 
   const title =
     mode === "unequip" ? "Inventory Full — Unequip Blocked"
@@ -173,13 +229,21 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
         <motion.button
           initial={{ y: -60, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          onClick={() => setMinimized(false)}
+          onClick={async () => {
+            const bag = await countItems(character.id);
+            if (bag < getInventoryCap(character) && mode === "loot") {
+              await claimToInventory();
+              if (!getPending()) return;
+            }
+            await refreshBag();
+            setMinimized(false);
+          }}
           className="pointer-events-auto absolute top-3 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-2 px-4 py-2 rounded-full border-2 border-amber-400 bg-card shadow-xl animate-pulse"
           style={{ animationDuration: "0.8s" }}
         >
           <AlertTriangle className="w-4 h-4 text-amber-400" />
           <span className="font-display font-bold text-xs text-amber-300">
-            Inventory Full — tap to resolve
+            {hasSpareSlot && mode === "loot" ? "Slot free — tap to claim" : "Inventory Full — tap to resolve"}
           </span>
         </motion.button>
       </GameplayOverlayPortal>
@@ -241,6 +305,15 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
                 {mode === "unequip" ? "EQUIPPED" : "NEW"}
               </span>
               <div className="flex flex-col gap-1 shrink-0">
+                {mode === "loot" && hasSpareSlot && (
+                  <button
+                    onClick={claimToInventory}
+                    disabled={busy}
+                    className="text-[10px] px-2.5 py-1.5 rounded-lg bg-primary/15 hover:bg-primary/25 text-primary font-display font-bold tracking-wide disabled:opacity-40"
+                  >
+                    Claim
+                  </button>
+                )}
                 {mode === "loot" && isStim(pendingItem) && (
                   <button
                     onClick={() => useStim(pendingItem, true)}

@@ -2,11 +2,30 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { useToast } from "@/components/ui/use-toast";
-import { ACHIEVEMENTS, ACHIEVEMENT_CATEGORIES } from "@/lib/achievements";
+import { useMyCharacter } from "@/hooks/useMyCharacter";
+import { primeMyCharacterCache } from "@/lib/socialEngine";
+import {
+  ACHIEVEMENTS,
+  ACHIEVEMENT_CATEGORIES,
+  formatAchievementProgress,
+} from "@/lib/achievements";
+import { toastNewAchievements } from "@/lib/achievementToasts";
 import { Trophy, Lock, Check, Sparkles } from "lucide-react";
 
+function AchievementIcon({ icon, unlocked }) {
+  if (!unlocked) {
+    return <Lock className="w-4 h-4 text-muted-foreground" aria-hidden />;
+  }
+  return (
+    <span className="achievement-emoji text-2xl leading-none select-none" role="img" aria-hidden>
+      {icon}
+    </span>
+  );
+}
+
 export default function AchievementsPage() {
-  const [character, setCharacter] = useState(null);
+  const { character: liveCharacter, setCharacter } = useMyCharacter();
+  const [character, setLocalCharacter] = useState(null);
   const [syncing, setSyncing] = useState(true);
   const [busy, setBusy] = useState(false);
   const { toast } = useToast();
@@ -17,22 +36,26 @@ export default function AchievementsPage() {
         const res = await api.functions.invoke("SyncAchievements", {});
         const ch = res?.character ?? res?.data?.character;
         if (ch) {
+          setLocalCharacter(ch);
           setCharacter(ch);
-          if (res?.newly_unlocked?.length) {
-            toast({ title: `🏆 ${res.newly_unlocked.length} new achievement${res.newly_unlocked.length > 1 ? "s" : ""} unlocked!` });
-          }
+          primeMyCharacterCache(ch, { emit: false });
+          toastNewAchievements(res, toast);
+        } else if (liveCharacter) {
+          setLocalCharacter(liveCharacter);
         }
       } catch (e) {
         toast({ title: "Couldn't sync achievements", description: e?.message, variant: "destructive" });
+        if (liveCharacter) setLocalCharacter(liveCharacter);
       } finally {
         setSyncing(false);
       }
     })();
   }, []);
 
-  const unlockedSet = new Set(character?.unlocked_achievements || []);
-  const titles = character?.unlocked_titles || [];
-  const activeTitle = character?.active_title || "";
+  const displayCharacter = character || liveCharacter;
+  const unlockedSet = new Set(displayCharacter?.unlocked_achievements || []);
+  const titles = displayCharacter?.unlocked_titles || [];
+  const activeTitle = displayCharacter?.active_title || "";
   const unlockedCount = ACHIEVEMENTS.filter((a) => unlockedSet.has(a.id)).length;
 
   async function equipTitle(title) {
@@ -40,7 +63,11 @@ export default function AchievementsPage() {
     try {
       const res = await api.functions.invoke("SyncAchievements", { title });
       const ch = res?.character ?? res?.data?.character;
-      if (ch) setCharacter(ch);
+      if (ch) {
+        setLocalCharacter(ch);
+        setCharacter(ch);
+        primeMyCharacterCache(ch, { emit: false });
+      }
     } catch (e) {
       toast({ title: "Failed", description: e?.message, variant: "destructive" });
     } finally {
@@ -48,7 +75,7 @@ export default function AchievementsPage() {
     }
   }
 
-  if (syncing) {
+  if (syncing && !displayCharacter) {
     return <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
   }
 
@@ -59,7 +86,6 @@ export default function AchievementsPage() {
         <h1 className="font-display font-bold text-xl tracking-wider">Achievements</h1>
       </div>
 
-      {/* Progress */}
       <div className="painted-panel canvas-grain rounded-2xl p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-display tracking-wide text-muted-foreground">PROGRESS</span>
@@ -75,7 +101,6 @@ export default function AchievementsPage() {
         </div>
       </div>
 
-      {/* Titles */}
       <div className="painted-panel canvas-grain rounded-2xl p-4">
         <div className="flex items-center gap-1.5 mb-2">
           <Sparkles className="w-4 h-4 text-amber-400" />
@@ -107,7 +132,6 @@ export default function AchievementsPage() {
         )}
       </div>
 
-      {/* Achievements by category */}
       {ACHIEVEMENT_CATEGORIES.map((cat) => {
         const items = ACHIEVEMENTS.filter((a) => a.category === cat);
         return (
@@ -116,19 +140,23 @@ export default function AchievementsPage() {
             <div className="grid gap-2 sm:grid-cols-2">
               {items.map((a) => {
                 const done = unlockedSet.has(a.id);
+                const progressLabel = !done ? formatAchievementProgress(a, displayCharacter) : null;
                 return (
                   <motion.div
                     key={a.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`relative rounded-xl p-3 border flex items-center gap-3 transition-colors ${done ? "bg-amber-500/5 border-amber-500/30" : "bg-card/40 border-border/30 opacity-80"}`}
+                    className={`relative rounded-xl p-3 border flex items-center gap-3 transition-colors ${done ? "bg-amber-500/5 border-amber-500/30" : "bg-card/40 border-border/30"}`}
                   >
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl shrink-0 ${done ? "bg-amber-500/15" : "bg-muted/30 grayscale"}`}>
-                      {done ? a.icon : <Lock className="w-4 h-4 text-muted-foreground" />}
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${done ? "bg-amber-500/15 ring-1 ring-amber-500/25" : "bg-muted/30"}`}>
+                      <AchievementIcon icon={a.icon} unlocked={done} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm font-display font-semibold truncate ${done ? "text-foreground" : "text-muted-foreground"}`}>{a.name}</p>
                       <p className="text-[11px] text-muted-foreground leading-tight">{a.desc}</p>
+                      {progressLabel && (
+                        <p className="text-[10px] text-primary/80 mt-0.5 font-mono">{progressLabel}</p>
+                      )}
                       <p className="text-[10px] text-amber-300/80 mt-0.5">📜 Title: 「{a.title}」</p>
                     </div>
                     {done && <Check className="w-4 h-4 text-amber-400 shrink-0" />}

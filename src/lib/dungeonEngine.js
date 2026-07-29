@@ -285,7 +285,7 @@ export function grantFrontierShipMod(character, planet) {
       unlockedLabel: flavor ? `${flavor} (catalogued)` : null,
       tier: null,
       maxed: true,
-      consolationStardust: 400 + (planet.id || 1) * 80,
+      consolationStardust: (400 + (planet.id || 1) * 80) * 10,
     };
   }
 

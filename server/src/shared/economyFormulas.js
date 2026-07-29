@@ -7,6 +7,7 @@ import {
   getMissionXpPerFuel,
   getMissionStardustPerFuel,
   getStatPointsForLevelRange,
+  XP_STARDUST_SCALE,
 } from "./rewards.js";
 import {
   computeItemVendorValue,
@@ -55,10 +56,14 @@ export function lerpWaypoints(level, points) {
 
 export function getAttributePointCost(purchaseNumber) {
   const n = Math.max(1, Math.floor(purchaseNumber || 1));
+  let cost;
   if (n <= 650) {
-    return Math.max(1, Math.round(lerpWaypoints(n, ATTR_PURCHASE_COST_WAYPOINTS)));
+    cost = Math.max(1, Math.round(lerpWaypoints(n, ATTR_PURCHASE_COST_WAYPOINTS)));
+  } else {
+    // Shape unchanged: ROUND(10 × (1 + (n-1)/97.54)^5.657); scale applied once below.
+    cost = Math.max(1, Math.round(10 * (1 + (n - 1) / 97.54) ** 5.657));
   }
-  return Math.max(1, Math.round(10 * (1 + (n - 1) / 97.54) ** 5.657));
+  return cost * XP_STARDUST_SCALE;
 }
 
 export const ATTR_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -90,7 +95,13 @@ export function getNextAttributePointCost(character, stat) {
 }
 
 // ── Stardust dissolve ────────────────────────────────────────
-export const STARDUST_PER_RARITY = { common: 8, uncommon: 20, rare: 50, epic: 120, legendary: 280 };
+export const STARDUST_PER_RARITY = {
+  common: 8 * XP_STARDUST_SCALE,
+  uncommon: 20 * XP_STARDUST_SCALE,
+  rare: 50 * XP_STARDUST_SCALE,
+  epic: 120 * XP_STARDUST_SCALE,
+  legendary: 280 * XP_STARDUST_SCALE,
+};
 
 export const STARDUST_TYPE_WEIGHT = { ...ITEM_SELL_TYPE_WEIGHT };
 
@@ -110,7 +121,7 @@ export function computeNovaCrystalCost(item) {
 // ── Fuel ─────────────────────────────────────────────────────
 export const FUEL_MAX = 100;
 /** Hard wallet ceiling for character stardust balance. */
-export const STARDUST_MAX = 5_000_000_000_000;
+export const STARDUST_MAX = 5_000_000_000_000 * XP_STARDUST_SCALE;
 
 export function clampStardust(amount) {
   const n = Number(amount);
@@ -137,10 +148,10 @@ export function checkFuelReset(character) {
 
 // ── Fuel mounts ──────────────────────────────────────────────
 export const FUEL_MOUNTS = [
-  { id: 1, name: "Ion Booster",       emoji: "⚡", speed: 0.10, duration_hours: 1, stardust: 120,  crystals: 0  },
-  { id: 2, name: "Plasma Thruster",   emoji: "🔥", speed: 0.20, duration_hours: 2, stardust: 300,  crystals: 0  },
-  { id: 3, name: "Warp Core",         emoji: "🌀", speed: 0.30, duration_hours: 4, stardust: 500,  crystals: 8  },
-  { id: 4, name: "Singularity Drive", emoji: "🌌", speed: 0.45, duration_hours: 8, stardust: 1000, crystals: 20 },
+  { id: 1, name: "Ion Booster",       emoji: "⚡", speed: 0.10, duration_hours: 1, stardust: 1200,  crystals: 0  },
+  { id: 2, name: "Plasma Thruster",   emoji: "🔥", speed: 0.20, duration_hours: 2, stardust: 3000,  crystals: 0  },
+  { id: 3, name: "Warp Core",         emoji: "🌀", speed: 0.30, duration_hours: 4, stardust: 5000,  crystals: 8  },
+  { id: 4, name: "Singularity Drive", emoji: "🌌", speed: 0.45, duration_hours: 8, stardust: 10000, crystals: 20 },
 ];
 
 export const MAX_FUEL_MOUNTS = 3;
@@ -166,7 +177,7 @@ export const STARTER_SHIP = "scout";
 export const SCOUT_MILESTONE_LEVEL = 20;
 export const SCOUT_MILESTONE_MOD_ID = "fuel_tank_1";
 export const NAME_CHANGE_COST = 500;
-export const GUILD_WAR_SIM_COST = 500;
+export const GUILD_WAR_SIM_COST = 500 * XP_STARDUST_SCALE;
 export const SHIP_UPGRADE_STEP = 1.08;
 export const SHIP_COST_STEP = 1.10;
 
@@ -178,19 +189,19 @@ export const SHIP_TYPES = {
     cost_mult: 1.0,
   },
   frigate: {
-    name: "Storm Frigate", cost: 5000, unlock_level: 50,
+    name: "Storm Frigate", cost: 50000, unlock_level: 50,
     inherent: { mission_stardust_mult: 0.05 },
     upgrade_mult: SHIP_UPGRADE_STEP,
     cost_mult: SHIP_COST_STEP,
   },
   cruiser: {
-    name: "Galaxy Cruiser", cost: 15000, unlock_level: 100,
+    name: "Galaxy Cruiser", cost: 150000, unlock_level: 100,
     inherent: { mission_xp_mult: 0.05, mission_duration_reduction: 0.03 },
     upgrade_mult: SHIP_UPGRADE_STEP ** 2,
     cost_mult: SHIP_COST_STEP ** 2,
   },
   dreadnought: {
-    name: "Void Dreadnought", cost: 40000, unlock_level: 200,
+    name: "Void Dreadnought", cost: 400000, unlock_level: 200,
     inherent: { mission_stardust_mult: 0.10, mission_xp_mult: 0.10, fuel_cost_reduction: 1 },
     upgrade_mult: SHIP_UPGRADE_STEP ** 3,
     cost_mult: SHIP_COST_STEP ** 3,
@@ -198,12 +209,12 @@ export const SHIP_TYPES = {
 };
 
 /** Tier costs + effects — ids/costs match client SHIP_MODS. */
-const FUEL_TANK_COSTS = [200, 450, 800, 1250, 1800, 2500, 3400, 4500, 5600, 6800];
-const FUEL_EFF_COSTS = [350, 700, 1100, 1600, 2200, 2900, 3700, 4600, 5600, 6800];
-const WARP_COSTS = [500, 950, 1450, 2000, 2600, 3300, 4100, 5000, 6000, 7100];
-const SD_MAG_COSTS = [300, 650, 1050, 1500, 2000, 2550, 3150, 3800, 4500, 5300];
-const NEURAL_COSTS = [400, 800, 1250, 1750, 2300, 2900, 3550, 4250, 5000, 5800];
-const CARGO_COSTS = [600, 1200, 1900, 2700, 3600, 4600, 5700, 6900, 8200, 9600];
+const FUEL_TANK_COSTS = [200, 450, 800, 1250, 1800, 2500, 3400, 4500, 5600, 6800].map((c) => c * XP_STARDUST_SCALE);
+const FUEL_EFF_COSTS = [350, 700, 1100, 1600, 2200, 2900, 3700, 4600, 5600, 6800].map((c) => c * XP_STARDUST_SCALE);
+const WARP_COSTS = [500, 950, 1450, 2000, 2600, 3300, 4100, 5000, 6000, 7100].map((c) => c * XP_STARDUST_SCALE);
+const SD_MAG_COSTS = [300, 650, 1050, 1500, 2000, 2550, 3150, 3800, 4500, 5300].map((c) => c * XP_STARDUST_SCALE);
+const NEURAL_COSTS = [400, 800, 1250, 1750, 2300, 2900, 3550, 4250, 5000, 5800].map((c) => c * XP_STARDUST_SCALE);
+const CARGO_COSTS = [600, 1200, 1900, 2700, 3600, 4600, 5700, 6900, 8200, 9600].map((c) => c * XP_STARDUST_SCALE);
 
 export const SHIP_MODS = {
   fuel_tank: {
@@ -476,7 +487,7 @@ export function generateSimpleGearSlot(playerLevel, randomItemFn, slotId, rng = 
     playerLevel
   );
   const item = randomItemFn(rarity, Math.max(1, playerLevel), type);
-  const cost = Math.max(5, Math.round(computeStardustValue(item) * 1.2));
+  const cost = Math.max(5 * XP_STARDUST_SCALE, Math.round(computeStardustValue(item) * 1.2));
   const nova_cost = computeNovaCrystalCost(item);
   return {
     ...item,
@@ -496,11 +507,11 @@ export function generateSimpleGearStock(seed, playerLevel, randomItemFn) {
 }
 
 const CONSUMABLE_TIERS = {
-  common:    { mult: 0.05, duration_hours: 2,  label: "Minor",    rarity: "common",    cost: 40,  sell_value: 15 },
-  uncommon:  { mult: 0.10, duration_hours: 6,  label: "Standard", rarity: "uncommon", cost: 80,  sell_value: 25 },
-  rare:      { mult: 0.15, duration_hours: 10, label: "Major",    rarity: "rare",     cost: 220, sell_value: 60 },
-  epic:      { mult: 0.20, duration_hours: 15, label: "Prime",    rarity: "epic",     cost: 500, sell_value: 120 },
-  legendary: { mult: 0.20, duration_hours: 24, label: "Mythic",  rarity: "legendary", cost: 1200, sell_value: 300, allStats: true },
+  common:    { mult: 0.05, duration_hours: 2,  label: "Minor",    rarity: "common",    cost: 400,  sell_value: 150 },
+  uncommon:  { mult: 0.10, duration_hours: 6,  label: "Standard", rarity: "uncommon", cost: 800,  sell_value: 250 },
+  rare:      { mult: 0.15, duration_hours: 10, label: "Major",    rarity: "rare",     cost: 2200, sell_value: 600 },
+  epic:      { mult: 0.20, duration_hours: 15, label: "Prime",    rarity: "epic",     cost: 5000, sell_value: 1200 },
+  legendary: { mult: 0.20, duration_hours: 24, label: "Mythic",  rarity: "legendary", cost: 12000, sell_value: 3000, allStats: true },
 };
 
 const CONSUMABLE_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -552,7 +563,7 @@ export function generateSimpleConsStock(seed) {
     slots.push({
       ...def,
       _slotId: `cons-${seed}-${i}`,
-      _cost: def._cost ?? def.sell_value ?? 25,
+      _cost: def._cost ?? def.sell_value ?? (25 * XP_STARDUST_SCALE),
     });
   }
   return slots;
@@ -568,7 +579,7 @@ export function generateSimpleHotDeal(dayKey, playerLevel, randomItemFn) {
     playerLevel
   );
   const item = randomItemFn(rarity, Math.max(1, playerLevel), type);
-  const cost = Math.max(5, Math.round(computeStardustValue(item) * 1.05));
+  const cost = Math.max(5 * XP_STARDUST_SCALE, Math.round(computeStardustValue(item) * 1.05));
   const nova_cost = computeNovaCrystalCost(item);
   return { ...item, _slotId: `hot-${dayKey}`, _hotDeal: true, cost, nova_cost };
 }
@@ -684,7 +695,7 @@ export { getMissionXpPerFuel, getMissionStardustPerFuel, expForLevel };
 // ── Arena ────────────────────────────────────────────────────
 export const ARENA_DAILY_FREE_BATTLES = 10;
 export const ARENA_PAID_BATTLE_COST = 5;
-export const ARENA_REFRESH_COST = 50;
+export const ARENA_REFRESH_COST = 50 * XP_STARDUST_SCALE;
 export const ARENA_SKIP_COST = 1;
 export const ARENA_ELO_K = 28;
 export const ARENA_RATING_DELTA_MIN = 6;
@@ -810,7 +821,7 @@ export function dungeonCooldownMs(won) {
 }
 
 export function computeMiningReward(level, hours) {
-  return Math.round((level || 1) * 12 * hours);
+  return Math.round((level || 1) * 12 * hours) * XP_STARDUST_SCALE;
 }
 
 export function grantFrontierShipMod(character, planetId) {
@@ -838,7 +849,7 @@ export function grantFrontierShipMod(character, planetId) {
       ship_mod_loadouts: null,
       unlockedLabel: flavor ? `${flavor} (catalogued)` : null,
       maxed: true,
-      consolationStardust: 400 + (planetId || 1) * 80,
+      consolationStardust: (400 + (planetId || 1) * 80) * XP_STARDUST_SCALE,
     };
   }
 
@@ -897,8 +908,8 @@ export const NOVA_CASINO_OPEN = false;
 export const CASINO_MAX_NOVA_BET = 100;
 /** Max stardust bet ≈ 25× mission SD/F (floored at 100, capped). */
 export const CASINO_STARDUST_BET_SD_MULT = 25;
-export const CASINO_MAX_STARDUST_BET_CAP = 250_000;
-export const CASINO_MIN_STARDUST_BET_FLOOR = 100;
+export const CASINO_MAX_STARDUST_BET_CAP = 250_000 * XP_STARDUST_SCALE;
+export const CASINO_MIN_STARDUST_BET_FLOOR = 100 * XP_STARDUST_SCALE;
 
 export function getCasinoMaxStardustBet(level = 1) {
   const sdf = getMissionStardustPerFuel(level);
@@ -921,8 +932,8 @@ export const CASINO_WHEEL_TIERS = [
   { p: 0.002, mult: 25, label: "25×" },
 ];
 
-export const GUILD_CREATE_COST = 500;
-export const GUILD_WAR_DECLARE_COST = 500;
+export const GUILD_CREATE_COST = 500 * XP_STARDUST_SCALE;
+export const GUILD_WAR_DECLARE_COST = 500 * XP_STARDUST_SCALE;
 export const GUILD_WAR_READY_HOURS = 24;
 export const CHARACTER_SLOT_COST = 500;
 export const CHARACTER_MAX_SLOTS = 3;

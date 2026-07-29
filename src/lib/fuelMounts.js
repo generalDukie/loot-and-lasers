@@ -7,10 +7,10 @@
 import { getModEffectTotal } from "@/lib/gameData";
 
 export const FUEL_MOUNTS = [
-  { id: 1, name: "Ion Booster",        emoji: "⚡",  speed: 0.10, duration_hours: 1, stardust: 120,  crystals: 0,  desc: "A quick ion burst for snappy errands." },
-  { id: 2, name: "Plasma Thruster",    emoji: "🔥",  speed: 0.20, duration_hours: 2, stardust: 300,  crystals: 0,  desc: "Sustained plasma acceleration." },
-  { id: 3, name: "Warp Core",          emoji: "🌀",  speed: 0.30, duration_hours: 4, stardust: 500,  crystals: 8,  desc: "Folds space for serious time savings." },
-  { id: 4, name: "Singularity Drive",  emoji: "🌌",  speed: 0.45, duration_hours: 8, stardust: 1000, crystals: 20, desc: "Micro black hole propulsion. Terrifyingly fast." },
+  { id: 1, name: "Ion Booster",        emoji: "⚡",  speed: 0.10, duration_hours: 1, stardust: 1200,  crystals: 0,  desc: "A quick ion burst for snappy errands." },
+  { id: 2, name: "Plasma Thruster",    emoji: "🔥",  speed: 0.20, duration_hours: 2, stardust: 3000,  crystals: 0,  desc: "Sustained plasma acceleration." },
+  { id: 3, name: "Warp Core",          emoji: "🌀",  speed: 0.30, duration_hours: 4, stardust: 5000,  crystals: 8,  desc: "Folds space for serious time savings." },
+  { id: 4, name: "Singularity Drive",  emoji: "🌌",  speed: 0.45, duration_hours: 8, stardust: 10000, crystals: 20, desc: "Micro black hole propulsion. Terrifyingly fast." },
 ];
 
 export const MAX_FUEL_MOUNTS = 3;

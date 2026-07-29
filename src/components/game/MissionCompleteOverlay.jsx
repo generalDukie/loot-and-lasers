@@ -79,7 +79,10 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
   const consumableAccent = consumableItem ? rarityAccent(consumableItem.rarity) : SUMMARY_ACCENT;
 
   return (
-    <GameplayOverlayPortal className="z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={onClose}>
+    <GameplayOverlayPortal
+      className="z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm lg:pl-[clamp(18.7rem,15.7vw,23.4rem)]"
+      onClick={onClose}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

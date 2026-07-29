@@ -491,8 +491,8 @@ export default function ShopPage() {
               animate={{ opacity: 1, y: 0 }}
               className="relative overflow-hidden rounded-xl border border-orange-500/55 bg-gradient-to-br from-orange-500/18 via-card/50 to-fuchsia-500/12 p-3.5 shadow-[0_0_40px_rgba(251,146,60,0.18)]"
             >
-              <div className="flex items-center justify-between gap-2 flex-wrap mb-1.5">
-                <p className="text-[10px] font-display font-black tracking-[0.18em] uppercase text-orange-200 flex items-center gap-1 bg-orange-500/10 border border-orange-400/25 px-2 py-0.5 rounded-md">
+              <div className="flex items-center justify-center gap-2 mb-1.5">
+                <p className="text-[10px] font-display font-black tracking-[0.18em] uppercase text-orange-200 flex items-center gap-1 bg-orange-500/10 border border-orange-400/25 px-2 py-0.5 rounded-md animate-pulse">
                   <Flame className="w-3 h-3" /> Hot Deal · resets {hotEta}
                 </p>
               </div>

@@ -3,27 +3,25 @@ import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
-import { getExpForLevel, randomConsumable, consumableItem, getInstalledMods, getStatPointsForLevelRange } from "@/lib/gameData";
+import { getInstalledMods, getStatPointsForLevelRange } from "@/lib/gameData";
 import { simulateBattle } from "@/lib/arenaEngine";
 import { DUNGEON_PLANETS, getInfinitePlanet, getDungeonPlanetById, WORMHOLE_ID, getWormholePlanet } from "@/lib/dungeonData";
 import {
   DUNGEON_ENEMIES_PER_PLANET, DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST,
   DUNGEON_BATTLE_COOLDOWN_MS, DUNGEON_SKIP_COST, DUNGEON_WIN_COOLDOWN_MS, DUNGEON_LOSS_COOLDOWN_MS,
-  generateDungeonEnemy, computeDungeonRewards, dungeonCooldownMs, rollMilestoneChest, grantFrontierShipMod,
+  generateDungeonEnemy, computeDungeonRewards,
 } from "@/lib/dungeonEngine";
 import { processDiscovery } from "@/lib/discovery";
 import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
 import { toastNewAchievements } from "@/lib/achievementToasts";
-import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
+import { getCollectionStats } from "@/lib/collectionBonus";
 import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import DungeonMap from "@/components/game/DungeonMap";
 import DungeonPlanetView from "@/components/game/DungeonPlanetView";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
 import { Satellite, Skull, Rocket } from "lucide-react";
-import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
-
-import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
+import { msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 
 export default function GalaxyMapPage() {
   const [character, setCharacterState] = useState(null);

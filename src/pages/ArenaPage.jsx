@@ -4,10 +4,10 @@ import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
-import { getExpForLevel, getStatPointsForLevelRange } from "@/lib/gameData";
+import { getStatPointsForLevelRange } from "@/lib/gameData";
 import { contributeArenaWin, getGuildMembership } from "@/lib/guildUtils";
 import { processDiscovery } from "@/lib/discovery";
-import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
+import { getCollectionStats } from "@/lib/collectionBonus";
 import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { pushNotification } from "@/lib/notificationEngine";
 import { toastNewAchievements } from "@/lib/achievementToasts";
@@ -26,10 +26,9 @@ import ArenaMatchHistory from "@/components/game/ArenaMatchHistory";
 import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
 import { ArenaBackdrop } from "@/components/game/ArenaBackdrop";
 import FitScaleFrame from "@/components/game/FitScaleFrame";
-import { progressWeeklyNovaQuest } from "@/lib/weeklyNovaQuests";
 import { Swords, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
 
-import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
+import { msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 import { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 function fmtMs(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 

@@ -76,6 +76,28 @@
     font-style: normal;
     font-weight: normal;
   }
+
+  @keyframes navNeonSlide {
+    0% { background-position: 0% 50%; filter: drop-shadow(0 0 10px var(--nav-neon-soft)); }
+    50% { background-position: 100% 50%; filter: drop-shadow(0 0 26px var(--nav-neon-strong)); }
+    100% { background-position: 0% 50%; filter: drop-shadow(0 0 10px var(--nav-neon-soft)); }
+  }
+
+  /* Side-nav neon sweep on hover (letters only). */
+  .nav-neon-text {
+    background-image: linear-gradient(90deg, var(--nav-neon-soft), var(--nav-neon-strong), var(--nav-neon-soft));
+    background-size: 200% 100%;
+    background-position: 0% 50%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    animation: navNeonSlide 1.6s ease-in-out infinite;
+  }
+
+  /* Icon glow helper (uses the same per-button color vars). */
+  .nav-icon-neon {
+    filter: drop-shadow(0 0 6px var(--nav-neon-soft)) drop-shadow(0 0 14px var(--nav-neon-strong));
+  }
   /* Responsive card grid that expands on ultrawide without leaving side gutters */
   .game-stage-grid {
     @apply w-full grid gap-4 sm:gap-5;

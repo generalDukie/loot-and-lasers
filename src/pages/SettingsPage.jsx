@@ -7,7 +7,7 @@ import CodexModal from "@/components/game/CodexModal";
 import DailyLoginModal from "@/components/social/DailyLoginModal";
 import CharacterSwitcher from "@/components/game/CharacterSwitcher";
 import ProfileSettings from "@/components/settings/ProfileSettings";
-import ChangePasswordForm from "@/components/settings/ChangePasswordForm";
+import AccountSettings from "@/components/settings/AccountSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import { getMyCharacter } from "@/lib/socialEngine";
@@ -110,7 +110,7 @@ export default function SettingsPage() {
 
         <CharacterSwitcher />
         <ProfileSettings />
-        <ChangePasswordForm />
+        <AccountSettings />
         <AudioSettings />
         <DisplaySettings />
 

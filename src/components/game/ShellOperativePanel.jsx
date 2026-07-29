@@ -123,11 +123,12 @@ export default function ShellOperativePanel({ character }) {
 /** Shrink font only once values are long enough to crowd the rail. */
 function railCurrencyFontSize(...labels) {
   const maxLen = Math.max(...labels.map((label) => String(label).length));
-  if (maxLen <= 6) return 11;
-  if (maxLen <= 8) return 10;
-  if (maxLen <= 10) return 9;
-  if (maxLen <= 12) return 8;
-  return 7;
+  // Slightly larger for readability, still shrinks as values get long.
+  if (maxLen <= 6) return 12;
+  if (maxLen <= 8) return 11;
+  if (maxLen <= 10) return 10;
+  if (maxLen <= 12) return 9;
+  return 8;
 }
 
 function CurrencyPill({ icon, value, color, interactive, fontSize = 10, block }) {
@@ -140,6 +141,23 @@ function CurrencyPill({ icon, value, color, interactive, fontSize = 10, block })
     >
       {icon}
       {value}
+      {interactive && (
+        <span
+          className="shrink-0 inline-flex items-center justify-center rounded-full border font-display font-black leading-none"
+          style={{
+            width: 18,
+            height: 18,
+            marginLeft: 1,
+            backgroundColor: `${color}1A`,
+            borderColor: `${color}55`,
+            color,
+            fontSize: 12,
+          }}
+          aria-hidden
+        >
+          +
+        </span>
+      )}
     </span>
   );
 }

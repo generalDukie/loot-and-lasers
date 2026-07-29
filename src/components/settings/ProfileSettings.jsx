@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
-import { Loader2, Mail, Lock, Pencil, Gem, Users } from "lucide-react";
+import { Loader2, Pencil, Gem, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter, bustMyCharacterCache } from "@/lib/socialEngine";
@@ -19,7 +19,6 @@ const NAME_CHANGE_COST = 500;
 
 export default function ProfileSettings() {
   const [char, setChar] = useState(null);
-  const [email, setEmail] = useState("");
   const [legacyName, setLegacyName] = useState("");
   const [legacyDisplay, setLegacyDisplay] = useState(LEGACY_DISPLAY_SURNAME);
   const [name, setName] = useState("");
@@ -36,7 +35,6 @@ export default function ProfileSettings() {
     ]).then(([myChar, user]) => {
       if (myChar) { setChar(myChar); setName(myChar.name || ""); }
       if (user) {
-        setEmail(user.email || "");
         setLegacyName(user.legacy_name || myChar?.legacy_name || "");
         setLegacyDisplay(normalizeLegacyDisplay(user.legacy_display || myChar?.legacy_display));
       }
@@ -113,25 +111,6 @@ export default function ProfileSettings() {
 
   return (
     <div className="painted-panel canvas-grain p-4 space-y-4">
-      {/* Linked email (locked) */}
-      <div>
-        <div className="flex items-center gap-2 mb-1.5">
-          <Mail className="w-4 h-4 text-accent" />
-          <h2 className="font-display font-semibold text-sm">Linked Email</h2>
-        </div>
-        {loading ? (
-          <div className="h-10 flex items-center"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
-        ) : (
-          <div className="flex items-center gap-2 px-3 h-10 bg-muted/40 rounded-lg border border-border/50">
-            <span className="text-sm text-muted-foreground truncate flex-1">{email || "—"}</span>
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70 shrink-0">
-              <Lock className="w-3 h-3" /> Locked
-            </span>
-          </div>
-        )}
-        <p className="text-[10px] text-muted-foreground/60 mt-1">Email is tied to your account and can't be changed.</p>
-      </div>
-
       {/* Legacy display style */}
       {legacyName && (
         <div>

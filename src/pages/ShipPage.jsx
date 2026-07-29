@@ -10,8 +10,8 @@ import FuelStation from "@/components/game/FuelStation";
 import {
   SHIP_TYPES, SHIP_MODS, STARTER_SHIP,
   getActiveShipId, getActiveShipType, getInstalledMods, getModEffectTotal,
-  getCategoryProgress, getShipInherentLabel, getTierEffectLabel, computeMaxFuelForLoadout,
-  getShipUnlockLevel, FUEL_MAX, getInventoryCap, INVENTORY_CAP, getTierCost, getShipModIds,
+  getCategoryProgress, getShipInherentLabel, getTierEffectLabel,
+  getShipUnlockLevel, FUEL_MAX, getInventoryCap, INVENTORY_CAP, getTierCost,
   getScoutMilestoneStatus, buildScoutMilestonePatch, SCOUT_MILESTONE_LEVEL,
   STARDUST_COLOR,
 } from "@/lib/gameData";

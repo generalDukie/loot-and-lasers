@@ -134,8 +134,19 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
     setBusyId(item.id || "focus");
     try {
       if (mode === "loot" && isFocus) {
+        const pendingLootId = pendingState?.pendingLootId;
+        if (!pendingLootId) {
+          toast({
+            title: "Cannot dissolve",
+            description: "Missing server pending loot id — relaunch claim flow",
+            variant: "destructive",
+          });
+          return;
+        }
+        const res = await api.functions.invoke("DissolvePendingLoot", {
+          pending_loot_id: pendingLootId,
+        });
         clearPendingItem();
-        const res = await api.functions.invoke("DissolvePendingLoot", { item });
         const value = res.stardust_gained ?? res.data?.stardust_gained ?? computeStardustValue(item);
         const patch = res.patch || res.data?.patch;
         if (patch) onCharacterChange?.(patch);

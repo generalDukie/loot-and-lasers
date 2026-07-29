@@ -5,9 +5,17 @@ import {
   rollItemStats,
   computeItemVendorValue,
 } from "./itemGeneration.js";
+import { XP_STARDUST_SCALE } from "./economyConstants.js";
 
-/** Global XP & Stardust numerical resolution (unit size ×10). Not Nova/Fuel. */
-export const XP_STARDUST_SCALE = 10;
+export { XP_STARDUST_SCALE };
+
+/** Prefer live getInventoryCap from economyFormulas (wired below / via hooks). */
+function getInventoryCap(ch) {
+  if (typeof globalThis.__llGetInventoryCap === "function") {
+    return globalThis.__llGetInventoryCap(ch);
+  }
+  return 10;
+}
 
 const ITEM_NAMES = {
   weapon: ["Plasma Cutter", "Void Lance", "Pulse Blaster", "Quantum Repeater", "Starforged Blade", "Ion Carbine"],
@@ -22,10 +30,6 @@ const ITEM_NAMES = {
 
 function pick(arr, rng = Math.random) {
   return arr[Math.floor(rng() * arr.length)];
-}
-
-function getInventoryCap(_ch) {
-  return 10;
 }
 
 /**

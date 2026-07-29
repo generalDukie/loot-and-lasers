@@ -17,6 +17,7 @@
     "test:api": "node server/scripts/smoke-test.mjs",
     "test:time": "node server/scripts/test-time.mjs",
     "test:entitlements": "node server/scripts/test-entitlements.mjs",
+    "test:rewards": "node server/scripts/test-rewards.mjs",
     "test:passives": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-class-passives.mjs"
   },
   "dependencies": {

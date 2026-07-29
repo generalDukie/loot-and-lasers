@@ -371,7 +371,7 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
       </div>
 
       {/* Skip — jumps straight to the rewards / results screen */}
-      <div className="flex justify-center pb-5 relative z-40">
+      <div className="flex justify-center pb-2 -mt-2 relative z-40">
         <motion.button
           onClick={onDone}
           initial={{ scale: 0.9, opacity: 0 }}

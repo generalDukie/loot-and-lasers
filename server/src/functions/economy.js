@@ -48,6 +48,18 @@ import {
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import { ECONOMY_FOLLOW_ON_HANDLERS } from "./economyFollowOn.js";
 import { clock, TimeErrors } from "../shared/time/index.js";
+import {
+  ClaimKeys,
+  executeRewardClaim,
+  resolveNexusBonus,
+  detectSuspiciousRewardFields,
+  createPendingLoot,
+  getClaimByKey,
+  RewardSources,
+  secureRandom,
+  snapshotDefinitionRef,
+  RewardErrors,
+} from "../rewards/index.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -401,7 +413,9 @@ export async function LaunchMission(user, body) {
       const lootType = LOOT_TYPES[String(template.name).length % 8];
       const chance = template.rewards?.item_rarity_chance || "common";
       const lootRarity = rollItemRarity(chance, ch.level || 1);
-      const lootDrops = Math.random() < Math.min(0.85, 0.4 + Math.min(0.25, (ch.level || 1) * 0.01));
+      const lootDrops =
+        secureRandom() < Math.min(0.85, 0.4 + Math.min(0.25, (ch.level || 1) * 0.01));
+      const rewardDef = snapshotDefinitionRef("mission_completion");
 
       const startNow = clock.now();
       const endTime = new Date(startNow.getTime() + duration * 1000);
@@ -412,7 +426,12 @@ export async function LaunchMission(user, body) {
       const rawScene = Number(template.explore_scene);
       const exploreScene = Number.isFinite(rawScene)
         ? ((Math.floor(rawScene) % EXPLORE_SCENE_COUNT) + EXPLORE_SCENE_COUNT) % EXPLORE_SCENE_COUNT
-        : Math.floor(Math.random() * EXPLORE_SCENE_COUNT);
+        : Math.floor(secureRandom() * EXPLORE_SCENE_COUNT);
+
+      // Snapshot reward definition + loot rolls at start (resolvePolicy: start).
+      // Strip any client-authored currency/XP/item payloads from template.rewards.
+      const { stardust: _sd, experience: _xp, items: _items, credits: _cr, ...safeTemplateRewards } =
+        template.rewards || {};
 
       const mission = entities.Mission.create({
         character_id: ch.id,
@@ -425,10 +444,12 @@ export async function LaunchMission(user, body) {
         start_time: startNow.toISOString(),
         end_time: endTime.toISOString(),
         rewards: {
-          ...(template.rewards || {}),
+          ...safeTemplateRewards,
           loot_rarity: lootRarity,
           loot_type: lootType,
           loot_drops: lootDrops,
+          reward_definition_key: rewardDef.definitionKey,
+          reward_definition_version: rewardDef.definitionVersion,
         },
         level_requirement: template.level_requirement || 1,
         patron: template.patron || null,
@@ -461,14 +482,25 @@ export async function ClaimMission(user, body) {
   const won = body?.won !== false && body?.won !== "false";
   if (!missionId) return { status: 400, body: { error: "Missing mission_id" } };
 
+  const suspicious = detectSuspiciousRewardFields(body);
+  // Explicit high-risk fields beyond the shared list
+  if (body?.nexus_bonus != null) suspicious.push("nexus_bonus");
+  if (body?.species_id != null) suspicious.push("species_id");
+
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
+      const claimKey = ClaimKeys.mission(missionId);
+      const prior = getClaimByKey(claimKey);
+      if (prior?.status === "completed" && prior.deliveredPayload) {
+        return { ...prior.deliveredPayload, idempotentReplay: true, reward_claim_id: prior.id };
+      }
+
       let mission = entities.Mission.get(missionId);
       if (!mission) httpErr(404, "Mission not found");
-      if (mission.character_id !== ch.id) httpErr(403, "Not your mission");
+      if (mission.character_id !== ch.id) httpErr(403, "Not your mission", RewardErrors.CHARACTER_NOT_OWNED);
       if (mission.status === "claimed" || mission.status === "failed") {
-        httpErr(409, "Mission already resolved");
+        httpErr(409, "Mission already resolved", RewardErrors.REWARD_ALREADY_CLAIMED);
       }
 
       const now = clock.nowMs();
@@ -486,84 +518,149 @@ export async function ClaimMission(user, body) {
         return { success: true, won: false, patch, character, items: [], gains: null };
       }
 
-      const nexusBonus = !!body?.nexus_bonus;
-      const gains = computeMissionGains(ch, mission, nexusBonus);
-      const patch = {
-        stardust: (ch.stardust || 0) + gains.stardustGain,
-        total_stardust_earned: (ch.total_stardust_earned || 0) + gains.stardustGain,
-        missions_completed: (ch.missions_completed || 0) + 1,
-        highest_sector: Math.max(ch.highest_sector || 1, mission.sector || 1),
-        active_mission_id: "",
-        mission_end_time: "",
-      };
-      applyXpToCharacter(ch, gains.xpGain, patch);
+      const defVersion =
+        mission.rewards?.reward_definition_version ??
+        snapshotDefinitionRef("mission_completion").definitionVersion;
 
-      if (body?.species_id) {
-        const discovered = new Set(ch.discovered_species || []);
-        if (!discovered.has(body.species_id)) {
-          patch.discovered_species = [...discovered, body.species_id];
-        }
-      }
-
-      const weekly = progressWeeklyNovaQuest(ch, "missions", 1);
-      if (weekly) patch.weekly_nova_quests = weekly;
-
-      const items = [];
-      const pendingLoot = [];
-      const rewards = mission.rewards || {};
-      if (rewards.loot_drops !== false) {
-        const rarity = rewards.loot_rarity || rollItemRarity(rewards.item_rarity_chance || "common", ch.level || 1);
-        const gear = randomItem(rarity, ch.level || 1, rewards.loot_type, Math.random, ch.class);
-        collectGrant(grantOrCompensate(ch, gear, patch), items, pendingLoot);
-      }
-
-      if (rewards.collectible?.name) {
-        const level = Math.max(1, ch.level || 1);
-        collectGrant(grantOrCompensate(ch, {
-          name: rewards.collectible.name,
-          type: "material",
-          rarity: "common",
-          level_requirement: level,
-          stats: {},
-          flavor_text: "A curious trinket recovered on mission.",
-          sell_value: computeMissionJunkSellValue(level),
-        }, patch), items, pendingLoot);
-      }
-
-      if (Math.random() < 0.15) {
-        const { _cost, ...consItem } = randomConsumable();
-        collectGrant(grantOrCompensate(ch, consItem, patch), items, pendingLoot);
-      }
-
-      entities.Mission.update(mission.id, { status: "claimed" });
-
-      const ach = mergeAchievementUnlocks(ch, patch);
-      Object.assign(patch, ach.patch);
-
-      const character = entities.Character.update(ch.id, patch);
-      return {
-        success: true,
-        won: true,
-        patch,
-        character,
-        items,
-        pending_loot: pendingLoot,
-        newly_unlocked: ach.newly_unlocked,
-        gains: {
-          stardust: gains.stardustGain,
-          experience: gains.xpGain,
-          stardustBase: gains.stardustBase,
-          xpBase: gains.xpBase,
-          efficiency: gains.efficiency,
-          xpEfficiency: gains.xpEfficiency,
-          collectionPct: gains.collectionPct,
-          fuelSpent: gains.fuelCost,
+      const claimResult = await executeRewardClaim({
+        claimKey,
+        idempotencyKey: body?.idempotencyKey || body?.idempotency_key || null,
+        accountId: user.id,
+        characterId: ch.id,
+        rewardSource: RewardSources.MISSION_COMPLETION,
+        sourceReferenceType: "mission",
+        sourceReferenceId: missionId,
+        definitionKey: "mission_completion",
+        definitionVersion: defVersion,
+        clientBody: body,
+        suspiciousFields: suspicious,
+        correlationId: body?.correlationId || null,
+        generate: async () => {
+          const live = entities.Character.get(ch.id) || ch;
+          const nexusBonus = resolveNexusBonus(live.id);
+          const gains = computeMissionGains(live, mission, nexusBonus);
+          const rewards = mission.rewards || {};
+          const itemTemplates = [];
+          if (rewards.loot_drops !== false) {
+            const rarity =
+              rewards.loot_rarity ||
+              rollItemRarity(rewards.item_rarity_chance || "common", live.level || 1);
+            itemTemplates.push(
+              randomItem(rarity, live.level || 1, rewards.loot_type, secureRandom, live.class)
+            );
+          }
+          if (rewards.collectible?.name) {
+            const level = Math.max(1, live.level || 1);
+            itemTemplates.push({
+              name: rewards.collectible.name,
+              type: "material",
+              rarity: "common",
+              level_requirement: level,
+              stats: {},
+              flavor_text: "A curious trinket recovered on mission.",
+              sell_value: computeMissionJunkSellValue(level),
+            });
+          }
+          if (secureRandom() < 0.15) {
+            const { _cost, ...consItem } = randomConsumable();
+            itemTemplates.push(consItem);
+          }
+          // Species discovery only from mission snapshot — never client species_id
+          const speciesId = rewards.species_id || null;
+          return {
+            stardust: gains.stardustGain,
+            experience: gains.xpGain,
+            itemTemplates,
+            species_id: speciesId,
+            gainsMeta: {
+              stardustBase: gains.stardustBase,
+              xpBase: gains.xpBase,
+              efficiency: gains.efficiency,
+              xpEfficiency: gains.xpEfficiency,
+              collectionPct: gains.collectionPct,
+              fuelSpent: gains.fuelCost,
+              nexusBonus,
+            },
+            bonusReasons: nexusBonus ? ["nexus_control"] : [],
+          };
         },
-      };
+        deliver: async (payload, claim) => {
+          const live = entities.Character.get(ch.id) || ch;
+          const patch = {
+            stardust: (live.stardust || 0) + (payload.stardust || 0),
+            total_stardust_earned: (live.total_stardust_earned || 0) + (payload.stardust || 0),
+            missions_completed: (live.missions_completed || 0) + 1,
+            highest_sector: Math.max(live.highest_sector || 1, mission.sector || 1),
+            active_mission_id: "",
+            mission_end_time: "",
+          };
+          applyXpToCharacter(live, payload.experience || 0, patch);
+
+          if (payload.species_id) {
+            const discovered = new Set(live.discovered_species || []);
+            if (!discovered.has(payload.species_id)) {
+              patch.discovered_species = [...discovered, payload.species_id];
+            }
+          }
+
+          const weekly = progressWeeklyNovaQuest(live, "missions", 1);
+          if (weekly) patch.weekly_nova_quests = weekly;
+
+          const items = [];
+          const pendingLoot = [];
+          for (const gear of payload.itemTemplates || []) {
+            const granted = grantOrCompensate(live, gear, patch);
+            if (granted.item) {
+              items.push(granted.item);
+            } else if (granted.pending) {
+              const pl = createPendingLoot({
+                accountId: user.id,
+                characterId: live.id,
+                claimId: claim.id,
+                claimKey: claim.claimKey,
+                item: granted.pending,
+              });
+              pendingLoot.push({ id: pl.id, item: pl.item });
+            }
+          }
+
+          entities.Mission.update(mission.id, { status: "claimed" });
+
+          const ach = mergeAchievementUnlocks(live, patch);
+          Object.assign(patch, ach.patch);
+
+          const character = entities.Character.update(live.id, patch);
+          return {
+            success: true,
+            won: true,
+            patch,
+            character,
+            items,
+            pending_loot: pendingLoot,
+            newly_unlocked: ach.newly_unlocked,
+            gains: {
+              stardust: payload.stardust || 0,
+              experience: payload.experience || 0,
+              ...(payload.gainsMeta || {}),
+            },
+            reward_claim_id: claim.id,
+            deliveryDestination: pendingLoot.length ? "pending_loot" : "character",
+          };
+        },
+      });
+
+      return claimResult.result;
     });
     return { status: 200, body: result };
   } catch (err) {
     if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    if (err.code) {
+      const status =
+        err.code === RewardErrors.REWARD_ALREADY_CLAIMED || err.code === RewardErrors.CLAIM_IN_PROGRESS
+          ? 409
+          : 400;
+      return { status, body: { error: err.message, code: err.code } };
+    }
     throw err;
   }
 }

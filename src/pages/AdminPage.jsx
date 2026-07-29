@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { useToast } from "@/components/ui/use-toast";
-import { Shield, Filter, Send, Gavel, Crown, Ticket, Gift, RefreshCw, Gem, Mail, Clock, KeyRound } from "lucide-react";
+import { Shield, Filter, Send, Gavel, Crown, Ticket, Gift, RefreshCw, Gem, Mail, Clock, KeyRound, Coins } from "lucide-react";
 import PlayerManager from "@/components/admin/PlayerManager";
 import GuildAdmin from "@/components/admin/GuildAdmin";
 import PromoCodeManager from "@/components/admin/PromoCodeManager";
@@ -12,6 +12,7 @@ import NovaSpendStats from "@/components/admin/NovaSpendStats";
 import EmailLogTab from "@/components/admin/EmailLogTab";
 import SchedulesTab from "@/components/admin/SchedulesTab";
 import EntitlementsTab from "@/components/admin/EntitlementsTab";
+import RewardsTab from "@/components/admin/RewardsTab";
 import PageStage from "@/components/game/PageStage";
 
 const TABS = [
@@ -20,6 +21,7 @@ const TABS = [
   { key: "guild", label: "Guilds", icon: Crown },
   { key: "promo", label: "Promo Codes", icon: Ticket },
   { key: "grant", label: "Grant Item", icon: Gift },
+  { key: "rewards", label: "Rewards", icon: Coins },
   { key: "filter", label: "Filter", icon: Filter },
   { key: "mail", label: "System Mail", icon: Send },
   { key: "email", label: "Email", icon: Mail },
@@ -93,6 +95,7 @@ export default function AdminPage() {
         {tab === "email" && <EmailLogTab />}
         {tab === "schedules" && <SchedulesTab />}
         {tab === "entitlements" && <EntitlementsTab />}
+        {tab === "rewards" && <RewardsTab />}
         {tab === "refresh" && <ServerRefreshTab />}
         {tab === "nova" && <NovaSpendStats />}
       </motion.div>

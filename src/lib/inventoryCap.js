@@ -1,5 +1,5 @@
 import { api } from "@/api/gameClient";
-import { INVENTORY_CAP, ensureUniqueItemName, getInventoryCap } from "@/lib/gameData";
+import { INVENTORY_CAP, getInventoryCap } from "@/lib/gameData";
 
 export { INVENTORY_CAP, getInventoryCap };
 
@@ -9,7 +9,7 @@ export { INVENTORY_CAP, getInventoryCap };
  * - unequip: equipped gear waiting to move into a full bag
  * - overflow: bag already over cap — must dissolve down to cap
  */
-let pending = null; // { mode: 'loot'|'unequip'|'overflow', item: object|null }
+let pending = null; // { mode: 'loot'|'unequip'|'overflow', item: object|null, pendingLootId?: string }
 const listeners = new Set();
 
 function emit() {
@@ -29,11 +29,11 @@ export function getPendingMode() {
   return pending?.mode ?? null;
 }
 
-export function setPendingItem(item, mode = "loot") {
+export function setPendingItem(item, mode = "loot", pendingLootId = null) {
   if (!item && mode !== "overflow") {
     pending = null;
   } else {
-    pending = { mode, item: item || null };
+    pending = { mode, item: item || null, pendingLootId: pendingLootId || null };
   }
   emit();
 }
@@ -64,7 +64,12 @@ export function subscribePending(fn) {
 export function applyPendingLootFromResponse(res) {
   const list = res?.pending_loot || res?.data?.pending_loot;
   if (!Array.isArray(list) || list.length === 0) return false;
-  if (!pending) setPendingItem(list[0], "loot");
+  if (!pending) {
+    const first = list[0];
+    // Prefer { id, item } server records; fall back to legacy bare item (will fail on accept).
+    if (first?.id && first?.item) setPendingItem(first.item, "loot", first.id);
+    else setPendingItem(first, "loot", first?.id || null);
+  }
   return true;
 }
 
@@ -121,7 +126,10 @@ export async function resolvePendingAfterFreeSlot(character) {
   }
 
   if (p.mode === "loot" && p.item) {
-    await api.functions.invoke("AcceptPendingLoot", { item: p.item });
+    if (!p.pendingLootId) {
+      throw new Error("Missing pending_loot_id — refresh inventory and try again");
+    }
+    await api.functions.invoke("AcceptPendingLoot", { pending_loot_id: p.pendingLootId });
     const claimed = p.item;
     clearPendingItem();
     return { kind: "loot", item: claimed };
@@ -140,9 +148,7 @@ export async function resolvePendingAfterFreeSlot(character) {
   return null;
 }
 
-// Try to add an item. If the bag has room, creates it and returns it.
-// If full, stashes the payload as pending (triggers the InventoryFullModal)
-// and returns null.
+// Client-side preview helper — actual grants must go through AcceptPendingLoot with pending_loot_id.
 export async function addItemWithCap(character, itemPayload) {
   const all = await api.entities.Item.filter({ character_id: character.id });
   const bagCount = all.filter((i) => !i.is_equipped).length;
@@ -150,7 +156,6 @@ export async function addItemWithCap(character, itemPayload) {
     setPendingItem(itemPayload, "loot");
     return null;
   }
-  const finalPayload = ensureUniqueItemName(itemPayload, all.map((i) => i.name));
-  const res = await api.functions.invoke("AcceptPendingLoot", { item: finalPayload });
-  return res.item || res.data?.item || null;
+  // Direct client creates are no longer supported for forged payloads.
+  throw new Error("Use server reward flows — AcceptPendingLoot requires pending_loot_id");
 }

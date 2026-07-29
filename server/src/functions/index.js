@@ -13,6 +13,15 @@ import {
   grantProductBundle,
 } from "../entitlements/index.js";
 import { ACHIEVEMENTS } from "../shared/achievements.js";
+import {
+  ClaimKeys,
+  executeRewardClaim,
+  deliverViaApplyCharacterRewards,
+  detectSuspiciousRewardFields,
+  getClaimByKey,
+  RewardSources,
+  RewardErrors,
+} from "../rewards/index.js";
 
 const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
 
@@ -25,21 +34,28 @@ function svc(user) {
   return createService(user);
 }
 
-export async function ClaimDailyLogin(user) {
+export async function ClaimDailyLogin(user, body = {}) {
   const character = await myCharacter(user);
   if (!character) return { status: 404, body: { error: "No character" } };
 
-  const game = svc(user);
   const today = todayET();
+  const claimKey = ClaimKeys.daily(character.id, today);
+  const suspicious = detectSuspiciousRewardFields(body);
 
   try {
-    const body = await withTransactionAsync(async () => {
+    const result = await withTransactionAsync(async () => {
+      const prior = getClaimByKey(claimKey);
+      if (prior?.status === "completed" && prior.deliveredPayload) {
+        return { ...prior.deliveredPayload, idempotentReplay: true };
+      }
+
       const existing = entities.DailyLogin.filter({ character_id: character.id });
       let progress = existing[0];
 
       if (progress && progress.last_claim_date === today) {
         const err = new Error("Already claimed today");
         err.status = 409;
+        err.code = RewardErrors.REWARD_ALREADY_CLAIMED;
         err.progress = progress;
         throw err;
       }
@@ -57,37 +73,73 @@ export async function ClaimDailyLogin(user) {
       const day = progress.current_day || 1;
       const rewardEntry = DAILY_REWARDS[(day - 1)] || DAILY_REWARDS[0];
 
-      // Claim flag first — concurrent requests hit 409 on re-read.
-      const claimedDays = [...(progress.claimed_days || []), day];
-      const wrapped = day >= 30;
-      const nextDay = wrapped ? 1 : day + 1;
-      const newTheme = wrapped
-        ? CYCLE_THEMES[(CYCLE_THEMES.indexOf(progress.cycle_theme || CYCLE_THEMES[0]) + 1) % CYCLE_THEMES.length]
-        : progress.cycle_theme;
+      const claimOut = await executeRewardClaim({
+        claimKey,
+        idempotencyKey: body?.idempotencyKey || body?.idempotency_key || null,
+        accountId: user.id,
+        characterId: character.id,
+        rewardSource: RewardSources.DAILY_LOGIN,
+        sourceReferenceType: "daily_period",
+        sourceReferenceId: `${character.id}:${today}`,
+        definitionKey: "daily_login",
+        clientBody: body,
+        suspiciousFields: suspicious,
+        generate: async () => ({
+          ...(rewardEntry.rewards || {}),
+          claimed_day: day,
+          period_key: today,
+        }),
+        deliver: async (payload, claim) => {
+          const claimedDays = [...(progress.claimed_days || []), day];
+          const wrapped = day >= 30;
+          const nextDay = wrapped ? 1 : day + 1;
+          const newTheme = wrapped
+            ? CYCLE_THEMES[(CYCLE_THEMES.indexOf(progress.cycle_theme || CYCLE_THEMES[0]) + 1) % CYCLE_THEMES.length]
+            : progress.cycle_theme;
 
-      const updated = entities.DailyLogin.update(progress.id, {
-        last_claim_date: today,
-        current_day: nextDay,
-        claimed_days: wrapped ? [] : claimedDays,
-        cycle_theme: newTheme,
+          const updated = entities.DailyLogin.update(progress.id, {
+            last_claim_date: today,
+            current_day: nextDay,
+            claimed_days: wrapped ? [] : claimedDays,
+            cycle_theme: newTheme,
+          });
+
+          const delivered = await deliverViaApplyCharacterRewards({
+            user,
+            characterId: character.id,
+            payload: {
+              stardust: payload.stardust,
+              nova_crystals: payload.nova_crystals,
+              experience: payload.experience,
+              fuel: payload.fuel,
+              item_rarity: payload.item_rarity,
+              collectible: payload.collectible,
+            },
+            claim,
+          });
+
+          return {
+            success: true,
+            claimed_day: day,
+            rewards: rewardEntry.rewards,
+            applied: delivered.applied,
+            items: delivered.items,
+            progress: updated,
+            wrapped,
+            reward_claim_id: claim.id,
+          };
+        },
       });
 
-      const { patch, items } = await applyCharacterRewards(game, character.id, rewardEntry.rewards || {});
-
-      return {
-        success: true,
-        claimed_day: day,
-        rewards: rewardEntry.rewards,
-        applied: patch,
-        items,
-        progress: updated,
-        wrapped,
-      };
+      return claimOut.result;
     });
-    return { status: 200, body };
+    return { status: 200, body: result };
   } catch (err) {
     if (err.status === 409) {
-      return { status: 409, body: { error: err.message, progress: err.progress } };
+      return { status: 409, body: { error: err.message, progress: err.progress, code: err.code } };
+    }
+    if (err.code) {
+      return { status: 400, body: { error: err.message, code: err.code } };
     }
     throw err;
   }
@@ -100,8 +152,16 @@ export async function ClaimMailReward(user, body) {
   const character = await myCharacter(user);
   if (!character) return { status: 404, body: { error: "No character" } };
 
+  const suspicious = detectSuspiciousRewardFields(body);
+  const claimKey = ClaimKeys.mail(mailId);
+
   try {
     const result = await withTransactionAsync(async () => {
+      const prior = getClaimByKey(claimKey);
+      if (prior?.status === "completed" && prior.deliveredPayload) {
+        return { ...prior.deliveredPayload, idempotentReplay: true };
+      }
+
       const mail = entities.Mail.get(mailId);
       if (!mail) {
         const err = new Error("Mail not found");
@@ -111,6 +171,7 @@ export async function ClaimMailReward(user, body) {
       if (mail.owner_id !== character.id) {
         const err = new Error("Not your mail");
         err.status = 403;
+        err.code = RewardErrors.CHARACTER_NOT_OWNED;
         throw err;
       }
       if (!mail.has_rewards) {
@@ -121,6 +182,7 @@ export async function ClaimMailReward(user, body) {
       if (mail.claimed) {
         const err = new Error("Rewards already claimed");
         err.status = 409;
+        err.code = RewardErrors.REWARD_ALREADY_CLAIMED;
         throw err;
       }
       if (mail.expires_at && new Date(mail.expires_at).getTime() < clock.nowMs()) {
@@ -130,14 +192,43 @@ export async function ClaimMailReward(user, body) {
         throw err;
       }
 
-      // Mark claimed before granting so double-submit cannot both grant.
-      entities.Mail.update(mailId, { claimed: true, read: true });
-      const { patch, items } = await applyCharacterRewards(svc(user), character.id, mail.rewards || {});
-      return { success: true, applied: patch, items };
+      const attachment = mail.rewards || {};
+
+      const claimOut = await executeRewardClaim({
+        claimKey,
+        idempotencyKey: body?.idempotencyKey || body?.idempotency_key || null,
+        accountId: user.id,
+        characterId: character.id,
+        rewardSource: RewardSources.MAIL_ATTACHMENT,
+        sourceReferenceType: "mail",
+        sourceReferenceId: mailId,
+        definitionKey: "mail_attachment",
+        clientBody: body,
+        suspiciousFields: suspicious,
+        generate: async () => ({ ...attachment }),
+        deliver: async (payload, claim) => {
+          entities.Mail.update(mailId, { claimed: true, read: true });
+          const delivered = await deliverViaApplyCharacterRewards({
+            user,
+            characterId: character.id,
+            payload,
+            claim,
+          });
+          return {
+            success: true,
+            applied: delivered.applied,
+            items: delivered.items,
+            reward_claim_id: claim.id,
+          };
+        },
+      });
+
+      return claimOut.result;
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    if (err.code) return { status: 400, body: { error: err.message, code: err.code } };
     throw err;
   }
 }
@@ -149,12 +240,19 @@ export async function RedeemPromoCode(user, body) {
   const code = (body?.code || "").trim();
   if (!code) return { status: 400, body: { error: "Missing code" } };
 
+  const suspicious = detectSuspiciousRewardFields(body);
+  const claimKey = ClaimKeys.promo(user.id, code);
   const game = svc(user);
   const found = entities.PromoCode.filter({ code });
   const pc = found[0];
   if (pc) {
     try {
       const result = await withTransactionAsync(async () => {
+        const prior = getClaimByKey(claimKey);
+        if (prior?.status === "completed" && prior.deliveredPayload) {
+          return { ...prior.deliveredPayload, idempotentReplay: true };
+        }
+
         const fresh = entities.PromoCode.get(pc.id) || pc;
         if (!fresh.active) {
           const err = new Error("This code is no longer active");
@@ -165,6 +263,7 @@ export async function RedeemPromoCode(user, body) {
         if (redeemedBy.includes(character.id)) {
           const err = new Error("Code already redeemed");
           err.status = 409;
+          err.code = RewardErrors.REWARD_ALREADY_CLAIMED;
           throw err;
         }
         if (fresh.max_redemptions && fresh.max_redemptions > 0 && redeemedBy.length >= fresh.max_redemptions) {
@@ -172,13 +271,43 @@ export async function RedeemPromoCode(user, body) {
           err.status = 410;
           throw err;
         }
-        entities.PromoCode.update(fresh.id, { redeemed_by: [...redeemedBy, character.id] });
-        const { patch, items } = await applyCharacterRewards(game, character.id, fresh.rewards || {});
-        return { success: true, code, label: fresh.label, patch, items };
+
+        const claimOut = await executeRewardClaim({
+          claimKey,
+          idempotencyKey: body?.idempotencyKey || `promo:${user.id}:${code}`,
+          accountId: user.id,
+          characterId: character.id,
+          rewardSource: RewardSources.PROMOTION,
+          sourceReferenceType: "promo_code",
+          sourceReferenceId: fresh.id,
+          definitionKey: "promotion",
+          clientBody: body,
+          suspiciousFields: suspicious,
+          generate: async () => ({ ...(fresh.rewards || {}) }),
+          deliver: async (payload, claim) => {
+            entities.PromoCode.update(fresh.id, { redeemed_by: [...redeemedBy, character.id] });
+            const delivered = await deliverViaApplyCharacterRewards({
+              user,
+              characterId: character.id,
+              payload,
+              claim,
+            });
+            return {
+              success: true,
+              code,
+              label: fresh.label,
+              patch: delivered.applied,
+              items: delivered.items,
+              reward_claim_id: claim.id,
+            };
+          },
+        });
+        return claimOut.result;
       });
       return { status: 200, body: result };
     } catch (err) {
-      if (err.status) return { status: err.status, body: { error: err.message } };
+      if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+      if (err.code) return { status: 400, body: { error: err.message, code: err.code } };
       throw err;
     }
   }
@@ -186,7 +315,6 @@ export async function RedeemPromoCode(user, body) {
   const result = await redeemPromoCode(game, character, code);
   if (!result.ok) return { status: result.status, body: { error: result.error } };
 
-  // Founders promo also grants account entitlements (idempotent).
   if (/^foundersonly$/i.test(code) && character.created_by_id) {
     try {
       await grantProductBundle({

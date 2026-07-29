@@ -342,6 +342,33 @@ const entitlements = {
   },
 };
 
+const rewards = {
+  definitions() {
+    return request("/api/rewards/definitions");
+  },
+  pendingLoot(characterId) {
+    const q = characterId ? `?characterId=${encodeURIComponent(characterId)}` : "";
+    return request(`/api/rewards/pending-loot${q}`);
+  },
+  adminSearch(params = {}) {
+    const q = new URLSearchParams(params).toString();
+    return request(`/api/rewards/admin/search?${q}`);
+  },
+  adminGet(id) {
+    return request(`/api/rewards/admin/${id}`);
+  },
+  adminGrant(body) {
+    return request("/api/rewards/admin/grant", { method: "POST", body });
+  },
+  adminRetryDelivery(id, body) {
+    return request(`/api/rewards/admin/${id}/retry-delivery`, { method: "POST", body });
+  },
+  adminAudit(params = {}) {
+    const q = new URLSearchParams(params).toString();
+    return request(`/api/rewards/admin/audit/recent?${q}`);
+  },
+};
+
 const entitiesProxy = entityProxy();
 
 export const api = {
@@ -350,6 +377,7 @@ export const api = {
   functions,
   time,
   entitlements,
+  rewards,
   asServiceRole: {
     entities: entitiesProxy,
   },

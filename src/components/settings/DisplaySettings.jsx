@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Monitor, AlignHorizontalJustifyCenter } from "lucide-react";
+import { AlignHorizontalJustifyCenter } from "lucide-react";
 import { DISPLAY_OPTIONS, ANCHOR_OPTIONS, getDisplayScale, setDisplayScale, getDisplayAnchor, setDisplayAnchor } from "@/lib/displayScale";
 
 // Display scale applies to the station hub and in-game shell (GameCanvas).
@@ -12,10 +12,9 @@ export default function DisplaySettings() {
 
   return (
     <div className="painted-panel canvas-grain p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Monitor className="w-4 h-4 text-primary" />
-        <h2 className="font-display font-semibold text-sm">Display</h2>
-      </div>
+      <h2 className="font-display font-bold text-base text-center tracking-wide mb-3">
+        <span className="scifi-heading">Display</span>
+      </h2>
       <p className="text-xs text-muted-foreground mb-2">
         Default keeps a 16:9 game frame on all monitors — ultrawide and tall screens get black bars.
       </p>

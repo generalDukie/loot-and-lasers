@@ -9,6 +9,10 @@ import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus
 import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import {
+  acceptServerPendingLoot,
+  dissolveServerPendingLoot,
+} from "../rewards/pending.js";
+import {
   todayET,
   applyXpToCharacter,
   rollItemRarity,
@@ -589,25 +593,9 @@ export const CasinoSettle = wrap((user, body) => {
     const won = Math.random() < 0.01;
     deltaCrystals = won ? bet * (25 - 1) : -bet;
     outcome = { won, mult: won ? 25 : 0, payout_mult: won ? 25 : 0 };
-  } else if (body.currency && body.wager != null && body.payout_mult != null) {
-    const currency = String(body.currency).toLowerCase();
-    const wager = Math.floor(Number(body.wager) || 0);
-    let mult = Number(body.payout_mult) || 0;
-    if (currency === "stardust") {
-      if (wager > maxStardustBet) httpErr(400, `Bet too high (max ${maxStardustBet})`);
-      if ((ch.stardust || 0) < wager) httpErr(400, "Not enough stardust");
-      mult = Math.min(25, Math.max(0, mult));
-      deltaStardust = Math.round(wager * (mult - 1));
-    } else if (currency === "nova" || currency === "nova_crystals") {
-      if (!NOVA_CASINO_OPEN && mult > 0) httpErr(400, "Crystal tables sealed");
-      if (wager > CASINO_MAX_NOVA_BET) httpErr(400, "Bet too high");
-      if ((ch.nova_crystals || 0) < wager) httpErr(400, "Not enough Nova Crystals");
-      mult = Math.min(25, Math.max(0, mult));
-      deltaCrystals = Math.round(wager * (mult - 1));
-    } else {
-      httpErr(400, "Unknown currency");
-    }
-    outcome = { payout_mult: mult, wager };
+  } else if (body.currency != null || body.wager != null || body.payout_mult != null) {
+    // Legacy client-authored payout path — rejected. Outcomes must use named games above.
+    httpErr(400, "Client payout multipliers are not accepted", "SUSPICIOUS_CLIENT_PAYLOAD");
   } else {
     httpErr(400, "Unknown casino game");
   }
@@ -864,60 +852,32 @@ export const RenameCharacter = wrap(async (user, body) => {
   return { success: true, patch, character, used_rename_token: !!useToken && tokens.quantity > 0 };
 });
 
-/** Dissolve a client-held pending loot payload for stardust (not in DB). */
+/** Dissolve server-persisted pending loot for stardust. Requires pending_loot_id. */
 export const DissolvePendingLoot = wrap((user, body) => {
-  const ch = requireMyChar(user);
-  const item = body?.item;
-  if (!item || typeof item !== "object") httpErr(400, "Missing item");
-  const value = computeStardustValue(item);
-  const patch = {
-    stardust: (ch.stardust || 0) + value,
-    total_stardust_earned: (ch.total_stardust_earned || 0) + value,
-  };
-  const character = entities.Character.update(ch.id, patch);
-  return { success: true, stardust_gained: value, patch, character };
+  const pendingId = body?.pending_loot_id || body?.pendingLootId;
+  if (!pendingId) httpErr(400, "Missing pending_loot_id — client item payloads are not accepted");
+  return dissolveServerPendingLoot(user, pendingId);
 });
 
 /**
- * Create a previously pending loot item once inventory has room.
- * Strips economy-forged fields; rarity capped to known set.
+ * Accept server-persisted pending loot once inventory has room.
+ * Client-submitted item bodies are ignored.
  */
 export const AcceptPendingLoot = wrap((user, body) => {
-  const ch = requireMyChar(user);
-  const raw = body?.item;
-  if (!raw || typeof raw !== "object") httpErr(400, "Missing item");
-  const cap = getInventoryCap(ch);
-  if (countBagOccupancy(ch) >= cap) httpErr(400, "Inventory full");
-  const rarity = ["common", "uncommon", "rare", "epic", "legendary"].includes(raw.rarity)
-    ? raw.rarity
-    : "common";
-  const type = typeof raw.type === "string" ? raw.type : "material";
-  const stats = raw.stats && typeof raw.stats === "object" ? raw.stats : {};
-  const created = entities.Item.create({
-    name: String(raw.name || "Unknown Loot").slice(0, 80),
-    type,
-    rarity,
-    level_requirement: Math.max(1, Math.min(500, Math.floor(raw.level_requirement || 1))),
-    stats,
-    flavor_text: typeof raw.flavor_text === "string" ? raw.flavor_text.slice(0, 200) : "",
-    sell_value: computeStardustValue({ rarity, type, stats, level_requirement: raw.level_requirement }),
-    consumable: raw.consumable && typeof raw.consumable === "object" ? raw.consumable : undefined,
-    emoji: typeof raw.emoji === "string" ? raw.emoji.slice(0, 8) : undefined,
-    is_equipped: false,
-    locked: false,
-    owner_id: ch.created_by_id,
-    character_id: ch.id,
-  });
-  return { success: true, item: created };
+  const pendingId = body?.pending_loot_id || body?.pendingLootId;
+  if (!pendingId) httpErr(400, "Missing pending_loot_id — client item payloads are not accepted");
+  return acceptServerPendingLoot(user, pendingId);
 });
 
-/** Legacy guild war sim payout — net stardust after war chest + rewards. */
+/**
+ * Legacy guild war sim payout.
+ * Client reward_stardust is ignored — server uses a fixed win/loss schedule.
+ */
 export const ApplyGuildWarResult = wrap((user, body) => {
   const ch = requireMyChar(user);
   const won = !!body.won;
-  const rewardSd = Math.max(0, Math.floor(Number(body.reward_stardust) || 0));
-  // Cap forged rewards — max payout mirrors client computeGuildBattleRewards scale.
-  const capped = Math.min(rewardSd, 5000 * 10);
+  // Server-authoritative reward (scaled units). Client amounts are ignored.
+  const capped = won ? 2500 * 10 : 500 * 10;
   const delta = -GUILD_WAR_SIM_COST + capped;
   const next = (ch.stardust || 0) + delta;
   if (next < 0) httpErr(400, "Not enough stardust for war chest");
@@ -926,7 +886,7 @@ export const ApplyGuildWarResult = wrap((user, body) => {
     total_stardust_earned: (ch.total_stardust_earned || 0) + Math.max(0, capped),
   };
   const character = entities.Character.update(ch.id, patch);
-  return { success: true, delta, patch, character, won };
+  return { success: true, delta, patch, character, won, reward_stardust: capped };
 });
 
 export const ECONOMY_FOLLOW_ON_HANDLERS = {

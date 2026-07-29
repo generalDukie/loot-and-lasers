@@ -26,7 +26,7 @@ import {
   EntitlementError,
   EntitlementErrors,
   FEATURE_FLAGS,
-} from "./index.js";
+} from "../entitlements/index.js";
 
 function adminOnly(req, res) {
   if (!isAdmin(req.user)) {

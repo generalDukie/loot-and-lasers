@@ -4,8 +4,10 @@ import { Settings, LogOut, Trash2, Ticket, Loader2, Check, BookOpen } from "luci
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import CodexModal from "@/components/game/CodexModal";
+import CharacterSwitcher from "@/components/game/CharacterSwitcher";
 import AccountSettings from "@/components/settings/AccountSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
+import DisplaySettings from "@/components/settings/DisplaySettings";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { departFromGuild } from "@/lib/guildUtils";
 import { purgeCharacter } from "@/lib/purgeCharacter";
@@ -17,12 +19,14 @@ export default function SettingsPage() {
   const [redeeming, setRedeeming] = useState(false);
   const [redeemed, setRedeemed] = useState([]);
   const [codexOpen, setCodexOpen] = useState(false);
+  const [myChar, setMyChar] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
     getMyCharacter().then((c) => {
       if (!c) return;
       setRedeemed(c.promo_codes_redeemed || []);
+      setMyChar(c);
     });
   }, []);
 
@@ -79,7 +83,9 @@ export default function SettingsPage() {
 
           {/* Right column — stacked smaller panels */}
           <div className="flex flex-col gap-4">
+            {myChar && <CharacterSwitcher />}
             <AudioSettings />
+            <DisplaySettings />
 
             {/* Codex quick-open */}
             <button

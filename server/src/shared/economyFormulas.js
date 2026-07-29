@@ -7,13 +7,15 @@ import {
   getMissionXpPerFuel,
   getMissionStardustPerFuel,
   getStatPointsForLevelRange,
-  XP_STARDUST_SCALE,
 } from "./rewards.js";
+import { XP_STARDUST_SCALE } from "./economyConstants.js";
 import {
   computeItemVendorValue,
   ITEM_SELL_TYPE_WEIGHT,
 } from "./itemGeneration.js";
 import { todayET as todayETFromClock, getWeekKey as getWeekKeyFromClock, clock } from "./time/index.js";
+
+export { XP_STARDUST_SCALE };
 
 /** Clock-backed daily key (America/New_York). */
 export function todayET(now = clock.now()) {
@@ -337,6 +339,9 @@ export function getInventoryCap(character) {
   }
   return base + modBonus + entBonus;
 }
+
+// Wire for applyCharacterRewards without an import cycle (rewards ↔ this module).
+globalThis.__llGetInventoryCap = getInventoryCap;
 
 export function getEffectiveMissionDuration(character, mission) {
   const warpReduction = getModEffectTotal(character, "mission_duration_reduction");

@@ -24,9 +24,9 @@ const SECTIONS = [
 ];
 
 function H({ children }) {
-  return <h4 className="font-display font-semibold text-[11px] uppercase tracking-wide text-muted-foreground mt-3 mb-1">{children}</h4>;
+  return <h4 className="font-display font-semibold text-[11px] uppercase tracking-wide text-muted-foreground mt-2 mb-0.5">{children}</h4>;
 }
-function Li({ children }) { return <li className="ml-4 list-disc marker:text-muted-foreground">{children}</li>; }
+function Li({ children }) { return <li className="ml-3 list-disc marker:text-muted-foreground">{children}</li>; }
 
 function renderSection(id) {
   switch (id) {
@@ -206,16 +206,16 @@ export default function CodexModal({ open, onClose }) {
       {open && (
         <GameplayOverlayPortal
           as={motion.div}
-          className="z-[80] flex items-center justify-center p-4"
+          className="z-[80] flex items-center justify-center p-3"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         >
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
           <motion.div
             initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
             transition={{ type: "spring", stiffness: 360, damping: 26 }}
-            className="relative w-full max-w-2xl max-h-[88%] flex flex-col rounded-2xl border border-border/60 painted-panel canvas-grain"
+            className="relative w-full max-w-2xl max-h-[84%] flex flex-col rounded-2xl border border-border/60 painted-panel canvas-grain"
           >
-            <div className="flex items-center justify-between p-4 border-b border-border/40">
+            <div className="flex items-center justify-between p-3 border-b border-border/40">
               <div className="flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-primary" />
                 <h2 className="font-display font-bold text-lg tracking-wide">Codex &amp; Guide</h2>
@@ -223,12 +223,12 @@ export default function CodexModal({ open, onClose }) {
               <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
             </div>
 
-            <div className="px-4 py-2 border-b border-border/30 bg-primary/5 text-[11px] text-muted-foreground text-center">
+            <div className="px-3 py-1.5 border-b border-border/30 bg-primary/5 text-[11px] text-muted-foreground text-center">
               You can reopen this guide anytime from <b className="text-foreground">Settings → Codex</b>.
             </div>
 
             {/* Section tabs */}
-            <div className="flex gap-1.5 p-3 overflow-x-auto border-b border-border/30">
+            <div className="flex gap-1.5 p-2 overflow-x-auto border-b border-border/30">
               {SECTIONS.map((s) => {
                 const Icon = s.icon;
                 const isActive = active === s.id;
@@ -236,7 +236,7 @@ export default function CodexModal({ open, onClose }) {
                   <button
                     key={s.id}
                     onClick={() => setActive(s.id)}
-                    className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-display font-semibold tracking-wide transition-colors border ${
+                    className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1.25 rounded-lg text-xs font-display font-semibold tracking-wide transition-colors border ${
                       isActive ? "border-primary/60 bg-primary/10 text-primary" : "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/20"
                     }`}
                   >
@@ -248,7 +248,7 @@ export default function CodexModal({ open, onClose }) {
             </div>
 
             {/* Content */}
-            <div className="overflow-y-auto p-5">
+            <div className="overflow-y-auto p-4">
               {renderSection(active)}
             </div>
           </motion.div>

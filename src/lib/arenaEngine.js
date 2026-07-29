@@ -354,12 +354,9 @@ function buildFighter(c, items, side) {
   const cls = CLASSES[c.class] || CLASSES.Vanguard;
   const derived = computeDerivedStats(stats, c);
   const className = cls.name;
-  // Astral Warden — Cosmic Barrier: starting shield = 20% max HP (cannot be restored once broken)
-  const shieldMax = className === "Astral Warden" ? Math.round(derived.health * 0.2) : 0;
   return {
     side, name: c.name, className,
     hp: derived.health, maxHp: derived.health,
-    atk: derived.damage, // sheet average; per-hit damage is rolled from primary
     primaryValue: derived.primaryValue,
     archetype: derived.archetype,
     crit: derived.critChance / 100,   // convert % → 0-1 for battle rolls
@@ -369,11 +366,8 @@ function buildFighter(c, items, side) {
     techResistPercent: derived.techResist || 0,
     damageType: derived.damageType || "strength",
     stats,
-    attackCount: 0,        // per-fighter turn counter (drives class specials)
-    shadowstepBuff: false, // Shadow Operative — Shadowstep damage boost pending
-    shield: shieldMax,
-    shieldMax,
-    shieldBroken: shieldMax === 0,
+    // Placeholder for future class passives. The current authoritative combat engine does not apply any.
+    passive: null,
   };
 }
 
@@ -382,17 +376,23 @@ function buildFighter(c, items, side) {
  * raw damage (class formula + variance) → crit → mitigation → round.
  * Class specials multiply raw damage before crit (existing ability identity).
  */
-function resolveBasicHit(attacker, defender, { abilityMult = 1, forceCrit = false, mitigationScale = 1 } = {}) {
-  let damage = rollBasicAttackDamage(attacker.archetype, attacker.primaryValue) * abilityMult;
-  const crit = forceCrit || Math.random() < attacker.crit;
-  if (crit) damage *= attacker.critMult || CRIT_MULT;
+function resolveBasicHit(attacker, defender, { canCrit = true, forceCrit = false, damageTypeForMitigation = attacker.damageType, rng = Math.random } = {}) {
+  // Base damage roll uses the existing formula + variance (no armor/DR yet).
+  let damage = rollBasicAttackDamage(attacker.archetype, attacker.primaryValue, rng);
 
-  let mit = mitigationForDamageType(
-    attacker.damageType,
+  // Crit step (canCrit controls whether crit is allowed for this damage event).
+  let crit = false;
+  if (canCrit) {
+    crit = forceCrit || rng() < attacker.crit;
+    if (crit) damage *= attacker.critMult || CRIT_MULT;
+  }
+
+  // Resistance step (after crit). Unknown damageTypeForMitigation yields 0 mitigation in mitigationForDamageType.
+  const mit = mitigationForDamageType(
+    damageTypeForMitigation,
     defender.armorPercent,
     defender.techResistPercent,
   );
-  mit *= mitigationScale;
   damage *= (1 - mit);
 
   const finalDamage = Math.max(0, Math.round(damage));
@@ -402,143 +402,155 @@ function resolveBasicHit(attacker, defender, { abilityMult = 1, forceCrit = fals
 // Applies damage to a fighter, absorbing it through the Astral Warden shield first.
 function applyDamage(target, dmg) {
   const amount = Math.max(0, dmg || 0);
-  if (target.shield > 0 && !target.shieldBroken) {
-    if (amount >= target.shield) {
-      const overflow = amount - target.shield;
-      target.shield = 0;
-      target.shieldBroken = true;
-      target.hp = Math.max(0, target.hp - overflow);
-      return { hpDamage: overflow, shieldHit: false, shieldBroken: true };
-    }
-    target.shield -= amount;
-    return { hpDamage: 0, shieldHit: true, shieldBroken: false };
-  }
   target.hp = Math.max(0, target.hp - amount);
-  return { hpDamage: amount, shieldHit: false, shieldBroken: false };
+  return { hpDamage: amount, shieldHit: false };
 }
 
-export function simulateBattle(player, opp, playerItems = [], oppItems = []) {
+// Healing is NOT an attack:
+// - cannot Crit
+// - cannot Dodge
+// - not reduced by Might/Tech Resistance
+// - clamps to missing HP only
+function applyHealing(target, healAmount) {
+  const amount = Math.max(0, healAmount || 0);
+  const missing = Math.max(0, (target.maxHp || 0) - target.hp);
+  const healed = Math.min(missing, amount);
+  target.hp = target.hp + healed;
+  return { healed };
+}
+
+export function simulateBattle(player, opp, playerItems = [], oppItems = [], opts = {}) {
+  const { rng = Math.random } = opts || {};
+  const forcedDamageTypeEnum = opts?.forceDamageTypeEnum ?? null; // "MIGHT" | "REFLEX" | "TECH" | "TRUE"
+  const forcedCanDodge = typeof opts?.forceCanDodge === "boolean" ? opts.forceCanDodge : true;
+
+  // Snapshot both combatants immediately when combat starts.
   const A = buildFighter(player, playerItems, "player");
   const B = buildFighter(opp, oppItems, "opponent");
-  // Ungeared bots: bump primary so their damage formula still scales with level.
-  if (!oppItems || oppItems.length === 0) {
-    B.primaryValue += (opp.level || 1) * 2;
-  }
 
   const events = [];
-  let attacker = A.stats.agility >= B.stats.agility ? A : B;
-  let defender = attacker === A ? B : A;
+
+  // Initiative: single pure 50/50 roll (no stat influence).
+  const playerGoesFirst = rng() < 0.5;
+  let attacker = playerGoesFirst ? A : B;
+  let defender = playerGoesFirst ? B : A;
+  const initiativeFirstSide = attacker.side;
+
   let round = 0;
-
-  while (A.hp > 0 && B.hp > 0 && round < 45) {
+  // With only standard attacks, combat should end quickly; we keep a high safety cap.
+  while (A.hp > 0 && B.hp > 0 && round < 5000) {
     round++;
-    attacker.attackCount++;
 
-    // Astral Warden — Cosmic Barrier: regenerates 2% max HP at the start of each of its turns
-    if (attacker.className === "Astral Warden" && attacker.hp < attacker.maxHp) {
-      const regen = Math.max(1, Math.round(attacker.maxHp * 0.02));
-      const before = attacker.hp;
-      attacker.hp = Math.min(attacker.maxHp, attacker.hp + regen);
-      const gained = attacker.hp - before;
-      if (gained > 0) {
-        events.push({ type: "regen", attacker: attacker.side, defender: attacker.side, heal: gained, dodged: false });
+    const damageTypeEnum = forcedDamageTypeEnum ?? (
+      attacker.damageType === "strength"
+        ? "MIGHT"
+        : attacker.damageType === "tech"
+          ? "TECH"
+          : "REFLEX"
+    );
+    const canDodge = forcedCanDodge;
+    const canCrit = damageTypeEnum !== "TRUE";
+    const mitigationType = damageTypeEnum === "MIGHT"
+      ? "strength"
+      : damageTypeEnum === "TECH"
+        ? "tech"
+        : damageTypeEnum === "REFLEX"
+          ? "agility"
+          : "true";
+
+    // STEP 4 — Dodge (before Crit / Resistance).
+    if (canDodge) {
+      const dodgeRoll = rng();
+      if (dodgeRoll < defender.dodge) {
+        events.push({
+          type: "dodge",
+          attacker: attacker.side,
+          defender: defender.side,
+          dodged: true,
+          damageType: damageTypeEnum,
+          canDodge,
+          canCrit,
+          damage: 0,
+          crit: false,
+          shieldHit: false,
+          ability: null,
+          text: `${defender.name} dodges!`,
+        });
+      } else {
+        // STEP 5/6/7 — Crit → Resistance → nearest-whole-number rounding.
+        const hit = resolveBasicHit(attacker, defender, {
+          canCrit,
+          damageTypeForMitigation: mitigationType,
+          rng,
+        });
+        const res = applyDamage(defender, hit.finalDamage);
+
+        events.push({
+          type: "attack",
+          attacker: attacker.side,
+          defender: defender.side,
+          damage: res.hpDamage,
+          shieldHit: false,
+          crit: hit.crit,
+          dodged: false,
+          ability: null,
+          damageType: damageTypeEnum,
+          canDodge,
+          canCrit,
+          finalDamage: hit.finalDamage,
+        });
+
+        // STEP 10 — End combat immediately on death.
+        if (defender.hp <= 0) break;
+        // Strict alternating turns.
+        [attacker, defender] = [defender, attacker];
+        continue;
       }
+      // Strict alternating turns after a dodge.
+      [attacker, defender] = [defender, attacker];
+      continue;
     }
 
-    // Cosmic Engineer — Combat Drone: every other turn, 40% of sheet average damage (no dodge/crit/mit)
-    if (attacker.className === "Cosmic Engineer" && attacker.attackCount % 2 === 0 && defender.hp > 0) {
-      const droneDmg = Math.max(1, Math.round(attacker.atk * 0.4));
-      const res = applyDamage(defender, droneDmg);
+    {
+      // STEP 5/6/7 — Crit → Resistance → nearest-whole-number rounding.
+      const hit = resolveBasicHit(attacker, defender, {
+        canCrit,
+        damageTypeForMitigation: mitigationType,
+        rng,
+      });
+      const res = applyDamage(defender, hit.finalDamage);
+
       events.push({
-        type: "drone",
+        type: "attack",
         attacker: attacker.side,
         defender: defender.side,
         damage: res.hpDamage,
-        shieldHit: res.shieldHit,
-        ability: "Combat Drone",
-        crit: false,
+        shieldHit: false,
+        crit: hit.crit,
         dodged: false,
+        ability: null,
+        damageType: damageTypeEnum,
+        canDodge,
+        canCrit,
+        finalDamage: hit.finalDamage,
       });
+
+      // STEP 10 — End combat immediately on death.
       if (defender.hp <= 0) break;
     }
 
-    const useAbility = round % 4 === 0;
-    // STEP 2 — Dodge (before damage / crit / mitigation)
-    const dodgeRoll = Math.random();
-
-    if (dodgeRoll < defender.dodge) {
-      events.push({
-        type: "dodge",
-        attacker: attacker.side,
-        defender: defender.side,
-        dodged: true,
-        text: `${defender.name} dodges!`,
-      });
-      // Shadow Operative — Shadowstep: a successful dodge empowers the next attack
-      if (defender.className === "Shadow Operative") defender.shadowstepBuff = true;
-    } else {
-      // Class specials keyed off this fighter's own attack count
-      const unstoppable = attacker.className === "Vanguard" && attacker.attackCount % 4 === 0;
-      const overcharge = attacker.className === "Technomancer" && attacker.attackCount % 3 === 0;
-      const shadowstep = attacker.className === "Shadow Operative" && attacker.shadowstepBuff;
-      const twinFang = attacker.className === "Void Runner" && attacker.attackCount % 3 === 0;
-
-      let abilityMult = 1;
-      if (unstoppable) abilityMult *= 2;
-      if (shadowstep) abilityMult *= 1.25;
-      if (twinFang) abilityMult *= 0.7;
-
-      let mitigationScale = 1;
-      if (unstoppable) mitigationScale *= 0.75;
-      if (overcharge) mitigationScale *= 0.8;
-
-      const hit = resolveBasicHit(attacker, defender, {
-        abilityMult,
-        forceCrit: overcharge,
-        mitigationScale,
-      });
-      const res = applyDamage(defender, hit.finalDamage);
-      attacker.shadowstepBuff = false; // consumed
-
-      const abilityName = unstoppable ? "Unstoppable"
-        : overcharge ? "Overcharge"
-        : shadowstep ? "Shadowstep"
-        : twinFang ? "Twin Fang"
-        : useAbility ? classSpecialName(attacker.className)
-        : null;
-
-      events.push({
-        type: abilityName ? "ability" : "attack",
-        attacker: attacker.side,
-        defender: defender.side,
-        damage: res.hpDamage,
-        shieldHit: res.shieldHit,
-        crit: hit.crit,
-        dodged: false,
-        ability: abilityName,
-      });
-
-      // Void Runner — Twin Fang: second strike (fresh variance + crit; same mitigation rules)
-      if (twinFang && defender.hp > 0) {
-        const hit2 = resolveBasicHit(attacker, defender, { abilityMult: 0.7 });
-        const res2 = applyDamage(defender, hit2.finalDamage);
-        events.push({
-          type: "ability",
-          attacker: attacker.side,
-          defender: defender.side,
-          damage: res2.hpDamage,
-          shieldHit: res2.shieldHit,
-          crit: hit2.crit,
-          dodged: false,
-          ability: "Twin Fang",
-        });
-      }
-    }
+    // Strict alternating turns.
     [attacker, defender] = [defender, attacker];
   }
 
   const winner = A.hp > 0 ? "player" : "opponent";
-  return { events, winner, playerMaxHp: A.maxHp, opponentMaxHp: B.maxHp };
+  return {
+    events,
+    winner,
+    playerMaxHp: A.maxHp,
+    opponentMaxHp: B.maxHp,
+    initiativeFirstSide,
+  };
 }
 
 // Elo K-factor and soft clamps keep climbs meaningful without runaway swings.

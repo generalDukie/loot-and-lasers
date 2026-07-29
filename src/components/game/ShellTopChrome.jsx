@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Settings, Menu, PanelLeft } from "lucide-react";
+import { Settings, Menu, PanelLeft, Users } from "lucide-react";
 import SiteTitle from "@/components/admin/SiteTitle";
 import GameClock from "@/components/game/GameClock";
 import ActivityCountdownChip from "@/components/game/ActivityCountdownChip";
@@ -54,6 +54,9 @@ export default function ShellTopChrome({
         <GameClock />
       </div>
 
+      <IconLink to="/select-character" title="Switch Operative">
+        <Users className="w-4 h-4" />
+      </IconLink>
       <IconLink to="/settings" title="Settings">
         <Settings className="w-4 h-4" />
       </IconLink>

@@ -35,10 +35,7 @@ export default function AudioSettings() {
 
   return (
     <div className="painted-panel canvas-grain p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <Volume2 className="w-4 h-4 text-primary" />
-        <h2 className="font-display font-semibold text-sm">Audio</h2>
-      </div>
+      <h2 className="font-display font-bold text-base text-center tracking-wide"><span className="scifi-heading">Audio</span></h2>
       <div className="space-y-4">
         <Row icon={Volume2} label="Master Volume" value={vols.master} onChange={(v) => setVolumes({ master: v })} />
         <Row icon={Music} label="Music Volume" value={vols.music} onChange={(v) => setVolumes({ music: v })} />

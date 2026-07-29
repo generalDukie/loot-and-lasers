@@ -1,15 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { api } from "@/api/gameClient";
-import { Settings, LogOut, Trash2, Ticket, Loader2, Check, BookOpen, Gift } from "lucide-react";
+import { Settings, LogOut, Trash2, Ticket, Loader2, Check, BookOpen } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import CodexModal from "@/components/game/CodexModal";
-import DailyLoginModal from "@/components/social/DailyLoginModal";
-import CharacterSwitcher from "@/components/game/CharacterSwitcher";
-import ProfileSettings from "@/components/settings/ProfileSettings";
 import AccountSettings from "@/components/settings/AccountSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
-import DisplaySettings from "@/components/settings/DisplaySettings";
 import { getMyCharacter } from "@/lib/socialEngine";
 import { departFromGuild } from "@/lib/guildUtils";
 import { purgeCharacter } from "@/lib/purgeCharacter";
@@ -21,15 +17,12 @@ export default function SettingsPage() {
   const [redeeming, setRedeeming] = useState(false);
   const [redeemed, setRedeemed] = useState([]);
   const [codexOpen, setCodexOpen] = useState(false);
-  const [dailyOpen, setDailyOpen] = useState(false);
-  const [myChar, setMyChar] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
     getMyCharacter().then((c) => {
       if (!c) return;
       setRedeemed(c.promo_codes_redeemed || []);
-      setMyChar(c);
     });
   }, []);
 
@@ -74,107 +67,97 @@ export default function SettingsPage() {
   }
 
   return (
-    <PageStage className="space-y-6">
+    <PageStage className="space-y-5">
       <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">
         <Settings className="w-5 h-5 text-primary" /> Settings
       </h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 w-full auto-rows-min">
-        {/* Codex / Guide */}
-        <button
-          onClick={() => setCodexOpen(true)}
-          className="w-full flex items-center gap-3 p-4 painted-panel canvas-grain text-left hover:brightness-110 transition"
-        >
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <BookOpen className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <p className="font-display font-semibold text-sm">Codex &amp; Guide</p>
-            <p className="text-xs text-muted-foreground">How things work · New player tutorial</p>
-          </div>
-        </button>
+      <div className="mx-auto w-full max-w-5xl">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(0,22rem)] gap-4 items-start">
+          {/* Left column — Account */}
+          <AccountSettings />
 
-        {/* Daily login rewards */}
-        <button
-          onClick={() => setDailyOpen(true)}
-          className="w-full flex items-center gap-3 p-4 painted-panel canvas-grain text-left hover:brightness-110 transition"
-        >
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-            <Gift className="w-5 h-5 text-amber-300" />
-          </div>
-          <div>
-            <p className="font-display font-semibold text-sm">Daily Login Rewards</p>
-            <p className="text-xs text-muted-foreground">Re-open today's reward calendar</p>
-          </div>
-        </button>
+          {/* Right column — stacked smaller panels */}
+          <div className="flex flex-col gap-4">
+            <AudioSettings />
 
-        <CharacterSwitcher />
-        <ProfileSettings />
-        <AccountSettings />
-        <AudioSettings />
-        <DisplaySettings />
-
-        <div className="painted-panel canvas-grain p-4 md:col-span-2 2xl:col-span-1">
-          <div className="flex items-center gap-2 mb-3">
-            <Ticket className="w-4 h-4 text-accent" />
-            <h2 className="font-display font-semibold text-sm">Promo Code</h2>
-          </div>
-          <form onSubmit={handleRedeem} className="flex gap-2">
-            <Input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Enter code"
-              className="h-10"
-              disabled={redeeming}
-            />
+            {/* Codex quick-open */}
             <button
-              type="submit"
-              disabled={redeeming || !code.trim()}
-              className="painted-btn painted-btn-accent px-4 py-2 text-xs flex items-center gap-1.5 disabled:opacity-50"
+              onClick={() => setCodexOpen(true)}
+              className="flex items-center gap-2.5 px-3.5 py-2.5 painted-panel canvas-grain text-left hover:brightness-110 transition rounded-xl w-full"
             >
-              {redeeming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ticket className="w-3.5 h-3.5" />}
-              Redeem
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <BookOpen className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="font-display font-semibold text-sm">Codex &amp; Guide</p>
+                <p className="text-[11px] text-muted-foreground">How things work · New player tutorial</p>
+              </div>
             </button>
-          </form>
-          {redeemed.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {redeemed.map((c) => (
-                <span key={c} className="text-[10px] bg-accent/10 text-accent px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <Check className="w-2.5 h-2.5" /> {c}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
 
-        <div className="bg-card/50 border border-border/50 rounded-2xl divide-y divide-border/50 md:col-span-2 2xl:col-span-3">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 p-4 text-sm text-left hover:bg-muted/20 transition-colors"
-          >
-            <LogOut className="w-4 h-4 text-muted-foreground" />
-            <div>
-              <p className="font-medium">Log Out</p>
-              <p className="text-xs text-muted-foreground">Sign out of your account</p>
+            {/* Promo Code */}
+            <div className="painted-panel canvas-grain p-3.5 rounded-xl">
+              <div className="flex items-center gap-2 mb-2.5">
+                <Ticket className="w-4 h-4 text-accent" />
+                <h2 className="font-display font-semibold text-sm">Promo Code</h2>
+              </div>
+              <form onSubmit={handleRedeem} className="flex gap-2">
+                <Input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="Enter code"
+                  className="h-9"
+                  disabled={redeeming}
+                />
+                <button
+                  type="submit"
+                  disabled={redeeming || !code.trim()}
+                  className="painted-btn painted-btn-accent px-3.5 py-1.5 text-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {redeeming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ticket className="w-3.5 h-3.5" />}
+                  Redeem
+                </button>
+              </form>
+              {redeemed.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {redeemed.map((c) => (
+                    <span key={c} className="text-[10px] bg-accent/10 text-accent px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Check className="w-2.5 h-2.5" /> {c}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-          </button>
 
-          <button
-            onClick={handleDeleteCharacter}
-            disabled={deleting}
-            className="w-full flex items-center gap-3 p-4 text-sm text-left hover:bg-destructive/5 transition-colors text-destructive"
-          >
-            <Trash2 className="w-4 h-4" />
-            <div>
-              <p className="font-medium">Delete Character</p>
-              <p className="text-xs opacity-70">Permanently erase your operative and all progress</p>
+            {/* Danger zone */}
+            <div className="rounded-xl border border-border/40 bg-card/30 divide-y divide-border/40">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-muted/20 transition-colors rounded-t-xl"
+              >
+                <LogOut className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">Log Out</p>
+                  <p className="text-[11px] text-muted-foreground">Sign out of your account</p>
+                </div>
+              </button>
+              <button
+                onClick={handleDeleteCharacter}
+                disabled={deleting}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-destructive/5 transition-colors text-destructive rounded-b-xl"
+              >
+                <Trash2 className="w-4 h-4" />
+                <div>
+                  <p className="font-medium text-sm">Delete Character</p>
+                  <p className="text-[11px] opacity-70">Permanently erase your operative and all progress</p>
+                </div>
+              </button>
             </div>
-          </button>
+          </div>
         </div>
       </div>
 
       <CodexModal open={codexOpen} onClose={() => setCodexOpen(false)} />
-      <DailyLoginModal open={dailyOpen} onClose={() => setDailyOpen(false)} myChar={myChar} />
     </PageStage>
   );
 }

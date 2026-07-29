@@ -1,5 +1,6 @@
 import { entities } from "../entities.js";
 import { getInventoryCap } from "./economyFormulas.js";
+import { createPendingLoot } from "../rewards/store.js";
 
 /** Bag occupancy — equipped gear does not consume inventory slots. */
 export function countBagOccupancy(ch) {
@@ -38,7 +39,32 @@ export function grantItemOrPending(ch, itemPayload) {
   return { item: created, pending: null, compensated: 0 };
 }
 
-export function collectGrant(result, items, pendingLoot) {
-  if (result?.item) items.push(result.item);
-  else if (result?.pending) pendingLoot.push(result.pending);
+/**
+ * Collect a grant result into items / pending_loot arrays.
+ * Pending overflow MUST be persisted via createPendingLoot so the client can AcceptPendingLoot.
+ *
+ * @param {object} result - from grantItemOrPending
+ * @param {array} items
+ * @param {array} pendingLoot - receives { id, item } records
+ * @param {{ accountId: string, characterId: string, claimId?: string, claimKey?: string }} ctx
+ */
+export function collectGrant(result, items, pendingLoot, ctx) {
+  if (result?.item) {
+    items.push(result.item);
+    return;
+  }
+  if (!result?.pending) return;
+  if (!ctx?.accountId || !ctx?.characterId) {
+    const err = new Error("Pending loot requires accountId and characterId");
+    err.status = 500;
+    throw err;
+  }
+  const pl = createPendingLoot({
+    accountId: ctx.accountId,
+    characterId: ctx.characterId,
+    claimId: ctx.claimId || null,
+    claimKey: ctx.claimKey || null,
+    item: result.pending,
+  });
+  pendingLoot.push({ id: pl.id, item: pl.item });
 }

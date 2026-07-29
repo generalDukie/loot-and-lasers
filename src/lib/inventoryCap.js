@@ -60,17 +60,72 @@ export function subscribePending(fn) {
   return () => listeners.delete(fn);
 }
 
+/** Normalize a server pending_loot list entry into { id, item }. */
+function normalizePendingEntry(entry) {
+  if (!entry) return null;
+  if (entry.id && entry.item) return { id: entry.id, item: entry.item };
+  // Legacy bare item — no server id (unclaimable until hydrated).
+  return { id: entry.id || null, item: entry };
+}
+
 /** Pull pending loot from a server function response and open the full-inventory modal. */
 export function applyPendingLootFromResponse(res) {
   const list = res?.pending_loot || res?.data?.pending_loot;
   if (!Array.isArray(list) || list.length === 0) return false;
-  if (!pending) {
-    const first = list[0];
-    // Prefer { id, item } server records; fall back to legacy bare item (will fail on accept).
-    if (first?.id && first?.item) setPendingItem(first.item, "loot", first.id);
-    else setPendingItem(first, "loot", first?.id || null);
+  const first = normalizePendingEntry(list[0]);
+  if (!first?.item) return false;
+
+  // Prefer a server id; upgrade an existing client-only pending if we now have one.
+  const existing = pending;
+  if (!existing || existing.mode !== "loot") {
+    setPendingItem(first.item, "loot", first.id);
+    return true;
+  }
+  if (!existing.pendingLootId && first.id) {
+    setPendingItem(first.item, "loot", first.id);
   }
   return true;
+}
+
+/**
+ * Load the oldest server-persisted pending loot for this character into client state.
+ * Returns { pending, hydrated, cleared }.
+ */
+export async function hydratePendingLootFromServer(characterId) {
+  if (!characterId) return { pending: getPending(), hydrated: false, cleared: false };
+  try {
+    const res = await api.rewards.pendingLoot(characterId);
+    const list = res?.pending_loot || [];
+    if (!Array.isArray(list) || list.length === 0) {
+      let cleared = false;
+      if (pending?.mode === "loot" && !pending.pendingLootId) {
+        // Ephemeral client-only pending that was never persisted — drop it.
+        clearPendingItem();
+        cleared = true;
+      }
+      return { pending: getPending(), hydrated: true, cleared };
+    }
+    const first = normalizePendingEntry(list[0]);
+    if (!first?.id || !first?.item) {
+      return { pending: getPending(), hydrated: true, cleared: false };
+    }
+
+    const existing = pending;
+    if (!existing || existing.mode !== "loot" || !existing.pendingLootId) {
+      setPendingItem(first.item, "loot", first.id);
+    }
+    return { pending: getPending(), hydrated: true, cleared: false };
+  } catch {
+    return { pending: getPending(), hydrated: false, cleared: false };
+  }
+}
+
+/** Ensure loot-mode pending has a server id before accept/dissolve. */
+async function ensurePendingLootId(characterId) {
+  if (pending?.mode !== "loot") return pending;
+  if (pending.pendingLootId) return pending;
+  const { pending: next } = await hydratePendingLootFromServer(characterId);
+  return next;
 }
 
 export async function countItems(characterId) {
@@ -89,6 +144,10 @@ export async function enforceInventoryCap(character) {
   }
   if (pending?.mode === "overflow" && bagCount <= cap) {
     clearPendingItem();
+  }
+  // Restore pending loot modal after refresh / navigation.
+  if (!pending) {
+    await hydratePendingLootFromServer(character.id);
   }
   return false;
 }
@@ -113,7 +172,7 @@ export async function tryClaimPendingIfSpaceAvailable(character) {
  * Returns a short result for UI toasts; null if nothing pending / overflow still over.
  */
 export async function resolvePendingAfterFreeSlot(character) {
-  const p = pending;
+  let p = pending;
   if (!p || !character?.id) return null;
 
   if (p.mode === "overflow") {
@@ -126,12 +185,15 @@ export async function resolvePendingAfterFreeSlot(character) {
   }
 
   if (p.mode === "loot" && p.item) {
-    if (!p.pendingLootId) {
+    p = (await ensurePendingLootId(character.id)) || p;
+    if (!p?.pendingLootId) {
       throw new Error("Missing pending_loot_id — refresh inventory and try again");
     }
     await api.functions.invoke("AcceptPendingLoot", { pending_loot_id: p.pendingLootId });
     const claimed = p.item;
     clearPendingItem();
+    // If more overflow loot is queued server-side, surface the next one.
+    await hydratePendingLootFromServer(character.id);
     return { kind: "loot", item: claimed };
   }
 

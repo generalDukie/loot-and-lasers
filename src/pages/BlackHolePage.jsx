@@ -81,16 +81,20 @@ export default function BlackHolePage() {
 
   async function claimPendingIfPossible(char) {
     if (!getPending()) return;
-    const bagCount = await countItems(char.id);
-    if (bagCount >= getInventoryCap(char) && getPending()?.mode !== "overflow") return;
-    const result = await tryClaimPendingIfSpaceAvailable(char);
-    if (result?.patch) setCharacter((c) => ({ ...c, ...result.patch }));
-    if (result?.kind === "loot" && result.item) {
-      toast({ title: "📦 Item claimed!", description: `${result.item.name} joined your inventory.` });
-      await load();
-    } else if (result?.kind === "unequip" && result.item) {
-      toast({ title: "Unequipped", description: `${result.item.name} moved to your bag.` });
-      await load();
+    try {
+      const bagCount = await countItems(char.id);
+      if (bagCount >= getInventoryCap(char) && getPending()?.mode !== "overflow") return;
+      const result = await tryClaimPendingIfSpaceAvailable(char);
+      if (result?.patch) setCharacter((c) => ({ ...c, ...result.patch }));
+      if (result?.kind === "loot" && result.item) {
+        toast({ title: "📦 Item claimed!", description: `${result.item.name} joined your inventory.` });
+        await load();
+      } else if (result?.kind === "unequip" && result.item) {
+        toast({ title: "Unequipped", description: `${result.item.name} moved to your bag.` });
+        await load();
+      }
+    } catch {
+      /* dissolve already succeeded — claim failure is handled by InventoryFullModal */
     }
   }
 

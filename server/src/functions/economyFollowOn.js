@@ -495,13 +495,14 @@ export const FinishDungeonBattle = wrap((user, body) => {
       const rarity = rollItemRarity(Math.random() < 0.12 ? "uncommon" : "common", ch.level || 1);
       gear = randomItem(rarity, Math.max(1, ch.level || 1), undefined, Math.random, ch.class);
     }
+    const grantCtx = { accountId: user.id, characterId: ch.id };
     if (gear) {
-      collectGrant(grantOrCompensate(ch, stripShopNoise(gear), patch), itemsGranted, pendingLoot);
+      collectGrant(grantOrCompensate(ch, stripShopNoise(gear), patch), itemsGranted, pendingLoot, grantCtx);
     }
 
     if (Math.random() < (patrol ? 0.1 : 0.2)) {
       const cons = stripShopNoise(randomConsumable());
-      collectGrant(grantOrCompensate(ch, cons, patch), itemsGranted, pendingLoot);
+      collectGrant(grantOrCompensate(ch, cons, patch), itemsGranted, pendingLoot, grantCtx);
     }
 
     const nextNodes = (ch.dungeon_nodes_cleared || 0) + 1;
@@ -509,7 +510,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
     if (nextNodes % DUNGEON_MILESTONE_EVERY === 0) {
       const rarity = rollItemRarity(Math.random() < 0.35 ? "rare" : "uncommon", ch.level || 1);
       const mile = randomItem(rarity, Math.max(1, ch.level || 1), undefined, Math.random, ch.class);
-      collectGrant(grantOrCompensate(ch, stripShopNoise(mile), patch), itemsGranted, pendingLoot);
+      collectGrant(grantOrCompensate(ch, stripShopNoise(mile), patch), itemsGranted, pendingLoot, grantCtx);
     }
 
     const weekly = progressWeeklyNovaQuest(

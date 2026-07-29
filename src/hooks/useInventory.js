@@ -135,15 +135,21 @@ export function useInventory(character, onCharacterChange) {
 
   const sell = useCallback(async (item) => {
     if (!character) return;
+    let patch = {};
     try {
       const res = await api.functions.invoke("DissolveItem", { item_id: item.id });
-      const patch = res.patch || res.data?.patch || {};
+      patch = res.patch || res.data?.patch || {};
       onCharacterChange?.(patch);
       await load();
-      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
     } catch (e) {
       await load();
       throw e;
+    }
+    // Claim is best-effort — never treat a claim failure as a dissolve failure.
+    try {
+      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+    } catch {
+      /* InventoryFullModal / hydrate will surface claim issues */
     }
   }, [character, load, onCharacterChange]);
 
@@ -158,7 +164,9 @@ export function useInventory(character, onCharacterChange) {
       if (patch.active_buffs) buffsRef.current = patch.active_buffs;
       onCharacterChange?.(patch);
       await load();
-      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+      try {
+        await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+      } catch { /* claim is best-effort after stim use */ }
       return { ok: true };
     } catch (e) {
       await load();
@@ -174,20 +182,24 @@ export function useInventory(character, onCharacterChange) {
 
   const bulkSell = useCallback(async (itemList) => {
     if (!character || !itemList?.length) return 0;
+    let gained = 0;
+    let patch = {};
     try {
       const res = await api.functions.invoke("DissolveJunk", {
         item_ids: itemList.map((i) => i.id),
       });
-      const patch = res.patch || res.data?.patch || {};
-      const gained = res.stardust_gained ?? res.data?.stardust_gained ?? 0;
+      patch = res.patch || res.data?.patch || {};
+      gained = res.stardust_gained ?? res.data?.stardust_gained ?? 0;
       onCharacterChange?.(patch);
       await load();
-      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
-      return gained;
     } catch (e) {
       await load();
       throw e;
     }
+    try {
+      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+    } catch { /* claim is best-effort after junk dissolve */ }
+    return gained;
   }, [character, load, onCharacterChange]);
 
   return { items, load, equip, sell, bulkSell, useConsumable, toggleLock };

@@ -8,6 +8,7 @@ import {
   subscribePending,
   tryClaimPendingIfSpaceAvailable,
   countItems,
+  hydratePendingLootFromServer,
 } from "@/lib/inventoryCap";
 import { prepareConsumableBuffs } from "@/hooks/useInventory";
 import GearVisual from "@/components/game/GearVisual";
@@ -54,10 +55,25 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
   useEffect(() => {
     if (!pendingState || !character) return;
     setLoadingItems(true);
-    api.entities.Item.filter({ character_id: character.id })
-      .then((list) => setItems(list || []))
-      .finally(() => setLoadingItems(false));
-  }, [pendingState, character]);
+    (async () => {
+      try {
+        if (pendingState.mode === "loot" && !pendingState.pendingLootId) {
+          const { cleared, hydrated, pending: next } = await hydratePendingLootFromServer(character.id);
+          if (cleared || (hydrated && !next?.pendingLootId)) {
+            toast({
+              title: "Pending loot unavailable",
+              description: "That overflow item was not saved on the server. New overflows can be claimed normally.",
+              variant: "destructive",
+            });
+          }
+        }
+        const list = await api.entities.Item.filter({ character_id: character.id });
+        setItems(list || []);
+      } finally {
+        setLoadingItems(false);
+      }
+    })();
+  }, [pendingState?.mode, pendingState?.pendingLootId, pendingState?.item?.name, character?.id, toast]);
 
   // While minimized, keep bag count fresh and auto-claim when the player frees a slot elsewhere.
   useEffect(() => {
@@ -110,6 +126,9 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
     if (!character || busyId) return;
     setBusyId("claim");
     try {
+      if (mode === "loot" && !pendingState?.pendingLootId) {
+        await hydratePendingLootFromServer(character.id);
+      }
       const bag = await countItems(character.id);
       if (bag >= getInventoryCap(character)) {
         toast({ title: "Still full", description: "Free a bag slot first.", variant: "destructive" });
@@ -134,7 +153,11 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
     setBusyId(item.id || "focus");
     try {
       if (mode === "loot" && isFocus) {
-        const pendingLootId = pendingState?.pendingLootId;
+        let pendingLootId = pendingState?.pendingLootId;
+        if (!pendingLootId) {
+          await hydratePendingLootFromServer(character.id);
+          pendingLootId = getPending()?.pendingLootId;
+        }
         if (!pendingLootId) {
           toast({
             title: "Cannot dissolve",
@@ -152,6 +175,7 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
         if (patch) onCharacterChange?.(patch);
         setItems([]);
         toast({ title: `${STARDUST_GLYPH} Dissolved ${item.name}`, description: `+${value} stardust` });
+        await hydratePendingLootFromServer(character.id);
         return;
       }
 
@@ -172,7 +196,12 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
       const patch = res.patch || res.data?.patch;
       if (patch) onCharacterChange?.(patch);
       toast({ title: `${STARDUST_GLYPH} Dissolved ${item.name}`, description: `+${value} stardust` });
-      await afterFreeSlot();
+      try {
+        await afterFreeSlot();
+      } catch (claimErr) {
+        toast({ title: "Item dissolved", description: claimErr?.message || "Could not auto-claim pending loot.", variant: "destructive" });
+        await refreshBag();
+      }
     } catch (e) {
       toast({ title: "Something went wrong", description: e?.message, variant: "destructive" });
       await refreshBag();

@@ -883,8 +883,9 @@ export async function BuyShopGear(user, body) {
 
       const items = [];
       const pendingLoot = [];
+      const grantCtx = { accountId: user.id, characterId: ch.id };
       for (const p of payloads) {
-        collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot);
+        collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot, grantCtx);
       }
 
       const character = entities.Character.update(ch.id, patch);
@@ -959,8 +960,9 @@ export async function BuyShopConsumable(user, body) {
 
       const items = [];
       const pendingLoot = [];
+      const grantCtx = { accountId: user.id, characterId: ch.id };
       for (const p of payloads) {
-        collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot);
+        collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot, grantCtx);
       }
 
       // Replace purchased slot with a fresh stim (client UX parity).

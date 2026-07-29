@@ -1,4 +1,4 @@
-import { Beer, MessageSquare, Zap, Trophy, Award, User, ShoppingBag, Orbit, Crown, Users, Mail, Pickaxe, Rocket, Dice5 } from "lucide-react";
+import { Beer, MessageSquare, Zap, Trophy, User, ShoppingBag, Orbit, Crown, Users, Mail, Pickaxe, Rocket, Dice5 } from "lucide-react";
 
 // Navigation grouped into categories so the rail stays condensed and scannable.
 export const NAV_GROUPS = [
@@ -26,7 +26,6 @@ export const NAV_GROUPS = [
       { to: "/arena", label: "Arena", icon: Zap, color: "#FF8C00" },
       { to: "/leaderboard", label: "Ranks", icon: Trophy, color: "#FBBF24" },
       { to: "/nexus", label: "Nexus", icon: Crown, color: "#FFD700" },
-      { to: "/achievements", label: "Achievements", icon: Award, color: "#FFD700" },
     ],
   },
   {

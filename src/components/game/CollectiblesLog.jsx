@@ -4,6 +4,7 @@ import { ALIEN_SPECIES, ARTIFACTS, RELICS } from "@/lib/collectibles";
 import { DUNGEON_PLANETS } from "@/lib/dungeonData";
 import { GEAR_CATALOG, RARITY_COLORS } from "@/lib/gameData";
 import { getCollectionStats } from "@/lib/collectionBonus";
+import { ACHIEVEMENTS, ACHIEVEMENT_CATEGORIES } from "@/lib/achievements";
 import SpeciesAvatar from "@/components/game/SpeciesAvatar";
 import CharacterStats from "@/components/game/CharacterStats";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -17,6 +18,7 @@ const TABS = [
   { key: "artifacts", label: "Artifacts", icon: Scroll },
   { key: "relics", label: "Relics", icon: Gem },
   { key: "gear", label: "Gear", icon: Swords },
+  { key: "achievements", label: "Achievements", icon: Award },
 ];
 
 function ProgressRow({ discovered, total, color = "hsl(var(--primary))" }) {
@@ -51,6 +53,9 @@ export default function CollectiblesLog({ character }) {
   const clearedPlanets = Math.max(0, (character.dungeon_planet || 1) - 1);
   const gearCatalog = GEAR_CATALOG;
 
+  const unlockedSet = new Set(character.unlocked_achievements || []);
+  const unlockedCount = ACHIEVEMENTS.filter((a) => unlockedSet.has(a.id)).length;
+
   const gearDiscovered = discoveredGear.filter((id) => gearCatalog.some((g) => g.id === id)).length;
   const totalStats = getCollectionStats(character);
 
@@ -59,6 +64,7 @@ export default function CollectiblesLog({ character }) {
     : key === "badges" ? `${clearedPlanets}/${DUNGEON_PLANETS.length}`
     : key === "artifacts" ? `${arts.length}/${ARTIFACTS.length}`
     : key === "relics" ? `${relics.length}/${RELICS.length}`
+    : key === "achievements" ? `${unlockedCount}/${ACHIEVEMENTS.length}`
     : `${gearDiscovered}/${gearCatalog.length}`;
 
   const fullContent = (
@@ -194,6 +200,55 @@ export default function CollectiblesLog({ character }) {
                       <span className="text-2xl" style={{ filter: found ? "none" : "grayscale(1) opacity(0.4)" }}>{found ? (GEAR_EMOJI[it.type] || "📦") : "🔒"}</span>
                       <p className="text-[9px] font-display font-bold mt-1 truncate w-full" style={{ color: found ? color : "#6b7280" }}>{found ? it.name : "???"}</p>
                       <p className="text-[8px] capitalize" style={{ color: found ? color : "#6b7280" }}>{found ? it.type.replace("_", " ") : "Unknown"}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === "achievements" && (
+            <div>
+              <div className="mb-3 rounded-lg border border-amber-400/30 bg-amber-500/5 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-display font-bold text-amber-300">ACHIEVEMENTS</span>
+                  <span className="text-[11px] font-display font-bold text-amber-300">
+                    {unlockedCount} / {ACHIEVEMENTS.length}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">Unlocked achievements show their icons.</p>
+              </div>
+
+              <div className="space-y-3">
+                {ACHIEVEMENT_CATEGORIES.map((cat) => {
+                  const items = ACHIEVEMENTS.filter((a) => a.category === cat);
+                  return (
+                    <div key={cat}>
+                      <h3 className="text-xs font-display font-semibold text-muted-foreground tracking-wide mb-2">{cat.toUpperCase()}</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {items.map((a) => {
+                          const done = unlockedSet.has(a.id);
+                          return (
+                            <div
+                              key={a.id}
+                              className={`rounded-lg border p-2 flex items-center gap-2 ${done ? "bg-amber-500/5 border-amber-500/30" : "bg-card/40 border-border/30 opacity-80"}`}
+                            >
+                              <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${done ? "bg-amber-500/15" : "bg-muted/30"}`}>
+                                {done ? (
+                                  <span className="achievement-emoji text-lg leading-none" role="img" aria-hidden>
+                                    {a.icon}
+                                  </span>
+                                ) : (
+                                  <span className="text-[14px]">🔒</span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className={`text-[10px] font-display font-bold truncate ${done ? "text-foreground" : "text-muted-foreground"}`}>{a.name}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}

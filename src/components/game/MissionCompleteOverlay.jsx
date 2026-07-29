@@ -80,7 +80,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
 
   return (
     <GameplayOverlayPortal
-      className="z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm lg:pl-[clamp(18.7rem,15.7vw,23.4rem)]"
+      className="z-[80] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
       onClick={onClose}
     >
       <motion.div

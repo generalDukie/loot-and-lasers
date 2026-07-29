@@ -149,7 +149,7 @@ export default function GameLayout() {
               {/* Overlay host covers the full shell (top chrome + side nav + content). */}
               <div
                 id="gameplay-overlay-root"
-                className="pointer-events-none absolute inset-0 z-[60]"
+                className="pointer-events-none absolute inset-0 z-[30] lg:left-[clamp(18.7rem,15.7vw,23.4rem)]"
               />
             </div>
           </PersistentGameFrame>

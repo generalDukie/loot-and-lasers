@@ -326,6 +326,41 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
   return out;
 }
 
+/**
+ * Convert a persistent ladder bot (from /api/arena/bots) into a fightable opponent.
+ * Attaches generated gear so combat power matches ephemeral bots.
+ */
+export function ladderBotToOpponent(bot, catalogItems = []) {
+  if (!bot) return null;
+  const classKey = bot.class || "Vanguard";
+  const level = bot.level || 1;
+  const stats = bot.stats && Object.keys(bot.stats).length
+    ? bot.stats
+    : botStats(level, CLASSES[classKey] || CLASSES.Vanguard);
+  const equippedItems = pickGearForBot(catalogItems, classKey, level);
+  const power = computePower({ level, class: classKey, stats }, equippedItems);
+  return {
+    id: bot.id,
+    arena_bot_id: bot.arena_bot_id || bot.id,
+    name: bot.name,
+    race: bot.race,
+    class: classKey,
+    level,
+    arena_rating: bot.arena_rating || 1000,
+    stats,
+    power,
+    arena_wins: bot.arena_wins || 0,
+    arena_losses: bot.arena_losses || 0,
+    guild: bot.guild || null,
+    lastOnlineMins: bot.lastOnlineMins ?? Math.floor(Math.random() * 180),
+    appearance: bot.appearance || randomAppearance(bot.race),
+    isBot: true,
+    speciesId: bot.speciesId ?? (((bot.name?.charCodeAt(0) || 1) % 30) + 1),
+    equippedItems,
+    equippedItemIds: equippedItems.map((it) => it.id),
+  };
+}
+
 /** Serializable opponent copy for revenge rematches (bots + real fallback). */
 export function snapshotOpponent(opp) {
   const equippedItems = (opp.equippedItems || []).map((it) => ({
@@ -359,6 +394,7 @@ export function snapshotOpponent(opp) {
     active_title: opp.active_title || null,
     isBot: !!opp.isBot,
     speciesId: opp.speciesId ?? null,
+    arena_bot_id: opp.arena_bot_id || null,
     equippedItemIds,
     equippedItems,
     lastOnlineMins: opp.lastOnlineMins ?? 0,
@@ -371,10 +407,14 @@ function buildFighter(c, items, side) {
   const cls = CLASSES[c.class] || CLASSES.Vanguard;
   const derived = computeDerivedStats(stats, c);
   const className = cls.name;
+  // Mission enemies (and any suppressClassPassive combatant) keep class-family
+  // damage/resist rules via computeDerivedStats(character.class) but must not
+  // receive player class passives — blank className for passive hooks.
+  const suppress = !!(c.suppressClassPassive || c.missionEnemy);
   return {
     side,
     name: c.name,
-    className,
+    className: suppress ? null : className,
     hp: derived.health,
     maxHp: derived.health,
     barrier: 0,
@@ -389,7 +429,8 @@ function buildFighter(c, items, side) {
     techResistPercent: derived.techResist || 0,
     damageType: derived.damageType || "strength",
     stats,
-    passive: passiveNameForClass(className),
+    suppressClassPassive: suppress,
+    passive: suppress ? null : passiveNameForClass(className),
     passiveState: null,
   };
 }

@@ -175,6 +175,12 @@ export function passiveNameForClass(className) {
  */
 export function onCombatStart(fighter, rng = Math.random) {
   const events = [];
+  if (fighter.suppressClassPassive || fighter.className == null) {
+    fighter.passive = null;
+    fighter.barrier = 0;
+    fighter.passiveState = createPassiveState();
+    return events;
+  }
   const cls = fighter.className;
   fighter.passive = passiveNameForClass(cls);
   fighter.barrier = 0;

@@ -34,6 +34,7 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "active_mission_id",
   "mission_end_time",
   "missions_completed",
+  "mission_gear_miss_streak",
   "mining_end_time",
   "mining_reward",
   "shop_meta",

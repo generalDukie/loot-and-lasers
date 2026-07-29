@@ -5,7 +5,29 @@ import {
   rollItemStats,
   computeItemVendorValue,
 } from "@/lib/itemGeneration";
+import {
+  getAllowedMissionDurations,
+  getMissionDurationBracket,
+  rollMissionDurationSeconds,
+  remainingFuelDurationSeconds,
+  needsRemainingFuelException,
+  isNormalPoolDuration,
+  isValidMissionDuration,
+  MISSION_MIN_DURATION_SECONDS,
+  MISSION_MAX_DURATION_SECONDS,
+} from "@/lib/missionDuration";
 
+export {
+  getAllowedMissionDurations,
+  getMissionDurationBracket,
+  rollMissionDurationSeconds,
+  remainingFuelDurationSeconds,
+  needsRemainingFuelException,
+  isNormalPoolDuration,
+  isValidMissionDuration,
+  MISSION_MIN_DURATION_SECONDS,
+  MISSION_MAX_DURATION_SECONDS,
+};
 /**
  * Global XP & Stardust numerical resolution (unit size ×10).
  * Apply once at formula exits / configured amounts — not Nova or Fuel.
@@ -841,6 +863,31 @@ export function generateShopConsumableSlots(seed) {
 }
 
 // ═══════════════════════════════════════════
+// MISSION GEAR DROP — hit chance (not rarity).
+// Base 20%; +2.5% pity per consecutive gear miss; soft-capped at 50%.
+// Stim/consumable rolls stay independent. On a miss, claim pays dissolve-value
+// stardust for the piece that would have dropped (server-side).
+// ═══════════════════════════════════════════
+export const MISSION_GEAR_DROP_BASE = 0.2;
+export const MISSION_GEAR_PITY_STEP = 0.025;
+export const MISSION_GEAR_DROP_CAP = 0.5;
+export const MISSION_CONSUMABLE_DROP_CHANCE = 0.15;
+
+export function missionGearMissStreak(character) {
+  return Math.max(0, Math.floor(Number(character?.mission_gear_miss_streak) || 0));
+}
+
+export function missionGearDropChance(missStreak = 0) {
+  const streak = Math.max(0, Math.floor(Number(missStreak) || 0));
+  const raw = MISSION_GEAR_DROP_BASE + streak * MISSION_GEAR_PITY_STEP;
+  return Math.min(MISSION_GEAR_DROP_CAP, Math.round(raw * 10000) / 10000);
+}
+
+export function rollMissionGearDrop(missStreak = 0, rng = Math.random) {
+  return rng() < missionGearDropChance(missStreak);
+}
+
+// ═══════════════════════════════════════════
 // ITEM DROP RATES — explicit % per mission loot tier (each row sums to 100).
 // The mission's item_rarity_chance picks the row; a single roll picks the
 // outcome rarity. Player level still gates the ceiling: any tier above the
@@ -1145,7 +1192,7 @@ export const FUEL_CYCLE_MS = 24 * 60 * 60 * 1000;
 export const FUEL_PURCHASE_AMOUNT = 20;
 export const FUEL_PURCHASE_COST = 10; // nova crystals
 export const FUEL_PURCHASE_MAX = 10; // per 24h cycle (200 fuel total)
-/** Smallest chargeable fuel unit (L1–5 short jobs = 15s = 0.25 fuel). */
+/** Smallest chargeable fuel unit (L1 short jobs = 15s = 0.25 fuel). */
 export const MISSION_MIN_FUEL = 0.25;
 
 /** Canonical 2-decimal fuel value for comparisons and display. */
@@ -1160,7 +1207,7 @@ export function formatFuelAmount(n) {
 }
 
 export function computeFuelCost(template) {
-  // 1 fuel = 1 minute of mission time (30s = 0.5, 40s = 0.67, 60s = 1, etc.)
+  // 1 fuel = 1 minute of mission time (15s = 0.25, 30s = 0.5, 60s = 1, etc.)
   const durationSeconds = Math.floor(template.duration_seconds || 60);
   return Math.round((durationSeconds / 60) * 100) / 100;
 }
@@ -1234,35 +1281,9 @@ const COLLECTIBLES = [
 const RISK_DIFFICULTY = { 1: "easy", 2: "medium", 3: "medium", 4: "hard", 5: "elite" };
 const RISK_RARITY = { 1: "common", 2: "uncommon", 3: "rare", 4: "epic", 5: "legendary" };
 
-// Design chart — mission duration by level (fuel cost = duration in minutes).
-// L1–5 stay very short; L6–20 ramp smoothly to the 5–20 min endgame band.
-// L20+ stays clamped at 5–20 min. All values are 15s increments.
-const MISSION_DURATION_BY_LEVEL = [
-  null, // level 0 unused
-  [15, 45], [15, 45], [15, 45], [15, 45], [15, 45],       // 1–5
-  [30, 75], [30, 90], [45, 105], [45, 135], [60, 150],     // 6–10
-  [75, 240], [90, 330], [105, 420], [135, 510], [150, 600], // 11–15
-  [180, 720], [210, 840], [240, 960], [270, 1080], [300, 1200], // 16–20
-];
-const MISSION_MAX_DURATION = 1200; // 20 minutes — hard cap for L20+
-
-export function getMissionDurationBracket(level = 1) {
-  const lvl = Math.max(1, Math.floor(Number(level) || 1));
-  const idx = Math.min(20, lvl);
-  const pair = MISSION_DURATION_BY_LEVEL[idx] || [300, 1200];
-  return { minSec: pair[0], maxSec: pair[1] };
-}
-
-/** Snap seconds to a clean 15s tick within the level's min/max. */
-export function rollMissionDurationSeconds(level = 1, unit = Math.random()) {
-  const { minSec, maxSec } = getMissionDurationBracket(level);
-  const lo = Math.round(minSec / 15) * 15;
-  const hi = Math.round(maxSec / 15) * 15;
-  const steps = Math.max(0, Math.round((hi - lo) / 15));
-  const t = Math.min(1, Math.max(0, Number(unit) || 0));
-  const idx = Math.round(steps * t);
-  return Math.min(MISSION_MAX_DURATION, lo + idx * 15);
-}
+// Design chart — discrete mission durations by level (fuel cost = duration in minutes).
+// Authoritative pool: getAllowedMissionDurations / rollMissionDurationSeconds in missionDuration.js
+// L21+ permanently uses 5/10/15/20 min. Hard cap 20 minutes.
 
 export function generateDailyMissions(character) {
   const level = character.level || 1;
@@ -1273,12 +1294,10 @@ export function generateDailyMissions(character) {
   const base = shuffled.length ? shuffled : MISSION_TEMPLATES;
 
   // Offer 3 quests drawn from the rotating template pool. Duration is rolled
-  // once within the level bracket (no short/mid/long variants). Quest givers
-  // are unique on the board — no two patrons offer jobs at once.
+  // once from the level's discrete pool. Quest givers are unique on the board.
   const givers = [...QUEST_GIVERS].sort(() => Math.random() - 0.5);
   return Array.from({ length: 3 }, (_, i) => {
     const t = base[i % base.length];
-    // Single duration within the level's min–max (not tiered variants).
     const duration = rollMissionDurationSeconds(level);
     const collectible = COLLECTIBLES[Math.floor(Math.random() * COLLECTIBLES.length)];
     const { difficulty: _d, risk: _r, rewards: _oldRewards, ...tpl } = t;
@@ -1307,9 +1326,9 @@ export function generateDailyMissions(character) {
 }
 
 // ═══════════════════════════════════════════
-// LOW-FUEL FALLBACK — level-agnostic errands sized to leftover fuel.
-// 0.5 fuel → 30s, 1 fuel → 60s, etc. (clamped 30s–5m). Always level_requirement 1
-// so a high-level player with scraps of fuel can still spend the remainder.
+// REMAINING-FUEL EXCEPTION — same reward systems, unusual allowed duration.
+// Used when the player cannot afford any normal-pool mission for their level.
+// Duration/Fuel exactly match remaining fuel (1 min = 1 Fuel). Not a new mission type.
 // ═══════════════════════════════════════════
 const LOW_FUEL_TEMPLATES = [
   {
@@ -1331,13 +1350,15 @@ const LOW_FUEL_TEMPLATES = [
 
 export function generateLowFuelMission(character, currentFuel, excludePatronNames = [], slot = 0) {
   const level = character?.level || 1;
-  // Round to hundredths so 0.5 fuel is never lost to float noise.
   const fuel = Math.round(Math.max(0, currentFuel || 0) * 100) / 100;
-  // Spend as much of the remainder as possible on a clean 15s-snapped timer.
-  const duration = Math.min(300, Math.max(15, Math.round((fuel * 60) / 15) * 15));
-  const fuelCost = Math.min(fuel, Math.round((duration / 60) * 100) / 100);
+  const duration = remainingFuelDurationSeconds(fuel);
+  if (duration == null) {
+    // Below minimum spendable fuel — should not be offered.
+    return null;
+  }
+  // Pin cost to exact remainder so the tank can empty completely.
+  const pinnedFuel = Math.max(MISSION_MIN_FUEL, fuel);
   const tpl = LOW_FUEL_TEMPLATES[slot % LOW_FUEL_TEMPLATES.length];
-  const pinnedFuel = Math.max(MISSION_MIN_FUEL, fuelCost);
   const sdEff = rollMissionEfficiency(level);
   const xpEff = rollMissionEfficiency(level);
   return {
@@ -1369,9 +1390,10 @@ export function generateLowFuelBoard(character, currentFuel, count = 3) {
   const used = [];
   return Array.from({ length: n }, (_, i) => {
     const m = generateLowFuelMission(character, fuel, used, i);
+    if (!m) return null;
     if (m.patron?.name) used.push(m.patron.name);
     return m;
-  });
+  }).filter(Boolean);
 }
 
 // ═══════════════════════════════════════════

@@ -48,6 +48,10 @@ import {
   generateSimpleHotDeal,
   prepareConsumableBuffs,
   rollItemRarity,
+  rollMissionGearDrop,
+  missionGearMissStreak,
+  missionGearDropChance,
+  MISSION_CONSUMABLE_DROP_CHANCE,
   applyXpToCharacter,
   getInventoryCap,
   randomConsumable,
@@ -480,8 +484,9 @@ export async function LaunchMission(user, body) {
       const lootType = LOOT_TYPES[String(template.name).length % 8];
       const chance = template.rewards?.item_rarity_chance || "common";
       const lootRarity = rollItemRarity(chance, ch.level || 1);
-      const lootDrops =
-        secureRandom() < Math.min(0.85, 0.4 + Math.min(0.25, (ch.level || 1) * 0.01));
+      const missStreak = missionGearMissStreak(ch);
+      const lootDropChance = missionGearDropChance(missStreak);
+      const lootDrops = rollMissionGearDrop(missStreak, secureRandom);
       const rewardDef = snapshotDefinitionRef("mission_completion");
 
       const startNow = clock.now();
@@ -515,6 +520,8 @@ export async function LaunchMission(user, body) {
           loot_rarity: lootRarity,
           loot_type: lootType,
           loot_drops: lootDrops,
+          loot_drop_chance: lootDropChance,
+          loot_miss_streak: missStreak,
           reward_definition_key: rewardDef.definitionKey,
           reward_definition_version: rewardDef.definitionVersion,
         },
@@ -608,13 +615,29 @@ export async function ClaimMission(user, body) {
           const gains = computeMissionGains(live, mission, nexusBonus);
           const rewards = mission.rewards || {};
           const itemTemplates = [];
+          let gearDropped = false;
+          let gearConsolation = 0;
           if (rewards.loot_drops !== false) {
+            gearDropped = true;
             const rarity =
               rewards.loot_rarity ||
               rollItemRarity(rewards.item_rarity_chance || "common", live.level || 1);
             itemTemplates.push(
               randomItem(rarity, live.level || 1, rewards.loot_type, secureRandom, live.class)
             );
+          } else {
+            // Missed gear — pay dissolve value of the piece that would have dropped.
+            const rarity =
+              rewards.loot_rarity ||
+              rollItemRarity(rewards.item_rarity_chance || "common", live.level || 1);
+            const phantom = randomItem(
+              rarity,
+              live.level || 1,
+              rewards.loot_type,
+              secureRandom,
+              live.class
+            );
+            gearConsolation = computeStardustValue(phantom);
           }
           if (rewards.collectible?.name) {
             const level = Math.max(1, live.level || 1);
@@ -628,17 +651,19 @@ export async function ClaimMission(user, body) {
               sell_value: computeMissionJunkSellValue(level),
             });
           }
-          if (secureRandom() < 0.15) {
+          if (secureRandom() < MISSION_CONSUMABLE_DROP_CHANCE) {
             const { _cost, ...consItem } = randomConsumable();
             itemTemplates.push(consItem);
           }
           // Species discovery only from mission snapshot — never client species_id
           const speciesId = rewards.species_id || null;
           return {
-            stardust: gains.stardustGain,
+            stardust: (gains.stardustGain || 0) + gearConsolation,
             experience: gains.xpGain,
             itemTemplates,
             species_id: speciesId,
+            gearDropped,
+            gearConsolation,
             gainsMeta: {
               stardustBase: gains.stardustBase,
               xpBase: gains.xpBase,
@@ -647,12 +672,15 @@ export async function ClaimMission(user, body) {
               collectionPct: gains.collectionPct,
               fuelSpent: gains.fuelCost,
               nexusBonus,
+              gearConsolation,
+              gearDropped,
             },
             bonusReasons: nexusBonus ? ["nexus_control"] : [],
           };
         },
         deliver: async (payload, claim) => {
           const live = entities.Character.get(ch.id) || ch;
+          const gearDropped = payload.gearDropped === true;
           const patch = {
             stardust: (live.stardust || 0) + (payload.stardust || 0),
             total_stardust_earned: (live.total_stardust_earned || 0) + (payload.stardust || 0),
@@ -660,6 +688,7 @@ export async function ClaimMission(user, body) {
             highest_sector: Math.max(live.highest_sector || 1, mission.sector || 1),
             active_mission_id: "",
             mission_end_time: "",
+            mission_gear_miss_streak: gearDropped ? 0 : missionGearMissStreak(live) + 1,
           };
           applyXpToCharacter(live, payload.experience || 0, patch);
 

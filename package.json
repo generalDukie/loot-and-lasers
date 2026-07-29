@@ -21,7 +21,9 @@
     "test:arena": "node server/scripts/test-arena.mjs",
     "test:audit": "node server/scripts/test-audit.mjs",
     "test:passives": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-class-passives.mjs",
-    "test:mission-duration": "node server/scripts/test-mission-duration.mjs"
+    "test:mission-duration": "node server/scripts/test-mission-duration.mjs",
+    "test:mission-gear-drop": "node server/scripts/test-mission-gear-drop.mjs",
+    "test:mission-enemy": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-mission-enemy.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",

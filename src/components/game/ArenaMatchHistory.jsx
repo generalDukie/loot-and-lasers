@@ -1,6 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { History, Swords, RotateCcw, User } from "lucide-react";
+import { History, Swords, RotateCcw, User, Shield } from "lucide-react";
 
 function eventTime(iso) {
   const d = new Date(iso);
@@ -61,6 +61,11 @@ export default function ArenaMatchHistory({ matches = [], onRevenge, revengeBusy
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <p className="font-display font-bold text-xs truncate">{m.opponent_name}</p>
+                      {m.is_defense && (
+                        <span className="shrink-0 inline-flex items-center gap-0.5 text-[8px] font-display font-bold tracking-wide text-amber-300/90">
+                          <Shield className="w-2.5 h-2.5" /> RAID
+                        </span>
+                      )}
                       {!m.opponent_is_bot && (
                         <span className="shrink-0 inline-flex items-center gap-0.5 text-[8px] font-display font-bold tracking-wide text-emerald-300/90">
                           <User className="w-2.5 h-2.5" /> REAL
@@ -68,7 +73,10 @@ export default function ArenaMatchHistory({ matches = [], onRevenge, revengeBusy
                       )}
                     </div>
                     <p className="text-[10px] text-muted-foreground truncate">
-                      {m.won ? "Victory" : "Defeat"} · Lv {m.opponent_level}
+                      {m.is_defense
+                        ? (m.won ? "Defense held" : "Raided")
+                        : (m.won ? "Victory" : "Defeat")}
+                      {" · "}Lv {m.opponent_level}
                       {m.opponent_guild ? ` · ${m.opponent_guild}` : ""}
                       {" · "}
                       <span className={m.rating_delta >= 0 ? "text-emerald-400" : "text-rose-400"}>

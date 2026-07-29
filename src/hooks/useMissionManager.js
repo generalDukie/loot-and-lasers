@@ -397,6 +397,7 @@ export function useMissionManager() {
       const xpGain = gains.experience ?? 0;
       const collectionPct = gains.collectionPct ?? 0;
       const stardustBase = gains.stardustBase ?? stardustGain;
+      const gearConsolation = gains.gearConsolation ?? 0;
       const xpBase = gains.xpBase ?? xpGain;
       const efficiency = gains.efficiency ?? 1;
       const xpEfficiency = gains.xpEfficiency ?? 1;
@@ -436,12 +437,14 @@ export function useMissionManager() {
           efficiency,
           nexus: nexusBonus,
           shipMult: shipSdMult,
+          salvage: gearConsolation,
           total: stardustGain,
         },
         leveledUp,
         newLevel,
         statPoints: getStatPointsForLevelRange(prevLevel, newLevel),
         gearItem,
+        gearConsolation,
         collectible,
         consumableItem,
         discoveries: discFound,

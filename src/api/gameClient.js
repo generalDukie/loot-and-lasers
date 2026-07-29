@@ -385,6 +385,17 @@ const arena = {
       body,
     });
   },
+  listBots(params = {}) {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v != null && v !== "") q.set(k, String(v));
+    });
+    const qs = q.toString();
+    return request(`/api/arena/bots${qs ? `?${qs}` : ""}`);
+  },
+  processBotRaids(body = {}) {
+    return request("/api/arena/bots/raids", { method: "POST", body });
+  },
 };
 
 const audit = {

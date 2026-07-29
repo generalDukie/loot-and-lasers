@@ -17,7 +17,7 @@ import {
   ARENA_BATTLE_COOLDOWN_MS, ARENA_SKIP_COST, ARENA_CHALLENGER_SLOTS, ARENA_MAX_REAL_OPPONENTS,
   ARENA_RATING_BAND_WIDE,
   computePower, generateOpponents, characterToOpponent, simulateBattle, computeRewards,
-  rankArenaCandidates, pickRankedCandidates, resolveOpponentItems,
+  rankArenaCandidates, pickRankedCandidates, resolveOpponentItems, ladderBotToOpponent,
 } from "@/lib/arenaEngine";
 import { defenseSnapshotToOpponent } from "@/lib/arenaChallenge";
 import { loadArenaHistory, recordArenaMatch, resolveRevengeOpponent } from "@/lib/arenaHistory";
@@ -72,9 +72,10 @@ async function fetchRealOpponents(char, maxReal = ARENA_MAX_REAL_OPPONENTS, excl
   }
 }
 
-// Mixes real players (when available) with bots to fill the challenger slots.
+// Mixes real players (when available) with persistent ladder bots to fill slots.
 // Prefers up to ARENA_MAX_REAL_OPPONENTS reals from the rating band; fills a 3rd
-// real slot only when another fair (wide-band) match exists. Rest are bots.
+// real slot only when another fair (wide-band) match exists. Rest are ladder bots
+// (falling back to ephemeral bots if the ladder is unreachable).
 // `excludeIds` lists real character ids already on screen so a replacement
 // can never duplicate a challenger still showing in the current refresh.
 async function buildOpponentPool(char, catalogItems, excludeIds = []) {
@@ -85,17 +86,29 @@ async function buildOpponentPool(char, catalogItems, excludeIds = []) {
     const thirdGap = Math.abs((candidates[2].arena_rating || 1000) - myRating);
     if (thirdGap <= ARENA_RATING_BAND_WIDE) real = candidates.slice(0, 3);
   }
-  const bots = generateOpponents(char, ARENA_CHALLENGER_SLOTS - real.length, catalogItems);
+  const needBots = Math.max(0, ARENA_CHALLENGER_SLOTS - real.length);
+  let bots = [];
+  if (needBots > 0) {
+    try {
+      const res = await api.arena.listBots({ characterId: char.id, limit: needBots + 2 });
+      const ladder = (res?.bots || []).map((b) => ladderBotToOpponent(b, catalogItems)).filter(Boolean);
+      bots = ladder.slice(0, needBots);
+    } catch { /* fall through */ }
+    if (bots.length < needBots) {
+      bots = [
+        ...bots,
+        ...generateOpponents(char, needBots - bots.length, catalogItems),
+      ];
+    }
+  }
   const pool = [...real, ...bots];
-  // Final guard: drop any duplicate real player within this refresh.
   const seen = new Set();
   const deduped = pool.filter((o) => {
-    const key = o.realCharacterId ? `real-${o.realCharacterId}` : o.id;
+    const key = o.realCharacterId ? `real-${o.realCharacterId}` : (o.arena_bot_id || o.id);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-  // Keep reals visible but shuffle within the board so slot order isn't fixed.
   return deduped.sort(() => Math.random() - 0.5);
 }
 
@@ -142,13 +155,33 @@ export default function ArenaPage() {
     setCatalogItems(items);
     setCharacter(char);
     setFreeBattlesLeft(left);
+    // Incoming bot raids (settled server-side) — toast results, then load board.
+    try {
+      const raidRes = await api.arena.processBotRaids({ characterId: char.id, max: 2 });
+      const raidPatch = raidRes?.patch;
+      if (raidPatch) Object.assign(char, raidPatch);
+      if (raidRes?.character) Object.assign(char, raidRes.character);
+      setCharacter({ ...char });
+      for (const raid of raidRes?.raids || []) {
+        const delta = raid.playerRatingDelta || 0;
+        toast({
+          title: raid.playerWon
+            ? `Defended vs ${raid.bot?.name || "a bot"}`
+            : `Raided by ${raid.bot?.name || "a bot"}`,
+          description: raid.playerWon
+            ? `Held the Arena (${delta >= 0 ? "+" : ""}${delta} rating). Rival is now ${raid.bot?.arena_rating ?? "?"} rating.`
+            : `Lost ${Math.abs(delta)} rating. ${raid.bot?.name || "Bot"} climbs to ${raid.bot?.arena_rating ?? "?"}.`,
+          variant: raid.playerWon ? "default" : "destructive",
+        });
+      }
+    } catch { /* non-blocking */ }
     setOpponents(await buildOpponentPool(char, items));
     setMatchHistory(await loadArenaHistory(char.id));
     setLoading(false);
     // Equipped gear feeds the power readout — load it best-effort so a hiccup
     // never traps the page on the loading spinner.
     try { setEquippedItems((await api.entities.Item.filter({ character_id: char.id, is_equipped: true })) || []); } catch (e) {}
-  }, [navigate]);
+  }, [navigate, setCharacter, toast]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -292,7 +325,13 @@ export default function ArenaPage() {
         is_free: isFree,
         skipped: !!skipped,
         skip_cooldown: !!skipped,
-        opponent: { arena_rating: opp.arena_rating, id: opp.realCharacterId || opp.id, speciesId: opp.speciesId },
+        opponent: {
+          arena_rating: opp.arena_rating,
+          id: opp.realCharacterId || opp.id,
+          speciesId: opp.speciesId,
+          isBot: !!opp.isBot,
+          arena_bot_id: opp.arena_bot_id || null,
+        },
         max_hit: maxPlayerHit,
         species_id: opp.speciesId,
         ...(challengeId

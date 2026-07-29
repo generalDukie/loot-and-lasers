@@ -672,6 +672,31 @@ export function prepareConsumableBuffs(character, item, sourceBuffs) {
   return { ok: true, buffs };
 }
 
+// ── Mission gear drop (hit chance) + pity ────────────────────
+/** Base chance a mission yields gear (rarity table is separate). */
+export const MISSION_GEAR_DROP_BASE = 0.2;
+/** +pity per consecutive gear miss (successful claims with no gear). */
+export const MISSION_GEAR_PITY_STEP = 0.025;
+/** Soft cap — 20% + 12×2.5% = 50%. */
+export const MISSION_GEAR_DROP_CAP = 0.5;
+/** Stim / consumable roll — independent of gear hit/miss. */
+export const MISSION_CONSUMABLE_DROP_CHANCE = 0.15;
+
+export function missionGearMissStreak(character) {
+  return Math.max(0, Math.floor(Number(character?.mission_gear_miss_streak) || 0));
+}
+
+/** Effective gear drop chance for the next launch given current miss streak. */
+export function missionGearDropChance(missStreak = 0) {
+  const streak = Math.max(0, Math.floor(Number(missStreak) || 0));
+  const raw = MISSION_GEAR_DROP_BASE + streak * MISSION_GEAR_PITY_STEP;
+  return Math.min(MISSION_GEAR_DROP_CAP, Math.round(raw * 10000) / 10000);
+}
+
+export function rollMissionGearDrop(missStreak = 0, rng = Math.random) {
+  return rng() < missionGearDropChance(missStreak);
+}
+
 // ── Loot rarity ──────────────────────────────────────────────
 export const ITEM_DROP_RATES = {
   common:    { common: 85, uncommon: 12, rare: 3,  epic: 0,  legendary: 0  },

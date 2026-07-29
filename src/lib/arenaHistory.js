@@ -19,7 +19,7 @@ export async function loadArenaHistory(characterId) {
   }
 }
 
-export async function recordArenaMatch({ characterId, opp, won, ratingDelta, ratingAfter }) {
+export async function recordArenaMatch({ characterId, opp, won, ratingDelta, ratingAfter, isDefense = false }) {
   if (!characterId || !opp) return null;
   try {
     const record = await api.entities.ArenaMatch.create({
@@ -36,6 +36,8 @@ export async function recordArenaMatch({ characterId, opp, won, ratingDelta, rat
       won: !!won,
       rating_delta: ratingDelta || 0,
       rating_after: ratingAfter ?? null,
+      is_defense: !!isDefense,
+      arena_bot_id: opp.arena_bot_id || null,
       opponent_snapshot: snapshotOpponent(opp),
     });
 
@@ -94,5 +96,6 @@ export async function resolveRevengeOpponent(match, catalogItems = []) {
     id: snap.isBot ? `revenge-bot-${match.id}` : (snap.id || `revenge-${match.id}`),
     equippedItems,
     equippedItemIds: snap.equippedItemIds || equippedItems.map((i) => i.id).filter(Boolean),
+    arena_bot_id: snap.arena_bot_id || match.arena_bot_id || null,
   };
 }

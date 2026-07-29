@@ -6,7 +6,9 @@ import { randomInt, createHash } from "node:crypto";
 
 /** Uniform float in [0, 1). */
 export function secureRandom() {
-  return randomInt(0, 2 ** 48) / 2 ** 48;
+  // crypto.randomInt requires (max - min) < 2^48; max is exclusive.
+  const span = 2 ** 48 - 1;
+  return randomInt(0, span) / span;
 }
 
 /** Inclusive integer range. */

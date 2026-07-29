@@ -180,10 +180,31 @@ export const AUDIT_ACTIONS = Object.freeze({
   arena_battle_completed: { category: AuditCategories.ARENA, severity: AuditSeverity.INFORMATIONAL, retention: RetentionClasses.STANDARD_GAMEPLAY },
   arena_direct_challenge_completed: { category: AuditCategories.ARENA, severity: AuditSeverity.INFORMATIONAL, retention: RetentionClasses.STANDARD_GAMEPLAY },
 
+  // Casino / mining / dungeon / fuel
+  casino_settled: { category: AuditCategories.ECONOMY, severity: AuditSeverity.INFORMATIONAL, retention: RetentionClasses.ECONOMY_CRITICAL, critical: true },
+  mining_started: { category: AuditCategories.PROGRESSION, severity: AuditSeverity.LOW, retention: RetentionClasses.STANDARD_GAMEPLAY },
+  mining_collected: { category: AuditCategories.ECONOMY, severity: AuditSeverity.INFORMATIONAL, retention: RetentionClasses.ECONOMY_CRITICAL, critical: true },
+  mining_cancelled: { category: AuditCategories.PROGRESSION, severity: AuditSeverity.LOW, retention: RetentionClasses.STANDARD_GAMEPLAY },
+  dungeon_battle_completed: { category: AuditCategories.PROGRESSION, severity: AuditSeverity.INFORMATIONAL, retention: RetentionClasses.STANDARD_GAMEPLAY },
+  fuel_purchased: { category: AuditCategories.PURCHASE, severity: AuditSeverity.INFORMATIONAL, retention: RetentionClasses.ECONOMY_CRITICAL, critical: true },
+
+  // Auth (generic login + existing password resets)
+  login_succeeded: { category: AuditCategories.AUTHENTICATION, severity: AuditSeverity.LOW, retention: RetentionClasses.SECURITY },
+  login_failed: { category: AuditCategories.AUTHENTICATION, severity: AuditSeverity.MEDIUM, retention: RetentionClasses.SECURITY },
+
+  // Guild
+  guild_leadership_transferred: { category: AuditCategories.GUILD, severity: AuditSeverity.HIGH, retention: RetentionClasses.ADMINISTRATIVE, critical: true },
+
+  // Admin entity CRUD
+  admin_entity_created: { category: AuditCategories.ADMINISTRATION, severity: AuditSeverity.HIGH, retention: RetentionClasses.ADMINISTRATIVE, critical: true },
+  admin_entity_updated: { category: AuditCategories.ADMINISTRATION, severity: AuditSeverity.HIGH, retention: RetentionClasses.ADMINISTRATIVE, critical: true },
+  admin_entity_deleted: { category: AuditCategories.ADMINISTRATION, severity: AuditSeverity.HIGH, retention: RetentionClasses.ADMINISTRATIVE, critical: true },
+
   // Audit meta
   audit_annotation_created: { category: AuditCategories.AUDIT, severity: AuditSeverity.LOW, retention: RetentionClasses.ADMINISTRATIVE },
   audit_export_requested: { category: AuditCategories.AUDIT, severity: AuditSeverity.MEDIUM, retention: RetentionClasses.ADMINISTRATIVE },
   audit_integrity_verified: { category: AuditCategories.AUDIT, severity: AuditSeverity.LOW, retention: RetentionClasses.ADMINISTRATIVE },
+  audit_retention_purged: { category: AuditCategories.SYSTEM_OPERATION, severity: AuditSeverity.MEDIUM, retention: RetentionClasses.ADMINISTRATIVE },
 });
 
 export function getActionMeta(action) {

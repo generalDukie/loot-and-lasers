@@ -17,6 +17,13 @@ import {
   previewDirectChallenge,
 } from "./service.js";
 import { listRecentAudit } from "./store.js";
+import {
+  ensureBotPoolForPlayer,
+  listBotsNearRating,
+  botToPublicOpponent,
+  processIncomingBotRaids,
+} from "./bots.js";
+import { entities } from "../entities.js";
 
 function handleErr(res, err) {
   if (err instanceof ArenaError) {
@@ -108,6 +115,52 @@ export function createArenaRouter(express) {
     }
     const limit = Math.min(200, Number(req.query.limit) || 50);
     res.json({ audit: listRecentAudit(limit) });
+  });
+
+  /** Ladder bots near the caller's active character rating (for matchmaking). */
+  router.get("/bots", requireAuth, (req, res) => {
+    try {
+      const characterId = req.query.characterId || req.user.active_character_id;
+      const ch = characterId ? entities.Character.get(characterId) : null;
+      if (!ch || ch.created_by_id !== req.user.id) {
+        return res.status(403).json({ error: "Not your character" });
+      }
+      const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 8));
+      ensureBotPoolForPlayer(ch);
+      const bots = listBotsNearRating(ch.arena_rating || 1000, { limit }).map(botToPublicOpponent);
+      res.json({ bots });
+    } catch (err) {
+      handleErr(res, err);
+    }
+  });
+
+  /**
+   * Simulate incoming bot raids against the player.
+   * Settles player + bot ratings; writes defense match history + notifications.
+   */
+  router.post("/bots/raids", requireAuth, async (req, res) => {
+    try {
+      const result = await withTransactionAsync(() => {
+        const characterId =
+          req.body?.characterId || req.user.active_character_id;
+        const ch = characterId ? entities.Character.get(characterId) : null;
+        if (!ch || ch.created_by_id !== req.user.id) {
+          const err = new Error("Not your character");
+          err.status = 403;
+          throw err;
+        }
+        return processIncomingBotRaids(ch, {
+          maxRaids: Math.min(3, Math.max(1, Number(req.body?.max) || 2)),
+          force: !!req.body?.force && isAdmin(req.user),
+        });
+      });
+      res.json(result);
+    } catch (err) {
+      if (err.status) {
+        return res.status(err.status).json({ error: err.message });
+      }
+      handleErr(res, err);
+    }
   });
 
   return router;

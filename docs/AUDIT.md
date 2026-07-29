@@ -76,7 +76,25 @@ Each entry stores `contentHash`, `previousEntryHash`, `chainScope`, and `chainSe
 
 ## Retention classes
 
-See `RetentionClasses` / `RETENTION_DAYS` in `registry.js`. Holds table exists for future purge jobs; no automatic purge ships yet for unresolved security/support cases.
+See `RetentionClasses` / `RETENTION_DAYS` in `registry.js`.
+
+- Rows on hold (`hold = 1` or an open `audit_retention_holds` row) are never purged.
+- Permanent / archived retention never expires.
+- Daily schedule `audit-retention-purge` (04:00 ET) runs `purgeExpiredAudits` and writes `audit_retention_purged`.
+
+## Covered systems (central audit)
+
+| System | Actions |
+|--------|---------|
+| Shop / dissolve | `shop_purchase_completed`, currency + item rows |
+| Casino | `casino_settled` |
+| Mining | `mining_started` / `mining_collected` / `mining_cancelled` |
+| Dungeon | `dungeon_battle_completed` |
+| Fuel buy | `fuel_purchased` |
+| Auth | `login_succeeded`, `login_failed`, `admin_login`, password reset request/complete |
+| Admin entity CRUD | `admin_entity_*`; SiteConfig → `remote_config_updated` |
+| Guild transfer | `guild_leadership_transferred` |
+| Moderation / rewards | existing helpers |
 
 ## Tests
 

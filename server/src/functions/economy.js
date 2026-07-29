@@ -8,6 +8,7 @@ import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
 import {
   auditShopPurchase,
+  auditFuelPurchase,
   recordCurrencyChange,
   recordItemOwnershipChange,
   ActorTypes,
@@ -53,6 +54,13 @@ import {
   progressWeeklyNovaQuest,
 } from "../shared/economyFormulas.js";
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
+import {
+  MISSION_MIN_DURATION_SECONDS,
+  MISSION_MAX_DURATION_SECONDS,
+  isNormalPoolDuration,
+  needsRemainingFuelException,
+  remainingFuelDurationSeconds,
+} from "../../../src/lib/missionDuration.js";
 import { ECONOMY_FOLLOW_ON_HANDLERS } from "./economyFollowOn.js";
 import { clock, TimeErrors } from "../shared/time/index.js";
 import {
@@ -277,14 +285,26 @@ export async function BuyFuel(user) {
         httpErr(400, `Tank too full — need ${max - FUEL_PURCHASE_AMOUNT} fuel or less to buy +${FUEL_PURCHASE_AMOUNT}`);
       }
 
+      const beforeNova = ch.nova_crystals || 0;
+      const beforeFuel = fuel;
       const patch = {
         ...(resetPatch || {}),
-        nova_crystals: (ch.nova_crystals || 0) - FUEL_PURCHASE_COST,
+        nova_crystals: beforeNova - FUEL_PURCHASE_COST,
         fuel: Math.min(max, fuel + FUEL_PURCHASE_AMOUNT),
         fuel_purchases: purchases + 1,
         fuel_updated_at: new Date().toISOString(),
       };
       const character = entities.Character.update(ch.id, patch);
+      auditFuelPurchase({
+        user,
+        character: ch,
+        beforeNova,
+        afterNova: patch.nova_crystals,
+        beforeFuel,
+        afterFuel: patch.fuel,
+        cost: FUEL_PURCHASE_COST,
+        correlationId: newCorrelationId(),
+      });
       return { success: true, patch, character };
     });
     return { status: 200, body: result };
@@ -404,7 +424,9 @@ export async function LaunchMission(user, body) {
 
   // Server-authoritative duration bounds — never trust raw client timers.
   const rawDuration = Math.floor(Number(template.duration_seconds));
-  if (!Number.isFinite(rawDuration) || rawDuration < 30 || rawDuration > 7200) {
+  const pinnedFuel = typeof template.fuel_cost === "number" ? template.fuel_cost : null;
+  // Level checked after character load; pre-check hard bounds here.
+  if (!Number.isFinite(rawDuration) || rawDuration < MISSION_MIN_DURATION_SECONDS || rawDuration > MISSION_MAX_DURATION_SECONDS) {
     return { status: 400, body: { error: "Invalid mission duration", code: "INVALID_DURATION" } };
   }
 
@@ -422,17 +444,31 @@ export async function LaunchMission(user, body) {
       const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch);
       ch = resetCh;
 
+      const level = ch.level || 1;
+      const currentFuel = Math.round((ch.fuel ?? FUEL_MAX) * 100) / 100;
+
       const draft = {
         ...template,
         duration_seconds: rawDuration,
         fuel_cost: typeof template.fuel_cost === "number" ? template.fuel_cost : undefined,
       };
+
+      // Normal pool, or exact remaining-fuel exception when the tank can't afford the pool.
+      if (isNormalPoolDuration(level, rawDuration)) {
+        // ok
+      } else if (
+        pinnedFuel != null
+        && needsRemainingFuelException(level, currentFuel)
+        && remainingFuelDurationSeconds(currentFuel) === rawDuration
+      ) {
+        // ok — leftover fuel cleanup duration
+      } else {
+        httpErr(400, "Invalid mission duration for level", "INVALID_DURATION");
+      }
+
       const duration = getEffectiveMissionDuration(ch, draft);
       const fuelCost = getEffectiveFuelCost(ch, { ...draft, duration_seconds: duration });
-      const currentFuel = Math.round((ch.fuel ?? FUEL_MAX) * 100) / 100;
       if (currentFuel < fuelCost) httpErr(400, "Not enough fuel");
-
-      const level = ch.level || 1;
       const sdEff = template.stardust_efficiency != null
         ? normalizeMissionEfficiency(template.stardust_efficiency, level)
         : rollMissionEfficiency(level);

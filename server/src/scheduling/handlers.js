@@ -76,4 +76,24 @@ registerHandler("entitlement_expiry_sweep", async () => {
   return { type: "entitlement_expiry_sweep", ...result, markedAtUtc: clock.nowIso() };
 });
 
+registerHandler("audit_retention_purge", async () => {
+  const { purgeExpiredAudits, recordAuditEntry, ActorTypes } = await import("../audit/index.js");
+  const result = purgeExpiredAudits({ limit: 500 });
+  if (result.deleted > 0) {
+    try {
+      recordAuditEntry({
+        action: "audit_retention_purged",
+        actorType: ActorTypes.SCHEDULED_JOB,
+        actorId: "audit_retention_purge",
+        subjectType: "audit_logs",
+        subjectId: "retention",
+        changeSet: result,
+      });
+    } catch (err) {
+      console.error("[scheduler] audit_retention_purged meta failed", err?.message || err);
+    }
+  }
+  return { type: "audit_retention_purge", ...result, markedAtUtc: clock.nowIso() };
+});
+
 registerHandler("noop", async () => ({ type: "noop", markedAtUtc: clock.nowIso() }));

@@ -52,6 +52,16 @@ const DEFAULTS = [
     missedRunPolicy: "latest_only",
     handlerKey: "entitlement_expiry_sweep",
   },
+  {
+    key: "audit-retention-purge",
+    displayName: "Audit Retention Purge",
+    scheduleType: "cleanup",
+    recurrence: "daily",
+    localTime: "04:00",
+    timeZoneId: "America/New_York",
+    missedRunPolicy: "latest_only",
+    handlerKey: "audit_retention_purge",
+  },
 ];
 
 export function ensureDefaultSchedules() {

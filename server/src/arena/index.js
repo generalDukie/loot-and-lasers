@@ -23,3 +23,13 @@ export {
 } from "./service.js";
 export { createArenaRouter } from "./routes.js";
 export { publicArenaCard, buildDefenseSnapshot } from "./eligibility.js";
+export {
+  ensureBotPoolForPlayer,
+  listBotsNearRating,
+  getArenaBot,
+  settleBotAsOpponent,
+  processIncomingBotRaids,
+  botToPublicOpponent,
+  BOT_RAID_COOLDOWN_MS,
+  BOT_RAIDS_PER_PULSE,
+} from "./bots.js";

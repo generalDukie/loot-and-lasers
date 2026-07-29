@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { clock } from "../shared/time/clock.js";
 import { nanoid } from "nanoid";
+import { RetentionClasses, RETENTION_DAYS } from "./registry.js";
 
 function ensureSchema() {
   db.exec(`
@@ -423,4 +424,60 @@ export function assertImmutable() {
     status: 405,
     code: "AUDIT_IMMUTABLE",
   });
+}
+
+/**
+ * Delete aged audit rows that are not on hold and not permanent retention.
+ * Does not touch rows referenced by active retention holds.
+ * @returns {{ deleted: number, scanned: number, byClass: Record<string, number> }}
+ */
+export function purgeExpiredAudits({ limit = 500, nowIso = null } = {}) {
+  ensureSchema();
+  const now = nowIso ? new Date(nowIso) : new Date(clock.nowIso());
+  const holdIds = new Set(
+    db
+      .prepare(
+        `SELECT audit_id FROM audit_retention_holds
+         WHERE released_at IS NULL`
+      )
+      .all()
+      .map((r) => r.audit_id)
+  );
+
+  const candidates = db
+    .prepare(
+      `SELECT id, retention_class, occurred_at, hold
+       FROM audit_logs
+       WHERE hold = 0
+       ORDER BY occurred_at ASC
+       LIMIT ?`
+    )
+    .all(Math.min(5000, Math.max(1, Number(limit) || 500) * 5));
+
+  const byClass = {};
+  const toDelete = [];
+  for (const row of candidates) {
+    if (holdIds.has(row.id)) continue;
+    if (row.retention_class === RetentionClasses.PERMANENT_OR_ARCHIVED) continue;
+    const days = RETENTION_DAYS[row.retention_class];
+    if (days == null) continue;
+    const occurred = new Date(row.occurred_at);
+    if (Number.isNaN(occurred.getTime())) continue;
+    const ageDays = (now.getTime() - occurred.getTime()) / (24 * 60 * 60 * 1000);
+    if (ageDays < days) continue;
+    toDelete.push(row);
+    if (toDelete.length >= limit) break;
+  }
+
+  const del = db.prepare("DELETE FROM audit_logs WHERE id = ? AND hold = 0");
+  let deleted = 0;
+  for (const row of toDelete) {
+    const info = del.run(row.id);
+    if (info.changes) {
+      deleted += 1;
+      byClass[row.retention_class] = (byClass[row.retention_class] || 0) + 1;
+    }
+  }
+
+  return { deleted, scanned: candidates.length, byClass };
 }

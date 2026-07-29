@@ -10,7 +10,7 @@ import os from "node:os";
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ll-audit-"));
 process.env.DB_PATH = path.join(tmpDir, "test-audit.db");
 
-const { withTransactionAsync } = await import("../src/db.js");
+const { withTransactionAsync, db } = await import("../src/db.js");
 const { entities } = await import("../src/entities.js");
 const {
   recordAuditEntry,
@@ -20,9 +20,17 @@ const {
   searchAuditLogs,
   getAuditDetail,
   exportAuditLogs,
+  auditCasinoSettle,
+  auditMiningEvent,
+  auditDungeonBattle,
+  auditFuelPurchase,
+  auditAdminEntityWrite,
+  auditAuthEvent,
+  purgeExpiredAudits,
   ActorTypes,
   AuditError,
   AuditErrors,
+  AuditResults,
   isKnownAction,
   redactValue,
   assertImmutable,
@@ -60,6 +68,26 @@ console.log("\nAudit system tests\n");
 test("known actions registered", () => {
   assert.equal(isKnownAction("currency_granted"), true);
   assert.equal(isKnownAction("client_hack"), false);
+  for (const action of [
+    "casino_settled",
+    "mining_started",
+    "mining_collected",
+    "mining_cancelled",
+    "dungeon_battle_completed",
+    "fuel_purchased",
+    "login_succeeded",
+    "login_failed",
+    "password_reset_requested",
+    "password_reset_completed",
+    "guild_leadership_transferred",
+    "admin_entity_created",
+    "admin_entity_updated",
+    "admin_entity_deleted",
+    "remote_config_updated",
+    "audit_retention_purged",
+  ]) {
+    assert.equal(isKnownAction(action), true, action);
+  }
 });
 
 test("redacts forbidden fields", () => {
@@ -231,6 +259,120 @@ test("assertImmutable throws", () => {
 test("search filters by category", () => {
   const r = searchAuditLogs({ category: "currency", limit: 20 });
   assert.ok(r.items.every((i) => i.category === "currency"));
+});
+
+test("casino / mining / dungeon / fuel helpers record", () => {
+  const user = { id: "acct-play", role: "user", email: "p@loot.local" };
+  const character = { id: "char-play", created_by_id: "acct-play", stardust: 100 };
+
+  assert.equal(
+    auditCasinoSettle({
+      user,
+      character,
+      game: "slots",
+      bet: 10,
+      beforeStardust: 100,
+      afterStardust: 120,
+      outcome: { win: true },
+      correlationId: "casino-1",
+    }).action,
+    "casino_settled"
+  );
+  assert.equal(
+    auditMiningEvent({
+      user,
+      character,
+      action: "mining_collected",
+      before: { stardust: 100 },
+      after: { stardust: 105 },
+      stardustGained: 5,
+      hours: 1,
+    }).action,
+    "mining_collected"
+  );
+  assert.equal(
+    auditDungeonBattle({
+      user,
+      character,
+      won: true,
+      beforeStardust: 105,
+      afterStardust: 125,
+      rewards: { stardust: 20, experience: 10 },
+    }).action,
+    "dungeon_battle_completed"
+  );
+  assert.equal(
+    auditFuelPurchase({
+      user,
+      character,
+      beforeNova: 50,
+      afterNova: 40,
+      beforeFuel: 10,
+      afterFuel: 60,
+      cost: 10,
+    }).action,
+    "fuel_purchased"
+  );
+});
+
+test("admin entity write maps SiteConfig to remote_config_updated", () => {
+  const admin = { id: "admin-cfg", role: "admin", email: "cfg@loot.local" };
+  const site = auditAdminEntityWrite({
+    user: admin,
+    entityType: "SiteConfig",
+    op: "update",
+    entityId: "cfg-1",
+    before: { feature_x: false },
+    after: { feature_x: true },
+    reasonText: "toggle feature",
+  });
+  assert.equal(site.action, "remote_config_updated");
+
+  const raw = auditAdminEntityWrite({
+    user: admin,
+    entityType: "ItemTemplate",
+    op: "create",
+    entityId: "tpl-1",
+    after: { name: "Blade" },
+    reasonText: "seed template",
+  });
+  assert.equal(raw.action, "admin_entity_created");
+});
+
+test("auth helper records login and reset actions", () => {
+  assert.equal(
+    auditAuthEvent({
+      action: "login_succeeded",
+      user: { id: "u1", email: "u@loot.local", role: "user" },
+      result: AuditResults.SUCCESS,
+    }).action,
+    "login_succeeded"
+  );
+  assert.equal(
+    auditAuthEvent({
+      action: "password_reset_requested",
+      email: "u@loot.local",
+      result: AuditResults.SUCCESS,
+    }).action,
+    "password_reset_requested"
+  );
+});
+
+test("purgeExpiredAudits deletes aged non-held rows", () => {
+  const old = recordAuditEntry({
+    action: "login_failed",
+    actorType: ActorTypes.PLAYER,
+    actorId: "purge-user",
+    actorAccountId: "purge-acct",
+  });
+  // Writer ignores client timestamps; backdate so retention expires.
+  db.prepare("UPDATE audit_logs SET occurred_at = ? WHERE id = ?").run(
+    "2000-01-01T00:00:00.000Z",
+    old.auditId
+  );
+  const result = purgeExpiredAudits({ limit: 100, nowIso: "2030-01-01T00:00:00.000Z" });
+  assert.ok(result.deleted >= 1);
+  assert.equal(getAuditDetail(old.auditId), null);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

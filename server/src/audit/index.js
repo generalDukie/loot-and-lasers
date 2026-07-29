@@ -30,8 +30,14 @@ export {
   auditAdminModeration,
   auditShopPurchase,
   auditRewardClaimBridge,
+  auditCasinoSettle,
+  auditMiningEvent,
+  auditDungeonBattle,
+  auditFuelPurchase,
+  auditAdminEntityWrite,
+  auditAuthEvent,
   newCorrelationId,
   safeAudit,
 } from "./helpers.js";
 export { createAuditRouter } from "./routes.js";
-export { searchAudits, getAuditById, assertImmutable } from "./store.js";
+export { searchAudits, getAuditById, assertImmutable, purgeExpiredAudits } from "./store.js";

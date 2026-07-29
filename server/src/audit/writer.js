@@ -48,6 +48,12 @@ const ADMIN_ACTIONS_REQUIRING_REASON = new Set([
   "character_deleted",
   "character_restored",
   "compensation_mail_sent",
+  "remote_config_updated",
+  "moderation_filter_updated",
+  "guild_leadership_transferred",
+  "admin_entity_created",
+  "admin_entity_updated",
+  "admin_entity_deleted",
 ]);
 
 function j(v) {

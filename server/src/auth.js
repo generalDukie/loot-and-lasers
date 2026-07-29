@@ -6,6 +6,7 @@ import { entities } from "./entities.js";
 import { isEmailSendingEnabled, sendEmail, recordEmailFallback, getEmailConfigSummary } from "./email.js";
 import { getEmailLog } from "./emailLog.js";
 import { NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
+import { auditAuthEvent, AuditResults } from "./audit/index.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "lootandlasers-dev-secret-change-me";
 const TOKEN_TTL = process.env.JWT_TTL || "30d";
@@ -196,15 +197,43 @@ export function createAuthRouter(express) {
     try {
       const email = String(req.body?.email || "").trim().toLowerCase();
       const password = String(req.body?.password || "");
+      const ip = req.ip || req.headers["x-forwarded-for"] || null;
       const row = getUserByEmail(email);
-      if (!row) return res.status(401).json({ error: "Invalid email or password" });
+      if (!row) {
+        auditAuthEvent({
+          action: "login_failed",
+          email,
+          ipAddress: ip,
+          result: AuditResults.REJECTED,
+          metadata: { reason: "unknown_email" },
+        });
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
       const ok = await bcrypt.compare(password, row.password_hash);
-      if (!ok) return res.status(401).json({ error: "Invalid email or password" });
+      if (!ok) {
+        auditAuthEvent({
+          action: "login_failed",
+          user: publicUser(row),
+          email,
+          ipAddress: ip,
+          result: AuditResults.REJECTED,
+          metadata: { reason: "bad_password" },
+        });
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
       if (!row.email_verified) {
         return res.status(403).json({ error: "Email not verified", otp_required: true });
       }
       const access_token = signToken(row.id);
-      res.json({ success: true, access_token, user: publicUser(row) });
+      const user = publicUser(row);
+      auditAuthEvent({
+        action: row.role === "admin" ? "admin_login" : "login_succeeded",
+        user,
+        email,
+        ipAddress: ip,
+        result: AuditResults.SUCCESS,
+      });
+      res.json({ success: true, access_token, user });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -264,12 +293,21 @@ export function createAuthRouter(express) {
   router.post("/reset-password-request", async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const row = getUserByEmail(email);
+    const ip = req.ip || req.headers["x-forwarded-for"] || null;
     // Always succeed to avoid email enumeration
     if (row) {
       const token = nanoid(32);
       const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       db.prepare("UPDATE users SET reset_token = ?, reset_expires_at = ?, updated_date = ? WHERE id = ?")
         .run(token, expires, nowIso(), row.id);
+
+      auditAuthEvent({
+        action: "password_reset_requested",
+        user: publicUser(row),
+        email,
+        ipAddress: ip,
+        result: AuditResults.SUCCESS,
+      });
 
       if (EMAIL_SENDING_ENABLED) {
         try {
@@ -302,6 +340,7 @@ export function createAuthRouter(express) {
     try {
       const token = String(req.body?.resetToken || req.body?.reset_token || "");
       const newPassword = String(req.body?.newPassword || req.body?.new_password || "");
+      const ip = req.ip || req.headers["x-forwarded-for"] || null;
       if (!token || !newPassword) return res.status(400).json({ error: "Token and new password required" });
       const row = db.prepare("SELECT * FROM users WHERE reset_token = ?").get(token);
       if (!row) return res.status(400).json({ error: "Invalid reset token" });
@@ -313,6 +352,14 @@ export function createAuthRouter(express) {
         UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires_at = NULL, updated_date = ?
         WHERE id = ?
       `).run(hash, nowIso(), row.id);
+      auditAuthEvent({
+        action: "password_reset_completed",
+        user: publicUser(row),
+        email: row.email,
+        ipAddress: ip,
+        result: AuditResults.SUCCESS,
+        metadata: { via: "reset_token" },
+      });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -323,12 +370,21 @@ export function createAuthRouter(express) {
     try {
       const currentPassword = String(req.body?.currentPassword || "");
       const newPassword = String(req.body?.newPassword || "");
+      const ip = req.ip || req.headers["x-forwarded-for"] || null;
       const row = getUserRowById(req.user.id);
       const ok = await bcrypt.compare(currentPassword, row.password_hash);
       if (!ok) return res.status(400).json({ error: "Current password is incorrect" });
       const hash = await bcrypt.hash(newPassword, 10);
       db.prepare("UPDATE users SET password_hash = ?, updated_date = ? WHERE id = ?")
         .run(hash, nowIso(), row.id);
+      auditAuthEvent({
+        action: "password_reset_completed",
+        user: req.user,
+        email: row.email,
+        ipAddress: ip,
+        result: AuditResults.SUCCESS,
+        metadata: { via: "change_password" },
+      });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: err.message });

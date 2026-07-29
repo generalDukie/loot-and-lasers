@@ -74,8 +74,15 @@ import {
 } from "../entitlements/index.js";
 import {
   completeDirectChallenge,
+  settleBotAsOpponent,
 } from "../arena/index.js";
 import { ArenaError } from "../arena/errors.js";
+import {
+  auditCasinoSettle,
+  auditMiningEvent,
+  auditDungeonBattle,
+  newCorrelationId,
+} from "../audit/index.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -361,6 +368,17 @@ export const FinishArenaBattle = wrap((user, body) => {
   Object.assign(patch, ach.patch);
 
   const character = entities.Character.update(ch.id, patch);
+
+  // Persistent bot ladder: mirror the player's Elo onto the bot they fought.
+  let botUpdate = null;
+  const ladderId = opp.arena_bot_id || opp.arenaBotId || null;
+  if (ladderId) {
+    botUpdate = settleBotAsOpponent(ladderId, {
+      playerWon: won,
+      playerRatingDelta: rewards.arena_rating_delta,
+    });
+  }
+
   return {
     success: true,
     rewards: { ...rewards, experience: boostedXp, collectionPct: collectPct },
@@ -369,6 +387,7 @@ export const FinishArenaBattle = wrap((user, body) => {
     patch,
     character,
     newly_unlocked: ach.newly_unlocked,
+    bot: botUpdate,
   };
 });
 
@@ -540,6 +559,22 @@ export const FinishDungeonBattle = wrap((user, body) => {
   Object.assign(patch, ach.patch);
 
   const character = entities.Character.update(ch.id, patch);
+  auditDungeonBattle({
+    user,
+    character: ch,
+    won,
+    beforeStardust: ch.stardust || 0,
+    afterStardust: patch.stardust ?? ch.stardust ?? 0,
+    rewards: {
+      stardust,
+      experience: boostedXp,
+      planetId,
+      enemyIndex,
+    },
+    items: itemsGranted,
+    pendingLoot,
+    correlationId: newCorrelationId(),
+  });
   return {
     success: true,
     won,
@@ -633,6 +668,14 @@ export const StartMining = wrap((user, body) => {
   const end = new Date(Date.now() + hours * 3600 * 1000).toISOString();
   const patch = { mining_end_time: end, mining_reward: reward };
   const character = entities.Character.update(ch.id, patch);
+  auditMiningEvent({
+    user,
+    character: ch,
+    action: "mining_started",
+    before: { mining_end_time: ch.mining_end_time || null, mining_reward: ch.mining_reward || 0 },
+    after: patch,
+    hours,
+  });
   return { success: true, hours, patch, character };
 });
 
@@ -641,13 +684,22 @@ export const CollectMining = wrap((user) => {
   if (!ch.mining_end_time) httpErr(400, "Not mining");
   if (new Date(ch.mining_end_time).getTime() > Date.now()) httpErr(400, "Mining not finished");
   const r = ch.mining_reward || 0;
+  const beforeStardust = ch.stardust || 0;
   const patch = {
-    stardust: (ch.stardust || 0) + r,
+    stardust: beforeStardust + r,
     total_stardust_earned: (ch.total_stardust_earned || 0) + r,
     mining_end_time: null,
     mining_reward: 0,
   };
   const character = entities.Character.update(ch.id, patch);
+  auditMiningEvent({
+    user,
+    character: ch,
+    action: "mining_collected",
+    before: { stardust: beforeStardust, mining_reward: r },
+    after: { stardust: patch.stardust, mining_reward: 0 },
+    stardustGained: r,
+  });
   return { success: true, stardust_gained: r, patch, character };
 });
 
@@ -656,6 +708,13 @@ export const CancelMining = wrap((user) => {
   if (!ch.mining_end_time) httpErr(400, "Not mining");
   const patch = { mining_end_time: null, mining_reward: 0 };
   const character = entities.Character.update(ch.id, patch);
+  auditMiningEvent({
+    user,
+    character: ch,
+    action: "mining_cancelled",
+    before: { mining_end_time: ch.mining_end_time, mining_reward: ch.mining_reward || 0 },
+    after: patch,
+  });
   return { success: true, patch, character };
 });
 
@@ -745,7 +804,21 @@ export const CasinoSettle = wrap((user, body) => {
       character: live,
     };
   }
+  const beforeStardust = live.stardust || 0;
+  const beforeNova = live.nova_crystals || 0;
   const character = entities.Character.update(ch.id, patch);
+  auditCasinoSettle({
+    user,
+    character: live,
+    game,
+    bet,
+    beforeStardust,
+    afterStardust: patch.stardust,
+    beforeNova,
+    afterNova: patch.nova_crystals,
+    outcome,
+    correlationId: newCorrelationId(),
+  });
   return {
     success: true,
     delta_stardust: deltaStardust,

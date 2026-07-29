@@ -1134,6 +1134,7 @@ async function adminModerationInner(user, body) {
     const members = entities.GuildMember.filter({ guild_id });
     const newLeaderMember = members.find((m) => m.character_id === new_leader_id);
     if (!newLeaderMember) return { status: 400, body: { error: "New leader is not a member of this guild" } };
+    const prevLeaderId = guild.leader_id;
     for (const m of members) {
       if (m.role === "leader") entities.GuildMember.update(m.id, { role: "member" });
     }
@@ -1141,6 +1142,15 @@ async function adminModerationInner(user, body) {
     const updated = entities.Guild.update(guild_id, {
       leader_id: new_leader_id,
       leader_name: newLeaderMember.character_name,
+    });
+    auditAdminModeration(user, "transfer_guild", {
+      targetType: "guild",
+      targetId: guild_id,
+      characterId: new_leader_id,
+      reason: body.reason || "transfer_guild",
+      beforeState: { leader_id: prevLeaderId, leader_name: guild.leader_name },
+      afterState: { leader_id: new_leader_id, leader_name: newLeaderMember.character_name },
+      changeSet: { guild_id, prevLeaderId, new_leader_id },
     });
     return { status: 200, body: { success: true, guild: updated } };
   }

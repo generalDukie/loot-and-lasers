@@ -27,7 +27,7 @@ import { createTimeRouter, createScheduleRouter } from "./routes/time.js";
 import { createEntitlementRouter } from "./routes/entitlements.js";
 import { createRewardRouter } from "./routes/rewards.js";
 import { createArenaRouter } from "./arena/index.js";
-import { createAuditRouter } from "./audit/index.js";
+import { createAuditRouter, auditAdminEntityWrite } from "./audit/index.js";
 import { migrateLegacyEntitlements } from "./entitlements/migrate.js";
 import "./entitlements/hooks.js";
 import "./rewards/store.js";
@@ -127,6 +127,16 @@ app.post("/api/entities/:type", requireAuth, (req, res) => {
       created_by_id: req.user.id,
       created_by: req.user.email,
     });
+    if (isAdmin(req.user)) {
+      auditAdminEntityWrite({
+        user: req.user,
+        entityType: req.params.type,
+        op: "create",
+        entityId: created.id,
+        after: created,
+        reasonText: req.body?.audit_reason || req.headers["x-audit-reason"],
+      });
+    }
     res.status(201).json(created);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -150,6 +160,17 @@ app.put("/api/entities/:type/:id", requireAuth, (req, res) => {
     body = sanitizeUpdatePayload(req.user, req.params.type, body);
     if (req.params.type === "Item") assertCanUnequipToBag(existing, body);
     const updated = store.update(req.params.id, body);
+    if (isAdmin(req.user)) {
+      auditAdminEntityWrite({
+        user: req.user,
+        entityType: req.params.type,
+        op: "update",
+        entityId: req.params.id,
+        before: existing,
+        after: updated,
+        reasonText: req.body?.audit_reason || req.headers["x-audit-reason"],
+      });
+    }
     res.json(updated);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -173,6 +194,17 @@ app.patch("/api/entities/:type/:id", requireAuth, (req, res) => {
     body = sanitizeUpdatePayload(req.user, req.params.type, body);
     if (req.params.type === "Item") assertCanUnequipToBag(existing, body);
     const updated = store.update(req.params.id, body);
+    if (isAdmin(req.user)) {
+      auditAdminEntityWrite({
+        user: req.user,
+        entityType: req.params.type,
+        op: "update",
+        entityId: req.params.id,
+        before: existing,
+        after: updated,
+        reasonText: req.body?.audit_reason || req.headers["x-audit-reason"],
+      });
+    }
     res.json(updated);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -191,6 +223,16 @@ app.delete("/api/entities/:type/:id", requireAuth, (req, res) => {
     assertCanDelete(req.user, req.params.type, existing);
     const deleted = store.delete(req.params.id);
     if (!deleted) return res.status(404).json({ error: "Not found" });
+    if (isAdmin(req.user)) {
+      auditAdminEntityWrite({
+        user: req.user,
+        entityType: req.params.type,
+        op: "delete",
+        entityId: req.params.id,
+        before: existing,
+        reasonText: req.body?.audit_reason || req.headers["x-audit-reason"],
+      });
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -218,6 +260,16 @@ app.post("/api/entities/:type/delete-many", requireAuth, (req, res) => {
       store.delete(item.id);
       deleted += 1;
     }
+    if (isAdmin(req.user) && deleted > 0) {
+      auditAdminEntityWrite({
+        user: req.user,
+        entityType: req.params.type,
+        op: "delete",
+        entityId: null,
+        after: { deleted, query },
+        reasonText: req.body?.audit_reason || req.headers["x-audit-reason"] || "delete_many",
+      });
+    }
     res.json({ deleted });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -242,6 +294,16 @@ app.post("/api/entities/:type/update-many", requireAuth, (req, res) => {
       for (const m of matches) assertCanUnequipToBag(m, body);
     }
     const updated = matches.map((m) => store.update(m.id, body));
+    if (isAdmin(req.user) && updated.length > 0) {
+      auditAdminEntityWrite({
+        user: req.user,
+        entityType: req.params.type,
+        op: "update",
+        entityId: null,
+        after: { updated: updated.length, query, fields: Object.keys(body) },
+        reasonText: req.body?.audit_reason || req.headers["x-audit-reason"] || "update_many",
+      });
+    }
     res.json(updated);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });

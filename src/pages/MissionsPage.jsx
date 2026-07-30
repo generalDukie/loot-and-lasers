@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { FUEL_MAX, FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, FUEL_COLOR, formatFuelAmount } from "@/lib/gameData";
 import MissionCard from "@/components/game/MissionCard";
 import MissionCantina from "@/components/game/MissionCantina";
 import MissionExploreBackdrop from "@/components/game/MissionExploreBackdrop";
 import MissionLaunchOverlay from "@/components/game/MissionLaunchOverlay";
 import MissionCompleteOverlay from "@/components/game/MissionCompleteOverlay";
+import LevelUpOverlay, { pendingLevelUpFromSummary } from "@/components/game/LevelUpOverlay";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import CantinaMusicToggle from "@/components/game/CantinaMusicToggle";
 import { useMissionManager } from "@/hooks/useMissionManager";
@@ -37,6 +38,14 @@ export default function MissionsPage() {
     setInventoryFullOpen,
     navigate,
   } = useMissionManager();
+
+  const [levelUp, setLevelUp] = useState(null);
+
+  function dismissMissionComplete() {
+    const pending = pendingLevelUpFromSummary(completeSummary);
+    setCompleteSummary(null);
+    if (pending) setLevelUp(pending);
+  }
 
   if (loading || !character) {
     return (
@@ -115,7 +124,18 @@ export default function MissionsPage() {
           playerItems={missionBattle.playerItems}
         />
       )}
-      {completeSummary && <MissionCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />}
+      {completeSummary && (
+        <MissionCompleteOverlay summary={completeSummary} onClose={dismissMissionComplete} />
+      )}
+      {levelUp && (
+        <LevelUpOverlay
+          open
+          fromLevel={levelUp.fromLevel}
+          toLevel={levelUp.toLevel}
+          character={character}
+          onConfirm={() => setLevelUp(null)}
+        />
+      )}
 
       <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between">
         <h1 className="font-display font-bold text-xl tracking-wider flex items-center gap-2">

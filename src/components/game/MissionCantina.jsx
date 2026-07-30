@@ -104,7 +104,8 @@ export default function MissionCantina({ missions, characterLevel, character, cu
       {/* Quest-giver NPCs */}
       {board.map((m, i) => {
         const patron = patronFor(m, i);
-        const x = n === 1 ? 50 : 10 + (i / (n - 1)) * 80;
+        // Cluster patrons toward center (closer than a full-width spread).
+        const x = n === 1 ? 50 : 22 + (i / (n - 1)) * 56;
         const fuelCost = getEffectiveFuelCost(character, m);
         const locked = m.level_requirement > characterLevel;
         const lowFuel = (currentFuel ?? 0) < fuelCost;

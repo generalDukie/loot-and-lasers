@@ -4,7 +4,7 @@ import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, FUEL_COLOR, STARDUST_COLOR, X
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import confetti from "canvas-confetti";
-import { Zap, Fuel, TrendingUp, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical, ArrowRight } from "lucide-react";
+import { Zap, Fuel, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical } from "lucide-react";
 import StardustIcon from "@/components/game/StardustIcon";
 
 // Shared chrome for level-up / empty panes (not rarity-coded).
@@ -61,7 +61,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
   }, []);
 
   if (!summary) return null;
-  const { mission, leveledUp, newLevel, gearItem, gearConsolation, collectible, consumableItem, discoveries, fuelSpent } = summary;
+  const { mission, gearItem, gearConsolation, collectible, consumableItem, discoveries, fuelSpent } = summary;
   const m = mission || {};
   const xp = summary.xp || { base: 0, total: 0, shipMult: 0, collectionPct: 0 };
   const stardust = summary.stardust || { base: 0, total: 0, shipMult: 0, nexus: false };
@@ -148,20 +148,6 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
               </div>
             )}
           </RewardCard>
-
-          {leveledUp && (
-            <RewardCard icon={<TrendingUp className="w-5 h-5" />}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-display font-semibold text-amber-200">LEVEL UP</span>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Keep earning Stardust to buy attributes</p>
-                </div>
-                <span className="font-display font-bold text-amber-300 text-lg flex items-center gap-1">
-                  {newLevel - 1} <ArrowRight className="w-4 h-4" /> {newLevel}
-                </span>
-              </div>
-            </RewardCard>
-          )}
 
           {gearItem ? (
             <RewardCard icon={<Package className="w-5 h-5" />} accent={gearAccent}>

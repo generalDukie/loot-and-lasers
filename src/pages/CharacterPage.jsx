@@ -148,7 +148,11 @@ export default function CharacterPage() {
 
   async function handleUse(item) {
     const res = await inv.useConsumable(item);
-    if (res && !res.ok && res.reason) {
+    if (res?.ok) {
+      toast({ title: `🧪 Used ${item.name}`, description: "Buff applied." });
+      return;
+    }
+    if (res?.reason) {
       toast({ title: "Can't use", description: res.reason, variant: "destructive" });
     }
   }

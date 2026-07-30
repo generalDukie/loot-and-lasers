@@ -26,6 +26,7 @@ import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import ArenaNewsFeed from "@/components/game/ArenaNewsFeed";
 import ArenaMatchHistory from "@/components/game/ArenaMatchHistory";
 import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
+import LevelUpOverlay, { pendingLevelUpFromSummary } from "@/components/game/LevelUpOverlay";
 import { ArenaBackdrop } from "@/components/game/ArenaBackdrop";
 import FitScaleFrame from "@/components/game/FitScaleFrame";
 import { Swords, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
@@ -121,6 +122,7 @@ export default function ArenaPage() {
   const [now, setNow] = useState(Date.now());
   const [battleState, setBattleState] = useState(null);
   const [completeSummary, setCompleteSummary] = useState(null);
+  const [levelUp, setLevelUp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [catalogItems, setCatalogItems] = useState([]);
   const [matchHistory, setMatchHistory] = useState([]);
@@ -456,7 +458,23 @@ export default function ArenaPage() {
         />
       )}
       {completeSummary && (
-        <CombatCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />
+        <CombatCompleteOverlay
+          summary={completeSummary}
+          onClose={() => {
+            const pending = pendingLevelUpFromSummary(completeSummary);
+            setCompleteSummary(null);
+            if (pending) setLevelUp(pending);
+          }}
+        />
+      )}
+      {levelUp && (
+        <LevelUpOverlay
+          open
+          fromLevel={levelUp.fromLevel}
+          toLevel={levelUp.toLevel}
+          character={character}
+          onConfirm={() => setLevelUp(null)}
+        />
       )}
 
       <FitScaleFrame>

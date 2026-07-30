@@ -20,6 +20,7 @@ import DungeonMap from "@/components/game/DungeonMap";
 import DungeonPlanetView from "@/components/game/DungeonPlanetView";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
+import LevelUpOverlay, { pendingLevelUpFromSummary } from "@/components/game/LevelUpOverlay";
 import { Satellite, Skull, Rocket } from "lucide-react";
 import { msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 
@@ -28,6 +29,7 @@ export default function GalaxyMapPage() {
   const [equippedItems, setEquippedItems] = useState([]);
   const [battleState, setBattleState] = useState(null);
   const [completeSummary, setCompleteSummary] = useState(null);
+  const [levelUp, setLevelUp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
   const [selectedPlanetId, setSelectedPlanetId] = useState(null);
@@ -278,7 +280,23 @@ export default function GalaxyMapPage() {
         />
       )}
       {completeSummary && (
-        <CombatCompleteOverlay summary={completeSummary} onClose={() => setCompleteSummary(null)} />
+        <CombatCompleteOverlay
+          summary={completeSummary}
+          onClose={() => {
+            const pending = pendingLevelUpFromSummary(completeSummary);
+            setCompleteSummary(null);
+            if (pending) setLevelUp(pending);
+          }}
+        />
+      )}
+      {levelUp && (
+        <LevelUpOverlay
+          open
+          fromLevel={levelUp.fromLevel}
+          toLevel={levelUp.toLevel}
+          character={character}
+          onConfirm={() => setLevelUp(null)}
+        />
       )}
 
       <div className="shrink-0 flex items-center justify-between flex-wrap gap-2">

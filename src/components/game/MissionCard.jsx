@@ -61,19 +61,22 @@ function CountdownTimer({ endTime, duration_seconds, onComplete, compact }) {
           {done ? "DONE" : formatDuration(remaining)}
         </span>
       </div>
-      <div className={`relative ${compact ? "h-3.5" : "h-5"} bg-muted/50 rounded-full overflow-hidden border border-border/30`}>
+      <div className={`relative ${compact ? "h-3.5" : "h-5"} bg-muted/50 rounded-full border border-border/30`}>
+        {/* Clip fill only — rocket sits on the tip and may overhang slightly at 0%/100%. */}
+        <div className="absolute inset-0 rounded-full overflow-hidden">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary/80 to-accent/80 transition-[width] duration-500 ease-linear"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary/80 to-accent/80 transition-all duration-500 ease-linear"
-          style={{ width: `${progress * 100}%` }}
-        />
-        <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-500 ease-linear"
-          style={{ left: `${Math.max(3, progress * 97)}%` }}
+          className="absolute top-1/2 z-10 -translate-y-1/2 -translate-x-1/2 pointer-events-none transition-[left] duration-500 ease-linear"
+          style={{ left: `${progress * 100}%` }}
         >
           <motion.div
             animate={{ rotate: done ? [0, -10, 10, 0] : [-3, 3, -3] }}
             transition={{ duration: done ? 0.4 : 0.8, repeat: Infinity, ease: "easeInOut" }}
-            className={compact ? "text-xs" : "text-base"}
+            className={compact ? "text-xs leading-none" : "text-base leading-none"}
           >
             {done ? "🎉" : "🚀"}
           </motion.div>

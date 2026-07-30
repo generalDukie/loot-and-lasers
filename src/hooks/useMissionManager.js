@@ -441,6 +441,7 @@ export function useMissionManager() {
           total: stardustGain,
         },
         leveledUp,
+        prevLevel,
         newLevel,
         statPoints: getStatPointsForLevelRange(prevLevel, newLevel),
         gearItem,

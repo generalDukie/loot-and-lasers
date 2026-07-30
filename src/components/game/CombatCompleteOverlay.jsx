@@ -4,7 +4,7 @@ import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, STARDUST_COLOR, XP_COLOR } fr
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import confetti from "canvas-confetti";
-import { Zap, TrendingUp, Package, Sparkles, Trophy, Gift, FlaskConical, ArrowRight, Swords, Skull } from "lucide-react";
+import { Zap, Package, Sparkles, Trophy, Gift, FlaskConical, Swords, Skull } from "lucide-react";
 import StardustIcon from "@/components/game/StardustIcon";
 
 function RewardCard({ icon, accent, children }) {
@@ -45,10 +45,6 @@ export default function CombatCompleteOverlay({ summary, onClose }) {
     subtitle,
     xp,
     stardust,
-    leveledUp,
-    newLevel,
-    prevLevel,
-    statPoints,
     ratingDelta,
     gearItem,
     shipMod,
@@ -114,20 +110,6 @@ export default function CombatCompleteOverlay({ summary, onClose }) {
                 <span className="text-xs font-display font-semibold" style={{ color: ratingDelta >= 0 ? "#FBBF24" : "#FB7185" }}>ARENA RATING</span>
                 <span className="font-display font-bold text-lg" style={{ color: ratingDelta >= 0 ? "#FBBF24" : "#FB7185" }}>
                   {ratingDelta >= 0 ? "+" : ""}{ratingDelta}
-                </span>
-              </div>
-            </RewardCard>
-          )}
-
-          {leveledUp && (
-            <RewardCard icon={<TrendingUp className="w-5 h-5" />} accent="#22C55E">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-display font-semibold text-green-300">LEVEL UP</span>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Keep earning Stardust to buy attributes</p>
-                </div>
-                <span className="font-display font-bold text-green-400 text-lg flex items-center gap-1">
-                  {prevLevel || (newLevel - 1)} <ArrowRight className="w-4 h-4" /> {newLevel}
                 </span>
               </div>
             </RewardCard>

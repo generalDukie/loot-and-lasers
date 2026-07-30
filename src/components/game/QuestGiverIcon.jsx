@@ -23,12 +23,12 @@ export default function QuestGiverIcon({
 
   const SIZE = {
     lg: {
-      wrap: "w-[6.25rem] sm:w-[7rem]",
-      diamond: "w-[3.75rem] h-[3.75rem] sm:w-[4.25rem] sm:h-[4.25rem]",
+      wrap: "w-[8.75rem] sm:w-[10rem]",
+      diamond: "w-[4.5rem] h-[4.5rem] sm:w-[5rem] sm:h-[5rem]",
       emoji: "text-3xl sm:text-4xl",
       column: "h-4 sm:h-5",
       base: "w-full h-2.5",
-      pad: "px-1.5 pt-1.5 pb-1",
+      pad: "px-2.5 pt-1.5 pb-1",
     },
     md: {
       wrap: "w-[4.25rem]",

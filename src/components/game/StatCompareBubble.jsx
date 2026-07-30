@@ -1,7 +1,8 @@
 import React from "react";
-import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle, FlaskConical } from "lucide-react";
 import { STAT_ICONS, RARITY_COLORS, computeStardustValue, CLASSES, STARDUST_COLOR } from "@/lib/gameData";
 import StardustIcon from "@/components/game/StardustIcon";
+import { EQUIPPABLE_TYPES } from "@/lib/inventoryJunk";
 
 const STATS = ["strength", "agility", "intellect", "vitality", "luck"];
 
@@ -31,13 +32,15 @@ export function powerRating(item, className) {
 // Rich RPG-style comparison tooltip. Shows the hovered item side by side with
 // the currently equipped item in the same slot, with stat deltas, % changes,
 // a power rating, an overall verdict, and quick action buttons.
-export default function StatCompareBubble({ item, equipped, onEquip, onSell, onLock, characterClass, className = "" }) {
+export default function StatCompareBubble({ item, equipped, onEquip, onSell, onUse, onLock, characterClass, className = "" }) {
   const color = RARITY_COLORS[item.rarity] || "#9CA3AF";
   const myPower = powerRating(item, characterClass);
   const eqPower = equipped ? powerRating(equipped, characterClass) : 0;
   const powerDelta = myPower - eqPower;
   const verdict = equipped ? (powerDelta > 0 ? "better" : powerDelta < 0 ? "worse" : "equal") : "new";
   const locked = !!item.locked;
+  const canEquip = EQUIPPABLE_TYPES.includes(item.type);
+  const isStim = item.type === "consumable" && !!item.consumable;
 
   return (
     <div className={`w-72 max-w-full rounded-xl border border-border/60 bg-popover/95 backdrop-blur-md p-3 shadow-2xl border-glow-cyan pointer-events-auto ${className}`}>
@@ -134,12 +137,17 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onL
 
       {/* Actions */}
       <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border/40">
-        {onEquip && !item.is_equipped && (
+        {isStim && onUse && (
+          <button onClick={() => onUse(item)} className="flex items-center gap-1 text-[10px] bg-accent/15 hover:bg-accent/25 text-accent px-2 py-1 rounded-md font-medium transition-colors">
+            <FlaskConical className="w-3 h-3" /> Use
+          </button>
+        )}
+        {canEquip && onEquip && !item.is_equipped && (
           <button onClick={() => onEquip(item)} className="flex items-center gap-1 text-[10px] bg-primary/15 hover:bg-primary/25 text-primary px-2 py-1 rounded-md font-medium transition-colors">
             <Swords className="w-3 h-3" /> Equip
           </button>
         )}
-        {onEquip && item.is_equipped && (
+        {canEquip && onEquip && item.is_equipped && (
           <button onClick={() => onEquip(item)} className="flex items-center gap-1 text-[10px] bg-muted hover:bg-muted/80 text-muted-foreground px-2 py-1 rounded-md font-medium transition-colors">
             Unequip
           </button>

@@ -130,6 +130,7 @@ export default function InventorySlotBoard({
             equipped={pinnedEq}
             onEquip={(it) => { onEquip?.(it); setPinnedId(null); }}
             onSell={(it) => { onSell?.(it); setPinnedId(null); }}
+            onUse={(it) => { onUse?.(it); setPinnedId(null); }}
             onLock={onLock}
             characterClass={characterClass}
             className="!w-full max-w-none"
@@ -305,6 +306,7 @@ export default function InventorySlotBoard({
             equipped={hoveredEq}
             onEquip={onEquip}
             onSell={onSell}
+            onUse={onUse}
             onLock={onLock}
             characterClass={characterClass}
           />

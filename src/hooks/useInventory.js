@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/api/gameClient";
 import { MAX_BUFF_STACKS, MAX_ACTIVE_STAT_TYPES, getInventoryCap } from "@/lib/gameData";
 import { enforceInventoryCap, setPendingUnequip, tryClaimPendingIfSpaceAvailable } from "@/lib/inventoryCap";
+import { EQUIPPABLE_TYPES } from "@/lib/inventoryJunk";
 
 /**
  * Pure stim apply — validates stack / distinct-stat caps and returns the next
@@ -73,6 +74,28 @@ export function useInventory(character, onCharacterChange) {
     if (!character) return;
     try {
       const all = await api.entities.Item.filter({ character_id: character.id });
+      // Heal stims/materials that were "equipped" by the old backpack Equip button.
+      const stray = (all || []).filter((i) => i.is_equipped && !EQUIPPABLE_TYPES.includes(i.type));
+      if (stray.length) {
+        const eq = { ...(character.equipped_items || {}) };
+        let eqDirty = false;
+        for (const s of stray) {
+          try {
+            await api.entities.Item.update(s.id, { is_equipped: false });
+          } catch { /* best-effort */ }
+          s.is_equipped = false;
+          if (eq[s.type] === s.id) {
+            delete eq[s.type];
+            eqDirty = true;
+          }
+        }
+        if (eqDirty) {
+          try {
+            await api.entities.Character.update(character.id, { equipped_items: eq });
+            onCharacterChange?.({ equipped_items: eq });
+          } catch { /* best-effort */ }
+        }
+      }
       setItems(all || []);
       await enforceInventoryCap(character);
     } catch (e) {
@@ -80,7 +103,7 @@ export function useInventory(character, onCharacterChange) {
       // throwing up to the page and leaving it stuck on a loading spinner.
       if (!/rate limit/i.test(e?.message || String(e))) console.warn("Inventory load failed", e);
     }
-  }, [character]);
+  }, [character, onCharacterChange]);
 
   // Optimistic equip/unequip: update local item state immediately so the
   // character sheet's derived stats (damage, health, etc.) reflect the change
@@ -88,6 +111,8 @@ export function useInventory(character, onCharacterChange) {
   // background; on failure we roll back to the pre-action snapshot.
   const equip = useCallback(async (item) => {
     if (!character) return;
+    // Stims/materials are not gear — equipping them only hid them from the bag.
+    if (!EQUIPPABLE_TYPES.includes(item?.type)) return;
     const snapshot = items;
 
     if (item.is_equipped) {

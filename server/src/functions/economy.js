@@ -59,11 +59,7 @@ import {
 } from "../shared/economyFormulas.js";
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import {
-  MISSION_MIN_DURATION_SECONDS,
-  MISSION_MAX_DURATION_SECONDS,
-  isNormalPoolDuration,
-  needsRemainingFuelException,
-  remainingFuelDurationSeconds,
+  isLaunchableMissionDuration,
 } from "../../../src/lib/missionDuration.js";
 import { ECONOMY_FOLLOW_ON_HANDLERS } from "./economyFollowOn.js";
 import { clock, TimeErrors } from "../shared/time/index.js";
@@ -426,11 +422,10 @@ export async function LaunchMission(user, body) {
     return { status: 400, body: { error: "Missing template fields" } };
   }
 
-  // Server-authoritative duration bounds — never trust raw client timers.
+  // Hard bounds only — level pools gate generation, not accept/complete.
+  // Stale cantina offers (rolled at a prior level) must remain launchable.
   const rawDuration = Math.floor(Number(template.duration_seconds));
-  const pinnedFuel = typeof template.fuel_cost === "number" ? template.fuel_cost : null;
-  // Level checked after character load; pre-check hard bounds here.
-  if (!Number.isFinite(rawDuration) || rawDuration < MISSION_MIN_DURATION_SECONDS || rawDuration > MISSION_MAX_DURATION_SECONDS) {
+  if (!isLaunchableMissionDuration(rawDuration)) {
     return { status: 400, body: { error: "Invalid mission duration", code: "INVALID_DURATION" } };
   }
 
@@ -456,19 +451,6 @@ export async function LaunchMission(user, body) {
         duration_seconds: rawDuration,
         fuel_cost: typeof template.fuel_cost === "number" ? template.fuel_cost : undefined,
       };
-
-      // Normal pool, or exact remaining-fuel exception when the tank can't afford the pool.
-      if (isNormalPoolDuration(level, rawDuration)) {
-        // ok
-      } else if (
-        pinnedFuel != null
-        && needsRemainingFuelException(level, currentFuel)
-        && remainingFuelDurationSeconds(currentFuel) === rawDuration
-      ) {
-        // ok — leftover fuel cleanup duration
-      } else {
-        httpErr(400, "Invalid mission duration for level", "INVALID_DURATION");
-      }
 
       const duration = getEffectiveMissionDuration(ch, draft);
       const fuelCost = getEffectiveFuelCost(ch, { ...draft, duration_seconds: duration });

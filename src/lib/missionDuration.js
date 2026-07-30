@@ -1,5 +1,7 @@
 /**
- * Authoritative mission-duration pools by player level.
+ * Mission-duration pools by player level — used when generating cantina offers.
+ * Accept/complete only enforce hard bounds (isLaunchableMissionDuration), so a
+ * board rolled at an earlier level stays playable after the player levels up.
  * Fuel cost remains duration_minutes (1 min = 1 Fuel).
  * Integer seconds only — no interpolated / legacy brackets.
  */
@@ -100,20 +102,33 @@ export function needsRemainingFuelException(level, currentFuel) {
   return fuel < cheapest;
 }
 
-/** Whether a raw client duration is in the normal pool for the level. */
+/** Whether a duration is in the normal generation pool for the level. */
 export function isNormalPoolDuration(level, durationSeconds) {
   const sec = Math.floor(Number(durationSeconds));
   return getAllowedMissionDurations(level).includes(sec);
 }
 
 /**
- * Accept normal-pool durations, or an exact remaining-fuel exception duration.
+ * Hard bounds for launching a mission (accept/complete).
+ * Level pools do not apply here — only generation uses getAllowedMissionDurations.
+ */
+export function isLaunchableMissionDuration(durationSeconds) {
+  const sec = Math.floor(Number(durationSeconds));
+  return (
+    Number.isFinite(sec)
+    && sec >= MISSION_MIN_DURATION_SECONDS
+    && sec <= MISSION_MAX_DURATION_SECONDS
+  );
+}
+
+/**
+ * Generation-time check: normal-pool duration, or exact remaining-fuel exception.
+ * Do not use this to gate LaunchMission — use isLaunchableMissionDuration.
  * `pinnedFuel` is the optional fuel_cost on low-fuel / residual offers.
  */
 export function isValidMissionDuration(level, durationSeconds, pinnedFuel = null) {
   const sec = Math.floor(Number(durationSeconds));
-  if (!Number.isFinite(sec)) return false;
-  if (sec < MISSION_MIN_DURATION_SECONDS || sec > MISSION_MAX_DURATION_SECONDS) return false;
+  if (!isLaunchableMissionDuration(sec)) return false;
   if (isNormalPoolDuration(level, sec)) return true;
   if (pinnedFuel == null || !Number.isFinite(Number(pinnedFuel))) return false;
   const expected = remainingFuelDurationSeconds(pinnedFuel);

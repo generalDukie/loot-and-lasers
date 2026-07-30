@@ -10,6 +10,7 @@ import {
   needsRemainingFuelException,
   isNormalPoolDuration,
   isValidMissionDuration,
+  isLaunchableMissionDuration,
 } from "../../src/lib/missionDuration.js";
 
 let passed = 0;
@@ -98,7 +99,7 @@ test("exception NOT needed when fuel covers a normal pool mission", () => {
   assert.equal(needsRemainingFuelException(4, 0.5), false); // 30s in pool
 });
 
-test("isValidMissionDuration accepts pool and exact leftover", () => {
+test("isValidMissionDuration is generation-time (pool + leftover)", () => {
   assert.equal(isValidMissionDuration(21, 300), true);
   assert.equal(isValidMissionDuration(21, 420), false); // 7m not in L21+ pool
   assert.equal(isValidMissionDuration(21, 180, 3), true); // 3m leftover
@@ -106,6 +107,15 @@ test("isValidMissionDuration accepts pool and exact leftover", () => {
   assert.equal(isValidMissionDuration(17, 120), false); // no pin → not in pool
   assert.equal(isNormalPoolDuration(20, 1050), true);
   assert.equal(isNormalPoolDuration(21, 1050), false);
+});
+
+test("launch accepts any hard-bound duration (stale boards after level-up)", () => {
+  // L15 board had 150s; player is now L16 (pool min 300) — still launchable.
+  assert.equal(isNormalPoolDuration(16, 150), false);
+  assert.equal(isLaunchableMissionDuration(150), true);
+  assert.equal(isLaunchableMissionDuration(120), true); // leftover-fuel style
+  assert.equal(isLaunchableMissionDuration(14), false);
+  assert.equal(isLaunchableMissionDuration(1201), false);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

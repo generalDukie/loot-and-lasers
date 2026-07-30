@@ -13,6 +13,7 @@ import {
   needsRemainingFuelException,
   isNormalPoolDuration,
   isValidMissionDuration,
+  isLaunchableMissionDuration,
   MISSION_MIN_DURATION_SECONDS,
   MISSION_MAX_DURATION_SECONDS,
 } from "@/lib/missionDuration";
@@ -25,6 +26,7 @@ export {
   needsRemainingFuelException,
   isNormalPoolDuration,
   isValidMissionDuration,
+  isLaunchableMissionDuration,
   MISSION_MIN_DURATION_SECONDS,
   MISSION_MAX_DURATION_SECONDS,
 };

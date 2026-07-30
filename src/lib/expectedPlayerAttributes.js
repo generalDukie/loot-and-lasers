@@ -4,6 +4,8 @@
  * multipliers here only as named constants.
  */
 
+import { getFullSetAttributeBudget } from "@/lib/itemGeneration";
+
 export const ATTR_KEYS = Object.freeze([
   "strength",
   "agility",
@@ -12,20 +14,40 @@ export const ATTR_KEYS = Object.freeze([
   "luck",
 ]);
 
+/** Class base attributes always sum to this. */
+export const PLAYER_BASE_ATTRIBUTES = 50;
+
 /**
  * Canonical expected TOTAL permanent attributes at a level
  * (Strength+Agility+Intellect+Vitality+Luck).
+ * Aspirational curve (base + gear + purchased attrs) — not used for mission foes.
  */
 export function expectedPlayerAttributes(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   return Math.round(50 + 19.3519 * L + 288.0495 * (1 - Math.exp(-L / 20)));
 }
 
-/** Mission end-of-fight enemy total attribute multiplier vs expected player. */
-export const MISSION_ENEMY_ATTR_MULT = 0.35;
+/**
+ * Realistic power for a player who keeps gear roughly on-level.
+ * Level-ups grant 0 free attrs; progression comes from equipped set budgets.
+ * GEAR_FILL ≈ uncommon-common blend of a full 8-slot set.
+ */
+export const MISSION_PLAYER_GEAR_FILL = 0.75;
+
+export function progressingPlayerAttributes(level) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  return Math.round(PLAYER_BASE_ATTRIBUTES + getFullSetAttributeBudget(L) * MISSION_PLAYER_GEAR_FILL);
+}
+
+/**
+ * Soft end-of-mission foe vs a progressing player.
+ * ~28% of progressing power — nearly always loses to equipped/on-level players;
+ * bare / obsolete-gear players fall behind as level rises.
+ */
+export const MISSION_ENEMY_ATTR_MULT = 0.28;
 
 export function missionEnemyAttributeBudget(level) {
-  return Math.round(expectedPlayerAttributes(level) * MISSION_ENEMY_ATTR_MULT);
+  return Math.round(progressingPlayerAttributes(level) * MISSION_ENEMY_ATTR_MULT);
 }
 
 /** Hidden combat archetypes — not shown in UI / names / art. */
@@ -99,4 +121,9 @@ export function distributeMissionEnemyAttributes(total, archetype) {
 /** Build expected-player flat stats for simulations (no gear). */
 export function distributeExpectedPlayerAttributes(level, archetype = "MIGHT") {
   return distributeMissionEnemyAttributes(expectedPlayerAttributes(level), archetype);
+}
+
+/** Build progressing-player flat stats for simulations (no gear items; attrs baked in). */
+export function distributeProgressingPlayerAttributes(level, archetype = "MIGHT") {
+  return distributeMissionEnemyAttributes(progressingPlayerAttributes(level), archetype);
 }

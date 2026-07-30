@@ -18,9 +18,10 @@ function pick(arr, rng = Math.random) {
 
 /**
  * Soft end-of-mission foe.
- * Power = ExpectedPlayerAttributes(playerLevel) × 35%, distributed by a hidden
- * MIGHT / REFLEX / TECH archetype. Presentation (name/race/art) is independent.
- * Combat uses player formulas via a class family mapping with passives suppressed.
+ * Power = progressingPlayerAttributes(playerLevel) × 28% (base + on-level gear
+ * fill), distributed by a hidden MIGHT / REFLEX / TECH archetype.
+ * Presentation (name/race/art) is independent. Combat uses player formulas via
+ * a class family mapping with passives suppressed.
  */
 export function generateMissionEncounter(character, mission, rng = Math.random) {
   const playerLevel = Math.max(1, Math.floor(Number(character?.level) || 1));
@@ -46,7 +47,7 @@ export function generateMissionEncounter(character, mission, rng = Math.random) 
     suppressClassPassive: true,
     // Class is ONLY for primary damage / resist-family rules in statEngine.
     class: classKey,
-    // No race combat bonus — keeps the 35% budget exact.
+    // No race combat bonus — keeps the soft progressing budget exact.
     race: null,
     level,
     stats,

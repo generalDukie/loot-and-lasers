@@ -5,9 +5,11 @@
 import assert from "node:assert/strict";
 import {
   expectedPlayerAttributes,
+  progressingPlayerAttributes,
   missionEnemyAttributeBudget,
   pickMissionEnemyArchetype,
   distributeMissionEnemyAttributes,
+  distributeProgressingPlayerAttributes,
   MISSION_ENEMY_ATTR_SHARES,
   MISSION_ENEMY_ARCHETYPES,
 } from "../../src/lib/expectedPlayerAttributes.js";
@@ -23,7 +25,7 @@ import {
   getBaseDamageFromPrimary,
 } from "../../src/lib/statEngine.js";
 import { simulateBattle } from "../../src/lib/arenaEngine.js";
-import { distributeExpectedPlayerAttributes } from "../../src/lib/expectedPlayerAttributes.js";
+import { CLASSES } from "../../src/lib/gameData.js";
 
 let passed = 0;
 let failed = 0;
@@ -76,20 +78,31 @@ test("expected player attribute curve matches sample anchors", () => {
   assert.ok(expectedPlayerAttributes(1000) > expectedPlayerAttributes(600));
 });
 
-test("mission enemy budgets = ROUND(expected × 0.35)", () => {
+test("mission enemy budgets = ROUND(progressing × 0.28)", () => {
   const samples = [
-    [10, 125],
-    [50, 449],
-    [100, 795],
-    [250, 1811],
-    [500, 3505],
+    [1, 17],
+    [4, 33],
+    [10, 66],
+    [50, 187],
+    [100, 309],
+    [500, 1416],
   ];
   for (const [level, approx] of samples) {
     const got = missionEnemyAttributeBudget(level);
-    const fromFormula = Math.round(expectedPlayerAttributes(level) * 0.35);
+    const fromFormula = Math.round(progressingPlayerAttributes(level) * 0.28);
     assert.equal(got, fromFormula, `L${level} formula`);
     assert.ok(Math.abs(got - approx) <= 1, `L${level}: got ${got}, approx ${approx}`);
   }
+  // Soft vs progressing: enemy stays well below progressing player power.
+  for (const level of [1, 4, 10, 50, 100]) {
+    const enemy = missionEnemyAttributeBudget(level);
+    const prog = progressingPlayerAttributes(level);
+    assert.ok(enemy < prog * 0.35, `L${level} enemy ${enemy} too close to prog ${prog}`);
+    assert.ok(enemy > prog * 0.2, `L${level} enemy ${enemy} too soft vs prog ${prog}`);
+  }
+  // Bare (50 attrs) falls behind by mid levels — negligence is punishable.
+  assert.ok(missionEnemyAttributeBudget(10) > 50, "L10 enemy exceeds bare base");
+  assert.ok(missionEnemyAttributeBudget(4) < 50, "L4 enemy still below bare base (early soft)");
 });
 
 test("archetype pick is ~equal over large sample", () => {
@@ -142,7 +155,7 @@ test("generateMissionEncounter uses player level budget and suppresses passives"
   assert.equal(enemy.missionEnemy, true);
   assert.equal(enemy.race, null);
   const sum = Object.values(enemy.stats).reduce((a, b) => a + b, 0);
-  assert.equal(sum, 449);
+  assert.equal(sum, missionEnemyAttributeBudget(50));
   assert.ok(ENCOUNTER_NAMES_HAS(enemy.name) || typeof enemy.name === "string");
 });
 
@@ -181,7 +194,7 @@ test("mission enemy has no passive in simulateBattle; can crit/dodge/die", () =>
     level: 50,
     class: "Vanguard",
     race: null,
-    stats: distributeExpectedPlayerAttributes(50, "MIGHT"),
+    stats: distributeProgressingPlayerAttributes(50, "MIGHT"),
   };
   const enemy = generateMissionEncounter({ level: 50 }, null, () => 0.1);
   assert.equal(enemy.suppressClassPassive, true);
@@ -197,21 +210,20 @@ test("mission enemy has no passive in simulateBattle; can crit/dodge/die", () =>
   assert.ok(battle.playerMaxHp > battle.opponentMaxHp);
 });
 
-test("expected player overwhelmingly favored vs mission enemy", () => {
-  const levels = [10, 50, 100, 250, 500];
+test("progressing player overwhelmingly favored vs mission enemy", () => {
+  const levels = [4, 10, 50, 100, 250];
   const results = {};
   for (const level of levels) {
     let wins = 0;
     const N = 40;
     for (let i = 0; i < N; i++) {
       const player = {
-        name: "Expected",
+        name: "Progressing",
         level,
         class: "Vanguard",
         race: null,
-        stats: distributeExpectedPlayerAttributes(level, "MIGHT"),
+        stats: distributeProgressingPlayerAttributes(level, "MIGHT"),
       };
-      // Deterministic-ish per trial
       let seed = (level * 1000 + i * 97) >>> 0;
       const rng = () => {
         seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -222,12 +234,36 @@ test("expected player overwhelmingly favored vs mission enemy", () => {
       if (battle.winner === "player") wins += 1;
     }
     results[level] = { wins, N, rate: wins / N };
-    console.log(`    L${level}: player wins ${wins}/${N} (${((wins / N) * 100).toFixed(0)}%)`);
-    // Design intent: overwhelmingly favored — flag if below 90% so we can retune 35%.
-    assert.ok(wins / N >= 0.9, `L${level} win rate ${wins}/${N}`);
+    console.log(`    L${level}: progressing wins ${wins}/${N} (${((wins / N) * 100).toFixed(0)}%)`);
+    assert.ok(wins / N >= 0.95, `L${level} progressing win rate ${wins}/${N}`);
   }
-  // Stash for report
   globalThis.__missionEnemyWinRates = results;
+});
+
+test("bare player can lose by mid levels without gear/attrs", () => {
+  const level = 10;
+  let wins = 0;
+  const N = 40;
+  for (let i = 0; i < N; i++) {
+    const player = {
+      name: "Bare",
+      level,
+      class: "Vanguard",
+      race: null,
+      stats: { ...CLASSES.Vanguard.baseStats },
+    };
+    let seed = (9000 + i * 91) >>> 0;
+    const rng = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0x100000000;
+    };
+    const enemy = generateMissionEncounter({ level }, null, rng);
+    const battle = simulateBattle(player, enemy, [], [], { rng });
+    if (battle.winner === "player") wins += 1;
+  }
+  console.log(`    L${level} bare Vanguard: ${wins}/${N} (${((wins / N) * 100).toFixed(0)}%)`);
+  // Negligent players should not be near-guaranteed winners by L10.
+  assert.ok(wins / N < 0.85, `L${level} bare win rate too high: ${wins}/${N}`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

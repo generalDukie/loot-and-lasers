@@ -4,6 +4,7 @@ import { getEffectiveFuelCost, ITEM_DROP_RATES, FUEL_COLOR, STARDUST_COLOR, XP_C
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
+import QuestGiverIcon from "@/components/game/QuestGiverIcon";
 import { X, Star, Fuel, MapPin, Lock, Clock } from "lucide-react";
 import StardustIcon from "@/components/game/StardustIcon";
 
@@ -55,14 +56,7 @@ export default function MissionDetailSheet({ mission, patron, characterLevel, ch
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-3 pr-6">
-          <motion.div
-            animate={{ y: [0, -4, 0], rotate: [-2, 2, -2] }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-            className="w-16 h-12 rounded-full flex items-center justify-center text-3xl border-4 shrink-0"
-            style={{ borderColor: patron.color, background: "rgba(10,12,20,0.7)", boxShadow: `0 0 14px ${patron.color}55` }}
-          >
-            {patron.emoji}
-          </motion.div>
+          <QuestGiverIcon patron={patron} available={!locked && !lowFuel} locked={locked} lowFuel={lowFuel} size="sm" />
           <div className="min-w-0">
             <p className="text-[10px] font-display tracking-widest uppercase" style={{ color: patron.color }}>{patron.name}</p>
             <h3 className="font-display font-bold text-base leading-tight">{mission.name}</h3>

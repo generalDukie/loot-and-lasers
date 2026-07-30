@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getEffectiveFuelCost, QUEST_GIVERS, FUEL_COLOR, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
 import { computeMissionGains } from "@/hooks/useMissionManager";
-import { Lock, Fuel, Star, Clock, MapPin } from "lucide-react";
+import { Fuel, Star, Clock, MapPin } from "lucide-react";
 import MissionDetailSheet from "@/components/game/MissionDetailSheet";
+import QuestGiverIcon from "@/components/game/QuestGiverIcon";
 import StardustIcon from "@/components/game/StardustIcon";
 
 const CANTINA_BG = "/assets/cantina-bg.png";
@@ -122,70 +123,43 @@ export default function MissionCantina({ missions, characterLevel, character, cu
             onClick={() => !locked && !lowFuel && setSelected(i)}
             aria-disabled={locked || lowFuel}
           >
-            {/* Avatar with glow ring */}
+            {/* Holo-beacon quest giver */}
             <motion.div
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 2.2 + i * 0.3, repeat: Infinity, ease: "easeInOut" }}
-              whileHover={available ? { scale: 1.1, y: -10 } : {}}
+              whileHover={available ? { scale: 1.08, y: -8 } : {}}
               whileTap={available ? { scale: 0.96 } : {}}
               className="relative"
             >
-              {available && (
-                <motion.span
-                  className="absolute -inset-3 rounded-[1.35rem] border-2 pointer-events-none"
-                  style={{ borderColor: `${patron.color}88` }}
-                  animate={{ scale: [1, 1.12, 1], opacity: [0.75, 0.2, 0.75] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
-                />
-              )}
-              <div
-                className="relative w-[5.5rem] h-[4.75rem] sm:w-28 sm:h-24 rounded-2xl flex items-center justify-center text-5xl sm:text-6xl border-[3px] transition-transform"
-                style={{
-                  borderColor: locked ? "#555" : patron.color,
-                  background: locked
-                    ? "rgba(10,12,20,0.75)"
-                    : `linear-gradient(160deg, ${patron.color}33, rgba(10,12,20,0.85) 55%)`,
-                  filter: locked ? "grayscale(1)" : lowFuel ? "saturate(0.45)" : "none",
-                  boxShadow: available
-                    ? `0 10px 28px rgba(0,0,0,0.45), 0 0 28px ${patron.color}66, inset 0 1px 0 ${patron.color}44`
-                    : "0 4px 12px rgba(0,0,0,0.35)",
-                }}
-              >
-                <motion.span
-                  animate={available ? { rotate: [-4, 4, -4] } : undefined}
-                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  {patron.emoji}
-                </motion.span>
-                {locked && (
-                  <span className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded-full bg-background/90 border border-border/50 text-muted-foreground">
-                    <Lock className="w-3.5 h-3.5" />
-                  </span>
-                )}
-              </div>
+              <QuestGiverIcon
+                patron={patron}
+                available={available}
+                locked={locked}
+                lowFuel={lowFuel}
+                size="lg"
+                index={i}
+                showName
+              />
             </motion.div>
 
-            {/* Patron name */}
-            <div className="mt-2 flex flex-col items-center gap-1">
-              <span
-                className="text-xs sm:text-sm font-display font-bold px-3 py-1 rounded-md truncate max-w-[7.5rem] sm:max-w-[9rem] bg-background/90 border canvas-grain shadow-md"
-                style={{
-                  color: locked ? "#777" : patron.color,
-                  borderColor: available ? `${patron.color}66` : "hsl(var(--border) / 0.4)",
-                  boxShadow: available ? `0 0 12px ${patron.color}33` : undefined,
-                }}
+            {available && (
+              <motion.span
+                className="mt-1.5 text-[9px] sm:text-[10px] font-display font-bold tracking-[0.2em] uppercase"
+                style={{ color: patron.color }}
+                animate={{ opacity: [0.4, 1, 0.4] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut", delay: i * 0.15 }}
               >
-                {patron.name}
+                Accept
+              </motion.span>
+            )}
+            {locked && (
+              <span className="mt-1.5 text-[9px] font-display tracking-wide uppercase text-muted-foreground">
+                Locked
               </span>
-              {available && (
-                <span
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-display font-bold tracking-wide uppercase mt-0.5"
-                  style={{ color: patron.color, textShadow: `0 0 8px ${patron.color}` }}
-                >
-                  Hear the job →
-                </span>
-              )}
-            </div>
+            )}
+            {lowFuel && !locked && (
+              <span className="mt-1.5 text-[9px] font-display tracking-wide uppercase text-amber-400">
+                Low fuel
+              </span>
+            )}
 
           </button>
         );
@@ -215,19 +189,10 @@ export default function MissionCantina({ missions, characterLevel, character, cu
               }}
             >
               <div className="flex items-start gap-4 mb-4">
-                <div
-                  className="w-16 h-14 sm:w-20 sm:h-16 rounded-2xl flex items-center justify-center text-4xl sm:text-5xl border-[3px] shrink-0"
-                  style={{
-                    borderColor: hoverPatron.color,
-                    background: `linear-gradient(160deg, ${hoverPatron.color}33, rgba(10,12,20,0.9) 55%)`,
-                    boxShadow: `0 0 20px ${hoverPatron.color}55`,
-                  }}
-                >
-                  {hoverPatron.emoji}
-                </div>
+                <QuestGiverIcon patron={hoverPatron} available size="md" showName />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-display tracking-widest uppercase mb-1" style={{ color: hoverPatron.color }}>
-                    {hoverPatron.name}
+                    Contract offer
                   </p>
                   <div className="flex items-start justify-between gap-3">
                     <h3 className="font-display font-bold text-xl sm:text-2xl leading-tight text-foreground">

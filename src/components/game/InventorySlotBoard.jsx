@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Droppable, Draggable } from "@hello-pangea/dnd";
-import { Trash2, X } from "lucide-react";
+import { motion } from "framer-motion";
+import { Trash2, X, ArrowUp, ArrowDown } from "lucide-react";
 import GearVisual from "@/components/game/GearVisual";
 import StatCompareBubble, { powerRating } from "@/components/game/StatCompareBubble";
 import GearInspectPortal from "@/components/game/GearInspectPortal";
@@ -233,13 +234,25 @@ export default function InventorySlotBoard({
                           }}
                         >
                           {powerDelta !== 0 && comparable && (
-                            <span
-                              className={`absolute top-0.5 left-0.5 text-[7px] font-bold leading-none ${
-                                powerDelta > 0 ? "text-green-400" : "text-red-400"
+                            <motion.span
+                              className={`absolute -top-0.5 -left-0.5 z-20 flex items-center justify-center w-7 h-7 rounded-full border-2 ${
+                                powerDelta > 0
+                                  ? "bg-green-500/40 text-green-300 border-green-400/80"
+                                  : "bg-red-500/40 text-red-300 border-red-400/80"
                               }`}
+                              style={{
+                                boxShadow: `0 0 12px ${powerDelta > 0 ? "#22c55e" : "#ef4444"}`,
+                              }}
+                              animate={{
+                                opacity: [1, 0.35, 1],
+                                scale: [1, 1.18, 1],
+                              }}
+                              transition={{ duration: 0.85, repeat: Infinity, ease: "easeInOut" }}
                             >
-                              {powerDelta > 0 ? "▲" : "▼"}
-                            </span>
+                              {powerDelta > 0
+                                ? <ArrowUp className="w-4 h-4 stroke-[3]" />
+                                : <ArrowDown className="w-4 h-4 stroke-[3]" />}
+                            </motion.span>
                           )}
                           <GearVisual
                             type={item.type}

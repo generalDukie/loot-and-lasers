@@ -31,28 +31,33 @@ function useDesktopHover() {
 }
 
 function UpgradeBadge({ item, eqSlot, characterClass }) {
-  if (!eqSlot) {
-    return (
-      <div
-        className="absolute top-0.5 left-0.5 z-20 flex items-center justify-center w-5 h-5 rounded-full animate-pulse bg-green-500/25 text-green-400"
-        style={{ boxShadow: "0 0 10px #22c55eaa" }}
-        title="Upgrade — empty slot, pure gain"
-      >
-        <ArrowUp className="w-3 h-3" />
-      </div>
-    );
-  }
-  const d = powerRating(item, characterClass) - powerRating(eqSlot, characterClass);
-  if (d === 0) return null;
-  const better = d > 0;
+  const empty = !eqSlot;
+  const d = empty ? 1 : powerRating(item, characterClass) - powerRating(eqSlot, characterClass);
+  if (!empty && d === 0) return null;
+  const better = empty || d > 0;
+  const color = better ? "#22c55e" : "#ef4444";
+  const title = empty
+    ? "Upgrade — empty slot, pure gain"
+    : better
+      ? "Upgrade — better than equipped"
+      : "Downgrade — worse than equipped";
+
   return (
-    <div
-      className={`absolute top-0.5 left-0.5 z-20 flex items-center justify-center w-5 h-5 rounded-full animate-pulse ${better ? "bg-green-500/25 text-green-400" : "bg-red-500/25 text-red-400"}`}
-      style={{ boxShadow: `0 0 10px ${better ? "#22c55e" : "#ef4444"}aa` }}
-      title={better ? "Upgrade — better than equipped" : "Downgrade — worse than equipped"}
+    <motion.div
+      className={`absolute -top-0.5 -left-0.5 z-20 flex items-center justify-center w-8 h-8 rounded-full border-2 ${
+        better ? "bg-green-500/40 text-green-300 border-green-400/80" : "bg-red-500/40 text-red-300 border-red-400/80"
+      }`}
+      style={{ boxShadow: `0 0 14px ${color}` }}
+      title={title}
+      animate={{
+        opacity: [1, 0.35, 1],
+        scale: [1, 1.18, 1],
+        boxShadow: [`0 0 10px ${color}`, `0 0 22px ${color}`, `0 0 10px ${color}`],
+      }}
+      transition={{ duration: 0.85, repeat: Infinity, ease: "easeInOut" }}
     >
-      {better ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-    </div>
+      {better ? <ArrowUp className="w-5 h-5 stroke-[3]" /> : <ArrowDown className="w-5 h-5 stroke-[3]" />}
+    </motion.div>
   );
 }
 

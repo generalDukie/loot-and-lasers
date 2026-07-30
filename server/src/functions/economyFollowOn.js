@@ -46,6 +46,8 @@ import {
   druToRewards,
   dungeonCooldownMs,
   grantFrontierShipMod,
+  isDungeonUnlockedByLevel,
+  getDungeonUnlockLevel,
   computeMiningReward,
   WEEKLY_NOVA_QUESTS,
   ensureWeeklyNovaState,
@@ -443,6 +445,14 @@ export const FinishDungeonBattle = wrap((user, body) => {
   );
   const patrol = !!body.patrol;
   const today = todayET();
+
+  // Story dungeons 1–10 require the player level unlock gate.
+  if (planetId >= 1 && planetId <= DUNGEON_STORY_PLANETS) {
+    if (!isDungeonUnlockedByLevel(planetId, ch.level)) {
+      const need = getDungeonUnlockLevel(planetId);
+      httpErr(403, `Dungeon ${planetId} unlocks at level ${need}`);
+    }
+  }
 
   const mult = patrol ? DUNGEON_PATROL_REWARD_MULT : 1;
   const enemyLevel = getDungeonEnemyLevel(planetId, enemyIndex);

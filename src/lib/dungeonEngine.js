@@ -6,7 +6,6 @@
 //   XP       = DRU × XP/F(enemyLevel) × 0.87
 import {
   RACES,
-  CLASSES,
   generateItem,
   rollItemRarity,
   SHIP_MODS,
@@ -15,7 +14,13 @@ import {
   getMissionXpPerFuel,
   getMissionStardustPerFuel,
 } from "@/lib/gameData";
-import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
+import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
+import {
+  dungeonEnemyAttributeBudget,
+  pickMissionEnemyArchetype,
+  distributeMissionEnemyAttributes,
+  MISSION_ENEMY_ARCHETYPE_CLASS,
+} from "@/lib/expectedPlayerAttributes";
 
 export const DUNGEON_ENEMIES_PER_PLANET = 10;
 export const DUNGEON_DEATHS_PER_DAY = 3; // free lives per day (ET rollover)
@@ -64,6 +69,28 @@ export const DUNGEON_ENEMY_LEVELS = [
   [170, 173, 177, 180, 183, 187, 190, 193, 197, 200],
 ];
 
+/**
+ * Minimum PLAYER level to attempt each story dungeon (index = planet id 1–10).
+ * Unlock ≠ recommended clear level — enemies keep their own fixed levels.
+ */
+export const DUNGEON_UNLOCK_LEVELS = Object.freeze([
+  null, 10, 20, 30, 40, 50, 60, 70, 90, 120, 140,
+]);
+
+/** Player-level gate for story dungeon 1–10. Wormhole has no separate level gate. */
+export function getDungeonUnlockLevel(planetId) {
+  const id = Math.floor(Number(planetId) || 0);
+  if (id >= 1 && id <= 10) return DUNGEON_UNLOCK_LEVELS[id];
+  return null;
+}
+
+/** True when playerLevel meets the unlock requirement for this planet (story 1–10). */
+export function isDungeonUnlockedByLevel(planetId, playerLevel) {
+  const unlock = getDungeonUnlockLevel(planetId);
+  if (unlock == null) return true; // wormhole / unknown — not gated by this table
+  return Math.max(1, Math.floor(Number(playerLevel) || 1)) >= unlock;
+}
+
 /** Relative offsets used to extend the L170–200 band into wormhole depths. */
 const D10_LEVEL_OFFSETS = [0, 3, 7, 10, 13, 17, 20, 23, 27, 30];
 
@@ -88,12 +115,6 @@ function pickRace(planet, isBoss, rng) {
   if (isBoss && planet.bossRace && RACES[planet.bossRace]) return planet.bossRace;
   const pool = (planet.races || []).filter((r) => RACES[r]);
   return pool.length ? pick(pool, rng) : pick(Object.keys(RACES), rng);
-}
-
-function pickClass(planet, isBoss, rng) {
-  if (isBoss && planet.bossClass && CLASSES[planet.bossClass]) return planet.bossClass;
-  const pool = (planet.classes || []).filter((c) => CLASSES[c]);
-  return pool.length ? pick(pool, rng) : pick(Object.keys(CLASSES), rng);
 }
 
 /** Story band 1–10, or extrapolated wormhole band (>10). */
@@ -139,24 +160,26 @@ export function druToRewards(dru, enemyLevel) {
   };
 }
 
-// Deterministic enemy for a given planet + enemy index.
+/**
+ * Deterministic dungeon foe for a planet + encounter index (1–10).
+ * Attributes = ExpectedPlayerAttributes(enemyLevel) × 1.20 (regular) or × 1.30 (boss).
+ * Strength is independent of the challenging player's stats/gear (`_charLevel` unused).
+ * Hidden MIGHT/REFLEX/TECH archetype drives combat family; artwork/name stay planet-flavored.
+ */
 export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
   const seed = planet.id * 1000 + enemyIndex * 37 + 7;
   const rng = mulberry32(seed);
   const isBoss = enemyIndex === DUNGEON_ENEMIES_PER_PLANET;
 
-  const raceKey = pickRace(planet, isBoss, rng);
-  const classKey = pickClass(planet, isBoss, rng);
-  const race = RACES[raceKey];
-  const cls = CLASSES[classKey];
-
   const level = getDungeonEnemyLevel(planet.id, enemyIndex);
-  const base = cls.baseStats;
-  const bonus = Math.floor(level * (isBoss ? 1.9 : 1.2));
-  const stats = {};
-  for (const k of Object.keys(base)) {
-    stats[k] = base[k] + Math.floor(bonus * (0.6 + rng() * 0.8));
-  }
+  const budget = dungeonEnemyAttributeBudget(level, isBoss);
+  const archetype = pickMissionEnemyArchetype(rng);
+  const stats = distributeMissionEnemyAttributes(budget, archetype);
+  const classKey = MISSION_ENEMY_ARCHETYPE_CLASS[archetype];
+
+  // Appearance only — race combat bonuses intentionally omitted (race: null).
+  const raceKey = pickRace(planet, isBoss, rng);
+  const race = RACES[raceKey];
 
   const power = Math.round(level * 10 + sumStats(stats) * 3);
   const namePool = planet.enemyNames?.length ? planet.enemyNames : FALLBACK_NAMES;
@@ -165,8 +188,13 @@ export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
   return {
     id: `dungeon-${planet.id}-${enemyIndex}`,
     name,
-    race: raceKey,
+    // No race combat bonus — keeps the ExpectedPlayerAttributes budget exact.
+    race: null,
+    // Class ONLY for primary damage / resist-family rules; passives suppressed.
     class: classKey,
+    dungeonEnemyArchetype: archetype,
+    dungeonEnemy: true,
+    suppressClassPassive: true,
     level,
     stats,
     power,

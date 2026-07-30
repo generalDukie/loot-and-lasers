@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════
 // ARENA ENGINE — async PvP simulation
 // ═══════════════════════════════════════════
-import { RACES, CLASSES, generateItem, generateClassWeapon, getArenaStardustReward, getArenaXpReward } from "@/lib/gameData";
+import { RACES, CLASSES, generateClassWeapon, getArenaStardustReward, getArenaXpReward } from "@/lib/gameData";
 import {
   computeTotalStats,
   computePermanentTotalStats,
@@ -29,6 +29,7 @@ import {
   passiveNameForClass,
 } from "@/lib/classPassives";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
+import { generateArenaBot, ARENA_BOT_CLASSES } from "@/lib/arenaBotGenerator";
 
 // First 10 arena battles each day are free (grant xp + stardust + rating on wins only).
 // Losses never grant XP or stardust. Beyond the free quota, each battle costs nova
@@ -119,53 +120,23 @@ function randomAppearance(raceKey) {
   };
 }
 
-function botStats(level, cls) {
-  const base = cls.baseStats;
-  const bonus = Math.floor(level * 1.2);
-  const out = {};
-  for (const k of Object.keys(base)) {
-    out[k] = base[k] + Math.floor(bonus * (0.6 + Math.random() * 0.8));
-  }
-  return out;
-}
-
-const BOT_EXTRA_SLOTS = ["armor", "helmet", "boots", "legs", "neck", "accessory"];
-
-function rollBotRarity(level) {
-  const roll = Math.random();
-  if (level >= 12 && roll < 0.06) return "legendary";
-  if (level >= 8 && roll < 0.18) return "epic";
-  if (level >= 4 && roll < 0.4) return "rare";
-  if (roll < 0.55) return "uncommon";
-  return "common";
-}
-
 function botGearId(slot) {
   return `bot-${slot}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
- * Build real gear objects for a bot (not DB Item ids). Always includes a weapon
- * so combat stats and the overlay weapon match the card's power readout.
+ * Cosmetic weapon only — empty stats so bot combat power comes from the
+ * generated attribute snapshot (ExpectedPlayerAttributes × 0.85–1.15).
  */
 export function pickGearForBot(_catalogItems, classKey, level) {
   const gearLevel = Math.max(1, level || 1);
-  const items = [];
-
-  const weaponRarity = rollBotRarity(gearLevel);
-  const weaponBase = Math.random() < 0.6
-    ? generateClassWeapon(classKey, weaponRarity, gearLevel)
-    : generateItem(weaponRarity, gearLevel, "weapon", classKey);
-  items.push({ ...weaponBase, id: botGearId("weapon"), is_equipped: true });
-
-  const extras = [...BOT_EXTRA_SLOTS].sort(() => Math.random() - 0.5);
-  const extraCount = 1 + Math.floor(Math.random() * 2);
-  for (let i = 0; i < extraCount; i++) {
-    const type = extras[i];
-    const piece = generateItem(rollBotRarity(gearLevel), gearLevel, type, classKey);
-    items.push({ ...piece, id: botGearId(type), is_equipped: true });
-  }
-  return items;
+  const weaponBase = generateClassWeapon(classKey, "common", gearLevel);
+  return [{
+    ...weaponBase,
+    id: botGearId("weapon"),
+    is_equipped: true,
+    stats: {},
+  }];
 }
 
 /** Resolve opponent gear for combat — prefers live equippedItems, else catalog ids. */
@@ -291,11 +262,12 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
   const out = [];
   for (let i = 0; i < count; i++) {
     const raceKey = pick(Object.keys(RACES));
-    const classKey = pick(Object.keys(CLASSES));
-    const level = Math.max(1, myLevel + Math.floor(Math.random() * 7) - 3);
+    const snap = generateArenaBot({ playerLevel: myLevel });
+    const classKey = snap.class;
+    const level = snap.level;
     // Opponent rating stays near the player's (±40) so fights stay competitive.
     const rating = Math.max(0, myRating + Math.floor(Math.random() * 80) - 40);
-    const stats = botStats(level, CLASSES[classKey]);
+    const stats = snap.stats;
     const equippedItems = pickGearForBot(catalogItems, classKey, level);
     const power = computePower({ level, class: classKey, stats }, equippedItems);
     const wins = Math.max(0, Math.floor(rating / 4) + Math.floor(Math.random() * 20));
@@ -321,6 +293,8 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
       speciesId: ((i * 7 + name.charCodeAt(0)) % 30) + 1,
       equippedItems,
       equippedItemIds: equippedItems.map((it) => it.id),
+      buildKey: snap.buildKey,
+      strengthMultiplier: snap.strengthMultiplier,
     });
   }
   return out;
@@ -328,15 +302,30 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
 
 /**
  * Convert a persistent ladder bot (from /api/arena/bots) into a fightable opponent.
- * Attaches generated gear so combat power matches ephemeral bots.
+ * Uses stored stats when present; otherwise regenerates via generateArenaBot.
+ * Cosmetic weapon only — combat power comes from the attribute snapshot.
  */
 export function ladderBotToOpponent(bot, catalogItems = []) {
   if (!bot) return null;
-  const classKey = bot.class || "Vanguard";
+  let classKey = bot.class;
+  // Migrate legacy class names from older ladder rows.
+  const LEGACY = {
+    Shadowblade: "Shadow Operative",
+    Arcanist: "Technomancer",
+    Warden: "Astral Warden",
+    Gunslinger: "Void Runner",
+    Mystic: "Cosmic Engineer",
+  };
+  if (LEGACY[bot.class]) classKey = LEGACY[bot.class];
+  if (!ARENA_BOT_CLASSES.includes(classKey)) classKey = "Vanguard";
+
   const level = bot.level || 1;
-  const stats = bot.stats && Object.keys(bot.stats).length
-    ? bot.stats
-    : botStats(level, CLASSES[classKey] || CLASSES.Vanguard);
+  let stats = bot.stats && Object.keys(bot.stats).length ? bot.stats : null;
+  if (!stats) {
+    const snap = generateArenaBot({ playerLevel: level, level, className: classKey });
+    stats = snap.stats;
+    classKey = snap.class;
+  }
   const equippedItems = pickGearForBot(catalogItems, classKey, level);
   const power = computePower({ level, class: classKey, stats }, equippedItems);
   return {
@@ -410,7 +399,7 @@ function buildFighter(c, items, side) {
   // Mission enemies (and any suppressClassPassive combatant) keep class-family
   // damage/resist rules via computeDerivedStats(character.class) but must not
   // receive player class passives — blank className for passive hooks.
-  const suppress = !!(c.suppressClassPassive || c.missionEnemy);
+  const suppress = !!(c.suppressClassPassive || c.missionEnemy || c.dungeonEnemy);
   return {
     side,
     name: c.name,

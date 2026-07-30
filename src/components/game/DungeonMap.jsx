@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Lock, Check, X } from "lucide-react";
 import { WORMHOLE_ID, getWormholePlanet } from "@/lib/dungeonData";
+import { isDungeonUnlockedByLevel, getDungeonUnlockLevel } from "@/lib/dungeonEngine";
 
 // Spiral crawl on a square stage (keeps the coil centered & circular).
 const WORMHOLE_POS = { x: 50, y: 50 };
@@ -209,6 +210,7 @@ export default function DungeonMap({
   selectedId,
   onSelect,
   fill = false,
+  playerLevel = 1,
 }) {
   const front = inInfinite ? null : Math.min(storyPlanetId, planets.length);
   const [zoomId, setZoomId] = useState(null);
@@ -450,11 +452,15 @@ export default function DungeonMap({
 
             {planets.map((p, i) => {
               const pos = NODE_POS[i];
-              const state = inInfinite || p.id < front
+              const levelLocked = !isDungeonUnlockedByLevel(p.id, playerLevel);
+              const storyState = inInfinite || p.id < front
                 ? "cleared"
                 : p.id === front
                 ? "current"
                 : "locked";
+              // Level gate blocks entry even when story progression has reached this world.
+              const state = levelLocked ? "locked" : storyState;
+              const unlockLevel = getDungeonUnlockLevel(p.id);
               const selected = selectedId === p.id;
               const clickable = state !== "locked";
               const label = radialLabelOffset(pos);
@@ -474,7 +480,9 @@ export default function DungeonMap({
                     } ${state === "current" ? "cursor-zoom-in" : ""}`}
                     style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
                     title={
-                      state === "current"
+                      levelLocked
+                        ? `Unlocks at level ${unlockLevel}`
+                        : state === "current"
                         ? "Inspect this world"
                         : state === "cleared"
                         ? "Patrol this world"
@@ -542,6 +550,11 @@ export default function DungeonMap({
                       )}
                       {state === "cleared" && selected && (
                         <p className="text-[8px] text-amber-300 font-display mt-0.5 tracking-wider">PATROL</p>
+                      )}
+                      {levelLocked && unlockLevel != null && (
+                        <p className="text-[8px] text-muted-foreground font-display mt-0.5 tracking-wider">
+                          Lv {unlockLevel}
+                        </p>
                       )}
                     </div>
                   )}

@@ -823,6 +823,27 @@ export const DUNGEON_ENEMY_LEVELS = [
   [140, 143, 146, 149, 152, 155, 158, 161, 164, 167],
   [170, 173, 177, 180, 183, 187, 190, 193, 197, 200],
 ];
+
+/**
+ * Minimum PLAYER level to attempt each story dungeon (index = planet id 1–10).
+ * Keep in sync with src/lib/dungeonEngine.js DUNGEON_UNLOCK_LEVELS.
+ */
+export const DUNGEON_UNLOCK_LEVELS = Object.freeze([
+  null, 10, 20, 30, 40, 50, 60, 70, 90, 120, 140,
+]);
+
+export function getDungeonUnlockLevel(planetId) {
+  const id = Math.floor(Number(planetId) || 0);
+  if (id >= 1 && id <= 10) return DUNGEON_UNLOCK_LEVELS[id];
+  return null;
+}
+
+export function isDungeonUnlockedByLevel(planetId, playerLevel) {
+  const unlock = getDungeonUnlockLevel(planetId);
+  if (unlock == null) return true;
+  return Math.max(1, Math.floor(Number(playerLevel) || 1)) >= unlock;
+}
+
 const D10_LEVEL_OFFSETS = [0, 3, 7, 10, 13, 17, 20, 23, 27, 30];
 
 /** Minimal planet ship-mod grant table (id → flavor + SHIP_MODS cat). */

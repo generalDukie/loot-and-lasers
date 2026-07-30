@@ -82,10 +82,16 @@ export function getClassWeights(className) {
 }
 
 // ── Caps & constants (authoritative combat system) ──
-export const CRIT_CAP = 30;            // % absolute max
-export const DODGE_CAP = 25;           // % absolute max
-export const ARMOR_CAP = 30;           // % absolute max vs Strength damage
-export const TECH_RESIST_CAP = 30;     // % absolute max vs Tech damage
+export const CRIT_CAP = 30;            // % absolute max (players)
+export const DODGE_CAP = 25;           // % absolute max (players)
+export const ARMOR_CAP = 30;           // % absolute max vs Strength damage (players)
+export const TECH_RESIST_CAP = 30;     // % absolute max vs Tech damage (players)
+
+/** Dungeon enemies may soft-cap past player ceilings up to these maxima. */
+export const DUNGEON_CRIT_CAP = 75;
+export const DUNGEON_DODGE_CAP = 75;
+export const DUNGEON_ARMOR_CAP = 75;
+export const DUNGEON_TECH_RESIST_CAP = 75;
 export const CRIT_MULT = 1.5;          // crit damage multiplier
 export const DAMAGE_BASE = 15;
 export const DAMAGE_COEFF = 0.0032;
@@ -117,24 +123,24 @@ export function getMaxHP(totalVitality) {
   return Math.round(50 + 2.5 * v + 0.008 * Math.pow(v, 2));
 }
 
-export function getCritChance(level, totalLuck) {
-  return softCapPercent(level, totalLuck, CRIT_CAP);
+export function getCritChance(level, totalLuck, maxPercent = CRIT_CAP) {
+  return softCapPercent(level, totalLuck, maxPercent);
 }
 
-export function getDodgeChance(level, totalAgility) {
-  return softCapPercent(level, totalAgility, DODGE_CAP);
+export function getDodgeChance(level, totalAgility, maxPercent = DODGE_CAP) {
+  return softCapPercent(level, totalAgility, maxPercent);
 }
 
 /** Attribute-derived Armor % — Strength classes always 0. */
-export function getAttributeArmorPercent(characterClass, level, totalStrength) {
+export function getAttributeArmorPercent(characterClass, level, totalStrength, maxPercent = ARMOR_CAP) {
   if (getDamageArchetype(characterClass) === "str") return 0;
-  return softCapPercent(level, totalStrength, ARMOR_CAP);
+  return softCapPercent(level, totalStrength, maxPercent);
 }
 
 /** Attribute-derived Tech Resist % — Intellect classes always 0. */
-export function getAttributeTechResistancePercent(characterClass, level, totalIntellect) {
+export function getAttributeTechResistancePercent(characterClass, level, totalIntellect, maxPercent = TECH_RESIST_CAP) {
   if (getDamageArchetype(characterClass) === "int") return 0;
-  return softCapPercent(level, totalIntellect, TECH_RESIST_CAP);
+  return softCapPercent(level, totalIntellect, maxPercent);
 }
 
 /** Raw base damage curve (no variance) — used for sheet display. */
@@ -217,11 +223,17 @@ export function computeDerivedStats(totalStats, character) {
   const rawBase = getBaseDamageFromPrimary(primaryValue);
   const damage = Math.round(archetype === "agi" ? rawBase * 0.925 : rawBase);
 
-  const critChance = getCritChance(level, s("luck"));
+  const dungeonCaps = !!(character?.dungeonEnemy);
+  const critCap = dungeonCaps ? DUNGEON_CRIT_CAP : CRIT_CAP;
+  const dodgeCap = dungeonCaps ? DUNGEON_DODGE_CAP : DODGE_CAP;
+  const armorCap = dungeonCaps ? DUNGEON_ARMOR_CAP : ARMOR_CAP;
+  const techCap = dungeonCaps ? DUNGEON_TECH_RESIST_CAP : TECH_RESIST_CAP;
+
+  const critChance = getCritChance(level, s("luck"), critCap);
   const health = getMaxHP(s("vitality"));
-  const dodgeChance = getDodgeChance(level, s("agility"));
-  const armor = getAttributeArmorPercent(className, level, s("strength"));
-  const techResist = getAttributeTechResistancePercent(className, level, s("intellect"));
+  const dodgeChance = getDodgeChance(level, s("agility"), dodgeCap);
+  const armor = getAttributeArmorPercent(className, level, s("strength"), armorCap);
+  const techResist = getAttributeTechResistancePercent(className, level, s("intellect"), techCap);
 
   return {
     damage,

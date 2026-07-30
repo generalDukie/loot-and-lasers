@@ -1,10 +1,9 @@
 /**
- * Expected player total attributes + mission-enemy budget helpers.
- * Reusable for dungeon/arena balancing later — keep mission-specific
- * multipliers here only as named constants.
+ * Expected player total attributes + PvE enemy budget helpers.
+ * Mission and dungeon multipliers live here; distribution is shared.
  */
 
-import { getFullSetAttributeBudget } from "@/lib/itemGeneration";
+import { getFullSetAttributeBudget } from "./itemGeneration.js";
 
 export const ATTR_KEYS = Object.freeze([
   "strength",
@@ -48,6 +47,22 @@ export const MISSION_ENEMY_ATTR_MULT = 0.28;
 
 export function missionEnemyAttributeBudget(level) {
   return Math.round(progressingPlayerAttributes(level) * MISSION_ENEMY_ATTR_MULT);
+}
+
+/** Regular dungeon foes — 120% of expected player attrs at the enemy's own level. */
+export const DUNGEON_REGULAR_ATTRIBUTE_MULTIPLIER = 1.20;
+
+/** Dungeon boss (encounter 10) — 130% of expected player attrs at the boss's own level. */
+export const DUNGEON_BOSS_ATTRIBUTE_MULTIPLIER = 1.30;
+
+/**
+ * Dungeon enemy total attribute budget from the enemy's level (not the player).
+ * Boss uses 1.30 directly — never compounds with the regular 1.20.
+ */
+export function dungeonEnemyAttributeBudget(level, isBoss = false) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  const mult = isBoss ? DUNGEON_BOSS_ATTRIBUTE_MULTIPLIER : DUNGEON_REGULAR_ATTRIBUTE_MULTIPLIER;
+  return Math.round(expectedPlayerAttributes(L) * mult);
 }
 
 /** Hidden combat archetypes — not shown in UI / names / art. */

@@ -1,6 +1,9 @@
 /**
  * Persistent arena bot ladder — bots keep ratings, can raid the player,
  * and appear as matchmaking opponents for simulation.
+ *
+ * Combat stats come from generateArenaBot (ExpectedPlayerAttributes × 0.85–1.15).
+ * Ranking / raid / pool selection logic is unchanged.
  */
 
 import { nanoid } from "nanoid";
@@ -11,6 +14,7 @@ import {
   eloExpectedScore,
   eloRatingDelta,
 } from "../shared/economyFormulas.js";
+import { generateArenaBot } from "../../../src/lib/arenaBotGenerator.js";
 
 const BOT_NAMES = [
   "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
@@ -23,7 +27,6 @@ const BOT_GUILDS = [
   "Quantum Corsairs", "Solar Fang", "The Forgotten", "Stellar Guard",
 ];
 const RACES = ["Zyrathi", "Cognati", "Keldris", "Luminae", "Cethylli", "Myrrkin"];
-const CLASSES = ["Vanguard", "Shadowblade", "Arcanist", "Warden", "Gunslinger", "Mystic"];
 
 /** How often incoming bot raids may process when the player opens Arena. */
 export const BOT_RAID_COOLDOWN_MS = 12 * 60 * 1000;
@@ -107,34 +110,17 @@ export function listBotsNearRating(rating = 1000, { limit = 8, excludeIds = [] }
     .slice(0, limit);
 }
 
-function botStatsForLevel(level, className) {
-  const pts = Math.max(0, (level - 1) * 3);
-  const base = { strength: 5, agility: 5, intellect: 5, vitality: 5, luck: 5 };
-  const primary =
-    className === "Arcanist" || className === "Mystic"
-      ? "intellect"
-      : className === "Shadowblade" || className === "Gunslinger"
-        ? "agility"
-        : className === "Warden"
-          ? "vitality"
-          : "strength";
-  base[primary] += Math.floor(pts * 0.5);
-  const rest = pts - Math.floor(pts * 0.5);
-  const keys = Object.keys(base);
-  for (let i = 0; i < rest; i++) base[keys[i % keys.length]] += 1;
-  return base;
-}
-
 function createBotNear(anchorLevel, anchorRating) {
   ensureSchema();
   const id = nanoid();
   const now = clock.nowIso();
-  const className = pick(CLASSES);
+  const snap = generateArenaBot({ playerLevel: anchorLevel || 1 });
+  const className = snap.class;
   const race = pick(RACES);
-  const level = Math.max(1, (anchorLevel || 1) + Math.floor(Math.random() * 7) - 3);
+  const level = snap.level;
   const rating = Math.max(0, (anchorRating || 1000) + Math.floor(Math.random() * 120) - 60);
   const name = `${pick(BOT_NAMES)}`;
-  const stats = botStatsForLevel(level, className);
+  const stats = snap.stats;
   const appearance = { skinColor: "#4A5568", eyeStyle: "Standard" };
   const guild = Math.random() < 0.55 ? pick(BOT_GUILDS) : null;
   const wins = Math.max(0, Math.floor(rating / 4) + Math.floor(Math.random() * 15));

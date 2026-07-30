@@ -9,7 +9,7 @@ import { DUNGEON_PLANETS, getInfinitePlanet, getDungeonPlanetById, WORMHOLE_ID, 
 import {
   DUNGEON_ENEMIES_PER_PLANET, DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST,
   DUNGEON_BATTLE_COOLDOWN_MS, DUNGEON_SKIP_COST, DUNGEON_WIN_COOLDOWN_MS, DUNGEON_LOSS_COOLDOWN_MS,
-  generateDungeonEnemy, computeDungeonRewards,
+  generateDungeonEnemy, computeDungeonRewards, isDungeonUnlockedByLevel, getDungeonUnlockLevel,
 } from "@/lib/dungeonEngine";
 import { processDiscovery } from "@/lib/discovery";
 import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
@@ -112,6 +112,17 @@ export default function GalaxyMapPage() {
 
   async function handleFight() {
     if (!character || battleState) return;
+    if (!viewingWormhole && planet?.id >= 1 && planet.id <= DUNGEON_PLANETS.length) {
+      if (!isDungeonUnlockedByLevel(planet.id, character.level)) {
+        const need = getDungeonUnlockLevel(planet.id);
+        toast({
+          title: "Dungeon locked",
+          description: `Reach level ${need} to attempt this world.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     if (cooldownActive) {
       toast({ title: "Battle Cooldown", description: `Wait or skip with ${DUNGEON_SKIP_COST} 💎.`, variant: "destructive" });
       return;
@@ -311,6 +322,7 @@ export default function GalaxyMapPage() {
             infiniteDepth={infiniteDepth}
             selectedId={effectiveSelection}
             onSelect={(id) => setSelectedPlanetId(id)}
+            playerLevel={character?.level || 1}
           />
         </div>
 

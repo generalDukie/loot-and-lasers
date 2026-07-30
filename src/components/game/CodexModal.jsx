@@ -67,7 +67,7 @@ function renderSection(id) {
           <ul className="space-y-1.5">
             <Li>Each quest shows its <b>duration</b> and <b>fuel cost</b>. Longer jobs pay more.</Li>
             <Li>Launch it — fuel is consumed and a timer starts. You can keep playing while it runs.</Li>
-            <Li>When the timer ends, the mission is ready to <b>claim</b>. Claiming grants XP, stardust, and (about 20% of the time) gear — with pity bumps after misses. A miss still pays salvage stardust about equal to dissolving that piece. Stims drop on their own chance.</Li>
+            <Li>When the timer ends, the mission is ready to <b>claim</b>. Claiming grants XP, stardust, and (about 20% of the time) gear — with pity bumps after misses. Stims drop on their own chance.</Li>
             <Li>Impatient? Spend <b>Nova Crystals</b> to skip — cost scales with time left (5 💎 per remaining minute).</Li>
           </ul>
           <H>Fuel &amp; reset</H>

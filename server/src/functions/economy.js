@@ -598,7 +598,6 @@ export async function ClaimMission(user, body) {
           const rewards = mission.rewards || {};
           const itemTemplates = [];
           let gearDropped = false;
-          let gearConsolation = 0;
           if (rewards.loot_drops !== false) {
             gearDropped = true;
             const rarity =
@@ -607,20 +606,8 @@ export async function ClaimMission(user, body) {
             itemTemplates.push(
               randomItem(rarity, live.level || 1, rewards.loot_type, secureRandom, live.class)
             );
-          } else {
-            // Missed gear — pay dissolve value of the piece that would have dropped.
-            const rarity =
-              rewards.loot_rarity ||
-              rollItemRarity(rewards.item_rarity_chance || "common", live.level || 1);
-            const phantom = randomItem(
-              rarity,
-              live.level || 1,
-              rewards.loot_type,
-              secureRandom,
-              live.class
-            );
-            gearConsolation = computeStardustValue(phantom);
           }
+          // Missed gear: no salvage consolation — mission stardust alone is the payout.
           if (rewards.collectible?.name) {
             const level = Math.max(1, live.level || 1);
             itemTemplates.push({
@@ -640,12 +627,11 @@ export async function ClaimMission(user, body) {
           // Species discovery only from mission snapshot — never client species_id
           const speciesId = rewards.species_id || null;
           return {
-            stardust: (gains.stardustGain || 0) + gearConsolation,
+            stardust: gains.stardustGain || 0,
             experience: gains.xpGain,
             itemTemplates,
             species_id: speciesId,
             gearDropped,
-            gearConsolation,
             gainsMeta: {
               stardustBase: gains.stardustBase,
               xpBase: gains.xpBase,
@@ -654,7 +640,6 @@ export async function ClaimMission(user, body) {
               collectionPct: gains.collectionPct,
               fuelSpent: gains.fuelCost,
               nexusBonus,
-              gearConsolation,
               gearDropped,
             },
             bonusReasons: nexusBonus ? ["nexus_control"] : [],

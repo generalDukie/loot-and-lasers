@@ -61,7 +61,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
   }, []);
 
   if (!summary) return null;
-  const { mission, gearItem, gearConsolation, collectible, consumableItem, discoveries, fuelSpent } = summary;
+  const { mission, gearItem, collectible, consumableItem, discoveries, fuelSpent } = summary;
   const m = mission || {};
   const xp = summary.xp || { base: 0, total: 0, shipMult: 0, collectionPct: 0 };
   const stardust = summary.stardust || { base: 0, total: 0, shipMult: 0, nexus: false };
@@ -73,8 +73,6 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
   const sdChips = [];
   if (stardust.nexus) sdChips.push("+5% nexus");
   if ((stardust.shipMult || 0) > 0) sdChips.push(`+${pct(stardust.shipMult)}% ship`);
-  const salvage = Number(stardust.salvage ?? gearConsolation) || 0;
-  if (salvage > 0) sdChips.push(`+${salvage} salvage`);
 
   const gearAccent = gearItem ? rarityAccent(gearItem.rarity) : EMPTY_GEAR_ACCENT;
   const collectibleAccent = collectible ? rarityAccent(collectible.rarity) : SUMMARY_ACCENT;
@@ -166,16 +164,6 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
                 </div>
               </div>
               {gearItem.flavor_text && <p className="text-[10px] italic text-muted-foreground/70 mt-1.5">"{gearItem.flavor_text}"</p>}
-            </RewardCard>
-          ) : salvage > 0 ? (
-            <RewardCard icon={<Package className="w-5 h-5" />} accent={STARDUST_COLOR}>
-              <div className="flex items-baseline justify-between gap-2">
-                <div>
-                  <p className="text-xs font-display font-semibold" style={{ color: STARDUST_COLOR }}>SALVAGED PARTS</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">No gear drop — paid dissolve value instead.</p>
-                </div>
-                <span className="font-display font-bold text-lg shrink-0" style={{ color: STARDUST_COLOR }}>+{salvage}</span>
-              </div>
             </RewardCard>
           ) : (
             <RewardCard icon={<Package className="w-5 h-5" />} muted>

@@ -49,7 +49,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "💎  Crystal Store"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 27)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	header.add_child(title)
@@ -60,7 +60,7 @@ func _build() -> void:
 	))
 	header.add_child(_balance)
 	_balance_lab = Label.new()
-	_balance_lab.add_theme_font_size_override("font_size", 13)
+	_balance_lab.add_theme_font_size_override("font_size", 17)
 	_balance_lab.add_theme_color_override("font_color", Color("#FCD34D"))
 	ClientUi.apply_display_font(_balance_lab)
 	_balance.add_child(_balance_lab)
@@ -103,12 +103,12 @@ func _populate() -> void:
 	_list.add_child(foot)
 	var check := Label.new()
 	check.text = "✓"
-	check.add_theme_font_size_override("font_size", 11)
+	check.add_theme_font_size_override("font_size", 15)
 	check.add_theme_color_override("font_color", Color("#4ADE80"))
 	foot.add_child(check)
 	var foot_lab := Label.new()
 	foot_lab.text = "Real purchases activate once Stripe checkout is connected."
-	foot_lab.add_theme_font_size_override("font_size", 11)
+	foot_lab.add_theme_font_size_override("font_size", 15)
 	foot_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(foot_lab)
 	foot.add_child(foot_lab)
@@ -134,7 +134,7 @@ func _make_quests_panel() -> PanelContainer:
 
 	var title := Label.new()
 	title.text = "🎁  Weekly Nova Ops"
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 19)
 	title.add_theme_color_override("font_color", Color("#FCD34D"))
 	ClientUi.apply_display_font(title)
 	head_l.add_child(title)
@@ -142,7 +142,7 @@ func _make_quests_panel() -> PanelContainer:
 	var sub := Label.new()
 	sub.name = "QuestCountdown"
 	sub.text = _quest_subline()
-	sub.add_theme_font_size_override("font_size", 11)
+	sub.add_theme_font_size_override("font_size", 15)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head_l.add_child(sub)
@@ -183,7 +183,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 
 	var emoji := Label.new()
 	emoji.text = str(q.get("emoji", "◆"))
-	emoji.add_theme_font_size_override("font_size", 18)
+	emoji.add_theme_font_size_override("font_size", 24)
 	emoji.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(emoji)
 
@@ -199,7 +199,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 	var title := Label.new()
 	title.text = str(q["label"])
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	title.clip_text = true
 	ClientUi.apply_display_font(title)
@@ -207,14 +207,14 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 
 	var reward := Label.new()
 	reward.text = "+%s 💎" % str(q["reward"])
-	reward.add_theme_font_size_override("font_size", 10)
+	reward.add_theme_font_size_override("font_size", 13)
 	reward.add_theme_color_override("font_color", Color("#FCD34D"))
 	ClientUi.apply_display_font(reward)
 	title_row.add_child(reward)
 
 	var desc := Label.new()
 	desc.text = str(q.get("desc", ""))
-	desc.add_theme_font_size_override("font_size", 10)
+	desc.add_theme_font_size_override("font_size", 13)
 	desc.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(desc)
 	mid.add_child(desc)
@@ -224,13 +224,13 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 	bar.max_value = goal
 	bar.value = mini(prog, goal)
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 6)
+	bar.custom_minimum_size = Vector2(0, 8)
 	ClientUi.apply_hp_bar(bar, Color("#FBBF24"))
 	mid.add_child(bar)
 
 	var prog_lab := Label.new()
 	prog_lab.text = "%s / %s" % [mini(prog, goal), goal]
-	prog_lab.add_theme_font_size_override("font_size", 9)
+	prog_lab.add_theme_font_size_override("font_size", 12)
 	prog_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(prog_lab)
 	mid.add_child(prog_lab)
@@ -242,7 +242,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 		))
 		var done_lab := Label.new()
 		done_lab.text = "✓  Done"
-		done_lab.add_theme_font_size_override("font_size", 10)
+		done_lab.add_theme_font_size_override("font_size", 13)
 		done_lab.add_theme_color_override("font_color", Color("#34D399"))
 		ClientUi.apply_display_font(done_lab)
 		done.add_child(done_lab)
@@ -251,7 +251,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 		var claim := Button.new()
 		claim.text = "💎  Claim" if claimable else "💎  Locked"
 		claim.disabled = not claimable or _busy_id == qid
-		claim.custom_minimum_size = Vector2(84, 0)
+		claim.custom_minimum_size = Vector2(112, 0)
 		_style_claim_button(claim)
 		claim.pressed.connect(func() -> void: _on_claim(qid))
 		row.add_child(claim)
@@ -260,7 +260,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 
 func _style_claim_button(btn: Button) -> void:
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 10)
+	btn.add_theme_font_size_override("font_size", 13)
 	var a := Color("#FBBF24")
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(Color(a.r, a.g, a.b, 0.15), Color(a.r, a.g, a.b, 0.40)))
 	btn.add_theme_stylebox_override("hover", ClientUi.button_style(Color(a.r, a.g, a.b, 0.25), Color(a.r, a.g, a.b, 0.55)))
@@ -291,7 +291,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size.y = 220
+	panel.custom_minimum_size.y = 293
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.06, 0.07, 0.10, 0.72).lerp(Color(tint, 0.14), 0.55),
 		Color(tint, 0.25),
@@ -305,7 +305,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 
 	# Reserve POPULAR badge height so cards stay aligned.
 	var badge_slot := Control.new()
-	badge_slot.custom_minimum_size.y = 18
+	badge_slot.custom_minimum_size.y = 24
 	col.add_child(badge_slot)
 	if popular:
 		var badge := PanelContainer.new()
@@ -317,23 +317,23 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 		badge_slot.add_child(badge)
 		var badge_lab := Label.new()
 		badge_lab.text = "👑  POPULAR"
-		badge_lab.add_theme_font_size_override("font_size", 9)
+		badge_lab.add_theme_font_size_override("font_size", 12)
 		badge_lab.add_theme_color_override("font_color", Color("#FCD34D"))
 		ClientUi.apply_display_font(badge_lab)
 		badge.add_child(badge_lab)
 
 	var gem_wrap := CenterContainer.new()
-	gem_wrap.custom_minimum_size.y = 56
+	gem_wrap.custom_minimum_size.y = 75
 	col.add_child(gem_wrap)
 	var gem_glow := PanelContainer.new()
-	gem_glow.custom_minimum_size = Vector2(56, 56)
+	gem_glow.custom_minimum_size = Vector2(75, 75)
 	gem_glow.add_theme_stylebox_override("panel", _gem_glow_style(tint))
 	gem_wrap.add_child(gem_glow)
 	var gem := Label.new()
 	gem.text = "💎"
 	gem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	gem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	gem.add_theme_font_size_override("font_size", 28)
+	gem.add_theme_font_size_override("font_size", 37)
 	gem.add_theme_color_override("font_color", tint)
 	gem_glow.add_child(gem)
 	_bob_gem(gem)
@@ -341,7 +341,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	var name := Label.new()
 	name.text = str(p["name"])
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.add_theme_font_size_override("font_size", 13)
+	name.add_theme_font_size_override("font_size", 17)
 	name.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(name)
 	col.add_child(name)
@@ -349,7 +349,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	var amt := Label.new()
 	amt.text = _fmt_int(int(p["crystals"]))
 	amt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	amt.add_theme_font_size_override("font_size", 22)
+	amt.add_theme_font_size_override("font_size", 29)
 	amt.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(amt)
 	col.add_child(amt)
@@ -357,14 +357,14 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	var amt_sub := Label.new()
 	amt_sub.text = "Nova Crystals"
 	amt_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	amt_sub.add_theme_font_size_override("font_size", 10)
+	amt_sub.add_theme_font_size_override("font_size", 13)
 	amt_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(amt_sub)
 	col.add_child(amt_sub)
 
 	var bonus := str(p.get("bonus", ""))
 	var bonus_slot := Control.new()
-	bonus_slot.custom_minimum_size.y = 20
+	bonus_slot.custom_minimum_size.y = 27
 	col.add_child(bonus_slot)
 	if not bonus.is_empty():
 		var bwrap := CenterContainer.new()
@@ -377,7 +377,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 		bwrap.add_child(bpanel)
 		var b := Label.new()
 		b.text = "%s BONUS" % bonus
-		b.add_theme_font_size_override("font_size", 10)
+		b.add_theme_font_size_override("font_size", 13)
 		b.add_theme_color_override("font_color", Color("#4ADE80"))
 		ClientUi.apply_display_font(b)
 		bpanel.add_child(b)
@@ -423,7 +423,7 @@ func _make_uses_section() -> VBoxContainer:
 
 	var head := Label.new()
 	head.text = "✨  WHAT NOVA CRYSTALS UNLOCK"
-	head.add_theme_font_size_override("font_size", 11)
+	head.add_theme_font_size_override("font_size", 15)
 	head.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(head)
 	wrap.add_child(head)
@@ -448,18 +448,18 @@ func _make_uses_section() -> VBoxContainer:
 		panel.add_child(col)
 		var icon := Label.new()
 		icon.text = str(u["icon"])
-		icon.add_theme_font_size_override("font_size", 22)
+		icon.add_theme_font_size_override("font_size", 29)
 		col.add_child(icon)
 		var t := Label.new()
 		t.text = str(u["title"])
-		t.add_theme_font_size_override("font_size", 13)
+		t.add_theme_font_size_override("font_size", 17)
 		t.add_theme_color_override("font_color", ClientUi.TEXT)
 		ClientUi.apply_display_font(t)
 		col.add_child(t)
 		var d := Label.new()
 		d.text = str(u["desc"])
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		d.add_theme_font_size_override("font_size", 11)
+		d.add_theme_font_size_override("font_size", 15)
 		d.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(d)
 		col.add_child(d)

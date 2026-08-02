@@ -95,17 +95,17 @@ func _build() -> void:
 	head_l.add_child(title_row)
 	var sat := Label.new()
 	sat.text = "🛰"
-	sat.add_theme_font_size_override("font_size", 22)
+	sat.add_theme_font_size_override("font_size", 29)
 	sat.add_theme_color_override("font_color", ClientUi.CYAN)
 	title_row.add_child(sat)
 	var title := Label.new()
 	title.text = "Galactic Frontier"
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", 32)
 	title.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(title)
 	title_row.add_child(title)
 	_subtitle = Label.new()
-	_subtitle.add_theme_font_size_override("font_size", 11)
+	_subtitle.add_theme_font_size_override("font_size", 15)
 	_subtitle.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_subtitle)
 	head_l.add_child(_subtitle)
@@ -120,20 +120,20 @@ func _build() -> void:
 	head_r.add_child(lives_col)
 	_lives_label = Label.new()
 	_lives_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_lives_label.add_theme_font_size_override("font_size", 14)
+	_lives_label.add_theme_font_size_override("font_size", 19)
 	_lives_label.add_theme_color_override("font_color", ClientUi.DANGER)
 	ClientUi.apply_display_font(_lives_label)
 	lives_col.add_child(_lives_label)
 	_lives_reset = Label.new()
 	_lives_reset.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_lives_reset.add_theme_font_size_override("font_size", 10)
+	_lives_reset.add_theme_font_size_override("font_size", 13)
 	_lives_reset.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
 	ClientUi.apply_display_font(_lives_reset)
 	lives_col.add_child(_lives_reset)
 
 	_meta_right = Label.new()
 	_meta_right.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_meta_right.add_theme_font_size_override("font_size", 13)
+	_meta_right.add_theme_font_size_override("font_size", 17)
 	_meta_right.add_theme_color_override("font_color", Color("#C084FC"))
 	ClientUi.apply_display_font(_meta_right)
 	head_r.add_child(_meta_right)
@@ -172,7 +172,7 @@ func _build() -> void:
 
 	_map_stage = SpiralStage.new()
 	_map_stage.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	_map_stage.custom_minimum_size = Vector2(280, 280)
+	_map_stage.custom_minimum_size = Vector2(373, 373)
 	_map_stage.layout = _layout
 	_map_stage.planet_pressed.connect(_on_planet_pressed)
 	_map_stage.wormhole_pressed.connect(_on_wormhole)
@@ -181,15 +181,15 @@ func _build() -> void:
 
 	_map_hint = Label.new()
 	_map_hint.set_anchors_and_offsets_preset(PRESET_BOTTOM_WIDE)
-	_map_hint.offset_top = -36
-	_map_hint.offset_bottom = -10
-	_map_hint.offset_left = 16
-	_map_hint.offset_right = -16
+	_map_hint.offset_top = -48
+	_map_hint.offset_bottom = -13
+	_map_hint.offset_left = 21
+	_map_hint.offset_right = -21
 	_map_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_map_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_map_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_map_hint.z_index = 5
-	_map_hint.add_theme_font_size_override("font_size", 11)
+	_map_hint.add_theme_font_size_override("font_size", 15)
 	_map_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_body_font(_map_hint)
 	_map_hint.text = "Worlds 1–10 spiral into the Wormhole. Tap your current world to inspect its lore."
@@ -197,7 +197,7 @@ func _build() -> void:
 
 	# ── Right: planet view (~clamp 260–440 / ~28vw) ──
 	_detail_root = PanelContainer.new()
-	_detail_root.custom_minimum_size = Vector2(300, 0)
+	_detail_root.custom_minimum_size = Vector2(400, 0)
 	_detail_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_detail_root.size_flags_stretch_ratio = 0.72
 	_detail_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -252,12 +252,12 @@ func _build() -> void:
 	dcol.add_child(head_row)
 
 	_detail_icon_wrap = PanelContainer.new()
-	_detail_icon_wrap.custom_minimum_size = Vector2(48, 48)
+	_detail_icon_wrap.custom_minimum_size = Vector2(64, 64)
 	head_row.add_child(_detail_icon_wrap)
 	_detail_icon = Label.new()
 	_detail_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_detail_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_detail_icon.add_theme_font_size_override("font_size", 24)
+	_detail_icon.add_theme_font_size_override("font_size", 32)
 	_detail_icon_wrap.add_child(_detail_icon)
 
 	var head_col := VBoxContainer.new()
@@ -266,20 +266,20 @@ func _build() -> void:
 	head_row.add_child(head_col)
 
 	_detail_sector = Label.new()
-	_detail_sector.add_theme_font_size_override("font_size", 10)
+	_detail_sector.add_theme_font_size_override("font_size", 13)
 	_detail_sector.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(_detail_sector)
 	head_col.add_child(_detail_sector)
 
 	_detail_title = Label.new()
 	_detail_title.clip_text = true
-	_detail_title.add_theme_font_size_override("font_size", 18)
+	_detail_title.add_theme_font_size_override("font_size", 24)
 	ClientUi.apply_display_font(_detail_title)
 	head_col.add_child(_detail_title)
 
 	_detail_boss = Label.new()
 	_detail_boss.clip_text = true
-	_detail_boss.add_theme_font_size_override("font_size", 12)
+	_detail_boss.add_theme_font_size_override("font_size", 16)
 	_detail_boss.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_detail_boss)
 	head_col.add_child(_detail_boss)
@@ -289,13 +289,13 @@ func _build() -> void:
 	head_row.add_child(cleared_col)
 	_detail_cleared_lab = Label.new()
 	_detail_cleared_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_detail_cleared_lab.add_theme_font_size_override("font_size", 10)
+	_detail_cleared_lab.add_theme_font_size_override("font_size", 13)
 	_detail_cleared_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_detail_cleared_lab)
 	cleared_col.add_child(_detail_cleared_lab)
 	_detail_cleared_val = Label.new()
 	_detail_cleared_val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_detail_cleared_val.add_theme_font_size_override("font_size", 18)
+	_detail_cleared_val.add_theme_font_size_override("font_size", 24)
 	ClientUi.apply_display_font(_detail_cleared_val)
 	cleared_col.add_child(_detail_cleared_val)
 
@@ -303,7 +303,7 @@ func _build() -> void:
 	_detail_progress.min_value = 0
 	_detail_progress.max_value = 10
 	_detail_progress.show_percentage = false
-	_detail_progress.custom_minimum_size = Vector2(0, 5)
+	_detail_progress.custom_minimum_size = Vector2(0, 7)
 	_detail_progress.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	dcol.add_child(_detail_progress)
 
@@ -311,7 +311,7 @@ func _build() -> void:
 	_detail_desc.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_detail_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail_desc.max_lines_visible = 2
-	_detail_desc.add_theme_font_size_override("font_size", 13)
+	_detail_desc.add_theme_font_size_override("font_size", 17)
 	_detail_desc.add_theme_color_override("font_color", Color(0.82, 0.86, 0.92, 0.95))
 	ClientUi.apply_body_font(_detail_desc)
 	dcol.add_child(_detail_desc)
@@ -329,14 +329,14 @@ func _build() -> void:
 	_mode_label = Label.new()
 	_mode_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_mode_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_mode_label.add_theme_font_size_override("font_size", 11)
+	_mode_label.add_theme_font_size_override("font_size", 15)
 	_mode_label.add_theme_color_override("font_color", Color("#FEF3C7", 0.92))
 	ClientUi.apply_body_font(_mode_label)
 	mode_row.add_child(_mode_label)
 	_return_front_btn = Button.new()
 	_return_front_btn.text = "Front"
 	ClientUi.apply_ghost_button(_return_front_btn)
-	_return_front_btn.add_theme_font_size_override("font_size", 10)
+	_return_front_btn.add_theme_font_size_override("font_size", 13)
 	_return_front_btn.add_theme_color_override("font_color", ClientUi.CYAN)
 	_return_front_btn.pressed.connect(_return_to_front)
 	mode_row.add_child(_return_front_btn)
@@ -350,12 +350,12 @@ func _build() -> void:
 	_reward_banner.add_child(reward_row)
 	var gem := Label.new()
 	gem.text = "💎"
-	gem.add_theme_font_size_override("font_size", 14)
+	gem.add_theme_font_size_override("font_size", 19)
 	reward_row.add_child(gem)
 	_detail_reward = Label.new()
 	_detail_reward.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_detail_reward.clip_text = true
-	_detail_reward.add_theme_font_size_override("font_size", 12)
+	_detail_reward.add_theme_font_size_override("font_size", 16)
 	_detail_reward.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_detail_reward)
 	reward_row.add_child(_detail_reward)
@@ -377,13 +377,13 @@ func _build() -> void:
 	var enc_lab := Label.new()
 	enc_lab.text = "ENCOUNTER PATH"
 	enc_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	enc_lab.add_theme_font_size_override("font_size", 10)
+	enc_lab.add_theme_font_size_override("font_size", 13)
 	enc_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(enc_lab)
 	enc_head.add_child(enc_lab)
 	var enc_sub := Label.new()
 	enc_sub.text = "1–9 · Boss"
-	enc_sub.add_theme_font_size_override("font_size", 10)
+	enc_sub.add_theme_font_size_override("font_size", 13)
 	enc_sub.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
 	ClientUi.apply_body_font(enc_sub)
 	enc_head.add_child(enc_sub)
@@ -422,14 +422,14 @@ func _build() -> void:
 	_cooldown_bar.add_child(cd_row)
 	_cooldown_lab = Label.new()
 	_cooldown_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_cooldown_lab.add_theme_font_size_override("font_size", 12)
+	_cooldown_lab.add_theme_font_size_override("font_size", 16)
 	_cooldown_lab.add_theme_color_override("font_color", Color("#FDE68A"))
 	ClientUi.apply_display_font(_cooldown_lab)
 	cd_row.add_child(_cooldown_lab)
 	_skip_btn = Button.new()
 	_skip_btn.text = "⚡ Skip · %s💎" % DungeonRules.SKIP_COST
 	ClientUi.apply_ghost_button(_skip_btn)
-	_skip_btn.add_theme_font_size_override("font_size", 11)
+	_skip_btn.add_theme_font_size_override("font_size", 15)
 	_skip_btn.add_theme_color_override("font_color", Color("#FDE68A"))
 	_skip_btn.pressed.connect(_on_skip)
 	cd_row.add_child(_skip_btn)
@@ -437,16 +437,16 @@ func _build() -> void:
 	_fight_btn = Button.new()
 	_fight_btn.text = "⚔  Fight 1"
 	_fight_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_fight_btn.custom_minimum_size.y = 46
+	_fight_btn.custom_minimum_size.y = 61
 	ClientUi.apply_primary_button(_fight_btn)
-	_fight_btn.add_theme_font_size_override("font_size", 15)
+	_fight_btn.add_theme_font_size_override("font_size", 20)
 	_fight_btn.pressed.connect(_on_fight)
 	act_col.add_child(_fight_btn)
 
 	_continue_hint = Label.new()
 	_continue_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_continue_hint.visible = false
-	_continue_hint.add_theme_font_size_override("font_size", 10)
+	_continue_hint.add_theme_font_size_override("font_size", 13)
 	_continue_hint.add_theme_color_override("font_color", Color("#FBBF24", 0.85))
 	ClientUi.apply_body_font(_continue_hint)
 	act_col.add_child(_continue_hint)
@@ -679,7 +679,7 @@ func _enc_cell(
 		label_col = Color(ClientUi.MUTED, 0.6)
 
 	var cell := PanelContainer.new()
-	cell.custom_minimum_size = Vector2(36, 52)
+	cell.custom_minimum_size = Vector2(48, 69)
 	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cell.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cell.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(bg, border, 10, 2 if (is_current or is_boss) else 1))
@@ -692,7 +692,7 @@ func _enc_cell(
 		var next := Label.new()
 		next.text = "NEXT"
 		next.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		next.add_theme_font_size_override("font_size", 8)
+		next.add_theme_font_size_override("font_size", 11)
 		next.add_theme_color_override("font_color", Color(0.02, 0.05, 0.08))
 		ClientUi.apply_display_font(next)
 		var next_bg := PanelContainer.new()
@@ -707,13 +707,13 @@ func _enc_cell(
 	var icon_lab := Label.new()
 	icon_lab.text = icon
 	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lab.add_theme_font_size_override("font_size", 14)
+	icon_lab.add_theme_font_size_override("font_size", 19)
 	icon_lab.add_theme_color_override("font_color", icon_col)
 	col.add_child(icon_lab)
 	var lab := Label.new()
 	lab.text = label
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 9)
+	lab.add_theme_font_size_override("font_size", 12)
 	lab.add_theme_color_override("font_color", label_col)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)

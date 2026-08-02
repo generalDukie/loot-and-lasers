@@ -74,13 +74,13 @@ func _build() -> void:
 	outer.add_child(head)
 	var eye := Label.new()
 	eye.text = "OPS CONSOLE"
-	eye.add_theme_font_size_override("font_size", 10)
+	eye.add_theme_font_size_override("font_size", 13)
 	eye.add_theme_color_override("font_color", Color(ClientUi.DANGER, 0.85))
 	ClientUi.apply_display_font(eye)
 	head.add_child(eye)
 	var title := Label.new()
 	title.text = "🛡  Admin"
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 29)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head.add_child(title)

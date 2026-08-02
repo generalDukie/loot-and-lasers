@@ -47,13 +47,13 @@ func _build() -> void:
 	root.add_child(head)
 	var eye := Label.new()
 	eye.text = "DOSSIER"
-	eye.add_theme_font_size_override("font_size", 10)
+	eye.add_theme_font_size_override("font_size", 13)
 	eye.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.72))
 	ClientUi.apply_display_font(eye)
 	head.add_child(eye)
 	var title := Label.new()
 	title.text = "Public Profile"
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 29)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head.add_child(title)
@@ -108,7 +108,7 @@ func _populate(data: Dictionary) -> void:
 		("[%s] " % tag) if not tag.is_empty() else "",
 		LegacyName.profile_display_name(character),
 	]
-	name_l.add_theme_font_size_override("font_size", 20)
+	name_l.add_theme_font_size_override("font_size", 27)
 	name_l.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(name_l)
 	info.add_child(name_l)
@@ -268,14 +268,14 @@ func _mini_stat(label: String, value: String, color: Color) -> PanelContainer:
 	var v := Label.new()
 	v.text = value
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_theme_font_size_override("font_size", 18)
+	v.add_theme_font_size_override("font_size", 24)
 	v.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(v)
 	col.add_child(v)
 	var l := Label.new()
 	l.text = label
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 9)
+	l.add_theme_font_size_override("font_size", 12)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(l)
 	col.add_child(l)
@@ -286,7 +286,7 @@ func _equip_chip(it: Dictionary) -> PanelContainer:
 	var tint := ClientUi.rarity_color(str(it.get("rarity", "")))
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size = Vector2(0, 56)
+	panel.custom_minimum_size = Vector2(0, 75)
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.06, 0.07, 0.11, 0.96), Color(tint, 0.55), 8, 1
 	))
@@ -296,7 +296,7 @@ func _equip_chip(it: Dictionary) -> PanelContainer:
 	var t := Label.new()
 	t.text = str(it.get("type", "?")).to_upper()
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	t.add_theme_font_size_override("font_size", 8)
+	t.add_theme_font_size_override("font_size", 11)
 	t.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(t)
 	col.add_child(t)
@@ -304,7 +304,7 @@ func _equip_chip(it: Dictionary) -> PanelContainer:
 	n.text = str(it.get("name", "Item"))
 	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	n.add_theme_font_size_override("font_size", 11)
+	n.add_theme_font_size_override("font_size", 15)
 	n.add_theme_color_override("font_color", tint.lightened(0.15))
 	ClientUi.apply_body_font(n)
 	col.add_child(n)
@@ -324,7 +324,7 @@ func _p(t: String) -> Label:
 	var l := Label.new()
 	l.text = t
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_size_override("font_size", 13)
+	l.add_theme_font_size_override("font_size", 17)
 	l.add_theme_color_override("font_color", Color(0.82, 0.88, 0.94))
 	ClientUi.apply_body_font(l)
 	return l

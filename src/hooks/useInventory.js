@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/api/gameClient";
 import { MAX_BUFF_STACKS, MAX_ACTIVE_STAT_TYPES, getInventoryCap } from "@/lib/gameData";
-import { enforceInventoryCap, setPendingUnequip, tryClaimPendingIfSpaceAvailable } from "@/lib/inventoryCap";
+import { enforceInventoryCap, setPendingUnequip, tryClaimPendingIfSpaceAvailable, getPending } from "@/lib/inventoryCap";
 import { EQUIPPABLE_TYPES } from "@/lib/inventoryJunk";
 
 /**
@@ -171,8 +171,13 @@ export function useInventory(character, onCharacterChange) {
       throw e;
     }
     // Claim is best-effort — never treat a claim failure as a dissolve failure.
+    // Do not auto-claim pending loot: that refills the slot and looks like the
+    // dissolved item "became" the waiting drop. Unequip / overflow still resolve.
     try {
-      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+      const mode = getPending()?.mode;
+      if (mode && mode !== "loot") {
+        await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+      }
     } catch {
       /* InventoryFullModal / hydrate will surface claim issues */
     }
@@ -190,7 +195,10 @@ export function useInventory(character, onCharacterChange) {
       onCharacterChange?.(patch);
       await load();
       try {
-        await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+        const mode = getPending()?.mode;
+        if (mode && mode !== "loot") {
+          await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+        }
       } catch { /* claim is best-effort after stim use */ }
       return { ok: true };
     } catch (e) {
@@ -222,7 +230,10 @@ export function useInventory(character, onCharacterChange) {
       throw e;
     }
     try {
-      await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+      const mode = getPending()?.mode;
+      if (mode && mode !== "loot") {
+        await tryClaimPendingIfSpaceAvailable({ ...character, ...patch });
+      }
     } catch { /* claim is best-effort after junk dissolve */ }
     return gained;
   }, [character, load, onCharacterChange]);

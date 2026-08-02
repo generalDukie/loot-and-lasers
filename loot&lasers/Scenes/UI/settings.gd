@@ -44,14 +44,14 @@ func _build() -> void:
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	outer.add_child(center)
 	var sheet := VBoxContainer.new()
-	sheet.custom_minimum_size.x = 920
+	sheet.custom_minimum_size.x = 1227
 	sheet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sheet.add_theme_constant_override("separation", 8)
 	center.add_child(sheet)
 
 	var title := Label.new()
 	title.text = "⚙  Settings"
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 27)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	sheet.add_child(title)
@@ -71,7 +71,7 @@ func _build() -> void:
 	columns.add_child(account_panel)
 
 	var utility := VBoxContainer.new()
-	utility.custom_minimum_size.x = 360
+	utility.custom_minimum_size.x = 480
 	utility.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	utility.size_flags_stretch_ratio = 0.42
 	utility.add_theme_constant_override("separation", 10)
@@ -112,7 +112,7 @@ func _build_account() -> VBoxContainer:
 	var email := LineEdit.new()
 	email.text = str(AuthManager.user.get("email", "—"))
 	email.editable = false
-	email.custom_minimum_size.y = 40
+	email.custom_minimum_size.y = 53
 	ClientUi.apply_body_font(email)
 	col.add_child(email)
 
@@ -174,7 +174,7 @@ func _build_account() -> VBoxContainer:
 		col.add_child(_legacy)
 
 	var spacer := Control.new()
-	spacer.custom_minimum_size.y = 8
+	spacer.custom_minimum_size.y = 11
 	col.add_child(spacer)
 	col.add_child(_build_danger())
 
@@ -222,7 +222,7 @@ func _build_audio() -> VBoxContainer:
 	var tip := Label.new()
 	tip.text = "Station ambience and cantina music use Music. Combat / UI cues use SFX."
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tip.add_theme_font_size_override("font_size", 11)
+	tip.add_theme_font_size_override("font_size", 15)
 	tip.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tip)
 	col.add_child(tip)
@@ -234,9 +234,9 @@ func _build_display() -> VBoxContainer:
 	col.add_theme_constant_override("separation", 10)
 	col.add_child(_section_title("DISPLAY"))
 	var hint := Label.new()
-	hint.text = "Game canvas is 1920×1080 (16:9). The window maximizes to your screen; the UI scales with letterboxing so nothing is cropped. Press F11 for fullscreen."
+	hint.text = "Game canvas is 2560×1440 (16:9). The window maximizes to your screen; the UI scales with letterboxing so nothing is cropped. Press F11 for fullscreen."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_font_size_override("font_size", 15)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	col.add_child(hint)
@@ -252,7 +252,7 @@ func _build_display() -> VBoxContainer:
 	var fs_hint := Label.new()
 	fs_hint.text = "Tip: press F11 anytime to toggle fullscreen (including from the editor Play window)."
 	fs_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	fs_hint.add_theme_font_size_override("font_size", 11)
+	fs_hint.add_theme_font_size_override("font_size", 15)
 	fs_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(fs_hint)
 	col.add_child(fs_hint)
@@ -288,7 +288,7 @@ func _build_codex_link() -> PanelContainer:
 	))
 	var btn := Button.new()
 	btn.flat = true
-	btn.custom_minimum_size = Vector2(0, 52)
+	btn.custom_minimum_size = Vector2(0, 69)
 	btn.pressed.connect(func() -> void: GameManager.go_codex())
 	row_panel.add_child(btn)
 	var row := HBoxContainer.new()
@@ -296,7 +296,7 @@ func _build_codex_link() -> PanelContainer:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(row)
 	var icon_box := PanelContainer.new()
-	icon_box.custom_minimum_size = Vector2(32, 32)
+	icon_box.custom_minimum_size = Vector2(43, 43)
 	icon_box.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(ClientUi.CYAN, 0.1), Color(ClientUi.CYAN, 0.25), 8, 1
 	))
@@ -312,13 +312,13 @@ func _build_codex_link() -> PanelContainer:
 	row.add_child(text_col)
 	var title := Label.new()
 	title.text = "Codex & Guide"
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 19)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	text_col.add_child(title)
 	var hint := Label.new()
 	hint.text = "How things work · New player tutorial"
-	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_font_size_override("font_size", 15)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	text_col.add_child(hint)
@@ -376,7 +376,7 @@ func _build_danger() -> PanelContainer:
 func _danger_row(title: String, hint: String, destructive: bool, on_press: Callable) -> Button:
 	var btn := Button.new()
 	btn.flat = true
-	btn.custom_minimum_size = Vector2(0, 56)
+	btn.custom_minimum_size = Vector2(0, 75)
 	btn.pressed.connect(on_press)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
@@ -384,7 +384,7 @@ func _danger_row(title: String, hint: String, destructive: bool, on_press: Calla
 	btn.add_child(row)
 	var icon := Label.new()
 	icon.text = "🗑" if destructive else "↩"
-	icon.add_theme_font_size_override("font_size", 16)
+	icon.add_theme_font_size_override("font_size", 21)
 	icon.add_theme_color_override("font_color", ClientUi.DANGER if destructive else ClientUi.MUTED)
 	row.add_child(icon)
 	var text_col := VBoxContainer.new()
@@ -393,14 +393,14 @@ func _danger_row(title: String, hint: String, destructive: bool, on_press: Calla
 	row.add_child(text_col)
 	var t := Label.new()
 	t.text = title
-	t.add_theme_font_size_override("font_size", 14)
+	t.add_theme_font_size_override("font_size", 19)
 	t.add_theme_color_override("font_color", ClientUi.DANGER if destructive else ClientUi.TEXT)
 	ClientUi.apply_body_font(t)
 	text_col.add_child(t)
 	var h := Label.new()
 	h.text = hint
 	h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	h.add_theme_font_size_override("font_size", 11)
+	h.add_theme_font_size_override("font_size", 15)
 	h.add_theme_color_override("font_color", Color(ClientUi.DANGER, 0.7) if destructive else ClientUi.MUTED)
 	ClientUi.apply_body_font(h)
 	text_col.add_child(h)
@@ -418,23 +418,23 @@ func _volume_row(label: String, icon: String, value: float, on_change: Callable,
 
 	var ic := Label.new()
 	ic.text = icon
-	ic.add_theme_font_size_override("font_size", 14)
+	ic.add_theme_font_size_override("font_size", 19)
 	ic.add_theme_color_override("font_color", ClientUi.CYAN)
 	head.add_child(ic)
 
 	var lab := Label.new()
 	lab.text = label
 	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lab.add_theme_font_size_override("font_size", 12)
+	lab.add_theme_font_size_override("font_size", 16)
 	lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(lab)
 	head.add_child(lab)
 
 	var pct := Label.new()
 	pct.text = "%d" % int(round(value * 100.0))
-	pct.custom_minimum_size.x = 36
+	pct.custom_minimum_size.x = 48
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	pct.add_theme_font_size_override("font_size", 11)
+	pct.add_theme_font_size_override("font_size", 15)
 	pct.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(pct)
 	head.add_child(pct)
@@ -445,7 +445,7 @@ func _volume_row(label: String, icon: String, value: float, on_change: Callable,
 	s.step = 0.01
 	s.value = clampf(value, 0.0, 1.0)
 	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	s.custom_minimum_size = Vector2(0, 22)
+	s.custom_minimum_size = Vector2(0, 29)
 	s.focus_mode = Control.FOCUS_ALL
 	s.mouse_filter = Control.MOUSE_FILTER_STOP
 	s.value_changed.connect(func(v: float) -> void:

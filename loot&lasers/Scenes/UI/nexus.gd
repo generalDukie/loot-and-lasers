@@ -61,7 +61,7 @@ func _build() -> void:
 	root.add_child(title_row)
 	var title := Label.new()
 	title.text = "👑  Galactic Command Nexus"
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 27)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	title_row.add_child(title)
@@ -77,12 +77,12 @@ func _build() -> void:
 	chatter_panel.add_child(chatter_row)
 	var chatter_icon := Label.new()
 	chatter_icon.text = "📡"
-	chatter_icon.add_theme_font_size_override("font_size", 18)
+	chatter_icon.add_theme_font_size_override("font_size", 24)
 	chatter_row.add_child(chatter_icon)
 	_chatter = Label.new()
 	_chatter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_chatter.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_chatter.add_theme_font_size_override("font_size", 12)
+	_chatter.add_theme_font_size_override("font_size", 16)
 	_chatter.add_theme_color_override("font_color", Color(ClientUi.TEXT, 0.8))
 	ClientUi.apply_body_font(_chatter)
 	chatter_row.add_child(_chatter)
@@ -135,7 +135,7 @@ func _build() -> void:
 
 	_log = Label.new()
 	_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_log.add_theme_font_size_override("font_size", 12)
+	_log.add_theme_font_size_override("font_size", 16)
 	_log.add_theme_color_override("font_color", ClientUi.MUTED)
 	right.add_child(_log)
 
@@ -194,11 +194,11 @@ func _populate() -> void:
 	_owner_col.add_child(showcase_head)
 	var crown := Label.new()
 	crown.text = "👑"
-	crown.add_theme_font_size_override("font_size", 16)
+	crown.add_theme_font_size_override("font_size", 21)
 	showcase_head.add_child(crown)
 	var showcase_title := Label.new()
 	showcase_title.text = "GALACTIC COMMAND NEXUS"
-	showcase_title.add_theme_font_size_override("font_size", 12)
+	showcase_title.add_theme_font_size_override("font_size", 16)
 	showcase_title.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(showcase_title)
 	showcase_head.add_child(showcase_title)
@@ -207,12 +207,12 @@ func _populate() -> void:
 		var unclaimed := Label.new()
 		unclaimed.text = "⛩️"
 		unclaimed.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		unclaimed.add_theme_font_size_override("font_size", 36)
+		unclaimed.add_theme_font_size_override("font_size", 48)
 		_owner_col.add_child(unclaimed)
 		var unclaimed_title := Label.new()
 		unclaimed_title.text = "UNCLAIMED — VULNERABLE"
 		unclaimed_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		unclaimed_title.add_theme_font_size_override("font_size", 18)
+		unclaimed_title.add_theme_font_size_override("font_size", 24)
 		unclaimed_title.add_theme_color_override("font_color", ClientUi.DANGER)
 		ClientUi.apply_display_font(unclaimed_title)
 		_owner_col.add_child(unclaimed_title)
@@ -220,7 +220,7 @@ func _populate() -> void:
 		unclaimed_hint.text = "No guild holds the Nexus. Any eligible guild may strike to claim dominion over the galaxy."
 		unclaimed_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		unclaimed_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		unclaimed_hint.add_theme_font_size_override("font_size", 11)
+		unclaimed_hint.add_theme_font_size_override("font_size", 15)
 		unclaimed_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(unclaimed_hint)
 		_owner_col.add_child(unclaimed_hint)
@@ -230,7 +230,7 @@ func _populate() -> void:
 		_owner_col.add_child(owner_row)
 
 		var flag := PanelContainer.new()
-		flag.custom_minimum_size = Vector2(52, 52)
+		flag.custom_minimum_size = Vector2(69, 69)
 		var banner := str(n.get("banner_color", "#FFD700"))
 		flag.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 			Color(0.04, 0.05, 0.08, 0.85), Color(banner, 0.75), 10, 2
@@ -240,7 +240,7 @@ func _populate() -> void:
 		flag_l.text = "⚑"
 		flag_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		flag_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		flag_l.add_theme_font_size_override("font_size", 22)
+		flag_l.add_theme_font_size_override("font_size", 29)
 		flag_l.add_theme_color_override("font_color", Color(banner))
 		flag.add_child(flag_l)
 
@@ -250,13 +250,13 @@ func _populate() -> void:
 		owner_row.add_child(owner_info)
 		var owner_title := Label.new()
 		owner_title.text = "[%s] %s" % [str(n.get("owner_guild_tag", "")), str(n.get("owner_guild_name", "?"))]
-		owner_title.add_theme_font_size_override("font_size", 20)
+		owner_title.add_theme_font_size_override("font_size", 27)
 		owner_title.add_theme_color_override("font_color", Color("#FDE68A"))
 		ClientUi.apply_display_font(owner_title)
 		owner_info.add_child(owner_title)
 		var leader := Label.new()
 		leader.text = "Led by %s" % str(n.get("owner_leader", n.get("owner_guild_leader", "?")))
-		leader.add_theme_font_size_override("font_size", 11)
+		leader.add_theme_font_size_override("font_size", 15)
 		leader.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(leader)
 		owner_info.add_child(leader)
@@ -268,7 +268,7 @@ func _populate() -> void:
 		owner_row.add_child(rank_chip)
 		var rank_l := Label.new()
 		rank_l.text = "🏆  RANK #1"
-		rank_l.add_theme_font_size_override("font_size", 11)
+		rank_l.add_theme_font_size_override("font_size", 15)
 		rank_l.add_theme_color_override("font_color", Color("#FBBF24"))
 		ClientUi.apply_display_font(rank_l)
 		rank_chip.add_child(rank_l)
@@ -295,7 +295,7 @@ func _populate() -> void:
 		status_row.add_child(pill)
 		var pill_l := Label.new()
 		pill_l.text = "⚠ VULNERABLE" if vuln else "🛡 FORTIFIED"
-		pill_l.add_theme_font_size_override("font_size", 11)
+		pill_l.add_theme_font_size_override("font_size", 15)
 		pill_l.add_theme_color_override("font_color", ClientUi.DANGER if vuln else ClientUi.SUCCESS)
 		ClientUi.apply_display_font(pill_l)
 		pill.add_child(pill_l)
@@ -307,7 +307,7 @@ func _populate() -> void:
 			if vuln
 			else "Defenses hold — becomes vulnerable after 24h."
 		)
-		status_hint.add_theme_font_size_override("font_size", 11)
+		status_hint.add_theme_font_size_override("font_size", 15)
 		status_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(status_hint)
 		status_row.add_child(status_hint)
@@ -323,7 +323,7 @@ func _populate() -> void:
 		var join := Label.new()
 		join.text = "Join or create a guild to contest the Nexus."
 		join.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		join.add_theme_font_size_override("font_size", 11)
+		join.add_theme_font_size_override("font_size", 15)
 		join.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(join)
 		join_panel.add_child(join)
@@ -339,7 +339,7 @@ func _populate() -> void:
 			DungeonRules.format_ms(NexusManager.assault_cooldown_ms()) if NexusManager.assault_cooldown_ms() > 0 else "ready",
 			str(power),
 		]
-		reqs.add_theme_font_size_override("font_size", 12)
+		reqs.add_theme_font_size_override("font_size", 16)
 		reqs.add_theme_color_override("font_color", ClientUi.MUTED)
 		_declare_col.add_child(reqs)
 
@@ -355,7 +355,7 @@ func _populate() -> void:
 		perk.text = "👑 Your guild holds the Nexus — members enjoy +5% mission rewards and +5% guild experience."
 		perk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		perk.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		perk.add_theme_font_size_override("font_size", 12)
+		perk.add_theme_font_size_override("font_size", 16)
 		perk.add_theme_color_override("font_color", Color("#FDE68A"))
 		ClientUi.apply_body_font(perk)
 		_owner_perk_panel.add_child(perk)
@@ -379,14 +379,14 @@ func _mini(label: String, value: String, color: Color) -> PanelContainer:
 	var l := Label.new()
 	l.text = label
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 8)
+	l.add_theme_font_size_override("font_size", 11)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(l)
 	col.add_child(l)
 	var v := Label.new()
 	v.text = value
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_theme_font_size_override("font_size", 13)
+	v.add_theme_font_size_override("font_size", 17)
 	v.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(v)
 	col.add_child(v)
@@ -455,21 +455,21 @@ func _hof_row(rank: int, r: Dictionary) -> PanelContainer:
 	panel.add_child(row)
 	var num := Label.new()
 	num.text = "%s." % rank
-	num.custom_minimum_size = Vector2(20, 0)
-	num.add_theme_font_size_override("font_size", 10)
+	num.custom_minimum_size = Vector2(27, 0)
+	num.add_theme_font_size_override("font_size", 13)
 	num.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(num)
 	row.add_child(num)
 	var name := Label.new()
 	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name.text = "[%s] %s" % [str(r.get("guild_tag", "")), str(r.get("guild_name", "?"))]
-	name.add_theme_font_size_override("font_size", 12)
+	name.add_theme_font_size_override("font_size", 16)
 	name.add_theme_color_override("font_color", Color("#FFD700"))
 	ClientUi.apply_display_font(name)
 	row.add_child(name)
 	var meta := Label.new()
 	meta.text = "%sd · %s🛡" % [str(r.get("reign_days", 0)), str(r.get("defenses", 0))]
-	meta.add_theme_font_size_override("font_size", 11)
+	meta.add_theme_font_size_override("font_size", 15)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	row.add_child(meta)
@@ -481,7 +481,7 @@ func _hof_line(t: String) -> Label:
 	l.text = t
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_size_override("font_size", 12)
+	l.add_theme_font_size_override("font_size", 16)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(l)
 	return l

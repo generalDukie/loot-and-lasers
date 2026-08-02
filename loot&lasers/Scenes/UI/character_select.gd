@@ -50,7 +50,7 @@ func _build() -> void:
 	var spinner := Label.new()
 	spinner.text = "⟳"
 	spinner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	spinner.add_theme_font_size_override("font_size", 28)
+	spinner.add_theme_font_size_override("font_size", 37)
 	spinner.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(spinner)
 	_loading_host.add_child(spinner)
@@ -58,7 +58,7 @@ func _build() -> void:
 	# Main picker
 	_main_host = VBoxContainer.new()
 	_main_host.visible = false
-	_main_host.custom_minimum_size = Vector2(720, 0)
+	_main_host.custom_minimum_size = Vector2(960, 0)
 	_main_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_main_host.add_theme_constant_override("separation", 18)
 	center.add_child(_main_host)
@@ -71,13 +71,13 @@ func _build() -> void:
 	head.add_child(title)
 	_welcome = Label.new()
 	_welcome.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_welcome.add_theme_font_size_override("font_size", 13)
+	_welcome.add_theme_font_size_override("font_size", 17)
 	_welcome.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_welcome)
 	head.add_child(_welcome)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size.y = 320
+	scroll.custom_minimum_size.y = 427
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -115,7 +115,7 @@ func _build() -> void:
 
 	_enter_btn = Button.new()
 	_enter_btn.text = "↪  Enter Game"
-	_enter_btn.custom_minimum_size.x = 148
+	_enter_btn.custom_minimum_size.x = 197
 	ClientUi.apply_primary_button(_enter_btn)
 	_enter_btn.pressed.connect(_enter_selected)
 	row.add_child(_enter_btn)
@@ -140,7 +140,7 @@ func _apply_accent_button(btn: Button) -> void:
 	btn.add_theme_stylebox_override("disabled", n)
 	btn.add_theme_color_override("font_color", ClientUi.VIOLET.lightened(0.25))
 	btn.add_theme_color_override("font_hover_color", ClientUi.TEXT)
-	btn.add_theme_font_size_override("font_size", 12)
+	btn.add_theme_font_size_override("font_size", 16)
 	ClientUi.apply_display_font(btn)
 
 
@@ -215,7 +215,7 @@ func _refresh() -> void:
 func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Button:
 	var btn := Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size.y = 88
+	btn.custom_minimum_size.y = 117
 	btn.clip_contents = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.disabled = _switching
@@ -226,10 +226,10 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	row.offset_left = 14
-	row.offset_top = 12
-	row.offset_right = -14
-	row.offset_bottom = -12
+	row.offset_left = 19
+	row.offset_top = 16
+	row.offset_right = -19
+	row.offset_bottom = -16
 	row.add_theme_constant_override("separation", 14)
 	btn.add_child(row)
 
@@ -248,7 +248,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_l.text = LegacyName.full_name(character)
 	name_l.clip_text = true
-	name_l.add_theme_font_size_override("font_size", 15)
+	name_l.add_theme_font_size_override("font_size", 20)
 	name_l.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(name_l)
 	info.add_child(name_l)
@@ -261,7 +261,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 		str(character.get("race", "?")),
 		str(character.get("class", "?")),
 	]
-	meta.add_theme_font_size_override("font_size", 11)
+	meta.add_theme_font_size_override("font_size", 15)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	info.add_child(meta)
@@ -270,7 +270,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 		var active := Label.new()
 		active.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		active.text = "✓  Active"
-		active.add_theme_font_size_override("font_size", 11)
+		active.add_theme_font_size_override("font_size", 15)
 		active.add_theme_color_override("font_color", ClientUi.CYAN)
 		ClientUi.apply_display_font(active)
 		row.add_child(active)

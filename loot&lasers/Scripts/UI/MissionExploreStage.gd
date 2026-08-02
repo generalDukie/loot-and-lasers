@@ -81,31 +81,31 @@ func _build() -> void:
 
 	var vignette := ColorRect.new()
 	vignette.set_anchors_preset(PRESET_BOTTOM_WIDE)
-	vignette.offset_top = -140
+	vignette.offset_top = -187
 	vignette.color = Color(0.02, 0.03, 0.06, 0.72)
 	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(vignette)
 
 	_badge = Label.new()
 	_badge.set_anchors_preset(PRESET_CENTER_TOP)
-	_badge.offset_top = 12
-	_badge.offset_bottom = 34
-	_badge.offset_left = -140
-	_badge.offset_right = 140
+	_badge.offset_top = 16
+	_badge.offset_bottom = 45
+	_badge.offset_left = -187
+	_badge.offset_right = 187
 	_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_badge.add_theme_font_size_override("font_size", 11)
+	_badge.add_theme_font_size_override("font_size", 15)
 	_badge.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(_badge)
 	add_child(_badge)
 
 	_caption = Label.new()
 	_caption.set_anchors_preset(PRESET_BOTTOM_WIDE)
-	_caption.offset_left = 18
-	_caption.offset_right = -18
-	_caption.offset_top = -120
-	_caption.offset_bottom = -84
+	_caption.offset_left = 24
+	_caption.offset_right = -24
+	_caption.offset_top = -160
+	_caption.offset_bottom = -112
 	_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_caption.add_theme_font_size_override("font_size", 15)
+	_caption.add_theme_font_size_override("font_size", 20)
 	_caption.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 0.95))
 	ClientUi.apply_display_font(_caption)
 	add_child(_caption)

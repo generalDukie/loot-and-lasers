@@ -105,7 +105,7 @@ func _show_branded_prompt(
 	overlay.add_child(center)
 
 	var sheet := PanelContainer.new()
-	sheet.custom_minimum_size = Vector2(420, 0)
+	sheet.custom_minimum_size = Vector2(560, 0)
 	sheet.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.05, 0.06, 0.1, 0.98), Color(ClientUi.CYAN, 0.55), 16, 2)
@@ -119,13 +119,13 @@ func _show_branded_prompt(
 	var icon_lab := Label.new()
 	icon_lab.text = icon
 	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lab.add_theme_font_size_override("font_size", 36)
+	icon_lab.add_theme_font_size_override("font_size", 48)
 	col.add_child(icon_lab)
 
 	var title_lab := Label.new()
 	title_lab.text = title
 	title_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_lab.add_theme_font_size_override("font_size", 20)
+	title_lab.add_theme_font_size_override("font_size", 27)
 	title_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title_lab)
 	col.add_child(title_lab)
@@ -134,7 +134,7 @@ func _show_branded_prompt(
 	body_lab.text = body
 	body_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	body_lab.add_theme_font_size_override("font_size", 13)
+	body_lab.add_theme_font_size_override("font_size", 17)
 	body_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(body_lab)
 	col.add_child(body_lab)
@@ -176,7 +176,7 @@ func _show_legacy_modal() -> void:
 	overlay.add_child(center)
 
 	var sheet := PanelContainer.new()
-	sheet.custom_minimum_size = Vector2(420, 0)
+	sheet.custom_minimum_size = Vector2(560, 0)
 	sheet.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.05, 0.06, 0.1, 0.98), Color(ClientUi.VIOLET, 0.45), 16, 2)
@@ -191,7 +191,7 @@ func _show_legacy_modal() -> void:
 	head.add_theme_constant_override("separation", 10)
 	col.add_child(head)
 	var lock_badge := PanelContainer.new()
-	lock_badge.custom_minimum_size = Vector2(40, 40)
+	lock_badge.custom_minimum_size = Vector2(53, 53)
 	var badge_sb := StyleBoxFlat.new()
 	badge_sb.bg_color = Color(ClientUi.VIOLET, 0.15)
 	badge_sb.set_border_width_all(1)
@@ -203,20 +203,20 @@ func _show_legacy_modal() -> void:
 	lock_lab.text = "🔒"
 	lock_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lock_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lock_lab.add_theme_font_size_override("font_size", 18)
+	lock_lab.add_theme_font_size_override("font_size", 24)
 	lock_badge.add_child(lock_lab)
 	var head_copy := VBoxContainer.new()
 	head_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(head_copy)
 	var title := Label.new()
 	title.text = "Set Your Legacy Name"
-	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_size_override("font_size", 20)
 	ClientUi.apply_display_font(title)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	head_copy.add_child(title)
 	var sub := Label.new()
 	sub.text = "One-time · permanent"
-	sub.add_theme_font_size_override("font_size", 10)
+	sub.add_theme_font_size_override("font_size", 13)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head_copy.add_child(sub)
@@ -224,7 +224,7 @@ func _show_legacy_modal() -> void:
 	var body := Label.new()
 	body.text = "This is your account's surname — a permanent last name shared by every character you create. It lets other players recognize all your operatives as the same person. It can never be changed."
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", 12)
+	body.add_theme_font_size_override("font_size", 16)
 	body.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(body)
 	col.add_child(body)
@@ -238,19 +238,19 @@ func _show_legacy_modal() -> void:
 	var count := Label.new()
 	count.text = "0/20"
 	count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	count.add_theme_font_size_override("font_size", 10)
+	count.add_theme_font_size_override("font_size", 13)
 	count.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(count)
 	meta_row.add_child(count)
 	var preview := Label.new()
 	preview.text = "Displayed as: —"
-	preview.add_theme_font_size_override("font_size", 10)
+	preview.add_theme_font_size_override("font_size", 13)
 	preview.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(preview)
 	meta_row.add_child(preview)
 
 	var err := Label.new()
-	err.add_theme_font_size_override("font_size", 11)
+	err.add_theme_font_size_override("font_size", 15)
 	err.add_theme_color_override("font_color", ClientUi.DANGER)
 	ClientUi.apply_body_font(err)
 	col.add_child(err)
@@ -368,7 +368,7 @@ func _build() -> void:
 	# Open station art (web: flex-1 min-h spacer — no caption overlay)
 	var vista := Control.new()
 	vista.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vista.custom_minimum_size.y = 64
+	vista.custom_minimum_size.y = 85
 	vista.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(vista)
 
@@ -449,7 +449,7 @@ func _build() -> void:
 	var showcase := Button.new()
 	showcase.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	showcase.size_flags_stretch_ratio = 1.15
-	showcase.custom_minimum_size.y = 56
+	showcase.custom_minimum_size.y = 75
 	showcase.clip_contents = true
 	showcase.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var sc_sb := StyleBoxFlat.new()
@@ -469,17 +469,17 @@ func _build() -> void:
 	var sc_row := HBoxContainer.new()
 	sc_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sc_row.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	sc_row.offset_left = 12
-	sc_row.offset_top = 8
-	sc_row.offset_right = -12
-	sc_row.offset_bottom = -8
+	sc_row.offset_left = 16
+	sc_row.offset_top = 11
+	sc_row.offset_right = -16
+	sc_row.offset_bottom = -11
 	sc_row.add_theme_constant_override("separation", 10)
 	showcase.add_child(sc_row)
 
 	var crown := Label.new()
 	crown.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	crown.text = "👑"
-	crown.add_theme_font_size_override("font_size", 20)
+	crown.add_theme_font_size_override("font_size", 27)
 	sc_row.add_child(crown)
 
 	var sc_copy := VBoxContainer.new()
@@ -490,14 +490,14 @@ func _build() -> void:
 	var nexus_eye := Label.new()
 	nexus_eye.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	nexus_eye.text = "GALACTIC COMMAND NEXUS"
-	nexus_eye.add_theme_font_size_override("font_size", 9)
+	nexus_eye.add_theme_font_size_override("font_size", 12)
 	nexus_eye.add_theme_color_override("font_color", Color("#FCD34D", 0.8))
 	ClientUi.apply_display_font(nexus_eye)
 	sc_copy.add_child(nexus_eye)
 	_nexus_owner = Label.new()
 	_nexus_owner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_nexus_owner.clip_text = true
-	_nexus_owner.add_theme_font_size_override("font_size", 12)
+	_nexus_owner.add_theme_font_size_override("font_size", 16)
 	_nexus_owner.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(_nexus_owner)
 	sc_copy.add_child(_nexus_owner)
@@ -505,7 +505,7 @@ func _build() -> void:
 	var chevron := Label.new()
 	chevron.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chevron.text = "›"
-	chevron.add_theme_font_size_override("font_size", 18)
+	chevron.add_theme_font_size_override("font_size", 24)
 	chevron.add_theme_color_override("font_color", ClientUi.MUTED)
 	sc_row.add_child(chevron)
 
@@ -528,12 +528,12 @@ func _build() -> void:
 	chatter_panel.add_child(chatter_row)
 	var radio := Label.new()
 	radio.text = "📡"
-	radio.add_theme_font_size_override("font_size", 18)
+	radio.add_theme_font_size_override("font_size", 24)
 	chatter_row.add_child(radio)
 	_nexus_chatter = Label.new()
 	_nexus_chatter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_nexus_chatter.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_nexus_chatter.add_theme_font_size_override("font_size", 11)
+	_nexus_chatter.add_theme_font_size_override("font_size", 15)
 	_nexus_chatter.add_theme_color_override("font_color", Color(ClientUi.TEXT, 0.82))
 	ClientUi.apply_body_font(_nexus_chatter)
 	chatter_row.add_child(_nexus_chatter)
@@ -600,7 +600,7 @@ func _make_top_fade() -> TextureRect:
 	texture.fill_to = Vector2(0.5, 1.0)
 	var overlay := TextureRect.new()
 	overlay.set_anchors_and_offsets_preset(PRESET_TOP_WIDE)
-	overlay.offset_bottom = 96
+	overlay.offset_bottom = 128
 	overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	overlay.texture = texture
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -611,7 +611,7 @@ func _dock_tile(icon: String, label: String, tint_hex: String, action: Callable)
 	var btn := Button.new()
 	btn.text = "%s\n%s" % [icon, label]
 	btn.tooltip_text = label
-	btn.custom_minimum_size = Vector2(0, 92)
+	btn.custom_minimum_size = Vector2(0, 123)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_dock_button(btn, Color(tint_hex))
@@ -623,7 +623,7 @@ func _dock_split(icon: String, label: String, tint_hex: String, options: Array) 
 	var wrap := Control.new()
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	wrap.custom_minimum_size = Vector2(0, 92)
+	wrap.custom_minimum_size = Vector2(0, 123)
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var btn := Button.new()
@@ -653,7 +653,7 @@ func _dock_split(icon: String, label: String, tint_hex: String, options: Array) 
 			continue
 		var ob := Button.new()
 		ob.text = "%s  %s" % [str(opt.get("icon", "")), str(opt.get("label", "?"))]
-		ob.add_theme_font_size_override("font_size", 11)
+		ob.add_theme_font_size_override("font_size", 15)
 		var opt_color := Color(str(opt.get("color", tint_hex)))
 		ClientUi.apply_ghost_button(ob)
 		ob.add_theme_color_override("font_color", opt_color)

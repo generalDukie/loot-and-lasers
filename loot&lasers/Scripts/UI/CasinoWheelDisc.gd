@@ -17,7 +17,7 @@ var glowing := false
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(120, 120)
+	custom_minimum_size = Vector2(160, 160)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_segments()
 	resized.connect(func() -> void:

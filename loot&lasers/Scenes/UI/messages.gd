@@ -71,7 +71,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "💬  Messages"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 29)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head.add_child(title)
@@ -87,7 +87,7 @@ func _build() -> void:
 	head.add_child(global_btn)
 
 	_meta = Label.new()
-	_meta.add_theme_font_size_override("font_size", 11)
+	_meta.add_theme_font_size_override("font_size", 15)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_meta)
 	root.add_child(_meta)
@@ -102,7 +102,7 @@ func _build() -> void:
 	root.add_child(split)
 
 	var side_panel := PanelContainer.new()
-	side_panel.custom_minimum_size = Vector2(280, 0)
+	side_panel.custom_minimum_size = Vector2(373, 0)
 	side_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	side_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.05, 0.06, 0.1, 0.96), Color(0.3, 0.38, 0.48, 0.4), 12, 1
@@ -113,7 +113,7 @@ func _build() -> void:
 	side_panel.add_child(side_col)
 	var side_lab := Label.new()
 	side_lab.text = "CONVERSATIONS"
-	side_lab.add_theme_font_size_override("font_size", 10)
+	side_lab.add_theme_font_size_override("font_size", 13)
 	side_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(side_lab)
 	side_col.add_child(side_lab)

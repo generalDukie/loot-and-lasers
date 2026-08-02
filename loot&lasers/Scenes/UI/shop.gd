@@ -69,20 +69,20 @@ func _build() -> void:
 
 	var eye := Label.new()
 	eye.text = "UNDER THE TABLE"
-	eye.add_theme_font_size_override("font_size", 10)
+	eye.add_theme_font_size_override("font_size", 13)
 	eye.add_theme_color_override("font_color", Color("#E879F9", 0.85))
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
 
 	var title := Label.new()
 	title.text = "🛒  Black Market"
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 29)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head_l.add_child(title)
 
 	_vendor = Label.new()
-	_vendor.add_theme_font_size_override("font_size", 11)
+	_vendor.add_theme_font_size_override("font_size", 15)
 	_vendor.add_theme_color_override("font_color", Color("#F5D0FE", 0.85))
 	ClientUi.apply_body_font(_vendor)
 	head_l.add_child(_vendor)
@@ -163,7 +163,7 @@ func _offline_panel() -> VBoxContainer:
 	var t := Label.new()
 	t.text = "🛒  Black Market is offline"
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	t.add_theme_font_size_override("font_size", 16)
+	t.add_theme_font_size_override("font_size", 21)
 	t.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(t)
 	col.add_child(t)
@@ -171,7 +171,7 @@ func _offline_panel() -> VBoxContainer:
 	sub.text = "Could not load bazaar stock. Restart the game API and retry."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sub.add_theme_font_size_override("font_size", 12)
+	sub.add_theme_font_size_override("font_size", 16)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(sub)
 	var retry := Button.new()
@@ -227,7 +227,7 @@ func _make_hot_banner(item: Dictionary) -> PanelContainer:
 	var badge := Label.new()
 	badge.text = "🔥  HOT DEAL · resets %s" % hot_eta
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	badge.add_theme_font_size_override("font_size", 11)
+	badge.add_theme_font_size_override("font_size", 15)
 	badge.add_theme_color_override("font_color", Color("#FED7AA"))
 	ClientUi.apply_display_font(badge)
 	col.add_child(badge)
@@ -239,7 +239,7 @@ func _make_hot_banner(item: Dictionary) -> PanelContainer:
 		var overlay := Label.new()
 		overlay.text = "YANKED TODAY" if yanked else "CLAIMED TODAY"
 		overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		overlay.add_theme_font_size_override("font_size", 12)
+		overlay.add_theme_font_size_override("font_size", 16)
 		overlay.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_display_font(overlay)
 		col.add_child(overlay)
@@ -269,13 +269,13 @@ func _make_armory_section() -> PanelContainer:
 	head.add_child(head_col)
 	var t := Label.new()
 	t.text = "⚔  Armory"
-	t.add_theme_font_size_override("font_size", 15)
+	t.add_theme_font_size_override("font_size", 20)
 	t.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(t)
 	head_col.add_child(t)
 	var h := Label.new()
 	h.text = "Haggle · crates sometimes"
-	h.add_theme_font_size_override("font_size", 10)
+	h.add_theme_font_size_override("font_size", 13)
 	h.add_theme_color_override("font_color", ClientUi.MUTED)
 	head_col.add_child(h)
 
@@ -324,13 +324,13 @@ func _make_stim_section() -> PanelContainer:
 	head.add_child(head_col)
 	var t := Label.new()
 	t.text = "🧪  Stim Lab"
-	t.add_theme_font_size_override("font_size", 15)
+	t.add_theme_font_size_override("font_size", 20)
 	t.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(t)
 	head_col.add_child(t)
 	var h := Label.new()
 	h.text = "Timed buffs · Stim Trios"
-	h.add_theme_font_size_override("font_size", 10)
+	h.add_theme_font_size_override("font_size", 13)
 	h.add_theme_color_override("font_color", ClientUi.MUTED)
 	head_col.add_child(h)
 
@@ -360,7 +360,7 @@ func _make_stim_section() -> PanelContainer:
 
 func _apply_restock_btn(btn: Button, accent: Color) -> void:
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 10)
+	btn.add_theme_font_size_override("font_size", 13)
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(
 		Color(accent.r, accent.g, accent.b, 0.15), Color(accent.r, accent.g, accent.b, 0.35)
 	))
@@ -374,7 +374,7 @@ func _apply_restock_btn(btn: Button, accent: Color) -> void:
 func _empty_line(text: String) -> Label:
 	var lab := Label.new()
 	lab.text = text
-	lab.add_theme_font_size_override("font_size", 12)
+	lab.add_theme_font_size_override("font_size", 16)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	return lab
 
@@ -408,7 +408,7 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 	top.add_theme_constant_override("separation", 8)
 	col.add_child(top)
 	var icon_box := PanelContainer.new()
-	icon_box.custom_minimum_size = Vector2(36, 36)
+	icon_box.custom_minimum_size = Vector2(48, 48)
 	icon_box.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(tint, 0.12), Color(tint, 0.4), 8, 1
 	))
@@ -422,7 +422,7 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 		icon.text = "✨"
 	else:
 		icon.text = str(GameData.STAT_ICONS.get(stat, "🧪"))
-	icon.add_theme_font_size_override("font_size", 14)
+	icon.add_theme_font_size_override("font_size", 19)
 	icon_box.add_child(icon)
 
 	var title_col := VBoxContainer.new()
@@ -430,13 +430,13 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 	top.add_child(title_col)
 	var title := Label.new()
 	title.text = str(item.get("name", "?"))
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", rarity_tint)
 	ClientUi.apply_display_font(title)
 	title_col.add_child(title)
 	var sub := Label.new()
 	sub.text = "bundle · 3 stims" if is_trio else ("%s · stim" % rarity)
-	sub.add_theme_font_size_override("font_size", 9)
+	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	title_col.add_child(sub)
 
@@ -461,7 +461,7 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 	else:
 		detail.text = str(item.get("flavor_text", "Stim"))
 		detail.add_theme_color_override("font_color", ClientUi.MUTED)
-	detail.add_theme_font_size_override("font_size", 11)
+	detail.add_theme_font_size_override("font_size", 15)
 	ClientUi.apply_body_font(detail)
 	col.add_child(detail)
 
@@ -471,14 +471,14 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 	var price := Label.new()
 	price.text = "✦ %s" % cost
 	price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	price.add_theme_font_size_override("font_size", 12)
+	price.add_theme_font_size_override("font_size", 16)
 	price.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(price)
 	row.add_child(price)
 	var buy := Button.new()
 	buy.text = "Open" if is_trio else "Buy"
 	ClientUi.apply_primary_button(buy)
-	buy.add_theme_font_size_override("font_size", 11)
+	buy.add_theme_font_size_override("font_size", 15)
 	var capt_cost := cost
 	buy.pressed.connect(func() -> void: _on_buy_cons(slot_id, capt_cost))
 	row.add_child(buy)
@@ -529,7 +529,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 	if is_bundle:
 		var crate := Label.new()
 		crate.text = "📦"
-		crate.add_theme_font_size_override("font_size", 22)
+		crate.add_theme_font_size_override("font_size", 29)
 		top.add_child(crate)
 	else:
 		top.add_child(GearIcon.make(item, 36.0))
@@ -539,7 +539,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 	top.add_child(title_col)
 	var title := Label.new()
 	title.text = str(item.get("name", "?"))
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(title)
 	title_col.add_child(title)
@@ -548,7 +548,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		sub.text = "bundle · 2 commons"
 	else:
 		sub.text = "%s · %s" % [str(item.get("rarity", "")), GameData.gear_type_label(item_type)]
-	sub.add_theme_font_size_override("font_size", 9)
+	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	title_col.add_child(sub)
 
@@ -558,7 +558,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		var flavor := Label.new()
 		flavor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		flavor.text = str(item.get("flavor_text", "Crate"))
-		flavor.add_theme_font_size_override("font_size", 10)
+		flavor.add_theme_font_size_override("font_size", 13)
 		flavor.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(flavor)
 	else:
@@ -568,7 +568,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		var gone := Label.new()
 		gone.text = "YANKED" if yanked else "SOLD"
 		gone.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		gone.add_theme_font_size_override("font_size", 11)
+		gone.add_theme_font_size_override("font_size", 15)
 		gone.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_display_font(gone)
 		col.add_child(gone)
@@ -603,7 +603,7 @@ func _compare_badge(slot: Dictionary, equipped: Dictionary, class_key: String, i
 	))
 	var lab := Label.new()
 	lab.text = text
-	lab.add_theme_font_size_override("font_size", 9)
+	lab.add_theme_font_size_override("font_size", 12)
 	lab.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(lab)
 	panel.add_child(lab)
@@ -635,7 +635,7 @@ func _stat_delta_row(slot: Dictionary, equipped: Dictionary) -> HBoxContainer:
 			var dtxt := ("+%s" % d) if d > 0 else str(d)
 			lab.text = "%s %s (%s)" % [icon, v, dtxt]
 			lab.add_theme_color_override("font_color", ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else color))
-		lab.add_theme_font_size_override("font_size", 9)
+		lab.add_theme_font_size_override("font_size", 12)
 		ClientUi.apply_body_font(lab)
 		row.add_child(lab)
 	return row
@@ -649,14 +649,14 @@ func _gear_actions(item: Dictionary, is_hot: bool, is_bundle: bool, cost: int, n
 	row.add_child(price_col)
 	var price := Label.new()
 	price.text = "✦ %s" % cost
-	price.add_theme_font_size_override("font_size", 12)
+	price.add_theme_font_size_override("font_size", 16)
 	price.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(price)
 	price_col.add_child(price)
 	if nova > 0:
 		var np := Label.new()
 		np.text = "💎 %s" % nova
-		np.add_theme_font_size_override("font_size", 11)
+		np.add_theme_font_size_override("font_size", 15)
 		np.add_theme_color_override("font_color", Color("#FCD34D"))
 		ClientUi.apply_display_font(np)
 		price_col.add_child(np)
@@ -671,7 +671,7 @@ func _gear_actions(item: Dictionary, is_hot: bool, is_bundle: bool, cost: int, n
 	var buy := Button.new()
 	buy.text = "Open" if is_bundle else "Buy"
 	ClientUi.apply_primary_button(buy)
-	buy.add_theme_font_size_override("font_size", 11)
+	buy.add_theme_font_size_override("font_size", 15)
 	buy.pressed.connect(func() -> void: _on_buy_gear(slot_id, is_hot, false, cost, nova))
 	row.add_child(buy)
 	return row
@@ -680,7 +680,7 @@ func _gear_actions(item: Dictionary, is_hot: bool, is_bundle: bool, cost: int, n
 func _apply_haggle_btn(btn: Button) -> void:
 	## Web: fuchsia border/text Haggle chip
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 10)
+	btn.add_theme_font_size_override("font_size", 13)
 	var f := Color("#E879F9")
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(
 		Color(f.r, f.g, f.b, 0.08), Color(f.r, f.g, f.b, 0.4)

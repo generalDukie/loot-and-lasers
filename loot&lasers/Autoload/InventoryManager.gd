@@ -58,22 +58,24 @@ func set_locked(item_id: String, locked: bool) -> Dictionary:
 	return await AuthManager.patch_item(item_id, {"locked": locked})
 
 
-func dissolve_item(item_id: String) -> Dictionary:
+func dissolve_item(item_id: String, auto_claim: bool = false) -> Dictionary:
 	if item_id.is_empty():
 		return {"ok": false, "error": "Missing item_id", "data": {}}
 	var res: Dictionary = await ApiClient.invoke("DissolveItem", {"item_id": item_id})
 	_apply_character(res)
-	if res.ok:
+	# Never auto-claim by default — claiming pending loot into a just-freed slot
+	# makes dissolve look like the item "turned into" the waiting drop.
+	if res.ok and auto_claim:
 		await try_claim_pending()
 	return res
 
 
-func dissolve_junk(item_ids: Array) -> Dictionary:
+func dissolve_junk(item_ids: Array, auto_claim: bool = false) -> Dictionary:
 	if item_ids.is_empty():
 		return {"ok": false, "error": "No items", "data": {}}
 	var res: Dictionary = await ApiClient.invoke("DissolveJunk", {"item_ids": item_ids})
 	_apply_character(res)
-	if res.ok:
+	if res.ok and auto_claim:
 		await try_claim_pending()
 	return res
 

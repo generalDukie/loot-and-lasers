@@ -75,7 +75,7 @@ func _build() -> void:
 	_compare = Label.new()
 	_compare.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_compare.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_compare.add_theme_font_size_override("font_size", 13)
+	_compare.add_theme_font_size_override("font_size", 17)
 	_compare.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(_compare)
 	_compare_panel.add_child(_compare)
@@ -200,7 +200,7 @@ func _refresh() -> void:
 	else:
 		var empty_hint := Label.new()
 		empty_hint.text = "Bag empty — drop equipped gear here to unequip"
-		empty_hint.add_theme_font_size_override("font_size", 12)
+		empty_hint.add_theme_font_size_override("font_size", 16)
 		empty_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(empty_hint)
 		empty_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -232,7 +232,7 @@ func _rebuild_doll(ch: Dictionary) -> void:
 		var stype := str(slot.get("type", ""))
 		if stype == "_portrait":
 			var wrap := PanelContainer.new()
-			wrap.custom_minimum_size = Vector2(112, 112)
+			wrap.custom_minimum_size = Vector2(149, 149)
 			wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 				Color(0.07, 0.09, 0.14, 1.0), Color(ClientUi.CYAN, 0.8)
 			))
@@ -249,7 +249,7 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 	var filled := not worn.is_empty()
 	var item_id := str(worn.get("id", "")) if filled else ""
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(104, 104)
+	panel.custom_minimum_size = Vector2(139, 139)
 	panel.tooltip_text = (
 		"%s — drag to bag to unequip · double-click to unequip" % str(worn.get("name", "Item"))
 		if filled
@@ -269,13 +269,13 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lab.text = label.to_upper()
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 9)
+	lab.add_theme_font_size_override("font_size", 12)
 	lab.add_theme_color_override("font_color", Color(0.55, 0.7, 0.85))
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
 	var icon_row := CenterContainer.new()
 	icon_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_row.custom_minimum_size = Vector2(0, 48)
+	icon_row.custom_minimum_size = Vector2(0, 64)
 	col.add_child(icon_row)
 	if filled:
 		icon_row.add_child(GearIcon.make(worn, 44.0))
@@ -284,7 +284,7 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 		empty_mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		empty_mark.text = "＋"
 		empty_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		empty_mark.add_theme_font_size_override("font_size", 18)
+		empty_mark.add_theme_font_size_override("font_size", 24)
 		empty_mark.add_theme_color_override("font_color", Color(0.35, 0.4, 0.48))
 		icon_row.add_child(empty_mark)
 	var name_l := Label.new()
@@ -292,7 +292,7 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	name_l.text = str(worn.get("name", "—")) if filled else "empty"
-	name_l.add_theme_font_size_override("font_size", 10)
+	name_l.add_theme_font_size_override("font_size", 13)
 	name_l.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0) if filled else Color(0.4, 0.45, 0.5))
 	ClientUi.apply_body_font(name_l)
 	col.add_child(name_l)
@@ -304,7 +304,7 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 			str(worn.get("rarity", "?")),
 			str(InventoryRules.class_power_rating(worn, str(GameManager.active_character.get("class", "Vanguard")))),
 		]
-		meta.add_theme_font_size_override("font_size", 9)
+		meta.add_theme_font_size_override("font_size", 12)
 		meta.add_theme_color_override("font_color", rarity_tint.lightened(0.2))
 		col.add_child(meta)
 
@@ -372,7 +372,7 @@ func _make_pending_row(pending: Dictionary) -> PanelContainer:
 	var title := Label.new()
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title.text = str(item.get("name", "Pending item"))
-	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", rarity_tint.lightened(0.18))
 	col.add_child(title)
 	var meta := Label.new()
@@ -381,7 +381,7 @@ func _make_pending_row(pending: Dictionary) -> PanelContainer:
 		str(item.get("type", "?")), str(item.get("rarity", "?")),
 		str(InventoryRules.estimate_sell_value(item)),
 	]
-	meta.add_theme_font_size_override("font_size", 12)
+	meta.add_theme_font_size_override("font_size", 16)
 	meta.add_theme_color_override("font_color", Color(0.75, 0.8, 0.85))
 	col.add_child(meta)
 	var claim := Button.new()
@@ -427,7 +427,7 @@ func _make_row(item: Dictionary, is_equipped: bool) -> PanelContainer:
 	var title := Label.new()
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title.text = ("%s%s" % ["NEW · " if is_new else "", str(item.get("name", "Item"))])
-	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", rarity_tint.lightened(0.2))
 	col.add_child(title)
 
@@ -447,7 +447,7 @@ func _make_row(item: Dictionary, is_equipped: bool) -> PanelContainer:
 			str(InventoryRules.class_power_rating(item, class_key)),
 			str(InventoryRules.estimate_sell_value(item)),
 		]
-	meta.add_theme_font_size_override("font_size", 12)
+	meta.add_theme_font_size_override("font_size", 16)
 	meta.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
 	col.add_child(meta)
 

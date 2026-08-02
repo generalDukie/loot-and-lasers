@@ -76,7 +76,7 @@ func _build() -> void:
 	p_col.add_child(_player_hp_label)
 	_player_hp = ProgressBar.new()
 	_player_hp.show_percentage = false
-	_player_hp.custom_minimum_size = Vector2(0, 18)
+	_player_hp.custom_minimum_size = Vector2(0, 24)
 	ClientUi.apply_hp_bar(_player_hp, ClientUi.CYAN)
 	p_col.add_child(_player_hp)
 	var e_col := VBoxContainer.new()
@@ -89,13 +89,13 @@ func _build() -> void:
 	e_col.add_child(_enemy_hp_label)
 	_enemy_hp = ProgressBar.new()
 	_enemy_hp.show_percentage = false
-	_enemy_hp.custom_minimum_size = Vector2(0, 18)
+	_enemy_hp.custom_minimum_size = Vector2(0, 24)
 	ClientUi.apply_hp_bar(_enemy_hp, ClientUi.DANGER)
 	e_col.add_child(_enemy_hp)
 
 	var stage := Control.new()
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stage.custom_minimum_size.y = 260
+	stage.custom_minimum_size.y = 347
 	col.add_child(stage)
 	var fighters := HBoxContainer.new()
 	fighters.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -104,27 +104,27 @@ func _build() -> void:
 	stage.add_child(fighters)
 	_player_portrait_slot = CenterContainer.new()
 	_player_portrait_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_player_portrait_slot.custom_minimum_size = Vector2(200, 220)
+	_player_portrait_slot.custom_minimum_size = Vector2(267, 293)
 	fighters.add_child(_player_portrait_slot)
 	_vs = Label.new()
 	_vs.text = "VS"
-	_vs.custom_minimum_size.x = 64
+	_vs.custom_minimum_size.x = 85
 	_vs.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_vs.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_vs.add_theme_font_size_override("font_size", 26)
+	_vs.add_theme_font_size_override("font_size", 35)
 	_vs.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(_vs)
 	fighters.add_child(_vs)
 	_enemy_portrait_slot = CenterContainer.new()
 	_enemy_portrait_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_enemy_portrait_slot.custom_minimum_size = Vector2(200, 220)
+	_enemy_portrait_slot.custom_minimum_size = Vector2(267, 293)
 	fighters.add_child(_enemy_portrait_slot)
 
 	_log = Label.new()
 	_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_log.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_log.custom_minimum_size = Vector2(0, 48)
-	_log.add_theme_font_size_override("font_size", 16)
+	_log.custom_minimum_size = Vector2(0, 64)
+	_log.add_theme_font_size_override("font_size", 21)
 	_log.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(_log)
 	col.add_child(_log)
@@ -139,14 +139,14 @@ func _build() -> void:
 	col.add_child(actions)
 	_skip_btn = Button.new()
 	_skip_btn.text = "Skip to Results"
-	_skip_btn.custom_minimum_size = Vector2(180, 0)
+	_skip_btn.custom_minimum_size = Vector2(240, 0)
 	ClientUi.apply_ghost_button(_skip_btn)
 	_skip_btn.pressed.connect(_skip_playback)
 	actions.add_child(_skip_btn)
 	_continue_btn = Button.new()
 	_continue_btn.text = "Settle"
 	_continue_btn.visible = false
-	_continue_btn.custom_minimum_size = Vector2(220, 0)
+	_continue_btn.custom_minimum_size = Vector2(293, 0)
 	ClientUi.apply_primary_button(_continue_btn)
 	_continue_btn.pressed.connect(_on_continue)
 	actions.add_child(_continue_btn)
@@ -210,7 +210,7 @@ func _boot() -> void:
 
 func _portrait_card(character: Dictionary, tint: Color) -> PanelContainer:
 	var frame := PanelContainer.new()
-	frame.custom_minimum_size = Vector2(180, 200)
+	frame.custom_minimum_size = Vector2(240, 267)
 	frame.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.035, 0.045, 0.075, 0.7), Color(tint, 0.82), 14, 2)
@@ -221,7 +221,7 @@ func _portrait_card(character: Dictionary, tint: Color) -> PanelContainer:
 	var name := Label.new()
 	name.text = str(character.get("name", "?"))
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.add_theme_font_size_override("font_size", 12)
+	name.add_theme_font_size_override("font_size", 16)
 	name.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(name)
 	col.add_child(name)

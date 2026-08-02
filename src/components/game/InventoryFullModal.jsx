@@ -169,13 +169,21 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
         const res = await api.functions.invoke("DissolvePendingLoot", {
           pending_loot_id: pendingLootId,
         });
-        clearPendingItem();
         const value = res.stardust_gained ?? res.data?.stardust_gained ?? computeStardustValue(item);
         const patch = res.patch || res.data?.patch;
         if (patch) onCharacterChange?.(patch);
-        setItems([]);
-        toast({ title: `${STARDUST_GLYPH} Dissolved ${item.name}`, description: `+${value} stardust` });
-        await hydratePendingLootFromServer(character.id);
+        clearPendingItem();
+        const advanced = await hydratePendingLootFromServer(character.id, { force: true });
+        if (advanced?.remaining > 0) {
+          toast({
+            title: `${STARDUST_GLYPH} Dissolved ${item.name}`,
+            description: `+${value} stardust. ${advanced.remaining} more overflow item${advanced.remaining === 1 ? "" : "s"} waiting — claim or dissolve.`,
+          });
+          await refreshBag();
+        } else {
+          setItems([]);
+          toast({ title: `${STARDUST_GLYPH} Dissolved ${item.name}`, description: `+${value} stardust` });
+        }
         return;
       }
 
@@ -196,10 +204,16 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
       const patch = res.patch || res.data?.patch;
       if (patch) onCharacterChange?.(patch);
       toast({ title: `${STARDUST_GLYPH} Dissolved ${item.name}`, description: `+${value} stardust` });
+      // Loot mode: do not auto-claim — that instantly fills the freed slot with the
+      // pending drop and feels like dissolve "replaced" the item. Player uses Claim.
+      if (mode === "loot") {
+        await refreshBag();
+        return;
+      }
       try {
         await afterFreeSlot();
       } catch (claimErr) {
-        toast({ title: "Item dissolved", description: claimErr?.message || "Could not auto-claim pending loot.", variant: "destructive" });
+        toast({ title: "Item dissolved", description: claimErr?.message || "Could not finish pending action.", variant: "destructive" });
         await refreshBag();
       }
     } catch (e) {
@@ -236,6 +250,10 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
 
       await api.functions.invoke("UseConsumable", { item_id: item.id });
       toast({ title: `🧪 Used ${item.name}`, description: "Slot freed." });
+      if (mode === "loot") {
+        await refreshBag();
+        return;
+      }
       await afterFreeSlot();
     } catch (e) {
       toast({ title: "Something went wrong", description: e?.message, variant: "destructive" });

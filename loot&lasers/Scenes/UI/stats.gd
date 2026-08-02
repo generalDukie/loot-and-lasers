@@ -106,7 +106,7 @@ func _build() -> void:
 	columns.add_child(left)
 
 	var right := VBoxContainer.new()
-	right.custom_minimum_size.x = 320
+	right.custom_minimum_size.x = 427
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.size_flags_stretch_ratio = 0.66
@@ -137,7 +137,7 @@ func _build() -> void:
 
 	# Lore rail — must not grow taller than the doll (no fit_content blowout).
 	var lore_panel := PanelContainer.new()
-	lore_panel.custom_minimum_size = Vector2(220, 0)
+	lore_panel.custom_minimum_size = Vector2(293, 0)
 	lore_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	lore_panel.clip_contents = true
 	lore_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
@@ -151,7 +151,7 @@ func _build() -> void:
 	var lore_eye := Label.new()
 	lore_eye.text = "LORE"
 	lore_eye.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	lore_eye.add_theme_font_size_override("font_size", 11)
+	lore_eye.add_theme_font_size_override("font_size", 15)
 	lore_eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(lore_eye)
 	lore_outer.add_child(lore_eye)
@@ -188,14 +188,14 @@ func _build() -> void:
 
 	_hero_name = Label.new()
 	_hero_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_name.add_theme_font_size_override("font_size", 16)
+	_hero_name.add_theme_font_size_override("font_size", 21)
 	_hero_name.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(_hero_name)
 	mid.add_child(_hero_name)
 
 	_operative_lab = Label.new()
 	_operative_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_operative_lab.add_theme_font_size_override("font_size", 9)
+	_operative_lab.add_theme_font_size_override("font_size", 12)
 	_operative_lab.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.7))
 	ClientUi.apply_body_font(_operative_lab)
 	_operative_lab.visible = false
@@ -203,7 +203,7 @@ func _build() -> void:
 
 	_title_lab = Label.new()
 	_title_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_lab.add_theme_font_size_override("font_size", 9)
+	_title_lab.add_theme_font_size_override("font_size", 12)
 	_title_lab.add_theme_color_override("font_color", Color("#FBBF24", 0.9))
 	ClientUi.apply_display_font(_title_lab)
 	_title_lab.visible = false
@@ -212,14 +212,14 @@ func _build() -> void:
 	_hero_meta = Label.new()
 	_hero_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hero_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hero_meta.add_theme_font_size_override("font_size", 9)
+	_hero_meta.add_theme_font_size_override("font_size", 12)
 	_hero_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_hero_meta)
 	mid.add_child(_hero_meta)
 
 	_xp_lab = Label.new()
 	_xp_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_xp_lab.add_theme_font_size_override("font_size", 9)
+	_xp_lab.add_theme_font_size_override("font_size", 12)
 	_xp_lab.add_theme_color_override("font_color", Color("#00E5FF"))
 	ClientUi.apply_display_font(_xp_lab)
 	mid.add_child(_xp_lab)
@@ -227,13 +227,13 @@ func _build() -> void:
 	_xp_bar.min_value = 0
 	_xp_bar.max_value = 100
 	_xp_bar.show_percentage = false
-	_xp_bar.custom_minimum_size = Vector2(0, 6)
+	_xp_bar.custom_minimum_size = Vector2(0, 8)
 	ClientUi.apply_hp_bar(_xp_bar, Color("#00E5FF"))
 	mid.add_child(_xp_bar)
 
 	# Stims / fuel mounts rail — labeled timer sections.
 	var stim_panel := PanelContainer.new()
-	stim_panel.custom_minimum_size = Vector2(132, 0)
+	stim_panel.custom_minimum_size = Vector2(176, 0)
 	stim_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stim_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.03, 0.07, 0.06, 0.95), Color(ClientUi.SUCCESS, 0.4), 10, 1
@@ -244,7 +244,7 @@ func _build() -> void:
 	stim_panel.add_child(stim_col)
 	_stims_lab = Label.new()
 	_stims_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_stims_lab.add_theme_font_size_override("font_size", 11)
+	_stims_lab.add_theme_font_size_override("font_size", 15)
 	_stims_lab.add_theme_color_override("font_color", Color(0.75, 0.95, 0.8))
 	ClientUi.apply_body_font(_stims_lab)
 	_stims_lab.visible = false
@@ -269,9 +269,9 @@ func _build() -> void:
 	)
 	bio_row.add_child(_bio_field)
 	_bio_count = Label.new()
-	_bio_count.custom_minimum_size.x = 28
+	_bio_count.custom_minimum_size.x = 37
 	_bio_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_bio_count.add_theme_font_size_override("font_size", 9)
+	_bio_count.add_theme_font_size_override("font_size", 12)
 	_bio_count.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
 	ClientUi.apply_body_font(_bio_count)
 	bio_row.add_child(_bio_count)
@@ -303,12 +303,12 @@ func _build() -> void:
 	var bag_label := Label.new()
 	bag_label.text = "🎒  BACKPACK"
 	bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bag_label.add_theme_font_size_override("font_size", 10)
+	bag_label.add_theme_font_size_override("font_size", 13)
 	bag_label.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(bag_label)
 	bag_row.add_child(bag_label)
 	_bag_count = Label.new()
-	_bag_count.add_theme_font_size_override("font_size", 10)
+	_bag_count.add_theme_font_size_override("font_size", 13)
 	_bag_count.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_bag_count)
 	bag_row.add_child(_bag_count)
@@ -367,14 +367,14 @@ func _populate() -> void:
 	head.add_child(head_copy)
 	var h2 := Label.new()
 	h2.text = "✨  ATTRIBUTE UPGRADES"
-	h2.add_theme_font_size_override("font_size", 13)
+	h2.add_theme_font_size_override("font_size", 17)
 	h2.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(h2)
 	head_copy.add_child(h2)
 	var sub := Label.new()
 	sub.text = "Spend stardust to permanently raise an attribute. Hold to keep buying."
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sub.add_theme_font_size_override("font_size", 10)
+	sub.add_theme_font_size_override("font_size", 13)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head_copy.add_child(sub)
@@ -385,19 +385,19 @@ func _populate() -> void:
 	var sd_eye := Label.new()
 	sd_eye.text = "YOUR STARDUST"
 	sd_eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	sd_eye.add_theme_font_size_override("font_size", 9)
+	sd_eye.add_theme_font_size_override("font_size", 12)
 	sd_eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(sd_eye)
 	sd_col.add_child(sd_eye)
 	_stardust_lab = Label.new()
 	_stardust_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_stardust_lab.add_theme_font_size_override("font_size", 16)
+	_stardust_lab.add_theme_font_size_override("font_size", 21)
 	_stardust_lab.add_theme_color_override("font_color", Color("#E879F9"))
 	ClientUi.apply_display_font(_stardust_lab)
 	sd_col.add_child(_stardust_lab)
 	_stardust_need = Label.new()
 	_stardust_need.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_stardust_need.add_theme_font_size_override("font_size", 9)
+	_stardust_need.add_theme_font_size_override("font_size", 12)
 	_stardust_need.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_stardust_need)
 	sd_col.add_child(_stardust_need)
@@ -482,7 +482,7 @@ func _refresh_values() -> void:
 		if buy != null and is_instance_valid(buy):
 			buy.text = "Upgrade\n✦ %s" % _fmt_int(cost)
 			buy.disabled = not affordable
-			buy.add_theme_font_size_override("font_size", 11)
+			buy.add_theme_font_size_override("font_size", 15)
 			buy.tooltip_text = (
 				"Spend %s ✦ · hold to keep buying" % cost if affordable
 				else "Need %s ✦ for the next point" % cost
@@ -603,8 +603,8 @@ func _rebuild_doll() -> void:
 			var badge := PanelContainer.new()
 			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			badge.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			badge.offset_left = -22
-			badge.offset_top = -22
+			badge.offset_left = -29
+			badge.offset_top = -29
 			badge.offset_right = -2
 			badge.offset_bottom = -2
 			var bsb := StyleBoxFlat.new()
@@ -621,7 +621,7 @@ func _rebuild_doll() -> void:
 			lvl.text = str(int(ch.get("level", 1)))
 			lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			lvl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			lvl.add_theme_font_size_override("font_size", 10)
+			lvl.add_theme_font_size_override("font_size", 13)
 			lvl.add_theme_color_override("font_color", ClientUi.VOID)
 			ClientUi.apply_display_font(lvl)
 			badge.add_child(lvl)
@@ -658,14 +658,14 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 	eye.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	eye.text = label.to_upper()
 	eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	eye.add_theme_font_size_override("font_size", 9)
+	eye.add_theme_font_size_override("font_size", 12)
 	eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(eye)
 	col.add_child(eye)
 	if filled:
 		var icon_wrap := CenterContainer.new()
 		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon_wrap.custom_minimum_size = Vector2(0, 48)
+		icon_wrap.custom_minimum_size = Vector2(0, 64)
 		col.add_child(icon_wrap)
 		icon_wrap.add_child(GearIcon.make(worn, 44.0))
 	var name := Label.new()
@@ -673,7 +673,7 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	name.text = str(worn.get("name", "—")) if filled else "empty"
-	name.add_theme_font_size_override("font_size", 10)
+	name.add_theme_font_size_override("font_size", 13)
 	name.add_theme_color_override("font_color", rarity_tint.lightened(0.15) if filled else ClientUi.MUTED)
 	ClientUi.apply_body_font(name)
 	col.add_child(name)
@@ -761,7 +761,7 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		name.text = str(item.get("name", "Item")).substr(0, 12)
-		name.add_theme_font_size_override("font_size", 10)
+		name.add_theme_font_size_override("font_size", 13)
 		name.add_theme_color_override(
 			"font_color",
 			ClientUi.rarity_color(str(item.get("rarity", ""))).lightened(0.2)
@@ -776,7 +776,7 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		mark.text = "·"
-		mark.add_theme_font_size_override("font_size", 14)
+		mark.add_theme_font_size_override("font_size", 19)
 		mark.add_theme_color_override("font_color", ClientUi.MUTED)
 		row.add_child(mark)
 
@@ -893,7 +893,7 @@ func _make_vault_teaser(c: Dictionary) -> PanelContainer:
 
 	var head := Label.new()
 	head.text = "COSMIC VAULT"
-	head.add_theme_font_size_override("font_size", 12)
+	head.add_theme_font_size_override("font_size", 16)
 	head.add_theme_color_override("font_color", Color("#E9D5FF"))
 	ClientUi.apply_display_font(head)
 	col.add_child(head)
@@ -931,13 +931,13 @@ func _make_vault_teaser(c: Dictionary) -> PanelContainer:
 	var tot_lab := Label.new()
 	tot_lab.text = "TOTAL COLLECTION"
 	tot_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tot_lab.add_theme_font_size_override("font_size", 10)
+	tot_lab.add_theme_font_size_override("font_size", 13)
 	tot_lab.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(tot_lab)
 	tot_row.add_child(tot_lab)
 	var tot_val := Label.new()
 	tot_val.text = "%s/%s · %s%%" % [discovered, total, int(round(pct))]
-	tot_val.add_theme_font_size_override("font_size", 10)
+	tot_val.add_theme_font_size_override("font_size", 13)
 	tot_val.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(tot_val)
 	tot_row.add_child(tot_val)
@@ -946,12 +946,12 @@ func _make_vault_teaser(c: Dictionary) -> PanelContainer:
 	bar.max_value = 100
 	bar.value = pct
 	bar.show_percentage = false
-	bar.custom_minimum_size.y = 6
+	bar.custom_minimum_size.y = 8
 	ClientUi.apply_hp_bar(bar, ClientUi.CYAN)
 	total_col.add_child(bar)
 	var xp_bonus := Label.new()
 	xp_bonus.text = "✨ XP Bonus: +%s%% from all sources" % int(round(pct))
-	xp_bonus.add_theme_font_size_override("font_size", 10)
+	xp_bonus.add_theme_font_size_override("font_size", 13)
 	xp_bonus.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(xp_bonus)
 	total_col.add_child(xp_bonus)
@@ -970,7 +970,7 @@ func _make_vault_teaser(c: Dictionary) -> PanelContainer:
 	]:
 		var chip_lab := Label.new()
 		chip_lab.text = "%s %s" % [chip[0], chip[1]]
-		chip_lab.add_theme_font_size_override("font_size", 9)
+		chip_lab.add_theme_font_size_override("font_size", 12)
 		chip_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(chip_lab)
 		var chip_panel := PanelContainer.new()
@@ -1005,7 +1005,7 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 
 	var icon := Label.new()
 	icon.text = str(GameData.STAT_ICONS.get(stat, ""))
-	icon.add_theme_font_size_override("font_size", 16)
+	icon.add_theme_font_size_override("font_size", 21)
 	row.add_child(icon)
 
 	var col := VBoxContainer.new()
@@ -1018,14 +1018,14 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	col.add_child(title_row)
 	var title := Label.new()
 	title.text = str(StatsRules.ATTR_LABELS.get(stat, stat.capitalize()))
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", accent.lightened(0.2))
 	ClientUi.apply_display_font(title)
 	title_row.add_child(title)
 	if is_primary:
 		var badge := Label.new()
 		badge.text = "Primary"
-		badge.add_theme_font_size_override("font_size", 8)
+		badge.add_theme_font_size_override("font_size", 11)
 		badge.add_theme_color_override("font_color", Color("#FDE68A"))
 		ClientUi.apply_display_font(badge)
 		title_row.add_child(badge)
@@ -1035,19 +1035,19 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	col.add_child(val_row)
 	var value_lab := Label.new()
 	value_lab.text = "0"
-	value_lab.add_theme_font_size_override("font_size", 18)
+	value_lab.add_theme_font_size_override("font_size", 24)
 	value_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(value_lab)
 	val_row.add_child(value_lab)
 	var bonus_lab := Label.new()
-	bonus_lab.add_theme_font_size_override("font_size", 11)
+	bonus_lab.add_theme_font_size_override("font_size", 15)
 	bonus_lab.add_theme_color_override("font_color", ClientUi.SUCCESS)
 	ClientUi.apply_display_font(bonus_lab)
 	bonus_lab.visible = false
 	val_row.add_child(bonus_lab)
 
 	var buy := Button.new()
-	buy.custom_minimum_size = Vector2(88, 40)
+	buy.custom_minimum_size = Vector2(117, 53)
 	ClientUi.apply_primary_button(buy)
 	buy.button_down.connect(func() -> void: _start_hold(stat))
 	buy.button_up.connect(_stop_hold)
@@ -1072,19 +1072,19 @@ func _make_combat_card() -> VBoxContainer:
 	var h2 := Label.new()
 	h2.text = "⚔  COMBAT"
 	h2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h2.add_theme_font_size_override("font_size", 11)
+	h2.add_theme_font_size_override("font_size", 15)
 	h2.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(h2)
 	head.add_child(h2)
 	_combat_stim = Label.new()
 	_combat_stim.text = "⚗ Stim"
 	_combat_stim.visible = false
-	_combat_stim.add_theme_font_size_override("font_size", 9)
+	_combat_stim.add_theme_font_size_override("font_size", 12)
 	_combat_stim.add_theme_color_override("font_color", ClientUi.VIOLET)
 	ClientUi.apply_display_font(_combat_stim)
 	head.add_child(_combat_stim)
 	_combat_via = Label.new()
-	_combat_via.add_theme_font_size_override("font_size", 9)
+	_combat_via.add_theme_font_size_override("font_size", 12)
 	_combat_via.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_combat_via)
 	head.add_child(_combat_via)
@@ -1092,7 +1092,7 @@ func _make_combat_card() -> VBoxContainer:
 	var off_lab := Label.new()
 	off_lab.text = "OFFENSIVE"
 	off_lab.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	off_lab.add_theme_font_size_override("font_size", 8)
+	off_lab.add_theme_font_size_override("font_size", 11)
 	off_lab.add_theme_color_override("font_color", Color("#F59E0B"))
 	ClientUi.apply_display_font(off_lab)
 	root.add_child(off_lab)
@@ -1107,7 +1107,7 @@ func _make_combat_card() -> VBoxContainer:
 	var def_lab := Label.new()
 	def_lab.text = "DEFENSIVE"
 	def_lab.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	def_lab.add_theme_font_size_override("font_size", 8)
+	def_lab.add_theme_font_size_override("font_size", 11)
 	def_lab.add_theme_color_override("font_color", Color("#A78BFA"))
 	ClientUi.apply_display_font(def_lab)
 	root.add_child(def_lab)
@@ -1173,13 +1173,13 @@ func _combat_tile(label: String, color: Color) -> PanelContainer:
 	var l := Label.new()
 	l.text = label.to_upper()
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 9)
+	l.add_theme_font_size_override("font_size", 12)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(l)
 	col.add_child(l)
 	var v := Label.new()
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_theme_font_size_override("font_size", 15)
+	v.add_theme_font_size_override("font_size", 20)
 	v.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(v)
 	col.add_child(v)

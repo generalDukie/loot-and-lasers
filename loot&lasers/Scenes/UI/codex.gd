@@ -46,7 +46,7 @@ func _build() -> void:
 
 	# Web: max-w-2xl ≈ 672px, max-h ~84%.
 	_sheet = PanelContainer.new()
-	_sheet.custom_minimum_size = Vector2(672, 560)
+	_sheet.custom_minimum_size = Vector2(896, 747)
 	_sheet.mouse_filter = Control.MOUSE_FILTER_STOP
 	_sheet.add_theme_stylebox_override(
 		"panel",
@@ -71,14 +71,14 @@ func _build() -> void:
 
 	var book := Label.new()
 	book.text = "📘"
-	book.add_theme_font_size_override("font_size", 18)
+	book.add_theme_font_size_override("font_size", 24)
 	book.add_theme_color_override("font_color", ClientUi.CYAN)
 	head_row.add_child(book)
 
 	var title := Label.new()
 	title.text = "Codex & Guide"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head_row.add_child(title)
@@ -86,8 +86,8 @@ func _build() -> void:
 	var close := Button.new()
 	close.text = "✕"
 	close.flat = true
-	close.custom_minimum_size = Vector2(32, 28)
-	close.add_theme_font_size_override("font_size", 14)
+	close.custom_minimum_size = Vector2(43, 37)
+	close.add_theme_font_size_override("font_size", 19)
 	close.add_theme_color_override("font_color", ClientUi.MUTED)
 	close.add_theme_color_override("font_hover_color", ClientUi.TEXT)
 	close.pressed.connect(func() -> void: GameManager.close_overlay())
@@ -125,7 +125,7 @@ func _build() -> void:
 	tab_wrap.add_theme_constant_override("margin_bottom", 8)
 	root.add_child(tab_wrap)
 	var tab_scroll := ScrollContainer.new()
-	tab_scroll.custom_minimum_size = Vector2(0, 36)
+	tab_scroll.custom_minimum_size = Vector2(0, 48)
 	tab_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	tab_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	tab_wrap.add_child(tab_scroll)
@@ -139,8 +139,8 @@ func _build() -> void:
 		var b := Button.new()
 		b.text = "%s  %s" % [str(s.get("icon", "•")), str(s.get("label", "?"))]
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(0, 28)
-		b.add_theme_font_size_override("font_size", 11)
+		b.custom_minimum_size = Vector2(0, 37)
+		b.add_theme_font_size_override("font_size", 15)
 		ClientUi.apply_display_font(b)
 		b.set_meta("section_id", sid)
 		b.set_meta("tint", tint)

@@ -178,7 +178,7 @@ func _build() -> void:
 
 func _make_top_chrome() -> Control:
 	var top := PanelContainer.new()
-	top.custom_minimum_size.y = 48
+	top.custom_minimum_size.y = ClientUi.px(48)
 	top.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	top.add_theme_stylebox_override(
 		"panel",
@@ -186,7 +186,7 @@ func _make_top_chrome() -> Control:
 	)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 9)
+	row.add_theme_constant_override("separation", ClientUi.px(9))
 	top.add_child(row)
 
 	# Left hub control — title high, "Station Hub" subtitle, click → hub.
@@ -199,7 +199,7 @@ func _make_top_chrome() -> Control:
 	brand.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	brand.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	brand.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	brand.custom_minimum_size = Vector2(220, 40)
+	brand.custom_minimum_size = ClientUi.pxv(Vector2(220, 40))
 	var brand_idle := _nav_style(Color.TRANSPARENT, Color.TRANSPARENT)
 	brand_idle.content_margin_left = 6
 	brand_idle.content_margin_right = 12
@@ -231,7 +231,7 @@ func _make_top_chrome() -> Control:
 
 	var title := BrandGradientTitle.new()
 	title.title_text = "LOOT & LASERS"
-	title.font_size = 24
+	title.font_size = 32
 	title.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	title.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	brand_col.add_child(title)
@@ -239,7 +239,7 @@ func _make_top_chrome() -> Control:
 	var hub_sub := Label.new()
 	hub_sub.text = "Station Hub"
 	hub_sub.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	hub_sub.add_theme_font_size_override("font_size", 9)
+	hub_sub.add_theme_font_size_override("font_size", 12)
 	hub_sub.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.78))
 	hub_sub.add_theme_constant_override("line_spacing", -2)
 	ClientUi.apply_display_font(hub_sub)
@@ -277,23 +277,23 @@ func _make_top_chrome() -> Control:
 	_activity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_activity_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_activity_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_activity_label.add_theme_font_size_override("font_size", 10)
+	_activity_label.add_theme_font_size_override("font_size", 13)
 	_activity_label.add_theme_color_override("font_color", ClientUi.SUCCESS)
 	ClientUi.apply_display_font(_activity_label)
 	_activity.add_child(_activity_label)
 	_activity_label.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	_activity_label.offset_left = 10
-	_activity_label.offset_right = -10
+	_activity_label.offset_left = 13
+	_activity_label.offset_right = -13
 	_activity_label.offset_top = 3
 	_activity_label.offset_bottom = -3
-	_activity.custom_minimum_size = Vector2(176, 36)
+	_activity.custom_minimum_size = Vector2(235, 48)
 
 	_clock = Label.new()
-	_clock.custom_minimum_size.x = 74
+	_clock.custom_minimum_size.x = 99
 	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_clock.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_clock.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_clock.add_theme_font_size_override("font_size", 11)
+	_clock.add_theme_font_size_override("font_size", 15)
 	_clock.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_clock)
 	row.add_child(_clock)
@@ -326,7 +326,7 @@ func _make_rail() -> Control:
 	##   rescale). Changing nav must not force the console to grow/scroll.
 	## - No minimum button height / font floor — fit comes first.
 	var rail := PanelContainer.new()
-	rail.custom_minimum_size.x = 272
+	rail.custom_minimum_size.x = ClientUi.px(272)
 	rail.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	# Critical: rail must shrink with the window — never dictate shell height.
 	rail.clip_contents = true
@@ -347,7 +347,7 @@ func _make_rail() -> Control:
 	var console_label := Label.new()
 	console_label.text = "OPERATIVE CONSOLE"
 	console_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	console_label.add_theme_font_size_override("font_size", 11)
+	console_label.add_theme_font_size_override("font_size", 15)
 	console_label.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.82))
 	ClientUi.apply_display_font(console_label)
 	console_header.add_child(console_label)
@@ -384,7 +384,7 @@ func _make_rail() -> Control:
 		var heading := Label.new()
 		heading.text = str(group.get("name", "")).to_upper()
 		heading.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		heading.add_theme_font_size_override("font_size", 9)
+		heading.add_theme_font_size_override("font_size", 12)
 		heading.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
 		ClientUi.apply_display_font(heading)
 		group_box.add_child(heading)
@@ -503,7 +503,7 @@ func _make_operative_panel() -> Control:
 	panel.add_theme_constant_override("separation", 2)
 
 	_portrait_host = CenterContainer.new()
-	_portrait_host.custom_minimum_size.y = 212
+	_portrait_host.custom_minimum_size.y = 283
 	_portrait_host.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			GameManager.go_stats()
@@ -515,7 +515,7 @@ func _make_operative_panel() -> Control:
 	_operative_name.flat = true
 	_operative_name.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_operative_name.tooltip_text = "Open character sheet"
-	_operative_name.add_theme_font_size_override("font_size", 13)
+	_operative_name.add_theme_font_size_override("font_size", 17)
 	_operative_name.add_theme_color_override("font_color", ClientUi.TEXT)
 	_operative_name.add_theme_color_override("font_hover_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(_operative_name)
@@ -524,24 +524,24 @@ func _make_operative_panel() -> Control:
 
 	_operative_meta = Label.new()
 	_operative_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_operative_meta.add_theme_font_size_override("font_size", 10)
+	_operative_meta.add_theme_font_size_override("font_size", 13)
 	_operative_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	panel.add_child(_operative_meta)
 
 	_xp_label = Label.new()
 	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_xp_label.add_theme_font_size_override("font_size", 9)
+	_xp_label.add_theme_font_size_override("font_size", 12)
 	_xp_label.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	panel.add_child(_xp_label)
 	_xp_bar = ProgressBar.new()
 	_xp_bar.show_percentage = false
-	_xp_bar.custom_minimum_size.y = 6
+	_xp_bar.custom_minimum_size.y = 8
 	ClientUi.apply_hp_bar(_xp_bar, ClientUi.CYAN)
 	panel.add_child(_xp_bar)
 
 	_operative_title = Label.new()
 	_operative_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_operative_title.add_theme_font_size_override("font_size", 9)
+	_operative_title.add_theme_font_size_override("font_size", 12)
 	_operative_title.add_theme_color_override("font_color", ClientUi.GOLD)
 	ClientUi.apply_display_font(_operative_title)
 	panel.add_child(_operative_title)
@@ -620,7 +620,7 @@ func _fit_currency_fonts() -> void:
 func _make_readout(parent: Control, icon_id: String, tint: Color, open_store := false) -> Label:
 	var frame := PanelContainer.new()
 	# Keep pane height in the same console band; icons + bold amounts fit inside.
-	frame.custom_minimum_size.y = 36
+	frame.custom_minimum_size.y = 48
 	frame.add_theme_stylebox_override(
 		"panel",
 		_shell_panel_style(Color(0.055, 0.07, 0.105, 0.96), Color(tint, 0.45), 7, 8, 4)
@@ -650,7 +650,7 @@ func _make_readout(parent: Control, icon_id: String, tint: Color, open_store := 
 	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	value.clip_text = false
 	value.autowrap_mode = TextServer.AUTOWRAP_OFF
-	value.add_theme_font_size_override("font_size", 25)
+	value.add_theme_font_size_override("font_size", 33)
 	value.add_theme_color_override("font_color", tint.lightened(0.15))
 	ClientUi.apply_bold_display_font(value)
 	value.set_meta("readout_icon", icon)
@@ -660,11 +660,11 @@ func _make_readout(parent: Control, icon_id: String, tint: Color, open_store := 
 		var plus := Button.new()
 		plus.text = "+"
 		plus.focus_mode = Control.FOCUS_NONE
-		plus.custom_minimum_size = Vector2(22, 22)
+		plus.custom_minimum_size = Vector2(29, 29)
 		plus.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		plus.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		plus.tooltip_text = "Crystal Store"
-		plus.add_theme_font_size_override("font_size", 18)
+		plus.add_theme_font_size_override("font_size", 24)
 		plus.add_theme_color_override("font_color", Color("#1A1400"))
 		plus.add_theme_color_override("font_hover_color", Color("#1A1400"))
 		plus.add_theme_color_override("font_pressed_color", Color("#1A1400"))
@@ -751,7 +751,7 @@ func _set_notification_open(open: bool) -> void:
 		# Expand dock stack so the sheet has room above the FAB.
 		var stack := _notif_panel.get_parent() as Control
 		if stack != null:
-			stack.offset_top = -440
+			stack.offset_top = -587
 		_notif_panel.visible = true
 		_notif_panel.modulate.a = 0.0
 		_notif_panel.scale = Vector2(0.88, 0.88)
@@ -776,7 +776,7 @@ func _set_notification_open(open: bool) -> void:
 				_notif_panel.scale = Vector2.ONE
 				var stack := _notif_panel.get_parent() as Control
 				if stack != null:
-					stack.offset_top = -80
+					stack.offset_top = -107
 		)
 
 
@@ -864,15 +864,15 @@ func _build_notification_center() -> void:
 	stack.anchor_top = 1.0
 	stack.anchor_right = 1.0
 	stack.anchor_bottom = 1.0
-	stack.offset_left = -368
-	stack.offset_top = -80
-	stack.offset_right = -14
-	stack.offset_bottom = -14
+	stack.offset_left = -491
+	stack.offset_top = -107
+	stack.offset_right = -19
+	stack.offset_bottom = -19
 	_notif_dock.add_child(stack)
 
 	_notif_panel = PanelContainer.new()
 	_notif_panel.visible = false
-	_notif_panel.custom_minimum_size = Vector2(340, 360)
+	_notif_panel.custom_minimum_size = Vector2(453, 480)
 	_notif_panel.size_flags_vertical = Control.SIZE_SHRINK_END
 	_notif_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
 	_notif_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -891,12 +891,12 @@ func _build_notification_center() -> void:
 	var title := Label.new()
 	title.text = "🔔  Notifications"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(title)
 	header.add_child(title)
 	_notif_meta = Label.new()
-	_notif_meta.add_theme_font_size_override("font_size", 10)
+	_notif_meta.add_theme_font_size_override("font_size", 13)
 	_notif_meta.add_theme_color_override("font_color", ClientUi.DANGER)
 	ClientUi.apply_body_font(_notif_meta)
 	header.add_child(_notif_meta)
@@ -911,7 +911,7 @@ func _build_notification_center() -> void:
 	header.add_child(mark)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size.y = 280
+	scroll.custom_minimum_size.y = 373
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(scroll)
 	_notif_list = VBoxContainer.new()
@@ -921,7 +921,7 @@ func _build_notification_center() -> void:
 
 	# Round FAB — mirrors web `w-12 h-12 rounded-full`.
 	var fab_wrap := Control.new()
-	fab_wrap.custom_minimum_size = Vector2(48, 48)
+	fab_wrap.custom_minimum_size = Vector2(64, 64)
 	fab_wrap.size_flags_horizontal = Control.SIZE_SHRINK_END
 	fab_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stack.add_child(fab_wrap)
@@ -930,10 +930,10 @@ func _build_notification_center() -> void:
 	_notif_btn.text = "🔔"
 	_notif_btn.tooltip_text = "Open notifications"
 	_notif_btn.focus_mode = Control.FOCUS_NONE
-	_notif_btn.custom_minimum_size = Vector2(48, 48)
+	_notif_btn.custom_minimum_size = Vector2(64, 64)
 	_notif_btn.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_notif_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	_notif_btn.add_theme_font_size_override("font_size", 18)
+	_notif_btn.add_theme_font_size_override("font_size", 24)
 	_style_notif_fab(false)
 	_notif_btn.pressed.connect(toggle_notifications)
 	ClientUi.apply_interaction_motion(_notif_btn, 1.06)
@@ -947,10 +947,10 @@ func _build_notification_center() -> void:
 	badge_chip.anchor_top = 0.0
 	badge_chip.anchor_right = 1.0
 	badge_chip.anchor_bottom = 0.0
-	badge_chip.offset_left = -8.0
-	badge_chip.offset_top = -6.0
-	badge_chip.offset_right = 12.0
-	badge_chip.offset_bottom = 12.0
+	badge_chip.offset_left = -11.0
+	badge_chip.offset_top = -8.0
+	badge_chip.offset_right = 16.0
+	badge_chip.offset_bottom = 16.0
 	var badge_bg := StyleBoxFlat.new()
 	badge_bg.bg_color = ClientUi.DANGER
 	badge_bg.set_corner_radius_all(9)
@@ -964,7 +964,7 @@ func _build_notification_center() -> void:
 	_notif_badge = Label.new()
 	_notif_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_notif_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_notif_badge.add_theme_font_size_override("font_size", 10)
+	_notif_badge.add_theme_font_size_override("font_size", 13)
 	_notif_badge.add_theme_color_override("font_color", Color.WHITE)
 	ClientUi.apply_display_font(_notif_badge)
 	_notif_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1185,8 +1185,8 @@ func _animate_page_entry(page_control: Control) -> void:
 	if page_control == null or not is_instance_valid(page_control):
 		return
 	# Keep anchors full-rect; only nudge offset for the slide-in so hit targets stay valid.
-	page_control.offset_left = 18.0
-	page_control.offset_right = 18.0
+	page_control.offset_left = 24.0
+	page_control.offset_right = 24.0
 	page_control.modulate.a = 0.0
 	var tween := page_control.create_tween()
 	tween.set_parallel(true)
@@ -1261,7 +1261,7 @@ func _add_shell_chrome(frame: PanelContainer) -> void:
 		Vector2(-14, -14),
 	]:
 		var rivet := ColorRect.new()
-		rivet.custom_minimum_size = Vector2(8, 8)
+		rivet.custom_minimum_size = Vector2(11, 11)
 		rivet.color = Color(0.42, 0.5, 0.58, 0.95)
 		rivet.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if pos.x < 0:
@@ -1293,8 +1293,8 @@ func _add_shell_chrome(frame: PanelContainer) -> void:
 	rail.anchor_right = 0.88
 	rail.anchor_top = 0.0
 	rail.anchor_bottom = 0.0
-	rail.offset_top = 10.0
-	rail.offset_bottom = 11.0
+	rail.offset_top = 13.0
+	rail.offset_bottom = 15.0
 	chrome.add_child(rail)
 	var rail_pulse := rail.create_tween().set_loops()
 	rail_pulse.tween_property(rail, "modulate:a", 0.42, 2.4).set_trans(Tween.TRANS_SINE)
@@ -1307,8 +1307,8 @@ func _add_shell_chrome(frame: PanelContainer) -> void:
 	left_tick.anchor_right = 0.0
 	left_tick.anchor_top = 0.22
 	left_tick.anchor_bottom = 0.78
-	left_tick.offset_left = 6.0
-	left_tick.offset_right = 8.0
+	left_tick.offset_left = 8.0
+	left_tick.offset_right = 11.0
 	chrome.add_child(left_tick)
 
 	var right_tick := ColorRect.new()
@@ -1318,8 +1318,8 @@ func _add_shell_chrome(frame: PanelContainer) -> void:
 	right_tick.anchor_right = 1.0
 	right_tick.anchor_top = 0.22
 	right_tick.anchor_bottom = 0.78
-	right_tick.offset_left = -8.0
-	right_tick.offset_right = -6.0
+	right_tick.offset_left = -11.0
+	right_tick.offset_right = -8.0
 	chrome.add_child(right_tick)
 
 

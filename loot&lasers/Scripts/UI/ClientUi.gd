@@ -20,6 +20,20 @@ const WARNING := Color("#F5A94E")
 const ANIM_FPS := 120
 const ANIM_FRAME_SEC := 1.0 / float(ANIM_FPS)
 
+## Design canvas helpers. After the 1080→1440 conversion, prefer literal 1440p
+## sizes for new code. Use px() only for leftover 1080-authored literals.
+static func px(v: float) -> int:
+	return ResolutionRules.px(v)
+
+
+static func pxf(v: float) -> float:
+	return ResolutionRules.pxf(v)
+
+
+static func pxv(v: Vector2) -> Vector2:
+	return ResolutionRules.pxv(v)
+
+
 const DISPLAY_FONT_PATH := "res://Assets/Fonts/Exo2-VariableFont_wght.ttf"
 const BODY_FONT_PATH := "res://Assets/Fonts/Inter-VariableFont_opsz_wght.ttf"
 
@@ -32,6 +46,12 @@ static var _painted_style_cache: Dictionary = {}
 static var _button_style_cache: Dictionary = {}
 ## Soft nebula renders fine at lower internal resolution; stretch hides the difference.
 const SPACE_RENDER_SCALE := 0.4
+
+
+static func _space_layout_size() -> Vector2i:
+	if ResolutionManager != null:
+		return ResolutionManager.content_scale_size()
+	return ResolutionRules.LEGACY_DESIGN_SIZE
 
 
 static func display_font() -> Font:
@@ -175,13 +195,13 @@ static func painted_panel_style(
 	s.anti_aliasing = true
 	s.anti_aliasing_size = 1.1
 	s.border_blend = true
-	s.content_margin_left = 14
-	s.content_margin_right = 14
-	s.content_margin_top = 11
-	s.content_margin_bottom = 11
+	s.content_margin_left = px(14)
+	s.content_margin_right = px(14)
+	s.content_margin_top = px(11)
+	s.content_margin_bottom = px(11)
 	s.shadow_color = Color(0.0, 0.0, 0.0, 0.28)
-	s.shadow_size = 10
-	s.shadow_offset = Vector2(0, 4)
+	s.shadow_size = px(10)
+	s.shadow_offset = Vector2(0, px(4))
 	_painted_style_cache[key] = s
 	return s
 
@@ -200,7 +220,7 @@ static func make_painted_frame(
 	panel.add_child(studs)
 	for pos in [Vector2(8, 8), Vector2(-8, 8), Vector2(8, -8), Vector2(-8, -8)]:
 		var stud := ColorRect.new()
-		stud.custom_minimum_size = Vector2(5, 5)
+		stud.custom_minimum_size = Vector2(7, 7)
 		stud.color = Color(border, 0.55)
 		stud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if pos.x < 0:
@@ -243,13 +263,13 @@ static func button_style(bg: Color, border: Color) -> StyleBoxFlat:
 	s.anti_aliasing = true
 	s.anti_aliasing_size = 1.1
 	s.border_blend = true
-	s.content_margin_left = 14
-	s.content_margin_right = 14
-	s.content_margin_top = 8
-	s.content_margin_bottom = 8
+	s.content_margin_left = px(14)
+	s.content_margin_right = px(14)
+	s.content_margin_top = px(8)
+	s.content_margin_bottom = px(8)
 	s.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
-	s.shadow_size = 5
-	s.shadow_offset = Vector2(0, 2)
+	s.shadow_size = px(5)
+	s.shadow_offset = Vector2(0, px(2))
 	_button_style_cache[key] = s
 	return s
 
@@ -257,7 +277,7 @@ static func button_style(bg: Color, border: Color) -> StyleBoxFlat:
 static func apply_primary_button(btn: Button) -> void:
 	## Web `.painted-btn` — cyan bevel, dark label (hsl 190/192).
 	apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_font_size_override("font_size", px(13))
 	var top := Color(0.11, 0.83, 0.93)       # hsl(190 90% 56%)
 	var bottom := Color(0.04, 0.65, 0.80)    # hsl(192 90% 42%)
 	var border := Color(0.03, 0.46, 0.57)    # hsl(192 90% 30%)
@@ -280,7 +300,7 @@ static func apply_primary_button(btn: Button) -> void:
 static func apply_tinted_painted_button(btn: Button, tint: Color) -> void:
 	## Web Crystal Store pack price buttons — painted-btn with pack accent gradient.
 	apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_font_size_override("font_size", px(13))
 	var top := tint
 	var bottom := tint.darkened(0.12)
 	var border := tint.darkened(0.28)
@@ -306,20 +326,20 @@ static func _painted_btn_style(top: Color, bottom: Color, border: Color) -> Styl
 	s.corner_radius_top_right = 10
 	s.corner_radius_bottom_left = 10
 	s.corner_radius_bottom_right = 10
-	s.content_margin_left = 14
-	s.content_margin_right = 14
-	s.content_margin_top = 8
-	s.content_margin_bottom = 8
+	s.content_margin_left = px(14)
+	s.content_margin_right = px(14)
+	s.content_margin_top = px(8)
+	s.content_margin_bottom = px(8)
 	s.shadow_color = Color(border.r, border.g, border.b, 0.95)
 	s.shadow_size = 0
-	s.shadow_offset = Vector2(0, 4)
+	s.shadow_offset = Vector2(0, px(4))
 	return s
 
 
 static func apply_accent_chip_button(btn: Button) -> void:
 	## Web arena Refresh: bg-accent/15 text-accent border-accent/30 (violet).
 	apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 11)
+	btn.add_theme_font_size_override("font_size", px(11))
 	var a := VIOLET
 	btn.add_theme_stylebox_override("normal", button_style(Color(a.r, a.g, a.b, 0.15), Color(a.r, a.g, a.b, 0.30)))
 	btn.add_theme_stylebox_override("hover", button_style(Color(a.r, a.g, a.b, 0.25), Color(a.r, a.g, a.b, 0.45)))
@@ -333,7 +353,7 @@ static func apply_accent_chip_button(btn: Button) -> void:
 static func apply_revenge_button(btn: Button) -> void:
 	## Web ArenaMatchHistory REVENGE: rose border/fill.
 	apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 10)
+	btn.add_theme_font_size_override("font_size", px(10))
 	btn.add_theme_stylebox_override("normal", button_style(Color(0.96, 0.25, 0.37, 0.15), Color(0.98, 0.45, 0.55, 0.40)))
 	btn.add_theme_stylebox_override("hover", button_style(Color(0.96, 0.25, 0.37, 0.25), Color(0.98, 0.45, 0.55, 0.55)))
 	btn.add_theme_stylebox_override("pressed", button_style(Color(0.96, 0.25, 0.37, 0.20), Color(0.98, 0.45, 0.55, 0.45)))
@@ -363,7 +383,7 @@ static func make_section_header(eyebrow: String, title: String, hint: String = "
 	if not eyebrow.is_empty():
 		var eye := Label.new()
 		eye.text = eyebrow.to_upper()
-		eye.add_theme_font_size_override("font_size", 10)
+		eye.add_theme_font_size_override("font_size", 13)
 		eye.add_theme_color_override("font_color", Color(CYAN, 0.72))
 		apply_display_font(eye)
 		wrap.add_child(eye)
@@ -371,12 +391,12 @@ static func make_section_header(eyebrow: String, title: String, hint: String = "
 	title_row.add_theme_constant_override("separation", 8)
 	wrap.add_child(title_row)
 	var tick := ColorRect.new()
-	tick.custom_minimum_size = Vector2(3, 16)
+	tick.custom_minimum_size = Vector2(3, 21)
 	tick.color = Color(CYAN, 0.75)
 	title_row.add_child(tick)
 	var t := Label.new()
 	t.text = title
-	t.add_theme_font_size_override("font_size", 15)
+	t.add_theme_font_size_override("font_size", 20)
 	t.add_theme_color_override("font_color", TEXT)
 	t.add_theme_color_override("font_shadow_color", Color(CYAN, 0.16))
 	t.add_theme_constant_override("shadow_offset_x", 1)
@@ -384,7 +404,7 @@ static func make_section_header(eyebrow: String, title: String, hint: String = "
 	apply_display_font(t)
 	title_row.add_child(t)
 	var rule := ColorRect.new()
-	rule.custom_minimum_size = Vector2(32, 1)
+	rule.custom_minimum_size = Vector2(43, 1)
 	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rule.color = Color(CYAN, 0.18)
 	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -393,7 +413,7 @@ static func make_section_header(eyebrow: String, title: String, hint: String = "
 		var h := Label.new()
 		h.text = hint
 		h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		h.add_theme_font_size_override("font_size", 11)
+		h.add_theme_font_size_override("font_size", 15)
 		h.add_theme_color_override("font_color", MUTED)
 		apply_body_font(h)
 		wrap.add_child(h)
@@ -447,8 +467,8 @@ static func _gradient_layer(colors: PackedColorArray, radial := false, opacity :
 	gradient.colors = colors
 	var texture := GradientTexture2D.new()
 	texture.gradient = gradient
-	texture.width = 1920
-	texture.height = 1080
+	texture.width = _space_layout_size().x
+	texture.height = _space_layout_size().y
 	if radial:
 		texture.fill = GradientTexture2D.FILL_RADIAL
 		texture.fill_from = Vector2(0.18, 0.2)
@@ -474,9 +494,10 @@ static func _space_material_layer(mood: String, opacity: float, intensity: float
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.set_meta("space_host", true)
 
+	var layout := _space_layout_size()
 	var vp_size := Vector2i(
-		maxi(320, int(1920.0 * SPACE_RENDER_SCALE)),
-		maxi(180, int(1080.0 * SPACE_RENDER_SCALE))
+		maxi(320, int(float(layout.x) * SPACE_RENDER_SCALE)),
+		maxi(180, int(float(layout.y) * SPACE_RENDER_SCALE))
 	)
 	var viewport := SubViewport.new()
 	viewport.transparent_bg = true
@@ -649,7 +670,7 @@ static func make_subtitle(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_font_size_override("font_size", 16)
 	label.add_theme_color_override("font_color", MUTED)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	apply_body_font(label)
@@ -660,7 +681,7 @@ static func make_field(placeholder: String, secret: bool = false) -> LineEdit:
 	var edit := LineEdit.new()
 	edit.placeholder_text = placeholder
 	edit.secret = secret
-	edit.custom_minimum_size = Vector2(0, 38)
+	edit.custom_minimum_size = Vector2(0, 51)
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	apply_body_font(edit)
 	edit.add_theme_stylebox_override("normal", painted_panel_style(PANEL_DEEP, Color(0.25, 0.36, 0.48, 0.9), 6, 1))
@@ -674,7 +695,7 @@ static func make_field(placeholder: String, secret: bool = false) -> LineEdit:
 
 
 static func apply_selector(selector: OptionButton) -> void:
-	selector.custom_minimum_size = Vector2(0, 40)
+	selector.custom_minimum_size = Vector2(0, 53)
 	selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	apply_body_font(selector)
 	selector.add_theme_stylebox_override(
@@ -707,19 +728,19 @@ static func dock_button_style(tint: Color, hover := false) -> StyleBoxFlat:
 	style.border_width_top = 1
 	style.border_width_bottom = 3
 	style.set_corner_radius_all(10)
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	style.content_margin_top = 10
-	style.content_margin_bottom = 10
+	style.content_margin_left = px(8)
+	style.content_margin_right = px(8)
+	style.content_margin_top = px(10)
+	style.content_margin_bottom = px(10)
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.4 if hover else 0.28)
-	style.shadow_size = 8 if hover else 5
-	style.shadow_offset = Vector2(0, 3)
+	style.shadow_size = px(8) if hover else px(5)
+	style.shadow_offset = Vector2(0, px(3))
 	return style
 
 
 static func apply_dock_button(btn: Button, tint: Color) -> void:
 	apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 11)
+	btn.add_theme_font_size_override("font_size", px(11))
 	btn.add_theme_stylebox_override("normal", dock_button_style(tint, false))
 	btn.add_theme_stylebox_override("hover", dock_button_style(tint, true))
 	btn.add_theme_stylebox_override("pressed", dock_button_style(tint.darkened(0.14), false))
@@ -733,7 +754,7 @@ static func make_status() -> Label:
 	var label := Label.new()
 	label.text = ""
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_font_size_override("font_size", 15)
 	label.add_theme_color_override("font_color", DANGER)
 	apply_body_font(label)
 	return label
@@ -747,7 +768,7 @@ static func make_currency_chip(symbol: String, value: Variant, tint: Color = CYA
 	)
 	var label := Label.new()
 	label.text = "%s  %s" % [symbol, str(value)]
-	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_font_size_override("font_size", 15)
 	label.add_theme_color_override("font_color", tint.lightened(0.18))
 	apply_display_font(label)
 	chip.add_child(label)
@@ -807,16 +828,16 @@ static func show_toast(host: Node, title: String, body: String = "", duration: f
 	)
 	panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.offset_top = 16
-	panel.offset_bottom = 16
-	panel.custom_minimum_size = Vector2(320, 0)
+	panel.offset_top = 21
+	panel.offset_bottom = 21
+	panel.custom_minimum_size = Vector2(427, 0)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
 	var t := Label.new()
 	t.text = title
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	t.add_theme_font_size_override("font_size", 15)
+	t.add_theme_font_size_override("font_size", 20)
 	t.add_theme_color_override("font_color", Color(0.85, 1.0, 0.9))
 	col.add_child(t)
 	if not body.is_empty():
@@ -824,7 +845,7 @@ static func show_toast(host: Node, title: String, body: String = "", duration: f
 		b.text = body
 		b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.add_theme_font_size_override("font_size", 12)
+		b.add_theme_font_size_override("font_size", 16)
 		b.add_theme_color_override("font_color", Color(0.75, 0.88, 0.82))
 		col.add_child(b)
 	panel.modulate.a = 0.0

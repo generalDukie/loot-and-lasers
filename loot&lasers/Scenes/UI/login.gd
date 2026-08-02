@@ -49,7 +49,7 @@ func _build() -> void:
 	margin.add_child(center)
 
 	var root := VBoxContainer.new()
-	root.custom_minimum_size = Vector2(400, 0)
+	root.custom_minimum_size = Vector2(533, 0)
 	root.add_theme_constant_override("separation", 0)
 	center.add_child(root)
 
@@ -61,7 +61,7 @@ func _build() -> void:
 	var icon_wrap := CenterContainer.new()
 	head.add_child(icon_wrap)
 	var icon_panel := PanelContainer.new()
-	icon_panel.custom_minimum_size = Vector2(56, 56)
+	icon_panel.custom_minimum_size = Vector2(75, 75)
 	var icon_sb := StyleBoxFlat.new()
 	icon_sb.bg_color = ClientUi.CYAN
 	icon_sb.set_corner_radius_all(14)
@@ -71,7 +71,7 @@ func _build() -> void:
 	_icon_lab.text = "↪"
 	_icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_icon_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_icon_lab.add_theme_font_size_override("font_size", 24)
+	_icon_lab.add_theme_font_size_override("font_size", 32)
 	_icon_lab.add_theme_color_override("font_color", ClientUi.VOID)
 	ClientUi.apply_display_font(_icon_lab)
 	icon_panel.add_child(_icon_lab)
@@ -79,7 +79,7 @@ func _build() -> void:
 	_title = Label.new()
 	_title.text = "Welcome back"
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title.add_theme_font_size_override("font_size", 28)
+	_title.add_theme_font_size_override("font_size", 37)
 	_title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(_title)
 	head.add_child(_title)
@@ -87,13 +87,13 @@ func _build() -> void:
 	_subtitle = Label.new()
 	_subtitle.text = "Log in to your account"
 	_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_subtitle.add_theme_font_size_override("font_size", 14)
+	_subtitle.add_theme_font_size_override("font_size", 19)
 	_subtitle.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_subtitle)
 	head.add_child(_subtitle)
 
 	var head_gap := Control.new()
-	head_gap.custom_minimum_size.y = 28
+	head_gap.custom_minimum_size.y = 37
 	root.add_child(head_gap)
 
 	# Card
@@ -128,7 +128,7 @@ func _build() -> void:
 	form.add_child(_status_banner)
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status.add_theme_font_size_override("font_size", 13)
+	_status.add_theme_font_size_override("font_size", 17)
 	_status.add_theme_color_override("font_color", ClientUi.DANGER)
 	ClientUi.apply_body_font(_status)
 	_status_banner.add_child(_status)
@@ -136,7 +136,7 @@ func _build() -> void:
 	# Email
 	form.add_child(_field_label("Email"))
 	_email = ClientUi.make_field("✉  you@example.com")
-	_email.custom_minimum_size.y = 44
+	_email.custom_minimum_size.y = 59
 	form.add_child(_email)
 
 	# Password row label + Forgot
@@ -148,14 +148,14 @@ func _build() -> void:
 	_forgot_link = Button.new()
 	_forgot_link.text = "Forgot password?"
 	_forgot_link.flat = true
-	_forgot_link.add_theme_font_size_override("font_size", 11)
+	_forgot_link.add_theme_font_size_override("font_size", 15)
 	_forgot_link.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_body_font(_forgot_link)
 	_forgot_link.pressed.connect(func() -> void: _set_mode("forgot"))
 	_password_row.add_child(_forgot_link)
 
 	_password = ClientUi.make_field("🔒  ••••••••", true)
-	_password.custom_minimum_size.y = 44
+	_password.custom_minimum_size.y = 59
 	form.add_child(_password)
 
 	# Confirm (register)
@@ -165,7 +165,7 @@ func _build() -> void:
 	form.add_child(_confirm_wrap)
 	_confirm_wrap.add_child(_field_label("Confirm Password"))
 	_confirm = ClientUi.make_field("🔒  ••••••••", true)
-	_confirm.custom_minimum_size.y = 44
+	_confirm.custom_minimum_size.y = 59
 	_confirm_wrap.add_child(_confirm)
 
 	# OTP
@@ -174,13 +174,13 @@ func _build() -> void:
 	_otp_wrap.add_theme_constant_override("separation", 10)
 	form.add_child(_otp_wrap)
 	_otp = ClientUi.make_field("6-digit code")
-	_otp.custom_minimum_size.y = 44
+	_otp.custom_minimum_size.y = 59
 	_otp.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_otp_wrap.add_child(_otp)
 	_resend_btn = Button.new()
 	_resend_btn.text = "Didn't receive the code?  Resend"
 	_resend_btn.flat = true
-	_resend_btn.add_theme_font_size_override("font_size", 12)
+	_resend_btn.add_theme_font_size_override("font_size", 16)
 	_resend_btn.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_resend_btn)
 	_resend_btn.pressed.connect(_on_resend_otp)
@@ -191,7 +191,7 @@ func _build() -> void:
 	_forgot_sent.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_forgot_sent.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_forgot_sent.text = "If an account exists with that email, you'll receive a password reset link shortly."
-	_forgot_sent.add_theme_font_size_override("font_size", 13)
+	_forgot_sent.add_theme_font_size_override("font_size", 17)
 	_forgot_sent.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(_forgot_sent)
 	form.add_child(_forgot_sent)
@@ -215,7 +215,7 @@ func _build() -> void:
 
 	_primary_btn = Button.new()
 	_primary_btn.text = "Log in"
-	_primary_btn.custom_minimum_size.y = 44
+	_primary_btn.custom_minimum_size.y = 59
 	_primary_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_primary_button(_primary_btn)
 	_primary_btn.pressed.connect(_on_primary)
@@ -225,14 +225,14 @@ func _build() -> void:
 	_back_from_forgot.visible = false
 	_back_from_forgot.text = "‹  Back to log in"
 	_back_from_forgot.flat = true
-	_back_from_forgot.add_theme_font_size_override("font_size", 12)
+	_back_from_forgot.add_theme_font_size_override("font_size", 16)
 	_back_from_forgot.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_body_font(_back_from_forgot)
 	_back_from_forgot.pressed.connect(func() -> void: _set_mode("login"))
 	form.add_child(_back_from_forgot)
 
 	var foot_gap := Control.new()
-	foot_gap.custom_minimum_size.y = 20
+	foot_gap.custom_minimum_size.y = 27
 	root.add_child(foot_gap)
 
 	_footer = RichTextLabel.new()
@@ -241,7 +241,7 @@ func _build() -> void:
 	_footer.scroll_active = false
 	_footer.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_footer.custom_minimum_size.y = 24
+	_footer.custom_minimum_size.y = 32
 	_footer.add_theme_font_size_override("normal_font_size", 13)
 	_footer.add_theme_color_override("default_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_footer)
@@ -254,7 +254,7 @@ func _build() -> void:
 func _field_label(text: String) -> Label:
 	var lab := Label.new()
 	lab.text = text
-	lab.add_theme_font_size_override("font_size", 12)
+	lab.add_theme_font_size_override("font_size", 16)
 	lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(lab)
 	return lab

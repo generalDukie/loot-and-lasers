@@ -33,7 +33,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 
 	var card := PanelContainer.new()
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.custom_minimum_size = Vector2(440, 0)
+	card.custom_minimum_size = Vector2(587, 0)
 	card.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.045, 0.05, 0.085, 0.98), Color(accent, 0.65), 14, 2)
@@ -47,7 +47,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	var eyebrow := Label.new()
 	eyebrow.text = "COMBAT REPORT"
 	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	eyebrow.add_theme_font_size_override("font_size", 9)
+	eyebrow.add_theme_font_size_override("font_size", 12)
 	eyebrow.add_theme_color_override("font_color", Color(accent, 0.75))
 	ClientUi.apply_display_font(eyebrow)
 	col.add_child(eyebrow)
@@ -55,7 +55,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	var icon := Label.new()
 	icon.text = "◆" if won else "◇"
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.add_theme_font_size_override("font_size", 28)
+	icon.add_theme_font_size_override("font_size", 37)
 	icon.add_theme_color_override("font_color", accent)
 	ClientUi.apply_display_font(icon)
 	col.add_child(icon)
@@ -68,7 +68,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	else:
 		heading.text = "ARENA VICTORY" if won else "ARENA DEFEAT"
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	heading.add_theme_font_size_override("font_size", 20)
+	heading.add_theme_font_size_override("font_size", 27)
 	heading.add_theme_color_override("font_color", accent)
 	ClientUi.apply_display_font(heading)
 	col.add_child(heading)
@@ -78,7 +78,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		var tlab := Label.new()
 		tlab.text = title
 		tlab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		tlab.add_theme_font_size_override("font_size", 14)
+		tlab.add_theme_font_size_override("font_size", 19)
 		tlab.add_theme_color_override("font_color", ClientUi.TEXT)
 		ClientUi.apply_display_font(tlab)
 		col.add_child(tlab)
@@ -89,7 +89,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		slab.text = subtitle
 		slab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		slab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		slab.add_theme_font_size_override("font_size", 11)
+		slab.add_theme_font_size_override("font_size", 15)
 		slab.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(slab)
 
@@ -121,7 +121,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		var nlab := Label.new()
 		nlab.text = note
 		nlab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		nlab.add_theme_font_size_override("font_size", 11)
+		nlab.add_theme_font_size_override("font_size", 15)
 		nlab.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(nlab)
 
@@ -185,7 +185,7 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 	root.add_child(center)
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(440, 0)
+	card.custom_minimum_size = Vector2(587, 0)
 	card.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.05, 0.06, 0.1, 0.98), Color("#FBBF24", 0.65), 16, 2)
@@ -199,7 +199,7 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 	var spark := Label.new()
 	spark.text = "LEVEL UP"
 	spark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	spark.add_theme_font_size_override("font_size", 12)
+	spark.add_theme_font_size_override("font_size", 16)
 	spark.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(spark)
 	col.add_child(spark)
@@ -207,7 +207,7 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 	var levels := Label.new()
 	levels.text = "%s  →  %s" % [from_level, to_level]
 	levels.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	levels.add_theme_font_size_override("font_size", 36)
+	levels.add_theme_font_size_override("font_size", 48)
 	levels.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(levels)
 	col.add_child(levels)
@@ -215,7 +215,7 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 	var name := Label.new()
 	name.text = str(character.get("name", "Operative"))
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.add_theme_font_size_override("font_size", 13)
+	name.add_theme_font_size_override("font_size", 17)
 	name.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(name)
 	col.add_child(name)
@@ -248,7 +248,7 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 		var lab := Label.new()
 		lab.text = str(row["label"])
 		lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lab.add_theme_font_size_override("font_size", 12)
+		lab.add_theme_font_size_override("font_size", 16)
 		lab.add_theme_color_override("font_color", ClientUi.MUTED)
 		line.add_child(lab)
 		var val := Label.new()
@@ -256,7 +256,7 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 			val.text = "%.1f%%  (%s%.1f%%)" % [b, "+" if delta >= 0 else "", delta]
 		else:
 			val.text = "%s  (%s%s)" % [int(round(b)), "+" if delta >= 0 else "", int(round(delta))]
-		val.add_theme_font_size_override("font_size", 12)
+		val.add_theme_font_size_override("font_size", 16)
 		val.add_theme_color_override("font_color", ClientUi.SUCCESS if delta >= 0 else ClientUi.DANGER)
 		ClientUi.apply_display_font(val)
 		line.add_child(val)
@@ -374,7 +374,7 @@ static func _reward_row(label: String, value: String, color: Color, icon: String
 	panel.add_child(row)
 	var ic := Label.new()
 	ic.text = icon
-	ic.add_theme_font_size_override("font_size", 18)
+	ic.add_theme_font_size_override("font_size", 24)
 	row.add_child(ic)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -382,13 +382,13 @@ static func _reward_row(label: String, value: String, color: Color, icon: String
 	row.add_child(col)
 	var lab := Label.new()
 	lab.text = label
-	lab.add_theme_font_size_override("font_size", 10)
+	lab.add_theme_font_size_override("font_size", 13)
 	lab.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
 	var val := Label.new()
 	val.text = value
-	val.add_theme_font_size_override("font_size", 16)
+	val.add_theme_font_size_override("font_size", 21)
 	val.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(val)
 	col.add_child(val)

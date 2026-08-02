@@ -21,6 +21,7 @@ config/icon="res://icon.svg"
 
 ApiClient="*res://Autoload/ApiClient.gd"
 AuthManager="*res://Autoload/AuthManager.gd"
+ResolutionManager="*res://Autoload/ResolutionManager.gd"
 MissionManager="*res://Autoload/MissionManager.gd"
 ArenaManager="*res://Autoload/ArenaManager.gd"
 ShopManager="*res://Autoload/ShopManager.gd"
@@ -47,9 +48,20 @@ SaveManager="*res://Autoload/SaveManager.gd"
 
 [display]
 
-window/size/viewport_width=1920
-window/size/viewport_height=1080
+window/size/viewport_width=2560
+window/size/viewport_height=1440
 window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/stretch/scale_mode="fractional"
+window/dpi/allow_hidpi=true
+
+[gui]
+
+theme/default_font_antialiasing=1
+theme/default_font_hinting=1
+theme/default_font_subpixel_positioning=4
+theme/default_font_multichannel_signed_distance_field=false
+fonts/dynamic_fonts/use_oversampling=true
 
 [physics]
 

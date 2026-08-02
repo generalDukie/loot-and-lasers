@@ -65,7 +65,7 @@ func _build() -> void:
 	scroll.add_child(center)
 
 	var root := VBoxContainer.new()
-	root.custom_minimum_size.x = 720
+	root.custom_minimum_size.x = 960
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.add_theme_constant_override("separation", 14)
 	center.add_child(root)
@@ -78,7 +78,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "⚄  Nebula Casino"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 27)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head.add_child(title)
@@ -86,7 +86,7 @@ func _build() -> void:
 	var tag := Label.new()
 	tag.text = "Risk it for the glittering prize. The house always remembers."
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tag.add_theme_font_size_override("font_size", 11)
+	tag.add_theme_font_size_override("font_size", 15)
 	tag.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tag)
 	head.add_child(tag)
@@ -102,7 +102,7 @@ func _build() -> void:
 	))
 	chips.add_child(sd_chip)
 	_balance_sd = Label.new()
-	_balance_sd.add_theme_font_size_override("font_size", 13)
+	_balance_sd.add_theme_font_size_override("font_size", 17)
 	_balance_sd.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(_balance_sd)
 	sd_chip.add_child(_balance_sd)
@@ -113,13 +113,13 @@ func _build() -> void:
 	))
 	chips.add_child(nova_chip)
 	_balance_nova = Label.new()
-	_balance_nova.add_theme_font_size_override("font_size", 13)
+	_balance_nova.add_theme_font_size_override("font_size", 17)
 	_balance_nova.add_theme_color_override("font_color", Color("#FCD34D"))
 	ClientUi.apply_display_font(_balance_nova)
 	nova_chip.add_child(_balance_nova)
 
 	_max_bet_lab = Label.new()
-	_max_bet_lab.add_theme_font_size_override("font_size", 10)
+	_max_bet_lab.add_theme_font_size_override("font_size", 13)
 	_max_bet_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_max_bet_lab)
 	chips.add_child(_max_bet_lab)
@@ -146,7 +146,7 @@ func _build() -> void:
 	)
 	disclaimer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	disclaimer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	disclaimer.add_theme_font_size_override("font_size", 10)
+	disclaimer.add_theme_font_size_override("font_size", 13)
 	disclaimer.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.70))
 	ClientUi.apply_body_font(disclaimer)
 	root.add_child(disclaimer)
@@ -163,7 +163,7 @@ func _make_sealed_banner() -> PanelContainer:
 	sealed.add_child(row)
 	var gem := Label.new()
 	gem.text = "💎"
-	gem.add_theme_font_size_override("font_size", 28)
+	gem.add_theme_font_size_override("font_size", 37)
 	row.add_child(gem)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -171,14 +171,14 @@ func _make_sealed_banner() -> PanelContainer:
 	row.add_child(col)
 	var t := Label.new()
 	t.text = "Crystal tables sealed"
-	t.add_theme_font_size_override("font_size", 13)
+	t.add_theme_font_size_override("font_size", 17)
 	t.add_theme_color_override("font_color", Color("#FDE68A"))
 	ClientUi.apply_display_font(t)
 	col.add_child(t)
 	var b := Label.new()
 	b.text = "Nova Crystal games are locked until the Crystal Store is live — they were minting hard currency. Stardust games below are still open."
 	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	b.add_theme_font_size_override("font_size", 11)
+	b.add_theme_font_size_override("font_size", 15)
 	b.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(b)
 	col.add_child(b)
@@ -187,7 +187,7 @@ func _make_sealed_banner() -> PanelContainer:
 
 func _make_dice_card() -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(360, 0)
+	panel.custom_minimum_size = Vector2(480, 0)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.06, 0.05, 0.09, 0.96), Color(GameData.STARDUST_COLOR, 0.35), 14, 1
@@ -202,12 +202,12 @@ func _make_dice_card() -> PanelContainer:
 	var t := Label.new()
 	t.text = "✦  Stardust Dice"
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	t.add_theme_font_size_override("font_size", 13)
+	t.add_theme_font_size_override("font_size", 17)
 	t.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(t)
 	head.add_child(t)
 	_dice_max_meta = Label.new()
-	_dice_max_meta.add_theme_font_size_override("font_size", 9)
+	_dice_max_meta.add_theme_font_size_override("font_size", 12)
 	_dice_max_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_dice_max_meta)
 	head.add_child(_dice_max_meta)
@@ -215,19 +215,19 @@ func _make_dice_card() -> PanelContainer:
 	var rules := Label.new()
 	rules.text = "Roll a die. Call High (4–6) or Low (1–3) — call it right to double your stardust."
 	rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	rules.add_theme_font_size_override("font_size", 11)
+	rules.add_theme_font_size_override("font_size", 15)
 	rules.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(rules)
 	col.add_child(rules)
 
 	# Felt tray — larger die stage with soft stardust glow (web h-16, we lean into Godot polish).
 	_dice_tray = PanelContainer.new()
-	_dice_tray.custom_minimum_size = Vector2(0, 148)
+	_dice_tray.custom_minimum_size = Vector2(0, 197)
 	_dice_tray.add_theme_stylebox_override("panel", _dice_tray_style(Color(GameData.STARDUST_COLOR, 0.28)))
 	col.add_child(_dice_tray)
 
 	var tray_inner := Control.new()
-	tray_inner.custom_minimum_size = Vector2(0, 140)
+	tray_inner.custom_minimum_size = Vector2(0, 187)
 	tray_inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_dice_tray.add_child(tray_inner)
 
@@ -236,10 +236,10 @@ func _make_dice_card() -> PanelContainer:
 	_dice_glow.set_anchors_preset(PRESET_CENTER)
 	_dice_glow.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_dice_glow.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_dice_glow.offset_left = -54
-	_dice_glow.offset_right = 54
-	_dice_glow.offset_top = -54
-	_dice_glow.offset_bottom = 54
+	_dice_glow.offset_left = -72
+	_dice_glow.offset_right = 72
+	_dice_glow.offset_top = -72
+	_dice_glow.offset_bottom = 72
 	_dice_glow.add_theme_stylebox_override("panel", _dice_glow_style(Color(GameData.STARDUST_COLOR, 0.18)))
 	tray_inner.add_child(_dice_glow)
 
@@ -254,7 +254,7 @@ func _make_dice_card() -> PanelContainer:
 	_dice_face.text = "⚄"
 	_dice_face.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_dice_face.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_dice_face.add_theme_font_size_override("font_size", 84)
+	_dice_face.add_theme_font_size_override("font_size", 112)
 	_dice_face.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98, 0.92))
 	_dice_face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	die_col.add_child(_dice_face)
@@ -262,7 +262,7 @@ func _make_dice_card() -> PanelContainer:
 	_dice_outcome = Label.new()
 	_dice_outcome.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_dice_outcome.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_dice_outcome.add_theme_font_size_override("font_size", 12)
+	_dice_outcome.add_theme_font_size_override("font_size", 16)
 	_dice_outcome.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_dice_outcome)
 	die_col.add_child(_dice_outcome)
@@ -273,7 +273,7 @@ func _make_dice_card() -> PanelContainer:
 	_dice_bet = SpinBox.new()
 	_dice_bet.min_value = 1
 	_dice_bet.step = 1
-	_dice_bet.custom_minimum_size.x = 96
+	_dice_bet.custom_minimum_size.x = 128
 	_dice_bet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bet_row.add_child(_dice_bet)
 	_dice_max_btn = Button.new()
@@ -338,7 +338,7 @@ func _set_dice_ambiance(tint: Color, glow_a: float = 0.18) -> void:
 
 func _make_wheel_card() -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(340, 0)
+	panel.custom_minimum_size = Vector2(453, 0)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.06, 0.05, 0.08, 0.96), Color("#F59E0B", 0.35), 14, 1
@@ -353,12 +353,12 @@ func _make_wheel_card() -> PanelContainer:
 	var t := Label.new()
 	t.text = "✦  Stardust Wheel"
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	t.add_theme_font_size_override("font_size", 13)
+	t.add_theme_font_size_override("font_size", 17)
 	t.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(t)
 	head.add_child(t)
 	_wheel_max_meta = Label.new()
-	_wheel_max_meta.add_theme_font_size_override("font_size", 9)
+	_wheel_max_meta.add_theme_font_size_override("font_size", 12)
 	_wheel_max_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_wheel_max_meta)
 	head.add_child(_wheel_max_meta)
@@ -366,7 +366,7 @@ func _make_wheel_card() -> PanelContainer:
 	var rules := Label.new()
 	rules.text = "Spin for a multiplier. Bust loses your stake; 2×–25× pays net profit of (mult−1)×bet."
 	rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	rules.add_theme_font_size_override("font_size", 11)
+	rules.add_theme_font_size_override("font_size", 15)
 	rules.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(rules)
 	col.add_child(rules)
@@ -377,7 +377,7 @@ func _make_wheel_card() -> PanelContainer:
 	_wheel_bet = SpinBox.new()
 	_wheel_bet.min_value = 1
 	_wheel_bet.step = 1
-	_wheel_bet.custom_minimum_size.x = 96
+	_wheel_bet.custom_minimum_size.x = 128
 	_wheel_bet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bet_row.add_child(_wheel_bet)
 	_wheel_max_btn = Button.new()
@@ -400,16 +400,16 @@ func _make_wheel_card() -> PanelContainer:
 	var pointer := Label.new()
 	pointer.text = "▼"
 	pointer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pointer.add_theme_font_size_override("font_size", 14)
+	pointer.add_theme_font_size_override("font_size", 19)
 	pointer.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(pointer)
 	stage.add_child(pointer)
 
 	var disc_wrap := CenterContainer.new()
-	disc_wrap.custom_minimum_size = Vector2(0, 110)
+	disc_wrap.custom_minimum_size = Vector2(0, 147)
 	stage.add_child(disc_wrap)
 	_wheel_disc = CasinoWheelDisc.new()
-	_wheel_disc.custom_minimum_size = Vector2(96, 96)
+	_wheel_disc.custom_minimum_size = Vector2(128, 128)
 	disc_wrap.add_child(_wheel_disc)
 
 	var legend := HBoxContainer.new()
@@ -426,7 +426,7 @@ func _make_wheel_card() -> PanelContainer:
 		legend.add_child(chip)
 		var chip_lab := Label.new()
 		chip_lab.text = str(tier.get("label", ""))
-		chip_lab.add_theme_font_size_override("font_size", 9)
+		chip_lab.add_theme_font_size_override("font_size", 12)
 		chip_lab.add_theme_color_override("font_color", tier.get("color", ClientUi.MUTED))
 		ClientUi.apply_display_font(chip_lab)
 		chip.add_child(chip_lab)
@@ -434,7 +434,7 @@ func _make_wheel_card() -> PanelContainer:
 	_wheel_outcome = Label.new()
 	_wheel_outcome.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_wheel_outcome.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_wheel_outcome.add_theme_font_size_override("font_size", 12)
+	_wheel_outcome.add_theme_font_size_override("font_size", 16)
 	_wheel_outcome.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_wheel_outcome)
 	col.add_child(_wheel_outcome)

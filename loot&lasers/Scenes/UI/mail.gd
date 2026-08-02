@@ -87,11 +87,11 @@ func _build() -> void:
 	var left_scroll := ScrollContainer.new()
 	left_scroll.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left_scroll.custom_minimum_size = Vector2(300, 0)
+	left_scroll.custom_minimum_size = Vector2(400, 0)
 	split.add_child(left_scroll)
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_list.custom_minimum_size = Vector2(280, 0)
+	_list.custom_minimum_size = Vector2(373, 0)
 	_list.add_theme_constant_override("separation", 6)
 	left_scroll.add_child(_list)
 
@@ -208,7 +208,7 @@ func _show_detail(mail: Dictionary) -> void:
 	var title := Label.new()
 	title.text = str(mail.get("subject", "(no subject)"))
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 24)
 	_detail.add_child(title)
 
 	var meta := Label.new()
@@ -218,14 +218,14 @@ func _show_detail(mail: Dictionary) -> void:
 		str(mail.get("mail_type", "")),
 		str(mail.get("folder", _folder)),
 	]
-	meta.add_theme_font_size_override("font_size", 12)
+	meta.add_theme_font_size_override("font_size", 16)
 	meta.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	_detail.add_child(meta)
 
 	var body := Label.new()
 	body.text = str(mail.get("body", ""))
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", 14)
+	body.add_theme_font_size_override("font_size", 19)
 	_detail.add_child(body)
 
 	var mid := str(mail.get("id", ""))
@@ -351,7 +351,7 @@ func _show_compose() -> void:
 	_status.text = "Compose a message."
 	var title := Label.new()
 	title.text = "Compose"
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 24)
 	_detail.add_child(title)
 
 	var to_lab := Label.new()
@@ -371,7 +371,7 @@ func _show_compose() -> void:
 	_detail.add_child(subj)
 	var body := TextEdit.new()
 	body.placeholder_text = "Message (max 1000)"
-	body.custom_minimum_size = Vector2(0, 120)
+	body.custom_minimum_size = Vector2(0, 160)
 	body.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_detail.add_child(body)
 

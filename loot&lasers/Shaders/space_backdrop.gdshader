@@ -96,7 +96,7 @@ void fragment() {
 
 	float vignette = smoothstep(0.95, 0.22, length(centered));
 	color *= mix(0.48, 1.0, vignette);
-	float scanline = 0.988 + 0.012 * sin(uv.y * 1080.0 * 3.14159);
+	float scanline = 0.988 + 0.012 * sin(uv.y * 1440.0 * 3.14159);
 	color *= scanline;
 
 	COLOR = vec4(color, transparency);

@@ -149,7 +149,7 @@ func _collect_timer_labels(node: Node, out: Array) -> void:
 func _section_label(text: String) -> Label:
 	var lab := Label.new()
 	lab.text = text
-	lab.add_theme_font_size_override("font_size", 10)
+	lab.add_theme_font_size_override("font_size", 13)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(lab)
 	return lab
@@ -159,7 +159,7 @@ func _empty_hint(text: String) -> Label:
 	var lab := Label.new()
 	lab.text = text
 	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lab.add_theme_font_size_override("font_size", 10)
+	lab.add_theme_font_size_override("font_size", 13)
 	lab.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
 	ClientUi.apply_body_font(lab)
 	return lab
@@ -195,20 +195,20 @@ func _buff_chip(buff: Dictionary) -> PanelContainer:
 	var label := "ALL" if stat == "all" else "%s %s" % [icon_stat, stat]
 	head.text = "⚗ +%s%% %s" % [int(round(float(buff.get("mult", 0)) * 100.0)), label]
 	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	head.add_theme_font_size_override("font_size", 11)
+	head.add_theme_font_size_override("font_size", 15)
 	head.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(head)
 	col.add_child(head)
 	var sub := Label.new()
 	sub.text = str(buff.get("name", "Stim"))
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sub.add_theme_font_size_override("font_size", 9)
+	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(sub)
 	var timer := Label.new()
 	timer.set_meta("effect_timer", true)
 	timer.text = format_remaining(str(buff.get("expires_at", "")))
-	timer.add_theme_font_size_override("font_size", 12)
+	timer.add_theme_font_size_override("font_size", 16)
 	timer.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(timer)
 	col.add_child(timer)
@@ -230,20 +230,20 @@ func _mount_chip(mount: Dictionary) -> PanelContainer:
 	var head := Label.new()
 	head.text = "🚀 −%s%% Mission Time" % int(round(float(mount.get("speed", 0)) * 100.0))
 	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	head.add_theme_font_size_override("font_size", 11)
+	head.add_theme_font_size_override("font_size", 15)
 	head.add_theme_color_override("font_color", Color("#FDE68A"))
 	ClientUi.apply_display_font(head)
 	col.add_child(head)
 	var sub := Label.new()
 	sub.text = str(mount.get("name", "Fuel Mount"))
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sub.add_theme_font_size_override("font_size", 9)
+	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(sub)
 	var timer := Label.new()
 	timer.set_meta("effect_timer", true)
 	timer.text = format_remaining(str(mount.get("expires_at", "")))
-	timer.add_theme_font_size_override("font_size", 12)
+	timer.add_theme_font_size_override("font_size", 16)
 	timer.add_theme_color_override("font_color", Color("#FBBF24", 0.9))
 	ClientUi.apply_display_font(timer)
 	col.add_child(timer)

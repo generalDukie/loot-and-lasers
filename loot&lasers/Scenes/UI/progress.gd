@@ -49,7 +49,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "🏆  Achievements"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", 32)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head.add_child(title)
@@ -61,7 +61,7 @@ func _build() -> void:
 
 	_meta = Label.new()
 	_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_meta.add_theme_font_size_override("font_size", 12)
+	_meta.add_theme_font_size_override("font_size", 16)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_meta)
 	root.add_child(_meta)
@@ -153,7 +153,7 @@ func _make_progress_panel(unlocked_n: int, total_n: int) -> PanelContainer:
 	panel.add_child(col)
 	var head := Label.new()
 	head.text = "PROGRESS  %s / %s · %s%%" % [unlocked_n, total_n, pct]
-	head.add_theme_font_size_override("font_size", 14)
+	head.add_theme_font_size_override("font_size", 19)
 	head.add_theme_color_override("font_color", Color("#FDE68A"))
 	ClientUi.apply_display_font(head)
 	col.add_child(head)
@@ -162,7 +162,7 @@ func _make_progress_panel(unlocked_n: int, total_n: int) -> PanelContainer:
 	bar.max_value = maxi(1, total_n)
 	bar.value = unlocked_n
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 12)
+	bar.custom_minimum_size = Vector2(0, 16)
 	ClientUi.apply_hp_bar(bar, ClientUi.GOLD)
 	col.add_child(bar)
 	return panel
@@ -215,14 +215,14 @@ func _make_achievement_row(entry: Dictionary, ch: Dictionary) -> PanelContainer:
 	var title := Label.new()
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.text = "%s%s" % [str(entry.get("name", "?")), " · ✓" if unlocked else ""]
-	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_font_size_override("font_size", 17)
 	title.add_theme_color_override("font_color", ClientUi.TEXT if unlocked else ClientUi.MUTED)
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
 	var desc := Label.new()
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.text = str(entry.get("desc", ""))
-	desc.add_theme_font_size_override("font_size", 11)
+	desc.add_theme_font_size_override("font_size", 15)
 	desc.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(desc)
 	var p := AchievementsCatalog.progress(entry, ch)
@@ -232,12 +232,12 @@ func _make_achievement_row(entry: Dictionary, ch: Dictionary) -> PanelContainer:
 		bar.max_value = maxi(1, int(p.get("target", 1)))
 		bar.value = mini(int(p.get("current", 0)), int(bar.max_value))
 		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(0, 8)
+		bar.custom_minimum_size = Vector2(0, 11)
 		ClientUi.apply_hp_bar(bar, ClientUi.SUCCESS if unlocked else ClientUi.CYAN)
 		col.add_child(bar)
 		var prog := Label.new()
 		prog.text = "%s / %s" % [str(p.get("current", 0)), str(p.get("target", 0))]
-		prog.add_theme_font_size_override("font_size", 10)
+		prog.add_theme_font_size_override("font_size", 13)
 		prog.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(prog)
 	return panel

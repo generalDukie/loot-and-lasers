@@ -99,13 +99,13 @@ func _build() -> void:
 	head.add_child(head_l)
 	var eye := Label.new()
 	eye.text = "COMBAT COLOSSEUM"
-	eye.add_theme_font_size_override("font_size", 10)
+	eye.add_theme_font_size_override("font_size", 13)
 	eye.add_theme_color_override("font_color", Color(ClientUi.CYAN_SOFT, 0.85))
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
 	var title := Label.new()
 	title.text = "⚔  Battle Arena"
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 29)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head_l.add_child(title)
@@ -116,13 +116,13 @@ func _build() -> void:
 	var rating_eye := Label.new()
 	rating_eye.text = "RATING"
 	rating_eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	rating_eye.add_theme_font_size_override("font_size", 9)
+	rating_eye.add_theme_font_size_override("font_size", 12)
 	rating_eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(rating_eye)
 	head_r.add_child(rating_eye)
 	_rating_label = Label.new()
 	_rating_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_rating_label.add_theme_font_size_override("font_size", 28)
+	_rating_label.add_theme_font_size_override("font_size", 37)
 	_rating_label.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(_rating_label)
 	head_r.add_child(_rating_label)
@@ -144,7 +144,7 @@ func _build() -> void:
 	root.add_child(challengers_row)
 	var ch_lab := Label.new()
 	ch_lab.text = "CHALLENGERS"
-	ch_lab.add_theme_font_size_override("font_size", 11)
+	ch_lab.add_theme_font_size_override("font_size", 15)
 	ch_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(ch_lab)
 	challengers_row.add_child(ch_lab)
@@ -163,7 +163,7 @@ func _build() -> void:
 	cd_pad.add_theme_constant_override("margin_bottom", 2)
 	_cooldown_panel.add_child(cd_pad)
 	_cooldown_banner = Label.new()
-	_cooldown_banner.add_theme_font_size_override("font_size", 10)
+	_cooldown_banner.add_theme_font_size_override("font_size", 13)
 	_cooldown_banner.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55))
 	ClientUi.apply_display_font(_cooldown_banner)
 	cd_pad.add_child(_cooldown_banner)
@@ -214,7 +214,7 @@ func _build() -> void:
 	_paid_panel.add_child(paid_pad)
 	_paid_banner = Label.new()
 	_paid_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_paid_banner.add_theme_font_size_override("font_size", 10)
+	_paid_banner.add_theme_font_size_override("font_size", 13)
 	_paid_banner.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_paid_banner)
 	paid_pad.add_child(_paid_banner)
@@ -242,14 +242,14 @@ func _build() -> void:
 
 	var hist_header := Label.new()
 	hist_header.text = "MATCH HISTORY"
-	hist_header.add_theme_font_size_override("font_size", 12)
+	hist_header.add_theme_font_size_override("font_size", 16)
 	hist_header.add_theme_color_override("font_color", Color(0.95, 0.65, 0.72))
 	ClientUi.apply_display_font(hist_header)
 	hist_col.add_child(hist_header)
 
 	_history_status = Label.new()
 	_history_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_history_status.add_theme_font_size_override("font_size", 11)
+	_history_status.add_theme_font_size_override("font_size", 15)
 	_history_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	hist_col.add_child(_history_status)
 
@@ -276,12 +276,12 @@ func _build() -> void:
 	news_panel.add_child(news_col)
 	var news_header := Label.new()
 	news_header.text = "GALAXY NEWS"
-	news_header.add_theme_font_size_override("font_size", 12)
+	news_header.add_theme_font_size_override("font_size", 16)
 	news_header.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(news_header)
 	news_col.add_child(news_header)
 	_news_status = Label.new()
-	_news_status.add_theme_font_size_override("font_size", 11)
+	_news_status.add_theme_font_size_override("font_size", 15)
 	_news_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	news_col.add_child(_news_status)
 	var news_scroll := ScrollContainer.new()
@@ -308,7 +308,7 @@ func _apply_refresh_button(btn: Button) -> void:
 func _apply_skip_fight_button(btn: Button) -> void:
 	## Web amber SKIP & FIGHT only (Challenge stays painted cyan).
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 12)
+	btn.add_theme_font_size_override("font_size", 16)
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(
 		Color("#F59E0B"), Color("#FCD34D")
 	))
@@ -342,7 +342,7 @@ func _add_stat_chip_wrap(parent: GridContainer, icon: String, label: String, col
 	panel.add_child(row)
 
 	var icon_box := PanelContainer.new()
-	icon_box.custom_minimum_size = Vector2(28, 28)
+	icon_box.custom_minimum_size = Vector2(37, 37)
 	icon_box.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(color.r, color.g, color.b, 0.13), Color(color.r, color.g, color.b, 0.35), 6, 1
 	))
@@ -351,7 +351,7 @@ func _add_stat_chip_wrap(parent: GridContainer, icon: String, label: String, col
 	icon_lab.text = icon
 	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon_lab.add_theme_font_size_override("font_size", 12)
+	icon_lab.add_theme_font_size_override("font_size", 16)
 	icon_lab.add_theme_color_override("font_color", color)
 	icon_box.add_child(icon_lab)
 
@@ -361,17 +361,17 @@ func _add_stat_chip_wrap(parent: GridContainer, icon: String, label: String, col
 	row.add_child(col)
 	var lab := Label.new()
 	lab.text = label
-	lab.add_theme_font_size_override("font_size", 9)
+	lab.add_theme_font_size_override("font_size", 12)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
 	var val := Label.new()
-	val.add_theme_font_size_override("font_size", 14)
+	val.add_theme_font_size_override("font_size", 19)
 	val.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(val)
 	col.add_child(val)
 	var hint := Label.new()
-	hint.add_theme_font_size_override("font_size", 9)
+	hint.add_theme_font_size_override("font_size", 12)
 	hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
 	hint.visible = false
 	col.add_child(hint)
@@ -426,7 +426,7 @@ func _populate_news() -> void:
 		var lab := Label.new()
 		lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lab.text = str(n.get("message", ""))
-		lab.add_theme_font_size_override("font_size", 12)
+		lab.add_theme_font_size_override("font_size", 16)
 		lab.add_theme_color_override("font_color", ClientUi.TEXT)
 		ClientUi.apply_body_font(lab)
 		row.add_child(lab)
@@ -515,7 +515,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var is_bot := bool(opp.get("isBot", true))
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size = Vector2(200, 0)
+	panel.custom_minimum_size = Vector2(267, 0)
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.04, 0.07, 0.09, 0.97) if is_bot else Color(0.04, 0.09, 0.07, 0.97),
 		Color(0.13, 0.83, 0.93, 0.55) if is_bot else Color(0.2, 0.83, 0.6, 0.6),
@@ -531,7 +531,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var portrait_wrap := CenterContainer.new()
 	col.add_child(portrait_wrap)
 	var stack := Control.new()
-	stack.custom_minimum_size = Vector2(96, 100)
+	stack.custom_minimum_size = Vector2(128, 133)
 	portrait_wrap.add_child(stack)
 	var pframe := PanelContainer.new()
 	pframe.position = Vector2(4, 0)
@@ -557,7 +557,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var lvl := Label.new()
 	lvl.text = str(opp.get("level", 1))
 	lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lvl.add_theme_font_size_override("font_size", 10)
+	lvl.add_theme_font_size_override("font_size", 13)
 	lvl.add_theme_color_override("font_color", Color(0.03, 0.07, 0.10))
 	ClientUi.apply_display_font(lvl)
 	badge.add_child(lvl)
@@ -565,7 +565,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var kind := Label.new()
 	kind.text = "SIMULANT" if is_bot else "REAL"
 	kind.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	kind.add_theme_font_size_override("font_size", 9)
+	kind.add_theme_font_size_override("font_size", 12)
 	kind.add_theme_color_override("font_color", Color("#67E8F9") if is_bot else Color("#6EE7B7"))
 	ClientUi.apply_display_font(kind)
 	col.add_child(kind)
@@ -573,7 +573,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var title := Label.new()
 	title.text = str(opp.get("name", "?"))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 19)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
@@ -581,15 +581,15 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var detail := Label.new()
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.text = "%s · %s" % [str(opp.get("race", "?")), str(opp.get("class", "?"))]
-	detail.add_theme_font_size_override("font_size", 11)
+	detail.add_theme_font_size_override("font_size", 15)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(detail)
 
 	# Always reserve this row so guild tags never push the challenge button down.
 	var guild_lab := Label.new()
 	guild_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	guild_lab.custom_minimum_size.y = 14
-	guild_lab.add_theme_font_size_override("font_size", 10)
+	guild_lab.custom_minimum_size.y = 19
+	guild_lab.add_theme_font_size_override("font_size", 13)
 	guild_lab.add_theme_color_override("font_color", ClientUi.GOLD)
 	ClientUi.apply_display_font(guild_lab)
 	var guild_raw = opp.get("guild", null)
@@ -634,7 +634,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	stake_col.add_child(stake_head)
 	var risk_lab := Label.new()
 	risk_lab.text = str(risk.get("label", "EVEN"))
-	risk_lab.add_theme_font_size_override("font_size", 9)
+	risk_lab.add_theme_font_size_override("font_size", 12)
 	var risk_color: Color = risk.get("color", Color("#FCD34D"))
 	risk_lab.add_theme_color_override("font_color", risk_color)
 	ClientUi.apply_display_font(risk_lab)
@@ -644,7 +644,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	stake_head.add_child(spacer)
 	var stake_kind := Label.new()
 	stake_kind.text = "FREE" if is_free else "RATING"
-	stake_kind.add_theme_font_size_override("font_size", 9)
+	stake_kind.add_theme_font_size_override("font_size", 12)
 	stake_kind.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(stake_kind)
 	stake_head.add_child(stake_kind)
@@ -657,7 +657,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var win_lab := Label.new()
 	win_lab.text = "WIN"
 	win_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	win_lab.add_theme_font_size_override("font_size", 9)
+	win_lab.add_theme_font_size_override("font_size", 12)
 	win_lab.add_theme_color_override("font_color", ClientUi.SUCCESS)
 	ClientUi.apply_display_font(win_lab)
 	win_col.add_child(win_lab)
@@ -665,7 +665,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var wd := int(on_win.get("arena_rating_delta", 0))
 	win_val.text = ("+%s" % wd) if wd > 0 else str(wd)
 	win_val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	win_val.add_theme_font_size_override("font_size", 13)
+	win_val.add_theme_font_size_override("font_size", 17)
 	win_val.add_theme_color_override("font_color", Color("#6EE7B7"))
 	ClientUi.apply_display_font(win_val)
 	win_col.add_child(win_val)
@@ -675,7 +675,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	else:
 		win_loot.text = "rating"
 	win_loot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	win_loot.add_theme_font_size_override("font_size", 9)
+	win_loot.add_theme_font_size_override("font_size", 12)
 	win_loot.add_theme_color_override("font_color", ClientUi.MUTED)
 	win_col.add_child(win_loot)
 
@@ -685,28 +685,28 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var lose_lab := Label.new()
 	lose_lab.text = "LOSE"
 	lose_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lose_lab.add_theme_font_size_override("font_size", 9)
+	lose_lab.add_theme_font_size_override("font_size", 12)
 	lose_lab.add_theme_color_override("font_color", ClientUi.DANGER)
 	ClientUi.apply_display_font(lose_lab)
 	lose_col.add_child(lose_lab)
 	var lose_val := Label.new()
 	lose_val.text = str(on_loss.get("arena_rating_delta", 0))
 	lose_val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lose_val.add_theme_font_size_override("font_size", 13)
+	lose_val.add_theme_font_size_override("font_size", 17)
 	lose_val.add_theme_color_override("font_color", Color("#FDA4AF"))
 	ClientUi.apply_display_font(lose_val)
 	lose_col.add_child(lose_val)
 	var lose_sub := Label.new()
 	lose_sub.text = "no loot" if is_free else "rating"
 	lose_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lose_sub.add_theme_font_size_override("font_size", 9)
+	lose_sub.add_theme_font_size_override("font_size", 12)
 	lose_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	lose_col.add_child(lose_sub)
 
 	var online := Label.new()
 	online.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	online.text = "⏱ %s" % ArenaRules.format_last_online(int(opp.get("lastOnlineMins", 0)))
-	online.add_theme_font_size_override("font_size", 10)
+	online.add_theme_font_size_override("font_size", 13)
 	online.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
 	ClientUi.apply_body_font(online)
 	col.add_child(online)
@@ -737,7 +737,7 @@ func _mini_stat(icon: String, label: String, value: String, color: Color, split_
 	var ic := Label.new()
 	ic.text = icon
 	ic.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ic.add_theme_font_size_override("font_size", 10)
+	ic.add_theme_font_size_override("font_size", 13)
 	ic.add_theme_color_override("font_color", color)
 	col.add_child(ic)
 	if split_wl and "/" in value:
@@ -747,18 +747,18 @@ func _mini_stat(icon: String, label: String, value: String, color: Color, split_
 		col.add_child(wl_row)
 		var w := Label.new()
 		w.text = parts[0]
-		w.add_theme_font_size_override("font_size", 12)
+		w.add_theme_font_size_override("font_size", 16)
 		w.add_theme_color_override("font_color", Color("#4ADE80"))
 		ClientUi.apply_display_font(w)
 		wl_row.add_child(w)
 		var slash := Label.new()
 		slash.text = "/"
-		slash.add_theme_font_size_override("font_size", 12)
+		slash.add_theme_font_size_override("font_size", 16)
 		slash.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.5))
 		wl_row.add_child(slash)
 		var l := Label.new()
 		l.text = parts[1] if parts.size() > 1 else "0"
-		l.add_theme_font_size_override("font_size", 12)
+		l.add_theme_font_size_override("font_size", 16)
 		l.add_theme_color_override("font_color", Color("#F87171"))
 		ClientUi.apply_display_font(l)
 		wl_row.add_child(l)
@@ -766,14 +766,14 @@ func _mini_stat(icon: String, label: String, value: String, color: Color, split_
 		var v := Label.new()
 		v.text = value
 		v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		v.add_theme_font_size_override("font_size", 12)
+		v.add_theme_font_size_override("font_size", 16)
 		v.add_theme_color_override("font_color", color)
 		ClientUi.apply_display_font(v)
 		col.add_child(v)
 	var lab := Label.new()
 	lab.text = label
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 8)
+	lab.add_theme_font_size_override("font_size", 11)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
@@ -810,7 +810,7 @@ func _make_history_row(match: Dictionary) -> PanelContainer:
 		badges.append("REAL")
 	var badge_txt := (" · " + " · ".join(badges)) if badges.size() > 0 else ""
 	title.text = "%s%s" % [str(match.get("opponent_name", "?")), badge_txt]
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 19)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
@@ -821,7 +821,7 @@ func _make_history_row(match: Dictionary) -> PanelContainer:
 	var guild_bit := (" · %s" % guild) if not guild.is_empty() and guild != "<null>" else ""
 	var detail := Label.new()
 	detail.text = "%s · Lv %s%s · %s" % [outcome, str(match.get("opponent_level", 1)), guild_bit, delta_txt]
-	detail.add_theme_font_size_override("font_size", 11)
+	detail.add_theme_font_size_override("font_size", 15)
 	detail.add_theme_color_override("font_color", ClientUi.SUCCESS if delta >= 0 else ClientUi.DANGER)
 	col.add_child(detail)
 

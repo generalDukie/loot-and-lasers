@@ -97,16 +97,17 @@ export function applyPendingLootFromResponse(res) {
 /**
  * Load the oldest server-persisted pending loot for this character into client state.
  * Returns { pending, hydrated, cleared }.
+ * Pass force=true after dissolving/accepting so the next queued item replaces stale state.
  */
-export async function hydratePendingLootFromServer(characterId) {
+export async function hydratePendingLootFromServer(characterId, { force = false } = {}) {
   if (!characterId) return { pending: getPending(), hydrated: false, cleared: false };
   try {
     const res = await api.rewards.pendingLoot(characterId);
     const list = res?.pending_loot || [];
     if (!Array.isArray(list) || list.length === 0) {
       let cleared = false;
-      if (pending?.mode === "loot" && !pending.pendingLootId) {
-        // Ephemeral client-only pending that was never persisted — drop it.
+      // Server queue empty — drop leftover loot-mode UI state (including stale ids).
+      if (pending?.mode === "loot") {
         clearPendingItem();
         cleared = true;
       }
@@ -118,10 +119,11 @@ export async function hydratePendingLootFromServer(characterId) {
     }
 
     const existing = pending;
-    if (!existing || existing.mode !== "loot" || !existing.pendingLootId) {
+    if (force || !existing || existing.mode !== "loot" || !existing.pendingLootId
+      || existing.pendingLootId !== first.id) {
       setPendingItem(first.item, "loot", first.id);
     }
-    return { pending: getPending(), hydrated: true, cleared: false };
+    return { pending: getPending(), hydrated: true, cleared: false, remaining: list.length };
   } catch {
     return { pending: getPending(), hydrated: false, cleared: false };
   }

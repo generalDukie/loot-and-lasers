@@ -62,13 +62,13 @@ func _build() -> void:
 	root.add_child(head)
 	var page_title := Label.new()
 	page_title.text = "Missions"
-	page_title.add_theme_font_size_override("font_size", 22)
+	page_title.add_theme_font_size_override("font_size", 29)
 	page_title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(page_title)
 	head.add_child(page_title)
 	var on_mission := Label.new()
 	on_mission.text = "  🚀 On Mission  "
-	on_mission.add_theme_font_size_override("font_size", 11)
+	on_mission.add_theme_font_size_override("font_size", 15)
 	on_mission.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(on_mission)
 	var pill := PanelContainer.new()
@@ -89,7 +89,7 @@ func _build() -> void:
 	# Slim ACTIVE MISSION strip (title + Skip / Fight)
 	var active_eye := Label.new()
 	active_eye.text = "ACTIVE MISSION"
-	active_eye.add_theme_font_size_override("font_size", 10)
+	active_eye.add_theme_font_size_override("font_size", 13)
 	active_eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(active_eye)
 	root.add_child(active_eye)
@@ -106,7 +106,7 @@ func _build() -> void:
 	_active_panel.add_child(active_col)
 
 	_title = Label.new()
-	_title.add_theme_font_size_override("font_size", 14)
+	_title.add_theme_font_size_override("font_size", 19)
 	_title.add_theme_color_override("font_color", ClientUi.TEXT)
 	_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_title.clip_text = true
@@ -114,7 +114,7 @@ func _build() -> void:
 	active_col.add_child(_title)
 
 	_goofy = Label.new()
-	_goofy.add_theme_font_size_override("font_size", 11)
+	_goofy.add_theme_font_size_override("font_size", 15)
 	_goofy.add_theme_color_override("font_color", ClientUi.MUTED)
 	_goofy.clip_text = true
 	ClientUi.apply_body_font(_goofy)
@@ -123,7 +123,7 @@ func _build() -> void:
 	_skip_btn = Button.new()
 	_skip_btn.text = "Skip · Fight · 1 💎"
 	ClientUi.apply_display_font(_skip_btn)
-	_skip_btn.add_theme_font_size_override("font_size", 12)
+	_skip_btn.add_theme_font_size_override("font_size", 16)
 	_skip_btn.add_theme_color_override("font_color", Color("#FCD34D"))
 	_skip_btn.add_theme_color_override("font_hover_color", Color("#FEF3C7"))
 	_skip_btn.add_theme_stylebox_override(
@@ -151,7 +151,7 @@ func _build() -> void:
 	# OUT ON ASSIGNMENT — full remaining height
 	var stage_eye := Label.new()
 	stage_eye.text = "OUT ON ASSIGNMENT"
-	stage_eye.add_theme_font_size_override("font_size", 11)
+	stage_eye.add_theme_font_size_override("font_size", 15)
 	stage_eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(stage_eye)
 	root.add_child(stage_eye)
@@ -169,7 +169,7 @@ func _build() -> void:
 	stage_host.clip_contents = true
 	stage_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stage_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stage_host.custom_minimum_size = Vector2(200, 180)
+	stage_host.custom_minimum_size = Vector2(267, 240)
 	stage_frame.add_child(stage_host)
 
 	_explore = MissionExploreStage.new()
@@ -179,10 +179,10 @@ func _build() -> void:
 	# Rocket timer overlay — pinned near bottom of the image
 	var overlay := MarginContainer.new()
 	overlay.set_anchors_and_offsets_preset(PRESET_BOTTOM_WIDE)
-	overlay.offset_top = -88
-	overlay.offset_bottom = -12
-	overlay.offset_left = 16
-	overlay.offset_right = -16
+	overlay.offset_top = -117
+	overlay.offset_bottom = -16
+	overlay.offset_left = 21
+	overlay.offset_right = -21
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.z_index = 5
 	stage_host.add_child(overlay)
@@ -201,14 +201,14 @@ func _build() -> void:
 	time_row.add_child(time_spacer)
 	_overlay_timer = Label.new()
 	_overlay_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_overlay_timer.add_theme_font_size_override("font_size", 13)
+	_overlay_timer.add_theme_font_size_override("font_size", 17)
 	_overlay_timer.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(_overlay_timer)
 	time_row.add_child(_overlay_timer)
 	_timer_label = _overlay_timer
 
 	_progress_track = Control.new()
-	_progress_track.custom_minimum_size = Vector2(0, 18)
+	_progress_track.custom_minimum_size = Vector2(0, 24)
 	_progress_track.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_progress_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_progress_track.clip_contents = false
@@ -244,13 +244,13 @@ func _build() -> void:
 	_rocket.text = "🚀"
 	_rocket.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_rocket.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_rocket.add_theme_font_size_override("font_size", 16)
+	_rocket.add_theme_font_size_override("font_size", 21)
 	_rocket.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rocket.set_anchors_preset(PRESET_CENTER_LEFT)
-	_rocket.offset_left = -12
-	_rocket.offset_right = 12
-	_rocket.offset_top = -12
-	_rocket.offset_bottom = 12
+	_rocket.offset_left = -16
+	_rocket.offset_right = 16
+	_rocket.offset_top = -16
+	_rocket.offset_bottom = 16
 	_progress_track.add_child(_rocket)
 
 	_tick = Timer.new()

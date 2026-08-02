@@ -83,14 +83,14 @@ func _build() -> void:
 	margin.add_child(root)
 
 	var col := VBoxContainer.new()
-	col.custom_minimum_size = Vector2(720, 0)
+	col.custom_minimum_size = Vector2(960, 0)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 12)
 	root.add_child(col)
 
 	# Header — BUILD YOUR OPERATIVE + Cancel
 	var head := Control.new()
-	head.custom_minimum_size.y = 64
+	head.custom_minimum_size.y = 85
 	col.add_child(head)
 
 	var head_copy := VBoxContainer.new()
@@ -107,10 +107,10 @@ func _build() -> void:
 	var cancel := Button.new()
 	cancel.text = "✕  Cancel"
 	cancel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	cancel.offset_left = -100
+	cancel.offset_left = -133
 	cancel.offset_top = 0
 	cancel.offset_right = 0
-	cancel.offset_bottom = 28
+	cancel.offset_bottom = 37
 	ClientUi.apply_ghost_button(cancel)
 	cancel.pressed.connect(_on_cancel)
 	head.add_child(cancel)
@@ -126,27 +126,27 @@ func _build() -> void:
 		steps_row.add_child(step_wrap)
 
 		var dot := PanelContainer.new()
-		dot.custom_minimum_size = Vector2(28, 28)
+		dot.custom_minimum_size = Vector2(37, 37)
 		step_wrap.add_child(dot)
 		var dot_lab := Label.new()
 		dot_lab.text = str(i + 1)
 		dot_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		dot_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		dot_lab.add_theme_font_size_override("font_size", 11)
+		dot_lab.add_theme_font_size_override("font_size", 15)
 		ClientUi.apply_display_font(dot_lab)
 		dot.add_child(dot_lab)
 		_step_dots.append(dot)
 
 		var lab := Label.new()
 		lab.text = STEPS[i]
-		lab.add_theme_font_size_override("font_size", 11)
+		lab.add_theme_font_size_override("font_size", 15)
 		ClientUi.apply_body_font(lab)
 		step_wrap.add_child(lab)
 		_step_labels.append(lab)
 
 		if i < STEPS.size() - 1:
 			var join := ColorRect.new()
-			join.custom_minimum_size = Vector2(32, 1)
+			join.custom_minimum_size = Vector2(43, 1)
 			join.color = Color(ClientUi.MUTED, 0.25)
 			join.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			steps_row.add_child(join)
@@ -155,7 +155,7 @@ func _build() -> void:
 	# Main panel
 	var panel := PanelContainer.new()
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size.y = 420
+	panel.custom_minimum_size.y = 560
 	panel.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.05, 0.07, 0.11, 0.92), Color(1, 1, 1, 0.12), 16, 1)
@@ -200,7 +200,7 @@ func _build() -> void:
 	nav.add_child(spacer)
 
 	_next_hint = Label.new()
-	_next_hint.add_theme_font_size_override("font_size", 11)
+	_next_hint.add_theme_font_size_override("font_size", 15)
 	_next_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_next_hint)
 	nav.add_child(_next_hint)
@@ -237,7 +237,7 @@ func _build_race_page() -> Control:
 
 	var h2 := Label.new()
 	h2.text = "Pick Your Race"
-	h2.add_theme_font_size_override("font_size", 16)
+	h2.add_theme_font_size_override("font_size", 21)
 	ClientUi.apply_display_font(h2)
 	h2.add_theme_color_override("font_color", ClientUi.TEXT)
 	page.add_child(h2)
@@ -265,7 +265,7 @@ func _make_race_card(race_name: String) -> Button:
 	var info := GameData.race_info(race_name)
 	var accent: Color = GameData.RACE_ACCENT.get(race_name, ClientUi.CYAN)
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(0, 108)
+	btn.custom_minimum_size = Vector2(0, 144)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.clip_contents = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -274,16 +274,16 @@ func _make_race_card(race_name: String) -> Button:
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	row.offset_left = 10
-	row.offset_top = 10
-	row.offset_right = -10
-	row.offset_bottom = -10
+	row.offset_left = 13
+	row.offset_top = 13
+	row.offset_right = -13
+	row.offset_bottom = -13
 	row.add_theme_constant_override("separation", 10)
 	btn.add_child(row)
 
 	var av_wrap := PanelContainer.new()
 	av_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	av_wrap.custom_minimum_size = Vector2(68, 68)
+	av_wrap.custom_minimum_size = Vector2(91, 91)
 	var av_sb := StyleBoxFlat.new()
 	av_sb.bg_color = Color(accent, 0.12)
 	av_sb.set_border_width_all(1)
@@ -321,12 +321,12 @@ func _make_race_card(race_name: String) -> Button:
 	var emoji := Label.new()
 	emoji.text = str(info.get("emoji", ""))
 	emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emoji.add_theme_font_size_override("font_size", 14)
+	emoji.add_theme_font_size_override("font_size", 19)
 	name_row.add_child(emoji)
 	var nm := Label.new()
 	nm.text = race_name
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	nm.add_theme_font_size_override("font_size", 13)
+	nm.add_theme_font_size_override("font_size", 17)
 	ClientUi.apply_display_font(nm)
 	nm.add_theme_color_override("font_color", ClientUi.TEXT)
 	name_row.add_child(nm)
@@ -335,7 +335,7 @@ func _make_race_card(race_name: String) -> Button:
 	tag.text = str(info.get("tagline", ""))
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tag.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tag.add_theme_font_size_override("font_size", 10)
+	tag.add_theme_font_size_override("font_size", 13)
 	tag.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tag)
 	copy.add_child(tag)
@@ -353,7 +353,7 @@ func _make_race_card(race_name: String) -> Button:
 			str(int(round(float(bonus_map[stat]) * 100.0))),
 			str(stat),
 		]
-		chip.add_theme_font_size_override("font_size", 9)
+		chip.add_theme_font_size_override("font_size", 12)
 		chip.add_theme_color_override("font_color", ClientUi.CYAN)
 		ClientUi.apply_body_font(chip)
 		bonuses.add_child(chip)
@@ -373,13 +373,13 @@ func _build_class_page() -> Control:
 	var h2 := Label.new()
 	h2.text = "Pick Your Class"
 	h2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h2.add_theme_font_size_override("font_size", 15)
+	h2.add_theme_font_size_override("font_size", 20)
 	ClientUi.apply_display_font(h2)
 	h2.add_theme_color_override("font_color", ClientUi.TEXT)
 	head.add_child(h2)
 	var race_hint := Label.new()
 	race_hint.name = "ClassRaceHint"
-	race_hint.add_theme_font_size_override("font_size", 10)
+	race_hint.add_theme_font_size_override("font_size", 13)
 	race_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(race_hint)
 	head.add_child(race_hint)
@@ -391,7 +391,7 @@ func _build_class_page() -> Control:
 	page.add_child(split)
 
 	var list := VBoxContainer.new()
-	list.custom_minimum_size.x = 280
+	list.custom_minimum_size.x = 373
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 6)
 	split.add_child(list)
@@ -414,7 +414,7 @@ func _make_class_card(cls_name: String) -> Button:
 	var primary := str(info.get("primaryStat", "strength"))
 	var accent: Color = GameData.STAT_COLORS.get(primary, ClientUi.VIOLET)
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(0, 58)
+	btn.custom_minimum_size = Vector2(0, 77)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.clip_contents = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -423,18 +423,18 @@ func _make_class_card(cls_name: String) -> Button:
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	row.offset_left = 8
-	row.offset_top = 6
-	row.offset_right = -8
-	row.offset_bottom = -6
+	row.offset_left = 11
+	row.offset_top = 8
+	row.offset_right = -11
+	row.offset_bottom = -8
 	row.add_theme_constant_override("separation", 8)
 	btn.add_child(row)
 
 	var emblem := Label.new()
 	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	emblem.text = str(info.get("emoji", "✦"))
-	emblem.add_theme_font_size_override("font_size", 22)
-	emblem.custom_minimum_size = Vector2(36, 36)
+	emblem.add_theme_font_size_override("font_size", 29)
+	emblem.custom_minimum_size = Vector2(48, 48)
 	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emblem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(emblem)
@@ -448,7 +448,7 @@ func _make_class_card(cls_name: String) -> Button:
 	var nm := Label.new()
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	nm.text = "%s %s" % [str(info.get("emoji", "")), cls_name]
-	nm.add_theme_font_size_override("font_size", 12)
+	nm.add_theme_font_size_override("font_size", 16)
 	ClientUi.apply_display_font(nm)
 	nm.add_theme_color_override("font_color", ClientUi.TEXT)
 	copy.add_child(nm)
@@ -457,7 +457,7 @@ func _make_class_card(cls_name: String) -> Button:
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tag.text = str(info.get("tagline", ""))
 	tag.clip_text = true
-	tag.add_theme_font_size_override("font_size", 9)
+	tag.add_theme_font_size_override("font_size", 12)
 	tag.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tag)
 	copy.add_child(tag)
@@ -469,7 +469,7 @@ func _make_class_card(cls_name: String) -> Button:
 	var pri := Label.new()
 	pri.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pri.text = "%s %s" % [str(GameData.STAT_ICONS.get(primary, "")), primary]
-	pri.add_theme_font_size_override("font_size", 9)
+	pri.add_theme_font_size_override("font_size", 12)
 	pri.add_theme_color_override("font_color", ClientUi.VIOLET)
 	ClientUi.apply_body_font(pri)
 	chips.add_child(pri)
@@ -478,7 +478,7 @@ func _make_class_card(cls_name: String) -> Button:
 		var sp := Label.new()
 		sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		sp.text = "✦ %s" % str(special.get("name", ""))
-		sp.add_theme_font_size_override("font_size", 9)
+		sp.add_theme_font_size_override("font_size", 12)
 		sp.add_theme_color_override("font_color", ClientUi.CYAN)
 		ClientUi.apply_body_font(sp)
 		chips.add_child(sp)
@@ -498,7 +498,7 @@ func _build_looks_page() -> Control:
 	var h2 := Label.new()
 	h2.text = "Customize Your Face"
 	h2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h2.add_theme_font_size_override("font_size", 16)
+	h2.add_theme_font_size_override("font_size", 21)
 	ClientUi.apply_display_font(h2)
 	h2.add_theme_color_override("font_color", ClientUi.TEXT)
 	head.add_child(h2)
@@ -521,11 +521,11 @@ func _build_looks_page() -> Control:
 	page.add_child(split)
 
 	var preview_col := VBoxContainer.new()
-	preview_col.custom_minimum_size.x = 180
+	preview_col.custom_minimum_size.x = 240
 	preview_col.add_theme_constant_override("separation", 8)
 	split.add_child(preview_col)
 	var preview_frame := PanelContainer.new()
-	preview_frame.custom_minimum_size = Vector2(172, 172)
+	preview_frame.custom_minimum_size = Vector2(229, 229)
 	preview_frame.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.04, 0.06, 0.1, 0.9), Color(1, 1, 1, 0.14), 12, 1)
@@ -536,7 +536,7 @@ func _build_looks_page() -> Control:
 	var preview_cap := Label.new()
 	preview_cap.text = "PREVIEW"
 	preview_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	preview_cap.add_theme_font_size_override("font_size", 9)
+	preview_cap.add_theme_font_size_override("font_size", 12)
 	preview_cap.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(preview_cap)
 	preview_col.add_child(preview_cap)
@@ -548,7 +548,7 @@ func _build_looks_page() -> Control:
 
 	var name_lab := Label.new()
 	name_lab.text = "Operative Name"
-	name_lab.add_theme_font_size_override("font_size", 11)
+	name_lab.add_theme_font_size_override("font_size", 15)
 	name_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(name_lab)
 	form_col.add_child(name_lab)
@@ -562,19 +562,19 @@ func _build_looks_page() -> Control:
 	_name.text_changed.connect(_on_name_changed)
 	name_row.add_child(_name)
 	_name_icon = Label.new()
-	_name_icon.custom_minimum_size.x = 18
+	_name_icon.custom_minimum_size.x = 24
 	_name_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_icon.add_theme_font_size_override("font_size", 14)
+	_name_icon.add_theme_font_size_override("font_size", 19)
 	name_row.add_child(_name_icon)
 
 	_name_hint = Label.new()
-	_name_hint.add_theme_font_size_override("font_size", 11)
+	_name_hint.add_theme_font_size_override("font_size", 15)
 	_name_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_name_hint)
 	form_col.add_child(_name_hint)
 	var letters_only := Label.new()
 	letters_only.text = "Letters only — no numbers."
-	letters_only.add_theme_font_size_override("font_size", 10)
+	letters_only.add_theme_font_size_override("font_size", 13)
 	letters_only.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.75))
 	ClientUi.apply_body_font(letters_only)
 	form_col.add_child(letters_only)
@@ -586,7 +586,7 @@ func _build_looks_page() -> Control:
 	var skin_prev := skin_row.get_node("Prev") as Button
 	var skin_next := skin_row.get_node("Next") as Button
 	_skin_swatch = ColorRect.new()
-	_skin_swatch.custom_minimum_size = Vector2(36, 36)
+	_skin_swatch.custom_minimum_size = Vector2(48, 48)
 	_skin_swatch.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	skin_mid.add_child(_skin_swatch)
 	skin_prev.pressed.connect(func() -> void: _cycle_skin(-1))
@@ -608,7 +608,7 @@ func _build_launch_page() -> Control:
 
 	var h2 := Label.new()
 	h2.text = "Looking Good. Ship It."
-	h2.add_theme_font_size_override("font_size", 16)
+	h2.add_theme_font_size_override("font_size", 21)
 	ClientUi.apply_display_font(h2)
 	h2.add_theme_color_override("font_color", ClientUi.TEXT)
 	page.add_child(h2)
@@ -625,21 +625,21 @@ func _build_launch_page() -> Control:
 	card.add_child(split)
 
 	var left := VBoxContainer.new()
-	left.custom_minimum_size.x = 180
+	left.custom_minimum_size.x = 240
 	left.add_theme_constant_override("separation", 8)
 	split.add_child(left)
 	_launch_preview_host = CenterContainer.new()
-	_launch_preview_host.custom_minimum_size = Vector2(160, 160)
+	_launch_preview_host.custom_minimum_size = Vector2(213, 213)
 	left.add_child(_launch_preview_host)
 	_launch_name = Label.new()
 	_launch_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_launch_name.add_theme_font_size_override("font_size", 20)
+	_launch_name.add_theme_font_size_override("font_size", 27)
 	ClientUi.apply_display_font(_launch_name)
 	_launch_name.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	left.add_child(_launch_name)
 	_launch_meta = Label.new()
 	_launch_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_launch_meta.add_theme_font_size_override("font_size", 12)
+	_launch_meta.add_theme_font_size_override("font_size", 16)
 	_launch_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_launch_meta)
 	left.add_child(_launch_meta)
@@ -656,7 +656,7 @@ func _build_launch_page() -> Control:
 func _chip_label(text: String) -> Label:
 	var lab := Label.new()
 	lab.text = text
-	lab.add_theme_font_size_override("font_size", 10)
+	lab.add_theme_font_size_override("font_size", 13)
 	ClientUi.apply_body_font(lab)
 	return lab
 
@@ -667,8 +667,8 @@ func _make_arrow_shell(label_text: String) -> HBoxContainer:
 
 	var lab := Label.new()
 	lab.text = label_text
-	lab.custom_minimum_size.x = 72
-	lab.add_theme_font_size_override("font_size", 11)
+	lab.custom_minimum_size.x = 96
+	lab.add_theme_font_size_override("font_size", 15)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(lab)
 	row.add_child(lab)
@@ -676,7 +676,7 @@ func _make_arrow_shell(label_text: String) -> HBoxContainer:
 	var prev := Button.new()
 	prev.name = "Prev"
 	prev.text = "‹"
-	prev.custom_minimum_size = Vector2(28, 28)
+	prev.custom_minimum_size = Vector2(37, 37)
 	ClientUi.apply_ghost_button(prev)
 	row.add_child(prev)
 
@@ -689,7 +689,7 @@ func _make_arrow_shell(label_text: String) -> HBoxContainer:
 	var next := Button.new()
 	next.name = "Next"
 	next.text = "›"
-	next.custom_minimum_size = Vector2(28, 28)
+	next.custom_minimum_size = Vector2(37, 37)
 	ClientUi.apply_ghost_button(next)
 	row.add_child(next)
 	return row
@@ -703,7 +703,7 @@ func _make_arrow_selector(label_text: String, field: String, options: PackedStri
 	var val := Label.new()
 	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	val.add_theme_font_size_override("font_size", 12)
+	val.add_theme_font_size_override("font_size", 16)
 	val.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(val)
 	mid.add_child(val)
@@ -896,7 +896,7 @@ func _refresh_lore() -> void:
 	panel.add_child(row)
 
 	var av := CenterContainer.new()
-	av.custom_minimum_size = Vector2(92, 92)
+	av.custom_minimum_size = Vector2(123, 123)
 	row.add_child(av)
 	av.add_child(AvatarRenderer.make_portrait(_fake_character(), 84.0))
 
@@ -906,14 +906,14 @@ func _refresh_lore() -> void:
 	row.add_child(copy)
 	var title := Label.new()
 	title.text = "%s %s" % [str(info.get("emoji", "")), _race_name]
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	ClientUi.apply_display_font(title)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	copy.add_child(title)
 	var lore := Label.new()
 	lore.text = str(info.get("lore", ""))
 	lore.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lore.add_theme_font_size_override("font_size", 11)
+	lore.add_theme_font_size_override("font_size", 15)
 	lore.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(lore)
 	copy.add_child(lore)
@@ -939,13 +939,13 @@ func _refresh_class_detail() -> void:
 		var star := Label.new()
 		star.text = "✦"
 		star.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		star.add_theme_font_size_override("font_size", 22)
+		star.add_theme_font_size_override("font_size", 29)
 		star.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.6))
 		wrap.add_child(star)
 		var t := Label.new()
 		t.text = "Choose a class"
 		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		t.add_theme_font_size_override("font_size", 13)
+		t.add_theme_font_size_override("font_size", 17)
 		ClientUi.apply_display_font(t)
 		t.add_theme_color_override("font_color", ClientUi.MUTED)
 		wrap.add_child(t)
@@ -953,7 +953,7 @@ func _refresh_class_detail() -> void:
 		hint.text = "Pick a kit on the left to preview its special, identity, and starting attributes."
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		hint.add_theme_font_size_override("font_size", 11)
+		hint.add_theme_font_size_override("font_size", 15)
 		hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.8))
 		ClientUi.apply_body_font(hint)
 		wrap.add_child(hint)
@@ -982,8 +982,8 @@ func _refresh_class_detail() -> void:
 	top.add_child(row)
 	var emblem := Label.new()
 	emblem.text = str(info.get("emoji", "✦"))
-	emblem.add_theme_font_size_override("font_size", 36)
-	emblem.custom_minimum_size = Vector2(56, 56)
+	emblem.add_theme_font_size_override("font_size", 48)
+	emblem.custom_minimum_size = Vector2(75, 75)
 	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emblem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(emblem)
@@ -994,35 +994,35 @@ func _refresh_class_detail() -> void:
 	row.add_child(copy)
 	var title := Label.new()
 	title.text = "%s %s" % [str(info.get("emoji", "")), _class_name]
-	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_font_size_override("font_size", 17)
 	ClientUi.apply_display_font(title)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	copy.add_child(title)
 	var desc := Label.new()
 	desc.text = str(info.get("description", ""))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.add_theme_font_size_override("font_size", 11)
+	desc.add_theme_font_size_override("font_size", 15)
 	desc.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(desc)
 	copy.add_child(desc)
 	if not special.is_empty():
 		var sp_name := Label.new()
 		sp_name.text = str(special.get("name", ""))
-		sp_name.add_theme_font_size_override("font_size", 11)
+		sp_name.add_theme_font_size_override("font_size", 15)
 		ClientUi.apply_display_font(sp_name)
 		sp_name.add_theme_color_override("font_color", ClientUi.CYAN)
 		copy.add_child(sp_name)
 		var sp_fx := Label.new()
 		sp_fx.text = str(special.get("effect", ""))
 		sp_fx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sp_fx.add_theme_font_size_override("font_size", 10)
+		sp_fx.add_theme_font_size_override("font_size", 13)
 		sp_fx.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(sp_fx)
 		copy.add_child(sp_fx)
 		var sp_id := Label.new()
 		sp_id.text = str(special.get("identity", ""))
 		sp_id.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sp_id.add_theme_font_size_override("font_size", 9)
+		sp_id.add_theme_font_size_override("font_size", 12)
 		sp_id.add_theme_color_override("font_color", Color(ClientUi.GOLD, 0.85))
 		ClientUi.apply_body_font(sp_id)
 		copy.add_child(sp_id)
@@ -1063,14 +1063,14 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool) -> void:
 	var h := Label.new()
 	h.text = "STARTING STATS"
 	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_theme_font_size_override("font_size", 10)
+	h.add_theme_font_size_override("font_size", 13)
 	ClientUi.apply_display_font(h)
 	h.add_theme_color_override("font_color", ClientUi.MUTED)
 	head.add_child(h)
 	if not primary.is_empty():
 		var pri := Label.new()
 		pri.text = "Primary: %s" % str(STAT_LABELS.get(primary, primary))
-		pri.add_theme_font_size_override("font_size", 9)
+		pri.add_theme_font_size_override("font_size", 12)
 		pri.add_theme_color_override("font_color", GameData.STAT_COLORS.get(primary, ClientUi.MUTED))
 		ClientUi.apply_body_font(pri)
 		head.add_child(pri)
@@ -1101,7 +1101,7 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool) -> void:
 		row.add_child(inner)
 		var icon := Label.new()
 		icon.text = str(GameData.STAT_ICONS.get(stat, ""))
-		icon.add_theme_font_size_override("font_size", 11)
+		icon.add_theme_font_size_override("font_size", 15)
 		inner.add_child(icon)
 		var nm := Label.new()
 		var suffix := ""
@@ -1117,12 +1117,12 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool) -> void:
 		inner.add_child(nm)
 		var num := Label.new()
 		num.text = str(val)
-		num.add_theme_font_size_override("font_size", 12)
+		num.add_theme_font_size_override("font_size", 16)
 		ClientUi.apply_display_font(num)
 		num.add_theme_color_override("font_color", color.lightened(0.25))
 		inner.add_child(num)
 		var bar_bg := ProgressBar.new()
-		bar_bg.custom_minimum_size = Vector2(56, 6)
+		bar_bg.custom_minimum_size = Vector2(75, 8)
 		bar_bg.max_value = float(max_val)
 		bar_bg.value = float(val)
 		bar_bg.show_percentage = false
@@ -1144,7 +1144,7 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool) -> void:
 			" on the preview values" if compact else "",
 		]
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		note.add_theme_font_size_override("font_size", 9)
+		note.add_theme_font_size_override("font_size", 12)
 		note.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(note)
 		host.add_child(note)

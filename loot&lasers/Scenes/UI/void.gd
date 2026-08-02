@@ -60,7 +60,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "◉  Void"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 27)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	header.add_child(title)
@@ -71,7 +71,7 @@ func _build() -> void:
 	))
 	header.add_child(bal)
 	_balance_lab = Label.new()
-	_balance_lab.add_theme_font_size_override("font_size", 13)
+	_balance_lab.add_theme_font_size_override("font_size", 17)
 	_balance_lab.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(_balance_lab)
 	bal.add_child(_balance_lab)
@@ -88,26 +88,26 @@ func _build() -> void:
 	_pending_banner.add_child(prow)
 	var picon := Label.new()
 	picon.text = "📦"
-	picon.add_theme_font_size_override("font_size", 20)
+	picon.add_theme_font_size_override("font_size", 27)
 	prow.add_child(picon)
 	_pending_lab = Label.new()
 	_pending_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_pending_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_pending_lab.add_theme_font_size_override("font_size", 12)
+	_pending_lab.add_theme_font_size_override("font_size", 16)
 	_pending_lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_body_font(_pending_lab)
 	prow.add_child(_pending_lab)
 
 	# The Void — drag target
 	_hole_panel = PanelContainer.new()
-	_hole_panel.custom_minimum_size = Vector2(0, 240)
+	_hole_panel.custom_minimum_size = Vector2(0, 320)
 	_hole_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_set_hole_style(false)
 	root.add_child(_hole_panel)
 
 	_hole_drop = Control.new()
 	_hole_drop.name = "HoleDrop"
-	_hole_drop.custom_minimum_size = Vector2(0, 240)
+	_hole_drop.custom_minimum_size = Vector2(0, 320)
 	_hole_drop.mouse_filter = Control.MOUSE_FILTER_STOP
 	_hole_drop.set_drag_forwarding(_hole_get_drag, _hole_can_drop, _hole_drop_data)
 	_hole_panel.add_child(_hole_drop)
@@ -151,9 +151,9 @@ func _build() -> void:
 	_hole_hint.text = "Drag gear in to dissolve into stardust"
 	_hole_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hole_hint.set_anchors_and_offsets_preset(PRESET_BOTTOM_WIDE)
-	_hole_hint.offset_top = -36
-	_hole_hint.offset_bottom = -12
-	_hole_hint.add_theme_font_size_override("font_size", 11)
+	_hole_hint.offset_top = -48
+	_hole_hint.offset_bottom = -16
+	_hole_hint.add_theme_font_size_override("font_size", 15)
 	_hole_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_hole_hint)
 	_hole_stage.add_child(_hole_hint)
@@ -195,7 +195,7 @@ func _build() -> void:
 	var empty_a := Label.new()
 	empty_a.text = "No spare gear to dissolve."
 	empty_a.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	empty_a.add_theme_font_size_override("font_size", 13)
+	empty_a.add_theme_font_size_override("font_size", 17)
 	empty_a.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(empty_a)
 	empty_col.add_child(empty_a)
@@ -203,7 +203,7 @@ func _build() -> void:
 	empty_b.text = "Complete missions or buy from the Black Market to find items."
 	empty_b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	empty_b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	empty_b.add_theme_font_size_override("font_size", 11)
+	empty_b.add_theme_font_size_override("font_size", 15)
 	empty_b.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.65))
 	ClientUi.apply_body_font(empty_b)
 	empty_col.add_child(empty_b)
@@ -240,7 +240,7 @@ func _add_orbit_ring(diameter: float, color: Color, period: float, direction: fl
 
 func _style_junk_button(btn: Button) -> void:
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 11)
+	btn.add_theme_font_size_override("font_size", 15)
 	var a := Color("#FBBF24")
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(Color(a.r, a.g, a.b, 0.10), Color(a.r, a.g, a.b, 0.30)))
 	btn.add_theme_stylebox_override("hover", ClientUi.button_style(Color(a.r, a.g, a.b, 0.20), Color(a.r, a.g, a.b, 0.45)))
@@ -314,7 +314,7 @@ func _populate() -> void:
 				pname = str(item_blob.get("name", first.get("name", "?")))
 			else:
 				pname = str(first.get("name", "?"))
-		_pending_lab.text = "Item Waiting: %s\nDissolve gear below to make room — it'll be added automatically." % pname
+		_pending_lab.text = "Item Waiting: %s\nFree a bag slot, then Claim on Inventory — it will not auto-fill when you dissolve." % pname
 
 	var cls := str(c.get("class", "Vanguard"))
 	var junk_ids: Array = InventoryRules.list_junk_ids(_items, cls)
@@ -383,7 +383,7 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title.text = str(it.get("name", "?"))
 	title.clip_text = true
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
@@ -391,7 +391,7 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 	var meta := Label.new()
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meta.text = "%s · %s" % [rarity, str(it.get("type", "?"))]
-	meta.add_theme_font_size_override("font_size", 11)
+	meta.add_theme_font_size_override("font_size", 15)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	col.add_child(meta)
@@ -399,7 +399,7 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 	var val := Label.new()
 	val.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	val.text = "✦  %s" % InventoryRules.estimate_sell_value(it)
-	val.add_theme_font_size_override("font_size", 11)
+	val.add_theme_font_size_override("font_size", 15)
 	val.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_body_font(val)
 	col.add_child(val)
@@ -592,15 +592,15 @@ func _spawn_burst() -> void:
 
 	var flash := ColorRect.new()
 	flash.color = Color(0.91, 0.47, 0.98, 0.55)
-	flash.custom_minimum_size = Vector2(70, 70)
+	flash.custom_minimum_size = Vector2(93, 93)
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	flash.set_anchors_preset(PRESET_CENTER)
 	flash.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	flash.grow_vertical = Control.GROW_DIRECTION_BOTH
-	flash.offset_left = -35
-	flash.offset_right = 35
-	flash.offset_top = -35
-	flash.offset_bottom = 35
+	flash.offset_left = -47
+	flash.offset_right = 47
+	flash.offset_top = -47
+	flash.offset_bottom = 47
 	_burst_layer.add_child(flash)
 	var ft := flash.create_tween()
 	ft.tween_property(flash, "scale", Vector2(2.4, 2.4), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)

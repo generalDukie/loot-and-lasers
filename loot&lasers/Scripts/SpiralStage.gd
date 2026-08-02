@@ -97,7 +97,7 @@ func _ensure_overlays() -> void:
 	_lore_panel.z_index = 50
 	_lore_panel.clip_contents = true
 	_lore_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_lore_panel.custom_minimum_size = Vector2(280, 0)
+	_lore_panel.custom_minimum_size = Vector2(373, 0)
 	add_child(_lore_panel)
 
 	var lore_col := VBoxContainer.new()
@@ -119,46 +119,46 @@ func _ensure_overlays() -> void:
 	hero.add_theme_constant_override("separation", 12)
 	lore_col.add_child(hero)
 	_lore_icon = Label.new()
-	_lore_icon.custom_minimum_size = Vector2(64, 64)
+	_lore_icon.custom_minimum_size = Vector2(85, 85)
 	_lore_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_lore_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_lore_icon.add_theme_font_size_override("font_size", 36)
+	_lore_icon.add_theme_font_size_override("font_size", 48)
 	hero.add_child(_lore_icon)
 	var title_col := VBoxContainer.new()
 	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hero.add_child(title_col)
 	_lore_sector = Label.new()
-	_lore_sector.add_theme_font_size_override("font_size", 10)
+	_lore_sector.add_theme_font_size_override("font_size", 13)
 	ClientUi.apply_display_font(_lore_sector)
 	title_col.add_child(_lore_sector)
 	_lore_title = Label.new()
 	_lore_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_lore_title.add_theme_font_size_override("font_size", 20)
+	_lore_title.add_theme_font_size_override("font_size", 27)
 	ClientUi.apply_display_font(_lore_title)
 	title_col.add_child(_lore_title)
 
 	_lore_body = Label.new()
 	_lore_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_lore_body.max_lines_visible = 5
-	_lore_body.add_theme_font_size_override("font_size", 13)
+	_lore_body.add_theme_font_size_override("font_size", 17)
 	_lore_body.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(_lore_body)
 	lore_col.add_child(_lore_body)
 
 	_lore_boss = Label.new()
-	_lore_boss.add_theme_font_size_override("font_size", 11)
+	_lore_boss.add_theme_font_size_override("font_size", 15)
 	ClientUi.apply_display_font(_lore_boss)
 	lore_col.add_child(_lore_boss)
 
 	_lore_reward = Label.new()
-	_lore_reward.add_theme_font_size_override("font_size", 11)
+	_lore_reward.add_theme_font_size_override("font_size", 15)
 	_lore_reward.add_theme_color_override("font_color", Color("#FDE68A"))
 	ClientUi.apply_display_font(_lore_reward)
 	lore_col.add_child(_lore_reward)
 
 	var hint := Label.new()
 	hint.text = "Tap empty space or Esc to pull back"
-	hint.add_theme_font_size_override("font_size", 10)
+	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(hint)
 	lore_col.add_child(hint)
@@ -212,11 +212,11 @@ func _rebuild_buttons() -> void:
 		var btn := Button.new()
 		btn.name = "World%s" % pid
 		btn.focus_mode = Control.FOCUS_NONE
-		btn.custom_minimum_size = Vector2(44, 44)
+		btn.custom_minimum_size = Vector2(59, 59)
 		btn.z_index = 10
 		btn.mouse_filter = Control.MOUSE_FILTER_STOP
 		btn.text = "🔒" if locked else ("✓" if cleared else str(planet.get("icon", "🪐")))
-		btn.add_theme_font_size_override("font_size", 17)
+		btn.add_theme_font_size_override("font_size", 23)
 		btn.disabled = locked
 		btn.mouse_default_cursor_shape = (
 			Control.CURSOR_FORBIDDEN if locked else Control.CURSOR_POINTING_HAND
@@ -246,10 +246,10 @@ func _rebuild_buttons() -> void:
 	_wormhole_button = Button.new()
 	_wormhole_button.name = "Wormhole"
 	_wormhole_button.focus_mode = Control.FOCUS_NONE
-	_wormhole_button.custom_minimum_size = Vector2(76, 76)
+	_wormhole_button.custom_minimum_size = Vector2(101, 101)
 	_wormhole_button.z_index = 12
 	_wormhole_button.text = "∞" if in_infinite else "🔒"
-	_wormhole_button.add_theme_font_size_override("font_size", 25)
+	_wormhole_button.add_theme_font_size_override("font_size", 33)
 	_wormhole_button.disabled = not in_infinite
 	_wormhole_button.tooltip_text = (
 		"Inspect Wormhole · Depth %s" % maxi(1, active - 10)
@@ -621,7 +621,7 @@ func _position_buttons() -> void:
 			btn.text = ""
 			btn.add_theme_font_size_override("font_size", 1)
 		else:
-			btn.add_theme_font_size_override("font_size", 17)
+			btn.add_theme_font_size_override("font_size", 23)
 	if is_instance_valid(_wormhole_button):
 		var raw_w := SpiralMap.pct_to_px(SpiralMap.WORMHOLE, side) + offset
 		var wp := _xform(raw_w)

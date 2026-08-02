@@ -45,7 +45,7 @@ func _build() -> void:
 
 	var card := PanelContainer.new()
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.custom_minimum_size = Vector2(460, 0)
+	card.custom_minimum_size = Vector2(613, 0)
 	card.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.045, 0.05, 0.085, 0.98), Color(AMBER, 0.65), 14, 2)
@@ -66,7 +66,7 @@ func _build() -> void:
 	var eyebrow := Label.new()
 	eyebrow.text = "BAG PRESSURE"
 	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	eyebrow.add_theme_font_size_override("font_size", 9)
+	eyebrow.add_theme_font_size_override("font_size", 12)
 	eyebrow.add_theme_color_override("font_color", Color(AMBER, 0.75))
 	ClientUi.apply_display_font(eyebrow)
 	col.add_child(eyebrow)
@@ -74,7 +74,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "INVENTORY FULL"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 27)
 	title.add_theme_color_override("font_color", AMBER)
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
@@ -83,14 +83,14 @@ func _build() -> void:
 	_sub_lab.text = _reason
 	_sub_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_sub_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sub_lab.add_theme_font_size_override("font_size", 12)
+	_sub_lab.add_theme_font_size_override("font_size", 16)
 	_sub_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_sub_lab)
 	col.add_child(_sub_lab)
 
 	_bag_lab = Label.new()
 	_bag_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_bag_lab.add_theme_font_size_override("font_size", 11)
+	_bag_lab.add_theme_font_size_override("font_size", 15)
 	_bag_lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(_bag_lab)
 	col.add_child(_bag_lab)
@@ -98,7 +98,7 @@ func _build() -> void:
 	_claim_hint = Label.new()
 	_claim_hint.visible = false
 	_claim_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_claim_hint.add_theme_font_size_override("font_size", 11)
+	_claim_hint.add_theme_font_size_override("font_size", 15)
 	_claim_hint.add_theme_color_override("font_color", ClientUi.GOLD)
 	ClientUi.apply_display_font(_claim_hint)
 	col.add_child(_claim_hint)
@@ -109,13 +109,13 @@ func _build() -> void:
 
 	var spare_head := Label.new()
 	spare_head.text = "DISSOLVE FROM BAG"
-	spare_head.add_theme_font_size_override("font_size", 10)
+	spare_head.add_theme_font_size_override("font_size", 13)
 	spare_head.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(spare_head)
 	col.add_child(spare_head)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 180)
+	scroll.custom_minimum_size = Vector2(0, 240)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
@@ -129,7 +129,7 @@ func _build() -> void:
 	_empty_lab.text = "No dissolvable bag items. Dissolve the new find above, or unlock a locked item."
 	_empty_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_empty_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_empty_lab.add_theme_font_size_override("font_size", 11)
+	_empty_lab.add_theme_font_size_override("font_size", 15)
 	_empty_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	_empty_lab.visible = false
 	col.add_child(_empty_lab)
@@ -244,7 +244,7 @@ func _rebuild_rows() -> void:
 func _make_section_label(text: String) -> Label:
 	var lab := Label.new()
 	lab.text = text
-	lab.add_theme_font_size_override("font_size", 10)
+	lab.add_theme_font_size_override("font_size", 13)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(lab)
 	return lab
@@ -271,7 +271,7 @@ func _make_item_row(item: Dictionary, is_pending: bool, pending_id: String) -> P
 	var name_lab := Label.new()
 	name_lab.text = str(item.get("name", "Item"))
 	name_lab.clip_text = true
-	name_lab.add_theme_font_size_override("font_size", 13)
+	name_lab.add_theme_font_size_override("font_size", 17)
 	name_lab.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(name_lab)
 	meta.add_child(name_lab)
@@ -283,14 +283,14 @@ func _make_item_row(item: Dictionary, is_pending: bool, pending_id: String) -> P
 		str(item.get("type", "")).replace("_", " "),
 		stardust,
 	]
-	detail.add_theme_font_size_override("font_size", 10)
+	detail.add_theme_font_size_override("font_size", 13)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	meta.add_child(detail)
 
 	if is_pending:
 		var badge := Label.new()
 		badge.text = "NEW"
-		badge.add_theme_font_size_override("font_size", 9)
+		badge.add_theme_font_size_override("font_size", 12)
 		badge.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 		ClientUi.apply_display_font(badge)
 		h.add_child(badge)
@@ -323,7 +323,7 @@ func _on_dissolve_bag(item_id: String, item: Dictionary) -> void:
 	if _busy or item_id.is_empty():
 		return
 	_busy = true
-	var res: Dictionary = await InventoryManager.dissolve_item(item_id)
+	var res: Dictionary = await InventoryManager.dissolve_item(item_id, false)
 	_busy = false
 	if not res.ok:
 		_sub_lab.text = str(res.get("error", "Dissolve failed"))
@@ -331,7 +331,7 @@ func _on_dissolve_bag(item_id: String, item: Dictionary) -> void:
 		await _reload()
 		return
 	_sub_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-	_sub_lab.text = "Dissolved %s — +%s stardust" % [
+	_sub_lab.text = "Dissolved %s — +%s stardust. Claim the new loot when ready." % [
 		str(item.get("name", "item")),
 		InventoryRules.estimate_sell_value(item),
 	]
@@ -354,8 +354,10 @@ func _on_dissolve_pending(pending_id: String, item: Dictionary) -> void:
 	_sub_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	_sub_lab.text = "Dissolved %s into stardust" % str(item.get("name", "loot"))
 	await _reload()
-	if _is_cleared():
+	if InventoryManager.pending_loot.is_empty():
 		_finish("dissolved")
+	else:
+		_sub_lab.text = "Dissolved. %s more overflow item(s) waiting — claim or dissolve." % InventoryManager.pending_loot.size()
 
 
 func _on_claim_pending(pending_id: String) -> void:
@@ -381,7 +383,7 @@ func _on_dissolve_junk() -> void:
 	if junk.is_empty():
 		return
 	_busy = true
-	var res: Dictionary = await InventoryManager.dissolve_junk(junk)
+	var res: Dictionary = await InventoryManager.dissolve_junk(junk, false)
 	_busy = false
 	if not res.ok:
 		_sub_lab.text = str(res.get("error", "Dissolve junk failed"))
@@ -389,7 +391,7 @@ func _on_dissolve_junk() -> void:
 		await _reload()
 		return
 	_sub_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-	_sub_lab.text = "Junk dissolved — bag pressure eased."
+	_sub_lab.text = "Junk dissolved — claim pending loot or continue."
 	await _reload()
 	if _is_cleared():
 		_finish("dissolved")

@@ -80,17 +80,17 @@ export default function BlackHolePage() {
   }
 
   async function claimPendingIfPossible(char) {
-    if (!getPending()) return;
+    const pending = getPending();
+    if (!pending || pending.mode === "loot") return;
     try {
       const bagCount = await countItems(char.id);
-      if (bagCount >= getInventoryCap(char) && getPending()?.mode !== "overflow") return;
+      if (bagCount >= getInventoryCap(char) && pending.mode !== "overflow") return;
       const result = await tryClaimPendingIfSpaceAvailable(char);
       if (result?.patch) setCharacter((c) => ({ ...c, ...result.patch }));
-      if (result?.kind === "loot" && result.item) {
-        toast({ title: "📦 Item claimed!", description: `${result.item.name} joined your inventory.` });
-        await load();
-      } else if (result?.kind === "unequip" && result.item) {
+      if (result?.kind === "unequip" && result.item) {
         toast({ title: "Unequipped", description: `${result.item.name} moved to your bag.` });
+        await load();
+      } else if (result?.kind === "overflow_cleared") {
         await load();
       }
     } catch {
@@ -206,7 +206,7 @@ export default function BlackHolePage() {
           <span className="text-xl">📦</span>
           <div className="flex-1">
             <p className="font-display font-bold text-sm text-primary">Item Waiting: {pending.name}</p>
-            <p className="text-xs text-muted-foreground">Dissolve gear below to make room — it'll be added automatically.</p>
+            <p className="text-xs text-muted-foreground">Dissolve gear below to free a slot, then Claim the waiting item from the inventory-full prompt — it will not auto-fill.</p>
           </div>
         </div>
       )}

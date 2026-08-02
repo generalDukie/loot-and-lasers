@@ -58,7 +58,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "🗺  Missions"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 29)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	title_row.add_child(title)
@@ -70,12 +70,12 @@ func _build() -> void:
 	_music_btn = Button.new()
 	_music_btn.text = "🔊  Music On"
 	ClientUi.apply_ghost_button(_music_btn)
-	_music_btn.add_theme_font_size_override("font_size", 11)
+	_music_btn.add_theme_font_size_override("font_size", 15)
 	_music_btn.pressed.connect(_toggle_music)
 	controls.add_child(_music_btn)
 
 	_fuel_chip = Label.new()
-	_fuel_chip.add_theme_font_size_override("font_size", 11)
+	_fuel_chip.add_theme_font_size_override("font_size", 15)
 	_fuel_chip.add_theme_color_override("font_color", FUEL_COLOR)
 	ClientUi.apply_body_font(_fuel_chip)
 	var fuel_panel := PanelContainer.new()
@@ -95,7 +95,7 @@ func _build() -> void:
 	_buy_fuel_btn = Button.new()
 	_buy_fuel_btn.text = "+20 · 10💎"
 	ClientUi.apply_ghost_button(_buy_fuel_btn)
-	_buy_fuel_btn.add_theme_font_size_override("font_size", 11)
+	_buy_fuel_btn.add_theme_font_size_override("font_size", 15)
 	_buy_fuel_btn.add_theme_color_override("font_color", ClientUi.CYAN)
 	_buy_fuel_btn.pressed.connect(_on_buy_fuel)
 	controls.add_child(_buy_fuel_btn)
@@ -113,7 +113,7 @@ func _build() -> void:
 	_mining_banner.add_child(mining_row)
 	var mining_icon := Label.new()
 	mining_icon.text = "⛏"
-	mining_icon.add_theme_font_size_override("font_size", 20)
+	mining_icon.add_theme_font_size_override("font_size", 27)
 	mining_row.add_child(mining_icon)
 	var mining_copy := VBoxContainer.new()
 	mining_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -121,14 +121,14 @@ func _build() -> void:
 	mining_row.add_child(mining_copy)
 	var mining_title := Label.new()
 	mining_title.text = "Ship Deployed — Mining"
-	mining_title.add_theme_font_size_override("font_size", 13)
+	mining_title.add_theme_font_size_override("font_size", 17)
 	mining_title.add_theme_color_override("font_color", Color("#FCD34D"))
 	ClientUi.apply_display_font(mining_title)
 	mining_copy.add_child(mining_title)
 	_mining_label = Label.new()
 	_mining_label.text = "Missions unavailable until mining finishes or is cancelled."
 	_mining_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_mining_label.add_theme_font_size_override("font_size", 11)
+	_mining_label.add_theme_font_size_override("font_size", 15)
 	_mining_label.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_mining_label)
 	mining_copy.add_child(_mining_label)
@@ -142,7 +142,7 @@ func _build() -> void:
 	# Section: THE CANTINA
 	_section_lab = Label.new()
 	_section_lab.text = "THE CANTINA"
-	_section_lab.add_theme_font_size_override("font_size", 11)
+	_section_lab.add_theme_font_size_override("font_size", 15)
 	_section_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_section_lab)
 	root.add_child(_section_lab)
@@ -153,7 +153,7 @@ func _build() -> void:
 	stage.clip_contents = true
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stage.custom_minimum_size.y = 200
+	stage.custom_minimum_size.y = 267
 	root.add_child(stage)
 
 	var bg := TextureRect.new()
@@ -238,10 +238,10 @@ func _build() -> void:
 	_stage_hint = Label.new()
 	_stage_hint.text = "Hover a patron for the full job · click to accept"
 	_stage_hint.set_anchors_and_offsets_preset(PRESET_TOP_WIDE)
-	_stage_hint.offset_top = 10
-	_stage_hint.offset_bottom = 34
+	_stage_hint.offset_top = 13
+	_stage_hint.offset_bottom = 45
 	_stage_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_stage_hint.add_theme_font_size_override("font_size", 10)
+	_stage_hint.add_theme_font_size_override("font_size", 13)
 	_stage_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_display_font(_stage_hint)
 	stage.add_child(_stage_hint)
@@ -263,9 +263,9 @@ func _build() -> void:
 	_hover_card.anchor_right = 0.5
 	_hover_card.anchor_top = 0.0
 	_hover_card.anchor_bottom = 0.0
-	_hover_card.offset_left = -340
-	_hover_card.offset_right = 340
-	_hover_card.custom_minimum_size = Vector2(680, 0)
+	_hover_card.offset_left = -453
+	_hover_card.offset_right = 453
+	_hover_card.custom_minimum_size = Vector2(907, 0)
 	stage.add_child(_hover_card)
 	var hover_pad := MarginContainer.new()
 	hover_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -301,11 +301,11 @@ func _build() -> void:
 	_preview.anchor_right = 0.5
 	_preview.anchor_top = 0.0
 	_preview.anchor_bottom = 0.0
-	_preview.offset_left = -280
-	_preview.offset_right = 280
+	_preview.offset_left = -373
+	_preview.offset_right = 373
 	_preview.offset_top = 0
 	_preview.offset_bottom = 0
-	_preview.custom_minimum_size = Vector2(560, 0)
+	_preview.custom_minimum_size = Vector2(747, 0)
 	stage.add_child(_preview)
 
 	var preview_pad := MarginContainer.new()
@@ -320,10 +320,10 @@ func _build() -> void:
 
 	_list = HBoxContainer.new()
 	_list.set_anchors_and_offsets_preset(PRESET_BOTTOM_WIDE)
-	_list.offset_left = 24
-	_list.offset_right = -24
-	_list.offset_top = -150
-	_list.offset_bottom = -18
+	_list.offset_left = 32
+	_list.offset_right = -32
+	_list.offset_top = -200
+	_list.offset_bottom = -24
 	_list.add_theme_constant_override("separation", 14)
 	_list.z_index = 30
 	stage.add_child(_list)
@@ -430,13 +430,13 @@ func _make_patron(offer: Dictionary) -> Button:
 
 	var button := Button.new()
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.custom_minimum_size = Vector2(160, 110)
+	button.custom_minimum_size = Vector2(213, 147)
 	button.text = "%s\n%s\n%s" % [
 		str(patron.get("emoji", "🧑‍🚀")),
 		str(patron.get("name", "Patron")),
 		state,
 	]
-	button.add_theme_font_size_override("font_size", 12)
+	button.add_theme_font_size_override("font_size", 16)
 	var tint := Color(str(patron.get("color", "#FF9E4F")))
 	button.add_theme_stylebox_override("normal", ClientUi.button_style(Color(tint, 0.12), Color(tint, 0.65)))
 	button.add_theme_stylebox_override("hover", ClientUi.button_style(Color(tint, 0.25), tint))
@@ -508,7 +508,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	var eyebrow := Label.new()
 	eyebrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	eyebrow.text = "CONTRACT OFFER"
-	eyebrow.add_theme_font_size_override("font_size", 14)
+	eyebrow.add_theme_font_size_override("font_size", 19)
 	eyebrow.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(eyebrow)
 	titles.add_child(eyebrow)
@@ -517,7 +517,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_l.text = str(offer.get("name", "Contract"))
 	name_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_l.add_theme_font_size_override("font_size", 28)
+	name_l.add_theme_font_size_override("font_size", 37)
 	name_l.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(name_l)
 	titles.add_child(name_l)
@@ -525,7 +525,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	var loc := Label.new()
 	loc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	loc.text = "📍  %s" % str(offer.get("location", "?"))
-	loc.add_theme_font_size_override("font_size", 16)
+	loc.add_theme_font_size_override("font_size", 21)
 	loc.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(loc)
 	titles.add_child(loc)
@@ -549,12 +549,12 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	var clock := Label.new()
 	clock.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	clock.text = "⏱"
-	clock.add_theme_font_size_override("font_size", 18)
+	clock.add_theme_font_size_override("font_size", 24)
 	dur_inner.add_child(clock)
 	var dur_lab := Label.new()
 	dur_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	dur_lab.text = MissionBoard.format_duration(dur)
-	dur_lab.add_theme_font_size_override("font_size", 18)
+	dur_lab.add_theme_font_size_override("font_size", 24)
 	dur_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(dur_lab)
 	dur_inner.add_child(dur_lab)
@@ -563,7 +563,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	desc.text = str(offer.get("description", ""))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.add_theme_font_size_override("font_size", 18)
+	desc.add_theme_font_size_override("font_size", 24)
 	desc.add_theme_color_override("font_color", Color(0.9, 0.92, 0.95, 0.95))
 	ClientUi.apply_body_font(desc)
 	_hover_body.add_child(desc)
@@ -579,7 +579,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	var footer := Label.new()
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer.add_theme_font_size_override("font_size", 16)
+	footer.add_theme_font_size_override("font_size", 21)
 	ClientUi.apply_display_font(footer)
 	if state == "Locked":
 		footer.text = "Requires Level %s" % str(offer.get("level_requirement", "?"))
@@ -699,7 +699,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 
 	var eyebrow := Label.new()
 	eyebrow.text = str(patron.get("name", "Patron")).to_upper()
-	eyebrow.add_theme_font_size_override("font_size", 13)
+	eyebrow.add_theme_font_size_override("font_size", 17)
 	eyebrow.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(eyebrow)
 	titles.add_child(eyebrow)
@@ -707,14 +707,14 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	var name_l := Label.new()
 	name_l.text = str(offer.get("name", "Contract"))
 	name_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_l.add_theme_font_size_override("font_size", 26)
+	name_l.add_theme_font_size_override("font_size", 35)
 	name_l.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(name_l)
 	titles.add_child(name_l)
 
 	var loc := Label.new()
 	loc.text = "📍  %s" % str(offer.get("location", "?"))
-	loc.add_theme_font_size_override("font_size", 14)
+	loc.add_theme_font_size_override("font_size", 19)
 	loc.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(loc)
 	titles.add_child(loc)
@@ -723,8 +723,8 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	close_btn.text = "✕"
 	close_btn.flat = true
 	close_btn.focus_mode = Control.FOCUS_NONE
-	close_btn.custom_minimum_size = Vector2(36, 36)
-	close_btn.add_theme_font_size_override("font_size", 18)
+	close_btn.custom_minimum_size = Vector2(48, 48)
+	close_btn.add_theme_font_size_override("font_size", 24)
 	close_btn.add_theme_color_override("font_color", ClientUi.MUTED)
 	close_btn.add_theme_color_override("font_hover_color", ClientUi.TEXT)
 	close_btn.pressed.connect(_close_mission_sheet)
@@ -747,11 +747,11 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	dur_row.add_child(dur_inner)
 	var clock := Label.new()
 	clock.text = "⏱"
-	clock.add_theme_font_size_override("font_size", 16)
+	clock.add_theme_font_size_override("font_size", 21)
 	dur_inner.add_child(clock)
 	var dur_lab := Label.new()
 	dur_lab.text = MissionBoard.format_duration(dur)
-	dur_lab.add_theme_font_size_override("font_size", 16)
+	dur_lab.add_theme_font_size_override("font_size", 21)
 	dur_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(dur_lab)
 	dur_inner.add_child(dur_lab)
@@ -760,7 +760,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	var desc := Label.new()
 	desc.text = str(offer.get("description", ""))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.add_theme_font_size_override("font_size", 16)
+	desc.add_theme_font_size_override("font_size", 21)
 	desc.add_theme_color_override("font_color", Color(0.9, 0.92, 0.95, 0.95))
 	ClientUi.apply_body_font(desc)
 	_preview_body.add_child(desc)
@@ -768,7 +768,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	# Rewards
 	var rew_lab := Label.new()
 	rew_lab.text = "REWARDS"
-	rew_lab.add_theme_font_size_override("font_size", 12)
+	rew_lab.add_theme_font_size_override("font_size", 16)
 	rew_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(rew_lab)
 	_preview_body.add_child(rew_lab)
@@ -782,7 +782,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	# Possible loot
 	var loot_lab := Label.new()
 	loot_lab.text = "POSSIBLE LOOT"
-	loot_lab.add_theme_font_size_override("font_size", 12)
+	loot_lab.add_theme_font_size_override("font_size", 16)
 	loot_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(loot_lab)
 	_preview_body.add_child(loot_lab)
@@ -805,11 +805,11 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	loot_col.add_child(loot_head)
 	var gift := Label.new()
 	gift.text = "🎁"
-	gift.add_theme_font_size_override("font_size", 20)
+	gift.add_theme_font_size_override("font_size", 27)
 	loot_head.add_child(gift)
 	var loot_type_lab := Label.new()
 	loot_type_lab.text = loot_type.replace("_", " ").capitalize()
-	loot_type_lab.add_theme_font_size_override("font_size", 16)
+	loot_type_lab.add_theme_font_size_override("font_size", 21)
 	loot_type_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(loot_type_lab)
 	loot_head.add_child(loot_type_lab)
@@ -832,7 +832,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 		rarity_row.add_child(chip)
 		var chip_lab := Label.new()
 		chip_lab.text = "%s %s%%" % [str(r).substr(0, 3).capitalize(), pct]
-		chip_lab.add_theme_font_size_override("font_size", 12)
+		chip_lab.add_theme_font_size_override("font_size", 16)
 		chip_lab.add_theme_color_override("font_color", rcol)
 		ClientUi.apply_display_font(chip_lab)
 		chip.add_child(chip_lab)
@@ -842,21 +842,21 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	if state == "Locked":
 		var lock_lab := Label.new()
 		lock_lab.text = "Requires Level %s" % str(offer.get("level_requirement", "?"))
-		lock_lab.add_theme_font_size_override("font_size", 14)
+		lock_lab.add_theme_font_size_override("font_size", 19)
 		lock_lab.add_theme_color_override("font_color", ClientUi.DANGER)
 		ClientUi.apply_body_font(lock_lab)
 		_preview_body.add_child(lock_lab)
 	elif state == "Low fuel":
 		var fuel_lab := Label.new()
 		fuel_lab.text = "Not enough fuel (need %s)" % str(fuel)
-		fuel_lab.add_theme_font_size_override("font_size", 14)
+		fuel_lab.add_theme_font_size_override("font_size", 19)
 		fuel_lab.add_theme_color_override("font_color", Color("#FBBF24"))
 		ClientUi.apply_body_font(fuel_lab)
 		_preview_body.add_child(fuel_lab)
 	elif state == "Busy":
 		var busy_lab := Label.new()
 		busy_lab.text = "Mining in progress — scout now, launch when free"
-		busy_lab.add_theme_font_size_override("font_size", 14)
+		busy_lab.add_theme_font_size_override("font_size", 19)
 		busy_lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 		ClientUi.apply_body_font(busy_lab)
 		_preview_body.add_child(busy_lab)
@@ -869,10 +869,10 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	else:
 		start.text = "UNAVAILABLE"
 	start.disabled = disabled
-	start.custom_minimum_size = Vector2(0, 48)
+	start.custom_minimum_size = Vector2(0, 64)
 	start.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_primary_button(start)
-	start.add_theme_font_size_override("font_size", 16)
+	start.add_theme_font_size_override("font_size", 21)
 	if not disabled:
 		start.pressed.connect(func() -> void:
 			var launch_offer := _detail_offer.duplicate(true)
@@ -924,7 +924,7 @@ func _fit_preview_above_patrons() -> void:
 
 func _make_sheet_quest_icon(patron: Dictionary, tint: Color) -> PanelContainer:
 	var wrap := PanelContainer.new()
-	wrap.custom_minimum_size = Vector2(72, 72)
+	wrap.custom_minimum_size = Vector2(96, 96)
 	var wrap_style := ClientUi.painted_panel_style(
 		Color(0.04, 0.05, 0.08, 0.98), Color(tint, 0.95), 14, 2
 	)
@@ -937,7 +937,7 @@ func _make_sheet_quest_icon(patron: Dictionary, tint: Color) -> PanelContainer:
 	emoji.text = str(patron.get("emoji", "🤖"))
 	emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emoji.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	emoji.add_theme_font_size_override("font_size", 34)
+	emoji.add_theme_font_size_override("font_size", 45)
 	wrap.add_child(emoji)
 	return wrap
 
@@ -960,20 +960,20 @@ func _make_reward_tile(icon: String, value: String, label: String, color: Color)
 	var ic := Label.new()
 	ic.text = icon
 	ic.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ic.add_theme_font_size_override("font_size", 18)
+	ic.add_theme_font_size_override("font_size", 24)
 	ic.add_theme_color_override("font_color", color)
 	col.add_child(ic)
 	var val := Label.new()
 	val.text = value
 	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	val.add_theme_font_size_override("font_size", 22)
+	val.add_theme_font_size_override("font_size", 29)
 	val.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(val)
 	col.add_child(val)
 	var lab := Label.new()
 	lab.text = label
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 12)
+	lab.add_theme_font_size_override("font_size", 16)
 	lab.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)

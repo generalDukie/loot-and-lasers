@@ -71,13 +71,13 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "⛏  Space Mining"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 27)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	header.add_child(title)
 
 	_balance_lab = Label.new()
-	_balance_lab.add_theme_font_size_override("font_size", 12)
+	_balance_lab.add_theme_font_size_override("font_size", 16)
 	_balance_lab.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(_balance_lab)
 	header.add_child(_balance_lab)
@@ -103,7 +103,7 @@ func _build() -> void:
 	pad.add_child(hcol)
 
 	_hero_wrap = Control.new()
-	_hero_wrap.custom_minimum_size = Vector2(0, 140)
+	_hero_wrap.custom_minimum_size = Vector2(0, 187)
 	_hero_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hcol.add_child(_hero_wrap)
 
@@ -118,13 +118,13 @@ func _build() -> void:
 	_hero_emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hero_emoji.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_hero_emoji.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	_hero_emoji.add_theme_font_size_override("font_size", 56)
+	_hero_emoji.add_theme_font_size_override("font_size", 75)
 	_hero_emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hero_wrap.add_child(_hero_emoji)
 
 	_hero_title = Label.new()
 	_hero_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_title.add_theme_font_size_override("font_size", 16)
+	_hero_title.add_theme_font_size_override("font_size", 21)
 	_hero_title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(_hero_title)
 	hcol.add_child(_hero_title)
@@ -132,7 +132,7 @@ func _build() -> void:
 	_hero_sub = Label.new()
 	_hero_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hero_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hero_sub.add_theme_font_size_override("font_size", 11)
+	_hero_sub.add_theme_font_size_override("font_size", 15)
 	_hero_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_hero_sub)
 	hcol.add_child(_hero_sub)
@@ -147,12 +147,12 @@ func _build() -> void:
 	var dur_lab := Label.new()
 	dur_lab.text = "⏱  Duration"
 	dur_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	dur_lab.add_theme_font_size_override("font_size", 11)
+	dur_lab.add_theme_font_size_override("font_size", 15)
 	dur_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(dur_lab)
 	dur_row.add_child(dur_lab)
 	_hours_lab = Label.new()
-	_hours_lab.add_theme_font_size_override("font_size", 16)
+	_hours_lab.add_theme_font_size_override("font_size", 21)
 	_hours_lab.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(_hours_lab)
 	dur_row.add_child(_hours_lab)
@@ -162,7 +162,7 @@ func _build() -> void:
 	_hours.max_value = 24
 	_hours.step = 1
 	_hours.value = 4
-	_hours.custom_minimum_size.y = 18
+	_hours.custom_minimum_size.y = 24
 	_hours.value_changed.connect(func(_v: float) -> void: _refresh_idle_preview())
 	_idle_box.add_child(_hours)
 
@@ -178,7 +178,7 @@ func _build() -> void:
 			HORIZONTAL_ALIGNMENT_CENTER,
 			HORIZONTAL_ALIGNMENT_RIGHT,
 		][i]
-		tl.add_theme_font_size_override("font_size", 9)
+		tl.add_theme_font_size_override("font_size", 12)
 		tl.add_theme_color_override("font_color", ClientUi.MUTED)
 		tick_row.add_child(tl)
 
@@ -193,13 +193,13 @@ func _build() -> void:
 	))
 	preview_row.add_child(chip)
 	_preview_chip = Label.new()
-	_preview_chip.add_theme_font_size_override("font_size", 11)
+	_preview_chip.add_theme_font_size_override("font_size", 15)
 	_preview_chip.add_theme_color_override("font_color", Color("#C4B5FD"))
 	ClientUi.apply_display_font(_preview_chip)
 	chip.add_child(_preview_chip)
 
 	_preview_formula = Label.new()
-	_preview_formula.add_theme_font_size_override("font_size", 10)
+	_preview_formula.add_theme_font_size_override("font_size", 13)
 	_preview_formula.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_preview_formula)
 	preview_row.add_child(_preview_formula)
@@ -221,12 +221,12 @@ func _build() -> void:
 	_busy_box.add_child(busy_row)
 	_remain_lab = Label.new()
 	_remain_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_remain_lab.add_theme_font_size_override("font_size", 12)
+	_remain_lab.add_theme_font_size_override("font_size", 16)
 	_remain_lab.add_theme_color_override("font_color", Color("#FCD34D"))
 	ClientUi.apply_display_font(_remain_lab)
 	busy_row.add_child(_remain_lab)
 	_reward_lab = Label.new()
-	_reward_lab.add_theme_font_size_override("font_size", 12)
+	_reward_lab.add_theme_font_size_override("font_size", 16)
 	_reward_lab.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(_reward_lab)
 	busy_row.add_child(_reward_lab)
@@ -235,7 +235,7 @@ func _build() -> void:
 	_progress.min_value = 0
 	_progress.max_value = 100
 	_progress.show_percentage = false
-	_progress.custom_minimum_size = Vector2(0, 10)
+	_progress.custom_minimum_size = Vector2(0, 13)
 	ClientUi.apply_hp_bar(_progress, Color("#F59E0B"))
 	_busy_box.add_child(_progress)
 
@@ -254,7 +254,7 @@ func _build() -> void:
 
 	_ready_reward = Label.new()
 	_ready_reward.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ready_reward.add_theme_font_size_override("font_size", 36)
+	_ready_reward.add_theme_font_size_override("font_size", 48)
 	_ready_reward.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(_ready_reward)
 	_ready_box.add_child(_ready_reward)
@@ -292,14 +292,14 @@ func _footer_tile(parent: HBoxContainer, label: String, color: Color) -> Label:
 	panel.add_child(col)
 	var val := Label.new()
 	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	val.add_theme_font_size_override("font_size", 14)
+	val.add_theme_font_size_override("font_size", 19)
 	val.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(val)
 	col.add_child(val)
 	var lab := Label.new()
 	lab.text = label
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 9)
+	lab.add_theme_font_size_override("font_size", 12)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)

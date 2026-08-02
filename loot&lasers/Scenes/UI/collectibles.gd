@@ -36,7 +36,7 @@ func _build() -> void:
 
 	var title := Label.new()
 	title.text = "💎  Cosmic Vault"
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", 32)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	root.add_child(title)
@@ -48,7 +48,7 @@ func _build() -> void:
 	root.add_child(career)
 	_career_lab = Label.new()
 	_career_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_career_lab.add_theme_font_size_override("font_size", 12)
+	_career_lab.add_theme_font_size_override("font_size", 16)
 	_career_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_career_lab)
 	career.add_child(_career_lab)
@@ -62,7 +62,7 @@ func _build() -> void:
 	pcol.add_theme_constant_override("separation", 6)
 	prog_panel.add_child(pcol)
 	_progress_lab = Label.new()
-	_progress_lab.add_theme_font_size_override("font_size", 13)
+	_progress_lab.add_theme_font_size_override("font_size", 17)
 	_progress_lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(_progress_lab)
 	pcol.add_child(_progress_lab)
@@ -70,7 +70,7 @@ func _build() -> void:
 	_progress_bar.min_value = 0
 	_progress_bar.max_value = 100
 	_progress_bar.show_percentage = false
-	_progress_bar.custom_minimum_size = Vector2(0, 12)
+	_progress_bar.custom_minimum_size = Vector2(0, 16)
 	ClientUi.apply_hp_bar(_progress_bar, ClientUi.CYAN)
 	pcol.add_child(_progress_bar)
 
@@ -268,14 +268,14 @@ func _entry(name: String, rarity: String, lore: String, owned: bool) -> PanelCon
 	var title := Label.new()
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.text = ("%s · %s" % [name, rarity]) if owned else "???"
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", tint if owned else Color(0.45, 0.5, 0.55))
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
 	var body := Label.new()
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.text = lore if owned else "Not yet discovered."
-	body.add_theme_font_size_override("font_size", 10)
+	body.add_theme_font_size_override("font_size", 13)
 	body.add_theme_color_override("font_color", ClientUi.MUTED if owned else Color(0.4, 0.45, 0.5))
 	ClientUi.apply_body_font(body)
 	col.add_child(body)

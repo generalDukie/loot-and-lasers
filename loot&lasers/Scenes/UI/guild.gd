@@ -116,14 +116,14 @@ func _make_creation_flow() -> VBoxContainer:
 	var title := Label.new()
 	title.text = "👥  FORM A GUILD"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", 32)
 	title.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(title)
 	head.add_child(title)
 	var sub := Label.new()
 	sub.text = "Band together to share progression and mission glory."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_font_size_override("font_size", 17)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head.add_child(sub)
@@ -165,7 +165,7 @@ func _make_creation_flow() -> VBoxContainer:
 	_create_block.add_child(_field_label("Description"))
 	_desc_edit = TextEdit.new()
 	_desc_edit.placeholder_text = "What does your guild stand for?"
-	_desc_edit.custom_minimum_size = Vector2(0, 72)
+	_desc_edit.custom_minimum_size = Vector2(0, 96)
 	_desc_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	ClientUi.apply_body_font(_desc_edit)
 	_create_block.add_child(_desc_edit)
@@ -182,7 +182,7 @@ func _make_creation_flow() -> VBoxContainer:
 
 	var browse_lab := Label.new()
 	browse_lab.text = "Open guilds"
-	browse_lab.add_theme_font_size_override("font_size", 12)
+	browse_lab.add_theme_font_size_override("font_size", 16)
 	browse_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(browse_lab)
 	_join_block.add_child(browse_lab)
@@ -195,7 +195,7 @@ func _make_creation_flow() -> VBoxContainer:
 
 	var by_name := Label.new()
 	by_name.text = "Or join by name"
-	by_name.add_theme_font_size_override("font_size", 12)
+	by_name.add_theme_font_size_override("font_size", 16)
 	by_name.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(by_name)
 	_join_block.add_child(by_name)
@@ -215,7 +215,7 @@ func _make_creation_flow() -> VBoxContainer:
 func _field_label(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(l)
 	return l
@@ -266,7 +266,7 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 	left.add_child(name_row)
 	var name := Label.new()
 	name.text = str(g.get("name", "?"))
-	name.add_theme_font_size_override("font_size", 22)
+	name.add_theme_font_size_override("font_size", 29)
 	name.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(name)
 	name_row.add_child(name)
@@ -281,7 +281,7 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 		name_row.add_child(tag_pill)
 		var tag_lab := Label.new()
 		tag_lab.text = "[%s]" % tag
-		tag_lab.add_theme_font_size_override("font_size", 12)
+		tag_lab.add_theme_font_size_override("font_size", 16)
 		tag_lab.add_theme_color_override("font_color", ClientUi.CYAN)
 		ClientUi.apply_display_font(tag_lab)
 		tag_pill.add_child(tag_lab)
@@ -291,7 +291,7 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 		var desc_lab := Label.new()
 		desc_lab.text = desc
 		desc_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc_lab.add_theme_font_size_override("font_size", 12)
+		desc_lab.add_theme_font_size_override("font_size", 16)
 		desc_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(desc_lab)
 		left.add_child(desc_lab)
@@ -303,7 +303,7 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 	pills.add_child(_header_pill("👥  %s  MEMBERS" % str(SocialManager.guild_members.size()), ClientUi.VIOLET))
 	var led := Label.new()
 	led.text = "Led by %s" % str(g.get("leader_name", "?"))
-	led.add_theme_font_size_override("font_size", 11)
+	led.add_theme_font_size_override("font_size", 15)
 	led.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(led)
 	pills.add_child(led)
@@ -330,12 +330,12 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 	var xp_lab := Label.new()
 	xp_lab.text = "Guild XP"
 	xp_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	xp_lab.add_theme_font_size_override("font_size", 11)
+	xp_lab.add_theme_font_size_override("font_size", 15)
 	xp_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	xp_row.add_child(xp_lab)
 	var xp_val := Label.new()
 	xp_val.text = "%s / %s" % [str(xp), str(xp_need)]
-	xp_val.add_theme_font_size_override("font_size", 11)
+	xp_val.add_theme_font_size_override("font_size", 15)
 	xp_val.add_theme_color_override("font_color", ClientUi.MUTED)
 	xp_row.add_child(xp_val)
 	var bar := ProgressBar.new()
@@ -343,7 +343,7 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 	bar.max_value = xp_need
 	bar.value = mini(xp, xp_need)
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 8)
+	bar.custom_minimum_size = Vector2(0, 11)
 	# Closest to web cyan→purple gradient fill.
 	ClientUi.apply_hp_bar(bar, Color("#22D3EE").lerp(Color("#A855F7"), 0.55))
 	left.add_child(bar)
@@ -363,7 +363,7 @@ func _header_pill(text: String, color: Color) -> PanelContainer:
 	))
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(l)
 	p.add_child(l)
@@ -372,7 +372,7 @@ func _header_pill(text: String, color: Color) -> PanelContainer:
 
 func _style_toggle_pill(btn: Button, on: bool, green_when_on: bool) -> void:
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 10)
+	btn.add_theme_font_size_override("font_size", 13)
 	var c := Color("#4ADE80") if (on and green_when_on) else (ClientUi.CYAN if on else ClientUi.MUTED)
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(
 		Color(c.r, c.g, c.b, 0.12), Color(c.r, c.g, c.b, 0.35)
@@ -401,13 +401,13 @@ func _make_challenge_panel(chg: Dictionary, g: Dictionary) -> PanelContainer:
 	head.add_child(left)
 	var eye := Label.new()
 	eye.text = "WEEKLY CHALLENGE"
-	eye.add_theme_font_size_override("font_size", 10)
+	eye.add_theme_font_size_override("font_size", 13)
 	eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(eye)
 	left.add_child(eye)
 	var title := Label.new()
 	title.text = str(chg.get("title", "?"))
-	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	left.add_child(title)
@@ -420,7 +420,7 @@ func _make_challenge_panel(chg: Dictionary, g: Dictionary) -> PanelContainer:
 	else:
 		badge.text = "⏱  %s" % _challenge_time_left(chg)
 		badge.add_theme_color_override("font_color", ClientUi.MUTED)
-	badge.add_theme_font_size_override("font_size", 11)
+	badge.add_theme_font_size_override("font_size", 15)
 	ClientUi.apply_display_font(badge)
 	head.add_child(badge)
 
@@ -432,20 +432,20 @@ func _make_challenge_panel(chg: Dictionary, g: Dictionary) -> PanelContainer:
 	bar.max_value = goal
 	bar.value = mini(prog, goal)
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 22)
+	bar.custom_minimum_size = Vector2(0, 29)
 	ClientUi.apply_hp_bar(bar, ClientUi.CYAN.lerp(ClientUi.VIOLET, 0.5))
 	col.add_child(bar)
 	var prog_lab := Label.new()
 	prog_lab.text = "%s / %s  (%s%%)" % [str(prog), str(goal), str(pct)]
 	prog_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prog_lab.add_theme_font_size_override("font_size", 11)
+	prog_lab.add_theme_font_size_override("font_size", 15)
 	prog_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(prog_lab)
 	col.add_child(prog_lab)
 
 	var hint := Label.new()
 	hint.text = "Complete missions and win Arena duels to fill the bar."
-	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_font_size_override("font_size", 15)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	col.add_child(hint)
@@ -460,7 +460,7 @@ func _make_challenge_panel(chg: Dictionary, g: Dictionary) -> PanelContainer:
 	rewards.add_child(spacer)
 	var glv := Label.new()
 	glv.text = "Guild Lv. %s" % str(g.get("level", 1))
-	glv.add_theme_font_size_override("font_size", 11)
+	glv.add_theme_font_size_override("font_size", 15)
 	glv.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(glv)
 	rewards.add_child(glv)
@@ -521,20 +521,20 @@ func _stat_tile(icon: String, label: String, value: String, color: Color) -> Pan
 	var ic := Label.new()
 	ic.text = icon
 	ic.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ic.add_theme_font_size_override("font_size", 14)
+	ic.add_theme_font_size_override("font_size", 19)
 	ic.add_theme_color_override("font_color", color)
 	col.add_child(ic)
 	var v := Label.new()
 	v.text = value
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_theme_font_size_override("font_size", 18)
+	v.add_theme_font_size_override("font_size", 24)
 	v.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(v)
 	col.add_child(v)
 	var l := Label.new()
 	l.text = label
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 9)
+	l.add_theme_font_size_override("font_size", 12)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(l)
 	col.add_child(l)
@@ -559,19 +559,19 @@ func _make_wars_panel(guild: Dictionary, wars: Array) -> PanelContainer:
 	head.add_child(left)
 	var eye := Label.new()
 	eye.text = "GUILD WARS"
-	eye.add_theme_font_size_override("font_size", 10)
+	eye.add_theme_font_size_override("font_size", 13)
 	eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(eye)
 	left.add_child(eye)
 	var title := Label.new()
 	title.text = "⚔  War Council"
-	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	left.add_child(title)
 	var wl := Label.new()
 	wl.text = "%sW / %sL" % [str(guild.get("war_wins", 0)), str(guild.get("war_losses", 0))]
-	wl.add_theme_font_size_override("font_size", 12)
+	wl.add_theme_font_size_override("font_size", 16)
 	wl.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(wl)
 	head.add_child(wl)
@@ -579,7 +579,7 @@ func _make_wars_panel(guild: Dictionary, wars: Array) -> PanelContainer:
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.text = "Declare war on any guild. Both sides have 24h to ready up — only readied members fight in the gauntlet, ranked by level."
-	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_font_size_override("font_size", 15)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	col.add_child(hint)
@@ -637,7 +637,7 @@ func _make_battle_history(wars: Array, guild_id: String) -> PanelContainer:
 	panel.add_child(col)
 	var t := Label.new()
 	t.text = "⚔  BATTLE HISTORY"
-	t.add_theme_font_size_override("font_size", 12)
+	t.add_theme_font_size_override("font_size", 16)
 	t.add_theme_color_override("font_color", Color(0.95, 0.65, 0.72))
 	ClientUi.apply_display_font(t)
 	col.add_child(t)
@@ -669,13 +669,13 @@ func _make_battle_history(wars: Array, guild_id: String) -> PanelContainer:
 		var info := Label.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.text = "vs %s" % opponent
-		info.add_theme_font_size_override("font_size", 12)
+		info.add_theme_font_size_override("font_size", 16)
 		info.add_theme_color_override("font_color", ClientUi.TEXT)
 		ClientUi.apply_body_font(info)
 		row.add_child(info)
 		var badge := Label.new()
 		badge.text = "WIN" if won else "LOSS"
-		badge.add_theme_font_size_override("font_size", 10)
+		badge.add_theme_font_size_override("font_size", 13)
 		badge.add_theme_color_override("font_color", ClientUi.SUCCESS if won else ClientUi.DANGER)
 		ClientUi.apply_display_font(badge)
 		row.add_child(badge)
@@ -715,7 +715,7 @@ func _make_war_card(w: Dictionary) -> PanelContainer:
 
 	var status_l := Label.new()
 	status_l.text = status.to_upper()
-	status_l.add_theme_font_size_override("font_size", 10)
+	status_l.add_theme_font_size_override("font_size", 13)
 	status_l.add_theme_color_override("font_color", border)
 	ClientUi.apply_display_font(status_l)
 	col.add_child(status_l)
@@ -734,7 +734,7 @@ func _make_war_card(w: Dictionary) -> PanelContainer:
 		var readies: Array = await GuildWarManager.list_readies(str(w.get("id", "")))
 		var ready_lab := Label.new()
 		ready_lab.text = "Ready: %s fighters" % readies.size()
-		ready_lab.add_theme_font_size_override("font_size", 11)
+		ready_lab.add_theme_font_size_override("font_size", 15)
 		ready_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(ready_lab)
 		col.add_child(ready_lab)
@@ -769,7 +769,7 @@ func _make_invite_row() -> PanelContainer:
 	panel.add_child(col)
 	var t := Label.new()
 	t.text = "Invite by name"
-	t.add_theme_font_size_override("font_size", 13)
+	t.add_theme_font_size_override("font_size", 17)
 	t.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(t)
 	col.add_child(t)
@@ -798,7 +798,7 @@ func _make_members_panel(ch: Dictionary) -> PanelContainer:
 	panel.add_child(col)
 	var t := Label.new()
 	t.text = "MEMBER ROSTER"
-	t.add_theme_font_size_override("font_size", 12)
+	t.add_theme_font_size_override("font_size", 16)
 	t.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(t)
 	col.add_child(t)
@@ -835,7 +835,7 @@ func _make_member_row(m: Dictionary, my_id: String) -> PanelContainer:
 	panel.add_child(row)
 	var icon := Label.new()
 	icon.text = "👑" if role == "leader" else "⭐"
-	icon.add_theme_font_size_override("font_size", 14)
+	icon.add_theme_font_size_override("font_size", 19)
 	icon.add_theme_color_override("font_color", color)
 	row.add_child(icon)
 	var col := VBoxContainer.new()
@@ -847,20 +847,20 @@ func _make_member_row(m: Dictionary, my_id: String) -> PanelContainer:
 	col.add_child(name_row)
 	var name := Label.new()
 	name.text = str(m.get("character_name", "?"))
-	name.add_theme_font_size_override("font_size", 13)
+	name.add_theme_font_size_override("font_size", 17)
 	name.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(name)
 	name_row.add_child(name)
 	if is_you:
 		var you := Label.new()
 		you.text = "YOU"
-		you.add_theme_font_size_override("font_size", 9)
+		you.add_theme_font_size_override("font_size", 12)
 		you.add_theme_color_override("font_color", ClientUi.CYAN)
 		ClientUi.apply_display_font(you)
 		name_row.add_child(you)
 	var role_lab := Label.new()
 	role_lab.text = role.capitalize()
-	role_lab.add_theme_font_size_override("font_size", 10)
+	role_lab.add_theme_font_size_override("font_size", 13)
 	role_lab.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(role_lab)
 	name_row.add_child(role_lab)
@@ -870,7 +870,7 @@ func _make_member_row(m: Dictionary, my_id: String) -> PanelContainer:
 		str(m.get("contributed_missions", 0)),
 		str(m.get("contributed_stardust", 0)),
 	]
-	detail.add_theme_font_size_override("font_size", 11)
+	detail.add_theme_font_size_override("font_size", 15)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(detail)
 	col.add_child(detail)
@@ -888,7 +888,7 @@ func _make_log_panel() -> PanelContainer:
 	panel.add_child(col)
 	var t := Label.new()
 	t.text = "📜  SHARED MISSION LOG"
-	t.add_theme_font_size_override("font_size", 12)
+	t.add_theme_font_size_override("font_size", 16)
 	t.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(t)
 	col.add_child(t)
@@ -905,13 +905,13 @@ func _make_log_panel() -> PanelContainer:
 			var elab := Label.new()
 			elab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			elab.text = "%s %s" % [str(entry.get("character_name", "")), str(entry.get("message", ""))]
-			elab.add_theme_font_size_override("font_size", 12)
+			elab.add_theme_font_size_override("font_size", 16)
 			elab.add_theme_color_override("font_color", ClientUi.TEXT)
 			ClientUi.apply_body_font(elab)
 			row.add_child(elab)
 			var ago := Label.new()
 			ago.text = _time_ago(str(entry.get("created_date", "")))
-			ago.add_theme_font_size_override("font_size", 10)
+			ago.add_theme_font_size_override("font_size", 13)
 			ago.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.7))
 			row.add_child(ago)
 			shown += 1
@@ -944,7 +944,7 @@ func _empty(t: String) -> Label:
 	l.text = t
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 12)
+	l.add_theme_font_size_override("font_size", 16)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(l)
 	return l
@@ -963,7 +963,7 @@ func _make_browse_row(g: Dictionary) -> PanelContainer:
 	row.add_child(col)
 	var title := Label.new()
 	title.text = "[%s] %s" % [str(g.get("tag", "????")), str(g.get("name", "?"))]
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 19)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
@@ -973,7 +973,7 @@ func _make_browse_row(g: Dictionary) -> PanelContainer:
 		str(g.get("member_count", 0)), str(g.get("level", 1)), str(g.get("leader_name", "?")),
 		"invite-only" if invite_only else "open",
 	]
-	detail.add_theme_font_size_override("font_size", 11)
+	detail.add_theme_font_size_override("font_size", 15)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(detail)
 	var join := Button.new()

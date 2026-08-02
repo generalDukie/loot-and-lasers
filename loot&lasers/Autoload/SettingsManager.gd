@@ -2,15 +2,11 @@ extends Node
 ## Player preferences (audio, display, input, accessibility).
 ## Persists to user://settings.cfg — no gameplay coupling.
 ##
-## Matches web GameCanvas "auto":
-##   - Logical canvas always 1920×1080 (16:9)
-##   - Window fills the work area (maximized) so nothing is clipped by the taskbar
-##   - CONTENT_SCALE_ASPECT_KEEP letterboxes/pillarboxes so UI never crops
-##   - F11 toggles fullscreen (works from the editor Play window too)
+## Display scaling is owned by ResolutionManager (2560×1440, canvas_items, KEEP).
+## This autoload only applies audio + fullscreen and re-asserts content scale.
 
 const SETTINGS_PATH := "user://settings.cfg"
-## Same design canvas as web `GameCanvas.jsx`.
-const DESIGN_SIZE := Vector2i(1920, 1080)
+const DESIGN_SIZE := ResolutionRules.DESIGN_SIZE
 const MIN_WINDOW := Vector2i(960, 540)
 
 var _config := ConfigFile.new()
@@ -34,7 +30,7 @@ func _ready() -> void:
 	get_tree().process_frame.connect(_ensure_visible_window, CONNECT_ONE_SHOT)
 	# Second pass after Windows applies DPI / chrome metrics.
 	get_tree().create_timer(0.15).timeout.connect(_ensure_visible_window)
-	print("[SettingsManager] ready design=%sx%s (16:9 auto-scale)" % [DESIGN_SIZE.x, DESIGN_SIZE.y])
+	print("[SettingsManager] ready design=%sx%s (delegates scale to ResolutionManager)" % [DESIGN_SIZE.x, DESIGN_SIZE.y])
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -127,10 +123,12 @@ func _persist_audio(immediate: bool) -> void:
 
 
 func _apply_content_scale() -> void:
+	if ResolutionManager != null:
+		ResolutionManager.apply_content_scaling(get_window())
+		return
 	var win := get_window()
 	if win == null:
 		return
-	# Always layout in 1920×1080 space; Godot scales the whole canvas to the window.
 	win.content_scale_size = DESIGN_SIZE
 	win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP

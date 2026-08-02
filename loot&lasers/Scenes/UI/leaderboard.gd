@@ -47,7 +47,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "👑  Galactic Rankings"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 29)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head.add_child(title)
@@ -55,7 +55,7 @@ func _build() -> void:
 	var sub := Label.new()
 	sub.text = "Ranked by arena rating · Challenge any eligible rival"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_font_size_override("font_size", 11)
+	sub.add_theme_font_size_override("font_size", 15)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head.add_child(sub)
@@ -68,7 +68,7 @@ func _build() -> void:
 	_podium = HBoxContainer.new()
 	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
 	_podium.add_theme_constant_override("separation", 18)
-	_podium.custom_minimum_size.y = 220
+	_podium.custom_minimum_size.y = 293
 	root.add_child(_podium)
 
 	var scroll := ScrollContainer.new()
@@ -204,7 +204,7 @@ func _build_podium(rows: Array) -> void:
 
 func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxContainer:
 	var wrap := VBoxContainer.new()
-	wrap.custom_minimum_size.x = 112
+	wrap.custom_minimum_size.x = 149
 	wrap.alignment = BoxContainer.ALIGNMENT_CENTER
 	wrap.add_theme_constant_override("separation", 4)
 
@@ -213,7 +213,7 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	emoji.name = "Emoji"
 	emoji.text = _race_emoji(c)
 	emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emoji.add_theme_font_size_override("font_size", 32)
+	emoji.add_theme_font_size_override("font_size", 43)
 	emoji.add_theme_color_override("font_shadow_color", Color(medal, 0.75))
 	emoji.add_theme_constant_override("shadow_offset_x", 0)
 	emoji.add_theme_constant_override("shadow_offset_y", 0)
@@ -227,9 +227,9 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	var name_l := Label.new()
 	name_l.text = str(c.get("name", "?"))
 	name_l.clip_text = true
-	name_l.custom_minimum_size.x = 90
+	name_l.custom_minimum_size.x = 120
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_l.add_theme_font_size_override("font_size", 11)
+	name_l.add_theme_font_size_override("font_size", 15)
 	name_l.add_theme_color_override("font_color", medal)
 	ClientUi.apply_display_font(name_l)
 	name_row.add_child(name_l)
@@ -237,7 +237,7 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	if not gtag.is_empty():
 		var g := Label.new()
 		g.text = "[%s]" % gtag
-		g.add_theme_font_size_override("font_size", 9)
+		g.add_theme_font_size_override("font_size", 12)
 		g.add_theme_color_override("font_color", Color(ClientUi.VIOLET, 0.85))
 		ClientUi.apply_display_font(g)
 		name_row.add_child(g)
@@ -245,7 +245,7 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	var meta := Label.new()
 	meta.text = "%s · %sW" % [str(c.get("arena_rating", 1000)), str(c.get("arena_wins", 0))]
 	meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	meta.add_theme_font_size_override("font_size", 10)
+	meta.add_theme_font_size_override("font_size", 13)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	wrap.add_child(meta)
@@ -258,7 +258,7 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	num.text = str(medal_rank + 1)
 	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	num.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	num.add_theme_font_size_override("font_size", 22)
+	num.add_theme_font_size_override("font_size", 29)
 	num.add_theme_color_override("font_color", Color(0, 0, 0, 0.55))
 	ClientUi.apply_display_font(num)
 	pillar.add_child(num)
@@ -342,9 +342,9 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	var rank_lab := Label.new()
 	rank_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rank_lab.text = str(rank)
-	rank_lab.custom_minimum_size.x = 28
+	rank_lab.custom_minimum_size.x = 37
 	rank_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rank_lab.add_theme_font_size_override("font_size", 13)
+	rank_lab.add_theme_font_size_override("font_size", 17)
 	rank_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(rank_lab)
 	id_row.add_child(rank_lab)
@@ -352,7 +352,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	var emoji := Label.new()
 	emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	emoji.text = _race_emoji(c)
-	emoji.add_theme_font_size_override("font_size", 22)
+	emoji.add_theme_font_size_override("font_size", 29)
 	id_row.add_child(emoji)
 
 	var mid := VBoxContainer.new()
@@ -370,7 +370,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	name_l.text = str(c.get("name", "?"))
 	name_l.clip_text = true
 	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_l.add_theme_font_size_override("font_size", 13)
+	name_l.add_theme_font_size_override("font_size", 17)
 	name_l.add_theme_color_override("font_color", ClientUi.GOLD if is_me else ClientUi.TEXT)
 	ClientUi.apply_display_font(name_l)
 	name_row.add_child(name_l)
@@ -385,7 +385,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 		var g := Label.new()
 		g.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		g.text = "[%s]" % gtag
-		g.add_theme_font_size_override("font_size", 9)
+		g.add_theme_font_size_override("font_size", 12)
 		g.add_theme_color_override("font_color", Color(ClientUi.VIOLET, 0.9))
 		ClientUi.apply_display_font(g)
 		gchip.add_child(g)
@@ -394,7 +394,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	detail.name = "Detail"
 	detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	detail.text = "%s · %s" % [str(c.get("race", "?")), str(c.get("class", "?"))]
-	detail.add_theme_font_size_override("font_size", 10)
+	detail.add_theme_font_size_override("font_size", 13)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(detail)
 	mid.add_child(detail)
@@ -402,7 +402,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	var rating := Label.new()
 	rating.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rating.text = "🏆  %s" % str(c.get("arena_rating", 1000))
-	rating.add_theme_font_size_override("font_size", 12)
+	rating.add_theme_font_size_override("font_size", 16)
 	rating.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(rating)
 	id_row.add_child(rating)
@@ -410,7 +410,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	var wins := Label.new()
 	wins.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	wins.text = "⚔  %s" % str(c.get("arena_wins", 0))
-	wins.add_theme_font_size_override("font_size", 12)
+	wins.add_theme_font_size_override("font_size", 16)
 	wins.add_theme_color_override("font_color", ClientUi.VIOLET)
 	ClientUi.apply_display_font(wins)
 	id_row.add_child(wins)
@@ -421,7 +421,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 		chal.text = "Challenge"
 		chal.focus_mode = Control.FOCUS_NONE
 		ClientUi.apply_ghost_button(chal)
-		chal.add_theme_font_size_override("font_size", 10)
+		chal.add_theme_font_size_override("font_size", 13)
 		chal.add_theme_color_override("font_color", ClientUi.CYAN)
 		chal.add_theme_color_override("font_hover_color", ClientUi.CYAN_SOFT)
 		chal.disabled = same_account or _challenging_id == oid

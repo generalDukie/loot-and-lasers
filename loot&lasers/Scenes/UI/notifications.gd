@@ -49,7 +49,7 @@ func _build() -> void:
 	align.add_child(spacer)
 
 	var sheet := PanelContainer.new()
-	sheet.custom_minimum_size = Vector2(360, 0)
+	sheet.custom_minimum_size = Vector2(480, 0)
 	sheet.size_flags_horizontal = Control.SIZE_SHRINK_END
 	sheet.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sheet.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
@@ -69,18 +69,18 @@ func _build() -> void:
 	header.add_child(head_l)
 	var eye := Label.new()
 	eye.text = "INBOX"
-	eye.add_theme_font_size_override("font_size", 10)
+	eye.add_theme_font_size_override("font_size", 13)
 	eye.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.72))
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
 	var title := Label.new()
 	title.text = "🔔  Notifications"
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head_l.add_child(title)
 	_meta = Label.new()
-	_meta.add_theme_font_size_override("font_size", 11)
+	_meta.add_theme_font_size_override("font_size", 15)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_meta)
 	head_l.add_child(_meta)
@@ -96,7 +96,7 @@ func _build() -> void:
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.custom_minimum_size = Vector2(0, 280)
+	scroll.custom_minimum_size = Vector2(0, 373)
 	root.add_child(scroll)
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -177,7 +177,7 @@ func _empty_state() -> PanelContainer:
 	var icon := Label.new()
 	icon.text = "🔔"
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.add_theme_font_size_override("font_size", 28)
+	icon.add_theme_font_size_override("font_size", 37)
 	col.add_child(icon)
 	var lab := Label.new()
 	lab.text = "No notifications yet."
@@ -205,7 +205,7 @@ func _make_row(n: Dictionary) -> PanelContainer:
 	panel.add_child(row)
 
 	var badge := PanelContainer.new()
-	badge.custom_minimum_size = Vector2(36, 36)
+	badge.custom_minimum_size = Vector2(48, 48)
 	var badge_s := StyleBoxFlat.new()
 	badge_s.bg_color = Color(tint, 0.18)
 	badge_s.set_corner_radius_all(8)
@@ -216,7 +216,7 @@ func _make_row(n: Dictionary) -> PanelContainer:
 	badge_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	badge_l.add_theme_color_override("font_color", tint)
-	badge_l.add_theme_font_size_override("font_size", 14)
+	badge_l.add_theme_font_size_override("font_size", 19)
 	ClientUi.apply_display_font(badge_l)
 	badge.add_child(badge_l)
 
@@ -227,7 +227,7 @@ func _make_row(n: Dictionary) -> PanelContainer:
 
 	var type_l := Label.new()
 	type_l.text = str(meta.get("label", ntype))
-	type_l.add_theme_font_size_override("font_size", 10)
+	type_l.add_theme_font_size_override("font_size", 13)
 	type_l.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(type_l)
 	col.add_child(type_l)
@@ -235,14 +235,14 @@ func _make_row(n: Dictionary) -> PanelContainer:
 	var title := Label.new()
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.text = "%s — %s" % [str(n.get("title", "Notice")), str(n.get("body", ""))]
-	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_font_size_override("font_size", 17)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(title)
 	col.add_child(title)
 
 	var meta_l := Label.new()
 	meta_l.text = _time_ago(str(n.get("created_date", "")))
-	meta_l.add_theme_font_size_override("font_size", 11)
+	meta_l.add_theme_font_size_override("font_size", 15)
 	meta_l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta_l)
 	col.add_child(meta_l)

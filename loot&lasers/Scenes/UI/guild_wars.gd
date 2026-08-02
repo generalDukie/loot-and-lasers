@@ -44,19 +44,19 @@ func _build() -> void:
 	header.add_child(head_l)
 	var eye := Label.new()
 	eye.text = "GUILD CONFLICT"
-	eye.add_theme_font_size_override("font_size", 10)
+	eye.add_theme_font_size_override("font_size", 13)
 	eye.add_theme_color_override("font_color", Color(ClientUi.WARNING, 0.85))
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
 	var title := Label.new()
 	title.text = "⚔  Guild Wars"
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 29)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	head_l.add_child(title)
 	_meta = Label.new()
 	_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_meta.add_theme_font_size_override("font_size", 11)
+	_meta.add_theme_font_size_override("font_size", 15)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_meta)
 	head_l.add_child(_meta)
@@ -166,7 +166,7 @@ func _add_war_card(w: Dictionary) -> void:
 
 	var status_l := Label.new()
 	status_l.text = status.to_upper()
-	status_l.add_theme_font_size_override("font_size", 10)
+	status_l.add_theme_font_size_override("font_size", 13)
 	status_l.add_theme_color_override("font_color", border)
 	ClientUi.apply_display_font(status_l)
 	col.add_child(status_l)

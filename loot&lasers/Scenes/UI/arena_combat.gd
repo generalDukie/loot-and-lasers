@@ -117,13 +117,13 @@ func _build() -> void:
 	_player_hp_nums = p_hp.get_meta("nums")
 
 	var mid := VBoxContainer.new()
-	mid.custom_minimum_size.x = 36
+	mid.custom_minimum_size.x = 48
 	mid.alignment = BoxContainer.ALIGNMENT_CENTER
 	hp_row.add_child(mid)
 	var swords := Label.new()
 	swords.text = "⚔"
 	swords.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	swords.add_theme_font_size_override("font_size", 18)
+	swords.add_theme_font_size_override("font_size", 24)
 	swords.add_theme_color_override("font_color", Color("#FCD34D", 0.85))
 	mid.add_child(swords)
 
@@ -178,21 +178,21 @@ func _build() -> void:
 	_ability_banner.add_child(ab_col)
 	_ability_emoji = Label.new()
 	_ability_emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_emoji.add_theme_font_size_override("font_size", 22)
+	_ability_emoji.add_theme_font_size_override("font_size", 29)
 	ab_col.add_child(_ability_emoji)
 	_ability_title = Label.new()
 	_ability_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_title.add_theme_font_size_override("font_size", 15)
+	_ability_title.add_theme_font_size_override("font_size", 20)
 	ClientUi.apply_display_font(_ability_title)
 	ab_col.add_child(_ability_title)
 	_ability_detail = Label.new()
 	_ability_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_detail.add_theme_font_size_override("font_size", 11)
+	_ability_detail.add_theme_font_size_override("font_size", 15)
 	ClientUi.apply_display_font(_ability_detail)
 	ab_col.add_child(_ability_detail)
 	_ability_class = Label.new()
 	_ability_class.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_class.add_theme_font_size_override("font_size", 9)
+	_ability_class.add_theme_font_size_override("font_size", 12)
 	ClientUi.apply_display_font(_ability_class)
 	ab_col.add_child(_ability_class)
 
@@ -203,7 +203,7 @@ func _build() -> void:
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_banner.modulate.a = 0.0
 	_banner.z_index = 25
-	_banner.add_theme_font_size_override("font_size", 42)
+	_banner.add_theme_font_size_override("font_size", 56)
 	_banner.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(_banner)
 	_stage.add_child(_banner)
@@ -216,22 +216,22 @@ func _build() -> void:
 	var intro_col := VBoxContainer.new()
 	intro_col.set_anchors_preset(PRESET_CENTER_TOP)
 	intro_col.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	intro_col.offset_top = 48
-	intro_col.offset_left = -180
-	intro_col.offset_right = 180
+	intro_col.offset_top = 64
+	intro_col.offset_left = -240
+	intro_col.offset_right = 240
 	intro_col.add_theme_constant_override("separation", 8)
 	_intro_layer.add_child(intro_col)
 	var vs_row := Label.new()
 	vs_row.name = "VsRow"
 	vs_row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vs_row.add_theme_font_size_override("font_size", 14)
+	vs_row.add_theme_font_size_override("font_size", 19)
 	ClientUi.apply_display_font(vs_row)
 	intro_col.add_child(vs_row)
 	var fight_lab := Label.new()
 	fight_lab.name = "FightLab"
 	fight_lab.text = "⚔  FIGHT!"
 	fight_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	fight_lab.add_theme_font_size_override("font_size", 36)
+	fight_lab.add_theme_font_size_override("font_size", 48)
 	fight_lab.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(fight_lab)
 	intro_col.add_child(fight_lab)
@@ -252,24 +252,24 @@ func _build() -> void:
 	outro_center.add_child(outro_col)
 	_outro_title = Label.new()
 	_outro_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_outro_title.add_theme_font_size_override("font_size", 48)
+	_outro_title.add_theme_font_size_override("font_size", 64)
 	ClientUi.apply_display_font(_outro_title)
 	outro_col.add_child(_outro_title)
 	_outro_sub = Label.new()
 	_outro_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_outro_sub.add_theme_font_size_override("font_size", 13)
+	_outro_sub.add_theme_font_size_override("font_size", 17)
 	_outro_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_outro_sub)
 	outro_col.add_child(_outro_sub)
 	_outro_btn = Button.new()
 	_outro_btn.text = "VIEW REWARDS"
-	_outro_btn.custom_minimum_size = Vector2(220, 44)
+	_outro_btn.custom_minimum_size = Vector2(293, 59)
 	ClientUi.apply_primary_button(_outro_btn)
 	_outro_btn.pressed.connect(_on_outro_continue)
 	outro_col.add_child(_outro_btn)
 
 	var combo_row := Control.new()
-	combo_row.custom_minimum_size.y = 36
+	combo_row.custom_minimum_size.y = 48
 	root.add_child(combo_row)
 	_combo_wrap = PanelContainer.new()
 	_combo_wrap.visible = false
@@ -281,7 +281,7 @@ func _build() -> void:
 	))
 	combo_row.add_child(_combo_wrap)
 	_combo_lab = Label.new()
-	_combo_lab.add_theme_font_size_override("font_size", 12)
+	_combo_lab.add_theme_font_size_override("font_size", 16)
 	_combo_lab.add_theme_color_override("font_color", Color("#FCD34D"))
 	ClientUi.apply_display_font(_combo_lab)
 	_combo_wrap.add_child(_combo_lab)
@@ -295,7 +295,7 @@ func _build() -> void:
 	skip_pad.add_child(skip_row)
 	_skip_btn = Button.new()
 	_skip_btn.text = "⚡  SKIP TO RESULTS"
-	_skip_btn.custom_minimum_size = Vector2(220, 40)
+	_skip_btn.custom_minimum_size = Vector2(293, 53)
 	_apply_skip_cta(_skip_btn)
 	_skip_btn.pressed.connect(_on_skip)
 	skip_row.add_child(_skip_btn)
@@ -315,7 +315,7 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	col.add_theme_constant_override("separation", 4)
 	var name_lab := Label.new()
 	name_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
-	name_lab.add_theme_font_size_override("font_size", 14)
+	name_lab.add_theme_font_size_override("font_size", 19)
 	name_lab.add_theme_color_override("font_color", Color("#FB7185") if align_right else Color("#22D3EE"))
 	ClientUi.apply_display_font(name_lab)
 	col.add_child(name_lab)
@@ -323,13 +323,13 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	bar.min_value = 0
 	bar.max_value = 100
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 16)
+	bar.custom_minimum_size = Vector2(0, 21)
 	ClientUi.apply_hp_bar(bar, Color("#FB7185") if align_right else Color("#22D3EE"))
 	# Web: remaining HP hugs center — approximate with fill from left (native ProgressBar).
 	col.add_child(bar)
 	var nums := Label.new()
 	nums.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
-	nums.add_theme_font_size_override("font_size", 11)
+	nums.add_theme_font_size_override("font_size", 15)
 	nums.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(nums)
 	col.add_child(nums)
@@ -341,7 +341,7 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 
 func _apply_skip_cta(btn: Button) -> void:
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_font_size_override("font_size", 17)
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(Color("#F59E0B"), Color("#FCD34D")))
 	btn.add_theme_stylebox_override("hover", ClientUi.button_style(Color("#FBBF24"), Color("#FDE68A")))
 	btn.add_theme_stylebox_override("pressed", ClientUi.button_style(Color("#D97706"), Color("#F59E0B")))
@@ -354,46 +354,46 @@ func _apply_skip_cta(btn: Button) -> void:
 func _add_corner(color: Color, left: bool, top: bool) -> void:
 	var c := ColorRect.new()
 	c.color = color
-	c.custom_minimum_size = Vector2(18, 2)
+	c.custom_minimum_size = Vector2(24, 2)
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.set_anchors_preset(PRESET_TOP_LEFT)
 	if left:
-		c.offset_left = 10
-		c.offset_right = 28
+		c.offset_left = 13
+		c.offset_right = 37
 	else:
 		c.anchor_left = 1.0
 		c.anchor_right = 1.0
-		c.offset_left = -28
-		c.offset_right = -10
+		c.offset_left = -37
+		c.offset_right = -13
 	if top:
-		c.offset_top = 10
-		c.offset_bottom = 12
+		c.offset_top = 13
+		c.offset_bottom = 16
 	else:
 		c.anchor_top = 1.0
 		c.anchor_bottom = 1.0
-		c.offset_top = -12
-		c.offset_bottom = -10
+		c.offset_top = -16
+		c.offset_bottom = -13
 	_stage.add_child(c)
 	var v := ColorRect.new()
 	v.color = color
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.set_anchors_preset(PRESET_TOP_LEFT)
 	if left:
-		v.offset_left = 10
-		v.offset_right = 12
+		v.offset_left = 13
+		v.offset_right = 16
 	else:
 		v.anchor_left = 1.0
 		v.anchor_right = 1.0
-		v.offset_left = -12
-		v.offset_right = -10
+		v.offset_left = -16
+		v.offset_right = -13
 	if top:
-		v.offset_top = 10
-		v.offset_bottom = 28
+		v.offset_top = 13
+		v.offset_bottom = 37
 	else:
 		v.anchor_top = 1.0
 		v.anchor_bottom = 1.0
-		v.offset_top = -28
-		v.offset_bottom = -10
+		v.offset_top = -37
+		v.offset_bottom = -13
 	_stage.add_child(v)
 
 
@@ -574,17 +574,17 @@ func _portrait_card(character: Dictionary, tint: Color, weapon: Dictionary, is_p
 	col.add_child(head)
 	var emoji := Label.new()
 	emoji.text = _class_emoji(str(character.get("class", "")))
-	emoji.add_theme_font_size_override("font_size", 14)
+	emoji.add_theme_font_size_override("font_size", 19)
 	head.add_child(emoji)
 	var name := Label.new()
 	name.text = str(character.get("name", "?"))
-	name.add_theme_font_size_override("font_size", 13)
+	name.add_theme_font_size_override("font_size", 17)
 	name.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(name)
 	head.add_child(name)
 
 	var portrait_wrap := Control.new()
-	portrait_wrap.custom_minimum_size = Vector2(168, 168)
+	portrait_wrap.custom_minimum_size = Vector2(224, 224)
 	portrait_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(portrait_wrap)
 	var center := CenterContainer.new()
@@ -598,16 +598,16 @@ func _portrait_card(character: Dictionary, tint: Color, weapon: Dictionary, is_p
 
 	var wlab := Control.new()
 	wlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wlab.custom_minimum_size = Vector2(40, 40)
+	wlab.custom_minimum_size = Vector2(53, 53)
 	wlab.set_anchors_preset(PRESET_CENTER_RIGHT if is_player else PRESET_CENTER_LEFT)
 	if is_player:
-		wlab.offset_left = -44
+		wlab.offset_left = -59
 		wlab.offset_right = 0
 	else:
 		wlab.offset_left = 0
-		wlab.offset_right = 44
-	wlab.offset_top = -18
-	wlab.offset_bottom = 22
+		wlab.offset_right = 59
+	wlab.offset_top = -24
+	wlab.offset_bottom = 29
 	wlab.pivot_offset = Vector2(20, 20)
 	var witem := {
 		"name": str(weapon.get("name", "")),
@@ -638,7 +638,7 @@ func _fighter_stats_block(character: Dictionary, tint: Color) -> Label:
 	var abbrev := {"strength": "STR", "agility": "AGI", "intellect": "INT", "vitality": "VIT", "luck": "LUK"}
 	var lab := Label.new()
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 11)
+	lab.add_theme_font_size_override("font_size", 15)
 	lab.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(lab)
 	lab.text = "%s %s · DMG %s · CRIT %.0f%% · DODGE %.0f%%" % [

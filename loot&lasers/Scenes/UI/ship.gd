@@ -66,7 +66,7 @@ func _build() -> void:
 
 	var eyebrow := Label.new()
 	eyebrow.text = "DOCKING BAY"
-	eyebrow.add_theme_font_size_override("font_size", 9)
+	eyebrow.add_theme_font_size_override("font_size", 12)
 	eyebrow.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.8))
 	ClientUi.apply_display_font(eyebrow)
 	head_col.add_child(eyebrow)
@@ -75,7 +75,7 @@ func _build() -> void:
 	title_row.add_theme_constant_override("separation", 10)
 	head_col.add_child(title_row)
 	var icon_wrap := PanelContainer.new()
-	icon_wrap.custom_minimum_size = Vector2(36, 36)
+	icon_wrap.custom_minimum_size = Vector2(48, 48)
 	icon_wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(ClientUi.CYAN, 0.15), Color(ClientUi.CYAN, 0.35), 10, 1
 	))
@@ -84,11 +84,11 @@ func _build() -> void:
 	rocket.text = "🚀"
 	rocket.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rocket.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	rocket.add_theme_font_size_override("font_size", 16)
+	rocket.add_theme_font_size_override("font_size", 21)
 	icon_wrap.add_child(rocket)
 	var title := Label.new()
 	title.text = "Ship Hangar"
-	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_font_size_override("font_size", 35)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	title_row.add_child(title)
@@ -212,7 +212,7 @@ func _make_edit_chip(ship_id: String, active_id: String) -> Button:
 		short,
 		" · fly" if ship_id == active_id else "",
 	]
-	btn.add_theme_font_size_override("font_size", 10)
+	btn.add_theme_font_size_override("font_size", 13)
 	ClientUi.apply_display_font(btn)
 	if selected:
 		btn.add_theme_stylebox_override("normal", ClientUi.painted_panel_style(
@@ -235,14 +235,14 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 	var bay: Color = theme["bay"]
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(0, 240)
+	panel.custom_minimum_size = Vector2(0, 320)
 	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		bay, Color(0.35, 0.4, 0.5, 0.45), 16, 1
 	))
 
 	var stack := Control.new()
-	stack.custom_minimum_size = Vector2(0, 240)
+	stack.custom_minimum_size = Vector2(0, 320)
 	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_child(stack)
 
@@ -274,14 +274,14 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 
 	var active_lab := Label.new()
 	active_lab.text = "ACTIVE VESSEL"
-	active_lab.add_theme_font_size_override("font_size", 10)
+	active_lab.add_theme_font_size_override("font_size", 13)
 	active_lab.add_theme_color_override("font_color", accent)
 	ClientUi.apply_display_font(active_lab)
 	col.add_child(active_lab)
 
 	var name_lab := Label.new()
 	name_lab.text = str(info.get("name", active))
-	name_lab.add_theme_font_size_override("font_size", 26)
+	name_lab.add_theme_font_size_override("font_size", 35)
 	name_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(name_lab)
 	col.add_child(name_lab)
@@ -291,7 +291,7 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 		var inh := Label.new()
 		inh.text = inherent
 		inh.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		inh.add_theme_font_size_override("font_size", 11)
+		inh.add_theme_font_size_override("font_size", 15)
 		inh.add_theme_color_override("font_color", accent)
 		ClientUi.apply_body_font(inh)
 		col.add_child(inh)
@@ -301,7 +301,7 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 		mods_n += ShipRules.installed_tier_count(ch, cat, active)
 	var meta := Label.new()
 	meta.text = "%s mod%s installed on this hull" % [str(mods_n), "" if mods_n == 1 else "s"]
-	meta.add_theme_font_size_override("font_size", 12)
+	meta.add_theme_font_size_override("font_size", 16)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	col.add_child(meta)
@@ -317,12 +317,12 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 	fuel_bar.max_value = max_fuel
 	fuel_bar.value = fuel
 	fuel_bar.show_percentage = false
-	fuel_bar.custom_minimum_size = Vector2(0, 8)
+	fuel_bar.custom_minimum_size = Vector2(0, 11)
 	ClientUi.apply_hp_bar(fuel_bar, FUEL_COLOR)
 	fuel_row.add_child(fuel_bar)
 	var fuel_lab := Label.new()
 	fuel_lab.text = "%s/%s ⛽" % [str(fuel), str(max_fuel)]
-	fuel_lab.add_theme_font_size_override("font_size", 10)
+	fuel_lab.add_theme_font_size_override("font_size", 13)
 	fuel_lab.add_theme_color_override("font_color", FUEL_COLOR)
 	ClientUi.apply_display_font(fuel_lab)
 	fuel_row.add_child(fuel_lab)
@@ -339,7 +339,7 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 	sil_wrap.size_flags_stretch_ratio = 0.95
 	row.add_child(sil_wrap)
 	var sil_host := Control.new()
-	sil_host.custom_minimum_size = Vector2(260, 120)
+	sil_host.custom_minimum_size = Vector2(347, 160)
 	sil_wrap.add_child(sil_host)
 	var sil := _HullSilhouette.new()
 	sil.ship_id = active
@@ -378,7 +378,7 @@ func _bonus_chips(ch: Dictionary, accent: Color) -> Array:
 		))
 		var lab := Label.new()
 		lab.text = "%s %s" % [str(e["label"]), str(e["value"])]
-		lab.add_theme_font_size_override("font_size", 10)
+		lab.add_theme_font_size_override("font_size", 13)
 		lab.add_theme_color_override("font_color", accent)
 		ClientUi.apply_display_font(lab)
 		chip.add_child(lab)
@@ -414,7 +414,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	col.add_child(top)
 
 	var thumb := PanelContainer.new()
-	thumb.custom_minimum_size = Vector2(56, 40)
+	thumb.custom_minimum_size = Vector2(75, 53)
 	thumb.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0, 0, 0, 0.4) if locked else Color(ClientUi.CYAN, 0.1),
 		Color(1, 1, 1, 0.1) if locked else Color(ClientUi.CYAN, 0.25),
@@ -426,7 +426,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	sil.ship_id = ship_id
 	sil.accent = accent
 	sil.ghost = locked
-	sil.custom_minimum_size = Vector2(48, 28)
+	sil.custom_minimum_size = Vector2(64, 37)
 	thumb.add_child(sil)
 
 	var title_col := VBoxContainer.new()
@@ -435,7 +435,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	top.add_child(title_col)
 	var title := Label.new()
 	title.text = str(info.get("name", ship_id))
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 19)
 	title.add_theme_color_override("font_color", Color(ClientUi.TEXT, 0.85) if locked else ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	title_col.add_child(title)
@@ -444,7 +444,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		var inh := Label.new()
 		inh.text = ("Teaser · %s" % inherent) if locked else inherent
 		inh.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		inh.add_theme_font_size_override("font_size", 10)
+		inh.add_theme_font_size_override("font_size", 13)
 		inh.add_theme_color_override("font_color", Color(accent, 0.7) if locked else accent)
 		ClientUi.apply_body_font(inh)
 		title_col.add_child(inh)
@@ -452,7 +452,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	if ship_id == "scout":
 		var mile: Dictionary = ShipRules.scout_milestone_status(ch)
 		var mile_lab := Label.new()
-		mile_lab.add_theme_font_size_override("font_size", 9)
+		mile_lab.add_theme_font_size_override("font_size", 12)
 		ClientUi.apply_body_font(mile_lab)
 		if bool(mile.get("claimed", false)):
 			mile_lab.text = "Bay tuned · free Fuel Tank T1"
@@ -471,14 +471,14 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	if active:
 		var badge := Label.new()
 		badge.text = "ACTIVE"
-		badge.add_theme_font_size_override("font_size", 10)
+		badge.add_theme_font_size_override("font_size", 13)
 		badge.add_theme_color_override("font_color", ClientUi.CYAN)
 		ClientUi.apply_display_font(badge)
 		top.add_child(badge)
 	elif locked:
 		var badge2 := Label.new()
 		badge2.text = "🔒 Lv %s" % unlock
-		badge2.add_theme_font_size_override("font_size", 10)
+		badge2.add_theme_font_size_override("font_size", 13)
 		badge2.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_display_font(badge2)
 		top.add_child(badge2)
@@ -486,7 +486,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	var desc := Label.new()
 	desc.text = str(info.get("desc", ""))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.add_theme_font_size_override("font_size", 12)
+	desc.add_theme_font_size_override("font_size", 16)
 	desc.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85) if locked else ClientUi.MUTED)
 	ClientUi.apply_body_font(desc)
 	col.add_child(desc)
@@ -497,13 +497,13 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		var left := Label.new()
 		left.text = "Bay reserved"
 		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		left.add_theme_font_size_override("font_size", 9)
+		left.add_theme_font_size_override("font_size", 12)
 		left.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(left)
 		prog_row.add_child(left)
 		var right := Label.new()
 		right.text = "%s / %s · %s lvl left" % [level, unlock, maxi(0, unlock - level)]
-		right.add_theme_font_size_override("font_size", 9)
+		right.add_theme_font_size_override("font_size", 12)
 		right.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(right)
 		prog_row.add_child(right)
@@ -512,7 +512,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		prog.max_value = unlock
 		prog.value = mini(level, unlock)
 		prog.show_percentage = false
-		prog.custom_minimum_size = Vector2(0, 6)
+		prog.custom_minimum_size = Vector2(0, 8)
 		ClientUi.apply_hp_bar(prog, Color(accent, 0.85))
 		col.add_child(prog)
 
@@ -525,7 +525,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 			var iu := Label.new()
 			iu.text = "✓  In Use"
 			iu.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			iu.add_theme_font_size_override("font_size", 12)
+			iu.add_theme_font_size_override("font_size", 16)
 			iu.add_theme_color_override("font_color", ClientUi.CYAN)
 			ClientUi.apply_display_font(iu)
 			in_use.add_child(iu)
@@ -570,7 +570,7 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 	top.add_theme_constant_override("separation", 10)
 	col.add_child(top)
 	var icon_wrap := PanelContainer.new()
-	icon_wrap.custom_minimum_size = Vector2(44, 44)
+	icon_wrap.custom_minimum_size = Vector2(59, 59)
 	icon_wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(accent, 0.12), Color(accent, 0.3), 10, 1
 	))
@@ -579,26 +579,26 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 	icon.text = str(cat.get("emoji", "🛠️"))
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon.add_theme_font_size_override("font_size", 20)
+	icon.add_theme_font_size_override("font_size", 27)
 	icon_wrap.add_child(icon)
 	var title_col := VBoxContainer.new()
 	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(title_col)
 	var title := Label.new()
 	title.text = str(cat.get("name", category))
-	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_font_size_override("font_size", 17)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	title_col.add_child(title)
 	var cat_lab := Label.new()
 	cat_lab.text = str(cat.get("category", "")).to_upper()
-	cat_lab.add_theme_font_size_override("font_size", 9)
+	cat_lab.add_theme_font_size_override("font_size", 12)
 	cat_lab.add_theme_color_override("font_color", accent)
 	ClientUi.apply_display_font(cat_lab)
 	title_col.add_child(cat_lab)
 	var tier_badge := Label.new()
 	tier_badge.text = "T%s/%s" % [str(have), str(max_tiers)]
-	tier_badge.add_theme_font_size_override("font_size", 10)
+	tier_badge.add_theme_font_size_override("font_size", 13)
 	tier_badge.add_theme_color_override("font_color", accent)
 	ClientUi.apply_display_font(tier_badge)
 	top.add_child(tier_badge)
@@ -606,7 +606,7 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 	var desc := Label.new()
 	desc.text = str(cat.get("desc", ""))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.add_theme_font_size_override("font_size", 11)
+	desc.add_theme_font_size_override("font_size", 15)
 	desc.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(desc)
 	col.add_child(desc)
@@ -617,7 +617,7 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 	for i in range(max_tiers):
 		var seg := ColorRect.new()
 		seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		seg.custom_minimum_size = Vector2(0, 5)
+		seg.custom_minimum_size = Vector2(0, 7)
 		seg.color = accent if i < have else Color(1, 1, 1, 0.08)
 		segs.add_child(seg)
 
@@ -644,14 +644,14 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 		next_box.add_child(next_col)
 		var next_eye := Label.new()
 		next_eye.text = "NEXT TIER"
-		next_eye.add_theme_font_size_override("font_size", 9)
+		next_eye.add_theme_font_size_override("font_size", 12)
 		next_eye.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_display_font(next_eye)
 		next_col.add_child(next_eye)
 		var next_lab := Label.new()
 		next_lab.text = ShipRules.tier_effect_label(next, _edit_ship)
 		next_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		next_lab.add_theme_font_size_override("font_size", 11)
+		next_lab.add_theme_font_size_override("font_size", 15)
 		next_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 		ClientUi.apply_body_font(next_lab)
 		next_col.add_child(next_lab)
@@ -690,7 +690,7 @@ func _make_fuel_section(ch: Dictionary) -> PanelContainer:
 	var active_badge := " · active" if mounts_active else ""
 	toggle.text = "⛽  Fuel Mounts%s\nTemporary mission speed — optional" % active_badge
 	ClientUi.apply_ghost_button(toggle)
-	toggle.add_theme_font_size_override("font_size", 12)
+	toggle.add_theme_font_size_override("font_size", 16)
 	toggle.pressed.connect(func() -> void:
 		_fuel_open = not _fuel_open
 		_populate()
@@ -703,7 +703,7 @@ func _make_fuel_section(ch: Dictionary) -> PanelContainer:
 	var tip := Label.new()
 	tip.text = "Temporary only — extends the timer (up to %s×). Speed does not stack; strongest mount wins." % ShipRules.MAX_FUEL_STACK
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tip.add_theme_font_size_override("font_size", 10)
+	tip.add_theme_font_size_override("font_size", 13)
 	tip.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tip)
 	col.add_child(tip)
@@ -740,14 +740,14 @@ func _make_active_mount_row(mount: Dictionary) -> PanelContainer:
 		str(mount.get("name", "?")),
 		str(int(round(float(mount.get("speed", 0)) * 100.0))),
 	]
-	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_font_size_override("font_size", 17)
 	title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55))
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
 	var detail := Label.new()
 	var rem_s := _mount_remaining_seconds(str(mount.get("expires_at", "")))
 	detail.text = "Expires in %s" % MissionBoard.format_duration(rem_s)
-	detail.add_theme_font_size_override("font_size", 11)
+	detail.add_theme_font_size_override("font_size", 15)
 	detail.add_theme_color_override("font_color", Color(0.75, 0.8, 0.7))
 	col.add_child(detail)
 	var dismiss := Button.new()
@@ -781,14 +781,14 @@ func _make_mount_card(mount: Dictionary) -> PanelContainer:
 	panel.add_child(row)
 	var icon := Label.new()
 	icon.text = "⛽"
-	icon.add_theme_font_size_override("font_size", 18)
+	icon.add_theme_font_size_override("font_size", 24)
 	row.add_child(icon)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(col)
 	var title := Label.new()
 	title.text = str(mount.get("name", "?"))
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 16)
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
 	var detail := Label.new()
@@ -800,7 +800,7 @@ func _make_mount_card(mount: Dictionary) -> PanelContainer:
 		str(mount.get("duration_hours", 1)),
 		price,
 	]
-	detail.add_theme_font_size_override("font_size", 10)
+	detail.add_theme_font_size_override("font_size", 13)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(detail)
 	col.add_child(detail)

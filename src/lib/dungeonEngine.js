@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════
 // 1 DRU = mission XP for 1 fuel at the enemy's level (Stardust from dungeons is 0).
 //   Stardust = 0
-//   XP       = DRU × XP/F(enemyLevel) × 0.87
+//   XP       = ROUND(DRU × XP/F(enemyLevel) × 0.87 × 2.10)
 import {
   RACES,
   generateItem,
@@ -37,11 +37,13 @@ export const DUNGEON_PATROL_REWARD_MULT = 0.4;
 /** Milestone chest every N node clears */
 export const DUNGEON_MILESTONE_EVERY = 5;
 
-/** XP is slightly leaner than missions so ~25% of career XP comes from the Frontier. */
-export const DUNGEON_XP_DRU_MULT = 0.87;
+export const DUNGEON_XP_BASE_FACTOR = 0.87;
+export const DUNGEON_XP_REBALANCE = 2.10;
+/** @deprecated use DUNGEON_XP_BASE_FACTOR */
+export const DUNGEON_XP_DRU_MULT = DUNGEON_XP_BASE_FACTOR;
 
 /** Total DRU budget per story dungeon (index = planet id 1–10). */
-export const DUNGEON_TOTAL_DRU = [0, 60, 70, 80, 90, 100, 110, 120, 135, 150, 175];
+export const DUNGEON_TOTAL_DRU = [0, 40, 50, 60, 70, 95, 110, 125, 140, 155, 185];
 
 /** Share of dungeon DRU per enemy slot (1–9 regular, 10 boss). Sums to 1.0. */
 export const DUNGEON_ENEMY_DRU_SHARE = [
@@ -126,7 +128,7 @@ export function getDungeonTotalDru(planetId) {
   const band = getDungeonBand(planetId);
   if (band <= 10) return DUNGEON_TOTAL_DRU[band];
   const depth = band - 10;
-  return Math.round(175 + depth * 25);
+  return Math.round(185 + depth * 25);
 }
 
 /** DRU awarded for defeating enemyIndex (1–10) on this planet. */
@@ -148,14 +150,18 @@ export function getDungeonEnemyLevel(planetId, enemyIndex) {
 
 /**
  * Convert DRU at an enemy level into Stardust / XP.
- * Stardust from dungeons is always 0; XP = DRU × XP/F × 0.87.
+ * Stardust from dungeons is always 0;
+ * XP = ROUND(DRU × XP/F × DUNGEON_XP_BASE_FACTOR × DUNGEON_XP_REBALANCE).
  */
 export function druToRewards(dru, enemyLevel) {
   const lvl = Math.max(1, enemyLevel || 1);
   const units = Math.max(0, Number(dru) || 0);
   return {
     stardust: 0,
-    experience: Math.max(units > 0 ? 1 : 0, Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_DRU_MULT)),
+    experience: Math.max(
+      units > 0 ? 1 : 0,
+      Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_BASE_FACTOR * DUNGEON_XP_REBALANCE)
+    ),
   };
 }
 

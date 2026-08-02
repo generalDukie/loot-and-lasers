@@ -136,13 +136,12 @@ test("Mission rarity weights", () => {
   assert.equal(counts.legendary, 2);
 });
 
-test("Junk value 22.5% base with ±40% variance", () => {
+test("Junk value 45% base with ±40% variance", () => {
   const missionReward = 10000;
-  const baseJunk = 2250;
-  assert.equal(JunkSaleValue(missionReward, () => 0), Math.round(baseJunk * 0.6)); // 1350
-  assert.equal(JunkSaleValue(missionReward, () => 1), Math.round(baseJunk * 1.4)); // 3150
-  assert.equal(JunkSaleValue(missionReward, () => 0.5), Math.round(baseJunk * 1.0)); // 2250
-  // Mean of endpoints stays at base (uniform mid)
+  const baseJunk = 4500;
+  assert.equal(JunkSaleValue(missionReward, () => 0), Math.round(baseJunk * 0.6)); // 2700
+  assert.equal(JunkSaleValue(missionReward, () => 1), Math.round(baseJunk * 1.4)); // 6300
+  assert.equal(JunkSaleValue(missionReward, () => 0.5), Math.round(baseJunk * 1.0)); // 4500
   const lo = JunkSaleValue(missionReward, () => 0);
   const hi = JunkSaleValue(missionReward, () => 1);
   assert.equal((lo + hi) / 2, baseJunk);
@@ -196,7 +195,7 @@ test("Dungeon rarity tables", () => {
 
 test("Arena first 10 wins/day", () => {
   assert.equal(ARENA_REWARDED_WINS_PER_DAY, 10);
-  assert.equal(ArenaWinStardust(50), Math.round(1.5 * 600));
+  assert.equal(ArenaWinStardust(50), Math.round(2.25 * 600));
   assert.equal(arenaWinGrantsStardust(0), true);
   assert.equal(arenaWinGrantsStardust(9), true);
   assert.equal(arenaWinGrantsStardust(10), false);

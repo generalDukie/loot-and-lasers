@@ -9,8 +9,8 @@ const MISSION_GEAR_BASE_CHANCE := 0.2
 const MISSION_GEAR_PITY_INCREMENT := 0.025
 ## Soft upper bound so pity never exceeds a guaranteed drop. Spec has no 50% cap.
 const MISSION_GEAR_DROP_CAP := 1.0
-const MISSION_JUNK_CHANCE_ON_GEAR_FAIL := 0.5
-const JUNK_AVG_MISSION_REWARD_RATIO := 0.225
+const MISSION_JUNK_CHANCE_ON_GEAR_FAIL := 0.75
+const JUNK_AVG_MISSION_REWARD_RATIO := 0.45
 const JUNK_VALUE_MULT_MIN := 0.6
 const JUNK_VALUE_MULT_MAX := 1.4
 
@@ -26,7 +26,7 @@ const WEAPON_VENDOR_MULT := 1.2
 const SHIP_MODULE_VENDOR_MULT := 1.2
 
 const ARENA_REWARDED_WINS_PER_DAY := 10
-const ARENA_WIN_FUEL_EQUIVALENT := 1.5
+const ARENA_WIN_FUEL_EQUIVALENT := 2.25
 const MINING_EFFICIENCY := 0.03
 
 ## StardustPerFuel anchors (authoritative absolute values).

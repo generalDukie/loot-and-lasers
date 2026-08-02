@@ -9,11 +9,18 @@ import {
   getStatPointsForLevelRange,
 } from "./rewards.js";
 import { XP_STARDUST_SCALE } from "./economyConstants.js";
+
+/** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
+export const MISSION_XP_REBALANCE = 0.85;
+export const DUNGEON_XP_BASE_FACTOR = 0.87;
+export const DUNGEON_XP_REBALANCE = 2.10;
 import {
   computeItemVendorValue,
   ITEM_SELL_TYPE_WEIGHT,
 } from "./itemGeneration.js";
 import { todayET as todayETFromClock, getWeekKey as getWeekKeyFromClock, clock } from "./time/index.js";
+import { DEFAULT_GAME_ZONE, getZonedParts } from "./time/zones.js";
+import { zonedLocalToUtc } from "./time/periods.js";
 import {
   AttributePurchaseCost,
   MissionStardustReward,
@@ -26,6 +33,8 @@ import {
   MISSION_GEAR_PITY_INCREMENT,
   MISSION_GEAR_DROP_CAP,
   MISSION_JUNK_CHANCE_ON_GEAR_FAIL,
+  MISSION_STIM_CHANCE_AFTER_GEAR_FAIL,
+  MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL,
   JUNK_AVG_MISSION_REWARD_RATIO,
   ARENA_REWARDED_WINS_PER_DAY,
   ARENA_WIN_FUEL_EQUIVALENT,
@@ -35,6 +44,8 @@ import {
   rollMissionGearRarity,
   rollDungeonRegularRarity,
   rollDungeonBossRarity,
+  GearSaleValue,
+  StardustPerFuel,
 } from "./stardustEconomy.js";
 
 export { XP_STARDUST_SCALE };
@@ -43,6 +54,8 @@ export {
   MISSION_GEAR_PITY_INCREMENT,
   MISSION_GEAR_DROP_CAP,
   MISSION_JUNK_CHANCE_ON_GEAR_FAIL,
+  MISSION_STIM_CHANCE_AFTER_GEAR_FAIL,
+  MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL,
   JUNK_AVG_MISSION_REWARD_RATIO,
   ARENA_REWARDED_WINS_PER_DAY,
   ARENA_WIN_FUEL_EQUIVALENT,
@@ -53,6 +66,8 @@ export {
   rollDungeonRegularRarity,
   rollDungeonBossRarity,
   JunkSaleValue,
+  GearSaleValue,
+  StardustPerFuel,
 };
 
 /** Clock-backed daily key (America/New_York). */
@@ -414,7 +429,11 @@ export function normalizeMissionEfficiency(value, playerLevel = 1) {
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
   const eff = normalizeMissionEfficiency(efficiency, level);
-  return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionXpPerFuel(level) * eff));
+  // getMissionXpPerFuel already includes XP_STARDUST_SCALE once.
+  return Math.max(
+    fuel > 0 ? 1 : 0,
+    Math.round(fuel * getMissionXpPerFuel(level) * eff * MISSION_XP_REBALANCE)
+  );
 }
 
 /** Mission Stardust = ROUND(StardustPerFuel(level) * fuel). Efficiency does not apply. */
@@ -422,7 +441,7 @@ export function computeMissionStardustFromFuel(fuelCost, level = 1, _efficiency 
   return MissionStardustReward(level, fuelCost);
 }
 
-/** Junk vendor value — 22.5% of originating mission Stardust × Uniform(0.60, 1.40), snapshotted. */
+/** Junk vendor value — 45% of originating mission Stardust × Uniform(0.60, 1.40), snapshotted. */
 export function computeMissionJunkSellValue(missionStardustReward, rng = Math.random) {
   return JunkSaleValue(missionStardustReward, rng);
 }
@@ -439,20 +458,86 @@ export function skipCostFor(mission, nowMs = Date.now()) {
 
 // ── Shop ─────────────────────────────────────────────────────
 export const SHOP_REFRESH_COST = 10;
-const SHOP_WINDOW_MS = 6 * 60 * 60 * 1000;
+export const SHOP_SLOT_COUNT = 8;
+export const SHOP_GEAR_CHANCE = 0.8;
+export const SHOP_STIM_CHANCE = 0.2;
+export const SHOP_MIN_STIMS = 1;
+export const GEAR_SHOP_PRICE_VARIANCE_MIN = 0.8;
+export const GEAR_SHOP_PRICE_VARIANCE_MAX = 1.2;
+export const HOT_DEAL_REFRESH_COUNT = 10;
+export const SHOP_RARITY_MARKUP = Object.freeze({
+  common: 2.0,
+  uncommon: 2.5,
+  rare: 3.5,
+  epic: 5.0,
+  legendary: 7.0,
+});
+export const SHOP_GEAR_RARITY_WEIGHTS = Object.freeze({
+  common: 0.6,
+  uncommon: 0.3,
+  rare: 0.08,
+  epic: 0.015,
+  legendary: 0.005,
+});
+export const HOT_DEAL_RARITY_WEIGHTS = Object.freeze({
+  uncommon: 0.35,
+  rare: 0.45,
+  epic: 0.15,
+  legendary: 0.05,
+});
+export const STIM_SHOP_FUEL_EQUIV = Object.freeze({
+  uncommon: 2,
+  rare: 4,
+  epic: 10,
+});
+export const STIM_SELL_FUEL_EQUIV = Object.freeze({
+  uncommon: 1,
+  rare: 2,
+  epic: 5,
+});
 
+/** 12-hour shop windows aligned to 2:00 AM / 2:00 PM America/New_York. */
 export function getShopWindow(nowMs = clock.nowMs()) {
-  const ms = nowMs;
-  const idx = Math.floor(ms / SHOP_WINDOW_MS);
-  const startsAt = idx * SHOP_WINDOW_MS;
-  const endsAt = startsAt + SHOP_WINDOW_MS;
+  const parts = getZonedParts(new Date(nowMs), DEFAULT_GAME_ZONE);
+  let startHour;
+  let anchorMs = nowMs;
+  if (parts.hour >= 14) {
+    startHour = 14;
+  } else if (parts.hour >= 2) {
+    startHour = 2;
+  } else {
+    startHour = 14;
+    anchorMs = nowMs - 12 * 3600 * 1000;
+  }
+  const anchor = getZonedParts(new Date(anchorMs), DEFAULT_GAME_ZONE);
+  const startUtc = zonedLocalToUtc(
+    { year: anchor.year, month: anchor.month, day: anchor.day, hour: startHour, minute: 0, second: 0 },
+    DEFAULT_GAME_ZONE
+  ).utc.getTime();
+  const endsAt = startUtc + 12 * 60 * 60 * 1000;
+  const idx = Math.floor(startUtc / (12 * 60 * 60 * 1000));
   return {
     idx,
-    startsAt,
+    startsAt: startUtc,
     endsAt,
-    secondsLeft: Math.max(0, Math.floor((endsAt - ms) / 1000)),
+    secondsLeft: Math.max(0, Math.floor((endsAt - nowMs) / 1000)),
     rotationPeriodId: `shop-rotation:global:${idx}`,
   };
+}
+
+/** Game-day key for Hot Deal (resets at 2:00 PM ET). */
+export function getShopGameDayKey(nowMs = clock.nowMs()) {
+  const parts = getZonedParts(new Date(nowMs), DEFAULT_GAME_ZONE);
+  let y = parts.year;
+  let m = parts.month;
+  let d = parts.day;
+  if (parts.hour < 14) {
+    const back = getZonedParts(new Date(nowMs - 14 * 3600 * 1000), DEFAULT_GAME_ZONE);
+    y = back.year;
+    m = back.month;
+    d = back.day;
+  }
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 /** Haggle: ~40% buy at 15–20% off; otherwise listing is yanked (no purchase). */
@@ -471,44 +556,53 @@ export function rollHaggle(rng = Math.random) {
   };
 }
 
-export function normalizeShopMeta(character, win = getShopWindow(), day = todayET()) {
+export function normalizeShopMeta(character, win = getShopWindow(), day = getShopGameDayKey()) {
   const prev = character?.shop_meta || {};
   const hot_day = day;
   const hot_purchased = prev.hot_day === day ? !!prev.hot_purchased : false;
   const hot_yanked = prev.hot_day === day ? !!prev.hot_yanked : false;
+  const hot_manual_refresh_count =
+    prev.hot_day === day ? Math.max(0, Math.floor(prev.hot_manual_refresh_count || 0)) : 0;
   if (!prev.window_idx || prev.window_idx !== win.idx) {
     return {
       window_idx: win.idx,
       gear_refresh: 0,
       cons_refresh: 0,
+      free_refresh_used: false,
+      manual_refresh_count: 0,
       purchased: {},
       yanked: {},
       hot_day,
       hot_purchased,
       hot_yanked,
+      hot_manual_refresh_count,
     };
   }
   return {
     window_idx: win.idx,
     gear_refresh: Math.max(0, Math.floor(prev.gear_refresh || 0)),
     cons_refresh: Math.max(0, Math.floor(prev.cons_refresh || 0)),
+    free_refresh_used: !!prev.free_refresh_used,
+    manual_refresh_count: Math.max(0, Math.floor(prev.manual_refresh_count || 0)),
     purchased: prev.purchased && typeof prev.purchased === "object" ? { ...prev.purchased } : {},
     yanked: prev.yanked && typeof prev.yanked === "object" ? { ...prev.yanked } : {},
     hot_day,
     hot_purchased,
     hot_yanked,
+    hot_manual_refresh_count,
     gear_stock: prev.gear_stock,
     cons_stock: prev.cons_stock,
+    shop_stock: prev.shop_stock,
     hot_deal: prev.hot_deal,
   };
 }
 
 export function shopGearSeed(meta, win = getShopWindow()) {
-  return (win?.idx || 0) + (meta?.gear_refresh || 0);
+  return (win?.idx || 0) + (meta?.gear_refresh || 0) + (meta?.manual_refresh_count || 0) * 17;
 }
 
 export function shopConsSeed(meta, win = getShopWindow()) {
-  return (win?.idx || 0) + (meta?.cons_refresh || 0);
+  return (win?.idx || 0) + (meta?.cons_refresh || 0) + (meta?.manual_refresh_count || 0) * 19;
 }
 
 function mulberry32(a) {
@@ -535,43 +629,174 @@ function clampRarityByLevel(rarity, playerLevel = 1) {
   return RARITY_ORDER[Math.max(0, Math.min(i < 0 ? 0 : i, maxIdx))];
 }
 
-/** Minimal shop gear stock (MVP) — 6 slots, cost = stardustValue * 1.2. */
+function pickWeighted(weights, rng) {
+  const entries = Object.entries(weights).filter(([, w]) => w > 0);
+  const total = entries.reduce((s, [, w]) => s + w, 0) || 1;
+  let roll = rng() * total;
+  for (const [key, w] of entries) {
+    roll -= w;
+    if (roll <= 0) return key;
+  }
+  return entries[entries.length - 1]?.[0];
+}
+
+/** Max item-level gap below player level for normal shop gear. */
+export function shopItemLevelMaxGap(playerLevel) {
+  const L = Math.max(1, Math.floor(Number(playerLevel) || 1));
+  if (L <= 5) return 0;
+  if (L <= 10) return 1;
+  if (L <= 15) return 2;
+  if (L <= 20) return 3;
+  if (L <= 21) return 3;
+  if (L <= 23) return 4;
+  if (L <= 25) return 5;
+  if (L <= 27) return 6;
+  if (L <= 29) return 7;
+  if (L <= 31) return 8;
+  if (L <= 33) return 9;
+  return 10;
+}
+
+const SHOP_LEVEL_WEIGHTS = Object.freeze([
+  [0, 20], [1, 15], [2, 13], [3, 11], [4, 9], [5, 8], [6, 7], [7, 6], [8, 5], [9, 4], [10, 2],
+]);
+
+export function rollShopItemLevel(playerLevel, rng = Math.random) {
+  const L = Math.max(1, Math.floor(Number(playerLevel) || 1));
+  const maxGap = shopItemLevelMaxGap(L);
+  const valid = SHOP_LEVEL_WEIGHTS.filter(([gap]) => gap <= maxGap && L - gap >= 1);
+  const total = valid.reduce((s, [, w]) => s + w, 0) || 1;
+  let roll = (typeof rng === "function" ? rng() : Math.random()) * total;
+  for (const [gap, w] of valid) {
+    roll -= w;
+    if (roll <= 0) return Math.max(1, L - gap);
+  }
+  return L;
+}
+
+const HOT_LEVEL_WEIGHTS = Object.freeze([[0, 40], [1, 30], [2, 20], [3, 10]]);
+
+export function rollHotDealItemLevel(playerLevel, rng = Math.random) {
+  const L = Math.max(1, Math.floor(Number(playerLevel) || 1));
+  const valid = HOT_LEVEL_WEIGHTS.filter(([gap]) => L - gap >= 1);
+  const total = valid.reduce((s, [, w]) => s + w, 0) || 1;
+  let roll = (typeof rng === "function" ? rng() : Math.random()) * total;
+  for (const [gap, w] of valid) {
+    roll -= w;
+    if (roll <= 0) return Math.max(1, L - gap);
+  }
+  return L;
+}
+
+export function gearShopPurchasePrice(item, rng = Math.random) {
+  const sale = GearSaleValue(item);
+  const markup = SHOP_RARITY_MARKUP[item?.rarity] ?? 3.5;
+  const r = typeof rng === "function" ? rng : Math.random;
+  const variance =
+    GEAR_SHOP_PRICE_VARIANCE_MIN +
+    r() * (GEAR_SHOP_PRICE_VARIANCE_MAX - GEAR_SHOP_PRICE_VARIANCE_MIN);
+  return Math.max(1, Math.round(sale * markup * variance));
+}
+
+export function stimShopPurchasePrice(rarity, playerLevel = 1) {
+  const S = StardustPerFuel(Math.max(1, playerLevel));
+  const mult = STIM_SHOP_FUEL_EQUIV[rarity] ?? 2;
+  return Math.max(1, Math.round(S * mult));
+}
+
+export function stimShopSellValue(rarity, playerLevel = 1) {
+  const S = StardustPerFuel(Math.max(1, playerLevel));
+  const mult = STIM_SELL_FUEL_EQUIV[rarity] ?? 1;
+  return Math.max(1, Math.round(S * mult));
+}
+
+/** Attach standardized Stim shop/sell pricing for a given player/shop level. */
+export function priceStimOffer(def, playerLevel = 1) {
+  const rarity = def?.rarity || def?.consumable?.tier || "uncommon";
+  const cost = stimShopPurchasePrice(rarity, playerLevel);
+  const sell_value = stimShopSellValue(rarity, playerLevel);
+  return {
+    ...def,
+    sell_value,
+    _cost: cost,
+    cost,
+  };
+}
+
+export function rollShopGearRarity(playerLevel, rng = Math.random) {
+  const r = typeof rng === "function" ? rng : Math.random;
+  return clampRarityByLevel(pickWeighted(SHOP_GEAR_RARITY_WEIGHTS, r), playerLevel);
+}
+
+export function rollHotDealRarity(playerLevel, rng = Math.random) {
+  const r = typeof rng === "function" ? rng : Math.random;
+  return clampRarityByLevel(pickWeighted(HOT_DEAL_RARITY_WEIGHTS, r), playerLevel);
+}
+
+/** Single normal-shop gear offer. */
 export function generateSimpleGearSlot(playerLevel, randomItemFn, slotId, rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
   const type = SHOP_GEAR_TYPES[Math.floor(r() * SHOP_GEAR_TYPES.length)];
-  const roll = r();
-  const rarity = clampRarityByLevel(
-    roll < 0.4 ? "common" : roll < 0.7 ? "uncommon" : roll < 0.88 ? "rare" : roll < 0.97 ? "epic" : "legendary",
-    playerLevel
-  );
-  const item = randomItemFn(rarity, Math.max(1, playerLevel), type);
-  const cost = Math.max(5 * XP_STARDUST_SCALE, Math.round(computeStardustValue(item) * 1.2));
+  const rarity = rollShopGearRarity(playerLevel, r);
+  const itemLevel = rollShopItemLevel(playerLevel, r);
+  const item = randomItemFn(rarity, itemLevel, type);
+  const cost = gearShopPurchasePrice(item, r);
   const nova_cost = computeNovaCrystalCost(item);
   return {
     ...item,
+    level_requirement: itemLevel,
     _slotId: slotId,
+    _offerKind: "gear",
     cost,
     nova_cost,
   };
 }
 
-export function generateSimpleGearStock(seed, playerLevel, randomItemFn) {
+function generateShopStimSlot(playerLevel, slotId, rng) {
+  const def = randomConsumable(rng);
+  const priced = priceStimOffer(def, playerLevel);
+  return {
+    ...priced,
+    _slotId: slotId,
+    _offerKind: "stim",
+  };
+}
+
+/**
+ * Unified normal shop: 8 independent 80/20 gear/stim rolls, then ensure ≥1 Stim.
+ * Also mirrors into gear_stock / cons_stock for legacy UI paths.
+ */
+export function generateSimpleShopStock(seed, playerLevel, randomItemFn) {
   const rng = mulberry32(seed * 7919 + 13);
   const slots = [];
-  for (let i = 0; i < 6; i++) {
-    slots.push(generateSimpleGearSlot(playerLevel, randomItemFn, `${seed}-${i}`, rng));
+  for (let i = 0; i < SHOP_SLOT_COUNT; i++) {
+    const isStim = rng() < SHOP_STIM_CHANCE;
+    if (isStim) slots.push(generateShopStimSlot(playerLevel, `${seed}-${i}`, rng));
+    else slots.push(generateSimpleGearSlot(playerLevel, randomItemFn, `${seed}-${i}`, rng));
+  }
+  const stimCount = slots.filter((s) => s._offerKind === "stim" || s.type === "consumable").length;
+  if (stimCount < SHOP_MIN_STIMS) {
+    const idx = Math.floor(rng() * slots.length);
+    slots[idx] = generateShopStimSlot(playerLevel, `${seed}-${idx}-minstim`, rng);
   }
   return slots;
 }
 
+/** @deprecated use generateSimpleShopStock — kept for callers expecting gear-only arrays. */
+export function generateSimpleGearStock(seed, playerLevel, randomItemFn) {
+  return generateSimpleShopStock(seed, playerLevel, randomItemFn).filter(
+    (s) => s._offerKind !== "stim" && s.type !== "consumable"
+  );
+}
+
 /**
  * Stim qualities (authoritative). No Common or Legendary Stims.
- * Bonus is a final multiplier on pre-stim totals (Uncommon 1.05, Rare 1.10, Epic 1.20).
+ * Shop/sell prices are level-scaled via StardustPerFuel (2S / 4S / 10S buy; 50% sell).
  */
 export const CONSUMABLE_TIERS = {
-  uncommon: { mult: 0.05, duration_hours: 6,  label: "Uncommon", rarity: "uncommon", cost: 800,  sell_value: 250 },
-  rare:     { mult: 0.10, duration_hours: 12, label: "Rare",     rarity: "rare",     cost: 2200, sell_value: 600 },
-  epic:     { mult: 0.20, duration_hours: 24, label: "Epic",     rarity: "epic",     cost: 5000, sell_value: 1200 },
+  uncommon: { mult: 0.05, duration_hours: 6,  label: "Uncommon", rarity: "uncommon" },
+  rare:     { mult: 0.10, duration_hours: 12, label: "Rare",     rarity: "rare" },
+  epic:     { mult: 0.20, duration_hours: 24, label: "Epic",     rarity: "epic" },
 };
 
 export const STIM_RARITY_RANK = { uncommon: 1, rare: 2, epic: 3 };
@@ -586,51 +811,51 @@ export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, t
     level_requirement: 1,
     stats: {},
     consumable: { stat, mult: tier.mult, duration_hours: tier.duration_hours, tier: tierKey },
-    sell_value: tier.sell_value,
+    sell_value: 0,
     flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * 100)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.duration_hours * 3}h).`,
     is_equipped: false,
-    _cost: tier.cost,
   }))
 );
 
-/** Weighted pick among Uncommon / Rare / Epic (no Common or Legendary). */
+/** Weighted pick: Uncommon 40% / Rare 40% / Epic 20%. */
 export function randomConsumable(rng = Math.random) {
   const roll = typeof rng === "function" ? rng() : Math.random();
   let rarity = "uncommon";
-  if (roll >= 0.85) rarity = "epic";
-  else if (roll >= 0.55) rarity = "rare";
+  if (roll >= 0.8) rarity = "epic";
+  else if (roll >= 0.4) rarity = "rare";
   const pool = CONSUMABLES.filter((c) => c.rarity === rarity);
   const pickRng = typeof rng === "function" ? rng() : Math.random();
   return pool[Math.floor(pickRng * pool.length)] || CONSUMABLES[0];
 }
 
-export function generateSimpleConsStock(seed) {
+/** @deprecated separate cons stall removed — stims live in unified shop_stock. */
+export function generateSimpleConsStock(seed, playerLevel = 1) {
   const rng = mulberry32(seed * 4099 + 7);
   const slots = [];
-  for (let i = 0; i < 6; i++) {
-    const def = randomConsumable(rng);
-    slots.push({
-      ...def,
-      _slotId: `cons-${seed}-${i}`,
-      _cost: def._cost ?? def.sell_value ?? (25 * XP_STARDUST_SCALE),
-    });
+  for (let i = 0; i < 2; i++) {
+    slots.push(generateShopStimSlot(playerLevel, `cons-${seed}-${i}`, rng));
   }
   return slots;
 }
 
 export function generateSimpleHotDeal(dayKey, playerLevel, randomItemFn) {
-  const dayNum = String(dayKey || todayET()).split("-").reduce((a, p) => a + Number(p || 0), 0);
+  const dayNum = String(dayKey || getShopGameDayKey()).split("-").reduce((a, p) => a + Number(p || 0), 0);
   const rng = mulberry32(dayNum * 104729 + 77);
   const type = SHOP_GEAR_TYPES[Math.floor(rng() * SHOP_GEAR_TYPES.length)];
-  const roll = rng();
-  const rarity = clampRarityByLevel(
-    roll < 0.15 ? "uncommon" : roll < 0.45 ? "rare" : roll < 0.78 ? "epic" : "legendary",
-    playerLevel
-  );
-  const item = randomItemFn(rarity, Math.max(1, playerLevel), type);
-  const cost = Math.max(5 * XP_STARDUST_SCALE, Math.round(computeStardustValue(item) * 1.05));
+  const rarity = rollHotDealRarity(playerLevel, rng);
+  const itemLevel = rollHotDealItemLevel(playerLevel, rng);
+  const item = randomItemFn(rarity, itemLevel, type);
+  const cost = gearShopPurchasePrice(item, rng);
   const nova_cost = computeNovaCrystalCost(item);
-  return { ...item, _slotId: `hot-${dayKey}`, _hotDeal: true, cost, nova_cost };
+  return {
+    ...item,
+    level_requirement: itemLevel,
+    _slotId: `hot-${dayKey}`,
+    _hotDeal: true,
+    _offerKind: "gear",
+    cost,
+    nova_cost,
+  };
 }
 
 // ── Consumable / Stim buffs ──────────────────────────────────
@@ -837,7 +1062,8 @@ export const MISSION_GEAR_DROP_BASE = MISSION_GEAR_BASE_CHANCE;
 /** @deprecated use MISSION_GEAR_PITY_INCREMENT */
 export const MISSION_GEAR_PITY_STEP = MISSION_GEAR_PITY_INCREMENT;
 /** Stim / consumable roll — independent of gear hit/miss. */
-export const MISSION_CONSUMABLE_DROP_CHANCE = 0.15;
+/** Stim / consumable roll — only after gear miss (ClaimMission exclusive chain). */
+export const MISSION_CONSUMABLE_DROP_CHANCE = 0.25;
 
 export function missionGearMissStreak(character) {
   return Math.max(0, Math.floor(Number(character?.mission_gear_miss_streak) || 0));
@@ -973,11 +1199,12 @@ export const DUNGEON_SKIP_COST = 10;
 export const DUNGEON_WIN_COOLDOWN_MS = 10 * 60 * 1000;
 export const DUNGEON_LOSS_COOLDOWN_MS = 25 * 60 * 1000;
 export const DUNGEON_PATROL_REWARD_MULT = 0.4;
-export const DUNGEON_XP_DRU_MULT = 0.87;
+/** @deprecated use DUNGEON_XP_BASE_FACTOR */
+export const DUNGEON_XP_DRU_MULT = DUNGEON_XP_BASE_FACTOR;
 export const DUNGEON_MILESTONE_EVERY = 5;
 export const DUNGEON_STORY_PLANETS = 10;
 
-export const DUNGEON_TOTAL_DRU = [0, 60, 70, 80, 90, 100, 110, 120, 135, 150, 175];
+export const DUNGEON_TOTAL_DRU = [0, 40, 50, 60, 70, 95, 110, 125, 140, 155, 185];
 export const DUNGEON_ENEMY_DRU_SHARE = [
   0, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.14, 0.18,
 ];
@@ -1039,7 +1266,7 @@ export function getDungeonTotalDru(planetId) {
   const band = getDungeonBand(planetId);
   if (band <= 10) return DUNGEON_TOTAL_DRU[band];
   const depth = band - 10;
-  return Math.round(175 + depth * 25);
+  return Math.round(185 + depth * 25);
 }
 
 export function getEnemyDru(planetId, enemyIndex) {
@@ -1062,8 +1289,12 @@ export function druToRewards(dru, enemyLevel) {
   const units = Math.max(0, Number(dru) || 0);
   return {
     // Standard dungeon: XP only — no direct Stardust.
+    // getMissionXpPerFuel already includes XP_STARDUST_SCALE once.
     stardust: 0,
-    experience: Math.max(units > 0 ? 1 : 0, Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_DRU_MULT)),
+    experience: Math.max(
+      units > 0 ? 1 : 0,
+      Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_BASE_FACTOR * DUNGEON_XP_REBALANCE)
+    ),
   };
 }
 

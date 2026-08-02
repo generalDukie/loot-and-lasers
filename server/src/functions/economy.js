@@ -37,7 +37,9 @@ import {
   computeMissionJunkSellValue,
   skipCostFor,
   SHOP_REFRESH_COST,
+  HOT_DEAL_REFRESH_COUNT,
   getShopWindow,
+  getShopGameDayKey,
   todayET,
   rollHaggle,
   normalizeShopMeta,
@@ -46,18 +48,21 @@ import {
   generateSimpleGearStock,
   generateSimpleGearSlot,
   generateSimpleConsStock,
+  generateSimpleShopStock,
   generateSimpleHotDeal,
   prepareConsumableBuffs,
+  stimShopPurchasePrice,
   rollItemRarity,
   rollMissionGearRarity,
   rollMissionGearDrop,
   missionGearMissStreak,
   missionGearDropChance,
-  MISSION_CONSUMABLE_DROP_CHANCE,
-  MISSION_JUNK_CHANCE_ON_GEAR_FAIL,
+  MISSION_STIM_CHANCE_AFTER_GEAR_FAIL,
+  MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL,
   applyXpToCharacter,
   getInventoryCap,
   randomConsumable,
+  priceStimOffer,
   progressWeeklyNovaQuest,
 } from "../shared/economyFormulas.js";
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
@@ -637,6 +642,8 @@ export async function ClaimMission(user, body) {
           const rewards = mission.rewards || {};
           const itemTemplates = [];
           let gearDropped = false;
+          let stimDropped = false;
+          let junkDropped = false;
           if (rewards.loot_drops !== false) {
             gearDropped = true;
             const rarity =
@@ -645,25 +652,29 @@ export async function ClaimMission(user, body) {
             itemTemplates.push(
               randomItem(rarity, live.level || 1, rewards.loot_type, secureRandom, live.class)
             );
+          } else {
+            // Exclusive chain: Gear miss → Stim (25%) → Junk (75% of remaining).
+            if (secureRandom() < MISSION_STIM_CHANCE_AFTER_GEAR_FAIL) {
+              stimDropped = true;
+              const { _cost, ...consItem } = randomConsumable(secureRandom);
+              itemTemplates.push(priceStimOffer(consItem, live.level || 1));
+            } else if (secureRandom() < MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL) {
+              junkDropped = true;
+              const level = Math.max(1, live.level || 1);
+              const junkName = rewards.collectible?.name || "Salvaged Trinket";
+              itemTemplates.push({
+                name: junkName,
+                type: "material",
+                rarity: "common",
+                level_requirement: level,
+                stats: {},
+                flavor_text: "A curious trinket recovered on mission.",
+                sell_value: computeMissionJunkSellValue(gains.stardustBase || gains.stardustGain || 0, secureRandom),
+              });
+            }
           }
-          // Junk only after gear miss — 50% chance; never alongside gear.
-          if (!gearDropped && secureRandom() < MISSION_JUNK_CHANCE_ON_GEAR_FAIL) {
-            const level = Math.max(1, live.level || 1);
-            const junkName = rewards.collectible?.name || "Salvaged Trinket";
-            itemTemplates.push({
-              name: junkName,
-              type: "material",
-              rarity: "common",
-              level_requirement: level,
-              stats: {},
-              flavor_text: "A curious trinket recovered on mission.",
-              sell_value: computeMissionJunkSellValue(gains.stardustBase || gains.stardustGain || 0, secureRandom),
-            });
-          }
-          if (secureRandom() < MISSION_CONSUMABLE_DROP_CHANCE) {
-            const { _cost, ...consItem } = randomConsumable();
-            itemTemplates.push(consItem);
-          }
+          void stimDropped;
+          void junkDropped;
           // Species discovery only from mission snapshot — never client species_id
           const speciesId = rewards.species_id || null;
           return {
@@ -825,17 +836,27 @@ export async function SkipMission(user, body) {
 }
 
 // ── EnsureShop ───────────────────────────────────────────────
-function buildShopStock(ch, meta, win) {
+/**
+ * Rebuild normal shop slots. Hot Deal is preserved across automatic 12h rotations;
+ * only regenerate it when missing or when refreshHotDeal is true (2 PM day roll / every 10 manual refreshes).
+ */
+function buildShopStock(ch, meta, win, { refreshHotDeal = false } = {}) {
   const level = ch.level || 1;
   const gearSeed = shopGearSeed(meta, win);
-  const consSeed = shopConsSeed(meta, win);
-  const day = meta.hot_day || todayET();
+  const day = meta.hot_day || getShopGameDayKey();
   const forClass = randomItemForClass(ch.class);
+  const shop_stock = generateSimpleShopStock(gearSeed, level, forClass);
+  let hot_deal = meta.hot_deal;
+  if (refreshHotDeal || !hot_deal) {
+    hot_deal = generateSimpleHotDeal(day, level, forClass);
+  }
   return {
     ...meta,
-    gear_stock: generateSimpleGearStock(gearSeed, level, forClass),
-    cons_stock: generateSimpleConsStock(consSeed),
-    hot_deal: generateSimpleHotDeal(day, level, forClass),
+    shop_stock,
+    // Legacy mirrors: full unified stock in gear_stock; stims also listed in cons_stock.
+    gear_stock: shop_stock,
+    cons_stock: shop_stock.filter((s) => s.type === "consumable" || s._offerKind === "stim"),
+    hot_deal,
   };
 }
 
@@ -844,17 +865,31 @@ export async function EnsureShop(user) {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
       const win = getShopWindow();
-      const day = todayET();
+      const day = getShopGameDayKey();
+      const dayRolled = ch.shop_meta?.hot_day !== day;
       let meta = normalizeShopMeta(ch, win, day);
+      const hasStock =
+        (Array.isArray(meta.shop_stock) && meta.shop_stock.length > 0) ||
+        (Array.isArray(meta.gear_stock) && meta.gear_stock.length > 0);
       const needsStock =
-        !Array.isArray(meta.gear_stock) || !meta.gear_stock.length
-        || !Array.isArray(meta.cons_stock) || !meta.cons_stock.length
-        || !meta.hot_deal
-        || ch.shop_meta?.window_idx !== win.idx
-        || ch.shop_meta?.hot_day !== day;
+        !hasStock ||
+        !meta.hot_deal ||
+        ch.shop_meta?.window_idx !== win.idx ||
+        dayRolled;
 
       if (needsStock) {
-        meta = buildShopStock(ch, meta, win);
+        // Auto 12h rotation must NOT advance Hot Deal; 2 PM day roll must.
+        meta = buildShopStock(ch, meta, win, {
+          refreshHotDeal: dayRolled || !meta.hot_deal,
+        });
+        if (dayRolled) {
+          meta = {
+            ...meta,
+            hot_purchased: false,
+            hot_yanked: false,
+            hot_manual_refresh_count: 0,
+          };
+        }
       }
 
       const patch = { shop_meta: meta };
@@ -870,35 +905,22 @@ export async function EnsureShop(user) {
 
 function replaceArmoryListing(meta, win, ch, slotId, isHot, outcome = "purchased") {
   const nextMeta = { ...meta };
-  const level = ch.level || 1;
-  const day = meta.hot_day || todayET();
-  const forClass = randomItemForClass(ch.class);
+  const day = meta.hot_day || getShopGameDayKey();
   if (isHot) {
-    // One hot deal per ET day: mark it consumed rather than rolling a new one.
+    // Sold out until next Hot Deal refresh — do not regenerate immediately.
     nextMeta.hot_day = day;
     if (outcome === "yanked") nextMeta.hot_yanked = true;
     else nextMeta.hot_purchased = true;
     return nextMeta;
   }
 
-  const stock = [...(meta.gear_stock || [])];
-  const idx = stock.findIndex((s) => s._slotId === slotId);
-  if (idx >= 0) {
-    stock[idx] = generateSimpleGearSlot(
-      level,
-      forClass,
-      `${shopGearSeed(meta, win)}-r-${idx}-${Date.now()}`,
-    );
-  }
-  nextMeta.gear_stock = stock;
-  if (nextMeta.purchased?.[slotId]) {
-    const { [slotId]: _gone, ...rest } = nextMeta.purchased;
-    nextMeta.purchased = rest;
-  }
-  if (nextMeta.yanked?.[slotId]) {
-    const { [slotId]: _gone, ...rest } = nextMeta.yanked;
-    nextMeta.yanked = rest;
-  }
+  // Mark sold out / yanked — do not refill the slot until a full shop refresh.
+  nextMeta.purchased = { ...(meta.purchased || {}) };
+  nextMeta.yanked = { ...(meta.yanked || {}) };
+  if (outcome === "yanked") nextMeta.yanked[slotId] = true;
+  else nextMeta.purchased[slotId] = true;
+  void win;
+  void ch;
   return nextMeta;
 }
 
@@ -913,20 +935,27 @@ export async function BuyShopGear(user, body) {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
       const win = getShopWindow();
-      let meta = normalizeShopMeta(ch, win, todayET());
-      if (!Array.isArray(meta.gear_stock) || !meta.gear_stock.length || !meta.hot_deal) {
+      let meta = normalizeShopMeta(ch, win, getShopGameDayKey());
+      if (
+        !(Array.isArray(meta.shop_stock) && meta.shop_stock.length) &&
+        !(Array.isArray(meta.gear_stock) && meta.gear_stock.length)
+      ) {
         meta = buildShopStock(ch, meta, win);
       }
 
       let slot;
+      const stock = Array.isArray(meta.shop_stock) && meta.shop_stock.length
+        ? meta.shop_stock
+        : meta.gear_stock || [];
       if (isHot) {
         if (meta.hot_purchased || meta.hot_yanked) httpErr(409, "Hot deal already gone");
         slot = meta.hot_deal;
         if (!slot || slot._slotId !== slotId) httpErr(404, "Hot deal slot not found");
       } else {
         if (meta.purchased?.[slotId] || meta.yanked?.[slotId]) httpErr(409, "Already gone");
-        slot = (meta.gear_stock || []).find((s) => s._slotId === slotId);
+        slot = stock.find((s) => s._slotId === slotId);
         if (!slot) httpErr(404, "Slot not found");
+        if (slot.type === "consumable") httpErr(400, "Use BuyShopConsumable for stims");
       }
 
       let stardustCost = slot.cost || 0;
@@ -1030,22 +1059,31 @@ export async function BuyShopConsumable(user, body) {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
       const win = getShopWindow();
-      let meta = normalizeShopMeta(ch, win, todayET());
-      if (!Array.isArray(meta.cons_stock) || !meta.cons_stock.length) {
+      let meta = normalizeShopMeta(ch, win, getShopGameDayKey());
+      if (
+        !(Array.isArray(meta.shop_stock) && meta.shop_stock.length) &&
+        !(Array.isArray(meta.cons_stock) && meta.cons_stock.length)
+      ) {
         meta = buildShopStock(ch, meta, win);
       }
+
+      const stock = Array.isArray(meta.shop_stock) && meta.shop_stock.length
+        ? meta.shop_stock
+        : meta.cons_stock || [];
 
       let idx = slotIndex;
       let slot;
       if (slotId != null) {
-        idx = (meta.cons_stock || []).findIndex((s) => s._slotId === slotId);
-        slot = meta.cons_stock[idx];
+        if (meta.purchased?.[slotId] || meta.yanked?.[slotId]) httpErr(409, "Already gone");
+        idx = stock.findIndex((s) => s._slotId === slotId);
+        slot = stock[idx];
       } else {
-        slot = meta.cons_stock[slotIndex];
+        slot = stock[slotIndex];
       }
       if (!slot || idx < 0) httpErr(404, "Consumable slot not found");
+      if (slot.type !== "consumable") httpErr(400, "Not a stim offer");
 
-      const cost = slot._cost ?? slot.sell_value ?? 250;
+      const cost = slot.cost ?? slot._cost ?? stimShopPurchasePrice(slot.rarity, ch.level || 1);
       if ((ch.stardust || 0) < cost) httpErr(400, "Not enough stardust");
 
       const patch = { stardust: (ch.stardust || 0) - cost };
@@ -1060,15 +1098,12 @@ export async function BuyShopConsumable(user, body) {
         collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot, grantCtx);
       }
 
-      // Replace purchased slot with a fresh stim (client UX parity).
-      const nextStock = [...(meta.cons_stock || [])];
-      const fresh = randomConsumable();
-      nextStock[idx] = {
-        ...fresh,
-        _slotId: `cons-${shopConsSeed(meta, win)}-${idx}-${Date.now()}`,
-        _cost: fresh._cost ?? fresh.sell_value ?? 250,
+      // Sold out until next full shop refresh — do not refill the slot.
+      const nextMeta = {
+        ...meta,
+        purchased: { ...(meta.purchased || {}), [slot._slotId]: true },
       };
-      patch.shop_meta = { ...meta, cons_stock: nextStock };
+      patch.shop_meta = nextMeta;
 
       const character = entities.Character.update(ch.id, patch);
       return { success: true, cost, items, pending_loot: pendingLoot, patch, character };
@@ -1082,42 +1117,65 @@ export async function BuyShopConsumable(user, body) {
 
 // ── RefreshShop ──────────────────────────────────────────────
 export async function RefreshShop(user, body) {
-  const which = body?.which;
-  if (which !== "gear" && which !== "consumables") {
-    return { status: 400, body: { error: "which must be 'gear' or 'consumables'" } };
+  const which = body?.which || "gear";
+  const useFree = !!body?.use_free;
+  if (which !== "gear" && which !== "consumables" && which !== "all") {
+    return { status: 400, body: { error: "which must be 'gear', 'consumables', or 'all'" } };
   }
 
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
-      if ((ch.nova_crystals || 0) < SHOP_REFRESH_COST) {
-        httpErr(400, "Not enough Nova Crystals");
+      const win = getShopWindow();
+      let meta = normalizeShopMeta(ch, win, getShopGameDayKey());
+
+      let novaCost = 0;
+      if (useFree || !meta.free_refresh_used) {
+        if (meta.free_refresh_used && useFree) httpErr(400, "Free refresh already used this period");
+        meta = { ...meta, free_refresh_used: true };
+      } else {
+        if ((ch.nova_crystals || 0) < SHOP_REFRESH_COST) {
+          httpErr(400, "Not enough Nova Crystals");
+        }
+        novaCost = SHOP_REFRESH_COST;
       }
 
-      const win = getShopWindow();
-      let meta = normalizeShopMeta(ch, win, todayET());
-      if (which === "gear") {
-        meta = {
-          ...meta,
-          gear_refresh: (meta.gear_refresh || 0) + 1,
-          purchased: {},
-          yanked: {},
-        };
-        meta.gear_stock = generateSimpleGearStock(shopGearSeed(meta, win), ch.level || 1, randomItemForClass(ch.class));
-      } else {
-        meta = {
-          ...meta,
-          cons_refresh: (meta.cons_refresh || 0) + 1,
-        };
-        meta.cons_stock = generateSimpleConsStock(shopConsSeed(meta, win));
+      let hotCount = Math.max(0, Math.floor(meta.hot_manual_refresh_count || 0)) + 1;
+      let hotDeal = meta.hot_deal;
+      let hotPurchased = meta.hot_purchased;
+      let hotYanked = meta.hot_yanked;
+      if (hotCount >= HOT_DEAL_REFRESH_COUNT) {
+        hotCount = 0;
+        hotPurchased = false;
+        hotYanked = false;
+        hotDeal = generateSimpleHotDeal(
+          meta.hot_day || getShopGameDayKey(),
+          ch.level || 1,
+          randomItemForClass(ch.class)
+        );
       }
+
+      meta = {
+        ...meta,
+        gear_refresh: (meta.gear_refresh || 0) + 1,
+        cons_refresh: (meta.cons_refresh || 0) + 1,
+        manual_refresh_count: (meta.manual_refresh_count || 0) + 1,
+        hot_manual_refresh_count: hotCount,
+        hot_purchased: hotPurchased,
+        hot_yanked: hotYanked,
+        hot_deal: hotDeal,
+        purchased: {},
+        yanked: {},
+      };
+      // Manual refresh regenerates the 8 slots only; Hot Deal was updated above iff count hit 10.
+      meta = buildShopStock(ch, meta, win, { refreshHotDeal: false });
 
       const patch = {
-        nova_crystals: (ch.nova_crystals || 0) - SHOP_REFRESH_COST,
+        nova_crystals: (ch.nova_crystals || 0) - novaCost,
         shop_meta: meta,
       };
       const character = entities.Character.update(ch.id, patch);
-      return { success: true, which, shop_meta: meta, patch, character };
+      return { success: true, which: "all", shop_meta: meta, patch, character, used_free: novaCost === 0 };
     });
     return { status: 200, body: result };
   } catch (err) {

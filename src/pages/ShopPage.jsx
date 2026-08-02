@@ -15,7 +15,7 @@ import {
   getVendorLine,
   STARDUST_COLOR,
 } from "@/lib/gameData";
-import { todayET, msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
+import { getShopGameDayKey, msUntilNextShopGameDay, formatEtaShort } from "@/lib/gameTime";
 import { powerRating } from "@/components/game/StatCompareBubble";
 import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
@@ -23,7 +23,7 @@ import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { playHaggleWinGrowl } from "@/lib/shopHaggleSfx";
 import {
   ShoppingBag, Clock, Gem, RefreshCw, ArrowUp, ArrowDown, Minus,
-  Swords, FlaskConical, PackageOpen, Flame, MessageSquare,
+  Swords, PackageOpen, Flame, MessageSquare,
 } from "lucide-react";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 import FitScaleFrame from "@/components/game/FitScaleFrame";
@@ -107,12 +107,11 @@ export default function ShopPage() {
   const [shopMeta, setShopMeta] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [gearRefreshing, setGearRefreshing] = useState(false);
-  const [consRefreshing, setConsRefreshing] = useState(false);
   const [busySlot, setBusySlot] = useState(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const win = getShopWindow();
-  const dayKey = todayET();
+  const dayKey = getShopGameDayKey();
 
   const applyShopResult = useCallback((res, baseChar) => {
     const patch = res.patch || res.data?.patch || {};
@@ -189,9 +188,10 @@ export default function ShopPage() {
     [equipped],
   );
 
-  const inventory = shopMeta?.gear_stock || [];
+  const inventory = shopMeta?.shop_stock?.length
+    ? shopMeta.shop_stock
+    : (shopMeta?.gear_stock || []);
   const hotDeal = shopMeta?.hot_deal || null;
-  const consumableSlots = shopMeta?.cons_stock || [];
 
   const vendorLine = useMemo(
     () => getVendorLine((win.idx || 0) * 17 + dayKey.length * 3),
@@ -285,18 +285,32 @@ export default function ShopPage() {
     }
   }
 
-  async function refreshGear() {
+  async function refreshShop() {
     if (gearRefreshing || !shopMeta) return;
-    if ((character.nova_crystals || 0) < SHOP_REFRESH_COST) {
-      toast({ title: "Not enough Nova Crystals", description: `Need ${SHOP_REFRESH_COST} 💎 to refresh the Armory.`, variant: "destructive" });
+    const freeLeft = !shopMeta.free_refresh_used;
+    if (!freeLeft && (character.nova_crystals || 0) < SHOP_REFRESH_COST) {
+      toast({
+        title: "Not enough Nova Crystals",
+        description: `Need ${SHOP_REFRESH_COST} 💎 to refresh (free refresh already used this period).`,
+        variant: "destructive",
+      });
       return;
     }
     setGearRefreshing(true);
     try {
-      const res = await api.functions.invoke("RefreshShop", { which: "gear" });
+      const res = await api.functions.invoke("RefreshShop", {
+        which: "all",
+        use_free: freeLeft,
+      });
       applyShopResult(res);
-      void trackNovaSpend(character, SHOP_REFRESH_COST, "shop_refresh_gear");
-      toast({ title: "🔄 Armory restocked", description: "Fresh gear on the tables. Hot Deal unchanged." });
+      const usedFree = res.used_free ?? res.data?.used_free ?? freeLeft;
+      if (!usedFree) void trackNovaSpend(character, SHOP_REFRESH_COST, "shop_refresh");
+      toast({
+        title: "🔄 Bazaar restocked",
+        description: usedFree
+          ? "Free refresh used — all 8 stalls rerolled."
+          : "Premium refresh — all 8 stalls rerolled.",
+      });
     } catch (e) {
       toast({ title: "Refresh failed", description: e.message, variant: "destructive" });
       await load();
@@ -305,43 +319,21 @@ export default function ShopPage() {
     }
   }
 
-  async function refreshConsumables() {
-    if (consRefreshing || !shopMeta) return;
-    if ((character.nova_crystals || 0) < SHOP_REFRESH_COST) {
-      toast({ title: "Not enough Nova Crystals", description: `Need ${SHOP_REFRESH_COST} 💎 to refresh the Stim Lab.`, variant: "destructive" });
-      return;
-    }
-    setConsRefreshing(true);
-    try {
-      const res = await api.functions.invoke("RefreshShop", { which: "consumables" });
-      applyShopResult(res);
-      void trackNovaSpend(character, SHOP_REFRESH_COST, "shop_refresh_cons");
-      toast({ title: "🔄 Stim Lab restocked", description: "New stims on the rack." });
-    } catch (e) {
-      toast({ title: "Refresh failed", description: e.message, variant: "destructive" });
-      await load();
-    } finally {
-      setConsRefreshing(false);
-    }
-  }
-
-  async function buyConsumable(slot, index) {
+  async function buyConsumable(slot) {
     if (busySlot) return;
-    const cost = slot._cost ?? slot.sell_value ?? 250;
+    if (shopMeta?.purchased?.[slot._slotId] || shopMeta?.yanked?.[slot._slotId]) return;
+    const cost = slot.cost ?? slot._cost ?? 0;
     if ((character.stardust || 0) < cost) {
       toast({ title: "Not enough stardust", description: `Need ${cost} ${STARDUST_GLYPH} — you have ${character.stardust || 0}.`, variant: "destructive" });
       return;
     }
-    setBusySlot(slot._slotId || `cons-${index}`);
+    setBusySlot(slot._slotId);
     try {
-      const body = slot._slotId != null
-        ? { slot_id: slot._slotId }
-        : { slot_index: index };
-      const res = await api.functions.invoke("BuyShopConsumable", body);
+      const res = await api.functions.invoke("BuyShopConsumable", { slot_id: slot._slotId });
       const patch = res.patch || res.data?.patch || {};
       const meta = patch.shop_meta;
       const items = res.items || res.data?.items || [];
-      const hadPending = applyPendingLootFromResponse(res);
+      applyPendingLootFromResponse(res);
       const anyCreated = items.length > 0;
 
       if (meta) setShopMeta(meta);
@@ -352,7 +344,7 @@ export default function ShopPage() {
       toast({
         title: anyCreated ? "🛒 Purchased!" : "📦 Inventory full!",
         description: anyCreated
-          ? (slot._bundle ? `${slot.name} claimed.` : `${slot.name} added to your inventory.`)
+          ? `${slot.name} added to your inventory.`
           : `${slot.name} is waiting — toss an item to make room.`,
       });
     } catch (e) {
@@ -371,7 +363,7 @@ export default function ShopPage() {
     );
   }
 
-  if (!shopMeta?.gear_stock?.length) {
+  if (!inventory.length) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-20 text-center px-4">
         <ShoppingBag className="w-8 h-8 text-fuchsia-300/80" />
@@ -387,11 +379,16 @@ export default function ShopPage() {
   }
 
   const secondsLeft = Math.max(0, Math.floor((win.endsAt - now) / 1000));
-  const hotEta = formatEtaShort(msUntilNextETMidnight(now));
+  const hotEta = formatEtaShort(msUntilNextShopGameDay(now));
   const purchased = shopMeta.purchased || {};
   const yanked = shopMeta.yanked || {};
   const hotSold = !!shopMeta.hot_purchased;
   const hotYanked = !!shopMeta.hot_yanked;
+  const freeLeft = !shopMeta.free_refresh_used;
+
+  function isStimSlot(slot) {
+    return slot?.type === "consumable" || slot?._offerKind === "stim";
+  }
 
   function renderGearActions(slot, { isHot = false } = {}) {
     const wasYanked = isHot ? hotYanked : !!yanked[slot._slotId];
@@ -440,6 +437,34 @@ export default function ShopPage() {
             {owned ? goneLabel : busySlot === slot._slotId ? "…" : slot._bundle ? "Open" : "Buy"}
           </motion.button>
         </div>
+      </div>
+    );
+  }
+
+  function renderStimActions(slot) {
+    const wasYanked = !!yanked[slot._slotId];
+    const owned = !!(purchased[slot._slotId] || wasYanked);
+    const cost = slot.cost ?? slot._cost ?? 0;
+    const affordable = (character.stardust || 0) >= cost;
+    return (
+      <div className="mt-auto flex items-end justify-between gap-2 pt-0.5">
+        <span className="flex items-center gap-1 text-xs font-display font-bold" style={{ color: STARDUST_COLOR }}>
+          <StardustIcon className="w-3 h-3" /> {cost}
+        </span>
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => buyConsumable(slot)}
+          disabled={owned || !affordable || busySlot === slot._slotId}
+          className={`text-[10px] px-2.5 py-1 rounded-md font-display font-semibold tracking-wide transition-colors ${
+            owned
+              ? "bg-muted text-muted-foreground"
+              : affordable
+                ? "bg-primary/15 text-primary hover:bg-primary/25 painted-btn"
+                : "bg-muted/40 text-muted-foreground/50"
+          }`}
+        >
+          {owned ? (wasYanked ? "Yanked" : "Sold") : busySlot === slot._slotId ? "…" : "Buy"}
+        </motion.button>
       </div>
     );
   }
@@ -535,46 +560,50 @@ export default function ShopPage() {
             </motion.section>
           )}
 
-          <div className="grid gap-2.5 lg:grid-cols-2 items-stretch">
-            <motion.section
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] via-card/40 to-transparent p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)] flex flex-col h-full min-h-0"
-            >
-              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                <div>
-                  <h2 className="font-display font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5">
-                    <Swords className="w-3.5 h-3.5 text-cyan-300" /> Armory
-                  </h2>
-                  <p className="text-[9px] text-muted-foreground">Haggle · crates sometimes</p>
-                </div>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={refreshGear}
-                  disabled={gearRefreshing}
-                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md font-display font-semibold tracking-wide bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-400/30 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3 h-3 ${gearRefreshing ? "animate-spin" : ""}`} />
-                  Restock · <Gem className="w-2.5 h-2.5" /> {SHOP_REFRESH_COST}
-                </motion.button>
+          <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] via-card/40 to-amber-500/[0.05] p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)] flex flex-col min-h-0"
+          >
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+              <div>
+                <h2 className="font-display font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5">
+                  <Swords className="w-3.5 h-3.5 text-cyan-300" /> Bazaar
+                </h2>
+                <p className="text-[9px] text-muted-foreground">8 stalls · gear &amp; stims mixed · haggle gear</p>
               </div>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={refreshShop}
+                disabled={gearRefreshing}
+                className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md font-display font-semibold tracking-wide bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-400/30 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${gearRefreshing ? "animate-spin" : ""}`} />
+                {freeLeft ? (
+                  <>Free restock</>
+                ) : (
+                  <>Restock · <Gem className="w-2.5 h-2.5" /> {SHOP_REFRESH_COST}</>
+                )}
+              </motion.button>
+            </div>
 
-              <div className="grid gap-2 sm:grid-cols-2 auto-rows-fr flex-1 min-h-0">
-                {inventory.map((slot) => {
-                  const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
-                  const wasYanked = !!yanked[slot._slotId];
-                  const owned = !!purchased[slot._slotId] || wasYanked;
-                  const eq = equippedByType[slot.type] || null;
-                  const better = !owned && !slot._bundle && eq && powerRating(slot, character.class) > powerRating(eq, character.class);
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 auto-rows-fr flex-1 min-h-0">
+              {inventory.map((slot) => {
+                const stim = isStimSlot(slot);
+                const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
+                const wasYanked = !!yanked[slot._slotId];
+                const owned = !!purchased[slot._slotId] || wasYanked;
+                if (stim) {
+                  const stat = slot.consumable?.stat || "all";
+                  const tint = getStatColor(stat);
+                  const icon = stat === "all" ? "✨" : (STAT_ICONS[stat] || "🧪");
                   return (
                     <motion.div
                       key={slot._slotId}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: owned ? 0.72 : 1, y: 0 }}
-                      className={`relative h-full p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden ${
-                        owned ? "opacity-70" : better ? "ring-1 ring-green-400/35" : ""
-                      }`}
-                      style={{ borderColor: color + "45", boxShadow: owned ? undefined : `0 0 12px ${color}12` }}
+                      className={`relative h-full p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden ${owned ? "opacity-70" : ""}`}
+                      style={{ borderColor: `${tint}55`, boxShadow: owned ? undefined : `0 0 10px ${tint}10` }}
                     >
                       {owned && (
                         <div className="absolute inset-0 bg-black/35 z-10 flex items-center justify-center">
@@ -584,116 +613,72 @@ export default function ShopPage() {
                         </div>
                       )}
                       <div className="flex items-center gap-2 mb-1.5">
-                        {slot._bundle ? (
-                          <div className="w-9 h-9 rounded-lg border border-amber-400/40 bg-amber-500/10 flex items-center justify-center text-lg">📦</div>
-                        ) : (
-                          <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} baseName={slot.base_name} level_requirement={slot.level_requirement} size={36} />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <h4 className="font-display font-semibold text-xs truncate" style={{ color }}>{slot.name}</h4>
-                          <p className="text-[9px] text-muted-foreground capitalize">
-                            {slot._bundle ? "bundle · 2 commons" : `${slot.rarity} · ${gearTypeLabel(slot.type)}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mb-1">
-                        <CompareBadge slot={slot} equipped={eq} characterClass={character.class} />
-                      </div>
-                      {slot._bundle ? (
-                        <p className="text-[9px] text-muted-foreground mb-1.5 line-clamp-2">{slot.flavor_text}</p>
-                      ) : (
-                        <StatDeltaRow slot={slot} equipped={eq} />
-                      )}
-                      {renderGearActions(slot)}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </motion.section>
-
-            <motion.section
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl border border-amber-400/20 bg-gradient-to-br from-amber-500/[0.08] via-card/40 to-violet-500/[0.05] p-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.22)] flex flex-col h-full min-h-0"
-            >
-              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                <div>
-                  <h2 className="font-display font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5">
-                    <FlaskConical className="w-3.5 h-3.5 text-amber-300" /> Stim Lab
-                  </h2>
-                  <p className="text-[9px] text-muted-foreground">Timed buffs · Stim Trios</p>
-                </div>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={refreshConsumables}
-                  disabled={consRefreshing}
-                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md font-display font-semibold tracking-wide bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 border border-violet-400/30 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3 h-3 ${consRefreshing ? "animate-spin" : ""}`} />
-                  Restock · <Gem className="w-2.5 h-2.5" /> {SHOP_REFRESH_COST}
-                </motion.button>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2 auto-rows-fr flex-1 min-h-0">
-                {consumableSlots.map((slot, index) => {
-                  const color = RARITY_COLORS[slot.rarity] || "#9CA3AF";
-                  const cost = slot._cost ?? slot.sell_value ?? 250;
-                  const affordable = (character.stardust || 0) >= cost;
-                  const isTrio = slot._bundle === "stim_trio";
-                  const stat = slot.consumable?.stat || "all";
-                  const tint = isTrio ? "#FBBF24" : getStatColor(stat);
-                  const icon = isTrio ? "📦" : (stat === "all" ? "✨" : (STAT_ICONS[stat] || "🧪"));
-                  const slotKey = slot._slotId || `cons-${index}`;
-                  return (
-                    <div
-                      key={slotKey}
-                      className="h-full p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col"
-                      style={{ borderColor: `${tint}55`, boxShadow: `0 0 10px ${tint}10` }}
-                    >
-                      <div className="flex items-center gap-2 mb-1.5">
                         <div
                           className="w-9 h-9 rounded-lg border flex items-center justify-center text-base shrink-0"
                           style={{ backgroundColor: `${tint}18`, borderColor: `${tint}44` }}
                         >
                           {icon}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <h4 className="font-display font-semibold text-xs truncate" style={{ color }}>{slot.name}</h4>
-                          <p className="text-[9px] text-muted-foreground capitalize">
-                            {isTrio ? "bundle · 3 stims" : `${slot.rarity} · stim`}
-                          </p>
+                          <p className="text-[9px] text-muted-foreground capitalize">{slot.rarity} · stim</p>
                         </div>
                       </div>
-                      {isTrio ? (
-                        <p className="text-[9px] text-amber-200/90 mb-2 leading-snug line-clamp-2">
-                          {(slot.bundle_items || []).map((b) => b.name.replace(/ Stim$/, "")).join(" · ")}
-                        </p>
-                      ) : (
-                        <p className="text-[10px] font-medium mb-2" style={{ color: tint }}>
-                          +{Math.round((slot.consumable?.mult || 0) * 100)}% {stat === "all" ? "ALL" : stat}
-                          <span className="text-muted-foreground font-normal"> · {slot.consumable?.duration_hours}h</span>
-                        </p>
-                      )}
-                      <div className="mt-auto flex items-center justify-between">
-                        <span className="flex items-center gap-1 text-xs font-display font-bold" style={{ color: STARDUST_COLOR }}>
-                          <StardustIcon className="w-3 h-3" /> {cost}
+                      <p className="text-[10px] font-medium mb-2" style={{ color: tint }}>
+                        +{Math.round((slot.consumable?.mult || 0) * 100)}% {stat === "all" ? "ALL" : stat}
+                        <span className="text-muted-foreground font-normal"> · {slot.consumable?.duration_hours}h</span>
+                      </p>
+                      {renderStimActions(slot)}
+                    </motion.div>
+                  );
+                }
+
+                const eq = equippedByType[slot.type] || null;
+                const better = !owned && !slot._bundle && eq && powerRating(slot, character.class) > powerRating(eq, character.class);
+                return (
+                  <motion.div
+                    key={slot._slotId}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: owned ? 0.72 : 1, y: 0 }}
+                    className={`relative h-full p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden ${
+                      owned ? "opacity-70" : better ? "ring-1 ring-green-400/35" : ""
+                    }`}
+                    style={{ borderColor: color + "45", boxShadow: owned ? undefined : `0 0 12px ${color}12` }}
+                  >
+                    {owned && (
+                      <div className="absolute inset-0 bg-black/35 z-10 flex items-center justify-center">
+                        <span className="text-[9px] font-display font-black tracking-[0.2em] uppercase text-muted-foreground border border-border/60 bg-card/80 px-2 py-0.5 rounded-full">
+                          {wasYanked ? "Yanked" : "Sold"}
                         </span>
-                        <button
-                          onClick={() => buyConsumable({ ...slot, _cost: cost }, index)}
-                          disabled={!affordable || busySlot === slotKey}
-                          className={`text-[10px] px-2.5 py-1 rounded-md font-display font-semibold tracking-wide transition-colors ${
-                            affordable ? "bg-primary/15 text-primary hover:bg-primary/25 painted-btn" : "bg-muted/40 text-muted-foreground/50"
-                          }`}
-                        >
-                          {busySlot === slotKey ? "…" : isTrio ? "Open" : "Buy"}
-                        </button>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {slot._bundle ? (
+                        <div className="w-9 h-9 rounded-lg border border-amber-400/40 bg-amber-500/10 flex items-center justify-center text-lg">📦</div>
+                      ) : (
+                        <GearVisual type={slot.type} rarity={slot.rarity} name={slot.name} baseName={slot.base_name} level_requirement={slot.level_requirement} size={36} />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-display font-semibold text-xs truncate" style={{ color }}>{slot.name}</h4>
+                        <p className="text-[9px] text-muted-foreground capitalize">
+                          {slot._bundle ? "bundle · 2 commons" : `${slot.rarity} · ${gearTypeLabel(slot.type)} · L${slot.level_requirement || "?"}`}
+                        </p>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </motion.section>
-          </div>
+                    <div className="mb-1">
+                      <CompareBadge slot={slot} equipped={eq} characterClass={character.class} />
+                    </div>
+                    {slot._bundle ? (
+                      <p className="text-[9px] text-muted-foreground mb-1.5 line-clamp-2">{slot.flavor_text}</p>
+                    ) : (
+                      <StatDeltaRow slot={slot} equipped={eq} />
+                    )}
+                    {renderGearActions(slot)}
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.section>
         </div>
       </FitScaleFrame>
     </div>

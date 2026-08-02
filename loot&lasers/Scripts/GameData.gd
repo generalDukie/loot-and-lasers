@@ -333,8 +333,9 @@ static func build_create_payload(
 	}
 
 
-## Black Market — mirrors src/lib/gameData.js shop window + vendor banter.
-const SHOP_WINDOW_MS := 6 * 60 * 60 * 1000
+## Black Market — display countdown only. Server EnsureShop owns stock + 12h ET windows.
+## Prefer server window endsAt when present; this local helper is a coarse 12h fallback.
+const SHOP_WINDOW_MS := 12 * 60 * 60 * 1000
 const SHOP_REFRESH_COST := 10
 const STARDUST_COLOR := Color("#E879F9")
 

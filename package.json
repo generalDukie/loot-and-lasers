@@ -28,6 +28,8 @@
     "test:expected-player": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-expected-player-attributes.mjs",
     "test:gear-stats": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-gear-stats.mjs",
     "test:stims": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-stims.mjs",
+    "test:balance-update": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-balance-update.mjs",
+    "sim:progression": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/sim-progression-cadence.mjs",
     "test:dungeon-enemy": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-dungeon-enemy.mjs",
     "test:arena-bot": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-arena-bot.mjs",
     "test:game-viewport": "node ./server/scripts/test-game-viewport.mjs",

@@ -10,8 +10,13 @@ export const MISSION_GEAR_BASE_CHANCE = 0.2;
 export const MISSION_GEAR_PITY_INCREMENT = 0.025;
 /** Soft upper bound so pity never exceeds a guaranteed drop. Spec has no 50% cap. */
 export const MISSION_GEAR_DROP_CAP = 1;
-export const MISSION_JUNK_CHANCE_ON_GEAR_FAIL = 0.5;
-export const JUNK_AVG_MISSION_REWARD_RATIO = 0.225;
+/** After gear fails: chance to roll a Stim (exclusive chain). */
+export const MISSION_STIM_CHANCE_AFTER_GEAR_FAIL = 0.25;
+/** After gear and stim both fail: chance to roll Junk. */
+export const MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL = 0.75;
+/** @deprecated use MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL */
+export const MISSION_JUNK_CHANCE_ON_GEAR_FAIL = MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL;
+export const JUNK_AVG_MISSION_REWARD_RATIO = 0.45;
 /** Uniform multiplier range around base junk value (mean multiplier = 1.0). */
 export const JUNK_VALUE_MULT_MIN = 0.6;
 export const JUNK_VALUE_MULT_MAX = 1.4;
@@ -51,7 +56,8 @@ export const DUNGEON_BOSS_RARITY_WEIGHTS = Object.freeze({
 });
 
 export const ARENA_REWARDED_WINS_PER_DAY = 10;
-export const ARENA_WIN_FUEL_EQUIVALENT = 1.5;
+export const ARENA_WIN_FUEL_EQUIVALENT = 2.25;
+export const ARENA_WIN_STARDUST_MULTIPLIER = ARENA_WIN_FUEL_EQUIVALENT;
 export const MINING_EFFICIENCY = 0.03;
 
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];

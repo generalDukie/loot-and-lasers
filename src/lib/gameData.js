@@ -1,5 +1,10 @@
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
-import { todayET } from "@/lib/gameTime";
+import {
+  todayET,
+  getShopWindow,
+  getShopGameDayKey,
+  msUntilNextShopGameDay,
+} from "@/lib/gameTime";
 import {
   EQUIPMENT_SLOTS,
   rollItemStats,
@@ -647,7 +652,6 @@ export function computeNovaCrystalCost(item) {
 // ═══════════════════════════════════════════
 // ROTATING SHOP / BLACK MARKET (6h armory+stims; daily hot deal)
 // ═══════════════════════════════════════════
-const SHOP_WINDOW_MS = 6 * 60 * 60 * 1000;
 const SHOP_GEAR_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
 
 function mulberry32(a) {
@@ -659,15 +663,10 @@ function mulberry32(a) {
   };
 }
 
-export function getShopWindow() {
-  const ms = Date.now();
-  const idx = Math.floor(ms / SHOP_WINDOW_MS);
-  const startsAt = idx * SHOP_WINDOW_MS;
-  const endsAt = startsAt + SHOP_WINDOW_MS;
-  return { idx, startsAt, endsAt, secondsLeft: Math.max(0, Math.floor((endsAt - ms) / 1000)) };
-}
+// Shop window / game-day — re-export client mirrors of server helpers for UI countdowns.
+export { getShopWindow, getShopGameDayKey, msUntilNextShopGameDay };
 
-/** Nova cost to reroll a market stall. */
+/** Nova cost to reroll a market stall (after free refresh is used). */
 export const SHOP_REFRESH_COST = 10;
 
 const VENDOR_LINES = [
@@ -707,35 +706,43 @@ export function rollHaggle(rng = Math.random) {
 }
 
 /**
- * Persistable market state for the current 6h window + daily hot deal.
- * Window fields reset every 6h; hot_day / hot_purchased / hot_yanked follow ET midnight.
+ * Persistable market state for the current 12h window + Hot Deal game-day (2 PM ET).
+ * Free refresh resets every window; Hot Deal counters reset on hot_day change.
  */
-export function normalizeShopMeta(character, win = getShopWindow(), day = todayET()) {
+export function normalizeShopMeta(character, win = getShopWindow(), day = getShopGameDayKey()) {
   const prev = character?.shop_meta || {};
   const hot_day = day;
   const hot_purchased = prev.hot_day === day ? !!prev.hot_purchased : false;
   const hot_yanked = prev.hot_day === day ? !!prev.hot_yanked : false;
+  const hot_manual_refresh_count =
+    prev.hot_day === day ? Math.max(0, Math.floor(prev.hot_manual_refresh_count || 0)) : 0;
   if (!prev.window_idx || prev.window_idx !== win.idx) {
     return {
       window_idx: win.idx,
       gear_refresh: 0,
       cons_refresh: 0,
+      free_refresh_used: false,
+      manual_refresh_count: 0,
       purchased: {},
       yanked: {},
       hot_day,
       hot_purchased,
       hot_yanked,
+      hot_manual_refresh_count,
     };
   }
   return {
     window_idx: win.idx,
     gear_refresh: Math.max(0, Math.floor(prev.gear_refresh || 0)),
     cons_refresh: Math.max(0, Math.floor(prev.cons_refresh || 0)),
+    free_refresh_used: !!prev.free_refresh_used,
+    manual_refresh_count: Math.max(0, Math.floor(prev.manual_refresh_count || 0)),
     purchased: prev.purchased && typeof prev.purchased === "object" ? { ...prev.purchased } : {},
     yanked: prev.yanked && typeof prev.yanked === "object" ? { ...prev.yanked } : {},
     hot_day,
     hot_purchased,
     hot_yanked,
+    hot_manual_refresh_count,
   };
 }
 
@@ -820,7 +827,7 @@ export function generateShopInventory(seed, playerLevel, playerClass) {
 
 /** One spotlight piece per ET day — not affected by Armory restock. */
 export function generateHotDeal(dayKey, playerLevel, playerClass) {
-  const dayNum = String(dayKey || todayET()).split("-").reduce((a, p) => a + Number(p || 0), 0);
+  const dayNum = String(dayKey || getShopGameDayKey()).split("-").reduce((a, p) => a + Number(p || 0), 0);
   const rng = mulberry32(dayNum * 104729 + 77);
   const r = () => rng();
   const type = pickShopGearType(r);
@@ -952,75 +959,35 @@ function lerpWaypoints(level, points) {
 }
 
 /**
- * XP needed to advance from level L → L+1.
- * Uses the design waypoint chart through 500 (matches published table),
- * then the closed form forever after:
- *   ROUND(2.106 × L^1.532 × (1 + (L/266)^3.683))
- * Pacing: 1→50 ~3d, 50→100 ~1wk, 100→200 ~2wk, then progressively slower.
- *
- * Levels 1–4 are hand-curated overrides; Level 5+ uses the formula below unchanged.
+ * XP to next: single closed-form for all levels (pre-scale), then × XP_STARDUST_SCALE once.
+ * XPToNextBase(L) = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
  */
-const XP_TO_NEXT_WAYPOINTS = [
-  [1, 40],
-  [5, 50],
-  [10, 120],
-  [15, 150],
-  [25, 335],
-  [50, 1135],
-  [75, 1810],
-  [100, 2590],
-  [150, 4460],
-  [200, 14300],
-  [250, 19800],
-  [300, 51700],
-  [350, 65000],
-  [400, 159000],
-  [450, 190000],
-  [500, 228000],
-];
+export const XP_REQUIREMENT_MULTIPLIER = 1.35;
 
-/** Existing XP-to-next formula (waypoints + closed form + L≤5 −20 easing). Do not alter. */
-function existingExpForLevelFormula(L) {
-  let xp;
-  if (L <= 500) {
-    xp = Math.max(1, Math.round(lerpWaypoints(L, XP_TO_NEXT_WAYPOINTS)));
-  } else {
-    xp = Math.max(1, Math.round(2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
-  }
-  // Early easing only: −20 XP each for levels 1–5. Formula/waypoints unchanged.
-  if (L <= 5) xp = Math.max(1, xp - 20);
-  return xp;
+export function xpToNextBase(level) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  return Math.max(
+    1,
+    Math.round(XP_REQUIREMENT_MULTIPLIER * 2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683))
+  );
 }
 
 export function getExpForLevel(level) {
-  const L = Math.max(1, Math.floor(level || 1));
-  let xp;
-  switch (L) {
-    case 1: xp = 10; break;
-    case 2: xp = 15; break;
-    case 3: xp = 25; break;
-    case 4: xp = 40; break;
-    default: xp = existingExpForLevelFormula(L);
-  }
-  return xp * XP_STARDUST_SCALE;
+  return xpToNextBase(level) * XP_STARDUST_SCALE;
 }
 
-// Design chart: mission XP granted per 1 fuel spent.
+/** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
+export const MISSION_XP_REBALANCE = 0.85;
+
+// Design chart: mission XP granted per 1 fuel spent (pre-scale).
 const MISSION_XP_PER_FUEL_WAYPOINTS = [
-  [1, 10],
-  [10, 16],
-  [25, 29],
-  [50, 57],
-  [75, 90],
-  [100, 130],
-  [150, 223],
-  [200, 334],
-  [250, 461],
-  [300, 603],
-  [350, 758],
-  [400, 927],
-  [450, 1108],
-  [500, 1301],
+  [1, 10], [10, 16], [20, 25], [30, 34], [40, 45], [50, 57],
+  [60, 70], [70, 83], [80, 98], [90, 113], [100, 130],
+  [110, 147], [120, 165], [130, 183], [140, 203], [150, 223],
+  [160, 244], [170, 265], [180, 288], [190, 310], [200, 334],
+  [225, 396], [250, 461], [275, 530], [300, 603],
+  [325, 679], [350, 758], [375, 841], [400, 927],
+  [425, 1016], [450, 1108], [475, 1203], [500, 1301],
 ];
 
 /** Mission XP per 1 fuel at this level (design chart). */
@@ -1099,13 +1066,16 @@ export function formatEfficiencyPct(efficiency, playerLevel = 1) {
 }
 
 /**
- * Mission XP = Fuel × Level XP/F × efficiency (level-banded variance).
- * Before ship/collection bonuses. Base XP/F chart is unchanged.
+ * Mission XP = Fuel × Level XP/F × efficiency × MISSION_XP_REBALANCE.
+ * Before ship/collection bonuses. getMissionXpPerFuel already includes XP_STARDUST_SCALE once.
  */
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
   const eff = normalizeMissionEfficiency(efficiency, level);
-  return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionXpPerFuel(level) * eff));
+  return Math.max(
+    fuel > 0 ? 1 : 0,
+    Math.round(fuel * getMissionXpPerFuel(level) * eff * MISSION_XP_REBALANCE)
+  );
 }
 
 /**

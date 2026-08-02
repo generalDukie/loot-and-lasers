@@ -76,6 +76,8 @@ func go_character_select() -> void:
 
 
 func go_character_create() -> void:
+	pending_page_path = ""
+	change_state(GameState.CHARACTER_SELECT)
 	_change_scene(SCENE_CHARACTER_CREATE)
 
 
@@ -207,6 +209,9 @@ func go_crystal_store() -> void:
 
 
 func go_admin() -> void:
+	if not AdminManager.is_admin():
+		push_warning("go_admin blocked — user is not admin")
+		return
 	change_state(GameState.IN_GAME)
 	open_game_page(SCENE_ADMIN)
 

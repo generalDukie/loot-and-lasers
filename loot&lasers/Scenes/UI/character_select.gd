@@ -35,15 +35,20 @@ func _build() -> void:
 	margin.add_theme_constant_override("margin_bottom", 24)
 	add_child(margin)
 
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	margin.add_child(center)
+	# Full-rect stack (not CenterContainer): a centered tall column was clipping the
+	# footer off-screen, so New / Enter Game could not be reached.
+	var stage := VBoxContainer.new()
+	stage.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	stage.alignment = BoxContainer.ALIGNMENT_CENTER
+	stage.add_theme_constant_override("separation", 0)
+	margin.add_child(stage)
 
 	# Loading state — SiteTitle + spinner (web CharacterSelectPage)
 	_loading_host = VBoxContainer.new()
+	_loading_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_loading_host.alignment = BoxContainer.ALIGNMENT_CENTER
 	_loading_host.add_theme_constant_override("separation", 16)
-	center.add_child(_loading_host)
+	stage.add_child(_loading_host)
 	var load_title := ClientUi.make_title("LOOT & LASERS", 28)
 	load_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_loading_host.add_child(load_title)
@@ -55,15 +60,16 @@ func _build() -> void:
 	ClientUi.apply_display_font(spinner)
 	_loading_host.add_child(spinner)
 
-	# Main picker
+	# Main picker — list scrolls; footer always stays on-screen.
 	_main_host = VBoxContainer.new()
 	_main_host.visible = false
-	_main_host.custom_minimum_size = Vector2(960, 0)
 	_main_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_main_host.add_theme_constant_override("separation", 18)
-	center.add_child(_main_host)
+	_main_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_main_host.add_theme_constant_override("separation", 14)
+	stage.add_child(_main_host)
 
 	var head := VBoxContainer.new()
+	head.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	head.add_theme_constant_override("separation", 6)
 	_main_host.add_child(head)
 	var title := ClientUi.make_title("SELECT YOUR OPERATIVE", 26)
@@ -76,12 +82,23 @@ func _build() -> void:
 	ClientUi.apply_body_font(_welcome)
 	head.add_child(_welcome)
 
+	var list_wrap := CenterContainer.new()
+	list_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_main_host.add_child(list_wrap)
+
+	var list_col := VBoxContainer.new()
+	list_col.custom_minimum_size.x = 960
+	list_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_col.add_theme_constant_override("separation", 10)
+	list_wrap.add_child(list_col)
+
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size.y = 427
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_main_host.add_child(scroll)
+	list_col.add_child(scroll)
 
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -89,11 +106,13 @@ func _build() -> void:
 	scroll.add_child(_list)
 
 	_status = ClientUi.make_status()
+	_status.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_main_host.add_child(_status)
 
-	# Footer: Log out | New + Enter Game
+	# Footer: Log out | New + Enter Game — always pinned below the list.
 	var row := HBoxContainer.new()
+	row.size_flags_vertical = Control.SIZE_SHRINK_END
 	row.add_theme_constant_override("separation", 10)
 	_main_host.add_child(row)
 
@@ -110,7 +129,7 @@ func _build() -> void:
 	_create_btn = Button.new()
 	_create_btn.text = "＋  New"
 	_apply_accent_button(_create_btn)
-	_create_btn.pressed.connect(func() -> void: GameManager.go_character_create())
+	_create_btn.pressed.connect(_on_create_pressed)
 	row.add_child(_create_btn)
 
 	_enter_btn = Button.new()
@@ -200,8 +219,18 @@ func _refresh() -> void:
 
 	var purchased := int(AuthManager.user.get("purchased_slots", 0))
 	var total_slots := mini(MAX_SLOTS, 1 + purchased)
-	_create_btn.visible = _characters.size() < total_slots
+	var can_create := _characters.size() < total_slots
+	_create_btn.visible = can_create
+	_create_btn.disabled = false
 	_enter_btn.disabled = _selected_id.is_empty() or _switching
+	if not can_create:
+		_status.add_theme_color_override("font_color", ClientUi.MUTED)
+		if total_slots >= MAX_SLOTS:
+			_status.text = "All %s operative slots are filled." % MAX_SLOTS
+		else:
+			_status.text = "%s/%s slots used — unlock another slot in the Crystal Store." % [
+				_characters.size(), total_slots
+			]
 
 	for c in _characters:
 		if typeof(c) != TYPE_DICTIONARY:
@@ -299,6 +328,18 @@ func _style_card(btn: Button, is_selected: bool) -> void:
 	btn.add_theme_stylebox_override("disabled", sb)
 	btn.add_theme_stylebox_override("focus", sb)
 	btn.add_theme_color_override("font_color", Color(0, 0, 0, 0))
+
+
+func _on_create_pressed() -> void:
+	if _busy or _switching:
+		return
+	var purchased := int(AuthManager.user.get("purchased_slots", 0))
+	var total_slots := mini(MAX_SLOTS, 1 + purchased)
+	if _characters.size() >= total_slots:
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = "No free character slots (max %s)." % total_slots
+		return
+	GameManager.go_character_create()
 
 
 func _select_card(character_id: String) -> void:

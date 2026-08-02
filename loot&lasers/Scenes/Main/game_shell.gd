@@ -320,6 +320,16 @@ func _make_top_chrome() -> Control:
 	settings_btn.pressed.connect(func() -> void: GameManager.go_settings())
 	row.add_child(settings_btn)
 
+	# Admin-only entry — never shown to non-admins (server still enforces role).
+	if AdminManager.is_admin():
+		var admin_btn := Button.new()
+		admin_btn.text = "ADMIN"
+		admin_btn.tooltip_text = "Admin Console"
+		admin_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		ClientUi.apply_danger_button(admin_btn)
+		admin_btn.pressed.connect(func() -> void: GameManager.go_admin())
+		row.add_child(admin_btn)
+
 	return top
 
 func _make_rail() -> Control:

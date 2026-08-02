@@ -815,6 +815,124 @@ static func apply_hp_bar(bar: ProgressBar, fill: Color) -> void:
 	bar.add_theme_stylebox_override("fill", meter)
 
 
+## Full-screen painted confirm — matches CombatSheets / InventoryFullSheet overlays.
+## Parent the returned Control on the game shell (or current scene), not a clipped rail.
+static func make_confirm_sheet(
+	eyebrow: String,
+	heading: String,
+	body: String,
+	on_confirm: Callable,
+	on_cancel: Callable = Callable(),
+	confirm_label: String = "Confirm",
+	cancel_label: String = "Cancel",
+	accent: Color = DANGER,
+	danger_confirm: bool = false
+) -> Control:
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.z_index = 140
+
+	var dismiss := func() -> void:
+		if is_instance_valid(root):
+			root.queue_free()
+		if on_cancel.is_valid():
+			on_cancel.call()
+
+	var scrim := ColorRect.new()
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scrim.color = Color(0.015, 0.018, 0.04, 0.82)
+	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
+	scrim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			dismiss.call()
+	)
+	root.add_child(scrim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(center)
+
+	var card := PanelContainer.new()
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	card.custom_minimum_size = Vector2(520, 0)
+	card.add_theme_stylebox_override(
+		"panel",
+		painted_panel_style(Color(0.045, 0.05, 0.085, 0.98), Color(accent, 0.65), 14, 2)
+	)
+	center.add_child(card)
+
+	var margin := MarginContainer.new()
+	for k in ["margin_left", "margin_right"]:
+		margin.add_theme_constant_override(k, 18)
+	margin.add_theme_constant_override("margin_top", 16)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	card.add_child(margin)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	margin.add_child(col)
+
+	if not eyebrow.is_empty():
+		var eye := Label.new()
+		eye.text = eyebrow
+		eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		eye.add_theme_font_size_override("font_size", 12)
+		eye.add_theme_color_override("font_color", Color(accent, 0.75))
+		apply_display_font(eye)
+		col.add_child(eye)
+
+	var title := Label.new()
+	title.text = heading
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 27)
+	title.add_theme_color_override("font_color", accent)
+	apply_display_font(title)
+	col.add_child(title)
+
+	if not body.is_empty():
+		var body_lab := Label.new()
+		body_lab.text = body
+		body_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		body_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body_lab.add_theme_font_size_override("font_size", 15)
+		body_lab.add_theme_color_override("font_color", MUTED)
+		apply_body_font(body_lab)
+		col.add_child(body_lab)
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 10)
+	col.add_child(actions)
+
+	var cancel_btn := Button.new()
+	cancel_btn.text = cancel_label
+	cancel_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	apply_ghost_button(cancel_btn)
+	cancel_btn.pressed.connect(dismiss)
+	actions.add_child(cancel_btn)
+
+	var confirm_btn := Button.new()
+	confirm_btn.text = confirm_label
+	confirm_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if danger_confirm:
+		apply_danger_button(confirm_btn)
+	else:
+		apply_primary_button(confirm_btn)
+	confirm_btn.pressed.connect(func() -> void:
+		if is_instance_valid(root):
+			root.queue_free()
+		if on_confirm.is_valid():
+			on_confirm.call()
+	)
+	actions.add_child(confirm_btn)
+
+	card.modulate.a = 0.0
+	var tween := card.create_tween()
+	tween.tween_property(card, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT)
+	return root
+
+
 ## Non-blocking toast overlay (top-center). Safe if host is freed mid-tween.
 static func show_toast(host: Node, title: String, body: String = "", duration: float = 3.5) -> void:
 	if host == null or not is_instance_valid(host):

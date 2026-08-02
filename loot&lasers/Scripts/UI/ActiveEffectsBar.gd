@@ -254,22 +254,35 @@ func _buff_chip(buff: Dictionary) -> PanelContainer:
 	return panel
 
 
+func _overlay_host() -> Node:
+	var tree := get_tree()
+	if tree == null:
+		return self
+	var shell := tree.get_first_node_in_group("game_shell")
+	if shell != null and is_instance_valid(shell):
+		return shell
+	if tree.current_scene != null:
+		return tree.current_scene
+	return self
+
+
 func _request_remove_stim(buff: Dictionary) -> void:
 	if _removing:
 		return
-	var dialog := ConfirmationDialog.new()
-	dialog.title = "Remove Stim?"
-	dialog.dialog_text = "Remove %s? Remaining duration will be discarded and the Stim will not be returned." % str(buff.get("name", "Stim"))
-	dialog.ok_button_text = "Remove"
-	dialog.cancel_button_text = "Cancel"
-	add_child(dialog)
-	dialog.confirmed.connect(func() -> void:
-		_do_remove_stim(buff)
-		dialog.queue_free()
+	var stim_name := str(buff.get("name", "Stim"))
+	var host := _overlay_host()
+	var sheet := ClientUi.make_confirm_sheet(
+		"ACTIVE STIM",
+		"REMOVE STIM?",
+		"Remove %s? Remaining duration will be discarded and the Stim will not be returned." % stim_name,
+		func() -> void: _do_remove_stim(buff),
+		Callable(),
+		"Remove",
+		"Cancel",
+		ClientUi.DANGER,
+		true
 	)
-	dialog.canceled.connect(func() -> void: dialog.queue_free())
-	dialog.close_requested.connect(func() -> void: dialog.queue_free())
-	dialog.popup_centered()
+	host.add_child(sheet)
 
 
 func _do_remove_stim(buff: Dictionary) -> void:

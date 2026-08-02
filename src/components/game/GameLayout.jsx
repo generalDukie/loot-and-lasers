@@ -19,9 +19,9 @@ import { enforceInventoryCap } from "@/lib/inventoryCap";
 import { primeMyCharacterCache } from "@/lib/socialEngine";
 import { applyServerTimeSync, lastTimeSyncAgeMs } from "@/lib/gameTime";
 
-/** Desktop operative side panel (~15% narrower than the prior default clamp). */
-const DESKTOP_RAIL_W = "clamp(18.7rem, 15.7vw, 23.4rem)";
-const MOBILE_RAIL_W = "min(27.2rem, 92vw)";
+/** Desktop operative side panel. */
+const DESKTOP_RAIL_W = "clamp(21.5rem, 18.1vw, 26.9rem)";
+const MOBILE_RAIL_W = "min(31.3rem, 92vw)";
 
 /**
  * Persistent application shell for all in-game routes.

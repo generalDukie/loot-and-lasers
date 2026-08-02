@@ -32,9 +32,16 @@ import {
 
 const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
 
+/** Prefer user's active_character_id when owned; else newest character. */
 async function myCharacter(user) {
-  const list = entities.Character.filter({ created_by_id: user.id }, "-created_date", 1);
-  return list[0] || null;
+  const list = entities.Character.filter({ created_by_id: user.id }, "-created_date", 50);
+  if (!list.length) return null;
+  const activeId = user.active_character_id;
+  if (activeId) {
+    const active = list.find((c) => c.id === activeId);
+    if (active) return active;
+  }
+  return list[0];
 }
 
 function svc(user) {

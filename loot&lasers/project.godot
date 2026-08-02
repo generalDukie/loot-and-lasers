@@ -1,0 +1,60 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Loot&Lasers"
+config/description="Online RPG client — auth, characters, and missions against the Node API"
+run/main_scene="res://Scenes/Main/main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+ApiClient="*res://Autoload/ApiClient.gd"
+AuthManager="*res://Autoload/AuthManager.gd"
+MissionManager="*res://Autoload/MissionManager.gd"
+ArenaManager="*res://Autoload/ArenaManager.gd"
+ShopManager="*res://Autoload/ShopManager.gd"
+StatsManager="*res://Autoload/StatsManager.gd"
+InventoryManager="*res://Autoload/InventoryManager.gd"
+ShipManager="*res://Autoload/ShipManager.gd"
+ProgressManager="*res://Autoload/ProgressManager.gd"
+SocialManager="*res://Autoload/SocialManager.gd"
+RealtimeManager="*res://Autoload/RealtimeManager.gd"
+DungeonManager="*res://Autoload/DungeonManager.gd"
+NexusManager="*res://Autoload/NexusManager.gd"
+MiningManager="*res://Autoload/MiningManager.gd"
+CasinoManager="*res://Autoload/CasinoManager.gd"
+ChatManager="*res://Autoload/ChatManager.gd"
+GuildWarManager="*res://Autoload/GuildWarManager.gd"
+CrystalStoreManager="*res://Autoload/CrystalStoreManager.gd"
+AccountManager="*res://Autoload/AccountManager.gd"
+PresenceManager="*res://Autoload/PresenceManager.gd"
+NotificationManager="*res://Autoload/NotificationManager.gd"
+GameManager="*res://Autoload/GameManager.gd"
+AudioManager="*res://Autoload/AudioManager.gd"
+SettingsManager="*res://Autoload/SettingsManager.gd"
+SaveManager="*res://Autoload/SaveManager.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+rendering_device/driver.windows="d3d12"
+environment/defaults/default_clear_color=Color(0, 0, 0, 1)

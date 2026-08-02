@@ -1,0 +1,21 @@
+# Godot 4+ 
+.godot/
+/android/
+
+# Import / editor noise
+*.translation
+.import/
+export.cfg
+export_presets.cfg
+*.tmp
+*.TMP
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local player data (if ever written under project)
+*.cfg.user
+user://
+
+_parse_fail.json

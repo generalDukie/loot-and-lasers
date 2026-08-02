@@ -6,6 +6,7 @@ import { withTransactionAsync } from "../db.js";
 import { randomItem, randomItemForClass } from "../shared/rewards.js";
 import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
+import { mergeDiscoveredGear } from "../shared/discovery.js";
 import {
   auditShopPurchase,
   auditFuelPurchase,
@@ -533,6 +534,21 @@ export async function LaunchMission(user, body) {
 }
 
 // ── ClaimMission / FailMission ───────────────────────────────
+/** Clear a character's pointer to a mission row that no longer exists. */
+function releaseDanglingMission(ch) {
+  const patch = { active_mission_id: "", mission_end_time: "" };
+  const character = entities.Character.update(ch.id, patch);
+  return {
+    success: true,
+    won: false,
+    mission_missing: true,
+    patch,
+    character,
+    items: [],
+    gains: null,
+  };
+}
+
 export async function ClaimMission(user, body) {
   const missionId = body?.mission_id;
   const won = body?.won !== false && body?.won !== "false";
@@ -553,9 +569,22 @@ export async function ClaimMission(user, body) {
       }
 
       let mission = entities.Mission.get(missionId);
-      if (!mission) httpErr(404, "Mission not found");
+      if (!mission) {
+        // No mission row, but the character is still flagged as flying it: release
+        // the ship (no rewards) instead of leaving the slot locked forever.
+        if (ch.active_mission_id && ch.active_mission_id === missionId) {
+          return releaseDanglingMission(ch);
+        }
+        httpErr(404, "Mission not found");
+      }
       if (mission.character_id !== ch.id) httpErr(403, "Not your mission", RewardErrors.CHARACTER_NOT_OWNED);
       if (mission.status === "claimed" || mission.status === "failed") {
+        // A resolved row the character is still flagged as flying has no claim to
+        // replay, so the pointer is stale — free the slot instead of 409-locking
+        // the character out of every future launch.
+        if (ch.active_mission_id && ch.active_mission_id === missionId) {
+          return releaseDanglingMission(ch);
+        }
         httpErr(409, "Mission already resolved", RewardErrors.REWARD_ALREADY_CLAIMED);
       }
 
@@ -687,6 +716,13 @@ export async function ClaimMission(user, body) {
             }
           }
 
+          // Cosmic Vault — discover gear from granted + pending templates (not consumables/materials).
+          mergeDiscoveredGear(live, [
+            ...items,
+            ...pendingLoot.map((p) => p.item),
+            ...(payload.itemTemplates || []),
+          ], patch);
+
           entities.Mission.update(mission.id, { status: "claimed" });
 
           const ach = mergeAchievementUnlocks(live, patch);
@@ -741,9 +777,22 @@ export async function SkipMission(user, body) {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
       const mission = entities.Mission.get(missionId);
-      if (!mission) httpErr(404, "Mission not found");
+      if (!mission) {
+        if (ch.active_mission_id && ch.active_mission_id === missionId) {
+          return { ...releaseDanglingMission(ch), skip_cost: 0, mission: null };
+        }
+        httpErr(404, "Mission not found");
+      }
       if (mission.character_id !== ch.id) httpErr(403, "Not your mission");
-      if (mission.status !== "in_progress") httpErr(400, "Mission is not in progress");
+      if (mission.status !== "in_progress") {
+        if (
+          (mission.status === "claimed" || mission.status === "failed") &&
+          ch.active_mission_id === missionId
+        ) {
+          return { ...releaseDanglingMission(ch), skip_cost: 0, mission: null };
+        }
+        httpErr(400, "Mission is not in progress");
+      }
 
       const cost = skipCostFor(mission);
       if ((ch.nova_crystals || 0) < cost) httpErr(400, "Not enough Nova Crystals");
@@ -808,19 +857,16 @@ export async function EnsureShop(user) {
   }
 }
 
-function replaceArmoryListing(meta, win, ch, slotId, isHot) {
+function replaceArmoryListing(meta, win, ch, slotId, isHot, outcome = "purchased") {
   const nextMeta = { ...meta };
   const level = ch.level || 1;
   const day = meta.hot_day || todayET();
   const forClass = randomItemForClass(ch.class);
   if (isHot) {
-    const fresh = generateSimpleHotDeal(day, level, forClass);
-    nextMeta.hot_deal = {
-      ...fresh,
-      _slotId: `hot-${day}-${Date.now()}`,
-    };
-    nextMeta.hot_purchased = false;
-    nextMeta.hot_yanked = false;
+    // One hot deal per ET day: mark it consumed rather than rolling a new one.
+    nextMeta.hot_day = day;
+    if (outcome === "yanked") nextMeta.hot_yanked = true;
+    else nextMeta.hot_purchased = true;
     return nextMeta;
   }
 
@@ -880,7 +926,7 @@ export async function BuyShopGear(user, body) {
         haggleNote = outcome.label;
         if (!outcome.ok) {
           // Haggle fail — listing is gone; restock the stall immediately.
-          const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot);
+          const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot, "yanked");
           const patch = { shop_meta: nextMeta };
           const character = entities.Character.update(ch.id, patch);
           return {
@@ -901,7 +947,7 @@ export async function BuyShopGear(user, body) {
       if (novaCost && (ch.nova_crystals || 0) < novaCost) httpErr(400, "Not enough Nova Crystals");
 
       // Buy / successful haggle — grant item, then restock that stall slot.
-      const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot);
+      const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot, "purchased");
 
       const patch = {
         stardust: (ch.stardust || 0) - stardustCost,
@@ -919,6 +965,12 @@ export async function BuyShopGear(user, body) {
       for (const p of payloads) {
         collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot, grantCtx);
       }
+
+      mergeDiscoveredGear(ch, [
+        ...items,
+        ...pendingLoot.map((p) => p.item),
+        ...payloads,
+      ], patch);
 
       const character = entities.Character.update(ch.id, patch);
       if (!haggleNote || true) {

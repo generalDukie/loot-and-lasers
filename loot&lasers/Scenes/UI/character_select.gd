@@ -1,0 +1,359 @@
+extends Control
+## Character select — mirrors web CharacterSelectPage.jsx.
+
+const MAX_SLOTS := 3
+
+var _list: VBoxContainer
+var _status: Label
+var _loading_host: Control
+var _main_host: Control
+var _welcome: Label
+var _busy := false
+var _switching := false
+var _characters: Array = []
+var _selected_id := ""
+var _active_id := ""
+var _enter_btn: Button
+var _create_btn: Button
+var _card_buttons: Dictionary = {} # id -> Button
+
+
+func _ready() -> void:
+	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_build()
+	await _refresh()
+
+
+func _build() -> void:
+	add_child(ClientUi.make_screen("void"))
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	add_child(margin)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	margin.add_child(center)
+
+	# Loading state — SiteTitle + spinner (web CharacterSelectPage)
+	_loading_host = VBoxContainer.new()
+	_loading_host.alignment = BoxContainer.ALIGNMENT_CENTER
+	_loading_host.add_theme_constant_override("separation", 16)
+	center.add_child(_loading_host)
+	var load_title := ClientUi.make_title("LOOT & LASERS", 28)
+	load_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_loading_host.add_child(load_title)
+	var spinner := Label.new()
+	spinner.text = "⟳"
+	spinner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	spinner.add_theme_font_size_override("font_size", 28)
+	spinner.add_theme_color_override("font_color", ClientUi.CYAN)
+	ClientUi.apply_display_font(spinner)
+	_loading_host.add_child(spinner)
+
+	# Main picker
+	_main_host = VBoxContainer.new()
+	_main_host.visible = false
+	_main_host.custom_minimum_size = Vector2(720, 0)
+	_main_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_main_host.add_theme_constant_override("separation", 18)
+	center.add_child(_main_host)
+
+	var head := VBoxContainer.new()
+	head.add_theme_constant_override("separation", 6)
+	_main_host.add_child(head)
+	var title := ClientUi.make_title("SELECT YOUR OPERATIVE", 26)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	head.add_child(title)
+	_welcome = Label.new()
+	_welcome.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_welcome.add_theme_font_size_override("font_size", 13)
+	_welcome.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_welcome)
+	head.add_child(_welcome)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size.y = 320
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_main_host.add_child(scroll)
+
+	_list = VBoxContainer.new()
+	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_list.add_theme_constant_override("separation", 10)
+	scroll.add_child(_list)
+
+	_status = ClientUi.make_status()
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_main_host.add_child(_status)
+
+	# Footer: Log out | New + Enter Game
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	_main_host.add_child(row)
+
+	var logout_btn := Button.new()
+	logout_btn.text = "↪  Log out"
+	ClientUi.apply_ghost_button(logout_btn)
+	logout_btn.pressed.connect(_on_logout)
+	row.add_child(logout_btn)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+
+	_create_btn = Button.new()
+	_create_btn.text = "＋  New"
+	_apply_accent_button(_create_btn)
+	_create_btn.pressed.connect(func() -> void: GameManager.go_character_create())
+	row.add_child(_create_btn)
+
+	_enter_btn = Button.new()
+	_enter_btn.text = "↪  Enter Game"
+	_enter_btn.custom_minimum_size.x = 148
+	ClientUi.apply_primary_button(_enter_btn)
+	_enter_btn.pressed.connect(_enter_selected)
+	row.add_child(_enter_btn)
+
+
+func _apply_accent_button(btn: Button) -> void:
+	## Closest to web painted-btn-accent (violet accent CTA).
+	var n := StyleBoxFlat.new()
+	n.bg_color = Color(ClientUi.VIOLET, 0.18)
+	n.set_border_width_all(1)
+	n.border_color = Color(ClientUi.VIOLET, 0.55)
+	n.set_corner_radius_all(8)
+	n.content_margin_left = 14
+	n.content_margin_right = 14
+	n.content_margin_top = 8
+	n.content_margin_bottom = 8
+	var h := n.duplicate() as StyleBoxFlat
+	h.bg_color = Color(ClientUi.VIOLET, 0.28)
+	btn.add_theme_stylebox_override("normal", n)
+	btn.add_theme_stylebox_override("hover", h)
+	btn.add_theme_stylebox_override("pressed", h)
+	btn.add_theme_stylebox_override("disabled", n)
+	btn.add_theme_color_override("font_color", ClientUi.VIOLET.lightened(0.25))
+	btn.add_theme_color_override("font_hover_color", ClientUi.TEXT)
+	btn.add_theme_font_size_override("font_size", 12)
+	ClientUi.apply_display_font(btn)
+
+
+func _welcome_name() -> String:
+	var full := str(AuthManager.user.get("full_name", "")).strip_edges()
+	if not full.is_empty():
+		return full
+	var email := str(AuthManager.user.get("email", "")).strip_edges()
+	if not email.is_empty():
+		return email
+	return "commander"
+
+
+func _refresh() -> void:
+	if _busy:
+		return
+	_busy = true
+	_loading_host.visible = true
+	_main_host.visible = false
+	_status.text = ""
+	for child in _list.get_children():
+		child.queue_free()
+	_card_buttons.clear()
+
+	var me: Dictionary = await AuthManager.fetch_me()
+	if not me.ok:
+		_busy = false
+		_loading_host.visible = false
+		_main_host.visible = true
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = str(me.get("error", "Could not load profile"))
+		return
+
+	var res: Dictionary = await AuthManager.list_characters()
+	_busy = false
+	if not res.ok:
+		_loading_host.visible = false
+		_main_host.visible = true
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = str(res.get("error", "Could not list characters"))
+		return
+
+	_characters = res.data if typeof(res.data) == TYPE_ARRAY else []
+	# Web: empty list → /create-character
+	if _characters.is_empty():
+		GameManager.go_character_create()
+		return
+
+	_loading_host.visible = false
+	_main_host.visible = true
+	_welcome.text = "👥  Welcome back, %s" % _welcome_name()
+
+	_active_id = str(AuthManager.user.get("active_character_id", ""))
+	_selected_id = _active_id
+	if _selected_id.is_empty():
+		_selected_id = str(_characters[0].get("id", ""))
+
+	var purchased := int(AuthManager.user.get("purchased_slots", 0))
+	var total_slots := mini(MAX_SLOTS, 1 + purchased)
+	_create_btn.visible = _characters.size() < total_slots
+	_enter_btn.disabled = _selected_id.is_empty() or _switching
+
+	for c in _characters:
+		if typeof(c) != TYPE_DICTIONARY:
+			continue
+		var cid := str(c.get("id", ""))
+		var card := _make_card(c, cid == _active_id, cid == _selected_id)
+		_list.add_child(card)
+		_card_buttons[cid] = card
+
+
+func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Button:
+	var btn := Button.new()
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size.y = 88
+	btn.clip_contents = true
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.disabled = _switching
+	var cid := str(character.get("id", ""))
+	btn.pressed.connect(func() -> void: _select_card(cid))
+	_style_card(btn, is_selected)
+
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	row.offset_left = 14
+	row.offset_top = 12
+	row.offset_right = -14
+	row.offset_bottom = -12
+	row.add_theme_constant_override("separation", 14)
+	btn.add_child(row)
+
+	var portrait := AvatarRenderer.make_portrait(character, 64.0)
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(portrait)
+
+	var info := VBoxContainer.new()
+	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_theme_constant_override("separation", 2)
+	info.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(info)
+
+	var name_l := Label.new()
+	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_l.text = LegacyName.full_name(character)
+	name_l.clip_text = true
+	name_l.add_theme_font_size_override("font_size", 15)
+	name_l.add_theme_color_override("font_color", ClientUi.TEXT)
+	ClientUi.apply_display_font(name_l)
+	info.add_child(name_l)
+
+	var meta := Label.new()
+	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Web: Level {n} · {race} {class}
+	meta.text = "Level %s · %s %s" % [
+		str(character.get("level", 1)),
+		str(character.get("race", "?")),
+		str(character.get("class", "?")),
+	]
+	meta.add_theme_font_size_override("font_size", 11)
+	meta.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(meta)
+	info.add_child(meta)
+
+	if is_active:
+		var active := Label.new()
+		active.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		active.text = "✓  Active"
+		active.add_theme_font_size_override("font_size", 11)
+		active.add_theme_color_override("font_color", ClientUi.CYAN)
+		ClientUi.apply_display_font(active)
+		row.add_child(active)
+
+	return btn
+
+
+func _style_card(btn: Button, is_selected: bool) -> void:
+	var sb := StyleBoxFlat.new()
+	if is_selected:
+		sb.bg_color = Color(ClientUi.CYAN, 0.06)
+		sb.set_border_width_all(2)
+		sb.border_color = ClientUi.CYAN
+	else:
+		sb.bg_color = Color(0.06, 0.08, 0.12, 0.72)
+		sb.set_border_width_all(1)
+		sb.border_color = Color(1, 1, 1, 0.12)
+	sb.set_corner_radius_all(16)
+	btn.add_theme_stylebox_override("normal", sb)
+	var hover := sb.duplicate() as StyleBoxFlat
+	if not is_selected:
+		hover.border_color = Color(ClientUi.CYAN, 0.4)
+		hover.bg_color = Color(0.07, 0.09, 0.14, 0.85)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", hover)
+	btn.add_theme_stylebox_override("disabled", sb)
+	btn.add_theme_stylebox_override("focus", sb)
+	btn.add_theme_color_override("font_color", Color(0, 0, 0, 0))
+
+
+func _select_card(character_id: String) -> void:
+	if _busy or _switching or character_id.is_empty():
+		return
+	_selected_id = character_id
+	_rebuild_cards()
+
+
+func _rebuild_cards() -> void:
+	for child in _list.get_children():
+		child.queue_free()
+	_card_buttons.clear()
+	for c in _characters:
+		if typeof(c) != TYPE_DICTIONARY:
+			continue
+		var cid := str(c.get("id", ""))
+		var card := _make_card(c, cid == _active_id, cid == _selected_id)
+		_list.add_child(card)
+		_card_buttons[cid] = card
+	_enter_btn.disabled = _selected_id.is_empty() or _switching
+
+
+func _enter_selected() -> void:
+	if _switching or _selected_id.is_empty():
+		return
+	for character in _characters:
+		if typeof(character) == TYPE_DICTIONARY and str(character.get("id", "")) == _selected_id:
+			_enter(character)
+			return
+
+
+func _enter(character: Dictionary) -> void:
+	if _busy or _switching:
+		return
+	_switching = true
+	_enter_btn.disabled = true
+	_enter_btn.text = "⟳  Enter Game"
+	_create_btn.disabled = true
+	_rebuild_cards()
+	_status.add_theme_color_override("font_color", ClientUi.MUTED)
+	_status.text = "Selecting…"
+	var cid := str(character.get("id", ""))
+	var res: Dictionary = await AuthManager.select_character(cid)
+	if not res.ok:
+		_switching = false
+		_enter_btn.text = "↪  Enter Game"
+		_create_btn.disabled = false
+		_rebuild_cards()
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = str(res.get("error", "Could not select character"))
+		return
+	GameManager.go_hub(character)
+
+
+func _on_logout() -> void:
+	await AuthManager.logout()
+	GameManager.go_login()

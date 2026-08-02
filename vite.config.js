@@ -13,6 +13,10 @@ export default defineConfig({
   },
   server: {
     host: true,
+    // Godot project lives beside the web client; its editor temp files crash Vite's watcher (EBUSY).
+    watch: {
+      ignored: ['**/loot&lasers/**', '**/.godot/**'],
+    },
     proxy: {
       '/api': {
         target: API,

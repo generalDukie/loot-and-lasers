@@ -1,0 +1,1265 @@
+extends Control
+## Character sheet — mirrors web CharacterPage (doll triad · backpack · attributes · vault).
+
+const FRAME_SLOTS: Array = [
+	{"type": "weapon", "label": "Weapon"},
+	{"type": "helmet", "label": "Helmet"},
+	{"type": "neck", "label": "Neck"},
+	{"type": "armor", "label": "Armor"},
+	{"type": "_portrait", "label": ""},
+	{"type": "ship_module", "label": "Ship"},
+	{"type": "boots", "label": "Boots"},
+	{"type": "legs", "label": "Legs"},
+	{"type": "accessory", "label": "Ring"},
+]
+
+## Hold-to-buy ramp — matches web StatBar (2/s accelerating to 10/s over 3s).
+const HOLD_START_RATE := 2.0
+const HOLD_END_RATE := 10.0
+const HOLD_RAMP_MS := 3000.0
+
+var _status: Label
+var _list: VBoxContainer
+var _hero_name: Label
+var _hero_meta: Label
+var _xp_bar: ProgressBar
+var _xp_lab: Label
+var _lore_lab: RichTextLabel
+var _stims_lab: Label
+var _effects: ActiveEffectsBar
+var _bio_field: LineEdit
+var _bio_count: Label
+var _bio_save: Button
+var _doll: GridContainer
+var _bag_grid: VBoxContainer
+var _bag_count: Label
+var _stardust_lab: Label
+var _stardust_need: Label
+var _attrs_panel: PanelContainer
+var _attrs_col: VBoxContainer
+var _vault_panel: PanelContainer
+var _backpack: PanelContainer
+var _combat_via: Label
+var _combat_stim: Label
+var _stat_rows: Dictionary = {}
+var _combat_values: Dictionary = {}
+var _hold_stat := ""
+var _hold_started_ms := 0
+var _hold_next_ms := 0
+var _busy := false
+var _saved_bio := ""
+var _operative_lab: Label
+var _title_lab: Label
+
+const EQUIP_SLOT_SIZE := 107.0 # 88 × 1.22 — loadout extends downward 22%
+const PORTRAIT_SIZE := 107.0
+const BAG_COLS := 5
+
+
+func _ready() -> void:
+	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	clip_contents = true
+	_build()
+	StatsManager.character_changed.connect(_refresh_values)
+	await _boot()
+
+
+func _boot() -> void:
+	_status.text = "Loading character sheet…"
+	await SocialManager.load_my_guild()
+	var res: Dictionary = await StatsManager.refresh()
+	if not res.ok:
+		_status.text = str(res.get("error", "Failed to load character"))
+	_populate()
+
+
+func _build() -> void:
+	add_child(ClientUi.make_page_bg(self, "hub"))
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 14)
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	add_child(margin)
+
+	var root := VBoxContainer.new()
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_theme_constant_override("separation", 8)
+	margin.add_child(root)
+
+	# Web CharacterPage: left ~60% hero+bag, right ~40% attributes+vault.
+	var columns := HBoxContainer.new()
+	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	columns.add_theme_constant_override("separation", 12)
+	root.add_child(columns)
+
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.size_flags_stretch_ratio = 1.0
+	left.clip_contents = true
+	left.add_theme_constant_override("separation", 8)
+	columns.add_child(left)
+
+	var right := VBoxContainer.new()
+	right.custom_minimum_size.x = 320
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.size_flags_stretch_ratio = 0.66
+	right.clip_contents = true
+	right.add_theme_constant_override("separation", 6)
+	columns.add_child(right)
+
+	# —— CharacterHeader triad: lore | doll | stims/mounts ——
+	# Loadout : backpack ≈ 1.2 : 1 (loadout ~20% taller). Both fill the left column
+	# so backpack bottom stays flush with Cosmic Vault.
+	var hero := PanelContainer.new()
+	hero.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hero.size_flags_stretch_ratio = 1.2
+	hero.clip_contents = true
+	hero.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.04, 0.06, 0.1, 0.97), Color(ClientUi.CYAN, 0.45), 14, 2
+	))
+	left.add_child(hero)
+	var hcol := VBoxContainer.new()
+	hcol.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hcol.add_theme_constant_override("separation", 8)
+	hero.add_child(hcol)
+
+	var triad := HBoxContainer.new()
+	triad.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	triad.add_theme_constant_override("separation", 12)
+	hcol.add_child(triad)
+
+	# Lore rail — must not grow taller than the doll (no fit_content blowout).
+	var lore_panel := PanelContainer.new()
+	lore_panel.custom_minimum_size = Vector2(220, 0)
+	lore_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lore_panel.clip_contents = true
+	lore_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.03, 0.04, 0.07, 0.95), Color(0.4, 0.45, 0.55, 0.35), 10, 1
+	))
+	triad.add_child(lore_panel)
+	var lore_outer := VBoxContainer.new()
+	lore_outer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lore_outer.add_theme_constant_override("separation", 6)
+	lore_panel.add_child(lore_outer)
+	var lore_eye := Label.new()
+	lore_eye.text = "LORE"
+	lore_eye.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	lore_eye.add_theme_font_size_override("font_size", 11)
+	lore_eye.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(lore_eye)
+	lore_outer.add_child(lore_eye)
+	_lore_lab = RichTextLabel.new()
+	_lore_lab.bbcode_enabled = true
+	_lore_lab.fit_content = false
+	_lore_lab.scroll_active = false
+	_lore_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lore_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lore_lab.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_lore_lab.add_theme_font_size_override("normal_font_size", 13)
+	_lore_lab.add_theme_font_size_override("bold_font_size", 14)
+	_lore_lab.add_theme_color_override("default_color", Color(0.82, 0.88, 0.94))
+	ClientUi.apply_body_font(_lore_lab)
+	lore_outer.add_child(_lore_lab)
+
+	# Center: EquippedFrame doll first, identity + XP beneath (web CharacterHeader).
+	# Doll height drives the triad — lore/stims match it, they must not grow it.
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	mid.add_theme_constant_override("separation", 4)
+	triad.add_child(mid)
+
+	var doll_wrap := CenterContainer.new()
+	doll_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	doll_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	mid.add_child(doll_wrap)
+	_doll = GridContainer.new()
+	_doll.columns = 3
+	_doll.add_theme_constant_override("h_separation", 8)
+	_doll.add_theme_constant_override("v_separation", 8)
+	doll_wrap.add_child(_doll)
+
+	_hero_name = Label.new()
+	_hero_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hero_name.add_theme_font_size_override("font_size", 16)
+	_hero_name.add_theme_color_override("font_color", ClientUi.TEXT)
+	ClientUi.apply_display_font(_hero_name)
+	mid.add_child(_hero_name)
+
+	_operative_lab = Label.new()
+	_operative_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_operative_lab.add_theme_font_size_override("font_size", 9)
+	_operative_lab.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.7))
+	ClientUi.apply_body_font(_operative_lab)
+	_operative_lab.visible = false
+	mid.add_child(_operative_lab)
+
+	_title_lab = Label.new()
+	_title_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_lab.add_theme_font_size_override("font_size", 9)
+	_title_lab.add_theme_color_override("font_color", Color("#FBBF24", 0.9))
+	ClientUi.apply_display_font(_title_lab)
+	_title_lab.visible = false
+	mid.add_child(_title_lab)
+
+	_hero_meta = Label.new()
+	_hero_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hero_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hero_meta.add_theme_font_size_override("font_size", 9)
+	_hero_meta.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_hero_meta)
+	mid.add_child(_hero_meta)
+
+	_xp_lab = Label.new()
+	_xp_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_xp_lab.add_theme_font_size_override("font_size", 9)
+	_xp_lab.add_theme_color_override("font_color", Color("#00E5FF"))
+	ClientUi.apply_display_font(_xp_lab)
+	mid.add_child(_xp_lab)
+	_xp_bar = ProgressBar.new()
+	_xp_bar.min_value = 0
+	_xp_bar.max_value = 100
+	_xp_bar.show_percentage = false
+	_xp_bar.custom_minimum_size = Vector2(0, 6)
+	ClientUi.apply_hp_bar(_xp_bar, Color("#00E5FF"))
+	mid.add_child(_xp_bar)
+
+	# Stims / fuel mounts rail — labeled timer sections.
+	var stim_panel := PanelContainer.new()
+	stim_panel.custom_minimum_size = Vector2(132, 0)
+	stim_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stim_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.03, 0.07, 0.06, 0.95), Color(ClientUi.SUCCESS, 0.4), 10, 1
+	))
+	triad.add_child(stim_panel)
+	var stim_col := VBoxContainer.new()
+	stim_col.add_theme_constant_override("separation", 6)
+	stim_panel.add_child(stim_col)
+	_stims_lab = Label.new()
+	_stims_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stims_lab.add_theme_font_size_override("font_size", 11)
+	_stims_lab.add_theme_color_override("font_color", Color(0.75, 0.95, 0.8))
+	ClientUi.apply_body_font(_stims_lab)
+	_stims_lab.visible = false
+	stim_col.add_child(_stims_lab)
+	_effects = ActiveEffectsBar.make()
+	_effects.side_sections = true
+	_effects.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_effects.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stim_col.add_child(_effects)
+
+	# Editable bio bar (web CharacterHeader).
+	var bio_row := HBoxContainer.new()
+	bio_row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	bio_row.add_theme_constant_override("separation", 8)
+	hcol.add_child(bio_row)
+	_bio_field = ClientUi.make_field("Bio — visible to others…")
+	_bio_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bio_field.max_length = 280
+	_bio_field.text_changed.connect(func(next: String) -> void:
+		_bio_count.text = str(next.length())
+		_bio_save.disabled = next == _saved_bio
+	)
+	bio_row.add_child(_bio_field)
+	_bio_count = Label.new()
+	_bio_count.custom_minimum_size.x = 28
+	_bio_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_bio_count.add_theme_font_size_override("font_size", 9)
+	_bio_count.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
+	ClientUi.apply_body_font(_bio_count)
+	bio_row.add_child(_bio_count)
+	_bio_save = Button.new()
+	_bio_save.text = "Save"
+	_bio_save.disabled = true
+	ClientUi.apply_ghost_button(_bio_save)
+	_bio_save.pressed.connect(_on_save_bio)
+	bio_row.add_child(_bio_save)
+
+	# Backpack shares leftover column height with loadout (ratio 1.0 vs 1.2).
+	# Slots expand to fill the pane; bottom edge stays aligned with Cosmic Vault.
+	_backpack = PanelContainer.new()
+	_backpack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_backpack.size_flags_stretch_ratio = 1.0
+	_backpack.clip_contents = true
+	_backpack.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.06, 0.07, 0.1, 0.94), Color(0.55, 0.39, 0.2, 0.45), 12, 1
+	))
+	left.add_child(_backpack)
+	var bag_col := VBoxContainer.new()
+	bag_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bag_col.add_theme_constant_override("separation", 6)
+	_backpack.add_child(bag_col)
+	var bag_row := HBoxContainer.new()
+	bag_row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	bag_row.add_theme_constant_override("separation", 8)
+	bag_col.add_child(bag_row)
+	var bag_label := Label.new()
+	bag_label.text = "🎒  BACKPACK"
+	bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bag_label.add_theme_font_size_override("font_size", 10)
+	bag_label.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(bag_label)
+	bag_row.add_child(bag_label)
+	_bag_count = Label.new()
+	_bag_count.add_theme_font_size_override("font_size", 10)
+	_bag_count.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(_bag_count)
+	bag_row.add_child(_bag_count)
+	_bag_grid = VBoxContainer.new()
+	_bag_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bag_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_bag_grid.add_theme_constant_override("separation", 6)
+	_bag_grid.set_drag_forwarding(_bag_drag_get, _bag_drag_can_drop, _bag_drag_drop)
+	bag_col.add_child(_bag_grid)
+
+	# Keep status inside the backpack so the pane's bottom stays flush with vault.
+	_status = ClientUi.make_status()
+	_status.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	bag_col.add_child(_status)
+
+	# Right column: attrs expand; Cosmic Vault fixed at bottom (aligns with backpack).
+	_list = VBoxContainer.new()
+	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_list.add_theme_constant_override("separation", 10)
+	right.add_child(_list)
+
+
+func _populate() -> void:
+	_update_hero()
+	_rebuild_doll()
+	_update_backpack()
+	_stat_rows.clear()
+	_combat_values.clear()
+	for c in _list.get_children():
+		c.queue_free()
+
+	var c: Dictionary = GameManager.active_character
+	var primary := StatsRules.primary_stat(str(c.get("class", "Vanguard")))
+
+	# Web: single ATTRIBUTE UPGRADES card with embedded combat + vault below.
+	_attrs_panel = PanelContainer.new()
+	_attrs_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_attrs_panel.clip_contents = true
+	_attrs_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.05, 0.06, 0.1, 0.96), Color(ClientUi.CYAN, 0.35), 14, 1
+	))
+	_list.add_child(_attrs_panel)
+	_attrs_col = VBoxContainer.new()
+	_attrs_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_attrs_col.add_theme_constant_override("separation", 8)
+	_attrs_panel.add_child(_attrs_col)
+
+	var head := HBoxContainer.new()
+	head.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	head.add_theme_constant_override("separation", 8)
+	_attrs_col.add_child(head)
+	var head_copy := VBoxContainer.new()
+	head_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head_copy.add_theme_constant_override("separation", 2)
+	head.add_child(head_copy)
+	var h2 := Label.new()
+	h2.text = "✨  ATTRIBUTE UPGRADES"
+	h2.add_theme_font_size_override("font_size", 13)
+	h2.add_theme_color_override("font_color", ClientUi.TEXT)
+	ClientUi.apply_display_font(h2)
+	head_copy.add_child(h2)
+	var sub := Label.new()
+	sub.text = "Spend stardust to permanently raise an attribute. Hold to keep buying."
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.add_theme_font_size_override("font_size", 10)
+	sub.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(sub)
+	head_copy.add_child(sub)
+
+	var sd_col := VBoxContainer.new()
+	sd_col.add_theme_constant_override("separation", 0)
+	head.add_child(sd_col)
+	var sd_eye := Label.new()
+	sd_eye.text = "YOUR STARDUST"
+	sd_eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sd_eye.add_theme_font_size_override("font_size", 9)
+	sd_eye.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(sd_eye)
+	sd_col.add_child(sd_eye)
+	_stardust_lab = Label.new()
+	_stardust_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_stardust_lab.add_theme_font_size_override("font_size", 16)
+	_stardust_lab.add_theme_color_override("font_color", Color("#E879F9"))
+	ClientUi.apply_display_font(_stardust_lab)
+	sd_col.add_child(_stardust_lab)
+	_stardust_need = Label.new()
+	_stardust_need.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_stardust_need.add_theme_font_size_override("font_size", 9)
+	_stardust_need.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_stardust_need)
+	sd_col.add_child(_stardust_need)
+
+	for stat in StatsRules.ATTR_KEYS:
+		var row := _make_stat_row(stat, primary)
+		row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		_attrs_col.add_child(row)
+
+	var divider := ColorRect.new()
+	divider.custom_minimum_size.y = 1
+	divider.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	divider.color = Color(1, 1, 1, 0.1)
+	_attrs_col.add_child(divider)
+	var combat := _make_combat_card()
+	combat.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	combat.size_flags_stretch_ratio = 1.0
+	_attrs_col.add_child(combat)
+
+	_vault_panel = _make_vault_teaser(c)
+	_vault_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_list.add_child(_vault_panel)
+
+	_refresh_values()
+	_status.text = ""
+
+
+## Live values only — never rebuilds rows, so a held button stays alive.
+func _refresh_values() -> void:
+	var c: Dictionary = GameManager.active_character
+	var eq: Array = StatsManager.equipped_items
+	var display: Dictionary = StatsRules.display_totals(c, eq)
+	var permanent: Dictionary = StatsRules.permanent_totals(c, eq)
+	var naked: Dictionary = StatsRules.naked_totals(c)
+	var derived: Dictionary = StatsRules.derived(c, permanent)
+	var stardust := int(c.get("stardust", 0))
+
+	if is_instance_valid(_stardust_lab):
+		_stardust_lab.text = "✦  %s" % _fmt_int(stardust)
+
+	var cheapest := 999999999
+	var can_buy_any := false
+	for stat in StatsRules.ATTR_KEYS:
+		var cost_i := StatsRules.next_cost(c, str(stat))
+		cheapest = mini(cheapest, cost_i)
+		if stardust >= cost_i:
+			can_buy_any = true
+
+	if is_instance_valid(_stardust_need):
+		_stardust_need.visible = not can_buy_any
+		_stardust_need.text = "Need ✦%s+" % _fmt_int(cheapest)
+
+	if is_instance_valid(_attrs_panel):
+		_attrs_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+			Color(0.05, 0.06, 0.1, 0.96),
+			Color(ClientUi.CYAN, 0.55) if can_buy_any else Color(1, 1, 1, 0.12),
+			14,
+			2 if can_buy_any else 1
+		))
+
+	for stat in _stat_rows:
+		var row: Dictionary = _stat_rows[stat]
+		if not row.has("value") or not is_instance_valid(row["value"]):
+			continue
+		var total := int(display.get(stat, 0))
+		var bonus := total - int(naked.get(stat, 0))
+		var cost := StatsRules.next_cost(c, str(stat))
+		var affordable := stardust >= cost
+
+		var value_lab := row["value"] as Label
+		value_lab.text = str(total)
+
+		var bonus_lab := row["bonus"] as Label
+		if bonus_lab != null and is_instance_valid(bonus_lab):
+			if bonus > 0:
+				bonus_lab.visible = true
+				bonus_lab.text = "+%s" % bonus
+			else:
+				bonus_lab.visible = false
+
+		var buy := row["buy"] as Button
+		if buy != null and is_instance_valid(buy):
+			buy.text = "Upgrade\n✦ %s" % _fmt_int(cost)
+			buy.disabled = not affordable
+			buy.add_theme_font_size_override("font_size", 11)
+			buy.tooltip_text = (
+				"Spend %s ✦ · hold to keep buying" % cost if affordable
+				else "Need %s ✦ for the next point" % cost
+			)
+
+	_update_combat(derived, permanent, display)
+
+
+func _update_hero() -> void:
+	var c: Dictionary = GameManager.active_character
+	_hero_name.text = LegacyName.profile_display_name(c)
+
+	var show_operative := (
+		LegacyName.normalize_display(c.get("legacy_display", AuthManager.user.get("legacy_display", "surname"))) == "family"
+		and not str(c.get("legacy_name", AuthManager.user.get("legacy_name", ""))).strip_edges().is_empty()
+		and not str(c.get("name", "")).is_empty()
+	)
+	_operative_lab.visible = show_operative
+	_operative_lab.text = "Operative %s" % str(c.get("name", ""))
+
+	var title := str(c.get("active_title", "")).strip_edges()
+	_title_lab.visible = not title.is_empty() and title != "<null>"
+	_title_lab.text = title
+
+	var guild_tag := str(c.get("guild_tag", SocialManager.my_guild.get("tag", ""))).strip_edges()
+	var guild_name := str(c.get("guild_name", SocialManager.my_guild.get("name", ""))).strip_edges()
+	if not SocialManager.my_guild.is_empty() or not guild_tag.is_empty() or not guild_name.is_empty():
+		if guild_tag.is_empty():
+			guild_tag = str(SocialManager.my_guild.get("tag", ""))
+		if guild_name.is_empty():
+			guild_name = str(SocialManager.my_guild.get("name", ""))
+		_hero_meta.text = "👥  [%s] %s" % [guild_tag, guild_name]
+		_hero_meta.add_theme_color_override("font_color", ClientUi.VIOLET.lightened(0.2))
+	else:
+		_hero_meta.text = "No guild"
+		_hero_meta.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
+
+	var xp := int(c.get("experience", 0))
+	var xp_next := maxi(1, int(c.get("experience_to_next_level", 1)))
+	_xp_lab.text = "XP  %s / %s" % [_fmt_int(xp), _fmt_int(xp_next)]
+	_xp_bar.max_value = xp_next
+	_xp_bar.value = mini(xp, xp_next)
+
+	var race_name := str(c.get("race", ""))
+	var class_name_key := str(c.get("class", ""))
+	var race := GameData.race_info(race_name)
+	var cls := GameData.class_info(class_name_key)
+	var special: Dictionary = cls.get("special", {})
+	# Structured like web CharacterHeader LORE rail (titles + body, scrollable).
+	var lore_bb := "[color=#0DCADF][b]%s %s[/b][/color]\n%s" % [
+		str(race.get("emoji", "")), race_name, str(race.get("lore", "")),
+	]
+	lore_bb += "\n\n[color=#A78BFA][b]%s %s[/b][/color]\n%s" % [
+		str(cls.get("emoji", "")), class_name_key, str(cls.get("description", "")),
+	]
+	if not special.is_empty():
+		lore_bb += "\n\n[color=#0DCADF][b]%s[/b][/color]\n%s" % [
+			str(special.get("name", "")), str(special.get("effect", "")),
+		]
+	_lore_lab.text = lore_bb
+
+	# Side rail owns empty-state copy via STIMS / MOUNTS section labels.
+	_stims_lab.visible = false
+	if _effects:
+		_effects.refresh(c)
+
+	_saved_bio = str(c.get("bio", c.get("backstory", "")))
+	_bio_field.text = _saved_bio
+	_bio_count.text = str(_saved_bio.length())
+	_bio_save.disabled = true
+
+
+func _on_save_bio() -> void:
+	if _busy:
+		return
+	_busy = true
+	_bio_save.disabled = true
+	_status.text = "Saving bio…"
+	var cid := str(GameManager.active_character.get("id", ""))
+	var next_bio := _bio_field.text.substr(0, 280)
+	var res: Dictionary = await AuthManager.patch_character(cid, {"bio": next_bio})
+	_busy = false
+	if not res.ok:
+		_status.text = str(res.get("error", "Failed to save bio"))
+		_bio_save.disabled = false
+		return
+	_saved_bio = next_bio
+	GameManager.active_character["bio"] = next_bio
+	_status.text = "Bio saved."
+	_bio_save.disabled = true
+
+
+func _rebuild_doll() -> void:
+	for child in _doll.get_children():
+		child.queue_free()
+	var ch: Dictionary = GameManager.active_character
+	var items: Array = StatsManager.all_items
+	var cell := Vector2(EQUIP_SLOT_SIZE, EQUIP_SLOT_SIZE)
+	for slot in FRAME_SLOTS:
+		var stype := str(slot.get("type", ""))
+		if stype == "_portrait":
+			# Center cell: avatar face (not a level tile). Equal outer size to gear slots.
+			var wrap := PanelContainer.new()
+			wrap.custom_minimum_size = cell
+			wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+				Color(0.07, 0.09, 0.14, 1.0), Color(ClientUi.CYAN, 0.85), 10, 2
+			))
+			var pad := MarginContainer.new()
+			pad.add_theme_constant_override("margin_left", 4)
+			pad.add_theme_constant_override("margin_right", 4)
+			pad.add_theme_constant_override("margin_top", 4)
+			pad.add_theme_constant_override("margin_bottom", 4)
+			wrap.add_child(pad)
+			var center := CenterContainer.new()
+			pad.add_child(center)
+			center.add_child(AvatarRenderer.make_portrait(ch, PORTRAIT_SIZE - 12.0))
+			# Small level badge — corner only, never replaces the portrait.
+			var badge := PanelContainer.new()
+			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			badge.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+			badge.offset_left = -22
+			badge.offset_top = -22
+			badge.offset_right = -2
+			badge.offset_bottom = -2
+			var bsb := StyleBoxFlat.new()
+			bsb.bg_color = ClientUi.CYAN
+			bsb.set_corner_radius_all(10)
+			bsb.set_border_width_all(2)
+			bsb.border_color = ClientUi.VOID
+			bsb.content_margin_left = 0
+			bsb.content_margin_right = 0
+			bsb.content_margin_top = 0
+			bsb.content_margin_bottom = 0
+			badge.add_theme_stylebox_override("panel", bsb)
+			var lvl := Label.new()
+			lvl.text = str(int(ch.get("level", 1)))
+			lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			lvl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			lvl.add_theme_font_size_override("font_size", 10)
+			lvl.add_theme_color_override("font_color", ClientUi.VOID)
+			ClientUi.apply_display_font(lvl)
+			badge.add_child(lvl)
+			wrap.add_child(badge)
+			_doll.add_child(wrap)
+			continue
+		var worn := InventoryRules.find_equipped_of_type(items, stype)
+		_doll.add_child(_make_slot_chip(stype, str(slot.get("label", stype)), worn))
+
+
+func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> PanelContainer:
+	var filled := not worn.is_empty()
+	var item_id := str(worn.get("id", "")) if filled else ""
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(EQUIP_SLOT_SIZE, EQUIP_SLOT_SIZE)
+	panel.tooltip_text = (
+		"%s — drag to bag to unequip · double-click to unequip" % str(worn.get("name", "Item"))
+		if filled
+		else "%s — drop matching gear here" % label
+	)
+	var rarity_tint := ClientUi.rarity_color(str(worn.get("rarity", ""))) if filled else Color(0.3, 0.35, 0.45)
+	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.09, 0.12, 0.18, 1.0) if filled else Color(0.06, 0.07, 0.1, 1.0),
+		Color(rarity_tint, 0.9) if filled else Color(rarity_tint, 0.55),
+		10, 2
+	))
+	ClientUi.apply_interaction_motion(panel, 1.02 if filled else 1.008)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 2)
+	panel.add_child(col)
+	var eye := Label.new()
+	eye.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	eye.text = label.to_upper()
+	eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	eye.add_theme_font_size_override("font_size", 9)
+	eye.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(eye)
+	col.add_child(eye)
+	if filled:
+		var icon_wrap := CenterContainer.new()
+		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_wrap.custom_minimum_size = Vector2(0, 48)
+		col.add_child(icon_wrap)
+		icon_wrap.add_child(GearIcon.make(worn, 44.0))
+	var name := Label.new()
+	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name.text = str(worn.get("name", "—")) if filled else "empty"
+	name.add_theme_font_size_override("font_size", 10)
+	name.add_theme_color_override("font_color", rarity_tint.lightened(0.15) if filled else ClientUi.MUTED)
+	ClientUi.apply_body_font(name)
+	col.add_child(name)
+
+	panel.set_drag_forwarding(
+		func(_at: Vector2) -> Variant:
+			return _make_item_drag(panel, worn, "equip") if filled else null,
+		func(_at: Vector2, data: Variant) -> bool:
+			return _can_drop_on_equip_slot(slot_type, data),
+		func(_at: Vector2, data: Variant) -> void:
+			_drop_on_equip_slot(slot_type, data)
+	)
+	if filled and not item_id.is_empty():
+		panel.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton:
+				var mb := ev as InputEventMouseButton
+				if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and mb.double_click:
+					_on_unequip(item_id)
+					panel.accept_event()
+		)
+	return panel
+
+
+func _update_backpack() -> void:
+	for child in _bag_grid.get_children():
+		child.queue_free()
+	var bag: Array = []
+	for item in StatsManager.all_items:
+		if typeof(item) == TYPE_DICTIONARY and not bool(item.get("is_equipped", false)):
+			bag.append(item)
+	var cap := mini(10, InventoryRules.bag_cap(GameManager.active_character))
+	_bag_count.text = "%s/%s" % [bag.size(), cap]
+	_bag_count.add_theme_color_override(
+		"font_color",
+		ClientUi.WARNING if bag.size() >= cap else ClientUi.MUTED
+	)
+	var row: HBoxContainer = null
+	for i in range(cap):
+		if i % BAG_COLS == 0:
+			row = HBoxContainer.new()
+			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_theme_constant_override("separation", 6)
+			_bag_grid.add_child(row)
+		var item: Dictionary = bag[i] if i < bag.size() else {}
+		row.add_child(_make_bag_slot(item))
+
+
+func _make_bag_slot(item: Dictionary) -> PanelContainer:
+	var filled := not item.is_empty()
+	var item_id := str(item.get("id", "")) if filled else ""
+	var item_type := str(item.get("type", "")) if filled else ""
+	var can_drag := filled and InventoryRules.is_equippable(item_type) and not item_id.is_empty()
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, 0)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	if filled:
+		var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
+		panel.add_theme_stylebox_override(
+			"panel",
+			ClientUi.painted_panel_style(Color(tint, 0.12), Color(tint, 0.6), 8, 1)
+		)
+		panel.tooltip_text = "%s · %s — drag onto matching slot to equip" % [
+			str(item.get("name", "Item")), str(item.get("rarity", "")),
+		]
+	else:
+		panel.add_theme_stylebox_override(
+			"panel",
+			ClientUi.painted_panel_style(Color(0.05, 0.06, 0.09, 0.7), Color(0.3, 0.35, 0.42, 0.35), 8, 1)
+		)
+		panel.tooltip_text = "Empty bag slot — drop equipped gear here to unequip"
+		panel.modulate.a = 0.55
+
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	panel.add_child(row)
+	if filled:
+		row.add_child(GearIcon.make(item, 28.0))
+		var name := Label.new()
+		name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		name.text = str(item.get("name", "Item")).substr(0, 12)
+		name.add_theme_font_size_override("font_size", 10)
+		name.add_theme_color_override(
+			"font_color",
+			ClientUi.rarity_color(str(item.get("rarity", ""))).lightened(0.2)
+		)
+		ClientUi.apply_body_font(name)
+		row.add_child(name)
+	else:
+		var mark := Label.new()
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mark.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mark.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		mark.text = "·"
+		mark.add_theme_font_size_override("font_size", 14)
+		mark.add_theme_color_override("font_color", ClientUi.MUTED)
+		row.add_child(mark)
+
+	panel.set_drag_forwarding(
+		func(_at: Vector2) -> Variant:
+			return _make_item_drag(panel, item, "bag") if can_drag else null,
+		func(_at: Vector2, data: Variant) -> bool:
+			return _can_drop_on_bag(data),
+		func(_at: Vector2, data: Variant) -> void:
+			_drop_on_bag(data)
+	)
+	return panel
+
+
+func _make_item_drag(host: Control, item: Dictionary, from: String) -> Variant:
+	if item.is_empty() or host == null:
+		return null
+	var item_id := str(item.get("id", ""))
+	if item_id.is_empty():
+		return null
+	host.set_drag_preview(GearIcon.make(item, 40.0))
+	return {
+		"item_id": item_id,
+		"from": from,
+		"type": str(item.get("type", "")),
+	}
+
+
+func _bag_drag_get(_at: Vector2) -> Variant:
+	return null
+
+
+func _bag_drag_can_drop(_at: Vector2, data: Variant) -> bool:
+	return _can_drop_on_bag(data)
+
+
+func _bag_drag_drop(_at: Vector2, data: Variant) -> void:
+	_drop_on_bag(data)
+
+
+func _can_drop_on_bag(data: Variant) -> bool:
+	return typeof(data) == TYPE_DICTIONARY and str(data.get("from", "")) == "equip"
+
+
+func _drop_on_bag(data: Variant) -> void:
+	if not _can_drop_on_bag(data):
+		return
+	var item_id := str(data.get("item_id", ""))
+	if not item_id.is_empty():
+		_on_unequip(item_id)
+
+
+func _can_drop_on_equip_slot(slot_type: String, data: Variant) -> bool:
+	if typeof(data) != TYPE_DICTIONARY:
+		return false
+	if str(data.get("from", "")) != "bag":
+		return false
+	return str(data.get("type", "")) == slot_type
+
+
+func _drop_on_equip_slot(slot_type: String, data: Variant) -> void:
+	if not _can_drop_on_equip_slot(slot_type, data):
+		return
+	var item_id := str(data.get("item_id", ""))
+	if not item_id.is_empty():
+		_on_equip(item_id)
+
+
+func _on_equip(item_id: String) -> void:
+	if _busy or item_id.is_empty():
+		return
+	_busy = true
+	_status.text = "Equipping…"
+	var res: Dictionary = await AuthManager.equip_item(item_id)
+	_busy = false
+	if not res.ok:
+		_status.text = str(res.get("error", "Equip failed"))
+		return
+	_status.text = "Equipped."
+	AudioManager.play_ui("equip")
+	await StatsManager.refresh()
+	_populate()
+
+
+func _on_unequip(item_id: String) -> void:
+	if _busy or item_id.is_empty():
+		return
+	_busy = true
+	_status.text = "Unequipping…"
+	var res: Dictionary = await AuthManager.unequip_item(item_id)
+	_busy = false
+	if not res.ok:
+		var err := str(res.get("error", "Unequip failed"))
+		_status.text = err
+		if err.to_lower().contains("inventory full"):
+			await InventoryManager.prompt_bag_pressure(self, "Free a bag slot before unequipping.")
+			await StatsManager.refresh()
+			_populate()
+		return
+	_status.text = "Unequipped."
+	await StatsManager.refresh()
+	_populate()
+
+
+func _make_vault_teaser(c: Dictionary) -> PanelContainer:
+	## Compact CollectiblesLog teaser — web COSMIC VAULT card.
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.05, 0.06, 0.12, 0.97), Color("#A855F7", 0.5), 12, 2
+	))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	panel.add_child(col)
+
+	var head := Label.new()
+	head.text = "COSMIC VAULT"
+	head.add_theme_font_size_override("font_size", 12)
+	head.add_theme_color_override("font_color", Color("#E9D5FF"))
+	ClientUi.apply_display_font(head)
+	col.add_child(head)
+
+	var pct := MissionBoard.collection_percentage(c)
+	var species_n := CollectiblesCatalog.owned_ids(c.get("discovered_species", [])).size()
+	var arts_n := CollectiblesCatalog.owned_ids(c.get("collected_artifacts", [])).size()
+	var relics_n := CollectiblesCatalog.owned_ids(c.get("collected_relics", [])).size()
+	var badges := CollectiblesCatalog.badge_count(c)
+	var gear_n := CollectiblesCatalog.discovered_gear_ids(c).size()
+	var unlocked: Variant = c.get("unlocked_achievements", [])
+	var ach_n := 0
+	if typeof(unlocked) == TYPE_ARRAY:
+		ach_n = (unlocked as Array).size()
+	# Approximate totals matching CollectiblesLog tab denominators.
+	const SPECIES_TOTAL := 30
+	const BADGES_TOTAL := 10
+	const ARTS_TOTAL := 100
+	const RELICS_TOTAL := 500
+	const GEAR_TOTAL := 200
+	const ACH_TOTAL := 40
+	var discovered := int(species_n + arts_n + relics_n + gear_n + badges + ach_n)
+	var total := SPECIES_TOTAL + BADGES_TOTAL + ARTS_TOTAL + RELICS_TOTAL + GEAR_TOTAL + ACH_TOTAL
+
+	var total_box := PanelContainer.new()
+	total_box.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(ClientUi.CYAN, 0.08), Color(ClientUi.CYAN, 0.35), 8, 1
+	))
+	col.add_child(total_box)
+	var total_col := VBoxContainer.new()
+	total_col.add_theme_constant_override("separation", 4)
+	total_box.add_child(total_col)
+	var tot_row := HBoxContainer.new()
+	total_col.add_child(tot_row)
+	var tot_lab := Label.new()
+	tot_lab.text = "TOTAL COLLECTION"
+	tot_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tot_lab.add_theme_font_size_override("font_size", 10)
+	tot_lab.add_theme_color_override("font_color", ClientUi.CYAN)
+	ClientUi.apply_display_font(tot_lab)
+	tot_row.add_child(tot_lab)
+	var tot_val := Label.new()
+	tot_val.text = "%s/%s · %s%%" % [discovered, total, int(round(pct))]
+	tot_val.add_theme_font_size_override("font_size", 10)
+	tot_val.add_theme_color_override("font_color", ClientUi.CYAN)
+	ClientUi.apply_display_font(tot_val)
+	tot_row.add_child(tot_val)
+	var bar := ProgressBar.new()
+	bar.min_value = 0
+	bar.max_value = 100
+	bar.value = pct
+	bar.show_percentage = false
+	bar.custom_minimum_size.y = 6
+	ClientUi.apply_hp_bar(bar, ClientUi.CYAN)
+	total_col.add_child(bar)
+	var xp_bonus := Label.new()
+	xp_bonus.text = "✨ XP Bonus: +%s%% from all sources" % int(round(pct))
+	xp_bonus.add_theme_font_size_override("font_size", 10)
+	xp_bonus.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(xp_bonus)
+	total_col.add_child(xp_bonus)
+
+	var chips := HFlowContainer.new()
+	chips.add_theme_constant_override("h_separation", 4)
+	chips.add_theme_constant_override("v_separation", 4)
+	col.add_child(chips)
+	for chip in [
+		["Species", "%s/%s" % [species_n, SPECIES_TOTAL]],
+		["Badges", "%s/%s" % [badges, BADGES_TOTAL]],
+		["Artifacts", "%s/%s" % [arts_n, ARTS_TOTAL]],
+		["Relics", "%s/%s" % [relics_n, RELICS_TOTAL]],
+		["Gear", "%s/%s" % [gear_n, GEAR_TOTAL]],
+		["Achievements", "%s/%s" % [ach_n, ACH_TOTAL]],
+	]:
+		var chip_lab := Label.new()
+		chip_lab.text = "%s %s" % [chip[0], chip[1]]
+		chip_lab.add_theme_font_size_override("font_size", 9)
+		chip_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_body_font(chip_lab)
+		var chip_panel := PanelContainer.new()
+		chip_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+			Color(0.06, 0.07, 0.1, 0.8), Color(1, 1, 1, 0.12), 6, 1
+		))
+		chip_panel.add_child(chip_lab)
+		chips.add_child(chip_panel)
+
+	var open := Button.new()
+	open.text = "Tap to view full log →"
+	ClientUi.apply_ghost_button(open)
+	open.pressed.connect(func() -> void: GameManager.go_collectibles())
+	col.add_child(open)
+	return panel
+
+
+func _make_stat_row(stat: String, primary: String) -> PanelContainer:
+	var is_primary := stat == primary
+	var accent: Color = GameData.STAT_COLORS.get(stat, ClientUi.CYAN)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(accent, 0.08),
+		Color(accent, 0.55) if is_primary else Color(1, 1, 1, 0.1),
+		10,
+		2 if is_primary else 1
+	))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	panel.add_child(row)
+
+	var icon := Label.new()
+	icon.text = str(GameData.STAT_ICONS.get(stat, ""))
+	icon.add_theme_font_size_override("font_size", 16)
+	row.add_child(icon)
+
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 1)
+	row.add_child(col)
+
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 6)
+	col.add_child(title_row)
+	var title := Label.new()
+	title.text = str(StatsRules.ATTR_LABELS.get(stat, stat.capitalize()))
+	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_color_override("font_color", accent.lightened(0.2))
+	ClientUi.apply_display_font(title)
+	title_row.add_child(title)
+	if is_primary:
+		var badge := Label.new()
+		badge.text = "Primary"
+		badge.add_theme_font_size_override("font_size", 8)
+		badge.add_theme_color_override("font_color", Color("#FDE68A"))
+		ClientUi.apply_display_font(badge)
+		title_row.add_child(badge)
+
+	var val_row := HBoxContainer.new()
+	val_row.add_theme_constant_override("separation", 6)
+	col.add_child(val_row)
+	var value_lab := Label.new()
+	value_lab.text = "0"
+	value_lab.add_theme_font_size_override("font_size", 18)
+	value_lab.add_theme_color_override("font_color", ClientUi.TEXT)
+	ClientUi.apply_display_font(value_lab)
+	val_row.add_child(value_lab)
+	var bonus_lab := Label.new()
+	bonus_lab.add_theme_font_size_override("font_size", 11)
+	bonus_lab.add_theme_color_override("font_color", ClientUi.SUCCESS)
+	ClientUi.apply_display_font(bonus_lab)
+	bonus_lab.visible = false
+	val_row.add_child(bonus_lab)
+
+	var buy := Button.new()
+	buy.custom_minimum_size = Vector2(88, 40)
+	ClientUi.apply_primary_button(buy)
+	buy.button_down.connect(func() -> void: _start_hold(stat))
+	buy.button_up.connect(_stop_hold)
+	buy.mouse_exited.connect(_stop_hold)
+	row.add_child(buy)
+
+	_stat_rows[stat] = {"value": value_lab, "bonus": bonus_lab, "buy": buy}
+	return panel
+
+
+func _make_combat_card() -> VBoxContainer:
+	## Embedded DerivedStatsPanel — Offensive / Defensive (no POWER tile).
+	## Tiles expand to fill the combat band so attrs pane has no deadspace.
+	var root := VBoxContainer.new()
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_theme_constant_override("separation", 6)
+
+	var head := HBoxContainer.new()
+	head.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	root.add_child(head)
+	var h2 := Label.new()
+	h2.text = "⚔  COMBAT"
+	h2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h2.add_theme_font_size_override("font_size", 11)
+	h2.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(h2)
+	head.add_child(h2)
+	_combat_stim = Label.new()
+	_combat_stim.text = "⚗ Stim"
+	_combat_stim.visible = false
+	_combat_stim.add_theme_font_size_override("font_size", 9)
+	_combat_stim.add_theme_color_override("font_color", ClientUi.VIOLET)
+	ClientUi.apply_display_font(_combat_stim)
+	head.add_child(_combat_stim)
+	_combat_via = Label.new()
+	_combat_via.add_theme_font_size_override("font_size", 9)
+	_combat_via.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_combat_via)
+	head.add_child(_combat_via)
+
+	var off_lab := Label.new()
+	off_lab.text = "OFFENSIVE"
+	off_lab.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	off_lab.add_theme_font_size_override("font_size", 8)
+	off_lab.add_theme_color_override("font_color", Color("#F59E0B"))
+	ClientUi.apply_display_font(off_lab)
+	root.add_child(off_lab)
+	var off_row := HBoxContainer.new()
+	off_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	off_row.size_flags_stretch_ratio = 1.0
+	off_row.add_theme_constant_override("separation", 6)
+	root.add_child(off_row)
+	off_row.add_child(_combat_tile("Damage", Color("#F59E0B")))
+	off_row.add_child(_combat_tile("Crit Chance", Color("#FBBF24")))
+
+	var def_lab := Label.new()
+	def_lab.text = "DEFENSIVE"
+	def_lab.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	def_lab.add_theme_font_size_override("font_size", 8)
+	def_lab.add_theme_color_override("font_color", Color("#A78BFA"))
+	ClientUi.apply_display_font(def_lab)
+	root.add_child(def_lab)
+	# Two expand rows (not GridContainer) so tiles fill leftover combat height.
+	var def_col := VBoxContainer.new()
+	def_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	def_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	def_col.size_flags_stretch_ratio = 2.0
+	def_col.add_theme_constant_override("separation", 6)
+	root.add_child(def_col)
+	var def_row_a := HBoxContainer.new()
+	def_row_a.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	def_row_a.add_theme_constant_override("separation", 6)
+	def_col.add_child(def_row_a)
+	def_row_a.add_child(_combat_tile("Max Health", Color("#FB7185")))
+	def_row_a.add_child(_combat_tile("Dodge Chance", Color("#34D399")))
+	var def_row_b := HBoxContainer.new()
+	def_row_b.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	def_row_b.add_theme_constant_override("separation", 6)
+	def_col.add_child(def_row_b)
+	def_row_b.add_child(_combat_tile("Armor", Color("#A78BFA")))
+	def_row_b.add_child(_combat_tile("Tech Resist", Color("#38BDF8")))
+	return root
+
+
+func _update_combat(derived: Dictionary, permanent: Dictionary, display: Dictionary) -> void:
+	var mult := float(derived.get("critMult", StatsRules.CRIT_MULT))
+	var values := {
+		"Damage": str(derived.get("damage", 0)),
+		"Crit Chance": "%s%% · %s×" % [_fmt_pct(float(derived.get("critChance", 0))), mult],
+		"Max Health": str(derived.get("health", 0)),
+		"Dodge Chance": "%s%%" % _fmt_pct(float(derived.get("dodgeChance", 0))),
+		"Armor": "%s%%" % _fmt_pct(float(derived.get("armor", 0))),
+		"Tech Resist": "%s%%" % _fmt_pct(float(derived.get("techResist", 0))),
+	}
+	for key in values:
+		if _combat_values.has(key):
+			(_combat_values[key] as Label).text = str(values[key])
+
+	if _combat_via:
+		_combat_via.text = "via %s" % str(derived.get("primaryStat", ""))
+	if _combat_stim:
+		var buffs: Array = StatsRules.active_buffs(GameManager.active_character)
+		_combat_stim.visible = not buffs.is_empty()
+	# silence unused if callers pass permanent/display for future stim deltas
+	var _p := permanent
+	var _d := display
+
+
+func _combat_tile(label: String, color: Color) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, 0)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(color, 0.1), Color(1, 1, 1, 0.1), 8, 1
+	))
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 2)
+	panel.add_child(col)
+	var l := Label.new()
+	l.text = label.to_upper()
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.add_theme_font_size_override("font_size", 9)
+	l.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(l)
+	col.add_child(l)
+	var v := Label.new()
+	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_theme_font_size_override("font_size", 15)
+	v.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(v)
+	col.add_child(v)
+	_combat_values[label] = v
+	return panel
+
+
+func _fmt_pct(v: float) -> String:
+	return "%.1f" % v
+
+
+func _fmt_int(n: int) -> String:
+	var s := str(n)
+	var out := ""
+	var count := 0
+	for i in range(s.length() - 1, -1, -1):
+		if count > 0 and count % 3 == 0:
+			out = "," + out
+		out = s[i] + out
+		count += 1
+	return out
+
+
+## Press-and-hold auto-buy: fire once now, then repeat on a ramping interval.
+func _start_hold(stat: String) -> void:
+	_hold_stat = stat
+	_hold_started_ms = Time.get_ticks_msec()
+	_hold_next_ms = _hold_started_ms + _hold_interval_ms(0)
+	_buy_once(stat)
+
+
+func _stop_hold() -> void:
+	_hold_stat = ""
+
+
+func _hold_interval_ms(elapsed_ms: int) -> int:
+	var t := clampf(float(elapsed_ms) / HOLD_RAMP_MS, 0.0, 1.0)
+	return int(round(1000.0 / (HOLD_START_RATE + (HOLD_END_RATE - HOLD_START_RATE) * t)))
+
+
+func _process(_delta: float) -> void:
+	if _hold_stat.is_empty():
+		return
+	# Buttons that go disabled mid-hold stop emitting button_up, so trust the device.
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_stop_hold()
+		return
+	if _busy:
+		return
+	var now := Time.get_ticks_msec()
+	if now < _hold_next_ms:
+		return
+	_hold_next_ms = now + _hold_interval_ms(now - _hold_started_ms)
+	_buy_once(_hold_stat)
+
+
+func _buy_once(stat: String) -> void:
+	if _busy:
+		return
+	var label := str(StatsRules.ATTR_LABELS.get(stat, stat))
+	var cost := StatsRules.next_cost(GameManager.active_character, stat)
+	if int(GameManager.active_character.get("stardust", 0)) < cost:
+		_stop_hold()
+		_status.text = "Need %s ✦ for the next %s point." % [cost, label]
+		_refresh_values()
+		return
+
+	_busy = true
+	# buy_attribute applies the spend locally before the request, so the sheet and
+	# the shell readouts move on this frame.
+	var res: Dictionary = await StatsManager.buy_attribute(stat)
+	_busy = false
+
+	if not res.ok:
+		_stop_hold()
+		var err := str(res.get("error", "BuyAttribute failed"))
+		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
+			err = str(res.data["error"])
+		_status.text = err
+		return
+
+	var spent := int(StatsManager.last_buy.get("cost", cost))
+	_status.text = "+1 %s  ·  −%s ✦" % [label, spent]

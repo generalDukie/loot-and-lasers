@@ -17,6 +17,14 @@ function assert(cond, msg) {
   }
 }
 
+/** Letter-only names (no digits) — matches server nameRules. */
+function alphaName(prefix = "Smoke") {
+  const letters = Array.from({ length: 8 }, () =>
+    String.fromCharCode(65 + Math.floor(Math.random() * 26))
+  ).join("");
+  return `${prefix}${letters}`;
+}
+
 async function req(path, { method = "GET", body, token } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -90,23 +98,18 @@ async function main() {
     }
   }
 
-  // Character create
+  // Character create (letter-only name + live class id)
   let character;
   {
-    const name = `Smoke${Date.now() % 100000}`;
+    const name = alphaName("Smoke");
     const r = await req("/api/entities/Character", {
       method: "POST",
       token: smokeToken,
       body: {
         name,
         race: "human",
-        class: "soldier",
-        level: 1,
-        experience: 0,
-        stardust: 0,
+        class: "Vanguard",
         nova_crystals: 100,
-        fuel: 10,
-        max_fuel: 10,
       },
     });
     character = r.data;
@@ -129,37 +132,70 @@ async function main() {
     assert(r.ok && r.data?.[0]?.id === character.id, "character filter by name");
   }
 
-  // Mission create + filter
+  // Missions: players cannot invent rows; admin seeds, player lists
   let mission;
   {
-    const r = await req("/api/entities/Mission", {
+    const blocked = await req("/api/entities/Mission", {
       method: "POST",
       token: smokeToken,
       body: {
         character_id: character.id,
-        status: "active",
-        mission_type: "explore",
-        rewards: { stardust: 50, experience: 10 },
+        status: "in_progress",
+        name: "Player Forged",
+        rewards: { stardust: 50 },
+        end_time: new Date(Date.now() - 1000).toISOString(),
+      },
+    });
+    assert(blocked.status === 403, `player mission create blocked (${blocked.status})`);
+
+    const r = await req("/api/entities/Mission", {
+      method: "POST",
+      token,
+      body: {
+        character_id: character.id,
+        status: "in_progress",
+        name: "Smoke Mission",
+        location: "Test Range",
+        sector: 1,
+        rewards: { loot_drops: false, stardust: 50, experience: 10 },
         end_time: new Date(Date.now() - 1000).toISOString(),
       },
     });
     mission = r.data;
-    assert(r.status === 201 && mission?.id, `create mission (${r.status})`);
+    assert(r.status === 201 && mission?.id, `admin create mission (${r.status})`);
 
     const list = await req("/api/entities/Mission/filter", {
       method: "POST",
       token: smokeToken,
-      body: { query: { character_id: character.id, status: "active" } },
+      body: { query: { character_id: character.id, status: "in_progress" } },
     });
-    assert(list.ok && list.data?.length >= 1, "mission filter");
+    assert(list.ok && list.data?.some((m) => m.id === mission.id), "mission filter");
   }
 
-  // Mail + claim
+  // Mail + claim (players cannot forge reward mail — admin seeds attachment)
   let mail;
   {
-    const r = await req("/api/entities/Mail", {
+    const forged = await req("/api/entities/Mail", {
       method: "POST",
       token: smokeToken,
+      body: {
+        owner_id: character.id,
+        subject: "Forged rewards",
+        body: "Should strip rewards",
+        has_rewards: true,
+        rewards: { stardust: 25 },
+        read: false,
+        claimed: false,
+      },
+    });
+    assert(
+      forged.status === 201 && forged.data?.has_rewards === false,
+      `player mail strips forged rewards (${forged.status})`
+    );
+
+    const r = await req("/api/entities/Mail", {
+      method: "POST",
+      token,
       body: {
         owner_id: character.id,
         subject: "Smoke test",
@@ -171,7 +207,7 @@ async function main() {
       },
     });
     mail = r.data;
-    assert(r.status === 201 && mail?.id, `create mail (${r.status})`);
+    assert(r.status === 201 && mail?.id && mail.has_rewards === true, `admin create reward mail (${r.status})`);
 
     const claim = await req("/api/functions/ClaimMailReward", {
       method: "POST",
@@ -211,12 +247,13 @@ async function main() {
 
   // Guild create + member
   {
+    const tag = alphaName("SG").slice(0, 4);
     const g = await req("/api/entities/Guild", {
       method: "POST",
       token: smokeToken,
       body: {
-        name: `SmokeGuild${Date.now() % 10000}`,
-        tag: `SG${Date.now() % 100}`,
+        name: alphaName("SmokeGuild"),
+        tag,
         leader_id: character.id,
         member_count: 1,
         recruiting: true,
@@ -238,19 +275,36 @@ async function main() {
     assert(m.status === 201 && m.data?.id, `guild member (${m.status})`);
   }
 
-  // deleteMany with $in
+  // Item CRUD: players cannot invent/delete items; admin + DissolveItem is the path
   {
+    const blocked = await req("/api/entities/Item", {
+      method: "POST",
+      token: smokeToken,
+      body: { character_id: character.id, name: "junk", type: "material", rarity: "common" },
+    });
+    assert(blocked.status === 403, `player item create blocked (${blocked.status})`);
+
     const item = await req("/api/entities/Item", {
       method: "POST",
-      token: smokeToken,
-      body: { character_id: character.id, name: "junk", rarity: "common", slot: "misc" },
+      token,
+      body: {
+        character_id: character.id,
+        owner_id: user.id,
+        name: "Smoke Junk",
+        type: "material",
+        rarity: "common",
+        sell_value: 5,
+        is_equipped: false,
+      },
     });
-    const dm = await req("/api/entities/Item/delete-many", {
+    assert(item.status === 201 && item.data?.id, `admin create item (${item.status})`);
+
+    const dissolve = await req("/api/functions/DissolveItem", {
       method: "POST",
       token: smokeToken,
-      body: { query: { id: { $in: [item.data.id] } } },
+      body: { item_id: item.data.id },
     });
-    assert(dm.ok && dm.data?.deleted >= 1, `deleteMany $in (${dm.status})`);
+    assert(dissolve.ok && dissolve.data?.success !== false, `DissolveItem (${dissolve.status})`);
   }
 
   // updateMany with $set
@@ -300,14 +354,29 @@ async function main() {
     assert(r.ok && Array.isArray(r.data), "character list");
   }
 
-  // Friendship array containment filter
+  // Friendship array containment filter (second account — slot limit is 1 per user)
   {
-    const friendChar = `Friend${Date.now() % 100000}`;
+    const email2 = `smoke_friend_${Date.now()}@test.local`;
+    const reg2 = await req("/api/auth/register", {
+      method: "POST",
+      body: { email: email2, password },
+    });
+    const otp2 = reg2.data?.otp_dev;
+    let friendToken = smokeToken;
+    if (reg2.ok && otp2) {
+      const ver2 = await req("/api/auth/verify-otp", {
+        method: "POST",
+        body: { email: email2, otpCode: otp2 },
+      });
+      friendToken = ver2.data?.access_token || smokeToken;
+    }
     const other = await req("/api/entities/Character", {
       method: "POST",
-      token: smokeToken,
-      body: { name: friendChar, race: "human", class: "soldier", level: 1 },
+      token: friendToken,
+      body: { name: alphaName("Friend"), race: "human", class: "Shadow Operative" },
     });
+    assert(other.status === 201 && other.data?.id, `friend character (${other.status})`);
+
     const friendship = await req("/api/entities/Friendship", {
       method: "POST",
       token: smokeToken,
@@ -319,7 +388,7 @@ async function main() {
       body: { query: { participant_ids: character.id } },
     });
     assert(
-      found.ok && found.data?.some((f) => f.id === friendship.data?.id),
+      friendship.status === 201 && found.ok && found.data?.some((f) => f.id === friendship.data?.id),
       "friendship filter by participant_ids"
     );
   }

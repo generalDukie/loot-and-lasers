@@ -6,6 +6,7 @@ import { withTransactionAsync, db, nowIso } from "../db.js";
 import { getUserById } from "../auth.js";
 import { randomItem } from "../shared/rewards.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
+import { mergeDiscoveredGear } from "../shared/discovery.js";
 import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import {
@@ -568,6 +569,13 @@ export const FinishDungeonBattle = wrap((user, body) => {
   const ach = mergeAchievementUnlocks(ch, patch);
   Object.assign(patch, ach.patch);
 
+  if (won) {
+    mergeDiscoveredGear(ch, [
+      ...itemsGranted,
+      ...pendingLoot.map((p) => p.item),
+    ], patch);
+  }
+
   const character = entities.Character.update(ch.id, patch);
   auditDungeonBattle({
     user,
@@ -896,6 +904,45 @@ export const ClaimWeeklyNovaQuest = wrap((user, body) => {
   return { success: true, quest, patch, character };
 });
 
+/** Crystal pack catalog — Stripe checkout TBD; local/dev grant when allowed. */
+export const CRYSTAL_PACKS = Object.freeze({
+  pouch: { id: "pouch", name: "Crystal Pouch", crystals: 500, price: "$4.99" },
+  cluster: { id: "cluster", name: "Crystal Cluster", crystals: 1200, price: "$9.99" },
+  vault: { id: "vault", name: "Crystal Vault", crystals: 2800, price: "$19.99" },
+  motherlode: { id: "motherlode", name: "Motherlode", crystals: 6000, price: "$39.99" },
+});
+
+function crystalPackGrantAllowed() {
+  if (process.env.CRYSTAL_PACK_DEV_GRANT === "1") return true;
+  return process.env.NODE_ENV !== "production";
+}
+
+/**
+ * PurchaseCrystalPack — credits Nova for a catalog pack.
+ * Production without CRYSTAL_PACK_DEV_GRANT returns 501 (Stripe not wired).
+ * Non-production (and explicit DEV grant) grants immediately for local play.
+ */
+export const PurchaseCrystalPack = wrap((user, body) => {
+  const packId = String(body.pack_id || body.packId || "").trim();
+  const pack = CRYSTAL_PACKS[packId];
+  if (!pack) httpErr(400, "Unknown pack");
+  if (!crystalPackGrantAllowed()) {
+    httpErr(501, "Checkout coming soon — Stripe payment is being connected");
+  }
+  const ch = requireMyChar(user);
+  const crystals = pack.crystals;
+  const patch = { nova_crystals: (ch.nova_crystals || 0) + crystals };
+  const character = entities.Character.update(ch.id, patch);
+  return {
+    success: true,
+    pack,
+    crystals,
+    patch,
+    character,
+    mode: "dev_grant",
+  };
+});
+
 // ── Guild ────────────────────────────────────────────────────
 export const CreateGuild = wrap((user, body) => {
   const ch = requireMyChar(user);
@@ -1109,6 +1156,7 @@ export const ECONOMY_FOLLOW_ON_HANDLERS = {
   CasinoSettle,
   BuyCharacterSlot,
   ClaimWeeklyNovaQuest,
+  PurchaseCrystalPack,
   CreateGuild,
   DeclareGuildWar,
   DismissFuelMount,

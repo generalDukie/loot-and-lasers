@@ -1,0 +1,1241 @@
+extends Control
+## Shared duel overlay — mirrors web ArenaBattleOverlay (arena + mission).
+
+const FIGHTER_SIZE := Vector2(200, 260)
+const LUNGE_DISTANCE := 40.0
+const LAND_DELAY := 0.12
+const INTRO_MS := 0.4
+## Playback scale vs web (~0.9–1.2s/hit). Godot needs snappier beats or it feels laggy.
+const PACE := 0.42
+
+const STAT_COLORS := {
+	"strength": Color("#F87171"),
+	"agility": Color("#4ADE80"),
+	"intellect": Color("#60A5FA"),
+	"vitality": Color("#FBBF24"),
+	"luck": Color("#C084FC"),
+}
+const MOD_COLORS := {
+	"dmg": Color("#F87171"),
+	"armor": Color("#FBBF24"),
+	"tech": Color("#38BDF8"),
+	"crit": Color("#C084FC"),
+	"dodge": Color("#4ADE80"),
+}
+
+var _player_hp: ProgressBar
+var _enemy_hp: ProgressBar
+var _player_hp_name: Label
+var _enemy_hp_name: Label
+var _player_hp_nums: Label
+var _enemy_hp_nums: Label
+var _skip_btn: Button
+var _stage: Control
+var _fighters: Control
+var _fx_layer: Control
+var _banner: Label
+var _intro_layer: Control
+var _outro_layer: Control
+var _outro_title: Label
+var _outro_sub: Label
+var _outro_btn: Button
+var _flash: ColorRect
+var _combo_lab: Label
+var _combo_wrap: PanelContainer
+var _player_anchor: Control
+var _enemy_anchor: Control
+var _player_card: Control
+var _enemy_card: Control
+var _backdrop: ArenaStageBackdrop
+var _ability_banner: PanelContainer
+var _ability_emoji: Label
+var _ability_title: Label
+var _ability_detail: Label
+var _ability_class: Label
+var _player_weapon: Dictionary = {}
+var _enemy_weapon: Dictionary = {}
+var _player_weapon_label: Control
+var _enemy_weapon_label: Control
+var _sheet_host: Control
+var _prev_level := 1
+var _generation := 0
+
+var _idle_tweens: Array[Tween] = []
+
+var _player_hp_val := 0
+var _enemy_hp_val := 0
+var _player_max := 1
+var _enemy_max := 1
+var _events: Array = []
+var _event_i := 0
+var _phase := "intro"
+var _playing := false
+var _finished := false
+var _busy := false
+var _combo := 0
+
+
+func _ready() -> void:
+	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	_build()
+	_boot()
+
+
+func _build() -> void:
+	# Web: fixed inset-0 duel stage over dark void.
+	_backdrop = ArenaStageBackdrop.new()
+	_backdrop.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	add_child(_backdrop)
+	# Static backdrop during duel — animated redraw was the main stutter source.
+	_backdrop.set_live(false)
+
+	var root := VBoxContainer.new()
+	root.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	root.add_theme_constant_override("separation", 0)
+	add_child(root)
+
+	var hp_pad := MarginContainer.new()
+	hp_pad.add_theme_constant_override("margin_left", 20)
+	hp_pad.add_theme_constant_override("margin_right", 20)
+	hp_pad.add_theme_constant_override("margin_top", 18)
+	hp_pad.add_theme_constant_override("margin_bottom", 4)
+	root.add_child(hp_pad)
+
+	var hp_row := HBoxContainer.new()
+	hp_row.add_theme_constant_override("separation", 12)
+	hp_pad.add_child(hp_row)
+
+	var p_hp := _make_hp_side(false)
+	p_hp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hp_row.add_child(p_hp)
+	_player_hp_name = p_hp.get_meta("name_lab")
+	_player_hp = p_hp.get_meta("bar")
+	_player_hp_nums = p_hp.get_meta("nums")
+
+	var mid := VBoxContainer.new()
+	mid.custom_minimum_size.x = 36
+	mid.alignment = BoxContainer.ALIGNMENT_CENTER
+	hp_row.add_child(mid)
+	var swords := Label.new()
+	swords.text = "⚔"
+	swords.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	swords.add_theme_font_size_override("font_size", 18)
+	swords.add_theme_color_override("font_color", Color("#FCD34D", 0.85))
+	mid.add_child(swords)
+
+	var e_hp := _make_hp_side(true)
+	e_hp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hp_row.add_child(e_hp)
+	_enemy_hp_name = e_hp.get_meta("name_lab")
+	_enemy_hp = e_hp.get_meta("bar")
+	_enemy_hp_nums = e_hp.get_meta("nums")
+
+	_stage = Control.new()
+	_stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_stage.clip_contents = true
+	root.add_child(_stage)
+
+	_fighters = Control.new()
+	_fighters.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_fighters.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stage.add_child(_fighters)
+
+	_player_anchor = _make_fighter_anchor()
+	_fighters.add_child(_player_anchor)
+	_enemy_anchor = _make_fighter_anchor()
+	_fighters.add_child(_enemy_anchor)
+	_stage.resized.connect(_layout_fighters)
+	_fighters.resized.connect(_layout_fighters)
+
+	# Corner brackets like web duel frame.
+	_add_corner(Color("#22D3EE", 0.35), true, true)
+	_add_corner(Color("#FB7185", 0.35), false, true)
+	_add_corner(Color("#22D3EE", 0.35), true, false)
+	_add_corner(Color("#FB7185", 0.35), false, false)
+
+	_fx_layer = Control.new()
+	_fx_layer.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stage.add_child(_fx_layer)
+
+	_flash = ColorRect.new()
+	_flash.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_flash.color = Color(1, 1, 1, 0)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stage.add_child(_flash)
+
+	_ability_banner = PanelContainer.new()
+	_ability_banner.visible = false
+	_ability_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ability_banner.z_index = 20
+	_stage.add_child(_ability_banner)
+	var ab_col := VBoxContainer.new()
+	ab_col.add_theme_constant_override("separation", 2)
+	_ability_banner.add_child(ab_col)
+	_ability_emoji = Label.new()
+	_ability_emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ability_emoji.add_theme_font_size_override("font_size", 22)
+	ab_col.add_child(_ability_emoji)
+	_ability_title = Label.new()
+	_ability_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ability_title.add_theme_font_size_override("font_size", 15)
+	ClientUi.apply_display_font(_ability_title)
+	ab_col.add_child(_ability_title)
+	_ability_detail = Label.new()
+	_ability_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ability_detail.add_theme_font_size_override("font_size", 11)
+	ClientUi.apply_display_font(_ability_detail)
+	ab_col.add_child(_ability_detail)
+	_ability_class = Label.new()
+	_ability_class.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ability_class.add_theme_font_size_override("font_size", 9)
+	ClientUi.apply_display_font(_ability_class)
+	ab_col.add_child(_ability_class)
+
+	_banner = Label.new()
+	_banner.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_banner.modulate.a = 0.0
+	_banner.z_index = 25
+	_banner.add_theme_font_size_override("font_size", 42)
+	_banner.add_theme_color_override("font_color", Color("#FBBF24"))
+	ClientUi.apply_display_font(_banner)
+	_stage.add_child(_banner)
+
+	_intro_layer = Control.new()
+	_intro_layer.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_intro_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_layer.z_index = 40
+	_stage.add_child(_intro_layer)
+	var intro_col := VBoxContainer.new()
+	intro_col.set_anchors_preset(PRESET_CENTER_TOP)
+	intro_col.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	intro_col.offset_top = 48
+	intro_col.offset_left = -180
+	intro_col.offset_right = 180
+	intro_col.add_theme_constant_override("separation", 8)
+	_intro_layer.add_child(intro_col)
+	var vs_row := Label.new()
+	vs_row.name = "VsRow"
+	vs_row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vs_row.add_theme_font_size_override("font_size", 14)
+	ClientUi.apply_display_font(vs_row)
+	intro_col.add_child(vs_row)
+	var fight_lab := Label.new()
+	fight_lab.name = "FightLab"
+	fight_lab.text = "⚔  FIGHT!"
+	fight_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	fight_lab.add_theme_font_size_override("font_size", 36)
+	fight_lab.add_theme_color_override("font_color", Color("#FBBF24"))
+	ClientUi.apply_display_font(fight_lab)
+	intro_col.add_child(fight_lab)
+
+	_outro_layer = ColorRect.new()
+	_outro_layer.color = Color(0, 0, 0, 0.72)
+	_outro_layer.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_outro_layer.visible = false
+	_outro_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	_outro_layer.z_index = 45
+	add_child(_outro_layer)
+	var outro_center := CenterContainer.new()
+	outro_center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_outro_layer.add_child(outro_center)
+	var outro_col := VBoxContainer.new()
+	outro_col.add_theme_constant_override("separation", 10)
+	outro_center.add_child(outro_col)
+	_outro_title = Label.new()
+	_outro_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_outro_title.add_theme_font_size_override("font_size", 48)
+	ClientUi.apply_display_font(_outro_title)
+	outro_col.add_child(_outro_title)
+	_outro_sub = Label.new()
+	_outro_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_outro_sub.add_theme_font_size_override("font_size", 13)
+	_outro_sub.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_outro_sub)
+	outro_col.add_child(_outro_sub)
+	_outro_btn = Button.new()
+	_outro_btn.text = "VIEW REWARDS"
+	_outro_btn.custom_minimum_size = Vector2(220, 44)
+	ClientUi.apply_primary_button(_outro_btn)
+	_outro_btn.pressed.connect(_on_outro_continue)
+	outro_col.add_child(_outro_btn)
+
+	var combo_row := Control.new()
+	combo_row.custom_minimum_size.y = 36
+	root.add_child(combo_row)
+	_combo_wrap = PanelContainer.new()
+	_combo_wrap.visible = false
+	_combo_wrap.set_anchors_preset(PRESET_CENTER)
+	_combo_wrap.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_combo_wrap.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_combo_wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.96, 0.62, 0.04, 0.18), Color("#FBBF24", 0.55), 14, 1
+	))
+	combo_row.add_child(_combo_wrap)
+	_combo_lab = Label.new()
+	_combo_lab.add_theme_font_size_override("font_size", 12)
+	_combo_lab.add_theme_color_override("font_color", Color("#FCD34D"))
+	ClientUi.apply_display_font(_combo_lab)
+	_combo_wrap.add_child(_combo_lab)
+
+	var skip_pad := MarginContainer.new()
+	skip_pad.add_theme_constant_override("margin_bottom", 28)
+	skip_pad.add_theme_constant_override("margin_top", 4)
+	root.add_child(skip_pad)
+	var skip_row := HBoxContainer.new()
+	skip_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	skip_pad.add_child(skip_row)
+	_skip_btn = Button.new()
+	_skip_btn.text = "⚡  SKIP TO RESULTS"
+	_skip_btn.custom_minimum_size = Vector2(220, 40)
+	_apply_skip_cta(_skip_btn)
+	_skip_btn.pressed.connect(_on_skip)
+	skip_row.add_child(_skip_btn)
+
+	_sheet_host = Control.new()
+	_sheet_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_sheet_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sheet_host.z_index = 60
+	add_child(_sheet_host)
+
+
+func _make_hp_side(align_right: bool) -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	var name_lab := Label.new()
+	name_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
+	name_lab.add_theme_font_size_override("font_size", 14)
+	name_lab.add_theme_color_override("font_color", Color("#FB7185") if align_right else Color("#22D3EE"))
+	ClientUi.apply_display_font(name_lab)
+	col.add_child(name_lab)
+	var bar := ProgressBar.new()
+	bar.min_value = 0
+	bar.max_value = 100
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 16)
+	ClientUi.apply_hp_bar(bar, Color("#FB7185") if align_right else Color("#22D3EE"))
+	# Web: remaining HP hugs center — approximate with fill from left (native ProgressBar).
+	col.add_child(bar)
+	var nums := Label.new()
+	nums.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
+	nums.add_theme_font_size_override("font_size", 11)
+	nums.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(nums)
+	col.add_child(nums)
+	col.set_meta("name_lab", name_lab)
+	col.set_meta("bar", bar)
+	col.set_meta("nums", nums)
+	return col
+
+
+func _apply_skip_cta(btn: Button) -> void:
+	ClientUi.apply_display_font(btn)
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_stylebox_override("normal", ClientUi.button_style(Color("#F59E0B"), Color("#FCD34D")))
+	btn.add_theme_stylebox_override("hover", ClientUi.button_style(Color("#FBBF24"), Color("#FDE68A")))
+	btn.add_theme_stylebox_override("pressed", ClientUi.button_style(Color("#D97706"), Color("#F59E0B")))
+	btn.add_theme_color_override("font_color", Color(0.05, 0.05, 0.05))
+	btn.add_theme_color_override("font_hover_color", Color(0.02, 0.02, 0.02))
+	btn.add_theme_color_override("font_pressed_color", Color(0.08, 0.05, 0.0))
+	ClientUi.apply_interaction_motion(btn)
+
+
+func _add_corner(color: Color, left: bool, top: bool) -> void:
+	var c := ColorRect.new()
+	c.color = color
+	c.custom_minimum_size = Vector2(18, 2)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.set_anchors_preset(PRESET_TOP_LEFT)
+	if left:
+		c.offset_left = 10
+		c.offset_right = 28
+	else:
+		c.anchor_left = 1.0
+		c.anchor_right = 1.0
+		c.offset_left = -28
+		c.offset_right = -10
+	if top:
+		c.offset_top = 10
+		c.offset_bottom = 12
+	else:
+		c.anchor_top = 1.0
+		c.anchor_bottom = 1.0
+		c.offset_top = -12
+		c.offset_bottom = -10
+	_stage.add_child(c)
+	var v := ColorRect.new()
+	v.color = color
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.set_anchors_preset(PRESET_TOP_LEFT)
+	if left:
+		v.offset_left = 10
+		v.offset_right = 12
+	else:
+		v.anchor_left = 1.0
+		v.anchor_right = 1.0
+		v.offset_left = -12
+		v.offset_right = -10
+	if top:
+		v.offset_top = 10
+		v.offset_bottom = 28
+	else:
+		v.anchor_top = 1.0
+		v.anchor_bottom = 1.0
+		v.offset_top = -28
+		v.offset_bottom = -10
+	_stage.add_child(v)
+
+
+func _boot() -> void:
+	if _is_mission():
+		await _boot_mission()
+	else:
+		await _boot_arena()
+
+
+func _is_mission() -> bool:
+	return str(GameManager.combat_overlay_kind) == "mission"
+
+
+func _opp() -> Dictionary:
+	if _is_mission():
+		return MissionManager.pending_enemy
+	return ArenaManager.pending_opp
+
+
+func _battle() -> Dictionary:
+	if _is_mission():
+		return MissionManager.pending_battle
+	return ArenaManager.pending_battle
+
+
+func _player_items() -> Array:
+	if _is_mission():
+		return MissionManager.pending_player_items
+	return ArenaManager.equipped_items
+
+
+func _boot_arena() -> void:
+	if ArenaManager.pending_battle.is_empty() or ArenaManager.pending_opp.is_empty():
+		await get_tree().create_timer(0.2).timeout
+		GameManager.close_overlay()
+		GameManager.go_arena()
+		return
+	_start_duel(
+		GameManager.active_character,
+		ArenaManager.pending_opp,
+		ArenaManager.pending_battle,
+		ArenaManager.equipped_items,
+		ArenaRules.resolve_opp_items(ArenaManager.pending_opp)
+	)
+
+
+func _boot_mission() -> void:
+	if not MissionManager.has_active_mission():
+		await get_tree().create_timer(0.35).timeout
+		GameManager.close_overlay()
+		GameManager.go_cantina()
+		return
+	var prep: Dictionary = await MissionManager.prepare_combat()
+	if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
+		await get_tree().create_timer(0.5).timeout
+		GameManager.close_overlay()
+		GameManager.go_mission_run()
+		return
+	var enemy_items: Array = []
+	if typeof(MissionManager.pending_enemy.get("equippedItems", null)) == TYPE_ARRAY:
+		enemy_items = MissionManager.pending_enemy.get("equippedItems", [])
+	_start_duel(
+		GameManager.active_character,
+		MissionManager.pending_enemy,
+		MissionManager.pending_battle,
+		MissionManager.pending_player_items,
+		enemy_items
+	)
+
+
+func _start_duel(
+	player: Dictionary,
+	opp: Dictionary,
+	battle: Dictionary,
+	player_items: Array,
+	opp_items: Array
+) -> void:
+	var player_name := str(player.get("name", "You"))
+	var opp_name := str(opp.get("name", "Rival"))
+	_prev_level = int(player.get("level", 1))
+	_player_weapon = GameData.weapon_from_items(player_items)
+	_enemy_weapon = GameData.weapon_from_items(opp_items)
+
+	var p_emoji := _class_emoji(str(player.get("class", "")))
+	var e_emoji := _class_emoji(str(opp.get("class", "")))
+	_player_hp_name.text = "%s  %s" % [p_emoji, player_name]
+	_enemy_hp_name.text = "%s  %s" % [opp_name, e_emoji]
+
+	_player_card = _mount_fighter(_player_anchor, player, Color("#22D3EE"), _player_weapon, true)
+	_enemy_card = _mount_fighter(_enemy_anchor, opp, Color("#FB7185"), _enemy_weapon, false)
+	_layout_fighters()
+
+	_player_max = maxi(1, int(battle.get("playerMaxHp", 1)))
+	_enemy_max = maxi(1, int(battle.get("opponentMaxHp", 1)))
+	_player_hp_val = _player_max
+	_enemy_hp_val = _enemy_max
+	_player_hp.max_value = _player_max
+	_enemy_hp.max_value = _enemy_max
+	_update_hp_ui()
+
+	_events = battle.get("events", []) if typeof(battle.get("events", [])) == TYPE_ARRAY else []
+	_event_i = 0
+	_phase = "intro"
+	_playing = true
+
+	var vs_row: Label = _intro_layer.find_child("VsRow", true, false) as Label
+	if vs_row:
+		vs_row.text = "%s   VS   %s" % [player_name, opp_name]
+		vs_row.add_theme_color_override("font_color", Color("#67E8F9"))
+	_intro_layer.visible = true
+	_intro_layer.modulate.a = 0.0
+	var intro_tw := _intro_layer.create_tween()
+	intro_tw.tween_property(_intro_layer, "modulate:a", 1.0, 0.25)
+	await get_tree().create_timer(INTRO_MS).timeout
+	if not is_instance_valid(self) or _finished:
+		return
+	var fade := _intro_layer.create_tween()
+	fade.tween_property(_intro_layer, "modulate:a", 0.0, 0.2)
+	await fade.finished
+	if not is_instance_valid(self) or _finished:
+		return
+	_intro_layer.visible = false
+	_phase = "fight"
+	_run_playback()
+
+
+func _class_emoji(class_key: String) -> String:
+	var cat: Variant = GameData.CLASS_CATALOG.get(class_key, null)
+	if typeof(cat) == TYPE_DICTIONARY:
+		return str((cat as Dictionary).get("emoji", "✦"))
+	return "✦"
+
+
+func _make_fighter_anchor() -> Control:
+	var anchor := Control.new()
+	anchor.custom_minimum_size = FIGHTER_SIZE
+	anchor.size = FIGHTER_SIZE
+	anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return anchor
+
+
+func _layout_fighters() -> void:
+	if _fighters == null or _player_anchor == null or _enemy_anchor == null:
+		return
+	var gap := 64.0
+	var total_w := FIGHTER_SIZE.x * 2.0 + gap
+	var x0 := (_fighters.size.x - total_w) * 0.5
+	var y0 := maxf(8.0, (_fighters.size.y - FIGHTER_SIZE.y) * 0.42)
+	_player_anchor.position = Vector2(x0, y0)
+	_enemy_anchor.position = Vector2(x0 + FIGHTER_SIZE.x + gap, y0)
+
+
+func _mount_fighter(anchor: Control, character: Dictionary, tint: Color, weapon: Dictionary, is_player: bool) -> Control:
+	var card := _portrait_card(character, tint, weapon, is_player)
+	anchor.add_child(card)
+	card.size = FIGHTER_SIZE
+	card.position = Vector2.ZERO
+	card.pivot_offset = FIGHTER_SIZE * 0.5
+	return card
+
+
+func _start_idle(card: Control, delay: float) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	var tween := card.create_tween().set_loops()
+	if delay > 0.0:
+		tween.tween_interval(delay)
+	tween.tween_property(card, "position:y", -6.0, 1.2).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(card, "position:y", 0.0, 1.2).set_trans(Tween.TRANS_SINE)
+	_idle_tweens.append(tween)
+
+
+## Compact fighter: name · avatar · one stat line (web has five; five RichText labels stutter here).
+func _portrait_card(character: Dictionary, tint: Color, weapon: Dictionary, is_player: bool) -> Control:
+	var frame := Control.new()
+	frame.custom_minimum_size = FIGHTER_SIZE
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var col := VBoxContainer.new()
+	col.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	col.alignment = BoxContainer.ALIGNMENT_BEGIN
+	col.add_theme_constant_override("separation", 4)
+	frame.add_child(col)
+
+	var head := HBoxContainer.new()
+	head.alignment = BoxContainer.ALIGNMENT_CENTER
+	head.add_theme_constant_override("separation", 6)
+	col.add_child(head)
+	var emoji := Label.new()
+	emoji.text = _class_emoji(str(character.get("class", "")))
+	emoji.add_theme_font_size_override("font_size", 14)
+	head.add_child(emoji)
+	var name := Label.new()
+	name.text = str(character.get("name", "?"))
+	name.add_theme_font_size_override("font_size", 13)
+	name.add_theme_color_override("font_color", tint)
+	ClientUi.apply_display_font(name)
+	head.add_child(name)
+
+	var portrait_wrap := Control.new()
+	portrait_wrap.custom_minimum_size = Vector2(168, 168)
+	portrait_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(portrait_wrap)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	portrait_wrap.add_child(center)
+	var portrait := AvatarRenderer.make_portrait(character, 156.0)
+	if not is_player:
+		portrait.scale = Vector2(-1, 1)
+		portrait.pivot_offset = Vector2(78, 78)
+	center.add_child(portrait)
+
+	var wlab := Control.new()
+	wlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wlab.custom_minimum_size = Vector2(40, 40)
+	wlab.set_anchors_preset(PRESET_CENTER_RIGHT if is_player else PRESET_CENTER_LEFT)
+	if is_player:
+		wlab.offset_left = -44
+		wlab.offset_right = 0
+	else:
+		wlab.offset_left = 0
+		wlab.offset_right = 44
+	wlab.offset_top = -18
+	wlab.offset_bottom = 22
+	wlab.pivot_offset = Vector2(20, 20)
+	var witem := {
+		"name": str(weapon.get("name", "")),
+		"base_name": str(weapon.get("base_name", "")),
+		"type": "weapon",
+		"rarity": str(weapon.get("rarity", "common")),
+	}
+	wlab.add_child(GearIcon.make(witem, 40.0))
+	portrait_wrap.add_child(wlab)
+	if is_player:
+		_player_weapon_label = wlab
+	else:
+		_enemy_weapon_label = wlab
+
+	col.add_child(_fighter_stats_block(character, tint))
+	return frame
+
+
+func _fighter_stats_block(character: Dictionary, tint: Color) -> Label:
+	var items: Array = []
+	if str(character.get("id", "")) == str(GameManager.active_character.get("id", "")):
+		items = _player_items()
+	elif typeof(character.get("equippedItems", null)) == TYPE_ARRAY:
+		items = character.get("equippedItems", [])
+	var totals := StatsRules.display_totals(character, items)
+	var d := StatsRules.derived(character, totals)
+	var primary := str(d.get("primaryStat", "strength"))
+	var abbrev := {"strength": "STR", "agility": "AGI", "intellect": "INT", "vitality": "VIT", "luck": "LUK"}
+	var lab := Label.new()
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", 11)
+	lab.add_theme_color_override("font_color", tint)
+	ClientUi.apply_display_font(lab)
+	lab.text = "%s %s · DMG %s · CRIT %.0f%% · DODGE %.0f%%" % [
+		abbrev.get(primary, "STR"),
+		str(int(totals.get(primary, 0))),
+		str(d.get("damage", 0)),
+		float(d.get("critChance", 0)),
+		float(d.get("dodgeChance", 0)),
+	]
+	return lab
+
+
+func _update_hp_ui() -> void:
+	_player_hp.value = _player_hp_val
+	_enemy_hp.value = _enemy_hp_val
+	_player_hp_nums.text = "%s / %s" % [_player_hp_val, _player_max]
+	_enemy_hp_nums.text = "%s / %s" % [_enemy_hp_val, _enemy_max]
+	var p_pct := 100.0 * float(_player_hp_val) / float(_player_max)
+	var e_pct := 100.0 * float(_enemy_hp_val) / float(_enemy_max)
+	if p_pct > 0.0 and p_pct < 25.0:
+		ClientUi.apply_hp_bar(_player_hp, Color("#FB7185"))
+	else:
+		ClientUi.apply_hp_bar(_player_hp, Color("#22D3EE"))
+	if e_pct > 0.0 and e_pct < 25.0:
+		ClientUi.apply_hp_bar(_enemy_hp, Color("#FB7185"))
+	else:
+		ClientUi.apply_hp_bar(_enemy_hp, Color("#FB7185"))
+
+
+func _event_duration(ev: Dictionary) -> float:
+	## Snappy pacing — web timings × PACE so the duel doesn't drag.
+	if ev.is_empty():
+		return 0.38
+	var t := str(ev.get("type", ""))
+	if t == "regen":
+		return 0.56 * PACE
+	if bool(ev.get("dodged", false)) or t == "dodge":
+		return 0.64 * PACE
+	if t == "passive" or (t == "miss" and str(ev.get("missKind", "")) == "phantom_signal"):
+		return 0.95 * PACE
+	if t == "secondary" and ev.get("passive", null) != null:
+		return 0.9 * PACE
+	if bool(ev.get("crit", false)) or t == "ability" or t == "drone":
+		return 0.85 * PACE
+	return 0.72 * PACE
+
+
+func _combo_at(i: int) -> int:
+	if i < 0 or i >= _events.size():
+		return 0
+	var ev: Dictionary = _events[i]
+	if ev.is_empty() or bool(ev.get("dodged", false)) or str(ev.get("type", "")) == "regen":
+		return 0
+	if ev.get("attacker", null) == null:
+		return 0
+	var count := 0
+	var j := i
+	while j >= 0:
+		var e: Dictionary = _events[j]
+		if typeof(e) != TYPE_DICTIONARY:
+			break
+		if str(e.get("attacker", "")) == str(ev.get("attacker", "")) \
+				and not bool(e.get("dodged", false)) \
+				and str(e.get("type", "")) != "regen":
+			count += 1
+		else:
+			break
+		j -= 1
+	return count
+
+
+func _run_playback() -> void:
+	_generation += 1
+	var gen := _generation
+	while _playing and not _finished and _event_i < _events.size():
+		if gen != _generation:
+			return
+		var ev: Dictionary = _events[_event_i]
+		if typeof(ev) != TYPE_DICTIONARY:
+			_event_i += 1
+			continue
+		_combo = _combo_at(_event_i)
+		_update_combo(str(ev.get("attacker", "")))
+		await _play_one_event(ev, gen)
+		if gen != _generation or _finished:
+			return
+		_event_i += 1
+		if _player_hp_val <= 0 or _enemy_hp_val <= 0:
+			break
+	if gen != _generation or _finished:
+		return
+	_show_outro()
+
+
+func _update_combo(_attacker: String) -> void:
+	if _combo >= 2:
+		_combo_wrap.visible = true
+		_combo_lab.text = "⚡  COMBO ×%s" % _combo
+	else:
+		_combo_wrap.visible = false
+
+
+func _play_one_event(ev: Dictionary, gen: int) -> void:
+	var dur := _event_duration(ev)
+	_maybe_ability_banner(ev)
+	_begin_event_fx(ev)
+	# Land damage almost immediately so HP tracks the hit instead of lagging behind.
+	if LAND_DELAY > 0.0:
+		await get_tree().create_timer(LAND_DELAY).timeout
+		if gen != _generation or _finished:
+			return
+	_land_event(ev)
+	var remain := maxf(0.04, dur - LAND_DELAY)
+	await get_tree().create_timer(remain).timeout
+
+
+func _begin_event_fx(ev: Dictionary) -> void:
+	var t := str(ev.get("type", ""))
+	var quiet := t == "regen"
+	var attacker := _card_for(ev.get("attacker", null))
+	var defender := _card_for(ev.get("defender", null))
+	var side := str(ev.get("attacker", "player"))
+
+	if quiet:
+		return
+	if t == "dodge" or t == "miss" or bool(ev.get("dodged", false)):
+		_lunge(attacker, side)
+		_slip(defender, ev.get("defender", null))
+		return
+	if t in ["attack", "drone", "ability", "secondary"] or int(ev.get("damage", 0)) > 0:
+		_swing_weapon(side)
+		_lunge(attacker, side)
+
+
+func _land_event(ev: Dictionary) -> void:
+	var t := str(ev.get("type", ""))
+	var defender := _card_for(ev.get("defender", null))
+	var attacker := _card_for(ev.get("attacker", null))
+	var side := str(ev.get("attacker", "player"))
+	var weapon: Dictionary = _player_weapon if side == "player" else _enemy_weapon
+
+	if int(ev.get("heal", 0)) > 0:
+		var heal := int(ev.get("heal", 0))
+		var def_side := str(ev.get("defender", "player"))
+		if def_side == "player":
+			_player_hp_val = mini(_player_max, _player_hp_val + heal)
+		else:
+			_enemy_hp_val = mini(_enemy_max, _enemy_hp_val + heal)
+		_update_hp_ui()
+		_float_text(defender if defender else attacker, "+%s" % heal, Color("#86EFAC"), false)
+		return
+
+	if t == "dodge" or t == "miss" or bool(ev.get("dodged", false)):
+		_float_text(defender, "DODGE" if t == "dodge" or bool(ev.get("dodged", false)) else "MISS", Color("#67E8F9"), false)
+		AudioManager.play_ui("dodge")
+		return
+
+	if t == "passive" and int(ev.get("damage", 0)) <= 0:
+		_float_text(attacker if attacker else _player_card, "✦", Color("#C084FC"), false)
+		return
+
+	if bool(ev.get("shieldHit", false)):
+		_float_text(defender, "SHIELD", Color("#67E8F9"), false)
+		return
+
+	var dmg := int(ev.get("damage", 0))
+	if dmg <= 0 and t not in ["attack", "drone", "ability", "secondary"]:
+		return
+
+	var crit := bool(ev.get("crit", false))
+	var ability := t == "drone" or t == "ability"
+	_impact(defender, crit or ability)
+	if crit:
+		_float_text(defender, "CRIT −%s" % dmg, Color("#FBBF24"), true)
+	else:
+		_float_text(defender, "−%s" % dmg, Color("#FCA5A5"), ability)
+	AudioManager.play_attack(str(weapon.get("style", "swing")), crit, ability)
+	if str(ev.get("defender", "")) == "player":
+		_player_hp_val = maxi(0, _player_hp_val - dmg)
+		_flash_bar(_player_hp, Color(1.0, 0.35, 0.35))
+	else:
+		_enemy_hp_val = maxi(0, _enemy_hp_val - dmg)
+		_flash_bar(_enemy_hp, Color(1.0, 0.85, 0.35) if crit else Color(0.4, 0.9, 1.0))
+	_update_hp_ui()
+	if crit or ability:
+		_shake_stage(11.0)
+		_screen_flash()
+		if _backdrop:
+			_backdrop.set_pulse(true)
+			get_tree().create_timer(0.45).timeout.connect(func() -> void:
+				if is_instance_valid(_backdrop):
+					_backdrop.set_pulse(false)
+			)
+
+
+func _maybe_ability_banner(ev: Dictionary) -> void:
+	var banner := ClassPassives.resolve_ability_banner(
+		ev, GameManager.active_character, _opp()
+	)
+	if banner.is_empty():
+		return
+	_show_ability_banner(banner)
+
+
+func _show_ability_banner(banner: Dictionary) -> void:
+	if _ability_banner == null:
+		return
+	var color: Color = banner.get("color", ClientUi.CYAN)
+	var side := str(banner.get("side", "player"))
+	_ability_banner.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(color, 0.14), Color(color, 0.7), 12, 2)
+	)
+	_ability_emoji.text = _class_emoji(str(banner.get("className", "")))
+	_ability_title.text = str(banner.get("name", ""))
+	_ability_title.add_theme_color_override("font_color", color)
+	var detail := str(banner.get("detail", ""))
+	_ability_detail.visible = not detail.is_empty()
+	_ability_detail.text = detail
+	_ability_detail.add_theme_color_override("font_color", Color(color, 0.95))
+	_ability_class.text = str(banner.get("className", "")).to_upper()
+	_ability_class.add_theme_color_override("font_color", Color(color, 0.7))
+
+	_ability_banner.reset_size()
+	var bw := maxf(140.0, _ability_banner.get_combined_minimum_size().x)
+	var bh := maxf(72.0, _ability_banner.get_combined_minimum_size().y)
+	if side == "player":
+		_ability_banner.position = Vector2(24, _stage.size.y * 0.36)
+	else:
+		_ability_banner.position = Vector2(_stage.size.x - bw - 24, _stage.size.y * 0.36)
+	_ability_banner.size = Vector2(bw, bh)
+	_ability_banner.visible = true
+	_ability_banner.modulate.a = 0.0
+	_ability_banner.scale = Vector2(0.85, 0.85)
+	var tween := _ability_banner.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(_ability_banner, "modulate:a", 1.0, 0.14)
+	tween.tween_property(_ability_banner, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.chain().tween_property(_ability_banner, "modulate:a", 0.0, 0.18).set_delay(0.35)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(_ability_banner):
+			_ability_banner.visible = false
+	)
+
+
+func _swing_weapon(side: String) -> void:
+	var wlab := _player_weapon_label if side == "player" else _enemy_weapon_label
+	if wlab == null or not is_instance_valid(wlab):
+		return
+	var weapon: Dictionary = _player_weapon if side == "player" else _enemy_weapon
+	var style := str(weapon.get("style", "swing"))
+	var dir := 1.0 if side == "player" else -1.0
+	var tween := wlab.create_tween()
+	match style:
+		"stab":
+			tween.tween_property(wlab, "position:x", dir * 18.0, 0.12)
+			tween.tween_property(wlab, "position:x", 0.0, 0.18)
+		"shoot":
+			tween.tween_property(wlab, "scale", Vector2(1.25, 1.25), 0.08)
+			tween.tween_property(wlab, "scale", Vector2.ONE, 0.16)
+		_:
+			tween.tween_property(wlab, "rotation", dir * -0.9, 0.12)
+			tween.tween_property(wlab, "rotation", dir * 0.35, 0.12)
+			tween.tween_property(wlab, "rotation", 0.0, 0.16)
+
+
+func _card_for(side: Variant) -> Control:
+	if side == null:
+		return null
+	return _player_card if str(side) == "player" else _enemy_card
+
+
+func _lunge(card: Control, side: Variant) -> void:
+	if card == null or not is_instance_valid(card) or side == null:
+		return
+	var direction := 1.0 if str(side) == "player" else -1.0
+	var tween := card.create_tween()
+	tween.tween_property(card, "position:x", direction * LUNGE_DISTANCE, 0.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(card, "position:x", 0.0, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _slip(card: Control, side: Variant) -> void:
+	if card == null or not is_instance_valid(card) or side == null:
+		return
+	var direction := -1.0 if str(side) == "player" else 1.0
+	var tween := card.create_tween()
+	tween.tween_property(card, "position:x", direction * 28.0, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(card, "position:x", 0.0, 0.22).set_trans(Tween.TRANS_SINE)
+
+
+func _impact(card: Control, crit: bool) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	card.pivot_offset = card.size * 0.5
+	card.modulate = Color(1.0, 0.42, 0.45) if not crit else Color(1.0, 0.82, 0.4)
+	card.scale = Vector2(0.94, 0.94) if crit else Vector2(0.97, 0.97)
+	var tween := card.create_tween().set_parallel(true)
+	tween.tween_property(card, "modulate", Color.WHITE, 0.3)
+	tween.tween_property(card, "scale", Vector2.ONE, 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_spark(card, crit)
+
+
+func _spark(card: Control, crit: bool) -> void:
+	if _fx_layer == null or not is_instance_valid(_fx_layer):
+		return
+	var spark := Label.new()
+	spark.text = "✸"
+	spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spark.add_theme_font_size_override("font_size", 48 if crit else 32)
+	spark.add_theme_color_override("font_color", Color("#FBBF24") if crit else Color(1, 1, 1, 0.95))
+	ClientUi.apply_display_font(spark)
+	_fx_layer.add_child(spark)
+	spark.position = _fx_point(card) - Vector2(16, 16)
+	spark.pivot_offset = Vector2(16, 16)
+	spark.scale = Vector2(0.3, 0.3)
+	var tween := spark.create_tween().set_parallel(true)
+	tween.tween_property(spark, "scale", Vector2(1.7, 1.7), 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(spark, "modulate:a", 0.0, 0.4)
+	tween.chain().tween_callback(spark.queue_free)
+
+
+func _float_text(card: Control, text: String, color: Color, big: bool) -> void:
+	if _fx_layer == null or not is_instance_valid(_fx_layer) or card == null:
+		return
+	var label := Label.new()
+	label.text = text
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 30 if big else 20)
+	label.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(label)
+	_fx_layer.add_child(label)
+	var origin := _fx_point(card) - Vector2(24, 10)
+	label.position = origin
+	label.pivot_offset = Vector2(24, 10)
+	label.scale = Vector2(0.65, 0.65)
+	var tween := label.create_tween().set_parallel(true)
+	tween.tween_property(label, "position:y", origin.y - 52.0, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, 0.66).set_delay(0.16)
+	tween.chain().tween_callback(label.queue_free)
+
+
+func _fx_point(card: Control) -> Vector2:
+	if card == null or not is_instance_valid(card) or _fx_layer == null:
+		return Vector2.ZERO
+	var center: Vector2 = card.get_global_transform() * (card.size * 0.5)
+	return _fx_layer.get_global_transform().affine_inverse() * center
+
+
+func _shake_stage(strength: float) -> void:
+	if _fighters == null or not is_instance_valid(_fighters):
+		return
+	var base := _fighters.position
+	var tween := _fighters.create_tween()
+	for offset in [
+		Vector2(-strength, strength * 0.45),
+		Vector2(strength * 0.82, -strength * 0.27),
+		Vector2(-strength * 0.55, strength * 0.18),
+		Vector2(strength * 0.36, 0),
+		Vector2.ZERO,
+	]:
+		tween.tween_property(_fighters, "position", base + offset, 0.055).set_trans(Tween.TRANS_SINE)
+
+
+func _screen_flash() -> void:
+	if _flash == null:
+		return
+	_flash.color = Color(1, 1, 1, 0.22)
+	var tw := _flash.create_tween()
+	tw.tween_property(_flash, "color:a", 0.0, 0.28)
+
+
+func _flash_bar(bar: ProgressBar, color: Color) -> void:
+	var tw := create_tween()
+	bar.modulate = color
+	tw.tween_property(bar, "modulate", Color.WHITE, 0.25)
+
+
+func _on_skip() -> void:
+	if _busy or _finished:
+		return
+	_generation += 1
+	_playing = false
+	var battle: Dictionary = _battle()
+	_player_hp_val = maxi(0, int(battle.get("playerEndHp", _player_hp_val)))
+	_enemy_hp_val = maxi(0, int(battle.get("opponentEndHp", _enemy_hp_val)))
+	_update_hp_ui()
+	_event_i = _events.size()
+	# Web SKIP calls onDone immediately (settle + rewards).
+	_settle_and_show_rewards()
+
+
+func _show_outro() -> void:
+	if _finished:
+		return
+	_playing = false
+	_phase = "outro"
+	_skip_btn.visible = false
+	_combo_wrap.visible = false
+	var won := str(_battle().get("winner", "opponent")) == "player"
+	_outro_title.text = "VICTORY" if won else "DEFEAT"
+	_outro_title.add_theme_color_override("font_color", Color("#FBBF24") if won else Color("#FB7185"))
+	if _is_mission():
+		_outro_sub.text = "The path home is clear." if won else "The encounter overwhelms you…"
+		_outro_btn.text = "VIEW REWARDS" if won else "VIEW RESULTS"
+	else:
+		_outro_sub.text = "Glory to the galaxy." if won else "You fall... but you'll rise again."
+		_outro_btn.text = "VIEW REWARDS" if won else "VIEW RESULTS"
+	if won:
+		ClientUi.apply_primary_button(_outro_btn)
+	else:
+		ClientUi.apply_danger_button(_outro_btn)
+	for tween in _idle_tweens:
+		if tween != null and tween.is_valid():
+			tween.kill()
+	_idle_tweens.clear()
+	_settle_fighter(_player_card if won else _enemy_card, true)
+	_settle_fighter(_enemy_card if won else _player_card, false)
+	_outro_layer.visible = true
+	_outro_layer.modulate.a = 0.0
+	var tw := _outro_layer.create_tween()
+	tw.tween_property(_outro_layer, "modulate:a", 1.0, 0.25)
+
+
+func _settle_fighter(card: Control, victorious: bool) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	card.pivot_offset = card.size * 0.5
+	var tween := card.create_tween().set_parallel(true)
+	if victorious:
+		tween.tween_property(card, "modulate", Color(1.18, 1.18, 1.12, 1.0), 0.35)
+		tween.tween_property(card, "scale", Vector2(1.05, 1.05), 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	else:
+		tween.tween_property(card, "modulate", Color(0.55, 0.55, 0.62, 0.75), 0.4)
+		tween.tween_property(card, "rotation", 0.09, 0.4).set_trans(Tween.TRANS_SINE)
+		tween.tween_property(card, "position:y", 12.0, 0.4).set_trans(Tween.TRANS_SINE)
+
+
+func _on_outro_continue() -> void:
+	if _busy:
+		return
+	_outro_btn.disabled = true
+	_settle_and_show_rewards()
+
+
+func _settle_and_show_rewards() -> void:
+	if _busy:
+		return
+	_busy = true
+	_finished = true
+	_playing = false
+	_skip_btn.disabled = true
+	_skip_btn.visible = false
+	_outro_layer.visible = false
+	var mission_won := false
+	if _is_mission():
+		mission_won = str(_battle().get("winner", "opponent")) == "player"
+	var res: Dictionary
+	if _is_mission():
+		res = await MissionManager.resolve_combat_outcome()
+	else:
+		res = await ArenaManager.finish_battle()
+	_busy = false
+	if not res.ok:
+		_outro_layer.visible = true
+		_outro_sub.text = str(res.get("error", "Settle failed"))
+		_outro_btn.disabled = false
+		_skip_btn.disabled = false
+		_skip_btn.visible = true
+		_finished = false
+		return
+	if _is_mission():
+		if mission_won:
+			AudioManager.play_ui("claim")
+		else:
+			AudioManager.play_ui("hit")
+		ProgressManager.toast_newly_unlocked(
+			self, res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+		)
+		await _show_mission_result(mission_won, res.data if typeof(res.data) == TYPE_DICTIONARY else {})
+		return
+	var result: Dictionary = res.get("result", {}) if typeof(res.get("result", {})) == TYPE_DICTIONARY else {}
+	if bool(result.get("won", false)):
+		AudioManager.play_ui("claim")
+	else:
+		AudioManager.play_ui("hit")
+	ProgressManager.toast_newly_unlocked(self, res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {})
+	await _show_result(result)
+
+
+func _show_mission_result(won: bool, data: Dictionary) -> void:
+	for tween in _idle_tweens:
+		if tween != null and tween.is_valid():
+			tween.kill()
+	_idle_tweens.clear()
+
+	if bool(data.get("mission_missing", false)):
+		var missing := CombatSheets.make_complete_sheet({
+			"won": false,
+			"mode": "mission",
+			"title": "Mission record lost",
+			"subtitle": "Your ship has been recalled — no rewards were issued.",
+			"note": "Launch a new mission from the cantina.",
+			"actions": [
+				{"label": "Back to Cantina", "primary": true, "callback": func() -> void: GameManager.go_cantina()},
+			],
+		}, func() -> void: GameManager.go_cantina())
+		_sheet_host.mouse_filter = Control.MOUSE_FILTER_STOP
+		_sheet_host.add_child(missing)
+		return
+
+	var gains: Dictionary = data.get("gains", {}) if typeof(data.get("gains", {})) == TYPE_DICTIONARY else {}
+	var items: Array = data.get("items", []) if typeof(data.get("items", [])) == TYPE_ARRAY else []
+	var gear = items[0] if items.size() > 0 and typeof(items[0]) == TYPE_DICTIONARY else null
+	var go_cantina := func() -> void: GameManager.go_cantina()
+	var go_secondary := func() -> void:
+		if won:
+			GameManager.go_inventory()
+		else:
+			GameManager.go_hub()
+	var summary := {
+		"won": won,
+		"mode": "mission",
+		"title": "Mission claimed!" if won else "Mission failed",
+		"subtitle": "" if won else "No stardust, XP, or loot. Fuel was already spent.",
+		"xp": int(gains.get("experience", 0)) if won else 0,
+		"stardust": int(gains.get("stardust", 0)) if won else 0,
+		"gear_item": gear,
+		"note": ("%s item(s) recovered" % items.size()) if won and items.size() > 1 else "",
+		"actions": [
+			{"label": "Cantina", "primary": true, "callback": go_cantina},
+			{"label": "Inventory" if won else "Hub", "primary": false, "callback": go_secondary},
+		],
+	}
+	var sheet := CombatSheets.make_complete_sheet(summary, go_cantina)
+	_sheet_host.mouse_filter = Control.MOUSE_FILTER_STOP
+	_sheet_host.add_child(sheet)
+
+	var next_level := int(GameManager.active_character.get("level", _prev_level))
+	if won and next_level > _prev_level:
+		await get_tree().create_timer(0.4).timeout
+		var dismiss_levelup := func() -> void:
+			for child in _sheet_host.get_children():
+				if child != sheet:
+					child.queue_free()
+		_sheet_host.add_child(CombatSheets.make_level_up_sheet(
+			_prev_level, next_level, GameManager.active_character, dismiss_levelup
+		))
+
+
+func _show_result(result: Dictionary) -> void:
+	var won := bool(result.get("won", false))
+	var rewards: Dictionary = result.get("rewards", {}) if typeof(result.get("rewards", {})) == TYPE_DICTIONARY else {}
+	var opp: Dictionary = result.get("opp", {}) if typeof(result.get("opp", {})) == TYPE_DICTIONARY else {}
+	var delta := int(rewards.get("arena_rating_delta", 0))
+	var was_free := bool(result.get("is_free", rewards.get("free", true)))
+	var nova_spent := int(result.get("nova_spent", 0))
+	var note := ""
+	if not won:
+		note = "No rewards on defeat."
+	elif not was_free:
+		note = "Paid battle — rating only."
+	else:
+		note = "Free battle rewards applied."
+	if nova_spent > 0:
+		note += " Nova spent: %s." % nova_spent
+
+	var summary := {
+		"won": won,
+		"mode": "arena",
+		"title": ("Defeated %s" if won else "Defeated by %s") % str(opp.get("name", "rival")),
+		"subtitle": "Rating now %s" % str(GameManager.active_character.get("arena_rating", "?")),
+		"xp": int(rewards.get("experience", 0)),
+		"stardust": int(rewards.get("stardust", 0)),
+		"rating_delta": delta,
+		"note": note,
+		"actions": [
+			{"label": "Back to Arena", "primary": true, "callback": func() -> void: GameManager.go_arena()},
+			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
+		],
+	}
+	var sheet := CombatSheets.make_complete_sheet(summary, func() -> void: GameManager.go_arena())
+	_sheet_host.mouse_filter = Control.MOUSE_FILTER_STOP
+	_sheet_host.add_child(sheet)
+
+	var next_level := int(GameManager.active_character.get("level", _prev_level))
+	if next_level > _prev_level:
+		await get_tree().create_timer(0.45).timeout
+		var level_sheet := CombatSheets.make_level_up_sheet(
+			_prev_level, next_level, GameManager.active_character,
+			func() -> void:
+				for child in _sheet_host.get_children():
+					if child != sheet:
+						child.queue_free()
+		)
+		_sheet_host.add_child(level_sheet)

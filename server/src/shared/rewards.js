@@ -17,15 +17,20 @@ function getInventoryCap(ch) {
   return 10;
 }
 
+/** Keep in sync with src/lib/gameData.js ITEM_NAMES (Cosmic Vault keys). */
 const ITEM_NAMES = {
-  weapon: ["Plasma Cutter", "Void Lance", "Pulse Blaster", "Quantum Repeater", "Starforged Blade", "Ion Carbine"],
-  armor: ["Aegis Plate", "Nebula Weave", "Carbon Carapace", "Flux Barrier", "Void Shell", "Titan Plating"],
-  helmet: ["Sensor Crown", "Visor of Foresight", "Neural Helm", "Starlit Mask", "Breach Visor"],
-  boots: ["Gravity Greaves", "Photon Striders", "Comet Steps", "Drift Walkers", "Mag-Lock Treads"],
+  weapon: [
+    "Plasma Rifle", "Ion Blaster", "Photon Cannon", "Pulse Repeater", "Neutrino Sniper", "Graviton Shotgun",
+    "Phase Pistol", "Singularity Cannon", "Void Saber", "Photon Cleaver", "Starforged Blade", "Quantum Dagger",
+    "Shadow Needle", "Phase Knife", "Nebula Bow", "Ion Longbow", "Graviton Axe", "Titan Maul", "Arc Staff", "Psionic Wand",
+  ],
+  armor: ["Nanoweave Suit", "Titan Plating", "Void Shell", "Quantum Mesh", "Stellar Guard", "Plasma Coat", "Crystal Carapace", "Shadow Shroud"],
+  helmet: ["Neural Crown", "Scan Visor", "Astral Helm", "Combat HUD", "Psi Amplifier", "Void Mask", "Star Circlet", "Echo Chamber"],
+  boots: ["Gravity Boots", "Phase Walkers", "Jet Treads", "Stealth Soles", "Mag-Lock Greaves", "Drift Runners", "Storm Striders", "Warp Steps"],
   legs: ["Void Greaves", "Plasma Leggings", "Titan Leg Plates", "Phase Treads", "Graviton Greaves"],
   neck: ["Quantum Amulet", "Void Collar", "Nebula Pendant", "Star Choker", "Plasma Torc"],
-  accessory: ["Phase Ring", "Chrono Charm", "Lucky Comet", "Soul Capacitor", "Orbit Band"],
-  ship_module: ["Warp Coil", "Shield Matrix", "Targeting Array", "Singularity Core", "Nav Beacon"],
+  accessory: ["Quantum Amulet", "Data Core Ring", "Nebula Charm", "Warp Beacon", "Chrono Band", "Star Shard Pendant", "Void Capacitor", "Neural Link"],
+  ship_module: ["Warp Drive MK-I", "Shield Amplifier", "Cargo Expander", "Sensor Array", "Cloaking Module", "Turret System", "Engine Booster", "Hull Reinforcement"],
 };
 
 function pick(arr, rng = Math.random) {
@@ -44,8 +49,10 @@ export function randomItem(rarity, level = 1, type, rng = Math.random, className
     : pick(EQUIPMENT_SLOTS, rng);
   const names = ITEM_NAMES[t] || ITEM_NAMES.weapon;
   const { stats } = rollItemStats({ itemLevel, type: t, rarity, rng, className });
+  const baseName = pick(names, rng);
   const item = {
-    name: pick(names, rng),
+    name: baseName,
+    base_name: baseName,
     type: t,
     rarity,
     level_requirement: itemLevel,

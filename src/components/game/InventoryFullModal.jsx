@@ -210,7 +210,7 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
     }
   }
 
-  async function useStim(item, isFocus) {
+  async function consumeStim(item, isFocus) {
     if (!character || busyId || !isStim(item)) return;
     setBusyId(item.id || "focus-use");
     try {
@@ -356,7 +356,7 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
                 )}
                 {mode === "loot" && isStim(pendingItem) && (
                   <button
-                    onClick={() => useStim(pendingItem, true)}
+                    onClick={() => consumeStim(pendingItem, true)}
                     disabled={busy}
                     className="text-[10px] px-2.5 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
                   >
@@ -423,7 +423,7 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
                     <div className="flex flex-col gap-1 shrink-0">
                       {isStim(item) && mode !== "overflow" && (
                         <button
-                          onClick={() => useStim(item, false)}
+                          onClick={() => consumeStim(item, false)}
                           disabled={busy}
                           className="text-[10px] px-2.5 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 font-display font-bold tracking-wide disabled:opacity-40 flex items-center gap-1"
                         >

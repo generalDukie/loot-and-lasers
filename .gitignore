@@ -31,3 +31,7 @@ server/node_modules/
 
 .env
 .vite
+
+# Godot client caches (project lives in loot&lasers/)
+**/loot&lasers/.godot/
+**/.godot/

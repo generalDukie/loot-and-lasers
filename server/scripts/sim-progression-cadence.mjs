@@ -1,6 +1,7 @@
 /**
  * Light Monte Carlo: 300 Fuel/day mission XP + dungeon first-clear XP → days to L200.
- * Not a full economy sim — validates progression cadence vs balance targets (~14 days).
+ * Validates early cadence (~14 days) and dungeon XP share (~25%) after the smooth
+ * XP/Fuel formula + Post200Growth requirement curve.
  *
  * Run: node --import ./server/scripts/register-src-alias.mjs ./server/scripts/sim-progression-cadence.mjs
  */

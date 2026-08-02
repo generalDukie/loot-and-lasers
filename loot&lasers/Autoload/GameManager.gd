@@ -242,13 +242,18 @@ func go_codex() -> void:
 
 
 func open_game_page(path: String) -> void:
-	close_overlay()
 	change_state(GameState.IN_GAME)
-	pending_page_path = path
 	var current := get_tree().current_scene
 	if current != null and current.is_in_group("game_shell") and current.has_method("show_page"):
+		# Drop rapid/duplicate clicks before a deferred show_page can stack.
+		if current.has_method("try_begin_page_nav") and not current.try_begin_page_nav(path):
+			return
+		close_overlay()
+		pending_page_path = path
 		current.call_deferred("show_page", path)
 		return
+	close_overlay()
+	pending_page_path = path
 	_change_scene(SCENE_GAME_SHELL)
 
 

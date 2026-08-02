@@ -79,9 +79,11 @@ func _build() -> void:
 	bottom_grad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bottom_grad)
 
+	# Keep the bottom clear for mission_run's rocket timer overlay (~117px).
 	var vignette := ColorRect.new()
 	vignette.set_anchors_preset(PRESET_BOTTOM_WIDE)
-	vignette.offset_top = -187
+	vignette.offset_top = -280
+	vignette.offset_bottom = -100
 	vignette.color = Color(0.02, 0.03, 0.06, 0.72)
 	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(vignette)
@@ -102,8 +104,9 @@ func _build() -> void:
 	_caption.set_anchors_preset(PRESET_BOTTOM_WIDE)
 	_caption.offset_left = 24
 	_caption.offset_right = -24
-	_caption.offset_top = -160
-	_caption.offset_bottom = -112
+	# Sit above the rocket timer overlay so caption and bar do not fight.
+	_caption.offset_top = -210
+	_caption.offset_bottom = -140
 	_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_caption.add_theme_font_size_override("font_size", 20)
 	_caption.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 0.95))

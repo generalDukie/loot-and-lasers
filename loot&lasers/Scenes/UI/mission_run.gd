@@ -208,7 +208,7 @@ func _build() -> void:
 	_timer_label = _overlay_timer
 
 	_progress_track = Control.new()
-	_progress_track.custom_minimum_size = Vector2(0, 24)
+	_progress_track.custom_minimum_size = Vector2(0, 22)
 	_progress_track.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_progress_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_progress_track.clip_contents = false
@@ -219,19 +219,31 @@ func _build() -> void:
 	track_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	track_bg.add_theme_stylebox_override(
 		"panel",
-		ClientUi.painted_panel_style(Color(0.08, 0.1, 0.14, 0.85), Color(0.35, 0.4, 0.5, 0.4), 9, 1)
+		ClientUi.painted_panel_style(Color(0.08, 0.1, 0.14, 0.85), Color(0.35, 0.4, 0.5, 0.4), 11, 1)
 	)
 	_progress_track.add_child(track_bg)
+
+	# Clip fill to rounded track; rocket sits on the tip and may overhang.
+	var fill_clip := Control.new()
+	fill_clip.name = "FillClip"
+	fill_clip.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	fill_clip.offset_left = 2
+	fill_clip.offset_top = 2
+	fill_clip.offset_right = -2
+	fill_clip.offset_bottom = -2
+	fill_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fill_clip.clip_contents = true
+	_progress_track.add_child(fill_clip)
 
 	_progress_fill = ColorRect.new()
 	_progress_fill.color = ClientUi.CYAN
 	_progress_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_progress_fill.set_anchors_preset(PRESET_LEFT_WIDE)
+	_progress_fill.set_anchors_and_offsets_preset(PRESET_LEFT_WIDE)
 	_progress_fill.anchor_right = 0.0
 	_progress_fill.offset_right = 0
-	_progress_track.add_child(_progress_fill)
+	fill_clip.add_child(_progress_fill)
 
-	# Gradient stand-in: left cyan panel + right purple hint via second rect
+	# Cyan → violet stand-in (web gradient).
 	var fill_right := ColorRect.new()
 	fill_right.name = "FillAccent"
 	fill_right.color = Color(ClientUi.VIOLET, 0.85)
@@ -347,15 +359,15 @@ func _refresh_timer() -> void:
 
 
 func _set_progress(progress: float, done: bool) -> void:
-	if not is_instance_valid(_progress_track):
+	if not is_instance_valid(_progress_track) or not is_instance_valid(_progress_fill):
 		return
-	var w := maxf(_progress_track.size.x, 1.0)
-	var h := maxf(_progress_track.size.y, 18.0)
+	var w := maxf(_progress_track.size.x - 4.0, 1.0)
+	var h := maxf(_progress_track.size.y - 4.0, 14.0)
 	_progress_fill.set_anchors_and_offsets_preset(PRESET_TOP_LEFT)
-	_progress_fill.position = Vector2(2, 2)
-	_progress_fill.size = Vector2(maxi(0, int((w - 4.0) * progress)), h - 4.0)
+	_progress_fill.position = Vector2.ZERO
+	_progress_fill.size = Vector2(maxi(0, int(w * progress)), h)
 	_rocket.set_anchors_and_offsets_preset(PRESET_TOP_LEFT)
-	_rocket.position = Vector2(clampf((w - 4.0) * progress - 10.0, 0.0, w - 22.0), (h - 24.0) * 0.5)
+	_rocket.position = Vector2(clampf(w * progress - 10.0, 0.0, maxf(w - 18.0, 0.0)), (h - 20.0) * 0.5)
 	_rocket.text = "🎉" if done else "🚀"
 	_progress_fill.color = ClientUi.SUCCESS if done else ClientUi.CYAN.lerp(ClientUi.VIOLET, progress)
 

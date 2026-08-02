@@ -66,6 +66,14 @@ func _ready() -> void:
 	clip_contents = true
 	_build()
 	StatsManager.character_changed.connect(_refresh_values)
+	# Defer network boot so shell show_page can finish mounting/animating
+	# without waiting on guild/stats requests (those used to freeze the rail).
+	call_deferred("_start_boot")
+
+
+func _start_boot() -> void:
+	if not is_inside_tree() or not is_instance_valid(self):
+		return
 	await _boot()
 
 
@@ -77,19 +85,19 @@ func _exit_tree() -> void:
 func _boot() -> void:
 	_status.text = "Loading character sheet…"
 	await SocialManager.load_my_guild()
-	if not is_inside_tree():
+	if not is_inside_tree() or not is_instance_valid(self):
 		return
 	var res: Dictionary = await StatsManager.refresh()
-	if not is_inside_tree():
+	if not is_inside_tree() or not is_instance_valid(self):
 		return
 	if not res.ok:
 		_status.text = str(res.get("error", "Failed to load character"))
+		return
 	_populate()
 
 
 func _build() -> void:
 	add_child(ClientUi.make_page_bg(self, "hub"))
-
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 14)
@@ -364,6 +372,8 @@ func _build() -> void:
 
 
 func _populate() -> void:
+	if not is_inside_tree() or not is_instance_valid(self):
+		return
 	_sheet_ready = false
 	_update_hero()
 	_rebuild_doll()
@@ -801,8 +811,8 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	panel.add_child(row)
 	if filled:
 		if can_equip:
-			var arrow := _make_upgrade_arrow(item)
-			if arrow:
+			var arrow: Label = _make_upgrade_arrow(item)
+			if arrow != null:
 				row.add_child(arrow)
 		row.add_child(GearIcon.make(item, 28.0))
 		var name := Label.new()
@@ -855,7 +865,7 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	return panel
 
 
-func _make_upgrade_arrow(item: Dictionary) -> Variant:
+func _make_upgrade_arrow(item: Dictionary) -> Label:
 	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
 	var worn := InventoryRules.find_equipped_of_type(StatsManager.all_items, str(item.get("type", "")))
 	var my_p := InventoryRules.class_power_rating(item, class_key)

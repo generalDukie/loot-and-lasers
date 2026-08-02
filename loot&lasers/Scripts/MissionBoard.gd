@@ -7,6 +7,10 @@ const MISSION_MIN_FUEL := 0.25
 const MISSION_MIN_DURATION_SECONDS := 15
 const MISSION_MAX_DURATION_SECONDS := 1200
 const XP_STARDUST_SCALE := 10
+const MISSION_XP_REBALANCE := 0.85
+const XP_PER_FUEL_LINEAR := 0.5
+const XP_PER_FUEL_POWER := 0.032
+const XP_PER_FUEL_EXP := 1.67
 
 ## Mirrors web `ITEM_DROP_RATES` — preview chips on the mission detail sheet.
 const ITEM_DROP_RATES := {
@@ -49,16 +53,6 @@ const DURATION_RULES := {
 	20: {"min": 300, "max": 1200, "step": 150},
 	21: {"min": 300, "max": 1200, "step": 300},
 }
-
-const XP_PER_FUEL := [
-	[1, 10], [10, 16], [20, 25], [30, 34], [40, 45], [50, 57],
-	[60, 70], [70, 83], [80, 98], [90, 113], [100, 130],
-	[110, 147], [120, 165], [130, 183], [140, 203], [150, 223],
-	[160, 244], [170, 265], [180, 288], [190, 310], [200, 334],
-	[225, 396], [250, 461], [275, 530], [300, 603],
-	[325, 679], [350, 758], [375, 841], [400, 927],
-	[425, 1016], [450, 1108], [475, 1203], [500, 1301],
-]
 
 const TEMPLATES := [
 	{
@@ -204,29 +198,23 @@ static func roll_efficiency(level: int) -> float:
 	return snappedf(raw, 0.01)
 
 
-static func lerp_waypoints(level: int, points: Array) -> float:
-	var L := float(maxi(1, level))
-	if L <= float(points[0][0]):
-		return float(points[0][1])
-	for i in range(1, points.size()):
-		var a: Array = points[i - 1]
-		var b: Array = points[i]
-		if L <= float(b[0]):
-			var t := (L - float(a[0])) / maxf(0.0001, float(b[0]) - float(a[0]))
-			return float(a[1]) + t * (float(b[1]) - float(a[1]))
-	return float(points[points.size() - 1][1])
-
-
+## Mission XP/Fuel (scaled). Mirrors server missionXpPerFuelBase × XP_STARDUST_SCALE.
 static func xp_per_fuel(level: int) -> int:
-	return maxi(1, int(round(lerp_waypoints(level, XP_PER_FUEL)))) * XP_STARDUST_SCALE
+	var L := maxi(1, level)
+	var pre := 10.0 + XP_PER_FUEL_LINEAR * float(L - 1) + XP_PER_FUEL_POWER * (pow(float(L), XP_PER_FUEL_EXP) - 1.0)
+	return maxi(1, int(round(pre))) * XP_STARDUST_SCALE
 
 
 static func sd_per_fuel(level: int) -> int:
 	return StardustEconomy.stardust_per_fuel(level)
 
 
+## Preview includes MISSION_XP_REBALANCE (0.85) — mirrors server computeMissionXpFromFuel.
 static func preview_xp(fuel: float, level: int, efficiency: float) -> int:
-	return maxi(1 if fuel > 0.0 else 0, int(round(fuel * float(xp_per_fuel(level)) * efficiency)))
+	return maxi(
+		1 if fuel > 0.0 else 0,
+		int(round(fuel * float(xp_per_fuel(level)) * efficiency * MISSION_XP_REBALANCE))
+	)
 
 
 ## Mission SD = ROUND(StardustPerFuel(level) * fuel). Efficiency does not apply.

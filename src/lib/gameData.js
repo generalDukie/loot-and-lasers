@@ -940,36 +940,30 @@ export function rollItemRarity(chanceString, playerLevel = 1) {
   return RARITY_ORDER[idx];
 }
 
-/** Linear interpolate a value between [x0,y0] design waypoints. */
-function lerpWaypoints(level, points) {
-  const L = Math.max(1, Math.floor(level || 1));
-  if (L <= points[0][0]) return points[0][1];
-  for (let i = 0; i < points.length - 1; i++) {
-    const [x0, y0] = points[i];
-    const [x1, y1] = points[i + 1];
-    if (L <= x1) {
-      const t = (L - x0) / (x1 - x0);
-      return y0 + (y1 - y0) * t;
-    }
-  }
-  const [xA, yA] = points[points.length - 2];
-  const [xB, yB] = points[points.length - 1];
-  const slope = (yB - yA) / (xB - xA);
-  return yB + slope * (L - xB);
-}
-
 /**
- * XP to next: single closed-form for all levels (pre-scale), then × XP_STARDUST_SCALE once.
- * XPToNextBase(L) = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
+ * XP to next: closed-form base × smooth Post200Growth, then × XP_STARDUST_SCALE once.
+ * Keep in sync with server/src/shared/rewards.js.
  */
 export const XP_REQUIREMENT_MULTIPLIER = 1.35;
+export const POST_200_START_LEVEL = 200;
+export const POST_200_A = 0.8;
+export const POST_200_P = 0.48;
+export const POST_200_B = 0.79;
+export const POST_200_Q = 0.71;
+
+export function post200Growth(level) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  const X = Math.max(0, (L - POST_200_START_LEVEL) / 100);
+  return 1 + POST_200_A * X ** POST_200_P + POST_200_B * X ** POST_200_Q;
+}
 
 export function xpToNextBase(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
-  return Math.max(
+  const base = Math.max(
     1,
     Math.round(XP_REQUIREMENT_MULTIPLIER * 2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683))
   );
+  return Math.max(1, Math.round(base * post200Growth(L)));
 }
 
 export function getExpForLevel(level) {
@@ -979,20 +973,26 @@ export function getExpForLevel(level) {
 /** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
 export const MISSION_XP_REBALANCE = 0.85;
 
-// Design chart: mission XP granted per 1 fuel spent (pre-scale).
-const MISSION_XP_PER_FUEL_WAYPOINTS = [
-  [1, 10], [10, 16], [20, 25], [30, 34], [40, 45], [50, 57],
-  [60, 70], [70, 83], [80, 98], [90, 113], [100, 130],
-  [110, 147], [120, 165], [130, 183], [140, 203], [150, 223],
-  [160, 244], [170, 265], [180, 288], [190, 310], [200, 334],
-  [225, 396], [250, 461], [275, 530], [300, 603],
-  [325, 679], [350, 758], [375, 841], [400, 927],
-  [425, 1016], [450, 1108], [475, 1203], [500, 1301],
-];
+/** Mission XP/Fuel design formula (pre-scale). Keep in sync with server rewards.js. */
+export const XP_PER_FUEL_LINEAR_COEFFICIENT = 0.5;
+export const XP_PER_FUEL_POWER_COEFFICIENT = 0.032;
+export const XP_PER_FUEL_EXPONENT = 1.67;
 
-/** Mission XP per 1 fuel at this level (design chart). */
+export function missionXpPerFuelBase(level = 1) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  return Math.max(
+    1,
+    Math.round(
+      10
+      + XP_PER_FUEL_LINEAR_COEFFICIENT * (L - 1)
+      + XP_PER_FUEL_POWER_COEFFICIENT * (L ** XP_PER_FUEL_EXPONENT - 1)
+    )
+  );
+}
+
+/** Mission XP per 1 fuel; × XP_STARDUST_SCALE exactly once. */
 export function getMissionXpPerFuel(level = 1) {
-  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
+  return missionXpPerFuelBase(level) * XP_STARDUST_SCALE;
 }
 
 /** Mission stardust per 1 fuel at this level (SD/F). */

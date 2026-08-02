@@ -42,10 +42,10 @@ assertEq("L1 XP/fuel", getMissionXpPerFuel(1), 100);
 assertEq("L10 XP/fuel", getMissionXpPerFuel(10), 160);
 assertEq("L1 SD/fuel", getMissionStardustPerFuel(1), 50);
 assertEq("L10 SD/fuel", getMissionStardustPerFuel(10), 80);
-assertEq("L100 XP/fuel", getMissionXpPerFuel(100), 1300);
+assertEq("L100 XP/fuel", getMissionXpPerFuel(100), 1290);
 assertEq("L100 SD/fuel", getMissionStardustPerFuel(100), 2250);
 assertEq("MISSION_XP_REBALANCE", MISSION_XP_REBALANCE, 0.85);
-assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), Math.round(10 * 1300 * 0.85));
+assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), Math.round(10 * 1290 * 0.85));
 
 assertEq("Attr cost #1", getAttributePointCost(1), 100);
 assertEq("Attr cost #10", getAttributePointCost(10), 150);

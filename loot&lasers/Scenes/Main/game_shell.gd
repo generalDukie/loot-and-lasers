@@ -36,9 +36,12 @@ var _effects: ActiveEffectsBar
 var _chrome_stamp: Array = []
 var _activity_mode := ""
 var _activity_styles: Dictionary = {}
-## Serializes shell page swaps so a second Hero click can't free a page mid-_ready.
-var _page_swap_gen := 0
+## Serializes shell page swaps. Overlapping swaps were freeing pages mid-_ready and crashing.
 var _page_swap_busy := false
+var _page_nav_pending := false
+var _page_swap_token := 0
+var _last_nav_ms := 0
+const NAV_COOLDOWN_MS := 450
 
 
 func _ready() -> void:
@@ -281,16 +284,16 @@ func _make_top_chrome() -> Control:
 	_activity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_activity_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_activity_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_activity_label.add_theme_font_size_override("font_size", 13)
+	_activity_label.add_theme_font_size_override("font_size", 12)
 	_activity_label.add_theme_color_override("font_color", ClientUi.SUCCESS)
 	ClientUi.apply_display_font(_activity_label)
 	_activity.add_child(_activity_label)
 	_activity_label.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	_activity_label.offset_left = 13
-	_activity_label.offset_right = -13
-	_activity_label.offset_top = 3
-	_activity_label.offset_bottom = -3
-	_activity.custom_minimum_size = Vector2(235, 48)
+	_activity_label.offset_left = 14
+	_activity_label.offset_right = -14
+	_activity_label.offset_top = 4
+	_activity_label.offset_bottom = -4
+	_activity.custom_minimum_size = Vector2(248, 52)
 
 	_clock = Label.new()
 	_clock.custom_minimum_size.x = 99
@@ -730,9 +733,145 @@ func _nav_groups() -> Array:
 
 
 func _on_nav_pressed(path: String) -> void:
-	if path.is_empty() or path == _page_path:
+	if path.is_empty():
 		return
 	GameManager.open_game_page(path)
+
+
+## Gate for GameManager.open_game_page — drops rapid / duplicate clicks before deferred load.
+func try_begin_page_nav(path: String) -> bool:
+	if path.is_empty():
+		return false
+	if _page_swap_busy or _page_nav_pending:
+		return false
+	if path == _page_path and _page != null and is_instance_valid(_page):
+		return false
+	var now := Time.get_ticks_msec()
+	if now - _last_nav_ms < NAV_COOLDOWN_MS:
+		return false
+	_last_nav_ms = now
+	_page_nav_pending = true
+	return true
+
+
+func show_page(path: String) -> void:
+	_page_nav_pending = false
+	if path.is_empty():
+		return
+	# Never re-enter while a page is mounting — that freed nodes mid-_ready.
+	if _page_swap_busy:
+		return
+	if path == _page_path and _page != null and is_instance_valid(_page):
+		return
+
+	_page_swap_busy = true
+	# Failsafe — never leave the shell permanently locked if a page script errors mid-mount.
+	_page_swap_token += 1
+	var swap_token := _page_swap_token
+	var tree := get_tree()
+	if tree != null:
+		tree.create_timer(2.0).timeout.connect(func() -> void:
+			if _page_swap_busy and _page_swap_token == swap_token:
+				push_warning("Page swap lock released by failsafe")
+				_page_swap_busy = false
+				_page_nav_pending = false
+				_set_nav_buttons_enabled(true)
+		, CONNECT_ONE_SHOT)
+	# Navigating to a normal page dismisses battle overlays (web portal behavior).
+	if path not in [
+		GameManager.SCENE_ARENA_COMBAT,
+		GameManager.SCENE_MISSION_COMBAT,
+		GameManager.SCENE_GALAXY_COMBAT,
+	]:
+		clear_overlays()
+	_page_path = path
+	GameManager.pending_page_path = path
+	ClientUi.apply_atmosphere_mood(_atmosphere, _mood_for_page(path))
+	_sync_hud_mood(_mood_for_page(path))
+	var outgoing_page: Node = null
+	if _page != null and is_instance_valid(_page):
+		var outgoing := _page
+		outgoing_page = outgoing
+		if outgoing is Control:
+			var outgoing_control := outgoing as Control
+			outgoing_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var exit_tween := outgoing_control.create_tween()
+			exit_tween.set_parallel(true)
+			exit_tween.tween_property(outgoing_control, "modulate:a", 0.0, 0.12)
+			exit_tween.tween_property(
+				outgoing_control,
+				"offset_left",
+				outgoing_control.offset_left - 12.0,
+				0.14
+			).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			exit_tween.tween_property(
+				outgoing_control,
+				"offset_right",
+				outgoing_control.offset_right - 12.0,
+				0.14
+			).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			exit_tween.chain().tween_callback(func() -> void:
+				if is_instance_valid(outgoing):
+					outgoing.queue_free()
+			)
+		else:
+			outgoing.queue_free()
+		_page = null
+	var packed := load(path) as PackedScene
+	if packed == null:
+		push_error("Could not load shell page: %s" % path)
+		_page_swap_busy = false
+		return
+	_page = packed.instantiate()
+	# If the page script failed to compile, Godot still returns a bare Control.
+	# Leaving it full-rect + alpha 0 + MOUSE_FILTER_STOP freezes the whole shell.
+	if path == GameManager.SCENE_STATS and not _page.has_method("_populate"):
+		push_error("Hero sheet script failed to load — refusing blank input blocker")
+		_page.free()
+		_page = null
+		_page_path = ""
+		_page_swap_busy = false
+		_set_nav_buttons_enabled(true)
+		return
+	_content.add_child(_page)
+	# Park the fading page under the incoming one, then restack so the live page
+	# sits above flash/HUD for picking and under OverlayHost for battle sheets.
+	if outgoing_page != null and is_instance_valid(outgoing_page):
+		_content.move_child(outgoing_page, 0)
+	_restack_content_layers()
+	if _page is Control:
+		var page_control := _page as Control
+		page_control.mouse_filter = Control.MOUSE_FILTER_STOP
+		page_control.scale = Vector2.ONE
+		page_control.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		page_control.modulate.a = 0.0
+		call_deferred("_fit_page_to_stage")
+		call_deferred("_animate_page_entry", page_control)
+	_update_nav_state()
+	_refresh_chrome()
+	# Unlock immediately after mount — never hold the nav lock across network awaits
+	# (Hero sheet boots with awaits; a hung refresh used to freeze the whole shell).
+	_page_swap_busy = false
+	_set_nav_buttons_enabled(true)
+	_refresh_notif_after_nav()
+
+
+func _refresh_notif_after_nav() -> void:
+	await NotificationManager.refresh_unread()
+	_update_notif_badge()
+
+
+func _set_nav_buttons_enabled(enabled: bool) -> void:
+	# Force-enable the rail after swaps. Older builds disabled buttons during load and
+	# could leave the side nav dead if a Hero mount stalled.
+	for path in _nav_buttons:
+		var data: Dictionary = _nav_buttons[path]
+		var btn: Variant = data.get("button", null)
+		if btn is BaseButton and is_instance_valid(btn):
+			(btn as BaseButton).disabled = not enabled
+			(btn as BaseButton).mouse_default_cursor_shape = (
+				Control.CURSOR_ARROW if not enabled else Control.CURSOR_POINTING_HAND
+			)
 
 
 func toggle_notifications() -> void:
@@ -1073,93 +1212,6 @@ func _refresh_notification_center() -> void:
 		_notif_list.add_child(row)
 
 
-func show_page(path: String) -> void:
-	if path.is_empty():
-		return
-	# Already on this page — hub dock / portrait can re-fire go_stats without checking.
-	if path == _page_path and _page != null and is_instance_valid(_page) and not _page_swap_busy:
-		return
-	# Drop overlapping swaps (double-click Hero while the first load is still booting).
-	if _page_swap_busy:
-		_page_swap_gen += 1
-	_page_swap_busy = true
-	_page_swap_gen += 1
-	var swap_gen := _page_swap_gen
-	# Navigating to a normal page dismisses battle overlays (web portal behavior).
-	if path not in [
-		GameManager.SCENE_ARENA_COMBAT,
-		GameManager.SCENE_MISSION_COMBAT,
-		GameManager.SCENE_GALAXY_COMBAT,
-	]:
-		clear_overlays()
-	_page_path = path
-	GameManager.pending_page_path = path
-	ClientUi.apply_atmosphere_mood(_atmosphere, _mood_for_page(path))
-	_sync_hud_mood(_mood_for_page(path))
-	var outgoing_page: Node = null
-	if _page != null and is_instance_valid(_page):
-		var outgoing := _page
-		outgoing_page = outgoing
-		if outgoing is Control:
-			var outgoing_control := outgoing as Control
-			outgoing_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var exit_tween := outgoing_control.create_tween()
-			exit_tween.set_parallel(true)
-			exit_tween.tween_property(outgoing_control, "modulate:a", 0.0, 0.12)
-			exit_tween.tween_property(
-				outgoing_control,
-				"offset_left",
-				outgoing_control.offset_left - 12.0,
-				0.14
-			).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-			exit_tween.tween_property(
-				outgoing_control,
-				"offset_right",
-				outgoing_control.offset_right - 12.0,
-				0.14
-			).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-			exit_tween.chain().tween_callback(func() -> void:
-				if is_instance_valid(outgoing):
-					outgoing.queue_free()
-			)
-		else:
-			outgoing.queue_free()
-		_page = null
-	var packed := load(path) as PackedScene
-	if packed == null:
-		push_error("Could not load shell page: %s" % path)
-		_page_swap_busy = false
-		return
-	var incoming: Node = packed.instantiate()
-	if swap_gen != _page_swap_gen:
-		# A newer navigation superseded this one before the page entered the tree.
-		incoming.queue_free()
-		return
-	_page = incoming
-	_content.add_child(_page)
-	# Park the fading page under the incoming one, then restack so the live page
-	# sits above flash/HUD for picking and under OverlayHost for battle sheets.
-	if outgoing_page != null and is_instance_valid(outgoing_page):
-		_content.move_child(outgoing_page, 0)
-	_restack_content_layers()
-	if _page is Control:
-		var page_control := _page as Control
-		page_control.mouse_filter = Control.MOUSE_FILTER_STOP
-		page_control.scale = Vector2.ONE
-		page_control.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-		page_control.modulate.a = 0.0
-		call_deferred("_fit_page_to_stage")
-		call_deferred("_animate_page_entry", page_control)
-	_update_nav_state()
-	_refresh_chrome()
-	await NotificationManager.refresh_unread()
-	if swap_gen != _page_swap_gen:
-		return
-	_update_notif_badge()
-	if swap_gen == _page_swap_gen:
-		_page_swap_busy = false
-
-
 func _mood_for_page(path: String) -> String:
 	if path in [
 		GameManager.SCENE_CANTINA,
@@ -1378,6 +1430,12 @@ func _process(_delta: float) -> void:
 
 func _character_stamp() -> Array:
 	var c: Dictionary = GameManager.active_character
+	var mission_tick := -1
+	if MissionManager.has_active_mission():
+		mission_tick = MissionManager.seconds_remaining()
+	var mining_tick := -1
+	if MiningManager.is_mining_busy():
+		mining_tick = int(ceil(float(MiningManager.remaining_ms()) / 1000.0))
 	return [
 		c.get("id", ""),
 		c.get("stardust", 0),
@@ -1390,16 +1448,20 @@ func _character_stamp() -> Array:
 		c.get("active_title", ""),
 		MissionManager.has_active_mission(),
 		MiningManager.is_mining_busy(),
+		mission_tick,
+		mining_tick,
 	]
 
 
 func _on_activity_pressed() -> void:
+	# Always jump back to the live activity screen (mission run while deployed).
 	if MissionManager.has_active_mission():
 		GameManager.go_mission_run()
-	elif MiningManager.is_mining_busy():
+		return
+	if MiningManager.is_mining_busy():
 		GameManager.go_mining()
-	else:
-		GameManager.go_hub()
+		return
+	GameManager.go_hub()
 
 
 func _activity_style_set(mode: String, tint: Color) -> Dictionary:

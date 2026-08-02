@@ -650,7 +650,7 @@ export function computeNovaCrystalCost(item) {
 }
 
 // ═══════════════════════════════════════════
-// ROTATING SHOP / BLACK MARKET (6h armory+stims; daily hot deal)
+// ROTATING SHOP / BLACK MARKET (6h stock; daily hot deal)
 // ═══════════════════════════════════════════
 const SHOP_GEAR_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
 
@@ -680,7 +680,7 @@ const VENDOR_LINES = [
   "Smells like ozone and opportunity in here.",
   "Don't touch the crate unless you're buying the crate.",
   "Whisper what you need. I'll pretend I didn't hear.",
-  "Armory's honest. My smile isn't.",
+  "Market's honest. My smile isn't.",
   "Come back after midnight — same junk, better stories.",
 ];
 
@@ -785,7 +785,7 @@ function makeScrapCrate(seed, i, r, playerLevel, playerClass) {
 }
 
 /**
- * Armory stock (6 pieces). ~8% chance a filler slot is a scrap crate bundle.
+ * Black Market stock (legacy generator). ~8% chance a filler slot is a scrap crate bundle.
  * @param {string} [playerClass] Class for Common–Epic 60/40 pool selection.
  */
 export function generateShopInventory(seed, playerLevel, playerClass) {
@@ -825,7 +825,7 @@ export function generateShopInventory(seed, playerLevel, playerClass) {
   return slots;
 }
 
-/** One spotlight piece per ET day — not affected by Armory restock. */
+/** One spotlight piece per ET day — not affected by Black Market restock. */
 export function generateHotDeal(dayKey, playerLevel, playerClass) {
   const dayNum = String(dayKey || getShopGameDayKey()).split("-").reduce((a, p) => a + Number(p || 0), 0);
   const rng = mulberry32(dayNum * 104729 + 77);

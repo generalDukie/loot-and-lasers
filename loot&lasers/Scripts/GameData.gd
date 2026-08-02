@@ -350,7 +350,7 @@ const VENDOR_LINES: PackedStringArray = [
 	"Smells like ozone and opportunity in here.",
 	"Don't touch the crate unless you're buying the crate.",
 	"Whisper what you need. I'll pretend I didn't hear.",
-	"Armory's honest. My smile isn't.",
+  "Market's honest. My smile isn't.",
 	"Come back after midnight — same junk, better stories.",
 ]
 

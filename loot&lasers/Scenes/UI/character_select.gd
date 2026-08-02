@@ -15,6 +15,7 @@ var _selected_id := ""
 var _active_id := ""
 var _enter_btn: Button
 var _create_btn: Button
+var _unlock_btn: Button
 var _card_buttons: Dictionary = {} # id -> Button
 
 
@@ -82,17 +83,13 @@ func _build() -> void:
 	ClientUi.apply_body_font(_welcome)
 	head.add_child(_welcome)
 
-	var list_wrap := CenterContainer.new()
-	list_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_main_host.add_child(list_wrap)
-
+	# Keep the list in a plain expanding column — CenterContainer collapses
+	# ScrollContainer min-height to 0 and hid every operative card.
 	var list_col := VBoxContainer.new()
-	list_col.custom_minimum_size.x = 960
 	list_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	list_col.add_theme_constant_override("separation", 10)
-	list_wrap.add_child(list_col)
+	_main_host.add_child(list_col)
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -125,6 +122,12 @@ func _build() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
+
+	_unlock_btn = Button.new()
+	_unlock_btn.text = "＋  Unlock Slot · %s 💎" % AccountManager.SLOT_NOVA_COST
+	_apply_accent_button(_unlock_btn)
+	_unlock_btn.pressed.connect(_on_unlock_slot)
+	row.add_child(_unlock_btn)
 
 	_create_btn = Button.new()
 	_create_btn.text = "＋  New"
@@ -217,20 +220,7 @@ func _refresh() -> void:
 	if _selected_id.is_empty():
 		_selected_id = str(_characters[0].get("id", ""))
 
-	var purchased := int(AuthManager.user.get("purchased_slots", 0))
-	var total_slots := mini(MAX_SLOTS, 1 + purchased)
-	var can_create := _characters.size() < total_slots
-	_create_btn.visible = can_create
-	_create_btn.disabled = false
-	_enter_btn.disabled = _selected_id.is_empty() or _switching
-	if not can_create:
-		_status.add_theme_color_override("font_color", ClientUi.MUTED)
-		if total_slots >= MAX_SLOTS:
-			_status.text = "All %s operative slots are filled." % MAX_SLOTS
-		else:
-			_status.text = "%s/%s slots used — unlock another slot in the Crystal Store." % [
-				_characters.size(), total_slots
-			]
+	_update_slot_actions()
 
 	for c in _characters:
 		if typeof(c) != TYPE_DICTIONARY:
@@ -239,6 +229,30 @@ func _refresh() -> void:
 		var card := _make_card(c, cid == _active_id, cid == _selected_id)
 		_list.add_child(card)
 		_card_buttons[cid] = card
+
+
+func _slot_capacity() -> int:
+	return AccountManager.slot_capacity()
+
+
+func _update_slot_actions() -> void:
+	var total_slots := _slot_capacity()
+	var can_create := _characters.size() < total_slots
+	var can_purchase := total_slots < MAX_SLOTS
+	_create_btn.visible = can_create
+	_create_btn.disabled = _switching or _busy
+	_unlock_btn.visible = can_purchase
+	_unlock_btn.disabled = _switching or _busy or _characters.is_empty()
+	_enter_btn.disabled = _selected_id.is_empty() or _switching
+	_status.add_theme_color_override("font_color", ClientUi.MUTED)
+	if can_create:
+		_status.text = "%s/%s slots used." % [_characters.size(), total_slots]
+	elif can_purchase:
+		_status.text = "%s/%s slots used — unlock another for %s 💎 (up to %s total)." % [
+			_characters.size(), total_slots, AccountManager.SLOT_NOVA_COST, MAX_SLOTS,
+		]
+	else:
+		_status.text = "All %s operative slots are filled." % MAX_SLOTS
 
 
 func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Button:
@@ -333,12 +347,66 @@ func _style_card(btn: Button, is_selected: bool) -> void:
 func _on_create_pressed() -> void:
 	if _busy or _switching:
 		return
-	var purchased := int(AuthManager.user.get("purchased_slots", 0))
-	var total_slots := mini(MAX_SLOTS, 1 + purchased)
+	var total_slots := _slot_capacity()
 	if _characters.size() >= total_slots:
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = "No free character slots (max %s)." % total_slots
 		return
+	GameManager.go_character_create()
+
+
+func _on_unlock_slot() -> void:
+	if _busy or _switching:
+		return
+	if _slot_capacity() >= MAX_SLOTS:
+		_status.add_theme_color_override("font_color", ClientUi.MUTED)
+		_status.text = "All %s operative slots are already unlocked." % MAX_SLOTS
+		return
+	var debit_id := _active_id
+	if debit_id.is_empty():
+		debit_id = _selected_id
+	if debit_id.is_empty() and not _characters.is_empty() and typeof(_characters[0]) == TYPE_DICTIONARY:
+		debit_id = str(_characters[0].get("id", ""))
+	if debit_id.is_empty():
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = "Create an operative before buying a slot."
+		return
+	var nova := 0
+	for c in _characters:
+		if typeof(c) == TYPE_DICTIONARY and str(c.get("id", "")) == debit_id:
+			nova = int(c.get("nova_crystals", 0))
+			break
+	if nova < AccountManager.SLOT_NOVA_COST:
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = "Need %s 💎 to unlock a slot — you have %s." % [
+			AccountManager.SLOT_NOVA_COST, nova,
+		]
+		return
+	_busy = true
+	_unlock_btn.disabled = true
+	_create_btn.disabled = true
+	_status.add_theme_color_override("font_color", ClientUi.MUTED)
+	_status.text = "Unlocking slot…"
+	# BuyCharacterSlot debits the account's active operative — pin first if needed.
+	if str(AuthManager.user.get("active_character_id", "")) != debit_id:
+		var pin: Dictionary = await AuthManager.select_character(debit_id)
+		if not pin.ok:
+			_busy = false
+			_update_slot_actions()
+			_status.add_theme_color_override("font_color", ClientUi.DANGER)
+			_status.text = str(pin.get("error", "Could not pin active operative"))
+			return
+		_active_id = debit_id
+	var res: Dictionary = await AccountManager.buy_character_slot()
+	_busy = false
+	if not res.ok:
+		_update_slot_actions()
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = str(res.get("error", "Could not unlock slot"))
+		return
+	_status.add_theme_color_override("font_color", ClientUi.SUCCESS)
+	_status.text = "Slot unlocked (−%s 💎). Create your next operative." % AccountManager.SLOT_NOVA_COST
+	await _refresh()
 	GameManager.go_character_create()
 
 
@@ -361,6 +429,7 @@ func _rebuild_cards() -> void:
 		_list.add_child(card)
 		_card_buttons[cid] = card
 	_enter_btn.disabled = _selected_id.is_empty() or _switching
+	_update_slot_actions()
 
 
 func _enter_selected() -> void:
@@ -379,6 +448,7 @@ func _enter(character: Dictionary) -> void:
 	_enter_btn.disabled = true
 	_enter_btn.text = "⟳  Enter Game"
 	_create_btn.disabled = true
+	_unlock_btn.disabled = true
 	_rebuild_cards()
 	_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	_status.text = "Selecting…"
@@ -387,7 +457,7 @@ func _enter(character: Dictionary) -> void:
 	if not res.ok:
 		_switching = false
 		_enter_btn.text = "↪  Enter Game"
-		_create_btn.disabled = false
+		_update_slot_actions()
 		_rebuild_cards()
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = str(res.get("error", "Could not select character"))

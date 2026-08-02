@@ -327,11 +327,15 @@ static func present_complete_then_level_up(
 			var captured_nav := nav
 			var on_level_done := func() -> void:
 				_clear_sheet_host(host)
+				# Close combat overlay even if nav is a no-op (same underlying page).
+				_dismiss_combat_overlay()
 				if captured_nav.is_valid():
 					captured_nav.call()
 			host.add_child(make_level_up_sheet(from_level, to_level, character, on_level_done))
-		elif nav.is_valid():
-			nav.call()
+		else:
+			_dismiss_combat_overlay()
+			if nav.is_valid():
+				nav.call()
 
 	var sequenced := summary.duplicate(true)
 	var wrapped_actions: Array = []
@@ -349,6 +353,12 @@ static func present_complete_then_level_up(
 	host.visible = true
 	host.mouse_filter = Control.MOUSE_FILTER_STOP
 	host.add_child(make_complete_sheet(sequenced, finish_sequence.bind(primary_nav)))
+
+
+static func _dismiss_combat_overlay() -> void:
+	var gm: Node = Engine.get_main_loop().root.get_node_or_null("/root/GameManager")
+	if gm != null and gm.has_method("close_overlay"):
+		gm.call("close_overlay")
 
 
 static func _clear_sheet_host(host: Control) -> void:

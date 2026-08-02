@@ -1,5 +1,5 @@
 extends Control
-## Black Market — mirrors web ShopPage (header · hot deal · Armory | Stim Lab).
+## Black Market — mirrors web ShopPage (header · hot deal · unified stalls).
 
 var _status: Label
 var _currency_row: HBoxContainer
@@ -143,15 +143,7 @@ func _populate() -> void:
 	if not hot.is_empty():
 		_list.add_child(_make_hot_banner(hot))
 
-	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 10)
-	cols.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_list.add_child(cols)
-
-	# Web: Armory (cyan) left · Stim Lab (amber) right
-	cols.add_child(_make_armory_section())
-	cols.add_child(_make_stim_section())
+	_list.add_child(_make_market_section())
 
 	if _status.text.begins_with("Opening"):
 		_set_status("")
@@ -248,9 +240,9 @@ func _make_hot_banner(item: Dictionary) -> PanelContainer:
 	return panel
 
 
-# ─── Armory / Stim Lab ──────────────────────────────────────────────────────
+# ─── Black Market stalls ────────────────────────────────────────────────────
 
-func _make_armory_section() -> PanelContainer:
+func _make_market_section() -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -268,13 +260,13 @@ func _make_armory_section() -> PanelContainer:
 	head_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(head_col)
 	var t := Label.new()
-	t.text = "⚔  Armory"
+	t.text = "⚔  Black Market"
 	t.add_theme_font_size_override("font_size", 20)
 	t.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(t)
 	head_col.add_child(t)
 	var h := Label.new()
-	h.text = "Haggle · crates sometimes"
+	h.text = "8 stalls · gear & stims mixed · haggle gear"
 	h.add_theme_font_size_override("font_size", 13)
 	h.add_theme_color_override("font_color", ClientUi.MUTED)
 	head_col.add_child(h)
@@ -282,79 +274,29 @@ func _make_armory_section() -> PanelContainer:
 	var restock := Button.new()
 	restock.text = "Restock · 💎 %s" % ShopManager.SHOP_REFRESH_COST
 	_apply_restock_btn(restock, Color("#FBBF24"))
-	restock.pressed.connect(func() -> void: _on_refresh("gear"))
+	restock.pressed.connect(func() -> void: _on_refresh("all"))
 	head.add_child(restock)
 
 	var grid := GridContainer.new()
-	grid.columns = 2
+	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(grid)
 
-	var stock: Array = ShopManager.gear_stock()
+	var stock: Array = ShopManager.shop_stock()
 	if stock.is_empty():
 		grid.add_child(_empty_line("No stock."))
 	else:
 		for item in stock:
 			if typeof(item) != TYPE_DICTIONARY:
 				continue
-			var rarity := str(item.get("rarity", "common"))
-			grid.add_child(_make_gear_card(item, false, ClientUi.rarity_color(rarity)))
-	return panel
-
-
-func _make_stim_section() -> PanelContainer:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.09, 0.07, 0.04, 0.96), Color("#FBBF24", 0.28), 12, 1
-	))
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
-	panel.add_child(col)
-
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 8)
-	col.add_child(head)
-	var head_col := VBoxContainer.new()
-	head_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(head_col)
-	var t := Label.new()
-	t.text = "🧪  Stim Lab"
-	t.add_theme_font_size_override("font_size", 20)
-	t.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(t)
-	head_col.add_child(t)
-	var h := Label.new()
-	h.text = "Timed buffs · Stim Trios"
-	h.add_theme_font_size_override("font_size", 13)
-	h.add_theme_color_override("font_color", ClientUi.MUTED)
-	head_col.add_child(h)
-
-	var restock := Button.new()
-	restock.text = "Restock · 💎 %s" % ShopManager.SHOP_REFRESH_COST
-	_apply_restock_btn(restock, ClientUi.VIOLET)
-	restock.pressed.connect(func() -> void: _on_refresh("consumables"))
-	head.add_child(restock)
-
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(grid)
-
-	var stock: Array = ShopManager.cons_stock()
-	if stock.is_empty():
-		grid.add_child(_empty_line("No stock."))
-	else:
-		for item in stock:
-			if typeof(item) == TYPE_DICTIONARY:
+			if ShopManager.is_stim_slot(item):
 				grid.add_child(_make_cons_card(item))
+			else:
+				var rarity := str(item.get("rarity", "common"))
+				grid.add_child(_make_gear_card(item, false, ClientUi.rarity_color(rarity)))
 	return panel
 
 
@@ -709,10 +651,7 @@ func _on_refresh(which: String) -> void:
 		_set_status(str(res.get("error", "Refresh failed")))
 		_update_meta()
 		return
-	_set_status("🔄 %s restocked (−%s 💎)." % [
-		"Armory" if which == "gear" else "Stim Lab",
-		ShopManager.SHOP_REFRESH_COST,
-	])
+	_set_status("🔄 Black Market restocked (−%s 💎)." % ShopManager.SHOP_REFRESH_COST)
 	_populate()
 
 

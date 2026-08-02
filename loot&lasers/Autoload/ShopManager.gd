@@ -75,6 +75,13 @@ func refresh_shop(which: String) -> Dictionary:
 	return res
 
 
+func shop_stock() -> Array:
+	var stock: Variant = shop_meta.get("shop_stock", [])
+	if typeof(stock) == TYPE_ARRAY and (stock as Array).size() > 0:
+		return stock
+	return gear_stock()
+
+
 func gear_stock() -> Array:
 	var stock: Variant = shop_meta.get("gear_stock", [])
 	return stock if typeof(stock) == TYPE_ARRAY else []
@@ -83,6 +90,12 @@ func gear_stock() -> Array:
 func cons_stock() -> Array:
 	var stock: Variant = shop_meta.get("cons_stock", [])
 	return stock if typeof(stock) == TYPE_ARRAY else []
+
+
+func is_stim_slot(item: Dictionary) -> bool:
+	if item.is_empty():
+		return false
+	return str(item.get("type", "")) == "consumable" or str(item.get("_offerKind", "")) == "stim"
 
 
 func hot_deal() -> Dictionary:

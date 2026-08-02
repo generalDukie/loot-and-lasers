@@ -306,7 +306,7 @@ export default function ShopPage() {
       const usedFree = res.used_free ?? res.data?.used_free ?? freeLeft;
       if (!usedFree) void trackNovaSpend(character, SHOP_REFRESH_COST, "shop_refresh");
       toast({
-        title: "🔄 Bazaar restocked",
+        title: "🔄 Black Market restocked",
         description: usedFree
           ? "Free refresh used — all 8 stalls rerolled."
           : "Premium refresh — all 8 stalls rerolled.",
@@ -568,7 +568,7 @@ export default function ShopPage() {
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
               <div>
                 <h2 className="font-display font-bold text-sm tracking-wide text-foreground flex items-center gap-1.5">
-                  <Swords className="w-3.5 h-3.5 text-cyan-300" /> Bazaar
+                  <Swords className="w-3.5 h-3.5 text-cyan-300" /> Black Market
                 </h2>
                 <p className="text-[9px] text-muted-foreground">8 stalls · gear &amp; stims mixed · haggle gear</p>
               </div>

@@ -53,6 +53,7 @@ var _title_lab: Label
 var _bag_inspect: PanelContainer
 var _bag_inspect_col: VBoxContainer
 var _inspect_item_id := ""
+var _inspect_anchor: Control = null
 var _inspect_hide_token := 0
 var _sheet_ready := false
 
@@ -358,14 +359,11 @@ func _build() -> void:
 	_bag_inspect.visible = false
 	_bag_inspect.z_index = 80
 	_bag_inspect.mouse_filter = Control.MOUSE_FILTER_STOP
-	_bag_inspect.custom_minimum_size = Vector2(280, 0)
-	_bag_inspect.add_theme_stylebox_override(
-		"panel",
-		ClientUi.painted_panel_style(Color(0.05, 0.07, 0.12, 0.98), Color(ClientUi.CYAN, 0.55), 12, 1)
-	)
+	_bag_inspect.custom_minimum_size = Vector2(220, 0)
+	_bag_inspect.add_theme_stylebox_override("panel", _compact_inspect_style(ClientUi.CYAN))
 	add_child(_bag_inspect)
 	_bag_inspect_col = VBoxContainer.new()
-	_bag_inspect_col.add_theme_constant_override("separation", 6)
+	_bag_inspect_col.add_theme_constant_override("separation", 2)
 	_bag_inspect.add_child(_bag_inspect_col)
 	_bag_inspect.mouse_entered.connect(_cancel_hide_bag_inspect)
 	_bag_inspect.mouse_exited.connect(_schedule_hide_bag_inspect)
@@ -764,7 +762,7 @@ func _update_backpack() -> void:
 	for i in range(cap):
 		if i % BAG_COLS == 0:
 			row = HBoxContainer.new()
-			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_theme_constant_override("separation", 6)
 			_bag_grid.add_child(row)
@@ -780,14 +778,14 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	var can_use := filled and InventoryRules.is_consumable(item) and not item_id.is_empty()
 	var can_drag := can_equip
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(0, 0)
+	panel.custom_minimum_size = Vector2(0, 40)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	if filled:
 		var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
 		panel.add_theme_stylebox_override(
 			"panel",
-			ClientUi.painted_panel_style(Color(tint, 0.12), Color(tint, 0.6), 8, 1)
+			_bag_slot_style(Color(tint, 0.12), Color(tint, 0.6))
 		)
 		if can_equip:
 			panel.tooltip_text = ""
@@ -798,14 +796,14 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	else:
 		panel.add_theme_stylebox_override(
 			"panel",
-			ClientUi.painted_panel_style(Color(0.05, 0.06, 0.09, 0.7), Color(0.3, 0.35, 0.42, 0.35), 8, 1)
+			_bag_slot_style(Color(0.05, 0.06, 0.09, 0.7), Color(0.3, 0.35, 0.42, 0.35))
 		)
 		panel.tooltip_text = "Empty bag slot — drop equipped gear here to unequip"
 		panel.modulate.a = 0.55
 
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 4)
 	panel.add_child(row)
@@ -831,7 +829,7 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		var mark := Label.new()
 		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		mark.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		mark.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		mark.text = "·"
@@ -887,6 +885,35 @@ func _make_upgrade_arrow(item: Dictionary) -> Label:
 	return lab
 
 
+func _compact_inspect_style(accent: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.04, 0.055, 0.1, 0.98)
+	sb.border_color = Color(accent, 0.8)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(8)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 8
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	sb.shadow_color = Color(0, 0, 0, 0.4)
+	sb.shadow_size = 6
+	sb.shadow_offset = Vector2(0, 2)
+	return sb
+
+
+func _bag_slot_style(bg: Color, border: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(8)
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	return sb
+
+
 func _cancel_hide_bag_inspect() -> void:
 	_inspect_hide_token += 1
 
@@ -894,14 +921,30 @@ func _cancel_hide_bag_inspect() -> void:
 func _schedule_hide_bag_inspect() -> void:
 	_inspect_hide_token += 1
 	var token := _inspect_hide_token
-	get_tree().create_timer(0.14).timeout.connect(func() -> void:
-		if token == _inspect_hide_token:
-			_hide_bag_inspect()
+	get_tree().create_timer(0.28).timeout.connect(func() -> void:
+		if token != _inspect_hide_token:
+			return
+		if _pointer_over_inspect_zone():
+			return
+		_hide_bag_inspect()
 	)
+
+
+func _pointer_over_inspect_zone() -> bool:
+	var mouse := get_viewport().get_mouse_position()
+	var pad := 8.0
+	if _bag_inspect != null and is_instance_valid(_bag_inspect) and _bag_inspect.visible:
+		if _bag_inspect.get_global_rect().grow(pad).has_point(mouse):
+			return true
+	if _inspect_anchor != null and is_instance_valid(_inspect_anchor):
+		if _inspect_anchor.get_global_rect().grow(pad).has_point(mouse):
+			return true
+	return false
 
 
 func _hide_bag_inspect() -> void:
 	_inspect_item_id = ""
+	_inspect_anchor = null
 	if _bag_inspect:
 		_bag_inspect.visible = false
 
@@ -910,49 +953,60 @@ func _show_bag_inspect(anchor: Control, item: Dictionary) -> void:
 	_cancel_hide_bag_inspect()
 	var item_id := str(item.get("id", ""))
 	_inspect_item_id = item_id
+	_inspect_anchor = anchor
 	_rebuild_bag_inspect(item)
 	_bag_inspect.visible = true
 	_bag_inspect.reset_size()
 	await get_tree().process_frame
 	if _inspect_item_id != item_id or not is_instance_valid(anchor):
 		return
+	_position_bag_inspect(anchor)
+
+
+func _position_bag_inspect(anchor: Control) -> void:
 	var rect := anchor.get_global_rect()
 	var size := _bag_inspect.get_combined_minimum_size()
+	_bag_inspect.size = size
 	var vp := get_viewport_rect().size
-	var pos := Vector2(rect.position.x, rect.position.y - size.y - 8.0)
+	# Overlap the slot so the pointer can move from gear → bubble without a gap.
+	var overlap := 10.0
+	var pos := Vector2(rect.position.x, rect.position.y - size.y + overlap)
 	if pos.y < 8.0:
-		pos.y = rect.end.y + 8.0
+		pos.y = rect.end.y - overlap
 	if pos.x + size.x > vp.x - 8.0:
 		pos.x = maxf(8.0, vp.x - size.x - 8.0)
 	if pos.x < 8.0:
 		pos.x = 8.0
+	if pos.y + size.y > vp.y - 8.0:
+		pos.y = maxf(8.0, vp.y - size.y - 8.0)
 	_bag_inspect.global_position = pos
 
 
 func _rebuild_bag_inspect(item: Dictionary) -> void:
-	for child in _bag_inspect_col.get_children():
-		child.queue_free()
+	while _bag_inspect_col.get_child_count() > 0:
+		var old: Node = _bag_inspect_col.get_child(0)
+		_bag_inspect_col.remove_child(old)
+		old.free()
 	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
 	var item_id := str(item.get("id", ""))
 	var item_type := str(item.get("type", ""))
 	var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
-	_bag_inspect.add_theme_stylebox_override(
-		"panel",
-		ClientUi.painted_panel_style(Color(0.05, 0.07, 0.12, 0.98), Color(tint, 0.75), 12, 1)
-	)
+	_bag_inspect.add_theme_stylebox_override("panel", _compact_inspect_style(tint))
 
 	var title := Label.new()
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title.text = str(item.get("name", "Item"))
-	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_font_size_override("font_size", 14)
 	title.add_theme_color_override("font_color", tint.lightened(0.2))
 	ClientUi.apply_display_font(title)
 	_bag_inspect_col.add_child(title)
 
 	var meta := Label.new()
+	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meta.text = "%s · %s · Lv.%s" % [
 		str(item.get("rarity", "?")), item_type, str(item.get("level_requirement", "?")),
 	]
-	meta.add_theme_font_size_override("font_size", 12)
+	meta.add_theme_font_size_override("font_size", 11)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	_bag_inspect_col.add_child(meta)
@@ -961,8 +1015,9 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 		if InventoryRules.is_equippable(item_type) else {}
 	if not worn.is_empty():
 		var eq_lab := Label.new()
+		eq_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		eq_lab.text = "vs %s" % str(worn.get("name", "equipped"))
-		eq_lab.add_theme_font_size_override("font_size", 12)
+		eq_lab.add_theme_font_size_override("font_size", 11)
 		eq_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(eq_lab)
 		_bag_inspect_col.add_child(eq_lab)
@@ -970,12 +1025,13 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 	if InventoryRules.is_consumable(item):
 		var cons: Dictionary = item.get("consumable", {}) if typeof(item.get("consumable", {})) == TYPE_DICTIONARY else {}
 		var stim := Label.new()
+		stim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		stim.text = "stim · %s +%s%% · %sh" % [
 			str(cons.get("stat", "?")),
 			str(int(round(float(cons.get("mult", 0)) * 100.0))),
 			str(cons.get("duration_hours", "?")),
 		]
-		stim.add_theme_font_size_override("font_size", 13)
+		stim.add_theme_font_size_override("font_size", 12)
 		stim.add_theme_color_override("font_color", ClientUi.CYAN)
 		ClientUi.apply_body_font(stim)
 		_bag_inspect_col.add_child(stim)
@@ -983,6 +1039,7 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 		for row in InventoryRules.compare_lines(item, worn):
 			var d: int = int(row.get("delta", 0))
 			var lab := Label.new()
+			lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			var icon := str(GameData.STAT_ICONS.get(str(row.get("stat", "")), ""))
 			var stat_abbr := str(row.get("stat", "?")).substr(0, 3).to_upper()
 			if worn.is_empty():
@@ -997,7 +1054,7 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 					"font_color",
 					ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else ClientUi.MUTED)
 				)
-			lab.add_theme_font_size_override("font_size", 13)
+			lab.add_theme_font_size_override("font_size", 12)
 			ClientUi.apply_body_font(lab)
 			_bag_inspect_col.add_child(lab)
 
@@ -1006,28 +1063,30 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 		var eq_p := InventoryRules.class_power_rating(worn, class_key) if not worn.is_empty() else 0
 		var delta := my_p - eq_p
 		var verdict := Label.new()
+		verdict.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if worn.is_empty():
 			verdict.text = "▲ Empty slot — equip for pure gain"
 			verdict.add_theme_color_override("font_color", ClientUi.SUCCESS)
 		elif delta > 0:
-			verdict.text = "▲ BETTER OVERALL (+%s)" % delta
+			verdict.text = "▲ BETTER (+%s)" % delta
 			verdict.add_theme_color_override("font_color", ClientUi.SUCCESS)
 		elif delta < 0:
-			verdict.text = "▼ WORSE OVERALL (%s)" % delta
+			verdict.text = "▼ WORSE (%s)" % delta
 			verdict.add_theme_color_override("font_color", ClientUi.DANGER)
 		else:
 			verdict.text = "— EVEN"
 			verdict.add_theme_color_override("font_color", ClientUi.MUTED)
-		verdict.add_theme_font_size_override("font_size", 13)
+		verdict.add_theme_font_size_override("font_size", 12)
 		ClientUi.apply_display_font(verdict)
 		_bag_inspect_col.add_child(verdict)
 
 	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 6)
+	actions.add_theme_constant_override("separation", 4)
 	_bag_inspect_col.add_child(actions)
 	if InventoryRules.is_consumable(item) and not item_id.is_empty():
 		var use_btn := Button.new()
 		use_btn.text = "Use"
+		use_btn.custom_minimum_size = Vector2(0, 26)
 		ClientUi.apply_primary_button(use_btn)
 		use_btn.pressed.connect(func() -> void:
 			_hide_bag_inspect()
@@ -1038,6 +1097,7 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 		var equip_btn := Button.new()
 		var swap := not worn.is_empty()
 		equip_btn.text = "Swap" if swap else "Equip"
+		equip_btn.custom_minimum_size = Vector2(0, 26)
 		ClientUi.apply_primary_button(equip_btn)
 		equip_btn.pressed.connect(func() -> void:
 			_hide_bag_inspect()

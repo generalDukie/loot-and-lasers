@@ -137,14 +137,14 @@ static func body_bbcode(section_id: String) -> String:
 			)
 		"market":
 			return (
-				_p("The [b]Black Market[/b] (Bazaar) sells rotating gear and stims for ✦ stardust. The Armory usually includes a class signature weapon.")
-				+ _h("Armory & Stim Lab")
-				+ _li("Both stalls refresh every [b]6 hours[/b]. Spend [b]%s Nova Crystals[/b] to restock a stall early." % str(ShopManager.SHOP_REFRESH_COST))
+				_p("The [b]Black Market[/b] sells rotating gear and stims for ✦ stardust. Stock usually includes a class signature weapon.")
+				+ _h("Stalls")
+				+ _li("Stock refreshes on a timed window. Spend [b]%s Nova Crystals[/b] to restock early." % str(ShopManager.SHOP_REFRESH_COST))
 				+ _li("Compare listed gear to what you have equipped before buying.")
-				+ _li("[b]Haggle[/b] on armory pieces — about 40% of the time you get 15–20% off; if it fails, they yank the listing (no purchase).")
+				+ _li("[b]Haggle[/b] on gear — about 40% of the time you get 15–20% off; if it fails, they yank the listing (no purchase).")
 				+ _li("Rare [b]Scrap Crates[/b] (2 commons) and [b]Stim Trios[/b] show up as bundle deals.")
 				+ "\n" + _h("Hot Deal")
-				+ _p("One spotlight piece per day (midnight Eastern). It does [b]not[/b] change when you restock the Armory — buy it or wait for tomorrow.")
+				+ _p("One spotlight piece per day (midnight Eastern). It does [b]not[/b] change when you restock the Black Market — buy it or wait for tomorrow.")
 			)
 		"blackhole":
 			return (

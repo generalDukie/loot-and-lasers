@@ -26,7 +26,7 @@ const STARDUST_SOURCE_LABELS = {
   ship_mod: "Ship Mod",
   arena_refresh: "Arena Opponent Refresh",
   shop_buy: "Black Market Purchase",
-  shop_consumable: "Stim Lab Purchase",
+  shop_consumable: "Black Market Stim",
   casino: "Casino Wager",
   fuel_mount: "Fuel Mount",
   guild_create: "Found Guild",

@@ -250,10 +250,13 @@ func open_game_page(path: String) -> void:
 	change_state(GameState.IN_GAME)
 	var current := get_tree().current_scene
 	if current != null and current.is_in_group("game_shell") and current.has_method("show_page"):
+		# Always dismiss combat overlays first. Returning to the same underlying
+		# page (e.g. Arena after arena combat) used to early-out in
+		# try_begin_page_nav before close_overlay — leaving a dead combat screen.
+		close_overlay()
 		# Drop rapid/duplicate clicks before a deferred show_page can stack.
 		if current.has_method("try_begin_page_nav") and not current.try_begin_page_nav(path):
 			return
-		close_overlay()
 		pending_page_path = path
 		current.call_deferred("show_page", path)
 		return

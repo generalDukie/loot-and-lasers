@@ -162,5 +162,4 @@ func _on_chat_poll() -> void:
 	if AuthManager.access_token.is_empty():
 		return
 	chat_event.emit("PrivateMessagePoll", {})
-	# Also refresh friend requests periodically while ChatMessage owns the socket.
-	await SocialManager.load_friends()
+	# Friend lists refresh via WS FriendRequest events — avoid loading every 8s.

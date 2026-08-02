@@ -9,12 +9,14 @@ extends Control
 var _elapsed := 0.0
 var _motes: Array[Dictionary] = []
 var _redraw_accum := 0.0
+var _scan_tex: Texture2D
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	resized.connect(queue_redraw)
+	_ensure_scan_tex()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 0x10F1A
 	for i in 24:
@@ -25,6 +27,22 @@ func _ready() -> void:
 			"size": rng.randf_range(0.6, 1.8),
 			"phase": rng.randf() * TAU,
 		})
+
+
+func set_active(on: bool) -> void:
+	set_process(on)
+	if on:
+		queue_redraw()
+
+
+func _ensure_scan_tex() -> void:
+	if _scan_tex != null:
+		return
+	# 1×6 strip: one lit row + 5 clear — matches old draw_line step of 6.
+	var img := Image.create(1, 6, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	img.set_pixel(0, 0, Color(0.72, 0.9, 1.0, 1.0))
+	_scan_tex = ImageTexture.create_from_image(img)
 
 
 func _process(delta: float) -> void:
@@ -47,9 +65,15 @@ func _draw() -> void:
 
 
 func _draw_scanlines() -> void:
-	var alpha := 0.012 * intensity
-	for y in range(0, int(size.y), 6):
-		draw_line(Vector2(0, y), Vector2(size.x, y), Color(0.72, 0.9, 1.0, alpha), 1.0)
+	if _scan_tex == null:
+		_ensure_scan_tex()
+	# One tiled blit replaces ~180 draw_line calls at 1080p.
+	draw_texture_rect(
+		_scan_tex,
+		Rect2(Vector2.ZERO, size),
+		true,
+		Color(1, 1, 1, 0.012 * intensity)
+	)
 
 
 func _draw_motes() -> void:

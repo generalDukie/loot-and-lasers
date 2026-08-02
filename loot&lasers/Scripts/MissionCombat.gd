@@ -321,6 +321,8 @@ static func simulate_battle(player: Dictionary, enemy: Dictionary, player_items:
 				"defender": defender["side"],
 				"damage": 0,
 				"crit": false,
+				"dodged": true,
+				"shieldHit": false,
 				"text": "%s dodges!" % defender["name"],
 			})
 			ClassPassives.end_attack_mods(attacker, mods)
@@ -344,11 +346,12 @@ static func simulate_battle(player: Dictionary, enemy: Dictionary, player_items:
 			dmg *= (1.0 - mit)
 			dmg = ClassPassives.apply_incoming_mult(defender, dmg)
 			var final_dmg := maxi(0, int(round(dmg)))
+			var barrier_absorbed := 0
 			var barrier := int(defender.get("barrier", 0))
-			if barrier > 0:
-				var absorb := mini(barrier, final_dmg)
-				defender["barrier"] = barrier - absorb
-				final_dmg -= absorb
+			if barrier > 0 and final_dmg > 0:
+				barrier_absorbed = mini(barrier, final_dmg)
+				defender["barrier"] = barrier - barrier_absorbed
+				final_dmg -= barrier_absorbed
 			defender["hp"] = maxi(0, int(defender["hp"]) - final_dmg)
 			ClassPassives.on_hit_dealt(attacker)
 			if crit:
@@ -358,7 +361,10 @@ static func simulate_battle(player: Dictionary, enemy: Dictionary, player_items:
 				"attacker": attacker["side"],
 				"defender": defender["side"],
 				"damage": final_dmg,
+				"barrierAbsorbed": barrier_absorbed,
+				"shieldHit": barrier_absorbed > 0,
 				"crit": crit,
+				"dodged": false,
 				"text": "%s hits %s for %s%s" % [
 					attacker["name"],
 					defender["name"],

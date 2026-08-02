@@ -21,8 +21,13 @@ const BODY_FONT_PATH := "res://Assets/Fonts/Inter-VariableFont_opsz_wght.ttf"
 
 static var _display_font: Font
 static var _body_font: Font
+static var _bold_display_font: Font
 static var _space_shader: Shader
 static var _app_theme: Theme
+static var _painted_style_cache: Dictionary = {}
+static var _button_style_cache: Dictionary = {}
+## Soft nebula renders fine at lower internal resolution; stretch hides the difference.
+const SPACE_RENDER_SCALE := 0.55
 
 
 static func display_font() -> Font:
@@ -44,14 +49,23 @@ static func apply_display_font(control: Control) -> void:
 
 
 static func apply_bold_display_font(control: Control) -> void:
+	var bold := bold_display_font()
+	if bold != null:
+		control.add_theme_font_override("font", bold)
+
+
+static func bold_display_font() -> Font:
+	if _bold_display_font != null:
+		return _bold_display_font
 	var base := display_font()
 	if base == null:
-		return
+		return null
 	var bold := FontVariation.new()
 	bold.base_font = base
 	# Embolden keeps glyphs readable on variable Exo 2 (OT wght alone can fail to draw).
 	bold.variation_embolden = 0.7
-	control.add_theme_font_override("font", bold)
+	_bold_display_font = bold
+	return _bold_display_font
 
 
 static func apply_body_font(control: Control) -> void:
@@ -141,6 +155,9 @@ static func painted_panel_style(
 	radius: int = 10,
 	border_width: int = 2
 ) -> StyleBoxFlat:
+	var key := "%s|%s|%s|%s" % [bg, border, radius, border_width]
+	if _painted_style_cache.has(key):
+		return _painted_style_cache[key]
 	# Web .painted-panel: depth via asymmetric border + restrained drop.
 	var s := StyleBoxFlat.new()
 	s.bg_color = bg
@@ -161,6 +178,7 @@ static func painted_panel_style(
 	s.shadow_color = Color(0.0, 0.0, 0.0, 0.28)
 	s.shadow_size = 10
 	s.shadow_offset = Vector2(0, 4)
+	_painted_style_cache[key] = s
 	return s
 
 
@@ -202,6 +220,9 @@ static func make_painted_frame(
 
 
 static func button_style(bg: Color, border: Color) -> StyleBoxFlat:
+	var key := "%s|%s" % [bg, border]
+	if _button_style_cache.has(key):
+		return _button_style_cache[key]
 	# Web .painted-btn: chunky bottom ledge + inset top highlight.
 	var s := StyleBoxFlat.new()
 	s.bg_color = bg
@@ -225,6 +246,7 @@ static func button_style(bg: Color, border: Color) -> StyleBoxFlat:
 	s.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
 	s.shadow_size = 5
 	s.shadow_offset = Vector2(0, 2)
+	_button_style_cache[key] = s
 	return s
 
 
@@ -440,16 +462,34 @@ static func _gradient_layer(colors: PackedColorArray, radial := false, opacity :
 	return layer
 
 
-static func _space_material_layer(mood: String, opacity: float, intensity: float) -> ColorRect:
+static func _space_material_layer(mood: String, opacity: float, intensity: float) -> Control:
+	## Render the heavy nebula shader at reduced resolution, then stretch.
+	## Soft clouds/stars look identical; GPU cost drops roughly with scale².
+	var host := Control.new()
+	host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.set_meta("space_host", true)
+
+	var vp_size := Vector2i(
+		maxi(320, int(1920.0 * SPACE_RENDER_SCALE)),
+		maxi(180, int(1080.0 * SPACE_RENDER_SCALE))
+	)
+	var viewport := SubViewport.new()
+	viewport.transparent_bg = true
+	viewport.handle_input_locally = false
+	viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	viewport.size = vp_size
+
 	var layer := ColorRect.new()
 	layer.color = Color.WHITE
-	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.size = Vector2(vp_size)
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _space_shader == null and ResourceLoader.exists("res://Shaders/space_backdrop.gdshader"):
 		_space_shader = load("res://Shaders/space_backdrop.gdshader") as Shader
 	if _space_shader == null:
 		layer.color = Color.TRANSPARENT
-		return layer
+		host.add_child(layer)
+		return host
 	var palette: Array = _mood_palette(mood)
 	var material := ShaderMaterial.new()
 	material.shader = _space_shader
@@ -459,7 +499,16 @@ static func _space_material_layer(mood: String, opacity: float, intensity: float
 	material.set_shader_parameter("intensity", intensity)
 	material.set_shader_parameter("transparency", opacity)
 	layer.material = material
-	return layer
+	layer.set_meta("space_shader_rect", true)
+	viewport.add_child(layer)
+
+	var container := SubViewportContainer.new()
+	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	container.stretch = true
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	container.add_child(viewport)
+	host.add_child(container)
+	return host
 
 
 static func is_under_shell(node: Node) -> bool:
@@ -554,11 +603,23 @@ static func apply_atmosphere_mood(screen: Control, mood: String) -> void:
 				tex.gradient.colors = PackedColorArray([Color(palette[3], 0.28), Color(palette[3], 0.0)])
 			else:
 				tex.gradient.colors = PackedColorArray([palette[0], palette[1], palette[2]])
+		elif child.has_meta("space_host"):
+			_apply_space_palette(child, palette)
 		elif child is ColorRect and child.material is ShaderMaterial:
 			var mat := child.material as ShaderMaterial
 			mat.set_shader_parameter("color_deep", palette[1])
 			mat.set_shader_parameter("color_nebula", palette[2])
 			mat.set_shader_parameter("color_accent", palette[3])
+
+
+static func _apply_space_palette(host: Node, palette: Array) -> void:
+	for n in host.find_children("*", "ColorRect", true, false):
+		if n is ColorRect and (n as ColorRect).material is ShaderMaterial:
+			var mat := (n as ColorRect).material as ShaderMaterial
+			mat.set_shader_parameter("color_deep", palette[1])
+			mat.set_shader_parameter("color_nebula", palette[2])
+			mat.set_shader_parameter("color_accent", palette[3])
+			return
 
 
 static func _make_shooting_stars(intensity: float) -> Control:

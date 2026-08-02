@@ -20,10 +20,13 @@ var _activity_label: Label
 var _clock: Label
 var _portrait_host: CenterContainer
 var _notif_btn: Button
+var _notif_badge: Label
+var _notif_dock: Control
 var _notif_panel: PanelContainer
 var _notif_list: VBoxContainer
 var _notif_meta: Label
 var _notif_open := false
+var _notif_auto_close: SceneTreeTimer
 var _transition_flash: ColorRect
 var _atmosphere: Control
 var _hud_overlay: Control
@@ -31,6 +34,8 @@ var _effects: ActiveEffectsBar
 ## Cheap snapshot of the character fields the chrome renders — drives same-frame
 ## readout updates so spending never waits on the 1s clock tick.
 var _chrome_stamp: Array = []
+var _activity_mode := ""
+var _activity_styles: Dictionary = {}
 
 
 func _ready() -> void:
@@ -49,6 +54,42 @@ func _ready() -> void:
 	if target.is_empty():
 		target = GameManager.SCENE_HUB
 	show_page(target)
+
+
+func _notification(what: int) -> void:
+	# Freeze decorative redraws / nebula animation while unfocused — look unchanged in play.
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_set_decor_active(false)
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_set_decor_active(true)
+
+
+func _set_decor_active(on: bool) -> void:
+	if _hud_overlay != null and is_instance_valid(_hud_overlay) and _hud_overlay.has_method("set_active"):
+		_hud_overlay.call("set_active", on)
+	if _atmosphere != null and is_instance_valid(_atmosphere):
+		for child in _atmosphere.get_children():
+			if child.has_method("set_active"):
+				child.call("set_active", on)
+			elif child.has_meta("space_host"):
+				_set_space_animating(child, on)
+	if _portrait_host != null and is_instance_valid(_portrait_host):
+		for n in _portrait_host.find_children("*", "Control", true, false):
+			if n.has_method("set_active"):
+				n.call("set_active", on)
+
+
+func _set_space_animating(host: Node, on: bool) -> void:
+	for n in host.find_children("*", "SubViewport", true, false):
+		if n is SubViewport:
+			(n as SubViewport).render_target_update_mode = (
+				SubViewport.UPDATE_WHEN_VISIBLE if on else SubViewport.UPDATE_DISABLED
+			)
+	for n in host.find_children("*", "ColorRect", true, false):
+		if n is ColorRect and (n as ColorRect).material is ShaderMaterial:
+			var mat := (n as ColorRect).material as ShaderMaterial
+			mat.set_shader_parameter("speed", 0.16 if on else 0.0)
+			return
 
 
 func _build() -> void:
@@ -262,14 +303,6 @@ func _make_top_chrome() -> Control:
 	ClientUi.apply_ghost_button(switch_btn)
 	switch_btn.pressed.connect(func() -> void: GameManager.go_character_select())
 	row.add_child(switch_btn)
-
-	_notif_btn = Button.new()
-	_notif_btn.text = "🔔"
-	_notif_btn.tooltip_text = "Notifications"
-	_notif_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	ClientUi.apply_ghost_button(_notif_btn)
-	_notif_btn.pressed.connect(toggle_notifications)
-	row.add_child(_notif_btn)
 
 	var settings_btn := Button.new()
 	settings_btn.text = "⚙"
@@ -709,24 +742,45 @@ func toggle_notifications() -> void:
 
 func _set_notification_open(open: bool) -> void:
 	_notif_open = open
+	_notif_auto_close = null
+	_sync_notif_fab()
 	if _notif_panel == null or not is_instance_valid(_notif_panel):
 		return
-	_notif_panel.pivot_offset = _notif_panel.size
-	var tween := _notif_panel.create_tween()
-	tween.set_parallel(true)
 	if open:
 		_notif_panel.visible = true
 		_notif_panel.modulate.a = 0.0
-		_notif_panel.scale = Vector2(0.96, 0.96)
-		tween.tween_property(_notif_panel, "modulate:a", 1.0, 0.18)
-		tween.tween_property(_notif_panel, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_notif_panel.scale = Vector2(0.88, 0.88)
+		call_deferred("_play_notif_open_anim")
+		var tree := get_tree()
+		if tree != null:
+			_notif_auto_close = tree.create_timer(30.0)
+			var token := _notif_auto_close
+			token.timeout.connect(func() -> void:
+				if _notif_auto_close != token or not _notif_open:
+					return
+				_set_notification_open(false)
+			)
 	else:
+		var tween := _notif_panel.create_tween()
+		tween.set_parallel(true)
 		tween.tween_property(_notif_panel, "modulate:a", 0.0, 0.14)
-		tween.tween_property(_notif_panel, "scale", Vector2(0.97, 0.97), 0.14)
+		tween.tween_property(_notif_panel, "scale", Vector2(0.92, 0.92), 0.14)
 		tween.chain().tween_callback(func() -> void:
 			if is_instance_valid(_notif_panel) and not _notif_open:
 				_notif_panel.visible = false
+				_notif_panel.scale = Vector2.ONE
 		)
+
+
+func _play_notif_open_anim() -> void:
+	if not _notif_open or _notif_panel == null or not is_instance_valid(_notif_panel):
+		return
+	# Pivot from the FAB corner so the sheet blooms upward/left.
+	_notif_panel.pivot_offset = Vector2(_notif_panel.size.x, _notif_panel.size.y)
+	var tween := _notif_panel.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(_notif_panel, "modulate:a", 1.0, 0.16)
+	tween.tween_property(_notif_panel, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func show_overlay(node: Control) -> void:
@@ -763,44 +817,62 @@ func clear_overlays() -> void:
 	if _overlay_host == null or not is_instance_valid(_overlay_host):
 		return
 	for child in _overlay_host.get_children():
-		if child == _notif_panel:
-			continue
 		child.queue_free()
 	_overlay_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if not _notif_open and is_instance_valid(_notif_panel):
-		_notif_panel.visible = false
 
 
 func _restack_content_layers() -> void:
 	## Pick order is tree order (back→front). Keep decorative layers under the page,
-	## and the overlay host on top so battle sheets receive input.
+	## notification dock above the page, and OverlayHost on top for battle sheets.
 	if _transition_flash != null and is_instance_valid(_transition_flash):
 		_content.move_child(_transition_flash, 0)
 	if _hud_overlay != null and is_instance_valid(_hud_overlay):
 		_content.move_child(_hud_overlay, mini(1, _content.get_child_count() - 1))
 	if _page != null and is_instance_valid(_page):
 		_content.move_child(_page, mini(2, _content.get_child_count() - 1))
+	if _notif_dock != null and is_instance_valid(_notif_dock):
+		_content.move_child(_notif_dock, -1)
 	if _overlay_host != null and is_instance_valid(_overlay_host):
 		_content.move_child(_overlay_host, -1)
 
 
 func _build_notification_center() -> void:
+	## Web NotificationCenter: floating BR round FAB + popover panel.
+	_notif_dock = Control.new()
+	_notif_dock.name = "NotificationDock"
+	_notif_dock.z_index = 90
+	_notif_dock.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_notif_dock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_content.add_child(_notif_dock)
+
+	var stack := VBoxContainer.new()
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.alignment = BoxContainer.ALIGNMENT_END
+	stack.add_theme_constant_override("separation", 10)
+	stack.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	stack.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	stack.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	stack.anchor_left = 1.0
+	stack.anchor_top = 1.0
+	stack.anchor_right = 1.0
+	stack.anchor_bottom = 1.0
+	stack.offset_left = -368
+	stack.offset_top = -440
+	stack.offset_right = -14
+	stack.offset_bottom = -14
+	_notif_dock.add_child(stack)
+
 	_notif_panel = PanelContainer.new()
 	_notif_panel.visible = false
-	_notif_panel.custom_minimum_size = Vector2(352, 420)
+	_notif_panel.custom_minimum_size = Vector2(340, 360)
+	_notif_panel.size_flags_vertical = Control.SIZE_SHRINK_END
+	_notif_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
 	_notif_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_notif_panel.set_anchors_preset(PRESET_CENTER)
-	_notif_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_notif_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_notif_panel.offset_left = -176
-	_notif_panel.offset_top = -210
-	_notif_panel.offset_right = 176
-	_notif_panel.offset_bottom = 210
 	_notif_panel.add_theme_stylebox_override(
 		"panel",
 		_shell_panel_style(Color(0.04, 0.05, 0.09, 0.97), Color(0.28, 0.38, 0.48, 0.7), 16, 10, 10, 1)
 	)
-	_overlay_host.add_child(_notif_panel)
+	stack.add_child(_notif_panel)
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
@@ -829,13 +901,9 @@ func _build_notification_center() -> void:
 		await _refresh_notification_center()
 	)
 	header.add_child(mark)
-	var close := Button.new()
-	close.text = "✕"
-	ClientUi.apply_ghost_button(close)
-	close.pressed.connect(func() -> void: _set_notification_open(false))
-	header.add_child(close)
 
 	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size.y = 280
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(scroll)
 	_notif_list = VBoxContainer.new()
@@ -843,13 +911,114 @@ func _build_notification_center() -> void:
 	_notif_list.add_theme_constant_override("separation", 6)
 	scroll.add_child(_notif_list)
 
+	# Round FAB — mirrors web `w-12 h-12 rounded-full`.
+	var fab_wrap := Control.new()
+	fab_wrap.custom_minimum_size = Vector2(48, 48)
+	fab_wrap.size_flags_horizontal = Control.SIZE_SHRINK_END
+	fab_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(fab_wrap)
+
+	_notif_btn = Button.new()
+	_notif_btn.text = "🔔"
+	_notif_btn.tooltip_text = "Open notifications"
+	_notif_btn.focus_mode = Control.FOCUS_NONE
+	_notif_btn.custom_minimum_size = Vector2(48, 48)
+	_notif_btn.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_notif_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_notif_btn.add_theme_font_size_override("font_size", 18)
+	_style_notif_fab(false)
+	_notif_btn.pressed.connect(toggle_notifications)
+	ClientUi.apply_interaction_motion(_notif_btn, 1.06)
+	fab_wrap.add_child(_notif_btn)
+
+	var badge_chip := PanelContainer.new()
+	badge_chip.visible = false
+	badge_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_chip.z_index = 2
+	badge_chip.anchor_left = 1.0
+	badge_chip.anchor_top = 0.0
+	badge_chip.anchor_right = 1.0
+	badge_chip.anchor_bottom = 0.0
+	badge_chip.offset_left = -8.0
+	badge_chip.offset_top = -6.0
+	badge_chip.offset_right = 12.0
+	badge_chip.offset_bottom = 12.0
+	var badge_bg := StyleBoxFlat.new()
+	badge_bg.bg_color = ClientUi.DANGER
+	badge_bg.set_corner_radius_all(9)
+	badge_bg.content_margin_left = 5
+	badge_bg.content_margin_right = 5
+	badge_bg.content_margin_top = 1
+	badge_bg.content_margin_bottom = 1
+	badge_chip.add_theme_stylebox_override("panel", badge_bg)
+	fab_wrap.add_child(badge_chip)
+
+	_notif_badge = Label.new()
+	_notif_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_notif_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_notif_badge.add_theme_font_size_override("font_size", 10)
+	_notif_badge.add_theme_color_override("font_color", Color.WHITE)
+	ClientUi.apply_display_font(_notif_badge)
+	_notif_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_chip.add_child(_notif_badge)
+	# Keep a handle to the chip so badge visibility toggles the whole pill.
+	_notif_badge.set_meta("chip", badge_chip)
+
+
+func _style_notif_fab(open: bool) -> void:
+	if _notif_btn == null or not is_instance_valid(_notif_btn):
+		return
+	var fill := Color(ClientUi.CYAN, 0.22 if open else 0.15)
+	var border := Color(ClientUi.CYAN, 0.55 if open else 0.4)
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(24)
+	style.content_margin_left = 0
+	style.content_margin_right = 0
+	style.content_margin_top = 0
+	style.content_margin_bottom = 0
+	_notif_btn.add_theme_stylebox_override("normal", style)
+	var hover := style.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(ClientUi.CYAN, 0.28)
+	_notif_btn.add_theme_stylebox_override("hover", hover)
+	_notif_btn.add_theme_stylebox_override("pressed", hover)
+	_notif_btn.add_theme_stylebox_override("focus", style)
+	_notif_btn.add_theme_color_override("font_color", ClientUi.CYAN)
+	_notif_btn.add_theme_color_override("font_hover_color", ClientUi.CYAN_SOFT)
+	_notif_btn.add_theme_color_override("font_pressed_color", ClientUi.CYAN)
+
+
+func _sync_notif_fab() -> void:
+	if _notif_btn == null or not is_instance_valid(_notif_btn):
+		return
+	_notif_btn.text = "✕" if _notif_open else "🔔"
+	_notif_btn.tooltip_text = "Minimize notifications" if _notif_open else "Open notifications"
+	_style_notif_fab(_notif_open)
+	_update_notif_badge()
+
+
+func _update_notif_badge(unread_override: int = -1) -> void:
+	if _notif_badge == null or not is_instance_valid(_notif_badge):
+		return
+	var chip: Control = _notif_badge.get_meta("chip") if _notif_badge.has_meta("chip") else null
+	var unread := unread_override if unread_override >= 0 else NotificationManager.unread_count
+	var total := unread + (1 if ProgressManager.can_claim_daily() else 0)
+	var show := not _notif_open and total > 0
+	if chip != null and is_instance_valid(chip):
+		chip.visible = show
+	else:
+		_notif_badge.visible = show
+	if show:
+		_notif_badge.text = "9+" if total > 9 else str(total)
+
 
 func _refresh_notification_center() -> void:
 	await NotificationManager.load_inbox()
 	var unread := NotificationManager.unread_count
 	_notif_meta.text = ("· %s new" % unread) if unread > 0 else ""
-	if _notif_btn:
-		_notif_btn.text = ("🔔 %s" % unread) if unread > 0 else "🔔"
+	_update_notif_badge(unread)
 	for child in _notif_list.get_children():
 		child.queue_free()
 
@@ -860,8 +1029,7 @@ func _refresh_notification_center() -> void:
 		ClientUi.apply_ghost_button(daily)
 		daily.add_theme_color_override("font_color", ClientUi.GOLD)
 		daily.pressed.connect(func() -> void:
-			_notif_open = false
-			_notif_panel.visible = false
+			_set_notification_open(false)
 			GameManager.go_progress()
 		)
 		_notif_list.add_child(daily)
@@ -962,9 +1130,7 @@ func show_page(path: String) -> void:
 	_update_nav_state()
 	_refresh_chrome()
 	await NotificationManager.refresh_unread()
-	if _notif_btn:
-		var unread := NotificationManager.unread_count
-		_notif_btn.text = ("🔔 %s" % unread) if unread > 0 else "🔔"
+	_update_notif_badge()
 
 
 func _mood_for_page(path: String) -> String:
@@ -1178,8 +1344,9 @@ func _shell_panel_style(
 
 func _process(_delta: float) -> void:
 	var stamp := _character_stamp()
-	if stamp != _chrome_stamp:
-		_refresh_chrome()
+	if stamp == _chrome_stamp:
+		return
+	_refresh_chrome()
 
 
 func _character_stamp() -> Array:
@@ -1194,6 +1361,8 @@ func _character_stamp() -> Array:
 		c.get("experience", 0),
 		c.get("experience_to_next_level", 0),
 		c.get("active_title", ""),
+		MissionManager.has_active_mission(),
+		MiningManager.is_mining_busy(),
 	]
 
 
@@ -1206,6 +1375,35 @@ func _on_activity_pressed() -> void:
 		GameManager.go_hub()
 
 
+func _activity_style_set(mode: String, tint: Color) -> Dictionary:
+	if _activity_styles.has(mode):
+		return _activity_styles[mode]
+	var styles := {
+		"normal": _nav_style(Color(tint, 0.14), Color(tint, 0.45)),
+		"hover": _nav_style(Color(tint, 0.22), Color(tint, 0.7)),
+		"pressed": _nav_style(Color(tint, 0.12), Color(tint, 0.55)),
+	}
+	_activity_styles[mode] = styles
+	return styles
+
+
+func _apply_activity_styles(mode: String, tint: Color) -> void:
+	if _activity_mode == mode:
+		return
+	_activity_mode = mode
+	var styles: Dictionary
+	if mode == "idle":
+		var idle := ClientUi.SUCCESS
+		var soft := _nav_style(Color(0.05, 0.12, 0.1, 0.55), Color(idle, 0.25))
+		styles = {"normal": soft, "hover": soft, "pressed": soft}
+		_activity_styles[mode] = styles
+	else:
+		styles = _activity_style_set(mode, tint)
+	_activity.add_theme_stylebox_override("normal", styles["normal"])
+	_activity.add_theme_stylebox_override("hover", styles["hover"])
+	_activity.add_theme_stylebox_override("pressed", styles["pressed"])
+
+
 func _refresh_chrome() -> void:
 	_chrome_stamp = _character_stamp()
 	_clock.text = Time.get_time_string_from_system()
@@ -1213,10 +1411,7 @@ func _refresh_chrome() -> void:
 		var remaining := MissionManager.seconds_remaining()
 		var done := remaining <= 0
 		var tint := ClientUi.SUCCESS if done else ClientUi.CYAN
-		var soft := Color(tint, 0.14)
-		_activity.add_theme_stylebox_override("normal", _nav_style(soft, Color(tint, 0.45)))
-		_activity.add_theme_stylebox_override("hover", _nav_style(Color(tint, 0.22), Color(tint, 0.7)))
-		_activity.add_theme_stylebox_override("pressed", _nav_style(Color(tint, 0.12), Color(tint, 0.55)))
+		_apply_activity_styles("mission_done" if done else "mission", tint)
 		_activity.disabled = false
 		_activity.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		_activity.tooltip_text = "Return to mission" if not done else "Claim mission rewards"
@@ -1228,9 +1423,7 @@ func _refresh_chrome() -> void:
 				_activity_label.text = "Mission in Progress\n%s" % MissionBoard.format_duration(remaining)
 	elif MiningManager.is_mining_busy():
 		var tint_m := Color("#F59E0B")
-		_activity.add_theme_stylebox_override("normal", _nav_style(Color(tint_m, 0.14), Color(tint_m, 0.45)))
-		_activity.add_theme_stylebox_override("hover", _nav_style(Color(tint_m, 0.22), Color(tint_m, 0.7)))
-		_activity.add_theme_stylebox_override("pressed", _nav_style(Color(tint_m, 0.12), Color(tint_m, 0.55)))
+		_apply_activity_styles("mining", tint_m)
 		_activity.disabled = false
 		_activity.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		_activity.tooltip_text = "Open mining"
@@ -1240,15 +1433,12 @@ func _refresh_chrome() -> void:
 				int(ceil(float(MiningManager.remaining_ms()) / 1000.0))
 			)
 	else:
-		var idle := ClientUi.SUCCESS
-		_activity.add_theme_stylebox_override("normal", _nav_style(Color(0.05, 0.12, 0.1, 0.55), Color(idle, 0.25)))
-		_activity.add_theme_stylebox_override("hover", _nav_style(Color(0.05, 0.12, 0.1, 0.55), Color(idle, 0.25)))
-		_activity.add_theme_stylebox_override("pressed", _nav_style(Color(0.05, 0.12, 0.1, 0.55), Color(idle, 0.25)))
+		_apply_activity_styles("idle", ClientUi.SUCCESS)
 		_activity.disabled = true
 		_activity.mouse_default_cursor_shape = Control.CURSOR_ARROW
 		_activity.tooltip_text = ""
 		if is_instance_valid(_activity_label):
-			_activity_label.add_theme_color_override("font_color", idle)
+			_activity_label.add_theme_color_override("font_color", ClientUi.SUCCESS)
 			_activity_label.text = "Systems Nominal"
 
 	var character := GameManager.active_character
@@ -1274,8 +1464,7 @@ func _refresh_chrome() -> void:
 	_xp_label.text = "XP  %s / %s" % [_format_rail_amount(xp), _format_rail_amount(xp_next)]
 	_xp_bar.max_value = xp_next
 	_xp_bar.value = mini(xp, xp_next)
-	if _effects:
-		_effects.refresh(character)
+	# ActiveEffectsBar owns its 1s timer — avoid rebuilding chips twice per second.
 	if _portrait_host.get_child_count() == 0:
 		var portrait_frame := PanelContainer.new()
 		portrait_frame.add_theme_stylebox_override(

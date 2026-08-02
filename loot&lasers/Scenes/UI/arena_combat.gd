@@ -1,12 +1,8 @@
-extends Control
+﻿extends Control
 ## Shared duel overlay — mirrors web ArenaBattleOverlay (arena + mission).
+## Simulation stays in MissionCombat; this file is presentation + settlement only.
 
 const FIGHTER_SIZE := Vector2(200, 260)
-const LUNGE_DISTANCE := 40.0
-const LAND_DELAY := 0.12
-const INTRO_MS := 0.4
-## Playback scale vs web (~0.9–1.2s/hit). Godot needs snappier beats or it feels laggy.
-const PACE := 0.42
 
 const STAT_COLORS := {
 	"strength": Color("#F87171"),
@@ -22,6 +18,11 @@ const MOD_COLORS := {
 	"crit": Color("#C084FC"),
 	"dodge": Color("#4ADE80"),
 }
+
+var _beats: CombatBeatConfig
+var _fx: CombatFxLayer
+var _motion: CombatFighterMotion
+var _hp: CombatHpPresenter
 
 var _player_hp: ProgressBar
 var _enemy_hp: ProgressBar
@@ -59,13 +60,8 @@ var _enemy_weapon_label: Control
 var _sheet_host: Control
 var _prev_level := 1
 var _generation := 0
+var _ability_tween: Tween
 
-var _idle_tweens: Array[Tween] = []
-
-var _player_hp_val := 0
-var _enemy_hp_val := 0
-var _player_max := 1
-var _enemy_max := 1
 var _events: Array = []
 var _event_i := 0
 var _phase := "intro"
@@ -78,7 +74,14 @@ var _combo := 0
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_beats = CombatBeatConfig.make_default()
+	_fx = CombatFxLayer.new()
+	_motion = CombatFighterMotion.new()
+	_hp = CombatHpPresenter.new()
 	_build()
+	_fx.setup(_fx_layer, _fighters, _flash, _beats)
+	_motion.setup(_beats)
+	_hp.setup(_player_hp, _enemy_hp, _player_hp_nums, _enemy_hp_nums, _beats)
 	_boot()
 
 
@@ -87,8 +90,8 @@ func _build() -> void:
 	_backdrop = ArenaStageBackdrop.new()
 	_backdrop.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	add_child(_backdrop)
-	# Static backdrop during duel — animated redraw was the main stutter source.
-	_backdrop.set_live(false)
+	# Soft live stage (throttled redraw) — pulse still pops on crits.
+	_backdrop.set_live(true)
 
 	var root := VBoxContainer.new()
 	root.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -480,13 +483,9 @@ func _start_duel(
 	_enemy_card = _mount_fighter(_enemy_anchor, opp, Color("#FB7185"), _enemy_weapon, false)
 	_layout_fighters()
 
-	_player_max = maxi(1, int(battle.get("playerMaxHp", 1)))
-	_enemy_max = maxi(1, int(battle.get("opponentMaxHp", 1)))
-	_player_hp_val = _player_max
-	_enemy_hp_val = _enemy_max
-	_player_hp.max_value = _player_max
-	_enemy_hp.max_value = _enemy_max
-	_update_hp_ui()
+	var p_max := maxi(1, int(battle.get("playerMaxHp", 1)))
+	var e_max := maxi(1, int(battle.get("opponentMaxHp", 1)))
+	_hp.reset(p_max, p_max, e_max, e_max)
 
 	_events = battle.get("events", []) if typeof(battle.get("events", [])) == TYPE_ARRAY else []
 	_event_i = 0
@@ -500,16 +499,18 @@ func _start_duel(
 	_intro_layer.visible = true
 	_intro_layer.modulate.a = 0.0
 	var intro_tw := _intro_layer.create_tween()
-	intro_tw.tween_property(_intro_layer, "modulate:a", 1.0, 0.25)
-	await get_tree().create_timer(INTRO_MS).timeout
+	intro_tw.tween_property(_intro_layer, "modulate:a", 1.0, 0.22)
+	await get_tree().create_timer(_beats.intro_duration()).timeout
 	if not is_instance_valid(self) or _finished:
 		return
 	var fade := _intro_layer.create_tween()
-	fade.tween_property(_intro_layer, "modulate:a", 0.0, 0.2)
+	fade.tween_property(_intro_layer, "modulate:a", 0.0, 0.18)
 	await fade.finished
 	if not is_instance_valid(self) or _finished:
 		return
 	_intro_layer.visible = false
+	_motion.start_idle(_player_card, 0.0)
+	_motion.start_idle(_enemy_card, 0.35)
 	_phase = "fight"
 	_run_playback()
 
@@ -517,8 +518,8 @@ func _start_duel(
 func _class_emoji(class_key: String) -> String:
 	var cat: Variant = GameData.CLASS_CATALOG.get(class_key, null)
 	if typeof(cat) == TYPE_DICTIONARY:
-		return str((cat as Dictionary).get("emoji", "✦"))
-	return "✦"
+		return str((cat as Dictionary).get("emoji", "✧"))
+	return "✧"
 
 
 func _make_fighter_anchor() -> Control:
@@ -549,18 +550,7 @@ func _mount_fighter(anchor: Control, character: Dictionary, tint: Color, weapon:
 	return card
 
 
-func _start_idle(card: Control, delay: float) -> void:
-	if card == null or not is_instance_valid(card):
-		return
-	var tween := card.create_tween().set_loops()
-	if delay > 0.0:
-		tween.tween_interval(delay)
-	tween.tween_property(card, "position:y", -6.0, 1.2).set_trans(Tween.TRANS_SINE)
-	tween.tween_property(card, "position:y", 0.0, 1.2).set_trans(Tween.TRANS_SINE)
-	_idle_tweens.append(tween)
 
-
-## Compact fighter: name · avatar · one stat line (web has five; five RichText labels stutter here).
 func _portrait_card(character: Dictionary, tint: Color, weapon: Dictionary, is_player: bool) -> Control:
 	var frame := Control.new()
 	frame.custom_minimum_size = FIGHTER_SIZE
@@ -656,45 +646,20 @@ func _fighter_stats_block(character: Dictionary, tint: Color) -> Label:
 
 
 func _update_hp_ui() -> void:
-	_player_hp.value = _player_hp_val
-	_enemy_hp.value = _enemy_hp_val
-	_player_hp_nums.text = "%s / %s" % [_player_hp_val, _player_max]
-	_enemy_hp_nums.text = "%s / %s" % [_enemy_hp_val, _enemy_max]
-	var p_pct := 100.0 * float(_player_hp_val) / float(_player_max)
-	var e_pct := 100.0 * float(_enemy_hp_val) / float(_enemy_max)
-	if p_pct > 0.0 and p_pct < 25.0:
-		ClientUi.apply_hp_bar(_player_hp, Color("#FB7185"))
-	else:
-		ClientUi.apply_hp_bar(_player_hp, Color("#22D3EE"))
-	if e_pct > 0.0 and e_pct < 25.0:
-		ClientUi.apply_hp_bar(_enemy_hp, Color("#FB7185"))
-	else:
-		ClientUi.apply_hp_bar(_enemy_hp, Color("#FB7185"))
+	if _hp:
+		_hp.snap(_hp.player_hp, _hp.enemy_hp)
 
 
 func _event_duration(ev: Dictionary) -> float:
-	## Snappy pacing — web timings × PACE so the duel doesn't drag.
-	if ev.is_empty():
-		return 0.38
-	var t := str(ev.get("type", ""))
-	if t == "regen":
-		return 0.56 * PACE
-	if bool(ev.get("dodged", false)) or t == "dodge":
-		return 0.64 * PACE
-	if t == "passive" or (t == "miss" and str(ev.get("missKind", "")) == "phantom_signal"):
-		return 0.95 * PACE
-	if t == "secondary" and ev.get("passive", null) != null:
-		return 0.9 * PACE
-	if bool(ev.get("crit", false)) or t == "ability" or t == "drone":
-		return 0.85 * PACE
-	return 0.72 * PACE
+	return _beats.beat_duration(ev)
 
 
 func _combo_at(i: int) -> int:
 	if i < 0 or i >= _events.size():
 		return 0
 	var ev: Dictionary = _events[i]
-	if ev.is_empty() or bool(ev.get("dodged", false)) or str(ev.get("type", "")) == "regen":
+	var ev_type := str(ev.get("type", ""))
+	if ev.is_empty() or bool(ev.get("dodged", false)) or ev_type in ["regen", "dodge", "miss", "passive"]:
 		return 0
 	if ev.get("attacker", null) == null:
 		return 0
@@ -704,9 +669,10 @@ func _combo_at(i: int) -> int:
 		var e: Dictionary = _events[j]
 		if typeof(e) != TYPE_DICTIONARY:
 			break
+		var et := str(e.get("type", ""))
 		if str(e.get("attacker", "")) == str(ev.get("attacker", "")) \
 				and not bool(e.get("dodged", false)) \
-				and str(e.get("type", "")) != "regen":
+				and et not in ["regen", "dodge", "miss", "passive"]:
 			count += 1
 		else:
 			break
@@ -730,7 +696,7 @@ func _run_playback() -> void:
 		if gen != _generation or _finished:
 			return
 		_event_i += 1
-		if _player_hp_val <= 0 or _enemy_hp_val <= 0:
+		if _hp.player_hp <= 0 or _hp.enemy_hp <= 0:
 			break
 	if gen != _generation or _finished:
 		return
@@ -746,17 +712,23 @@ func _update_combo(_attacker: String) -> void:
 
 
 func _play_one_event(ev: Dictionary, gen: int) -> void:
-	var dur := _event_duration(ev)
+	_hide_ability_banner()
+	var land_at := _beats.land_delay(ev)
 	_maybe_ability_banner(ev)
 	_begin_event_fx(ev)
-	# Land damage almost immediately so HP tracks the hit instead of lagging behind.
-	if LAND_DELAY > 0.0:
-		await get_tree().create_timer(LAND_DELAY).timeout
+	if land_at > 0.0:
+		await get_tree().create_timer(land_at).timeout
 		if gen != _generation or _finished:
 			return
 	_land_event(ev)
-	var remain := maxf(0.04, dur - LAND_DELAY)
-	await get_tree().create_timer(remain).timeout
+	# Crits get a tiny readable hold without stretching the whole fight.
+	if bool(ev.get("crit", false)):
+		var hold := _beats.scaled(_beats.hit_pause_crit_s)
+		if hold > 0.01:
+			await get_tree().create_timer(hold).timeout
+			if gen != _generation or _finished:
+				return
+	await get_tree().create_timer(_beats.recovery_after_land(ev)).timeout
 
 
 func _begin_event_fx(ev: Dictionary) -> void:
@@ -769,12 +741,14 @@ func _begin_event_fx(ev: Dictionary) -> void:
 	if quiet:
 		return
 	if t == "dodge" or t == "miss" or bool(ev.get("dodged", false)):
-		_lunge(attacker, side)
-		_slip(defender, ev.get("defender", null))
+		_motion.lunge(attacker, side)
+		_motion.slip(defender, str(ev.get("defender", "player")))
 		return
 	if t in ["attack", "drone", "ability", "secondary"] or int(ev.get("damage", 0)) > 0:
-		_swing_weapon(side)
-		_lunge(attacker, side)
+		var weapon: Dictionary = _player_weapon if side == "player" else _enemy_weapon
+		var wlab := _player_weapon_label if side == "player" else _enemy_weapon_label
+		_motion.swing_weapon(wlab, side, str(weapon.get("style", "swing")))
+		_motion.lunge(attacker, side)
 
 
 func _land_event(ev: Dictionary) -> void:
@@ -786,56 +760,67 @@ func _land_event(ev: Dictionary) -> void:
 
 	if int(ev.get("heal", 0)) > 0:
 		var heal := int(ev.get("heal", 0))
-		var def_side := str(ev.get("defender", "player"))
-		if def_side == "player":
-			_player_hp_val = mini(_player_max, _player_hp_val + heal)
-		else:
-			_enemy_hp_val = mini(_enemy_max, _enemy_hp_val + heal)
-		_update_hp_ui()
-		_float_text(defender if defender else attacker, "+%s" % heal, Color("#86EFAC"), false)
+		var to_player := str(ev.get("defender", "player")) == "player"
+		_hp.apply_heal(to_player, heal)
+		_fx.float_text(defender if defender else attacker, "+%s" % heal, Color("#86EFAC"), false)
+		AudioManager.play_ui("claim")
 		return
 
 	if t == "dodge" or t == "miss" or bool(ev.get("dodged", false)):
-		_float_text(defender, "DODGE" if t == "dodge" or bool(ev.get("dodged", false)) else "MISS", Color("#67E8F9"), false)
+		var dodge := t == "dodge" or bool(ev.get("dodged", false))
+		_fx.float_text(defender, "DODGE" if dodge else "MISS", Color("#67E8F9") if dodge else Color("#94A3B8"), false)
 		AudioManager.play_ui("dodge")
 		return
 
 	if t == "passive" and int(ev.get("damage", 0)) <= 0:
-		_float_text(attacker if attacker else _player_card, "✦", Color("#C084FC"), false)
+		_fx.float_text(attacker if attacker else _player_card, "✧", Color("#C084FC"), false)
+		AudioManager.play_ui("ability")
 		return
 
-	if bool(ev.get("shieldHit", false)):
-		_float_text(defender, "SHIELD", Color("#67E8F9"), false)
-		return
-
+	var shield := bool(ev.get("shieldHit", false))
 	var dmg := int(ev.get("damage", 0))
-	if dmg <= 0 and t not in ["attack", "drone", "ability", "secondary"]:
+	if shield and dmg <= 0:
+		_motion.guard(defender)
+		_fx.float_text(defender, "BLOCK", Color("#67E8F9"), false)
+		AudioManager.play_ui("dodge")
+		return
+	if shield and dmg > 0:
+		_motion.guard(defender)
+		# Partial absorb: one readable float, then impact continues below.
+		_fx.float_text(defender, "SHIELD −%s" % dmg, Color("#67E8F9"), false)
+		AudioManager.play_ui("dodge")
+
+	if dmg <= 0:
 		return
 
 	var crit := bool(ev.get("crit", false))
 	var ability := t == "drone" or t == "ability"
-	_impact(defender, crit or ability)
-	if crit:
-		_float_text(defender, "CRIT −%s" % dmg, Color("#FBBF24"), true)
-	else:
-		_float_text(defender, "−%s" % dmg, Color("#FCA5A5"), ability)
+	_motion.impact(defender, crit or ability, _fx)
+	if not shield:
+		if crit:
+			_fx.float_text(defender, "CRIT −%s" % dmg, Color("#FBBF24"), true)
+		elif ability:
+			_fx.float_text(defender, "−%s" % dmg, Color("#C4B5FD"), true)
+		else:
+			_fx.float_text(defender, "−%s" % dmg, Color("#FCA5A5"), false)
+	elif crit:
+		_fx.float_text(defender, "CRIT", Color("#FBBF24"), true)
 	AudioManager.play_attack(str(weapon.get("style", "swing")), crit, ability)
-	if str(ev.get("defender", "")) == "player":
-		_player_hp_val = maxi(0, _player_hp_val - dmg)
-		_flash_bar(_player_hp, Color(1.0, 0.35, 0.35))
-	else:
-		_enemy_hp_val = maxi(0, _enemy_hp_val - dmg)
-		_flash_bar(_enemy_hp, Color(1.0, 0.85, 0.35) if crit else Color(0.4, 0.9, 1.0))
-	_update_hp_ui()
+	var to_player := str(ev.get("defender", "")) == "player"
+	var flash_col := Color(1.0, 0.35, 0.35) if to_player else (Color(1.0, 0.85, 0.35) if crit else Color(0.4, 0.9, 1.0))
+	_hp.apply_damage(to_player, dmg, flash_col)
 	if crit or ability:
-		_shake_stage(11.0)
-		_screen_flash()
+		_fx.shake(_beats.shake_crit if crit else _beats.shake_hit * 1.4)
+		_fx.flash(_beats.flash_peak * (1.25 if crit else 1.0))
 		if _backdrop:
 			_backdrop.set_pulse(true)
-			get_tree().create_timer(0.45).timeout.connect(func() -> void:
+			get_tree().create_timer(0.4).timeout.connect(func() -> void:
 				if is_instance_valid(_backdrop):
 					_backdrop.set_pulse(false)
 			)
+	else:
+		_fx.shake(_beats.shake_hit)
+		_fx.flash(_beats.flash_peak * 0.55)
 
 
 func _maybe_ability_banner(ev: Dictionary) -> void:
@@ -847,9 +832,19 @@ func _maybe_ability_banner(ev: Dictionary) -> void:
 	_show_ability_banner(banner)
 
 
+func _hide_ability_banner() -> void:
+	if _ability_tween != null and _ability_tween.is_valid():
+		_ability_tween.kill()
+		_ability_tween = null
+	if _ability_banner != null and is_instance_valid(_ability_banner):
+		_ability_banner.visible = false
+		_ability_banner.modulate.a = 0.0
+
+
 func _show_ability_banner(banner: Dictionary) -> void:
 	if _ability_banner == null:
 		return
+	_hide_ability_banner()
 	var color: Color = banner.get("color", ClientUi.CYAN)
 	var side := str(banner.get("side", "player"))
 	_ability_banner.add_theme_stylebox_override(
@@ -877,36 +872,16 @@ func _show_ability_banner(banner: Dictionary) -> void:
 	_ability_banner.visible = true
 	_ability_banner.modulate.a = 0.0
 	_ability_banner.scale = Vector2(0.85, 0.85)
-	var tween := _ability_banner.create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(_ability_banner, "modulate:a", 1.0, 0.14)
-	tween.tween_property(_ability_banner, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.chain().tween_property(_ability_banner, "modulate:a", 0.0, 0.18).set_delay(0.35)
-	tween.tween_callback(func() -> void:
+	var hold := _beats.scaled(_beats.banner_hold_s)
+	_ability_tween = _ability_banner.create_tween()
+	_ability_tween.set_parallel(true)
+	_ability_tween.tween_property(_ability_banner, "modulate:a", 1.0, 0.12)
+	_ability_tween.tween_property(_ability_banner, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_ability_tween.chain().tween_property(_ability_banner, "modulate:a", 0.0, 0.14).set_delay(hold)
+	_ability_tween.tween_callback(func() -> void:
 		if is_instance_valid(_ability_banner):
 			_ability_banner.visible = false
 	)
-
-
-func _swing_weapon(side: String) -> void:
-	var wlab := _player_weapon_label if side == "player" else _enemy_weapon_label
-	if wlab == null or not is_instance_valid(wlab):
-		return
-	var weapon: Dictionary = _player_weapon if side == "player" else _enemy_weapon
-	var style := str(weapon.get("style", "swing"))
-	var dir := 1.0 if side == "player" else -1.0
-	var tween := wlab.create_tween()
-	match style:
-		"stab":
-			tween.tween_property(wlab, "position:x", dir * 18.0, 0.12)
-			tween.tween_property(wlab, "position:x", 0.0, 0.18)
-		"shoot":
-			tween.tween_property(wlab, "scale", Vector2(1.25, 1.25), 0.08)
-			tween.tween_property(wlab, "scale", Vector2.ONE, 0.16)
-		_:
-			tween.tween_property(wlab, "rotation", dir * -0.9, 0.12)
-			tween.tween_property(wlab, "rotation", dir * 0.35, 0.12)
-			tween.tween_property(wlab, "rotation", 0.0, 0.16)
 
 
 func _card_for(side: Variant) -> Control:
@@ -915,121 +890,17 @@ func _card_for(side: Variant) -> Control:
 	return _player_card if str(side) == "player" else _enemy_card
 
 
-func _lunge(card: Control, side: Variant) -> void:
-	if card == null or not is_instance_valid(card) or side == null:
-		return
-	var direction := 1.0 if str(side) == "player" else -1.0
-	var tween := card.create_tween()
-	tween.tween_property(card, "position:x", direction * LUNGE_DISTANCE, 0.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(card, "position:x", 0.0, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-
-func _slip(card: Control, side: Variant) -> void:
-	if card == null or not is_instance_valid(card) or side == null:
-		return
-	var direction := -1.0 if str(side) == "player" else 1.0
-	var tween := card.create_tween()
-	tween.tween_property(card, "position:x", direction * 28.0, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(card, "position:x", 0.0, 0.22).set_trans(Tween.TRANS_SINE)
-
-
-func _impact(card: Control, crit: bool) -> void:
-	if card == null or not is_instance_valid(card):
-		return
-	card.pivot_offset = card.size * 0.5
-	card.modulate = Color(1.0, 0.42, 0.45) if not crit else Color(1.0, 0.82, 0.4)
-	card.scale = Vector2(0.94, 0.94) if crit else Vector2(0.97, 0.97)
-	var tween := card.create_tween().set_parallel(true)
-	tween.tween_property(card, "modulate", Color.WHITE, 0.3)
-	tween.tween_property(card, "scale", Vector2.ONE, 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_spark(card, crit)
-
-
-func _spark(card: Control, crit: bool) -> void:
-	if _fx_layer == null or not is_instance_valid(_fx_layer):
-		return
-	var spark := Label.new()
-	spark.text = "✸"
-	spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	spark.add_theme_font_size_override("font_size", 48 if crit else 32)
-	spark.add_theme_color_override("font_color", Color("#FBBF24") if crit else Color(1, 1, 1, 0.95))
-	ClientUi.apply_display_font(spark)
-	_fx_layer.add_child(spark)
-	spark.position = _fx_point(card) - Vector2(16, 16)
-	spark.pivot_offset = Vector2(16, 16)
-	spark.scale = Vector2(0.3, 0.3)
-	var tween := spark.create_tween().set_parallel(true)
-	tween.tween_property(spark, "scale", Vector2(1.7, 1.7), 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(spark, "modulate:a", 0.0, 0.4)
-	tween.chain().tween_callback(spark.queue_free)
-
-
-func _float_text(card: Control, text: String, color: Color, big: bool) -> void:
-	if _fx_layer == null or not is_instance_valid(_fx_layer) or card == null:
-		return
-	var label := Label.new()
-	label.text = text
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", 30 if big else 20)
-	label.add_theme_color_override("font_color", color)
-	ClientUi.apply_display_font(label)
-	_fx_layer.add_child(label)
-	var origin := _fx_point(card) - Vector2(24, 10)
-	label.position = origin
-	label.pivot_offset = Vector2(24, 10)
-	label.scale = Vector2(0.65, 0.65)
-	var tween := label.create_tween().set_parallel(true)
-	tween.tween_property(label, "position:y", origin.y - 52.0, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(label, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(label, "modulate:a", 0.0, 0.66).set_delay(0.16)
-	tween.chain().tween_callback(label.queue_free)
-
-
-func _fx_point(card: Control) -> Vector2:
-	if card == null or not is_instance_valid(card) or _fx_layer == null:
-		return Vector2.ZERO
-	var center: Vector2 = card.get_global_transform() * (card.size * 0.5)
-	return _fx_layer.get_global_transform().affine_inverse() * center
-
-
-func _shake_stage(strength: float) -> void:
-	if _fighters == null or not is_instance_valid(_fighters):
-		return
-	var base := _fighters.position
-	var tween := _fighters.create_tween()
-	for offset in [
-		Vector2(-strength, strength * 0.45),
-		Vector2(strength * 0.82, -strength * 0.27),
-		Vector2(-strength * 0.55, strength * 0.18),
-		Vector2(strength * 0.36, 0),
-		Vector2.ZERO,
-	]:
-		tween.tween_property(_fighters, "position", base + offset, 0.055).set_trans(Tween.TRANS_SINE)
-
-
-func _screen_flash() -> void:
-	if _flash == null:
-		return
-	_flash.color = Color(1, 1, 1, 0.22)
-	var tw := _flash.create_tween()
-	tw.tween_property(_flash, "color:a", 0.0, 0.28)
-
-
-func _flash_bar(bar: ProgressBar, color: Color) -> void:
-	var tw := create_tween()
-	bar.modulate = color
-	tw.tween_property(bar, "modulate", Color.WHITE, 0.25)
-
-
 func _on_skip() -> void:
 	if _busy or _finished:
 		return
 	_generation += 1
 	_playing = false
+	_hide_ability_banner()
 	var battle: Dictionary = _battle()
-	_player_hp_val = maxi(0, int(battle.get("playerEndHp", _player_hp_val)))
-	_enemy_hp_val = maxi(0, int(battle.get("opponentEndHp", _enemy_hp_val)))
-	_update_hp_ui()
+	_hp.snap(
+		maxi(0, int(battle.get("playerEndHp", _hp.player_hp))),
+		maxi(0, int(battle.get("opponentEndHp", _hp.enemy_hp)))
+	)
 	_event_i = _events.size()
 	# Web SKIP calls onDone immediately (settle + rewards).
 	_settle_and_show_rewards()
@@ -1042,6 +913,7 @@ func _show_outro() -> void:
 	_phase = "outro"
 	_skip_btn.visible = false
 	_combo_wrap.visible = false
+	_hide_ability_banner()
 	var won := str(_battle().get("winner", "opponent")) == "player"
 	_outro_title.text = "VICTORY" if won else "DEFEAT"
 	_outro_title.add_theme_color_override("font_color", Color("#FBBF24") if won else Color("#FB7185"))
@@ -1055,30 +927,13 @@ func _show_outro() -> void:
 		ClientUi.apply_primary_button(_outro_btn)
 	else:
 		ClientUi.apply_danger_button(_outro_btn)
-	for tween in _idle_tweens:
-		if tween != null and tween.is_valid():
-			tween.kill()
-	_idle_tweens.clear()
-	_settle_fighter(_player_card if won else _enemy_card, true)
-	_settle_fighter(_enemy_card if won else _player_card, false)
+	_motion.stop_all_idle()
+	_motion.settle(_player_card if won else _enemy_card, true)
+	_motion.settle(_enemy_card if won else _player_card, false)
 	_outro_layer.visible = true
 	_outro_layer.modulate.a = 0.0
 	var tw := _outro_layer.create_tween()
 	tw.tween_property(_outro_layer, "modulate:a", 1.0, 0.25)
-
-
-func _settle_fighter(card: Control, victorious: bool) -> void:
-	if card == null or not is_instance_valid(card):
-		return
-	card.pivot_offset = card.size * 0.5
-	var tween := card.create_tween().set_parallel(true)
-	if victorious:
-		tween.tween_property(card, "modulate", Color(1.18, 1.18, 1.12, 1.0), 0.35)
-		tween.tween_property(card, "scale", Vector2(1.05, 1.05), 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	else:
-		tween.tween_property(card, "modulate", Color(0.55, 0.55, 0.62, 0.75), 0.4)
-		tween.tween_property(card, "rotation", 0.09, 0.4).set_trans(Tween.TRANS_SINE)
-		tween.tween_property(card, "position:y", 12.0, 0.4).set_trans(Tween.TRANS_SINE)
 
 
 func _on_outro_continue() -> void:
@@ -1134,10 +989,7 @@ func _settle_and_show_rewards() -> void:
 
 
 func _show_mission_result(won: bool, data: Dictionary) -> void:
-	for tween in _idle_tweens:
-		if tween != null and tween.is_valid():
-			tween.kill()
-	_idle_tweens.clear()
+	_motion.stop_all_idle()
 
 	if bool(data.get("mission_missing", false)):
 		var missing := CombatSheets.make_complete_sheet({

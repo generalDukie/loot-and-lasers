@@ -13,6 +13,12 @@ func _ready() -> void:
 	_phase = float(get_instance_id() % 97) / 97.0 * TAU
 
 
+func set_active(on: bool) -> void:
+	set_process(on)
+	if on:
+		queue_redraw()
+
+
 func _process(delta: float) -> void:
 	_elapsed += delta
 	_redraw_accum += delta

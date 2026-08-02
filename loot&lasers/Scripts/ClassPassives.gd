@@ -239,10 +239,11 @@ static func maybe_orbital(engineer: Dictionary, opponent: Dictionary) -> Array:
 		var raw := maxi(0, int(round(float(engineer.get("standardAttack", 0)) * FIRE_SUPPORT_FRAC)))
 		var barrier := int(opponent.get("barrier", 0))
 		var hp_dmg := raw
+		var absorbed := 0
 		if barrier > 0 and raw > 0:
-			var absorb := mini(barrier, raw)
-			opponent["barrier"] = barrier - absorb
-			hp_dmg = raw - absorb
+			absorbed = mini(barrier, raw)
+			opponent["barrier"] = barrier - absorbed
+			hp_dmg = raw - absorbed
 		opponent["hp"] = maxi(0, int(opponent.get("hp", 0)) - hp_dmg)
 		events.append({
 			"type": "drone",
@@ -250,6 +251,8 @@ static func maybe_orbital(engineer: Dictionary, opponent: Dictionary) -> Array:
 			"attacker": engineer["side"],
 			"defender": opponent["side"],
 			"damage": hp_dmg,
+			"barrierAbsorbed": absorbed,
+			"shieldHit": absorbed > 0,
 			"crit": false,
 			"text": "Orbital Assistant Fire Support deals %s True Damage" % hp_dmg,
 		})

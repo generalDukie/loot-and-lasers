@@ -22,6 +22,7 @@ const STAT_ICONS := {
 
 ## When true (Hero loadout rail), show STIMS / MOUNTS section labels + timers.
 var side_sections := false
+var _stamp := ""
 
 
 static func make(character: Dictionary = {}) -> ActiveEffectsBar:
@@ -50,12 +51,17 @@ func refresh(character: Dictionary = {}) -> void:
 			ch = gm.get("active_character") as Dictionary
 			if ch == null:
 				ch = {}
+	var buffs: Array = StatsRules.active_buffs(ch)
+	var mounts: Array = ShipRules.active_fuel_mounts(ch)
+	var next_stamp := _make_stamp(buffs, mounts)
+	if next_stamp == _stamp and get_child_count() > 0:
+		_refresh_timers_only(buffs, mounts)
+		return
+	_stamp = next_stamp
 	for child in get_children():
 		if child is Timer:
 			continue
 		child.queue_free()
-	var buffs: Array = StatsRules.active_buffs(ch)
-	var mounts: Array = ShipRules.active_fuel_mounts(ch)
 	if not side_sections:
 		visible = not buffs.is_empty() or not mounts.is_empty()
 		if not visible:
@@ -88,6 +94,56 @@ func refresh(character: Dictionary = {}) -> void:
 		for m in mounts:
 			if typeof(m) == TYPE_DICTIONARY:
 				add_child(_mount_chip(m))
+
+
+func _make_stamp(buffs: Array, mounts: Array) -> String:
+	var parts: PackedStringArray = []
+	for b in buffs:
+		if typeof(b) != TYPE_DICTIONARY:
+			continue
+		parts.append("%s:%s:%s" % [b.get("stat", ""), b.get("mult", ""), b.get("expires_at", "")])
+	for m in mounts:
+		if typeof(m) != TYPE_DICTIONARY:
+			continue
+		parts.append("m:%s:%s:%s" % [m.get("name", ""), m.get("speed", ""), m.get("expires_at", "")])
+	parts.append("side=%s" % side_sections)
+	return "|".join(parts)
+
+
+func _refresh_timers_only(buffs: Array, mounts: Array) -> void:
+	var timers: Array = []
+	_collect_timer_labels(self, timers)
+	var i := 0
+	for b in buffs:
+		if typeof(b) != TYPE_DICTIONARY:
+			continue
+		if i >= timers.size():
+			return
+		var lab: Label = timers[i]
+		i += 1
+		var text := format_remaining(str(b.get("expires_at", "")))
+		lab.text = text
+		lab.get_parent().get_parent().tooltip_text = "%s · expires in %s" % [str(b.get("name", "Stim")), text]
+	for m in mounts:
+		if typeof(m) != TYPE_DICTIONARY:
+			continue
+		if i >= timers.size():
+			return
+		var lab2: Label = timers[i]
+		i += 1
+		var text2 := format_remaining(str(m.get("expires_at", "")))
+		lab2.text = text2
+		lab2.get_parent().get_parent().tooltip_text = "%s · expires in %s" % [str(m.get("name", "Mount")), text2]
+
+
+func _collect_timer_labels(node: Node, out: Array) -> void:
+	for child in node.get_children():
+		if child is Timer:
+			continue
+		if child is Label and bool(child.get_meta("effect_timer", false)):
+			out.append(child)
+		else:
+			_collect_timer_labels(child, out)
 
 
 func _section_label(text: String) -> Label:
@@ -150,6 +206,7 @@ func _buff_chip(buff: Dictionary) -> PanelContainer:
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(sub)
 	var timer := Label.new()
+	timer.set_meta("effect_timer", true)
 	timer.text = format_remaining(str(buff.get("expires_at", "")))
 	timer.add_theme_font_size_override("font_size", 12)
 	timer.add_theme_color_override("font_color", color)
@@ -184,6 +241,7 @@ func _mount_chip(mount: Dictionary) -> PanelContainer:
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(sub)
 	var timer := Label.new()
+	timer.set_meta("effect_timer", true)
 	timer.text = format_remaining(str(mount.get("expires_at", "")))
 	timer.add_theme_font_size_override("font_size", 12)
 	timer.add_theme_color_override("font_color", Color("#FBBF24", 0.9))

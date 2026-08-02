@@ -31,6 +31,7 @@ func _build() -> void:
 
 	var scroll := ScrollContainer.new()
 	scroll.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	margin.add_child(scroll)
 
 	var outer := VBoxContainer.new()
@@ -43,6 +44,7 @@ func _build() -> void:
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	outer.add_child(center)
 	var sheet := VBoxContainer.new()
+	sheet.custom_minimum_size.x = 920
 	sheet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sheet.add_theme_constant_override("separation", 8)
 	center.add_child(sheet)
@@ -57,9 +59,10 @@ func _build() -> void:
 	_status = ClientUi.make_status()
 	sheet.add_child(_status)
 
+	# Web SettingsPage: account left, stacked utility column right (max ~22rem).
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation", 10)
-	columns.alignment = BoxContainer.ALIGNMENT_BEGIN
+	columns.add_theme_constant_override("separation", 12)
+	columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sheet.add_child(columns)
 
 	var account_panel := _panel_wrap(_build_account())
@@ -67,19 +70,17 @@ func _build() -> void:
 	account_panel.size_flags_stretch_ratio = 1.0
 	columns.add_child(account_panel)
 
-	var utility := GridContainer.new()
-	utility.columns = 2
+	var utility := VBoxContainer.new()
+	utility.custom_minimum_size.x = 360
 	utility.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	utility.size_flags_stretch_ratio = 1.0
-	utility.add_theme_constant_override("h_separation", 8)
-	utility.add_theme_constant_override("v_separation", 8)
+	utility.size_flags_stretch_ratio = 0.42
+	utility.add_theme_constant_override("separation", 10)
 	columns.add_child(utility)
 	utility.add_child(_panel_wrap(_build_character_switcher()))
 	utility.add_child(_panel_wrap(_build_audio()))
 	utility.add_child(_panel_wrap(_build_display()))
 	utility.add_child(_build_codex_link())
 	utility.add_child(_panel_wrap(_build_promo()))
-	utility.add_child(_build_danger())
 
 	var back := Button.new()
 	back.text = "Back to Hub"
@@ -172,6 +173,11 @@ func _build_account() -> VBoxContainer:
 		_legacy.editable = false
 		col.add_child(_legacy)
 
+	var spacer := Control.new()
+	spacer.custom_minimum_size.y = 8
+	col.add_child(spacer)
+	col.add_child(_build_danger())
+
 	return col
 
 
@@ -199,21 +205,27 @@ func _build_character_switcher() -> VBoxContainer:
 
 func _build_audio() -> VBoxContainer:
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 16)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 12)
 	col.add_child(_section_title("AUDIO"))
 
-	col.add_child(_slider("Master Volume", SettingsManager.master_volume, func(v: float) -> void:
-		SettingsManager.master_volume = v
-		SettingsManager.apply_settings()
+	col.add_child(_volume_row("Master Volume", "🔊", SettingsManager.master_volume, func(v: float) -> void:
+		SettingsManager.set_master_volume(v, false)
 	))
-	col.add_child(_slider("Music Volume", SettingsManager.music_volume, func(v: float) -> void:
-		SettingsManager.music_volume = v
-		SettingsManager.apply_settings()
+	col.add_child(_volume_row("Music Volume", "🎵", SettingsManager.music_volume, func(v: float) -> void:
+		SettingsManager.set_music_volume(v, false)
 	))
-	col.add_child(_slider("SFX Volume", SettingsManager.sfx_volume, func(v: float) -> void:
-		SettingsManager.sfx_volume = v
-		SettingsManager.apply_settings()
-	))
+	col.add_child(_volume_row("SFX Volume", "⚡", SettingsManager.sfx_volume, func(v: float) -> void:
+		SettingsManager.set_sfx_volume(v, false)
+	, true))
+
+	var tip := Label.new()
+	tip.text = "Station ambience and cantina music use Music. Combat / UI cues use SFX."
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip.add_theme_font_size_override("font_size", 11)
+	tip.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(tip)
+	col.add_child(tip)
 	return col
 
 
@@ -395,24 +407,59 @@ func _danger_row(title: String, hint: String, destructive: bool, on_press: Calla
 	return btn
 
 
-func _slider(label: String, value: float, on_change: Callable) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+func _volume_row(label: String, icon: String, value: float, on_change: Callable, preview_sfx: bool = false) -> VBoxContainer:
+	var wrap := VBoxContainer.new()
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wrap.add_theme_constant_override("separation", 4)
+
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	wrap.add_child(head)
+
+	var ic := Label.new()
+	ic.text = icon
+	ic.add_theme_font_size_override("font_size", 14)
+	ic.add_theme_color_override("font_color", ClientUi.CYAN)
+	head.add_child(ic)
+
 	var lab := Label.new()
 	lab.text = label
-	lab.custom_minimum_size = Vector2(100, 0)
-	lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lab.add_theme_font_size_override("font_size", 12)
+	lab.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(lab)
-	row.add_child(lab)
+	head.add_child(lab)
+
+	var pct := Label.new()
+	pct.text = "%d" % int(round(value * 100.0))
+	pct.custom_minimum_size.x = 36
+	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	pct.add_theme_font_size_override("font_size", 11)
+	pct.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(pct)
+	head.add_child(pct)
+
 	var s := HSlider.new()
-	s.min_value = 0
-	s.max_value = 1
-	s.step = 0.05
-	s.value = value
+	s.min_value = 0.0
+	s.max_value = 1.0
+	s.step = 0.01
+	s.value = clampf(value, 0.0, 1.0)
 	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	s.value_changed.connect(on_change)
-	row.add_child(s)
-	return row
+	s.custom_minimum_size = Vector2(0, 22)
+	s.focus_mode = Control.FOCUS_ALL
+	s.mouse_filter = Control.MOUSE_FILTER_STOP
+	s.value_changed.connect(func(v: float) -> void:
+		pct.text = "%d" % int(round(v * 100.0))
+		if on_change.is_valid():
+			on_change.call(v)
+	)
+	s.drag_ended.connect(func(_changed: bool) -> void:
+		SettingsManager.save_settings()
+		if preview_sfx:
+			AudioManager.play_ui("click")
+	)
+	wrap.add_child(s)
+	return wrap
 
 
 func _on_change_password() -> void:

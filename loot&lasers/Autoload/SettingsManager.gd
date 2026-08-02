@@ -15,6 +15,7 @@ const MIN_WINDOW := Vector2i(960, 540)
 
 var _config := ConfigFile.new()
 var _enforcing_size := false
+var _audio_save_timer: SceneTreeTimer
 
 var master_volume: float = 1.0
 var music_volume: float = 0.8
@@ -77,7 +78,51 @@ func apply_settings() -> void:
 		# sizing was clipping the bottom under Windows decorations / DPI.
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		call_deferred("_ensure_visible_window")
+	apply_audio()
+
+
+## Volume only — never touch window mode (sliders used to call apply_settings and break).
+func apply_audio() -> void:
 	AudioManager.apply_volumes(master_volume, music_volume, sfx_volume)
+
+
+## Live bus update; optional persist (drag ticks should pass persist=false).
+func set_master_volume(v: float, persist: bool = true) -> void:
+	master_volume = clampf(v, 0.0, 1.0)
+	apply_audio()
+	_persist_audio(persist)
+
+
+func set_music_volume(v: float, persist: bool = true) -> void:
+	music_volume = clampf(v, 0.0, 1.0)
+	apply_audio()
+	_persist_audio(persist)
+
+
+func set_sfx_volume(v: float, persist: bool = true) -> void:
+	sfx_volume = clampf(v, 0.0, 1.0)
+	apply_audio()
+	_persist_audio(persist)
+
+
+func _persist_audio(immediate: bool) -> void:
+	if immediate:
+		_audio_save_timer = null
+		save_settings()
+		return
+	# Coalesce rapid slider ticks / key repeats into one disk write.
+	var tree := get_tree()
+	if tree == null:
+		save_settings()
+		return
+	_audio_save_timer = tree.create_timer(0.35)
+	var token := _audio_save_timer
+	token.timeout.connect(func() -> void:
+		if _audio_save_timer != token:
+			return
+		_audio_save_timer = null
+		save_settings()
+	)
 
 
 func _apply_content_scale() -> void:

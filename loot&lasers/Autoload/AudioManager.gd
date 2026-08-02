@@ -8,6 +8,7 @@ const BUS_SFX := "SFX"
 var _sfx: AudioStreamPlayer
 var _music: AudioStreamPlayer
 var _bed_kind := ""
+var _stream_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -120,6 +121,9 @@ func start_cantina_bed() -> void:
 
 
 func _tone(freq: float, seconds: float) -> AudioStreamWAV:
+	var key := "tone:%.2f:%.3f" % [freq, seconds]
+	if _stream_cache.has(key):
+		return _stream_cache[key]
 	var sample_rate := 22050
 	var frames := int(sample_rate * seconds)
 	var data := PackedByteArray()
@@ -134,10 +138,17 @@ func _tone(freq: float, seconds: float) -> AudioStreamWAV:
 	stream.mix_rate = sample_rate
 	stream.stereo = false
 	stream.data = data
+	_stream_cache[key] = stream
 	return stream
 
 
 func _chord(freqs: Array, seconds: float) -> AudioStreamWAV:
+	var parts: PackedStringArray = []
+	for f in freqs:
+		parts.append("%.2f" % float(f))
+	var key := "chord:%s:%.3f" % [",".join(parts), seconds]
+	if _stream_cache.has(key):
+		return _stream_cache[key]
 	var sample_rate := 22050
 	var frames := int(sample_rate * seconds)
 	var data := PackedByteArray()
@@ -156,10 +167,14 @@ func _chord(freqs: Array, seconds: float) -> AudioStreamWAV:
 	stream.mix_rate = sample_rate
 	stream.stereo = false
 	stream.data = data
+	_stream_cache[key] = stream
 	return stream
 
 
 func _noise_burst(seconds: float) -> AudioStreamWAV:
+	var key := "noise:%.3f" % seconds
+	if _stream_cache.has(key):
+		return _stream_cache[key]
 	var sample_rate := 22050
 	var frames := int(sample_rate * seconds)
 	var data := PackedByteArray()
@@ -175,10 +190,14 @@ func _noise_burst(seconds: float) -> AudioStreamWAV:
 	stream.mix_rate = sample_rate
 	stream.stereo = false
 	stream.data = data
+	_stream_cache[key] = stream
 	return stream
 
 
 func _drone(freq: float) -> AudioStreamWAV:
+	var key := "drone:%.2f" % freq
+	if _stream_cache.has(key):
+		return _stream_cache[key]
 	var sample_rate := 22050
 	var seconds := 2.0
 	var frames := int(sample_rate * seconds)
@@ -199,6 +218,7 @@ func _drone(freq: float) -> AudioStreamWAV:
 	stream.loop_begin = 0
 	stream.loop_end = frames
 	stream.data = data
+	_stream_cache[key] = stream
 	return stream
 
 

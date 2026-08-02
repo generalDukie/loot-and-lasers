@@ -499,7 +499,7 @@ static func make_content_wash(mood: String = "hub") -> Control:
 	screen.add_child(_gradient_layer(PackedColorArray([
 		Color(palette[3], 0.12), Color(palette[3], 0.0)
 	]), true, 0.45))
-	screen.add_child(_make_ambient_hud(palette[3], 0.72))
+	# Shell already owns AmbientHud — skip a second full-screen redraw pass here.
 	return screen
 
 

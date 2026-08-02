@@ -6,6 +6,7 @@ extends Control
 @export_range(0.0, 1.0, 0.05) var strength := 0.55
 
 var _elapsed := 0.0
+var _redraw_accum := 0.0
 
 
 func _ready() -> void:
@@ -16,6 +17,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
+	_redraw_accum += delta
+	if _redraw_accum < 0.08:
+		return
+	_redraw_accum = 0.0
 	queue_redraw()
 
 

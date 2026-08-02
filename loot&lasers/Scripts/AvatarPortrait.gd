@@ -5,6 +5,7 @@ extends Control
 var character: Dictionary = {}
 var _elapsed := 0.0
 var _phase := 0.0
+var _redraw_accum := 0.0
 
 
 func _ready() -> void:
@@ -14,6 +15,11 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
+	_redraw_accum += delta
+	# Portrait breathe/aura does not need 60 fps redraws.
+	if _redraw_accum < 0.05:
+		return
+	_redraw_accum = 0.0
 	queue_redraw()
 
 

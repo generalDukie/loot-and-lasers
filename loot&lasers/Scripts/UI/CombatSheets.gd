@@ -287,6 +287,79 @@ static func pending_level_up(prev_character: Dictionary, next_character: Diction
 	return {"from_level": from_l, "to_level": to_l}
 
 
+## Show combat-complete first; only after it closes, show level-up (never both).
+## Navigation callbacks run after the full sequence (complete → optional level-up → done).
+static func present_complete_then_level_up(
+	host: Control,
+	summary: Dictionary,
+	from_level: int,
+	character: Dictionary,
+	require_win_for_levelup: bool = true
+) -> void:
+	if host == null or not is_instance_valid(host):
+		return
+	var won := bool(summary.get("won", false))
+	var to_level := int(character.get("level", from_level))
+	var show_levelup := to_level > from_level and (won or not require_win_for_levelup)
+	var finished := {"done": false}
+
+	var primary_nav := Callable()
+	for action in summary.get("actions", []):
+		if typeof(action) != TYPE_DICTIONARY:
+			continue
+		if bool(action.get("primary", true)) and action.get("callback") is Callable:
+			primary_nav = action["callback"]
+			break
+	if not primary_nav.is_valid():
+		for action in summary.get("actions", []):
+			if typeof(action) == TYPE_DICTIONARY and action.get("callback") is Callable:
+				primary_nav = action["callback"]
+				break
+
+	var finish_sequence := func(nav: Callable) -> void:
+		if finished["done"]:
+			return
+		finished["done"] = true
+		_clear_sheet_host(host)
+		if show_levelup:
+			host.mouse_filter = Control.MOUSE_FILTER_STOP
+			var captured_nav := nav
+			var on_level_done := func() -> void:
+				_clear_sheet_host(host)
+				if captured_nav.is_valid():
+					captured_nav.call()
+			host.add_child(make_level_up_sheet(from_level, to_level, character, on_level_done))
+		elif nav.is_valid():
+			nav.call()
+
+	var sequenced := summary.duplicate(true)
+	var wrapped_actions: Array = []
+	for action in summary.get("actions", []):
+		if typeof(action) != TYPE_DICTIONARY:
+			continue
+		var a: Dictionary = (action as Dictionary).duplicate()
+		var orig: Callable = a["callback"] if a.get("callback") is Callable else Callable()
+		# Bind so each button keeps its own nav target (GDScript loop capture).
+		a["callback"] = finish_sequence.bind(orig)
+		wrapped_actions.append(a)
+	sequenced["actions"] = wrapped_actions
+
+	_clear_sheet_host(host)
+	host.mouse_filter = Control.MOUSE_FILTER_STOP
+	host.add_child(make_complete_sheet(sequenced, finish_sequence.bind(primary_nav)))
+
+
+static func _clear_sheet_host(host: Control) -> void:
+	if host == null or not is_instance_valid(host):
+		return
+	# Detach first so the next sheet never draws stacked with the previous.
+	var kids := host.get_children()
+	for child in kids:
+		host.remove_child(child)
+		child.queue_free()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
 static func _reward_row(label: String, value: String, color: Color, icon: String) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override(

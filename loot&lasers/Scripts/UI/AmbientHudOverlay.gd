@@ -8,6 +8,7 @@ extends Control
 
 var _elapsed := 0.0
 var _motes: Array[Dictionary] = []
+var _redraw_accum := 0.0
 
 
 func _ready() -> void:
@@ -28,6 +29,11 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
+	_redraw_accum += delta
+	# Decorative only — ~12 fps is enough and cuts CPU a lot on shell pages.
+	if _redraw_accum < 0.08:
+		return
+	_redraw_accum = 0.0
 	queue_redraw()
 
 

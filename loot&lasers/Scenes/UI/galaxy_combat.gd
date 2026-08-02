@@ -350,16 +350,6 @@ func _show_result(data: Dictionary) -> void:
 			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
 		],
 	}
-	var sheet := CombatSheets.make_complete_sheet(summary, func() -> void: GameManager.go_galaxy())
-	_sheet_host.mouse_filter = Control.MOUSE_FILTER_STOP
-	_sheet_host.add_child(sheet)
-	var next_level := int(GameManager.active_character.get("level", _prev_level))
-	if won and next_level > _prev_level:
-		await get_tree().create_timer(0.4).timeout
-		_sheet_host.add_child(CombatSheets.make_level_up_sheet(
-			_prev_level, next_level, GameManager.active_character,
-			func() -> void:
-				for child in _sheet_host.get_children():
-					if child != sheet:
-						child.queue_free()
-		))
+	CombatSheets.present_complete_then_level_up(
+		_sheet_host, summary, _prev_level, GameManager.active_character, true
+	)

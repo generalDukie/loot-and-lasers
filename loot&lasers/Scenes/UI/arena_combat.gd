@@ -1177,20 +1177,9 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 			{"label": "Inventory" if won else "Hub", "primary": false, "callback": go_secondary},
 		],
 	}
-	var sheet := CombatSheets.make_complete_sheet(summary, go_cantina)
-	_sheet_host.mouse_filter = Control.MOUSE_FILTER_STOP
-	_sheet_host.add_child(sheet)
-
-	var next_level := int(GameManager.active_character.get("level", _prev_level))
-	if won and next_level > _prev_level:
-		await get_tree().create_timer(0.4).timeout
-		var dismiss_levelup := func() -> void:
-			for child in _sheet_host.get_children():
-				if child != sheet:
-					child.queue_free()
-		_sheet_host.add_child(CombatSheets.make_level_up_sheet(
-			_prev_level, next_level, GameManager.active_character, dismiss_levelup
-		))
+	CombatSheets.present_complete_then_level_up(
+		_sheet_host, summary, _prev_level, GameManager.active_character, true
+	)
 
 
 func _show_result(result: Dictionary) -> void:
@@ -1224,18 +1213,7 @@ func _show_result(result: Dictionary) -> void:
 			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
 		],
 	}
-	var sheet := CombatSheets.make_complete_sheet(summary, func() -> void: GameManager.go_arena())
-	_sheet_host.mouse_filter = Control.MOUSE_FILTER_STOP
-	_sheet_host.add_child(sheet)
-
-	var next_level := int(GameManager.active_character.get("level", _prev_level))
-	if next_level > _prev_level:
-		await get_tree().create_timer(0.45).timeout
-		var level_sheet := CombatSheets.make_level_up_sheet(
-			_prev_level, next_level, GameManager.active_character,
-			func() -> void:
-				for child in _sheet_host.get_children():
-					if child != sheet:
-						child.queue_free()
-		)
-		_sheet_host.add_child(level_sheet)
+	# Arena can award XP on either outcome; still sequence level-up after complete.
+	CombatSheets.present_complete_then_level_up(
+		_sheet_host, summary, _prev_level, GameManager.active_character, false
+	)

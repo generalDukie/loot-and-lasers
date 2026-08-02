@@ -14,7 +14,7 @@ var base_url: String = DEFAULT_BASE_URL
 
 func _ready() -> void:
 	_load_base_url()
-	print("[ApiClient] base_url=%s" % base_url)
+	print("[GameApiClient] base_url=%s" % base_url)
 
 
 func set_base_url(url: String) -> void:

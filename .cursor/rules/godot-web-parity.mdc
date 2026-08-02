@@ -1,0 +1,37 @@
+---
+description: Godot client must replicate the web UI/UX as source of truth — no redesigns
+globs: loot&lasers/**/*
+alwaysApply: true
+---
+
+# Godot ↔ Web parity (source of truth)
+
+The **web client in `src/`** is the source of truth for Loot & Lasers design and gameplay UX.
+
+The Godot client in `loot&lasers/` must **replicate the web experience as closely as possible**. Do **not** redesign, “modernize,” simplify, or invent a new visual language unless the user explicitly asks.
+
+## Before changing any Godot UI
+
+1. Open the matching web implementation under `src/` (pages, `src/components/game/`, etc.).
+2. Match **layout, hierarchy, colors, typography, spacing, icons, copy, animations, menus, and flow**.
+3. Prefer Godot only for **performance / animation fidelity** (tweens, particles, shaders) — not for changing the design.
+4. If something cannot be reproduced exactly in Godot, **say why** and propose the **closest visual + functional equivalent** — do not silently substitute a different look.
+
+## Mapping
+
+| Web | Godot |
+|-----|--------|
+| `src/pages/*`, `src/components/game/*` | `loot&lasers/Scenes/UI/*`, `Scripts/UI/*` |
+| Design tokens / Tailwind theme / game CSS | `Scripts/UI/ClientUi.gd` + existing painted styles |
+| Game rules / formulas | Prefer shared server authority; mirror `src/lib/` in `loot&lasers/Scripts/` only as needed |
+
+## Hard rules
+
+- **No drive-by redesigns** while “fixing” or “polishing.”
+- **No new color themes, fonts, or layout systems** that diverge from web.
+- **Copy and section structure** (e.g. Codex) must follow the web component, not a paraphrased GDScript version.
+- When auditing “does it look right?”, **diff against the live web UI**, not against AI taste.
+
+## When exact parity is blocked
+
+Call out limits clearly (e.g. no Lucide SVG set → closest emoji/icon atlas; HTML/CSS layout → Godot containers; Framer Motion → Tween equivalents). Ship the closest match; track gaps instead of inventing a new design.

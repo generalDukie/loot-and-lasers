@@ -396,7 +396,7 @@ func _populate() -> void:
 func _populate_news() -> void:
 	for c in _news_list.get_children():
 		c.queue_free()
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/GalaxyNews?sort=-created_date&limit=40", null, true
 	)
 	if not res.ok:

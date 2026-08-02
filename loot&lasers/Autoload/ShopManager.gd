@@ -15,7 +15,7 @@ func _ready() -> void:
 
 
 func ensure_shop() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("EnsureShop", {})
+	var res: Dictionary = await GameApiClient.invoke("EnsureShop", {})
 	_apply_payload(res)
 	return res
 
@@ -28,7 +28,7 @@ func buy_fuel() -> Dictionary:
 func buy_consumable(slot_id: String) -> Dictionary:
 	if slot_id.is_empty():
 		return {"ok": false, "error": "Missing slot_id", "data": {}}
-	var res: Dictionary = await ApiClient.invoke("BuyShopConsumable", {"slot_id": slot_id})
+	var res: Dictionary = await GameApiClient.invoke("BuyShopConsumable", {"slot_id": slot_id})
 	_apply_payload(res)
 	if res.ok:
 		last_purchase = {
@@ -44,7 +44,7 @@ func buy_consumable(slot_id: String) -> Dictionary:
 func buy_gear(slot_id: String, is_hot: bool = false, haggle: bool = false) -> Dictionary:
 	if slot_id.is_empty():
 		return {"ok": false, "error": "Missing slot_id", "data": {}}
-	var res: Dictionary = await ApiClient.invoke("BuyShopGear", {
+	var res: Dictionary = await GameApiClient.invoke("BuyShopGear", {
 		"slot_id": slot_id,
 		"haggle": haggle,
 		"is_hot": is_hot,
@@ -70,7 +70,7 @@ func buy_gear(slot_id: String, is_hot: bool = false, haggle: bool = false) -> Di
 
 
 func refresh_shop(which: String) -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("RefreshShop", {"which": which})
+	var res: Dictionary = await GameApiClient.invoke("RefreshShop", {"which": which})
 	_apply_payload(res)
 	return res
 

@@ -67,7 +67,7 @@ func stop() -> void:
 func _connect_ws() -> void:
 	if AuthManager.access_token.is_empty():
 		return
-	var base := ApiClient.base_url.replace("http://", "ws://").replace("https://", "wss://")
+	var base := GameApiClient.base_url.replace("http://", "ws://").replace("https://", "wss://")
 	var url := "%s/ws?entity=%s&token=%s" % [
 		base.rstrip("/"),
 		_entity_filter.uri_encode(),

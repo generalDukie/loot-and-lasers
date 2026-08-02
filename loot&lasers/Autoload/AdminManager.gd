@@ -51,7 +51,7 @@ func moderation(action: String, body: Dictionary = {}) -> Dictionary:
 		return gate
 	var payload := body.duplicate(true)
 	payload["action"] = action
-	var res: Dictionary = await ApiClient.invoke("AdminModeration", payload)
+	var res: Dictionary = await GameApiClient.invoke("AdminModeration", payload)
 	return _result(res, action)
 
 
@@ -157,7 +157,7 @@ func search_players(query: String = "", limit: int = 200) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Character?sort=-created_date&limit=%s" % clampi(limit, 1, 500), null, true
 	)
 	var out := _result(res, "players")
@@ -189,7 +189,7 @@ func get_character(character_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Character/%s" % character_id.uri_encode(), null, true
 	)
 	return _result(res, "character")
@@ -199,7 +199,7 @@ func get_user(user_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/User/%s" % user_id.uri_encode(), null, true
 	)
 	return _result(res, "user")
@@ -209,7 +209,7 @@ func list_character_items(character_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/Item/filter",
 		{"query": {"character_id": character_id}, "limit": 200}, true
 	)
@@ -220,7 +220,7 @@ func rename_character(character_id: String, new_name: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"PATCH", "/api/entities/Character/%s" % character_id.uri_encode(),
 		{"name": new_name}, true
 	)
@@ -231,7 +231,7 @@ func list_open_reports(limit: int = 50) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/Report/filter",
 		{"query": {"status": "open"}, "sort": "-created_date", "limit": limit}, true
 	)
@@ -242,7 +242,7 @@ func list_guilds(limit: int = 100) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Guild?sort=-created_date&limit=%s" % clampi(limit, 1, 200), null, true
 	)
 	return _result(res, "guilds")
@@ -252,7 +252,7 @@ func list_guild_members(guild_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildMember/filter",
 		{"query": {"guild_id": guild_id}, "limit": 100}, true
 	)
@@ -263,7 +263,7 @@ func list_promo_codes() -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/PromoCode?sort=-created_date&limit=200", null, true
 	)
 	return _result(res, "promos")
@@ -273,7 +273,7 @@ func get_moderation_filter() -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/ModerationConfig/filter",
 		{"query": {}, "limit": 1}, true
 	)
@@ -292,13 +292,13 @@ func economy_snapshot() -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var chars: Dictionary = await ApiClient.request(
+	var chars: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Character?sort=-created_date&limit=500", null, true
 	)
-	var nova_ev: Dictionary = await ApiClient.request(
+	var nova_ev: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/NovaSpendEvent?sort=-created_date&limit=200", null, true
 	)
-	var sd_ev: Dictionary = await ApiClient.request(
+	var sd_ev: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/StardustSpendEvent?sort=-created_date&limit=200", null, true
 	)
 	if not chars.ok:
@@ -339,7 +339,7 @@ func entitlements_search(params: Dictionary = {}) -> Dictionary:
 	if not gate.is_empty():
 		return gate
 	var q := _query_string(params)
-	var res: Dictionary = await ApiClient.request("GET", "/api/entitlements/admin/search%s" % q, null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/entitlements/admin/search%s" % q, null, true)
 	return _result(res, "entitlements")
 
 
@@ -347,7 +347,7 @@ func entitlements_grant(body: Dictionary) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("POST", "/api/entitlements/admin/grant", body, true)
+	var res: Dictionary = await GameApiClient.request("POST", "/api/entitlements/admin/grant", body, true)
 	return _result(res, "granted")
 
 
@@ -355,7 +355,7 @@ func entitlements_revoke(entitlement_id: String, body: Dictionary = {}) -> Dicti
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entitlements/admin/%s/revoke" % entitlement_id.uri_encode(), body, true
 	)
 	return _result(res, "revoked")
@@ -365,7 +365,7 @@ func entitlements_restore(entitlement_id: String, body: Dictionary = {}) -> Dict
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entitlements/admin/%s/restore" % entitlement_id.uri_encode(), body, true
 	)
 	return _result(res, "restored")
@@ -376,7 +376,7 @@ func entitlements_audit(params: Dictionary = {}) -> Dictionary:
 	if not gate.is_empty():
 		return gate
 	var q := _query_string(params)
-	var res: Dictionary = await ApiClient.request("GET", "/api/entitlements/admin/audit%s" % q, null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/entitlements/admin/audit%s" % q, null, true)
 	return _result(res, "entitlement_audit")
 
 
@@ -384,7 +384,7 @@ func entitlements_products() -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("GET", "/api/entitlements/admin/products", null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/entitlements/admin/products", null, true)
 	return _result(res, "products")
 
 
@@ -395,7 +395,7 @@ func rewards_search(params: Dictionary = {}) -> Dictionary:
 	if not gate.is_empty():
 		return gate
 	var q := _query_string(params)
-	var res: Dictionary = await ApiClient.request("GET", "/api/rewards/admin/search%s" % q, null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/rewards/admin/search%s" % q, null, true)
 	return _result(res, "rewards")
 
 
@@ -403,7 +403,7 @@ func rewards_get(claim_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/rewards/admin/%s" % claim_id.uri_encode(), null, true
 	)
 	return _result(res, "reward")
@@ -413,7 +413,7 @@ func rewards_grant(body: Dictionary) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("POST", "/api/rewards/admin/grant", body, true)
+	var res: Dictionary = await GameApiClient.request("POST", "/api/rewards/admin/grant", body, true)
 	return _result(res, "reward_granted")
 
 
@@ -421,7 +421,7 @@ func rewards_retry(claim_id: String, body: Dictionary = {}) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/rewards/admin/%s/retry-delivery" % claim_id.uri_encode(), body, true
 	)
 	return _result(res, "retried")
@@ -432,7 +432,7 @@ func rewards_audit(params: Dictionary = {}) -> Dictionary:
 	if not gate.is_empty():
 		return gate
 	var q := _query_string(params)
-	var res: Dictionary = await ApiClient.request("GET", "/api/rewards/admin/audit/recent%s" % q, null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/rewards/admin/audit/recent%s" % q, null, true)
 	return _result(res, "reward_audit")
 
 
@@ -443,7 +443,7 @@ func audit_search(params: Dictionary = {}) -> Dictionary:
 	if not gate.is_empty():
 		return gate
 	var q := _query_string(params)
-	var res: Dictionary = await ApiClient.request("GET", "/api/audit/admin/search%s" % q, null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/audit/admin/search%s" % q, null, true)
 	return _result(res, "audit")
 
 
@@ -451,7 +451,7 @@ func audit_get(entry_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/audit/admin/%s" % entry_id.uri_encode(), null, true
 	)
 	return _result(res, "audit_entry")
@@ -462,7 +462,7 @@ func audit_timeline(account_id: String, params: Dictionary = {}) -> Dictionary:
 	if not gate.is_empty():
 		return gate
 	var q := _query_string(params)
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/audit/admin/timeline/%s%s" % [account_id.uri_encode(), q], null, true
 	)
 	return _result(res, "timeline")
@@ -472,7 +472,7 @@ func audit_annotate(entry_id: String, note: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/audit/admin/%s/annotations" % entry_id.uri_encode(),
 		{"note": note}, true
 	)
@@ -483,7 +483,7 @@ func audit_export(body: Dictionary = {}) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("POST", "/api/audit/admin/export", body, true)
+	var res: Dictionary = await GameApiClient.request("POST", "/api/audit/admin/export", body, true)
 	return _result(res, "exported")
 
 
@@ -491,7 +491,7 @@ func audit_integrity(entry_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/audit/admin/%s/integrity" % entry_id.uri_encode(), null, true
 	)
 	return _result(res, "integrity")
@@ -503,7 +503,7 @@ func email_log(limit: int = 50) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/auth/admin/email-log?limit=%s" % clampi(limit, 1, 200), null, true
 	)
 	return _result(res, "email_log")
@@ -513,7 +513,7 @@ func email_test() -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("POST", "/api/auth/admin/email-test", {}, true)
+	var res: Dictionary = await GameApiClient.request("POST", "/api/auth/admin/email-test", {}, true)
 	return _result(res, "email_test")
 
 
@@ -521,7 +521,7 @@ func schedules_list() -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("GET", "/api/schedules", null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/schedules", null, true)
 	return _result(res, "schedules")
 
 
@@ -529,7 +529,7 @@ func schedules_audit(limit: int = 50) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/schedules/audit?limit=%s" % clampi(limit, 1, 200), null, true
 	)
 	return _result(res, "schedule_audit")
@@ -539,7 +539,7 @@ func schedules_create(body: Dictionary) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("POST", "/api/schedules", body, true)
+	var res: Dictionary = await GameApiClient.request("POST", "/api/schedules", body, true)
 	return _result(res, "schedule_created")
 
 
@@ -547,7 +547,7 @@ func schedules_pause(schedule_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/schedules/%s/pause" % schedule_id.uri_encode(), {}, true
 	)
 	return _result(res, "paused")
@@ -557,7 +557,7 @@ func schedules_resume(schedule_id: String) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/schedules/%s/resume" % schedule_id.uri_encode(), {}, true
 	)
 	return _result(res, "resumed")
@@ -567,7 +567,7 @@ func schedules_tick() -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("POST", "/api/schedules/tick", {}, true)
+	var res: Dictionary = await GameApiClient.request("POST", "/api/schedules/tick", {}, true)
 	return _result(res, "ticked")
 
 
@@ -575,7 +575,7 @@ func schedules_preview(body: Dictionary) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await ApiClient.request("POST", "/api/schedules/preview", body, true)
+	var res: Dictionary = await GameApiClient.request("POST", "/api/schedules/preview", body, true)
 	return _result(res, "preview")
 
 

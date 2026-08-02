@@ -13,7 +13,7 @@ func _ready() -> void:
 
 func _boot() -> void:
 	_status.text = "Loading news…"
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/GalaxyNews?sort=-created_date&limit=40", null, true
 	)
 	for c in _list.get_children():

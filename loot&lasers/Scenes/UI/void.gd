@@ -277,7 +277,7 @@ func _load_items() -> void:
 	_items = []
 	if cid.is_empty():
 		return
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/Item/filter",
 		{"query": {"character_id": cid}, "sort": "-created_date", "limit": 200}, true
 	)

@@ -39,19 +39,19 @@ func preview_reward(hours: int) -> int:
 
 
 func start(hours: int) -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("StartMining", {"hours": clampi(hours, 1, 24)})
+	var res: Dictionary = await GameApiClient.invoke("StartMining", {"hours": clampi(hours, 1, 24)})
 	_apply(res)
 	return res
 
 
 func collect() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("CollectMining", {})
+	var res: Dictionary = await GameApiClient.invoke("CollectMining", {})
 	_apply(res)
 	return res
 
 
 func cancel() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("CancelMining", {})
+	var res: Dictionary = await GameApiClient.invoke("CancelMining", {})
 	_apply(res)
 	return res
 

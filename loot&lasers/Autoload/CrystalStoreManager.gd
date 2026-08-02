@@ -113,7 +113,7 @@ static func format_week_left(sec: int) -> String:
 
 
 func claim_quest(quest_id: String) -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("ClaimWeeklyNovaQuest", {"quest_id": quest_id})
+	var res: Dictionary = await GameApiClient.invoke("ClaimWeeklyNovaQuest", {"quest_id": quest_id})
 	if res.ok:
 		_apply_character_payload(res.data if typeof(res.data) == TYPE_DICTIONARY else {})
 	return res
@@ -122,7 +122,7 @@ func claim_quest(quest_id: String) -> Dictionary:
 ## Local/dev grants Nova via PurchaseCrystalPack; production returns 501 until Stripe.
 ## Web CrystalStorePage does not call this yet — checkout toast only.
 func purchase_pack(pack_id: String) -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("PurchaseCrystalPack", {"pack_id": pack_id})
+	var res: Dictionary = await GameApiClient.invoke("PurchaseCrystalPack", {"pack_id": pack_id})
 	if res.ok:
 		_apply_character_payload(res.data if typeof(res.data) == TYPE_DICTIONARY else {})
 	return res

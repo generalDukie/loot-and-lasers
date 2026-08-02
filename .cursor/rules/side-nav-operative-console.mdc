@@ -1,0 +1,29 @@
+---
+description: Permanent side-nav ↔ operative-console layout relationship in the Godot shell
+globs: loot&lasers/Scenes/Main/game_shell.gd
+alwaysApply: true
+---
+
+# Side nav ↔ operative console (invariant)
+
+In `loot&lasers/Scenes/Main/game_shell.gd`, the **operative console** and **side nav** are permanently coupled.
+
+## Contract
+
+1. **Operative console** (portrait, name, currencies, XP) is fixed-height chrome at the top of the rail (`SIZE_SHRINK_BEGIN`). It must **not** expand into nav space.
+2. **All page buttons** (currently 15) live in the leftover height **under** the console and must stay **fully visible at every window height** — **never** put the page list in a `ScrollContainer`.
+3. **Equal buttons**: every page button shares the same height and the same in-group spacing. Keep **group headings** (Explore / Social / Battle / Trade) and **slightly larger gaps between groups** than between buttons inside a group.
+4. Stretch groups by **item count** so 3-button groups (Battle) still yield the same per-button height as 4-button groups.
+5. **No minimum** button height or font floor — if the console grows or the window shrinks, buttons rescale to fit.
+6. Changing the console must only change leftover nav height (buttons rescale). Changing nav must not force the console to grow, scroll, or reflow.
+
+## Do not
+
+- Reintroduce scroll for page nav
+- Give page buttons a non-zero `custom_minimum_size.y` that causes clipping/cutoff
+- Give the operative panel `SIZE_EXPAND_FILL`
+- Remove group headings or flatten all gaps to one uniform value unless the user asks
+
+## Baseline look
+
+Preserve today’s console + nav visual scale (fonts, icons, portrait, rail width) unless the user explicitly changes the console; then only the nav button heights may change as a consequence.

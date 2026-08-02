@@ -23,13 +23,13 @@ func _ready() -> void:
 
 
 func sync_fuel() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("SyncFuelCycle", {})
+	var res: Dictionary = await GameApiClient.invoke("SyncFuelCycle", {})
 	_apply_character_payload(res)
 	return res
 
 
 func buy_fuel() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("BuyFuel", {})
+	var res: Dictionary = await GameApiClient.invoke("BuyFuel", {})
 	_apply_character_payload(res)
 	return res
 
@@ -74,7 +74,7 @@ func reroll_board() -> Array:
 func launch_offer(offer: Dictionary) -> Dictionary:
 	var template := offer.duplicate(true)
 	# Server ignores preview XP/SD; keep loot metadata.
-	var res: Dictionary = await ApiClient.invoke("LaunchMission", {"template": template})
+	var res: Dictionary = await GameApiClient.invoke("LaunchMission", {"template": template})
 	if not res.ok:
 		return res
 	_apply_character_payload(res)
@@ -95,7 +95,7 @@ func fetch_active_mission() -> Dictionary:
 		active_mission_missing = false
 		active_mission_changed.emit(active_mission)
 		return {"ok": true, "data": {}}
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/entities/Mission/filter",
 		{"query": {"id": mid}, "sort": "-created_date", "limit": 1},
@@ -227,7 +227,7 @@ func skip_mission() -> Dictionary:
 	var mid := current_mission_id()
 	if mid.is_empty():
 		return {"ok": false, "error": "No active mission", "data": {}}
-	var res: Dictionary = await ApiClient.invoke("SkipMission", {"mission_id": mid})
+	var res: Dictionary = await GameApiClient.invoke("SkipMission", {"mission_id": mid})
 	_apply_character_payload(res)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		var mission_raw: Variant = res.data.get("mission", null)
@@ -250,11 +250,11 @@ func claim_mission(won: bool = true) -> Dictionary:
 	var body := {"mission_id": mid, "won": won}
 	var res: Dictionary
 	if won:
-		res = await ApiClient.invoke("ClaimMission", body)
+		res = await GameApiClient.invoke("ClaimMission", body)
 	else:
-		res = await ApiClient.invoke("FailMission", {"mission_id": mid})
+		res = await GameApiClient.invoke("FailMission", {"mission_id": mid})
 		if not res.ok:
-			res = await ApiClient.invoke("ClaimMission", {"mission_id": mid, "won": false})
+			res = await GameApiClient.invoke("ClaimMission", {"mission_id": mid, "won": false})
 	_apply_character_payload(res)
 	if res.ok:
 		last_claim_result = res.data if typeof(res.data) == TYPE_DICTIONARY else {}

@@ -1,5 +1,7 @@
 extends Node
 ## Session / JWT + auth helpers for the Godot client.
+## Node API (GameApiClient) remains the source of truth for gameplay auth.
+## NakamaManager handles the parallel Nakama session used for realtime/RPC.
 
 signal auth_changed(logged_in: bool)
 signal user_changed(user: Dictionary)
@@ -20,7 +22,7 @@ func is_logged_in() -> bool:
 
 
 func login(email: String, password: String) -> Dictionary:
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/auth/login",
 		{"email": email.strip_edges(), "password": password},
@@ -32,7 +34,7 @@ func login(email: String, password: String) -> Dictionary:
 
 
 func register(email: String, password: String) -> Dictionary:
-	return await ApiClient.request(
+	return await GameApiClient.request(
 		"POST",
 		"/api/auth/register",
 		{"email": email.strip_edges(), "password": password},
@@ -41,7 +43,7 @@ func register(email: String, password: String) -> Dictionary:
 
 
 func verify_otp(email: String, otp_code: String) -> Dictionary:
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/auth/verify-otp",
 		{"email": email.strip_edges(), "otpCode": otp_code.strip_edges()},
@@ -53,7 +55,7 @@ func verify_otp(email: String, otp_code: String) -> Dictionary:
 
 
 func resend_otp(email: String) -> Dictionary:
-	return await ApiClient.request(
+	return await GameApiClient.request(
 		"POST",
 		"/api/auth/resend-otp",
 		{"email": email.strip_edges()},
@@ -62,7 +64,7 @@ func resend_otp(email: String) -> Dictionary:
 
 
 func fetch_me() -> Dictionary:
-	var res: Dictionary = await ApiClient.request("GET", "/api/auth/me", null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/auth/me", null, true)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		user = res.data
 		user_changed.emit(user)
@@ -72,7 +74,7 @@ func fetch_me() -> Dictionary:
 
 
 func update_me(patch: Dictionary) -> Dictionary:
-	var res: Dictionary = await ApiClient.request("PATCH", "/api/auth/me", patch, true)
+	var res: Dictionary = await GameApiClient.request("PATCH", "/api/auth/me", patch, true)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		user = res.data
 		user_changed.emit(user)
@@ -85,7 +87,7 @@ func list_characters() -> Dictionary:
 		if not me_res.ok:
 			return me_res
 	var uid := str(user.get("id", ""))
-	return await ApiClient.request(
+	return await GameApiClient.request(
 		"POST",
 		"/api/entities/Character/filter",
 		{"query": {"created_by_id": uid}, "sort": "-created_date", "limit": 10},
@@ -94,7 +96,7 @@ func list_characters() -> Dictionary:
 
 
 func create_character(payload: Dictionary) -> Dictionary:
-	return await ApiClient.request("POST", "/api/entities/Character", payload, true)
+	return await GameApiClient.request("POST", "/api/entities/Character", payload, true)
 
 
 func select_character(character_id: String) -> Dictionary:
@@ -102,14 +104,14 @@ func select_character(character_id: String) -> Dictionary:
 
 
 func get_character(character_id: String) -> Dictionary:
-	return await ApiClient.request("GET", "/api/entities/Character/%s" % character_id, null, true)
+	return await GameApiClient.request("GET", "/api/entities/Character/%s" % character_id, null, true)
 
 
 func list_items(character_id: String = "", limit: int = 200) -> Dictionary:
 	var cid := character_id if not character_id.is_empty() else str(GameManager.active_character.get("id", ""))
 	if cid.is_empty():
 		return {"ok": false, "status": 0, "error": "No character id", "data": []}
-	return await ApiClient.request(
+	return await GameApiClient.request(
 		"POST",
 		"/api/entities/Item/filter",
 		{"query": {"character_id": cid}, "sort": "-created_date", "limit": limit},
@@ -118,11 +120,11 @@ func list_items(character_id: String = "", limit: int = 200) -> Dictionary:
 
 
 func patch_item(item_id: String, patch: Dictionary) -> Dictionary:
-	return await ApiClient.request("PATCH", "/api/entities/Item/%s" % item_id, patch, true)
+	return await GameApiClient.request("PATCH", "/api/entities/Item/%s" % item_id, patch, true)
 
 
 func patch_character(character_id: String, patch: Dictionary) -> Dictionary:
-	return await ApiClient.request("PATCH", "/api/entities/Character/%s" % character_id, patch, true)
+	return await GameApiClient.request("PATCH", "/api/entities/Character/%s" % character_id, patch, true)
 
 
 ## Equip an unequipped bag item. Swaps the same-slot piece if one is worn.
@@ -218,7 +220,7 @@ func unequip_item(item_id: String) -> Dictionary:
 func use_consumable(item_id: String) -> Dictionary:
 	if item_id.is_empty():
 		return {"ok": false, "error": "Missing item_id", "data": {}}
-	var res: Dictionary = await ApiClient.invoke("UseConsumable", {"item_id": item_id})
+	var res: Dictionary = await GameApiClient.invoke("UseConsumable", {"item_id": item_id})
 	if not res.ok:
 		var err := str(res.get("error", "UseConsumable failed"))
 		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
@@ -243,7 +245,7 @@ func dismiss_active_buff(stat: String, expires_at: String = "", name: String = "
 		body["expires_at"] = expires_at
 	if not name.is_empty():
 		body["name"] = name
-	var res: Dictionary = await ApiClient.invoke("DismissActiveBuff", body)
+	var res: Dictionary = await GameApiClient.invoke("DismissActiveBuff", body)
 	if not res.ok:
 		var err := str(res.get("error", "DismissActiveBuff failed"))
 		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
@@ -261,12 +263,36 @@ func dismiss_active_buff(stat: String, expires_at: String = "", name: String = "
 
 func logout() -> void:
 	if not access_token.is_empty():
-		await ApiClient.request("POST", "/api/auth/logout", {}, true)
+		await GameApiClient.request("POST", "/api/auth/logout", {}, true)
+	# Clear parallel Nakama session without touching Node gameplay APIs.
+	await logout_nakama()
 	clear_session()
 
 
+## Ensure a Nakama session exists (restore saved tokens, else device auth).
+## Does not replace email/password login against the Node API.
+func ensure_nakama_session() -> Dictionary:
+	NakamaManager.initialize_client()
+	var res: Dictionary = await NakamaManager.ensure_authenticated()
+	if res.get("success", false):
+		print("[AuthManager] Nakama session ready user_id=%s" % str(res.get("data", {}).get("user_id", "")))
+	else:
+		print("[AuthManager] Nakama session unavailable — %s" % str(res.get("error", "unknown")))
+	return res
+
+
+func logout_nakama() -> Dictionary:
+	if NakamaManager == null:
+		return {"success": true, "data": {}, "error": "", "status_code": 200}
+	return await NakamaManager.logout()
+
+
+func is_nakama_authenticated() -> bool:
+	return NakamaManager != null and NakamaManager.is_authenticated()
+
+
 func change_password(current_password: String, new_password: String) -> Dictionary:
-	return await ApiClient.request(
+	return await GameApiClient.request(
 		"POST", "/api/auth/change-password",
 		{"currentPassword": current_password, "newPassword": new_password},
 		true
@@ -274,7 +300,7 @@ func change_password(current_password: String, new_password: String) -> Dictiona
 
 
 func request_password_reset(email: String) -> Dictionary:
-	return await ApiClient.request(
+	return await GameApiClient.request(
 		"POST", "/api/auth/reset-password-request",
 		{"email": email.strip_edges()},
 		false
@@ -282,7 +308,7 @@ func request_password_reset(email: String) -> Dictionary:
 
 
 func reset_password(reset_token: String, new_password: String) -> Dictionary:
-	return await ApiClient.request(
+	return await GameApiClient.request(
 		"POST", "/api/auth/reset-password",
 		{"resetToken": reset_token.strip_edges(), "newPassword": new_password},
 		false

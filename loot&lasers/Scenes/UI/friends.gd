@@ -39,7 +39,7 @@ func _warm_names() -> void:
 			ids.append(oid)
 	if ids.is_empty():
 		return
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Character?sort=-created_date&limit=200", null, true
 	)
 	if res.ok and typeof(res.data) == TYPE_ARRAY:

@@ -425,7 +425,7 @@ func _rotate_chatter() -> void:
 func _load_hof() -> void:
 	for c in _hof.get_children():
 		c.queue_free()
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/NexusHallOfFame?sort=-lost_at&limit=50", null, true
 	)
 	if not res.ok or typeof(res.data) != TYPE_ARRAY:

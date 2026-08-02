@@ -93,7 +93,7 @@ func _refresh() -> void:
 
 	await _load_guild_tags()
 
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET",
 		"/api/entities/Character?sort=-arena_rating&limit=100",
 		null,
@@ -128,10 +128,10 @@ func _refresh() -> void:
 
 func _load_guild_tags() -> void:
 	_guild_by_char.clear()
-	var guilds_res: Dictionary = await ApiClient.request(
+	var guilds_res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Guild?limit=200", null, true
 	)
-	var members_res: Dictionary = await ApiClient.request(
+	var members_res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/GuildMember?limit=500", null, true
 	)
 	var tag_by_gid: Dictionary = {}
@@ -440,7 +440,7 @@ func _prefetch_preview(opponent_id: String) -> void:
 	var me := str(GameManager.active_character.get("id", ""))
 	if me.is_empty() or me == opponent_id:
 		return
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/arena/challenges/preview",
 		{
 			"challengerCharacterId": me,

@@ -26,7 +26,7 @@ func load_history(character_id: String = "") -> Array:
 	if cid.is_empty():
 		match_history = []
 		return match_history
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/entities/ArenaMatch/filter",
 		{"query": {"character_id": cid}, "sort": "-created_date", "limit": ArenaRules.HISTORY_LIMIT},
@@ -67,12 +67,12 @@ func record_match(opp: Dictionary, won: bool, rating_delta: int, rating_after = 
 		"arena_bot_id": bot_id,
 		"opponent_snapshot": ArenaRules.snapshot_opponent(opp),
 	}
-	var create_res: Dictionary = await ApiClient.request("POST", "/api/entities/ArenaMatch", body, true)
+	var create_res: Dictionary = await GameApiClient.request("POST", "/api/entities/ArenaMatch", body, true)
 	if not create_res.ok:
 		return create_res
 
 	# Prune excess rows beyond HISTORY_LIMIT (same as web).
-	var all_res: Dictionary = await ApiClient.request(
+	var all_res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/entities/ArenaMatch/filter",
 		{"query": {"character_id": cid}, "sort": "-created_date", "limit": ArenaRules.HISTORY_LIMIT + 20},
@@ -88,7 +88,7 @@ func record_match(opp: Dictionary, won: bool, rating_delta: int, rating_after = 
 				var oid := str(old.get("id", ""))
 				if oid.is_empty():
 					continue
-				await ApiClient.request("DELETE", "/api/entities/ArenaMatch/%s" % oid.uri_encode(), null, true)
+				await GameApiClient.request("DELETE", "/api/entities/ArenaMatch/%s" % oid.uri_encode(), null, true)
 
 	await load_history(cid)
 	return create_res
@@ -142,7 +142,7 @@ func process_bot_raids(max_raids: int = 2) -> Dictionary:
 	var cid := str(GameManager.active_character.get("id", ""))
 	if cid.is_empty():
 		return {"ok": false, "raids": []}
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/arena/bots/raids",
 		{"characterId": cid, "max": max_raids},
 		true
@@ -161,7 +161,7 @@ func process_bot_raids(max_raids: int = 2) -> Dictionary:
 
 
 func sync_day() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("SyncArenaDay", {})
+	var res: Dictionary = await GameApiClient.invoke("SyncArenaDay", {})
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		var patch: Variant = res.data.get("patch", {})
 		if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
@@ -201,7 +201,7 @@ func list_ladder_bots(limit: int = 8) -> Array:
 	var path := "/api/arena/bots?limit=%s" % limit
 	if not cid.is_empty():
 		path += "&characterId=%s" % cid.uri_encode()
-	var res: Dictionary = await ApiClient.request("GET", path, null, true)
+	var res: Dictionary = await GameApiClient.request("GET", path, null, true)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		var bots: Variant = res.data.get("bots", [])
 		if typeof(bots) == TYPE_ARRAY:
@@ -210,7 +210,7 @@ func list_ladder_bots(limit: int = 8) -> Array:
 
 
 func list_rated_characters(limit: int = 80) -> Array:
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET",
 		"/api/entities/Character?sort=-arena_rating&limit=%s" % limit,
 		null,
@@ -224,7 +224,7 @@ func list_rated_characters(limit: int = 80) -> Array:
 func fetch_equipped_for(character_id: String) -> Array:
 	if character_id.is_empty():
 		return []
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/entities/Item/filter",
 		{"query": {"character_id": character_id, "is_equipped": true}, "sort": "-created_date", "limit": 40},
@@ -388,7 +388,7 @@ func mark_refresh_used() -> void:
 
 func refresh_opponents(charge: bool = false) -> Dictionary:
 	if charge:
-		var res: Dictionary = await ApiClient.invoke("RefreshArenaOpponents", {"charge": true})
+		var res: Dictionary = await GameApiClient.invoke("RefreshArenaOpponents", {"charge": true})
 		if not res.ok:
 			return res
 		if typeof(res.data) == TYPE_DICTIONARY:
@@ -467,7 +467,7 @@ func start_direct_challenge(opponent_character_id: String) -> Dictionary:
 		return {"ok": false, "error": "Missing characters"}
 	if me == opponent_character_id:
 		return {"ok": false, "error": "Cannot challenge yourself"}
-	var preview: Dictionary = await ApiClient.request(
+	var preview: Dictionary = await GameApiClient.request(
 		"POST", "/api/arena/challenges/preview",
 		{
 			"challengerCharacterId": me,
@@ -486,7 +486,7 @@ func start_direct_challenge(opponent_character_id: String) -> Dictionary:
 			"data": pdata,
 		}
 	var idem := "lb-%s-%s-%s" % [me, Time.get_ticks_msec(), randi()]
-	var created: Dictionary = await ApiClient.request(
+	var created: Dictionary = await GameApiClient.request(
 		"POST", "/api/arena/challenges",
 		{
 			"challengerCharacterId": me,
@@ -584,7 +584,7 @@ func finish_battle() -> Dictionary:
 		body["challengeId"] = pending_challenge_id
 	if not pending_policy_version.is_empty():
 		body["policyVersion"] = pending_policy_version
-	var res: Dictionary = await ApiClient.invoke("FinishArenaBattle", body)
+	var res: Dictionary = await GameApiClient.invoke("FinishArenaBattle", body)
 	if not res.ok:
 		# Keep pending_* so the player can retry Settle.
 		await refresh_character()

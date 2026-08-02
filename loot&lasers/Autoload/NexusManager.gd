@@ -16,7 +16,7 @@ func _ready() -> void:
 
 
 func load_nexus() -> Dictionary:
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/Nexus/filter",
 		{"query": {"singleton": true}, "limit": 1}, true
 	)
@@ -97,7 +97,7 @@ func resolve_assault(attacker_guild_id: String) -> Dictionary:
 	var cid := str(GameManager.active_character.get("id", ""))
 	if attacker_guild_id.is_empty() or cid.is_empty():
 		return {"ok": false, "error": "Missing guild or character"}
-	var res: Dictionary = await ApiClient.invoke("ResolveNexusAssault", {
+	var res: Dictionary = await GameApiClient.invoke("ResolveNexusAssault", {
 		"attacker_guild_id": attacker_guild_id,
 		"character_id": cid,
 	})

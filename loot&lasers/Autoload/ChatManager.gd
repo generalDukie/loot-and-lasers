@@ -14,7 +14,7 @@ func list_conversations() -> Array:
 	var me := char_id()
 	if me.is_empty():
 		return []
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/PrivateConversation?sort=-last_message_at&limit=100", null, true
 	)
 	if not res.ok or typeof(res.data) != TYPE_ARRAY:
@@ -43,7 +43,7 @@ func other_participant(conversation: Dictionary) -> String:
 func load_thread(conversation_id: String) -> Array:
 	if conversation_id.is_empty():
 		return []
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/PrivateMessage/filter",
 		{"query": {"conversation_id": conversation_id}, "sort": "-created_date", "limit": 50}, true
 	)
@@ -58,7 +58,7 @@ func mark_read(conversation_id: String) -> void:
 	var me := char_id()
 	if conversation_id.is_empty() or me.is_empty():
 		return
-	await ApiClient.request("POST", "/api/entities/PrivateMessage/update-many", {
+	await GameApiClient.request("POST", "/api/entities/PrivateMessage/update-many", {
 		"query": {
 			"conversation_id": conversation_id,
 			"recipient_id": me,
@@ -67,7 +67,7 @@ func mark_read(conversation_id: String) -> void:
 		"update": {"$set": {"read_by_recipient": true}},
 	}, true)
 	# Web markConversationRead also clears related private_message notifications.
-	var notifs: Dictionary = await ApiClient.request(
+	var notifs: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/AppNotification/filter",
 		{
 			"query": {
@@ -87,7 +87,7 @@ func mark_read(conversation_id: String) -> void:
 			var nid := str(n.get("id", ""))
 			if nid.is_empty():
 				continue
-			await ApiClient.request(
+			await GameApiClient.request(
 				"PATCH", "/api/entities/AppNotification/%s" % nid.uri_encode(),
 				{"read": true}, true
 			)
@@ -99,7 +99,7 @@ func send_private(recipient_id: String, content: String) -> Dictionary:
 		return {"ok": false, "error": "Missing recipient or message"}
 	if text.length() > 280:
 		return {"ok": false, "error": "Max 280 characters"}
-	return await ApiClient.invoke("SendMessage", {
+	return await GameApiClient.invoke("SendMessage", {
 		"channel": "private",
 		"recipient_id": recipient_id,
 		"content": text,
@@ -112,14 +112,14 @@ func send_global(content: String) -> Dictionary:
 		return {"ok": false, "error": "Empty message"}
 	if text.length() > 280:
 		return {"ok": false, "error": "Max 280 characters"}
-	return await ApiClient.invoke("SendMessage", {
+	return await GameApiClient.invoke("SendMessage", {
 		"channel": "global",
 		"content": text,
 	})
 
 
 func load_global(limit: int = 40) -> Array:
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/ChatMessage?sort=-created_date&limit=%s" % clampi(limit, 10, 100), null, true
 	)
 	if not res.ok or typeof(res.data) != TYPE_ARRAY:

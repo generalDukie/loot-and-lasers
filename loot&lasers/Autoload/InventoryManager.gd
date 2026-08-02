@@ -61,7 +61,7 @@ func set_locked(item_id: String, locked: bool) -> Dictionary:
 func dissolve_item(item_id: String, auto_claim: bool = false) -> Dictionary:
 	if item_id.is_empty():
 		return {"ok": false, "error": "Missing item_id", "data": {}}
-	var res: Dictionary = await ApiClient.invoke("DissolveItem", {"item_id": item_id})
+	var res: Dictionary = await GameApiClient.invoke("DissolveItem", {"item_id": item_id})
 	_apply_character(res)
 	# Never auto-claim by default — claiming pending loot into a just-freed slot
 	# makes dissolve look like the item "turned into" the waiting drop.
@@ -73,7 +73,7 @@ func dissolve_item(item_id: String, auto_claim: bool = false) -> Dictionary:
 func dissolve_junk(item_ids: Array, auto_claim: bool = false) -> Dictionary:
 	if item_ids.is_empty():
 		return {"ok": false, "error": "No items", "data": {}}
-	var res: Dictionary = await ApiClient.invoke("DissolveJunk", {"item_ids": item_ids})
+	var res: Dictionary = await GameApiClient.invoke("DissolveJunk", {"item_ids": item_ids})
 	_apply_character(res)
 	if res.ok and auto_claim:
 		await try_claim_pending()
@@ -85,7 +85,7 @@ func list_pending_loot() -> Array:
 	if cid.is_empty():
 		pending_loot = []
 		return pending_loot
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET",
 		"/api/rewards/pending-loot?characterId=%s" % cid.uri_encode(),
 		null,
@@ -102,7 +102,7 @@ func list_pending_loot() -> Array:
 func accept_pending(pending_id: String) -> Dictionary:
 	if pending_id.is_empty():
 		return {"ok": false, "error": "Missing pending_loot_id", "data": {}}
-	var res: Dictionary = await ApiClient.invoke("AcceptPendingLoot", {"pending_loot_id": pending_id})
+	var res: Dictionary = await GameApiClient.invoke("AcceptPendingLoot", {"pending_loot_id": pending_id})
 	_apply_character(res)
 	await list_pending_loot()
 	return res
@@ -111,7 +111,7 @@ func accept_pending(pending_id: String) -> Dictionary:
 func dissolve_pending(pending_id: String) -> Dictionary:
 	if pending_id.is_empty():
 		return {"ok": false, "error": "Missing pending_loot_id", "data": {}}
-	var res: Dictionary = await ApiClient.invoke("DissolvePendingLoot", {"pending_loot_id": pending_id})
+	var res: Dictionary = await GameApiClient.invoke("DissolvePendingLoot", {"pending_loot_id": pending_id})
 	_apply_character(res)
 	await list_pending_loot()
 	return res

@@ -21,21 +21,21 @@ func active_char() -> Dictionary:
 
 
 func sync_state() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("SyncDungeonState", {})
+	var res: Dictionary = await GameApiClient.invoke("SyncDungeonState", {})
 	_apply(res)
 	state_changed.emit()
 	return res
 
 
 func skip_cooldown() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("SkipDungeonCooldown", {})
+	var res: Dictionary = await GameApiClient.invoke("SkipDungeonCooldown", {})
 	_apply(res)
 	state_changed.emit()
 	return res
 
 
 func pay_continue() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("PayDungeonContinue", {})
+	var res: Dictionary = await GameApiClient.invoke("PayDungeonContinue", {})
 	_apply(res)
 	state_changed.emit()
 	return res
@@ -126,7 +126,7 @@ func finish_battle() -> Dictionary:
 		"species_id": pending_enemy.get("speciesId", 1),
 		"max_hit": max_hit,
 	}
-	var res: Dictionary = await ApiClient.invoke("FinishDungeonBattle", body)
+	var res: Dictionary = await GameApiClient.invoke("FinishDungeonBattle", body)
 	_apply(res)
 	last_finish = res.data if res.ok and typeof(res.data) == TYPE_DICTIONARY else {}
 	if res.ok:
@@ -154,7 +154,7 @@ func _load_equipped() -> Array:
 	var cid := str(active_char().get("id", ""))
 	if cid.is_empty():
 		return []
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/Item/filter",
 		{"query": {"character_id": cid, "is_equipped": true}, "limit": 20}, true
 	)

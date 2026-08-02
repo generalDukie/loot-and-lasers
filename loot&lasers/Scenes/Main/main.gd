@@ -56,8 +56,21 @@ func _set_status(text: String) -> void:
 
 
 func _boot() -> void:
+	# TEMPORARY_NAKAMA_TEST — one-time connection path check; remove this block later.
+	# Path: main → AuthManager.ensure_nakama_session → NakamaManager → Nakama server
+	NakamaManager.initialize_client()
+	print("[TEMPORARY_NAKAMA_TEST] Nakama client initialized")
+	var nakama_res: Dictionary = await AuthManager.ensure_nakama_session()
+	if nakama_res.get("success", false):
+		var uid := str(nakama_res.get("data", {}).get("user_id", ""))
+		print("[TEMPORARY_NAKAMA_TEST] Nakama authentication successful")
+		print("[TEMPORARY_NAKAMA_TEST] User ID %s" % uid)
+	else:
+		print("[TEMPORARY_NAKAMA_TEST] Nakama authentication failed — %s" % str(nakama_res.get("error", "unknown")))
+	# END TEMPORARY_NAKAMA_TEST
+
 	_set_status("Connecting…")
-	var health: Dictionary = await ApiClient.health()
+	var health: Dictionary = await GameApiClient.health()
 	if not health.ok:
 		push_warning("API health check failed: %s" % health.get("error", "unknown"))
 		_set_status("API offline — opening login…")

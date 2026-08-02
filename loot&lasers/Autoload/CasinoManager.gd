@@ -13,7 +13,7 @@ func max_bet() -> int:
 
 
 func settle_dice(bet: int, choice: String) -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("CasinoSettle", {
+	var res: Dictionary = await GameApiClient.invoke("CasinoSettle", {
 		"game": "dice",
 		"bet": bet,
 		"choice": choice,
@@ -23,7 +23,7 @@ func settle_dice(bet: int, choice: String) -> Dictionary:
 
 
 func settle_wheel(bet: int) -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("CasinoSettle", {
+	var res: Dictionary = await GameApiClient.invoke("CasinoSettle", {
 		"game": "wheel",
 		"bet": bet,
 	})

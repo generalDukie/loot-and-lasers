@@ -45,7 +45,7 @@ func buy_attribute(stat: String) -> Dictionary:
 	var rollback := _snapshot_buy_fields()
 	_apply_optimistic_buy(stat, cost)
 	character_changed.emit()
-	var res: Dictionary = await ApiClient.invoke("BuyAttribute", {"stat": stat})
+	var res: Dictionary = await GameApiClient.invoke("BuyAttribute", {"stat": stat})
 	if not res.ok:
 		_restore_buy_fields(rollback)
 		character_changed.emit()

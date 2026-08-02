@@ -11,7 +11,7 @@ func _ready() -> void:
 
 
 func redeem_promo(code: String) -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("RedeemPromoCode", {
+	var res: Dictionary = await GameApiClient.invoke("RedeemPromoCode", {
 		"code": code.strip_edges(),
 	})
 	_apply_char(res)
@@ -22,13 +22,13 @@ func rename_character(new_name: String, pay_with_nova: bool = false) -> Dictiona
 	var body := {"name": new_name.strip_edges()}
 	if pay_with_nova:
 		body["pay_with_nova"] = true
-	var res: Dictionary = await ApiClient.invoke("RenameCharacter", body)
+	var res: Dictionary = await GameApiClient.invoke("RenameCharacter", body)
 	_apply_char(res)
 	return res
 
 
 func buy_character_slot() -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("BuyCharacterSlot", {})
+	var res: Dictionary = await GameApiClient.invoke("BuyCharacterSlot", {})
 	_apply_char(res)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		var u: Variant = res.data.get("user", {})
@@ -53,7 +53,7 @@ func set_legacy_display(mode: String) -> Dictionary:
 	var uid := str(AuthManager.user.get("id", ""))
 	if uid.is_empty():
 		return res
-	var list: Dictionary = await ApiClient.request(
+	var list: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/Character/filter",
 		{"query": {"created_by_id": uid}, "sort": "-created_date", "limit": 10}, true
 	)
@@ -64,7 +64,7 @@ func set_legacy_display(mode: String) -> Dictionary:
 			var cid := str(ch.get("id", ""))
 			if cid.is_empty():
 				continue
-			await ApiClient.request(
+			await GameApiClient.request(
 				"PATCH", "/api/entities/Character/%s" % cid.uri_encode(),
 				{"legacy_display": m}, true
 			)
@@ -110,12 +110,12 @@ func purge_and_delete_character(character_id: String, character_name: String = "
 		cleanups.append(["GalaxyNews", {"character_name": character_name}])
 
 	for entry in cleanups:
-		await ApiClient.request(
+		await GameApiClient.request(
 			"POST", "/api/entities/%s/delete-many" % entry[0],
 			{"query": entry[1]}, true
 		)
 
-	var del: Dictionary = await ApiClient.request(
+	var del: Dictionary = await GameApiClient.request(
 		"DELETE", "/api/entities/Character/%s" % character_id.uri_encode(), null, true
 	)
 	if del.ok and str(GameManager.active_character.get("id", "")) == character_id:

@@ -268,14 +268,14 @@ func _build_display() -> VBoxContainer:
 
 	col.add_child(ClientUi.make_section_header("", "Self-host API", "Developer override."))
 	_api = ClientUi.make_field("API base URL")
-	_api.text = ApiClient.base_url
+	_api.text = GameApiClient.base_url
 	col.add_child(_api)
 	var save_api := Button.new()
 	save_api.text = "Apply API URL"
 	ClientUi.apply_ghost_button(save_api)
 	save_api.pressed.connect(func() -> void:
-		ApiClient.set_base_url(_api.text.strip_edges())
-		_status.text = "API → %s" % ApiClient.base_url
+		GameApiClient.set_base_url(_api.text.strip_edges())
+		_status.text = "API → %s" % GameApiClient.base_url
 	)
 	col.add_child(save_api)
 	return col

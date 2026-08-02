@@ -1136,7 +1136,7 @@ func _on_join_by_name() -> void:
 			found = g
 			break
 	if found.is_empty():
-		var res: Dictionary = await ApiClient.request(
+		var res: Dictionary = await GameApiClient.request(
 			"GET",
 			"/api/entities/Guild?name=%s&limit=5" % q.uri_encode(),
 			null,

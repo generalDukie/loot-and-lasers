@@ -14,7 +14,7 @@ func _ready() -> void:
 
 
 func sync_server_time() -> Dictionary:
-	var res: Dictionary = await ApiClient.request("GET", "/api/time/now", null, true)
+	var res: Dictionary = await GameApiClient.request("GET", "/api/time/now", null, true)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		var data: Dictionary = res.data
 		var key := str(data.get("todayET", ""))
@@ -57,7 +57,7 @@ func load_daily() -> Dictionary:
 	if cid.is_empty():
 		daily_progress = {}
 		return {"ok": false, "error": "No character"}
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/entities/DailyLogin/filter",
 		{"query": {"character_id": cid}, "sort": "-updated_date", "limit": 1},
@@ -73,7 +73,7 @@ func load_daily() -> Dictionary:
 
 func claim_daily() -> Dictionary:
 	await sync_server_time()
-	var res: Dictionary = await ApiClient.invoke("ClaimDailyLogin", {})
+	var res: Dictionary = await GameApiClient.invoke("ClaimDailyLogin", {})
 	# 409 Already claimed — treat as success so the client locks the day.
 	if not res.ok and int(res.get("status", 0)) == 409:
 		_apply_progress_from_payload(res.get("data", {}))
@@ -146,7 +146,7 @@ func sync_achievements(title = null) -> Dictionary:
 	var body := {}
 	if title != null:
 		body["title"] = title
-	var res: Dictionary = await ApiClient.invoke("SyncAchievements", body)
+	var res: Dictionary = await GameApiClient.invoke("SyncAchievements", body)
 	_apply_character(res)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		last_sync = res.data

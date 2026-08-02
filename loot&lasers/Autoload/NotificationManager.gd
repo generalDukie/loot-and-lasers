@@ -23,7 +23,7 @@ func load_inbox() -> Array:
 		unread_count = 0
 		notifications_changed.emit()
 		return notifications
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/AppNotification/filter",
 		{"query": {"owner_id": cid}, "sort": "-created_date", "limit": 50}, true
 	)
@@ -41,7 +41,7 @@ func refresh_unread() -> int:
 	if cid.is_empty():
 		unread_count = 0
 		return 0
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/AppNotification/filter",
 		{"query": {"owner_id": cid, "read": false}, "sort": "-created_date", "limit": 100}, true
 	)
@@ -53,7 +53,7 @@ func refresh_unread() -> int:
 func mark_read(notification_id: String) -> Dictionary:
 	if notification_id.is_empty():
 		return {"ok": false, "error": "Missing id"}
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"PATCH", "/api/entities/AppNotification/%s" % notification_id.uri_encode(),
 		{"read": true}, true
 	)
@@ -66,7 +66,7 @@ func mark_all_read() -> Dictionary:
 	var cid := char_id()
 	if cid.is_empty():
 		return {"ok": false, "error": "No character"}
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/AppNotification/update-many",
 		{"query": {"owner_id": cid, "read": false}, "update": {"$set": {"read": true}}}, true
 	)
@@ -91,7 +91,7 @@ func act_on(notification: Dictionary, accept: bool) -> Dictionary:
 		await mark_read(nid)
 		_busy = false
 		return {"ok": false, "error": "Missing friend request"}
-	var req_res: Dictionary = await ApiClient.request(
+	var req_res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/FriendRequest/%s" % related.uri_encode(), null, true
 	)
 	if not req_res.ok or typeof(req_res.data) != TYPE_DICTIONARY:
@@ -107,7 +107,7 @@ func act_on(notification: Dictionary, accept: bool) -> Dictionary:
 		result = await SocialManager.accept_friend(request)
 		if result.ok:
 			var me := GameManager.active_character
-			await ApiClient.request("POST", "/api/entities/AppNotification", {
+			await GameApiClient.request("POST", "/api/entities/AppNotification", {
 				"owner_id": str(request.get("from_character_id", "")),
 				"type": "system",
 				"title": str(me.get("name", "")),

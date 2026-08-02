@@ -1371,7 +1371,7 @@ func _schedule_name_check() -> void:
 	await get_tree().create_timer(0.45).timeout
 	if token != _name_check_token:
 		return
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/entities/Character/filter",
 		{"query": {"name": trimmed}, "sort": "-created_date", "limit": 1},

@@ -46,14 +46,14 @@ func ping() -> void:
 	_busy = true
 	var now := Time.get_datetime_string_from_system(true)
 	if _presence_id.is_empty():
-		var found: Dictionary = await ApiClient.request(
+		var found: Dictionary = await GameApiClient.request(
 			"POST", "/api/entities/PlayerPresence/filter",
 			{"query": {"character_id": cid}, "limit": 1}, true
 		)
 		if found.ok and typeof(found.data) == TYPE_ARRAY and (found.data as Array).size() > 0:
 			_presence_id = str(found.data[0].get("id", ""))
 	if _presence_id.is_empty():
-		var created: Dictionary = await ApiClient.request("POST", "/api/entities/PlayerPresence", {
+		var created: Dictionary = await GameApiClient.request("POST", "/api/entities/PlayerPresence", {
 			"character_id": cid,
 			"character_name": str(c.get("name", "")),
 			"status": current_status,
@@ -62,7 +62,7 @@ func ping() -> void:
 		if created.ok and typeof(created.data) == TYPE_DICTIONARY:
 			_presence_id = str(created.data.get("id", ""))
 	else:
-		await ApiClient.request(
+		await GameApiClient.request(
 			"PATCH", "/api/entities/PlayerPresence/%s" % _presence_id.uri_encode(),
 			{
 				"status": current_status,
@@ -111,7 +111,7 @@ static func status_label(status: String) -> String:
 func load_for(character_id: String) -> Dictionary:
 	if character_id.is_empty():
 		return {}
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/PlayerPresence/filter",
 		{"query": {"character_id": character_id}, "limit": 1}, true
 	)
@@ -128,7 +128,7 @@ func load_map(character_ids: Array) -> Dictionary:
 			wanted[s] = true
 	if wanted.is_empty():
 		return {}
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/PlayerPresence?sort=-created_date&limit=200", null, true
 	)
 	var out := {}

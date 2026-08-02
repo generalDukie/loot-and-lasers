@@ -11,11 +11,11 @@ func _ready() -> void:
 func list_wars(guild_id: String) -> Array:
 	if guild_id.is_empty():
 		return []
-	var atk: Dictionary = await ApiClient.request(
+	var atk: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildWar/filter",
 		{"query": {"attacker_guild_id": guild_id}, "sort": "-declared_at", "limit": 20}, true
 	)
-	var def: Dictionary = await ApiClient.request(
+	var def: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildWar/filter",
 		{"query": {"defender_guild_id": guild_id}, "sort": "-declared_at", "limit": 20}, true
 	)
@@ -39,7 +39,7 @@ func list_wars(guild_id: String) -> Array:
 
 
 func declare_war(defender_guild_id: String) -> Dictionary:
-	var res: Dictionary = await ApiClient.invoke("DeclareGuildWar", {
+	var res: Dictionary = await GameApiClient.invoke("DeclareGuildWar", {
 		"defender_guild_id": defender_guild_id,
 	})
 	if res.ok:
@@ -54,7 +54,7 @@ func declare_war(defender_guild_id: String) -> Dictionary:
 
 
 func list_readies(war_id: String) -> Array:
-	var res: Dictionary = await ApiClient.request(
+	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildWarReady/filter",
 		{"query": {"war_id": war_id}, "limit": 100}, true
 	)
@@ -74,13 +74,13 @@ func toggle_ready(war: Dictionary) -> Dictionary:
 	var cid := str(GameManager.active_character.get("id", ""))
 	var existing: Dictionary = await my_ready(str(war.get("id", "")))
 	if not existing.is_empty():
-		var del: Dictionary = await ApiClient.request(
+		var del: Dictionary = await GameApiClient.request(
 			"DELETE", "/api/entities/GuildWarReady/%s" % str(existing.get("id", "")).uri_encode(),
 			null, true
 		)
 		return {"ok": del.ok, "ready": false, "error": del.get("error", "")}
 	var side := "attacker" if str(war.get("attacker_guild_id", "")) == str(membership.get("guild_id", "")) else "defender"
-	var create: Dictionary = await ApiClient.request("POST", "/api/entities/GuildWarReady", {
+	var create: Dictionary = await GameApiClient.request("POST", "/api/entities/GuildWarReady", {
 		"war_id": str(war.get("id", "")),
 		"guild_id": str(membership.get("guild_id", "")),
 		"character_id": cid,
@@ -124,7 +124,7 @@ func resolve_war(war: Dictionary) -> Dictionary:
 	var base := (80 + total * 15) * 10
 	var rewards := {"stardust": base, "guild_xp": int(round(float(base) * 0.8))}
 	var now := Time.get_datetime_string_from_system(true)
-	var patch_war: Dictionary = await ApiClient.request(
+	var patch_war: Dictionary = await GameApiClient.request(
 		"PATCH", "/api/entities/GuildWar/%s" % str(war.get("id", "")).uri_encode(),
 		{
 			"status": "completed",
@@ -143,7 +143,7 @@ func resolve_war(war: Dictionary) -> Dictionary:
 	await _bump_guild_wl(str(war.get("attacker_guild_id", "")), winner == "attacker")
 	await _bump_guild_wl(str(war.get("defender_guild_id", "")), winner == "defender")
 	await _apply_guild_xp(win_gid, int(rewards.guild_xp))
-	await ApiClient.request("POST", "/api/entities/GuildLog", {
+	await GameApiClient.request("POST", "/api/entities/GuildLog", {
 		"guild_id": win_gid,
 		"entry_type": "war",
 		"message": "won the guild war",
@@ -164,12 +164,12 @@ func _load_fighters(war_id: String, side: String) -> Array:
 		if cid.begins_with("smoke-bot-"):
 			# Synthetic members — skip in combat
 			continue
-		var ch_res: Dictionary = await ApiClient.request(
+		var ch_res: Dictionary = await GameApiClient.request(
 			"GET", "/api/entities/Character/%s" % cid.uri_encode(), null, true
 		)
 		if not ch_res.ok or typeof(ch_res.data) != TYPE_DICTIONARY:
 			continue
-		var items_res: Dictionary = await ApiClient.request(
+		var items_res: Dictionary = await GameApiClient.request(
 			"POST", "/api/entities/Item/filter",
 			{"query": {"character_id": cid, "is_equipped": true}, "limit": 20}, true
 		)
@@ -219,7 +219,7 @@ func _simulate_gauntlet(attackers: Array, defenders: Array) -> Dictionary:
 func _bump_guild_wl(guild_id: String, won: bool) -> void:
 	if guild_id.is_empty():
 		return
-	var g: Dictionary = await ApiClient.request(
+	var g: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Guild/%s" % guild_id.uri_encode(), null, true
 	)
 	if not g.ok or typeof(g.data) != TYPE_DICTIONARY:
@@ -230,7 +230,7 @@ func _bump_guild_wl(guild_id: String, won: bool) -> void:
 		patch["war_wins"] = int(guild.get("war_wins", 0)) + 1
 	else:
 		patch["war_losses"] = int(guild.get("war_losses", 0)) + 1
-	await ApiClient.request(
+	await GameApiClient.request(
 		"PATCH", "/api/entities/Guild/%s" % guild_id.uri_encode(), patch, true
 	)
 
@@ -238,7 +238,7 @@ func _bump_guild_wl(guild_id: String, won: bool) -> void:
 func _apply_guild_xp(guild_id: String, xp_amount: int) -> void:
 	if guild_id.is_empty() or xp_amount <= 0:
 		return
-	var g: Dictionary = await ApiClient.request(
+	var g: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Guild/%s" % guild_id.uri_encode(), null, true
 	)
 	if not g.ok or typeof(g.data) != TYPE_DICTIONARY:
@@ -251,7 +251,7 @@ func _apply_guild_xp(guild_id: String, xp_amount: int) -> void:
 		exp -= to_next
 		level += 1
 		to_next = int(floor(float(to_next) * 1.4))
-	await ApiClient.request(
+	await GameApiClient.request(
 		"PATCH", "/api/entities/Guild/%s" % guild_id.uri_encode(),
 		{"experience": exp, "level": level, "experience_to_next": to_next}, true
 	)

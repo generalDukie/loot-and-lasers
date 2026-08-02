@@ -2,8 +2,9 @@ extends Node
 ## Player preferences (audio, display, input, accessibility).
 ## Persists to user://settings.cfg — no gameplay coupling.
 ##
-## Display scaling is owned by ResolutionManager (2560×1440, canvas_items, KEEP).
+## Display scaling is owned by ResolutionManager (2560×1440 logical, canvas_items, KEEP).
 ## This autoload only applies audio + fullscreen and re-asserts content scale.
+## Physical window sizing never forces 2560×1440 and is skipped entirely on web.
 
 const SETTINGS_PATH := "user://settings.cfg"
 const DESIGN_SIZE := ResolutionRules.DESIGN_SIZE
@@ -26,10 +27,11 @@ func _ready() -> void:
 	var win := get_window()
 	if win != null and not win.size_changed.is_connected(_on_window_size_changed):
 		win.size_changed.connect(_on_window_size_changed)
-	call_deferred("_ensure_visible_window")
-	get_tree().process_frame.connect(_ensure_visible_window, CONNECT_ONE_SHOT)
-	# Second pass after Windows applies DPI / chrome metrics.
-	get_tree().create_timer(0.15).timeout.connect(_ensure_visible_window)
+	if not OS.has_feature("web"):
+		call_deferred("_ensure_visible_window")
+		get_tree().process_frame.connect(_ensure_visible_window, CONNECT_ONE_SHOT)
+		# Second pass after Windows applies DPI / chrome metrics.
+		get_tree().create_timer(0.15).timeout.connect(_ensure_visible_window)
 	print("[SettingsManager] ready design=%sx%s (delegates scale to ResolutionManager)" % [DESIGN_SIZE.x, DESIGN_SIZE.y])
 
 
@@ -68,11 +70,14 @@ func apply_settings() -> void:
 	RenderingServer.set_default_clear_color(Color.BLACK)
 	Engine.max_fps = ClientUi.ANIM_FPS
 	_apply_content_scale()
+	if OS.has_feature("web"):
+		# Browser owns the canvas size — never call DisplayServer.window_set_size.
+		apply_audio()
+		return
 	if fullscreen:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	else:
-		# Maximized stays inside the work area (taskbar-safe). Manual 16:9 window
-		# sizing was clipping the bottom under Windows decorations / DPI.
+		# Maximized stays inside the work area (taskbar-safe).
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		call_deferred("_ensure_visible_window")
 	apply_audio()
@@ -143,12 +148,17 @@ func _on_window_size_changed() -> void:
 
 func _ensure_visible_window() -> void:
 	_apply_content_scale()
+	if OS.has_feature("web"):
+		return
 	if fullscreen:
 		return
 	var mode := DisplayServer.window_get_mode()
 	if mode == DisplayServer.WINDOW_MODE_FULLSCREEN \
 			or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
 		return
+
+	var screen := DisplayServer.window_get_current_screen()
+	var usable := DisplayServer.screen_get_usable_rect(screen)
 
 	# Prefer maximize — fills the usable monitor without hanging under the taskbar.
 	if mode != DisplayServer.WINDOW_MODE_MAXIMIZED:
@@ -158,8 +168,6 @@ func _ensure_visible_window() -> void:
 
 	# Even when maximized, clamp decorations into the usable work area (DPI / taskbar).
 	mode = DisplayServer.window_get_mode()
-	var screen := DisplayServer.window_get_current_screen()
-	var usable := DisplayServer.screen_get_usable_rect(screen)
 	if usable.size.x > 1 and usable.size.y > 1:
 		var decor := Vector2i(DisplayServer.window_get_size_with_decorations())
 		var pos := Vector2i(DisplayServer.window_get_position())
@@ -176,6 +184,15 @@ func _ensure_visible_window() -> void:
 				maxi(MIN_WINDOW.x, usable.size.x - maxi(chrome.x, 0) - pad.x),
 				maxi(MIN_WINDOW.y, usable.size.y - maxi(chrome.y, 0) - pad.y)
 			)
+			# Never request a physical client larger than the usable monitor.
+			max_client.x = mini(max_client.x, usable.size.x)
+			max_client.y = mini(max_client.y, usable.size.y)
+			# Prefer largest 16:9 that fits (matches content KEEP aspect).
+			var fitted := ResolutionRules.largest_16_9_rect(Vector2(max_client))
+			if fitted.size.x >= float(MIN_WINDOW.x) and fitted.size.y >= float(MIN_WINDOW.y):
+				max_client = Vector2i(int(fitted.size.x), int(fitted.size.y))
+			max_client.x -= max_client.x % 2
+			max_client.y -= max_client.y % 2
 			DisplayServer.window_set_size(max_client)
 			decor = Vector2i(DisplayServer.window_get_size_with_decorations())
 			pos = Vector2i(
@@ -186,10 +203,12 @@ func _ensure_visible_window() -> void:
 			pos.y = clampi(pos.y, usable.position.y, usable.position.y + maxi(0, usable.size.y - decor.y))
 			DisplayServer.window_set_position(pos)
 			_enforcing_size = false
+			_apply_content_scale()
 			return
 
 	mode = DisplayServer.window_get_mode()
 	if mode == DisplayServer.WINDOW_MODE_MAXIMIZED:
+		_apply_content_scale()
 		return
 
 	if usable.size.x <= 1 or usable.size.y <= 1:
@@ -204,6 +223,8 @@ func _ensure_visible_window() -> void:
 		maxi(MIN_WINDOW.x, usable.size.x - maxi(chrome2.x, 0) - pad2.x),
 		maxi(MIN_WINDOW.y, usable.size.y - maxi(chrome2.y, 0) - pad2.y)
 	)
+	max_client2.x = mini(max_client2.x, usable.size.x)
+	max_client2.y = mini(max_client2.y, usable.size.y)
 	var target := Vector2i(
 		mini(client.x, max_client2.x) if client.x > 1 else max_client2.x,
 		mini(client.y, max_client2.y) if client.y > 1 else max_client2.y
@@ -224,3 +245,4 @@ func _ensure_visible_window() -> void:
 	pos2.x = clampi(pos2.x, usable.position.x, usable.position.x + maxi(0, usable.size.x - decor2.x))
 	pos2.y = clampi(pos2.y, usable.position.y, usable.position.y + maxi(0, usable.size.y - decor2.y))
 	DisplayServer.window_set_position(pos2)
+	_apply_content_scale()

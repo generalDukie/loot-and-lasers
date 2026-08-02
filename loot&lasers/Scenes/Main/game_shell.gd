@@ -36,11 +36,15 @@ var _effects: ActiveEffectsBar
 var _chrome_stamp: Array = []
 var _activity_mode := ""
 var _activity_styles: Dictionary = {}
+## Serializes shell page swaps so a second Hero click can't free a page mid-_ready.
+var _page_swap_gen := 0
+var _page_swap_busy := false
 
 
 func _ready() -> void:
 	add_to_group("game_shell")
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	scale = Vector2.ONE
 	# Never let chrome/rail minimum sizes push past the window edge.
 	clip_contents = true
 	_build()
@@ -504,11 +508,7 @@ func _make_operative_panel() -> Control:
 
 	_portrait_host = CenterContainer.new()
 	_portrait_host.custom_minimum_size.y = 283
-	_portrait_host.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			GameManager.go_stats()
-	)
-	_portrait_host.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_portrait_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(_portrait_host)
 
 	_operative_name = Button.new()
@@ -1076,6 +1076,15 @@ func _refresh_notification_center() -> void:
 func show_page(path: String) -> void:
 	if path.is_empty():
 		return
+	# Already on this page — hub dock / portrait can re-fire go_stats without checking.
+	if path == _page_path and _page != null and is_instance_valid(_page) and not _page_swap_busy:
+		return
+	# Drop overlapping swaps (double-click Hero while the first load is still booting).
+	if _page_swap_busy:
+		_page_swap_gen += 1
+	_page_swap_busy = true
+	_page_swap_gen += 1
+	var swap_gen := _page_swap_gen
 	# Navigating to a normal page dismisses battle overlays (web portal behavior).
 	if path not in [
 		GameManager.SCENE_ARENA_COMBAT,
@@ -1119,8 +1128,14 @@ func show_page(path: String) -> void:
 	var packed := load(path) as PackedScene
 	if packed == null:
 		push_error("Could not load shell page: %s" % path)
+		_page_swap_busy = false
 		return
-	_page = packed.instantiate()
+	var incoming: Node = packed.instantiate()
+	if swap_gen != _page_swap_gen:
+		# A newer navigation superseded this one before the page entered the tree.
+		incoming.queue_free()
+		return
+	_page = incoming
 	_content.add_child(_page)
 	# Park the fading page under the incoming one, then restack so the live page
 	# sits above flash/HUD for picking and under OverlayHost for battle sheets.
@@ -1138,7 +1153,11 @@ func show_page(path: String) -> void:
 	_update_nav_state()
 	_refresh_chrome()
 	await NotificationManager.refresh_unread()
+	if swap_gen != _page_swap_gen:
+		return
 	_update_notif_badge()
+	if swap_gen == _page_swap_gen:
+		_page_swap_busy = false
 
 
 func _mood_for_page(path: String) -> String:
@@ -1473,11 +1492,37 @@ func _refresh_chrome() -> void:
 	_xp_bar.max_value = xp_next
 	_xp_bar.value = mini(xp, xp_next)
 	# ActiveEffectsBar owns its 1s timer — avoid rebuilding chips twice per second.
+	# Portrait is a Button so clicks reach Hero (PanelContainer children ate gui_input).
 	if _portrait_host.get_child_count() == 0:
-		var portrait_frame := PanelContainer.new()
-		portrait_frame.add_theme_stylebox_override(
-			"panel",
+		var portrait_btn := Button.new()
+		portrait_btn.flat = true
+		portrait_btn.focus_mode = Control.FOCUS_NONE
+		portrait_btn.tooltip_text = "Open character sheet"
+		portrait_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		portrait_btn.custom_minimum_size = Vector2(208, 208)
+		portrait_btn.add_theme_stylebox_override(
+			"normal",
 			_shell_panel_style(Color(0.035, 0.05, 0.08, 0.98), Color(ClientUi.CYAN, 0.65), 10, 4, 4)
 		)
-		portrait_frame.add_child(AvatarRenderer.make_portrait(character, 200.0))
-		_portrait_host.add_child(portrait_frame)
+		portrait_btn.add_theme_stylebox_override(
+			"hover",
+			_shell_panel_style(Color(0.05, 0.08, 0.12, 0.98), Color(ClientUi.CYAN_SOFT, 0.9), 10, 4, 4)
+		)
+		portrait_btn.add_theme_stylebox_override(
+			"pressed",
+			_shell_panel_style(Color(0.03, 0.045, 0.07, 0.98), Color(ClientUi.CYAN, 0.85), 10, 4, 4)
+		)
+		var empty := StyleBoxEmpty.new()
+		portrait_btn.add_theme_stylebox_override("focus", empty)
+		var portrait := AvatarRenderer.make_portrait(character, 200.0)
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		portrait_btn.add_child(portrait)
+		portrait_btn.pressed.connect(func() -> void: GameManager.go_stats())
+		_portrait_host.add_child(portrait_btn)
+	else:
+		var existing := _portrait_host.get_child(0)
+		for n in existing.find_children("*", "Control", true, false):
+			if n.has_method("set_character"):
+				n.call("set_character", character)
+				break

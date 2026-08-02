@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+	<title>Loot &amp; Lasers</title>
+	<style>
+		html, body {
+			width: 100%;
+			height: 100%;
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+			background: #000;
+			touch-action: none;
+		}
+		#canvas,
+		#canvas:focus {
+			display: block;
+			margin: 0;
+			padding: 0;
+			border: 0;
+			outline: none;
+			background: #000;
+			width: 100%;
+			height: 100%;
+		}
+		#status, #status-progress, #status-notice {
+			display: none;
+		}
+	</style>
+	$GODOT_HEAD_INCLUDE
+</head>
+<body>
+	<canvas id="canvas" tabindex="1">
+		Your browser does not support HTML5 canvas — Loot &amp; Lasers needs a modern browser.
+	</canvas>
+	$GODOT_SPLASH
+	<script src="$GODOT_URL"></script>
+	<script>
+		const GODOT_CONFIG = $GODOT_CONFIG;
+		const engine = new Engine(GODOT_CONFIG);
+		(function () {
+			const missing = Engine.getMissingFeatures();
+			if (missing.length !== 0) {
+				console.error("Missing features:", missing);
+				return;
+			}
+			engine.startGame({
+				onProgress: function (_current, _total) {},
+			}).then(function () {
+				// Ensure the canvas always tracks the browser viewport.
+				const canvas = document.getElementById("canvas");
+				if (!canvas) return;
+				const sync = function () {
+					canvas.style.width = "100%";
+					canvas.style.height = "100%";
+				};
+				sync();
+				window.addEventListener("resize", sync);
+				window.addEventListener("orientationchange", sync);
+			}).catch(function (err) {
+				console.error("Failed to start Loot & Lasers:", err);
+			});
+		})();
+	</script>
+</body>
+</html>

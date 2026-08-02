@@ -47,6 +47,8 @@ func _ready() -> void:
 
 
 func refresh(character: Dictionary = {}) -> void:
+	if not is_inside_tree():
+		return
 	var ch: Dictionary = character
 	if ch.is_empty():
 		var gm: Node = Engine.get_main_loop().root.get_node_or_null("/root/GameManager")
@@ -124,9 +126,16 @@ func _refresh_timers_only(buffs: Array, mounts: Array) -> void:
 			return
 		var lab: Label = timers[i]
 		i += 1
+		if lab == null or not is_instance_valid(lab):
+			continue
 		var text := format_remaining(str(b.get("expires_at", "")))
 		lab.text = text
-		lab.get_parent().get_parent().tooltip_text = "%s · expires in %s" % [str(b.get("name", "Stim")), text]
+		var col := lab.get_parent()
+		if col == null:
+			continue
+		var panel := col.get_parent()
+		if panel is Control:
+			(panel as Control).tooltip_text = "%s · expires in %s" % [str(b.get("name", "Stim")), text]
 	for m in mounts:
 		if typeof(m) != TYPE_DICTIONARY:
 			continue
@@ -134,9 +143,16 @@ func _refresh_timers_only(buffs: Array, mounts: Array) -> void:
 			return
 		var lab2: Label = timers[i]
 		i += 1
+		if lab2 == null or not is_instance_valid(lab2):
+			continue
 		var text2 := format_remaining(str(m.get("expires_at", "")))
 		lab2.text = text2
-		lab2.get_parent().get_parent().tooltip_text = "%s · expires in %s" % [str(m.get("name", "Mount")), text2]
+		var col2 := lab2.get_parent()
+		if col2 == null:
+			continue
+		var panel2 := col2.get_parent()
+		if panel2 is Control:
+			(panel2 as Control).tooltip_text = "%s · expires in %s" % [str(m.get("name", "Mount")), text2]
 
 
 func _collect_timer_labels(node: Node, out: Array) -> void:

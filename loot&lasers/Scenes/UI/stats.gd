@@ -54,6 +54,7 @@ var _bag_inspect: PanelContainer
 var _bag_inspect_col: VBoxContainer
 var _inspect_item_id := ""
 var _inspect_hide_token := 0
+var _sheet_ready := false
 
 const EQUIP_SLOT_SIZE := 107.0 # 88 × 1.22 — loadout extends downward 22%
 const PORTRAIT_SIZE := 107.0
@@ -68,10 +69,19 @@ func _ready() -> void:
 	await _boot()
 
 
+func _exit_tree() -> void:
+	if StatsManager.character_changed.is_connected(_refresh_values):
+		StatsManager.character_changed.disconnect(_refresh_values)
+
+
 func _boot() -> void:
 	_status.text = "Loading character sheet…"
 	await SocialManager.load_my_guild()
+	if not is_inside_tree():
+		return
 	var res: Dictionary = await StatsManager.refresh()
+	if not is_inside_tree():
+		return
 	if not res.ok:
 		_status.text = str(res.get("error", "Failed to load character"))
 	_populate()
@@ -354,6 +364,7 @@ func _build() -> void:
 
 
 func _populate() -> void:
+	_sheet_ready = false
 	_update_hero()
 	_rebuild_doll()
 	_update_backpack()
@@ -442,13 +453,18 @@ func _populate() -> void:
 	_vault_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_list.add_child(_vault_panel)
 
+	_sheet_ready = true
 	_refresh_values()
 	_status.text = ""
 
 
 ## Live values only — never rebuilds rows, so a held button stays alive.
 func _refresh_values() -> void:
+	if not _sheet_ready or not is_inside_tree():
+		return
 	var c: Dictionary = GameManager.active_character
+	if c.is_empty():
+		return
 	var eq: Array = StatsManager.equipped_items
 	var display: Dictionary = StatsRules.display_totals(c, eq)
 	var permanent: Dictionary = StatsRules.permanent_totals(c, eq)
@@ -551,7 +567,8 @@ func _update_hero() -> void:
 	var class_name_key := str(c.get("class", ""))
 	var race := GameData.race_info(race_name)
 	var cls := GameData.class_info(class_name_key)
-	var special: Dictionary = cls.get("special", {})
+	var special_raw: Variant = cls.get("special", {})
+	var special: Dictionary = special_raw if typeof(special_raw) == TYPE_DICTIONARY else {}
 	# Structured like web CharacterHeader LORE rail (titles + body, scrollable).
 	var lore_bb := "[color=#0DCADF][b]%s %s[/b][/color]\n%s" % [
 		str(race.get("emoji", "")), race_name, str(race.get("lore", "")),
@@ -563,7 +580,8 @@ func _update_hero() -> void:
 		lore_bb += "\n\n[color=#0DCADF][b]%s[/b][/color]\n%s" % [
 			str(special.get("name", "")), str(special.get("effect", "")),
 		]
-	_lore_lab.text = lore_bb
+	if is_instance_valid(_lore_lab):
+		_lore_lab.text = lore_bb
 
 	# Side rail owns empty-state copy via STIMS / MOUNTS section labels.
 	_stims_lab.visible = false

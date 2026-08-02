@@ -234,7 +234,7 @@ func _build_display() -> VBoxContainer:
 	col.add_theme_constant_override("separation", 10)
 	col.add_child(_section_title("DISPLAY"))
 	var hint := Label.new()
-	hint.text = "Game canvas is 2560×1440 (16:9). The window maximizes to your screen; the UI scales with letterboxing so nothing is cropped. Press F11 for fullscreen."
+	hint.text = "Logical design is 2560×1440 (16:9). The window fits your screen; Godot scales the full UI uniformly (letterbox/pillarbox). Press F11 for fullscreen."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_font_size_override("font_size", 15)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)

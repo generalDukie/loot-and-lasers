@@ -4,7 +4,6 @@
 import { RACES, CLASSES, generateClassWeapon, getArenaStardustReward, getArenaXpReward } from "@/lib/gameData";
 import {
   computeTotalStats,
-  computePermanentTotalStats,
   computeDerivedStats,
   getClassWeights,
   rollBasicAttackDamage,
@@ -391,8 +390,8 @@ export function snapshotOpponent(opp) {
 }
 
 function buildFighter(c, items, side) {
-  // Permanent totals only — stims stay off the combat attribute pipeline.
-  const stats = computePermanentTotalStats(c, items);
+  // Effective totals — Stim multipliers apply as the final attribute step.
+  const stats = computeTotalStats(c, items);
   const cls = CLASSES[c.class] || CLASSES.Vanguard;
   const derived = computeDerivedStats(stats, c);
   const className = cls.name;
@@ -727,7 +726,7 @@ export function eloRatingDelta(playerRating, oppRating, won, k = ARENA_ELO_K) {
 function lootForOutcome(player, opp, won, free) {
   if (!free || !won) return { experience: 0, stardust: 0 };
   const pl = player.level || 1;
-  // Design: Arena SD = SD/F × 5/3, Arena XP = XP/F × 5/7 (win amounts).
+  // Design: Arena SD = ARENA_WIN_FUEL_EQUIVALENT × SD/F; Arena XP = XP/F × 5/7.
   return {
     experience: getArenaXpReward(pl),
     stardust: getArenaStardustReward(pl),

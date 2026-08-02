@@ -1,5 +1,5 @@
 ﻿extends Control
-## Shared duel overlay — mirrors web ArenaBattleOverlay (arena + mission).
+## Shared duel overlay — mirrors web ArenaBattleOverlay (arena + mission + dungeon).
 ## Simulation stays in MissionCombat; this file is presentation + settlement only.
 
 const FIGHTER_SIZE := Vector2(200, 260)
@@ -61,6 +61,8 @@ var _sheet_host: Control
 var _prev_level := 1
 var _generation := 0
 var _ability_tween: Tween
+var _theme_chip: Label
+var _dungeon_ctx: Dictionary = {}
 
 var _events: Array = []
 var _event_i := 0
@@ -92,6 +94,21 @@ func _build() -> void:
 	add_child(_backdrop)
 	# Soft live stage — redraws every frame at Engine.max_fps (120).
 	_backdrop.set_live(true)
+
+	_theme_chip = Label.new()
+	_theme_chip.visible = false
+	_theme_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_theme_chip.set_anchors_preset(PRESET_CENTER_TOP)
+	_theme_chip.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_theme_chip.offset_top = 10
+	_theme_chip.offset_left = -220
+	_theme_chip.offset_right = 220
+	_theme_chip.offset_bottom = 36
+	_theme_chip.z_index = 35
+	_theme_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_theme_chip.add_theme_font_size_override("font_size", 13)
+	ClientUi.apply_display_font(_theme_chip)
+	add_child(_theme_chip)
 
 	var root := VBoxContainer.new()
 	root.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -400,6 +417,8 @@ func _add_corner(color: Color, left: bool, top: bool) -> void:
 func _boot() -> void:
 	if _is_mission():
 		await _boot_mission()
+	elif _is_dungeon():
+		await _boot_dungeon()
 	else:
 		await _boot_arena()
 
@@ -408,21 +427,31 @@ func _is_mission() -> bool:
 	return str(GameManager.combat_overlay_kind) == "mission"
 
 
+func _is_dungeon() -> bool:
+	return str(GameManager.combat_overlay_kind) == "dungeon"
+
+
 func _opp() -> Dictionary:
 	if _is_mission():
 		return MissionManager.pending_enemy
+	if _is_dungeon():
+		return DungeonManager.pending_enemy
 	return ArenaManager.pending_opp
 
 
 func _battle() -> Dictionary:
 	if _is_mission():
 		return MissionManager.pending_battle
+	if _is_dungeon():
+		return DungeonManager.pending_battle
 	return ArenaManager.pending_battle
 
 
 func _player_items() -> Array:
 	if _is_mission():
 		return MissionManager.pending_player_items
+	if _is_dungeon():
+		return DungeonManager.pending_player_items
 	return ArenaManager.equipped_items
 
 
@@ -465,6 +494,54 @@ func _boot_mission() -> void:
 		MissionManager.pending_player_items,
 		enemy_items
 	)
+
+
+func _boot_dungeon() -> void:
+	if DungeonManager.pending_battle.is_empty() or DungeonManager.pending_enemy.is_empty():
+		await get_tree().create_timer(0.35).timeout
+		GameManager.close_overlay()
+		GameManager.go_galaxy()
+		return
+	var planet: Dictionary = DungeonRules.get_planet(DungeonManager.selected_planet_id)
+	var enemy: Dictionary = DungeonManager.pending_enemy
+	var is_boss := bool(enemy.get("isBoss", false))
+	_dungeon_ctx = {
+		"planet_name": str(planet.get("name", "Frontier")),
+		"planet_icon": str(planet.get("icon", "")),
+		"planet_color": planet.get("color", Color("#34D399")),
+		"patrol": DungeonManager.patrol,
+		"is_boss": is_boss,
+		"enemy_name": str(enemy.get("name", "Foe")),
+		"enemy_index": _dungeon_enemy_index(enemy),
+		"free_lives_before": DungeonRules.free_lives_left(GameManager.active_character),
+	}
+	var accent := Color("#34D399")
+	var raw_accent: Variant = _dungeon_ctx.get("planet_color", accent)
+	if typeof(raw_accent) == TYPE_COLOR:
+		accent = raw_accent as Color
+	_backdrop.set_accent(accent)
+	_theme_chip.text = "%s %s%s" % [
+		_dungeon_ctx.get("planet_icon", ""),
+		_dungeon_ctx.get("planet_name", "Frontier"),
+		" · Patrol" if bool(_dungeon_ctx.get("patrol", false)) else "",
+	]
+	_theme_chip.add_theme_color_override("font_color", accent.lightened(0.25))
+	_theme_chip.visible = true
+	_start_duel(
+		GameManager.active_character,
+		enemy,
+		DungeonManager.pending_battle,
+		DungeonManager.pending_player_items,
+		[]
+	)
+
+
+func _dungeon_enemy_index(enemy: Dictionary) -> int:
+	var id := str(enemy.get("id", ""))
+	var parts := id.split("-")
+	if parts.size() >= 3:
+		return clampi(int(parts[2]), 1, DungeonRules.ENEMIES_PER_PLANET)
+	return DungeonManager.current_enemy_index()
 
 
 func _start_duel(
@@ -926,6 +1003,9 @@ func _show_outro() -> void:
 	if _is_mission():
 		_outro_sub.text = "The path home is clear." if won else "The encounter overwhelms you…"
 		_outro_btn.text = "VIEW REWARDS" if won else "VIEW RESULTS"
+	elif _is_dungeon():
+		_outro_sub.text = "The frontier yields." if won else "The world claims another operative…"
+		_outro_btn.text = "VIEW REWARDS" if won else "VIEW RESULTS"
 	else:
 		_outro_sub.text = "Glory to the galaxy." if won else "You fall... but you'll rise again."
 		_outro_btn.text = "VIEW REWARDS" if won else "VIEW RESULTS"
@@ -959,11 +1039,16 @@ func _settle_and_show_rewards() -> void:
 	_skip_btn.visible = false
 	_outro_layer.visible = false
 	var mission_won := false
+	var dungeon_won := false
 	if _is_mission():
 		mission_won = str(_battle().get("winner", "opponent")) == "player"
+	elif _is_dungeon():
+		dungeon_won = str(_battle().get("winner", "opponent")) == "player"
 	var res: Dictionary
 	if _is_mission():
 		res = await MissionManager.resolve_combat_outcome()
+	elif _is_dungeon():
+		res = await DungeonManager.finish_battle()
 	else:
 		res = await ArenaManager.finish_battle()
 	_busy = false
@@ -984,6 +1069,17 @@ func _settle_and_show_rewards() -> void:
 			self, res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 		)
 		await _show_mission_result(mission_won, res.data if typeof(res.data) == TYPE_DICTIONARY else {})
+		return
+	if _is_dungeon():
+		if dungeon_won:
+			AudioManager.play_ui("claim")
+		else:
+			AudioManager.play_ui("hit")
+		var finish_data: Dictionary = DungeonManager.last_finish.duplicate(true)
+		if not finish_data.has("won"):
+			finish_data["won"] = dungeon_won
+		ProgressManager.toast_newly_unlocked(self, finish_data)
+		await _show_dungeon_result(finish_data)
 		return
 	var result: Dictionary = res.get("result", {}) if typeof(res.get("result", {})) == TYPE_DICTIONARY else {}
 	if bool(result.get("won", false)):
@@ -1034,6 +1130,71 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 		"actions": [
 			{"label": "Cantina", "primary": true, "callback": go_cantina},
 			{"label": "Inventory" if won else "Hub", "primary": false, "callback": go_secondary},
+		],
+	}
+	CombatSheets.present_complete_then_level_up(
+		_sheet_host, summary, _prev_level, GameManager.active_character, true
+	)
+
+
+func _show_dungeon_result(data: Dictionary) -> void:
+	_motion.stop_all_idle()
+	_theme_chip.visible = false
+	var won := bool(data.get("won", false))
+	var rewards: Dictionary = data.get("rewards", {}) if typeof(data.get("rewards", {})) == TYPE_DICTIONARY else {}
+	var items: Array = data.get("items", []) if typeof(data.get("items", [])) == TYPE_ARRAY else []
+	var gear = items[0] if items.size() > 0 and typeof(items[0]) == TYPE_DICTIONARY else null
+	var enemy_name := str(_dungeon_ctx.get("enemy_name", "Foe"))
+	var planet_name := str(_dungeon_ctx.get("planet_name", "Frontier"))
+	var is_boss := bool(_dungeon_ctx.get("is_boss", false))
+	var was_patrol := bool(_dungeon_ctx.get("patrol", false))
+	var enemy_index := int(_dungeon_ctx.get("enemy_index", 1))
+	var title := ""
+	if won:
+		if was_patrol:
+			title = "Patrolled — defeated %s" % enemy_name
+		elif is_boss:
+			title = "Defeated %s" % enemy_name
+		else:
+			title = "Cleared enemy %s" % enemy_index
+	else:
+		title = "Fell to %s" % enemy_name
+	var subtitle := planet_name
+	if is_boss:
+		subtitle += " · Boss"
+	if was_patrol:
+		subtitle += " · Patrol"
+	var note := ""
+	if not won:
+		var free_before := int(_dungeon_ctx.get("free_lives_before", 0))
+		var deaths_now := int(GameManager.active_character.get("dungeon_deaths", 0))
+		if free_before > 1:
+			note = "Death %s/%s. No rewards on defeat." % [deaths_now, DungeonRules.DEATHS_PER_DAY]
+		elif free_before == 1:
+			note = "Last free life spent. Further fights cost %s 💎." % DungeonRules.CONTINUE_COST
+		else:
+			note = "Next fight costs %s 💎." % DungeonRules.CONTINUE_COST
+	elif items.size() > 1:
+		var milestone: Variant = items[items.size() - 1]
+		if typeof(milestone) == TYPE_DICTIONARY:
+			note = "Milestone chest: %s" % str(milestone.get("name", "loot"))
+		else:
+			note = "Loot: %s item(s)" % items.size()
+	var ship: Variant = data.get("ship_mod", null)
+	if ship != null and str(ship) != "":
+		note = (note + " · " if not note.is_empty() else "") + "Ship mod: %s" % str(ship)
+	var summary := {
+		"won": won,
+		"mode": "dungeon",
+		"title": title,
+		"subtitle": subtitle,
+		"xp": int(rewards.get("experience", 0)) if won else 0,
+		"stardust": int(rewards.get("stardust", 0)) if won else 0,
+		"gear_item": gear,
+		"note": note,
+		"actions": [
+			{"label": "Back to Frontier", "primary": true, "callback": func() -> void: GameManager.go_galaxy()},
+			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
 		],
 	}
 	CombatSheets.present_complete_then_level_up(

@@ -6,14 +6,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Pickaxe, Clock, Zap } from "lucide-react";
 import { getMyCharacter } from "@/lib/socialEngine";
-import { STARDUST_COLOR } from "@/lib/gameData";
+import { STARDUST_COLOR, computeMiningReward } from "@/lib/gameData";
 import PageStage from "@/components/game/PageStage";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
-// Stardust yield = level × 12 × hours. Scales with both level and duration.
-export function computeMiningReward(level, hours) {
-  return Math.round((level || 1) * 12 * hours) * 10;
-}
+export { computeMiningReward };
 
 function formatRemaining(ms) {
   if (ms <= 0) return "Ready to collect!";

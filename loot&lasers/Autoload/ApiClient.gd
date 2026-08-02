@@ -5,6 +5,9 @@ signal base_url_changed(url: String)
 
 const DEFAULT_BASE_URL := "http://127.0.0.1:8787"
 const CONFIG_PATH := "user://godot_client.cfg"
+## Boot probe — fail fast so splash → login stays snappy if the API is down.
+const HEALTH_TIMEOUT_SEC := 2.0
+const DEFAULT_TIMEOUT_SEC := 30.0
 
 var base_url: String = DEFAULT_BASE_URL
 
@@ -23,17 +26,23 @@ func set_base_url(url: String) -> void:
 	base_url_changed.emit(base_url)
 
 
-func health() -> Dictionary:
-	return await request("GET", "/health", null, false)
+func health(timeout_sec: float = HEALTH_TIMEOUT_SEC) -> Dictionary:
+	return await request("GET", "/health", null, false, timeout_sec)
 
 
 func invoke(function_name: String, body: Dictionary = {}) -> Dictionary:
 	return await request("POST", "/api/functions/%s" % function_name, body, true)
 
 
-func request(method: String, path: String, body: Variant = null, authed: bool = true) -> Dictionary:
+func request(
+	method: String,
+	path: String,
+	body: Variant = null,
+	authed: bool = true,
+	timeout_sec: float = DEFAULT_TIMEOUT_SEC
+) -> Dictionary:
 	var http := HTTPRequest.new()
-	http.timeout = 30.0
+	http.timeout = maxf(0.25, timeout_sec)
 	add_child(http)
 
 	var headers: PackedStringArray = ["Content-Type: application/json", "Accept: application/json"]

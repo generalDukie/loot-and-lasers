@@ -10,7 +10,6 @@ const ATTR_LABELS := {
 	"vitality": "Vitality",
 	"luck": "Luck",
 }
-const XP_STARDUST_SCALE := 10
 const CRIT_MULT := 1.5
 
 const CLASS_BASE_STATS := {
@@ -21,12 +20,6 @@ const CLASS_BASE_STATS := {
 	"Technomancer": {"strength": 6, "agility": 8, "intellect": 15, "vitality": 13, "luck": 8},
 	"Cosmic Engineer": {"strength": 6, "agility": 8, "intellect": 15, "vitality": 13, "luck": 8},
 }
-
-const COST_WAYPOINTS := [
-	[1, 10], [10, 15], [20, 25], [30, 40], [40, 65], [50, 100],
-	[75, 225], [100, 500], [150, 1500], [200, 4000], [300, 20000],
-	[400, 75000], [500, 225000], [600, 600000], [650, 1000000],
-]
 
 
 static func primary_stat(class_key: String) -> String:
@@ -69,13 +62,7 @@ static func purchase_count(character: Dictionary, stat: String) -> int:
 
 
 static func point_cost(purchase_number: int) -> int:
-	var n := maxi(1, purchase_number)
-	var cost := 1
-	if n <= 650:
-		cost = maxi(1, int(round(MissionCombat.lerp_waypoints(n, COST_WAYPOINTS))))
-	else:
-		cost = maxi(1, int(round(10.0 * pow(1.0 + float(n - 1) / 97.54, 5.657))))
-	return cost * XP_STARDUST_SCALE
+	return StardustEconomy.attribute_purchase_cost(purchase_number)
 
 
 static func next_cost(character: Dictionary, stat: String) -> int:
@@ -118,12 +105,10 @@ static func active_buffs(character: Dictionary) -> Array:
 	return out
 
 
-## UI totals with stims: buff % on base, then gear + race.
+## UI / combat totals: permanent pre-stim attributes, then Stim multipliers last.
 static func display_totals(character: Dictionary, equipped: Array = []) -> Dictionary:
-	var base := raw_stats(character)
-	var buffed := _apply_buffs(base, active_buffs(character))
-	var merged := MissionCombat.merge_gear_stats(buffed, equipped)
-	return MissionCombat.apply_race_bonus(merged, character.get("race", null))
+	var permanent := permanent_totals(character, equipped)
+	return _apply_buffs(permanent, active_buffs(character))
 
 
 static func derived(character: Dictionary, totals: Dictionary) -> Dictionary:

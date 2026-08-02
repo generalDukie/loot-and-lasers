@@ -192,19 +192,23 @@ export function computePermanentTotalStats(character, equippedItems = []) {
   return applyRaceBonus(stats, character?.race);
 }
 
-/** Buffed totals for UI (stim % on base stats, then gear + race). */
+/**
+ * Effective totals: permanent pre-stim attributes, then Stim multipliers last.
+ * Downstream combat/UI should prefer this when Stim effects should apply.
+ */
 export function computeTotalStats(character, equippedItems = []) {
-  const stats = applyBuffs(character?.stats || {}, getActiveBuffs(character));
-  for (const it of equippedItems) {
-    for (const [k, v] of Object.entries(it.stats || {})) {
-      stats[k] = (stats[k] || 0) + (v || 0);
-    }
-  }
-  return applyRaceBonus(stats, character?.race);
+  const permanent = computePermanentTotalStats(character, equippedItems);
+  return applyBuffs(permanent, getActiveBuffs(character));
 }
 
 export function computeTotalStatsNoBuffs(character, equippedItems = []) {
   return computePermanentTotalStats(character, equippedItems);
+}
+
+/** Single-attribute effective value (permanent then active Stim). */
+export function getEffectiveAttribute(character, equippedItems, attrKey) {
+  const totals = computeTotalStats(character, equippedItems);
+  return totals?.[attrKey] || 0;
 }
 
 // ── Derived combat stats (single source of truth) ──

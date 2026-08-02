@@ -8,14 +8,6 @@ const EQUIPPABLE_TYPES: PackedStringArray = [
 
 const BAG_CAP_DEFAULT := 10
 
-const RARITY_SELL_FACTOR := {
-	"common": 0.55, "uncommon": 0.7, "rare": 0.9, "epic": 1.15, "legendary": 1.4,
-}
-const TYPE_SELL_WEIGHT := {
-	"weapon": 1.4, "armor": 1.2, "helmet": 1.0, "boots": 1.0, "legs": 1.0,
-	"neck": 1.1, "accessory": 1.15, "ship_module": 1.35, "material": 0.5, "consumable": 0.6,
-}
-
 
 static func is_equippable(item_type: String) -> bool:
 	return item_type in EQUIPPABLE_TYPES
@@ -95,21 +87,7 @@ static func compare_lines(candidate: Dictionary, equipped: Dictionary) -> Array:
 
 
 static func estimate_sell_value(item: Dictionary) -> int:
-	var itype := str(item.get("type", ""))
-	var sell := int(item.get("sell_value", 0))
-	if itype in ["consumable", "material"] and sell > 0:
-		return maxi(1, sell)
-	var stats: Variant = item.get("stats", {})
-	var sum := 0
-	if typeof(stats) == TYPE_DICTIONARY:
-		for k in stats.keys():
-			sum += int(stats[k])
-	if sum > 0:
-		var rarity := str(item.get("rarity", "common"))
-		var rf := float(RARITY_SELL_FACTOR.get(rarity, 0.55))
-		var tw := float(TYPE_SELL_WEIGHT.get(itype, 1.0))
-		return maxi(1, int(round(float(sum) * rf * tw * 10.0)))
-	return maxi(1, sell if sell > 0 else 1)
+	return StardustEconomy.gear_sale_value(item)
 
 
 ## UI junk heuristic matching web listDissolveJunk (class-weighted power).

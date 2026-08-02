@@ -35,7 +35,7 @@ func is_ready() -> bool:
 func preview_reward(hours: int) -> int:
 	var level := maxi(1, int(GameManager.active_character.get("level", 1)))
 	var h := clampi(hours, 1, 24)
-	return int(round(float(level) * 12.0 * float(h))) * 10
+	return StardustEconomy.compute_mining_reward(level, float(h))
 
 
 func start(hours: int) -> Dictionary:

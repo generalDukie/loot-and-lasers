@@ -1,0 +1,245 @@
+/**
+ * Finalized Stardust economy tests.
+ * Run: node server/scripts/test-stardust-economy.mjs
+ */
+import assert from "node:assert/strict";
+import {
+  StardustPerFuel,
+  AttributePurchaseCost,
+  MissionStardustReward,
+  ArenaWinStardust,
+  MiningStardust,
+  computeMiningReward,
+  JunkSaleValue,
+  GearSaleValue,
+  missionGearDropChance,
+  rollMissionGearDrop,
+  rollMissionGearRarity,
+  rollDungeonRegularRarity,
+  rollDungeonBossRarity,
+  arenaWinGrantsStardust,
+  getArenaRewardedWinsState,
+  STARDUST_PER_FUEL_ANCHORS,
+  ATTRIBUTE_PURCHASE_COST_ANCHORS,
+  MISSION_GEAR_BASE_CHANCE,
+  MISSION_GEAR_PITY_INCREMENT,
+  MISSION_GEAR_RARITY_WEIGHTS,
+  DUNGEON_REGULAR_RARITY_WEIGHTS,
+  DUNGEON_BOSS_RARITY_WEIGHTS,
+  ARENA_REWARDED_WINS_PER_DAY,
+  MINING_EFFICIENCY,
+} from "../src/shared/stardustEconomy.js";
+import {
+  computeMissionStardustFromFuel,
+  computeArenaRewards,
+  druToRewards,
+  getAttributePointCost,
+  getAttributePurchaseCount,
+  getNextAttributePointCost,
+  missionGearDropChance as formulaPity,
+} from "../src/shared/economyFormulas.js";
+import { computeItemVendorValue } from "../src/shared/itemGeneration.js";
+import { getMissionStardustPerFuel } from "../src/shared/rewards.js";
+
+let passed = 0;
+let failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    passed += 1;
+    console.log(`  ✓ ${name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`  ✗ ${name}`);
+    console.error(`    ${err.stack || err.message}`);
+  }
+}
+
+console.log("\nStardust economy tests\n");
+
+test("StardustPerFuel anchors exact", () => {
+  for (const [lvl, val] of STARDUST_PER_FUEL_ANCHORS) {
+    assert.equal(StardustPerFuel(lvl), val, `L${lvl}`);
+    assert.equal(getMissionStardustPerFuel(lvl), val, `alias L${lvl}`);
+  }
+});
+
+test("StardustPerFuel monotone between anchors", () => {
+  let prev = StardustPerFuel(1);
+  for (let L = 2; L <= 320; L++) {
+    const v = StardustPerFuel(L);
+    assert.ok(v >= prev, `L${L}: ${v} < ${prev}`);
+    prev = v;
+  }
+});
+
+test("StardustPerFuel stays within surrounding anchors", () => {
+  for (let i = 0; i < STARDUST_PER_FUEL_ANCHORS.length - 1; i++) {
+    const [x0, y0] = STARDUST_PER_FUEL_ANCHORS[i];
+    const [x1, y1] = STARDUST_PER_FUEL_ANCHORS[i + 1];
+    for (let L = x0 + 1; L < x1; L++) {
+      const v = StardustPerFuel(L);
+      assert.ok(v >= y0 && v <= y1, `L${L}=${v} not in [${y0},${y1}]`);
+    }
+  }
+});
+
+test("StardustPerFuel >300 keeps rising", () => {
+  assert.ok(StardustPerFuel(301) > StardustPerFuel(300));
+  assert.ok(StardustPerFuel(350) > StardustPerFuel(301));
+});
+
+test("MissionStardust = SD/F * fuel", () => {
+  assert.equal(MissionStardustReward(50, 5), 600 * 5);
+  assert.equal(computeMissionStardustFromFuel(5, 50, 0.5), 3000); // efficiency ignored
+  assert.equal(MissionStardustReward(1, 2), 100);
+});
+
+test("Mission gear pity ladder", () => {
+  assert.equal(MISSION_GEAR_BASE_CHANCE, 0.2);
+  assert.equal(MISSION_GEAR_PITY_INCREMENT, 0.025);
+  assert.equal(missionGearDropChance(0), 0.2);
+  assert.equal(missionGearDropChance(1), 0.225);
+  assert.equal(missionGearDropChance(2), 0.25);
+  assert.equal(missionGearDropChance(4), 0.3);
+  assert.equal(formulaPity(12), 0.5);
+  assert.ok(missionGearDropChance(40) <= 1);
+  assert.equal(missionGearDropChance(40), 1);
+});
+
+test("pity reset conceptually — streak 0 after success", () => {
+  assert.equal(missionGearDropChance(0), 0.2);
+  assert.equal(rollMissionGearDrop(0, () => 0.19), true);
+  assert.equal(rollMissionGearDrop(0, () => 0.2), false);
+});
+
+test("Mission rarity weights", () => {
+  assert.deepEqual(MISSION_GEAR_RARITY_WEIGHTS, {
+    common: 50, uncommon: 25, rare: 15, epic: 8, legendary: 2,
+  });
+  const counts = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 };
+  let i = 0;
+  const seq = [];
+  for (const [r, w] of Object.entries(MISSION_GEAR_RARITY_WEIGHTS)) {
+    for (let k = 0; k < w; k++) seq.push(r);
+  }
+  // Deterministic coverage of table
+  for (let n = 0; n < 100; n++) {
+    const r = rollMissionGearRarity(() => (n + 0.5) / 100);
+    counts[r] += 1;
+  }
+  assert.equal(counts.common, 50);
+  assert.equal(counts.uncommon, 25);
+  assert.equal(counts.rare, 15);
+  assert.equal(counts.epic, 8);
+  assert.equal(counts.legendary, 2);
+});
+
+test("Junk value 22.5% base with ±40% variance", () => {
+  const missionReward = 10000;
+  const baseJunk = 2250;
+  assert.equal(JunkSaleValue(missionReward, () => 0), Math.round(baseJunk * 0.6)); // 1350
+  assert.equal(JunkSaleValue(missionReward, () => 1), Math.round(baseJunk * 1.4)); // 3150
+  assert.equal(JunkSaleValue(missionReward, () => 0.5), Math.round(baseJunk * 1.0)); // 2250
+  // Mean of endpoints stays at base (uniform mid)
+  const lo = JunkSaleValue(missionReward, () => 0);
+  const hi = JunkSaleValue(missionReward, () => 1);
+  assert.equal((lo + hi) / 2, baseJunk);
+});
+
+test("Gear sale values", () => {
+  const rate = StardustPerFuel(50); // 600
+  assert.equal(
+    GearSaleValue({ type: "armor", rarity: "rare", level_requirement: 50 }),
+    Math.round(rate * 2 * 1.0 * 1.0)
+  );
+  assert.equal(
+    GearSaleValue({ type: "armor", rarity: "epic", level_requirement: 50 }),
+    Math.round(rate * 2 * 1.2)
+  );
+  assert.equal(
+    GearSaleValue({ type: "armor", rarity: "legendary", level_requirement: 50 }),
+    Math.round(rate * 2 * 1.75)
+  );
+  assert.equal(
+    GearSaleValue({ type: "weapon", rarity: "legendary", level_requirement: 50 }),
+    Math.round(rate * 2 * 1.75 * 1.2)
+  );
+  // Source-agnostic
+  const a = GearSaleValue({ type: "boots", rarity: "rare", level_requirement: 25, from: "mission" });
+  const b = GearSaleValue({ type: "boots", rarity: "rare", level_requirement: 25, from: "dungeon" });
+  assert.equal(a, b);
+  assert.equal(computeItemVendorValue({ type: "boots", rarity: "rare", level_requirement: 25 }), a);
+});
+
+test("Dungeon rewards: 0 direct Stardust", () => {
+  const r = druToRewards(10, 50);
+  assert.equal(r.stardust, 0);
+  assert.ok(r.experience > 0);
+});
+
+test("Dungeon rarity tables", () => {
+  assert.deepEqual(DUNGEON_REGULAR_RARITY_WEIGHTS, {
+    uncommon: 40, rare: 30, epic: 20, legendary: 10,
+  });
+  assert.deepEqual(DUNGEON_BOSS_RARITY_WEIGHTS, { epic: 70, legendary: 30 });
+  for (let n = 0; n < 100; n++) {
+    const r = rollDungeonRegularRarity(() => (n + 0.5) / 100);
+    assert.notEqual(r, "common");
+  }
+  for (let n = 0; n < 100; n++) {
+    const r = rollDungeonBossRarity(() => (n + 0.5) / 100);
+    assert.ok(r === "epic" || r === "legendary");
+  }
+});
+
+test("Arena first 10 wins/day", () => {
+  assert.equal(ARENA_REWARDED_WINS_PER_DAY, 10);
+  assert.equal(ArenaWinStardust(50), Math.round(1.5 * 600));
+  assert.equal(arenaWinGrantsStardust(0), true);
+  assert.equal(arenaWinGrantsStardust(9), true);
+  assert.equal(arenaWinGrantsStardust(10), false);
+  const loss = computeArenaRewards({ level: 50, arena_rating: 1000 }, { arena_rating: 1000 }, false, {
+    free: true, rewardedWinsToday: 0,
+  });
+  assert.equal(loss.stardust, 0);
+  const win11 = computeArenaRewards({ level: 50, arena_rating: 1000 }, { arena_rating: 1000 }, true, {
+    free: true, rewardedWinsToday: 10,
+  });
+  assert.equal(win11.stardust, 0);
+  const win1 = computeArenaRewards({ level: 50, arena_rating: 1000 }, { arena_rating: 1000 }, true, {
+    free: false, rewardedWinsToday: 0,
+  });
+  assert.equal(win1.stardust, ArenaWinStardust(50));
+  assert.equal(win1.experience, 0); // paid fight: XP still free-gated
+  const state = getArenaRewardedWinsState({ arena_rewarded_wins_today: 3, arena_rewarded_wins_date: "2026-01-01" }, "2026-01-02");
+  assert.equal(state.wins, 0);
+});
+
+test("Mining 3% efficiency", () => {
+  assert.equal(MINING_EFFICIENCY, 0.03);
+  assert.equal(MiningStardust(50, 1), Math.round(600 * 0.03));
+  assert.equal(computeMiningReward(50, 1), Math.round(600 * 0.03 * 60));
+});
+
+test("Attribute purchase anchors + independent counters", () => {
+  for (const [n, cost] of ATTRIBUTE_PURCHASE_COST_ANCHORS) {
+    assert.equal(AttributePurchaseCost(n), cost, `purchase #${n}`);
+    assert.equal(getAttributePointCost(n), cost);
+  }
+  assert.ok(AttributePurchaseCost(651) > AttributePurchaseCost(650));
+  const ch = {
+    class: "Vanguard",
+    stats: { strength: 15, agility: 8, intellect: 6, vitality: 14, luck: 7 },
+    attribute_purchases_by_stat: { strength: 200, agility: 50, intellect: 0, vitality: 0, luck: 0 },
+  };
+  assert.equal(getAttributePurchaseCount(ch, "strength"), 200);
+  assert.equal(getAttributePurchaseCount(ch, "agility"), 50);
+  assert.notEqual(getNextAttributePointCost(ch, "strength"), getNextAttributePointCost(ch, "agility"));
+  assert.equal(getNextAttributePointCost(ch, "strength"), AttributePurchaseCost(201));
+  assert.equal(getNextAttributePointCost(ch, "agility"), AttributePurchaseCost(51));
+});
+
+console.log(`\n${passed} passed, ${failed} failed\n`);
+if (failed) process.exit(1);

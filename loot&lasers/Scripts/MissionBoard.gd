@@ -56,13 +56,6 @@ const XP_PER_FUEL := [
 	[400, 927], [450, 1108], [500, 1301],
 ]
 
-const SD_PER_FUEL := [
-	[1, 4], [5, 5], [10, 8], [15, 12], [20, 18], [25, 25], [50, 60],
-	[75, 120], [100, 225], [150, 600], [200, 1500], [250, 3500],
-	[300, 7500], [325, 10135], [350, 13693], [375, 18502], [400, 25000],
-	[425, 31746], [450, 40311], [475, 51188], [500, 65000],
-]
-
 const TEMPLATES := [
 	{
 		"name": "Patrol the Rimward Sector",
@@ -225,15 +218,16 @@ static func xp_per_fuel(level: int) -> int:
 
 
 static func sd_per_fuel(level: int) -> int:
-	return maxi(1, int(round(lerp_waypoints(level, SD_PER_FUEL)))) * XP_STARDUST_SCALE
+	return StardustEconomy.stardust_per_fuel(level)
 
 
 static func preview_xp(fuel: float, level: int, efficiency: float) -> int:
 	return maxi(1 if fuel > 0.0 else 0, int(round(fuel * float(xp_per_fuel(level)) * efficiency)))
 
 
-static func preview_sd(fuel: float, level: int, efficiency: float) -> int:
-	return maxi(1 if fuel > 0.0 else 0, int(round(fuel * float(sd_per_fuel(level)) * efficiency)))
+## Mission SD = ROUND(StardustPerFuel(level) * fuel). Efficiency does not apply.
+static func preview_sd(fuel: float, level: int, _efficiency: float = 1.0) -> int:
+	return StardustEconomy.mission_stardust_reward(level, fuel)
 
 
 ## Claim-aligned preview (ship mods + collection XP; optional nexus +5% SD).
@@ -242,9 +236,8 @@ static func compute_gains(character: Dictionary, offer: Dictionary, nexus_bonus:
 	var level := int(character.get("level", 1))
 	var fuel := estimate_fuel_cost(offer, character)
 	var xp_eff := float(offer.get("xp_efficiency", 1.0))
-	var sd_eff := float(offer.get("stardust_efficiency", 1.0))
 	var xp_base := preview_xp(fuel, level, xp_eff)
-	var sd_base := preview_sd(fuel, level, sd_eff)
+	var sd_base := preview_sd(fuel, level)
 	var xp_mult := 1.0 + ShipRules.mod_effect_total(character, "mission_xp_mult")
 	var sd_mult := 1.0 + ShipRules.mod_effect_total(character, "mission_stardust_mult")
 	var bonus_mult := 1.05 if nexus_bonus else 1.0
@@ -356,7 +349,7 @@ static func generate_daily(character: Dictionary) -> Array:
 			rarity = "uncommon"
 		draft["rewards"] = {
 			"experience": preview_xp(fuel, level, xp_eff),
-			"stardust": preview_sd(fuel, level, sd_eff),
+			"stardust": preview_sd(fuel, level),
 			"item_rarity_chance": rarity,
 			"collectible": COLLECTIBLES[randi() % COLLECTIBLES.size()],
 		}
@@ -394,7 +387,7 @@ static func generate_low_fuel(character: Dictionary, current_fuel: float) -> Arr
 			"_seed": "low-%s-%s" % [Time.get_unix_time_from_system(), i],
 			"rewards": {
 				"experience": preview_xp(pinned, level, xp_eff),
-				"stardust": preview_sd(pinned, level, sd_eff),
+				"stardust": preview_sd(pinned, level),
 				"item_rarity_chance": "common",
 			},
 		})

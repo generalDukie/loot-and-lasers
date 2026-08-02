@@ -68,8 +68,7 @@ const LEGACY_CLASS := {
 
 
 static func expected_player_attributes(level: int) -> int:
-	var L := float(maxi(1, level))
-	return int(round(50.0 + 19.3519 * L + 288.0495 * (1.0 - exp(-L / 20.0))))
+	return ExpectedPlayerAttributes.at(level)
 
 
 static func merge_stats(character: Dictionary, items: Array = []) -> Dictionary:
@@ -113,7 +112,7 @@ static func arena_xp_reward(level: int) -> int:
 
 
 static func arena_sd_reward(level: int) -> int:
-	return maxi(1, int(round(float(MissionBoard.sd_per_fuel(level)) * 5.0 / 3.0)))
+	return StardustEconomy.arena_win_stardust(level)
 
 
 static func compute_rewards(player: Dictionary, opp: Dictionary, won: bool, is_free: bool) -> Dictionary:

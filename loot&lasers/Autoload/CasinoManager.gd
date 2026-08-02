@@ -8,8 +8,8 @@ func _ready() -> void:
 
 func max_bet() -> int:
 	var level := maxi(1, int(GameManager.active_character.get("level", 1)))
-	# Web getCasinoMaxStardustBet: SD/F × 25, floor 1000, cap 2_500_000.
-	return clampi(MissionBoard.sd_per_fuel(level) * 25, 1000, 2_500_000)
+	# Server getCasinoMaxStardustBet: SD/F × 25, floor 1000, cap 2_500_000.
+	return clampi(StardustEconomy.stardust_per_fuel(level) * 25, 1000, 2_500_000)
 
 
 func settle_dice(bet: int, choice: String) -> Dictionary:

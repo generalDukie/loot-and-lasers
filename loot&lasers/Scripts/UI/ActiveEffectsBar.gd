@@ -2,6 +2,8 @@ class_name ActiveEffectsBar
 extends VBoxContainer
 ## Live stim + fuel-mount chips — mirrors web ActiveBuffsBar / ActiveEffectsPanel.
 
+signal stim_removed
+
 const STAT_COLORS := {
 	"strength": Color("#F59E0B"),
 	"agility": Color("#34D399"),
@@ -23,6 +25,7 @@ const STAT_ICONS := {
 ## When true (Hero loadout rail), show STIMS / MOUNTS section labels + timers.
 var side_sections := false
 var _stamp := ""
+var _removing := false
 
 
 static func make(character: Dictionary = {}) -> ActiveEffectsBar:
@@ -190,15 +193,30 @@ func _buff_chip(buff: Dictionary) -> PanelContainer:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 1)
 	panel.add_child(col)
+	var head_row := HBoxContainer.new()
+	head_row.add_theme_constant_override("separation", 4)
+	col.add_child(head_row)
 	var head := Label.new()
 	var icon_stat := str(STAT_ICONS.get(stat, "✦"))
 	var label := "ALL" if stat == "all" else "%s %s" % [icon_stat, stat]
-	head.text = "⚗ +%s%% %s" % [int(round(float(buff.get("mult", 0)) * 100.0)), label]
+	var rarity := str(buff.get("rarity", "")).capitalize()
+	var pct := int(round(float(buff.get("mult", 0)) * 100.0))
+	if rarity.is_empty():
+		head.text = "⚗ +%s%% %s" % [pct, label]
+	else:
+		head.text = "⚗ %s +%s%% %s" % [rarity, pct, label]
+	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	head.add_theme_font_size_override("font_size", 15)
 	head.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(head)
-	col.add_child(head)
+	head_row.add_child(head)
+	var remove_btn := Button.new()
+	remove_btn.text = "×"
+	remove_btn.tooltip_text = "Remove Stim"
+	remove_btn.custom_minimum_size = Vector2(28, 28)
+	remove_btn.pressed.connect(func() -> void: _request_remove_stim(buff))
+	head_row.add_child(remove_btn)
 	var sub := Label.new()
 	sub.text = str(buff.get("name", "Stim"))
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -212,8 +230,51 @@ func _buff_chip(buff: Dictionary) -> PanelContainer:
 	timer.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(timer)
 	col.add_child(timer)
-	panel.tooltip_text = "%s · expires in %s" % [str(buff.get("name", "Stim")), timer.text]
+	panel.tooltip_text = "%s · +%s%% · expires in %s" % [str(buff.get("name", "Stim")), pct, timer.text]
+	panel.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+			_request_remove_stim(buff)
+	)
 	return panel
+
+
+func _request_remove_stim(buff: Dictionary) -> void:
+	if _removing:
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Remove Stim?"
+	dialog.dialog_text = "Remove %s? Remaining duration will be discarded and the Stim will not be returned." % str(buff.get("name", "Stim"))
+	dialog.ok_button_text = "Remove"
+	dialog.cancel_button_text = "Cancel"
+	add_child(dialog)
+	dialog.confirmed.connect(func() -> void:
+		_do_remove_stim(buff)
+		dialog.queue_free()
+	)
+	dialog.canceled.connect(func() -> void: dialog.queue_free())
+	dialog.close_requested.connect(func() -> void: dialog.queue_free())
+	dialog.popup_centered()
+
+
+func _do_remove_stim(buff: Dictionary) -> void:
+	if _removing:
+		return
+	_removing = true
+	var auth: Node = Engine.get_main_loop().root.get_node_or_null("/root/AuthManager")
+	if auth == null:
+		_removing = false
+		return
+	var res: Dictionary = await auth.dismiss_active_buff(
+		str(buff.get("stat", "")),
+		str(buff.get("expires_at", "")),
+		str(buff.get("name", ""))
+	)
+	_removing = false
+	_stamp = ""
+	refresh()
+	stim_removed.emit()
+	if not res.get("ok", false):
+		push_warning("DismissActiveBuff failed: %s" % str(res.get("error", "")))
 
 
 func _mount_chip(mount: Dictionary) -> PanelContainer:

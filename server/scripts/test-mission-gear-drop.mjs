@@ -40,10 +40,11 @@ test("pity adds 2.5% per miss", () => {
   assert.equal(missionGearDropChance(4), 0.3);
 });
 
-test("soft-caps at 50% (12 misses)", () => {
-  assert.equal(MISSION_GEAR_DROP_CAP, 0.5);
+test("pity can reach 100% (no 50% soft-cap)", () => {
+  assert.equal(MISSION_GEAR_DROP_CAP, 1);
   assert.equal(missionGearDropChance(12), 0.5);
-  assert.equal(missionGearDropChance(100), 0.5);
+  assert.equal(missionGearDropChance(32), 1);
+  assert.equal(missionGearDropChance(100), 1);
 });
 
 test("miss streak coerces safely", () => {

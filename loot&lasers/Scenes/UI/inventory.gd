@@ -194,7 +194,7 @@ func _refresh() -> void:
 				_list.add_child(_make_pending_row(p))
 
 	if not bag.is_empty():
-		_list.add_child(_section("BAG (GEAR) — drag onto a slot · tap Compare"))
+		_list.add_child(_section("BAG (GEAR) — hover for stats · Equip / drag onto a slot"))
 		for it in bag:
 			_list.add_child(_make_row(it, false))
 	else:
@@ -419,6 +419,10 @@ func _make_row(item: Dictionary, is_equipped: bool) -> PanelContainer:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
+	if InventoryRules.is_equippable(str(item.get("type", ""))) and not is_equipped:
+		var arrow := _make_upgrade_arrow(item)
+		if arrow:
+			row.add_child(arrow)
 	row.add_child(GearIcon.make(item, 44.0))
 	var col := VBoxContainer.new()
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -458,7 +462,17 @@ func _make_row(item: Dictionary, is_equipped: bool) -> PanelContainer:
 		InventoryRules.is_equippable(item_type) and not item_id.is_empty() and not is_equipped
 	)
 	if can_drag_equip:
-		panel.tooltip_text = "Drag onto the matching loadout slot to equip"
+		panel.tooltip_text = ""
+		var captured_id := item_id
+		panel.mouse_entered.connect(func() -> void:
+			_selected_id = captured_id
+			_update_compare()
+		)
+		panel.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.double_click \
+					and ev.button_index == MOUSE_BUTTON_LEFT:
+				_on_equip(captured_id)
+		)
 
 	# Bag rows accept equipped gear drops (unequip) and start drags for bag gear.
 	panel.set_drag_forwarding(
@@ -514,6 +528,28 @@ func _make_row(item: Dictionary, is_equipped: bool) -> PanelContainer:
 		diss.pressed.connect(func() -> void: _on_dissolve(item_id))
 		row.add_child(diss)
 	return panel
+
+
+func _make_upgrade_arrow(item: Dictionary) -> Variant:
+	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
+	var worn := InventoryRules.find_equipped_of_type(_items, str(item.get("type", "")))
+	var my_p := InventoryRules.class_power_rating(item, class_key)
+	var eq_p := InventoryRules.class_power_rating(worn, class_key) if not worn.is_empty() else 0
+	var delta := my_p - eq_p if not worn.is_empty() else 1
+	if delta == 0:
+		return null
+	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", 22)
+	ClientUi.apply_display_font(lab)
+	if delta > 0:
+		lab.text = "▲"
+		lab.add_theme_color_override("font_color", ClientUi.SUCCESS)
+	else:
+		lab.text = "▼"
+		lab.add_theme_color_override("font_color", ClientUi.DANGER)
+	return lab
 
 
 func _make_item_drag(host: Control, item: Dictionary, from: String) -> Variant:

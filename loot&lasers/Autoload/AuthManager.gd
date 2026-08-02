@@ -234,6 +234,31 @@ func use_consumable(item_id: String) -> Dictionary:
 	return {"ok": true, "error": "", "data": data, "status": 200}
 
 
+## Manually remove an active Stim effect (discards remaining duration).
+func dismiss_active_buff(stat: String, expires_at: String = "", name: String = "") -> Dictionary:
+	if stat.is_empty():
+		return {"ok": false, "error": "Missing stat", "data": {}}
+	var body := {"stat": stat}
+	if not expires_at.is_empty():
+		body["expires_at"] = expires_at
+	if not name.is_empty():
+		body["name"] = name
+	var res: Dictionary = await ApiClient.invoke("DismissActiveBuff", body)
+	if not res.ok:
+		var err := str(res.get("error", "DismissActiveBuff failed"))
+		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
+			err = str(res.data["error"])
+		return {"ok": false, "error": err, "status": res.get("status", 0), "data": res.get("data", {})}
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	var patch: Variant = data.get("patch", {})
+	if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
+		GameManager.active_character.merge(patch, true)
+	var ch: Variant = data.get("character", {})
+	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
+		GameManager.active_character = ch
+	return {"ok": true, "error": "", "data": data, "status": 200}
+
+
 func logout() -> void:
 	if not access_token.is_empty():
 		await ApiClient.request("POST", "/api/auth/logout", {}, true)

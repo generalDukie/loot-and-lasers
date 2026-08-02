@@ -135,8 +135,7 @@ static func enemy_level(planet_id: int, enemy_index: int) -> int:
 
 
 static func expected_player_attrs(level: int) -> int:
-	var L := float(maxi(1, level))
-	return int(round(50.0 + 19.3519 * L + 288.0495 * (1.0 - exp(-L / 20.0))))
+	return ExpectedPlayerAttributes.at(level)
 
 
 static func enemy_budget(level: int, is_boss: bool) -> int:

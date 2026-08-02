@@ -8,6 +8,7 @@ import {
 import { XP_STARDUST_SCALE } from "./economyConstants.js";
 
 export { XP_STARDUST_SCALE };
+export { StardustPerFuel, StardustPerFuel as getMissionStardustPerFuel } from "./stardustEconomy.js";
 
 /** Prefer live getInventoryCap from economyFormulas (wired below / via hooks). */
 function getInventoryCap(ch) {
@@ -128,21 +129,11 @@ const MISSION_XP_PER_FUEL_WAYPOINTS = [
   [400, 927], [450, 1108], [500, 1301],
 ];
 
-const MISSION_SD_PER_FUEL_WAYPOINTS = [
-  [1, 4], [5, 5], [10, 8], [15, 12], [20, 18], [25, 25],
-  [50, 60], [75, 120], [100, 225], [150, 600], [200, 1500],
-  [250, 3500], [300, 7500], [325, 10135], [350, 13693],
-  [375, 18502], [400, 25000], [425, 31746], [450, 40311],
-  [475, 51188], [500, 65000],
-];
-
 export function getMissionXpPerFuel(level = 1) {
   return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
 }
 
-export function getMissionStardustPerFuel(level = 1) {
-  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
-}
+// StardustPerFuel / getMissionStardustPerFuel — see stardustEconomy.js (re-exported above).
 
 /** Scale flat XP grants (dailies/promos) with the XP/fuel chart. */
 export function scaleXpReward(baseXp, level = 1) {
@@ -261,7 +252,7 @@ export const DAILY_REWARDS = [
   { day: 7, rewards: { stardust: 1500 } },
   { day: 8, rewards: { stardust: 800 } },
   { day: 9, rewards: { experience: 1000 } },
-  { day: 10, rewards: { collectible: { type: "consumable", name: "Minor Strength Stim", rarity: "uncommon", consumable: { stat: "strength", mult: 0.05, duration_hours: 6, tier: "minor" }, flavor_text: "Boosts Strength by 5% for 6 hours.", sell_value: 250 } } },
+  { day: 10, rewards: { collectible: { type: "consumable", name: "Uncommon Strength Stim", rarity: "uncommon", consumable: { stat: "strength", mult: 0.05, duration_hours: 6, tier: "uncommon" }, flavor_text: "Boosts Strength by 5% for 6 hours (stacks duration up to 18h).", sell_value: 250 } } },
   { day: 11, rewards: { stardust: 1000 } },
   { day: 12, rewards: { fuel: 30 } },
   { day: 13, rewards: { nova_crystals: 4 } },
@@ -269,7 +260,7 @@ export const DAILY_REWARDS = [
   { day: 15, rewards: { item_rarity: "rare" } },
   { day: 16, rewards: { stardust: 2000 } },
   { day: 17, rewards: { stardust: 1200 } },
-  { day: 18, rewards: { collectible: { type: "consumable", name: "Minor Agility Stim", rarity: "uncommon", consumable: { stat: "agility", mult: 0.05, duration_hours: 6, tier: "minor" }, flavor_text: "Boosts Agility by 5% for 6 hours.", sell_value: 250 } } },
+  { day: 18, rewards: { collectible: { type: "consumable", name: "Uncommon Agility Stim", rarity: "uncommon", consumable: { stat: "agility", mult: 0.05, duration_hours: 6, tier: "uncommon" }, flavor_text: "Boosts Agility by 5% for 6 hours (stacks duration up to 18h).", sell_value: 250 } } },
   { day: 19, rewards: { experience: 1500 } },
   { day: 20, rewards: { nova_crystals: 8 } },
   { day: 21, rewards: { item_rarity: "rare", stardust: 1500 } },

@@ -52,6 +52,8 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "arena_attempts",
   "arena_attempts_left",
   "arena_attempts_date",
+  "arena_rewarded_wins_today",
+  "arena_rewarded_wins_date",
   "arena_bot_raid_at",
   "dungeon_deaths",
   "dungeon_deaths_date",

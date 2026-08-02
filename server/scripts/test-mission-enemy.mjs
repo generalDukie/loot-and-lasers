@@ -53,29 +53,38 @@ function seqRng(values) {
 
 console.log("\nMission enemy generation tests\n");
 
-test("expected player attribute curve matches sample anchors", () => {
-  // Spec sample table is approximate; the formula is authoritative.
+test("expected player attribute curve matches finalized anchors", () => {
   const samples = [
-    [10, 357],
-    [20, 619],
-    [30, 854],
-    [40, 1073],
-    [50, 1282],
-    [100, 2271],
-    [150, 3240],
-    [200, 4208],
-    [250, 5175],
-    [300, 6143],
-    [400, 8078],
-    [500, 10014],
+    [1, 68],
+    [10, 383],
+    [20, 630],
+    [25, 745],
+    [50, 1277],
+    [100, 2275],
+    [150, 3263],
+    [200, 4096],
+    [250, 5365],
+    [300, 6336],
+    [350, 7700],
+    [400, 8673],
+    [450, 10095],
+    [500, 11054],
   ];
-  for (const [level, approx] of samples) {
-    const got = expectedPlayerAttributes(level);
-    assert.ok(Math.abs(got - approx) <= 1, `L${level}: got ${got}, approx ${approx}`);
+  for (const [level, exact] of samples) {
+    assert.equal(expectedPlayerAttributes(level), exact, `L${level}`);
   }
-  // Continues past 500 without brackets.
-  assert.ok(expectedPlayerAttributes(600) > expectedPlayerAttributes(500));
-  assert.ok(expectedPlayerAttributes(1000) > expectedPlayerAttributes(600));
+  // Monotone between anchors / integers
+  let prev = expectedPlayerAttributes(1);
+  for (let L = 2; L <= 520; L++) {
+    const v = expectedPlayerAttributes(L);
+    assert.equal(v, Math.round(v));
+    assert.ok(v >= prev, `L${L}: ${v} < ${prev}`);
+    prev = v;
+  }
+  // Linear tail (Stim-adjusted)
+  assert.equal(expectedPlayerAttributes(600), Math.round(11054 + 23.9 * 100));
+  assert.equal(expectedPlayerAttributes(1000), Math.round(11054 + 23.9 * 500));
+  assert.ok(expectedPlayerAttributes(501) > expectedPlayerAttributes(500));
 });
 
 test("mission enemy budgets = ROUND(progressing × 0.28)", () => {

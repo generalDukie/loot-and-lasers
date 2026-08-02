@@ -35,6 +35,9 @@ import {
   ARENA_REFRESH_COST,
   ARENA_SKIP_COST,
   computeArenaRewards,
+  getArenaRewardedWinsState,
+  rollDungeonRegularRarity,
+  rollDungeonBossRarity,
   DUNGEON_ENEMIES_PER_PLANET,
   DUNGEON_DEATHS_PER_DAY,
   DUNGEON_CONTINUE_COST,
@@ -66,6 +69,7 @@ import {
   SCOUT_MILESTONE_MOD_ID,
   NAME_CHANGE_COST,
   GUILD_WAR_SIM_COST,
+  dismissActiveBuff,
 } from "../shared/economyFormulas.js";
 import { assertNameHasNoDigits } from "../shared/nameRules.js";
 import {
@@ -250,14 +254,18 @@ export const FinishArenaBattle = wrap((user, body) => {
     // Economy rewards scaled down for zero-rating / reduced farming wins.
     const ratingEligible = (dc.ratingDelta || 0) > 0 || !won;
     const rewardMult = !won ? 0 : ratingEligible ? 1 : 0.25;
+    const rewardedState = getArenaRewardedWinsState(ch, today);
     const baseRewards = computeArenaRewards(
       ch,
       { arena_rating: dc.challenge?.opponentRatingAtStart || 1000 },
       won,
-      useFree
+      { free: useFree, rewardedWinsToday: rewardedState.wins }
     );
     const experience = Math.round((baseRewards.experience || 0) * rewardMult);
-    const stardust = Math.round((baseRewards.stardust || 0) * rewardMult);
+    // Stardust uses rewarded-win quota — do not scale farm-penalty into zero (already gated).
+    const stardust = baseRewards.stardust_rewarded
+      ? Math.round((baseRewards.stardust || 0) * (ratingEligible ? 1 : rewardMult))
+      : 0;
     const collectPct = getCollectionPercentage(ch, 0);
     const boostedXp = won ? applyXpBonus(experience, collectPct) : 0;
 
@@ -267,6 +275,13 @@ export const FinishArenaBattle = wrap((user, body) => {
       patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + stardust;
       patch.total_stardust_earned =
         (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + stardust;
+    }
+    if (baseRewards.stardust_rewarded) {
+      patch.arena_rewarded_wins_today = rewardedState.wins + 1;
+      patch.arena_rewarded_wins_date = rewardedState.date;
+    } else if (rewardedState.date !== ch.arena_rewarded_wins_date) {
+      patch.arena_rewarded_wins_today = rewardedState.wins;
+      patch.arena_rewarded_wins_date = rewardedState.date;
     }
     patch.arena_attempts_left = Math.max(0, freeLeft - (useFree ? 1 : 0));
     patch.arena_attempts_date = attemptsDate;
@@ -329,16 +344,29 @@ export const FinishArenaBattle = wrap((user, body) => {
   if (novaCost > 0 && (ch.nova_crystals || 0) < novaCost) httpErr(400, "Not enough Nova Crystals");
 
   const opp = body.opponent || {};
-  const rewards = computeArenaRewards(ch, { arena_rating: opp.arena_rating || 1000 }, won, useFree);
+  const rewardedState = getArenaRewardedWinsState(ch, today);
+  const rewards = computeArenaRewards(
+    ch,
+    { arena_rating: opp.arena_rating || 1000 },
+    won,
+    { free: useFree, rewardedWinsToday: rewardedState.wins }
+  );
   const collectPct = getCollectionPercentage(ch, 0);
   const boostedXp = won ? applyXpBonus(rewards.experience, collectPct) : 0;
 
   const patch = {};
   applyXpToCharacter(ch, boostedXp, patch);
-  const stardustGain = won ? (rewards.stardust || 0) : 0;
+  const stardustGain = rewards.stardust_rewarded ? (rewards.stardust || 0) : 0;
   if (stardustGain > 0) {
     patch.stardust = (ch.stardust || 0) + stardustGain;
     patch.total_stardust_earned = (ch.total_stardust_earned || 0) + stardustGain;
+  }
+  if (rewards.stardust_rewarded) {
+    patch.arena_rewarded_wins_today = rewardedState.wins + 1;
+    patch.arena_rewarded_wins_date = rewardedState.date;
+  } else if (rewardedState.date !== ch.arena_rewarded_wins_date) {
+    patch.arena_rewarded_wins_today = rewardedState.wins;
+    patch.arena_rewarded_wins_date = rewardedState.date;
   }
 
   const prevRating = ch.arena_rating || 1000;
@@ -515,15 +543,14 @@ export const FinishDungeonBattle = wrap((user, body) => {
       }
     }
 
-    // Gear loot
+    // Gear loot — first story defeat only (patrol = already cleared, no gear).
     let gear = null;
-    if (!patrol && isBoss) {
-      const tier = Math.min(3, Math.floor((planetId - 1) / 3));
-      const rarities = ["rare", "epic", "epic", "legendary"];
-      gear = randomItem(rollItemRarity(rarities[tier], ch.level || 1), Math.max(1, ch.level || 1), undefined, Math.random, ch.class);
-    } else if (Math.random() < (patrol ? 0.12 : 0.25)) {
-      const rarity = rollItemRarity(Math.random() < 0.12 ? "uncommon" : "common", ch.level || 1);
-      gear = randomItem(rarity, Math.max(1, ch.level || 1), undefined, Math.random, ch.class);
+    if (!patrol) {
+      const itemLevel = Math.max(1, enemyLevel || ch.level || 1);
+      const rarity = isBoss
+        ? rollDungeonBossRarity(Math.random)
+        : rollDungeonRegularRarity(Math.random);
+      gear = randomItem(rarity, itemLevel, undefined, Math.random, ch.class);
     }
     const grantCtx = { accountId: user.id, characterId: ch.id };
     if (gear) {
@@ -537,9 +564,10 @@ export const FinishDungeonBattle = wrap((user, body) => {
 
     const nextNodes = (ch.dungeon_nodes_cleared || 0) + 1;
     patch.dungeon_nodes_cleared = nextNodes;
+    // Milestone chests preserved as non-Stardust flavor loot (not standard enemy gear).
     if (nextNodes % DUNGEON_MILESTONE_EVERY === 0) {
-      const rarity = rollItemRarity(Math.random() < 0.35 ? "rare" : "uncommon", ch.level || 1);
-      const mile = randomItem(rarity, Math.max(1, ch.level || 1), undefined, Math.random, ch.class);
+      const rarity = rollDungeonRegularRarity(Math.random);
+      const mile = randomItem(rarity, Math.max(1, enemyLevel || ch.level || 1), undefined, Math.random, ch.class);
       collectGrant(grantOrCompensate(ch, stripShopNoise(mile), patch), itemsGranted, pendingLoot, grantCtx);
     }
 
@@ -1041,6 +1069,21 @@ export const DismissFuelMount = wrap((user, body) => {
   return { success: true, patch, character };
 });
 
+export const DismissActiveBuff = wrap((user, body) => {
+  const ch = requireMyChar(user);
+  const stat = body?.stat;
+  if (!stat) httpErr(400, "Missing stat");
+  const prepared = dismissActiveBuff(ch, {
+    stat,
+    expires_at: body?.expires_at,
+    name: body?.name,
+  });
+  if (!prepared.ok) httpErr(400, prepared.reason || "Failed to remove Stim");
+  const patch = { active_buffs: prepared.buffs };
+  const character = entities.Character.update(ch.id, patch);
+  return { success: true, patch, character };
+});
+
 export const ClaimScoutMilestone = wrap((user) => {
   const ch = requireMyChar(user);
   if ((ch.level || 1) < SCOUT_MILESTONE_LEVEL) httpErr(400, "Level too low");
@@ -1160,6 +1203,7 @@ export const ECONOMY_FOLLOW_ON_HANDLERS = {
   CreateGuild,
   DeclareGuildWar,
   DismissFuelMount,
+  DismissActiveBuff,
   ClaimScoutMilestone,
   RenameCharacter,
   DissolvePendingLoot,

@@ -17,6 +17,35 @@ import {
   MISSION_MIN_DURATION_SECONDS,
   MISSION_MAX_DURATION_SECONDS,
 } from "@/lib/missionDuration";
+import {
+  StardustPerFuel,
+  AttributePurchaseCost,
+  MissionStardustReward,
+  ArenaWinStardust,
+  computeMiningReward,
+  JunkSaleValue,
+  GearSaleValue,
+  missionGearDropChance as seMissionGearDropChance,
+  rollMissionGearDrop as seRollMissionGearDrop,
+  computeMissionJunkSellValue as seComputeMissionJunkSellValue,
+  MISSION_GEAR_BASE_CHANCE,
+  MISSION_GEAR_PITY_INCREMENT,
+  MISSION_GEAR_DROP_CAP as SE_MISSION_GEAR_DROP_CAP,
+  MINING_EFFICIENCY,
+  ARENA_WIN_FUEL_EQUIVALENT,
+} from "./stardustEconomy.js";
+
+export {
+  StardustPerFuel,
+  AttributePurchaseCost,
+  MissionStardustReward,
+  ArenaWinStardust,
+  computeMiningReward,
+  JunkSaleValue,
+  GearSaleValue,
+  MINING_EFFICIENCY,
+  ARENA_WIN_FUEL_EQUIVALENT,
+};
 
 export {
   getAllowedMissionDurations,
@@ -511,18 +540,10 @@ const ATTR_PURCHASE_COST_WAYPOINTS = [
 
 /**
  * Stardust cost for purchase number `n` (1 = first bought point).
- * Charted range uses waypoints; beyond 650: Cost(n) = ROUND(10 * (1 + (n-1)/97.54)^5.657).
+ * Authoritative curve: AttributePurchaseCost (log-PCHIP anchors).
  */
 export function getAttributePointCost(purchaseNumber) {
-  const n = Math.max(1, Math.floor(purchaseNumber || 1));
-  let cost;
-  if (n <= 650) {
-    cost = Math.max(1, Math.round(lerpWaypoints(n, ATTR_PURCHASE_COST_WAYPOINTS)));
-  } else {
-    // Shape unchanged: ROUND(10 × (1 + (n-1)/97.54)^5.657); scale is applied once below.
-    cost = Math.max(1, Math.round(10 * (1 + (n - 1) / 97.54) ** 5.657));
-  }
-  return cost * XP_STARDUST_SCALE;
+  return AttributePurchaseCost(purchaseNumber);
 }
 
 export const ATTR_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -608,10 +629,9 @@ export {
   computeItemVendorValue,
 } from "@/lib/itemGeneration";
 
-// Stardust yielded by dissolving an item — scales with rolled attribute budget,
-// rarity, and gear slot (see itemGeneration.computeItemVendorValue).
+// Stardust yielded by dissolving an item — GearSaleValue (level × rarity × type).
 export function computeStardustValue(item) {
-  return computeItemVendorValue(item);
+  return GearSaleValue(item);
 }
 
 // Nova-crystal cost for premium gear — legendary items require both currencies,
@@ -823,8 +843,7 @@ export function generateHotDeal(dayKey, playerLevel, playerClass) {
 function makeStimTrio(seed, i, rng) {
   const picks = [];
   for (let n = 0; n < 3; n++) {
-    const pool = CONSUMABLES.filter((c) => c.rarity !== "legendary");
-    picks.push(pool[Math.floor(rng() * pool.length)]);
+    picks.push(CONSUMABLES[Math.floor(rng() * CONSUMABLES.length)]);
   }
   const raw = picks.reduce((s, p) => s + (p._cost || p.sell_value || 25), 0);
   return {
@@ -850,15 +869,7 @@ export function generateShopConsumableSlots(seed) {
       slots.push(makeStimTrio(seed, i, rng));
       continue;
     }
-    const r = rng();
-    let def;
-    if (r < 0.01) {
-      const legendary = CONSUMABLES.filter((c) => c.rarity === "legendary");
-      def = legendary[Math.floor(rng() * legendary.length)];
-    } else {
-      const pool = CONSUMABLES.filter((c) => c.rarity !== "legendary");
-      def = pool[Math.floor(rng() * pool.length)];
-    }
+    const def = randomConsumable(rng);
     slots.push({ ...def, _slotId: `cons-${seed}-${i}` });
   }
   return slots;
@@ -866,13 +877,13 @@ export function generateShopConsumableSlots(seed) {
 
 // ═══════════════════════════════════════════
 // MISSION GEAR DROP — hit chance (not rarity).
-// Base 20%; +2.5% pity per consecutive gear miss; soft-capped at 50%.
+// Base 20%; +2.5% pity per consecutive gear miss; soft-capped at 100%.
 // Stim/consumable rolls stay independent. On a miss, claim pays dissolve-value
 // stardust for the piece that would have dropped (server-side).
 // ═══════════════════════════════════════════
-export const MISSION_GEAR_DROP_BASE = 0.2;
-export const MISSION_GEAR_PITY_STEP = 0.025;
-export const MISSION_GEAR_DROP_CAP = 0.5;
+export const MISSION_GEAR_DROP_BASE = MISSION_GEAR_BASE_CHANCE;
+export const MISSION_GEAR_PITY_STEP = MISSION_GEAR_PITY_INCREMENT;
+export const MISSION_GEAR_DROP_CAP = SE_MISSION_GEAR_DROP_CAP;
 export const MISSION_CONSUMABLE_DROP_CHANCE = 0.15;
 
 export function missionGearMissStreak(character) {
@@ -880,13 +891,11 @@ export function missionGearMissStreak(character) {
 }
 
 export function missionGearDropChance(missStreak = 0) {
-  const streak = Math.max(0, Math.floor(Number(missStreak) || 0));
-  const raw = MISSION_GEAR_DROP_BASE + streak * MISSION_GEAR_PITY_STEP;
-  return Math.min(MISSION_GEAR_DROP_CAP, Math.round(raw * 10000) / 10000);
+  return seMissionGearDropChance(missStreak);
 }
 
 export function rollMissionGearDrop(missStreak = 0, rng = Math.random) {
-  return rng() < missionGearDropChance(missStreak);
+  return seRollMissionGearDrop(missStreak, rng);
 }
 
 // ═══════════════════════════════════════════
@@ -1014,32 +1023,6 @@ const MISSION_XP_PER_FUEL_WAYPOINTS = [
   [500, 1301],
 ];
 
-// Design chart: stardust per 1 fuel (SD/F) — independent of XP/fuel.
-// L1–300 from mission chart; L300–500 from arena/economy high-band chart.
-const MISSION_SD_PER_FUEL_WAYPOINTS = [
-  [1, 4],
-  [5, 5],
-  [10, 8],
-  [15, 12],
-  [20, 18],
-  [25, 25],
-  [50, 60],
-  [75, 120],
-  [100, 225],
-  [150, 600],
-  [200, 1_500],
-  [250, 3_500],
-  [300, 7_500],
-  [325, 10_135],
-  [350, 13_693],
-  [375, 18_502],
-  [400, 25_000],
-  [425, 31_746],
-  [450, 40_311],
-  [475, 51_188],
-  [500, 65_000],
-];
-
 /** Mission XP per 1 fuel at this level (design chart). */
 export function getMissionXpPerFuel(level = 1) {
   return Math.max(1, Math.round(lerpWaypoints(level, MISSION_XP_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
@@ -1047,7 +1030,7 @@ export function getMissionXpPerFuel(level = 1) {
 
 /** Mission stardust per 1 fuel at this level (SD/F). */
 export function getMissionStardustPerFuel(level = 1) {
-  return Math.max(1, Math.round(lerpWaypoints(level, MISSION_SD_PER_FUEL_WAYPOINTS))) * XP_STARDUST_SCALE;
+  return StardustPerFuel(level);
 }
 
 /** Max stardust casino bet scales with SD/F (25× rate, floor 100, cap 250k) — floors/caps at 10× scale. */
@@ -1074,9 +1057,9 @@ export const CASINO_WHEEL_TIERS = [
   { p: 0.002, mult: 25, label: "25×", color: "#F97316" },
 ];
 
-/** Arena win Stardust = SD/F(playerLevel) × 5/3 (≈1.667). */
+/** Arena win Stardust = ARENA_WIN_FUEL_EQUIVALENT × SD/F(playerLevel). */
 export function getArenaStardustReward(level = 1) {
-  return Math.max(1, Math.round((getMissionStardustPerFuel(level) * 5) / 3));
+  return ArenaWinStardust(level);
 }
 
 /** Arena win XP = XP/F(playerLevel) × 5/7 (≈0.714). */
@@ -1126,18 +1109,20 @@ export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
 }
 
 /**
- * Mission Stardust = Fuel × Level SD/F × efficiency (level-banded variance).
- * Before ship/nexus bonuses. Base SD/F chart is unchanged.
+ * Mission Stardust = Fuel × Level SD/F (no efficiency variance).
+ * Before ship/nexus bonuses.
  */
-export function computeMissionStardustFromFuel(fuelCost, level = 1, efficiency = 1) {
-  const fuel = Math.max(0, Number(fuelCost) || 0);
-  const eff = normalizeMissionEfficiency(efficiency, level);
-  return Math.max(fuel > 0 ? 1 : 0, Math.round(fuel * getMissionStardustPerFuel(level) * eff));
+export function computeMissionStardustFromFuel(fuelCost, level = 1, _efficiency = 1) {
+  return MissionStardustReward(level, fuelCost);
 }
 
-/** Mission junk trinket vendor/dissolve value — ~1× SD/F at completion level. */
-export function computeMissionJunkSellValue(level = 1) {
-  return Math.max(1, Math.round(getMissionStardustPerFuel(level)));
+/**
+ * Mission junk trinket vendor/dissolve value.
+ * Prefer passing missionStardustReward; level-only callers use stardustEconomy back-compat
+ * (JunkSaleValue(MissionStardustReward(level, 1))).
+ */
+export function computeMissionJunkSellValue(missionStardustOrLevel = 1, maybeFuel) {
+  return seComputeMissionJunkSellValue(missionStardustOrLevel, maybeFuel);
 }
 
 /**
@@ -1399,39 +1384,30 @@ export function generateLowFuelBoard(character, currentFuel, count = 3) {
 }
 
 // ═══════════════════════════════════════════
-// CONSUMABLES — timed stat buffs (minor 6h / major 12h)
+// CONSUMABLES — Stim qualities (Uncommon / Rare / Epic).
 // Stored as items of type "consumable"; using one adds an entry to
-// character.active_buffs { stat, mult, expires_at, name }.
+// character.active_buffs { stat, mult, expires_at, name, rarity, stacks, duration_hours }.
+// Bonus is applied as a final multiplier on pre-stim attribute totals.
 // ═══════════════════════════════════════════
 export const CONSUMABLE_TIERS = {
-  common:    { mult: 0.05, duration_hours: 2,  label: "Minor",    rarity: "common",    cost: 400,  sell_value: 150 },
-  uncommon:  { mult: 0.10, duration_hours: 6,  label: "Standard", rarity: "uncommon", cost: 800,  sell_value: 250 },
-  rare:      { mult: 0.15, duration_hours: 10, label: "Major",    rarity: "rare",     cost: 2200, sell_value: 600 },
-  epic:      { mult: 0.20, duration_hours: 15, label: "Prime",    rarity: "epic",     cost: 5000, sell_value: 1200 },
-  legendary: { mult: 0.20, duration_hours: 24, label: "Mythic",  rarity: "legendary", cost: 12000, sell_value: 3000, allStats: true },
+  uncommon: { mult: 0.05, duration_hours: 6,  label: "Uncommon", rarity: "uncommon", cost: 800,  sell_value: 250 },
+  rare:     { mult: 0.10, duration_hours: 12, label: "Rare",     rarity: "rare",     cost: 2200, sell_value: 600 },
+  epic:     { mult: 0.20, duration_hours: 24, label: "Epic",     rarity: "epic",     cost: 5000, sell_value: 1200 },
 };
+
+export const STIM_RARITY_RANK = { uncommon: 1, rare: 2, epic: 3 };
 
 // Maximum times a stim's duration can be extended by stacking the same stim.
 export const MAX_BUFF_STACKS = 3;
-// Maximum distinct stats that can be boosted by stims simultaneously.
+// Maximum distinct attributes that can be stimulated simultaneously.
 export const MAX_ACTIVE_STAT_TYPES = 3;
+export const STIM_YEARN_MESSAGE = "Your character doesn't yearn for more yet.";
+
 const CONSUMABLE_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
-export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, tier]) => {
-  if (tier.allStats) {
-    return [{
-      name: `${tier.label} Omni-Stim`,
-      type: "consumable",
-      rarity: tier.rarity,
-      level_requirement: 1,
-      stats: {},
-      consumable: { stat: "all", mult: tier.mult, duration_hours: tier.duration_hours, tier: tierKey },
-      sell_value: tier.sell_value,
-      flavor_text: `Boosts ALL stats by ${Math.round(tier.mult * 100)}% for ${tier.duration_hours} hours.`,
-      is_equipped: false,
-      _cost: tier.cost,
-    }];
-  }
-  return CONSUMABLE_STATS.map((stat) => ({
+const MS_PER_HOUR = 3600 * 1000;
+
+export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, tier]) =>
+  CONSUMABLE_STATS.map((stat) => ({
     name: `${tier.label} ${stat.charAt(0).toUpperCase() + stat.slice(1)} Stim`,
     type: "consumable",
     rarity: tier.rarity,
@@ -1439,39 +1415,220 @@ export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, t
     stats: {},
     consumable: { stat, mult: tier.mult, duration_hours: tier.duration_hours, tier: tierKey },
     sell_value: tier.sell_value,
-    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * 100)}% for ${tier.duration_hours} hours.`,
+    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * 100)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.duration_hours * 3}h).`,
     is_equipped: false,
     _cost: tier.cost,
-  }));
-});
+  }))
+);
+
 export function consumableItem(def) {
   const { _cost, _slotId, ...rest } = def;
   return rest;
 }
-// Legendary consumables have a 1% drop rate; everything else is weighted by rarity.
-export function randomConsumable() {
-  if (Math.random() < 0.01) {
-    const legendary = CONSUMABLES.filter((c) => c.rarity === "legendary");
-    return legendary[Math.floor(Math.random() * legendary.length)];
-  }
-  const pool = CONSUMABLES.filter((c) => c.rarity !== "legendary");
-  return pool[Math.floor(Math.random() * pool.length)];
+
+/** Weighted pick among Uncommon / Rare / Epic (no Common or Legendary). */
+export function randomConsumable(rng = Math.random) {
+  const roll = typeof rng === "function" ? rng() : Math.random();
+  let rarity = "uncommon";
+  if (roll >= 0.85) rarity = "epic";
+  else if (roll >= 0.55) rarity = "rare";
+  const pool = CONSUMABLES.filter((c) => c.rarity === rarity);
+  const pickRng = typeof rng === "function" ? rng() : Math.random();
+  return pool[Math.floor(pickRng * pool.length)] || CONSUMABLES[0];
 }
-export function getActiveBuffs(character) {
-  const now = Date.now();
+
+export function getActiveBuffs(character, nowMs = Date.now()) {
+  const now = Number(nowMs) || Date.now();
   return (character?.active_buffs || []).filter((b) => new Date(b.expires_at).getTime() > now);
 }
+
+/** Apply Stim multipliers to already-complete pre-stim attribute totals. */
 export function applyBuffs(stats, buffs) {
   const out = { ...(stats || {}) };
   const allStats = ["strength", "agility", "intellect", "vitality", "luck"];
   for (const b of buffs || []) {
     if (b.stat === "all") {
-      for (const k of allStats) out[k] = Math.round((out[k] || 0) * (1 + b.mult));
-    } else {
-      out[b.stat] = Math.round((out[b.stat] || 0) * (1 + b.mult));
+      for (const k of allStats) out[k] = Math.round((out[k] || 0) * (1 + (b.mult || 0)));
+    } else if (b.stat) {
+      out[b.stat] = Math.round((out[b.stat] || 0) * (1 + (b.mult || 0)));
     }
   }
   return out;
+}
+
+export function resolveStimRarity(source) {
+  const raw = source?.rarity || source?.consumable?.tier || source?.tier || null;
+  if (raw && STIM_RARITY_RANK[raw] != null) return raw;
+  if (raw === "common" || raw === "minor") return "uncommon";
+  if (raw === "legendary" || raw === "mythic" || raw === "prime") return "epic";
+  const mult = Number(source?.mult ?? source?.consumable?.mult ?? 0);
+  if (mult >= 0.2) return "epic";
+  if (mult >= 0.1) return "rare";
+  if (mult > 0) return "uncommon";
+  return "uncommon";
+}
+
+export function stimRarityRank(rarity) {
+  return STIM_RARITY_RANK[rarity] ?? 0;
+}
+
+export function stimMaxDurationMs(durationHours) {
+  return Math.max(0, Number(durationHours) || 0) * MS_PER_HOUR * MAX_BUFF_STACKS;
+}
+
+export function stimRefreshRemainingMs(durationHours) {
+  const base = Math.max(0, Number(durationHours) || 0) * MS_PER_HOUR;
+  return stimMaxDurationMs(durationHours) - base / 2;
+}
+
+function inferStimStacks(remainingMs, baseMs) {
+  if (baseMs <= 0) return 1;
+  return Math.min(MAX_BUFF_STACKS, Math.max(1, Math.ceil(remainingMs / baseMs)));
+}
+
+function makeStimBuff({ stat, mult, name, rarity, durationHours, stacks, expiresAt }) {
+  return {
+    stat,
+    mult,
+    name,
+    rarity,
+    duration_hours: durationHours,
+    stacks,
+    expires_at: new Date(expiresAt).toISOString(),
+  };
+}
+
+/**
+ * Validate + compute next active_buffs for a Stim use.
+ * Caller must only remove the inventory item when ok === true.
+ */
+export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Date.now()) {
+  if (!character || item?.type !== "consumable" || !item.consumable) {
+    return { ok: false, reason: "Not a stim." };
+  }
+  if (item._bundle === "stim_trio" || item.consumable?.tier === "bundle") {
+    return { ok: false, reason: "Open the Stim Trio bundle first." };
+  }
+
+  const now = Number(nowMs) || Date.now();
+  const stat = item.consumable.stat;
+  if (!stat) return { ok: false, reason: "Not a stim." };
+
+  const rarity = resolveStimRarity(item);
+  const durationHours =
+    Number(item.consumable.duration_hours) ||
+    CONSUMABLE_TIERS[rarity]?.duration_hours ||
+    6;
+  const mult =
+    item.consumable.mult != null
+      ? Number(item.consumable.mult)
+      : CONSUMABLE_TIERS[rarity]?.mult ?? 0.05;
+  const baseMs = durationHours * MS_PER_HOUR;
+  const maxMs = baseMs * MAX_BUFF_STACKS;
+  const refreshAt = maxMs - baseMs / 2;
+
+  const source = sourceBuffs ?? character.active_buffs ?? [];
+  const active = (source || []).filter((b) => new Date(b.expires_at).getTime() > now);
+  const sameStatIdx = active.findIndex((b) => b.stat === stat);
+
+  if (sameStatIdx < 0) {
+    if (new Set(active.map((b) => b.stat)).size >= MAX_ACTIVE_STAT_TYPES) {
+      return {
+        ok: false,
+        reason: `You already have ${MAX_ACTIVE_STAT_TYPES} active Stim effects. Remove one first.`,
+      };
+    }
+    return {
+      ok: true,
+      buffs: [
+        ...active,
+        makeStimBuff({
+          stat,
+          mult,
+          name: item.name,
+          rarity,
+          durationHours,
+          stacks: 1,
+          expiresAt: now + baseMs,
+        }),
+      ],
+    };
+  }
+
+  const existing = active[sameStatIdx];
+  const existingRarity = resolveStimRarity(existing);
+  const inRank = stimRarityRank(rarity);
+  const exRank = stimRarityRank(existingRarity);
+
+  if (inRank < exRank) {
+    return {
+      ok: false,
+      reason: `A stronger ${stat} Stim is already active. Remove it first to use a lower quality.`,
+    };
+  }
+
+  const buffs = [...active];
+
+  if (inRank > exRank) {
+    buffs[sameStatIdx] = makeStimBuff({
+      stat,
+      mult,
+      name: item.name,
+      rarity,
+      durationHours,
+      stacks: 1,
+      expiresAt: now + baseMs,
+    });
+    return { ok: true, buffs };
+  }
+
+  const remaining = Math.max(0, new Date(existing.expires_at).getTime() - now);
+  let stacks = Number(existing.stacks);
+  if (!Number.isFinite(stacks) || stacks < 1) {
+    stacks = inferStimStacks(remaining, baseMs);
+  }
+  stacks = Math.min(MAX_BUFF_STACKS, Math.max(1, Math.floor(stacks)));
+
+  if (stacks >= MAX_BUFF_STACKS) {
+    if (remaining > refreshAt) {
+      return { ok: false, reason: STIM_YEARN_MESSAGE };
+    }
+    buffs[sameStatIdx] = makeStimBuff({
+      stat,
+      mult: existing.mult ?? mult,
+      name: item.name,
+      rarity,
+      durationHours,
+      stacks: MAX_BUFF_STACKS,
+      expiresAt: now + maxMs,
+    });
+    return { ok: true, buffs };
+  }
+
+  const newRemaining = Math.min(remaining + baseMs, maxMs);
+  buffs[sameStatIdx] = makeStimBuff({
+    stat,
+    mult: existing.mult ?? mult,
+    name: item.name,
+    rarity,
+    durationHours,
+    stacks: Math.min(MAX_BUFF_STACKS, stacks + 1),
+    expiresAt: now + newRemaining,
+  });
+  return { ok: true, buffs };
+}
+
+export function dismissActiveBuff(character, { stat, expires_at, name } = {}, nowMs = Date.now()) {
+  const now = Number(nowMs) || Date.now();
+  if (!stat) return { ok: false, reason: "Missing stat" };
+  const source = character?.active_buffs || [];
+  const next = source.filter((b) => {
+    if (b.stat !== stat) return true;
+    if (expires_at && b.expires_at !== expires_at) return true;
+    if (name && b.name !== name) return true;
+    return false;
+  });
+  return { ok: true, buffs: next.filter((b) => new Date(b.expires_at).getTime() > now) };
 }
 
 export { RARITY_COLORS };

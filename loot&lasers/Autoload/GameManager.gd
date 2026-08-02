@@ -162,6 +162,7 @@ func go_galaxy() -> void:
 
 
 func go_galaxy_combat() -> void:
+	combat_overlay_kind = "dungeon"
 	open_overlay(SCENE_GALAXY_COMBAT)
 
 

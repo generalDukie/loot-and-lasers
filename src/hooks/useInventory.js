@@ -1,64 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/api/gameClient";
-import { MAX_BUFF_STACKS, MAX_ACTIVE_STAT_TYPES, getInventoryCap } from "@/lib/gameData";
+import { prepareConsumableBuffs, getInventoryCap } from "@/lib/gameData";
 import { enforceInventoryCap, setPendingUnequip, tryClaimPendingIfSpaceAvailable, getPending } from "@/lib/inventoryCap";
 import { EQUIPPABLE_TYPES } from "@/lib/inventoryJunk";
 
-/**
- * Pure stim apply — validates stack / distinct-stat caps and returns the next
- * active_buffs list. Does not mutate inventory. Used by useConsumable and the
- * inventory-full modal Use action (pending / non-persisted items).
- */
-export function prepareConsumableBuffs(character, item, sourceBuffs) {
-  if (!character || item?.type !== "consumable" || !item.consumable) {
-    return { ok: false, reason: "Not a stim." };
-  }
-  const now = Date.now();
-  const durationMs = (item.consumable.duration_hours || 6) * 3600 * 1000;
-  const maxExpiry = now + durationMs * MAX_BUFF_STACKS;
-  const source = sourceBuffs ?? character.active_buffs ?? [];
-  const active = source.filter((b) => new Date(b.expires_at).getTime() > now);
-  const sameStatIdx = active.findIndex((b) => b.stat === item.consumable.stat);
-  if (sameStatIdx < 0 && new Set(active.map((b) => b.stat)).size >= MAX_ACTIVE_STAT_TYPES) {
-    return { ok: false, reason: `You already have ${MAX_ACTIVE_STAT_TYPES} active stat boosts. Wait for one to expire.` };
-  }
-  if (sameStatIdx >= 0 && active[sameStatIdx].name === item.name) {
-    const existingExpiry = new Date(active[sameStatIdx].expires_at).getTime();
-    if (existingExpiry - now >= durationMs * MAX_BUFF_STACKS) {
-      return { ok: false, reason: `${item.name} is already at max stacks (${MAX_BUFF_STACKS}×).` };
-    }
-  }
-  if (sameStatIdx >= 0 && (item.consumable.mult || 0) < (active[sameStatIdx].mult || 0)) {
-    return { ok: false, reason: `A stronger ${item.consumable.stat} stim is already active.` };
-  }
-  let buffs;
-  if (sameStatIdx >= 0) {
-    const existing = active[sameStatIdx];
-    buffs = [...active];
-    if (existing.name === item.name) {
-      const newExpiry = Math.min(new Date(existing.expires_at).getTime() + durationMs, maxExpiry);
-      buffs[sameStatIdx] = { ...existing, expires_at: new Date(newExpiry).toISOString() };
-    } else {
-      buffs[sameStatIdx] = {
-        stat: item.consumable.stat,
-        mult: item.consumable.mult,
-        expires_at: new Date(now + durationMs).toISOString(),
-        name: item.name,
-      };
-    }
-  } else {
-    buffs = [
-      ...active,
-      {
-        stat: item.consumable.stat,
-        mult: item.consumable.mult,
-        expires_at: new Date(now + durationMs).toISOString(),
-        name: item.name,
-      },
-    ];
-  }
-  return { ok: true, buffs };
-}
+export { prepareConsumableBuffs } from "@/lib/gameData";
 
 // Shared inventory logic: loads items, handles equip/unequip and sell,
 // and reports character patches (equipped_items / stardust) back to the parent.

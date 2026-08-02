@@ -311,18 +311,20 @@ func _refresh_idle_preview() -> void:
 	var level := maxi(1, int(c.get("level", 1)))
 	var h := int(_hours.value)
 	var preview := MiningManager.preview_reward(h)
+	var spf := StardustEconomy.stardust_per_fuel(level)
 	_hours_lab.text = "%sh" % h
 	_preview_chip.text = "%s ✦ projected" % preview
-	_preview_formula.text = "(%s × 12 × %sh)" % [level, h]
+	_preview_formula.text = "(%s × 0.03 × %sm)" % [spf, h * 60]
 
 
 func _populate() -> void:
 	var c := GameManager.active_character
 	var level := maxi(1, int(c.get("level", 1)))
+	var spf := StardustEconomy.stardust_per_fuel(level)
+	var rate_per_hour := int(round(float(spf) * StardustEconomy.MINING_EFFICIENCY * 60.0))
 	_balance_lab.text = "✦  %s" % str(c.get("stardust", 0))
 	_stat_level.text = str(level)
-	_stat_rate.text = "12/h"
-	# Actual 24h payout (includes XP_STARDUST_SCALE) — web footer omits ×10 by accident.
+	_stat_rate.text = "%s/h" % rate_per_hour
 	_stat_max.text = str(MiningManager.preview_reward(24))
 	_refresh_idle_preview()
 
@@ -364,8 +366,9 @@ func _populate() -> void:
 		_hero_sub.text = "Your drone is harvesting a stardust node..."
 		_remain_lab.text = "⏱  %s" % _format_remaining(rem)
 		_reward_lab.text = "%s ✦" % reward
-		# Derive duration from reward = level×12×hours×10 (correct; web divides without ×10).
-		var total_h := float(reward) / float(maxi(1, level * 12 * 10))
+		# Derive duration from reward ≈ StardustPerFuel × 0.03 × minutes.
+		var rate := float(spf) * StardustEconomy.MINING_EFFICIENCY * 60.0
+		var total_h := float(reward) / maxf(1.0, rate)
 		var total_ms := maxf(1.0, total_h * 3600000.0)
 		var elapsed := total_ms - float(rem)
 		_progress.value = clampf(elapsed / total_ms * 100.0, 0.0, 100.0)

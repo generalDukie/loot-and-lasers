@@ -8,6 +8,7 @@ var viewing_wormhole := false
 var patrol := false
 var pending_enemy: Dictionary = {}
 var pending_battle: Dictionary = {}
+var pending_player_items: Array = []
 var last_finish: Dictionary = {}
 
 
@@ -101,8 +102,8 @@ func prepare_fight() -> Dictionary:
 		if not paid.ok:
 			return paid
 	pending_enemy = DungeonRules.generate_enemy(planet, enemy_idx)
-	var items: Array = await _load_equipped()
-	pending_battle = MissionCombat.simulate_battle(active_char(), pending_enemy, items, [])
+	pending_player_items = await _load_equipped()
+	pending_battle = MissionCombat.simulate_battle(active_char(), pending_enemy, pending_player_items, [])
 	return {"ok": true, "enemy": pending_enemy, "battle": pending_battle}
 
 
@@ -134,6 +135,7 @@ func finish_battle() -> Dictionary:
 			GameManager.remember_loot_from_claim({"items": items})
 	pending_enemy = {}
 	pending_battle = {}
+	pending_player_items = []
 	state_changed.emit()
 	return res
 

@@ -1,12 +1,16 @@
 /**
- * Equipment attribute budget system (V1).
+ * Equipment attribute budget system.
  * Items roll only the five core attributes; combat %/HP/damage are derived elsewhere.
  *
- * Full-set budget anchors → normal slot = full/8.4 → × slot × rarity → allocate.
+ * Pipeline:
+ *   ItemLevel → BaseGearStatBudget → SlotMult → RarityMult → TotalStatPool
+ *   → select stats by rarity → min floors → random remainder → integer repair
  *
  * Common–Epic: optional per-item 60/40 Favored vs Total pool when a player class
- * is provided. Legendary: always all five stats, class-neutral, ≥10% floor each.
+ * is provided. Legendary: always all five stats.
  */
+
+import { GearSaleValue } from "./stardustEconomy.js";
 
 export const ITEM_ATTR_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
 
@@ -36,9 +40,6 @@ export const CLASS_ARCHETYPE_BY_NAME = {
 /** Chance the entire Common–Epic item uses the Favored Stat Pool (else Total). */
 export const FAVORED_POOL_CHANCE = 0.6;
 
-/** Legendary: each attribute receives at least this share of the total budget. */
-export const LEGENDARY_MIN_STAT_SHARE = 0.1;
-
 export const EQUIPMENT_SLOTS = [
   "helmet",
   "armor",
@@ -50,7 +51,7 @@ export const EQUIPMENT_SLOTS = [
   "ship_module",
 ];
 
-/** Slot budget multipliers — Weapon & Ship Module are ~20% stronger. */
+/** Slot budget multipliers — Weapon & Ship Module are 20% stronger. */
 export const SLOT_STAT_MULT = {
   helmet: 1.0,
   armor: 1.0,
@@ -62,9 +63,6 @@ export const SLOT_STAT_MULT = {
   ship_module: 1.2,
 };
 
-/** Total slot-budget units in a full set: 6×1.0 + 2×1.2 = 8.4 */
-export const FULL_SET_SLOT_UNITS = 8.4;
-
 export const RARITY_ATTR_COUNT = {
   common: 1,
   uncommon: 2,
@@ -73,6 +71,7 @@ export const RARITY_ATTR_COUNT = {
   legendary: 5,
 };
 
+/** Rarity STAT-budget multipliers (not vendor sale multipliers). */
 export const RARITY_BUDGET_MULT = {
   common: 0.7,
   uncommon: 0.85,
@@ -81,7 +80,41 @@ export const RARITY_BUDGET_MULT = {
   legendary: 1.35,
 };
 
-/** Full equipped-set attribute totals (balance anchors). Level 1 uses mid of 10–15. */
+/** Minimum share of TotalStatPool each rolled stat must receive. */
+export const RARITY_MIN_STAT_SHARE = {
+  common: 1.0,
+  uncommon: 0.3,
+  rare: 0.2,
+  epic: 0.2,
+  legendary: 0.1,
+};
+
+/** @deprecated use RARITY_MIN_STAT_SHARE.legendary */
+export const LEGENDARY_MIN_STAT_SHARE = 0.1;
+
+/**
+ * Rare normal-slot base budget anchors (authoritative).
+ * BaseGearStatBudget(level) — before slot/rarity multipliers.
+ */
+export const BASE_GEAR_STAT_BUDGET_ANCHORS = Object.freeze([
+  [1, 12],
+  [10, 29],
+  [25, 57],
+  [50, 98],
+  [100, 167],
+  [200, 303],
+  [300, 468],
+  [400, 632],
+  [500, 795],
+]);
+
+export const BASE_GEAR_AT_500 = 795;
+export const BASE_GEAR_POST_500_SLOPE = 1.63;
+
+/**
+ * Full equipped-set attribute totals (balance reference for progressing-player
+ * mission soft foes). NOT used for individual item BaseGearStatBudget.
+ */
 export const FULL_SET_BUDGET_ANCHORS = [
   [1, 12.5],
   [10, 245],
@@ -93,6 +126,60 @@ export const FULL_SET_BUDGET_ANCHORS = [
   [400, 5305],
   [500, 6675],
 ];
+
+/** @deprecated full-set units; individual items use BaseGearStatBudget directly. */
+export const FULL_SET_SLOT_UNITS = 8.4;
+
+// ── Monotone cubic PCHIP (linear budget space) ───────────────
+
+function pchipSlopes(xs, ys) {
+  const n = xs.length;
+  const d = new Array(n).fill(0);
+  const delta = new Array(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    delta[i] = (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]);
+  }
+  d[0] = delta[0];
+  d[n - 1] = delta[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    if (delta[i - 1] === 0 || delta[i] === 0 || Math.sign(delta[i - 1]) !== Math.sign(delta[i])) {
+      d[i] = 0;
+    } else {
+      const w1 = 2 * (xs[i + 1] - xs[i]) + (xs[i] - xs[i - 1]);
+      const w2 = (xs[i + 1] - xs[i]) + 2 * (xs[i] - xs[i - 1]);
+      d[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i]);
+    }
+  }
+  return d;
+}
+
+function hermite(x, x0, x1, y0, y1, d0, d1) {
+  const h = x1 - x0;
+  const t = (x - x0) / h;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+  return h00 * y0 + h10 * h * d0 + h01 * y1 + h11 * h * d1;
+}
+
+function pchipAnchors(anchors, x) {
+  const pts = anchors.map(([a, b]) => [Number(a), Number(b)]);
+  if (!pts.length) return 0;
+  const X = Math.max(pts[0][0], Number(x) || pts[0][0]);
+  for (const [ax, ay] of pts) {
+    if (X === ax) return Math.round(ay);
+  }
+  if (X < pts[0][0]) return Math.round(pts[0][1]);
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const d = pchipSlopes(xs, ys);
+  let i = 0;
+  while (i < xs.length - 2 && X > xs[i + 1]) i += 1;
+  return Math.max(1, Math.round(hermite(X, xs[i], xs[i + 1], ys[i], ys[i + 1], d[i], d[i + 1])));
+}
 
 function lerpWaypoints(level, points) {
   const L = Math.max(1, Number(level) || 1);
@@ -111,14 +198,25 @@ function lerpWaypoints(level, points) {
   return yB + slope * (L - xB);
 }
 
-/** Expected total attributes across all 8 equipped pieces at this item level. */
-export function getFullSetAttributeBudget(itemLevel) {
-  return lerpWaypoints(itemLevel, FULL_SET_BUDGET_ANCHORS);
+/**
+ * Rare normal-slot base budget at item level (before slot/rarity multipliers).
+ */
+export function BaseGearStatBudget(itemLevel) {
+  const L = Math.max(1, Math.floor(Number(itemLevel) || 1));
+  if (L > 500) {
+    return Math.round(BASE_GEAR_AT_500 + BASE_GEAR_POST_500_SLOPE * (L - 500));
+  }
+  return pchipAnchors(BASE_GEAR_STAT_BUDGET_ANCHORS, L);
 }
 
-/** Baseline normal-slot budget (before rarity) at this item level. */
+/** Alias — Rare normal-slot base budget. */
 export function getNormalSlotBudget(itemLevel) {
-  return getFullSetAttributeBudget(itemLevel) / FULL_SET_SLOT_UNITS;
+  return BaseGearStatBudget(itemLevel);
+}
+
+/** Expected total attributes across all 8 equipped pieces (mission soft-foe reference). */
+export function getFullSetAttributeBudget(itemLevel) {
+  return lerpWaypoints(itemLevel, FULL_SET_BUDGET_ANCHORS);
 }
 
 export function getSlotMultiplier(type) {
@@ -133,13 +231,18 @@ export function getRarityAttributeCount(rarity) {
   return RARITY_ATTR_COUNT[rarity] ?? 1;
 }
 
+export function getRarityMinStatShare(rarity) {
+  return RARITY_MIN_STAT_SHARE[rarity] ?? 0.2;
+}
+
 /**
- * Final attribute budget for one item (before random variance).
- * FinalItemStatBudget = NormalSlotBudget × SlotMult × RarityMult
+ * Final TotalStatPool for one item.
+ * ROUND(BaseGearStatBudget(level) × SlotMult × RarityMult)
  */
 export function getItemStatBudget(itemLevel, type, rarity) {
-  const base = getNormalSlotBudget(itemLevel);
-  return base * getSlotMultiplier(type) * getRarityBudgetMultiplier(rarity);
+  return Math.round(
+    BaseGearStatBudget(itemLevel) * getSlotMultiplier(type) * getRarityBudgetMultiplier(rarity)
+  );
 }
 
 function shuffleInPlace(arr, rng) {
@@ -150,10 +253,6 @@ function shuffleInPlace(arr, rng) {
   return arr;
 }
 
-/**
- * Resolve a class name or archetype string to strength|agility|intellect.
- * Returns null when no player/class context is available.
- */
 export function resolveClassArchetype(classNameOrArchetype) {
   if (classNameOrArchetype == null || classNameOrArchetype === "") return null;
   const raw = String(classNameOrArchetype);
@@ -162,14 +261,12 @@ export function resolveClassArchetype(classNameOrArchetype) {
   if (lower === "agility" || lower === "agi") return "agility";
   if (lower === "intellect" || lower === "int") return "intellect";
   if (CLASS_ARCHETYPE_BY_NAME[raw]) return CLASS_ARCHETYPE_BY_NAME[raw];
-  // Case-insensitive class name match
   for (const [name, arch] of Object.entries(CLASS_ARCHETYPE_BY_NAME)) {
     if (name.toLowerCase() === lower) return arch;
   }
   return null;
 }
 
-/** Favored pool for a class, or null if class context is missing. */
 export function getFavoredStatPool(classNameOrArchetype) {
   const arch = resolveClassArchetype(classNameOrArchetype);
   if (!arch) return null;
@@ -178,19 +275,13 @@ export function getFavoredStatPool(classNameOrArchetype) {
 
 /**
  * Pick which attributes appear on an item.
- *
- * Legendary: always all five (class-neutral — no 60/40).
- * Common–Epic with class context: ONE 60/40 roll for the whole item, then
- * select all unique attrs from that single chosen pool.
- * Without class context: neutral shuffle from Total Stat Pool (legacy behavior).
- *
- * @returns {{ attrs: string[], poolMode: 'favored'|'total'|'legendary'|'neutral' }}
+ * Legendary: always all five.
+ * Common–Epic with class: optional favored pool (existing intentional restriction).
  */
 export function selectItemAttributes(rarity, rng = Math.random, options = {}) {
   const count = getRarityAttributeCount(rarity);
   const className = options.className;
 
-  // Legendary — completely separate: all five, no pool mode.
   if (rarity === "legendary" || count >= ITEM_ATTR_KEYS.length) {
     return { attrs: [...ITEM_ATTR_KEYS], poolMode: "legendary" };
   }
@@ -200,7 +291,6 @@ export function selectItemAttributes(rarity, rng = Math.random, options = {}) {
   let poolMode;
 
   if (favored) {
-    // ONE roll per item — not per attribute.
     if (rng() < FAVORED_POOL_CHANCE) {
       pool = favored;
       poolMode = "favored";
@@ -213,7 +303,6 @@ export function selectItemAttributes(rarity, rng = Math.random, options = {}) {
     poolMode = "neutral";
   }
 
-  // Rare/Epic favored: pool has exactly 3 → use all three unique attrs.
   if (count >= pool.length) {
     return { attrs: shuffleInPlace([...pool], rng), poolMode };
   }
@@ -221,89 +310,39 @@ export function selectItemAttributes(rarity, rng = Math.random, options = {}) {
 }
 
 /**
- * Distribute `budget` across `attrs` with randomized weights.
- * Guarantees sum(values) === budget after integer allocation (largest remainder).
- * Rejects pathological dumps via min/max share clamps.
+ * Distribute TotalStatPool across attrs with rarity minimum floors, then
+ * randomly allocate the remainder (allows heavily uneven rolls).
+ * Sum of values always equals `budget` exactly.
+ *
+ * @param {string[]} attrs
+ * @param {number} budget
+ * @param {() => number} [rng]
+ * @param {string} [rarity] — used for min share; inferred from attrs.length if omitted
  */
-export function allocateStatBudget(attrs, budget, rng = Math.random) {
+export function allocateStatBudget(attrs, budget, rng = Math.random, rarity = null) {
   const keys = Array.isArray(attrs) ? attrs.filter(Boolean) : [];
-  const total = Math.max(0, Math.round(budget || 0));
+  const total = Math.max(0, Math.round(Number(budget) || 0));
   if (!keys.length || total <= 0) return {};
   if (keys.length === 1) return { [keys[0]]: total };
 
   const n = keys.length;
-  const maxShare = n === 2 ? 0.72 : n === 3 ? 0.55 : 0.38;
-  const minShare = n === 2 ? 0.28 : n === 3 ? 0.18 : 0.10;
-
-  let weights = null;
-  for (let attempt = 0; attempt < 48; attempt++) {
-    const raw = keys.map(() => 0.15 + rng());
-    const sum = raw.reduce((a, b) => a + b, 0) || 1;
-    const normalized = raw.map((w) => w / sum);
-    if (normalized.every((w) => w >= minShare - 1e-9 && w <= maxShare + 1e-9)) {
-      weights = normalized;
-      break;
-    }
+  let rarityKey = rarity;
+  if (!rarityKey) {
+    if (n >= 5) rarityKey = "legendary";
+    else if (n === 2) rarityKey = "uncommon";
+    else rarityKey = "rare";
   }
-  if (!weights) {
-    // Fall back: equal shares + mild noise, then re-clamp & renormalize.
-    weights = keys.map(() => 1 / n);
-    weights = weights.map((w) => {
-      const jitter = (rng() - 0.5) * (maxShare - minShare) * 0.6;
-      return Math.min(maxShare, Math.max(minShare, w + jitter));
-    });
-    const s = weights.reduce((a, b) => a + b, 0) || 1;
-    weights = weights.map((w) => w / s);
-  }
-
-  const exact = weights.map((w) => total * w);
-  const floors = exact.map((x) => Math.floor(x));
-  let remainder = total - floors.reduce((a, b) => a + b, 0);
-  const byFrac = exact
-    .map((x, i) => ({ i, frac: x - floors[i] }))
-    .sort((a, b) => b.frac - a.frac || a.i - b.i);
-  const values = [...floors];
-  for (let k = 0; k < remainder; k++) values[byFrac[k].i] += 1;
-
-  // Every selected attr gets ≥1 when the budget allows.
-  if (total >= n) {
-    for (let i = 0; i < n; i++) {
-      if (values[i] >= 1) continue;
-      let donor = 0;
-      for (let j = 1; j < n; j++) if (values[j] > values[donor]) donor = j;
-      if (values[donor] > 1) {
-        values[donor] -= 1;
-        values[i] = 1;
-      }
-    }
-  }
-
-  const stats = {};
-  keys.forEach((k, i) => { stats[k] = values[i]; });
-  return stats;
-}
-
-/**
- * Legendary distribution: class-neutral, all five stats.
- * Reserve ~10% of budget for each attribute, then randomly distribute the rest
- * (extras may be zero so one stat can sit at the floor while another spikes).
- * Final values always sum exactly to `budget`.
- */
-export function allocateLegendaryStatBudget(budget, rng = Math.random) {
-  const keys = [...ITEM_ATTR_KEYS];
-  const n = keys.length;
-  const total = Math.max(n, Math.round(budget || 0));
-
-  let minEach = Math.floor(total * LEGENDARY_MIN_STAT_SHARE);
+  let minRatio = getRarityMinStatShare(rarityKey);
+  let minEach = Math.floor(total * minRatio);
   while (minEach > 0 && minEach * n > total) minEach -= 1;
 
   const reserved = minEach * n;
   const leftover = total - reserved;
 
-  // Free-form remainder weights — allow 0 extra on some stats.
   const extras = new Array(n).fill(0);
   if (leftover > 0) {
-    const raw = keys.map(() => rng());
+    // Free-form weights — allow near-zero extras so one stat can spike.
+    const raw = keys.map(() => Math.max(1e-9, rng()));
     const wSum = raw.reduce((a, b) => a + b, 0) || 1;
     const exact = raw.map((w) => leftover * (w / wSum));
     const floors = exact.map((x) => Math.floor(x));
@@ -312,13 +351,15 @@ export function allocateLegendaryStatBudget(budget, rng = Math.random) {
       .map((x, i) => ({ i, frac: x - floors[i] }))
       .sort((a, b) => b.frac - a.frac || a.i - b.i);
     for (let i = 0; i < n; i++) extras[i] = floors[i];
-    for (let k = 0; k < rem; k++) extras[byFrac[k].i] += 1;
+    for (let k = 0; k < rem; k++) extras[byFrac[k % n].i] += 1;
   }
 
   const stats = {};
-  keys.forEach((k, i) => { stats[k] = minEach + extras[i]; });
+  keys.forEach((k, i) => {
+    stats[k] = minEach + extras[i];
+  });
 
-  // Exact-sum safety (should already match).
+  // Exact-sum remainder repair (never violate floors when removing).
   let sum = keys.reduce((a, k) => a + stats[k], 0);
   if (sum !== total) {
     const delta = total - sum;
@@ -334,47 +375,53 @@ export function allocateLegendaryStatBudget(budget, rng = Math.random) {
         stats[k] -= take;
         left -= take;
       }
+      // If still over (pathological), strip from highest.
+      while (left > 0) {
+        let donor = order[0];
+        for (const k of order) if (stats[k] > stats[donor]) donor = k;
+        if (stats[donor] <= 0) break;
+        stats[donor] -= 1;
+        left -= 1;
+      }
     }
   }
 
   return stats;
 }
 
+/** @deprecated unified into allocateStatBudget(..., "legendary") */
+export function allocateLegendaryStatBudget(budget, rng = Math.random) {
+  return allocateStatBudget([...ITEM_ATTR_KEYS], budget, rng, "legendary");
+}
+
 /**
- * Apply ±variancePct around the target budget, then allocate.
+ * Generate item stats from level / type / rarity.
+ * TotalStatPool is fixed (no post-budget variance).
  * Pass `className` for Common–Epic class-aware pool selection.
- * Returns { stats, budget, attributes, targetBudget, poolMode }.
  */
 export function rollItemStats({
   itemLevel,
   type,
   rarity,
   rng = Math.random,
-  variancePct = 0.08,
   className,
+  variancePct = 0, // ignored — TotalStatPool is authoritative
 } = {}) {
+  void variancePct;
   const { attrs, poolMode } = selectItemAttributes(rarity, rng, { className });
-  const target = getItemStatBudget(itemLevel, type, rarity);
-  const lo = 1 - variancePct;
-  const hi = 1 + variancePct;
-  let budget = Math.round(target * (lo + rng() * (hi - lo)));
-  budget = Math.max(attrs.length, budget);
-
-  const stats = rarity === "legendary"
-    ? allocateLegendaryStatBudget(budget, rng)
-    : allocateStatBudget(attrs, budget, rng);
-
+  const budget = Math.max(attrs.length, getItemStatBudget(itemLevel, type, rarity));
+  const stats = allocateStatBudget(attrs, budget, rng, rarity);
   const sum = Object.values(stats).reduce((a, b) => a + (b || 0), 0);
   return {
     stats,
     budget: sum,
     attributes: attrs,
-    targetBudget: target,
+    targetBudget: budget,
     poolMode,
   };
 }
 
-/** Vendor sell factor by rarity (budget already embeds level). */
+/** Legacy vendor factors (unused by GearSaleValue; kept for shop heuristics if any). */
 export const RARITY_SELL_FACTOR = {
   common: 0.55,
   uncommon: 0.7,
@@ -397,23 +444,9 @@ export const ITEM_SELL_TYPE_WEIGHT = {
 };
 
 /**
- * Stardust vendor/dissolve value — scales with attribute budget, rarity, and slot.
- * Level is already reflected in the rolled budget, so we avoid a second steep level curve.
+ * Stardust vendor/dissolve value — universal gear formula (level × rarity × type).
+ * Source (mission/dungeon/shop) does not affect sale value.
  */
 export function computeItemVendorValue(item) {
-  if (!item) return 1;
-  if (item.type === "consumable" || item.type === "material") {
-    const flat = item.sell_value;
-    if (typeof flat === "number" && flat > 0) return Math.max(1, Math.round(flat));
-  }
-  const statSum = item.stats
-    ? Object.values(item.stats).reduce((a, b) => a + (b || 0), 0)
-    : 0;
-  if (statSum <= 0) {
-    return Math.max(1, Math.round(item.sell_value || 1));
-  }
-  const rarityF = RARITY_SELL_FACTOR[item.rarity] ?? 0.9;
-  const typeW = ITEM_SELL_TYPE_WEIGHT[item.type] ?? 1;
-  // 10× stardust resolution — apply once at vendor exit (not to Nova).
-  return Math.max(1, Math.round(statSum * rarityF * typeW * 10));
+  return GearSaleValue(item);
 }

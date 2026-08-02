@@ -1,6 +1,13 @@
 /**
  * Expected player total attributes + PvE enemy budget helpers.
  * Mission and dungeon multipliers live here; distribution is shared.
+ *
+ * ExpectedPlayerAttributes(level) is a balance benchmark only — never derived
+ * from the live player's gear, purchases, activity, or active Stims.
+ *
+ * The Stim-adjusted anchor table already bakes in typical combat-ready Stim
+ * usage (~3 active Stims at ~+12.5% average on Primary/Vitality/Luck).
+ * Do NOT multiply the result by another Stim factor.
  */
 
 import { getFullSetAttributeBudget } from "./itemGeneration.js";
@@ -17,19 +24,125 @@ export const ATTR_KEYS = Object.freeze([
 export const PLAYER_BASE_ATTRIBUTES = 50;
 
 /**
- * Canonical expected TOTAL permanent attributes at a level
- * (Strength+Agility+Intellect+Vitality+Luck).
- * Aspirational curve (base + gear + purchased attrs) — not used for mission foes.
+ * Authoritative Stim-adjusted ExpectedPlayerAttributes anchors
+ * (simulation-derived combat-ready player benchmark).
+ * Levels at these points must return the exact values.
+ */
+export const EXPECTED_PLAYER_ATTRIBUTE_ANCHORS = Object.freeze([
+  [1, 68],
+  [10, 383],
+  [20, 630],
+  [25, 745],
+  [30, 864],
+  [40, 1087],
+  [50, 1277],
+  [60, 1512],
+  [70, 1718],
+  [80, 1919],
+  [90, 2119],
+  [100, 2275],
+  [110, 2520],
+  [120, 2706],
+  [130, 2893],
+  [140, 3078],
+  [150, 3263],
+  [160, 3448],
+  [170, 3631],
+  [180, 3816],
+  [190, 4001],
+  [200, 4096],
+  [250, 5365],
+  [300, 6336],
+  [350, 7700],
+  [400, 8673],
+  [450, 10095],
+  [500, 11054],
+]);
+
+/** Linear late-game slope for level > 500 (Stim-adjusted). */
+export const EXPECTED_PLAYER_POST_500_SLOPE = 23.9;
+export const EXPECTED_PLAYER_AT_500 = 11054;
+
+// ── Monotone cubic PCHIP (linear attribute space — not log) ──
+
+function pchipSlopes(xs, ys) {
+  const n = xs.length;
+  const d = new Array(n).fill(0);
+  const delta = new Array(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    delta[i] = (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]);
+  }
+  d[0] = delta[0];
+  d[n - 1] = delta[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    if (delta[i - 1] === 0 || delta[i] === 0 || Math.sign(delta[i - 1]) !== Math.sign(delta[i])) {
+      d[i] = 0;
+    } else {
+      const w1 = 2 * (xs[i + 1] - xs[i]) + (xs[i] - xs[i - 1]);
+      const w2 = (xs[i + 1] - xs[i]) + 2 * (xs[i] - xs[i - 1]);
+      d[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i]);
+    }
+  }
+  return d;
+}
+
+function hermite(x, x0, x1, y0, y1, d0, d1) {
+  const h = x1 - x0;
+  const t = (x - x0) / h;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+  return h00 * y0 + h10 * h * d0 + h01 * y1 + h11 * h * d1;
+}
+
+/**
+ * Monotone cubic PCHIP over anchors; exact at anchors.
+ * @param {ReadonlyArray<[number, number]>} anchors
+ * @param {number} x
+ */
+function pchipAnchors(anchors, x) {
+  const pts = anchors.map(([a, b]) => [Number(a), Number(b)]);
+  if (!pts.length) return 0;
+  const X = Math.max(pts[0][0], Number(x) || pts[0][0]);
+
+  for (const [ax, ay] of pts) {
+    if (X === ax) return Math.round(ay);
+  }
+
+  if (X < pts[0][0]) return Math.round(pts[0][1]);
+
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const d = pchipSlopes(xs, ys);
+
+  let i = 0;
+  while (i < xs.length - 2 && X > xs[i + 1]) i += 1;
+
+  return Math.max(1, Math.round(hermite(X, xs[i], xs[i + 1], ys[i], ys[i + 1], d[i], d[i + 1])));
+}
+
+/**
+ * Canonical expected TOTAL effective attributes at a level
+ * (Strength+Agility+Intellect+Vitality+Luck), including typical Stim uplift
+ * baked into the anchor table.
+ * Balance benchmark only — not the live player's attributes.
  */
 export function expectedPlayerAttributes(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
-  return Math.round(50 + 19.3519 * L + 288.0495 * (1 - Math.exp(-L / 20)));
+  if (L > 500) {
+    return Math.round(EXPECTED_PLAYER_AT_500 + EXPECTED_PLAYER_POST_500_SLOPE * (L - 500));
+  }
+  return pchipAnchors(EXPECTED_PLAYER_ATTRIBUTE_ANCHORS, L);
 }
 
 /**
  * Realistic power for a player who keeps gear roughly on-level.
  * Level-ups grant 0 free attrs; progression comes from equipped set budgets.
  * GEAR_FILL ≈ uncommon-common blend of a full 8-slot set.
+ * Used for mission soft-encounter budgets (separate from ExpectedPlayerAttributes).
  */
 export const MISSION_PLAYER_GEAR_FILL = 0.75;
 

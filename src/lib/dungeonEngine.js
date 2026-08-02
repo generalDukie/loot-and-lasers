@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════
 // DUNGEON ENGINE — enemy generation + DRU rewards
 // ═══════════════════════════════════════════
-// 1 DRU = mission rewards for 1 fuel at the enemy's level.
-//   Stardust = DRU × SD/F(enemyLevel)
+// 1 DRU = mission XP for 1 fuel at the enemy's level (Stardust from dungeons is 0).
+//   Stardust = 0
 //   XP       = DRU × XP/F(enemyLevel) × 0.87
 import {
   RACES,
@@ -12,7 +12,6 @@ import {
   getActiveShipId,
   getActiveShipMods,
   getMissionXpPerFuel,
-  getMissionStardustPerFuel,
 } from "@/lib/gameData";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
 import {
@@ -149,13 +148,13 @@ export function getDungeonEnemyLevel(planetId, enemyIndex) {
 
 /**
  * Convert DRU at an enemy level into Stardust / XP.
- * 1 DRU ≡ 1 fuel of mission rewards at that level (XP × 0.87).
+ * Stardust from dungeons is always 0; XP = DRU × XP/F × 0.87.
  */
 export function druToRewards(dru, enemyLevel) {
   const lvl = Math.max(1, enemyLevel || 1);
   const units = Math.max(0, Number(dru) || 0);
   return {
-    stardust: Math.max(units > 0 ? 1 : 0, Math.round(units * getMissionStardustPerFuel(lvl))),
+    stardust: 0,
     experience: Math.max(units > 0 ? 1 : 0, Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_DRU_MULT)),
   };
 }

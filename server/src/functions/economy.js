@@ -49,10 +49,12 @@ import {
   generateSimpleHotDeal,
   prepareConsumableBuffs,
   rollItemRarity,
+  rollMissionGearRarity,
   rollMissionGearDrop,
   missionGearMissStreak,
   missionGearDropChance,
   MISSION_CONSUMABLE_DROP_CHANCE,
+  MISSION_JUNK_CHANCE_ON_GEAR_FAIL,
   applyXpToCharacter,
   getInventoryCap,
   randomConsumable,
@@ -465,8 +467,7 @@ export async function LaunchMission(user, body) {
 
       const LOOT_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
       const lootType = LOOT_TYPES[String(template.name).length % 8];
-      const chance = template.rewards?.item_rarity_chance || "common";
-      const lootRarity = rollItemRarity(chance, ch.level || 1);
+      const lootRarity = rollMissionGearRarity(secureRandom);
       const missStreak = missionGearMissStreak(ch);
       const lootDropChance = missionGearDropChance(missStreak);
       const lootDrops = rollMissionGearDrop(missStreak, secureRandom);
@@ -640,22 +641,23 @@ export async function ClaimMission(user, body) {
             gearDropped = true;
             const rarity =
               rewards.loot_rarity ||
-              rollItemRarity(rewards.item_rarity_chance || "common", live.level || 1);
+              rollMissionGearRarity(secureRandom);
             itemTemplates.push(
               randomItem(rarity, live.level || 1, rewards.loot_type, secureRandom, live.class)
             );
           }
-          // Missed gear: no salvage consolation — mission stardust alone is the payout.
-          if (rewards.collectible?.name) {
+          // Junk only after gear miss — 50% chance; never alongside gear.
+          if (!gearDropped && secureRandom() < MISSION_JUNK_CHANCE_ON_GEAR_FAIL) {
             const level = Math.max(1, live.level || 1);
+            const junkName = rewards.collectible?.name || "Salvaged Trinket";
             itemTemplates.push({
-              name: rewards.collectible.name,
+              name: junkName,
               type: "material",
               rarity: "common",
               level_requirement: level,
               stats: {},
               flavor_text: "A curious trinket recovered on mission.",
-              sell_value: computeMissionJunkSellValue(level),
+              sell_value: computeMissionJunkSellValue(gains.stardustBase || gains.stardustGain || 0, secureRandom),
             });
           }
           if (secureRandom() < MISSION_CONSUMABLE_DROP_CHANCE) {

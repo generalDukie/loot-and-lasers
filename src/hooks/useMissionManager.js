@@ -77,6 +77,35 @@ export function skipCostFor(mission, nowMs = Date.now()) {
   return Math.max(1, Math.ceil(remainingMinutes * SKIP_CRYSTALS_PER_MINUTE));
 }
 
+/**
+ * True when the wait is over and FIGHT FOR REWARDS may open.
+ * While in_progress, trust mission.end_time only (never a stale character
+ * mission_end_time from a prior skip/claim — that made launches look completed).
+ * After SkipMission, status is completed and character.mission_end_time is snapped
+ * to now while the mission row may still hold the original future end_time.
+ */
+export function isMissionReadyToFight(mission, character, nowMs = Date.now()) {
+  if (!mission) return false;
+  const status = mission.status;
+  if (status === "claimed" || status === "failed") return false;
+
+  const missionEnd = mission.end_time ? new Date(mission.end_time).getTime() : NaN;
+  const charEnd = character?.mission_end_time
+    ? new Date(character.mission_end_time).getTime()
+    : NaN;
+
+  let effectiveEnd = NaN;
+  if (status === "completed") {
+    effectiveEnd = Number.isFinite(charEnd) ? charEnd : missionEnd;
+  } else {
+    // in_progress (and any other active status): mission row timer is authoritative
+    effectiveEnd = Number.isFinite(missionEnd) ? missionEnd : charEnd;
+  }
+
+  if (!Number.isFinite(effectiveEnd)) return false;
+  return effectiveEnd <= nowMs;
+}
+
 function formatTime(s) {
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
@@ -224,7 +253,7 @@ export function useMissionManager() {
         const missions = await api.entities.Mission.filter({ id: char.active_mission_id });
         if (missions.length > 0) {
           const m = missions[0];
-          if (m.status === "in_progress" && new Date(m.end_time) <= new Date()) {
+          if (m.status === "in_progress" && isMissionReadyToFight(m, char)) {
             // Local UX only — ClaimMission completes server-side when claimed.
             m.status = "completed";
           }
@@ -252,7 +281,7 @@ export function useMissionManager() {
     let fired = false;
     const interval = setInterval(() => {
       setNow(Date.now());
-      if (!fired && new Date(activeMission.end_time) <= new Date()) {
+      if (!fired && isMissionReadyToFight(activeMission, character)) {
         fired = true;
         setActiveMission(m => m ? { ...m, status: "completed" } : null);
         playMissionComplete();
@@ -270,7 +299,7 @@ export function useMissionManager() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [activeMission, toast]);
+  }, [activeMission, character, toast]);
 
   const handleStart = useCallback(async (template) => {
     if (activeMission) return;
@@ -325,19 +354,29 @@ export function useMissionManager() {
   }, [activeMission, character, toast, load, setCharacter]);
 
   // Soft end-mission fight — used by claim and by skip-to-fight.
-  const startMissionBattle = useCallback(async (mission) => {
+  // `characterOverride` lets Skip pass the freshly patched character before React state catches up.
+  const startMissionBattle = useCallback(async (mission, characterOverride = null) => {
     if (claimingRef.current || missionBattle || settlingBattleRef.current) return;
-    if (!mission || !character) return;
+    const char = characterOverride || character;
+    if (!mission || !char) return;
+    if (!isMissionReadyToFight(mission, char)) {
+      toast({
+        title: "Mission not finished yet",
+        description: "Wait for the timer, or skip the wait with Nova Crystals.",
+        variant: "destructive",
+      });
+      return;
+    }
     claimingRef.current = true;
     settlingBattleRef.current = false;
     setClaiming(true);
     try {
       let playerItems = [];
       try {
-        playerItems = (await api.entities.Item.filter({ character_id: character.id, is_equipped: true })) || [];
+        playerItems = (await api.entities.Item.filter({ character_id: char.id, is_equipped: true })) || [];
       } catch (e) {}
-      const enemy = generateMissionEncounter(character, mission);
-      const battle = simulateBattle(character, enemy, playerItems);
+      const enemy = generateMissionEncounter(char, mission);
+      const battle = simulateBattle(char, enemy, playerItems);
       setMissionBattle({ enemy, battle, playerItems });
     } catch (e) {
       claimingRef.current = false;
@@ -348,9 +387,9 @@ export function useMissionManager() {
 
   // Claim opens a soft end-mission fight first — rewards only apply on a win.
   const handleClaim = useCallback(async () => {
-    if (!activeMission || activeMission.status !== "completed") return;
+    if (!activeMission || !isMissionReadyToFight(activeMission, character)) return;
     await startMissionBattle(activeMission);
-  }, [activeMission, startMissionBattle]);
+  }, [activeMission, character, startMissionBattle]);
 
   const finishMissionBattle = useCallback(async () => {
     const battleState = missionBattleRef.current;
@@ -505,10 +544,11 @@ export function useMissionManager() {
       const patch = res.patch || res.data?.patch || {};
       const mission = res.mission || res.data?.mission || { ...activeMission, status: "completed" };
       const cost = res.skip_cost ?? res.data?.skip_cost ?? previewCost;
+      const nextChar = { ...character, ...patch };
       setActiveMission({ ...mission, status: "completed" });
       setCharacter((c) => ({ ...c, ...patch }));
       void trackNovaSpend(character, cost, "mission_skip");
-      await startMissionBattle({ ...mission, status: "completed" });
+      await startMissionBattle({ ...mission, status: "completed" }, nextChar);
     } catch (e) {
       toast({ title: "Skip failed", description: e?.message || "Try again.", variant: "destructive" });
       await load();
@@ -548,6 +588,7 @@ export function useMissionManager() {
   const gains = activeMission && character ? computeMissionGains(character, activeMission, nexusBonus) : null;
   const currentFuel = character ? normalizeFuelAmount(character.fuel ?? FUEL_MAX) : FUEL_MAX;
   const cantinaMissions = dailyMissions;
+  const missionReady = !!(activeMission && character && isMissionReadyToFight(activeMission, character, now));
 
   return {
     // state
@@ -564,6 +605,7 @@ export function useMissionManager() {
     skipCost,
     gains,
     currentFuel,
+    missionReady,
     cantAffordAny: dailyMissions.some((m) => m._lowFuel),
     cantinaMissions,
     // actions

@@ -8,7 +8,6 @@ extends Control
 var _elapsed := 0.0
 var _stars: Array = []
 var _gallery_lights: Array = []
-var _redraw_accum := 0.0
 
 
 func _ready() -> void:
@@ -62,11 +61,6 @@ func set_pulse(on: bool) -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
-	_redraw_accum += delta
-	# Full redraw every frame is expensive during combat tweens — ~8 fps is enough.
-	if _redraw_accum < 0.12 and not pulse:
-		return
-	_redraw_accum = 0.0
 	queue_redraw()
 
 

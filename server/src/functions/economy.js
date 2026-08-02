@@ -589,10 +589,19 @@ export async function ClaimMission(user, body) {
       }
 
       const now = clock.nowMs();
+      // in_progress: mission.end_time is authoritative.
+      // completed (after SkipMission): character.mission_end_time is snapped to now
+      // while the mission row may still hold the original future end_time.
+      const charEnd = ch.mission_end_time ? new Date(ch.mission_end_time).getTime() : 0;
+      const missionEnd = mission.end_time ? new Date(mission.end_time).getTime() : 0;
+      const effectiveEnd =
+        mission.status === "completed"
+          ? (charEnd || missionEnd)
+          : (missionEnd || charEnd);
+      if (effectiveEnd && effectiveEnd > now) {
+        httpErr(400, "Mission not finished yet", TimeErrors.COOLDOWN_ACTIVE);
+      }
       if (mission.status === "in_progress") {
-        if (mission.end_time && new Date(mission.end_time).getTime() > now) {
-          httpErr(400, "Mission not finished yet", TimeErrors.COOLDOWN_ACTIVE);
-        }
         mission = entities.Mission.update(mission.id, { status: "completed" });
       }
 

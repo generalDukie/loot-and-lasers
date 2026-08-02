@@ -11,7 +11,6 @@ var neon_tint := Color("#00E5FF")
 var neon_on := false
 
 var _phase := 0.0
-var _redraw_accum := 0.0
 
 
 func _ready() -> void:
@@ -43,11 +42,6 @@ func _process(delta: float) -> void:
 	if not neon_on:
 		return
 	_phase = fposmod(_phase + delta / SWEEP_SECONDS, 1.0)
-	_redraw_accum += delta
-	# Sweep is 1.6s — 20fps is visually identical and cheaper.
-	if _redraw_accum < 0.05:
-		return
-	_redraw_accum = 0.0
 	queue_redraw()
 
 

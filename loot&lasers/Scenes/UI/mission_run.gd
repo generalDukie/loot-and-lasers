@@ -400,8 +400,9 @@ func _on_fight() -> void:
 	if MissionManager.active_mission_missing:
 		await _recall_lost_mission()
 		return
-	if MissionManager.seconds_remaining() > 0:
-		_set_status("Mission not finished yet.", true)
+	if not MissionManager.is_mission_finished():
+		_set_status("Mission not finished yet — wait for the timer, or skip with Nova Crystals.", true)
+		_refresh_timer()
 		return
 	_busy = true
 	_claim_btn.disabled = true

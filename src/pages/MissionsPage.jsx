@@ -37,6 +37,7 @@ export default function MissionsPage() {
     inventoryFullOpen,
     setInventoryFullOpen,
     navigate,
+    missionReady,
   } = useMissionManager();
 
   const [levelUp, setLevelUp] = useState(null);
@@ -181,8 +182,8 @@ export default function MissionsPage() {
           <h2 className="text-[10px] font-display font-semibold text-muted-foreground tracking-wide mb-1">ACTIVE MISSION</h2>
           <MissionCard
             mission={activeMission}
-            isActive={activeMission.status === "in_progress"}
-            isCompleted={activeMission.status === "completed"}
+            isActive={activeMission.status === "in_progress" && !missionReady}
+            isCompleted={missionReady}
             characterLevel={character.level}
             character={character}
             onClaim={handleClaim}

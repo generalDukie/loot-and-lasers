@@ -26,7 +26,6 @@ var _structure_stamp: Array = []
 var _zoom_id := ZOOM_NONE
 var _zoom_amount := 0.0  # 0 = pulled back, 1 = fully zoomed
 var _zoom_tween: Tween
-var _redraw_accum := 0.0
 
 var _dim: ColorRect
 var _lore_panel: PanelContainer
@@ -49,15 +48,6 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
-	# Full map redraw every frame is heavy; keep 60fps only while zooming.
-	var zooming := _zoom_amount > 0.001 and _zoom_amount < 0.999
-	if zooming or (_zoom_tween != null and _zoom_tween.is_running()):
-		queue_redraw()
-		return
-	_redraw_accum += delta
-	if _redraw_accum < 0.1:
-		return
-	_redraw_accum = 0.0
 	queue_redraw()
 
 

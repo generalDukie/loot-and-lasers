@@ -155,58 +155,63 @@ func resume_or_hub() -> void:
 
 func is_mission_finished(mission: Dictionary = {}) -> bool:
 	var m: Dictionary = mission if not mission.is_empty() else active_mission
-	var status := str(m.get("status", ""))
-	if status in ["completed", "claimed", "failed"]:
-		return true
-	var end_iso := str(m.get("end_time", GameManager.active_character.get("mission_end_time", "")))
-	if end_iso.is_empty():
+	if m.is_empty():
 		return false
+	var status := str(m.get("status", ""))
+	if status in ["claimed", "failed"]:
+		return true
 	return seconds_remaining(m) <= 0
+
+
+func effective_end_unix(mission: Dictionary = {}) -> int:
+	## in_progress → mission.end_time (authoritative timer).
+	## completed → prefer character.mission_end_time (SkipMission snaps it to now
+	## while the mission row may still hold the original future end_time).
+	var m: Dictionary = mission if not mission.is_empty() else active_mission
+	var status := str(m.get("status", ""))
+	var char_end := str(GameManager.active_character.get("mission_end_time", ""))
+	var mission_end := str(m.get("end_time", ""))
+	var iso := ""
+	if status == "completed":
+		iso = char_end if not char_end.is_empty() else mission_end
+	else:
+		iso = mission_end if not mission_end.is_empty() else char_end
+	return _parse_iso_unix(iso)
 
 
 func seconds_remaining(mission: Dictionary = {}) -> int:
 	var m: Dictionary = mission if not mission.is_empty() else active_mission
-	# SkipMission marks status completed but leaves the original future end_time on the row.
-	# Treat completed as ready-to-fight so the timer / Skip button don't stay stuck.
+	if m.is_empty():
+		return 0
 	var status := str(m.get("status", ""))
-	if status in ["completed", "claimed", "failed"]:
+	if status in ["claimed", "failed"]:
 		return 0
-	var end_iso := str(m.get("end_time", GameManager.active_character.get("mission_end_time", "")))
-	if end_iso.is_empty():
-		return 0
-	var end_unix := _parse_iso_unix(end_iso)
+	var end_unix := effective_end_unix(m)
 	if end_unix <= 0:
-		return 0
+		# Unknown / unparseable end — never treat as ready-to-fight.
+		return 1 if status == "in_progress" else 0
 	return maxi(0, int(ceil(float(end_unix) - Time.get_unix_time_from_system())))
 
 
 func _parse_iso_unix(iso: String) -> int:
-	## Server timestamps are UTC (...Z). Godot 4.7's datetime_dict helper has no utc=
-	## flag, so convert Z times by subtracting the local UTC offset.
+	## Server timestamps are UTC (...Z). Keep the timezone suffix so Godot parses
+	## them as UTC — stripping Z and applying local bias wrongly shifted ends into
+	## the past and unlocked FIGHT FOR REWARDS immediately.
 	var s := iso.strip_edges()
 	if s.is_empty():
 		return 0
-	var as_utc := s.ends_with("Z") or s.ends_with("z")
-	if s.ends_with("Z") or s.ends_with("z"):
-		s = s.substr(0, s.length() - 1)
-	# Drop milliseconds: 2026-07-31T08:00:30.917
+	# Trim fractional seconds but keep Z / ±HH:MM: 2026-07-31T08:00:30.917Z → …30Z
 	var dot := s.find(".")
 	if dot >= 0:
-		s = s.substr(0, dot)
-	# Drop numeric timezone suffixes if present (+00:00 / -04:00).
-	var plus := s.find("+", 10)
-	if plus >= 0:
-		as_utc = true
-		s = s.substr(0, plus)
+		var tz := ""
+		for i in range(dot + 1, s.length()):
+			var ch := s[i]
+			if ch == "Z" or ch == "z" or ch == "+" or ch == "-":
+				tz = s.substr(i)
+				break
+		s = s.substr(0, dot) + tz
 	var unix := int(Time.get_unix_time_from_datetime_string(s))
-	if unix <= 0:
-		return 0
-	if as_utc:
-		# datetime_string without Z is treated as local — shift to real UTC unix.
-		# bias = local offset from UTC in minutes (e.g. EDT = -240).
-		var offset_min := int(Time.get_time_zone_from_system().get("bias", 0))
-		unix += offset_min * 60
-	return unix
+	return maxi(0, unix)
 
 
 func current_mission_id() -> String:
@@ -277,6 +282,8 @@ func prepare_combat(refresh: bool = true) -> Dictionary:
 	## Set refresh=false when the character payload was just applied (e.g. SkipMission).
 	if refresh:
 		await refresh_character()
+	if not is_mission_finished() and not active_mission_missing:
+		return {"ok": false, "error": "Mission not finished yet"}
 	var equipped: Array = []
 	var items_res: Dictionary = await AuthManager.list_items()
 	if items_res.ok and typeof(items_res.data) == TYPE_ARRAY:

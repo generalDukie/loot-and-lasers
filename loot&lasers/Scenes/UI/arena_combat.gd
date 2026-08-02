@@ -90,7 +90,7 @@ func _build() -> void:
 	_backdrop = ArenaStageBackdrop.new()
 	_backdrop.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	add_child(_backdrop)
-	# Soft live stage (throttled redraw) — pulse still pops on crits.
+	# Soft live stage — redraws every frame at Engine.max_fps (120).
 	_backdrop.set_live(true)
 
 	var root := VBoxContainer.new()

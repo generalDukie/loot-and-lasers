@@ -70,6 +70,7 @@ func toggle_fullscreen() -> void:
 
 func apply_settings() -> void:
 	RenderingServer.set_default_clear_color(Color.BLACK)
+	Engine.max_fps = ClientUi.ANIM_FPS
 	_apply_content_scale()
 	if fullscreen:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)

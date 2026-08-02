@@ -16,6 +16,10 @@ const SUCCESS := Color("#62D89B")
 const DANGER := Color("#FF6B6B")
 const WARNING := Color("#F5A94E")
 
+## Target frame rate for all animated UI / decorative redraws.
+const ANIM_FPS := 120
+const ANIM_FRAME_SEC := 1.0 / float(ANIM_FPS)
+
 const DISPLAY_FONT_PATH := "res://Assets/Fonts/Exo2-VariableFont_wght.ttf"
 const BODY_FONT_PATH := "res://Assets/Fonts/Inter-VariableFont_opsz_wght.ttf"
 

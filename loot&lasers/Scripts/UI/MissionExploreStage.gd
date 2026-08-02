@@ -29,7 +29,6 @@ var _caption: Label
 var _badge: Label
 var _fallback: ColorRect
 var _elapsed := 0.0
-var _ken_accum := 0.0
 
 
 static func pick_index(seed_s: String = "") -> int:
@@ -141,11 +140,6 @@ func _paint_fallback(idx: int) -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
-	# Gentle Ken-Burns drift — throttle so mission pages stay light.
-	_ken_accum += delta
-	if _ken_accum < 0.05:
-		return
-	_ken_accum = 0.0
 	if _image.texture != null:
 		var s := 1.0 + 0.018 * sin(_elapsed * 0.22)
 		_image.scale = Vector2(s, s)

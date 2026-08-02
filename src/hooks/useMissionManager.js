@@ -175,8 +175,19 @@ export function useMissionManager() {
   const [nexusBonus, setNexusBonus] = useState(false);
   const [inventoryFullOpen, setInventoryFullOpen] = useState(false);
   const claimingRef = useRef(false);
+  /** Guards double-settle on VIEW REWARDS / SKIP (independent of claimingRef). */
+  const settlingBattleRef = useRef(false);
+  const missionBattleRef = useRef(null);
+  const activeMissionRef = useRef(null);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  useEffect(() => {
+    missionBattleRef.current = missionBattle;
+  }, [missionBattle]);
+  useEffect(() => {
+    activeMissionRef.current = activeMission;
+  }, [activeMission]);
 
   const commitCantinaBoard = useCallback((characterId, board) => {
     setDailyMissions(board);
@@ -315,9 +326,10 @@ export function useMissionManager() {
 
   // Soft end-mission fight — used by claim and by skip-to-fight.
   const startMissionBattle = useCallback(async (mission) => {
-    if (claimingRef.current || missionBattle) return;
+    if (claimingRef.current || missionBattle || settlingBattleRef.current) return;
     if (!mission || !character) return;
     claimingRef.current = true;
+    settlingBattleRef.current = false;
     setClaiming(true);
     try {
       let playerItems = [];
@@ -341,15 +353,18 @@ export function useMissionManager() {
   }, [activeMission, startMissionBattle]);
 
   const finishMissionBattle = useCallback(async () => {
-    if (!missionBattle || !activeMission) return;
-    // Consume the claim lock immediately so double-clicks on VIEW REWARDS cannot
-    // fire two ClaimMission calls (second 409 used to toast over a successful claim).
-    if (!claimingRef.current) return;
+    const battleState = missionBattleRef.current;
+    const missionSnapshot = activeMissionRef.current;
+    if (!battleState || !missionSnapshot) return;
+    // One settle per duel — do not gate on claimingRef (can be cleared by remounts/races).
+    if (settlingBattleRef.current) return;
+    settlingBattleRef.current = true;
     claimingRef.current = false;
-    const { battle, enemy } = missionBattle;
+
+    const { battle, enemy } = battleState;
     const won = battle?.winner === "player";
-    const missionSnapshot = activeMission;
     setMissionBattle(null);
+    missionBattleRef.current = null;
 
     if (!won) {
       try {
@@ -369,6 +384,7 @@ export function useMissionManager() {
         description: "The encounter went south. Fuel is spent, but you walk away empty-handed.",
         variant: "destructive",
       });
+      settlingBattleRef.current = false;
       claimingRef.current = false;
       setClaiming(false);
       return;
@@ -469,10 +485,11 @@ export function useMissionManager() {
       toast({ title: "Claim failed", description: e?.message || "Try again.", variant: "destructive" });
       await load();
     } finally {
+      settlingBattleRef.current = false;
       claimingRef.current = false;
       setClaiming(false);
     }
-  }, [missionBattle, activeMission, character, nexusBonus, toast, commitCantinaBoard, load]);
+  }, [character, nexusBonus, toast, commitCantinaBoard, load]);
 
   const handleSkip = useCallback(async () => {
     if (!activeMission || activeMission.status !== "in_progress") return;

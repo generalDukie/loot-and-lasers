@@ -25,7 +25,8 @@
     "test:mission-gear-drop": "node server/scripts/test-mission-gear-drop.mjs",
     "test:mission-enemy": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-mission-enemy.mjs",
     "test:dungeon-enemy": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-dungeon-enemy.mjs",
-    "test:arena-bot": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-arena-bot.mjs"
+    "test:arena-bot": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-arena-bot.mjs",
+    "test:game-viewport": "node ./server/scripts/test-game-viewport.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",

@@ -322,6 +322,7 @@ static func present_complete_then_level_up(
 		finished["done"] = true
 		_clear_sheet_host(host)
 		if show_levelup:
+			host.visible = true
 			host.mouse_filter = Control.MOUSE_FILTER_STOP
 			var captured_nav := nav
 			var on_level_done := func() -> void:
@@ -345,6 +346,7 @@ static func present_complete_then_level_up(
 	sequenced["actions"] = wrapped_actions
 
 	_clear_sheet_host(host)
+	host.visible = true
 	host.mouse_filter = Control.MOUSE_FILTER_STOP
 	host.add_child(make_complete_sheet(sequenced, finish_sequence.bind(primary_nav)))
 
@@ -358,6 +360,7 @@ static func _clear_sheet_host(host: Control) -> void:
 		host.remove_child(child)
 		child.queue_free()
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.visible = false
 
 
 static func _reward_row(label: String, value: String, color: Color, icon: String) -> PanelContainer:

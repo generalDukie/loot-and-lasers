@@ -48,8 +48,8 @@ func _ensure_scan_tex() -> void:
 func _process(delta: float) -> void:
 	_elapsed += delta
 	_redraw_accum += delta
-	# Decorative only — ~12 fps is enough and cuts CPU a lot on shell pages.
-	if _redraw_accum < 0.08:
+	# Decorative only — ~8 fps is enough and cuts CPU a lot on shell pages.
+	if _redraw_accum < 0.12:
 		return
 	_redraw_accum = 0.0
 	queue_redraw()

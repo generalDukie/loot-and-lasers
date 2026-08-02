@@ -123,6 +123,12 @@ func fetch_active_mission() -> Dictionary:
 			var end_fallback := str(GameManager.active_character.get("mission_end_time", ""))
 			if not end_fallback.is_empty():
 				active_mission["end_time"] = end_fallback
+		# After SkipMission the row stays "completed" with a stale future end_time —
+		# snap to the character's patched end so timers / chrome stay consistent.
+		if str(active_mission.get("status", "")) == "completed":
+			var end_now := str(GameManager.active_character.get("mission_end_time", ""))
+			if not end_now.is_empty():
+				active_mission["end_time"] = end_now
 	elif res.ok:
 		# Character still points at a mission id we can't load — keep a stub so resume
 		# UI works. Claiming it lets the server release the dangling pointer.
@@ -149,6 +155,9 @@ func resume_or_hub() -> void:
 
 func is_mission_finished(mission: Dictionary = {}) -> bool:
 	var m: Dictionary = mission if not mission.is_empty() else active_mission
+	var status := str(m.get("status", ""))
+	if status in ["completed", "claimed", "failed"]:
+		return true
 	var end_iso := str(m.get("end_time", GameManager.active_character.get("mission_end_time", "")))
 	if end_iso.is_empty():
 		return false
@@ -157,6 +166,11 @@ func is_mission_finished(mission: Dictionary = {}) -> bool:
 
 func seconds_remaining(mission: Dictionary = {}) -> int:
 	var m: Dictionary = mission if not mission.is_empty() else active_mission
+	# SkipMission marks status completed but leaves the original future end_time on the row.
+	# Treat completed as ready-to-fight so the timer / Skip button don't stay stuck.
+	var status := str(m.get("status", ""))
+	if status in ["completed", "claimed", "failed"]:
+		return 0
 	var end_iso := str(m.get("end_time", GameManager.active_character.get("mission_end_time", "")))
 	if end_iso.is_empty():
 		return 0
@@ -167,15 +181,32 @@ func seconds_remaining(mission: Dictionary = {}) -> int:
 
 
 func _parse_iso_unix(iso: String) -> int:
+	## Server timestamps are UTC (...Z). Godot 4.7's datetime_dict helper has no utc=
+	## flag, so convert Z times by subtracting the local UTC offset.
 	var s := iso.strip_edges()
-	if s.ends_with("Z"):
+	if s.is_empty():
+		return 0
+	var as_utc := s.ends_with("Z") or s.ends_with("z")
+	if s.ends_with("Z") or s.ends_with("z"):
 		s = s.substr(0, s.length() - 1)
 	# Drop milliseconds: 2026-07-31T08:00:30.917
 	var dot := s.find(".")
 	if dot >= 0:
 		s = s.substr(0, dot)
-	var unix := Time.get_unix_time_from_datetime_string(s)
-	return int(unix)
+	# Drop numeric timezone suffixes if present (+00:00 / -04:00).
+	var plus := s.find("+", 10)
+	if plus >= 0:
+		as_utc = true
+		s = s.substr(0, plus)
+	var unix := int(Time.get_unix_time_from_datetime_string(s))
+	if unix <= 0:
+		return 0
+	if as_utc:
+		# datetime_string without Z is treated as local — shift to real UTC unix.
+		# bias = local offset from UTC in minutes (e.g. EDT = -240).
+		var offset_min := int(Time.get_time_zone_from_system().get("bias", 0))
+		unix += offset_min * 60
+	return unix
 
 
 func current_mission_id() -> String:
@@ -193,8 +224,16 @@ func skip_mission() -> Dictionary:
 		return {"ok": false, "error": "No active mission", "data": {}}
 	var res: Dictionary = await ApiClient.invoke("SkipMission", {"mission_id": mid})
 	_apply_character_payload(res)
-	if res.ok and typeof(res.data) == TYPE_DICTIONARY and typeof(res.data.get("mission", {})) == TYPE_DICTIONARY:
-		active_mission = res.data["mission"]
+	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+		var mission_raw: Variant = res.data.get("mission", null)
+		if typeof(mission_raw) == TYPE_DICTIONARY and not (mission_raw as Dictionary).is_empty():
+			active_mission = (mission_raw as Dictionary).duplicate(true)
+		# Align local timer with the character's patched end time + completed status.
+		active_mission["status"] = "completed"
+		var end_now := str(GameManager.active_character.get("mission_end_time", ""))
+		if not end_now.is_empty():
+			active_mission["end_time"] = end_now
+		active_mission_missing = bool(res.data.get("mission_missing", false))
 		active_mission_changed.emit(active_mission)
 	return res
 
@@ -233,9 +272,11 @@ func claim_mission(won: bool = true) -> Dictionary:
 	return res
 
 
-func prepare_combat() -> Dictionary:
+func prepare_combat(refresh: bool = true) -> Dictionary:
 	## Generate encounter + simulate once. Call after mission timer/skip completes.
-	await refresh_character()
+	## Set refresh=false when the character payload was just applied (e.g. SkipMission).
+	if refresh:
+		await refresh_character()
 	var equipped: Array = []
 	var items_res: Dictionary = await AuthManager.list_items()
 	if items_res.ok and typeof(items_res.data) == TYPE_ARRAY:

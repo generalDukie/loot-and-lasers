@@ -58,7 +58,7 @@ export default function SpaceStationHub({ children }) {
         <div
           className="mx-auto h-full w-full flex flex-col gap-3 lg:gap-4 min-h-0"
           style={{
-            padding: "clamp(0.65rem, 1.2vw, 1.5rem) clamp(0.75rem, 2vw, 2.5rem) clamp(0.65rem, 1vw, 1.1rem)",
+            padding: "clamp(0.65rem, 1.2cqi, 1.5rem) clamp(0.75rem, 2cqi, 2.5rem) clamp(0.65rem, 1cqi, 1.1rem)",
           }}
         >
           {/* Open station art */}
@@ -78,7 +78,7 @@ export default function SpaceStationHub({ children }) {
           {/* Bottom dock — equal flex tiles span the full stage width */}
           <nav
             className="shrink-0 w-full flex flex-nowrap items-stretch"
-            style={{ gap: "clamp(0.35rem, 0.8vw, 0.85rem)" }}
+            style={{ gap: "clamp(0.35rem, 0.8cqi, 0.85rem)" }}
           >
             {DOCK_ORDER.map((id, i) => renderDockButton(id, builtinOverrides, 0.05 + i * 0.04))}
           </nav>

@@ -344,7 +344,7 @@ export default function GalaxyMapPage() {
           />
         </div>
 
-        <div className="relative z-10 flex-[0_0_clamp(260px,28vw,440px)] min-w-0 min-h-0 flex flex-col overflow-hidden isolate">
+        <div className="relative z-10 flex-[0_0_clamp(260px,28cqi,440px)] min-w-0 min-h-0 flex flex-col overflow-hidden isolate">
           <DungeonPlanetView
             planet={planet}
             currentEnemy={displayEnemy}

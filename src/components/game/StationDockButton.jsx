@@ -35,7 +35,7 @@ export default function StationDockButton({
             borderColor: color,
             background: `linear-gradient(180deg, ${color}28, hsl(232 30% 6% / 0.9))`,
             boxShadow: `0 4px 18px hsl(232 40% 2% / 0.55), 0 0 16px ${color}33`,
-            padding: "clamp(0.55rem, 0.9vw, 0.9rem) clamp(0.35rem, 0.6vw, 0.6rem)",
+            padding: "clamp(0.55rem, 0.9cqi, 0.9rem) clamp(0.35rem, 0.6cqi, 0.6rem)",
           }}
         >
           <div
@@ -46,7 +46,7 @@ export default function StationDockButton({
             <span
               className="leading-none"
               style={{
-                fontSize: "clamp(1.25rem, 2vw, 1.85rem)",
+                fontSize: "clamp(1.25rem, 2cqi, 1.85rem)",
                 filter: `drop-shadow(0 0 6px ${color}55)`,
               }}
             >
@@ -56,7 +56,7 @@ export default function StationDockButton({
               className="font-display font-bold tracking-wide leading-tight line-clamp-2"
               style={{
                 color,
-                fontSize: "clamp(0.65rem, 1vw, 0.9rem)",
+                fontSize: "clamp(0.65rem, 1cqi, 0.9rem)",
               }}
             >
               {label}

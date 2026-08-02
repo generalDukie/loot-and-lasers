@@ -19,9 +19,9 @@ import { enforceInventoryCap } from "@/lib/inventoryCap";
 import { primeMyCharacterCache } from "@/lib/socialEngine";
 import { applyServerTimeSync, lastTimeSyncAgeMs } from "@/lib/gameTime";
 
-/** Desktop operative side panel. */
-const DESKTOP_RAIL_W = "clamp(21.5rem, 18.1vw, 26.9rem)";
-const MOBILE_RAIL_W = "min(31.3rem, 92vw)";
+/** Desktop operative side panel — % of the 16:9 game viewport (not browser vw). */
+const DESKTOP_RAIL_W = "clamp(21.5rem, 18.1%, 26.9rem)";
+const MOBILE_RAIL_W = "min(31.3rem, 92%)";
 
 /**
  * Persistent application shell for all in-game routes.
@@ -173,11 +173,13 @@ export default function GameLayout() {
                 </main>
               </div>
 
-              {/* Overlay host covers the full shell (top chrome + side nav + content). */}
+              {/* Overlay host covers content + chrome; left inset clears the desktop rail. */}
               <div
                 id="gameplay-overlay-root"
-                className="pointer-events-none absolute inset-0 z-[30] lg:z-[80] lg:left-[clamp(18.7rem,15.7vw,23.4rem)]"
+                className="pointer-events-none absolute inset-0 z-[30] lg:z-[80] lg:left-[clamp(18.7rem,15.7%,23.4rem)]"
               />
+
+              <NotificationCenter myChar={character} onOpenDaily={() => setDailyOpen(true)} />
             </div>
           </PersistentGameFrame>
         </div>
@@ -201,7 +203,6 @@ export default function GameLayout() {
         character={character}
         onCharacterChange={(patch) => setCharacter((c) => (c ? { ...c, ...patch } : c))}
       />
-      <NotificationCenter myChar={character} onOpenDaily={() => setDailyOpen(true)} />
     </>
   );
 }

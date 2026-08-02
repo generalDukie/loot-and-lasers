@@ -7,7 +7,7 @@ import React from "react";
 export default function PersistentGameFrame({ children, className = "" }) {
   return (
     <div
-      className={`relative h-full w-full min-h-0 flex flex-col p-[clamp(0.35rem,0.7vw,0.65rem)] ${className}`}
+      className={`relative h-full w-full min-h-0 flex flex-col p-[clamp(0.35rem,0.7cqi,0.65rem)] ${className}`}
       style={{
         background: `
           radial-gradient(ellipse 80% 60% at 50% 0%, hsl(190 40% 18% / 0.35), transparent 55%),

@@ -4,6 +4,10 @@ import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
+import {
+  overlayPositionClass,
+  useGameViewportOverlayContainer,
+} from "@/hooks/useGameViewportOverlayContainer"
 
 const Drawer = ({
   shouldScaleBackground = true,
@@ -15,33 +19,51 @@ Drawer.displayName = "Drawer"
 
 const DrawerTrigger = DrawerPrimitive.Trigger
 
-const DrawerPortal = DrawerPrimitive.Portal
-
 const DrawerClose = DrawerPrimitive.Close
 
-const DrawerOverlay = React.forwardRef(({ className, ...props }, ref) => (
-  <DrawerPrimitive.Overlay
-    ref={ref}
-    className={cn("fixed inset-0 z-50 bg-black/80", className)}
-    {...props} />
-))
-DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName
+function DrawerPortal({ children, ...props }) {
+  const container = useGameViewportOverlayContainer()
+  return (
+    <DrawerPrimitive.Portal container={container || undefined} {...props}>
+      {children}
+    </DrawerPrimitive.Portal>
+  )
+}
 
-const DrawerContent = React.forwardRef(({ className, children, ...props }, ref) => (
-  <DrawerPortal>
-    <DrawerOverlay />
-    <DrawerPrimitive.Content
+const DrawerOverlay = React.forwardRef(({ className, ...props }, ref) => {
+  const container = useGameViewportOverlayContainer()
+  return (
+    <DrawerPrimitive.Overlay
       ref={ref}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+        overlayPositionClass(container),
+        "inset-0 z-50 bg-black/80 pointer-events-auto",
         className
       )}
-      {...props}>
-      <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
-      {children}
-    </DrawerPrimitive.Content>
-  </DrawerPortal>
-))
+      {...props} />
+  )
+})
+DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName
+
+const DrawerContent = React.forwardRef(({ className, children, ...props }, ref) => {
+  const container = useGameViewportOverlayContainer()
+  return (
+    <DrawerPortal>
+      <DrawerOverlay />
+      <DrawerPrimitive.Content
+        ref={ref}
+        className={cn(
+          overlayPositionClass(container),
+          "inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background pointer-events-auto",
+          className
+        )}
+        {...props}>
+        <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
+        {children}
+      </DrawerPrimitive.Content>
+    </DrawerPortal>
+  )
+})
 DrawerContent.displayName = "DrawerContent"
 
 const DrawerHeader = ({

@@ -9,6 +9,7 @@ import { useEquippedItems } from "@/hooks/useEquippedItems";
 import { PRIMARY_STATS, computePermanentTotalStats, computeDerivedStats } from "@/lib/statEngine";
 import { STAT_ICONS } from "@/lib/gameData";
 import { NAV_GROUPS } from "@/lib/navGroups";
+import { getOverlayClampBounds } from "@/lib/gameViewportDom";
 
 const STAT_SHORT = {
   strength: "STR",
@@ -73,10 +74,11 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
       const pad = 8;
       let left = r.left;
       const approxW = 420;
-      if (left + approxW > window.innerWidth - pad) {
-        left = Math.max(pad, window.innerWidth - pad - approxW);
+      const bounds = getOverlayClampBounds(pad);
+      if (left + approxW > bounds.right) {
+        left = Math.max(bounds.left, bounds.right - approxW);
       }
-      setMenuPos({ top: r.bottom + 4, left: Math.max(pad, left) });
+      setMenuPos({ top: r.bottom + 4, left: Math.max(bounds.left, left) });
     };
     place();
     window.addEventListener("resize", place);

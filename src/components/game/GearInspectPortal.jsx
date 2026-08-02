@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getOverlayClampBounds } from "@/lib/gameViewportDom";
 
 /**
  * Gear inspect popup — bottom-left of the bubble meets top-left of the gear piece.
  * Renders in a portal so inventory overflow / stacking never clips it.
+ * Clamped to the 16:9 game viewport (not browser letterbox bars).
  */
 export default function GearInspectPortal({
   anchorRef,
@@ -23,22 +25,21 @@ export default function GearInspectPortal({
       const pad = 8;
       const bw = bubbleRef.current?.offsetWidth || 288;
       const bh = bubbleRef.current?.offsetHeight || 300;
+      const bounds = getOverlayClampBounds(pad);
 
-      // Anchor: bottom-left of popup ↔ top-left of gear (via translateY(-100%)).
       let left = r.left;
       let top = r.top;
 
-      if (left + bw > window.innerWidth - pad) {
-        left = Math.max(pad, window.innerWidth - pad - bw);
+      if (left + bw > bounds.right) {
+        left = Math.max(bounds.left, bounds.right - bw);
       }
-      if (left < pad) left = pad;
+      if (left < bounds.left) left = bounds.left;
 
-      // Keep as much of the preferred vertical anchor as possible.
-      if (top - bh < pad) {
-        top = pad + bh;
+      if (top - bh < bounds.top) {
+        top = bounds.top + bh;
       }
-      if (top > window.innerHeight - pad) {
-        top = window.innerHeight - pad;
+      if (top > bounds.bottom) {
+        top = bounds.bottom;
       }
 
       setPos({ top, left });

@@ -23,7 +23,7 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	_redraw_accum += delta
 	# Portrait breathe/aura does not need 60 fps redraws.
-	if _redraw_accum < 0.05:
+	if _redraw_accum < 0.1:
 		return
 	_redraw_accum = 0.0
 	queue_redraw()

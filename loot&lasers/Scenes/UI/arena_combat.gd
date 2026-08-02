@@ -241,7 +241,8 @@ func _build() -> void:
 	_outro_layer.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_outro_layer.visible = false
 	_outro_layer.mouse_filter = Control.MOUSE_FILTER_STOP
-	_outro_layer.z_index = 45
+	# Above empty _sheet_host so VIEW REWARDS is never blocked by the sheet mount.
+	_outro_layer.z_index = 70
 	add_child(_outro_layer)
 	var outro_center := CenterContainer.new()
 	outro_center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -302,7 +303,10 @@ func _build() -> void:
 	_sheet_host = Control.new()
 	_sheet_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_sheet_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sheet_host.z_index = 60
+	_sheet_host.z_index = 80
+	# Hidden until a reward sheet is mounted — a full-rect host can still steal
+	# hits from the outro in some Godot versions even with MOUSE_FILTER_IGNORE.
+	_sheet_host.visible = false
 	add_child(_sheet_host)
 
 
@@ -443,12 +447,14 @@ func _boot_mission() -> void:
 		GameManager.close_overlay()
 		GameManager.go_cantina()
 		return
-	var prep: Dictionary = await MissionManager.prepare_combat()
-	if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
-		await get_tree().create_timer(0.5).timeout
-		GameManager.close_overlay()
-		GameManager.go_mission_run()
-		return
+	# Mission run may have already prepared the duel (Skip / Fight) — don't double-fetch.
+	if MissionManager.pending_battle.is_empty():
+		var prep: Dictionary = await MissionManager.prepare_combat()
+		if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
+			await get_tree().create_timer(0.5).timeout
+			GameManager.close_overlay()
+			GameManager.go_mission_run()
+			return
 	var enemy_items: Array = []
 	if typeof(MissionManager.pending_enemy.get("equippedItems", null)) == TYPE_ARRAY:
 		enemy_items = MissionManager.pending_enemy.get("equippedItems", [])
@@ -1002,6 +1008,7 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 				{"label": "Back to Cantina", "primary": true, "callback": func() -> void: GameManager.go_cantina()},
 			],
 		}, func() -> void: GameManager.go_cantina())
+		_sheet_host.visible = true
 		_sheet_host.mouse_filter = Control.MOUSE_FILTER_STOP
 		_sheet_host.add_child(missing)
 		return

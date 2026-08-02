@@ -119,7 +119,7 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
   const total = unread + (dailyAvailable ? 1 : 0);
 
   return (
-    <div className="fixed bottom-4 right-3 sm:right-4 z-[60] flex flex-col items-end gap-2 pointer-events-none">
+    <div className="absolute bottom-4 right-3 sm:right-4 z-[60] flex flex-col items-end gap-2 pointer-events-none">
       <AnimatePresence>
         {open && (
           <motion.div
@@ -127,7 +127,7 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 380, damping: 28 }}
-            className="pointer-events-auto w-[min(22rem,calc(100vw-1.5rem))] max-h-[65vh] flex flex-col rounded-2xl border border-border/60 bg-card/95 backdrop-blur-md shadow-2xl painted-panel overflow-hidden"
+            className="pointer-events-auto w-[min(22rem,calc(100%-1.5rem))] max-h-[65%] flex flex-col rounded-2xl border border-border/60 bg-card/95 backdrop-blur-md shadow-2xl painted-panel overflow-hidden"
           >
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/30 bg-muted/20 shrink-0">
               <h3 className="text-xs font-display font-semibold tracking-wide text-muted-foreground uppercase flex items-center gap-1.5">

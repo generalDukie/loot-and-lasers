@@ -405,11 +405,15 @@ func _on_fight() -> void:
 		return
 	_busy = true
 	_claim_btn.disabled = true
+	_skip_btn.disabled = true
 	_set_status("Opening encounter…", true)
+	var prep: Dictionary = await MissionManager.prepare_combat(true)
+	if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
+		_busy = false
+		_set_status("Could not prepare the encounter. Try again.", true)
+		_refresh_timer()
+		return
 	GameManager.go_mission_combat()
-	await get_tree().create_timer(0.4).timeout
-	_busy = false
-	_refresh_timer()
 
 
 func _recall_lost_mission() -> void:
@@ -443,17 +447,45 @@ func _recall_lost_mission() -> void:
 func _on_skip() -> void:
 	if _busy or _claimed:
 		return
+	var cost := _skip_cost_now()
+	if cost <= 0:
+		# Already ready — go straight to the fight path.
+		await _on_fight()
+		return
+	var crystals := int(GameManager.active_character.get("nova_crystals", 0))
+	if crystals < cost:
+		_set_status("Not enough Nova Crystals — need %s 💎 (you have %s)." % [cost, crystals], true)
+		return
 	_busy = true
+	_skip_btn.disabled = true
+	_claim_btn.disabled = true
 	_set_status("Skipping wait…", true)
 	var res: Dictionary = await MissionManager.skip_mission()
-	_busy = false
 	if not res.ok:
-		_set_status(str(res.get("error", "Skip failed")), true)
+		var err := str(res.get("error", "Skip failed"))
+		# Already completed (e.g. prior skip left future end_time) — open the fight.
+		if err.to_lower().find("not in progress") >= 0:
+			MissionManager.active_mission["status"] = "completed"
+			_busy = false
+			await _on_fight()
+			return
+		_busy = false
+		_set_status(err, true)
+		_refresh_timer()
 		return
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	if bool(data.get("mission_missing", false)):
+		_busy = false
 		_set_status("Mission record lost — ship recalled. Returning to the cantina…", true)
 		await get_tree().create_timer(1.0).timeout
 		GameManager.go_cantina()
+		return
+	_set_status("Preparing encounter…", true)
+	# Character was just patched by SkipMission — skip the redundant refresh round-trip.
+	var prep: Dictionary = await MissionManager.prepare_combat(false)
+	if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
+		_busy = false
+		_set_status("Skip applied, but the encounter failed to load. Tap FIGHT FOR REWARDS.", true)
+		_refresh_timer()
 		return
 	GameManager.go_mission_combat()

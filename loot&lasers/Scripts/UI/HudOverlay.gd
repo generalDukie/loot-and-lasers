@@ -6,13 +6,13 @@ extends Control
 @export_range(0.0, 1.0, 0.05) var strength := 0.55
 
 var _elapsed := 0.0
-var _redraw_accum := 0.0
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	resized.connect(queue_redraw)
+	set_process(true)
 
 
 func set_active(on: bool) -> void:
@@ -23,10 +23,6 @@ func set_active(on: bool) -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
-	_redraw_accum += delta
-	if _redraw_accum < 0.08:
-		return
-	_redraw_accum = 0.0
 	queue_redraw()
 
 
@@ -61,16 +57,31 @@ func _draw() -> void:
 		1.0
 	)
 
-	# Slow scanning beam — live instrument motion without obscuring UI.
+	# Scanning beam — soft band so motion reads cleanly at high refresh.
 	var sweep := fposmod(_elapsed * 0.065, 1.2) - 0.08
 	var y := sweep * size.y
-	draw_line(Vector2(inset, y), Vector2(size.x - inset, y), Color(accent, 0.10 * strength), 1.0)
-	draw_line(
-		Vector2(inset, y - 3.0),
-		Vector2(size.x - inset, y - 3.0),
-		Color(accent, 0.04 * strength),
-		1.0
-	)
+	if y > inset and y < size.y - inset:
+		draw_line(
+			Vector2(inset, y - 4.0),
+			Vector2(size.x - inset, y - 4.0),
+			Color(accent, 0.03 * strength),
+			1.0,
+			true
+		)
+		draw_line(
+			Vector2(inset, y),
+			Vector2(size.x - inset, y),
+			Color(accent, 0.14 * strength),
+			1.5,
+			true
+		)
+		draw_line(
+			Vector2(inset, y + 3.0),
+			Vector2(size.x - inset, y + 3.0),
+			Color(accent, 0.05 * strength),
+			1.0,
+			true
+		)
 
 	# Animated telemetry ticks.
 	var pulse := 0.55 + sin(_elapsed * 2.1) * 0.25

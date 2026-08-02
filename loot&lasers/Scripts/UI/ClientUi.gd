@@ -27,7 +27,7 @@ static var _app_theme: Theme
 static var _painted_style_cache: Dictionary = {}
 static var _button_style_cache: Dictionary = {}
 ## Soft nebula renders fine at lower internal resolution; stretch hides the difference.
-const SPACE_RENDER_SCALE := 0.55
+const SPACE_RENDER_SCALE := 0.4
 
 
 static func display_font() -> Font:

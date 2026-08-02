@@ -45,6 +45,7 @@ func _ready() -> void:
 	clip_contents = true
 	_build()
 	_refresh_chrome()
+	_set_decor_active(true)
 	var timer := Timer.new()
 	timer.wait_time = 1.0
 	timer.timeout.connect(_refresh_chrome)
@@ -747,6 +748,10 @@ func _set_notification_open(open: bool) -> void:
 	if _notif_panel == null or not is_instance_valid(_notif_panel):
 		return
 	if open:
+		# Expand dock stack so the sheet has room above the FAB.
+		var stack := _notif_panel.get_parent() as Control
+		if stack != null:
+			stack.offset_top = -440
 		_notif_panel.visible = true
 		_notif_panel.modulate.a = 0.0
 		_notif_panel.scale = Vector2(0.88, 0.88)
@@ -769,6 +774,9 @@ func _set_notification_open(open: bool) -> void:
 			if is_instance_valid(_notif_panel) and not _notif_open:
 				_notif_panel.visible = false
 				_notif_panel.scale = Vector2.ONE
+				var stack := _notif_panel.get_parent() as Control
+				if stack != null:
+					stack.offset_top = -80
 		)
 
 
@@ -857,7 +865,7 @@ func _build_notification_center() -> void:
 	stack.anchor_right = 1.0
 	stack.anchor_bottom = 1.0
 	stack.offset_left = -368
-	stack.offset_top = -440
+	stack.offset_top = -80
 	stack.offset_right = -14
 	stack.offset_bottom = -14
 	_notif_dock.add_child(stack)

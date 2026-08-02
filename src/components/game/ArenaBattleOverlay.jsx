@@ -9,6 +9,7 @@ import { CLASSES } from "@/lib/gameData";
 import { resolveAbilityBanner } from "@/lib/classPassives";
 import { ArenaBackdrop, ArenaFloor } from "@/components/game/ArenaBackdrop";
 import ArenaWeaponVisual from "@/components/game/ArenaWeaponVisual";
+import GameViewportOverlayPortal from "@/components/game/GameViewportOverlayPortal";
 
 const STAT_COLORS = { STR: "#F87171", AGI: "#4ADE80", INT: "#60A5FA", VIT: "#FBBF24", LUK: "#C084FC" };
 const MOD_COLORS = { dmg: "#F87171", armor: "#FBBF24", tech: "#38BDF8", crit: "#C084FC", dodge: "#4ADE80" };
@@ -323,7 +324,7 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
   const combo = phase === "fight" ? comboAt(battle.events, idx) : 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-[#040214]">
+    <GameViewportOverlayPortal className="z-[100] flex flex-col bg-[#040214]">
       <ArenaBackdrop accent={accent} />
       {theme?.label && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
@@ -376,12 +377,17 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
       {/* Skip — lifted from the bottom edge so PC taskbar hover doesn't steal clicks */}
       <div className="flex justify-center pb-10 sm:pb-12 -mt-2 relative z-40">
         <motion.button
-          onClick={onDone}
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDone?.();
+          }}
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           whileHover={{ scale: 1.06 }}
           whileTap={{ scale: 0.92 }}
-          className="group flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 border-2 border-amber-300 font-display font-black text-sm tracking-wider text-black shadow-[0_0_18px_rgba(251,191,36,0.6)] hover:shadow-[0_0_26px_rgba(251,191,36,0.8)] transition-shadow"
+          className="group relative z-[60] flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 border-2 border-amber-300 font-display font-black text-sm tracking-wider text-black shadow-[0_0_18px_rgba(251,191,36,0.6)] hover:shadow-[0_0_26px_rgba(251,191,36,0.8)] transition-shadow pointer-events-auto"
         >
           <Zap className="w-4 h-4 group-hover:scale-110 transition-transform" />
           SKIP TO RESULTS
@@ -469,13 +475,18 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
               </h2>
               <p className="text-sm text-muted-foreground mt-2">{battle.winner === "player" ? "Glory to the galaxy." : "You fall... but you'll rise again."}</p>
               <motion.button
-                onClick={onDone}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDone?.();
+                }}
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }}
                 className={
                   battle.winner === "player"
-                    ? "mt-6 inline-flex items-center gap-2 px-8 py-3 rounded-xl font-display font-black text-base tracking-wider text-black bg-gradient-to-r from-cyan-400 to-blue-500 border-2 border-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.5)] hover:shadow-[0_0_30px_rgba(34,211,238,0.75)] transition-shadow"
-                    : "mt-6 inline-flex items-center gap-2 px-8 py-3 rounded-xl font-display font-black text-base tracking-wider text-white bg-gradient-to-r from-red-500 to-rose-600 border-2 border-red-300 shadow-[0_0_20px_rgba(239,68,68,0.55)] hover:shadow-[0_0_30px_rgba(239,68,68,0.8)] transition-shadow"
+                    ? "mt-6 relative z-[60] inline-flex items-center gap-2 px-8 py-3 rounded-xl font-display font-black text-base tracking-wider text-black bg-gradient-to-r from-cyan-400 to-blue-500 border-2 border-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.5)] hover:shadow-[0_0_30px_rgba(34,211,238,0.75)] transition-shadow pointer-events-auto"
+                    : "mt-6 relative z-[60] inline-flex items-center gap-2 px-8 py-3 rounded-xl font-display font-black text-base tracking-wider text-white bg-gradient-to-r from-red-500 to-rose-600 border-2 border-red-300 shadow-[0_0_20px_rgba(239,68,68,0.55)] hover:shadow-[0_0_30px_rgba(239,68,68,0.8)] transition-shadow pointer-events-auto"
                 }
               >
                 <ChevronRight className="w-5 h-5" />
@@ -485,6 +496,6 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </GameViewportOverlayPortal>
   );
 }

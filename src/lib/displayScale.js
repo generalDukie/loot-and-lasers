@@ -1,13 +1,14 @@
 // Per-user station hub display preference (stored locally).
+// Resolved by src/lib/gameViewport.js → GameCanvas (authoritative 16:9 system).
 // Scale modes:
-//   "auto"           — fit the 16:9 design inside the viewport (default)
+//   "auto"           — largest 16:9 fit inside the browser (default, preferred)
 //   "cover"          — fill the screen (may crop edges)
-//   "fill-width"     — scale to viewport width (may clip top/bottom)
-//   "contain-height" — scale to viewport height (may letterbox sides)
-//   number           — fixed zoom factor (e.g. "1.5")
+//   "fill-width"     — scale to browser width (may clip top/bottom)
+//   "contain-height" — scale to browser height (may pillarbox sides)
+//   number           — fixed zoom vs 1920×1080 design (e.g. "1.5")
 //
-// Anchor controls horizontal placement when the scaled canvas is narrower
-// than the viewport (useful on ultrawide monitors):
+// Anchor controls horizontal placement when the game pane is narrower
+// than the browser (ultrawide):
 //   "left" | "center" | "right"
 const KEY = "loot_display_scale";
 const ANCHOR_KEY = "loot_display_anchor";

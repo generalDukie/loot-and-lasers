@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/api/gameClient";
 import { trackNovaSpend } from "@/lib/novaTracker";
-import { applyPendingLootFromResponse, countItems, getInventoryCap } from "@/lib/inventoryCap";
+import { applyPendingLootFromResponse, countItems, getInventoryCap, setPendingNeedSlot } from "@/lib/inventoryCap";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   FUEL_MAX,
@@ -202,7 +202,6 @@ export function useMissionManager() {
   const [completeSummary, setCompleteSummary] = useState(null);
   const [missionBattle, setMissionBattle] = useState(null);
   const [nexusBonus, setNexusBonus] = useState(false);
-  const [inventoryFullOpen, setInventoryFullOpen] = useState(false);
   const claimingRef = useRef(false);
   /** Guards double-settle on VIEW REWARDS / SKIP (independent of claimingRef). */
   const settlingBattleRef = useRef(false);
@@ -317,7 +316,7 @@ export function useMissionManager() {
     try {
       const bagCount = await countItems(character.id);
       if (bagCount >= getInventoryCap(character)) {
-        setInventoryFullOpen(true);
+        setPendingNeedSlot();
         return;
       }
 
@@ -345,7 +344,7 @@ export function useMissionManager() {
       });
     } catch (e) {
       if (/inventory full/i.test(e?.message || "")) {
-        setInventoryFullOpen(true);
+        setPendingNeedSlot();
         return;
       }
       toast({ title: "Launch failed", description: e?.message || "Try again.", variant: "destructive" });
@@ -616,8 +615,6 @@ export function useMissionManager() {
     handleBuyFuel,
     setCompleteSummary,
     setLaunchAnim,
-    inventoryFullOpen,
-    setInventoryFullOpen,
     navigate,
   };
 }

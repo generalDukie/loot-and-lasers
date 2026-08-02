@@ -306,7 +306,11 @@ export default function EquippedFrame({
   // collapsing into auto-sized columns that bunch beside a large avatar.
   const chipOuter = size + 6;
   const center = Math.max(chipOuter, Math.round(portraitSize || size * 2.4));
-  const gap = showcase ? 14 : 8;
+  // Gap tracks slot size so callers can shrink the frame with integer px
+  // (no CSS transform) and keep the ring proportional.
+  const gap = showcase
+    ? Math.max(6, Math.round(size * (14 / 56)))
+    : Math.max(4, Math.round(size * (8 / 53)));
 
   return (
     <div

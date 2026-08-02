@@ -12,44 +12,68 @@ import { profileDisplayName, normalizeLegacyDisplay, LEGACY_DISPLAY_FAMILY } fro
 
 const paneClass = "bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl";
 
-/** Scale content down to fit a container without scrolling (keeps layout box in sync). */
-function useFitScale() {
+const BASE_SLOT = 56;
+const BASE_PORTRAIT = 148;
+const MIN_SLOT = 28;
+
+/** Natural footprint of EquippedFrame showcase (matches EquippedFrame gap math). */
+function loadoutFootprint(slot, portrait) {
+  const gap = Math.max(6, Math.round(slot * (14 / 56)));
+  return 2 * (slot + 6) + portrait + 2 * gap;
+}
+
+/**
+ * Fit the loadout by choosing integer slot/portrait sizes — never CSS
+ * transform: scale, which rasterizes the subtree and softens text on HiDPI.
+ */
+function useFitLoadoutSizes() {
   const containerRef = useRef(null);
-  const contentRef = useRef(null);
-  const [scale, setScale] = useState(1);
-  const [box, setBox] = useState({ w: 0, h: 0 });
+  const [sizes, setSizes] = useState({ size: BASE_SLOT, portraitSize: BASE_PORTRAIT });
 
   useLayoutEffect(() => {
     const container = containerRef.current;
-    const content = contentRef.current;
-    if (!container || !content) return undefined;
+    if (!container) return undefined;
 
     const update = () => {
       const cw = container.clientWidth;
       const ch = container.clientHeight;
-      const bw = content.offsetWidth;
-      const bh = content.offsetHeight;
-      if (bw <= 0 || bh <= 0 || cw <= 0 || ch <= 0) return;
-      const next = Math.min(1, cw / bw, ch / bh);
-      const s = next > 0.995 ? 1 : Math.max(0.5, next);
-      setScale(s);
-      setBox({ w: Math.ceil(bw * s), h: Math.ceil(bh * s) });
+      if (cw <= 0 || ch <= 0) return;
+
+      const avail = Math.min(cw, ch);
+      const natural = loadoutFootprint(BASE_SLOT, BASE_PORTRAIT);
+      if (natural <= avail) {
+        setSizes({ size: BASE_SLOT, portraitSize: BASE_PORTRAIT });
+        return;
+      }
+
+      const ratio = BASE_PORTRAIT / BASE_SLOT;
+      // avail ≈ 2*(slot+6) + ratio*slot + 2*(slot*14/56) = 2.5*slot + ratio*slot + 12
+      let slot = Math.floor((avail - 12) / (2.5 + ratio));
+      slot = Math.max(MIN_SLOT, Math.min(BASE_SLOT, slot));
+      let portrait = Math.round(slot * ratio);
+
+      // Nudge down if rounding/gap pushed us over (integer px only).
+      while (slot > MIN_SLOT && loadoutFootprint(slot, portrait) > avail) {
+        slot -= 1;
+        portrait = Math.round(slot * ratio);
+      }
+
+      setSizes({ size: slot, portraitSize: portrait });
     };
 
     update();
     const ro = new ResizeObserver(update);
     ro.observe(container);
-    ro.observe(content);
     return () => ro.disconnect();
   }, []);
 
-  return { containerRef, contentRef, scale, box };
+  return { containerRef, ...sizes };
 }
 
 export default function CharacterHeader({ character, guild, equippedItems, onUpdate, onEquip, onLock }) {
   const [bio, setBio] = useState("");
   const [saving, setSaving] = useState(false);
-  const { containerRef, contentRef, scale, box } = useFitScale();
+  const { containerRef, size: slotSize, portraitSize } = useFitLoadoutSizes();
   const race = RACES[character.race];
   const cls = CLASSES[character.class];
   const expToNext = character.experience_to_next_level || 0;
@@ -72,6 +96,8 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
     && character.name;
   const hasActiveEffects =
     getActiveBuffs(character).length > 0 || getActiveFuelMounts(character).length > 0;
+  const levelBadge = Math.max(18, Math.round(26 * (slotSize / BASE_SLOT)));
+  const levelText = Math.max(9, Math.round(11 * (slotSize / BASE_SLOT)));
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-2">
@@ -118,59 +144,52 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
           className={`flex-1 min-w-0 min-h-0 ${paneClass} p-2.5 sm:p-3 flex gap-2.5 overflow-hidden`}
         >
           <div className="flex-1 min-w-0 min-h-0 flex flex-col items-center overflow-hidden">
-            {/* Loadout scales to available height — no scroll */}
+            {/* Loadout fits via integer sizes — no transform: scale */}
             <div
               ref={containerRef}
               className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden"
             >
-              <div
-                className="relative shrink-0"
-                style={box.w ? { width: box.w, height: box.h } : undefined}
+              <EquippedFrame
+                equippedItems={equippedItems}
+                size={slotSize}
+                portraitSize={portraitSize}
+                showcase
+                interactive
+                showHoverStats
+                characterClass={character.class}
+                onEquip={onEquip}
+                onLock={onLock}
               >
-                <div
-                  ref={contentRef}
-                  className="absolute top-0 left-0"
-                  style={{
-                    transform: `scale(${scale})`,
-                    transformOrigin: "top left",
-                  }}
-                >
-                  <EquippedFrame
-                    equippedItems={equippedItems}
-                    size={56}
-                    portraitSize={148}
-                    showcase
-                    interactive
-                    showHoverStats
-                    characterClass={character.class}
-                    onEquip={onEquip}
-                    onLock={onLock}
+                <div className="relative">
+                  <div
+                    className="rounded-2xl overflow-hidden border border-primary/40 bg-muted/15"
+                    style={{ boxShadow: "0 0 24px hsl(190 90% 50% / 0.2)" }}
                   >
-                    <div className="relative">
-                      <div
-                        className="rounded-2xl overflow-hidden border border-primary/40 bg-muted/15"
-                        style={{ boxShadow: "0 0 24px hsl(190 90% 50% / 0.2)" }}
-                      >
-                        <CharacterAvatar
-                          race={character.race}
-                          skinColor={character.appearance?.skin_color}
-                          eyeStyle={character.appearance?.eye_style}
-                          ears={character.appearance?.ears}
-                          mouth={character.appearance?.mouth}
-                          nose={character.appearance?.nose}
-                          eyebrows={character.appearance?.eyebrows}
-                          marking={character.appearance?.marking}
-                          cls={character.class}
-                          size={148}
-                        />
-                      </div>
-                      <span className="absolute -bottom-1.5 -right-1.5 min-w-[26px] h-[26px] px-1 rounded-full bg-primary text-primary-foreground font-display font-black text-[11px] flex items-center justify-center border-2 border-background shadow-md tabular-nums">
-                        {character.level}
-                      </span>
-                    </div>
-                  </EquippedFrame>
+                    <CharacterAvatar
+                      race={character.race}
+                      skinColor={character.appearance?.skin_color}
+                      eyeStyle={character.appearance?.eye_style}
+                      ears={character.appearance?.ears}
+                      mouth={character.appearance?.mouth}
+                      nose={character.appearance?.nose}
+                      eyebrows={character.appearance?.eyebrows}
+                      marking={character.appearance?.marking}
+                      cls={character.class}
+                      size={portraitSize}
+                    />
+                  </div>
+                  <span
+                    className="absolute -bottom-1.5 -right-1.5 px-1 rounded-full bg-primary text-primary-foreground font-display font-black flex items-center justify-center border-2 border-background shadow-md tabular-nums"
+                    style={{
+                      minWidth: levelBadge,
+                      height: levelBadge,
+                      fontSize: levelText,
+                    }}
+                  >
+                    {character.level}
+                  </span>
                 </div>
-              </div>
+              </EquippedFrame>
             </div>
 
             <div className="shrink-0 w-full max-w-[20rem] text-center min-w-0 pt-1.5">

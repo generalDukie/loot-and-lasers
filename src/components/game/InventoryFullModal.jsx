@@ -14,7 +14,7 @@ import { prepareConsumableBuffs } from "@/hooks/useInventory";
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { useToast } from "@/components/ui/use-toast";
-import { Orbit, Loader2, AlertTriangle, FlaskConical } from "lucide-react";
+import { Orbit, Loader2, AlertTriangle, FlaskConical, X } from "lucide-react";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 function isStim(item) {
@@ -255,13 +255,16 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
   const title =
     mode === "unequip" ? "Inventory Full — Unequip Blocked"
       : mode === "overflow" ? "Inventory Over Capacity"
-        : "Inventory Full";
+        : mode === "need_slot" ? "Inventory Full"
+          : "Inventory Full";
   const subtitle =
     mode === "unequip"
       ? `Bag is full (${bagCount}/${cap}). Dissolve a spare item to unequip, or dissolve the equipped piece.`
       : mode === "overflow"
-        ? `You have ${bagCount} bag items (max ${cap}). Dissolve until you are at or under the limit.`
-        : "Dissolve into the Void, or use a stim to free a slot.";
+        ? `You have ${bagCount} bag items (max ${cap}). Dissolve gear below to free slots — then retry your action.`
+        : mode === "need_slot"
+          ? `Bag is full (${bagCount}/${cap}). Dissolve gear below to free a slot, then retry.`
+          : "Dissolve a bag item to claim the new find, or dissolve the new piece itself.";
 
   if (minimized && !mandatory) {
     return (
@@ -309,17 +312,29 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
               <h2 className="font-display font-bold text-lg text-amber-300 glow-orange">{title}</h2>
               <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
             </div>
-            {!mandatory && (
-              <button
-                onClick={() => setMinimized(true)}
-                className="text-[10px] px-2 py-1 rounded-lg bg-muted/30 hover:bg-muted/50 text-muted-foreground font-display font-semibold tracking-wide shrink-0"
-              >
-                Minimize
-              </button>
-            )}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {!mandatory && mode !== "need_slot" && (
+                <button
+                  onClick={() => setMinimized(true)}
+                  className="text-[10px] px-2 py-1 rounded-lg bg-muted/30 hover:bg-muted/50 text-muted-foreground font-display font-semibold tracking-wide"
+                >
+                  Minimize
+                </button>
+              )}
+              {mode === "need_slot" && (
+                <button
+                  type="button"
+                  onClick={() => clearPendingItem()}
+                  className="p-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-muted-foreground"
+                  aria-label="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
-          {pendingItem && mode !== "overflow" && (
+          {pendingItem && mode !== "overflow" && mode !== "need_slot" && (
             <div
               className="flex items-center gap-3 p-3 rounded-xl border mb-3"
               style={{ borderColor: pendingColor + "40", background: pendingColor + "08" }}
@@ -375,7 +390,7 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
           )}
 
           <p className="text-[10px] font-display font-semibold tracking-widest text-muted-foreground mb-2">
-            {mode === "overflow" ? "DISSOLVE UNTIL ≤ 10" : "OR FREE A SPARE SLOT"}
+            {mode === "overflow" || mode === "need_slot" ? "DISSOLVE TO FREE A SLOT" : "OR FREE A SPARE SLOT"}
           </p>
 
           {loadingItems ? (
@@ -386,7 +401,7 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
             <p className="text-center text-xs text-muted-foreground italic py-4">
               {mode === "unequip"
                 ? "No spare items. Dissolve the equipped piece above."
-                : mode === "overflow"
+                : mode === "overflow" || mode === "need_slot"
                   ? "No dissolvable bag items found. Unlock an item or contact support."
                   : `No spare items. Dissolve${isStim(pendingItem) ? " or use" : ""} the new find above.`}
             </p>
@@ -421,7 +436,7 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
                       <StardustIcon className="w-2.5 h-2.5" glow={false} /> {val}
                     </span>
                     <div className="flex flex-col gap-1 shrink-0">
-                      {isStim(item) && mode !== "overflow" && (
+                      {isStim(item) && mode !== "overflow" && mode !== "need_slot" && (
                         <button
                           onClick={() => consumeStim(item, false)}
                           disabled={busy}

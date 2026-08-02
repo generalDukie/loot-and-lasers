@@ -8,8 +8,9 @@ export { INVENTORY_CAP, getInventoryCap };
  * - loot: new drop waiting for a bag slot
  * - unequip: equipped gear waiting to move into a full bag
  * - overflow: bag already over cap — must dissolve down to cap
+ * - need_slot: bag at cap (e.g. mission launch) — dissolve until one free slot
  */
-let pending = null; // { mode: 'loot'|'unequip'|'overflow', item: object|null, pendingLootId?: string }
+let pending = null; // { mode: 'loot'|'unequip'|'overflow'|'need_slot', item: object|null, pendingLootId?: string }
 const listeners = new Set();
 
 function emit() {
@@ -30,7 +31,7 @@ export function getPendingMode() {
 }
 
 export function setPendingItem(item, mode = "loot", pendingLootId = null) {
-  if (!item && mode !== "overflow") {
+  if (!item && mode !== "overflow" && mode !== "need_slot") {
     pending = null;
   } else {
     pending = { mode, item: item || null, pendingLootId: pendingLootId || null };
@@ -46,6 +47,12 @@ export function setPendingUnequip(item) {
 
 export function setPendingOverflow() {
   pending = { mode: "overflow", item: null };
+  emit();
+}
+
+/** At-cap gate (mission launch, etc.) — dissolve until bagCount < cap. */
+export function setPendingNeedSlot() {
+  pending = { mode: "need_slot", item: null };
   emit();
 }
 
@@ -145,6 +152,9 @@ export async function enforceInventoryCap(character) {
   if (pending?.mode === "overflow" && bagCount <= cap) {
     clearPendingItem();
   }
+  if (pending?.mode === "need_slot" && bagCount < cap) {
+    clearPendingItem();
+  }
   // Restore pending loot modal after refresh / navigation.
   if (!pending) {
     await hydratePendingLootFromServer(character.id);
@@ -157,7 +167,7 @@ export async function tryClaimPendingIfSpaceAvailable(character) {
   const p = pending;
   if (!p || !character?.id) return null;
 
-  if (p.mode === "overflow") {
+  if (p.mode === "overflow" || p.mode === "need_slot") {
     return resolvePendingAfterFreeSlot(character);
   }
 
@@ -182,6 +192,15 @@ export async function resolvePendingAfterFreeSlot(character) {
       return { kind: "overflow_cleared", bagCount };
     }
     return { kind: "overflow", bagCount };
+  }
+
+  if (p.mode === "need_slot") {
+    const bagCount = await countItems(character.id);
+    if (bagCount < getInventoryCap(character)) {
+      clearPendingItem();
+      return { kind: "overflow_cleared", bagCount };
+    }
+    return { kind: "need_slot", bagCount };
   }
 
   if (p.mode === "loot" && p.item) {

@@ -30,67 +30,26 @@ func is_bag_full() -> bool:
 	return n >= bag_cap()
 
 
-## Blocking recovery dialog.
+## Blocking painted recovery sheet (mirrors web InventoryFullModal).
 ## Returns: "ready" (already had space), "inventory", "dissolved", or "cancel".
 func prompt_bag_pressure(host: Node, reason: String = "Inventory full") -> String:
 	if host == null or not is_instance_valid(host):
 		return "cancel"
 	var n := await bag_occupancy()
 	var cap := bag_cap()
-	if n >= 0 and n < cap:
+	await list_pending_loot()
+	# Space free and nothing waiting — no modal needed.
+	if n >= 0 and n < cap and pending_loot.is_empty():
 		return "ready"
 
-	await list_pending_loot()
-	var pending_n := pending_loot.size()
-	var dlg := AcceptDialog.new()
-	dlg.title = "Inventory Full"
-	dlg.dialog_text = "%s\nBag %s/%s%s\nDissolve junk or open Inventory to free a slot." % [
-		reason,
-		str(n if n >= 0 else "?"),
-		str(cap),
-		(" · %s pending loot" % pending_n) if pending_n > 0 else "",
-	]
-	dlg.ok_button_text = "Open Inventory"
-	dlg.add_button("Dissolve Junk", true, "dissolve")
-	dlg.add_cancel_button("Cancel")
-	host.add_child(dlg)
-	dlg.popup_centered()
-
-	var choice := await _await_pressure_choice(dlg)
-	if is_instance_valid(dlg):
-		dlg.queue_free()
-	match choice:
-		"inventory":
-			GameManager.go_inventory()
-			return "inventory"
-		"dissolve":
-			var items_res: Dictionary = await AuthManager.list_items()
-			var items: Array = items_res.data if items_res.ok and typeof(items_res.data) == TYPE_ARRAY else []
-			var junk: Array = InventoryRules.list_junk_ids(items)
-			if junk.is_empty():
-				GameManager.go_inventory()
-				return "inventory"
-			var res: Dictionary = await dissolve_junk(junk)
-			pressure_resolved.emit()
-			return "dissolved" if res.ok else "cancel"
-		_:
-			return "cancel"
-
-
-func _await_pressure_choice(dlg: AcceptDialog) -> String:
-	var out: Array = [""]
-	var finish := func(v: String) -> void:
-		if str(out[0]).is_empty():
-			out[0] = v
-		if is_instance_valid(dlg) and dlg.visible:
-			dlg.hide()
-	dlg.confirmed.connect(func() -> void: finish.call("inventory"))
-	dlg.custom_action.connect(func(action: StringName) -> void: finish.call(str(action)))
-	dlg.canceled.connect(func() -> void: finish.call("cancel"))
-	dlg.close_requested.connect(func() -> void: finish.call("cancel"))
-	while str(out[0]).is_empty() and is_instance_valid(dlg):
-		await dlg.get_tree().process_frame
-	return str(out[0]) if not str(out[0]).is_empty() else "cancel"
+	var sheet := InventoryFullSheet.new()
+	host.add_child(sheet)
+	var choice: String = await sheet.run(reason)
+	if is_instance_valid(sheet):
+		sheet.queue_free()
+	if choice == "dissolved" or choice == "ready":
+		pressure_resolved.emit()
+	return choice
 
 
 func set_locked(item_id: String, locked: bool) -> Dictionary:

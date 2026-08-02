@@ -9,10 +9,7 @@ import LevelUpOverlay, { pendingLevelUpFromSummary } from "@/components/game/Lev
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import CantinaMusicToggle from "@/components/game/CantinaMusicToggle";
 import { useMissionManager } from "@/hooks/useMissionManager";
-import { Map, Rocket, Fuel, Backpack } from "lucide-react";
-import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Map, Rocket, Fuel } from "lucide-react";
 
 export default function MissionsPage() {
   const {
@@ -34,8 +31,6 @@ export default function MissionsPage() {
     handleBuyFuel,
     setCompleteSummary,
     setLaunchAnim,
-    inventoryFullOpen,
-    setInventoryFullOpen,
     navigate,
     missionReady,
   } = useMissionManager();
@@ -69,53 +64,6 @@ export default function MissionsPage() {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
-      {inventoryFullOpen && (
-        <GameplayOverlayPortal
-          className="z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-          onClick={() => setInventoryFullOpen(false)}
-        >
-          <div
-            role="alertdialog"
-            aria-labelledby="mission-inv-full-title"
-            aria-describedby="mission-inv-full-desc"
-            className="painted-panel border border-amber-400/40 max-w-md w-full p-6 shadow-lg grid gap-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col space-y-2 text-left">
-              <h2
-                id="mission-inv-full-title"
-                className="font-display font-bold text-lg text-amber-300 tracking-wide flex items-center gap-2"
-              >
-                <Backpack className="w-5 h-5" />
-                INVENTORY FULL
-              </h2>
-              <p id="mission-inv-full-desc" className="text-sm text-muted-foreground">
-                Your bag is at capacity. Clear inventory space before starting a mission so loot has somewhere to go.
-              </p>
-            </div>
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-0 sm:space-x-2">
-              <button
-                type="button"
-                onClick={() => setInventoryFullOpen(false)}
-                className={cn(buttonVariants({ variant: "outline" }), "mt-2 sm:mt-0")}
-              >
-                Got it
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setInventoryFullOpen(false);
-                  navigate("/character");
-                }}
-                className={buttonVariants()}
-              >
-                Open Inventory
-              </button>
-            </div>
-          </div>
-        </GameplayOverlayPortal>
-      )}
-
       {missionBattle && (
         <ArenaBattleOverlay
           player={character}

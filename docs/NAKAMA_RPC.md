@@ -235,3 +235,16 @@ Managed by `EquipmentManager` (**read-only**). Storage: `equipment` / `<characte
 | `equipment_get` | Load equipment slot map or empty null slots |
 
 Character-level ownership (must match profile `selected_character_id`). Live Hero UI still uses Node `Item.is_equipped`. See `docs/PHASE6_EQUIPMENT.md`.
+
+## Phase 7 — Mission RPCs
+
+Managed by `MissionManager` (Nakama core + preserved Node launch/claim/fuel). Storage: `mission_boards/<character_id>`, `active_missions/<character_id>`.
+
+| RPC | Purpose |
+|-----|---------|
+| `missions_get` | Load or create board; include active mission |
+| `missions_refresh` | Regenerate board (15s cooldown; blocked while active) |
+| `mission_start` | Start an available mission (server timestamps) |
+| `mission_status` | Timer check; may transition `active` → `complete` (no rewards) |
+
+Character-level ownership. **No** claim/reward/fuel RPCs in this phase. See `docs/PHASE7_MISSIONS.md` and `docs/BACKEND_ARCHITECTURE.md`.

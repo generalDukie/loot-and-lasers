@@ -1,0 +1,32 @@
+---
+description: Mandatory 8-step workflow for every backend feature/phase
+alwaysApply: true
+---
+
+# Backend phase workflow
+
+Before implementing any new backend feature, follow this order. **Never skip a step.**
+
+1. **Audit** — Inspect existing managers, UI, storage, APIs, and source of truth. Document findings first.
+2. **Design** — Define RPC surface, storage schema, ownership, and non-goals. Prefer read-only before write paths.
+3. **Verify architecture** — Confirm client → manager → NakamaManager → RPC → module → storage → manager → UI. Reject client-trusted ids/balances.
+4. **Implement** — One backend service per phase. Touch only what that phase needs.
+5. **Test** — Prove the phase independently (RPC missing/empty/ownership/offline/read-only as applicable).
+6. **Document** — Update phase doc + `docs/NAKAMA_RPC.md` (or equivalent).
+7. **Commit** — Only when the user asks, after checks pass. One backend service per commit.
+8. **Push** — Only when the user asks.
+
+## Hard rules
+
+- Never implement two backend services in one commit.
+- Every backend phase must remain **independently testable and reversible**.
+- Do not start the next phase until the current phase is committed (when the user wants it shipped).
+- Commit messages stay milestone-shaped, e.g. `Phase N - Backend - <Service name>`.
+
+## Examples
+
+```
+✅ Phase 4 inventory, then separate commit for Phase 5 wallet
+❌ Inventory + equipment + wallet in one commit
+❌ Jumping to implement before audit/design
+```

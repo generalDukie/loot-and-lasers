@@ -1,12 +1,23 @@
 extends Node
-## Mission lifecycle against the Node API (cantina is client-generated).
+## Mission lifecycle.
+## Live Cantina launch/claim/fuel remain on the Node API this phase.
+## Phase 7 adds authoritative Nakama mission core (board/start/timer/status) with no rewards.
 
 signal board_changed(offers: Array)
 signal active_mission_changed(mission: Dictionary)
 signal character_updated(character: Dictionary)
 signal claim_ready(result: Dictionary)
 
+## Phase 7 — Nakama mission core signals
+signal missions_loaded(board: Dictionary)
+signal missions_refreshed(board: Dictionary)
+signal mission_started(mission: Dictionary)
+signal mission_status_changed(status: Dictionary)
+signal mission_error(error: String)
+signal loading_changed(loading: bool)
+
 const BOARD_CFG := "user://godot_mission_board.cfg"
+const STATUS_MIN_INTERVAL_SEC := 2.0
 
 var offers: Array = []
 var active_mission: Dictionary = {}
@@ -16,6 +27,14 @@ var last_claim_result: Dictionary = {}
 var pending_enemy: Dictionary = {}
 var pending_battle: Dictionary = {}
 var pending_player_items: Array = []
+
+## Phase 7 Nakama snapshot (parallel to Node; no rewards).
+var nakama_board: Dictionary = {}
+var nakama_active: Dictionary = {}
+var loading := false
+
+var _nakama_busy := false
+var _last_status_at := 0.0
 
 
 func _ready() -> void:
@@ -171,8 +190,11 @@ func effective_end_unix(mission: Dictionary = {}) -> int:
 	var status := str(m.get("status", ""))
 	var char_end := str(GameManager.active_character.get("mission_end_time", ""))
 	var mission_end := str(m.get("end_time", ""))
+	# Phase 7 Nakama missions use completes_at.
+	if mission_end.is_empty():
+		mission_end = str(m.get("completes_at", ""))
 	var iso := ""
-	if status == "completed":
+	if status == "completed" or status == "complete":
 		iso = char_end if not char_end.is_empty() else mission_end
 	else:
 		iso = mission_end if not mission_end.is_empty() else char_end
@@ -184,12 +206,12 @@ func seconds_remaining(mission: Dictionary = {}) -> int:
 	if m.is_empty():
 		return 0
 	var status := str(m.get("status", ""))
-	if status in ["claimed", "failed"]:
+	if status in ["claimed", "failed", "complete"]:
 		return 0
 	var end_unix := effective_end_unix(m)
 	if end_unix <= 0:
 		# Unknown / unparseable end — never treat as ready-to-fight.
-		return 1 if status == "in_progress" else 0
+		return 1 if status == "in_progress" or status == "active" else 0
 	return maxi(0, int(ceil(float(end_unix) - Time.get_unix_time_from_system())))
 
 
@@ -220,7 +242,12 @@ func current_mission_id() -> String:
 	var cid := str(GameManager.active_character.get("active_mission_id", ""))
 	if not cid.is_empty():
 		return cid
-	return str(active_mission.get("id", ""))
+	var mission_raw: Variant = nakama_active.get("mission", {})
+	if typeof(mission_raw) == TYPE_DICTIONARY:
+		var nakama_id := str((mission_raw as Dictionary).get("mission_id", ""))
+		if not nakama_id.is_empty():
+			return nakama_id
+	return str(active_mission.get("id", active_mission.get("mission_id", "")))
 
 
 func skip_mission() -> Dictionary:
@@ -308,6 +335,197 @@ func resolve_combat_outcome() -> Dictionary:
 
 func has_active_mission() -> bool:
 	return not str(GameManager.active_character.get("active_mission_id", "")).is_empty()
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 — Nakama mission core (no rewards / fuel / claim)
+# ---------------------------------------------------------------------------
+
+func load_missions(character_id: String = "") -> Dictionary:
+	return await _nakama_board_rpc("missions_get", character_id, false)
+
+
+func refresh_missions(character_id: String = "") -> Dictionary:
+	return await _nakama_board_rpc("missions_refresh", character_id, true)
+
+
+func start_mission(mission_id: String, character_id: String = "") -> Dictionary:
+	if _nakama_busy:
+		return _fail_nakama("Mission request already in progress")
+	if mission_id.strip_edges().is_empty():
+		return _fail_nakama("mission_id is required")
+
+	_nakama_busy = true
+	_set_loading(true)
+	var payload := _nakama_character_payload(character_id)
+	payload["mission_id"] = mission_id.strip_edges()
+	var res: Dictionary = await NakamaManager.invoke_rpc("mission_start", payload)
+	_nakama_busy = false
+	_set_loading(false)
+
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "mission_start failed"))
+		mission_error.emit(err)
+		return {
+			"ok": false,
+			"success": false,
+			"error": err,
+			"data": {},
+			"status_code": int(res.get("status_code", 0)),
+		}
+
+	var data: Variant = res.get("data", {})
+	if typeof(data) != TYPE_DICTIONARY:
+		return _fail_nakama("Malformed mission_start response")
+
+	nakama_active = (data as Dictionary).duplicate(true)
+	var mission: Variant = nakama_active.get("mission", {})
+	if typeof(mission) == TYPE_DICTIONARY:
+		mission_started.emit(mission)
+		mission_status_changed.emit(nakama_active)
+	return {
+		"ok": true,
+		"success": true,
+		"error": "",
+		"data": nakama_active,
+		"status_code": int(res.get("status_code", 200)),
+	}
+
+
+func get_active_mission(character_id: String = "") -> Dictionary:
+	return await refresh_mission_status(character_id)
+
+
+func refresh_mission_status(character_id: String = "", force: bool = false) -> Dictionary:
+	var now := Time.get_ticks_msec() / 1000.0
+	if not force and (now - _last_status_at) < STATUS_MIN_INTERVAL_SEC and not nakama_active.is_empty():
+		return {
+			"ok": true,
+			"success": true,
+			"error": "",
+			"data": nakama_active,
+			"status_code": 200,
+			"cached": true,
+		}
+	if _nakama_busy:
+		return _fail_nakama("Mission request already in progress")
+
+	_nakama_busy = true
+	_set_loading(true)
+	var res: Dictionary = await NakamaManager.invoke_rpc("mission_status", _nakama_character_payload(character_id))
+	_nakama_busy = false
+	_set_loading(false)
+	_last_status_at = Time.get_ticks_msec() / 1000.0
+
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "mission_status failed"))
+		mission_error.emit(err)
+		return {
+			"ok": false,
+			"success": false,
+			"error": err,
+			"data": {},
+			"status_code": int(res.get("status_code", 0)),
+		}
+
+	var data: Variant = res.get("data", {})
+	if typeof(data) != TYPE_DICTIONARY:
+		return _fail_nakama("Malformed mission_status response")
+
+	nakama_active = (data as Dictionary).duplicate(true)
+	mission_status_changed.emit(nakama_active)
+	return {
+		"ok": true,
+		"success": true,
+		"error": "",
+		"data": nakama_active,
+		"status_code": int(res.get("status_code", 200)),
+	}
+
+
+func clear_nakama_mission_local() -> void:
+	nakama_board = {}
+	nakama_active = {}
+
+
+func _nakama_board_rpc(rpc_id: String, character_id: String, is_refresh: bool) -> Dictionary:
+	if _nakama_busy:
+		return _fail_nakama("Mission request already in progress")
+	_nakama_busy = true
+	_set_loading(true)
+	var payload := _nakama_character_payload(character_id)
+	var ch: Dictionary = GameManager.active_character
+	payload["level"] = int(ch.get("level", 1))
+	payload["highest_sector"] = int(ch.get("highest_sector", 0))
+	var res: Dictionary = await NakamaManager.invoke_rpc(rpc_id, payload)
+	_nakama_busy = false
+	_set_loading(false)
+
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "%s failed" % rpc_id))
+		mission_error.emit(err)
+		return {
+			"ok": false,
+			"success": false,
+			"error": err,
+			"data": {},
+			"status_code": int(res.get("status_code", 0)),
+		}
+
+	var data: Variant = res.get("data", {})
+	if typeof(data) != TYPE_DICTIONARY:
+		return _fail_nakama("Malformed %s response" % rpc_id)
+
+	var board: Variant = (data as Dictionary).get("board", {})
+	if typeof(board) == TYPE_DICTIONARY:
+		nakama_board = (board as Dictionary).duplicate(true)
+		if is_refresh:
+			missions_refreshed.emit(nakama_board)
+		else:
+			missions_loaded.emit(nakama_board)
+
+	var active: Variant = (data as Dictionary).get("active", null)
+	if typeof(active) == TYPE_DICTIONARY:
+		nakama_active = (active as Dictionary).duplicate(true)
+		mission_status_changed.emit(nakama_active)
+
+	return {
+		"ok": true,
+		"success": true,
+		"error": "",
+		"data": data,
+		"status_code": int(res.get("status_code", 200)),
+	}
+
+
+func _nakama_character_payload(character_id: String = "") -> Dictionary:
+	var cid := character_id.strip_edges()
+	if cid.is_empty():
+		cid = str(GameManager.active_character.get("id", ""))
+	if cid.is_empty() and ProfileManager != null:
+		cid = str(ProfileManager.profile.get("selected_character_id", ""))
+	var payload: Dictionary = {}
+	if not cid.is_empty():
+		payload["character_id"] = cid
+	return payload
+
+
+func _set_loading(value: bool) -> void:
+	if loading == value:
+		return
+	loading = value
+	loading_changed.emit(loading)
+
+
+func _fail_nakama(error: String, status_code: int = 0) -> Dictionary:
+	mission_error.emit(error)
+	return {
+		"ok": false,
+		"success": false,
+		"error": error,
+		"data": {},
+		"status_code": status_code,
+	}
 
 
 func _restore_active_mission_from_character() -> void:

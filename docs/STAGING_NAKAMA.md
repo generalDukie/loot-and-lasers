@@ -63,6 +63,17 @@ server_key=<Hetzner NAKAMA_SOCKET_SERVER_KEY>
 
 Do **not** put CockroachDB passwords, console passwords, session encryption keys, runtime HTTP keys, or SSH keys in Godot.
 
+Hetzner's server-only `.env` must disable development fixtures:
+
+```env
+LOOT_ENVIRONMENT=staging
+LOOT_DEV_WALLET_MUTATIONS=0
+LOOT_DEV_REWARD_TEST=0
+LOOT_DEV_LOOT_TEST=0
+LOOT_DEV_MAIL_TEST=0
+LOOT_WALLET_BRIDGE_SECRET=<shared server-only secret>
+```
+
 ## Visible environment badge
 
 Debug / editor builds show a top-left label:

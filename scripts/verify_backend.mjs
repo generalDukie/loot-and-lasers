@@ -155,6 +155,7 @@ function checkNakamaModules() {
     "modules/wallet.lua",
     "modules/missions.lua",
     "modules/config.lua",
+    "modules/rewards.lua",
     "modules/lib/auth.lua",
     "modules/lib/storage.lua",
     "modules/lib/validation.lua",
@@ -179,6 +180,7 @@ function checkNakamaModules() {
     "modules/missions.lua",
     "modules/profile.lua",
     "modules/config.lua",
+    "modules/rewards.lua",
   ];
   for (const rel of serviceFiles) {
     const src = read(rel);
@@ -189,6 +191,10 @@ function checkNakamaModules() {
         return;
       }
     }
+  }
+  if (!exists("modules/data/reward_tables.lua")) {
+    fail(cat, "Missing modules/data/reward_tables.lua");
+    return;
   }
   pass(cat, `${required.length} required files present`);
 }
@@ -220,6 +226,11 @@ function checkRpcRegistration() {
     feature_flag_enable: true,
     feature_flag_disable: true,
     maintenance_set: true,
+    reward_grant: true,
+    grant_reward: true,
+    reward_apply: true,
+    reward_debug: true,
+    reward_claim_any: true,
   };
 
   const luaFiles = listLuaModules(path.join(ROOT, "modules"));
@@ -323,6 +334,14 @@ function checkDocs() {
   }
   if (!exists("docs/PHASE11_EQUIPMENT_MUTATIONS.md")) {
     fail(cat, "Missing docs/PHASE11_EQUIPMENT_MUTATIONS.md");
+    return;
+  }
+  if (!exists("docs/PHASE12_REWARD_SERVICE.md")) {
+    fail(cat, "Missing docs/PHASE12_REWARD_SERVICE.md");
+    return;
+  }
+  if (!/Phase 12|reward service|apply_reward_bundle/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 12 reward service note");
     return;
   }
   pass(cat, "phase docs present; RPCs mentioned");

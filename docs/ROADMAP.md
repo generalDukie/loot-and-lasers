@@ -13,6 +13,7 @@
 | 9 | Done | Shared runtime library + `verify:backend` |
 | 10 | Done | Remote config + feature flags |
 | 11 | Done | Equipment mutations (equip/unequip) |
-| 12+ | Planned | Admin tooling, inventory grants, rewards, etc. |
+| 12 | Done | Central reward service (soft currency orchestrator) |
+| 13+ | Planned | Admin tooling, inventory grants, mission reward wiring, etc. |
 
 Before each backend commit: `npm run verify:backend`.

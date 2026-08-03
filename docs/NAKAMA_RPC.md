@@ -274,3 +274,12 @@ Managed by `RemoteConfigManager`. Storage: `remote_config/<namespace>`, `feature
 | `equipment_unequip` | Slot → inventory (request_id required) |
 
 Managed by `EquipmentManager`. Consistency model B. See `docs/PHASE11_EQUIPMENT_MUTATIONS.md`.
+
+## Phase 12 — Central reward service
+
+| RPC | Purpose |
+|-----|---------|
+| *(none public for grants)* | Internal `apply_reward_bundle` only |
+| `dev_reward_test` | Gated by `LOOT_DEV_REWARD_TEST=1`; fixed soft-currency allowlist |
+
+See `docs/PHASE12_REWARD_SERVICE.md`.

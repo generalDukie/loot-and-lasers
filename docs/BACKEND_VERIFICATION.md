@@ -45,6 +45,7 @@ Do not install Git hooks unless the user asks.
 - `verify_mission_authority.mjs`
 - `verify_remote_config.mjs`
 - `verify_equipment_mutations.mjs`
+- `verify_reward_service.mjs`
 
 ## Phase 10 checks
 
@@ -53,6 +54,10 @@ Do not install Git hooks unless the user asks.
 ## Phase 11 checks
 
 `verify_equipment_mutations.mjs` asserts equip/unequip registration, ownership, slot allowlist, request_id idempotency, swap preservation, legacy AuthManager path disabled, and UI routing via EquipmentManager.
+
+## Phase 12 checks
+
+`verify_reward_service.mjs` asserts no public grant RPCs, wallet integration, premium blocked, duplicate/conflict transaction handling, missions unwired, and gated `dev_reward_test` soft-currency behavior.
 
 ## Troubleshooting
 

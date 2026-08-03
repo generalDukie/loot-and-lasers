@@ -23,6 +23,7 @@ Loot & Lasers uses a **dual stack** during the Nakama migration:
 | 9 | Shared runtime + verification | `modules/lib/*`, `npm run verify:backend` | infrastructure only |
 | 10 | Remote config + feature flags | `config_get` | system storage; mutations internal-only |
 | 11 | Equipment mutations | `equipment_get`, `equipment_equip`, `equipment_unequip` | equipment + inventory moves |
+| 12 | Central reward service | internal `apply_reward_bundle`; gated `dev_reward_test` | soft currency via wallet |
 
 ## Shared library
 
@@ -79,3 +80,10 @@ Environment: `LOOT_ENVIRONMENT` on Nakama runtime. See `docs/PHASE10_REMOTE_CONF
 Nakama is authoritative for equip/unequip. Representation B: instances move between `inventories` and `equipment`.
 Godot uses `EquipmentManager`; legacy `AuthManager.equip_item` / `unequip_item` are disabled.
 See `docs/PHASE11_EQUIPMENT_MUTATIONS.md`.
+
+## Reward service (Phase 12)
+
+Internal orchestrator in `modules/rewards.lua`. No public grant RPC.
+Soft-currency credits via `wallet.credit_currency`. Item/XP/premium rejected until those services exist.
+Gated `dev_reward_test` for local verification only. Missions **not** connected yet.
+See `docs/PHASE12_REWARD_SERVICE.md`.

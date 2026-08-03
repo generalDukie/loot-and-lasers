@@ -99,8 +99,9 @@ func _boot() -> void:
 	var char_res: Dictionary = await AuthManager.get_character(active_id)
 	if char_res.ok and typeof(char_res.data) == TYPE_DICTIONARY:
 		GameManager.active_character = char_res.data
-		if not str(char_res.data.get("active_mission_id", "")).is_empty():
-			await MissionManager.fetch_active_mission()
+		# Phase 8: resume from Nakama mission authority (not Node active_mission_id).
+		await MissionManager.fetch_active_mission()
+		if MissionManager.has_active_mission():
 			GameManager.go_mission_run()
 		else:
 			GameManager.go_hub(char_res.data)

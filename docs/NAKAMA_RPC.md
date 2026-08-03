@@ -248,3 +248,7 @@ Managed by `MissionManager` (Nakama core + preserved Node launch/claim/fuel). St
 | `mission_status` | Timer check; may transition `active` → `complete` (no rewards) |
 
 Character-level ownership. **No** claim/reward/fuel RPCs in this phase. See `docs/PHASE7_MISSIONS.md` and `docs/BACKEND_ARCHITECTURE.md`.
+
+## Phase 8 — Mission authority
+
+Nakama is the **sole** mission source of truth for Godot. `MissionManager.ensure_board` / `launch_offer` / `fetch_active_mission` call `missions_get` / `mission_start` / `mission_status`. Local board cfg is display cache only. See `docs/PHASE8_MISSION_MIGRATION.md`.

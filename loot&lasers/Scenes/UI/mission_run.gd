@@ -288,9 +288,9 @@ func _boot() -> void:
 
 func _populate() -> void:
 	var m: Dictionary = MissionManager.active_mission
-	var mname := str(m.get("name", "Mission"))
+	var mname := str(m.get("name", m.get("title", "Mission")))
 	_title.text = mname
-	var seed_s := str(m.get("id", m.get("mission_id", mname)))
+	var seed_s := str(m.get("mission_id", m.get("id", mname)))
 	var scene_i := int(m.get("explore_scene", -1))
 	_explore.configure(mname, seed_s, scene_i)
 
@@ -314,6 +314,8 @@ func _goofy_for_progress(progress: float) -> String:
 func _refresh_timer() -> void:
 	if _claimed or _busy:
 		return
+	# Authoritative status poll (MissionManager rate-limits internally).
+	await MissionManager.refresh_mission_status()
 	if MissionManager.active_mission_missing:
 		_stop_ready_fx()
 		_timer_label.text = "LOST"
@@ -422,9 +424,18 @@ func _on_fight() -> void:
 	_set_status("Opening encounter…", true)
 	var prep: Dictionary = await MissionManager.prepare_combat(true)
 	if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
+		# Phase 8: rewards/combat deferred — acknowledge Nakama completion without grants.
+		var ack: Dictionary = await MissionManager.claim_mission(true)
 		_busy = false
-		_set_status("Could not prepare the encounter. Try again.", true)
-		_refresh_timer()
+		if not ack.get("ok", false):
+			_set_status(str(ack.get("error", "Could not clear mission")), true)
+			_refresh_timer()
+			return
+		_claimed = true
+		_tick.stop()
+		_set_status("Mission complete — rewards coming in a later phase.", false)
+		await get_tree().create_timer(0.8).timeout
+		GameManager.go_cantina()
 		return
 	GameManager.go_mission_combat()
 

@@ -35,3 +35,40 @@ server/node_modules/
 # Godot client caches (project lives in loot&lasers/)
 **/loot&lasers/.godot/
 **/.godot/
+
+# Local auth cookie (browser/API session dump; never commit)
+.cookie
+
+# Cursor machine-local only (keep .cursor/rules/ and other shared project config tracked)
+.cursor/cache/
+.cursor/logs/
+.cursor/tmp/
+.cursor/**/*.log
+
+# Secrets and local scratch directories
+secrets/
+tmp/
+temp/
+
+# OS junk
+Thumbs.db
+
+# Editor / backup leftovers
+*~
+*.bak
+*.backup
+*.orig
+
+# Local database files (server/data/ already ignored above)
+*.sqlite
+*.sqlite3
+
+# Docker host bind-mount data dirs (named volumes stay in Docker)
+cockroach-data/
+nakama-data/
+docker-data/
+
+# Nakama / Godot credential files if copied into the repo
+# (runtime path is Godot user:// outside the project tree)
+**/nakama_session.cfg
+**/nakama_device_id.txt

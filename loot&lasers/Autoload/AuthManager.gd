@@ -306,6 +306,8 @@ func logout_nakama() -> Dictionary:
 		ProfileManager.clear_local()
 	if CurrencyManager != null:
 		CurrencyManager.clear_local()
+	if EquipmentManager != null:
+		EquipmentManager.clear_local()
 	if NakamaManager == null:
 		return {"success": true, "data": {}, "error": "", "status_code": 200}
 	return await NakamaManager.logout()

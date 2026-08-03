@@ -20,6 +20,12 @@ func refresh() -> Dictionary:
 
 
 func load_equipped() -> Array:
+	# Phase 6: refresh Nakama read-only equipment snapshot (non-fatal; UI still uses Node).
+	if EquipmentManager != null:
+		var eq_res: Dictionary = await EquipmentManager.load_equipment()
+		if not eq_res.get("success", false):
+			print("[StatsManager] WARNING: Nakama equipment_get — %s" % str(eq_res.get("error", "")))
+
 	var items_res: Dictionary = await AuthManager.list_items()
 	equipped_items = []
 	all_items = []

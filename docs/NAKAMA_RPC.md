@@ -225,3 +225,13 @@ Mutations are **internal** Lua only (`credit_currency` / `debit_currency` in `mo
 Temporary local-dev RPCs (flag `LOOT_DEV_WALLET_MUTATIONS=1`, soft currency only): `dev_wallet_credit_test`, `dev_wallet_debit_test`, `dev_wallet_internal_selftest`.
 
 Currency ids: `stardust` (soft), `nova_crystals` (premium). See `docs/PHASE5_WALLET.md`.
+
+## Phase 6 — Equipment RPCs
+
+Managed by `EquipmentManager` (**read-only**). Storage: `equipment` / `<character_id>`.
+
+| RPC | Purpose |
+|-----|---------|
+| `equipment_get` | Load equipment slot map or empty null slots |
+
+Character-level ownership (must match profile `selected_character_id`). Live Hero UI still uses Node `Item.is_equipped`. See `docs/PHASE6_EQUIPMENT.md`.

@@ -37,7 +37,13 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	clip_contents = true
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_refresh_timer()
 
 
 func _build() -> void:
@@ -143,7 +149,7 @@ func _build() -> void:
 	active_col.add_child(_skip_btn)
 
 	_claim_btn = Button.new()
-	_claim_btn.text = "FIGHT FOR REWARDS"
+	_claim_btn.text = "FIGHT ENCOUNTER"
 	_claim_btn.visible = false
 	ClientUi.apply_primary_button(_claim_btn)
 	_claim_btn.pressed.connect(_on_fight)
@@ -349,17 +355,17 @@ func _refresh_timer() -> void:
 	_goofy.text = _goofy_for_progress(progress)
 	_set_progress(progress, rem <= 0)
 
-	if rem <= 0:
+	if rem <= 0 or MissionManager.is_mission_finished():
 		_start_ready_fx()
 		_skip_btn.visible = false
 		_claim_btn.visible = true
 		_claim_btn.disabled = _busy
-		_claim_btn.text = "FIGHT FOR REWARDS"
+		_claim_btn.text = "FIGHT ENCOUNTER"
 		_active_panel.add_theme_stylebox_override(
 			"panel",
 			ClientUi.painted_panel_style(Color(ClientUi.SUCCESS, 0.08), Color(ClientUi.SUCCESS, 0.5), 10, 1)
 		)
-		_set_status("Mission complete — claim your rewards.", false)
+		_set_status("Mission complete — fight the encounter for rewards.", false)
 	else:
 		_stop_ready_fx()
 		_claim_btn.visible = false
@@ -421,60 +427,46 @@ func _stop_ready_fx() -> void:
 		_timer_label.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 
 
+func _start_mission_fight() -> void:
+	_set_status("Preparing encounter…", true)
+	var prep: Dictionary = await MissionManager.prepare_combat(false)
+	_busy = false
+	if not prep.get("ok", false):
+		_set_status(str(prep.get("error", "Could not start fight")), true)
+		_claim_btn.visible = true
+		_claim_btn.disabled = false
+		_skip_btn.visible = false
+		_refresh_timer()
+		return
+	_tick.stop()
+	if is_instance_valid(_status_poll):
+		_status_poll.stop()
+	GameManager.go_mission_combat()
+
+
 func _on_fight() -> void:
 	if _busy or _claimed:
 		return
 	if MissionManager.active_mission_missing:
 		await _recall_lost_mission()
 		return
-	# Force a status sync so the server flips active → complete before claim.
-	await MissionManager.refresh_mission_status("", true)
-	if not MissionManager.is_mission_finished():
-		_set_status("Mission not finished yet — wait for the timer, or skip with Nova Crystals.", true)
-		_refresh_timer()
-		return
+
+	# Lock UI first so status polls cannot race combat prep.
 	_busy = true
 	_claim_btn.disabled = true
 	_skip_btn.disabled = true
-	_set_status("Claiming rewards…", true)
-	var prep: Dictionary = await MissionManager.prepare_combat(true)
-	if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
-		var ack: Dictionary = await MissionManager.claim_mission(true)
+	_skip_btn.visible = false
+
+	if not MissionManager.is_mission_finished():
+		_set_status("Checking mission…", true)
+		await MissionManager.refresh_mission_status("", true)
+	if not MissionManager.is_mission_finished():
 		_busy = false
-		if not ack.get("ok", false):
-			_set_status(str(ack.get("error", "Could not claim mission")), true)
-			_claim_btn.disabled = false
-			_refresh_timer()
-			return
-		_claimed = true
-		_tick.stop()
-		if is_instance_valid(_status_poll):
-			_status_poll.stop()
-		var gains: Dictionary = {}
-		var ack_data: Variant = ack.get("data", {})
-		if typeof(ack_data) == TYPE_DICTIONARY:
-			var g: Variant = (ack_data as Dictionary).get("gains", {})
-			if typeof(g) == TYPE_DICTIONARY:
-				gains = g
-		var sd := int(gains.get("stardust", 0))
-		var loot_n := 0
-		var reward: Variant = (ack_data as Dictionary).get("reward", {}) if typeof(ack_data) == TYPE_DICTIONARY else {}
-		if typeof(reward) == TYPE_DICTIONARY:
-			var items: Variant = (reward as Dictionary).get("items", [])
-			if typeof(items) == TYPE_ARRAY:
-				loot_n = (items as Array).size()
-		var msg := "Mission claimed"
-		if sd > 0:
-			msg = "Mission claimed — +%d Stardust" % sd
-		if loot_n > 0:
-			msg += " · +%d loot" % loot_n
-		if str(gains.get("experience_status", "")) == "unsupported":
-			msg += " (XP pending Progression)"
-		_set_status(msg, false)
-		await get_tree().create_timer(1.4).timeout
-		GameManager.go_cantina()
+		_set_status("Mission not finished yet — wait for the timer, or skip with Nova Crystals.", true)
+		_refresh_timer()
 		return
-	GameManager.go_mission_combat()
+
+	await _start_mission_fight()
 
 
 func _recall_lost_mission() -> void:
@@ -514,13 +506,13 @@ func _on_skip() -> void:
 		return
 	var cost := _skip_cost_now()
 	if cost <= 0:
-		# Already ready — go straight to the fight path.
 		await _on_fight()
 		return
-	var crystals := int(GameManager.active_character.get("nova_crystals", 0))
-	if crystals < cost:
+	var crystals: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, cost):
 		_set_status("Not enough Nova Crystals — need %s 💎 (you have %s)." % [cost, crystals], true)
 		return
+
 	_busy = true
 	_skip_btn.disabled = true
 	_claim_btn.disabled = true
@@ -529,7 +521,6 @@ func _on_skip() -> void:
 	if not res.ok:
 		var err := str(res.get("error", "Skip failed"))
 		var low := err.to_lower()
-		# Already completed — open the claim path.
 		if low.find("not in progress") >= 0 or low.find("not active") >= 0 or low.find("already complete") >= 0:
 			_busy = false
 			await _on_fight()
@@ -538,7 +529,11 @@ func _on_skip() -> void:
 		_set_status(err, true)
 		_refresh_timer()
 		return
-	_busy = false
-	_set_status("Wait skipped — claim your rewards.", false)
-	_refresh_timer()
-	await _on_fight()
+
+	_skip_btn.visible = false
+	_claim_btn.visible = true
+	_claim_btn.disabled = true
+	_timer_label.text = "DONE"
+	# Keep _busy true through combat prep so polls cannot interleave.
+	_set_status("Wait skipped — starting fight…", true)
+	await _start_mission_fight()

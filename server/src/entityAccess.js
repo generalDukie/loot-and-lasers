@@ -1,7 +1,7 @@
 /**
  * Entity access control — ownership + admin gates for the document CRUD API.
- * Reads stay relatively open where the client needs public data (arena, social);
- * mutations require ownership (or admin).
+ * Public social/arena reads remain available where required. Character-owned
+ * gameplay documents are always scoped to the authenticated Node account.
  */
 import { entities } from "./entities.js";
 import { expForLevel } from "./shared/rewards.js";
@@ -109,6 +109,33 @@ function ownsDocViaCreatedBy(user, doc) {
 
 function characterOwnedByUser(user, characterId) {
   return ownsCharacter(user, characterId);
+}
+
+const CHARACTER_SCOPED_READ_TYPES = new Set([
+  "Item",
+  "Mission",
+  "DailyLogin",
+  "HubLayout",
+  "NovaSpendEvent",
+  "StardustSpendEvent",
+  "PlayerPresence",
+]);
+
+export function canReadDoc(user, type, doc) {
+  if (!user || !doc) return false;
+  if (isAdmin(user)) return true;
+  if (type === "User") return doc.id === user.id;
+  if (type === "Character") return ownsDocViaCreatedBy(user, doc);
+  if (CHARACTER_SCOPED_READ_TYPES.has(type)) {
+    if (ownsDocViaCreatedBy(user, doc)) return true;
+    if (doc.character_id && characterOwnedByUser(user, doc.character_id)) return true;
+    if (doc.owner_id && characterOwnedByUser(user, doc.owner_id)) return true;
+    return false;
+  }
+  if (["PromoCode", "PlayerModeration", "PrivateMessage", "Mail"].includes(type)) {
+    return canWriteDoc(user, type, doc);
+  }
+  return true;
 }
 
 /** Types only admins may create/update/delete via entity CRUD. */
@@ -330,8 +357,6 @@ export function sanitizeCreatePayload(user, type, data = {}) {
         }
         throw err;
       }
-      const clientNova = Number(out.nova_crystals) || 0;
-
       out.level = 1;
       out.experience = 0;
       out.experience_to_next_level = expForLevel(1);
@@ -351,9 +376,14 @@ export function sanitizeCreatePayload(user, type, data = {}) {
       }
       // Force class base stats — never trust client progression attributes.
       const base = CLASS_BASE_STATS[out.class];
-      if (base) out.stats = { ...base };
-      // First character may start with up to 100 nova from client; otherwise force 0.
-      out.nova_crystals = existingCount === 0 ? Math.min(100, Math.max(0, clientNova)) : 0;
+      if (!base) {
+        const err = new Error("Invalid character class");
+        err.status = 400;
+        throw err;
+      }
+      out.stats = { ...base };
+      // Starting currency is wholly server-authored.
+      out.nova_crystals = existingCount === 0 ? 100 : 0;
 
       // Strip other locked progression fields if client forged them.
       for (const key of CHARACTER_ECONOMY_FIELDS) {
@@ -466,6 +496,35 @@ export function queryIsConstrained(query) {
 export function scopeReadQuery(user, type, query = {}) {
   if (isAdmin(user)) return query;
 
+  if (type === "User") {
+    return { id: user.id };
+  }
+
+  if (type === "Character") {
+    return {
+      $and: [
+        query && Object.keys(query).length ? query : { id: { $exists: true } },
+        { created_by_id: user.id },
+      ],
+    };
+  }
+
+  if (CHARACTER_SCOPED_READ_TYPES.has(type)) {
+    const ids = characterIdsForUser(user.id);
+    return {
+      $and: [
+        query && Object.keys(query).length ? query : { id: { $exists: true } },
+        {
+          $or: [
+            { created_by_id: user.id },
+            { character_id: { $in: ids } },
+            { owner_id: { $in: ids } },
+          ],
+        },
+      ],
+    };
+  }
+
   if (type === "PromoCode") {
     // Players may look up a single code string for redeem UX; no full list dumps.
     if (query.code && typeof query.code === "string") return { code: query.code };
@@ -510,6 +569,13 @@ export function scopeReadQuery(user, type, query = {}) {
 
 export function assertCanWrite(user, type, doc) {
   if (canWriteDoc(user, type, doc)) return;
+  const err = new Error("Forbidden");
+  err.status = 403;
+  throw err;
+}
+
+export function assertCanRead(user, type, doc) {
+  if (canReadDoc(user, type, doc)) return;
   const err = new Error("Forbidden");
   err.status = 403;
   throw err;

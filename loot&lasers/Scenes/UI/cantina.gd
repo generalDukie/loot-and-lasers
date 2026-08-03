@@ -32,7 +32,13 @@ var _detail_tint := Color("#FF9E4F")
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_render()
 
 
 func _build() -> void:
@@ -338,15 +344,25 @@ func _boot() -> void:
 	AudioManager.start_cantina_bed()
 	_music_on = true
 	_update_music_btn()
+	if not MissionManager.mission_error.is_connected(_on_mission_error):
+		MissionManager.mission_error.connect(_on_mission_error)
 	await MissionManager.sync_fuel()
 	await MissionManager.refresh_character()
 	if MissionManager.has_active_mission():
 		GameManager.go_mission_run()
 		return
+	_status.text = "Loading contracts…"
 	await MissionManager.ensure_board(false)
 	await InventoryManager.list_pending_loot()
 	_busy = false
 	_render()
+
+
+func _on_mission_error(err: String) -> void:
+	if err.is_empty():
+		return
+	_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
+	_status.text = err
 
 
 func _toggle_music() -> void:
@@ -368,11 +384,13 @@ func _render() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	var ch: Dictionary = GameManager.active_character
-	var fuel_now := int(ch.get("fuel", 0))
 	var max_fuel := int(ch.get("max_fuel", 100))
 	if max_fuel <= 0:
 		max_fuel = 100
-	_fuel_chip.text = "⛽  %s/%s" % [fuel_now, max_fuel]
+	_fuel_chip.text = "⛽  %s/%s" % [
+		CurrencyManager.format_balance(CurrencyManager.CURRENCY_FUEL),
+		max_fuel,
+	]
 
 	var purchases := int(ch.get("fuel_purchases", 0))
 	var left := maxi(0, ShopManager.FUEL_PURCHASE_MAX - purchases)
@@ -382,8 +400,16 @@ func _render() -> void:
 		left,
 	]
 	var gate: Dictionary = ShopManager.can_buy_fuel()
-	_buy_fuel_btn.disabled = not bool(gate.get("ok", false))
-	_buy_fuel_btn.tooltip_text = str(gate.get("error", "Buy fuel"))
+	var can_pay := CurrencyManager.can_afford(
+		CurrencyManager.CURRENCY_NOVA,
+		ShopManager.FUEL_PURCHASE_COST
+	)
+	_buy_fuel_btn.disabled = not bool(gate.get("ok", false)) or not can_pay
+	_buy_fuel_btn.tooltip_text = (
+		str(gate.get("error", "Buy fuel"))
+		if not bool(gate.get("ok", false))
+		else ("Buy fuel" if can_pay else "Not enough Nova Crystals")
+	)
 
 	_mining_banner.visible = MiningManager.is_mining_busy()
 	if MiningManager.is_mining_busy():
@@ -393,9 +419,12 @@ func _render() -> void:
 
 	var offers: Array = MissionManager.offers
 	if offers.is_empty():
-		_status.text = "No contracts on the board right now."
+		if _status.text.is_empty() or _status.text == "Loading contracts…":
+			_status.add_theme_color_override("font_color", ClientUi.MUTED)
+			_status.text = "No contracts on the board right now."
 		return
-	_status.text = ""
+	if not _status.text.to_lower().contains("fail") and not _status.text.to_lower().contains("error"):
+		_status.text = ""
 	for offer in offers:
 		if typeof(offer) == TYPE_DICTIONARY:
 			_list.add_child(_make_patron(offer))
@@ -418,15 +447,13 @@ func _make_patron(offer: Dictionary) -> Button:
 	var ch := GameManager.active_character
 	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
 	var locked := int(offer.get("level_requirement", 1)) > int(ch.get("level", 1))
-	var low_fuel := int(ch.get("fuel", 0)) < fuel
+	# Fuel affordability is preview-only; Nakama mission_start bridges the authoritative debit.
 	var mining := MiningManager.is_mining_busy()
 	var state := "Accept"
 	if mining:
 		state = "Busy"
 	elif locked:
 		state = "Locked"
-	elif low_fuel:
-		state = "Low fuel"
 
 	var button := Button.new()
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -477,8 +504,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	var gains: Dictionary = MissionBoard.compute_gains(ch, offer, false)
 	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
 	var dur := MissionBoard.estimate_duration(offer, ch)
-	var low_fuel := state == "Low fuel"
-	var fuel_tint := Color("#FBBF24") if low_fuel else FUEL_COLOR
+	var fuel_tint := FUEL_COLOR
 
 	var card_style := ClientUi.painted_panel_style(
 		Color(0.05, 0.045, 0.08, 0.97), Color(tint, 0.55), 18, 2
@@ -584,9 +610,6 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	if state == "Locked":
 		footer.text = "Requires Level %s" % str(offer.get("level_requirement", "?"))
 		footer.add_theme_color_override("font_color", ClientUi.DANGER)
-	elif state == "Low fuel":
-		footer.text = "Not enough fuel (need %s)" % str(fuel)
-		footer.add_theme_color_override("font_color", Color("#FBBF24"))
 	elif state == "Busy":
 		footer.text = "Scouting — finish mining to launch"
 		footer.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
@@ -660,8 +683,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	var gains: Dictionary = MissionBoard.compute_gains(ch, offer, false)
 	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
 	var dur := MissionBoard.estimate_duration(offer, ch)
-	var low_fuel := state == "Low fuel"
-	var fuel_tint := Color("#FBBF24") if low_fuel else FUEL_COLOR
+	var fuel_tint := FUEL_COLOR
 	var rewards_raw: Variant = offer.get("rewards", {})
 	var rewards: Dictionary = rewards_raw if typeof(rewards_raw) == TYPE_DICTIONARY else {}
 	var rarity_chance := str(rewards.get("item_rarity_chance", "common"))
@@ -837,8 +859,8 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 		ClientUi.apply_display_font(chip_lab)
 		chip.add_child(chip_lab)
 
-	# Status + Start Mission
-	var disabled := state == "Locked" or state == "Low fuel" or state == "Busy"
+	# Status + Start Mission — fuel does not gate launch (Nakama start has no debit).
+	var disabled := state == "Locked" or state == "Busy"
 	if state == "Locked":
 		var lock_lab := Label.new()
 		lock_lab.text = "Requires Level %s" % str(offer.get("level_requirement", "?"))
@@ -846,13 +868,6 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 		lock_lab.add_theme_color_override("font_color", ClientUi.DANGER)
 		ClientUi.apply_body_font(lock_lab)
 		_preview_body.add_child(lock_lab)
-	elif state == "Low fuel":
-		var fuel_lab := Label.new()
-		fuel_lab.text = "Not enough fuel (need %s)" % str(fuel)
-		fuel_lab.add_theme_font_size_override("font_size", 19)
-		fuel_lab.add_theme_color_override("font_color", Color("#FBBF24"))
-		ClientUi.apply_body_font(fuel_lab)
-		_preview_body.add_child(fuel_lab)
 	elif state == "Busy":
 		var busy_lab := Label.new()
 		busy_lab.text = "Mining in progress — scout now, launch when free"
@@ -994,14 +1009,6 @@ func _on_launch(offer: Dictionary) -> void:
 		_mining_banner.visible = true
 		return
 
-	var ch: Dictionary = GameManager.active_character
-	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
-	var have := MissionBoard.normalize_fuel(ch.get("fuel", 0))
-	if have + 0.001 < fuel:
-		_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
-		_status.text = "Not enough fuel (need %s, have %s)." % [fuel, have]
-		return
-
 	if await InventoryManager.is_bag_full():
 		_busy = true
 		var action: String = await InventoryManager.prompt_bag_pressure(
@@ -1057,7 +1064,7 @@ func _on_buy_fuel() -> void:
 		_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
 		_status.text = str(res.get("error", "Buy fuel failed"))
 		return
-	await MissionManager.ensure_board(true)
+	await MissionManager.refresh_character()
 	_status.add_theme_color_override("font_color", Color(0.45, 0.9, 0.65))
 	_status.text = "Fuel topped up."
 	_render()

@@ -102,7 +102,10 @@ export function createEntityStore(type) {
         created_date: data.created_date || ts,
         updated_date: ts,
       });
-      return persist(type, entity, { eventType: "create" });
+      return persist(type, entity, {
+        eventType: "create",
+        emit: opts.emit !== false,
+      });
     },
 
     update(id, update) {

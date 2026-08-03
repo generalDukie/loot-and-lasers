@@ -74,8 +74,9 @@ NODE http://178.156.210.186:8787
 
 (or `LOCAL` for local). Release exports without debug features hide the badge.
 
-**Important:** Godot login / register use **Nakama** (`:7350`) only.  
-The Node API (`:8787`) is legacy gameplay (characters/economy) for the web app and remaining Godot entity calls — not account authentication.
+**Important:** Godot login / register use **Nakama** (`:7350`) only.
+The Node API (`:8787`) is authoritative for all gameplay. Nakama establishes the
+identity that Node maps to a Loot & Lasers account.
 
 ## Shared login for remote friends (Nakama auth)
 
@@ -88,7 +89,11 @@ $env:NAKAMA_SOCKET_SERVER_KEY = "<Hetzner NAKAMA_SOCKET_SERVER_KEY>"
 
 Badge should show `NAKAMA STAGING · http://178.156.210.186:7350 (auth)`.
 
-After Nakama login, Godot calls Node `POST /api/auth/nakama-bridge` so Character/economy APIs still work on `:8787` until migrated. The host must run the Node API (`npm run server`) with `NAKAMA_HTTP_URL` pointing at reachable Nakama (default `http://127.0.0.1:7350`; staging host should use its local Nakama URL). For hybrid local Node + staging Nakama, set:
+After Nakama login, Godot calls Node `POST /api/auth/nakama-bridge`. The host
+validates the Nakama session and issues a 10–15 minute gameplay JWT whose subject
+is the Nakama user id. For the Docker deployment, use
+`NAKAMA_HTTP_URL=http://host.docker.internal:7350`; the compose file installs the
+Linux host-gateway alias. For hybrid local Node + staging Nakama, set:
 
 ```powershell
 $env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,http://178.156.210.186:7350"
@@ -104,7 +109,8 @@ $env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,http://178.156.210.186:7350"
 npm run test:godot-auth-flow
 ```
 
-No `LOOT_NODE_API_URL` is required for signup itself; it is required for the gameplay bridge.
+No `LOOT_NODE_API_URL` is required for Nakama signup itself; it is required before
+account mapping, Character loading, or any gameplay can proceed.
 
 ### OTP / email
 
@@ -120,6 +126,12 @@ Priority for optional Node gameplay base URL:
 
 This does **not** affect Godot authentication.
 
+Staging never falls back to a local Node API. Such a fallback would use a
+different SQLite database and split authoritative player state. The shared
+Hetzner endpoint must be reachable. Publish `8787:8787` and allow inbound TCP
+8787 in the Hetzner/host firewall for direct staging access, or terminate HTTPS
+on 443 and proxy to the container.
+
 ## Session separation
 
 | File | Purpose |
@@ -127,6 +139,7 @@ This does **not** affect Godot authentication.
 | `user://nakama_session_local.cfg` | Local tokens |
 | `user://nakama_session_staging.cfg` | Staging tokens |
 | `user://nakama_device_id_*.txt` | Env-scoped device id fallback |
+| `user://godot_client.cfg` / `auth_<environment>` | Short-lived Node gameplay JWT, Nakama binding, and expiry |
 
 A local session file is never loaded while `environment=staging` (and vice versa). Device auth ids are prefixed by environment so accounts stay distinct across servers.
 

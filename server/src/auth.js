@@ -10,6 +10,12 @@ import { auditAuthEvent, AuditResults } from "./audit/index.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "lootandlasers-dev-secret-change-me";
 const TOKEN_TTL = process.env.JWT_TTL || "30d";
+const GAMEPLAY_JWT_TTL_SEC = Math.max(
+  60,
+  Math.min(15 * 60, Number(process.env.GAMEPLAY_JWT_TTL_SEC) || 12 * 60),
+);
+const GAMEPLAY_JWT_ISSUER = process.env.GAMEPLAY_JWT_ISSUER || "lootandlasers-node";
+const GAMEPLAY_JWT_AUDIENCE = process.env.GAMEPLAY_JWT_AUDIENCE || "lootandlasers-gameplay";
 const APP_ID = process.env.APP_ID || "lootandlasers-local";
 const IS_PROD = process.env.NODE_ENV === "production";
 const EMAIL_SENDING_ENABLED = isEmailSendingEnabled();
@@ -42,8 +48,43 @@ export function signToken(userId) {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: TOKEN_TTL });
 }
 
+function nakamaTokenExpiry(sessionToken) {
+  const decoded = jwt.decode(sessionToken);
+  const exp = Number(decoded?.exp);
+  return Number.isSafeInteger(exp) ? exp : 0;
+}
+
+export function signGameplayToken(nakamaUserId, nakamaExpiresAt) {
+  const now = Math.floor(Date.now() / 1000);
+  const remaining = Number(nakamaExpiresAt) - now;
+  if (!nakamaUserId || !Number.isFinite(remaining) || remaining <= 0) {
+    const err = new Error("Nakama session is expired or missing expiry");
+    err.status = 401;
+    throw err;
+  }
+  const expiresIn = Math.max(1, Math.min(GAMEPLAY_JWT_TTL_SEC, Math.floor(remaining)));
+  return jwt.sign(
+    { token_use: "nakama_gameplay" },
+    JWT_SECRET,
+    {
+      subject: nakamaUserId,
+      issuer: GAMEPLAY_JWT_ISSUER,
+      audience: GAMEPLAY_JWT_AUDIENCE,
+      expiresIn,
+      jwtid: nanoid(),
+    },
+  );
+}
+
 export function verifyToken(token) {
   try {
+    const decoded = jwt.decode(token);
+    if (decoded?.token_use === "nakama_gameplay") {
+      return jwt.verify(token, JWT_SECRET, {
+        issuer: GAMEPLAY_JWT_ISSUER,
+        audience: GAMEPLAY_JWT_AUDIENCE,
+      });
+    }
     return jwt.verify(token, JWT_SECRET);
   } catch {
     return null;
@@ -66,12 +107,22 @@ export function getUserByEmail(email) {
 export function authMiddleware(req, res, next) {
   const header = req.headers.authorization || "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7) : null;
-  const token = bearer || req.headers["x-access-token"] || req.query?.access_token || null;
+  const token = bearer || req.headers["x-access-token"] || null;
   req.token = token || null;
   req.user = null;
   if (token) {
     const payload = verifyToken(token);
-    if (payload?.sub) req.user = getUserById(payload.sub);
+    if (payload?.sub) {
+      req.user = payload.token_use === "nakama_gameplay"
+        ? publicUser(getUserByNakamaId(payload.sub))
+        : getUserById(payload.sub);
+      req.authIdentity = {
+        token_use: payload.token_use || "legacy_node",
+        subject: payload.sub,
+        expires_at: payload.exp || null,
+        token_id: payload.jti || null,
+      };
+    }
   }
   next();
 }
@@ -158,6 +209,10 @@ function linkNakamaId(userId, nakamaUserId) {
   );
 }
 
+function resolveBridgeUser(nakamaUserId, email) {
+  return getUserByNakamaId(nakamaUserId) || getUserByEmail(email);
+}
+
 export function createAuthRouter(express) {
   const router = express.Router();
 
@@ -165,17 +220,31 @@ export function createAuthRouter(express) {
     res.json(req.user);
   });
 
+  router.get("/selected-character", requireAuth, (req, res) => {
+    const characterId = String(req.user.active_character_id || "").trim();
+    if (!characterId) {
+      return res.status(404).json({ error: "No selected character" });
+    }
+    const character = entities.Character.get(characterId);
+    if (!character) {
+      return res.status(404).json({ error: "Selected character not found" });
+    }
+    if (character.created_by_id !== req.user.id) {
+      return res.status(403).json({ error: "Selected character does not belong to you" });
+    }
+    return res.json(character);
+  });
+
   /**
    * Dual-stack bridge: validate a Nakama session and issue a Node JWT for
    * unmigrated Character/economy APIs. Does not replace Nakama as auth SoT.
    *
-   * Body: { nakama_token, email?, password? }
-   * password optional — used to create/link a Node user when none exists yet.
+   * Body: { nakama_token, email? }
+   * Godot credentials never cross this boundary; Nakama owns authentication.
    */
   router.post("/nakama-bridge", async (req, res) => {
     try {
       const nakamaToken = String(req.body?.nakama_token || req.body?.session_token || "").trim();
-      const password = String(req.body?.password || "");
       const emailHint = String(req.body?.email || "").trim().toLowerCase();
       if (!nakamaToken) {
         return res.status(400).json({ error: "nakama_token required" });
@@ -195,37 +264,49 @@ export function createAuthRouter(express) {
       if (!nakamaUserId) {
         return res.status(401).json({ error: "Nakama account missing user id" });
       }
+      const nakamaExpiresAt = nakamaTokenExpiry(nakamaToken);
+      if (!nakamaExpiresAt || nakamaExpiresAt <= Math.floor(Date.now() / 1000)) {
+        return res.status(401).json({ error: "Nakama session is expired or missing expiry" });
+      }
       if (!email) {
         return res.status(400).json({
           error: "Nakama account has no email — pass email (and password) to link a Node user",
         });
       }
 
-      let row = getUserByNakamaId(nakamaUserId) || getUserByEmail(email);
+      let row = resolveBridgeUser(nakamaUserId, email);
       const ts = nowIso();
 
       if (!row) {
         // Create a Node gameplay user linked to this Nakama identity.
         const id = nanoid();
-        let hash;
-        if (password.length >= 6) {
-          hash = await bcrypt.hash(password, 10);
-        } else {
-          // Bridge-only account — cannot password-login until password is set.
-          hash = await bcrypt.hash(nanoid(48), 10);
+        // Bridge-only account: random, unknown Node password. Godot never sends
+        // or synchronizes its Nakama credential to the gameplay backend.
+        const hash = await bcrypt.hash(nanoid(48), 10);
+        try {
+          db.prepare(`
+            INSERT INTO users (
+              id, email, password_hash, role, email_verified, nakama_user_id,
+              otp_code, otp_expires_at, created_date, updated_date
+            ) VALUES (?, ?, ?, 'user', 1, ?, NULL, NULL, ?, ?)
+          `).run(id, email, hash, nakamaUserId, ts, ts);
+          console.log(`[auth] nakama-bridge created Node user for ${email} nakama=${nakamaUserId}`);
+        } catch (err) {
+          // Concurrent first exchange converges on the row that won either
+          // unique key. Do not turn an idempotent bridge race into a 500.
+          row = resolveBridgeUser(nakamaUserId, email);
+          if (!row) throw err;
         }
-        db.prepare(`
-          INSERT INTO users (
-            id, email, password_hash, role, email_verified, nakama_user_id,
-            otp_code, otp_expires_at, created_date, updated_date
-          ) VALUES (?, ?, ?, 'user', 1, ?, NULL, NULL, ?, ?)
-        `).run(id, email, hash, nakamaUserId, ts, ts);
-        row = getUserByEmail(email);
-        console.log(`[auth] nakama-bridge created Node user for ${email} nakama=${nakamaUserId}`);
+        row = resolveBridgeUser(nakamaUserId, email);
       } else {
         if (!row.nakama_user_id) {
-          linkNakamaId(row.id, nakamaUserId);
-          row = getUserByEmail(email) || getUserByNakamaId(nakamaUserId);
+          try {
+            linkNakamaId(row.id, nakamaUserId);
+          } catch (err) {
+            const winner = getUserByNakamaId(nakamaUserId);
+            if (!winner || winner.id !== row.id) throw err;
+          }
+          row = resolveBridgeUser(nakamaUserId, email);
         } else if (row.nakama_user_id !== nakamaUserId) {
           return res.status(409).json({
             error: "Node account is linked to a different Nakama user",
@@ -237,22 +318,13 @@ export function createAuthRouter(express) {
             WHERE id = ?
           `).run(ts, row.id);
         }
-        // Optional: sync password so web login matches Godot credentials.
-        if (password.length >= 6) {
-          const hash = await bcrypt.hash(password, 10);
-          db.prepare("UPDATE users SET password_hash = ?, updated_date = ? WHERE id = ?").run(
-            hash,
-            ts,
-            row.id,
-          );
-        }
       }
 
-      const fresh = getUserByNakamaId(nakamaUserId) || getUserByEmail(email);
+      const fresh = resolveBridgeUser(nakamaUserId, email);
       if (!fresh) {
         return res.status(500).json({ error: "Bridge user missing after link" });
       }
-      const access_token = signToken(fresh.id);
+      const access_token = signGameplayToken(nakamaUserId, nakamaExpiresAt);
       const pub = publicUser(fresh);
       auditAuthEvent({
         action: "nakama_bridge",
@@ -267,6 +339,10 @@ export function createAuthRouter(express) {
         access_token,
         user: pub,
         nakama_user_id: nakamaUserId,
+        expires_at: Math.min(
+          nakamaExpiresAt,
+          Math.floor(Date.now() / 1000) + GAMEPLAY_JWT_TTL_SEC,
+        ),
         bridge: true,
       });
     } catch (err) {

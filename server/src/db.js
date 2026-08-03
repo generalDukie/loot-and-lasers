@@ -58,6 +58,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
   CREATE INDEX IF NOT EXISTS idx_entities_created_by_id ON entities(created_by_id);
   CREATE INDEX IF NOT EXISTS idx_entities_type_created ON entities(type, created_date);
+
+  CREATE TABLE IF NOT EXISTS wallet_operations (
+    account_id TEXT NOT NULL,
+    operation_type TEXT NOT NULL,
+    operation_key TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (account_id, operation_type, operation_key)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_wallet_operations_created
+    ON wallet_operations(created_at);
+
+  CREATE TABLE IF NOT EXISTS character_creation_requests (
+    account_id TEXT NOT NULL,
+    request_id TEXT NOT NULL,
+    request_fingerprint TEXT NOT NULL,
+    character_id TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (account_id, request_id)
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_character_creation_character
+    ON character_creation_requests(character_id);
 `);
 
 // Lightweight column adds for existing DBs (CREATE TABLE IF NOT EXISTS won't alter).
@@ -70,6 +95,43 @@ db.exec(`
     db.exec("ALTER TABLE users ADD COLUMN nakama_user_id TEXT");
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_nakama_user_id ON users(nakama_user_id)");
+  const duplicates = db.prepare(`
+    SELECT nakama_user_id, COUNT(*) AS count
+    FROM users
+    WHERE nakama_user_id IS NOT NULL AND TRIM(nakama_user_id) <> ''
+    GROUP BY nakama_user_id
+    HAVING COUNT(*) > 1
+  `).all();
+  if (duplicates.length > 0) {
+    const ids = duplicates.map((row) => row.nakama_user_id).join(", ");
+    throw new Error(
+      `Duplicate Nakama account mappings must be repaired before startup: ${ids}`,
+    );
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_nakama_user_id_unique
+      ON users(nakama_user_id)
+      WHERE nakama_user_id IS NOT NULL AND TRIM(nakama_user_id) <> ''
+  `);
+})();
+
+(function ensureWalletOperationColumns() {
+  const cols = new Set(db.prepare("PRAGMA table_info(wallet_operations)").all().map((c) => c.name));
+  const additions = {
+    character_id: "TEXT",
+    request_fingerprint: "TEXT",
+    transaction_id: "TEXT",
+    revision: "INTEGER",
+    updated_at: "TEXT",
+  };
+  for (const [name, type] of Object.entries(additions)) {
+    if (!cols.has(name)) db.exec(`ALTER TABLE wallet_operations ADD COLUMN ${name} ${type}`);
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_operations_transaction
+      ON wallet_operations(transaction_id)
+      WHERE transaction_id IS NOT NULL
+  `);
 })();
 
 /**

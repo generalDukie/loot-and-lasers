@@ -23,6 +23,8 @@ var _global_channel_id := ""
 var _refreshing_friends := false
 var _refreshing_guild := false
 var _nakama_signals_bound := false
+var _nakama_was_connected := false
+var _wallet_reconcile_running := false
 
 
 func _ready() -> void:
@@ -68,12 +70,14 @@ func start_nakama() -> Dictionary:
 	connection_changed.emit(ok or _connected)
 	if ok:
 		await SocialManager.load_social_state()
+		await _reconcile_wallet_once("nakama_connect")
 	return {"ok": ok, "error": str(res.get("error", ""))}
 
 
 func stop_nakama() -> void:
 	_want_nakama = false
 	_global_channel_id = ""
+	_nakama_was_connected = false
 	await NakamaManager.disconnect_socket()
 	nakama_connection_changed.emit(false)
 	ChatManager.clear_account_chat_cache()
@@ -145,11 +149,16 @@ func _on_nakama_notification(p_notification) -> void:
 			n["content"] = raw
 	nakama_notification.emit(n)
 	entity_event.emit("MailNotification", "received", n)
+	if str(n.get("subject", "")).to_lower() == "wallet_updated":
+		_handle_wallet_event(n.get("content", {}))
 
 
 func _on_nakama_mgr_connection(connected: bool) -> void:
 	if connected:
 		_ensure_socket_message_binds()
+		if not _nakama_was_connected:
+			call_deferred("_reconcile_wallet_deferred", "nakama_reconnect")
+	_nakama_was_connected = connected
 	nakama_connection_changed.emit(connected)
 
 
@@ -194,11 +203,25 @@ func start(entity: String = "ChatMessage") -> void:
 	MailManager.refresh_unread()
 
 
+## Start the existing authenticated Node socket as soon as the gameplay bridge is
+## ready so account-scoped wallet events do not depend on visiting Hub first.
+func start_node_wallet_events() -> void:
+	_want_connect = true
+	_entity_filter = "*"
+	_connect_ws()
+
+
 func _boot_nakama_deferred() -> void:
 	await start_nakama()
 
 
 func stop() -> void:
+	stop_node()
+	if _want_nakama:
+		stop_nakama()
+
+
+func stop_node() -> void:
 	_want_connect = false
 	_poll_mail.stop()
 	_poll_chat.stop()
@@ -209,12 +232,15 @@ func stop() -> void:
 	_connected = false
 	set_process(false)
 	connection_changed.emit(false)
-	if _want_nakama:
-		stop_nakama()
 
 
 func _connect_ws() -> void:
 	if AuthManager.access_token.is_empty():
+		return
+	if _socket != null and _socket.get_ready_state() in [
+		WebSocketPeer.STATE_CONNECTING,
+		WebSocketPeer.STATE_OPEN,
+	]:
 		return
 	var base := GameApiClient.base_url.replace("http://", "ws://").replace("https://", "wss://")
 	var url := "%s/ws?entity=%s&token=%s" % [
@@ -269,6 +295,35 @@ func _handle_packet(packet: String) -> void:
 		_refreshing_friends = true
 		SocialManager.load_friends()
 		_refreshing_friends = false
+	elif entity == "Wallet" or event_type == "wallet_updated":
+		_handle_wallet_event(payload if typeof(payload) == TYPE_DICTIONARY else {})
+
+
+func _handle_wallet_event(payload: Dictionary) -> void:
+	if CurrencyManager == null:
+		return
+	if CurrencyManager.apply_realtime_wallet(payload):
+		var character := GameManager.active_character.duplicate(true)
+		var balances: Dictionary = CurrencyManager.get_balances()
+		for currency_id in CurrencyManager.CURRENCY_IDS:
+			character[currency_id] = int(balances.get(currency_id, 0))
+		GameManager.apply_active_character(character, "wallet_updated", false)
+		return
+	call_deferred("_reconcile_wallet_deferred", "wallet_event")
+
+
+func _reconcile_wallet_deferred(source: String) -> void:
+	await _reconcile_wallet_once(source)
+
+
+func _reconcile_wallet_once(_source: String) -> void:
+	if _wallet_reconcile_running or CurrencyManager == null:
+		return
+	if str(GameManager.active_character.get("id", "")).is_empty():
+		return
+	_wallet_reconcile_running = true
+	await CurrencyManager.reconcile_wallet()
+	_wallet_reconcile_running = false
 
 
 func _on_mail_poll() -> void:

@@ -25,7 +25,13 @@ var _card_by_id: Dictionary = {} # item_id -> PanelContainer
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_populate()
 
 
 func _boot() -> void:
@@ -301,7 +307,9 @@ func _unequipped() -> Array:
 
 func _populate() -> void:
 	var c := GameManager.active_character
-	_balance_lab.text = "✦  %s  stardust" % str(c.get("stardust", 0))
+	_balance_lab.text = "✦  %s  stardust" % str(
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
+	)
 
 	var pending: Array = InventoryManager.pending_loot
 	_pending_banner.visible = not pending.is_empty()

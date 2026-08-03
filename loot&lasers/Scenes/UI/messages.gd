@@ -59,7 +59,9 @@ func _build() -> void:
 	for k in ["margin_left", "margin_right"]:
 		margin.add_theme_constant_override(k, 16)
 	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
+	# Leave room for the shell notification FAB (bottom-right) so Send stays clickable.
+	margin.add_theme_constant_override("margin_bottom", 88)
+	margin.add_theme_constant_override("margin_right", 88)
 	add_child(margin)
 
 	var root := VBoxContainer.new()
@@ -148,9 +150,13 @@ func _build() -> void:
 	thread_col.add_child(compose_row)
 	_compose = ClientUi.make_field("Message (max 280)")
 	_compose.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_compose.max_length = 280
+	# Enter / keypad Enter submits (Godot LineEdit text_submitted).
+	_compose.text_submitted.connect(func(_text: String) -> void: _on_send())
 	compose_row.add_child(_compose)
 	var send := Button.new()
 	send.text = "Send"
+	send.focus_mode = Control.FOCUS_NONE
 	ClientUi.apply_primary_button(send)
 	send.pressed.connect(_on_send)
 	compose_row.add_child(send)

@@ -138,7 +138,7 @@ func pack_by_id(pack_id: String) -> Dictionary:
 func _apply_character_payload(data: Dictionary) -> void:
 	var patch: Variant = data.get("patch", {})
 	if typeof(patch) == TYPE_DICTIONARY:
-		GameManager.active_character.merge(patch, true)
+		GameManager.apply_active_character_patch(patch, "crystal_store_purchase")
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.active_character = ch
+		GameManager.apply_active_character(ch, "crystal_store_purchase")

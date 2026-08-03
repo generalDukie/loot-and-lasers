@@ -138,6 +138,37 @@ static func derived(character: Dictionary, totals: Dictionary) -> Dictionary:
 	}
 
 
+## Concise player-facing combat effect for attribute hover tooltips (presentation only).
+static func attribute_tooltip(stat: String, character: Dictionary, equipped: Array = []) -> String:
+	var totals := display_totals(character, equipped)
+	var d := derived(character, totals)
+	var arch := str(d.get("archetype", "str"))
+	var primary := str(d.get("primaryStat", "strength"))
+	match stat:
+		"luck":
+			return "Increases critical-hit chance by %.1f%% (×%.1f crit damage)." % [
+				float(d.get("critChance", 0)), float(d.get("critMult", CRIT_MULT)),
+			]
+		"vitality":
+			return "Increases maximum health to %d." % int(d.get("health", 0))
+		"agility":
+			var lines := "Increases dodge chance by %.1f%%." % float(d.get("dodgeChance", 0))
+			if primary == "agility":
+				lines += "\nAlso sets attack damage to %d." % int(d.get("damage", 0))
+			return lines
+		"intellect":
+			var lines2 := "Increases tech resistance by %.1f%%." % float(d.get("techResist", 0))
+			if primary == "intellect":
+				lines2 += "\nAlso sets attack damage to %d." % int(d.get("damage", 0))
+			return lines2
+		"strength":
+			if arch == "str" or primary == "strength":
+				return "Increases attack damage to %d." % int(d.get("damage", 0))
+			return "Increases Might Resistance by %.1f%%." % float(d.get("armor", 0))
+		_:
+			return "Contributes to combat power and derived stats."
+
+
 static func combat_power(character: Dictionary, equipped: Array = []) -> int:
 	var totals := permanent_totals(character, equipped)
 	var class_key := str(character.get("class", "Vanguard"))

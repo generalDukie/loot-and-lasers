@@ -46,10 +46,10 @@ func declare_war(defender_guild_id: String) -> Dictionary:
 		var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 		var patch: Variant = data.get("patch", {})
 		if typeof(patch) == TYPE_DICTIONARY:
-			GameManager.active_character.merge(patch, true)
+			GameManager.apply_active_character_patch(patch, "guild_war_declare")
 		var ch: Variant = data.get("character", {})
 		if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-			GameManager.active_character = ch
+			GameManager.apply_active_character(ch, "guild_war_declare")
 	return res
 
 

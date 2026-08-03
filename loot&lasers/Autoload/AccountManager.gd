@@ -69,7 +69,7 @@ func set_legacy_display(mode: String) -> Dictionary:
 				{"legacy_display": m}, true
 			)
 			if cid == str(GameManager.active_character.get("id", "")):
-				GameManager.active_character["legacy_display"] = m
+				GameManager.apply_active_character_patch({"legacy_display": m}, "account_legacy_display")
 	return res
 
 
@@ -119,7 +119,7 @@ func purge_and_delete_character(character_id: String, character_name: String = "
 		"DELETE", "/api/entities/Character/%s" % character_id.uri_encode(), null, true
 	)
 	if del.ok and str(GameManager.active_character.get("id", "")) == character_id:
-		GameManager.active_character = {}
+		GameManager.clear_active_character("account_character_deleted")
 	return del
 
 
@@ -129,7 +129,7 @@ func _apply_char(res: Dictionary) -> void:
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var patch: Variant = data.get("patch", {})
 	if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
-		GameManager.active_character.merge(patch, true)
+		GameManager.apply_active_character_patch(patch, "account_mutation")
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.active_character = ch
+		GameManager.apply_active_character(ch, "account_mutation")

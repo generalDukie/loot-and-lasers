@@ -114,11 +114,10 @@ export function requireMyChar(user) {
   const list = entities.Character.filter({ created_by_id: user.id }, "-created_date", 50);
   if (!list.length) httpErr(404, "No character");
   const activeId = user.active_character_id;
-  if (activeId) {
-    const active = list.find((c) => c.id === activeId);
-    if (active) return active;
-  }
-  return list[0];
+  if (!activeId) httpErr(409, "No selected character");
+  const active = list.find((c) => c.id === activeId);
+  if (!active) httpErr(403, "Selected character is not owned by this account");
+  return active;
 }
 
 function wrap(fn) {

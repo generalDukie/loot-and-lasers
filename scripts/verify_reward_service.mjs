@@ -121,9 +121,9 @@ function staticChecks() {
     fail("unsupported type rejection docs missing");
   } else pass("unsupported XP/item types rejected");
 
-  if (!src.includes('require("wallet")') || !src.includes("credit_currency")) {
+  if (!src.includes('require("lib.wallet_bridge")') || !src.includes("wallet_bridge.apply")) {
     fail("wallet integration missing");
-  } else pass("wallet credit_currency integration present");
+  } else pass("trusted Node Character wallet bridge integration present");
 
   const wallet = read("modules/wallet.lua");
   if (/nk\.register_rpc\([^,]+,\s*"wallet_credit"\)/.test(wallet)) {

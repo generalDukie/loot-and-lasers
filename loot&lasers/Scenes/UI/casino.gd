@@ -34,7 +34,13 @@ var _wheel_degrees := 0.0
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_populate()
 
 
 func _boot() -> void:
@@ -280,7 +286,10 @@ func _make_dice_card() -> PanelContainer:
 	_dice_max_btn.text = "Max"
 	ClientUi.apply_ghost_button(_dice_max_btn)
 	_dice_max_btn.pressed.connect(func() -> void:
-		_dice_bet.value = mini(float(CasinoManager.max_bet()), float(GameManager.active_character.get("stardust", 0)))
+		_dice_bet.value = mini(
+			float(CasinoManager.max_bet()),
+			float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
+		)
 	)
 	bet_row.add_child(_dice_max_btn)
 
@@ -384,7 +393,10 @@ func _make_wheel_card() -> PanelContainer:
 	_wheel_max_btn.text = "Max"
 	ClientUi.apply_ghost_button(_wheel_max_btn)
 	_wheel_max_btn.pressed.connect(func() -> void:
-		_wheel_bet.value = mini(float(CasinoManager.max_bet()), float(GameManager.active_character.get("stardust", 0)))
+		_wheel_bet.value = mini(
+			float(CasinoManager.max_bet()),
+			float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
+		)
 	)
 	bet_row.add_child(_wheel_max_btn)
 	_wheel_btn = Button.new()
@@ -460,9 +472,12 @@ func _sync_bets(reset_defaults := false) -> void:
 
 
 func _populate() -> void:
-	var c := GameManager.active_character
-	_balance_sd.text = "✦  %s" % _fmt(int(c.get("stardust", 0)))
-	_balance_nova.text = "💎  %s" % _fmt(int(c.get("nova_crystals", 0)))
+	_balance_sd.text = "✦  %s" % _fmt(
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
+	)
+	_balance_nova.text = "💎  %s" % _fmt(
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)
+	)
 	_max_bet_lab.text = "Max stardust bet · %s ✦ (scales with SD/F)" % _fmt(CasinoManager.max_bet())
 	_sync_bets(false)
 
@@ -486,8 +501,7 @@ func _play_dice(choice: String) -> void:
 	if _busy:
 		return
 	var bet := maxi(1, int(_dice_bet.value))
-	var bal := int(GameManager.active_character.get("stardust", 0))
-	if bal < bet:
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, bet):
 		_dice_outcome.text = "Not enough stardust"
 		_dice_outcome.add_theme_color_override("font_color", ClientUi.DANGER)
 		return
@@ -512,8 +526,7 @@ func _play_wheel() -> void:
 	if _busy:
 		return
 	var bet := maxi(1, int(_wheel_bet.value))
-	var bal := int(GameManager.active_character.get("stardust", 0))
-	if bal < bet:
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, bet):
 		_wheel_outcome.text = "Not enough stardust"
 		_wheel_outcome.add_theme_color_override("font_color", ClientUi.DANGER)
 		return

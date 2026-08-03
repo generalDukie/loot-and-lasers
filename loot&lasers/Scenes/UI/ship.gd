@@ -23,7 +23,13 @@ var _fuel_open := false
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_populate()
 
 
 func _boot() -> void:
@@ -126,8 +132,16 @@ func _populate() -> void:
 
 	for child in _currency_row.get_children():
 		child.queue_free()
-	_currency_row.add_child(ClientUi.make_currency_chip("✦", ch.get("stardust", 0), STARDUST_COLOR))
-	_currency_row.add_child(ClientUi.make_currency_chip("💎", ch.get("nova_crystals", 0), NOVA_COLOR))
+	_currency_row.add_child(ClientUi.make_currency_chip(
+		"✦",
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST),
+		STARDUST_COLOR
+	))
+	_currency_row.add_child(ClientUi.make_currency_chip(
+		"💎",
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA),
+		NOVA_COLOR
+	))
 
 	_list.add_child(_make_hero(ch, active))
 
@@ -306,7 +320,7 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 	ClientUi.apply_body_font(meta)
 	col.add_child(meta)
 
-	var fuel := int(ch.get("fuel", 0))
+	var fuel: float = float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_FUEL))
 	var max_fuel := maxi(1, int(ch.get("max_fuel", ShipRules.FUEL_MAX_BASE)))
 	var fuel_row := HBoxContainer.new()
 	fuel_row.add_theme_constant_override("separation", 8)
@@ -544,7 +558,10 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		buy.text = "Buy · %s 💎" % str(info.get("cost", 0))
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ClientUi.apply_primary_button(buy)
-		buy.disabled = int(ch.get("nova_crystals", 0)) < int(info.get("cost", 0))
+		buy.disabled = not CurrencyManager.can_afford(
+			CurrencyManager.CURRENCY_NOVA,
+			int(info.get("cost", 0))
+		)
 		buy.pressed.connect(func() -> void: _on_buy_ship(ship_id))
 		col.add_child(buy)
 	return panel
@@ -657,10 +674,9 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 		next_col.add_child(next_lab)
 
 		var cost := ShipRules.tier_cost(next, _edit_ship)
-		var sd := int(ch.get("stardust", 0))
 		var buy := Button.new()
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if sd < cost:
+		if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
 			buy.text = "🔒  %s ✦" % cost
 			ClientUi.apply_ghost_button(buy)
 			buy.disabled = true
@@ -840,7 +856,7 @@ func _on_activate(ship_id: String) -> void:
 func _on_buy_mod(category: String, cost: int) -> void:
 	if _busy:
 		return
-	if int(GameManager.active_character.get("stardust", 0)) < cost:
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
 		_set_status("Need %s stardust." % cost, true)
 		return
 	_busy = true

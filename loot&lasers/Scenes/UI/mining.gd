@@ -35,7 +35,13 @@ var _last_phase := ""
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_populate()
 
 
 func _boot() -> void:
@@ -322,7 +328,9 @@ func _populate() -> void:
 	var level := maxi(1, int(c.get("level", 1)))
 	var spf := StardustEconomy.stardust_per_fuel(level)
 	var rate_per_hour := int(round(float(spf) * StardustEconomy.MINING_EFFICIENCY * 60.0))
-	_balance_lab.text = "✦  %s" % str(c.get("stardust", 0))
+	_balance_lab.text = "✦  %s" % str(
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
+	)
 	_stat_level.text = str(level)
 	_stat_rate.text = "%s/h" % rate_per_hour
 	_stat_max.text = str(MiningManager.preview_reward(24))

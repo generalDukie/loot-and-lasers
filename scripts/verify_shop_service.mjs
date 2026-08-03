@@ -94,8 +94,8 @@ function staticChecks() {
   if (!src.includes("request_id") || !src.includes("Conflicting reuse")) fail("idempotency missing");
   else pass("idempotency present");
 
-  if (!src.includes('require("wallet")') || !src.includes("debit_currency")) fail("wallet integration missing");
-  else pass("wallet debit/credit used");
+  if (!src.includes('require("lib.wallet_bridge")') || !src.includes("wallet_bridge.apply")) fail("wallet integration missing");
+  else pass("trusted Node Character wallet bridge used");
 
   if (!src.includes('require("inventory")') || !src.includes("grant_item_instance")) fail("inventory grant missing");
   else pass("inventory grant used");

@@ -248,10 +248,10 @@ func _apply_character(res: Dictionary) -> void:
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var patch: Variant = data.get("patch", {})
 	if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
-		GameManager.active_character.merge(patch, true)
+		GameManager.apply_active_character_patch(patch, "inventory_mutation")
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.active_character = ch
+		GameManager.apply_active_character(ch, "inventory_mutation")
 
 
 func _fail(error: String, status_code: int = 0) -> Dictionary:

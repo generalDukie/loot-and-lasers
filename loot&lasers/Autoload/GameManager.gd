@@ -1,6 +1,8 @@
 extends Node
 ## Scene router + high-level client state for the Godot client.
 
+signal active_character_changed(character: Dictionary, source: String)
+
 enum GameState {
 	BOOT,
 	LOGIN,
@@ -83,9 +85,39 @@ func go_character_create() -> void:
 
 func go_hub(character: Dictionary = {}) -> void:
 	if not character.is_empty():
-		active_character = character
+		apply_active_character(character, "go_hub")
 	change_state(GameState.IN_GAME)
 	open_game_page(SCENE_HUB)
+
+
+## The only supported way for managers to replace the selected Character cache.
+## CurrencyManager mirrors authoritative balance fields and fans out wallet signals.
+func apply_active_character(character: Dictionary, source: String = "manager", sync_wallet: bool = true) -> void:
+	active_character = character.duplicate(true)
+	if sync_wallet and CurrencyManager != null:
+		CurrencyManager.apply_character_snapshot(active_character, source)
+	active_character_changed.emit(active_character, source)
+
+
+func apply_active_character_patch(patch: Dictionary, source: String = "manager") -> void:
+	if patch.is_empty():
+		return
+	active_character.merge(patch, true)
+	if CurrencyManager != null:
+		CurrencyManager.apply_character_snapshot(active_character, source)
+	active_character_changed.emit(active_character, source)
+
+
+func clear_active_character(source: String = "logout") -> void:
+	active_character = {}
+	recent_loot_ids = PackedStringArray()
+	pending_profile = {}
+	pending_dm_character = {}
+	pending_page_path = ""
+	combat_overlay_kind = "arena"
+	if CurrencyManager != null:
+		CurrencyManager.clear_local()
+	active_character_changed.emit(active_character, source)
 
 
 func go_cantina() -> void:

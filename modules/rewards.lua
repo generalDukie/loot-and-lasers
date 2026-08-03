@@ -9,7 +9,7 @@
     - reward_grant, grant_reward, reward_apply, reward_debug, reward_claim_any
 
   Supported today:
-    - currency (soft: stardust) via wallet.credit_currency
+    - currency (soft: stardust) via the Node Character wallet bridge
     - item (server-generated instances only) via inventory grant API (grant_item_instance)
 
   Rejected safely (future):
@@ -31,7 +31,7 @@ local time = require("lib.time")
 local logging = require("lib.logging")
 local transactions = require("lib.transactions")
 local ids = require("lib.ids")
-local wallet = require("wallet")
+local wallet_bridge = require("lib.wallet_bridge")
 local reward_tables = require("data.reward_tables")
 
 local TX_COLLECTION = "reward_transactions"
@@ -302,6 +302,7 @@ function validate_reward_bundle(bundle)
     rewards = cleaned,
     metadata = metadata,
     reward_hash = fp,
+    bridge_context = bundle.bridge_context,
   }, nil
 end
 
@@ -341,31 +342,38 @@ function record_reward_transaction(user_id, record, version)
   return record, nil
 end
 
---- Soft-currency credit via existing wallet internals.
-function apply_currency_reward(user_id, currency_id, amount, step_transaction_id, reason, source)
+--- Soft-currency credit via the Node Character compatibility authority.
+function apply_currency_reward(
+  context, user_id, character_id, currency_id, amount, step_transaction_id, source_type, source_id
+)
   if SUPPORTED_CURRENCY[currency_id] ~= true then
     return nil, "Unsupported currency_id"
   end
-  local data, err, code = wallet.credit_currency(
-    user_id,
-    currency_id,
-    amount,
-    step_transaction_id,
-    reason,
-    source or "reward_service"
-  )
+  if type(context) ~= "table" or context.user_id ~= user_id then
+    return nil, "Wallet bridge context unavailable", 503
+  end
+  local operation_type = source_type == "mail" and "mail_reward_stardust" or "reward_stardust"
+  local data, err, code = wallet_bridge.apply(context, {
+    character_id = character_id,
+    operation_type = operation_type,
+    operation_key = step_transaction_id,
+    reference_id = source_id,
+    amount = amount,
+  })
   if err ~= nil then
     return nil, err, code or 400
   end
   local balance_after = nil
-  if type(data) == "table" and type(data.transaction) == "table" then
-    balance_after = data.transaction.balance_after
+  if type(data) == "table" and type(data.wallet) == "table" then
+    balance_after = data.wallet.balances.stardust
   end
   return {
     type = "currency",
     currency_id = currency_id,
     amount = amount,
     balance_after = balance_after,
+    wallet = data.wallet,
+    character = data.character,
   }, nil, 200
 end
 
@@ -437,6 +445,34 @@ function apply_reward_bundle(bundle)
       }), "Conflicting reuse of transaction_id"
     end
     -- Idempotent replay
+    if existing.status == STATUS.completed then
+      for i = 1, #cleaned.rewards do
+        local entry = cleaned.rewards[i]
+        if entry.type == "currency" then
+          local refreshed, refresh_err = apply_currency_reward(
+            cleaned.bridge_context,
+            user_id,
+            cleaned.character_id,
+            entry.currency_id,
+            entry.amount,
+            string.format("%s:step:%d", transaction_id, i),
+            cleaned.source_type,
+            cleaned.source_id
+          )
+          if refresh_err ~= nil then
+            return build_reward_result(false, transaction_id, STATUS.failed, empty_applied(), {
+              tostring(refresh_err),
+            }), refresh_err
+          end
+          for j = 1, #(existing.applied_rewards or {}) do
+            if existing.applied_rewards[j].type == "currency" then
+              existing.applied_rewards[j] = refreshed
+              break
+            end
+          end
+        end
+      end
+    end
     return result_from_tx(existing), nil
   end
 
@@ -485,12 +521,14 @@ function apply_reward_bundle(bundle)
 
     if entry.type == "currency" then
       applied_entry, aerr = apply_currency_reward(
+        cleaned.bridge_context,
         user_id,
+        cleaned.character_id,
         entry.currency_id,
         entry.amount,
         step_tid,
-        cleaned.reason,
-        "reward_service:" .. cleaned.source_type
+        cleaned.source_type,
+        cleaned.source_id
       )
     elseif entry.type == "item" then
       applied_entry, aerr = apply_item_reward(
@@ -622,6 +660,7 @@ local function rpc_dev_reward_test(context, payload)
     reason = template.reason,
     rewards = template.rewards,
     metadata = template.metadata or {},
+    bridge_context = context,
   }
 
   local result, err = apply_reward_bundle(bundle)

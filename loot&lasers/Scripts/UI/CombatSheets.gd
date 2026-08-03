@@ -236,7 +236,7 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 		{"key": "health", "label": "Max Health", "fmt": "int"},
 		{"key": "critChance", "label": "Crit Chance", "fmt": "pct"},
 		{"key": "dodgeChance", "label": "Dodge Chance", "fmt": "pct"},
-		{"key": "armor", "label": "Armor", "fmt": "pct"},
+		{"key": "armor", "label": "Might Resistance", "fmt": "pct"},
 		{"key": "techResist", "label": "Tech Resist", "fmt": "pct"},
 	]:
 		var a := float(before.get(row["key"], 0))

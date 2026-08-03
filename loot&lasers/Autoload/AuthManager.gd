@@ -6,14 +6,20 @@ extends Node
 
 signal auth_changed(logged_in: bool)
 signal user_changed(user: Dictionary)
+signal node_bridge_completed(result: Dictionary)
 
 const CONFIG_PATH := "user://godot_client.cfg"
 const BRIDGE_FLAG_KEY := "nakama_node_bridge_v1"
+const NODE_REFRESH_SKEW_SEC := 90
 
 var access_token: String = ""
 var user: Dictionary = {}
 var last_auth_diagnostics: Dictionary = {}
 var node_bridge_ok := false
+var node_token_expires_at := 0
+var node_token_nakama_user_id := ""
+var _bridge_in_progress := false
+var _node_auth_generation := 0
 
 
 func _ready() -> void:
@@ -73,8 +79,11 @@ func _authenticate_email(email: String, password: String, create: bool) -> Dicti
 			"diagnostics": last_auth_diagnostics,
 		}
 
+	# A newly authenticated Nakama identity must never inherit a prior account's
+	# Node gameplay token if the exchange is unavailable.
+	_clear_node_session_only()
 	var clean_email := email.strip_edges().to_lower()
-	var bridge: Dictionary = await bridge_node_session(clean_email, password)
+	var bridge: Dictionary = await bridge_node_session(clean_email)
 	last_auth_diagnostics["node_bridge"] = bool(bridge.get("success", false))
 	if not bool(bridge.get("success", false)):
 		# Keep Nakama session; surface bridge failure so UI can show a useful error.
@@ -124,11 +133,14 @@ func _authenticate_email(email: String, password: String, create: bool) -> Dicti
 
 
 ## Exchange Nakama session for Node JWT (creates/links Node user as needed).
-func bridge_node_session(email: String = "", password: String = "") -> Dictionary:
+func bridge_node_session(email: String = "", _password: String = "") -> Dictionary:
 	if GameApiClient == null:
 		return {"success": false, "error": "GameApiClient missing", "status": 0}
 	if not is_nakama_authenticated():
 		return {"success": false, "error": "Nakama session required before Node bridge", "status": 401}
+	if _bridge_in_progress:
+		var pending: Dictionary = await node_bridge_completed
+		return pending
 	var token := ""
 	if NakamaManager.has_method("get_session_token"):
 		token = NakamaManager.get_session_token()
@@ -141,13 +153,14 @@ func bridge_node_session(email: String = "", password: String = "") -> Dictionar
 		"nakama_token": token,
 		"email": email.strip_edges().to_lower(),
 	}
-	if not password.is_empty():
-		body["password"] = password
-
+	_bridge_in_progress = true
+	var bridge_generation := _node_auth_generation
 	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/auth/nakama-bridge",
 		body,
+		false,
+		5.0,
 		false
 	)
 	if not res.ok:
@@ -155,34 +168,102 @@ func bridge_node_session(email: String = "", password: String = "") -> Dictionar
 		var err := str(res.get("error", "Node bridge failed"))
 		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
 			err = str(res.data["error"])
-		return {"success": false, "error": err, "status": int(res.get("status", 0))}
+		return _finish_node_bridge({
+			"success": false,
+			"error": err,
+			"status": int(res.get("status", 0)),
+		})
 
+	var response_nakama_id := ""
+	if typeof(res.get("data", null)) == TYPE_DICTIONARY:
+		response_nakama_id = str(res.data.get("nakama_user_id", ""))
+	if (
+		bridge_generation != _node_auth_generation
+		or response_nakama_id.is_empty()
+		or response_nakama_id != _current_nakama_user_id()
+	):
+		return _finish_node_bridge({
+			"success": false,
+			"error": "Authentication changed while linking gameplay",
+			"status": 409,
+		})
 	_apply_auth_payload(res.data)
 	node_bridge_ok = not access_token.is_empty()
 	_mark_bridge_flag()
 	print("[AuthManager] Node bridge OK user_id=%s" % str(user.get("id", "")))
-	return {"success": true, "error": "", "status": 200, "data": user}
+	return _finish_node_bridge({"success": true, "error": "", "status": 200, "data": user})
 
 
 ## After Nakama restore: reuse JWT if valid, else bridge with session token.
 func ensure_node_bridge() -> Dictionary:
 	if not is_nakama_authenticated():
 		return {"success": false, "error": "Not authenticated on Nakama", "status": 401}
+	if GameApiClient != null and GameApiClient.has_method("prefer_reachable_base_url"):
+		var reach: Dictionary = await GameApiClient.prefer_reachable_base_url()
+		if not reach.get("ok", false):
+			node_bridge_ok = false
+			return {
+				"success": false,
+				"error": "Node gameplay API unreachable — %s" % str(reach.get("error", "")),
+				"status": 503,
+			}
 	if not access_token.is_empty():
-		var me: Dictionary = await GameApiClient.request("GET", "/api/auth/me", null, true)
-		if me.ok and typeof(me.data) == TYPE_DICTIONARY:
-			user = me.data
-			_merge_profile_into_user()
-			node_bridge_ok = true
-			user_changed.emit(user)
-			return {"success": true, "error": "", "status": 200, "data": user}
-		# Stale JWT — clear and re-bridge.
-		access_token = ""
-		_save_token()
+		var current_nakama_id := _current_nakama_user_id()
+		var binding_matches := (
+			not current_nakama_id.is_empty()
+			and node_token_nakama_user_id == current_nakama_id
+		)
+		var has_time := node_token_expires_at > Time.get_unix_time_from_system() + NODE_REFRESH_SKEW_SEC
+		if binding_matches and has_time:
+			var me: Dictionary = await GameApiClient.request(
+				"GET", "/api/auth/me", null, true, 3.0, false
+			)
+			if me.ok and typeof(me.data) == TYPE_DICTIONARY:
+				user = me.data
+				_merge_profile_into_user()
+				node_bridge_ok = true
+				user_changed.emit(user)
+				return {"success": true, "error": "", "status": 200, "data": user}
+		# Stale, near-expiry, or cross-account JWT — clear and re-bridge.
+		_clear_node_session_only()
 	var email := str(user.get("email", "")).strip_edges().to_lower()
 	if email.is_empty() and NakamaManager != null and NakamaManager.has_method("get_account_email"):
 		email = str(NakamaManager.get_account_email()).strip_edges().to_lower()
 	return await bridge_node_session(email, "")
+
+
+func refresh_node_gameplay_session() -> Dictionary:
+	if NakamaManager == null:
+		return {"success": false, "error": "Nakama manager unavailable", "status": 401}
+	if NakamaManager.session != null and NakamaManager.session.would_expire_in(NODE_REFRESH_SKEW_SEC):
+		var refreshed: Dictionary = await NakamaManager.refresh_session()
+		if not refreshed.get("success", false):
+			_clear_node_session_only()
+			if _is_terminal_auth_failure(refreshed):
+				await logout_nakama()
+				clear_session()
+				GameManager.go_login()
+			return {
+				"success": false,
+				"error": str(refreshed.get("error", "Nakama session expired")),
+				"status": int(refreshed.get("status_code", 401)),
+			}
+	if not is_nakama_authenticated():
+		_clear_node_session_only()
+		await logout_nakama()
+		clear_session()
+		GameManager.go_login()
+		return {"success": false, "error": "Nakama session expired", "status": 401}
+	_clear_node_session_only()
+	var email := ""
+	if NakamaManager.has_method("get_account_email"):
+		email = str(NakamaManager.get_account_email()).strip_edges().to_lower()
+	var bridged: Dictionary = await bridge_node_session(email)
+	if not bridged.get("success", false) and int(bridged.get("status", 0)) == 401:
+		await logout_nakama()
+		clear_session()
+		GameManager.go_login()
+	return bridged
 
 
 func _post_nakama_auth(email: String) -> Dictionary:
@@ -208,6 +289,8 @@ func _post_nakama_auth(email: String) -> Dictionary:
 		var sock: Dictionary = await RealtimeManager.start_nakama()
 		if not bool(sock.get("ok", false)):
 			print("[AuthManager] WARNING: realtime socket — %s" % str(sock.get("error", "unknown")))
+		if RealtimeManager.has_method("start_node_wallet_events"):
+			RealtimeManager.start_node_wallet_events()
 	return {"success": true, "error": "", "status_code": 200}
 
 
@@ -226,9 +309,6 @@ func _user_from_nakama(email: String = "") -> Dictionary:
 		var display := str(p.get("display_name", "")).strip_edges()
 		if not display.is_empty():
 			out["full_name"] = display
-		var selected := str(p.get("selected_character_id", "")).strip_edges()
-		if not selected.is_empty():
-			out["active_character_id"] = selected
 	return out
 
 
@@ -239,9 +319,6 @@ func _merge_profile_into_user() -> void:
 	var display := str(p.get("display_name", "")).strip_edges()
 	if not display.is_empty():
 		user["full_name"] = display
-	var selected := str(p.get("selected_character_id", "")).strip_edges()
-	if not selected.is_empty():
-		user["active_character_id"] = selected
 	# Keep Node user.id for Character.created_by_id; store Nakama id separately.
 	var account_id := str(p.get("account_id", "")).strip_edges()
 	if not account_id.is_empty():
@@ -272,38 +349,38 @@ func fetch_me() -> Dictionary:
 		clear_session()
 		return {"ok": false, "error": "Not authenticated", "data": {}, "status": 401}
 	# Node /me is gameplay user id (Character.created_by_id).
-	if not access_token.is_empty():
-		var res: Dictionary = await GameApiClient.request("GET", "/api/auth/me", null, true)
-		if res.ok and typeof(res.data) == TYPE_DICTIONARY:
-			user = res.data
-			_merge_profile_into_user()
-			node_bridge_ok = true
-			user_changed.emit(user)
-			return {"ok": true, "error": "", "data": user, "status": 200}
-		if int(res.get("status", 0)) == 401:
-			# JWT expired/invalid — keep Nakama session, re-bridge without password.
-			access_token = ""
-			_save_token()
-			node_bridge_ok = false
-			var bridged: Dictionary = await ensure_node_bridge()
-			if bridged.get("success", false):
-				return {"ok": true, "error": "", "data": user, "status": 200}
-			return {
-				"ok": false,
-				"error": "Node session expired and re-bridge failed — %s" % str(bridged.get("error", "")),
-				"data": {},
-				"status": int(bridged.get("status", 401)),
-			}
-	else:
-		var bridged2: Dictionary = await ensure_node_bridge()
-		if bridged2.get("success", false):
+	if access_token.is_empty():
+		var bridged_empty: Dictionary = await ensure_node_bridge()
+		if bridged_empty.get("success", false):
 			return {"ok": true, "error": "", "data": user, "status": 200}
 		return {
 			"ok": false,
-			"error": "Node gameplay bridge required — %s" % str(bridged2.get("error", "")),
+			"error": "Node gameplay bridge required — %s" % str(bridged_empty.get("error", "")),
 			"data": {},
-			"status": int(bridged2.get("status", 503)),
+			"status": int(bridged_empty.get("status", 503)),
 		}
+
+	var res: Dictionary = await GameApiClient.request("GET", "/api/auth/me", null, true, 5.0)
+	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+		user = res.data
+		_merge_profile_into_user()
+		node_bridge_ok = true
+		user_changed.emit(user)
+		return {"ok": true, "error": "", "data": user, "status": 200}
+
+	# JWT expired/invalid or Node unreachable — keep Nakama session, re-bridge.
+	access_token = ""
+	_save_token()
+	node_bridge_ok = false
+	var bridged: Dictionary = await ensure_node_bridge()
+	if bridged.get("success", false):
+		return {"ok": true, "error": "", "data": user, "status": 200}
+	return {
+		"ok": false,
+		"error": "Node session expired and re-bridge failed — %s" % str(bridged.get("error", "")),
+		"data": {},
+		"status": int(bridged.get("status", 401)),
+	}
 
 
 func update_me(patch: Dictionary) -> Dictionary:
@@ -322,18 +399,25 @@ func update_me(patch: Dictionary) -> Dictionary:
 				"data": {},
 				"status": int(pref.get("status_code", 0)),
 			}
-	if patch.has("active_character_id") and ProfileManager != null:
+	if patch.has("active_character_id"):
 		var cid := str(patch.get("active_character_id", ""))
-		var sync_res: Dictionary = await ProfileManager.set_selected_character_id(cid)
-		if sync_res.get("success", false) or sync_res.get("ok", false):
-			user["active_character_id"] = cid
+		var node_res: Dictionary = await GameApiClient.request(
+			"PATCH",
+			"/api/auth/me",
+			{"active_character_id": cid},
+			true
+		)
+		if node_res.get("ok", false):
+			if typeof(node_res.get("data", null)) == TYPE_DICTIONARY:
+				user = (node_res.data as Dictionary).duplicate(true)
+				_merge_profile_into_user()
 			user_changed.emit(user)
 			return {"ok": true, "error": "", "data": user, "status": 200}
 		return {
 			"ok": false,
-			"error": str(sync_res.get("error", "Failed to update selected character")),
+			"error": str(node_res.get("error", "Failed to update selected character")),
 			"data": {},
-			"status": int(sync_res.get("status_code", 0)),
+			"status": int(node_res.get("status", 0)),
 		}
 	user.merge(patch, true)
 	user_changed.emit(user)
@@ -361,7 +445,7 @@ func list_characters() -> Dictionary:
 	)
 
 
-func create_character(payload: Dictionary) -> Dictionary:
+func create_character(payload: Dictionary, request_id: String = "") -> Dictionary:
 	if access_token.is_empty():
 		var bridged: Dictionary = await ensure_node_bridge()
 		if not bridged.get("success", false):
@@ -371,16 +455,14 @@ func create_character(payload: Dictionary) -> Dictionary:
 				"data": {},
 				"status": 503,
 			}
-	return await GameApiClient.request("POST", "/api/entities/Character", payload, true)
+	var body := payload.duplicate(true)
+	if not request_id.is_empty():
+		body["request_id"] = request_id
+	return await GameApiClient.request("POST", "/api/entities/Character", body, true)
 
 
 func select_character(character_id: String) -> Dictionary:
-	var res: Dictionary = await update_me({"active_character_id": character_id})
-	if res.ok and ProfileManager != null and NakamaManager.is_authenticated():
-		var sync_res: Dictionary = await ProfileManager.set_selected_character_id(character_id)
-		if not sync_res.get("success", false) and not sync_res.get("ok", false):
-			print("[AuthManager] WARNING: Nakama profile selected_character_id sync failed — %s" % str(sync_res.get("error", "")))
-	return res
+	return await update_me({"active_character_id": character_id})
 
 
 func get_character(character_id: String) -> Dictionary:
@@ -389,6 +471,14 @@ func get_character(character_id: String) -> Dictionary:
 		if not bridged.get("success", false):
 			return {"ok": false, "error": "No Node gameplay session for characters", "data": {}, "status": 503}
 	return await GameApiClient.request("GET", "/api/entities/Character/%s" % character_id, null, true)
+
+
+func get_selected_character() -> Dictionary:
+	if access_token.is_empty():
+		var bridged: Dictionary = await ensure_node_bridge()
+		if not bridged.get("success", false):
+			return {"ok": false, "error": "No Node gameplay session for characters", "data": {}, "status": 503}
+	return await GameApiClient.request("GET", "/api/auth/selected-character", null, true)
 
 
 func list_items(character_id: String = "", limit: int = 200) -> Dictionary:
@@ -413,26 +503,134 @@ func patch_character(character_id: String, patch: Dictionary) -> Dictionary:
 	return await GameApiClient.request("PATCH", "/api/entities/Character/%s" % character_id, patch, true)
 
 
-## Equip an unequipped bag item. DEPRECATED — use EquipmentManager.equip_item (Nakama).
+## Equip an unequipped bag item via Node Item PATCH (web useInventory parity).
+## Hero UI lists Node Item rows; Nakama EquipmentManager remains for shop-migrated gear.
 func equip_item(item_id: String) -> Dictionary:
-	push_warning("[AuthManager] equip_item is disabled — use EquipmentManager.equip_item")
-	return {
-		"ok": false,
-		"error": "Legacy equip path disabled — use EquipmentManager",
-		"data": {},
-		"status": 410,
-	}
+	if item_id.is_empty():
+		return {"ok": false, "error": "Missing item_id", "data": {}, "status": 0}
+	var list_res: Dictionary = await list_items()
+	if not list_res.get("ok", false):
+		return {
+			"ok": false,
+			"error": str(list_res.get("error", "Could not load items")),
+			"data": {},
+			"status": int(list_res.get("status", 0)),
+		}
+	var items: Array = list_res.get("data", []) if typeof(list_res.get("data", null)) == TYPE_ARRAY else []
+	var target: Dictionary = {}
+	for it in items:
+		if typeof(it) == TYPE_DICTIONARY and str(it.get("id", "")) == item_id:
+			target = it
+			break
+	if target.is_empty():
+		return {"ok": false, "error": "Item not found", "data": {}, "status": 404}
+	var item_type := str(target.get("type", ""))
+	if not InventoryRules.is_equippable(item_type):
+		return {"ok": false, "error": "Item is not equippable", "data": {}, "status": 400}
+	if bool(target.get("is_equipped", false)):
+		return {"ok": true, "error": "", "data": {"item": target, "already": true}, "status": 200}
+
+	var current: Dictionary = {}
+	for it in items:
+		if typeof(it) != TYPE_DICTIONARY:
+			continue
+		if str(it.get("type", "")) == item_type and bool(it.get("is_equipped", false)):
+			current = it
+			break
+
+	var equip_res: Dictionary = await patch_item(item_id, {"is_equipped": true})
+	if not equip_res.get("ok", false):
+		var err := str(equip_res.get("error", "Equip failed"))
+		if typeof(equip_res.get("data", null)) == TYPE_DICTIONARY and equip_res.data.has("error"):
+			err = str(equip_res.data["error"])
+		return {"ok": false, "error": err, "data": equip_res.get("data", {}), "status": int(equip_res.get("status", 0))}
+
+	if not current.is_empty():
+		var swap_id := str(current.get("id", ""))
+		if not swap_id.is_empty() and swap_id != item_id:
+			var swap_res: Dictionary = await patch_item(swap_id, {"is_equipped": false})
+			if not swap_res.get("ok", false):
+				# Best-effort rollback so two pieces of the same type are not equipped.
+				await patch_item(item_id, {"is_equipped": false})
+				var serr := str(swap_res.get("error", "Equip swap failed"))
+				return {"ok": false, "error": serr, "data": swap_res.get("data", {}), "status": int(swap_res.get("status", 0))}
+
+	var cid := str(GameManager.active_character.get("id", ""))
+	var eq: Dictionary = {}
+	var raw_eq: Variant = GameManager.active_character.get("equipped_items", {})
+	if typeof(raw_eq) == TYPE_DICTIONARY:
+		eq = (raw_eq as Dictionary).duplicate(true)
+	eq[item_type] = item_id
+	if not cid.is_empty():
+		var char_res: Dictionary = await patch_character(cid, {"equipped_items": eq})
+		if char_res.get("ok", false):
+			var ch: Variant = char_res.get("data", {})
+			if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
+				GameManager.apply_active_character(ch, "auth_equip_item")
+			else:
+				GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_equip_item")
+		else:
+			GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_equip_item")
+	else:
+		GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_equip_item")
+
+	print("[AuthManager] equip_item ok id=%s type=%s via=node_item_patch" % [item_id.substr(0, mini(8, item_id.length())), item_type])
+	return {"ok": true, "error": "", "data": {"item_id": item_id, "type": item_type}, "status": 200}
 
 
-## Unequip a worn item into the bag. DEPRECATED — use EquipmentManager.unequip_item (Nakama).
+## Unequip a worn item into the bag via Node Item PATCH (web useInventory parity).
 func unequip_item(item_id: String) -> Dictionary:
-	push_warning("[AuthManager] unequip_item is disabled — use EquipmentManager.unequip_item")
-	return {
-		"ok": false,
-		"error": "Legacy unequip path disabled — use EquipmentManager",
-		"data": {},
-		"status": 410,
-	}
+	if item_id.is_empty():
+		return {"ok": false, "error": "Missing item_id", "data": {}, "status": 0}
+	var list_res: Dictionary = await list_items()
+	if not list_res.get("ok", false):
+		return {
+			"ok": false,
+			"error": str(list_res.get("error", "Could not load items")),
+			"data": {},
+			"status": int(list_res.get("status", 0)),
+		}
+	var items: Array = list_res.get("data", []) if typeof(list_res.get("data", null)) == TYPE_ARRAY else []
+	var target: Dictionary = {}
+	for it in items:
+		if typeof(it) == TYPE_DICTIONARY and str(it.get("id", "")) == item_id:
+			target = it
+			break
+	if target.is_empty():
+		return {"ok": false, "error": "Item not found", "data": {}, "status": 404}
+	if not bool(target.get("is_equipped", false)):
+		return {"ok": true, "error": "", "data": {"already": true}, "status": 200}
+	var item_type := str(target.get("type", ""))
+
+	var unequip_res: Dictionary = await patch_item(item_id, {"is_equipped": false})
+	if not unequip_res.get("ok", false):
+		var err := str(unequip_res.get("error", "Unequip failed"))
+		if typeof(unequip_res.get("data", null)) == TYPE_DICTIONARY and unequip_res.data.has("error"):
+			err = str(unequip_res.data["error"])
+		return {"ok": false, "error": err, "data": unequip_res.get("data", {}), "status": int(unequip_res.get("status", 0))}
+
+	var cid := str(GameManager.active_character.get("id", ""))
+	var eq: Dictionary = {}
+	var raw_eq: Variant = GameManager.active_character.get("equipped_items", {})
+	if typeof(raw_eq) == TYPE_DICTIONARY:
+		eq = (raw_eq as Dictionary).duplicate(true)
+	if eq.get(item_type, "") == item_id or str(eq.get(item_type, "")) == item_id:
+		eq.erase(item_type)
+	if not cid.is_empty():
+		var char_res: Dictionary = await patch_character(cid, {"equipped_items": eq})
+		if char_res.get("ok", false):
+			var ch: Variant = char_res.get("data", {})
+			if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
+				GameManager.apply_active_character(ch, "auth_unequip_item")
+			else:
+				GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_unequip_item")
+		else:
+			GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_unequip_item")
+	else:
+		GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_unequip_item")
+
+	print("[AuthManager] unequip_item ok id=%s type=%s via=node_item_patch" % [item_id.substr(0, mini(8, item_id.length())), item_type])
+	return {"ok": true, "error": "", "data": {"item_id": item_id, "type": item_type}, "status": 200}
 
 
 ## Apply a stim: deletes the item and patches character.active_buffs.
@@ -448,10 +646,10 @@ func use_consumable(item_id: String) -> Dictionary:
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var patch: Variant = data.get("patch", {})
 	if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
-		GameManager.active_character.merge(patch, true)
+		GameManager.apply_active_character_patch(patch, "auth_use_consumable")
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.active_character = ch
+		GameManager.apply_active_character(ch, "auth_use_consumable")
 	return {"ok": true, "error": "", "data": data, "status": 200}
 
 
@@ -473,10 +671,10 @@ func dismiss_active_buff(stat: String, expires_at: String = "", name: String = "
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var patch: Variant = data.get("patch", {})
 	if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
-		GameManager.active_character.merge(patch, true)
+		GameManager.apply_active_character_patch(patch, "auth_dismiss_buff")
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.active_character = ch
+		GameManager.apply_active_character(ch, "auth_dismiss_buff")
 	return {"ok": true, "error": "", "data": data, "status": 200}
 
 
@@ -486,7 +684,9 @@ func logout() -> void:
 
 
 ## Restore Nakama email session, bridge Node JWT, then profile/wallet.
-func ensure_nakama_session() -> Dictionary:
+## Optional status_cb(text) updates splash labels during long hybrid boot.
+func ensure_nakama_session(status_cb: Callable = Callable()) -> Dictionary:
+	_boot_status(status_cb, "Restoring session...")
 	NakamaManager.initialize_client()
 	var res: Dictionary = await NakamaManager.ensure_authenticated()
 	if res.get("success", false):
@@ -494,11 +694,13 @@ func ensure_nakama_session() -> Dictionary:
 			str(res.get("data", {}).get("user_id", "")),
 			str(res.get("data", {}).get("auth_method", NakamaManager.get_auth_method())),
 		])
+		_boot_status(status_cb, "Linking gameplay...")
 		var bridge: Dictionary = await ensure_node_bridge()
 		if not bridge.get("success", false):
 			print("[AuthManager] WARNING: Node bridge unavailable — %s" % str(bridge.get("error", "unknown")))
 		if user.is_empty():
 			user = _user_from_nakama()
+		_boot_status(status_cb, "Loading profile...")
 		if ProfileManager != null:
 			var pref: Dictionary = await ProfileManager.ensure_profile()
 			if pref.get("success", false) or pref.get("ok", false):
@@ -512,6 +714,13 @@ func ensure_nakama_session() -> Dictionary:
 				print("[AuthManager] Nakama wallet ready")
 			else:
 				print("[AuthManager] WARNING: Nakama wallet unavailable — %s" % str(wres.get("error", "unknown")))
+		if RealtimeManager != null:
+			if RealtimeManager.has_method("start_nakama"):
+				var socket_result: Dictionary = await RealtimeManager.start_nakama()
+				if not bool(socket_result.get("ok", false)):
+					print("[AuthManager] WARNING: realtime socket — %s" % str(socket_result.get("error", "unknown")))
+			if RealtimeManager.has_method("start_node_wallet_events"):
+				RealtimeManager.start_node_wallet_events()
 		auth_changed.emit(true)
 		user_changed.emit(user)
 	else:
@@ -519,13 +728,35 @@ func ensure_nakama_session() -> Dictionary:
 	return res
 
 
+func _boot_status(status_cb: Callable, text: String) -> void:
+	if status_cb.is_valid():
+		status_cb.call(text)
+
+
 func logout_nakama() -> Dictionary:
+	GameManager.clear_active_character("auth_logout")
 	if ProfileManager != null:
 		ProfileManager.clear_local()
 	if CurrencyManager != null:
 		CurrencyManager.clear_local()
 	if EquipmentManager != null:
 		EquipmentManager.clear_local()
+	if InventoryManager != null and InventoryManager.has_method("clear_nakama_inventory_local"):
+		InventoryManager.clear_nakama_inventory_local()
+	if StatsManager != null and StatsManager.has_method("clear_local"):
+		StatsManager.clear_local()
+	if ShopManager != null and ShopManager.has_method("clear_local"):
+		ShopManager.clear_local()
+	if ArenaManager != null and ArenaManager.has_method("clear_local"):
+		ArenaManager.clear_local()
+	if ProgressManager != null and ProgressManager.has_method("clear_local"):
+		ProgressManager.clear_local()
+	if DungeonManager != null and DungeonManager.has_method("clear_local"):
+		DungeonManager.clear_local()
+	if NotificationManager != null and NotificationManager.has_method("clear_local"):
+		NotificationManager.clear_local()
+	if PresenceManager != null and PresenceManager.has_method("stop"):
+		PresenceManager.stop()
 	if MissionManager != null and MissionManager.has_method("clear_nakama_mission_local"):
 		MissionManager.clear_nakama_mission_local()
 	if MailManager != null and MailManager.has_method("clear_account_mail_cache"):
@@ -536,6 +767,8 @@ func logout_nakama() -> Dictionary:
 		ChatManager.clear_account_chat_cache()
 	if RealtimeManager != null and RealtimeManager.has_method("stop_nakama"):
 		await RealtimeManager.stop_nakama()
+		if RealtimeManager.has_method("stop_node"):
+			RealtimeManager.stop_node()
 	if NakamaManager == null:
 		return {"success": true, "data": {}, "error": "", "status_code": 200}
 	return await NakamaManager.logout()
@@ -580,13 +813,9 @@ func get_auth_diagnostics() -> Dictionary:
 
 
 func clear_session() -> void:
-	access_token = ""
 	user = {}
-	node_bridge_ok = false
-	var cfg := ConfigFile.new()
-	cfg.load(CONFIG_PATH)
-	cfg.set_value("auth", "access_token", "")
-	cfg.save(CONFIG_PATH)
+	_clear_node_session_only()
+	GameManager.clear_active_character("auth_session_cleared")
 	auth_changed.emit(false)
 	user_changed.emit(user)
 
@@ -595,8 +824,11 @@ func _apply_auth_payload(data: Variant) -> void:
 	if typeof(data) != TYPE_DICTIONARY:
 		return
 	access_token = str(data.get("access_token", ""))
+	node_token_nakama_user_id = str(data.get("nakama_user_id", ""))
+	node_token_expires_at = int(data.get("expires_at", 0))
 	if typeof(data.get("user", {})) == TYPE_DICTIONARY:
 		user = data.get("user", {})
+		user["nakama_user_id"] = node_token_nakama_user_id
 	_save_token()
 	auth_changed.emit(not access_token.is_empty() or is_nakama_authenticated())
 	user_changed.emit(user)
@@ -605,18 +837,58 @@ func _apply_auth_payload(data: Variant) -> void:
 func _save_token() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(CONFIG_PATH)
-	cfg.set_value("auth", "access_token", access_token)
+	var section := _auth_section()
+	cfg.set_value(section, "access_token", access_token)
+	cfg.set_value(section, "nakama_user_id", node_token_nakama_user_id)
+	cfg.set_value(section, "expires_at", node_token_expires_at)
 	cfg.save(CONFIG_PATH)
 
 
 func _load_token() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) == OK:
-		access_token = str(cfg.get_value("auth", "access_token", ""))
+		var section := _auth_section()
+		access_token = str(cfg.get_value(section, "access_token", ""))
+		node_token_nakama_user_id = str(cfg.get_value(section, "nakama_user_id", ""))
+		node_token_expires_at = int(cfg.get_value(section, "expires_at", 0))
 
 
 func _mark_bridge_flag() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(CONFIG_PATH)
-	cfg.set_value("auth", BRIDGE_FLAG_KEY, true)
+	cfg.set_value(_auth_section(), BRIDGE_FLAG_KEY, true)
 	cfg.save(CONFIG_PATH)
+
+
+func _auth_section() -> String:
+	var env_id := "local"
+	if BackendEnvironment != null and BackendEnvironment.has_method("get_environment_id"):
+		env_id = str(BackendEnvironment.get_environment_id())
+	return "auth_%s" % env_id
+
+
+func _current_nakama_user_id() -> String:
+	if NakamaManager != null and NakamaManager.session != null:
+		return str(NakamaManager.session.user_id)
+	return ""
+
+
+func _clear_node_session_only() -> void:
+	_node_auth_generation += 1
+	access_token = ""
+	node_token_nakama_user_id = ""
+	node_token_expires_at = 0
+	node_bridge_ok = false
+	_save_token()
+
+
+func _finish_node_bridge(result: Dictionary) -> Dictionary:
+	_bridge_in_progress = false
+	node_bridge_completed.emit(result)
+	return result
+
+
+func _is_terminal_auth_failure(result: Dictionary) -> bool:
+	var status := int(result.get("status_code", result.get("status", 0)))
+	var message := str(result.get("error", "")).to_lower()
+	return status == 401 or message.contains("expired") or message.contains("unauthorized")

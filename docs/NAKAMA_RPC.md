@@ -1,8 +1,13 @@
-# Nakama RPC layer (Godot)
+# Nakama RPC layer (legacy gameplay inventory)
 
-Reusable async RPC framework in `loot&lasers/Autoload/NakamaManager.gd`.
+Nakama is authoritative only for authentication, account identity, and session
+lifecycle. The RPC framework below remains because the incomplete migration left
+gameplay modules in Nakama. It is documented for restoration and rollback; it is
+not the target path for new gameplay work.
 
-Gameplay managers still use `GameApiClient` today. When they migrate, they must call **only** this layer — not the Nakama SDK directly.
+New and restored gameplay managers use `GameApiClient` → Node. Do not add new
+Nakama gameplay RPCs. Existing RPCs are removed from live Godot paths only in
+their dedicated Node restoration phases.
 
 ## Contract
 
@@ -68,9 +73,9 @@ await NakamaManager.call_authenticated_rpc("launch_mission", payload, {
 - **Dev logging** — `[NakamaManager:RPC] …` prints in debug builds / editor only (never logs session tokens).
 - **Concurrency** — Per-call result boxes; parallel RPCs do not cancel each other.
 
-## What not to do (yet)
+## Do not migrate these into Nakama
 
-Do **not** migrate these until a dedicated phase says so:
+Node is their target authority:
 
 - `MissionManager`
 - `InventoryManager`
@@ -80,7 +85,8 @@ Do **not** migrate these until a dedicated phase says so:
 - `StatsManager`
 - `ShopManager`
 
-They should keep using `GameApiClient` until server RPCs exist and a migration PR switches the boundary.
+They should use Node `GameApiClient`. Existing Nakama calls listed later are
+legacy implementation debt, not examples to copy.
 
 ## Future examples by manager
 
@@ -215,7 +221,10 @@ See `docs/PHASE4_INVENTORY.md`.
 
 ## Phase 5 — Wallet RPCs
 
-Managed by `CurrencyManager` (**read-only** from the Godot client). Storage: `wallets`/`wallet`, tx log `wallet_transactions`.
+Legacy account wallet storage: `wallets`/`wallet`, tx log
+`wallet_transactions`. `wallet_get` remains public and read-only, but Godot
+`CurrencyManager` now displays the compatibility-authoritative Node Character
+ledger for Fuel, Stardust, and Nova.
 
 | RPC | Purpose |
 |-----|---------|
@@ -225,7 +234,9 @@ Mutations are **internal** Lua only (`credit_currency` / `debit_currency` in `mo
 
 Temporary local-dev RPCs (flag `LOOT_DEV_WALLET_MUTATIONS=1`, soft currency only): `dev_wallet_credit_test`, `dev_wallet_debit_test`, `dev_wallet_internal_selftest`.
 
-Currency ids: `stardust` (soft), `nova_crystals` (premium). See `docs/PHASE5_WALLET.md`.
+Legacy Nakama currency IDs: `stardust`, `nova_crystals`. Fuel never existed in this
+document. Do not merge these account balances with selected-character balances.
+See `docs/PHASE5_WALLET.md` and `docs/WALLET_ARCHITECTURE.md`.
 
 ## Phase 6 — Equipment RPCs
 
@@ -239,16 +250,20 @@ Character-level ownership (must match profile `selected_character_id`). Live Her
 
 ## Phase 7 — Mission RPCs
 
-Managed by `MissionManager` (Nakama core + preserved Node launch/claim/fuel). Storage: `mission_boards/<character_id>`, `active_missions/<character_id>`.
+Managed by `MissionManager`. Mission storage remains
+`mission_boards/<character_id>` and `active_missions/<character_id>`. Required
+currency is applied through the private Nakama→Node bridge before success.
 
 | RPC | Purpose |
 |-----|---------|
 | `missions_get` | Load or create board; include active mission |
 | `missions_refresh` | Regenerate board (15s cooldown; blocked while active) |
-| `mission_start` | Start an available mission (server timestamps) |
+| `mission_start` | Start an available mission; bridge server-derived Fuel debit |
 | `mission_status` | Timer check; may transition `active` → `complete` (no rewards) |
 
-Character-level ownership. **No** claim/reward/fuel RPCs in this phase. See `docs/PHASE7_MISSIONS.md` and `docs/BACKEND_ARCHITECTURE.md`.
+Character-level ownership. The public RPC name is unchanged; there is no
+client-callable currency mutation RPC. See `docs/PHASE7_MISSIONS.md`,
+`docs/BACKEND_ARCHITECTURE.md`, and `docs/WALLET_ARCHITECTURE.md`.
 
 ## Phase 8 — Mission authority
 
@@ -299,7 +314,7 @@ Client must not submit item ID, rarity, affixes, item level, or seed. See `docs/
 | RPC | Purpose |
 |-----|---------|
 | `mission_claim` | Claim a completed mission; server builds rewards |
-| `mission_skip` | Skip remaining wait (snaps to `complete`; Nova spent via Node DebitNovaCrystals until wallet owns premium) |
+| `mission_skip` | Skip remaining wait; idempotent Nova debit through trusted bridge |
 
 Payload claim: `{ character_id?, mission_id, request_id }`.
 Payload skip: `{ character_id?, mission_id, request_id }`. See `docs/PHASE14_MISSION_REWARDS.md`.

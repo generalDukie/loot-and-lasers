@@ -5,6 +5,7 @@
 #
 # Required env (see .env.node-api.example):
 #   JWT_SECRET
+#   LOOT_WALLET_BRIDGE_SECRET (same value supplied to Nakama runtime)
 
 services:
   node-api:
@@ -16,6 +17,8 @@ services:
     restart: unless-stopped
     ports:
       - "8787:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
       PORT: "8787"
@@ -23,6 +26,11 @@ services:
       TRUST_PROXY: "true"
       RUN_SEED: "${RUN_SEED:-true}"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env.node-api}"
+      GAMEPLAY_JWT_TTL_SEC: "${GAMEPLAY_JWT_TTL_SEC:-720}"
+      GAMEPLAY_JWT_ISSUER: "${GAMEPLAY_JWT_ISSUER:-lootandlasers-node}"
+      GAMEPLAY_JWT_AUDIENCE: "${GAMEPLAY_JWT_AUDIENCE:-lootandlasers-gameplay}"
+      NAKAMA_HTTP_URL: "${NAKAMA_HTTP_URL:-http://host.docker.internal:7350}"
+      LOOT_WALLET_BRIDGE_SECRET: "${LOOT_WALLET_BRIDGE_SECRET:?set LOOT_WALLET_BRIDGE_SECRET in .env.node-api}"
       APP_ID: "${APP_ID:-lootandlasers-staging}"
       PUBLIC_CLIENT_URL: "${PUBLIC_CLIENT_URL:-http://178.156.210.186:8787}"
       # Leave SMTP unset → register auto-verifies (no email OTP).

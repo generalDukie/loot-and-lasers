@@ -13,7 +13,8 @@ func _initialize() -> void:
 		if path.begins_with("res://.godot/") or path.get_file().begins_with("_"):
 			continue
 		var res: Resource = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
-		if res == null:
+		var script := res as GDScript
+		if script == null or not script.can_instantiate():
 			script_fails.append(path)
 			print("SCRIPT_FAIL %s" % path)
 

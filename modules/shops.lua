@@ -22,7 +22,7 @@ local logging = require("lib.logging")
 local transactions = require("lib.transactions")
 local ids = require("lib.ids")
 local remote_config = require("config")
-local wallet = require("wallet")
+local wallet_bridge = require("lib.wallet_bridge")
 local inventory = require("inventory")
 local equipment = require("equipment")
 local item_definitions = require("data.item_definitions")
@@ -479,7 +479,46 @@ local function rpc_shop_buy(context, payload)
     then
       return responses.fail("Conflicting reuse of request_id", responses.CODES.CONFLICT)
     end
-    return responses.ok(existing.receipt or { replay = true, status = existing.status })
+    if existing.status == STATUS.completed then
+      local replay_key = "sbd:" .. body.request_id
+      if #replay_key > 64 then replay_key = body.request_id end
+      local fresh_wallet, ferr = wallet_bridge.apply(context, {
+        character_id = character_id,
+        operation_type = "shop_buy_stardust",
+        operation_key = replay_key,
+        reference_id = body.offer_id,
+        amount = existing.amount,
+      })
+      if ferr ~= nil then return responses.fail_status(ferr, 503) end
+      local replay = existing.receipt or {}
+      replay.replay = true
+      replay.wallet = fresh_wallet.wallet
+      replay.character = fresh_wallet.character
+      return responses.ok(replay)
+    end
+    if existing.status == STATUS.compensation_required then
+      local _, remove_err = inventory.remove_item_instance(
+        user_id, character_id, existing.item_instance_id, 1
+      )
+      if remove_err ~= nil and string.find(string.lower(tostring(remove_err)), "not found", 1, true) then
+        remove_err = nil
+      end
+      local _, refund_err = wallet_bridge.apply(context, {
+        character_id = character_id,
+        operation_type = "shop_buy_stardust_refund",
+        operation_key = "sbr:" .. body.request_id,
+        reference_id = body.offer_id,
+        amount = existing.amount,
+      })
+      if remove_err ~= nil or refund_err ~= nil then
+        return responses.fail_status("Purchase compensation still pending; retry reconciliation", 503)
+      end
+      existing.status = STATUS.failed
+      existing.updated_at = iso_now()
+      write_tx(user_id, body.request_id, existing, nil)
+      return responses.fail_status("Purchase failed; payment compensated", 409)
+    end
+    return responses.fail_status("Purchase is not complete; reconciliation required", 409)
   end
 
   local doc, version = read_shop(user_id, character_id, shop_id)
@@ -550,9 +589,13 @@ local function rpc_shop_buy(context, payload)
   if #debit_tid > 64 then
     debit_tid = body.request_id
   end
-  local _, derr = wallet.debit_currency(
-    user_id, "stardust", amount, debit_tid, "shop_buy", "shop:" .. shop_id
-  )
+  local wallet_result, derr = wallet_bridge.apply(context, {
+    character_id = character_id,
+    operation_type = "shop_buy_stardust",
+    operation_key = debit_tid,
+    reference_id = body.offer_id,
+    amount = amount,
+  })
   if derr ~= nil then
     tx.status = STATUS.failed
     tx.updated_at = iso_now()
@@ -572,13 +615,25 @@ local function rpc_shop_buy(context, payload)
   })
   if gerr ~= nil then
     local credit_tid = "sbr:" .. body.request_id
-    wallet.credit_currency(user_id, "stardust", amount, credit_tid, "shop_buy_refund", "shop:" .. shop_id)
+    local _, compensation_err = wallet_bridge.apply(context, {
+      character_id = character_id,
+      operation_type = "shop_buy_stardust_refund",
+      operation_key = credit_tid,
+      reference_id = body.offer_id,
+      amount = amount,
+    })
     tx.status = STATUS.compensation_required
-    if string.find(tostring(gerr), "Inventory full", 1, true) then
+    if compensation_err == nil then
       tx.status = STATUS.failed
     end
     tx.updated_at = iso_now()
     write_tx(user_id, body.request_id, tx, nil)
+    if compensation_err ~= nil then
+      return responses.fail_status(
+        "Purchase failed after payment; compensation pending, retry reconciliation",
+        503
+      )
+    end
     return responses.fail(tostring(gerr), responses.CODES.CONFLICT)
   end
 
@@ -586,7 +641,32 @@ local function rpc_shop_buy(context, payload)
   offer.purchased = true
   offer.stock = 0
   doc.updated_at = iso_now()
-  write_shop(user_id, character_id, shop_id, doc, version)
+  local _, shop_write_err = write_shop(user_id, character_id, shop_id, doc, version)
+  if shop_write_err ~= nil then
+    local _, remove_err = inventory.remove_item_instance(
+      user_id, character_id, preview.instance_id, preview.quantity or 1
+    )
+    local _, refund_err = wallet_bridge.apply(context, {
+      character_id = character_id,
+      operation_type = "shop_buy_stardust_refund",
+      operation_key = "sbr:" .. body.request_id,
+      reference_id = body.offer_id,
+      amount = amount,
+    })
+    tx.status = STATUS.failed
+    if remove_err ~= nil or refund_err ~= nil then
+      tx.status = STATUS.compensation_required
+    end
+    tx.updated_at = iso_now()
+    write_tx(user_id, body.request_id, tx, nil)
+    if tx.status == STATUS.compensation_required then
+      return responses.fail_status(
+        "Purchase state failed after payment; compensation pending, retry reconciliation",
+        503
+      )
+    end
+    return responses.fail_status("Purchase state failed; payment compensated", 409)
+  end
 
   local pub = public_shop(doc)
   local receipt = {
@@ -600,6 +680,8 @@ local function rpc_shop_buy(context, payload)
     currency_id = "stardust",
     amount = amount,
     already_present = grant and grant.already_present == true,
+    wallet = wallet_result.wallet,
+    character = wallet_result.character,
   }
   tx.status = STATUS.completed
   tx.receipt = receipt
@@ -668,7 +750,48 @@ local function rpc_shop_sell(context, payload)
     then
       return responses.fail("Conflicting reuse of request_id", responses.CODES.CONFLICT)
     end
-    return responses.ok(existing.receipt or { replay = true, status = existing.status })
+    if existing.status == STATUS.completed then
+      local fresh_wallet, ferr = wallet_bridge.apply(context, {
+        character_id = character_id,
+        operation_type = "shop_sell_stardust",
+        operation_key = "ssc:" .. body.request_id,
+        reference_id = body.item_instance_id,
+        amount = existing.amount,
+      })
+      if ferr ~= nil then return responses.fail_status(ferr, 503) end
+      local replay = existing.receipt or {}
+      replay.replay = true
+      replay.wallet = fresh_wallet.wallet
+      replay.character = fresh_wallet.character
+      return responses.ok(replay)
+    end
+    if existing.status == STATUS.compensation_required then
+      local recovered, recover_err = wallet_bridge.apply(context, {
+        character_id = character_id,
+        operation_type = "shop_sell_stardust",
+        operation_key = "ssc:" .. body.request_id,
+        reference_id = body.item_instance_id,
+        amount = existing.amount,
+      })
+      if recover_err ~= nil then
+        return responses.fail_status("Sale credit still pending; retry reconciliation", 503)
+      end
+      existing.status = STATUS.completed
+      existing.receipt = {
+        replay = true,
+        recovered = true,
+        status = STATUS.completed,
+        item_instance_id = body.item_instance_id,
+        currency_id = "stardust",
+        amount = existing.amount,
+        wallet = recovered.wallet,
+        character = recovered.character,
+      }
+      existing.updated_at = iso_now()
+      write_tx(user_id, body.request_id, existing, nil)
+      return responses.ok(existing.receipt)
+    end
+    return responses.fail_status("Sale is not complete; reconciliation required", 409)
   end
 
   if equipment.is_instance_equipped(user_id, character_id, body.item_instance_id) then
@@ -724,9 +847,13 @@ local function rpc_shop_sell(context, payload)
   end
 
   local credit_tid = "ssc:" .. body.request_id
-  local _, cerr2 = wallet.credit_currency(
-    user_id, "stardust", sale_amount, credit_tid, "shop_sell", "shop_sell"
-  )
+  local wallet_result, cerr2 = wallet_bridge.apply(context, {
+    character_id = character_id,
+    operation_type = "shop_sell_stardust",
+    operation_key = credit_tid,
+    reference_id = body.item_instance_id,
+    amount = sale_amount,
+  })
   if cerr2 ~= nil then
     tx.status = STATUS.compensation_required
     tx.updated_at = iso_now()
@@ -743,6 +870,8 @@ local function rpc_shop_sell(context, payload)
     currency_id = "stardust",
     amount = sale_amount,
     inventory = removed and removed.inventory or nil,
+    wallet = wallet_result.wallet,
+    character = wallet_result.character,
   }
   tx.status = STATUS.completed
   tx.receipt = receipt

@@ -122,9 +122,15 @@ function staticChecks() {
   } else pass("idempotency collection present");
 
   const auth = read("loot&lasers/Autoload/AuthManager.gd");
-  if (!/Legacy equip path disabled/.test(auth) || !/Legacy unequip path disabled/.test(auth)) {
-    fail("AuthManager legacy path not disabled");
-  } else pass("AuthManager legacy equip/unequip disabled");
+  const heroDocs = read("docs/HERO_PAGE_UI.md");
+  if (
+    !/func equip_item\(item_id: String\)/.test(auth)
+    || !/func unequip_item\(item_id: String\)/.test(auth)
+    || !/via=node_item_patch/.test(auth)
+    || !/Hero-listed Node items|Node Item compatibility/i.test(heroDocs)
+  ) {
+    fail("AuthManager Node Item compatibility path is missing or undocumented");
+  } else pass("AuthManager Node Item compatibility path documented");
 
   const mgr = read("loot&lasers/Autoload/EquipmentManager.gd");
   if (!mgr.includes("RPC_EQUIP") || !mgr.includes("equip_item")) {

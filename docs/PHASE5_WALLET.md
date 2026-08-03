@@ -1,6 +1,13 @@
 # Phase 5 — Wallet and currency service
 
-Authoritative Nakama wallet. Does **not** migrate Character balances or wire shops/missions/arena.
+> Historical phase document. Phase 5 created an account-scoped Nakama wallet but
+> deliberately did not migrate the live Character economy. The global wallet repair
+> therefore designates Node Character balances as the compatibility authority for
+> Fuel, Stardust, and Nova. Godot no longer uses `wallet_get` as its display ledger.
+> See `docs/WALLET_ARCHITECTURE.md`.
+
+Authoritative only within the legacy Nakama wallet subsystem. It does **not**
+supersede live Character balances.
 
 ## Audit summary
 

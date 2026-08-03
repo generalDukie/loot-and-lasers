@@ -421,7 +421,7 @@ func _make_row(item: Dictionary, is_equipped: bool) -> PanelContainer:
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 	if InventoryRules.is_equippable(str(item.get("type", ""))) and not is_equipped:
-		var arrow := _make_upgrade_arrow(item)
+		var arrow: Control = _make_upgrade_arrow(item)
 		if arrow:
 			row.add_child(arrow)
 	row.add_child(GearIcon.make(item, 44.0))
@@ -531,7 +531,7 @@ func _make_row(item: Dictionary, is_equipped: bool) -> PanelContainer:
 	return panel
 
 
-func _make_upgrade_arrow(item: Dictionary) -> Variant:
+func _make_upgrade_arrow(item: Dictionary) -> Control:
 	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
 	var worn := InventoryRules.find_equipped_of_type(_items, str(item.get("type", "")))
 	var my_p := InventoryRules.class_power_rating(item, class_key)

@@ -5,8 +5,8 @@ signal base_url_changed(url: String)
 
 const DEFAULT_BASE_URL := "http://127.0.0.1:8787"
 const CONFIG_PATH := "user://godot_client.cfg"
-## Boot probe — fail fast so splash → login stays snappy if the API is down.
-const HEALTH_TIMEOUT_SEC := 2.0
+## Boot probe — fail fast so splash → login stays snappy if the API is down/slow.
+const HEALTH_TIMEOUT_SEC := 0.75
 const DEFAULT_TIMEOUT_SEC := 30.0
 
 var base_url: String = DEFAULT_BASE_URL

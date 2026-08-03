@@ -17,6 +17,7 @@
 | 13 | Done | Server-authoritative loot generation (engine only) |
 | 14 | Done | Mission rewards integration (`mission_claim`) |
 | 15 | Done | Secure shop service (buy/sell/refresh) |
-| 16+ | Planned | Progression/XP, fuel debit, premium shop parity, etc. |
+| 16 | Deferred / Design in progress | Shipment System — gameplay loop still being workshopped (crate rules, item eligibility, payouts, timing, destinations, bonuses, failure/risk). Revisit after a written gameplay specification is approved. No placeholder RPCs, storage, managers, feature flags, or config until then. |
+| 17+ | Planned | Progression/XP, fuel debit, premium shop parity, and other post-shop backend work (excluding deferred shipments until Phase 16 is unblocked) |
 
 Before each backend commit: `npm run verify:backend`.

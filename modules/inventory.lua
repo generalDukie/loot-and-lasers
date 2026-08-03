@@ -247,13 +247,101 @@ local function grant_item_instance(user_id, character_id, instance_row)
   return nil, last_err, 409
 end
 
+--- INTERNAL — remove one item instance from character bag. Not a public RPC.
+local function remove_item_instance(user_id, character_id, instance_id, quantity)
+  if type(user_id) ~= "string" or user_id == "" then
+    return nil, "user_id is required", 400
+  end
+  if type(character_id) ~= "string" or character_id == "" then
+    return nil, "character_id is required", 400
+  end
+  if type(instance_id) ~= "string" or instance_id == "" then
+    return nil, "instance_id is required", 400
+  end
+  local qty = tonumber(quantity) or 1
+  if qty ~= math.floor(qty) or qty < 1 then
+    return nil, "quantity must be a positive integer", 400
+  end
+
+  local last_err = "Failed to remove item"
+  for _ = 1, MAX_WRITE_RETRIES do
+    local inv, version, err = read_inventory(user_id, character_id)
+    if err ~= nil then
+      return nil, err, 422
+    end
+
+    local found_index = nil
+    local found_row = nil
+    for i = 1, #inv.slots do
+      if inv.slots[i].instance_id == instance_id then
+        found_index = i
+        found_row = inv.slots[i]
+        break
+      end
+    end
+    if found_index == nil then
+      return nil, "Item instance not found", 404
+    end
+
+    local have = tonumber(found_row.quantity) or 1
+    if qty > have then
+      return nil, "Insufficient item quantity", 409
+    end
+
+    local slots = validation.empty_array()
+    for i = 1, #inv.slots do
+      if i == found_index then
+        if have > qty then
+          table.insert(slots, {
+            instance_id = found_row.instance_id,
+            item_id = found_row.item_id,
+            quantity = have - qty,
+            slot_index = #slots,
+            metadata = found_row.metadata or {},
+          })
+        end
+      else
+        local row = inv.slots[i]
+        table.insert(slots, {
+          instance_id = row.instance_id,
+          item_id = row.item_id,
+          quantity = row.quantity,
+          slot_index = #slots,
+          metadata = row.metadata or {},
+        })
+      end
+    end
+
+    local record = {
+      inventory_version = 1,
+      owner_type = "character",
+      owner_id = character_id,
+      slots = slots,
+      updated_at = time.unix(),
+    }
+    local _, werr = storage.write_one(user_id, INV_COLLECTION, character_id, record, version, 1, 0)
+    if werr == nil then
+      return {
+        inventory = record,
+        removed_instance_id = instance_id,
+        removed_quantity = qty,
+        item_id = found_row.item_id,
+        metadata = found_row.metadata or {},
+      }, nil, 200
+    end
+    last_err = tostring(werr)
+  end
+  return nil, last_err, 409
+end
+
 nk.register_rpc(rpc_inventory_get, "inventory_get")
 -- inventory_grant / inventory_write intentionally NOT registered.
 
-nk.logger_info("Phase 4/13 inventory: public inventory_get; grant_item_instance internal-only")
+nk.logger_info("Phase 4/13/15 inventory: public inventory_get; grant/remove internal-only")
 
 return {
   grant_item_instance = grant_item_instance,
+  remove_item_instance = remove_item_instance,
   BAG_CAP_DEFAULT = BAG_CAP_DEFAULT,
   INV_COLLECTION = INV_COLLECTION,
 }

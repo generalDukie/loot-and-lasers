@@ -839,3 +839,26 @@ nk.register_rpc(rpc_equipment_get, "equipment_get")
 nk.register_rpc(rpc_equipment_equip, "equipment_equip")
 nk.register_rpc(rpc_equipment_unequip, "equipment_unequip")
 nk.logger_info("Phase 11 equipment RPCs registered (equipment_get, equipment_equip, equipment_unequip)")
+
+--- INTERNAL — true if instance_id is currently equipped.
+local function is_instance_equipped(user_id, character_id, instance_id)
+  if type(instance_id) ~= "string" or instance_id == "" then
+    return false
+  end
+  local eq, _, err = read_equipment(user_id, character_id)
+  if err ~= nil or eq == nil or type(eq.slots) ~= "table" then
+    return false
+  end
+  for _, slot_id in ipairs(EQUIPMENT_SLOTS) do
+    local piece = eq.slots[slot_id]
+    if type(piece) == "table" and piece.instance_id == instance_id then
+      return true
+    end
+  end
+  return false
+end
+
+return {
+  is_instance_equipped = is_instance_equipped,
+  EQ_COLLECTION = EQ_COLLECTION,
+}

@@ -300,3 +300,14 @@ Client must not submit item ID, rarity, affixes, item level, or seed. See `docs/
 | `mission_claim` | Claim a completed mission; server builds rewards |
 
 Payload: `{ character_id?, mission_id, request_id }`. See `docs/PHASE14_MISSION_REWARDS.md`.
+
+## Phase 15 — Secure shops
+
+| RPC | Purpose |
+|-----|---------|
+| `shop_get` | Load/generate character shop |
+| `shop_buy` | Purchase offer (stardust) |
+| `shop_sell` | Sell bag item (stardust; equipped rejected) |
+| `shop_refresh` | Free cooldown refresh |
+
+See `docs/PHASE15_SHOPS.md`.

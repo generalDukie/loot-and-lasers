@@ -272,7 +272,13 @@ func _make_market_section() -> PanelContainer:
 	head_col.add_child(h)
 
 	var restock := Button.new()
-	restock.text = "Restock · 💎 %s" % ShopManager.SHOP_REFRESH_COST
+	var rem := ShopManager.get_refresh_remaining()
+	if rem > 0:
+		restock.text = "Restock in %ss" % rem
+		restock.disabled = true
+	else:
+		restock.text = "Free Restock"
+		restock.disabled = false
 	_apply_restock_btn(restock, Color("#FBBF24"))
 	restock.pressed.connect(func() -> void: _on_refresh("all"))
 	head.add_child(restock)
@@ -639,9 +645,8 @@ func _apply_haggle_btn(btn: Button) -> void:
 func _on_refresh(which: String) -> void:
 	if _busy:
 		return
-	var nova := int(GameManager.active_character.get("nova_crystals", 0))
-	if nova < ShopManager.SHOP_REFRESH_COST:
-		_set_status("Need %s 💎 to refresh." % ShopManager.SHOP_REFRESH_COST)
+	if ShopManager.get_refresh_remaining() > 0:
+		_set_status("Restock available in %ss." % ShopManager.get_refresh_remaining())
 		return
 	_busy = true
 	_set_status("Refreshing %s…" % which)
@@ -651,14 +656,14 @@ func _on_refresh(which: String) -> void:
 		_set_status(str(res.get("error", "Refresh failed")))
 		_update_meta()
 		return
-	_set_status("🔄 Black Market restocked (−%s 💎)." % ShopManager.SHOP_REFRESH_COST)
+	_set_status("🔄 Black Market restocked (free).")
 	_populate()
 
 
 func _on_buy_cons(slot_id: String, cost: int) -> void:
 	if _busy:
 		return
-	var sd := int(GameManager.active_character.get("stardust", 0))
+	var sd := int(CurrencyManager.get_balance("stardust")) if CurrencyManager != null else int(GameManager.active_character.get("stardust", 0))
 	if sd < cost:
 		_set_status("Need %s ✦ — you have %s." % [cost, sd])
 		return
@@ -680,24 +685,17 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: int) -> void:
 	if _busy:
 		return
-	var sd := int(GameManager.active_character.get("stardust", 0))
-	var nc := int(GameManager.active_character.get("nova_crystals", 0))
+	var sd := int(CurrencyManager.get_balance("stardust")) if CurrencyManager != null else int(GameManager.active_character.get("stardust", 0))
 	if haggle:
-		var need := int(ceil(float(cost) * 0.85))
-		if sd < need:
-			_set_status("Need %s ✦ to haggle if the deal lands." % need)
-			return
-	else:
-		if sd < cost:
-			_set_status("Need %s ✦ — you have %s." % [cost, sd])
-			return
-		if nova > 0 and nc < nova:
-			_set_status("Need %s 💎." % nova)
-			return
+		# Phase 15: haggle is display-only; purchase uses full authoritative price.
+		pass
+	if sd < cost:
+		_set_status("Need %s ✦ — you have %s." % [cost, sd])
+		return
 	_busy = true
 	_busy_slot = slot_id
-	_set_status("Haggling…" if haggle else "Buying gear…")
-	var res: Dictionary = await ShopManager.buy_gear(slot_id, is_hot, haggle)
+	_set_status("Buying gear…")
+	var res: Dictionary = await ShopManager.buy_gear(slot_id, is_hot, false)
 	_busy = false
 	_busy_slot = ""
 	if not res.ok:
@@ -705,14 +703,8 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 		_update_meta()
 		return
 	var purchase: Dictionary = ShopManager.last_purchase
-	if str(purchase.get("kind", "")) == "haggle_fail":
-		_set_status(str(purchase.get("note", "Haggle failed — they yanked the listing.")))
-	else:
-		var note := str(purchase.get("haggle_note", ""))
-		var msg := _purchase_msg(purchase, "Deal struck!" if haggle else "Purchased!")
-		if not note.is_empty():
-			msg = "%s · %s" % [note, msg]
-		_set_status(msg)
+	var msg := _purchase_msg(purchase, "Purchased!")
+	_set_status(msg)
 	await _load_equipped()
 	_populate()
 

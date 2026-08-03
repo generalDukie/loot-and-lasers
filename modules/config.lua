@@ -37,6 +37,7 @@ local ALLOWED_NAMESPACES = {
   global = true,
   missions = true,
   client_ui = true,
+  shops = true,
 }
 
 -- Schema: type + optional min/max/maxlen + client_visible.
@@ -64,12 +65,58 @@ local NAMESPACE_SCHEMAS = {
   client_ui = {
     show_development_banner = { type = "boolean", client_visible = true, default = true },
   },
+  shops = {
+    offer_count = { type = "integer", client_visible = true, default = 4, min = 1, max = 8 },
+    refresh_cooldown_seconds = { type = "integer", client_visible = true, default = 60, min = 0, max = 86400 },
+    sell_value_ratio = { type = "integer", client_visible = false, default = 100, min = 1, max = 100 },
+    buy_price_multiplier_percent = { type = "integer", client_visible = false, default = 100, min = 50, max = 300 },
+  },
 }
 
 local DEFAULT_FLAGS = {
   shipments_enabled = {
     flag_id = "shipments_enabled",
     enabled = false,
+    environment = "development",
+    client_visible = true,
+    minimum_client_version = "",
+    starts_at = "",
+    ends_at = "",
+    metadata = {},
+  },
+  shops_enabled = {
+    flag_id = "shops_enabled",
+    enabled = true,
+    environment = "development",
+    client_visible = true,
+    minimum_client_version = "",
+    starts_at = "",
+    ends_at = "",
+    metadata = {},
+  },
+  shop_buy_enabled = {
+    flag_id = "shop_buy_enabled",
+    enabled = true,
+    environment = "development",
+    client_visible = true,
+    minimum_client_version = "",
+    starts_at = "",
+    ends_at = "",
+    metadata = {},
+  },
+  shop_sell_enabled = {
+    flag_id = "shop_sell_enabled",
+    enabled = true,
+    environment = "development",
+    client_visible = true,
+    minimum_client_version = "",
+    starts_at = "",
+    ends_at = "",
+    metadata = {},
+  },
+  shop_refresh_enabled = {
+    flag_id = "shop_refresh_enabled",
+    enabled = true,
     environment = "development",
     client_visible = true,
     minimum_client_version = "",

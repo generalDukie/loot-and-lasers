@@ -59,7 +59,7 @@ M.LOOT_TABLES = {
       },
     },
   },
-  // Phase 14 mission claim sample (common/uncommon only — no high-tier unrestricted entries).
+  -- Phase 14 mission claim sample (common/uncommon only).
   phase14_mission_basic = {
     loot_table_version = 1,
     loot_table_id = "phase14_mission_basic",

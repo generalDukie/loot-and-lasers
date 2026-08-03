@@ -99,3 +99,9 @@ See `docs/PHASE13_LOOT_GENERATION.md`.
 `mission_claim` connects MissionService → LootService → RewardService.
 Snapshot reward references at mission generation. Stardust + sample loot; XP explicitly unsupported.
 Godot `MissionManager` claims via Nakama only. See `docs/PHASE14_MISSION_REWARDS.md`.
+
+## Secure shops (Phase 15)
+
+`modules/shops.lua` — character-level `general` shop. Soft currency buy/sell; free cooldown refresh.
+Godot `ShopManager` uses Nakama; Node EnsureShop/BuyShop disabled for stalls.
+See `docs/PHASE15_SHOPS.md`.

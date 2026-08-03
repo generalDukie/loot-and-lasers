@@ -18,6 +18,8 @@ Schema history for Nakama storage collections introduced by backend phases.
 | 13 | `inventories` | character id | account | Internal `grant_item_instance` append (via RewardService) |
 | 14 | `active_missions` | character id | account | Claim fields: `claim_request_id`, `reward_transaction_id`, `loot_transaction_id`, `claimed_at`, `reward_status`, receipt summaries |
 | 14 | `reward_transactions` / `loot_transactions` | `mission_reward:` / `mission_loot:` + mission id | recipient | Canonical grant records referenced by mission |
+| 15 | `shops` | `<character_id>:<shop_id>` | account | Character shop offers + revision |
+| 15 | `shop_transactions` | `request_id` | account | Buy/sell/refresh idempotency receipts |
 
 Permissions for Phase 10 system objects: read `0`, write `0` (runtime/RPC only).
 

@@ -67,6 +67,10 @@ Do not install Git hooks unless the user asks.
 
 `verify_mission_rewards.mjs` asserts `mission_claim`, snapshot rewards, RewardService/LootService wiring, single-grant idempotency, no loot reroll, client reward rejection, and XP unsupported handling.
 
+## Phase 15 checks
+
+`verify_shop_service.mjs` asserts shop RPCs, server prices/sale values, buy/sell/refresh idempotency, capacity-before-charge, equipped sell rejection, Nakama ShopManager, and no premium shop currency.
+
 ## Troubleshooting
 
 | Symptom | Fix |

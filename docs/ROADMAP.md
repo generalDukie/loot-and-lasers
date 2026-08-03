@@ -16,6 +16,7 @@
 | 12 | Done | Central reward service (soft currency orchestrator) |
 | 13 | Done | Server-authoritative loot generation (engine only) |
 | 14 | Done | Mission rewards integration (`mission_claim`) |
-| 15+ | Planned | Progression/XP, fuel debit, arena rewards, etc. |
+| 15 | Done | Secure shop service (buy/sell/refresh) |
+| 16+ | Planned | Progression/XP, fuel debit, premium shop parity, etc. |
 
 Before each backend commit: `npm run verify:backend`.

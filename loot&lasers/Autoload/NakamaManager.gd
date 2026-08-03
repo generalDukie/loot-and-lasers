@@ -169,6 +169,23 @@ func get_auth_method() -> String:
 	return _load_auth_method()
 
 
+func get_session_token() -> String:
+	if session == null or not is_authenticated():
+		return ""
+	return str(session.token)
+
+
+func get_session_user_id() -> String:
+	if session == null or not is_authenticated():
+		return ""
+	return str(session.user_id)
+
+
+## Email used for last email auth (persisted for passwordless Node re-bridge).
+func get_account_email() -> String:
+	return _load_account_email()
+
+
 ## Godot login / register — sole email/password path (Nakama :7350, never Node :8787).
 ## create=true → register; create=false → login existing account.
 func authenticate_email(email: String, password: String, create: bool = false, username: String = "") -> Dictionary:
@@ -213,6 +230,7 @@ func authenticate_email(email: String, password: String, create: bool = false, u
 
 	_set_session(result, false)
 	_save_auth_method("email")
+	_save_account_email(clean_email)
 	print("[NakamaManager] %s success env=%s host=%s:%s user_id=%s" % [
 		method,
 		BackendEnvironment.get_environment_id(),
@@ -858,6 +876,29 @@ func _save_auth_method(method: String) -> void:
 	cfg.set_value("nakama", "auth_method", method.strip_edges())
 	cfg.set_value("nakama", "environment", BackendEnvironment.get_environment_id())
 	cfg.save(session_path)
+
+
+func _save_account_email(email: String) -> void:
+	var clean := email.strip_edges().to_lower()
+	if clean.is_empty():
+		return
+	var session_path := BackendEnvironment.get_session_path()
+	var cfg := ConfigFile.new()
+	cfg.load(session_path)
+	cfg.set_value("nakama", "account_email", clean)
+	cfg.set_value("nakama", "environment", BackendEnvironment.get_environment_id())
+	cfg.save(session_path)
+
+
+func _load_account_email() -> String:
+	var session_path := BackendEnvironment.get_session_path()
+	var cfg := ConfigFile.new()
+	if cfg.load(session_path) != OK:
+		return ""
+	var saved_env := str(cfg.get_value("nakama", "environment", ""))
+	if not saved_env.is_empty() and saved_env != BackendEnvironment.get_environment_id():
+		return ""
+	return str(cfg.get_value("nakama", "account_email", "")).strip_edges().to_lower()
 
 
 func _load_auth_method() -> String:

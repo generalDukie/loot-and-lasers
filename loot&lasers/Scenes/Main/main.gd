@@ -91,6 +91,12 @@ func _boot() -> void:
 		str(nakama_res.get("data", {}).get("auth_method", "")),
 	])
 
+	if not AuthManager.has_node_gameplay_session():
+		print("[NakamaBoot] Node gameplay bridge missing — opening login to re-link")
+		_set_status("Ready")
+		GameManager.go_login()
+		return
+
 	_set_status("Loading profile...")
 	var me: Dictionary = await AuthManager.fetch_me()
 	if not me.ok:

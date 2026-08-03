@@ -88,7 +88,23 @@ $env:NAKAMA_SOCKET_SERVER_KEY = "<Hetzner NAKAMA_SOCKET_SERVER_KEY>"
 
 Badge should show `NAKAMA STAGING · http://178.156.210.186:7350 (auth)`.
 
-No `LOOT_NODE_API_URL` is required for signup/login.
+After Nakama login, Godot calls Node `POST /api/auth/nakama-bridge` so Character/economy APIs still work on `:8787` until migrated. The host must run the Node API (`npm run server`) with `NAKAMA_HTTP_URL` pointing at reachable Nakama (default `http://127.0.0.1:7350`; staging host should use its local Nakama URL). For hybrid local Node + staging Nakama, set:
+
+```powershell
+$env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,http://178.156.210.186:7350"
+```
+
+Automated dual-stack player path (login → bridge → character → JWT reconnect → friend isolation):
+
+```powershell
+npm run test:godot-auth-flow
+# staging Nakama + local Node (Node must reach staging via NAKAMA_HTTP_URL or NAKAMA_HTTP_URLS):
+$env:LOOT_NAKAMA_ENV = "staging"
+$env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,http://178.156.210.186:7350"
+npm run test:godot-auth-flow
+```
+
+No `LOOT_NODE_API_URL` is required for signup itself; it is required for the gameplay bridge.
 
 ### OTP / email
 

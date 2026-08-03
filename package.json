@@ -35,6 +35,7 @@
     "test:arena-bot": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-arena-bot.mjs",
     "test:game-viewport": "node ./server/scripts/test-game-viewport.mjs",
     "test:godot-resolution": "node \"./loot&lasers/scripts/test-resolution-rules.mjs\"",
+    "test:godot-auth-flow": "node scripts/verify_godot_auth_gameplay_flow.mjs",
     "verify:backend": "node scripts/verify_backend.mjs",
     "checkpoint:backend": "node scripts/checkpoint_backend.mjs"
   },

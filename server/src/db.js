@@ -66,6 +66,10 @@ db.exec(`
   if (!cols.has("legacy_display")) {
     db.exec("ALTER TABLE users ADD COLUMN legacy_display TEXT DEFAULT 'surname'");
   }
+  if (!cols.has("nakama_user_id")) {
+    db.exec("ALTER TABLE users ADD COLUMN nakama_user_id TEXT");
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_users_nakama_user_id ON users(nakama_user_id)");
 })();
 
 /**

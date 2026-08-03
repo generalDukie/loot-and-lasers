@@ -4,9 +4,19 @@ Loot & Lasers uses a **dual stack** during the Nakama migration:
 
 | Layer | Role |
 |-------|------|
-| Node API (`server/`, port 8787) | Gameplay auth (JWT), character/items economy, fuel buy/sync, shops |
-| Nakama (Docker, port 7350) | Authoritative services migrating phase-by-phase |
-| Godot (`loot&lasers/`) | Client; managers call `NakamaManager` / `GameApiClient` |
+| Nakama (Docker / staging, port 7350) | **Godot account auth** (email), migrating gameplay services |
+| Node API (`server/`, port 8787) | Character/items economy and other unmigrated gameplay |
+| Godot (`loot&lasers/`) | Client; auth via Nakama, then **Node JWT bridge** for Character APIs |
+
+### Auth bridge (current)
+
+1. Godot login/register → Nakama `authenticate_email`
+2. Godot → `POST /api/auth/nakama-bridge` with Nakama session token (+ password on first link)
+3. Node validates the session against Nakama HTTP (`NAKAMA_HTTP_URL`, default `http://127.0.0.1:7350`; optional comma-separated `NAKAMA_HTTP_URLS` fallbacks), links/creates a Node user (`nakama_user_id`), returns JWT
+4. Unmigrated managers keep using `GameApiClient` + JWT
+5. Automated dual-stack path: `npm run test:godot-auth-flow` (also picked up by `npm run verify:backend`)
+
+Do **not** remove Node `/api/auth/*` until each gameplay system has a verified Nakama replacement.
 
 ## Phase map
 

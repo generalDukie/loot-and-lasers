@@ -85,11 +85,194 @@ function otpCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+export function getUserByNakamaId(nakamaUserId) {
+  if (!nakamaUserId) return null;
+  return db.prepare("SELECT * FROM users WHERE nakama_user_id = ?").get(nakamaUserId);
+}
+
+/** Primary + optional fallback Nakama HTTP bases (comma-separated NAKAMA_HTTP_URLS). */
+function nakamaHttpBases() {
+  const multi = String(process.env.NAKAMA_HTTP_URLS || "").trim();
+  const primary = String(
+    process.env.NAKAMA_HTTP_URL || process.env.LOOT_NAKAMA_HTTP_URL || "http://127.0.0.1:7350",
+  )
+    .trim()
+    .replace(/\/$/, "");
+  const list = [];
+  const push = (u) => {
+    const n = String(u || "")
+      .trim()
+      .replace(/\/$/, "");
+    if (n && !list.includes(n)) list.push(n);
+  };
+  push(primary);
+  if (multi) {
+    for (const part of multi.split(",")) push(part);
+  }
+  return list.length ? list : ["http://127.0.0.1:7350"];
+}
+
+async function fetchNakamaAccountFromBase(base, sessionToken) {
+  const res = await fetch(`${base}/v2/account`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+      Accept: "application/json",
+    },
+  });
+  const text = await res.text();
+  let body = {};
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    body = { raw: text.slice(0, 200) };
+  }
+  if (!res.ok) {
+    const msg = body.message || body.error || `Nakama account lookup failed (${res.status})`;
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return body;
+}
+
+async function fetchNakamaAccount(sessionToken) {
+  const bases = nakamaHttpBases();
+  let lastErr = null;
+  for (const base of bases) {
+    try {
+      return await fetchNakamaAccountFromBase(base, sessionToken);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error("Nakama account lookup failed");
+}
+
+function linkNakamaId(userId, nakamaUserId) {
+  if (!userId || !nakamaUserId) return;
+  db.prepare("UPDATE users SET nakama_user_id = ?, updated_date = ? WHERE id = ?").run(
+    nakamaUserId,
+    nowIso(),
+    userId,
+  );
+}
+
 export function createAuthRouter(express) {
   const router = express.Router();
 
   router.get("/me", requireAuth, (req, res) => {
     res.json(req.user);
+  });
+
+  /**
+   * Dual-stack bridge: validate a Nakama session and issue a Node JWT for
+   * unmigrated Character/economy APIs. Does not replace Nakama as auth SoT.
+   *
+   * Body: { nakama_token, email?, password? }
+   * password optional — used to create/link a Node user when none exists yet.
+   */
+  router.post("/nakama-bridge", async (req, res) => {
+    try {
+      const nakamaToken = String(req.body?.nakama_token || req.body?.session_token || "").trim();
+      const password = String(req.body?.password || "");
+      const emailHint = String(req.body?.email || "").trim().toLowerCase();
+      if (!nakamaToken) {
+        return res.status(400).json({ error: "nakama_token required" });
+      }
+
+      let account;
+      try {
+        account = await fetchNakamaAccount(nakamaToken);
+      } catch (err) {
+        const status = err.status && err.status >= 400 && err.status < 600 ? err.status : 401;
+        return res.status(status).json({ error: err.message || "Invalid Nakama session" });
+      }
+
+      const nakamaUser = account.user || account;
+      const nakamaUserId = String(nakamaUser?.id || nakamaUser?.user_id || "").trim();
+      const email = String(nakamaUser?.email || emailHint || "").trim().toLowerCase();
+      if (!nakamaUserId) {
+        return res.status(401).json({ error: "Nakama account missing user id" });
+      }
+      if (!email) {
+        return res.status(400).json({
+          error: "Nakama account has no email — pass email (and password) to link a Node user",
+        });
+      }
+
+      let row = getUserByNakamaId(nakamaUserId) || getUserByEmail(email);
+      const ts = nowIso();
+
+      if (!row) {
+        // Create a Node gameplay user linked to this Nakama identity.
+        const id = nanoid();
+        let hash;
+        if (password.length >= 6) {
+          hash = await bcrypt.hash(password, 10);
+        } else {
+          // Bridge-only account — cannot password-login until password is set.
+          hash = await bcrypt.hash(nanoid(48), 10);
+        }
+        db.prepare(`
+          INSERT INTO users (
+            id, email, password_hash, role, email_verified, nakama_user_id,
+            otp_code, otp_expires_at, created_date, updated_date
+          ) VALUES (?, ?, ?, 'user', 1, ?, NULL, NULL, ?, ?)
+        `).run(id, email, hash, nakamaUserId, ts, ts);
+        row = getUserByEmail(email);
+        console.log(`[auth] nakama-bridge created Node user for ${email} nakama=${nakamaUserId}`);
+      } else {
+        if (!row.nakama_user_id) {
+          linkNakamaId(row.id, nakamaUserId);
+          row = getUserByEmail(email) || getUserByNakamaId(nakamaUserId);
+        } else if (row.nakama_user_id !== nakamaUserId) {
+          return res.status(409).json({
+            error: "Node account is linked to a different Nakama user",
+          });
+        }
+        if (!row.email_verified) {
+          db.prepare(`
+            UPDATE users SET email_verified = 1, otp_code = NULL, otp_expires_at = NULL, updated_date = ?
+            WHERE id = ?
+          `).run(ts, row.id);
+        }
+        // Optional: sync password so web login matches Godot credentials.
+        if (password.length >= 6) {
+          const hash = await bcrypt.hash(password, 10);
+          db.prepare("UPDATE users SET password_hash = ?, updated_date = ? WHERE id = ?").run(
+            hash,
+            ts,
+            row.id,
+          );
+        }
+      }
+
+      const fresh = getUserByNakamaId(nakamaUserId) || getUserByEmail(email);
+      if (!fresh) {
+        return res.status(500).json({ error: "Bridge user missing after link" });
+      }
+      const access_token = signToken(fresh.id);
+      const pub = publicUser(fresh);
+      auditAuthEvent({
+        action: "nakama_bridge",
+        user: pub,
+        email,
+        ipAddress: req.ip || req.headers["x-forwarded-for"] || null,
+        result: AuditResults.SUCCESS,
+        metadata: { nakama_user_id: nakamaUserId },
+      });
+      res.json({
+        success: true,
+        access_token,
+        user: pub,
+        nakama_user_id: nakamaUserId,
+        bridge: true,
+      });
+    } catch (err) {
+      console.error("[auth] nakama-bridge error", err);
+      res.status(500).json({ error: err.message || "Bridge failed" });
+    }
   });
 
   router.post("/register", async (req, res) => {

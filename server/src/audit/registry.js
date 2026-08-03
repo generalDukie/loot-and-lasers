@@ -191,6 +191,8 @@ export const AUDIT_ACTIONS = Object.freeze({
   // Auth (generic login + existing password resets)
   login_succeeded: { category: AuditCategories.AUTHENTICATION, severity: AuditSeverity.LOW, retention: RetentionClasses.SECURITY },
   login_failed: { category: AuditCategories.AUTHENTICATION, severity: AuditSeverity.MEDIUM, retention: RetentionClasses.SECURITY },
+  nakama_bridge: { category: AuditCategories.AUTHENTICATION, severity: AuditSeverity.LOW, retention: RetentionClasses.SECURITY },
+  admin_login: { category: AuditCategories.AUTHENTICATION, severity: AuditSeverity.MEDIUM, retention: RetentionClasses.SECURITY },
 
   // Guild
   guild_leadership_transferred: { category: AuditCategories.GUILD, severity: AuditSeverity.HIGH, retention: RetentionClasses.ADMINISTRATIVE, critical: true },

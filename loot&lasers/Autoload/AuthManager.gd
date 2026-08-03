@@ -1,39 +1,42 @@
 extends Node
-## Godot authentication coordinator.
-## Login / register / session restore use NakamaManager email auth only (port 7350).
-## Legacy Node JWT (:8787) is cleared and never used for Godot account auth.
-## Gameplay helpers that still call GameApiClient are intentional legacy (characters/items).
+## Godot authentication coordinator (dual-stack).
+## Auth SoT: Nakama email (:7350).
+## Gameplay bridge: Node JWT (:8787) for unmigrated Character/economy APIs.
+## Do not remove Node auth routes until each gameplay system has migrated.
 
 signal auth_changed(logged_in: bool)
 signal user_changed(user: Dictionary)
 
 const CONFIG_PATH := "user://godot_client.cfg"
-const AUTH_LEGACY_CLEARED_KEY := "legacy_node_auth_cleared_v1"
+const BRIDGE_FLAG_KEY := "nakama_node_bridge_v1"
 
 var access_token: String = ""
 var user: Dictionary = {}
 var last_auth_diagnostics: Dictionary = {}
+var node_bridge_ok := false
 
 
 func _ready() -> void:
-	_invalidate_legacy_node_auth()
 	_load_token()
-	print("[AuthManager] ready (nakama_auth=%s legacy_jwt=%s)" % [
-		"pending",
-		"cleared" if access_token.is_empty() else "present",
-	])
+	print("[AuthManager] ready (nakama=pending node_jwt=%s)" % (
+		"yes" if not access_token.is_empty() else "no"
+	))
 
 
 func is_logged_in() -> bool:
 	return is_nakama_authenticated()
 
 
-## Email/password login via Nakama (never Node :8787).
+func has_node_gameplay_session() -> bool:
+	return not access_token.is_empty()
+
+
+## Email/password login via Nakama, then bridge Node JWT.
 func login(email: String, password: String) -> Dictionary:
 	return await _authenticate_email(email, password, false)
 
 
-## Create account via Nakama email auth with create=true (never Node :8787).
+## Create account via Nakama, then bridge Node JWT.
 func register(email: String, password: String) -> Dictionary:
 	return await _authenticate_email(email, password, true)
 
@@ -55,6 +58,7 @@ func _authenticate_email(email: String, password: String, create: bool) -> Dicti
 		"auth_method": "email_register" if create else "email_login",
 		"success": bool(nakama_res.get("success", false)),
 		"error": str(nakama_res.get("error", "")),
+		"node_bridge": false,
 	}
 	if not bool(nakama_res.get("success", false)):
 		print("[AuthManager] %s failed — %s" % [
@@ -69,7 +73,24 @@ func _authenticate_email(email: String, password: String, create: bool) -> Dicti
 			"diagnostics": last_auth_diagnostics,
 		}
 
-	var post: Dictionary = await _post_nakama_auth(str(email.strip_edges().to_lower()))
+	var clean_email := email.strip_edges().to_lower()
+	var bridge: Dictionary = await bridge_node_session(clean_email, password)
+	last_auth_diagnostics["node_bridge"] = bool(bridge.get("success", false))
+	if not bool(bridge.get("success", false)):
+		# Keep Nakama session; surface bridge failure so UI can show a useful error.
+		last_auth_diagnostics["success"] = false
+		last_auth_diagnostics["error"] = str(bridge.get("error", "Node gameplay bridge failed"))
+		print("[AuthManager] WARNING: Nakama OK but Node bridge failed — %s" % last_auth_diagnostics.error)
+		return {
+			"ok": false,
+			"success": false,
+			"error": "Signed into Nakama, but Node gameplay bridge failed: %s" % last_auth_diagnostics.error,
+			"data": {"nakama_ok": true, "node_bridge": false},
+			"status": int(bridge.get("status", 0)),
+			"diagnostics": last_auth_diagnostics,
+		}
+
+	var post: Dictionary = await _post_nakama_auth(clean_email)
 	if not bool(post.get("success", false)):
 		last_auth_diagnostics["success"] = false
 		last_auth_diagnostics["error"] = str(post.get("error", "Post-auth init failed"))
@@ -85,8 +106,10 @@ func _authenticate_email(email: String, password: String, create: bool) -> Dicti
 
 	last_auth_diagnostics["success"] = true
 	last_auth_diagnostics["user_id"] = str(nakama_res.get("data", {}).get("user_id", ""))
-	print("[AuthManager] %s success user_id=%s" % [
-		last_auth_diagnostics.auth_method, last_auth_diagnostics.get("user_id", "")
+	print("[AuthManager] %s success nakama_user=%s node_user=%s" % [
+		last_auth_diagnostics.auth_method,
+		last_auth_diagnostics.get("user_id", ""),
+		str(user.get("id", "")),
 	])
 	auth_changed.emit(true)
 	user_changed.emit(user)
@@ -100,9 +123,74 @@ func _authenticate_email(email: String, password: String, create: bool) -> Dicti
 	}
 
 
+## Exchange Nakama session for Node JWT (creates/links Node user as needed).
+func bridge_node_session(email: String = "", password: String = "") -> Dictionary:
+	if GameApiClient == null:
+		return {"success": false, "error": "GameApiClient missing", "status": 0}
+	if not is_nakama_authenticated():
+		return {"success": false, "error": "Nakama session required before Node bridge", "status": 401}
+	var token := ""
+	if NakamaManager.has_method("get_session_token"):
+		token = NakamaManager.get_session_token()
+	elif NakamaManager.session != null:
+		token = str(NakamaManager.session.token)
+	if token.is_empty():
+		return {"success": false, "error": "Missing Nakama session token", "status": 401}
+
+	var body := {
+		"nakama_token": token,
+		"email": email.strip_edges().to_lower(),
+	}
+	if not password.is_empty():
+		body["password"] = password
+
+	var res: Dictionary = await GameApiClient.request(
+		"POST",
+		"/api/auth/nakama-bridge",
+		body,
+		false
+	)
+	if not res.ok:
+		node_bridge_ok = false
+		var err := str(res.get("error", "Node bridge failed"))
+		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
+			err = str(res.data["error"])
+		return {"success": false, "error": err, "status": int(res.get("status", 0))}
+
+	_apply_auth_payload(res.data)
+	node_bridge_ok = not access_token.is_empty()
+	_mark_bridge_flag()
+	print("[AuthManager] Node bridge OK user_id=%s" % str(user.get("id", "")))
+	return {"success": true, "error": "", "status": 200, "data": user}
+
+
+## After Nakama restore: reuse JWT if valid, else bridge with session token.
+func ensure_node_bridge() -> Dictionary:
+	if not is_nakama_authenticated():
+		return {"success": false, "error": "Not authenticated on Nakama", "status": 401}
+	if not access_token.is_empty():
+		var me: Dictionary = await GameApiClient.request("GET", "/api/auth/me", null, true)
+		if me.ok and typeof(me.data) == TYPE_DICTIONARY:
+			user = me.data
+			_merge_profile_into_user()
+			node_bridge_ok = true
+			user_changed.emit(user)
+			return {"success": true, "error": "", "status": 200, "data": user}
+		# Stale JWT — clear and re-bridge.
+		access_token = ""
+		_save_token()
+	var email := str(user.get("email", "")).strip_edges().to_lower()
+	if email.is_empty() and NakamaManager != null and NakamaManager.has_method("get_account_email"):
+		email = str(NakamaManager.get_account_email()).strip_edges().to_lower()
+	return await bridge_node_session(email, "")
+
+
 func _post_nakama_auth(email: String) -> Dictionary:
-	user = _user_from_nakama(email)
-	# Profile + wallet init (existing pipeline).
+	# Prefer Node user (gameplay id) when bridge succeeded.
+	if user.is_empty() or str(user.get("id", "")).is_empty():
+		user = _user_from_nakama(email)
+	elif not email.is_empty():
+		user["email"] = email
 	if ProfileManager != null:
 		var pref: Dictionary = await ProfileManager.ensure_profile()
 		if not pref.get("success", false) and not pref.get("ok", false):
@@ -154,9 +242,10 @@ func _merge_profile_into_user() -> void:
 	var selected := str(p.get("selected_character_id", "")).strip_edges()
 	if not selected.is_empty():
 		user["active_character_id"] = selected
+	# Keep Node user.id for Character.created_by_id; store Nakama id separately.
 	var account_id := str(p.get("account_id", "")).strip_edges()
 	if not account_id.is_empty():
-		user["id"] = account_id
+		user["nakama_account_id"] = account_id
 
 
 ## OTP is legacy Node-only — disabled for Godot Nakama auth.
@@ -182,15 +271,39 @@ func fetch_me() -> Dictionary:
 	if not is_nakama_authenticated():
 		clear_session()
 		return {"ok": false, "error": "Not authenticated", "data": {}, "status": 401}
-	# Prefer Nakama profile; optionally enrich from Node if a leftover JWT exists (gameplay only).
-	if user.is_empty() or str(user.get("id", "")).is_empty():
-		user = _user_from_nakama(str(user.get("email", "")))
-	if ProfileManager != null:
-		var pref: Dictionary = await ProfileManager.ensure_profile()
-		if pref.get("success", false) or pref.get("ok", false):
+	# Node /me is gameplay user id (Character.created_by_id).
+	if not access_token.is_empty():
+		var res: Dictionary = await GameApiClient.request("GET", "/api/auth/me", null, true)
+		if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+			user = res.data
 			_merge_profile_into_user()
-	user_changed.emit(user)
-	return {"ok": true, "error": "", "data": user, "status": 200}
+			node_bridge_ok = true
+			user_changed.emit(user)
+			return {"ok": true, "error": "", "data": user, "status": 200}
+		if int(res.get("status", 0)) == 401:
+			# JWT expired/invalid — keep Nakama session, re-bridge without password.
+			access_token = ""
+			_save_token()
+			node_bridge_ok = false
+			var bridged: Dictionary = await ensure_node_bridge()
+			if bridged.get("success", false):
+				return {"ok": true, "error": "", "data": user, "status": 200}
+			return {
+				"ok": false,
+				"error": "Node session expired and re-bridge failed — %s" % str(bridged.get("error", "")),
+				"data": {},
+				"status": int(bridged.get("status", 401)),
+			}
+	else:
+		var bridged2: Dictionary = await ensure_node_bridge()
+		if bridged2.get("success", false):
+			return {"ok": true, "error": "", "data": user, "status": 200}
+		return {
+			"ok": false,
+			"error": "Node gameplay bridge required — %s" % str(bridged2.get("error", "")),
+			"data": {},
+			"status": int(bridged2.get("status", 503)),
+		}
 
 
 func update_me(patch: Dictionary) -> Dictionary:
@@ -228,13 +341,17 @@ func update_me(patch: Dictionary) -> Dictionary:
 
 
 func list_characters() -> Dictionary:
-	if user.is_empty():
+	if user.is_empty() or access_token.is_empty():
 		var me_res: Dictionary = await fetch_me()
 		if not me_res.ok:
 			return me_res
-	# Legacy Node character store (intentional gameplay path — not auth).
 	if access_token.is_empty():
-		return {"ok": true, "status": 200, "error": "", "data": []}
+		return {
+			"ok": false,
+			"status": 503,
+			"error": "Node gameplay session missing — re-login to bridge Character APIs",
+			"data": [],
+		}
 	var uid := str(user.get("id", ""))
 	return await GameApiClient.request(
 		"POST",
@@ -246,12 +363,14 @@ func list_characters() -> Dictionary:
 
 func create_character(payload: Dictionary) -> Dictionary:
 	if access_token.is_empty():
-		return {
-			"ok": false,
-			"error": "Character creation still uses the Node gameplay API (:8787). Auth is on Nakama; start local/staging Node for characters.",
-			"data": {},
-			"status": 503,
-		}
+		var bridged: Dictionary = await ensure_node_bridge()
+		if not bridged.get("success", false):
+			return {
+				"ok": false,
+				"error": "Character creation needs Node gameplay bridge (:8787). %s" % str(bridged.get("error", "")),
+				"data": {},
+				"status": 503,
+			}
 	return await GameApiClient.request("POST", "/api/entities/Character", payload, true)
 
 
@@ -266,7 +385,9 @@ func select_character(character_id: String) -> Dictionary:
 
 func get_character(character_id: String) -> Dictionary:
 	if access_token.is_empty():
-		return {"ok": false, "error": "No Node gameplay session for characters", "data": {}, "status": 503}
+		var bridged: Dictionary = await ensure_node_bridge()
+		if not bridged.get("success", false):
+			return {"ok": false, "error": "No Node gameplay session for characters", "data": {}, "status": 503}
 	return await GameApiClient.request("GET", "/api/entities/Character/%s" % character_id, null, true)
 
 
@@ -364,7 +485,7 @@ func logout() -> void:
 	clear_session()
 
 
-## Restore Nakama email session + profile/wallet. Never creates anonymous device accounts.
+## Restore Nakama email session, bridge Node JWT, then profile/wallet.
 func ensure_nakama_session() -> Dictionary:
 	NakamaManager.initialize_client()
 	var res: Dictionary = await NakamaManager.ensure_authenticated()
@@ -373,6 +494,9 @@ func ensure_nakama_session() -> Dictionary:
 			str(res.get("data", {}).get("user_id", "")),
 			str(res.get("data", {}).get("auth_method", NakamaManager.get_auth_method())),
 		])
+		var bridge: Dictionary = await ensure_node_bridge()
+		if not bridge.get("success", false):
+			print("[AuthManager] WARNING: Node bridge unavailable — %s" % str(bridge.get("error", "unknown")))
 		if user.is_empty():
 			user = _user_from_nakama()
 		if ProfileManager != null:
@@ -458,27 +582,41 @@ func get_auth_diagnostics() -> Dictionary:
 func clear_session() -> void:
 	access_token = ""
 	user = {}
+	node_bridge_ok = false
 	var cfg := ConfigFile.new()
 	cfg.load(CONFIG_PATH)
 	cfg.set_value("auth", "access_token", "")
-	cfg.set_value("auth", AUTH_LEGACY_CLEARED_KEY, true)
 	cfg.save(CONFIG_PATH)
 	auth_changed.emit(false)
 	user_changed.emit(user)
 
 
-func _invalidate_legacy_node_auth() -> void:
+func _apply_auth_payload(data: Variant) -> void:
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	access_token = str(data.get("access_token", ""))
+	if typeof(data.get("user", {})) == TYPE_DICTIONARY:
+		user = data.get("user", {})
+	_save_token()
+	auth_changed.emit(not access_token.is_empty() or is_nakama_authenticated())
+	user_changed.emit(user)
+
+
+func _save_token() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(CONFIG_PATH)
-	var had := str(cfg.get_value("auth", "access_token", "")).strip_edges()
-	if not had.is_empty():
-		print("[AuthManager] Invalidating legacy Node :8787 JWT session")
-	cfg.set_value("auth", "access_token", "")
-	cfg.set_value("auth", AUTH_LEGACY_CLEARED_KEY, true)
+	cfg.set_value("auth", "access_token", access_token)
 	cfg.save(CONFIG_PATH)
-	access_token = ""
 
 
 func _load_token() -> void:
-	# Legacy JWT is no longer used for Godot login. Keep empty.
-	access_token = ""
+	var cfg := ConfigFile.new()
+	if cfg.load(CONFIG_PATH) == OK:
+		access_token = str(cfg.get_value("auth", "access_token", ""))
+
+
+func _mark_bridge_flag() -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG_PATH)
+	cfg.set_value("auth", BRIDGE_FLAG_KEY, true)
+	cfg.save(CONFIG_PATH)

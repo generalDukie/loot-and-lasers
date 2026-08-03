@@ -14,6 +14,8 @@ Schema history for Nakama storage collections introduced by backend phases.
 | 11 | `equipment` / `inventories` | character id | account | Equip/unequip moves instances (model B) |
 | 11 | `equipment_mutations` | `request_id` | account | Idempotency / replay |
 | 12 | `reward_transactions` | `transaction_id` | recipient account | Reward apply status + applied steps |
+| 13 | `loot_transactions` | `transaction_id` | recipient account | Loot generation receipt + grant status |
+| 13 | `inventories` | character id | account | Internal `grant_item_instance` append (via RewardService) |
 
 Permissions for Phase 10 system objects: read `0`, write `0` (runtime/RPC only).
 
@@ -22,3 +24,5 @@ Missing config records use **code defaults**; `config_get` does not auto-seed st
 Equipment mutations require both inventory and equipment records (created empty if missing). Bag capacity for unequip uses server `BAG_CAP_DEFAULT = 10`.
 
 Reward transactions: read `1`, write `0`. Statuses include `pending`, `applying`, `completed`, `failed`, `compensation_required`. Retention: keep indefinitely until a cleanup job is defined.
+
+Loot transactions: read `1`, write `0`. Statuses include `pending`, `generated`, `granting`, `completed`, `failed`, `inventory_full`. Seed material is not stored in client-visible responses. Retention: keep indefinitely until a cleanup job is defined. On inventory full, the generated receipt is preserved without granting.

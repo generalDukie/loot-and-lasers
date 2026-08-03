@@ -156,6 +156,7 @@ function checkNakamaModules() {
     "modules/missions.lua",
     "modules/config.lua",
     "modules/rewards.lua",
+    "modules/loot.lua",
     "modules/lib/auth.lua",
     "modules/lib/storage.lua",
     "modules/lib/validation.lua",
@@ -181,6 +182,7 @@ function checkNakamaModules() {
     "modules/profile.lua",
     "modules/config.lua",
     "modules/rewards.lua",
+    "modules/loot.lua",
   ];
   for (const rel of serviceFiles) {
     const src = read(rel);
@@ -194,6 +196,10 @@ function checkNakamaModules() {
   }
   if (!exists("modules/data/reward_tables.lua")) {
     fail(cat, "Missing modules/data/reward_tables.lua");
+    return;
+  }
+  if (!exists("modules/data/loot_tables.lua") || !exists("modules/data/item_definitions.lua")) {
+    fail(cat, "Missing Phase 13 loot data modules");
     return;
   }
   pass(cat, `${required.length} required files present`);
@@ -231,6 +237,12 @@ function checkRpcRegistration() {
     reward_apply: true,
     reward_debug: true,
     reward_claim_any: true,
+    loot_generate: true,
+    roll_loot: true,
+    grant_random_item: true,
+    generate_item: true,
+    loot_debug: true,
+    loot_from_table: true,
   };
 
   const luaFiles = listLuaModules(path.join(ROOT, "modules"));
@@ -342,6 +354,18 @@ function checkDocs() {
   }
   if (!/Phase 12|reward service|apply_reward_bundle/i.test(arch)) {
     fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 12 reward service note");
+    return;
+  }
+  if (!exists("docs/PHASE13_LOOT_GENERATION.md")) {
+    fail(cat, "Missing docs/PHASE13_LOOT_GENERATION.md");
+    return;
+  }
+  if (!/Phase 13|loot generation|LootService/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 13 loot note");
+    return;
+  }
+  if (!rpcDoc.includes("dev_loot_test") && !/Phase 13/i.test(rpcDoc)) {
+    fail(cat, "NAKAMA_RPC.md missing Phase 13 loot notes");
     return;
   }
   pass(cat, "phase docs present; RPCs mentioned");

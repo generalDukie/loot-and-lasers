@@ -1,8 +1,9 @@
 --[[
-  Phase 4 — Read-only inventory service (Nakama Lua runtime).
+  Phase 4 + 13 — Inventory service (Nakama Lua runtime).
+  Public RPC: inventory_get (read-only)
+  INTERNAL (trusted modules only — not registered as public RPCs):
+    - grant_item_instance(user_id, character_id, instance_row)
   Collection: inventories / key: <character_id>
-  RPC: inventory_get
-  Uses shared lib helpers for auth/responses/validation/storage (behavior preserved).
 ]]
 
 local nk = require("nakama")
@@ -11,8 +12,11 @@ local responses = require("lib.responses")
 local validation = require("lib.validation")
 local storage = require("lib.storage")
 local logging = require("lib.logging")
+local time = require("lib.time")
 
 local INV_COLLECTION = "inventories"
+local BAG_CAP_DEFAULT = 10
+local MAX_WRITE_RETRIES = 5
 
 local function empty_inventory(character_id)
   return {
@@ -147,5 +151,109 @@ local function rpc_inventory_get(context, payload)
   return responses.ok(result)
 end
 
+local function read_inventory(user_id, character_id)
+  local value, version, found = storage.read_one(user_id, INV_COLLECTION, character_id)
+  if not found then
+    return empty_inventory(character_id), nil, nil
+  end
+  local normalized, err = normalize_record(character_id, value)
+  if err ~= nil then
+    return nil, nil, err
+  end
+  return normalized, version, nil
+end
+
+--- INTERNAL — append one item instance to character bag. Not a public RPC.
+--- instance_row: { instance_id, item_id, quantity, metadata }
+local function grant_item_instance(user_id, character_id, instance_row)
+  if type(user_id) ~= "string" or user_id == "" then
+    return nil, "user_id is required", 400
+  end
+  if type(character_id) ~= "string" or character_id == "" then
+    return nil, "character_id is required", 400
+  end
+  if type(instance_row) ~= "table" then
+    return nil, "instance_row must be an object", 400
+  end
+  if type(instance_row.instance_id) ~= "string" or instance_row.instance_id == "" then
+    return nil, "instance_id is required", 400
+  end
+  if type(instance_row.item_id) ~= "string" or instance_row.item_id == "" then
+    return nil, "item_id is required", 400
+  end
+  local quantity = tonumber(instance_row.quantity) or 1
+  if quantity ~= math.floor(quantity) or quantity < 1 then
+    return nil, "quantity must be a positive integer", 400
+  end
+  local metadata = instance_row.metadata
+  if metadata == nil then
+    metadata = {}
+  end
+  if type(metadata) ~= "table" then
+    return nil, "metadata must be an object", 400
+  end
+
+  local last_err = "Failed to grant item"
+  for _ = 1, MAX_WRITE_RETRIES do
+    local inv, version, err = read_inventory(user_id, character_id)
+    if err ~= nil then
+      return nil, err, 422
+    end
+
+    -- Duplicate instance guard
+    for i = 1, #inv.slots do
+      if inv.slots[i].instance_id == instance_row.instance_id then
+        return {
+          inventory = inv,
+          already_present = true,
+          instance_id = instance_row.instance_id,
+        }, nil, 200
+      end
+    end
+
+    if #inv.slots >= BAG_CAP_DEFAULT then
+      return nil, "Inventory full", 409
+    end
+
+    local slots = validation.empty_array()
+    for i = 1, #inv.slots do
+      table.insert(slots, inv.slots[i])
+    end
+    table.insert(slots, {
+      instance_id = instance_row.instance_id,
+      item_id = instance_row.item_id,
+      quantity = quantity,
+      slot_index = #slots,
+      metadata = metadata,
+    })
+
+    local record = {
+      inventory_version = 1,
+      owner_type = "character",
+      owner_id = character_id,
+      slots = slots,
+      updated_at = time.unix(),
+    }
+    local _, werr = storage.write_one(user_id, INV_COLLECTION, character_id, record, version, 1, 0)
+    if werr == nil then
+      return {
+        inventory = record,
+        already_present = false,
+        instance_id = instance_row.instance_id,
+      }, nil, 200
+    end
+    last_err = tostring(werr)
+  end
+  return nil, last_err, 409
+end
+
 nk.register_rpc(rpc_inventory_get, "inventory_get")
-nk.logger_info("Phase 4 inventory RPC registered (inventory_get, read-only)")
+-- inventory_grant / inventory_write intentionally NOT registered.
+
+nk.logger_info("Phase 4/13 inventory: public inventory_get; grant_item_instance internal-only")
+
+return {
+  grant_item_instance = grant_item_instance,
+  BAG_CAP_DEFAULT = BAG_CAP_DEFAULT,
+  INV_COLLECTION = INV_COLLECTION,
+}

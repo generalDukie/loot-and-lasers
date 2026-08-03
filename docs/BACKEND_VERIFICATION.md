@@ -59,6 +59,10 @@ Do not install Git hooks unless the user asks.
 
 `verify_reward_service.mjs` asserts no public grant RPCs, wallet integration, premium blocked, duplicate/conflict transaction handling, missions unwired, and gated `dev_reward_test` soft-currency behavior.
 
+## Phase 13 checks
+
+`verify_loot_service.mjs` asserts loot module + table data, no generic loot RPCs, RewardService grant path, inventory internal grant, deterministic transaction behavior, client outcome-field rejection, inventory-full safety, missions unwired, and gated `dev_loot_test`.
+
 ## Troubleshooting
 
 | Symptom | Fix |

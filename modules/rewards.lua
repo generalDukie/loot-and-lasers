@@ -10,14 +10,16 @@
 
   Supported today:
     - currency (soft: stardust) via wallet.credit_currency
+    - item (server-generated instances only) via inventory grant API (grant_item_instance)
 
   Rejected safely (future):
-    - premium_currency / nova_crystals via this service in Phase 12
-    - item / consumable (no inventory grant API yet)
+    - premium_currency / nova_crystals via this service
+    - bare item grants without instance_id (client-authored)
     - xp (no ProgressionService yet)
     - entitlement / cosmetic / title
 
-  No gameplay callers (missions/arena/etc.) wired in this phase.
+  No gameplay callers (missions/arena/etc.) wired yet.
+  LootService (Phase 13) is an authorized internal caller for item grants.
 ]]
 
 local nk = require("nakama")
@@ -47,6 +49,8 @@ local SUPPORTED_CURRENCY = {
 local ALLOWED_SOURCE_TYPES = {
   dev_test = true,
   system = true,
+  loot = true,
+  loot_dev = true,
   -- Future trusted callers (documented; not wired yet):
   -- mission = true, arena = true, shipment = true, daily_login = true,
   -- event = true, achievement = true, mail = true, admin = true, purchase = true,
@@ -77,10 +81,11 @@ local function fingerprint_bundle(user_id, character_id, source_type, source_id,
       local r = rewards[i]
       if type(r) == "table" then
         table.insert(parts, string.format(
-          "%s|%s|%s|%s",
+          "%s|%s|%s|%s|%s",
           tostring(r.type or ""),
           tostring(r.currency_id or r.item_id or ""),
           tostring(r.amount or r.quantity or ""),
+          tostring(r.instance_id or ""),
           tostring(i)
         ))
       end
@@ -148,7 +153,39 @@ local function validate_reward_entry(entry, index)
   end
 
   if rtype == "item" or rtype == "consumable" then
-    return nil, "Item rewards are not supported until inventory grant API exists"
+    -- Trusted server-generated instances only (LootService). Reject bare item_id grants.
+    if type(entry.instance_id) ~= "string" or entry.instance_id == "" then
+      return nil, "item rewards require server-generated instance_id"
+    end
+    if type(entry.item_id) ~= "string" or entry.item_id == "" then
+      return nil, "item_id is required"
+    end
+    local quantity = tonumber(entry.quantity) or 1
+    if quantity ~= math.floor(quantity) or quantity < 1 then
+      return nil, "quantity must be a positive integer"
+    end
+    if quantity > 99 then
+      return nil, "quantity exceeds hard limit"
+    end
+    local metadata = entry.metadata
+    if metadata == nil then
+      metadata = {}
+    end
+    if type(metadata) ~= "table" then
+      return nil, "item metadata must be an object"
+    end
+    if type(metadata.type) ~= "string" or metadata.type == "" then
+      return nil, "item metadata.type is required"
+    end
+    return {
+      type = "item",
+      item_id = entry.item_id,
+      quantity = quantity,
+      instance_id = entry.instance_id,
+      metadata = metadata,
+      rarity = type(entry.rarity) == "string" and entry.rarity or "",
+      item_level = tonumber(entry.item_level) or 1,
+    }, nil
   end
 
   if rtype == "xp" or rtype == "experience" then
@@ -330,9 +367,28 @@ function apply_currency_reward(user_id, currency_id, amount, step_transaction_id
   }, nil, 200
 end
 
---- Extension point — not implemented (no inventory grant API).
-function apply_item_reward(_user_id, _character_id, _entry, _step_transaction_id)
-  return nil, "Item rewards are not supported until inventory grant API exists", 501
+--- Item grant via inventory.grant_item_instance (trusted pre-generated instances only).
+function apply_item_reward(user_id, character_id, entry, _step_transaction_id)
+  if type(character_id) ~= "string" or character_id == "" then
+    return nil, "character_id is required for item rewards", 400
+  end
+  local inventory = require("inventory")
+  local data, err, code = inventory.grant_item_instance(user_id, character_id, {
+    instance_id = entry.instance_id,
+    item_id = entry.item_id,
+    quantity = entry.quantity,
+    metadata = entry.metadata,
+  })
+  if err ~= nil then
+    return nil, err, code or 400
+  end
+  return {
+    type = "item",
+    instance_id = entry.instance_id,
+    item_id = entry.item_id,
+    quantity = entry.quantity,
+    already_present = data and data.already_present == true,
+  }, nil, 200
 end
 
 --- Extension point — not implemented (no ProgressionService).
@@ -419,7 +475,7 @@ function apply_reward_bundle(bundle)
   record.updated_at = now_iso()
   write_tx(user_id, transaction_id, record, nil)
 
-  -- Deterministic order: validate already done; apply currency steps only (Phase 12).
+  -- Deterministic order: apply currency then item steps.
   for i = 1, #cleaned.rewards do
     local entry = cleaned.rewards[i]
     local step_tid = string.format("%s:step:%d", transaction_id, i)
@@ -433,6 +489,13 @@ function apply_reward_bundle(bundle)
         step_tid,
         cleaned.reason,
         "reward_service:" .. cleaned.source_type
+      )
+    elseif entry.type == "item" then
+      applied_entry, aerr = apply_item_reward(
+        user_id,
+        cleaned.character_id,
+        entry,
+        step_tid
       )
     else
       aerr = "Unsupported reward type during apply"

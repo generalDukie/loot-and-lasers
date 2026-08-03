@@ -283,3 +283,12 @@ Managed by `EquipmentManager`. Consistency model B. See `docs/PHASE11_EQUIPMENT_
 | `dev_reward_test` | Gated by `LOOT_DEV_REWARD_TEST=1`; fixed soft-currency allowlist |
 
 See `docs/PHASE12_REWARD_SERVICE.md`.
+
+## Phase 13 — Loot generation
+
+| RPC | Purpose |
+|-----|---------|
+| *(none public for loot generation)* | Internal `generate_loot_bundle` / `create_loot_receipt_and_grant` only |
+| `dev_loot_test` | Gated by `LOOT_DEV_LOOT_TEST=1`; blocked in staging/production; fixed table allowlist |
+
+Client must not submit item ID, rarity, affixes, item level, or seed. See `docs/PHASE13_LOOT_GENERATION.md`.

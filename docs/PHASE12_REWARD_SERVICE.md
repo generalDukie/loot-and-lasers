@@ -24,20 +24,21 @@ The server chooses the bundle from `modules/data/reward_tables.lua`. Soft curren
 - `validate_reward_bundle(bundle)`
 - `apply_reward_bundle(bundle)`
 - `apply_currency_reward(...)`
-- `apply_item_reward(...)` — returns unsupported (501)
+- `apply_item_reward(...)` — grants via `inventory.grant_item_instance` when `instance_id` + metadata are present (LootService)
 - `apply_xp_reward(...)` — returns unsupported (501)
 - `apply_entitlement_reward(...)` — returns unsupported (501)
 - `build_reward_result(...)`
 - `record_reward_transaction(...)` / `get_reward_transaction(...)`
 
-## Trusted callers (Phase 12)
+## Trusted callers (Phase 12+)
 
 | Caller | Authorized? |
 |--------|-------------|
 | `dev_reward_test` (flag-gated) | Yes — fixed allowlist |
+| LootService (`source_type` `loot`) | Yes — Phase 13 |
 | Missions / arena / shipments / mail / daily / admin | **Not wired** |
 
-Authorized `source_type` values today: `dev_test`, `system`.
+Authorized `source_type` values today: `dev_test`, `system`, `loot`, `loot_dev`.
 Future: `mission`, `arena`, `shipment`, `daily_login`, `event`, `achievement`, `mail`, `admin`, `purchase`.
 
 ## Supported reward types
@@ -46,7 +47,7 @@ Future: `mission`, `arena`, `shipment`, `daily_login`, `event`, `achievement`, `
 |------|--------|
 | `currency` (`stardust`) | **Supported** via wallet |
 | `premium_currency` / `nova_crystals` | **Rejected** |
-| `item` / `consumable` | **Rejected** until inventory grant API |
+| `item` / `consumable` | **Supported** only with server-generated `instance_id` + metadata (LootService) |
 | `xp` | **Rejected** until ProgressionService |
 | `entitlement` / `cosmetic` / `title` | **Rejected** |
 

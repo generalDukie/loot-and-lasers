@@ -84,6 +84,12 @@ See `docs/PHASE11_EQUIPMENT_MUTATIONS.md`.
 ## Reward service (Phase 12)
 
 Internal orchestrator in `modules/rewards.lua`. No public grant RPC.
-Soft-currency credits via `wallet.credit_currency`. Item/XP/premium rejected until those services exist.
-Gated `dev_reward_test` for local verification only. Missions **not** connected yet.
+Soft-currency credits via `wallet.credit_currency`. Server-generated item instances via `inventory.grant_item_instance` (wired in Phase 13).
+XP/premium still rejected. Gated `dev_reward_test` for local soft-currency verification. Missions **not** connected yet.
 See `docs/PHASE12_REWARD_SERVICE.md`.
+
+## Loot generation (Phase 13)
+
+Internal LootService in `modules/loot.lua`. Server-side tables/pools in `modules/data/`. Deterministic weighted rolls → item instance → RewardService grant.
+No generic public loot RPC. Gated `dev_loot_test` only. Missions/arena/shops **not** connected.
+See `docs/PHASE13_LOOT_GENERATION.md`.

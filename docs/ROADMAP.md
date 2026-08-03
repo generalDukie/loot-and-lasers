@@ -14,6 +14,7 @@
 | 10 | Done | Remote config + feature flags |
 | 11 | Done | Equipment mutations (equip/unequip) |
 | 12 | Done | Central reward service (soft currency orchestrator) |
-| 13+ | Planned | Admin tooling, inventory grants, mission reward wiring, etc. |
+| 13 | Done | Server-authoritative loot generation (engine only) |
+| 14+ | Planned | Mission reward wiring, admin tooling, etc. |
 
 Before each backend commit: `npm run verify:backend`.

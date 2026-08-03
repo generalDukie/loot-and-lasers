@@ -16,19 +16,8 @@ signal logged_out()
 signal rpc_succeeded(rpc_id: String, data: Variant)
 signal rpc_failed(rpc_id: String, error: String, status_code: int)
 
-const SERVER_KEY := "defaultkey"
-const HOST := "127.0.0.1"
-const PORT := 7350
-const SCHEME := "http"
-const SOCKET_SCHEME := "ws"
-const DEVICE_ID_PATH := "user://nakama_device_id.txt"
-const SESSION_PATH := "user://nakama_session.cfg"
 ## Refresh a bit before JWT expiry so calls do not race the clock.
 const REFRESH_SKEW_SEC := 60
-## HTTP timeout for the Nakama client (seconds).
-const CLIENT_TIMEOUT_SEC := 2
-## Wall-clock cap so a dead server cannot hang the main thread forever.
-const AUTH_TIMEOUT_SEC := 5.0
 ## Default wall-clock cap for a single RPC attempt (seconds).
 const RPC_TIMEOUT_SEC := 10.0
 ## Transient-failure retries after the first attempt (total attempts = 1 + this).
@@ -44,19 +33,127 @@ var _auth_busy := false
 var _auth_gen := 0
 var _socket_connected := false
 var _socket_signals_bound := false
+var _client_env_id := ""
 
 
 func _ready() -> void:
 	initialize_client()
 
 
-func initialize_client() -> void:
+func initialize_client(force: bool = false) -> Dictionary:
+	var env_id := BackendEnvironment.get_environment_id()
+	if client != null and not force and _client_env_id == env_id:
+		return {"success": true, "data": BackendEnvironment.get_public_config(), "error": "", "status_code": 200}
+
+	var server_key := BackendEnvironment.get_server_key()
+	if server_key.is_empty():
+		var missing := "Nakama server key not configured for environment '%s'" % env_id
+		print("[NakamaManager] ERROR: %s" % missing)
+		return {"success": false, "data": BackendEnvironment.get_public_config(), "error": missing, "status_code": 0}
+
+	# Tear down prior client/socket when switching environments.
 	if client != null:
-		return
+		disconnect_socket()
+		client = null
+		_clear_session_memory()
+
+	var scheme := BackendEnvironment.get_scheme()
+	var host := BackendEnvironment.get_host()
+	var port := BackendEnvironment.get_port()
+	var timeout_sec := BackendEnvironment.get_client_timeout_sec()
 	client = Nakama.create_client(
-		SERVER_KEY, HOST, PORT, SCHEME, CLIENT_TIMEOUT_SEC, NakamaLogger.LOG_LEVEL.ERROR
+		server_key, host, port, scheme, timeout_sec, NakamaLogger.LOG_LEVEL.ERROR
 	)
-	print("[NakamaManager] Nakama client initialized (%s://%s:%s)" % [SCHEME, HOST, PORT])
+	_client_env_id = env_id
+	var pub := BackendEnvironment.get_public_config()
+	print(
+		"[NakamaManager] Nakama client initialized env=%s %s://%s:%s"
+		% [pub.get("environment", ""), pub.get("scheme", ""), pub.get("host", ""), pub.get("port", 0)]
+	)
+	return {"success": true, "data": pub, "error": "", "status_code": 200}
+
+
+## Safe diagnostics for staging/local — never includes tokens or full server key.
+func get_connection_diagnostics() -> Dictionary:
+	var pub := BackendEnvironment.get_public_config()
+	return {
+		"environment": pub.get("environment", ""),
+		"scheme": pub.get("scheme", ""),
+		"host": pub.get("host", ""),
+		"port": pub.get("port", 0),
+		"client_created": client != null,
+		"client_env_id": _client_env_id,
+		"authenticated": is_authenticated(),
+		"user_id": session.user_id if session != null and is_authenticated() else "",
+		"socket_connected": socket != null and socket.is_connected_to_host(),
+		"session_path": BackendEnvironment.get_session_path(),
+		"server_key_configured": pub.get("server_key_configured", false),
+		"server_key_fingerprint": pub.get("server_key_fingerprint", ""),
+	}
+
+
+## Staging/local smoke test: auth → profile_get → inventory_get → socket.
+## Does not log secrets. Safe to run from the editor / debug console.
+func run_connection_smoke_test() -> Dictionary:
+	var steps: Array = []
+	var diag := get_connection_diagnostics()
+	steps.append({"step": "environment", "ok": true, "detail": diag})
+
+	var init_res: Dictionary = initialize_client(true)
+	steps.append({
+		"step": "client_create",
+		"ok": bool(init_res.get("success", false)),
+		"error": str(init_res.get("error", "")),
+	})
+	if not bool(init_res.get("success", false)):
+		return {"success": false, "steps": steps, "diagnostics": get_connection_diagnostics()}
+
+	var auth_res: Dictionary = await ensure_authenticated()
+	steps.append({
+		"step": "authenticate",
+		"ok": bool(auth_res.get("success", false)),
+		"user_id": str(auth_res.get("data", {}).get("user_id", "")),
+		"error": str(auth_res.get("error", "")),
+	})
+	if not bool(auth_res.get("success", false)):
+		return {"success": false, "steps": steps, "diagnostics": get_connection_diagnostics()}
+
+	var profile_res: Dictionary = await invoke_rpc("profile_get", {})
+	steps.append({
+		"step": "profile_get",
+		"ok": bool(profile_res.get("success", false)),
+		"error": str(profile_res.get("error", "")),
+	})
+
+	var inv_res: Dictionary = await invoke_rpc("inventory_get", {})
+	steps.append({
+		"step": "inventory_get",
+		"ok": bool(inv_res.get("success", false)),
+		"error": str(inv_res.get("error", "")),
+	})
+
+	var sock_res: Dictionary = await connect_socket()
+	steps.append({
+		"step": "socket_connect",
+		"ok": bool(sock_res.get("success", false)),
+		"error": str(sock_res.get("error", "")),
+	})
+
+	var all_ok := true
+	for s in steps:
+		if typeof(s) == TYPE_DICTIONARY and not bool(s.get("ok", false)) and str(s.get("step", "")) != "environment":
+			all_ok = false
+			break
+
+	var out := {
+		"success": all_ok,
+		"steps": steps,
+		"diagnostics": get_connection_diagnostics(),
+	}
+	print("[NakamaManager] connection smoke test success=%s env=%s" % [
+		all_ok, BackendEnvironment.get_environment_id()
+	])
+	return out
 
 
 func is_authenticated() -> bool:
@@ -67,8 +164,10 @@ func is_authenticated() -> bool:
 func authenticate_device() -> Dictionary:
 	if _auth_busy:
 		return _fail("Authentication already in progress")
-	if client == null:
-		initialize_client()
+	var init_res: Dictionary = initialize_client()
+	if not bool(init_res.get("success", false)):
+		authentication_failed.emit(str(init_res.get("error", "client init failed")))
+		return init_res
 	if client == null:
 		return _fail("Nakama client not initialized")
 
@@ -76,13 +175,14 @@ func authenticate_device() -> Dictionary:
 	_auth_gen += 1
 	var gen := _auth_gen
 	var device_id := _resolve_device_id()
-	var result: NakamaSession = await _authenticate_device_timed(device_id, AUTH_TIMEOUT_SEC, gen)
+	var timeout_sec := BackendEnvironment.get_auth_timeout_sec()
+	var result: NakamaSession = await _authenticate_device_timed(device_id, timeout_sec, gen)
 	if gen != _auth_gen:
 		return _fail("Authentication superseded")
 	_auth_busy = false
 
 	if result == null:
-		var timeout_err := "Nakama server unreachable or timed out (%ss)" % str(AUTH_TIMEOUT_SEC)
+		var timeout_err := "Nakama server unreachable or timed out (%ss)" % str(timeout_sec)
 		print("[NakamaManager] ERROR: device authentication failed — %s" % timeout_err)
 		authentication_failed.emit(timeout_err)
 		return _fail(timeout_err)
@@ -93,7 +193,9 @@ func authenticate_device() -> Dictionary:
 		return _fail(err)
 
 	_set_session(result, false)
-	print("[NakamaManager] Nakama authentication successful user_id=%s" % session.user_id)
+	print("[NakamaManager] Nakama authentication successful user_id=%s env=%s" % [
+		session.user_id, BackendEnvironment.get_environment_id()
+	])
 	authenticated.emit(session.user_id)
 	return {"success": true, "data": {"user_id": session.user_id}, "error": "", "status_code": 200}
 
@@ -120,8 +222,9 @@ func _authenticate_device_worker(device_id: String, box: Dictionary, gen: int) -
 
 
 func restore_session() -> Dictionary:
-	if client == null:
-		initialize_client()
+	var init_res: Dictionary = initialize_client()
+	if not bool(init_res.get("success", false)):
+		return init_res
 	var saved := _load_session_tokens()
 	var token := str(saved.get("token", ""))
 	var refresh := str(saved.get("refresh_token", ""))
@@ -143,7 +246,9 @@ func restore_session() -> Dictionary:
 		if not refresh_res.get("success", false):
 			return refresh_res
 
-	print("[NakamaManager] Nakama session restored user_id=%s" % session.user_id)
+	print("[NakamaManager] Nakama session restored user_id=%s env=%s" % [
+		session.user_id, BackendEnvironment.get_environment_id()
+	])
 	session_restored.emit(session.user_id)
 	return {"success": true, "data": {"user_id": session.user_id}, "error": "", "status_code": 200}
 
@@ -572,18 +677,20 @@ func _on_socket_closed() -> void:
 
 
 func _resolve_device_id() -> String:
+	var device_path := BackendEnvironment.get_device_id_path()
 	var id := str(OS.get_unique_id()).strip_edges()
 	if not id.is_empty():
-		return id
-	if FileAccess.file_exists(DEVICE_ID_PATH):
-		var existing := FileAccess.get_file_as_string(DEVICE_ID_PATH).strip_edges()
+		return "%s-%s" % [BackendEnvironment.get_environment_id(), id]
+	if FileAccess.file_exists(device_path):
+		var existing := FileAccess.get_file_as_string(device_path).strip_edges()
 		if not existing.is_empty():
 			return existing
-	var fallback := "godot-%s-%s" % [
+	var fallback := "godot-%s-%s-%s" % [
+		BackendEnvironment.get_environment_id(),
 		str(Time.get_unix_time_from_system()),
 		str(randi()),
 	]
-	var f := FileAccess.open(DEVICE_ID_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(device_path, FileAccess.WRITE)
 	if f != null:
 		f.store_string(fallback)
 		f.close()
@@ -595,17 +702,24 @@ func _resolve_device_id() -> String:
 func _save_session_tokens() -> void:
 	if session == null or not session.is_valid():
 		return
+	var session_path := BackendEnvironment.get_session_path()
 	var cfg := ConfigFile.new()
-	cfg.load(SESSION_PATH)
+	cfg.load(session_path)
+	cfg.set_value("nakama", "environment", BackendEnvironment.get_environment_id())
 	cfg.set_value("nakama", "token", session.token)
 	cfg.set_value("nakama", "refresh_token", session.refresh_token)
 	cfg.set_value("nakama", "user_id", session.user_id)
-	cfg.save(SESSION_PATH)
+	cfg.save(session_path)
 
 
 func _load_session_tokens() -> Dictionary:
+	var session_path := BackendEnvironment.get_session_path()
 	var cfg := ConfigFile.new()
-	if cfg.load(SESSION_PATH) != OK:
+	if cfg.load(session_path) != OK:
+		return {}
+	var saved_env := str(cfg.get_value("nakama", "environment", ""))
+	if not saved_env.is_empty() and saved_env != BackendEnvironment.get_environment_id():
+		# Refuse cross-environment session reuse.
 		return {}
 	return {
 		"token": str(cfg.get_value("nakama", "token", "")),
@@ -615,8 +729,9 @@ func _load_session_tokens() -> Dictionary:
 
 
 func _clear_saved_session() -> void:
-	if FileAccess.file_exists(SESSION_PATH):
-		DirAccess.remove_absolute(SESSION_PATH)
+	var session_path := BackendEnvironment.get_session_path()
+	if FileAccess.file_exists(session_path):
+		DirAccess.remove_absolute(session_path)
 
 
 func _exception_message(result) -> String:

@@ -50,11 +50,16 @@ AudioManager="*res://Autoload/AudioManager.gd"
 SettingsManager="*res://Autoload/SettingsManager.gd"
 SaveManager="*res://Autoload/SaveManager.gd"
 Nakama="*uid://b24hquol88ydg"
+BackendEnvironment="*res://Autoload/BackendEnvironment.gd"
 NakamaManager="*res://Autoload/NakamaManager.gd"
 ProfileManager="*res://Autoload/ProfileManager.gd"
 CurrencyManager="*res://Autoload/CurrencyManager.gd"
 EquipmentManager="*res://Autoload/EquipmentManager.gd"
 RemoteConfigManager="*res://Autoload/RemoteConfigManager.gd"
+
+[loot]
+
+backend/environment="local"
 
 [display]
 

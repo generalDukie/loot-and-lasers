@@ -167,8 +167,9 @@ var res: Dictionary = await NakamaManager.call_authenticated_rpc(
 ## Related
 
 - Autoload: `NakamaManager`, `ProfileManager` (`project.godot`)
-- Session bridge: `AuthManager.ensure_nakama_session()` / `logout_nakama()`
-- Local session file: `user://nakama_session.cfg` (gitignored patterns cover accidental copies)
+## Session bridge: `AuthManager.ensure_nakama_session()` / `logout_nakama()`
+- Local/staging session files: `user://nakama_session_<env>.cfg` (see `docs/STAGING_NAKAMA.md`)
+- Environment selection: `BackendEnvironment` autoload (`LOOT_NAKAMA_ENV` / ProjectSettings / `user://backend_env.cfg`)
 
 ## Phase 3 — Player profile RPCs
 

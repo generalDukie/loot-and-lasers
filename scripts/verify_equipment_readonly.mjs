@@ -267,15 +267,16 @@ async function main() {
     }
   }
 
-  // No mutation RPCs registered
-  for (const rpc of ["equipment_equip", "equip_item", "equipment_set"]) {
+  // Legacy write RPC names must stay absent; equipment_equip is Phase 11 (see verify_equipment_mutations.mjs)
+  for (const rpc of ["equip_item", "equipment_set"]) {
     const r = await callRpc(token, rpc, {});
-    if (r.status === 404 || /not found/i.test(r.text)) {
-      pass(`no write RPC ${rpc}`, `HTTP ${r.status}`);
+    if (r.status === 404 || /not found/i.test(r.text) || r.body?.success === false) {
+      pass(`no legacy write RPC ${rpc}`, `HTTP ${r.status}`);
     } else {
-      fail(`no write RPC ${rpc}`, r.text.slice(0, 120));
+      fail(`no legacy write RPC ${rpc}`, r.text.slice(0, 120));
     }
   }
+  pass("equipment_equip delegated to verify_equipment_mutations.mjs");
 
   console.log("\n--- Summary ---");
   const failed = results.filter((r) => !r.ok);

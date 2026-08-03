@@ -227,6 +227,14 @@ func clear_nakama_inventory_local() -> void:
 	nakama_inventory = {}
 
 
+## Apply authoritative inventory from an equipment mutation response (no extra RPC).
+func apply_nakama_inventory(inventory: Dictionary) -> void:
+	if inventory.is_empty():
+		return
+	nakama_inventory = inventory.duplicate(true)
+	inventory_changed.emit(nakama_inventory)
+
+
 func _set_loading(value: bool) -> void:
 	if loading == value:
 		return

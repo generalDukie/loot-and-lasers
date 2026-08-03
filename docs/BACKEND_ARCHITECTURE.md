@@ -22,6 +22,7 @@ Loot & Lasers uses a **dual stack** during the Nakama migration:
 | 8 | Mission authority | same RPCs | **Nakama is sole mission SoT** |
 | 9 | Shared runtime + verification | `modules/lib/*`, `npm run verify:backend` | infrastructure only |
 | 10 | Remote config + feature flags | `config_get` | system storage; mutations internal-only |
+| 11 | Equipment mutations | `equipment_get`, `equipment_equip`, `equipment_unequip` | equipment + inventory moves |
 
 ## Shared library
 
@@ -72,3 +73,9 @@ See `docs/PHASE7_MISSIONS.md` and `docs/PHASE8_MISSION_MIGRATION.md`.
 Server-authoritative configuration namespaces (`global`, `missions`, `client_ui`) and feature flags.
 Public RPC: `config_get` (client-visible only). Mutations are internal helpers — not registered.
 Environment: `LOOT_ENVIRONMENT` on Nakama runtime. See `docs/PHASE10_REMOTE_CONFIG.md` and `docs/STORAGE_MIGRATIONS.md`.
+
+## Equipment mutations (Phase 11)
+
+Nakama is authoritative for equip/unequip. Representation B: instances move between `inventories` and `equipment`.
+Godot uses `EquipmentManager`; legacy `AuthManager.equip_item` / `unequip_item` are disabled.
+See `docs/PHASE11_EQUIPMENT_MUTATIONS.md`.

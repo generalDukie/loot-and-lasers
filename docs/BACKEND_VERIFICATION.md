@@ -44,10 +44,15 @@ Do not install Git hooks unless the user asks.
 - `verify_missions_core.mjs`
 - `verify_mission_authority.mjs`
 - `verify_remote_config.mjs`
+- `verify_equipment_mutations.mjs`
 
 ## Phase 10 checks
 
 `verify_remote_config.mjs` asserts `config_get`, absence of mutation RPCs, client-visible filtering, defaults (`board_size=3`, cooldown `15`), `RemoteConfigManager` autoload, and cache gitignore.
+
+## Phase 11 checks
+
+`verify_equipment_mutations.mjs` asserts equip/unequip registration, ownership, slot allowlist, request_id idempotency, swap preservation, legacy AuthManager path disabled, and UI routing via EquipmentManager.
 
 ## Troubleshooting
 

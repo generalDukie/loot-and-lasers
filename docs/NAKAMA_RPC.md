@@ -264,3 +264,13 @@ Service modules may `require("lib.auth")`, `lib.responses`, `lib.validation`, et
 | `config_get` | Client-visible namespaces + feature flags |
 
 Managed by `RemoteConfigManager`. Storage: `remote_config/<namespace>`, `feature_flags/<flag_id>` (system owner). **No** public mutation RPCs. See `docs/PHASE10_REMOTE_CONFIG.md`.
+
+## Phase 11 — Equipment mutations
+
+| RPC | Purpose |
+|-----|---------|
+| `equipment_get` | Read slots |
+| `equipment_equip` | Inventory → slot (request_id required) |
+| `equipment_unequip` | Slot → inventory (request_id required) |
+
+Managed by `EquipmentManager`. Consistency model B. See `docs/PHASE11_EQUIPMENT_MUTATIONS.md`.

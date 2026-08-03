@@ -133,93 +133,26 @@ func patch_character(character_id: String, patch: Dictionary) -> Dictionary:
 	return await GameApiClient.request("PATCH", "/api/entities/Character/%s" % character_id, patch, true)
 
 
-## Equip an unequipped bag item. Swaps the same-slot piece if one is worn.
+## Equip an unequipped bag item. DEPRECATED — use EquipmentManager.equip_item (Nakama).
 func equip_item(item_id: String) -> Dictionary:
-	var cid := str(GameManager.active_character.get("id", ""))
-	if cid.is_empty():
-		return {"ok": false, "error": "No active character", "data": {}}
-	var list_res: Dictionary = await list_items(cid)
-	if not list_res.ok:
-		return list_res
-	var items: Array = list_res.data if typeof(list_res.data) == TYPE_ARRAY else []
-	var item := InventoryRules.find_by_id(items, item_id)
-	if item.is_empty():
-		return {"ok": false, "error": "Item not found", "data": {}}
-	if bool(item.get("is_equipped", false)):
-		return {"ok": false, "error": "Already equipped", "data": {}}
-	var item_type := str(item.get("type", ""))
-	if not InventoryRules.is_equippable(item_type):
-		return {"ok": false, "error": "That item cannot be equipped", "data": {}}
-
-	var currently := InventoryRules.find_equipped_of_type(items, item_type)
-
-	var eq_res: Dictionary = await patch_item(item_id, {"is_equipped": true})
-	if not eq_res.ok:
-		return eq_res
-
-	# Swap: unequip previous after new is equipped (keeps bag occupancy flat).
-	if not currently.is_empty():
-		var old_id := str(currently.get("id", ""))
-		if old_id != item_id:
-			var uneq: Dictionary = await patch_item(old_id, {"is_equipped": false})
-			if not uneq.ok:
-				# Best-effort rollback of the new equip.
-				await patch_item(item_id, {"is_equipped": false})
-				return uneq
-
-	var eq_map: Dictionary = {}
-	var raw_map: Variant = GameManager.active_character.get("equipped_items", {})
-	if typeof(raw_map) == TYPE_DICTIONARY:
-		eq_map = raw_map.duplicate(true)
-	eq_map[item_type] = item_id
-	var ch_res: Dictionary = await patch_character(cid, {"equipped_items": eq_map})
-	if not ch_res.ok:
-		return ch_res
-	if typeof(ch_res.data) == TYPE_DICTIONARY:
-		GameManager.active_character = ch_res.data
-	else:
-		GameManager.active_character["equipped_items"] = eq_map
-	return {"ok": true, "error": "", "data": GameManager.active_character, "status": 200}
+	push_warning("[AuthManager] equip_item is disabled — use EquipmentManager.equip_item")
+	return {
+		"ok": false,
+		"error": "Legacy equip path disabled — use EquipmentManager",
+		"data": {},
+		"status": 410,
+	}
 
 
-## Unequip a worn item into the bag (blocked when bag is full).
+## Unequip a worn item into the bag. DEPRECATED — use EquipmentManager.unequip_item (Nakama).
 func unequip_item(item_id: String) -> Dictionary:
-	var cid := str(GameManager.active_character.get("id", ""))
-	if cid.is_empty():
-		return {"ok": false, "error": "No active character", "data": {}}
-	var list_res: Dictionary = await list_items(cid)
-	if not list_res.ok:
-		return list_res
-	var items: Array = list_res.data if typeof(list_res.data) == TYPE_ARRAY else []
-	var item := InventoryRules.find_by_id(items, item_id)
-	if item.is_empty():
-		return {"ok": false, "error": "Item not found", "data": {}}
-	if not bool(item.get("is_equipped", false)):
-		return {"ok": false, "error": "Not equipped", "data": {}}
-
-	var bag_count := InventoryRules.bag_occupancy(items)
-	var cap := InventoryRules.bag_cap(GameManager.active_character)
-	if bag_count >= cap:
-		return {"ok": false, "error": "Inventory full — dissolve an item before unequipping", "data": {}}
-
-	var item_type := str(item.get("type", ""))
-	var uneq: Dictionary = await patch_item(item_id, {"is_equipped": false})
-	if not uneq.ok:
-		return uneq
-
-	var eq_map: Dictionary = {}
-	var raw_map: Variant = GameManager.active_character.get("equipped_items", {})
-	if typeof(raw_map) == TYPE_DICTIONARY:
-		eq_map = raw_map.duplicate(true)
-	eq_map.erase(item_type)
-	var ch_res: Dictionary = await patch_character(cid, {"equipped_items": eq_map})
-	if not ch_res.ok:
-		return ch_res
-	if typeof(ch_res.data) == TYPE_DICTIONARY:
-		GameManager.active_character = ch_res.data
-	else:
-		GameManager.active_character["equipped_items"] = eq_map
-	return {"ok": true, "error": "", "data": GameManager.active_character, "status": 200}
+	push_warning("[AuthManager] unequip_item is disabled — use EquipmentManager.unequip_item")
+	return {
+		"ok": false,
+		"error": "Legacy unequip path disabled — use EquipmentManager",
+		"data": {},
+		"status": 410,
+	}
 
 
 ## Apply a stim: deletes the item and patches character.active_buffs.

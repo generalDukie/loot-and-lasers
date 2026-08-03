@@ -200,6 +200,8 @@ function checkRpcRegistration() {
     profile_update: true,
     inventory_get: true,
     equipment_get: true,
+    equipment_equip: true,
+    equipment_unequip: true,
     wallet_get: true,
     missions_get: true,
     missions_refresh: true,
@@ -300,6 +302,8 @@ function checkDocs() {
     "profile_get",
     "inventory_get",
     "equipment_get",
+    "equipment_equip",
+    "equipment_unequip",
     "wallet_get",
     "missions_get",
     "mission_start",
@@ -313,12 +317,12 @@ function checkDocs() {
     }
   }
   const arch = read("docs/BACKEND_ARCHITECTURE.md");
-  if (!/Phase 10|remote config|feature flag/i.test(arch)) {
-    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 10 remote config note");
+  if (!/Phase 11|equipment_equip|Equipment mutations/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 11 equipment mutations note");
     return;
   }
-  if (!exists("docs/PHASE10_REMOTE_CONFIG.md")) {
-    fail(cat, "Missing docs/PHASE10_REMOTE_CONFIG.md");
+  if (!exists("docs/PHASE11_EQUIPMENT_MUTATIONS.md")) {
+    fail(cat, "Missing docs/PHASE11_EQUIPMENT_MUTATIONS.md");
     return;
   }
   pass(cat, "phase docs present; RPCs mentioned");
@@ -347,19 +351,26 @@ async function checkDockerNakama() {
   const cat = "Nakama runtime logs";
   try {
     const { execSync } = await import("node:child_process");
-    const logs = execSync("docker compose logs nakama --tail 80", {
+    const logs = execSync("docker compose logs nakama --tail 120", {
       cwd: ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
-    if (/error.*runtime|failed to load|panic/i.test(logs) && /modules/i.test(logs)) {
+    // Ignore Prometheus re-register noise and expected client validation logs.
+    const lines = logs.split("\n").filter((line) => {
+      if (/Prometheus metric/i.test(line)) return false;
+      if (/\[equipment\].*code=(400|403|404|409|422)/i.test(line)) return false;
+      return true;
+    });
+    const joined = lines.join("\n");
+    if (/failed to load|panic|runtime error|module.*error|error loading/i.test(joined)) {
       fail(cat, "Nakama logs show module/runtime errors", "Restart Nakama and inspect docker compose logs");
       return;
     }
     if (/Registered Lua runtime RPC/.test(logs) || /Startup done/.test(logs)) {
       pass(cat, "Nakama appears healthy");
     } else {
-      pass(cat, "Docker up; registration lines not in last 80 (ok)");
+      pass(cat, "Docker up; registration lines not in last 120 (ok)");
     }
   } catch {
     pass(cat, "Docker unavailable — skipped");

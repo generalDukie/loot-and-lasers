@@ -1177,11 +1177,21 @@ func _drop_on_equip_slot(slot_type: String, data: Variant) -> void:
 
 
 func _on_equip(item_id: String) -> void:
-	if _busy or item_id.is_empty():
+	if _busy or item_id.is_empty() or EquipmentManager.is_mutating():
 		return
 	_busy = true
 	_status.text = "Equipping…"
-	var res: Dictionary = await AuthManager.equip_item(item_id)
+	var item_type := ""
+	var items: Array = StatsManager.all_items if typeof(StatsManager.all_items) == TYPE_ARRAY else []
+	for it in items:
+		if typeof(it) == TYPE_DICTIONARY and str(it.get("id", "")) == item_id:
+			item_type = str(it.get("type", ""))
+			break
+	if item_type.is_empty():
+		_busy = false
+		_status.text = "Cannot resolve item type for equip"
+		return
+	var res: Dictionary = await EquipmentManager.equip_from_bag(item_id, item_type)
 	_busy = false
 	if not res.ok:
 		_status.text = str(res.get("error", "Equip failed"))
@@ -1193,11 +1203,11 @@ func _on_equip(item_id: String) -> void:
 
 
 func _on_unequip(item_id: String) -> void:
-	if _busy or item_id.is_empty():
+	if _busy or item_id.is_empty() or EquipmentManager.is_mutating():
 		return
 	_busy = true
 	_status.text = "Unequipping…"
-	var res: Dictionary = await AuthManager.unequip_item(item_id)
+	var res: Dictionary = await EquipmentManager.unequip_by_instance("", item_id)
 	_busy = false
 	if not res.ok:
 		var err := str(res.get("error", "Unequip failed"))

@@ -687,11 +687,20 @@ func _on_use(item_id: String, item_name: String) -> void:
 
 
 func _on_equip(item_id: String) -> void:
-	if _busy:
+	if _busy or EquipmentManager.is_mutating():
 		return
 	_busy = true
 	_status.text = "Equipping…"
-	var res: Dictionary = await AuthManager.equip_item(item_id)
+	var item_type := ""
+	var list_res: Dictionary = await InventoryManager.list_character_items()
+	if list_res.get("ok", false) and typeof(list_res.get("data", null)) == TYPE_ARRAY:
+		var found := InventoryRules.find_by_id(list_res.data, item_id)
+		item_type = str(found.get("type", ""))
+	if item_type.is_empty():
+		_busy = false
+		_fail("Cannot resolve item type for equip")
+		return
+	var res: Dictionary = await EquipmentManager.equip_from_bag(item_id, item_type)
 	_busy = false
 	if not res.ok:
 		_fail(str(res.get("error", "Equip failed")))
@@ -703,11 +712,11 @@ func _on_equip(item_id: String) -> void:
 
 
 func _on_unequip(item_id: String) -> void:
-	if _busy:
+	if _busy or EquipmentManager.is_mutating():
 		return
 	_busy = true
 	_status.text = "Unequipping…"
-	var res: Dictionary = await AuthManager.unequip_item(item_id)
+	var res: Dictionary = await EquipmentManager.unequip_by_instance("", item_id)
 	_busy = false
 	if not res.ok:
 		var err := str(res.get("error", "Unequip failed"))

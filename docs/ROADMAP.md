@@ -12,6 +12,7 @@
 | 8 | Done | Mission authority migration |
 | 9 | Done | Shared runtime library + `verify:backend` |
 | 10 | Done | Remote config + feature flags |
-| 11+ | Planned | Admin config tooling, broader migrations, rewards, etc. |
+| 11 | Done | Equipment mutations (equip/unequip) |
+| 12+ | Planned | Admin tooling, inventory grants, rewards, etc. |
 
 Before each backend commit: `npm run verify:backend`.

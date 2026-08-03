@@ -32,7 +32,7 @@ services:
       NAKAMA_HTTP_URL: "${NAKAMA_HTTP_URL:-http://host.docker.internal:7350}"
       LOOT_WALLET_BRIDGE_SECRET: "${LOOT_WALLET_BRIDGE_SECRET:?set LOOT_WALLET_BRIDGE_SECRET in .env.node-api}"
       APP_ID: "${APP_ID:-lootandlasers-staging}"
-      PUBLIC_CLIENT_URL: "${PUBLIC_CLIENT_URL:-http://178.156.210.186:8787}"
+      PUBLIC_CLIENT_URL: "${PUBLIC_CLIENT_URL:-https://178.156.210.186}"
       # Leave SMTP unset → register auto-verifies (no email OTP).
       SMTP_HOST: "${SMTP_HOST:-}"
       SMTP_PORT: "${SMTP_PORT:-}"

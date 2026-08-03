@@ -35,14 +35,14 @@ const ENVIRONMENTS := {
 		"client_timeout_sec": 2,
 	},
 	ENV_STAGING: {
-		"scheme": "http",
+		"scheme": "https",
 		"host": "178.156.210.186",
-		"port": 7350,
-		"socket_scheme": "ws",
+		"port": 8443,
+		"socket_scheme": "wss",
 		# Filled at runtime from env / secrets file — never hardcode staging secrets.
 		"server_key": "",
 		# Legacy Node gameplay only (not Godot login/register).
-		"node_api_base_url": "http://178.156.210.186:8787",
+		"node_api_base_url": "https://178.156.210.186",
 		"auth_timeout_sec": 15.0,
 		"client_timeout_sec": 10,
 	},

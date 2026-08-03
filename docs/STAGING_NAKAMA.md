@@ -68,8 +68,8 @@ Do **not** put CockroachDB passwords, console passwords, session encryption keys
 Debug / editor builds show a top-left label:
 
 ```
-NAKAMA STAGING · http://178.156.210.186:7350
-NODE http://178.156.210.186:8787
+NAKAMA STAGING · https://178.156.210.186:8443
+NODE https://178.156.210.186
 ```
 
 (or `LOCAL` for local). Release exports without debug features hide the badge.
@@ -87,7 +87,7 @@ $env:LOOT_NAKAMA_ENV = "staging"
 $env:NAKAMA_SOCKET_SERVER_KEY = "<Hetzner NAKAMA_SOCKET_SERVER_KEY>"
 ```
 
-Badge should show `NAKAMA STAGING · http://178.156.210.186:7350 (auth)`.
+Badge should show `NAKAMA STAGING · https://178.156.210.186:8443 (auth)`.
 
 After Nakama login, Godot calls Node `POST /api/auth/nakama-bridge`. The host
 validates the Nakama session and issues a 10–15 minute gameplay JWT whose subject
@@ -96,7 +96,7 @@ is the Nakama user id. For the Docker deployment, use
 Linux host-gateway alias. For hybrid local Node + staging Nakama, set:
 
 ```powershell
-$env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,http://178.156.210.186:7350"
+$env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,https://178.156.210.186:8443"
 ```
 
 Automated dual-stack player path (login → bridge → character → JWT reconnect → friend isolation):
@@ -105,7 +105,7 @@ Automated dual-stack player path (login → bridge → character → JWT reconne
 npm run test:godot-auth-flow
 # staging Nakama + local Node (Node must reach staging via NAKAMA_HTTP_URL or NAKAMA_HTTP_URLS):
 $env:LOOT_NAKAMA_ENV = "staging"
-$env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,http://178.156.210.186:7350"
+$env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,https://178.156.210.186:8443"
 npm run test:godot-auth-flow
 ```
 
@@ -122,15 +122,16 @@ Priority for optional Node gameplay base URL:
 
 1. `LOOT_NODE_API_URL`
 2. `nakama_secrets.cfg` → `[staging] node_api_base_url=`
-3. Default for staging: `http://178.156.210.186:8787`
+3. Default for staging: `https://178.156.210.186`
 
 This does **not** affect Godot authentication.
 
 Staging never falls back to a local Node API. Such a fallback would use a
 different SQLite database and split authoritative player state. The shared
-Hetzner endpoint must be reachable. Publish `8787:8787` and allow inbound TCP
-8787 in the Hetzner/host firewall for direct staging access, or terminate HTTPS
-on 443 and proxy to the container.
+Hetzner endpoint must be reachable. Public traffic terminates at Nginx:
+HTTPS 443 proxies Node `127.0.0.1:8787`; HTTPS/WSS 8443 proxies Nakama
+`127.0.0.1:7350`. Ports 7350 and 8787 must not remain publicly exposed after
+TLS verification.
 
 ## Session separation
 

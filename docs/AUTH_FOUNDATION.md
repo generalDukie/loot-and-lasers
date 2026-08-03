@@ -126,8 +126,9 @@ The Node container requires:
 - `NAKAMA_HTTP_URL`
 
 `docker-compose.node-api.yml` maps `host.docker.internal` to the Linux host gateway
-so a co-located Nakama on port 7350 can be validated. Port 8787 must be reachable
-from staging clients, or an HTTPS reverse proxy on 443 must forward to it.
+so a co-located Nakama on port 7350 can be validated. Public staging uses the
+trusted IP certificate at HTTPS 443 for Node and HTTPS/WSS 8443 for Nakama.
+Nginx proxies to localhost ports 8787 and 7350; those backend ports stay private.
 
 Back up the `node_api_data` SQLite volume before first deployment because startup
 adds the unique mapping index and Character-creation receipt table.

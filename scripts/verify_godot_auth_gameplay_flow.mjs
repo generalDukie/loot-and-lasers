@@ -31,13 +31,13 @@ const NODE = (process.env.API_URL || process.env.LOOT_NODE_API_URL || "http://12
 const ENV = (process.env.LOOT_NAKAMA_ENV || "local").trim().toLowerCase();
 const NAKAMA_DEFAULTS = {
   local: { host: "127.0.0.1", port: 7350, key: "defaultkey" },
-  staging: { host: "178.156.210.186", port: 7350, key: "" },
+  staging: { host: "178.156.210.186", port: 8443, key: "", scheme: "https" },
 };
 const ep = NAKAMA_DEFAULTS[ENV] || NAKAMA_DEFAULTS.local;
 const NAKAMA = (
   process.env.NAKAMA_HTTP_URL ||
   process.env.LOOT_NAKAMA_HTTP_URL ||
-  `http://${ep.host}:${ep.port}`
+  `${ep.scheme || "http"}://${ep.host}:${ep.port}`
 ).replace(/\/$/, "");
 
 function readStagingKey() {

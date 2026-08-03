@@ -71,5 +71,9 @@ docker-data/
 # Nakama / Godot credential files if copied into the repo
 # (runtime path is Godot user:// outside the project tree)
 **/nakama_session.cfg
+**/nakama_session_*.cfg
 **/nakama_device_id.txt
+**/nakama_device_id_*.txt
+**/nakama_secrets.cfg
 **/remote_config_cache.json
+**/backend_env.cfg

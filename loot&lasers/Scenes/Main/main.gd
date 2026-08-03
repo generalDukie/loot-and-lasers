@@ -6,6 +6,7 @@ var _status: Label
 
 func _ready() -> void:
 	_build_splash()
+	DevEnvironmentBadge.attach_to(self)
 	await get_tree().process_frame
 	await _boot()
 
@@ -56,18 +57,27 @@ func _set_status(text: String) -> void:
 
 
 func _boot() -> void:
-	# TEMPORARY_NAKAMA_TEST — one-time connection path check; remove this block later.
-	# Path: main → AuthManager.ensure_nakama_session → NakamaManager → Nakama server
-	NakamaManager.initialize_client()
-	print("[TEMPORARY_NAKAMA_TEST] Nakama client initialized")
+	# Nakama boot: BackendEnvironment → NakamaManager (sole client) → session
+	var init_res: Dictionary = NakamaManager.initialize_client()
+	var diag: Dictionary = NakamaManager.get_connection_diagnostics()
+	print(
+		"[NakamaBoot] env=%s host=%s:%s client=%s key=%s"
+		% [
+			diag.get("environment", ""),
+			diag.get("host", ""),
+			diag.get("port", ""),
+			diag.get("client_created", false),
+			diag.get("server_key_fingerprint", ""),
+		]
+	)
+	if not bool(init_res.get("success", false)):
+		print("[NakamaBoot] client init failed — %s" % str(init_res.get("error", "unknown")))
 	var nakama_res: Dictionary = await AuthManager.ensure_nakama_session()
 	if nakama_res.get("success", false):
 		var uid := str(nakama_res.get("data", {}).get("user_id", ""))
-		print("[TEMPORARY_NAKAMA_TEST] Nakama authentication successful")
-		print("[TEMPORARY_NAKAMA_TEST] User ID %s" % uid)
+		print("[NakamaBoot] authenticated user_id=%s" % uid)
 	else:
-		print("[TEMPORARY_NAKAMA_TEST] Nakama authentication failed — %s" % str(nakama_res.get("error", "unknown")))
-	# END TEMPORARY_NAKAMA_TEST
+		print("[NakamaBoot] authentication failed — %s" % str(nakama_res.get("error", "unknown")))
 
 	_set_status("Connecting…")
 	var health: Dictionary = await GameApiClient.health()

@@ -50,6 +50,7 @@ AudioManager="*res://Autoload/AudioManager.gd"
 SettingsManager="*res://Autoload/SettingsManager.gd"
 SaveManager="*res://Autoload/SaveManager.gd"
 Nakama="*uid://b24hquol88ydg"
+BackendEnvironment="*res://Autoload/BackendEnvironment.gd"
 NakamaManager="*res://Autoload/NakamaManager.gd"
 ProfileManager="*res://Autoload/ProfileManager.gd"
 CurrencyManager="*res://Autoload/CurrencyManager.gd"
@@ -68,6 +69,10 @@ window/stretch/mode="canvas_items"
 [gui]
 
 theme/default_font_subpixel_positioning=4
+
+[loot]
+
+backend/environment="local"
 
 [physics]
 

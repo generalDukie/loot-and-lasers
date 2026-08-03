@@ -48,6 +48,7 @@ func _ready() -> void:
 	add_to_group("game_shell")
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	scale = Vector2.ONE
+	DevEnvironmentBadge.attach_to(self)
 	# Never let chrome/rail minimum sizes push past the window edge.
 	clip_contents = true
 	_build()

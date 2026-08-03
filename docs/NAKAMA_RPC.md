@@ -311,3 +311,11 @@ Payload: `{ character_id?, mission_id, request_id }`. See `docs/PHASE14_MISSION_
 | `shop_refresh` | Free cooldown refresh |
 
 See `docs/PHASE15_SHOPS.md`.
+
+## Phase 17 — Combat engine
+
+| RPC | Purpose |
+|-----|---------|
+| `combat_simulate` | Authoritative duel vs a server opponent template; returns winner + combat log |
+
+Payload: `{ character_id?, opponent_source, request_id, class?, level? }`. Client must not submit damage, RNG, stats, HP, buffs, or outcomes. See `docs/PHASE17_COMBAT_ENGINE.md`.

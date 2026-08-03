@@ -20,6 +20,7 @@ Schema history for Nakama storage collections introduced by backend phases.
 | 14 | `reward_transactions` / `loot_transactions` | `mission_reward:` / `mission_loot:` + mission id | recipient | Canonical grant records referenced by mission |
 | 15 | `shops` | `<character_id>:<shop_id>` | account | Character shop offers + revision |
 | 15 | `shop_transactions` | `request_id` | account | Buy/sell/refresh idempotency receipts |
+| 17 | `combat_transactions` | `request_id` | account | Combat simulate idempotency + deterministic replay |
 
 Permissions for Phase 10 system objects: read `0`, write `0` (runtime/RPC only).
 

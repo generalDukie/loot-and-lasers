@@ -158,6 +158,7 @@ function checkNakamaModules() {
     "modules/rewards.lua",
     "modules/loot.lua",
     "modules/shops.lua",
+    "modules/combat.lua",
     "modules/lib/auth.lua",
     "modules/lib/storage.lua",
     "modules/lib/validation.lua",
@@ -166,6 +167,8 @@ function checkNakamaModules() {
     "modules/lib/ids.lua",
     "modules/lib/logging.lua",
     "modules/lib/transactions.lua",
+    "modules/lib/rng.lua",
+    "modules/lib/combat_formulas.lua",
   ];
   for (const rel of required) {
     if (!exists(rel)) {
@@ -185,6 +188,7 @@ function checkNakamaModules() {
     "modules/rewards.lua",
     "modules/loot.lua",
     "modules/shops.lua",
+    "modules/combat.lua",
   ];
   for (const rel of serviceFiles) {
     const src = read(rel);
@@ -227,6 +231,7 @@ function checkRpcRegistration() {
     shop_buy: true,
     shop_sell: true,
     shop_refresh: true,
+    combat_simulate: true,
   };
   const forbidden = {
     wallet_credit: true,
@@ -343,6 +348,7 @@ function checkDocs() {
     "shop_buy",
     "shop_sell",
     "shop_refresh",
+    "combat_simulate",
   ];
   for (const id of requiredMentions) {
     if (!rpcDoc.includes(id)) {
@@ -389,6 +395,14 @@ function checkDocs() {
   }
   if (!/Phase 15|shop_get|Secure shop/i.test(arch)) {
     fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 15 shops note");
+    return;
+  }
+  if (!exists("docs/PHASE17_COMBAT_ENGINE.md")) {
+    fail(cat, "Missing docs/PHASE17_COMBAT_ENGINE.md");
+    return;
+  }
+  if (!/Phase 17|combat_simulate|Combat engine/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 17 combat note");
     return;
   }
   if (!rpcDoc.includes("dev_loot_test") && !/Phase 13/i.test(rpcDoc)) {

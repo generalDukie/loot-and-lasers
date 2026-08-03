@@ -124,6 +124,16 @@ local DEFAULT_FLAGS = {
     ends_at = "",
     metadata = {},
   },
+  combat_simulate_enabled = {
+    flag_id = "combat_simulate_enabled",
+    enabled = true,
+    environment = "development",
+    client_visible = true,
+    minimum_client_version = "",
+    starts_at = "",
+    ends_at = "",
+    metadata = {},
+  },
 }
 
 local function get_environment(context)

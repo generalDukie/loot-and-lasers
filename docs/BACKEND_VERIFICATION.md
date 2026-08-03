@@ -71,6 +71,10 @@ Do not install Git hooks unless the user asks.
 
 `verify_shop_service.mjs` asserts shop RPCs, server prices/sale values, buy/sell/refresh idempotency, capacity-before-charge, equipped sell rejection, Nakama ShopManager, and no premium shop currency.
 
+## Phase 17 checks
+
+`verify_combat_engine.mjs` asserts `combat.lua` / `combat_simulate`, rejection of client damage/RNG/stats, server-side equipment load, deterministic replay, opponent template allowlist, loop/draw prevention, and healing/crit/dodge/tank template paths.
+
 ## Troubleshooting
 
 | Symptom | Fix |

@@ -105,3 +105,9 @@ Godot `MissionManager` claims via Nakama only. See `docs/PHASE14_MISSION_REWARDS
 `modules/shops.lua` — character-level `general` shop. Soft currency buy/sell; free cooldown refresh.
 Godot `ShopManager` uses Nakama; Node EnsureShop/BuyShop disabled for stalls.
 See `docs/PHASE15_SHOPS.md`.
+
+## Combat engine (Phase 17)
+
+`modules/combat.lua` — reusable server-authoritative simulator (`combat_simulate`).
+Equipment and formulas loaded on the server; deterministic RNG; structured combat log for Godot animation.
+Does not implement Arena, Dungeons, Bosses, Guild Wars, or PvE modes. See `docs/PHASE17_COMBAT_ENGINE.md`.

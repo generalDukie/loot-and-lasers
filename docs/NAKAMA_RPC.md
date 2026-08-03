@@ -214,12 +214,14 @@ See `docs/PHASE4_INVENTORY.md`.
 
 ## Phase 5 — Wallet RPCs
 
-Managed by `CurrencyManager`. Storage: `wallets`/`wallet`, tx log `wallet_transactions`.
+Managed by `CurrencyManager` (**read-only** from the Godot client). Storage: `wallets`/`wallet`, tx log `wallet_transactions`.
 
 | RPC | Purpose |
 |-----|---------|
-| `wallet_get` | Load or create zero balances |
-| `wallet_credit` | Credit allowlisted currency (not premium from client) |
-| `wallet_debit` | Debit allowlisted currency |
+| `wallet_get` | Load or create zero balances (public, read-only) |
+
+Mutations are **internal** Lua only (`credit_currency` / `debit_currency` in `modules/wallet.lua`). Former public RPCs `wallet_credit` and `wallet_debit` are **not registered**.
+
+Temporary local-dev RPCs (flag `LOOT_DEV_WALLET_MUTATIONS=1`, soft currency only): `dev_wallet_credit_test`, `dev_wallet_debit_test`, `dev_wallet_internal_selftest`.
 
 Currency ids: `stardust` (soft), `nova_crystals` (premium). See `docs/PHASE5_WALLET.md`.

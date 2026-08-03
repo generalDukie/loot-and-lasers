@@ -17,25 +17,51 @@ Fuel is a separate resource (not a wallet currency). `total_stardust_earned` is 
 
 ```
 Currency UI (shell keeps Character display)
-  → CurrencyManager
-  → NakamaManager.invoke_rpc
+  → CurrencyManager (read-only)
+  → NakamaManager.invoke_rpc("wallet_get")
   → modules/wallet.lua
   → wallets / wallet (+ wallet_transactions)
   → wallet_changed
+
+Trusted server modules (future)
+  → require("wallet").credit_currency / debit_currency
+  → never trust Godot user_id / balances / results
 ```
 
 ## Currency registry
 
-| id | type | client credit | client debit | Future writers |
-|----|------|---------------|--------------|----------------|
-| `stardust` | soft | yes (RPC) | yes | mission, shop, arena, void, casino, admin |
-| `nova_crystals` | premium | **no** | yes | purchase verification, weekly quests, admin, promotion |
+| id | type | client mutation | Future writers |
+|----|------|-----------------|----------------|
+| `stardust` | soft | **none** (get only) | mission, shop, arena, void, casino, admin |
+| `nova_crystals` | premium | **none** (get only) | purchase verification, weekly quests, admin, promotion |
 
-## RPCs
+## Public RPC
 
-- `wallet_get` — load or create zero wallet
-- `wallet_credit` — `{ currency_id, amount, transaction_id, reason, source? }`
-- `wallet_debit` — same shape
+- `wallet_get` — load or create zero wallet (read-only)
+
+## Internal functions (not client-callable)
+
+```lua
+credit_currency(user_id, currency_id, amount, transaction_id, reason, source)
+debit_currency(user_id, currency_id, amount, transaction_id, reason, source)
+```
+
+`user_id` must be supplied by a trusted server module (or session context in gated dev tests). Never taken from a Godot payload.
+
+## Removed public RPCs
+
+- `wallet_credit` — unregistered
+- `wallet_debit` — unregistered
+
+## Temporary development RPCs
+
+Gated by Nakama runtime env `LOOT_DEV_WALLET_MUTATIONS=1` (set in local `docker-compose.yml`). Soft currency (`stardust`) only. Marked for removal before production.
+
+- `dev_wallet_credit_test`
+- `dev_wallet_debit_test`
+- `dev_wallet_internal_selftest` — runs internal credit/debit + duplicate + insufficient checks
+
+Without the flag, these return `RPC not found` (404).
 
 ## Storage
 
@@ -44,11 +70,11 @@ Currency UI (shell keeps Character display)
 
 ## Security
 
-- Account id from session only
+- Account id from session / trusted module only
 - Reject negative/zero amounts, unknown/disabled currencies, overflow, insufficient funds
 - Duplicate `transaction_id` → 409
 - OCC retries on wallet version conflicts
-- Premium credit rejected for session clients
+- Public Godot client cannot credit or debit any currency
 
 ## Non-goals
 

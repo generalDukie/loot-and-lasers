@@ -289,6 +289,13 @@ func ensure_nakama_session() -> Dictionary:
 				print("[AuthManager] Nakama profile ready account_id=%s" % str(pref.get("data", {}).get("account_id", "")))
 			else:
 				print("[AuthManager] WARNING: Nakama profile unavailable — %s" % str(pref.get("error", "unknown")))
+		# Phase 5: load-or-create zero wallet (does not migrate Character balances).
+		if CurrencyManager != null:
+			var wres: Dictionary = await CurrencyManager.ensure_wallet()
+			if wres.get("success", false):
+				print("[AuthManager] Nakama wallet ready")
+			else:
+				print("[AuthManager] WARNING: Nakama wallet unavailable — %s" % str(wres.get("error", "unknown")))
 	else:
 		print("[AuthManager] Nakama session unavailable — %s" % str(res.get("error", "unknown")))
 	return res
@@ -297,6 +304,8 @@ func ensure_nakama_session() -> Dictionary:
 func logout_nakama() -> Dictionary:
 	if ProfileManager != null:
 		ProfileManager.clear_local()
+	if CurrencyManager != null:
+		CurrencyManager.clear_local()
 	if NakamaManager == null:
 		return {"success": true, "data": {}, "error": "", "status_code": 200}
 	return await NakamaManager.logout()

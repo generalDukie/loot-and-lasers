@@ -211,3 +211,15 @@ var items: Dictionary = await InventoryManager.list_character_items()
 ```
 
 See `docs/PHASE4_INVENTORY.md`.
+
+## Phase 5 — Wallet RPCs
+
+Managed by `CurrencyManager`. Storage: `wallets`/`wallet`, tx log `wallet_transactions`.
+
+| RPC | Purpose |
+|-----|---------|
+| `wallet_get` | Load or create zero balances |
+| `wallet_credit` | Credit allowlisted currency (not premium from client) |
+| `wallet_debit` | Debit allowlisted currency |
+
+Currency ids: `stardust` (soft), `nova_crystals` (premium). See `docs/PHASE5_WALLET.md`.

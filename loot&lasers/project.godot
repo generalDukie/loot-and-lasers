@@ -51,6 +51,7 @@ SaveManager="*res://Autoload/SaveManager.gd"
 Nakama="*uid://b24hquol88ydg"
 NakamaManager="*res://Autoload/NakamaManager.gd"
 ProfileManager="*res://Autoload/ProfileManager.gd"
+CurrencyManager="*res://Autoload/CurrencyManager.gd"
 
 [display]
 

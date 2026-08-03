@@ -1555,8 +1555,12 @@ func _refresh_chrome() -> void:
 		_format_rail_amount(character.get("fuel", 0)),
 		_format_rail_amount(character.get("max_fuel", 100)),
 	])
+	# Character balances remain the live readout this phase (Node SoT).
+	# Phase 5 Nakama wallet loads in parallel — not yet migrated onto these chips.
 	_set_readout(_stardust_value, _format_rail_amount(character.get("stardust", 0)))
 	_set_readout(_nova_value, _format_rail_amount(character.get("nova_crystals", 0)))
+	if CurrencyManager != null and not CurrencyManager.loading:
+		CurrencyManager.load_wallet()
 	_fit_currency_fonts()
 	var xp := int(character.get("experience", 0))
 	var xp_next := maxi(1, int(character.get("experience_to_next_level", 1)))

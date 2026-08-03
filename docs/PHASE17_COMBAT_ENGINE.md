@@ -133,6 +133,8 @@ Plug-in modes should:
 
 Candidates: Arena, Guild Wars, Bosses, Missions, Raids, World Bosses, Friends Duels, PvE.
 
+**Phase 18 update:** Arena now calls `combat.build_character_combatant` + `simulate_combat` from `modules/arena.lua`. Training-template `combat_simulate` RPC remains for engine tests; Arena does not use it for ranked fights.
+
 ## Known limitations
 
 - No class passives, stims, or orbital extras (Godot MissionCombat has these)

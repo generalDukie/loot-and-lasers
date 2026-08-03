@@ -75,6 +75,10 @@ Do not install Git hooks unless the user asks.
 
 `verify_combat_engine.mjs` asserts `combat.lua` / `combat_simulate`, rejection of client damage/RNG/stats, server-side equipment load, deterministic replay, opponent template allowlist, loop/draw prevention, and healing/crit/dodge/tank template paths.
 
+## Phase 18 checks
+
+`verify_arena_service.mjs` asserts Arena RPCs, CombatService wiring, server rating + lower-rank penalty, idempotent challenges, anti-farm/cooldown, rankings bounds, ArenaManager Nakama path, and disabled local combat settlement.
+
 ## Troubleshooting
 
 | Symptom | Fix |

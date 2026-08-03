@@ -19,6 +19,7 @@
 | 15 | Done | Secure shop service (buy/sell/refresh) |
 | 16 | Deferred / Design in progress | Shipment System — gameplay loop still being workshopped (crate rules, item eligibility, payouts, timing, destinations, bonuses, failure/risk). Revisit after a written gameplay specification is approved. No placeholder RPCs, storage, managers, feature flags, or config until then. |
 | 17 | Done | Server-authoritative combat engine (`combat_simulate`) — reusable simulator only; no Arena/Dungeons/Bosses/Guild Wars/PvE modes |
-| 18+ | Planned | Progression/XP, fuel debit, premium shop parity, mode-specific combat integrations, and other post-combat backend work (excluding deferred shipments until Phase 16 is unblocked) |
+| 18 | Done | Arena matchmaking and rankings (`arena_*` RPCs) — CombatService resolution, Elo + lower-rank penalties, history; no Arena rewards |
+| 19+ | Planned | Progression/XP, fuel debit, premium shop parity, Arena rewards, and other post-arena backend work (excluding deferred shipments until Phase 16 is unblocked) |
 
 Before each backend commit: `npm run verify:backend`.

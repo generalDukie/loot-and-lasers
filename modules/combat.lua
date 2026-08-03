@@ -258,18 +258,28 @@ local function build_fighter_from_totals(opts)
   }
 end
 
-local function build_player_fighter(user_id, character_id, class_name, level)
+local function build_player_fighter(user_id, character_id, class_name, level, side, display_name)
   local pieces = read_equipment_slots(user_id, character_id)
   local totals = formulas.build_totals(class_name, pieces)
   local fighter = build_fighter_from_totals({
     class = class_name,
     level = level,
     totals = totals,
-    side = "player",
-    display_name = "Player",
+    side = side or "player",
+    display_name = display_name or "Player",
     heal_per_round = 0,
   })
   return fighter, pieces, equipment_fingerprint(pieces)
+end
+
+--- INTERNAL — build a combatant from authoritative equipment (Arena / future modes).
+local function build_character_combatant(user_id, character_id, opts)
+  opts = opts or {}
+  local class_name = resolve_class(opts.class)
+  local level = clamp_level(opts.level)
+  local side = opts.side or "player"
+  local name = opts.display_name or (side == "opponent" and "Opponent" or "Player")
+  return build_player_fighter(user_id, character_id, class_name, level, side, name)
 end
 
 local function build_opponent_fighter(template, mirror_class, mirror_level)
@@ -744,6 +754,7 @@ nk.logger_info("Phase 17 combat RPC registered (combat_simulate)")
 
 return {
   simulate_combat = simulate_combat,
+  build_character_combatant = build_character_combatant,
   OPPONENT_SOURCES = OPPONENT_SOURCES,
   TX_COLLECTION = TX_COLLECTION,
   MAX_ROUNDS = MAX_ROUNDS,

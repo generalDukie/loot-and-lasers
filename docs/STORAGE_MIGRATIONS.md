@@ -21,6 +21,10 @@ Schema history for Nakama storage collections introduced by backend phases.
 | 15 | `shops` | `<character_id>:<shop_id>` | account | Character shop offers + revision |
 | 15 | `shop_transactions` | `request_id` | account | Buy/sell/refresh idempotency receipts |
 | 17 | `combat_transactions` | `request_id` | account | Combat simulate idempotency + deterministic replay |
+| 18 | `arena_states` | character id | account | Character Arena rating / streaks / cooldowns |
+| 18 | `arena_index` | character id | system UUID | Public ranking index (server-written) |
+| 18 | `arena_transactions` | `request_id` | account | Challenge/refresh idempotency |
+| 18 | `arena_history` | `battle_id` | account | Per-account copies of battle receipts |
 
 Permissions for Phase 10 system objects: read `0`, write `0` (runtime/RPC only).
 

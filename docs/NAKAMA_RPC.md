@@ -319,3 +319,16 @@ See `docs/PHASE15_SHOPS.md`.
 | `combat_simulate` | Authoritative duel vs a server opponent template; returns winner + combat log |
 
 Payload: `{ character_id?, opponent_source, request_id, class?, level? }`. Client must not submit damage, RNG, stats, HP, buffs, or outcomes. See `docs/PHASE17_COMBAT_ENGINE.md`.
+
+## Phase 18 — Arena matchmaking and rankings
+
+| RPC | Purpose |
+|-----|---------|
+| `arena_get_state` | Load/ensure character Arena state |
+| `arena_get_opponents` | Up to three nearby opponents |
+| `arena_refresh_opponents` | Cooldown rematchmaking |
+| `arena_get_rankings` | Paginated rankings |
+| `arena_challenge` | Authoritative challenge (CombatService + rating) |
+| `arena_get_history` | Battle history |
+
+See `docs/PHASE18_ARENA.md`.

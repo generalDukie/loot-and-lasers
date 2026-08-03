@@ -159,6 +159,7 @@ function checkNakamaModules() {
     "modules/loot.lua",
     "modules/shops.lua",
     "modules/combat.lua",
+    "modules/arena.lua",
     "modules/lib/auth.lua",
     "modules/lib/storage.lua",
     "modules/lib/validation.lua",
@@ -169,6 +170,7 @@ function checkNakamaModules() {
     "modules/lib/transactions.lua",
     "modules/lib/rng.lua",
     "modules/lib/combat_formulas.lua",
+    "modules/lib/arena_rating.lua",
   ];
   for (const rel of required) {
     if (!exists(rel)) {
@@ -189,6 +191,7 @@ function checkNakamaModules() {
     "modules/loot.lua",
     "modules/shops.lua",
     "modules/combat.lua",
+    "modules/arena.lua",
   ];
   for (const rel of serviceFiles) {
     const src = read(rel);
@@ -232,6 +235,12 @@ function checkRpcRegistration() {
     shop_sell: true,
     shop_refresh: true,
     combat_simulate: true,
+    arena_get_state: true,
+    arena_get_opponents: true,
+    arena_refresh_opponents: true,
+    arena_get_rankings: true,
+    arena_challenge: true,
+    arena_get_history: true,
   };
   const forbidden = {
     wallet_credit: true,
@@ -254,6 +263,10 @@ function checkRpcRegistration() {
     generate_item: true,
     loot_debug: true,
     loot_from_table: true,
+    arena_set_rating: true,
+    arena_force_win: true,
+    arena_submit_result: true,
+    arena_grant_points: true,
   };
 
   const luaFiles = listLuaModules(path.join(ROOT, "modules"));
@@ -349,6 +362,12 @@ function checkDocs() {
     "shop_sell",
     "shop_refresh",
     "combat_simulate",
+    "arena_get_state",
+    "arena_get_opponents",
+    "arena_refresh_opponents",
+    "arena_get_rankings",
+    "arena_challenge",
+    "arena_get_history",
   ];
   for (const id of requiredMentions) {
     if (!rpcDoc.includes(id)) {
@@ -403,6 +422,14 @@ function checkDocs() {
   }
   if (!/Phase 17|combat_simulate|Combat engine/i.test(arch)) {
     fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 17 combat note");
+    return;
+  }
+  if (!exists("docs/PHASE18_ARENA.md")) {
+    fail(cat, "Missing docs/PHASE18_ARENA.md");
+    return;
+  }
+  if (!/Phase 18|arena_challenge|Arena/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 18 arena note");
     return;
   }
   if (!rpcDoc.includes("dev_loot_test") && !/Phase 13/i.test(rpcDoc)) {

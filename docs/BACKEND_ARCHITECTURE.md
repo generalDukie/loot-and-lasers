@@ -111,3 +111,10 @@ See `docs/PHASE15_SHOPS.md`.
 `modules/combat.lua` — reusable server-authoritative simulator (`combat_simulate`).
 Equipment and formulas loaded on the server; deterministic RNG; structured combat log for Godot animation.
 Does not implement Arena, Dungeons, Bosses, Guild Wars, or PvE modes. See `docs/PHASE17_COMBAT_ENGINE.md`.
+
+## Arena (Phase 18)
+
+`modules/arena.lua` — character Arena state, matchmaking, rankings, direct challenges.
+Combat via CombatService; Elo rating + lower-ranked gain penalties; custom `arena_index` (character-safe).
+Godot `ArenaManager` uses Nakama; local combat settlement disabled. No Arena rewards yet.
+See `docs/PHASE18_ARENA.md`.

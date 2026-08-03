@@ -1,12 +1,20 @@
 extends Node
 ## Nakama connection layer — client, session, socket, RPC.
 ## Game-specific systems stay in their own managers and call into this.
+## See docs/NAKAMA_RPC.md for the manager-facing RPC contract.
+##
+## Primary RPC API (do not name methods `rpc` — conflicts with Node.rpc):
+##   await NakamaManager.call_rpc("id", payload)
+##   await NakamaManager.call_authenticated_rpc("id", payload)
+## Envelope: { success, data, error, status_code }
 
 signal connection_changed(connected: bool)
 signal authenticated(user_id: String)
 signal authentication_failed(error: String)
 signal session_restored(user_id: String)
 signal logged_out()
+signal rpc_succeeded(rpc_id: String, data: Variant)
+signal rpc_failed(rpc_id: String, error: String, status_code: int)
 
 const SERVER_KEY := "defaultkey"
 const HOST := "127.0.0.1"
@@ -21,6 +29,12 @@ const REFRESH_SKEW_SEC := 60
 const CLIENT_TIMEOUT_SEC := 2
 ## Wall-clock cap so a dead server cannot hang the main thread forever.
 const AUTH_TIMEOUT_SEC := 5.0
+## Default wall-clock cap for a single RPC attempt (seconds).
+const RPC_TIMEOUT_SEC := 10.0
+## Transient-failure retries after the first attempt (total attempts = 1 + this).
+const RPC_TRANSIENT_RETRIES := 2
+## Base delay between transient retries (seconds); doubles each attempt.
+const RPC_RETRY_BACKOFF_SEC := 0.35
 
 var client: NakamaClient
 var session: NakamaSession
@@ -220,38 +234,113 @@ func disconnect_socket() -> void:
 	print("[NakamaManager] socket disconnected")
 
 
-func call_rpc(rpc_id: String, payload: Dictionary = {}) -> Dictionary:
-	if rpc_id.is_empty():
-		return _fail("Missing RPC id")
+# ---------------------------------------------------------------------------
+# RPC framework — shared by every manager after migration
+# ---------------------------------------------------------------------------
+
+## Call a Nakama RPC with an existing session.
+## Verifies auth (soft-refresh near expiry). Does not device-auth a new account.
+## Always async; never blocks the main thread beyond awaited frames.
+##
+## options:
+##   timeout_sec: float
+##   retries: int — transient retries after the first attempt
+##   retry_on_auth_failure: bool — one session refresh + retry on 401-style errors
+##   use_socket: bool — use realtime socket when connected
+##   log: bool — force request logging on/off (default: debug/editor builds only)
+func call_rpc(rpc_id: String, payload: Variant = null, options: Dictionary = {}) -> Dictionary:
+	return await _execute_rpc(rpc_id, payload, options, false)
+
+
+## Ensure a valid Nakama session (restore → refresh → device auth), then call_rpc.
+## Prefer this from gameplay managers once they migrate off GameApiClient.
+func call_authenticated_rpc(rpc_id: String, payload: Variant = null, options: Dictionary = {}) -> Dictionary:
+	return await _execute_rpc(rpc_id, payload, options, true)
+
+
+## Alias kept for earlier wiring.
+func rpc_authenticated(rpc_id: String, payload: Variant = null, options: Dictionary = {}) -> Dictionary:
+	return await call_authenticated_rpc(rpc_id, payload, options)
+
+
+## Optional helper: if the server returns JSON { success|ok, error, data }, promote it.
+## Managers can use call_rpc / call_authenticated_rpc directly; this is for Node-API parity.
+func invoke_rpc(rpc_id: String, payload: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
+	var res: Dictionary = await call_authenticated_rpc(rpc_id, payload, options)
+	if not res.get("success", false):
+		return res
+	return _promote_server_envelope(res)
+
+
+func _execute_rpc(
+	rpc_id: String,
+	payload: Variant,
+	options: Dictionary,
+	require_full_auth: bool
+) -> Dictionary:
+	var id := rpc_id.strip_edges()
+	if id.is_empty():
+		return _rpc_fail("Missing RPC id")
+
+	var timeout_sec := float(options.get("timeout_sec", RPC_TIMEOUT_SEC))
+	var retries := int(options.get("retries", RPC_TRANSIENT_RETRIES))
+	var retry_on_auth := bool(options.get("retry_on_auth_failure", true))
+	var use_socket := bool(options.get("use_socket", false))
+	var do_log := bool(options.get("log", _rpc_logging_enabled()))
+
 	if client == null:
-		return _fail("Nakama client not initialized")
-	if not is_authenticated():
-		# Try a soft refresh/restore before failing hard.
-		if session != null and not session.refresh_token.is_empty() and not session.is_refresh_expired():
+		initialize_client()
+	if client == null:
+		return _rpc_fail("Nakama client not initialized")
+
+	if require_full_auth:
+		var ready: Dictionary = await ensure_authenticated()
+		if not ready.get("success", false):
+			var auth_err := str(ready.get("error", "Not authenticated"))
+			_rpc_log(do_log, id, "auth_failed", auth_err)
+			return _rpc_fail(auth_err, int(ready.get("status_code", 0)))
+	else:
+		var verified: Dictionary = await _verify_session_for_rpc()
+		if not verified.get("success", false):
+			var verify_err := str(verified.get("error", "Not authenticated"))
+			_rpc_log(do_log, id, "auth_verify_failed", verify_err)
+			return _rpc_fail(verify_err, int(verified.get("status_code", 0)))
+
+	_rpc_log(do_log, id, "request", payload)
+
+	var attempts := maxi(1, retries + 1)
+	var result: Dictionary = _rpc_fail("RPC did not run")
+	for attempt in range(attempts):
+		result = await _rpc_once(id, payload, timeout_sec, use_socket)
+		if result.get("success", false):
+			_rpc_log(do_log, id, "success", result.get("data"))
+			rpc_succeeded.emit(id, result.get("data"))
+			return result
+
+		# Auth failure: refresh once, then one more attempt (does not consume transient budget).
+		if retry_on_auth and _is_auth_rpc_failure(result):
+			_rpc_log(do_log, id, "auth_retry", result.get("error"))
 			var refreshed: Dictionary = await refresh_session()
-			if not refreshed.get("success", false):
-				return _fail("Not authenticated")
-		else:
-			return _fail("Not authenticated")
+			if refreshed.get("success", false):
+				result = await _rpc_once(id, payload, timeout_sec, use_socket)
+				if result.get("success", false):
+					_rpc_log(do_log, id, "success", result.get("data"))
+					rpc_succeeded.emit(id, result.get("data"))
+					return result
+			retry_on_auth = false
 
-	var payload_json: Variant = null
-	if not payload.is_empty():
-		payload_json = JSON.stringify(payload)
-	var result = await client.rpc_async(session, rpc_id, payload_json)
-	if result == null:
-		return _fail("RPC returned null")
-	if result.is_exception():
-		return _fail(_exception_message(result), _exception_status(result))
+		if attempt >= attempts - 1 or not _is_transient_rpc_failure(result):
+			break
 
-	var raw := str(result.payload) if result.payload != null else ""
-	var data: Variant = {}
-	if not raw.is_empty():
-		var parsed: Variant = JSON.parse_string(raw)
-		if parsed == null:
-			data = {"raw": raw}
-		else:
-			data = parsed
-	return {"success": true, "data": data, "error": "", "status_code": 200}
+		var backoff := RPC_RETRY_BACKOFF_SEC * pow(2.0, float(attempt))
+		_rpc_log(do_log, id, "transient_retry", "%s (attempt %s/%s, wait %.2fs)" % [
+			str(result.get("error", "")), str(attempt + 1), str(attempts), backoff
+		])
+		await get_tree().create_timer(backoff).timeout
+
+	_rpc_log(do_log, id, "failed", result.get("error"))
+	rpc_failed.emit(id, str(result.get("error", "RPC failed")), int(result.get("status_code", 0)))
+	return result
 
 
 ## Boot helper used by AuthManager / temporary tests.
@@ -260,6 +349,197 @@ func ensure_authenticated() -> Dictionary:
 	if restored.get("success", false):
 		return restored
 	return await authenticate_device()
+
+
+## Soft verification: valid session required; soft-refresh near expiry; no new device auth.
+func _verify_session_for_rpc() -> Dictionary:
+	if is_authenticated():
+		if session.would_expire_in(REFRESH_SKEW_SEC) and not session.refresh_token.is_empty() \
+				and not session.is_refresh_expired():
+			var refreshed: Dictionary = await refresh_session()
+			if refreshed.get("success", false):
+				return refreshed
+			return _fail(str(refreshed.get("error", "Session refresh failed")), int(refreshed.get("status_code", 0)))
+		return {"success": true, "data": {"user_id": session.user_id}, "error": "", "status_code": 200}
+	if session != null and not session.refresh_token.is_empty() and not session.is_refresh_expired():
+		return await refresh_session()
+	return _fail("Not authenticated")
+
+
+func _rpc_once(rpc_id: String, payload: Variant, timeout_sec: float, use_socket: bool) -> Dictionary:
+	var encoded: Variant = _encode_rpc_payload(payload)
+	# Per-call box so concurrent RPCs never cancel each other / freeze the UI.
+	var box: Dictionary = {"result": null, "done": false, "abandoned": false}
+	_rpc_worker(rpc_id, encoded, use_socket, box)
+
+	var start_ms := Time.get_ticks_msec()
+	var limit_ms := int(maxf(0.25, timeout_sec) * 1000.0)
+	while not bool(box.get("done", false)):
+		if Time.get_ticks_msec() - start_ms >= limit_ms:
+			box["abandoned"] = true
+			return _rpc_fail(
+				"Nakama server unreachable or timed out (%ss)" % str(timeout_sec),
+				408
+			)
+		await get_tree().process_frame
+
+	var raw_result = box.get("result")
+	if raw_result == null:
+		return _rpc_fail("RPC returned null")
+	if typeof(raw_result) == TYPE_DICTIONARY and (raw_result as Dictionary).has("framework_error"):
+		var ferr: Dictionary = raw_result
+		return _rpc_fail(str(ferr.get("framework_error", "RPC failed")), int(ferr.get("status_code", 0)))
+	if raw_result.has_method("is_exception") and raw_result.is_exception():
+		var err := _exception_message(raw_result)
+		var status := _exception_status(raw_result)
+		# Offline / connection failures often surface as empty status + HTTPRequest text.
+		if status == 0 and _looks_like_offline_error(err):
+			err = "Nakama server unreachable — %s" % err
+		return _rpc_fail(err, status)
+
+	var data: Variant = _decode_rpc_payload(raw_result)
+	return _rpc_ok(data)
+
+
+func _rpc_worker(rpc_id: String, encoded: Variant, use_socket: bool, box: Dictionary) -> void:
+	var result = null
+	if use_socket and socket != null and socket.is_connected_to_host():
+		result = await socket.rpc_async(rpc_id, encoded)
+	else:
+		if session == null or client == null:
+			result = {"framework_error": "Nakama client/session missing", "status_code": 0}
+		else:
+			result = await client.rpc_async(session, rpc_id, encoded)
+	if bool(box.get("abandoned", false)):
+		return
+	box["result"] = result
+	box["done"] = true
+
+
+func _encode_rpc_payload(payload: Variant) -> Variant:
+	if payload == null:
+		return null
+	match typeof(payload):
+		TYPE_STRING:
+			var s := str(payload)
+			return s if not s.is_empty() else null
+		TYPE_DICTIONARY:
+			if (payload as Dictionary).is_empty():
+				return null
+			return JSON.stringify(payload)
+		TYPE_ARRAY:
+			return JSON.stringify(payload)
+		TYPE_BOOL, TYPE_INT, TYPE_FLOAT:
+			return JSON.stringify(payload)
+		_:
+			return JSON.stringify(payload)
+
+
+func _decode_rpc_payload(result) -> Variant:
+	var raw := ""
+	if result != null and "payload" in result and result.payload != null:
+		raw = str(result.payload)
+	if raw.is_empty():
+		return {}
+	var parsed: Variant = JSON.parse_string(raw)
+	if parsed == null:
+		return {"raw": raw}
+	return parsed
+
+
+func _promote_server_envelope(res: Dictionary) -> Dictionary:
+	var data: Variant = res.get("data")
+	if typeof(data) != TYPE_DICTIONARY:
+		return res
+	var body: Dictionary = data
+	if not body.has("ok") and not body.has("success"):
+		return res
+
+	var server_ok := bool(body.get("ok", body.get("success", false)))
+	var server_error := str(body.get("error", ""))
+	var server_data: Variant = body.get("data", {})
+	if not body.has("data"):
+		server_data = body.duplicate(true)
+		server_data.erase("ok")
+		server_data.erase("success")
+		server_data.erase("error")
+		server_data.erase("status")
+		server_data.erase("status_code")
+
+	var status := int(res.get("status_code", 200))
+	if body.has("status_code"):
+		status = int(body.get("status_code"))
+	elif body.has("status"):
+		status = int(body.get("status"))
+	elif not server_ok and status == 200:
+		status = 0
+
+	var out := _rpc_result(server_ok, server_data, server_error, status)
+	if not server_ok and server_error.is_empty():
+		out["error"] = "RPC rejected by server"
+	return out
+
+
+func _is_auth_rpc_failure(result: Dictionary) -> bool:
+	var status := int(result.get("status_code", 0))
+	if status == 401 or status == 403:
+		return true
+	var err := str(result.get("error", "")).to_lower()
+	return err.contains("unauthorized") or err.contains("unauthenticated") \
+		or (err.contains("session") and err.contains("expired")) \
+		or err.contains("not authenticated")
+
+
+func _is_transient_rpc_failure(result: Dictionary) -> bool:
+	var status := int(result.get("status_code", 0))
+	if status in [0, 408, 425, 429, 500, 502, 503, 504]:
+		return true
+	var err := str(result.get("error", "")).to_lower()
+	return err.contains("timed out") or err.contains("unreachable") \
+		or err.contains("httprequest failed") or err.contains("connection") \
+		or err.contains("temporarily") or err.contains("unavailable")
+
+
+func _looks_like_offline_error(err: String) -> bool:
+	var e := err.to_lower()
+	return e.contains("httprequest failed") or e.contains("connection") \
+		or e.contains("unreachable") or e.contains("failed to connect") \
+		or e.is_empty()
+
+
+func _rpc_logging_enabled() -> bool:
+	return OS.is_debug_build() or Engine.is_editor_hint()
+
+
+func _rpc_log(enabled: bool, rpc_id: String, phase: String, detail: Variant = null) -> void:
+	if not enabled:
+		return
+	# Never log tokens / session material — payload may contain gameplay fields only.
+	var detail_text := ""
+	if detail == null:
+		detail_text = ""
+	elif typeof(detail) == TYPE_DICTIONARY or typeof(detail) == TYPE_ARRAY:
+		detail_text = " %s" % JSON.stringify(detail)
+	else:
+		detail_text = " %s" % str(detail)
+	print("[NakamaManager:RPC] %s %s%s" % [rpc_id, phase, detail_text])
+
+
+func _rpc_ok(data: Variant) -> Dictionary:
+	return _rpc_result(true, data, "", 200)
+
+
+func _rpc_fail(error: String, status_code: int = 0) -> Dictionary:
+	return _rpc_result(false, {}, error, status_code)
+
+
+func _rpc_result(success: bool, data: Variant, error: String, status_code: int) -> Dictionary:
+	return {
+		"success": success,
+		"data": data if data != null else {},
+		"error": error,
+		"status_code": status_code,
+	}
 
 
 func _set_session(next: NakamaSession, emit_restored: bool) -> void:

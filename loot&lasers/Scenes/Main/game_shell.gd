@@ -59,6 +59,10 @@ func _ready() -> void:
 	timer.timeout.connect(_refresh_chrome)
 	add_child(timer)
 	timer.start()
+	if CurrencyManager != null and CurrencyManager.has_signal("wallet_changed"):
+		CurrencyManager.wallet_changed.connect(func(_w: Dictionary) -> void:
+			_refresh_chrome()
+		)
 	var target := GameManager.pending_page_path
 	if target.is_empty():
 		target = GameManager.SCENE_HUB
@@ -1447,10 +1451,14 @@ func _character_stamp() -> Array:
 	var mining_tick := -1
 	if MiningManager.is_mining_busy():
 		mining_tick = int(ceil(float(MiningManager.remaining_ms()) / 1000.0))
+	var sd := int(c.get("stardust", 0))
+	var nova := int(c.get("nova_crystals", 0))
+	if CurrencyManager != null and CurrencyManager.has_wallet():
+		sd = CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
 	return [
 		c.get("id", ""),
-		c.get("stardust", 0),
-		c.get("nova_crystals", 0),
+		sd,
+		nova,
 		c.get("fuel", 0),
 		c.get("max_fuel", 0),
 		c.get("level", 0),
@@ -1556,11 +1564,14 @@ func _refresh_chrome() -> void:
 		_format_rail_amount(character.get("fuel", 0)),
 		_format_rail_amount(character.get("max_fuel", 100)),
 	])
-	# Character balances remain the live readout this phase (Node SoT).
-	# Phase 5 Nakama wallet loads in parallel — not yet migrated onto these chips.
-	_set_readout(_stardust_value, _format_rail_amount(character.get("stardust", 0)))
-	_set_readout(_nova_value, _format_rail_amount(character.get("nova_crystals", 0)))
-	if CurrencyManager != null and not CurrencyManager.loading:
+	# Mission rewards land in the Nakama wallet; Nova skip still spends Character crystals.
+	var stardust := int(character.get("stardust", 0))
+	var nova := int(character.get("nova_crystals", 0))
+	if CurrencyManager != null and CurrencyManager.has_wallet():
+		stardust = CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
+	_set_readout(_stardust_value, _format_rail_amount(stardust))
+	_set_readout(_nova_value, _format_rail_amount(nova))
+	if CurrencyManager != null and not CurrencyManager.loading and not CurrencyManager.has_wallet():
 		CurrencyManager.load_wallet()
 	_fit_currency_fonts()
 	var xp := int(character.get("experience", 0))

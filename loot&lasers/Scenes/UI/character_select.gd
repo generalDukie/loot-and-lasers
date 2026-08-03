@@ -206,9 +206,19 @@ func _refresh() -> void:
 		return
 
 	_characters = res.data if typeof(res.data) == TYPE_ARRAY else []
-	# Web: empty list → /create-character
+	# Empty list → create flow when Node gameplay is available; otherwise stay here.
 	if _characters.is_empty():
-		GameManager.go_character_create()
+		if not str(AuthManager.access_token).is_empty():
+			GameManager.go_character_create()
+			return
+		_loading_host.visible = false
+		_main_host.visible = true
+		_welcome.text = "👥  Welcome, %s" % _welcome_name()
+		_status.add_theme_color_override("font_color", ClientUi.MUTED)
+		_status.text = "No operatives yet. Character creation uses the Node gameplay API (:8787) when available."
+		_create_btn.disabled = false
+		_enter_btn.disabled = true
+		_unlock_btn.visible = false
 		return
 
 	_loading_host.visible = false

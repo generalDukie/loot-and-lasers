@@ -177,6 +177,12 @@ func is_mission_finished(mission: Dictionary = {}) -> bool:
 func effective_end_unix(mission: Dictionary = {}) -> int:
 	var m: Dictionary = mission if not mission.is_empty() else active_mission
 	var status := str(m.get("status", ""))
+	# Prefer server unix when present (avoids ISO parse quirks).
+	var unix_raw = m.get("completes_at_unix", null)
+	if unix_raw != null:
+		var u := int(unix_raw)
+		if u > 0:
+			return u
 	var mission_end := str(m.get("completes_at", m.get("end_time", "")))
 	var char_end := str(GameManager.active_character.get("mission_end_time", ""))
 	var iso := ""
@@ -194,13 +200,14 @@ func seconds_remaining(mission: Dictionary = {}) -> int:
 	var status := str(m.get("status", ""))
 	if status in ["claimed", "failed", "complete", "completed", "reward_pending", "reward_failed"]:
 		return 0
-	# Prefer server-reported remaining when present on nakama_active.
+	# Countdown from completes_at on the client clock so the UI ticks every second.
+	# Server seconds_remaining is a poll snapshot (STATUS_MIN_INTERVAL) — do not freeze the display on it.
+	var end_unix := effective_end_unix(m)
+	if end_unix > 0:
+		return maxi(0, int(ceil(float(end_unix) - Time.get_unix_time_from_system())))
 	if mission.is_empty() and nakama_active.has("seconds_remaining"):
 		return maxi(0, int(nakama_active.get("seconds_remaining", 0)))
-	var end_unix := effective_end_unix(m)
-	if end_unix <= 0:
-		return 1 if status == "in_progress" or status == "active" else 0
-	return maxi(0, int(ceil(float(end_unix) - Time.get_unix_time_from_system())))
+	return 1 if status == "in_progress" or status == "active" else 0
 
 
 func _parse_iso_unix(iso: String) -> int:
@@ -229,13 +236,64 @@ func current_mission_id() -> String:
 	return str(active_mission.get("mission_id", active_mission.get("id", "")))
 
 
-## Skip waits for rewards phase — must not charge crystals or call Node SkipMission.
+## Skip remaining wait: debit Character Nova (Node), then Nakama mission_skip.
 func skip_mission() -> Dictionary:
-	return {
-		"ok": false,
-		"error": "Mission skip is deferred until the rewards phase",
-		"data": {},
-	}
+	if _nakama_busy:
+		return _fail_nakama("Mission request already in progress")
+
+	var mid := current_mission_id()
+	if mid.is_empty():
+		return {"ok": false, "error": "No active mission to skip", "data": {}}
+
+	var cost := 0
+	var rem := seconds_remaining()
+	if rem > 0:
+		cost = maxi(1, int(ceil((float(rem) / 60.0) * 5.0)))
+
+	if cost > 0:
+		var crystals := int(GameManager.active_character.get("nova_crystals", 0))
+		if crystals < cost:
+			return {"ok": false, "error": "Not enough Nova Crystals", "data": {}}
+		var debit: Dictionary = await GameApiClient.invoke("DebitNovaCrystals", {
+			"amount": cost,
+			"purpose": "mission_skip",
+			"mission_id": mid,
+		})
+		if not bool(debit.get("ok", false)):
+			return {
+				"ok": false,
+				"error": str(debit.get("error", "Could not spend Nova Crystals")),
+				"data": {},
+			}
+		_apply_character_payload(debit)
+
+	_nakama_busy = true
+	_set_loading(true)
+	var payload := _nakama_character_payload("")
+	payload["mission_id"] = mid
+	payload["request_id"] = "skip-%s-%d" % [mid.substr(0, mini(8, mid.length())), Time.get_unix_time_from_system()]
+	var res: Dictionary = await NakamaManager.invoke_rpc("mission_skip", payload)
+	_nakama_busy = false
+	_set_loading(false)
+
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "Mission skip failed"))
+		mission_error.emit(err)
+		return {"ok": false, "error": err, "data": {}}
+
+	var data: Variant = res.get("data", {})
+	if typeof(data) != TYPE_DICTIONARY:
+		return {"ok": false, "error": "Malformed skip response", "data": {}}
+
+	var skip_data: Dictionary = data
+	if typeof(skip_data.get("active", null)) == TYPE_DICTIONARY:
+		nakama_active = (skip_data.get("active") as Dictionary).duplicate(true)
+	elif typeof(skip_data.get("mission", null)) == TYPE_DICTIONARY:
+		nakama_active = skip_data.duplicate(true)
+	_apply_nakama_active_to_local()
+	mission_status_changed.emit(nakama_active)
+
+	return {"ok": true, "error": "", "data": skip_data}
 
 
 ## Claim completed mission rewards via Nakama mission_claim (server-authoritative).
@@ -318,6 +376,13 @@ func claim_mission_for(character_id: String = "", mission_id: String = "") -> Di
 		await CurrencyManager.load_wallet()
 	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
 		await InventoryManager.load_inventory(str(payload.get("character_id", "")))
+
+	# Mirror claimed stardust onto the character display cache so chrome updates even
+	# before wallet_changed listeners run (wallet is the real SoT for mission rewards).
+	var claimed_sd := int(gains.get("stardust", 0))
+	if claimed_sd > 0 and CurrencyManager != null and CurrencyManager.has_wallet():
+		GameManager.active_character["stardust"] = CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
+		character_updated.emit(GameManager.active_character)
 
 	active_mission = {}
 	active_mission_missing = false
@@ -607,6 +672,7 @@ func _ui_active_from_nakama(wrapper: Dictionary) -> Dictionary:
 	offer["status"] = str(m.get("status", "active"))
 	offer["end_time"] = str(m.get("completes_at", ""))
 	offer["completes_at"] = str(m.get("completes_at", ""))
+	offer["completes_at_unix"] = int(m.get("completes_at_unix", 0))
 	offer["started_at"] = str(m.get("started_at", ""))
 	offer["start_time"] = str(m.get("started_at", ""))
 	offer["duration_seconds"] = int(m.get("duration_seconds", offer.get("duration_seconds", 15)))

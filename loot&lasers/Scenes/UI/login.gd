@@ -30,6 +30,12 @@ var _forgot_sent_flag := false
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	DevEnvironmentBadge.attach_to(self)
+	var diag: Dictionary = AuthManager.get_auth_diagnostics()
+	print(
+		"[Login] Nakama auth env=%s host=%s:%s method=email (no :8787)"
+		% [diag.get("environment", ""), diag.get("host", ""), diag.get("port", "")]
+	)
 
 
 func _build() -> void:
@@ -377,18 +383,8 @@ func _do_login() -> void:
 	var res: Dictionary = await AuthManager.login(_email.text.strip_edges(), _password.text)
 	_set_busy(false)
 	_primary_btn.text = "Log in"
-	var payload: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
-	if bool(payload.get("otp_required", false)) or (
-		not res.ok and str(res.get("error", "")).findn("not verified") >= 0
-	):
-		_set_mode("otp")
-		_show_error("Email not verified — enter the code.", false)
-		if payload.has("otp_dev"):
-			_otp.text = str(payload["otp_dev"])
-			_show_error("Dev OTP filled in.", false)
-		return
 	if not res.ok:
-		_show_error(str(res.get("error", "Invalid email or password")))
+		_show_error(_friendly_auth_error(str(res.get("error", "Invalid email or password"))))
 		return
 	GameManager.go_character_select()
 
@@ -397,8 +393,8 @@ func _do_register() -> void:
 	if _password.text != _confirm.text:
 		_show_error("Passwords do not match")
 		return
-	if _password.text.length() < 6:
-		_show_error("Password must be at least 6 characters.")
+	if _password.text.length() < 8:
+		_show_error("Password must be at least 8 characters.")
 		return
 	_set_busy(true)
 	_primary_btn.text = "⟳  Creating account..."
@@ -407,43 +403,32 @@ func _do_register() -> void:
 	_set_busy(false)
 	_primary_btn.text = "Create account"
 	if not res.ok:
-		_show_error(str(res.get("error", "Registration failed")))
+		_show_error(_friendly_auth_error(str(res.get("error", "Registration failed"))))
 		return
-	_set_mode("otp")
-	if typeof(res.data) == TYPE_DICTIONARY and res.data.has("otp_dev"):
-		_otp.text = str(res.data["otp_dev"])
-		_show_error("Dev OTP: %s" % str(res.data["otp_dev"]), false)
-
-
-func _on_verify_otp() -> void:
-	if _busy:
-		return
-	_set_busy(true)
-	_primary_btn.text = "⟳  Verifying..."
-	_show_error("")
-	var res: Dictionary = await AuthManager.verify_otp(_email.text.strip_edges(), _otp.text.strip_edges())
-	_set_busy(false)
-	_primary_btn.text = "Verify"
-	if not res.ok:
-		_show_error(str(res.get("error", "Invalid verification code")))
-		return
+	_show_error("Account created.", false)
 	GameManager.go_character_select()
 
 
+func _friendly_auth_error(err: String) -> String:
+	var diag: Dictionary = AuthManager.get_auth_diagnostics()
+	var host := "%s://%s:%s" % [
+		str(diag.get("scheme", "http")),
+		str(diag.get("host", "")),
+		str(diag.get("port", "")),
+	]
+	if err.strip_edges().is_empty():
+		return "Authentication failed (%s)" % host
+	return "%s\n(%s · %s)" % [err, str(diag.get("environment", "")).to_upper(), host]
+
+
+func _on_verify_otp() -> void:
+	_show_error("OTP is not used — log in with email and password on Nakama.", true)
+	_set_mode("login")
+
+
 func _on_resend_otp() -> void:
-	if _busy:
-		return
-	_set_busy(true)
-	var res: Dictionary = await AuthManager.resend_otp(_email.text.strip_edges())
-	_set_busy(false)
-	if res.ok:
-		var msg := "Code sent. Check your email for the new code."
-		if typeof(res.data) == TYPE_DICTIONARY and res.data.has("otp_dev"):
-			msg = "Dev OTP: %s" % str(res.data["otp_dev"])
-			_otp.text = str(res.data["otp_dev"])
-		_show_error(msg, false)
-	else:
-		_show_error(str(res.get("error", "Failed to resend code")))
+	_show_error("OTP is not used — log in with email and password on Nakama.", true)
+	_set_mode("login")
 
 
 func _on_forgot() -> void:
@@ -457,29 +442,14 @@ func _on_forgot() -> void:
 	var res: Dictionary = await AuthManager.request_password_reset(_email.text.strip_edges())
 	_set_busy(false)
 	_primary_btn.text = "Send reset link"
-	# Web always shows success
 	_forgot_sent_flag = true
 	_email.visible = false
 	_primary_btn.visible = false
 	_forgot_sent.visible = true
-	if typeof(res.data) == TYPE_DICTIONARY and res.data.has("reset_token_dev"):
-		_reset_wrap.visible = true
-		_reset_token.text = str(res.data["reset_token_dev"])
-		_show_error("Dev reset token filled in.", false)
+	_forgot_sent.text = str(res.get("error", "Password reset is not available in the Godot client yet."))
+	_show_error(str(res.get("error", "")), true)
 
 
 func _on_reset_password() -> void:
-	if _busy:
-		return
-	if _reset_pw.text.length() < 6:
-		_show_error("New password must be at least 6 characters.")
-		return
-	_set_busy(true)
-	var res: Dictionary = await AuthManager.reset_password(_reset_token.text.strip_edges(), _reset_pw.text)
-	_set_busy(false)
-	if not res.ok:
-		_show_error(str(res.get("error", "Reset failed")))
-		return
-	_password.text = _reset_pw.text
+	_show_error("Password reset is not available in the Godot client yet.", true)
 	_set_mode("login")
-	_show_error("Password reset — log in with the new password.", false)

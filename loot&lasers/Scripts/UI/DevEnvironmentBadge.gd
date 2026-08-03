@@ -34,9 +34,14 @@ static func attach_to(parent: CanvasItem) -> Label:
 
 static func _refresh(lab: Label) -> void:
 	var pub: Dictionary = BackendEnvironment.get_public_config()
-	lab.text = "NAKAMA %s · %s://%s:%s" % [
+	var node_url := str(pub.get("node_api_base_url", ""))
+	if GameApiClient != null:
+		node_url = str(GameApiClient.base_url)
+	lab.text = "NAKAMA %s · %s://%s:%s (auth)\nNODE gameplay %s" % [
 		str(pub.get("environment", "?")).to_upper(),
 		str(pub.get("scheme", "")),
 		str(pub.get("host", "")),
 		str(pub.get("port", "")),
+		node_url,
 	]
+	lab.offset_bottom = 52

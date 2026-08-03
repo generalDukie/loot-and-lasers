@@ -118,16 +118,31 @@ export function createAuthRouter(express) {
           subject: "Loot & Lasers verification code",
           text: `Your verification code is: ${code}\n\nThis code expires in 15 minutes.\n\nIf you did not request this, you can ignore this message.`,
         });
-      } else {
-        console.log(`[auth] OTP for ${email}: ${code}`);
-        recordEmailFallback({
-          type: "otp",
-          to: email,
-          subject: "Loot & Lasers verification code",
-          note: `code logged to server console`,
-        });
+        return res.json({ success: true, email, otp_required: true });
       }
-      res.json({ success: true, email, otp_required: true, ...devOnlyExtras({ otp_dev: code }) });
+
+      // No SMTP: auto-verify so remote clients are not stuck waiting for console OTPs.
+      db.prepare(`
+        UPDATE users SET email_verified = 1, otp_code = NULL, otp_expires_at = NULL, updated_date = ?
+        WHERE id = ?
+      `).run(ts, id);
+      console.log(`[auth] SMTP off — auto-verified ${email}`);
+      recordEmailFallback({
+        type: "otp",
+        to: email,
+        subject: "Loot & Lasers verification code",
+        note: "auto-verified (SMTP_HOST not set)",
+      });
+      const user = getUserById(id);
+      const access_token = signToken(id);
+      res.json({
+        success: true,
+        email,
+        otp_required: false,
+        access_token,
+        user,
+        ...devOnlyExtras({ otp_dev: code, auto_verified: true }),
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

@@ -57,10 +57,6 @@ CurrencyManager="*res://Autoload/CurrencyManager.gd"
 EquipmentManager="*res://Autoload/EquipmentManager.gd"
 RemoteConfigManager="*res://Autoload/RemoteConfigManager.gd"
 
-[loot]
-
-backend/environment="local"
-
 [display]
 
 window/size/viewport_width=2560
@@ -73,6 +69,10 @@ window/stretch/mode="canvas_items"
 [gui]
 
 theme/default_font_subpixel_positioning=4
+
+[loot]
+
+backend/environment="local"
 
 [physics]
 

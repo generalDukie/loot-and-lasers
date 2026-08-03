@@ -27,7 +27,8 @@ func _ready() -> void:
 		RealtimeManager.nakama_channel_message.connect(_on_channel_message)
 
 
-func is_connected() -> bool:
+## Avoid naming this is_connected() — that overrides Object.is_connected (signals).
+func is_nakama_connected() -> bool:
 	return RealtimeManager.is_nakama_connected()
 
 

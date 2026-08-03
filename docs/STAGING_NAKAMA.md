@@ -71,6 +71,7 @@ LOOT_DEV_WALLET_MUTATIONS=0
 LOOT_DEV_REWARD_TEST=0
 LOOT_DEV_LOOT_TEST=0
 LOOT_DEV_MAIL_TEST=0
+LOOT_NODE_INTERNAL_URL=http://loot-node-api:8787
 LOOT_WALLET_BRIDGE_SECRET=<shared server-only secret>
 ```
 
@@ -102,9 +103,10 @@ Badge should show `NAKAMA STAGING · https://178.156.210.186:8443 (auth)`.
 
 After Nakama login, Godot calls Node `POST /api/auth/nakama-bridge`. The host
 validates the Nakama session and issues a 10–15 minute gameplay JWT whose subject
-is the Nakama user id. For the Docker deployment, use
-`NAKAMA_HTTP_URL=http://host.docker.internal:7350`; the compose file installs the
-Linux host-gateway alias. For hybrid local Node + staging Nakama, set:
+is the Nakama user id. The Compose stacks share the private `loot_backend` network:
+Node uses `NAKAMA_HTTP_URL=http://nakama:7350`, while Nakama uses
+`LOOT_NODE_INTERNAL_URL=http://loot-node-api:8787`. For hybrid local Node +
+staging Nakama, set:
 
 ```powershell
 $env:NAKAMA_HTTP_URLS = "http://127.0.0.1:7350,https://178.156.210.186:8443"

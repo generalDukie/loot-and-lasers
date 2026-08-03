@@ -17,8 +17,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8787:8787"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - loot_backend
     environment:
       NODE_ENV: production
       PORT: "8787"
@@ -29,7 +30,7 @@ services:
       GAMEPLAY_JWT_TTL_SEC: "${GAMEPLAY_JWT_TTL_SEC:-720}"
       GAMEPLAY_JWT_ISSUER: "${GAMEPLAY_JWT_ISSUER:-lootandlasers-node}"
       GAMEPLAY_JWT_AUDIENCE: "${GAMEPLAY_JWT_AUDIENCE:-lootandlasers-gameplay}"
-      NAKAMA_HTTP_URL: "${NAKAMA_HTTP_URL:-http://host.docker.internal:7350}"
+      NAKAMA_HTTP_URL: "${NAKAMA_HTTP_URL:-http://nakama:7350}"
       LOOT_WALLET_BRIDGE_SECRET: "${LOOT_WALLET_BRIDGE_SECRET:?set LOOT_WALLET_BRIDGE_SECRET in .env.node-api}"
       APP_ID: "${APP_ID:-lootandlasers-staging}"
       PUBLIC_CLIENT_URL: "${PUBLIC_CLIENT_URL:-https://178.156.210.186}"
@@ -56,3 +57,7 @@ services:
 
 volumes:
   node_api_data:
+networks:
+  loot_backend:
+    external: true
+    name: loot_backend

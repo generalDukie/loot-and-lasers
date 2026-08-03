@@ -1,6 +1,6 @@
 extends Node
 ## Phase 19: owns exactly one Nakama realtime socket (via NakamaManager).
-## Legacy Node WS + mail poll retained for guild/mail until those migrate.
+## Phase 20: Nakama notifications drive new-mail; legacy Node poll retained for guild.
 
 signal entity_event(entity: String, event_type: String, data: Dictionary)
 signal connection_changed(connected: bool)
@@ -8,6 +8,7 @@ signal chat_event(entity: String, data: Dictionary)
 signal nakama_connection_changed(connected: bool)
 signal nakama_channel_message(message: Dictionary)
 signal nakama_presence(event: Dictionary)
+signal nakama_notification(notification: Dictionary)
 
 var _socket: WebSocketPeer
 var _connected := false
@@ -77,6 +78,8 @@ func stop_nakama() -> void:
 	nakama_connection_changed.emit(false)
 	ChatManager.clear_account_chat_cache()
 	SocialManager.clear_account_social_cache()
+	if MailManager != null and MailManager.has_method("clear_account_mail_cache"):
+		MailManager.clear_account_mail_cache()
 
 
 func join_global_chat() -> Dictionary:
@@ -121,6 +124,27 @@ func _ensure_socket_message_binds() -> void:
 		socket.received_channel_message.connect(_on_nakama_channel_message)
 	if not socket.received_status_presence.is_connected(_on_nakama_status_presence):
 		socket.received_status_presence.connect(_on_nakama_status_presence)
+	if socket.has_signal("received_notification") and not socket.received_notification.is_connected(_on_nakama_notification):
+		socket.received_notification.connect(_on_nakama_notification)
+
+
+func _on_nakama_notification(p_notification) -> void:
+	var n := {
+		"id": str(p_notification.id) if p_notification != null and "id" in p_notification else "",
+		"subject": str(p_notification.subject) if p_notification != null and "subject" in p_notification else "",
+		"code": int(p_notification.code) if p_notification != null and "code" in p_notification else -1,
+		"content": {},
+		"create_time": str(p_notification.create_time) if p_notification != null and "create_time" in p_notification else "",
+	}
+	if p_notification != null and "content" in p_notification:
+		var raw = p_notification.content
+		if typeof(raw) == TYPE_STRING:
+			var parsed: Variant = JSON.parse_string(raw)
+			n["content"] = parsed if typeof(parsed) == TYPE_DICTIONARY else {"raw": raw}
+		elif typeof(raw) == TYPE_DICTIONARY:
+			n["content"] = raw
+	nakama_notification.emit(n)
+	entity_event.emit("MailNotification", "received", n)
 
 
 func _on_nakama_mgr_connection(connected: bool) -> void:
@@ -167,7 +191,7 @@ func start(entity: String = "ChatMessage") -> void:
 		_poll_mail.stop()
 	_poll_mail.start()
 	_poll_chat.stop()
-	SocialManager.refresh_unread()
+	MailManager.refresh_unread()
 
 
 func _boot_nakama_deferred() -> void:
@@ -248,7 +272,7 @@ func _handle_packet(packet: String) -> void:
 
 
 func _on_mail_poll() -> void:
-	SocialManager.refresh_unread()
+	MailManager.refresh_unread()
 	NotificationManager.refresh_unread()
 
 

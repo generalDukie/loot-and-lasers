@@ -349,3 +349,18 @@ See `docs/PHASE18_ARENA.md`.
 | `chat_mark_read` | DM read state |
 
 See `docs/PHASE19_SOCIAL_CHAT.md`.
+
+## Phase 20 — Mail
+
+| RPC | Purpose |
+|-----|---------|
+| `mail_get_inbox` | Paginated mail summaries |
+| `mail_get_message` | Full client-safe message |
+| `mail_mark_read` / `mail_mark_unread` | Read state |
+| `mail_delete` | Soft delete (`restore: true` undeletes) |
+| `mail_claim_attachments` | Claim via RewardService (`request_id` required) |
+| `mail_send_player_text` | Player text mail (`request_id` required) |
+| `mail_get_unread_count` | Unread counter |
+
+Gated: `dev_mail_create_fixture` (`LOOT_DEV_MAIL_TEST=1`).  
+Not registered: system/admin attach/create/mass RPCs. See `docs/PHASE20_MAIL.md`.

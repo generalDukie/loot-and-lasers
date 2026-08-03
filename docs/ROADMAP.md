@@ -20,7 +20,8 @@
 | 16 | Deferred / Design in progress | Shipment System — gameplay loop still being workshopped (crate rules, item eligibility, payouts, timing, destinations, bonuses, failure/risk). Revisit after a written gameplay specification is approved. No placeholder RPCs, storage, managers, feature flags, or config until then. |
 | 17 | Done | Server-authoritative combat engine (`combat_simulate`) — reusable simulator only; no Arena/Dungeons/Bosses/Guild Wars/PvE modes |
 | 18 | Done | Arena matchmaking and rankings (`arena_*` RPCs) — CombatService resolution, Elo + lower-rank penalties, history; no Arena rewards |
-| 19 | Done | Friends, presence, and chat foundation (account-level Nakama friends/DM/global chat); no guild chat or mail |
-| 20+ | Planned | Progression/XP, fuel debit, premium shop parity, Arena rewards, user search, guild chat, and other post-social work (excluding deferred shipments until Phase 16 is unblocked) |
+| 19 | Done | Friends, presence, and chat foundation (account-level Nakama friends/DM/global chat); no guild chat |
+| 20 | Done | Server-authoritative mail (`mail_*` RPCs) — player text, system/reward (internal), claims via RewardService; no marketplace/guild mail/admin tools |
+| 21+ | Planned | Progression/XP, fuel debit, premium shop parity, Arena rewards, user search, guild chat, and other post-mail work (excluding deferred shipments until Phase 16 is unblocked) |
 
 Before each backend commit: `npm run verify:backend`.

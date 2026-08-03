@@ -1,6 +1,6 @@
 extends Node
-## Mail · friends · guild. Phase 19: friends/blocks are Nakama account-level.
-## Mail and guild remain on the Node entity API until a later phase.
+## Friends · guild. Phase 19: friends/blocks are Nakama account-level.
+## Phase 20: mail delegated to MailManager (Nakama). Guild remains on Node.
 
 signal mail_changed
 signal friends_changed
@@ -38,7 +38,7 @@ var guild_log: Array = []
 
 
 func _ready() -> void:
-	print("[SocialManager] ready (Nakama friends; Node mail/guild)")
+	print("[SocialManager] ready (Nakama friends; MailManager mail; Node guild)")
 
 
 func is_loading() -> bool:
@@ -93,90 +93,55 @@ func _apply_social_state(data: Dictionary) -> void:
 	social_state_loaded.emit(social_state)
 
 
-# ── Mail (Node — unchanged) ───────────────────────────────────
+# ── Mail (Phase 20 — delegated to MailManager / Nakama) ────────
 
 func load_inbox() -> Array:
 	return await load_mail("inbox")
 
 
 func load_mail(folder: String = "inbox") -> Array:
-	var cid := char_id()
 	mail_folder = folder if not folder.is_empty() else "inbox"
-	if cid.is_empty():
-		inbox = []
-		unread_count = 0
-		return inbox
-	var res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/Mail/filter",
-		{"query": {"owner_id": cid, "folder": mail_folder}, "sort": "-created_date", "limit": 100},
-		true
-	)
-	inbox = res.data if res.ok and typeof(res.data) == TYPE_ARRAY else []
-	if mail_folder == "inbox":
-		unread_count = 0
-		for m in inbox:
-			if typeof(m) == TYPE_DICTIONARY and not bool(m.get("read", false)):
-				unread_count += 1
+	inbox = await MailManager.load_mail(mail_folder)
+	unread_count = MailManager.unread_count
 	mail_changed.emit()
 	return inbox
 
 
 func refresh_unread() -> int:
-	var cid := char_id()
-	if cid.is_empty():
-		unread_count = 0
-		return 0
-	var res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/Mail/filter",
-		{"query": {"owner_id": cid, "read": false, "folder": "inbox"}, "sort": "-created_date", "limit": 100},
-		true
-	)
-	unread_count = res.data.size() if res.ok and typeof(res.data) == TYPE_ARRAY else 0
+	unread_count = await MailManager.refresh_unread()
 	mail_changed.emit()
 	return unread_count
 
 
 func mark_read(mail_id: String) -> Dictionary:
-	var res: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/Mail/%s" % mail_id.uri_encode(), {"read": true}, true
-	)
-	if res.ok:
-		await load_mail(mail_folder)
+	var res: Dictionary = await MailManager.mark_read(mail_id)
+	inbox = MailManager.inbox
+	unread_count = MailManager.unread_count
+	mail_changed.emit()
 	return res
 
 
 func delete_mail(mail_id: String) -> Dictionary:
-	var res: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/Mail/%s" % mail_id.uri_encode(), {"folder": "deleted"}, true
-	)
-	if res.ok:
-		await load_mail(mail_folder)
+	var res: Dictionary = await MailManager.delete_mail(mail_id)
+	inbox = MailManager.inbox
+	unread_count = MailManager.unread_count
+	mail_changed.emit()
 	return res
 
 
 func restore_mail(mail_id: String) -> Dictionary:
-	var res: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/Mail/%s" % mail_id.uri_encode(), {"folder": "inbox"}, true
-	)
-	if res.ok:
-		await load_mail(mail_folder)
+	var res: Dictionary = await MailManager.restore_mail(mail_id)
+	inbox = MailManager.inbox
+	unread_count = MailManager.unread_count
+	mail_changed.emit()
 	return res
 
 
 func claim_mail(mail_id: String) -> Dictionary:
-	var res: Dictionary = await GameApiClient.invoke("ClaimMailReward", {"mail_id": mail_id})
-	if res.ok:
-		var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
-		var patch: Variant = data.get("patch", {})
-		if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
-			GameManager.active_character.merge(patch, true)
-		var ch: Variant = data.get("character", {})
-		if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-			GameManager.active_character = ch
-		var items: Variant = data.get("items", [])
-		if typeof(items) == TYPE_ARRAY:
-			GameManager.remember_loot_from_claim({"items": items})
-		await load_mail(mail_folder)
+	var res: Dictionary = await MailManager.claim_mail(mail_id)
+	inbox = MailManager.inbox
+	unread_count = MailManager.unread_count
+	mail_changed.emit()
 	return res
 
 
@@ -453,7 +418,12 @@ func clear_account_social_cache() -> void:
 	outgoing_requests = []
 	blocks = []
 	social_state = {}
+	inbox = []
+	unread_count = 0
+	if MailManager != null and MailManager.has_method("clear_account_mail_cache"):
+		MailManager.clear_account_mail_cache()
 	friends_changed.emit()
+	mail_changed.emit()
 
 
 # ── Guild challenge (client entity CRUD; no claim payout yet) ─
@@ -834,106 +804,14 @@ func invite_to_guild(target: Dictionary) -> Dictionary:
 
 
 func send_player_mail(to_char: Dictionary, subject: String, body: String) -> Dictionary:
-	var me := active_char()
-	var from_id := str(me.get("id", ""))
-	var to_id := str(to_char.get("id", ""))
-	var text := body.strip_edges()
-	if from_id.is_empty() or to_id.is_empty():
-		return {"ok": false, "error": "Missing sender or recipient"}
-	if text.is_empty():
-		return {"ok": false, "error": "Message body required"}
-	if text.length() > 1000:
-		text = text.substr(0, 1000)
-	var subj := subject.strip_edges()
-	if subj.is_empty():
-		subj = "(no subject)"
-	if subj.length() > 80:
-		subj = subj.substr(0, 80)
-	# Mute check
-	var mod: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/PlayerModeration/filter",
-		{"query": {"character_id": from_id}, "limit": 1}, true
-	)
-	if mod.ok and typeof(mod.data) == TYPE_ARRAY and (mod.data as Array).size() > 0:
-		var until := str(mod.data[0].get("chat_muted_until", ""))
-		if not until.is_empty():
-			var muted_until := Time.get_unix_time_from_datetime_string(until.replace("Z", ""))
-			if muted_until > Time.get_unix_time_from_system():
-				return {"ok": false, "error": "You are muted"}
-	var sent: Dictionary = await GameApiClient.request("POST", "/api/entities/Mail", {
-		"owner_id": from_id,
-		"from_id": from_id,
-		"from_name": str(me.get("name", "")),
-		"to_id": to_id,
-		"to_name": str(to_char.get("name", "")),
-		"subject": subj,
-		"body": text,
-		"mail_type": "player",
-		"folder": "sent",
-		"read": true,
-		"claimed": false,
-		"has_rewards": false,
-	}, true)
-	if not sent.ok:
-		return sent
-	var inbox_mail: Dictionary = await GameApiClient.request("POST", "/api/entities/Mail", {
-		"owner_id": to_id,
-		"from_id": from_id,
-		"from_name": str(me.get("name", "")),
-		"to_id": to_id,
-		"to_name": str(to_char.get("name", "")),
-		"subject": subj,
-		"body": text,
-		"mail_type": "player",
-		"folder": "inbox",
-		"read": false,
-		"claimed": false,
-		"has_rewards": false,
-	}, true)
-	if inbox_mail.ok:
-		await GameApiClient.request("POST", "/api/entities/AppNotification", {
-			"owner_id": to_id,
-			"type": "mail",
-			"title": str(me.get("name", "")),
-			"body": "sent you mail: %s" % subj,
-			"read": false,
-		}, true)
-	return inbox_mail if inbox_mail.ok else sent
+	var res: Dictionary = await MailManager.send_player_mail_to(to_char, subject, body)
+	if bool(res.get("ok", false)):
+		await load_mail("sent")
+	return res
 
 
 func mail_compose_recipients() -> Array:
-	## Friends + guild mates (web compose restriction).
-	var out: Array = []
-	var seen := {}
-	var me := char_id()
-	await load_friends()
-	for f in friendships:
-		if typeof(f) != TYPE_DICTIONARY:
-			continue
-		var oid := friend_other_id(f)
-		if oid.is_empty() or seen.has(oid):
-			continue
-		seen[oid] = true
-		var cres: Dictionary = await GameApiClient.request(
-			"GET", "/api/entities/Character/%s" % oid.uri_encode(), null, true
-		)
-		if cres.ok and typeof(cres.data) == TYPE_DICTIONARY:
-			out.append(cres.data)
-	if my_guild.is_empty():
-		await load_my_guild()
-	for m in guild_members:
-		if typeof(m) != TYPE_DICTIONARY:
-			continue
-		var mid := str(m.get("character_id", ""))
-		if mid.is_empty() or mid == me or seen.has(mid):
-			continue
-		seen[mid] = true
-		out.append({
-			"id": mid,
-			"name": str(m.get("character_name", "?")),
-			"level": int(m.get("character_level", 1)),
-		})
-	return out
+	return await MailManager.mail_compose_recipients()
 
 
 # ── Guild ─────────────────────────────────────────────────────

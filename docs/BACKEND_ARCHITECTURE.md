@@ -123,4 +123,10 @@ See `docs/PHASE18_ARENA.md`.
 
 `modules/social.lua` + `modules/chat.lua` — account-level friends/blocks and global/DM chat.
 Native Nakama friends + channel APIs; RealtimeManager owns one Nakama socket.
-Mail and guild remain on Node. See `docs/PHASE19_SOCIAL_CHAT.md`.
+Guild remains on Node. See `docs/PHASE19_SOCIAL_CHAT.md`.
+
+## Mail (Phase 20)
+
+`modules/mail.lua` — account-level inbox, player text mail, system/reward mail (internal),
+attachment claims via RewardService, soft delete, pagination, Nakama notifications.
+Godot `MailManager` + `RealtimeManager.nakama_notification`. See `docs/PHASE20_MAIL.md`.

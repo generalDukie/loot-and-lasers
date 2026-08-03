@@ -26,7 +26,7 @@ func _ready() -> void:
 
 func _boot() -> void:
 	_status.text = "Loading mail…"
-	await SocialManager.load_mail(_folder)
+	await MailManager.load_mail(_folder)
 	_populate()
 
 
@@ -46,7 +46,7 @@ func _build() -> void:
 	margin.add_child(root)
 
 	root.add_child(ClientUi.make_title("MAIL", 28))
-	_meta = ClientUi.make_subtitle("FOLDERS · COMPOSE · CLAIM · GUILD INVITES")
+	_meta = ClientUi.make_subtitle("FOLDERS · COMPOSE · CLAIM")
 	root.add_child(_meta)
 
 	_status = ClientUi.make_status()
@@ -133,7 +133,7 @@ func _on_folder(folder: String) -> void:
 	_style_tabs()
 	_busy = true
 	_status.text = "Loading…"
-	await SocialManager.load_mail(_folder)
+	await MailManager.load_mail(_folder)
 	_busy = false
 	_populate()
 
@@ -144,21 +144,21 @@ func _populate() -> void:
 	var label := _folder.capitalize()
 	_meta.text = "%s · %s messages%s" % [
 		label,
-		SocialManager.inbox.size(),
-		(" · %s unread" % SocialManager.unread_count) if _folder == "inbox" else "",
+		MailManager.inbox.size(),
+		(" · %s unread" % MailManager.unread_count) if _folder == "inbox" else "",
 	]
-	if SocialManager.inbox.is_empty():
+	if MailManager.inbox.is_empty():
 		_status.text = "No mail in %s." % label
 		_show_detail({})
 		return
 	_status.text = "Select a message."
-	for m in SocialManager.inbox:
+	for m in MailManager.inbox:
 		if typeof(m) == TYPE_DICTIONARY:
 			_list.add_child(_make_row(m))
 	if not _selected.is_empty():
 		var sid := str(_selected.get("id", ""))
 		var found := {}
-		for m in SocialManager.inbox:
+		for m in MailManager.inbox:
 			if typeof(m) == TYPE_DICTIONARY and str(m.get("id", "")) == sid:
 				found = m
 				break
@@ -189,9 +189,13 @@ func _make_row(mail: Dictionary) -> PanelContainer:
 
 func _open(mail: Dictionary) -> void:
 	_selected = mail
-	_show_detail(mail)
-	if _folder != "deleted" and not bool(mail.get("read", false)):
-		await SocialManager.mark_read(str(mail.get("id", "")))
+	_status.text = "Opening…"
+	var res: Dictionary = await MailManager.load_message(str(mail.get("id", "")))
+	if bool(res.get("ok", false)) and typeof(res.get("data", {})) == TYPE_DICTIONARY:
+		_selected = res.data
+	_show_detail(_selected)
+	if _folder != "deleted" and not bool(_selected.get("read", false)):
+		await MailManager.mark_read(str(_selected.get("id", "")))
 		_populate()
 
 
@@ -275,7 +279,7 @@ func _on_claim(mail_id: String) -> void:
 		return
 	_busy = true
 	_status.text = "Claiming…"
-	var res: Dictionary = await SocialManager.claim_mail(mail_id)
+	var res: Dictionary = await MailManager.claim_mail(mail_id)
 	_busy = false
 	if not res.ok:
 		_status.text = _err(res)
@@ -289,7 +293,7 @@ func _on_delete(mail_id: String) -> void:
 	if _busy:
 		return
 	_busy = true
-	var res: Dictionary = await SocialManager.delete_mail(mail_id)
+	var res: Dictionary = await MailManager.delete_mail(mail_id)
 	_busy = false
 	if not res.ok:
 		_status.text = _err(res)
@@ -304,7 +308,7 @@ func _on_restore(mail_id: String) -> void:
 		return
 	_busy = true
 	_status.text = "Restoring…"
-	var res: Dictionary = await SocialManager.restore_mail(mail_id)
+	var res: Dictionary = await MailManager.restore_mail(mail_id)
 	_busy = false
 	if not res.ok:
 		_status.text = _err(res)
@@ -340,11 +344,11 @@ func _show_compose() -> void:
 	for c in _detail.get_children():
 		c.queue_free()
 	_status.text = "Loading recipients…"
-	var recipients: Array = await SocialManager.mail_compose_recipients()
+	var recipients: Array = await MailManager.mail_compose_recipients()
 	if recipients.is_empty():
-		_status.text = "No friends or guild mates to mail."
+		_status.text = "No friends to mail."
 		var empty := Label.new()
-		empty.text = "Add friends or join a guild to send player mail."
+		empty.text = "Add friends to send player mail."
 		empty.add_theme_color_override("font_color", Color(0.55, 0.6, 0.7))
 		_detail.add_child(empty)
 		return
@@ -355,7 +359,7 @@ func _show_compose() -> void:
 	_detail.add_child(title)
 
 	var to_lab := Label.new()
-	to_lab.text = "To (friends & guild)"
+	to_lab.text = "To (friends)"
 	to_lab.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	_detail.add_child(to_lab)
 	var to_opt := OptionButton.new()
@@ -394,7 +398,7 @@ func _on_send(to_opt: OptionButton, subject: String, body: String) -> void:
 		return
 	_busy = true
 	_status.text = "Sending…"
-	var res: Dictionary = await SocialManager.send_player_mail(target, subject, body)
+	var res: Dictionary = await MailManager.send_player_mail_to(target, subject, body)
 	_busy = false
 	if not res.ok:
 		_status.text = _err(res)
@@ -402,6 +406,6 @@ func _on_send(to_opt: OptionButton, subject: String, body: String) -> void:
 	_status.text = "Sent."
 	_folder = "sent"
 	_style_tabs()
-	await SocialManager.load_mail(_folder)
+	await MailManager.load_mail(_folder)
 	_populate()
 	_show_detail({})

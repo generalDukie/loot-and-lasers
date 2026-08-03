@@ -30,6 +30,12 @@ Schema history for Nakama storage collections introduced by backend phases.
 | 19 | `chat_transactions` | `request_id` | account | Chat send idempotency |
 | 19 | `chat_rate_limits` | `global` / `dm` | account | Chat rate tracking |
 | 19 | `chat_read_state` | conversation_id | account | Per-user DM read/unread |
+| 20 | `mail_messages` | `mail_id` | recipient account | Inbox / system / soft-deleted mail documents |
+| 20 | `mail_sent` | `mail_id` | sender account | Sent copies of player text mail |
+| 20 | `mail_indexes` | `meta` | account | Unread count index |
+| 20 | `mail_transactions` | `request_id` | account | Send/claim idempotency |
+| 20 | `mail_rate_limits` | `send` | account | Player mail rate tracking |
+| 20 | `reward_transactions` | `mail_reward:<mail_id>` | recipient | Attachment claim grants via RewardService |
 
 Permissions for Phase 10 system objects: read `0`, write `0` (runtime/RPC only).
 

@@ -1,6 +1,6 @@
 # Phase 19 — Friends, presence, and chat foundation
 
-Account-level social graph and chat on Nakama. Guild chat and mail were **not** implemented.
+Account-level social graph and chat on Nakama. Guild chat was **not** implemented in Phase 19. Mail moved to Nakama in Phase 20.
 
 ## Ownership decision
 
@@ -8,7 +8,7 @@ Account-level social graph and chat on Nakama. Guild chat and mail were **not** 
 Display may show the selected character name from `player_profiles`.  
 Blocking is account-wide. The client cannot impersonate another user.
 
-Legacy Node friends were character-scoped; Godot friends UI now targets Nakama user IDs. Mail/guild remain on Node until a later phase.
+Legacy Node friends were character-scoped; Godot friends UI now targets Nakama user IDs. Guild remains on Node until a later phase. Mail is Phase 20.
 
 ## Audit summary
 
@@ -67,7 +67,7 @@ RemoteConfig `chat` / `social` namespaces. Burst per 10s, duplicate window, min 
 
 ## Socket ownership
 
-`RealtimeManager` owns **one** Nakama socket through `NakamaManager.connect_socket()`. Connect is not started from `_process()`. Legacy Node WS may still run for mail/guild fan-out only.
+`RealtimeManager` owns **one** Nakama socket through `NakamaManager.connect_socket()`. Connect is not started from `_process()`. Legacy Node WS may still run for guild fan-out. Mail uses Nakama notifications (Phase 20).
 
 ## Feature flags
 
@@ -87,10 +87,10 @@ Friends/messages themselves use Nakama native stores.
 
 ## Godot
 
-- `SocialManager` — Nakama friends/blocks; mail/guild still Node
+- `SocialManager` — Nakama friends/blocks; mail delegated to MailManager (Phase 20); guild still Node
 - `ChatManager` — Nakama send/history; realtime via RealtimeManager
-- `RealtimeManager` — Nakama socket + optional Node mail poll
-- Logout/clear: `clear_account_social_cache` / `clear_account_chat_cache`
+- `RealtimeManager` — Nakama socket + optional Node poll; mail unread via MailManager
+- Logout/clear: `clear_account_social_cache` / `clear_account_chat_cache` / MailManager cache clear
 
 ## User search
 
@@ -98,12 +98,13 @@ Deferred — not invented in this phase.
 
 ## Known limitations
 
-- No guild chat / mail attachments / group chat
+- No guild chat / group chat
 - Content filter is minimal
 - Friend UI must use account user IDs (character search deferred)
 - Dual presence (Nakama + Node entity) during transition
 - Global chat does not hide messages from blocked peers
 - Web client still on Node social until cutover
+- Blocking: existing mail remains visible; new player-text mail rejected (Phase 20)
 
 ## Verification
 

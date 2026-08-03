@@ -243,6 +243,12 @@ func logout_nakama() -> Dictionary:
 		EquipmentManager.clear_local()
 	if MissionManager != null and MissionManager.has_method("clear_nakama_mission_local"):
 		MissionManager.clear_nakama_mission_local()
+	if MailManager != null and MailManager.has_method("clear_account_mail_cache"):
+		MailManager.clear_account_mail_cache()
+	if SocialManager != null and SocialManager.has_method("clear_account_social_cache"):
+		SocialManager.clear_account_social_cache()
+	if ChatManager != null and ChatManager.has_method("clear_account_chat_cache"):
+		ChatManager.clear_account_chat_cache()
 	if NakamaManager == null:
 		return {"success": true, "data": {}, "error": "", "status_code": 200}
 	return await NakamaManager.logout()

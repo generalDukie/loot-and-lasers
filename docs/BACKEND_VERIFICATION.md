@@ -46,6 +46,8 @@ Do not install Git hooks unless the user asks.
 - `verify_remote_config.mjs`
 - `verify_equipment_mutations.mjs`
 - `verify_reward_service.mjs`
+- `verify_social_chat.mjs`
+- `verify_mail_service.mjs`
 
 ## Phase 10 checks
 
@@ -82,6 +84,10 @@ Do not install Git hooks unless the user asks.
 ## Phase 19 checks
 
 `verify_social_chat.mjs` asserts social/chat modules and RPCs, self-friend/block rejection, DM block enforcement, rate/history bounds, deterministic conversation IDs, RealtimeManager single Nakama socket, and manager wiring.
+
+## Phase 20 checks
+
+`verify_mail_service.mjs` asserts `mail.lua` RPCs, no public system/attach RPCs, ownership/sender authority, player text-only, block checks, pagination bounds, RewardService claims, MailManager autoload, and gated `dev_mail_create_fixture`.
 
 ## Troubleshooting
 

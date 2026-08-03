@@ -1,7 +1,8 @@
 # Phase 12 — Central reward service
 
 Server-authoritative reward orchestrator for **trusted backend modules**.
-This phase does **not** connect missions, arena, shops, mail, daily login, or admin grants.
+This phase originally did not connect missions, arena, shops, mail, daily login, or admin grants.
+**Phase 14** wired missions; **Phase 20** wires mail attachment claims (`source_type: mail`).
 
 ## Responsibility
 
@@ -37,7 +38,8 @@ The server chooses the bundle from `modules/data/reward_tables.lua`. Soft curren
 | `dev_reward_test` (flag-gated) | Yes — fixed allowlist |
 | LootService (`source_type` `loot`) | Yes — Phase 13 |
 | MissionService (`source_type` `mission`) | Yes — Phase 14 |
-| Arena / shipments / mail / daily / admin | **Not wired** |
+| Arena / shipments / daily / admin | **Not wired** |
+| MailService (`source_type` `mail`) | Yes — Phase 20 attachment claims |
 
 Authorized `source_type` values today: `dev_test`, `system`, `loot`, `loot_dev`, `mission`.
 Future: `arena`, `shipment`, `daily_login`, `event`, `achievement`, `mail`, `admin`, `purchase`.

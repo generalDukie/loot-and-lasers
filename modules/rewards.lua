@@ -52,9 +52,10 @@ local ALLOWED_SOURCE_TYPES = {
   loot = true,
   loot_dev = true,
   mission = true,
+  mail = true,
   -- Future trusted callers (documented; not wired yet):
   -- arena = true, shipment = true, daily_login = true,
-  -- event = true, achievement = true, mail = true, admin = true, purchase = true,
+  -- event = true, achievement = true, admin = true, purchase = true,
 }
 
 local STATUS = {

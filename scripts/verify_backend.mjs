@@ -90,6 +90,7 @@ function checkGodotIntegrity() {
     "EquipmentManager=",
     "MissionManager=",
     "RemoteConfigManager=",
+    "MailManager=",
     'Nakama="',
   ];
   for (const r of required) {
@@ -162,6 +163,7 @@ function checkNakamaModules() {
     "modules/arena.lua",
     "modules/social.lua",
     "modules/chat.lua",
+    "modules/mail.lua",
     "modules/lib/auth.lua",
     "modules/lib/storage.lua",
     "modules/lib/validation.lua",
@@ -196,6 +198,7 @@ function checkNakamaModules() {
     "modules/arena.lua",
     "modules/social.lua",
     "modules/chat.lua",
+    "modules/mail.lua",
   ];
   for (const rel of serviceFiles) {
     const src = read(rel);
@@ -258,6 +261,14 @@ function checkRpcRegistration() {
     chat_mark_read: true,
     chat_send_global: true,
     chat_send_dm: true,
+    mail_get_inbox: true,
+    mail_get_message: true,
+    mail_mark_read: true,
+    mail_mark_unread: true,
+    mail_delete: true,
+    mail_claim_attachments: true,
+    mail_send_player_text: true,
+    mail_get_unread_count: true,
   };
   const forbidden = {
     wallet_credit: true,
@@ -284,6 +295,16 @@ function checkRpcRegistration() {
     arena_force_win: true,
     arena_submit_result: true,
     arena_grant_points: true,
+    mail_send_system: true,
+    mail_attach_item: true,
+    mail_attach_currency: true,
+    mail_send_as_admin: true,
+    mail_force_claim: true,
+    mail_set_sender: true,
+    mail_create_reward: true,
+    mail_claim_any_user: true,
+    mail_mass_send: true,
+    mail_admin_delete: true,
   };
 
   const luaFiles = listLuaModules(path.join(ROOT, "modules"));
@@ -390,6 +411,9 @@ function checkDocs() {
     "chat_send_global",
     "chat_send_dm",
     "chat_get_global_history",
+    "mail_get_inbox",
+    "mail_send_player_text",
+    "mail_claim_attachments",
   ];
   for (const id of requiredMentions) {
     if (!rpcDoc.includes(id)) {
@@ -460,6 +484,14 @@ function checkDocs() {
   }
   if (!/Phase 19|social\.lua|Friends, presence/i.test(arch)) {
     fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 19 social note");
+    return;
+  }
+  if (!exists("docs/PHASE20_MAIL.md")) {
+    fail(cat, "Missing docs/PHASE20_MAIL.md");
+    return;
+  }
+  if (!/Phase 20|mail\.lua|MailService/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 20 mail note");
     return;
   }
   if (!rpcDoc.includes("dev_loot_test") && !/Phase 13/i.test(rpcDoc)) {

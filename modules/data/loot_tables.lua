@@ -59,6 +59,39 @@ M.LOOT_TABLES = {
       },
     },
   },
+  // Phase 14 mission claim sample (common/uncommon only — no high-tier unrestricted entries).
+  phase14_mission_basic = {
+    loot_table_version = 1,
+    loot_table_id = "phase14_mission_basic",
+    enabled = true,
+    rolls = 1,
+    entries = {
+      {
+        entry_id = "mission_weapon_pool",
+        weight = 60,
+        type = "item_pool",
+        item_pool_id = "phase13_basic_weapons",
+        quantity_min = 1,
+        quantity_max = 1,
+        rarity_weights = {
+          common = 80,
+          uncommon = 20,
+        },
+      },
+      {
+        entry_id = "mission_armor_pool",
+        weight = 40,
+        type = "item_pool",
+        item_pool_id = "phase13_basic_armor",
+        quantity_min = 1,
+        quantity_max = 1,
+        rarity_weights = {
+          common = 85,
+          uncommon = 15,
+        },
+      },
+    },
+  },
 }
 
 -- Dev allowlist: only these table IDs may be requested by dev_loot_test.

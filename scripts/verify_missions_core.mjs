@@ -187,13 +187,22 @@ async function main() {
     fail("status becomes complete after server time", st2.text.slice(0, 400));
   }
 
-  // No reward RPCs
-  for (const rpc of ["mission_claim", "mission_reward", "mission_complete_reward"]) {
+  // No unsafe reward RPCs (mission_claim is Phase 14 — verified separately)
+  for (const rpc of ["mission_reward", "mission_complete_reward"]) {
     const r = await callRpc(token, rpc, {});
     if (r.status === 404 || /not found/i.test(r.text)) {
       pass(`no reward RPC ${rpc}`);
     } else {
       fail(`no reward RPC ${rpc}`, r.text.slice(0, 120));
+    }
+  }
+  // mission_claim must exist
+  {
+    const r = await callRpc(token, "mission_claim", {});
+    if (r.status === 404 || /rpc not found/i.test(r.text)) {
+      fail("mission_claim registered", r.text.slice(0, 120));
+    } else {
+      pass("mission_claim registered", r.body?.error || "responds");
     }
   }
 

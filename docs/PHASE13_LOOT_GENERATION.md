@@ -22,7 +22,8 @@ The normal Godot client must **not** choose table, item ID, rarity, item level, 
 | Caller | Status |
 |--------|--------|
 | `dev_loot_test` (flag-gated) | Authorized — fixed table allowlist |
-| Mission / arena / shipment / event / shop / daily / admin | **Not wired** |
+| MissionService (`source_type` `mission`) | Authorized — Phase 14 |
+| Arena / shipment / event / shop / daily / admin | **Not wired** |
 
 Authorized loot `source_type` values: `loot_dev`, `system`.
 Reward bundle `source_type` for grants: `loot` (authorized in RewardService).
@@ -127,7 +128,7 @@ Phase 13 uses code defaults for tables/pools. Future balancing (weights, enablem
 - No affix rolls; metadata `stats` often empty
 - Failed / `inventory_full` txs do not auto-retry grants (claim queue later)
 - No atomic multi-collection transaction across loot + reward + inventory
-- Missions remain disconnected
+- Missions claim via LootService (`phase14_mission_basic`) — see Phase 14
 
 ## Verification
 

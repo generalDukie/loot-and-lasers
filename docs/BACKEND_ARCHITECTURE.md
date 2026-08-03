@@ -91,5 +91,11 @@ See `docs/PHASE12_REWARD_SERVICE.md`.
 ## Loot generation (Phase 13)
 
 Internal LootService in `modules/loot.lua`. Server-side tables/pools in `modules/data/`. Deterministic weighted rolls → item instance → RewardService grant.
-No generic public loot RPC. Gated `dev_loot_test` only. Missions/arena/shops **not** connected.
+No generic public loot RPC. Gated `dev_loot_test` only.
 See `docs/PHASE13_LOOT_GENERATION.md`.
+
+## Mission rewards (Phase 14)
+
+`mission_claim` connects MissionService → LootService → RewardService.
+Snapshot reward references at mission generation. Stardust + sample loot; XP explicitly unsupported.
+Godot `MissionManager` claims via Nakama only. See `docs/PHASE14_MISSION_REWARDS.md`.

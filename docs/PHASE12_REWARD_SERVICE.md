@@ -36,10 +36,11 @@ The server chooses the bundle from `modules/data/reward_tables.lua`. Soft curren
 |--------|-------------|
 | `dev_reward_test` (flag-gated) | Yes — fixed allowlist |
 | LootService (`source_type` `loot`) | Yes — Phase 13 |
-| Missions / arena / shipments / mail / daily / admin | **Not wired** |
+| MissionService (`source_type` `mission`) | Yes — Phase 14 |
+| Arena / shipments / mail / daily / admin | **Not wired** |
 
-Authorized `source_type` values today: `dev_test`, `system`, `loot`, `loot_dev`.
-Future: `mission`, `arena`, `shipment`, `daily_login`, `event`, `achievement`, `mail`, `admin`, `purchase`.
+Authorized `source_type` values today: `dev_test`, `system`, `loot`, `loot_dev`, `mission`.
+Future: `arena`, `shipment`, `daily_login`, `event`, `achievement`, `mail`, `admin`, `purchase`.
 
 ## Supported reward types
 

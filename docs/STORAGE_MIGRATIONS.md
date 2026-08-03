@@ -16,6 +16,8 @@ Schema history for Nakama storage collections introduced by backend phases.
 | 12 | `reward_transactions` | `transaction_id` | recipient account | Reward apply status + applied steps |
 | 13 | `loot_transactions` | `transaction_id` | recipient account | Loot generation receipt + grant status |
 | 13 | `inventories` | character id | account | Internal `grant_item_instance` append (via RewardService) |
+| 14 | `active_missions` | character id | account | Claim fields: `claim_request_id`, `reward_transaction_id`, `loot_transaction_id`, `claimed_at`, `reward_status`, receipt summaries |
+| 14 | `reward_transactions` / `loot_transactions` | `mission_reward:` / `mission_loot:` + mission id | recipient | Canonical grant records referenced by mission |
 
 Permissions for Phase 10 system objects: read `0`, write `0` (runtime/RPC only).
 
@@ -26,3 +28,5 @@ Equipment mutations require both inventory and equipment records (created empty 
 Reward transactions: read `1`, write `0`. Statuses include `pending`, `applying`, `completed`, `failed`, `compensation_required`. Retention: keep indefinitely until a cleanup job is defined.
 
 Loot transactions: read `1`, write `0`. Statuses include `pending`, `generated`, `granting`, `completed`, `failed`, `inventory_full`. Seed material is not stored in client-visible responses. Retention: keep indefinitely until a cleanup job is defined. On inventory full, the generated receipt is preserved without granting.
+
+Mission claim (Phase 14): active mission may remain `claimed` until the next `mission_start` clears it (idempotent replay). Large transaction bodies are not duplicated — summaries + foreign keys only.

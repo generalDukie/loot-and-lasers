@@ -1,7 +1,10 @@
 --[[
-  Phase 7 — Mission service core (Nakama Lua).
-  Public RPCs: missions_get, missions_refresh, mission_start, mission_status
-  NO rewards, XP, currency, items, fuel/energy, claim, or loot grants.
+  Phase 7/8/14 — Mission service (Nakama Lua).
+  Public RPCs: missions_get, missions_refresh, mission_start, mission_status, mission_claim
+
+  Phase 14: claim applies stardust + optional loot via RewardService / LootService.
+  XP is recorded as unsupported (no ProgressionService).
+  No fuel debit, arena/shipment/daily/admin grants.
 
   Ownership: character-level (matches Node Mission.character_id).
   Account id = context.user_id only. Character must match profile.selected_character_id.
@@ -18,7 +21,11 @@ local validation = require("lib.validation")
 local time = require("lib.time")
 local ids = require("lib.ids")
 local logging = require("lib.logging")
+local transactions = require("lib.transactions")
 local remote_config = require("config")
+local reward_formulas = require("data.mission_reward_formulas")
+local rewards = require("rewards")
+local loot = require("loot")
 
 local BOARD_COLLECTION = "mission_boards"
 local ACTIVE_COLLECTION = "active_missions"
@@ -52,7 +59,10 @@ local ALLOWED_STATUS = {
   available = true,
   active = true,
   complete = true,
+  reward_pending = true,
+  claimed = true,
   expired = true,
+  reward_failed = true,
 }
 
 -- Duration pools (mirrors src/lib/missionDuration.js / MissionBoard.DURATION_RULES).
@@ -353,8 +363,33 @@ local function public_mission(m)
     completes_at = m.completes_at or "",
     completed_at = m.completed_at or "",
     expires_at = m.expires_at or "",
+    claimed_at = m.claimed_at or "",
+    claim_request_id = m.claim_request_id or "",
+    reward_transaction_id = m.reward_transaction_id or "",
+    loot_transaction_id = m.loot_transaction_id or "",
+    reward_status = m.reward_status or "",
     reward_reference = m.reward_reference or {},
     metadata = m.metadata or {},
+  }
+end
+
+local function snapshot_reward_reference(level, duration_seconds, stardust_eff, xp_eff)
+  local fuel = reward_formulas.fuel_from_duration(duration_seconds)
+  local stardust_amount = reward_formulas.compute_stardust(level, fuel)
+  local xp_amount = reward_formulas.compute_xp(level, fuel, xp_eff)
+  local include_loot = reward_formulas.LOOT_CHANCE >= 1.0
+  return {
+    reward_formula_version = reward_formulas.REWARD_FORMULA_VERSION,
+    character_level = math.floor(tonumber(level) or 1),
+    fuel_cost = fuel,
+    stardust_efficiency = stardust_eff,
+    xp_efficiency = xp_eff,
+    currency_id = "stardust",
+    stardust_amount = stardust_amount,
+    xp_amount = xp_amount,
+    xp_grant = "unsupported",
+    include_loot = include_loot,
+    loot_table_id = reward_formulas.DEFAULT_LOOT_TABLE_ID,
   }
 end
 
@@ -362,6 +397,8 @@ local function build_mission(character_id, tpl, level)
   local duration = roll_duration(level)
   local generated = now_unix()
   local patron = QUEST_GIVERS[rand_int(1, #QUEST_GIVERS)]
+  local sd_eff = roll_efficiency(level)
+  local xp_eff = roll_efficiency(level)
   return {
     mission_version = 1,
     mission_id = ids.uuid(),
@@ -381,11 +418,12 @@ local function build_mission(character_id, tpl, level)
     completes_at = "",
     completed_at = "",
     expires_at = "",
-    reward_reference = {
-      -- Future claim phase only — never granted by this module.
-      stardust_efficiency = roll_efficiency(level),
-      xp_efficiency = roll_efficiency(level),
-    },
+    claimed_at = "",
+    claim_request_id = "",
+    reward_transaction_id = "",
+    loot_transaction_id = "",
+    reward_status = "",
+    reward_reference = snapshot_reward_reference(level, duration, sd_eff, xp_eff),
     metadata = {
       patron = patron,
       explore_scene = rand_int(0, 5),
@@ -590,8 +628,13 @@ local function public_active(active)
     mission = m,
     server_time_unix = now_unix(),
     seconds_remaining = remaining,
-    is_complete = active.mission.status == "complete",
-    ready_for_resolution = active.mission.status == "complete",
+    is_complete = active.mission.status == "complete"
+      or active.mission.status == "reward_pending"
+      or active.mission.status == "reward_failed"
+      or active.mission.status == "claimed",
+    ready_for_resolution = active.mission.status == "complete"
+      or active.mission.status == "reward_failed",
+    reward_status = active.mission.reward_status or "",
   }
 end
 
@@ -749,8 +792,11 @@ local function rpc_mission_start(context, payload)
       if m.status == "active" then
         error({ err = "Already on a mission", code = 409 })
       end
-      -- complete/expired: clear pointer so a new mission can start (no rewards this phase).
-      if m.status == "complete" or m.status == "expired" then
+      if m.status == "complete" or m.status == "reward_pending" or m.status == "reward_failed" then
+        error({ err = "Claim mission rewards before starting another", code = 409 })
+      end
+      -- claimed/expired: clear pointer so a new mission can start.
+      if m.status == "claimed" or m.status == "expired" then
         delete_active(user_id, character_id)
         active_raw = nil
       end
@@ -899,8 +945,380 @@ local function rpc_mission_status(context, payload)
   return encode_ok(result)
 end
 
+--- Build claim receipt from mission + reward/loot results.
+local function build_claim_receipt(mission, reward_result, loot_items, xp_note)
+  local currency = validation.empty_array()
+  local items = validation.empty_array()
+  local xp = validation.empty_array()
+  local other = validation.empty_array()
+
+  if type(reward_result) == "table" and type(reward_result.applied) == "table" then
+    for i = 1, #reward_result.applied do
+      local a = reward_result.applied[i]
+      if type(a) == "table" then
+        if a.type == "currency" then
+          table.insert(currency, {
+            currency_id = a.currency_id,
+            amount = a.amount,
+          })
+        elseif a.type == "item" then
+          table.insert(items, {
+            instance_id = a.instance_id,
+            item_id = a.item_id,
+            quantity = a.quantity,
+          })
+        end
+      end
+    end
+  end
+
+  if type(loot_items) == "table" then
+    for i = 1, #loot_items do
+      local inst = loot_items[i]
+      if type(inst) == "table" then
+        local already = false
+        for j = 1, #items do
+          if items[j].instance_id == inst.instance_id then
+            already = true
+            break
+          end
+        end
+        if not already then
+          table.insert(items, {
+            instance_id = inst.instance_id,
+            item_id = inst.item_id,
+            quantity = inst.quantity,
+            rarity = inst.rarity,
+          })
+        end
+      end
+    end
+  end
+
+  if type(xp_note) == "table" then
+    table.insert(xp, xp_note)
+  end
+
+  return {
+    transaction_id = mission.reward_transaction_id or "",
+    status = mission.reward_status or "",
+    currency = currency,
+    items = items,
+    xp = xp,
+    other = other,
+  }
+end
+
+local function ensure_reward_snapshot(mission)
+  local ref = mission.reward_reference
+  if type(ref) ~= "table" then
+    ref = {}
+  end
+  if type(ref.stardust_amount) == "number" and ref.stardust_amount >= 0 and type(ref.currency_id) == "string" then
+    return ref, nil
+  end
+  -- Backfill for missions generated before Phase 14 snapshot fields.
+  local level = tonumber(ref.character_level) or tonumber(mission.level_requirement) or 1
+  local duration = tonumber(mission.duration_seconds) or MIN_DURATION
+  local sd_eff = tonumber(ref.stardust_efficiency) or 1
+  local xp_eff = tonumber(ref.xp_efficiency) or 1
+  local snap = snapshot_reward_reference(level, duration, sd_eff, xp_eff)
+  -- Preserve original efficiencies if present.
+  snap.stardust_efficiency = sd_eff
+  snap.xp_efficiency = xp_eff
+  mission.reward_reference = snap
+  return snap, nil
+end
+
+local function rpc_mission_claim(context, payload)
+  local user_id = context.user_id
+  if user_id == nil or user_id == "" then
+    return encode_fail("Unauthenticated", 401)
+  end
+  local body = decode_payload(payload)
+  if body == nil then
+    return encode_fail("Malformed JSON payload", 400)
+  end
+  local forbid = reject_client_ids(body)
+  if forbid ~= nil then
+    return encode_fail(forbid, 400)
+  end
+  local unknown = validation.reject_unknown_keys(body, {
+    character_id = true,
+    mission_id = true,
+    request_id = true,
+  })
+  if unknown ~= nil then
+    return encode_fail(unknown, 400)
+  end
+  -- Reject client-authored reward outcomes.
+  if body.rewards ~= nil or body.amount ~= nil or body.currency_id ~= nil
+      or body.item_id ~= nil or body.rarity ~= nil or body.seed ~= nil
+      or body.affixes ~= nil or body.item_level ~= nil or body.xp ~= nil
+      or body.status ~= nil or body.loot_table_id ~= nil or body.won ~= nil
+      or body.completes_at ~= nil or body.claimed ~= nil then
+    return encode_fail("Client cannot supply reward or completion fields", 400)
+  end
+  if type(body.mission_id) ~= "string" or body.mission_id == "" then
+    return encode_fail("mission_id is required", 400)
+  end
+  if type(body.request_id) ~= "string" or body.request_id == "" then
+    return encode_fail("request_id is required", 400)
+  end
+  local tid_err = transactions.validate_transaction_id(body.request_id)
+  if tid_err ~= nil then
+    return encode_fail(tid_err, 400)
+  end
+
+  local ok, result = pcall(function()
+    local character_id, err = resolve_character_id(user_id, body.character_id)
+    if err ~= nil then
+      error({ err = err, code = 403 })
+    end
+
+    local active_raw, active_ver = read_active(user_id, character_id)
+    if active_raw == nil or type(active_raw.mission) ~= "table" then
+      error({ err = "No active mission", code = 404 })
+    end
+
+    local mission, did = apply_timer_transition(active_raw.mission)
+    active_raw.mission = mission
+    if did then
+      write_active(user_id, character_id, active_raw, active_ver)
+      active_ver = nil
+      active_raw, active_ver = read_active(user_id, character_id)
+      mission = active_raw.mission
+    end
+
+    if mission.mission_id ~= body.mission_id then
+      error({ err = "mission_id does not match active mission", code = 404 })
+    end
+    if mission.owner_character_id ~= character_id then
+      error({ err = "Mission not owned by character", code = 403 })
+    end
+
+    -- Idempotent replay for completed claims.
+    if mission.status == "claimed" then
+      if mission.claim_request_id ~= "" and mission.claim_request_id ~= body.request_id then
+        error({ err = "Conflicting reuse of claim request_id", code = 409 })
+      end
+      local xp_note = {
+        amount = (mission.reward_reference and mission.reward_reference.xp_amount) or 0,
+        status = "unsupported",
+        reason = "ProgressionService not available",
+      }
+      return {
+        mission = public_mission(mission),
+        reward = build_claim_receipt(mission, mission.reward_receipt_summary, mission.loot_receipt_items, xp_note),
+        replay = true,
+      }
+    end
+
+    if mission.status == "reward_pending" then
+      if mission.claim_request_id ~= "" and mission.claim_request_id ~= body.request_id then
+        error({ err = "Conflicting reuse of claim request_id", code = 409 })
+      end
+      -- Fall through to retry grant using stored transaction ids.
+    elseif mission.status == "reward_failed" then
+      if mission.claim_request_id ~= "" and mission.claim_request_id ~= body.request_id then
+        error({ err = "Conflicting reuse of claim request_id", code = 409 })
+      end
+      -- Allow retry with same request_id.
+    elseif mission.status == "complete" then
+      -- OK
+    elseif mission.status == "active" then
+      error({ err = "Mission not complete yet", code = 409 })
+    else
+      error({ err = "Mission is not claimable", code = 409 })
+    end
+
+    local ref, rerr = ensure_reward_snapshot(mission)
+    if rerr ~= nil then
+      error({ err = rerr, code = 422 })
+    end
+    if type(ref.currency_id) ~= "string" or ref.currency_id ~= "stardust" then
+      error({ err = "Invalid mission currency reward definition", code = 422 })
+    end
+    local stardust_amount = tonumber(ref.stardust_amount)
+    if stardust_amount == nil or stardust_amount < 0 or stardust_amount ~= math.floor(stardust_amount) then
+      error({ err = "Invalid mission stardust amount", code = 422 })
+    end
+    if stardust_amount > 100000000 then
+      error({ err = "Mission stardust amount exceeds hard limit", code = 422 })
+    end
+
+    local reward_tid = "mission_reward:" .. mission.mission_id
+    local loot_tid = "mission_loot:" .. mission.mission_id
+    if #reward_tid > 64 then
+      error({ err = "reward transaction_id too long", code = 500 })
+    end
+
+    -- Transition to reward_pending before granting.
+    mission.status = "reward_pending"
+    mission.claim_request_id = body.request_id
+    mission.reward_transaction_id = reward_tid
+    mission.loot_transaction_id = ""
+    mission.reward_status = "pending"
+    mission.updated_at = now_ms()
+    active_raw.mission = mission
+    active_raw.updated_at = now_ms()
+    write_active(user_id, character_id, active_raw, active_ver)
+    active_ver = nil
+
+    local loot_items = validation.empty_array()
+    local reward_entries = validation.empty_array()
+
+    if stardust_amount > 0 then
+      table.insert(reward_entries, {
+        type = "currency",
+        currency_id = "stardust",
+        amount = stardust_amount,
+      })
+    end
+
+    if ref.include_loot == true then
+      local loot_table_id = ref.loot_table_id
+      if type(loot_table_id) ~= "string" or loot_table_id == "" then
+        error({ err = "Missing loot_table_id on mission reward reference", code = 422 })
+      end
+      local loot_record, lerr = loot.generate_loot_bundle({
+        user_id = user_id,
+        character_id = character_id,
+        source_type = "mission",
+        source_id = mission.mission_id,
+        loot_table_id = loot_table_id,
+        transaction_id = loot_tid,
+      })
+      if lerr ~= nil then
+        mission.status = "reward_failed"
+        mission.reward_status = "loot_failed"
+        active_raw.mission = mission
+        write_active(user_id, character_id, active_raw, nil)
+        error({ err = "Loot generation failed: " .. tostring(lerr), code = 422 })
+      end
+      mission.loot_transaction_id = loot_tid
+      loot_items = loot_record.generated_items or validation.empty_array()
+      for i = 1, #loot_items do
+        local inst = loot_items[i]
+        table.insert(reward_entries, {
+          type = "item",
+          item_id = inst.item_id,
+          quantity = inst.quantity,
+          instance_id = inst.instance_id,
+          metadata = inst.metadata,
+          rarity = inst.rarity,
+          item_level = inst.item_level,
+        })
+      end
+    end
+
+    if #reward_entries < 1 then
+      -- Zero currency and no loot — still mark claimed (edge case).
+      mission.status = "claimed"
+      mission.claimed_at = iso_utc(now_unix())
+      mission.reward_status = "completed"
+      mission.reward_receipt_summary = { applied = validation.empty_array() }
+      mission.loot_receipt_items = loot_items
+      active_raw.mission = mission
+      write_active(user_id, character_id, active_raw, nil)
+      local xp_note = {
+        amount = tonumber(ref.xp_amount) or 0,
+        status = "unsupported",
+        reason = "ProgressionService not available",
+      }
+      return {
+        mission = public_mission(mission),
+        reward = build_claim_receipt(mission, mission.reward_receipt_summary, loot_items, xp_note),
+        replay = false,
+      }
+    end
+
+    local bundle = {
+      reward_version = 1,
+      source_type = "mission",
+      source_id = mission.mission_id,
+      user_id = user_id,
+      character_id = character_id,
+      transaction_id = reward_tid,
+      reason = "mission_claim",
+      rewards = reward_entries,
+      metadata = {
+        claim_request_id = body.request_id,
+        loot_transaction_id = mission.loot_transaction_id,
+      },
+    }
+
+    local reward_result, aerr = rewards.apply_reward_bundle(bundle)
+    if aerr ~= nil or reward_result == nil or reward_result.success ~= true then
+      local msg = aerr or "Reward apply failed"
+      if string.find(tostring(msg), "Inventory full", 1, true) then
+        mission.status = "reward_failed"
+        mission.reward_status = "inventory_full"
+      else
+        mission.status = "reward_failed"
+        mission.reward_status = "failed"
+      end
+      active_raw.mission = mission
+      write_active(user_id, character_id, active_raw, nil)
+      error({ err = tostring(msg), code = 409 })
+    end
+
+    -- Mark loot items on mission for receipt replay.
+    if mission.loot_transaction_id ~= "" then
+      mission.loot_receipt_items = loot_items
+    end
+
+    mission.status = "claimed"
+    mission.claimed_at = iso_utc(now_unix())
+    mission.reward_status = "completed"
+    mission.reward_receipt_summary = {
+      applied = reward_result.applied or validation.empty_array(),
+      transaction_id = reward_tid,
+      status = "completed",
+    }
+    mission.loot_receipt_items = loot_items
+    active_raw.mission = mission
+    active_raw.updated_at = now_ms()
+    write_active(user_id, character_id, active_raw, nil)
+
+    logging.info("missions", "mission_claim", {
+      user_id = user_id,
+      request_id = body.request_id,
+      mission_id = mission.mission_id,
+      reward_transaction_id = reward_tid,
+    })
+
+    local xp_note = {
+      amount = tonumber(ref.xp_amount) or 0,
+      status = "unsupported",
+      reason = "ProgressionService not available",
+    }
+
+    return {
+      mission = public_mission(mission),
+      reward = build_claim_receipt(mission, reward_result, loot_items, xp_note),
+      replay = false,
+      gains = {
+        stardust = stardust_amount,
+        experience = 0,
+        experience_status = "unsupported",
+      },
+    }
+  end)
+
+  if not ok then
+    if type(result) == "table" and result.err ~= nil then
+      return encode_fail(result.err, result.code or 400)
+    end
+    nk.logger_error(string.format("mission_claim failed: %s", tostring(result)))
+    return encode_fail("Failed to claim mission", 500)
+  end
+  return encode_ok(result)
+end
+
 nk.register_rpc(rpc_missions_get, "missions_get")
 nk.register_rpc(rpc_missions_refresh, "missions_refresh")
 nk.register_rpc(rpc_mission_start, "mission_start")
 nk.register_rpc(rpc_mission_status, "mission_status")
-nk.logger_info("Phase 7 mission RPCs registered (missions_get, missions_refresh, mission_start, mission_status) — no rewards")
+nk.register_rpc(rpc_mission_claim, "mission_claim")
+nk.logger_info("Phase 14 mission RPCs registered (incl. mission_claim) — rewards via RewardService/LootService")

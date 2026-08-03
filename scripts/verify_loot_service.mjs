@@ -171,9 +171,9 @@ function staticChecks() {
   } else pass("loot source_type authorized in RewardService");
 
   const missions = read("modules/missions.lua");
-  if (/require\("loot"\)/.test(missions) || /create_loot_receipt/.test(missions)) {
-    fail("missions connected to loot prematurely");
-  } else pass("missions remain unwired to loot");
+  if (!/require\("loot"\)/.test(missions) || !/generate_loot_bundle/.test(missions)) {
+    fail("missions not wired to loot (Phase 14 expected)");
+  } else pass("missions wired to LootService (Phase 14)");
 
   // UI must not call loot RPCs
   let bad = null;

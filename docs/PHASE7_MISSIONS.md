@@ -1,6 +1,6 @@
 # Phase 7 — Mission service core
 
-Authoritative Nakama mission **core only**. No rewards, XP, currency, items, fuel, claim, loot, daily missions, achievements, or admin tools.
+Authoritative Nakama mission **core** (Phase 7). Claim/rewards added in Phase 14 — see `docs/PHASE14_MISSION_REWARDS.md`.
 
 ## Audit summary
 
@@ -61,7 +61,7 @@ available → active → complete
 
 - No backward transitions.
 - `expired` reserved; not used for timer completion (timer uses `complete`).
-- After `complete`, a new `mission_start` clears the active record (no claim/rewards in this phase).
+- After `complete`, claim via `mission_claim` (Phase 14). A new `mission_start` clears a `claimed` active record.
 
 ## Timer authority
 

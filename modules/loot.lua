@@ -42,7 +42,8 @@ local STATUS = {
 local ALLOWED_SOURCE_TYPES = {
   loot_dev = true,
   system = true,
-  -- Future: mission, arena, shipment, event, shop, daily_login, admin
+  mission = true,
+  -- Future: arena, shipment, event, shop, daily_login, admin
 }
 
 --- Deterministic FNV-1a style hash (gameplay RNG — not cryptographic).

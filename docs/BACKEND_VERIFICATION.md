@@ -61,7 +61,11 @@ Do not install Git hooks unless the user asks.
 
 ## Phase 13 checks
 
-`verify_loot_service.mjs` asserts loot module + table data, no generic loot RPCs, RewardService grant path, inventory internal grant, deterministic transaction behavior, client outcome-field rejection, inventory-full safety, missions unwired, and gated `dev_loot_test`.
+`verify_loot_service.mjs` asserts loot module + table data, no generic loot RPCs, RewardService grant path, inventory internal grant, deterministic transaction behavior, client outcome-field rejection, inventory-full safety, and gated `dev_loot_test`.
+
+## Phase 14 checks
+
+`verify_mission_rewards.mjs` asserts `mission_claim`, snapshot rewards, RewardService/LootService wiring, single-grant idempotency, no loot reroll, client reward rejection, and XP unsupported handling.
 
 ## Troubleshooting
 

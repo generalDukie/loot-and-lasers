@@ -292,3 +292,11 @@ See `docs/PHASE12_REWARD_SERVICE.md`.
 | `dev_loot_test` | Gated by `LOOT_DEV_LOOT_TEST=1`; blocked in staging/production; fixed table allowlist |
 
 Client must not submit item ID, rarity, affixes, item level, or seed. See `docs/PHASE13_LOOT_GENERATION.md`.
+
+## Phase 14 — Mission rewards
+
+| RPC | Purpose |
+|-----|---------|
+| `mission_claim` | Claim a completed mission; server builds rewards |
+
+Payload: `{ character_id?, mission_id, request_id }`. See `docs/PHASE14_MISSION_REWARDS.md`.

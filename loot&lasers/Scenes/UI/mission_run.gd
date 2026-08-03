@@ -421,19 +421,26 @@ func _on_fight() -> void:
 	_busy = true
 	_claim_btn.disabled = true
 	_skip_btn.disabled = true
-	_set_status("Opening encounter…", true)
+	_set_status("Claiming rewards…", true)
 	var prep: Dictionary = await MissionManager.prepare_combat(true)
 	if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
-		# Phase 8: rewards/combat deferred — acknowledge Nakama completion without grants.
 		var ack: Dictionary = await MissionManager.claim_mission(true)
 		_busy = false
 		if not ack.get("ok", false):
-			_set_status(str(ack.get("error", "Could not clear mission")), true)
+			_set_status(str(ack.get("error", "Could not claim mission")), true)
+			_claim_btn.disabled = false
 			_refresh_timer()
 			return
 		_claimed = true
 		_tick.stop()
-		_set_status("Mission complete — rewards coming in a later phase.", false)
+		var gains: Dictionary = ack.get("data", {}).get("gains", {}) if typeof(ack.get("data", null)) == TYPE_DICTIONARY else {}
+		var sd := int(gains.get("stardust", 0))
+		var msg := "Mission claimed"
+		if sd > 0:
+			msg = "Mission claimed — +%d Stardust" % sd
+		if str(gains.get("experience_status", "")) == "unsupported":
+			msg += " (XP pending Progression)"
+		_set_status(msg, false)
 		await get_tree().create_timer(0.8).timeout
 		GameManager.go_cantina()
 		return

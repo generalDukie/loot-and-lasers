@@ -1,8 +1,7 @@
 extends Node
-## Mission lifecycle — Phase 8: Nakama is the sole mission authority.
-## Board / start / timer / completion eligibility: Nakama RPCs only.
-## Local board cfg is a non-authoritative display cache (never generates missions).
-## Fuel buy/sync remain on Node (economy). Rewards / claim grants are deferred.
+## Mission lifecycle — Phase 14: Nakama mission authority + claim rewards.
+## Board / start / timer / claim: Nakama RPCs only.
+## Fuel buy/sync remain on Node (economy). XP grants deferred (ProgressionService).
 
 signal board_changed(offers: Array)
 signal active_mission_changed(mission: Dictionary)
@@ -15,6 +14,10 @@ signal mission_started(mission: Dictionary)
 signal mission_status_changed(status: Dictionary)
 signal mission_error(error: String)
 signal loading_changed(loading: bool)
+signal mission_claim_started
+signal mission_claimed(result: Dictionary)
+signal mission_claim_failed(error: String)
+signal reward_received(reward: Dictionary)
 
 const BOARD_CFG := "user://godot_mission_board.cfg"
 const STATUS_MIN_INTERVAL_SEC := 2.0
@@ -166,7 +169,7 @@ func is_mission_finished(mission: Dictionary = {}) -> bool:
 	if m.is_empty():
 		return false
 	var status := str(m.get("status", ""))
-	if status in ["claimed", "failed", "complete", "completed"]:
+	if status in ["claimed", "failed", "complete", "completed", "reward_pending", "reward_failed"]:
 		return true
 	return seconds_remaining(m) <= 0
 
@@ -189,7 +192,7 @@ func seconds_remaining(mission: Dictionary = {}) -> int:
 	if m.is_empty():
 		return 0
 	var status := str(m.get("status", ""))
-	if status in ["claimed", "failed", "complete", "completed"]:
+	if status in ["claimed", "failed", "complete", "completed", "reward_pending", "reward_failed"]:
 		return 0
 	# Prefer server-reported remaining when present on nakama_active.
 	if mission.is_empty() and nakama_active.has("seconds_remaining"):
@@ -235,19 +238,87 @@ func skip_mission() -> Dictionary:
 	}
 
 
-## No reward grants. Clears local active state when Nakama reports complete so the
-## player can return to the Cantina. Server complete row is cleared on next start.
+## Claim completed mission rewards via Nakama mission_claim (server-authoritative).
+## Does not mutate wallet/inventory locally — refreshes managers from server result.
 func claim_mission(_won: bool = true) -> Dictionary:
-	await refresh_mission_status("", true)
+	return await claim_mission_for("", "")
+
+
+func claim_mission_for(character_id: String = "", mission_id: String = "") -> Dictionary:
+	if _nakama_busy:
+		return _fail_nakama("Mission request already in progress")
+
+	await refresh_mission_status(character_id, true)
 	var status := _nakama_mission_status()
 	if status == "active" and not is_mission_finished():
 		return {"ok": false, "error": "Mission not finished yet", "data": {}}
 
+	var mid := mission_id.strip_edges()
+	if mid.is_empty():
+		var nakama_mission: Variant = nakama_active.get("mission", {})
+		if typeof(nakama_mission) == TYPE_DICTIONARY:
+			mid = str(nakama_mission.get("mission_id", ""))
+		if mid.is_empty():
+			mid = str(active_mission.get("mission_id", active_mission.get("id", "")))
+	if mid.is_empty():
+		return {"ok": false, "error": "mission_id is required", "data": {}}
+
+	_nakama_busy = true
+	_set_loading(true)
+	mission_claim_started.emit()
+	var payload := _nakama_character_payload(character_id)
+	payload["mission_id"] = mid
+	payload["request_id"] = "claim-%s-%d" % [mid.substr(0, min(8, mid.length())), Time.get_unix_time_from_system()]
+	var res: Dictionary = await NakamaManager.invoke_rpc("mission_claim", payload)
+	_nakama_busy = false
+	_set_loading(false)
+
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "Mission claim failed"))
+		mission_error.emit(err)
+		mission_claim_failed.emit(err)
+		return {"ok": false, "error": err, "data": {}}
+
+	var data: Variant = res.get("data", {})
+	if typeof(data) != TYPE_DICTIONARY:
+		var bad := "Malformed claim response"
+		mission_claim_failed.emit(bad)
+		return {"ok": false, "error": bad, "data": {}}
+
+	var claim_data: Dictionary = data
+	var reward: Dictionary = {}
+	if typeof(claim_data.get("reward", null)) == TYPE_DICTIONARY:
+		reward = claim_data.get("reward")
+	var gains: Dictionary = {}
+	if typeof(claim_data.get("gains", null)) == TYPE_DICTIONARY:
+		gains = claim_data.get("gains")
+	else:
+		var stardust := 0
+		var currency: Variant = reward.get("currency", [])
+		if typeof(currency) == TYPE_ARRAY:
+			for row in currency:
+				if typeof(row) == TYPE_DICTIONARY and str(row.get("currency_id", "")) == "stardust":
+					stardust += int(row.get("amount", 0))
+		gains = {
+			"stardust": stardust,
+			"experience": 0,
+			"experience_status": "unsupported",
+		}
+
 	last_claim_result = {
-		"gains": {},
-		"rewards_deferred": true,
-		"message": "Mission complete — rewards deferred to a later phase",
+		"gains": gains,
+		"reward": reward,
+		"mission": claim_data.get("mission", {}),
+		"rewards_deferred": false,
+		"message": "",
+		"replay": bool(claim_data.get("replay", false)),
 	}
+
+	if CurrencyManager != null and CurrencyManager.has_method("load_wallet"):
+		await CurrencyManager.load_wallet()
+	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
+		await InventoryManager.load_inventory(str(payload.get("character_id", "")))
+
 	active_mission = {}
 	active_mission_missing = false
 	nakama_active = {}
@@ -256,6 +327,8 @@ func claim_mission(_won: bool = true) -> Dictionary:
 	pending_player_items = []
 	active_mission_changed.emit(active_mission)
 	claim_ready.emit(last_claim_result)
+	mission_claimed.emit(last_claim_result)
+	reward_received.emit(reward)
 	await ensure_board(false)
 	return {"ok": true, "error": "", "data": last_claim_result}
 
@@ -263,7 +336,7 @@ func claim_mission(_won: bool = true) -> Dictionary:
 func prepare_combat(_refresh: bool = true) -> Dictionary:
 	return {
 		"ok": false,
-		"error": "Mission combat/rewards are deferred — mission core only",
+		"error": "Mission combat is deferred — claim rewards directly",
 	}
 
 
@@ -271,13 +344,13 @@ func resolve_combat_outcome() -> Dictionary:
 	return await claim_mission(true)
 
 
-## Nakama mission session: in-flight or complete-awaiting-dismiss (not Node pointers).
+## Nakama mission session: in-flight or awaiting claim (claimed is cleared on next start).
 func has_active_mission() -> bool:
 	var s := _nakama_mission_status()
-	if s == "active" or s == "complete":
+	if s in ["active", "complete", "reward_pending", "reward_failed"]:
 		return true
 	var local_status := str(active_mission.get("status", ""))
-	return local_status in ["active", "in_progress", "complete", "completed"]
+	return local_status in ["active", "in_progress", "complete", "completed", "reward_pending", "reward_failed"]
 
 
 # ---------------------------------------------------------------------------
@@ -542,12 +615,19 @@ func _ui_active_from_nakama(wrapper: Dictionary) -> Dictionary:
 
 func _apply_nakama_active_to_local() -> void:
 	if nakama_active.is_empty() or typeof(nakama_active.get("mission", null)) != TYPE_DICTIONARY:
-		if str(active_mission.get("status", "")) in ["active", "in_progress", "complete", "completed"]:
+		if str(active_mission.get("status", "")) in ["active", "in_progress", "complete", "completed", "reward_pending", "reward_failed"]:
 			# Keep local only if still matching; otherwise clear.
 			if not bool(nakama_active.get("has_active", false)) and nakama_active.get("mission") == null:
 				active_mission = {}
 				active_mission_missing = false
 				active_mission_changed.emit(active_mission)
+		return
+	var status := str((nakama_active.get("mission") as Dictionary).get("status", ""))
+	# Claimed missions remain server-side for idempotent replay but do not block Cantina.
+	if status == "claimed":
+		active_mission = {}
+		active_mission_missing = false
+		active_mission_changed.emit(active_mission)
 		return
 	active_mission = _ui_active_from_nakama(nakama_active)
 	active_mission_missing = false

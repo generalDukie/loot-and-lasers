@@ -15,6 +15,7 @@
 | 11 | Done | Equipment mutations (equip/unequip) |
 | 12 | Done | Central reward service (soft currency orchestrator) |
 | 13 | Done | Server-authoritative loot generation (engine only) |
-| 14+ | Planned | Mission reward wiring, admin tooling, etc. |
+| 14 | Done | Mission rewards integration (`mission_claim`) |
+| 15+ | Planned | Progression/XP, fuel debit, arena rewards, etc. |
 
 Before each backend commit: `npm run verify:backend`.

@@ -106,11 +106,17 @@ async function main() {
     pass("completion from Nakama");
   } else fail("completion from Nakama", done.text.slice(0, 300));
 
-  // No reward RPCs
-  for (const rpc of ["mission_claim", "LaunchMission"]) {
-    const r = await callRpc(token, rpc, {});
-    if (r.status === 404 || /not found/i.test(r.text)) pass(`no ${rpc} on Nakama`);
-    else fail(`no ${rpc} on Nakama`, r.text.slice(0, 100));
+  // Legacy LaunchMission absent; mission_claim is Phase 14 (present)
+  {
+    const r = await callRpc(token, "LaunchMission", {});
+    if (r.status === 404 || /not found/i.test(r.text)) pass("no LaunchMission on Nakama");
+    else fail("no LaunchMission on Nakama", r.text.slice(0, 100));
+  }
+  {
+    const r = await callRpc(token, "mission_claim", { character_id: CHAR_ID, mission_id: "x", request_id: "probe-1" });
+    if (r.status === 404 || /rpc not found/i.test(r.text + JSON.stringify(r.body))) {
+      fail("mission_claim present (Phase 14)", r.text.slice(0, 100));
+    } else pass("mission_claim present (Phase 14)");
   }
 
   // Wallet unchanged path still read-only

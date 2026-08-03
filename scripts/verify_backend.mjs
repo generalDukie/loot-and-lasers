@@ -219,12 +219,12 @@ function checkRpcRegistration() {
     missions_refresh: true,
     mission_start: true,
     mission_status: true,
+    mission_claim: true,
     config_get: true,
   };
   const forbidden = {
     wallet_credit: true,
     wallet_debit: true,
-    mission_claim: true,
     mission_reward: true,
     config_set: true,
     config_update: true,
@@ -331,6 +331,7 @@ function checkDocs() {
     "missions_get",
     "mission_start",
     "mission_status",
+    "mission_claim",
     "config_get",
   ];
   for (const id of requiredMentions) {
@@ -362,6 +363,14 @@ function checkDocs() {
   }
   if (!/Phase 13|loot generation|LootService/i.test(arch)) {
     fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 13 loot note");
+    return;
+  }
+  if (!exists("docs/PHASE14_MISSION_REWARDS.md")) {
+    fail(cat, "Missing docs/PHASE14_MISSION_REWARDS.md");
+    return;
+  }
+  if (!/Phase 14|mission_claim|mission rewards/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 14 mission rewards note");
     return;
   }
   if (!rpcDoc.includes("dev_loot_test") && !/Phase 13/i.test(rpcDoc)) {

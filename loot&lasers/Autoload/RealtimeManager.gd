@@ -1,9 +1,13 @@
 extends Node
-## WebSocket fan-out for FriendRequest / Guild (mail unread is polled).
+## Phase 19: owns exactly one Nakama realtime socket (via NakamaManager).
+## Legacy Node WS + mail poll retained for guild/mail until those migrate.
 
 signal entity_event(entity: String, event_type: String, data: Dictionary)
 signal connection_changed(connected: bool)
 signal chat_event(entity: String, data: Dictionary)
+signal nakama_connection_changed(connected: bool)
+signal nakama_channel_message(message: Dictionary)
+signal nakama_presence(event: Dictionary)
 
 var _socket: WebSocketPeer
 var _connected := false
@@ -12,12 +16,16 @@ var _poll_mail: Timer
 var _poll_chat: Timer
 var _reconnect: Timer
 var _want_connect := false
+var _want_nakama := false
+var _nakama_connecting := false
+var _global_channel_id := ""
 var _refreshing_friends := false
 var _refreshing_guild := false
+var _nakama_signals_bound := false
 
 
 func _ready() -> void:
-	print("[RealtimeManager] ready")
+	print("[RealtimeManager] ready (Nakama socket owner + legacy Node poll)")
 	_poll_mail = Timer.new()
 	_poll_mail.wait_time = 30.0
 	_poll_mail.timeout.connect(_on_mail_poll)
@@ -37,18 +45,133 @@ func _ready() -> void:
 	set_process(false)
 
 
+func is_nakama_connected() -> bool:
+	return NakamaManager.socket != null and NakamaManager.socket.is_connected_to_host()
+
+
+## Preferred entry — connect Nakama socket once after auth.
+func start_nakama() -> Dictionary:
+	if _nakama_connecting:
+		return {"ok": false, "error": "Socket connect already in progress"}
+	_want_nakama = true
+	_nakama_connecting = true
+	var auth: Dictionary = await NakamaManager.ensure_authenticated()
+	if not bool(auth.get("success", false)):
+		_nakama_connecting = false
+		return {"ok": false, "error": str(auth.get("error", "auth failed"))}
+	_bind_nakama_signals()
+	var res: Dictionary = await NakamaManager.connect_socket()
+	_nakama_connecting = false
+	var ok := bool(res.get("success", false))
+	nakama_connection_changed.emit(ok)
+	connection_changed.emit(ok or _connected)
+	if ok:
+		await SocialManager.load_social_state()
+	return {"ok": ok, "error": str(res.get("error", ""))}
+
+
+func stop_nakama() -> void:
+	_want_nakama = false
+	_global_channel_id = ""
+	await NakamaManager.disconnect_socket()
+	nakama_connection_changed.emit(false)
+	ChatManager.clear_account_chat_cache()
+	SocialManager.clear_account_social_cache()
+
+
+func join_global_chat() -> Dictionary:
+	if not is_nakama_connected():
+		var started: Dictionary = await start_nakama()
+		if not started.get("ok", false):
+			return started
+	var socket = NakamaManager.socket
+	if socket == null:
+		return {"ok": false, "error": "No socket"}
+	var channel = await socket.join_chat_async("global", NakamaSocket.ChannelType.Room, true, false)
+	if channel == null or channel.is_exception():
+		return {"ok": false, "error": "Failed to join global chat"}
+	_global_channel_id = str(channel.id) if "id" in channel else ""
+	return {"ok": true, "channel_id": _global_channel_id}
+
+
+func leave_global_chat() -> void:
+	if not is_nakama_connected() or _global_channel_id.is_empty():
+		return
+	var socket = NakamaManager.socket
+	if socket != null:
+		await socket.leave_chat_async(_global_channel_id)
+	_global_channel_id = ""
+
+
+func _bind_nakama_signals() -> void:
+	if _nakama_signals_bound:
+		return
+	if not NakamaManager.connection_changed.is_connected(_on_nakama_mgr_connection):
+		NakamaManager.connection_changed.connect(_on_nakama_mgr_connection)
+	# Socket message signals bound when socket exists
+	_nakama_signals_bound = true
+	_ensure_socket_message_binds()
+
+
+func _ensure_socket_message_binds() -> void:
+	var socket = NakamaManager.socket
+	if socket == null:
+		return
+	if not socket.received_channel_message.is_connected(_on_nakama_channel_message):
+		socket.received_channel_message.connect(_on_nakama_channel_message)
+	if not socket.received_status_presence.is_connected(_on_nakama_status_presence):
+		socket.received_status_presence.connect(_on_nakama_status_presence)
+
+
+func _on_nakama_mgr_connection(connected: bool) -> void:
+	if connected:
+		_ensure_socket_message_binds()
+	nakama_connection_changed.emit(connected)
+
+
+func _on_nakama_channel_message(p_message) -> void:
+	var msg := {
+		"message_id": str(p_message.message_id) if p_message != null and "message_id" in p_message else "",
+		"channel_id": str(p_message.channel_id) if p_message != null and "channel_id" in p_message else "",
+		"sender_user_id": str(p_message.sender_id) if p_message != null and "sender_id" in p_message else "",
+		"content": "",
+		"created_at": str(p_message.create_time) if p_message != null and "create_time" in p_message else "",
+	}
+	if p_message != null and "content" in p_message:
+		var raw = p_message.content
+		if typeof(raw) == TYPE_STRING:
+			var parsed: Variant = JSON.parse_string(raw)
+			if typeof(parsed) == TYPE_DICTIONARY:
+				msg["content"] = str(parsed.get("text", parsed.get("message", "")))
+				msg["sender_display_name"] = str(parsed.get("sender_display_name", ""))
+				msg["sender_character_id"] = str(parsed.get("sender_character_id", ""))
+			else:
+				msg["content"] = raw
+	nakama_channel_message.emit(msg)
+	chat_event.emit("NakamaChannel", msg)
+
+
+func _on_nakama_status_presence(p_presence) -> void:
+	nakama_presence.emit({"raw": true})
+	# Presence details vary by SDK version; SocialManager may refresh on demand.
+
+
+## Legacy Node WebSocket — mail/guild fan-out until those migrate.
 func start(entity: String = "ChatMessage") -> void:
-	# ChatMessage is broadcast to non-admins; PrivateMessage is sensitive (poll instead).
 	_entity_filter = entity
 	_want_connect = true
+	_want_nakama = true
+	call_deferred("_boot_nakama_deferred")
 	_connect_ws()
 	if not _poll_mail.is_stopped():
 		_poll_mail.stop()
 	_poll_mail.start()
-	if not _poll_chat.is_stopped():
-		_poll_chat.stop()
-	_poll_chat.start()
+	_poll_chat.stop()
 	SocialManager.refresh_unread()
+
+
+func _boot_nakama_deferred() -> void:
+	await start_nakama()
 
 
 func stop() -> void:
@@ -62,6 +185,8 @@ func stop() -> void:
 	_connected = false
 	set_process(false)
 	connection_changed.emit(false)
+	if _want_nakama:
+		stop_nakama()
 
 
 func _connect_ws() -> void:
@@ -76,16 +201,16 @@ func _connect_ws() -> void:
 	_socket = WebSocketPeer.new()
 	var err := _socket.connect_to_url(url)
 	if err != OK:
-		print("[RealtimeManager] connect failed: ", err)
+		print("[RealtimeManager] Node WS connect failed: ", err)
 		_socket = null
-		if _want_connect and _reconnect.is_stopped():
-			_reconnect.start()
 		return
 	set_process(true)
 
 
 func _process(_delta: float) -> void:
+	# Only polls Node WebSocketPeer state — does NOT initiate Nakama connects.
 	if _socket == null:
+		set_process(false)
 		return
 	_socket.poll()
 	var state := _socket.get_ready_state()
@@ -93,73 +218,47 @@ func _process(_delta: float) -> void:
 		if not _connected:
 			_connected = true
 			connection_changed.emit(true)
-			print("[RealtimeManager] connected")
 		while _socket.get_available_packet_count() > 0:
 			var packet := _socket.get_packet().get_string_from_utf8()
 			_handle_packet(packet)
-	elif state == WebSocketPeer.STATE_CLOSING:
-		pass
 	elif state == WebSocketPeer.STATE_CLOSED:
 		if _connected:
-			print("[RealtimeManager] closed code=", _socket.get_close_code())
-		_connected = false
-		connection_changed.emit(false)
+			_connected = false
+			connection_changed.emit(false)
 		_socket = null
 		set_process(false)
-		if _want_connect and _reconnect.is_stopped():
+		if _want_connect:
 			_reconnect.start()
 
 
-func _on_reconnect() -> void:
-	if _want_connect and _socket == null:
-		_connect_ws()
-
-
-func _handle_packet(text: String) -> void:
-	var parsed: Variant = JSON.parse_string(text)
-	if typeof(parsed) != TYPE_DICTIONARY:
+func _handle_packet(packet: String) -> void:
+	var data: Variant = JSON.parse_string(packet)
+	if typeof(data) != TYPE_DICTIONARY:
 		return
-	var msg: Dictionary = parsed
-	var mtype := str(msg.get("type", ""))
-	if mtype == "connected" or mtype == "error":
-		return
-	var entity := str(msg.get("entity", ""))
-	var data: Dictionary = msg.get("data", {}) if typeof(msg.get("data", {})) == TYPE_DICTIONARY else {}
-	entity_event.emit(entity, mtype, data)
-	if entity == "FriendRequest":
-		_refresh_friends_async()
-	elif entity in ["Guild", "GuildMember"]:
-		_refresh_guild_async()
-	elif entity == "ChatMessage":
-		chat_event.emit(entity, data)
-
-
-func _refresh_friends_async() -> void:
-	if _refreshing_friends:
-		return
-	_refreshing_friends = true
-	await SocialManager.load_friends()
-	_refreshing_friends = false
-
-
-func _refresh_guild_async() -> void:
-	if _refreshing_guild:
-		return
-	_refreshing_guild = true
-	await SocialManager.load_my_guild()
-	_refreshing_guild = false
+	var entity := str(data.get("entity", ""))
+	var event_type := str(data.get("type", data.get("event", "")))
+	var payload: Variant = data.get("data", data)
+	entity_event.emit(entity, event_type, payload if typeof(payload) == TYPE_DICTIONARY else {})
+	if entity == "ChatMessage":
+		chat_event.emit(entity, payload if typeof(payload) == TYPE_DICTIONARY else {})
+	elif entity == "FriendRequest" and not _refreshing_friends:
+		_refreshing_friends = true
+		SocialManager.load_friends()
+		_refreshing_friends = false
 
 
 func _on_mail_poll() -> void:
-	if AuthManager.access_token.is_empty():
-		return
-	await SocialManager.refresh_unread()
-	await NotificationManager.refresh_unread()
+	SocialManager.refresh_unread()
+	NotificationManager.refresh_unread()
 
 
 func _on_chat_poll() -> void:
-	# PrivateMessage is sensitive — not WS-broadcast to players; soft-notify via signal.
-	if AuthManager.access_token.is_empty():
-		return
-	chat_event.emit("PrivateMessagePoll", {})
-	# Friend lists refresh via WS FriendRequest events — avoid loading every 8s.
+	# Legacy private poll disabled under Nakama chat authority.
+	pass
+
+
+func _on_reconnect() -> void:
+	if _want_connect:
+		_connect_ws()
+	if _want_nakama and not is_nakama_connected():
+		start_nakama()

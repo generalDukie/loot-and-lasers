@@ -1,9 +1,22 @@
 extends Node
-## Mail · friends · guild against the Node entity API + ClaimMailReward / CreateGuild.
+## Mail · friends · guild. Phase 19: friends/blocks are Nakama account-level.
+## Mail and guild remain on the Node entity API until a later phase.
 
 signal mail_changed
 signal friends_changed
 signal guild_changed
+signal social_state_loaded(state: Dictionary)
+signal friend_request_received
+signal friend_request_sent
+signal friend_request_accepted
+signal friend_request_declined
+signal friend_removed
+signal user_blocked
+signal user_unblocked
+signal presence_changed(user_id: String, status: Dictionary)
+signal social_error(error: String)
+signal loading_changed(loading: bool)
+signal mutation_state_changed(mutating: bool)
 
 var inbox: Array = []
 var mail_folder: String = "inbox"
@@ -12,6 +25,10 @@ var friendships: Array = []
 var incoming_requests: Array = []
 var outgoing_requests: Array = []
 var blocks: Array = []
+var social_state: Dictionary = {}
+var loading := false
+var mutating := false
+var _busy := false
 var my_membership: Dictionary = {}
 var my_guild: Dictionary = {}
 var guild_members: Array = []
@@ -21,7 +38,15 @@ var guild_log: Array = []
 
 
 func _ready() -> void:
-	print("[SocialManager] ready")
+	print("[SocialManager] ready (Nakama friends; Node mail/guild)")
+
+
+func is_loading() -> bool:
+	return loading
+
+
+func is_mutating() -> bool:
+	return mutating
 
 
 func char_id() -> String:
@@ -32,7 +57,43 @@ func active_char() -> Dictionary:
 	return GameManager.active_character
 
 
-# ── Mail ──────────────────────────────────────────────────────
+func get_friends() -> Array:
+	return friendships
+
+
+func get_pending_requests() -> Dictionary:
+	return {"incoming": incoming_requests, "outgoing": outgoing_requests}
+
+
+func get_presence(_user_id: String) -> Dictionary:
+	return {}
+
+
+func _set_loading(v: bool) -> void:
+	loading = v
+	loading_changed.emit(v)
+
+
+func _set_mutating(v: bool) -> void:
+	mutating = v
+	mutation_state_changed.emit(v)
+
+
+func _rid(prefix: String) -> String:
+	return "%s-%s-%s" % [prefix, Time.get_ticks_msec(), randi()]
+
+
+func _apply_social_state(data: Dictionary) -> void:
+	social_state = data.duplicate(true)
+	friendships = data.get("friends", []) if typeof(data.get("friends", [])) == TYPE_ARRAY else []
+	incoming_requests = data.get("incoming_requests", []) if typeof(data.get("incoming_requests", [])) == TYPE_ARRAY else []
+	outgoing_requests = data.get("outgoing_requests", []) if typeof(data.get("outgoing_requests", [])) == TYPE_ARRAY else []
+	blocks = data.get("blocks", []) if typeof(data.get("blocks", [])) == TYPE_ARRAY else []
+	friends_changed.emit()
+	social_state_loaded.emit(social_state)
+
+
+# ── Mail (Node — unchanged) ───────────────────────────────────
 
 func load_inbox() -> Array:
 	return await load_mail("inbox")
@@ -190,230 +251,209 @@ func handle_guild_mail(mail: Dictionary, accept: bool) -> Dictionary:
 	return {"ok": false, "error": "Not a guild mail"}
 
 
-# ── Friends ───────────────────────────────────────────────────
+# ── Friends (Nakama account-level) ────────────────────────────
+
+func load_social_state() -> Dictionary:
+	if _busy:
+		return {"ok": false, "error": "Social request already in progress"}
+	_busy = true
+	_set_loading(true)
+	var res: Dictionary = await NakamaManager.invoke_rpc("social_get_state", {})
+	_busy = false
+	_set_loading(false)
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "social_get_state failed"))
+		social_error.emit(err)
+		return {"ok": false, "error": err}
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	_apply_social_state(data)
+	return {"ok": true, "error": "", "data": data}
+
 
 func load_friends() -> Dictionary:
-	var cid := char_id()
-	if cid.is_empty():
-		friendships = []
-		incoming_requests = []
-		outgoing_requests = []
-		return {"ok": false, "error": "No character"}
-	var fr: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/Friendship/filter",
-		{"query": {"participant_ids": cid}, "sort": "-created_date", "limit": 100}, true
-	)
-	friendships = fr.data if fr.ok and typeof(fr.data) == TYPE_ARRAY else []
-	var inc: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/FriendRequest/filter",
-		{"query": {"to_character_id": cid, "status": "pending"}, "sort": "-created_date", "limit": 50}, true
-	)
-	incoming_requests = inc.data if inc.ok and typeof(inc.data) == TYPE_ARRAY else []
-	var out: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/FriendRequest/filter",
-		{"query": {"from_character_id": cid, "status": "pending"}, "sort": "-created_date", "limit": 50}, true
-	)
-	outgoing_requests = out.data if out.ok and typeof(out.data) == TYPE_ARRAY else []
-	friends_changed.emit()
-	return {"ok": true}
+	return await load_social_state()
 
 
 func search_characters(query: String) -> Array:
-	var q := query.strip_edges().to_lower()
-	if q.is_empty():
+	## User search is deferred (Phase 19). Keep empty rather than scraping Character list.
+	var q := query.strip_edges()
+	if q.length() < 3:
 		return []
-	var res: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/Character?sort=-created_date&limit=200", null, true
-	)
-	if not res.ok or typeof(res.data) != TYPE_ARRAY:
-		return []
-	var me := char_id()
-	var out: Array = []
-	for c in res.data:
-		if typeof(c) != TYPE_DICTIONARY:
-			continue
-		var cid := str(c.get("id", ""))
-		if cid == me:
-			continue
-		var name := str(c.get("name", "")).to_lower()
-		if name.contains(q):
-			out.append(c)
-		if out.size() >= 20:
-			break
-	return out
+	return []
 
 
 func send_friend_request(to_char: Dictionary) -> Dictionary:
-	var me := active_char()
-	var my_id := str(me.get("id", ""))
-	var to_id := str(to_char.get("id", ""))
-	if my_id.is_empty() or to_id.is_empty():
-		return {"ok": false, "error": "Missing character"}
-	if my_id == to_id:
-		return {"ok": false, "error": "Cannot friend yourself"}
-	# Web socialEngine: blocked-by-target, already friends, pending either way.
-	var blocked: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/Block/filter",
-		{"query": {"blocker_id": to_id, "blocked_id": my_id}, "limit": 1}, true
-	)
-	if blocked.ok and typeof(blocked.data) == TYPE_ARRAY and not (blocked.data as Array).is_empty():
-		return {"ok": false, "error": "You cannot send a request to this player."}
-	for f in friendships:
-		if typeof(f) != TYPE_DICTIONARY:
-			continue
-		var parts: Variant = f.get("participant_ids", [])
-		if typeof(parts) == TYPE_ARRAY and to_id in (parts as Array):
-			return {"ok": false, "error": "You are already friends."}
-	for r in incoming_requests + outgoing_requests:
-		if typeof(r) != TYPE_DICTIONARY:
-			continue
-		var a := str(r.get("from_character_id", ""))
-		var b := str(r.get("to_character_id", ""))
-		if (a == my_id and b == to_id) or (a == to_id and b == my_id):
-			return {"ok": false, "error": "Request already pending"}
-	var res: Dictionary = await GameApiClient.request("POST", "/api/entities/FriendRequest", {
-		"from_character_id": my_id,
-		"to_character_id": to_id,
-		"from_name": str(me.get("name", "")),
-		"to_name": str(to_char.get("name", "")),
-		"status": "pending",
-	}, true)
-	# Notification is best-effort.
-	if res.ok:
-		await GameApiClient.request("POST", "/api/entities/AppNotification", {
-			"owner_id": to_id,
-			"type": "friend_request",
-			"title": str(me.get("name", "")),
-			"body": "sent you a friend request",
-			"related_id": str(res.data.get("id", "")) if typeof(res.data) == TYPE_DICTIONARY else "",
-			"read": false,
-		}, true)
-		await load_friends()
-	return res
+	var target := str(to_char.get("user_id", to_char.get("id", "")))
+	if target.is_empty():
+		return {"ok": false, "error": "Missing target user id"}
+	_set_mutating(true)
+	var res: Dictionary = await NakamaManager.invoke_rpc("friend_request_send", {
+		"target_user_id": target,
+		"request_id": _rid("frs"),
+	})
+	_set_mutating(false)
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "friend_request_send failed"))
+		social_error.emit(err)
+		return {"ok": false, "error": err}
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
+		_apply_social_state(data["state"])
+	friend_request_sent.emit()
+	return {"ok": true, "error": "", "data": data}
 
 
 func accept_friend(request: Dictionary) -> Dictionary:
-	var a := str(request.get("from_character_id", ""))
-	var b := str(request.get("to_character_id", ""))
-	var ids: Array = [a, b]
-	ids.sort()
-	var create: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/Friendship", {"participant_ids": ids}, true
-	)
-	if not create.ok:
-		return create
-	var upd: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/FriendRequest/%s" % str(request.get("id", "")).uri_encode(),
-		{"status": "accepted"}, true
-	)
-	# Notify the requester (web socialEngine.acceptRequest).
-	var me := active_char()
-	var me_id := str(me.get("id", ""))
-	var requester_id := a if a != me_id else b
-	if not requester_id.is_empty() and requester_id != me_id:
-		await GameApiClient.request("POST", "/api/entities/AppNotification", {
-			"owner_id": requester_id,
-			"type": "friend_accepted",
-			"title": str(me.get("name", "")),
-			"body": "accepted your friend request",
-			"related_id": me_id,
-			"read": false,
-		}, true)
-	await load_friends()
-	return upd if upd.ok else create
+	var target := str(request.get("user_id", request.get("from_character_id", request.get("id", ""))))
+	return await accept_friend_request(target)
+
+
+func accept_friend_request(target_user_id: String) -> Dictionary:
+	if target_user_id.is_empty():
+		return {"ok": false, "error": "Missing target"}
+	_set_mutating(true)
+	var res: Dictionary = await NakamaManager.invoke_rpc("friend_request_accept", {
+		"target_user_id": target_user_id,
+		"request_id": _rid("fra"),
+	})
+	_set_mutating(false)
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "accept failed"))
+		social_error.emit(err)
+		return {"ok": false, "error": err}
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
+		_apply_social_state(data["state"])
+	friend_request_accepted.emit()
+	return {"ok": true, "error": "", "data": data}
 
 
 func decline_friend(request: Dictionary) -> Dictionary:
-	var res: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/FriendRequest/%s" % str(request.get("id", "")).uri_encode(),
-		{"status": "declined"}, true
-	)
-	if res.ok:
-		await load_friends()
-	return res
+	var target := str(request.get("user_id", request.get("from_character_id", request.get("id", ""))))
+	return await decline_friend_request(target)
+
+
+func decline_friend_request(target_user_id: String) -> Dictionary:
+	if target_user_id.is_empty():
+		return {"ok": false, "error": "Missing target"}
+	_set_mutating(true)
+	var res: Dictionary = await NakamaManager.invoke_rpc("friend_request_decline", {
+		"target_user_id": target_user_id,
+		"request_id": _rid("frd"),
+	})
+	_set_mutating(false)
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "decline failed"))
+		social_error.emit(err)
+		return {"ok": false, "error": err}
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
+		_apply_social_state(data["state"])
+	friend_request_declined.emit()
+	return {"ok": true, "error": "", "data": data}
 
 
 func cancel_friend_request(request: Dictionary) -> Dictionary:
-	var res: Dictionary = await GameApiClient.request(
-		"DELETE", "/api/entities/FriendRequest/%s" % str(request.get("id", "")).uri_encode(),
-		null, true
-	)
-	if res.ok:
-		await load_friends()
-	return res
+	# Outgoing cancel = friend_remove / delete pending via remove.
+	var target := str(request.get("user_id", request.get("to_character_id", request.get("id", ""))))
+	return await remove_friend(target)
 
 
 func remove_friend(other_id: String) -> Dictionary:
-	var cid := char_id()
-	for f in friendships:
-		if typeof(f) != TYPE_DICTIONARY:
-			continue
-		var parts: Variant = f.get("participant_ids", [])
-		if typeof(parts) == TYPE_ARRAY and other_id in parts and cid in parts:
-			var res: Dictionary = await GameApiClient.request(
-				"DELETE", "/api/entities/Friendship/%s" % str(f.get("id", "")).uri_encode(), null, true
-			)
-			if res.ok:
-				await load_friends()
-			return res
-	return {"ok": false, "error": "Friendship not found"}
+	if other_id.is_empty():
+		return {"ok": false, "error": "Missing id"}
+	_set_mutating(true)
+	var res: Dictionary = await NakamaManager.invoke_rpc("friend_remove", {
+		"target_user_id": other_id,
+		"request_id": _rid("frm"),
+	})
+	_set_mutating(false)
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "remove failed"))
+		social_error.emit(err)
+		return {"ok": false, "error": err}
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
+		_apply_social_state(data["state"])
+	friend_removed.emit()
+	return {"ok": true, "error": "", "data": data}
 
 
 func friend_other_id(friendship: Dictionary) -> String:
-	var cid := char_id()
-	var parts: Variant = friendship.get("participant_ids", [])
-	if typeof(parts) != TYPE_ARRAY:
-		return ""
-	for p in parts:
-		if str(p) != cid:
-			return str(p)
-	return ""
+	return str(friendship.get("user_id", friendship.get("id", "")))
 
 
-# ── Blocks ────────────────────────────────────────────────────
+# ── Blocks (Nakama account-level) ─────────────────────────────
 
 func load_blocks() -> Array:
-	var cid := char_id()
-	blocks = []
-	if cid.is_empty():
-		return blocks
-	var res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/Block/filter",
-		{"query": {"blocker_id": cid}, "sort": "-created_date", "limit": 100}, true
-	)
-	blocks = res.data if res.ok and typeof(res.data) == TYPE_ARRAY else []
+	var res: Dictionary = await NakamaManager.invoke_rpc("block_list_get", {})
+	if bool(res.get("success", false)):
+		var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+		blocks = data.get("blocks", []) if typeof(data.get("blocks", [])) == TYPE_ARRAY else []
+	else:
+		blocks = []
 	return blocks
 
 
-func block_character(other_id: String, other_name: String = "") -> Dictionary:
-	var cid := char_id()
-	if cid.is_empty() or other_id.is_empty():
+func load_block_list() -> Array:
+	return await load_blocks()
+
+
+func block_user(target_user_id: String) -> Dictionary:
+	return await block_character(target_user_id, "")
+
+
+func block_character(other_id: String, _other_name: String = "") -> Dictionary:
+	if other_id.is_empty():
 		return {"ok": false, "error": "Missing ids"}
-	await remove_friend(other_id)
-	for r in incoming_requests.duplicate():
-		if typeof(r) == TYPE_DICTIONARY and str(r.get("from_character_id", "")) == other_id:
-			await decline_friend(r)
-	for r in outgoing_requests.duplicate():
-		if typeof(r) == TYPE_DICTIONARY and str(r.get("to_character_id", "")) == other_id:
-			await cancel_friend_request(r)
-	var res: Dictionary = await GameApiClient.request("POST", "/api/entities/Block", {
-		"blocker_id": cid,
-		"blocked_id": other_id,
-		"blocked_name": other_name if not other_name.is_empty() else other_id,
-	}, true)
-	if res.ok:
-		await load_blocks()
-		await load_friends()
-	return res
+	_set_mutating(true)
+	var res: Dictionary = await NakamaManager.invoke_rpc("user_block", {
+		"target_user_id": other_id,
+		"request_id": _rid("blk"),
+	})
+	_set_mutating(false)
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "block failed"))
+		social_error.emit(err)
+		return {"ok": false, "error": err}
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
+		_apply_social_state(data["state"])
+	user_blocked.emit()
+	return {"ok": true, "error": "", "data": data}
 
 
-func unblock(block_id: String) -> Dictionary:
-	var res: Dictionary = await GameApiClient.request(
-		"DELETE", "/api/entities/Block/%s" % block_id.uri_encode(), null, true
-	)
-	if res.ok:
-		await load_blocks()
-	return res
+func unblock_user(target_user_id: String) -> Dictionary:
+	return await unblock(target_user_id)
+
+
+func unblock(other_id: String) -> Dictionary:
+	if other_id.is_empty():
+		return {"ok": false, "error": "Missing id"}
+	_set_mutating(true)
+	var res: Dictionary = await NakamaManager.invoke_rpc("user_unblock", {
+		"target_user_id": other_id,
+		"request_id": _rid("ubk"),
+	})
+	_set_mutating(false)
+	if not bool(res.get("success", false)):
+		var err := str(res.get("error", "unblock failed"))
+		social_error.emit(err)
+		return {"ok": false, "error": err}
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
+		_apply_social_state(data["state"])
+	user_unblocked.emit()
+	return {"ok": true, "error": "", "data": data}
+
+
+func clear_account_social_cache() -> void:
+	friendships = []
+	incoming_requests = []
+	outgoing_requests = []
+	blocks = []
+	social_state = {}
+	friends_changed.emit()
 
 
 # ── Guild challenge (client entity CRUD; no claim payout yet) ─

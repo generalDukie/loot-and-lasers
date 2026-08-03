@@ -160,6 +160,8 @@ function checkNakamaModules() {
     "modules/shops.lua",
     "modules/combat.lua",
     "modules/arena.lua",
+    "modules/social.lua",
+    "modules/chat.lua",
     "modules/lib/auth.lua",
     "modules/lib/storage.lua",
     "modules/lib/validation.lua",
@@ -192,6 +194,8 @@ function checkNakamaModules() {
     "modules/shops.lua",
     "modules/combat.lua",
     "modules/arena.lua",
+    "modules/social.lua",
+    "modules/chat.lua",
   ];
   for (const rel of serviceFiles) {
     const src = read(rel);
@@ -241,6 +245,19 @@ function checkRpcRegistration() {
     arena_get_rankings: true,
     arena_challenge: true,
     arena_get_history: true,
+    social_get_state: true,
+    friend_request_send: true,
+    friend_request_accept: true,
+    friend_request_decline: true,
+    friend_remove: true,
+    user_block: true,
+    user_unblock: true,
+    block_list_get: true,
+    chat_get_global_history: true,
+    chat_get_dm_history: true,
+    chat_mark_read: true,
+    chat_send_global: true,
+    chat_send_dm: true,
   };
   const forbidden = {
     wallet_credit: true,
@@ -368,6 +385,11 @@ function checkDocs() {
     "arena_get_rankings",
     "arena_challenge",
     "arena_get_history",
+    "social_get_state",
+    "friend_request_send",
+    "chat_send_global",
+    "chat_send_dm",
+    "chat_get_global_history",
   ];
   for (const id of requiredMentions) {
     if (!rpcDoc.includes(id)) {
@@ -430,6 +452,14 @@ function checkDocs() {
   }
   if (!/Phase 18|arena_challenge|Arena/i.test(arch)) {
     fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 18 arena note");
+    return;
+  }
+  if (!exists("docs/PHASE19_SOCIAL_CHAT.md")) {
+    fail(cat, "Missing docs/PHASE19_SOCIAL_CHAT.md");
+    return;
+  }
+  if (!/Phase 19|social\.lua|Friends, presence/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 19 social note");
     return;
   }
   if (!rpcDoc.includes("dev_loot_test") && !/Phase 13/i.test(rpcDoc)) {

@@ -39,6 +39,10 @@ func set_status(status: String) -> void:
 func ping() -> void:
 	if _busy:
 		return
+	# Nakama status presence when socket is up (account-level).
+	if RealtimeManager.is_nakama_connected() and NakamaManager.socket != null:
+		var status_payload := {"status": current_status}
+		NakamaManager.socket.update_status_async(JSON.stringify(status_payload))
 	var c: Dictionary = GameManager.active_character
 	var cid := str(c.get("id", ""))
 	if cid.is_empty() or AuthManager.access_token.is_empty():

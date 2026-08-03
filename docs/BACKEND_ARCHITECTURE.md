@@ -118,3 +118,9 @@ Does not implement Arena, Dungeons, Bosses, Guild Wars, or PvE modes. See `docs/
 Combat via CombatService; Elo rating + lower-ranked gain penalties; custom `arena_index` (character-safe).
 Godot `ArenaManager` uses Nakama; local combat settlement disabled. No Arena rewards yet.
 See `docs/PHASE18_ARENA.md`.
+
+## Social and chat (Phase 19)
+
+`modules/social.lua` + `modules/chat.lua` — account-level friends/blocks and global/DM chat.
+Native Nakama friends + channel APIs; RealtimeManager owns one Nakama socket.
+Mail and guild remain on Node. See `docs/PHASE19_SOCIAL_CHAT.md`.

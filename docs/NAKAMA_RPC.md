@@ -332,3 +332,20 @@ Payload: `{ character_id?, opponent_source, request_id, class?, level? }`. Clien
 | `arena_get_history` | Battle history |
 
 See `docs/PHASE18_ARENA.md`.
+
+## Phase 19 — Friends, presence, and chat
+
+| RPC | Purpose |
+|-----|---------|
+| `social_get_state` | Friends, requests, blocks |
+| `friend_request_send` | Send request |
+| `friend_request_accept` | Accept request |
+| `friend_request_decline` | Decline request |
+| `friend_remove` | Remove friend / cancel outgoing |
+| `user_block` / `user_unblock` | Account block |
+| `block_list_get` | List blocks |
+| `chat_send_global` / `chat_send_dm` | Authoritative send |
+| `chat_get_global_history` / `chat_get_dm_history` | Bounded history |
+| `chat_mark_read` | DM read state |
+
+See `docs/PHASE19_SOCIAL_CHAT.md`.

@@ -25,6 +25,11 @@ Schema history for Nakama storage collections introduced by backend phases.
 | 18 | `arena_index` | character id | system UUID | Public ranking index (server-written) |
 | 18 | `arena_transactions` | `request_id` | account | Challenge/refresh idempotency |
 | 18 | `arena_history` | `battle_id` | account | Per-account copies of battle receipts |
+| 19 | `social_transactions` | `request_id` | account | Friend/block idempotency |
+| 19 | `social_rate_limits` | `friend_requests` | account | Friend request rate tracking |
+| 19 | `chat_transactions` | `request_id` | account | Chat send idempotency |
+| 19 | `chat_rate_limits` | `global` / `dm` | account | Chat rate tracking |
+| 19 | `chat_read_state` | conversation_id | account | Per-user DM read/unread |
 
 Permissions for Phase 10 system objects: read `0`, write `0` (runtime/RPC only).
 

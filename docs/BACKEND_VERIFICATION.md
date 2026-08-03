@@ -79,6 +79,10 @@ Do not install Git hooks unless the user asks.
 
 `verify_arena_service.mjs` asserts Arena RPCs, CombatService wiring, server rating + lower-rank penalty, idempotent challenges, anti-farm/cooldown, rankings bounds, ArenaManager Nakama path, and disabled local combat settlement.
 
+## Phase 19 checks
+
+`verify_social_chat.mjs` asserts social/chat modules and RPCs, self-friend/block rejection, DM block enforcement, rate/history bounds, deterministic conversation IDs, RealtimeManager single Nakama socket, and manager wiring.
+
 ## Troubleshooting
 
 | Symptom | Fix |

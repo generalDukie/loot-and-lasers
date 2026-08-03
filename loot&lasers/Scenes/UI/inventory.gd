@@ -150,7 +150,8 @@ func _refresh() -> void:
 	await MissionManager.refresh_character()
 	await InventoryManager.list_pending_loot()
 	var ch: Dictionary = GameManager.active_character
-	var res: Dictionary = await AuthManager.list_items()
+	# Phase 4: InventoryManager loads Nakama read-only snapshot + Node Items for rendering.
+	var res: Dictionary = await InventoryManager.list_character_items()
 	_busy = false
 	if not res.ok:
 		_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))

@@ -193,3 +193,21 @@ if not upd.success:
 
 Allowlisted update fields: `display_name`, `selected_character_id`, `appearance`, `avatar_portrait`.  
 `account_id` / timestamps are server-owned. See `docs/PHASE3_PROFILE.md`.
+
+## Phase 4 — Read-only inventory RPC
+
+Managed by `InventoryManager`. Storage: collection `inventories`, key = character id. **No write RPCs.**
+
+| RPC | Purpose |
+|-----|---------|
+| `inventory_get` | Load character inventory; missing → empty slots |
+
+```gdscript
+var res: Dictionary = await InventoryManager.load_inventory()
+if res.success:
+	print(res.data.slots.size())
+# UI gear list (Node SoT + Nakama snapshot):
+var items: Dictionary = await InventoryManager.list_character_items()
+```
+
+See `docs/PHASE4_INVENTORY.md`.

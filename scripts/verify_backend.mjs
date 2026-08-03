@@ -89,6 +89,7 @@ function checkGodotIntegrity() {
     "InventoryManager=",
     "EquipmentManager=",
     "MissionManager=",
+    "RemoteConfigManager=",
     'Nakama="',
   ];
   for (const r of required) {
@@ -153,6 +154,7 @@ function checkNakamaModules() {
     "modules/equipment.lua",
     "modules/wallet.lua",
     "modules/missions.lua",
+    "modules/config.lua",
     "modules/lib/auth.lua",
     "modules/lib/storage.lua",
     "modules/lib/validation.lua",
@@ -176,6 +178,7 @@ function checkNakamaModules() {
     "modules/wallet.lua",
     "modules/missions.lua",
     "modules/profile.lua",
+    "modules/config.lua",
   ];
   for (const rel of serviceFiles) {
     const src = read(rel);
@@ -202,12 +205,19 @@ function checkRpcRegistration() {
     missions_refresh: true,
     mission_start: true,
     mission_status: true,
+    config_get: true,
   };
   const forbidden = {
     wallet_credit: true,
     wallet_debit: true,
     mission_claim: true,
     mission_reward: true,
+    config_set: true,
+    config_update: true,
+    feature_flag_set: true,
+    feature_flag_enable: true,
+    feature_flag_disable: true,
+    maintenance_set: true,
   };
 
   const luaFiles = listLuaModules(path.join(ROOT, "modules"));
@@ -294,6 +304,7 @@ function checkDocs() {
     "missions_get",
     "mission_start",
     "mission_status",
+    "config_get",
   ];
   for (const id of requiredMentions) {
     if (!rpcDoc.includes(id)) {
@@ -302,8 +313,12 @@ function checkDocs() {
     }
   }
   const arch = read("docs/BACKEND_ARCHITECTURE.md");
-  if (!/Phase 8|sole|authoritative mission/i.test(arch)) {
-    fail(cat, "BACKEND_ARCHITECTURE.md missing mission authority note");
+  if (!/Phase 10|remote config|feature flag/i.test(arch)) {
+    fail(cat, "BACKEND_ARCHITECTURE.md missing Phase 10 remote config note");
+    return;
+  }
+  if (!exists("docs/PHASE10_REMOTE_CONFIG.md")) {
+    fail(cat, "Missing docs/PHASE10_REMOTE_CONFIG.md");
     return;
   }
   pass(cat, "phase docs present; RPCs mentioned");

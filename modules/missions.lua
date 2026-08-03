@@ -18,13 +18,32 @@ local validation = require("lib.validation")
 local time = require("lib.time")
 local ids = require("lib.ids")
 local logging = require("lib.logging")
+local remote_config = require("config")
 
 local BOARD_COLLECTION = "mission_boards"
 local ACTIVE_COLLECTION = "active_missions"
 
 local MAX_CHARACTER_ID = auth.MAX_CHARACTER_ID
-local BOARD_SIZE = 3
-local REFRESH_COOLDOWN_SEC = 15
+-- Hardcoded fallbacks — remote config may override when valid; defaults preserve live behavior.
+local BOARD_SIZE_DEFAULT = 3
+local REFRESH_COOLDOWN_DEFAULT = 15
+
+local function board_size()
+  local v = remote_config.get_config_value("missions", "board_size")
+  if type(v) == "number" and v == math.floor(v) and v >= 1 and v <= 10 then
+    return v
+  end
+  return BOARD_SIZE_DEFAULT
+end
+
+local function refresh_cooldown_sec()
+  local v = remote_config.get_config_value("missions", "free_refresh_cooldown_seconds")
+  if type(v) == "number" and v == math.floor(v) and v >= 0 and v <= 86400 then
+    return v
+  end
+  return REFRESH_COOLDOWN_DEFAULT
+end
+
 local MIN_DURATION = 15
 local MAX_DURATION = 1200
 local MAX_WRITE_RETRIES = 5
@@ -379,7 +398,7 @@ local function generate_board_missions(character_id, level, highest_sector)
   local shuffled = shuffle_copy(filtered)
   local missions = empty_array()
   local used_patrons = {}
-  local count = math.min(BOARD_SIZE, #shuffled)
+  local count = math.min(board_size(), #shuffled)
   for i = 1, count do
     local m = build_mission(character_id, shuffled[i], level)
     -- Prefer unique patrons when possible.
@@ -501,7 +520,7 @@ local function ensure_board(user_id, character_id, level, highest_sector, force_
 
   if force_refresh and board ~= nil and type(board) == "table" then
     local last = tonumber(board.last_refresh_at) or 0
-    if last > 0 and (now - last) < REFRESH_COOLDOWN_SEC then
+    if last > 0 and (now - last) < refresh_cooldown_sec() then
       return nil, nil, "Refresh cooldown active"
     end
   end
@@ -522,7 +541,7 @@ local function ensure_board(user_id, character_id, level, highest_sector, force_
     local cur, ver = read_board(user_id, character_id)
     if force_refresh and cur ~= nil then
       local last = tonumber(cur.last_refresh_at) or 0
-      if last > 0 and (now_unix() - last) < REFRESH_COOLDOWN_SEC then
+      if last > 0 and (now_unix() - last) < refresh_cooldown_sec() then
         return nil, nil, "Refresh cooldown active"
       end
     end
@@ -553,7 +572,7 @@ local function public_board(board)
     missions = missions,
     generated_at = board.generated_at or 0,
     last_refresh_at = board.last_refresh_at or 0,
-    refresh_cooldown_seconds = REFRESH_COOLDOWN_SEC,
+    refresh_cooldown_seconds = refresh_cooldown_sec(),
   }
 end
 

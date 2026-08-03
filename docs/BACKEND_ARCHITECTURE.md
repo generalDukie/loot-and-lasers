@@ -21,6 +21,7 @@ Loot & Lasers uses a **dual stack** during the Nakama migration:
 | 7 | Missions core | `missions_get`, `missions_refresh`, `mission_start`, `mission_status` | board/active; **no rewards** |
 | 8 | Mission authority | same RPCs | **Nakama is sole mission SoT** |
 | 9 | Shared runtime + verification | `modules/lib/*`, `npm run verify:backend` | infrastructure only |
+| 10 | Remote config + feature flags | `config_get` | system storage; mutations internal-only |
 
 ## Shared library
 
@@ -65,3 +66,9 @@ Rules:
 Collections: `mission_boards/<character_id>`, `active_missions/<character_id>`.
 
 See `docs/PHASE7_MISSIONS.md` and `docs/PHASE8_MISSION_MIGRATION.md`.
+
+## Remote config (Phase 10)
+
+Server-authoritative configuration namespaces (`global`, `missions`, `client_ui`) and feature flags.
+Public RPC: `config_get` (client-visible only). Mutations are internal helpers — not registered.
+Environment: `LOOT_ENVIRONMENT` on Nakama runtime. See `docs/PHASE10_REMOTE_CONFIG.md` and `docs/STORAGE_MIGRATIONS.md`.

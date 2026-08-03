@@ -256,3 +256,11 @@ Nakama is the **sole** mission source of truth for Godot. `MissionManager.ensure
 ## Phase 9 — Shared library
 
 Service modules may `require("lib.auth")`, `lib.responses`, `lib.validation`, etc. Response envelopes keep `status_code` for Godot and add stable `code` strings. See `docs/BACKEND_SHARED_LIBRARY.md` and `docs/BACKEND_VERIFICATION.md` (`npm run verify:backend`).
+
+## Phase 10 — Remote config
+
+| RPC | Purpose |
+|-----|---------|
+| `config_get` | Client-visible namespaces + feature flags |
+
+Managed by `RemoteConfigManager`. Storage: `remote_config/<namespace>`, `feature_flags/<flag_id>` (system owner). **No** public mutation RPCs. See `docs/PHASE10_REMOTE_CONFIG.md`.

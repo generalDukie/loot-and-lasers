@@ -72,3 +72,4 @@ docker-data/
 # (runtime path is Godot user:// outside the project tree)
 **/nakama_session.cfg
 **/nakama_device_id.txt
+**/remote_config_cache.json

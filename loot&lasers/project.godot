@@ -53,6 +53,7 @@ NakamaManager="*res://Autoload/NakamaManager.gd"
 ProfileManager="*res://Autoload/ProfileManager.gd"
 CurrencyManager="*res://Autoload/CurrencyManager.gd"
 EquipmentManager="*res://Autoload/EquipmentManager.gd"
+RemoteConfigManager="*res://Autoload/RemoteConfigManager.gd"
 
 [display]
 

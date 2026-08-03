@@ -299,8 +299,10 @@ Client must not submit item ID, rarity, affixes, item level, or seed. See `docs/
 | RPC | Purpose |
 |-----|---------|
 | `mission_claim` | Claim a completed mission; server builds rewards |
+| `mission_skip` | Skip remaining wait (snaps to `complete`; Nova spent via Node DebitNovaCrystals until wallet owns premium) |
 
-Payload: `{ character_id?, mission_id, request_id }`. See `docs/PHASE14_MISSION_REWARDS.md`.
+Payload claim: `{ character_id?, mission_id, request_id }`.
+Payload skip: `{ character_id?, mission_id, request_id }`. See `docs/PHASE14_MISSION_REWARDS.md`.
 
 ## Phase 15 — Secure shops
 

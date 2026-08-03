@@ -67,9 +67,42 @@ Do **not** put CockroachDB passwords, console passwords, session encryption keys
 
 Debug / editor builds show a top-left label:
 
-`NAKAMA STAGING · http://178.156.210.186:7350`
+```
+NAKAMA STAGING · http://178.156.210.186:7350
+NODE http://178.156.210.186:8787
+```
 
 (or `LOCAL` for local). Release exports without debug features hide the badge.
+
+**Important:** Godot login / register use **Nakama** (`:7350`) only.  
+The Node API (`:8787`) is legacy gameplay (characters/economy) for the web app and remaining Godot entity calls — not account authentication.
+
+## Shared login for remote friends (Nakama auth)
+
+Friends set staging Nakama and create accounts with email/password in the Godot login UI:
+
+```powershell
+$env:LOOT_NAKAMA_ENV = "staging"
+$env:NAKAMA_SOCKET_SERVER_KEY = "<Hetzner NAKAMA_SOCKET_SERVER_KEY>"
+```
+
+Badge should show `NAKAMA STAGING · http://178.156.210.186:7350 (auth)`.
+
+No `LOOT_NODE_API_URL` is required for signup/login.
+
+### OTP / email
+
+Godot no longer uses Node OTP. Nakama `authenticate_email` creates or logs in immediately (password ≥ 8 characters).
+
+### Staging Node URL (gameplay only)
+
+Priority for optional Node gameplay base URL:
+
+1. `LOOT_NODE_API_URL`
+2. `nakama_secrets.cfg` → `[staging] node_api_base_url=`
+3. Default for staging: `http://178.156.210.186:8787`
+
+This does **not** affect Godot authentication.
 
 ## Session separation
 

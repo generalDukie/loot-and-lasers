@@ -27,6 +27,7 @@ var _progress_fill: ColorRect
 var _rocket: Label
 var _overlay_timer: Label
 var _tick: Timer
+var _status_poll: Timer
 var _busy := false
 var _claimed := false
 var _ready_fx: Tween
@@ -270,6 +271,12 @@ func _build() -> void:
 	_tick.timeout.connect(_refresh_timer)
 	add_child(_tick)
 
+	# Authoritative status poll — separate from the local countdown tick.
+	_status_poll = Timer.new()
+	_status_poll.wait_time = 5.0
+	_status_poll.timeout.connect(_poll_status)
+	add_child(_status_poll)
+
 
 func _boot() -> void:
 	_set_status("Restoring mission…", true)
@@ -284,6 +291,7 @@ func _boot() -> void:
 	_populate()
 	_refresh_timer()
 	_tick.start()
+	_status_poll.start()
 
 
 func _populate() -> void:
@@ -311,11 +319,16 @@ func _goofy_for_progress(progress: float) -> String:
 	return current
 
 
+func _poll_status() -> void:
+	if _claimed or _busy:
+		return
+	await MissionManager.refresh_mission_status()
+	_refresh_timer()
+
+
 func _refresh_timer() -> void:
 	if _claimed or _busy:
 		return
-	# Authoritative status poll (MissionManager rate-limits internally).
-	await MissionManager.refresh_mission_status()
 	if MissionManager.active_mission_missing:
 		_stop_ready_fx()
 		_timer_label.text = "LOST"
@@ -346,7 +359,7 @@ func _refresh_timer() -> void:
 			"panel",
 			ClientUi.painted_panel_style(Color(ClientUi.SUCCESS, 0.08), Color(ClientUi.SUCCESS, 0.5), 10, 1)
 		)
-		_set_status("Mission complete — fight the return encounter to claim.", false)
+		_set_status("Mission complete — claim your rewards.", false)
 	else:
 		_stop_ready_fx()
 		_claim_btn.visible = false
@@ -414,6 +427,8 @@ func _on_fight() -> void:
 	if MissionManager.active_mission_missing:
 		await _recall_lost_mission()
 		return
+	# Force a status sync so the server flips active → complete before claim.
+	await MissionManager.refresh_mission_status("", true)
 	if not MissionManager.is_mission_finished():
 		_set_status("Mission not finished yet — wait for the timer, or skip with Nova Crystals.", true)
 		_refresh_timer()
@@ -433,15 +448,30 @@ func _on_fight() -> void:
 			return
 		_claimed = true
 		_tick.stop()
-		var gains: Dictionary = ack.get("data", {}).get("gains", {}) if typeof(ack.get("data", null)) == TYPE_DICTIONARY else {}
+		if is_instance_valid(_status_poll):
+			_status_poll.stop()
+		var gains: Dictionary = {}
+		var ack_data: Variant = ack.get("data", {})
+		if typeof(ack_data) == TYPE_DICTIONARY:
+			var g: Variant = (ack_data as Dictionary).get("gains", {})
+			if typeof(g) == TYPE_DICTIONARY:
+				gains = g
 		var sd := int(gains.get("stardust", 0))
+		var loot_n := 0
+		var reward: Variant = (ack_data as Dictionary).get("reward", {}) if typeof(ack_data) == TYPE_DICTIONARY else {}
+		if typeof(reward) == TYPE_DICTIONARY:
+			var items: Variant = (reward as Dictionary).get("items", [])
+			if typeof(items) == TYPE_ARRAY:
+				loot_n = (items as Array).size()
 		var msg := "Mission claimed"
 		if sd > 0:
 			msg = "Mission claimed — +%d Stardust" % sd
+		if loot_n > 0:
+			msg += " · +%d loot" % loot_n
 		if str(gains.get("experience_status", "")) == "unsupported":
 			msg += " (XP pending Progression)"
 		_set_status(msg, false)
-		await get_tree().create_timer(0.8).timeout
+		await get_tree().create_timer(1.4).timeout
 		GameManager.go_cantina()
 		return
 	GameManager.go_mission_combat()
@@ -455,6 +485,8 @@ func _recall_lost_mission() -> void:
 		_busy = false
 		_claimed = true
 		_tick.stop()
+		if is_instance_valid(_status_poll):
+			_status_poll.stop()
 		GameManager.go_cantina()
 		return
 	await MissionManager.fetch_active_mission()
@@ -472,6 +504,8 @@ func _recall_lost_mission() -> void:
 		return
 	_claimed = true
 	_tick.stop()
+	if is_instance_valid(_status_poll):
+		_status_poll.stop()
 	GameManager.go_cantina()
 
 
@@ -494,9 +528,9 @@ func _on_skip() -> void:
 	var res: Dictionary = await MissionManager.skip_mission()
 	if not res.ok:
 		var err := str(res.get("error", "Skip failed"))
-		# Already completed (e.g. prior skip left future end_time) — open the fight.
-		if err.to_lower().find("not in progress") >= 0:
-			MissionManager.active_mission["status"] = "completed"
+		var low := err.to_lower()
+		# Already completed — open the claim path.
+		if low.find("not in progress") >= 0 or low.find("not active") >= 0 or low.find("already complete") >= 0:
 			_busy = false
 			await _on_fight()
 			return
@@ -504,19 +538,7 @@ func _on_skip() -> void:
 		_set_status(err, true)
 		_refresh_timer()
 		return
-	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
-	if bool(data.get("mission_missing", false)):
-		_busy = false
-		_set_status("Mission record lost — ship recalled. Returning to the cantina…", true)
-		await get_tree().create_timer(1.0).timeout
-		GameManager.go_cantina()
-		return
-	_set_status("Preparing encounter…", true)
-	# Character was just patched by SkipMission — skip the redundant refresh round-trip.
-	var prep: Dictionary = await MissionManager.prepare_combat(false)
-	if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
-		_busy = false
-		_set_status("Skip applied, but the encounter failed to load. Tap FIGHT FOR REWARDS.", true)
-		_refresh_timer()
-		return
-	GameManager.go_mission_combat()
+	_busy = false
+	_set_status("Wait skipped — claim your rewards.", false)
+	_refresh_timer()
+	await _on_fight()

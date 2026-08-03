@@ -21,6 +21,8 @@ const PROJECT_SECRETS_PATH := "res://Config/nakama_secrets.cfg"
 const USER_SECRETS_PATH := "user://nakama_secrets.cfg"
 
 ## Public connection endpoints only — no DB/console/SSH secrets here.
+## node_api_base_url is the legacy Node gameplay API (characters/economy) — NOT Godot auth.
+## Godot login/register use Nakama host:port below (7350).
 const ENVIRONMENTS := {
 	ENV_LOCAL: {
 		"scheme": "http",
@@ -28,6 +30,7 @@ const ENVIRONMENTS := {
 		"port": 7350,
 		"socket_scheme": "ws",
 		"server_key": "defaultkey",
+		"node_api_base_url": "http://127.0.0.1:8787",
 		"auth_timeout_sec": 5.0,
 		"client_timeout_sec": 2,
 	},
@@ -38,6 +41,8 @@ const ENVIRONMENTS := {
 		"socket_scheme": "ws",
 		# Filled at runtime from env / secrets file — never hardcode staging secrets.
 		"server_key": "",
+		# Legacy Node gameplay only (not Godot login/register).
+		"node_api_base_url": "http://178.156.210.186:8787",
 		"auth_timeout_sec": 15.0,
 		"client_timeout_sec": 10,
 	},
@@ -77,9 +82,22 @@ func get_public_config() -> Dictionary:
 		"host": str(_resolved.get("host", "")),
 		"port": int(_resolved.get("port", 0)),
 		"socket_scheme": str(_resolved.get("socket_scheme", "ws")),
+		"node_api_base_url": get_node_api_base_url(),
 		"server_key_configured": not str(_resolved.get("server_key", "")).is_empty(),
 		"server_key_fingerprint": _key_fingerprint(str(_resolved.get("server_key", ""))),
 	}
+
+
+## Legacy Node gameplay API base URL (characters/functions). Godot auth does not use this.
+## Priority: LOOT_NODE_API_URL → secrets node_api_base_url → env default.
+func get_node_api_base_url() -> String:
+	var from_os := OS.get_environment("LOOT_NODE_API_URL").strip_edges()
+	if not from_os.is_empty():
+		return from_os.rstrip("/")
+	var from_secret := _read_secret_value("node_api_base_url")
+	if not from_secret.is_empty():
+		return from_secret.rstrip("/")
+	return str(_resolved.get("node_api_base_url", "http://127.0.0.1:8787")).rstrip("/")
 
 
 func get_scheme() -> String:
@@ -187,17 +205,21 @@ func _load_staging_server_key() -> String:
 		from_os = OS.get_environment("LOOT_NAKAMA_SERVER_KEY").strip_edges()
 	if not from_os.is_empty():
 		return from_os
-	var from_project := _read_secret_key(PROJECT_SECRETS_PATH)
+	return _read_secret_value("server_key")
+
+
+func _read_secret_value(field: String) -> String:
+	var from_project := _read_secret_field(PROJECT_SECRETS_PATH, field)
 	if not from_project.is_empty():
 		return from_project
-	return _read_secret_key(USER_SECRETS_PATH)
+	return _read_secret_field(USER_SECRETS_PATH, field)
 
 
-func _read_secret_key(path: String) -> String:
+func _read_secret_field(path: String, field: String) -> String:
 	var cfg := ConfigFile.new()
 	var load_err := cfg.load(path)
 	if load_err == OK:
-		var from_cfg := str(cfg.get_value("staging", "server_key", "")).strip_edges()
+		var from_cfg := str(cfg.get_value("staging", field, "")).strip_edges()
 		# ConfigFile may keep surrounding quotes on some values.
 		if from_cfg.begins_with("\"") and from_cfg.ends_with("\"") and from_cfg.length() >= 2:
 			from_cfg = from_cfg.substr(1, from_cfg.length() - 2)
@@ -209,11 +231,14 @@ func _read_secret_key(path: String) -> String:
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		return ""
+	var prefix := "%s" % field
 	while not f.eof_reached():
 		var line := f.get_line().strip_edges()
-		if line.begins_with("server_key"):
+		if line.begins_with(prefix) and line.contains("="):
 			var parts := line.split("=", false, 1)
 			if parts.size() < 2:
+				continue
+			if str(parts[0]).strip_edges() != field:
 				continue
 			var v := str(parts[1]).strip_edges()
 			if v.begins_with("\"") and v.ends_with("\"") and v.length() >= 2:
@@ -234,12 +259,13 @@ func _key_fingerprint(key: String) -> String:
 func _log_selection() -> void:
 	var pub := get_public_config()
 	print(
-		"[BackendEnvironment] env=%s %s://%s:%s key=%s"
+		"[BackendEnvironment] env=%s nakama=%s://%s:%s node=%s key=%s"
 		% [
 			pub.get("environment", ""),
 			pub.get("scheme", ""),
 			pub.get("host", ""),
 			pub.get("port", 0),
+			pub.get("node_api_base_url", ""),
 			pub.get("server_key_fingerprint", ""),
 		]
 	)

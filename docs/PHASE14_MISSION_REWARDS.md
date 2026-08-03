@@ -21,8 +21,11 @@ Cantina / mission_run
 | RPC | Payload |
 |-----|---------|
 | `mission_claim` | `{ character_id?, mission_id, request_id }` |
+| `mission_skip` | `{ character_id?, mission_id, request_id }` — snap to `complete` |
 
-Client must **not** submit amounts, currency, items, rarity, XP, loot table, seed, status, or `won`.
+Client must **not** submit amounts, currency, items, rarity, XP, loot table, seed, status, `won`, or skip cost.
+
+Skip cost is computed client-side for display (`max(1, ceil(remaining_minutes * 5))`). Godot debits Character Nova via Node `DebitNovaCrystals`, then calls `mission_skip` to complete the timer. Wallet Nova debit lands when premium fully migrates.
 
 ## State transitions
 

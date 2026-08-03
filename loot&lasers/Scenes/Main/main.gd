@@ -1,6 +1,6 @@
 extends Control
-## Boot router: minimal splash -> fast health probe -> login/hub.
-## Nakama session warm-up runs in the background so splash never stalls on it.
+## Boot router: splash → restore Nakama email session → login / character / hub.
+## Godot authentication uses Nakama :7350 only (never Node :8787).
 
 var _status: Label
 
@@ -60,44 +60,41 @@ func _set_status(text: String) -> void:
 func _boot() -> void:
 	_set_status("Starting...")
 
-	# Sync client create only — full Nakama auth is backgrounded.
 	var init_res: Dictionary = NakamaManager.initialize_client()
 	var diag: Dictionary = NakamaManager.get_connection_diagnostics()
 	print(
-		"[NakamaBoot] env=%s host=%s:%s client=%s key=%s"
+		"[NakamaBoot] env=%s host=%s:%s client=%s key=%s auth_method=%s"
 		% [
 			diag.get("environment", ""),
 			diag.get("host", ""),
 			diag.get("port", ""),
 			diag.get("client_created", false),
 			diag.get("server_key_fingerprint", ""),
+			diag.get("auth_method", ""),
 		]
 	)
 	if not bool(init_res.get("success", false)):
 		print("[NakamaBoot] client init failed — %s" % str(init_res.get("error", "unknown")))
-	# call_deferred so we do not invoke a coroutine without await (parse/analyzer error).
-	call_deferred("_nakama_warm_worker")
-
-	_set_status("Connecting...")
-	var health: Dictionary = await GameApiClient.health()
-	if not health.ok:
-		push_warning("API health check failed: %s" % health.get("error", "unknown"))
-
-	if not AuthManager.is_logged_in():
 		_set_status("Ready")
 		GameManager.go_login()
 		return
 
-	if not health.ok:
-		_set_status("API offline — opening login...")
-		AuthManager.clear_session()
+	_set_status("Restoring session...")
+	var nakama_res: Dictionary = await AuthManager.ensure_nakama_session()
+	if not nakama_res.get("success", false):
+		_set_status("Ready")
 		GameManager.go_login()
 		return
 
-	_set_status("Restoring session...")
+	print("[NakamaBoot] authenticated user_id=%s method=%s" % [
+		str(nakama_res.get("data", {}).get("user_id", "")),
+		str(nakama_res.get("data", {}).get("auth_method", "")),
+	])
+
+	_set_status("Loading profile...")
 	var me: Dictionary = await AuthManager.fetch_me()
 	if not me.ok:
-		AuthManager.clear_session()
+		await AuthManager.logout()
 		GameManager.go_login()
 		return
 
@@ -110,20 +107,11 @@ func _boot() -> void:
 	var char_res: Dictionary = await AuthManager.get_character(active_id)
 	if char_res.ok and typeof(char_res.data) == TYPE_DICTIONARY:
 		GameManager.active_character = char_res.data
-		# Phase 8: resume from Nakama mission authority (not Node active_mission_id).
 		await MissionManager.fetch_active_mission()
 		if MissionManager.has_active_mission():
 			GameManager.go_mission_run()
 		else:
 			GameManager.go_hub(char_res.data)
 	else:
+		# Nakama auth OK; Node character load optional.
 		GameManager.go_character_select()
-
-
-## Background Nakama warm-up. Logs only; does not gate splash -> login.
-func _nakama_warm_worker() -> void:
-	var nakama_res: Dictionary = await AuthManager.ensure_nakama_session()
-	if nakama_res.get("success", false):
-		print("[NakamaBoot] authenticated user_id=%s" % str(nakama_res.get("data", {}).get("user_id", "")))
-	else:
-		print("[NakamaBoot] authentication failed — %s" % str(nakama_res.get("error", "unknown")))

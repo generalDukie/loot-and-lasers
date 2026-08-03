@@ -84,6 +84,7 @@ func get_connection_diagnostics() -> Dictionary:
 		"client_created": client != null,
 		"client_env_id": _client_env_id,
 		"authenticated": is_authenticated(),
+		"auth_method": get_auth_method(),
 		"user_id": session.user_id if session != null and is_authenticated() else "",
 		"socket_connected": socket != null and socket.is_connected_to_host(),
 		"session_path": BackendEnvironment.get_session_path(),
@@ -108,10 +109,12 @@ func run_connection_smoke_test() -> Dictionary:
 	if not bool(init_res.get("success", false)):
 		return {"success": false, "steps": steps, "diagnostics": get_connection_diagnostics()}
 
-	var auth_res: Dictionary = await ensure_authenticated()
+	# Smoke test uses device auth only — email login/register is the Godot UI path.
+	var auth_res: Dictionary = await authenticate_device()
 	steps.append({
 		"step": "authenticate",
 		"ok": bool(auth_res.get("success", false)),
+		"method": "device",
 		"user_id": str(auth_res.get("data", {}).get("user_id", "")),
 		"error": str(auth_res.get("error", "")),
 	})
@@ -161,6 +164,126 @@ func is_authenticated() -> bool:
 		and not session.is_expired()
 
 
+## Last successful auth method for this env session: email | device | restored | "".
+func get_auth_method() -> String:
+	return _load_auth_method()
+
+
+## Godot login / register — sole email/password path (Nakama :7350, never Node :8787).
+## create=true → register; create=false → login existing account.
+func authenticate_email(email: String, password: String, create: bool = false, username: String = "") -> Dictionary:
+	if _auth_busy:
+		return _fail("Authentication already in progress")
+	var clean_email := email.strip_edges().to_lower()
+	if clean_email.is_empty() or password.is_empty():
+		return _fail("Email and password are required")
+	var init_res: Dictionary = initialize_client()
+	if not bool(init_res.get("success", false)):
+		authentication_failed.emit(str(init_res.get("error", "client init failed")))
+		return init_res
+	if client == null:
+		return _fail("Nakama client not initialized")
+
+	_auth_busy = true
+	_auth_gen += 1
+	var gen := _auth_gen
+	var timeout_sec := BackendEnvironment.get_auth_timeout_sec()
+	var uname = username.strip_edges() if not username.strip_edges().is_empty() else null
+	var result: NakamaSession = await _authenticate_email_timed(clean_email, password, create, uname, timeout_sec, gen)
+	if gen != _auth_gen:
+		return _fail("Authentication superseded")
+	_auth_busy = false
+
+	var method := "email_register" if create else "email_login"
+	var diag := get_connection_diagnostics()
+	if result == null:
+		var timeout_err := "Nakama unreachable or timed out (%ss) at %s://%s:%s" % [
+			str(timeout_sec), diag.get("scheme", ""), diag.get("host", ""), diag.get("port", 0)
+		]
+		print("[NakamaManager] ERROR: %s failed — %s" % [method, timeout_err])
+		authentication_failed.emit(timeout_err)
+		return _fail(timeout_err)
+	if result.is_exception():
+		var err := _friendly_email_auth_error(_exception_message(result), create)
+		print("[NakamaManager] ERROR: %s failed — %s (env=%s host=%s:%s)" % [
+			method, err, diag.get("environment", ""), diag.get("host", ""), diag.get("port", 0)
+		])
+		authentication_failed.emit(err)
+		return _fail(err, _exception_status(result))
+
+	_set_session(result, false)
+	_save_auth_method("email")
+	print("[NakamaManager] %s success env=%s host=%s:%s user_id=%s" % [
+		method,
+		BackendEnvironment.get_environment_id(),
+		diag.get("host", ""),
+		diag.get("port", 0),
+		session.user_id,
+	])
+	authenticated.emit(session.user_id)
+	return {
+		"success": true,
+		"data": {
+			"user_id": session.user_id,
+			"auth_method": "email",
+			"created": create,
+			"email": clean_email,
+		},
+		"error": "",
+		"status_code": 200,
+	}
+
+
+func _authenticate_email_timed(
+	email: String,
+	password: String,
+	create: bool,
+	username,
+	timeout_sec: float,
+	gen: int
+) -> NakamaSession:
+	var box: Dictionary = {"session": null, "done": false}
+	_authenticate_email_worker(email, password, create, username, box, gen)
+	var start_ms := Time.get_ticks_msec()
+	while not bool(box.get("done", false)):
+		if gen != _auth_gen:
+			return null
+		if Time.get_ticks_msec() - start_ms >= int(timeout_sec * 1000.0):
+			return null
+		await get_tree().process_frame
+	return box.get("session") as NakamaSession
+
+
+func _authenticate_email_worker(
+	email: String,
+	password: String,
+	create: bool,
+	username,
+	box: Dictionary,
+	gen: int
+) -> void:
+	var result: NakamaSession = await client.authenticate_email_async(
+		email, password, username, create
+	)
+	if gen != _auth_gen:
+		return
+	box["session"] = result
+	box["done"] = true
+
+
+func _friendly_email_auth_error(raw: String, create: bool) -> String:
+	var low := raw.to_lower()
+	if low.contains("already in use") or low.contains("already exists") or low.contains("user already"):
+		return "An account with that email already exists. Log in instead."
+	if low.contains("not found") or low.contains("user account not found") or low.contains("invalid credentials"):
+		return "Invalid email or password" if not create else raw
+	if low.contains("password") and (low.contains("short") or low.contains("least") or low.contains("8")):
+		return "Password must be at least 8 characters."
+	if raw.strip_edges().is_empty():
+		return "Authentication failed"
+	return raw
+
+
 func authenticate_device() -> Dictionary:
 	if _auth_busy:
 		return _fail("Authentication already in progress")
@@ -193,11 +316,12 @@ func authenticate_device() -> Dictionary:
 		return _fail(err)
 
 	_set_session(result, false)
-	print("[NakamaManager] Nakama authentication successful user_id=%s env=%s" % [
+	_save_auth_method("device")
+	print("[NakamaManager] Nakama device auth successful user_id=%s env=%s" % [
 		session.user_id, BackendEnvironment.get_environment_id()
 	])
 	authenticated.emit(session.user_id)
-	return {"success": true, "data": {"user_id": session.user_id}, "error": "", "status_code": 200}
+	return {"success": true, "data": {"user_id": session.user_id, "auth_method": "device"}, "error": "", "status_code": 200}
 
 
 func _authenticate_device_timed(device_id: String, timeout_sec: float, gen: int) -> NakamaSession:
@@ -246,11 +370,18 @@ func restore_session() -> Dictionary:
 		if not refresh_res.get("success", false):
 			return refresh_res
 
-	print("[NakamaManager] Nakama session restored user_id=%s env=%s" % [
-		session.user_id, BackendEnvironment.get_environment_id()
+	if _load_auth_method().is_empty():
+		_save_auth_method("restored")
+	print("[NakamaManager] Nakama session restored user_id=%s env=%s method=%s" % [
+		session.user_id, BackendEnvironment.get_environment_id(), get_auth_method()
 	])
 	session_restored.emit(session.user_id)
-	return {"success": true, "data": {"user_id": session.user_id}, "error": "", "status_code": 200}
+	return {
+		"success": true,
+		"data": {"user_id": session.user_id, "auth_method": get_auth_method()},
+		"error": "",
+		"status_code": 200,
+	}
 
 
 func refresh_session() -> Dictionary:
@@ -448,12 +579,20 @@ func _execute_rpc(
 	return result
 
 
-## Boot helper used by AuthManager / temporary tests.
+## Restore an existing session. Does NOT create anonymous device accounts.
+## Godot login/register must call authenticate_email; device auth is explicit-only.
 func ensure_authenticated() -> Dictionary:
+	if is_authenticated():
+		return {
+			"success": true,
+			"data": {"user_id": session.user_id, "auth_method": get_auth_method()},
+			"error": "",
+			"status_code": 200,
+		}
 	var restored: Dictionary = await restore_session()
 	if restored.get("success", false):
 		return restored
-	return await authenticate_device()
+	return _fail("Not authenticated — log in with email")
 
 
 ## Soft verification: valid session required; soft-refresh near expiry; no new device auth.
@@ -712,6 +851,26 @@ func _save_session_tokens() -> void:
 	cfg.save(session_path)
 
 
+func _save_auth_method(method: String) -> void:
+	var session_path := BackendEnvironment.get_session_path()
+	var cfg := ConfigFile.new()
+	cfg.load(session_path)
+	cfg.set_value("nakama", "auth_method", method.strip_edges())
+	cfg.set_value("nakama", "environment", BackendEnvironment.get_environment_id())
+	cfg.save(session_path)
+
+
+func _load_auth_method() -> String:
+	var session_path := BackendEnvironment.get_session_path()
+	var cfg := ConfigFile.new()
+	if cfg.load(session_path) != OK:
+		return ""
+	var saved_env := str(cfg.get_value("nakama", "environment", ""))
+	if not saved_env.is_empty() and saved_env != BackendEnvironment.get_environment_id():
+		return ""
+	return str(cfg.get_value("nakama", "auth_method", "")).strip_edges()
+
+
 func _load_session_tokens() -> Dictionary:
 	var session_path := BackendEnvironment.get_session_path()
 	var cfg := ConfigFile.new()
@@ -725,6 +884,7 @@ func _load_session_tokens() -> Dictionary:
 		"token": str(cfg.get_value("nakama", "token", "")),
 		"refresh_token": str(cfg.get_value("nakama", "refresh_token", "")),
 		"user_id": str(cfg.get_value("nakama", "user_id", "")),
+		"auth_method": str(cfg.get_value("nakama", "auth_method", "")),
 	}
 
 

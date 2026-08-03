@@ -21,6 +21,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+BackendEnvironment="*res://Autoload/BackendEnvironment.gd"
 GameApiClient="*res://Autoload/ApiClient.gd"
 AuthManager="*res://Autoload/AuthManager.gd"
 ResolutionManager="*res://Autoload/ResolutionManager.gd"
@@ -50,7 +51,6 @@ AudioManager="*res://Autoload/AudioManager.gd"
 SettingsManager="*res://Autoload/SettingsManager.gd"
 SaveManager="*res://Autoload/SaveManager.gd"
 Nakama="*uid://b24hquol88ydg"
-BackendEnvironment="*res://Autoload/BackendEnvironment.gd"
 NakamaManager="*res://Autoload/NakamaManager.gd"
 ProfileManager="*res://Autoload/ProfileManager.gd"
 CurrencyManager="*res://Autoload/CurrencyManager.gd"

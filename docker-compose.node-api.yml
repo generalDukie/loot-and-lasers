@@ -1,0 +1,50 @@
+# Node gameplay/auth API for Hetzner staging (port 8787).
+# Run on the same host as Nakama staging so friends can use the public IP.
+#
+#   docker compose -f docker-compose.node-api.yml --env-file .env.node-api up -d --build
+#
+# Required env (see .env.node-api.example):
+#   JWT_SECRET
+
+services:
+  node-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lootandlasers-node-api:staging
+    container_name: loot-node-api
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+      SERVE_STATIC: "true"
+      TRUST_PROXY: "true"
+      RUN_SEED: "${RUN_SEED:-true}"
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env.node-api}"
+      APP_ID: "${APP_ID:-lootandlasers-staging}"
+      PUBLIC_CLIENT_URL: "${PUBLIC_CLIENT_URL:-http://178.156.210.186:8787}"
+      # Leave SMTP unset → register auto-verifies (no email OTP).
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+    volumes:
+      - node_api_data:/app/server/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  node_api_data:

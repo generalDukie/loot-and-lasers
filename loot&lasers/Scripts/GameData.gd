@@ -393,4 +393,3 @@ static func stat_color(stat: String) -> Color:
 	if STAT_COLORS.has(stat):
 		return STAT_COLORS[stat]
 	return Color("#FBBF24")
-

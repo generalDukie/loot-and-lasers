@@ -1,5 +1,6 @@
 extends Node
-## HTTP client for the Loot & Lasers Node API (localhost:8787 by default).
+## HTTP client for the Loot & Lasers Node API.
+## Base URL follows BackendEnvironment (local/staging) unless overridden.
 
 signal base_url_changed(url: String)
 
@@ -13,12 +14,60 @@ var base_url: String = DEFAULT_BASE_URL
 
 
 func _ready() -> void:
-	_load_base_url()
+	_apply_environment_base_url()
 	print("[GameApiClient] base_url=%s" % base_url)
 
 
+## Prefer BackendEnvironment / LOOT_NODE_API_URL over a stale localhost cfg from local play.
+func _apply_environment_base_url() -> void:
+	var env_url := ""
+	if BackendEnvironment != null and BackendEnvironment.has_method("get_node_api_base_url"):
+		env_url = str(BackendEnvironment.get_node_api_base_url()).strip_edges().rstrip("/")
+	if env_url.is_empty():
+		_load_base_url()
+		return
+	# Staging (or any non-local env URL) wins over saved localhost so friends share one API.
+	var saved := ""
+	var cfg := ConfigFile.new()
+	if cfg.load(CONFIG_PATH) == OK:
+		saved = str(cfg.get_value("api", "base_url", "")).strip_edges().rstrip("/")
+	if not saved.is_empty() and _urls_compatible(saved, env_url):
+		base_url = saved
+	else:
+		base_url = env_url
+		cfg.set_value("api", "base_url", base_url)
+		cfg.save(CONFIG_PATH)
+	base_url_changed.emit(base_url)
+
+
+func _urls_compatible(saved: String, env_url: String) -> bool:
+	if saved == env_url:
+		return true
+	# Never keep a URL pointed at Nakama (7350/7349/7351) — that is not the Node auth API.
+	if _looks_like_nakama_url(saved):
+		return false
+	# Staging: drop leftover localhost so LOOT_NODE_API_URL / secrets can win.
+	if BackendEnvironment != null and BackendEnvironment.is_staging():
+		if saved.contains("127.0.0.1") or saved.contains("localhost"):
+			return false
+	return saved.begins_with("http")
+
+
+func is_nakama_url(url: String) -> bool:
+	return _looks_like_nakama_url(url)
+
+
+func _looks_like_nakama_url(url: String) -> bool:
+	var u := url.to_lower()
+	return u.contains(":7350") or u.contains(":7349") or u.contains(":7351")
+
+
 func set_base_url(url: String) -> void:
-	base_url = url.rstrip("/")
+	var cleaned := url.strip_edges().rstrip("/")
+	if _looks_like_nakama_url(cleaned):
+		push_warning("[GameApiClient] Refusing Nakama URL for Node API: %s" % cleaned)
+		return
+	base_url = cleaned
 	var cfg := ConfigFile.new()
 	cfg.load(CONFIG_PATH)
 	cfg.set_value("api", "base_url", base_url)
@@ -119,3 +168,5 @@ func _load_base_url() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) == OK:
 		base_url = str(cfg.get_value("api", "base_url", DEFAULT_BASE_URL)).rstrip("/")
+	else:
+		base_url = DEFAULT_BASE_URL

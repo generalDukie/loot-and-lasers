@@ -790,6 +790,39 @@ export async function FailMission(user, body) {
   return ClaimMission(user, { ...body, won: false });
 }
 
+// ── DebitNovaCrystals ────────────────────────────────────────
+/** Debit Character.nova_crystals for hybrid Nakama mission skip (until wallet owns premium). */
+export async function DebitNovaCrystals(user, body) {
+  const amount = Math.floor(Number(body?.amount));
+  const purpose = String(body?.purpose || "");
+  const missionId = String(body?.mission_id || "");
+  if (!Number.isFinite(amount) || amount < 1 || amount > 5000) {
+    return { status: 400, body: { error: "Invalid amount" } };
+  }
+  if (purpose !== "mission_skip") {
+    return { status: 400, body: { error: "Invalid purpose" } };
+  }
+  if (!missionId) {
+    return { status: 400, body: { error: "Missing mission_id" } };
+  }
+
+  try {
+    const result = await withTransactionAsync(async () => {
+      const ch = requireMyChar(user);
+      if ((ch.nova_crystals || 0) < amount) {
+        httpErr(400, "Not enough Nova Crystals");
+      }
+      const patch = { nova_crystals: (ch.nova_crystals || 0) - amount };
+      const character = entities.Character.update(ch.id, patch);
+      return { success: true, amount, purpose, mission_id: missionId, patch, character };
+    });
+    return { status: 200, body: result };
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message } };
+    throw err;
+  }
+}
+
 // ── SkipMission ──────────────────────────────────────────────
 export async function SkipMission(user, body) {
   const missionId = body?.mission_id;
@@ -1196,6 +1229,7 @@ export const ECONOMY_HANDLERS = {
   ClaimMission,
   FailMission,
   SkipMission,
+  DebitNovaCrystals,
   BuyShopGear,
   BuyShopConsumable,
   RefreshShop,

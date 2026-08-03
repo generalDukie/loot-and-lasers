@@ -1,6 +1,7 @@
 --[[
   Phase 7/8/14 — Mission service (Nakama Lua).
-  Public RPCs: missions_get, missions_refresh, mission_start, mission_status, mission_claim
+  Public RPCs: missions_get, missions_refresh, mission_start, mission_status,
+               mission_claim, mission_skip
 
   Phase 14: claim applies stardust + optional loot via RewardService / LootService.
   XP is recorded as unsupported (no ProgressionService).
@@ -34,6 +35,7 @@ local MAX_CHARACTER_ID = auth.MAX_CHARACTER_ID
 -- Hardcoded fallbacks — remote config may override when valid; defaults preserve live behavior.
 local BOARD_SIZE_DEFAULT = 3
 local REFRESH_COOLDOWN_DEFAULT = 15
+local SKIP_CRYSTALS_PER_MINUTE = 5
 
 local function board_size()
   local v = remote_config.get_config_value("missions", "board_size")
@@ -361,6 +363,7 @@ local function public_mission(m)
     generated_at = m.generated_at or "",
     started_at = m.started_at or "",
     completes_at = m.completes_at or "",
+    completes_at_unix = tonumber(m.completes_at_unix) or 0,
     completed_at = m.completed_at or "",
     expires_at = m.expires_at or "",
     claimed_at = m.claimed_at or "",
@@ -544,6 +547,23 @@ local function apply_timer_transition(mission)
     return mission, true
   end
   return mission, false
+end
+
+--- Nova cost to skip remaining wait (matches client SKIP_CRYSTALS_PER_MINUTE).
+local function skip_cost_for(mission)
+  if type(mission) ~= "table" then
+    return 0
+  end
+  if mission.status ~= "active" then
+    return 0
+  end
+  local completes = tonumber(mission.completes_at_unix) or 0
+  local rem = math.max(0, completes - now_unix())
+  if rem <= 0 then
+    return 0
+  end
+  local minutes = rem / 60.0
+  return math.max(1, math.ceil(minutes * SKIP_CRYSTALS_PER_MINUTE))
 end
 
 local function ensure_board(user_id, character_id, level, highest_sector, force_refresh)
@@ -1316,9 +1336,160 @@ local function rpc_mission_claim(context, payload)
   return encode_ok(result)
 end
 
+--- Skip remaining wait: debit nova_crystals, snap mission to complete.
+local function rpc_mission_skip(context, payload)
+  local user_id = context.user_id
+  if user_id == nil or user_id == "" then
+    return encode_fail("Unauthenticated", 401)
+  end
+  local body = decode_payload(payload)
+  if body == nil then
+    return encode_fail("Malformed JSON payload", 400)
+  end
+  local forbid = reject_client_ids(body)
+  if forbid ~= nil then
+    return encode_fail(forbid, 400)
+  end
+  local unknown = validation.reject_unknown_keys(body, {
+    character_id = true,
+    mission_id = true,
+    request_id = true,
+  })
+  if unknown ~= nil then
+    return encode_fail(unknown, 400)
+  end
+  if body.completes_at ~= nil or body.status ~= nil or body.skip_cost ~= nil
+      or body.amount ~= nil or body.currency_id ~= nil then
+    return encode_fail("Client cannot supply skip cost or completion fields", 400)
+  end
+  if type(body.mission_id) ~= "string" or body.mission_id == "" then
+    return encode_fail("mission_id is required", 400)
+  end
+  if type(body.request_id) ~= "string" or body.request_id == "" then
+    return encode_fail("request_id is required", 400)
+  end
+  local tid_err = transactions.validate_transaction_id(body.request_id)
+  if tid_err ~= nil then
+    return encode_fail(tid_err, 400)
+  end
+
+  local ok, result = pcall(function()
+    local character_id, err = resolve_character_id(user_id, body.character_id)
+    if err ~= nil then
+      error({ err = err, code = 403 })
+    end
+
+    local active_raw, active_ver = read_active(user_id, character_id)
+    if active_raw == nil or type(active_raw.mission) ~= "table" then
+      error({ err = "No active mission", code = 404 })
+    end
+
+    local mission, did = apply_timer_transition(active_raw.mission)
+    active_raw.mission = mission
+    if did then
+      write_active(user_id, character_id, active_raw, active_ver)
+      active_ver = nil
+    end
+
+    if mission.mission_id ~= body.mission_id then
+      error({ err = "mission_id does not match active mission", code = 404 })
+    end
+
+    -- Already claimable — idempotent no-op (no second debit).
+    if mission.status == "complete"
+        or mission.status == "reward_pending"
+        or mission.status == "reward_failed"
+        or mission.status == "claimed" then
+      if mission.skip_request_id ~= nil and mission.skip_request_id ~= ""
+          and mission.skip_request_id ~= body.request_id then
+        -- Different request after prior skip is fine if already complete.
+      end
+      local pub = public_active(active_raw)
+      pub.has_active = true
+      return {
+        active = pub,
+        skip_cost = 0,
+        already_complete = true,
+      }
+    end
+
+    if mission.status ~= "active" then
+      error({ err = "Mission is not active", code = 409 })
+    end
+
+    -- Replay same skip request_id after success.
+    if mission.skip_request_id ~= nil and mission.skip_request_id == body.request_id
+        and mission.status == "complete" then
+      local pub = public_active(active_raw)
+      pub.has_active = true
+      return {
+        active = pub,
+        skip_cost = tonumber(mission.skip_cost_paid) or 0,
+        replay = true,
+      }
+    end
+
+    local cost = skip_cost_for(mission)
+    if cost < 1 then
+      -- Timer already elapsed between checks.
+      mission.status = "complete"
+      mission.completed_at = iso_utc(now_unix())
+      active_raw.mission = mission
+      active_raw.updated_at = now_ms()
+      write_active(user_id, character_id, active_raw, active_ver)
+      local pub = public_active(active_raw)
+      pub.has_active = true
+      return {
+        active = pub,
+        skip_cost = 0,
+        already_complete = true,
+      }
+    end
+
+    -- Timer skip only. Nova debit is Character-side (Node DebitNovaCrystals) until
+    -- premium currency fully migrates to the Nakama wallet. Cost is echoed for clients.
+    local now = now_unix()
+    mission.status = "complete"
+    mission.completed_at = iso_utc(now)
+    mission.completes_at = iso_utc(now)
+    mission.completes_at_unix = now
+    mission.skip_request_id = body.request_id
+    mission.skip_cost_paid = cost
+    mission.updated_at = now_ms()
+    active_raw.mission = mission
+    active_raw.updated_at = now_ms()
+    write_active(user_id, character_id, active_raw, active_ver)
+
+    logging.info("missions", "mission_skip", {
+      user_id = user_id,
+      request_id = body.request_id,
+      mission_id = mission.mission_id,
+      skip_cost = cost,
+    })
+
+    local pub = public_active(active_raw)
+    pub.has_active = true
+    return {
+      active = pub,
+      skip_cost = cost,
+      already_complete = false,
+    }
+  end)
+
+  if not ok then
+    if type(result) == "table" and result.err ~= nil then
+      return encode_fail(result.err, result.code or 400)
+    end
+    nk.logger_error(string.format("mission_skip failed: %s", tostring(result)))
+    return encode_fail("Failed to skip mission", 500)
+  end
+  return encode_ok(result)
+end
+
 nk.register_rpc(rpc_missions_get, "missions_get")
 nk.register_rpc(rpc_missions_refresh, "missions_refresh")
 nk.register_rpc(rpc_mission_start, "mission_start")
 nk.register_rpc(rpc_mission_status, "mission_status")
 nk.register_rpc(rpc_mission_claim, "mission_claim")
-nk.logger_info("Phase 14 mission RPCs registered (incl. mission_claim) — rewards via RewardService/LootService")
+nk.register_rpc(rpc_mission_skip, "mission_skip")
+nk.logger_info("Phase 14 mission RPCs registered (incl. mission_claim, mission_skip) — rewards via RewardService/LootService")

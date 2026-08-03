@@ -166,6 +166,30 @@ var res: Dictionary = await NakamaManager.call_authenticated_rpc(
 
 ## Related
 
-- Autoload: `NakamaManager` (`project.godot`)
+- Autoload: `NakamaManager`, `ProfileManager` (`project.godot`)
 - Session bridge: `AuthManager.ensure_nakama_session()` / `logout_nakama()`
 - Local session file: `user://nakama_session.cfg` (gitignored patterns cover accidental copies)
+
+## Phase 3 — Player profile RPCs
+
+Managed by `ProfileManager` (not UI scripts). Storage: collection `player_profiles`, key `profile`.
+
+| RPC | Purpose |
+|-----|---------|
+| `profile_get` | Load profile; create default once if missing |
+| `profile_update` | Patch allowlisted fields only |
+
+```gdscript
+# Load or create
+var res: Dictionary = await ProfileManager.ensure_profile()
+if res.success:
+	print(res.data.account_id, res.data.display_name)
+
+# Update display name (debounced by caller — never per keystroke)
+var upd: Dictionary = await ProfileManager.update_display_name("Nova Vex")
+if not upd.success:
+	push_warning(upd.error)
+```
+
+Allowlisted update fields: `display_name`, `selected_character_id`, `appearance`, `avatar_portrait`.  
+`account_id` / timestamps are server-owned. See `docs/PHASE3_PROFILE.md`.

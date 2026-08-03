@@ -100,7 +100,13 @@ func create_character(payload: Dictionary) -> Dictionary:
 
 
 func select_character(character_id: String) -> Dictionary:
-	return await update_me({"active_character_id": character_id})
+	var res: Dictionary = await update_me({"active_character_id": character_id})
+	# Best-effort Nakama profile sync — Node active_character_id remains gameplay SoT.
+	if res.ok and ProfileManager != null and NakamaManager.is_authenticated():
+		var sync_res: Dictionary = await ProfileManager.set_selected_character_id(character_id)
+		if not sync_res.get("success", false):
+			print("[AuthManager] WARNING: Nakama profile selected_character_id sync failed — %s" % str(sync_res.get("error", "")))
+	return res
 
 
 func get_character(character_id: String) -> Dictionary:
@@ -276,12 +282,21 @@ func ensure_nakama_session() -> Dictionary:
 	var res: Dictionary = await NakamaManager.ensure_authenticated()
 	if res.get("success", false):
 		print("[AuthManager] Nakama session ready user_id=%s" % str(res.get("data", {}).get("user_id", "")))
+		# Phase 3: load-or-create slim Nakama profile (idempotent).
+		if ProfileManager != null:
+			var pref: Dictionary = await ProfileManager.ensure_profile()
+			if pref.get("success", false):
+				print("[AuthManager] Nakama profile ready account_id=%s" % str(pref.get("data", {}).get("account_id", "")))
+			else:
+				print("[AuthManager] WARNING: Nakama profile unavailable — %s" % str(pref.get("error", "unknown")))
 	else:
 		print("[AuthManager] Nakama session unavailable — %s" % str(res.get("error", "unknown")))
 	return res
 
 
 func logout_nakama() -> Dictionary:
+	if ProfileManager != null:
+		ProfileManager.clear_local()
 	if NakamaManager == null:
 		return {"success": true, "data": {}, "error": "", "status_code": 200}
 	return await NakamaManager.logout()

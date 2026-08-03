@@ -20,6 +20,15 @@ Loot & Lasers uses a **dual stack** during the Nakama migration:
 | 6 | Equipment | `equipment_get` | no |
 | 7 | Missions core | `missions_get`, `missions_refresh`, `mission_start`, `mission_status` | board/active; **no rewards** |
 | 8 | Mission authority | same RPCs | **Nakama is sole mission SoT** |
+| 9 | Shared runtime + verification | `modules/lib/*`, `npm run verify:backend` | infrastructure only |
+
+## Shared library
+
+See `docs/BACKEND_SHARED_LIBRARY.md`. Prefer `require("lib.*")` for auth, responses, validation, storage wrappers, time, logging, and transaction-id helpers.
+
+## Verification
+
+See `docs/BACKEND_VERIFICATION.md`. Run `npm run verify:backend` before backend commits.
 
 ## Client → server pattern
 

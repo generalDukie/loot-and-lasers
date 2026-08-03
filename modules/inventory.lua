@@ -2,78 +2,30 @@
   Phase 4 — Read-only inventory service (Nakama Lua runtime).
   Collection: inventories / key: <character_id>
   RPC: inventory_get
-  Ownership: character-level (matches Node Item.character_id architecture).
-  account id is always context.user_id — never trust client account ids.
-  No writes. Missing records return an empty inventory envelope.
+  Uses shared lib helpers for auth/responses/validation/storage (behavior preserved).
 ]]
 
 local nk = require("nakama")
+local auth = require("lib.auth")
+local responses = require("lib.responses")
+local validation = require("lib.validation")
+local storage = require("lib.storage")
+local logging = require("lib.logging")
 
 local INV_COLLECTION = "inventories"
-local PROFILE_COLLECTION = "player_profiles"
-local PROFILE_KEY = "profile"
-local MAX_CHARACTER_ID = 64
-
-local function encode_ok(data)
-  return nk.json_encode({
-    success = true,
-    data = data or {},
-    error = "",
-    status_code = 200,
-  })
-end
-
-local function encode_fail(message, status_code)
-  return nk.json_encode({
-    success = false,
-    data = {},
-    error = message or "Request failed",
-    status_code = status_code or 400,
-  })
-end
-
-local function decode_payload(payload)
-  if payload == nil or payload == "" then
-    return {}
-  end
-  local ok, decoded = pcall(nk.json_decode, payload)
-  if not ok or type(decoded) ~= "table" then
-    return nil
-  end
-  return decoded
-end
-
-local function empty_array()
-  -- Lua {} encodes as JSON object; force a real JSON array.
-  return nk.json_decode("[]")
-end
 
 local function empty_inventory(character_id)
   return {
     inventory_version = 1,
     owner_type = "character",
     owner_id = character_id or "",
-    slots = empty_array(),
+    slots = validation.empty_array(),
     updated_at = 0,
   }
 end
 
-local function read_profile(user_id)
-  local objects = nk.storage_read({
-    { collection = PROFILE_COLLECTION, key = PROFILE_KEY, user_id = user_id },
-  })
-  if objects == nil or #objects == 0 then
-    return nil
-  end
-  local value = objects[1].value
-  if type(value) ~= "table" then
-    return nil
-  end
-  return value
-end
-
 local function sanitize_slots(raw_slots)
-  local slots = empty_array()
+  local slots = validation.empty_array()
   if type(raw_slots) ~= "table" then
     return nil, "slots must be an array"
   end
@@ -122,6 +74,7 @@ local function sanitize_slots(raw_slots)
   end
   return slots, nil
 end
+
 local function normalize_record(character_id, value)
   if type(value) ~= "table" then
     return nil, "Malformed inventory record"
@@ -146,55 +99,24 @@ local function normalize_record(character_id, value)
   }, nil
 end
 
-local function resolve_character_id(user_id, requested)
-  local profile = read_profile(user_id)
-  local selected = ""
-  if profile ~= nil and type(profile.selected_character_id) == "string" then
-    selected = profile.selected_character_id
-  end
-
-  if requested ~= nil and requested ~= "" then
-    if type(requested) ~= "string" then
-      return nil, "character_id must be a string"
-    end
-    if #requested > MAX_CHARACTER_ID then
-      return nil, "character_id is too long"
-    end
-    -- Phase 4 ownership check: only the profile-selected character is readable.
-    -- Full Node ownership binding is out of scope; do not silently allow arbitrary ids.
-    if selected == "" then
-      return nil, "No selected character on profile"
-    end
-    if requested ~= selected then
-      return nil, "character_id is not the selected character for this account"
-    end
-    return requested, nil
-  end
-
-  if selected == "" then
-    return "", nil -- empty inventory path (no character selected)
-  end
-  return selected, nil
-end
-
 local function rpc_inventory_get(context, payload)
-  local user_id = context.user_id
-  if user_id == nil or user_id == "" then
-    return encode_fail("Unauthenticated", 401)
+  local user_id, unauth = auth.require_user(context)
+  if unauth ~= nil then
+    return unauth
   end
 
-  local body = decode_payload(payload)
+  local body = validation.decode_payload(payload)
   if body == nil then
-    return encode_fail("Malformed JSON payload", 400)
+    return responses.fail_status("Malformed JSON payload", 400)
   end
 
-  -- Reject client-supplied account / user ids.
-  if body.account_id ~= nil or body.user_id ~= nil or body.owner_id ~= nil then
-    return encode_fail("Unknown or forbidden field in inventory_get", 400)
+  local forbid = validation.reject_client_identity_fields(body)
+  if forbid ~= nil then
+    return responses.fail_status("Unknown or forbidden field in inventory_get", 400)
   end
 
   local ok, result = pcall(function()
-    local character_id, resolve_err = resolve_character_id(user_id, body.character_id)
+    local character_id, resolve_err = auth.resolve_character_id(user_id, body.character_id, true)
     if resolve_err ~= nil then
       error({ err = resolve_err, code = 403 })
     end
@@ -202,14 +124,12 @@ local function rpc_inventory_get(context, payload)
       return empty_inventory("")
     end
 
-    local objects = nk.storage_read({
-      { collection = INV_COLLECTION, key = character_id, user_id = user_id },
-    })
-    if objects == nil or #objects == 0 then
+    local value, _, found = storage.read_one(user_id, INV_COLLECTION, character_id)
+    if not found then
       return empty_inventory(character_id)
     end
 
-    local normalized, norm_err = normalize_record(character_id, objects[1].value)
+    local normalized, norm_err = normalize_record(character_id, value)
     if norm_err ~= nil then
       error({ err = norm_err, code = 422 })
     end
@@ -218,13 +138,13 @@ local function rpc_inventory_get(context, payload)
 
   if not ok then
     if type(result) == "table" and result.err ~= nil then
-      return encode_fail(result.err, result.code or 400)
+      return responses.fail_status(result.err, result.code or 400)
     end
-    nk.logger_error(string.format("inventory_get failed: %s", tostring(result)))
-    return encode_fail("Failed to load inventory", 500)
+    logging.error("inventory", "inventory_get", { user_id = user_id, error = tostring(result) })
+    return responses.fail_status("Failed to load inventory", 500)
   end
 
-  return encode_ok(result)
+  return responses.ok(result)
 end
 
 nk.register_rpc(rpc_inventory_get, "inventory_get")

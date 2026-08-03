@@ -252,3 +252,7 @@ Character-level ownership. **No** claim/reward/fuel RPCs in this phase. See `doc
 ## Phase 8 — Mission authority
 
 Nakama is the **sole** mission source of truth for Godot. `MissionManager.ensure_board` / `launch_offer` / `fetch_active_mission` call `missions_get` / `mission_start` / `mission_status`. Local board cfg is display cache only. See `docs/PHASE8_MISSION_MIGRATION.md`.
+
+## Phase 9 — Shared library
+
+Service modules may `require("lib.auth")`, `lib.responses`, `lib.validation`, etc. Response envelopes keep `status_code` for Godot and add stable `code` strings. See `docs/BACKEND_SHARED_LIBRARY.md` and `docs/BACKEND_VERIFICATION.md` (`npm run verify:backend`).

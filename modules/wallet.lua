@@ -24,13 +24,18 @@
 ]]
 
 local nk = require("nakama")
+local responses = require("lib.responses")
+local validation = require("lib.validation")
+local time = require("lib.time")
+local txhelpers = require("lib.transactions")
+local logging = require("lib.logging")
 
 local WALLET_COLLECTION = "wallets"
 local WALLET_KEY = "wallet"
 local TX_COLLECTION = "wallet_transactions"
 
-local MAX_TX_ID_LEN = 64
-local MAX_REASON_LEN = 128
+local MAX_TX_ID_LEN = txhelpers.MAX_TX_ID_LEN
+local MAX_REASON_LEN = txhelpers.MAX_REASON_LEN
 local MAX_WRITE_RETRIES = 5
 
 -- TEMPORARY — development mutation gate. Do not enable in production.
@@ -58,36 +63,19 @@ local CURRENCIES = {
 }
 
 local function now_ms()
-  return os.time() * 1000
+  return time.ms()
 end
 
 local function encode_ok(data)
-  return nk.json_encode({
-    success = true,
-    data = data or {},
-    error = "",
-    status_code = 200,
-  })
+  return responses.ok(data)
 end
 
 local function encode_fail(message, status_code)
-  return nk.json_encode({
-    success = false,
-    data = {},
-    error = message or "Request failed",
-    status_code = status_code or 400,
-  })
+  return responses.fail_status(message, status_code)
 end
 
 local function decode_payload(payload)
-  if payload == nil or payload == "" then
-    return {}
-  end
-  local ok, decoded = pcall(nk.json_decode, payload)
-  if not ok or type(decoded) ~= "table" then
-    return nil
-  end
-  return decoded
+  return validation.decode_payload(payload)
 end
 
 local function get_currency(currency_id)
@@ -222,16 +210,7 @@ local function write_transaction(user_id, tx)
 end
 
 local function validate_transaction_id(transaction_id)
-  if type(transaction_id) ~= "string" or transaction_id == "" then
-    return "transaction_id is required"
-  end
-  if #transaction_id > MAX_TX_ID_LEN then
-    return "transaction_id is too long"
-  end
-  if not string.match(transaction_id, "^[%w%-%._:]+$") then
-    return "transaction_id has invalid characters"
-  end
-  return nil
+  return txhelpers.validate_transaction_id(transaction_id)
 end
 
 local function validate_amount(amount)

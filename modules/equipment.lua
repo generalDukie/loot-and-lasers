@@ -9,10 +9,12 @@
 ]]
 
 local nk = require("nakama")
+local auth = require("lib.auth")
+local responses = require("lib.responses")
+local validation = require("lib.validation")
+local logging = require("lib.logging")
 
 local EQ_COLLECTION = "equipment"
-local PROFILE_COLLECTION = "player_profiles"
-local PROFILE_KEY = "profile"
 local MAX_CHARACTER_ID = 64
 
 -- Canonical slot IDs — item.type is the slot key (1:1). Matches InventoryRules.EQUIPPABLE_TYPES.
@@ -33,23 +35,11 @@ for _, id in ipairs(EQUIPMENT_SLOTS) do
 end
 
 local function encode_fail(message, status_code)
-  return nk.json_encode({
-    success = false,
-    data = {},
-    error = message or "Request failed",
-    status_code = status_code or 400,
-  })
+  return responses.fail_status(message, status_code)
 end
 
 local function decode_payload(payload)
-  if payload == nil or payload == "" then
-    return {}
-  end
-  local ok, decoded = pcall(nk.json_decode, payload)
-  if not ok or type(decoded) ~= "table" then
-    return nil
-  end
-  return decoded
+  return validation.decode_payload(payload)
 end
 
 -- Lua nil is omitted by nk.json_encode; build slots JSON so empty slots stay null.
@@ -106,17 +96,7 @@ local function empty_equipment(character_id)
 end
 
 local function read_profile(user_id)
-  local objects = nk.storage_read({
-    { collection = PROFILE_COLLECTION, key = PROFILE_KEY, user_id = user_id },
-  })
-  if objects == nil or #objects == 0 then
-    return nil
-  end
-  local value = objects[1].value
-  if type(value) ~= "table" then
-    return nil
-  end
-  return value
+  return auth.read_profile(user_id)
 end
 
 local function sanitize_slot_value(slot_id, raw)
@@ -223,38 +203,14 @@ local function normalize_record(character_id, value)
 end
 
 local function resolve_character_id(user_id, requested)
-  local profile = read_profile(user_id)
-  local selected = ""
-  if profile ~= nil and type(profile.selected_character_id) == "string" then
-    selected = profile.selected_character_id
-  end
-
-  if requested ~= nil and requested ~= "" then
-    if type(requested) ~= "string" then
-      return nil, "character_id must be a string"
-    end
-    if #requested > MAX_CHARACTER_ID then
-      return nil, "character_id is too long"
-    end
-    if selected == "" then
-      return nil, "No selected character on profile"
-    end
-    if requested ~= selected then
-      return nil, "character_id is not the selected character for this account"
-    end
-    return requested, nil
-  end
-
-  if selected == "" then
-    return "", nil -- empty equipment path (no character selected)
-  end
-  return selected, nil
+  local character_id, err = auth.resolve_character_id(user_id, requested, true)
+  return character_id, err
 end
 
 local function rpc_equipment_get(context, payload)
-  local user_id = context.user_id
-  if user_id == nil or user_id == "" then
-    return encode_fail("Unauthenticated", 401)
+  local user_id, unauth = auth.require_user(context)
+  if unauth ~= nil then
+    return unauth
   end
 
   local body = decode_payload(payload)
@@ -294,7 +250,7 @@ local function rpc_equipment_get(context, payload)
     if type(result) == "table" and result.err ~= nil then
       return encode_fail(result.err, result.code or 400)
     end
-    nk.logger_error(string.format("equipment_get failed: %s", tostring(result)))
+    logging.error("equipment", "equipment_get", { user_id = user_id, error = tostring(result) })
     return encode_fail("Failed to load equipment", 500)
   end
 

@@ -6,6 +6,10 @@
 ]]
 
 local nk = require("nakama")
+local responses = require("lib.responses")
+local validation = require("lib.validation")
+local time = require("lib.time")
+local logging = require("lib.logging")
 
 local COLLECTION = "player_profiles"
 local KEY = "profile"
@@ -33,36 +37,19 @@ local ALLOWED_UPDATE_KEYS = {
 }
 
 local function now_ms()
-  return os.time() * 1000
+  return time.ms()
 end
 
 local function encode_ok(data)
-  return nk.json_encode({
-    success = true,
-    data = data or {},
-    error = "",
-    status_code = 200,
-  })
+  return responses.ok(data)
 end
 
 local function encode_fail(message, status_code)
-  return nk.json_encode({
-    success = false,
-    data = {},
-    error = message or "Request failed",
-    status_code = status_code or 400,
-  })
+  return responses.fail_status(message, status_code)
 end
 
 local function decode_payload(payload)
-  if payload == nil or payload == "" then
-    return {}
-  end
-  local ok, decoded = pcall(nk.json_decode, payload)
-  if not ok or type(decoded) ~= "table" then
-    return nil
-  end
-  return decoded
+  return validation.decode_payload(payload)
 end
 
 local function default_profile(user_id)

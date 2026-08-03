@@ -12,13 +12,17 @@
 ]]
 
 local nk = require("nakama")
+local auth = require("lib.auth")
+local responses = require("lib.responses")
+local validation = require("lib.validation")
+local time = require("lib.time")
+local ids = require("lib.ids")
+local logging = require("lib.logging")
 
 local BOARD_COLLECTION = "mission_boards"
 local ACTIVE_COLLECTION = "active_missions"
-local PROFILE_COLLECTION = "player_profiles"
-local PROFILE_KEY = "profile"
 
-local MAX_CHARACTER_ID = 64
+local MAX_CHARACTER_ID = auth.MAX_CHARACTER_ID
 local BOARD_SIZE = 3
 local REFRESH_COOLDOWN_SEC = 15
 local MIN_DURATION = 15
@@ -153,53 +157,35 @@ local QUEST_GIVERS = {
 }
 
 local function now_unix()
-  return os.time()
+  return time.unix()
 end
 
 local function now_ms()
-  return os.time() * 1000
+  return time.ms()
 end
 
 local function iso_utc(unix)
-  -- Basic UTC ISO without strftime %z (Nakama Lua os.date is limited).
-  return os.date("!%Y-%m-%dT%H:%M:%SZ", unix)
+  return time.iso_utc(unix)
 end
 
 local function encode_ok(data)
-  return nk.json_encode({
-    success = true,
-    data = data or {},
-    error = "",
-    status_code = 200,
-  })
+  return responses.ok(data)
 end
 
 local function encode_fail(message, status_code)
-  return nk.json_encode({
-    success = false,
-    data = {},
-    error = message or "Request failed",
-    status_code = status_code or 400,
-  })
+  return responses.fail_status(message, status_code)
 end
 
 local function decode_payload(payload)
-  if payload == nil or payload == "" then
-    return {}
-  end
-  local ok, decoded = pcall(nk.json_decode, payload)
-  if not ok or type(decoded) ~= "table" then
-    return nil
-  end
-  return decoded
+  return validation.decode_payload(payload)
 end
 
 local function empty_array()
-  return nk.json_decode("[]")
+  return validation.empty_array()
 end
 
 local function rand_u32()
-  local u = nk.uuid_v4()
+  local u = ids.uuid()
   local n = 0
   for i = 1, #u do
     local c = string.sub(u, i, i)
@@ -231,53 +217,16 @@ local function shuffle_copy(list)
 end
 
 local function read_profile(user_id)
-  local objects = nk.storage_read({
-    { collection = PROFILE_COLLECTION, key = PROFILE_KEY, user_id = user_id },
-  })
-  if objects == nil or #objects == 0 then
-    return nil
-  end
-  local value = objects[1].value
-  if type(value) ~= "table" then
-    return nil
-  end
-  return value
+  return auth.read_profile(user_id)
 end
 
 local function resolve_character_id(user_id, requested)
-  local profile = read_profile(user_id)
-  local selected = ""
-  if profile ~= nil and type(profile.selected_character_id) == "string" then
-    selected = profile.selected_character_id
-  end
-
-  if requested ~= nil and requested ~= "" then
-    if type(requested) ~= "string" then
-      return nil, "character_id must be a string"
-    end
-    if #requested > MAX_CHARACTER_ID then
-      return nil, "character_id is too long"
-    end
-    if selected == "" then
-      return nil, "No selected character on profile"
-    end
-    if requested ~= selected then
-      return nil, "character_id is not the selected character for this account"
-    end
-    return requested, nil
-  end
-
-  if selected == "" then
-    return nil, "No selected character on profile"
-  end
-  return selected, nil
+  local character_id, err = auth.resolve_character_id(user_id, requested, false)
+  return character_id, err
 end
 
 local function reject_client_ids(body)
-  if body.account_id ~= nil or body.user_id ~= nil or body.owner_id ~= nil then
-    return "Unknown or forbidden field"
-  end
-  return nil
+  return validation.reject_client_identity_fields(body)
 end
 
 local function clamp_level(level)
@@ -396,7 +345,7 @@ local function build_mission(character_id, tpl, level)
   local patron = QUEST_GIVERS[rand_int(1, #QUEST_GIVERS)]
   return {
     mission_version = 1,
-    mission_id = nk.uuid_v4(),
+    mission_id = ids.uuid(),
     template_id = tpl.template_id,
     owner_character_id = character_id,
     title = tpl.title,

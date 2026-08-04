@@ -350,7 +350,6 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 		"overclock_stack_gained": true,
 		"overclock_stacks_removed": true,
 		"overclock_ready": true,
-		"fire_support_dodged": true,
 		"defensive_protocol_applied": true,
 		"acquire_target_applied": true,
 	}

@@ -110,8 +110,7 @@ func send_global_message(content: String) -> Dictionary:
 	return {"ok": true, "error": "", "data": data}
 
 
-func load_global_history(cursor: String = "") -> Dictionary:
-	void cursor
+func load_global_history(_cursor: String = "") -> Dictionary:
 	var res: Dictionary = await GameApiClient.invoke("GetChatHistory", {"channel": "global", "limit": 50})
 	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "history failed"))
@@ -153,8 +152,7 @@ func send_dm(user_id: String, content: String) -> Dictionary:
 	return {"ok": true, "error": "", "data": data}
 
 
-func load_dm_history(user_id: String, cursor: String = "") -> Dictionary:
-	void cursor
+func load_dm_history(user_id: String, _cursor: String = "") -> Dictionary:
 	var res: Dictionary = await GameApiClient.invoke("GetChatHistory", {
 		"channel": "private",
 		"recipient_id": user_id,

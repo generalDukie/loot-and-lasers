@@ -292,10 +292,9 @@ func restore_mail(mail_id: String) -> Dictionary:
 	return {"ok": true, "success": true, "data": res.get("data", {}), "error": ""}
 
 
-func claim_attachments(mail_id: String, target_character_id: String = "") -> Dictionary:
+func claim_attachments(mail_id: String, _target_character_id: String = "") -> Dictionary:
 	if mail_id.is_empty():
 		return _fail("Missing mail_id")
-	void target_character_id
 	_set_mutating(true)
 	var res: Dictionary = await GameApiClient.invoke("ClaimMailReward", {"mail_id": mail_id})
 	_set_mutating(false)

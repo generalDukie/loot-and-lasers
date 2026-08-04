@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { useNavigate } from "react-router-dom";
-import { getGuildMembership } from "@/lib/guildUtils";
+import { getGuildMembership, departFromGuild } from "@/lib/guildUtils";
 import { ensureWeeklyChallenge } from "@/lib/guildEngine";
 import { getMyCharacter } from "@/lib/socialEngine";
 import GuildHeader from "@/components/game/GuildHeader";
@@ -72,25 +72,11 @@ export default function GuildPage() {
   }, [navigate]);
 
   async function handleLeave() {
-    if (!membership || !guild) return;
-    await api.entities.GuildLog.create({
-      guild_id: guild.id,
-      entry_type: "leave",
-      message: "left the guild",
-      character_name: character.name,
-    });
-    await api.entities.GuildMember.delete(membership.id);
-    const remaining = members.filter((m) => m.id !== membership.id);
-    if (membership.role === "leader" && remaining.length) {
-      const next = [...remaining].sort((a, b) => new Date(a.joined_date) - new Date(b.joined_date))[0];
-      await api.entities.GuildMember.update(next.id, { role: "leader" });
-      await api.entities.Guild.update(guild.id, {
-        leader_id: next.character_id,
-        leader_name: next.character_name,
-        member_count: remaining.length,
-      });
-    } else {
-      await api.entities.Guild.update(guild.id, { member_count: remaining.length });
+    if (!membership || !guild || !character) return;
+    try {
+      await departFromGuild(character.id);
+    } catch {
+      return;
     }
     setMembership(null);
     setGuild(null);
@@ -146,13 +132,17 @@ export default function GuildPage() {
         isLeader={membership?.role === "leader"}
         onToggleRecruiting={async () => {
           const next = guild.recruiting === false;
-          await api.entities.Guild.update(guild.id, { recruiting: next });
-          setGuild({ ...guild, recruiting: next });
+          const res = await api.functions.invoke("UpdateGuildSettings", { recruiting: next });
+          const data = res?.data || res || {};
+          if (data.error) return;
+          setGuild(data.guild || { ...guild, recruiting: next });
         }}
         onTogglePublicListing={async () => {
           const next = guild.public_listing === false;
-          await api.entities.Guild.update(guild.id, { public_listing: next });
-          setGuild({ ...guild, public_listing: next });
+          const res = await api.functions.invoke("UpdateGuildSettings", { public_listing: next });
+          const data = res?.data || res || {};
+          if (data.error) return;
+          setGuild(data.guild || { ...guild, public_listing: next });
         }}
       />
 

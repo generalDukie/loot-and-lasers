@@ -37,6 +37,14 @@ Do not install Git hooks unless the user asks.
 8. Docker Nakama logs (skipped if Docker unavailable)
 9. All `scripts/verify_*.mjs` except `verify_backend.mjs`
 
+The phase 3–20 Nakama gameplay scripts verify historical migration prototypes.
+They are regression inventory, not proof that Nakama is the live gameplay
+authority. New restoration gates must exercise the corresponding Node path
+through a Nakama-authenticated gameplay JWT.
+
+See `docs/GAMEPLAY_REQUEST_PIPELINE_AUDIT.md` for the current ownership matrix,
+known duplicate paths, response contract, and milestone release gates.
+
 ## Authentication foundation checks
 
 `scripts/verify_nakama_node_bridge.mjs` verifies Nakama email auth, stable
@@ -48,7 +56,8 @@ Nakama user id as `sub`, include issuer/audience/`iat`/`exp`/`jti`, expire withi
 `npm run test:godot-auth-flow` verifies two isolated accounts, authoritative
 Character creation/selection/loading, server-authored starter currency,
 idempotent create replay/conflict behavior, JWT re-exchange, and denial of
-cross-account Character reads.
+cross-account Character reads. It also verifies Node mission launch/skip/claim,
+persisted XP, active-pointer clearing, and idempotent claim replay.
 
 The Godot headless audit verifies environment-scoped token code, startup,
 selection, and logout scripts compile. Staging validation additionally requires

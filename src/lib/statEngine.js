@@ -5,9 +5,9 @@
 //   Class Base + Level-Gained + Stardust-Purchased + Equipment
 //   (+ racial % at compute time; race is permanent, not a stim)
 //
-// character.stats already holds Class Base + Purchased (buys mutate stats).
-// Level-Gained is currently 0 (no free points on level-up).
-// Equipment is summed from equipped items.
+// character.stats already holds Class Base + Level-Gained + Purchased
+// (buys and server level grants mutate stats). Level-Gained = 2 attrs/level
+// via characterProgression. Equipment is summed from equipped items.
 // Temporary stims are NOT part of permanent totals — use
 // computePermanentTotalStats for combat formulas.
 //

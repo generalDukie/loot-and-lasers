@@ -93,6 +93,10 @@ func get_public_config() -> Dictionary:
 ## Legacy Node gameplay API base URL (characters/functions). Godot auth does not use this.
 ## Priority: LOOT_NODE_API_URL → secrets node_api_base_url → env default.
 func get_node_api_base_url() -> String:
+	# Friend builds are immutable release artifacts. Never let stale machine
+	# environment variables redirect them to an obsolete direct port.
+	if OS.has_feature(RELEASE_FEATURE):
+		return str(_resolved.get("node_api_base_url", "")).rstrip("/")
 	var from_os := OS.get_environment("LOOT_NODE_API_URL").strip_edges()
 	if not from_os.is_empty():
 		return from_os.rstrip("/")
@@ -171,13 +175,12 @@ func apply_environment(env_id: String) -> Dictionary:
 
 
 func _resolve_environment_id() -> String:
+	# Release identity wins over all machine-specific editor/developer settings.
+	if OS.has_feature(RELEASE_FEATURE):
+		return ENV_STAGING
 	var from_os := _normalize_env_id(OS.get_environment("LOOT_NAKAMA_ENV"))
 	if not from_os.is_empty():
 		return from_os
-	# Exported friend builds are permanently staging-bound and require no
-	# machine-specific environment variables.
-	if OS.has_feature(RELEASE_FEATURE):
-		return ENV_STAGING
 	var cfg := ConfigFile.new()
 	if cfg.load(USER_ENV_PATH) == OK:
 		var from_user := _normalize_env_id(str(cfg.get_value("backend", "environment", "")))
@@ -206,15 +209,15 @@ func _build_resolved(env_id: String) -> Dictionary:
 
 
 func _load_staging_server_key() -> String:
+	if OS.has_feature(RELEASE_FEATURE):
+		var from_release := _read_secret_field(RELEASE_CLIENT_CONFIG_PATH, "server_key")
+		if not from_release.is_empty():
+			return from_release
 	var from_os := OS.get_environment("NAKAMA_SOCKET_SERVER_KEY").strip_edges()
 	if from_os.is_empty():
 		from_os = OS.get_environment("LOOT_NAKAMA_SERVER_KEY").strip_edges()
 	if not from_os.is_empty():
 		return from_os
-	if OS.has_feature(RELEASE_FEATURE):
-		var from_release := _read_secret_field(RELEASE_CLIENT_CONFIG_PATH, "server_key")
-		if not from_release.is_empty():
-			return from_release
 	return _read_secret_value("server_key")
 
 

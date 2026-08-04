@@ -199,7 +199,7 @@ async function runPlayer(label) {
   assert(created.status === 201 && created.data?.id, `${label}: create character (${created.status})`);
   const characterId = created.data.id;
   assert(created.data.created_by_id === nodeUserId, `${label}: character owned by Node user`);
-  assert(created.data.nova_crystals === 100, `${label}: starter Nova is server-authored`);
+  assert.ok(created.data.nova_crystals === 50 || created.data.nova_crystals === 25, `${label}: starter Nova is server-authored`);
 
   const replay = await nodeReq("/api/entities/Character", {
     method: "POST",
@@ -250,6 +250,76 @@ async function runPlayer(label) {
     list.ok && Array.isArray(list.data) && list.data.some((c) => c.id === characterId),
     `${label}: list characters`,
   );
+
+  if (label === "player-a") {
+    const beforeXp = Number(selected.data?.experience || 0);
+    const launch = await nodeReq("/api/functions/LaunchMission", {
+      method: "POST",
+      token: jwt,
+      body: {
+        template: {
+          name: "Installer Reward Verification",
+          description: "Server-authoritative mission reward test",
+          location: "Verification Reach",
+          sector: 1,
+          level_requirement: 1,
+          duration_seconds: 15,
+          stardust_efficiency: 1,
+          xp_efficiency: 1,
+        },
+      },
+    });
+    assert(launch.ok && launch.data?.mission?.id, `${label}: Node mission launch`);
+    const missionId = launch.data?.mission?.id;
+    const serverRolledGear = launch.data?.mission?.rewards?.loot_drops === true;
+
+    const skip = await nodeReq("/api/functions/SkipMission", {
+      method: "POST",
+      token: jwt,
+      body: { mission_id: missionId },
+    });
+    assert(skip.ok && skip.data?.mission?.status === "completed", `${label}: Node mission skip`);
+
+    const claimKey = `mission:${missionId}`;
+    const claim = await nodeReq("/api/functions/ClaimMission", {
+      method: "POST",
+      token: jwt,
+      body: { mission_id: missionId, won: true, idempotencyKey: claimKey },
+    });
+    assert(claim.ok && Number(claim.data?.gains?.experience || 0) > 0, `${label}: mission grants XP`);
+    const deliveredItems = [
+      ...(Array.isArray(claim.data?.items) ? claim.data.items : []),
+      ...(Array.isArray(claim.data?.pending_loot) ? claim.data.pending_loot : []),
+    ];
+    if (serverRolledGear) {
+      assert(deliveredItems.length > 0, `${label}: rolled mission gear is delivered`);
+    } else {
+      pass(`${label}: server-authored mission gear miss recorded`);
+    }
+
+    const afterClaim = await nodeReq(`/api/entities/Character/${characterId}`, { token: jwt });
+    const xpAdvanced =
+      Number(afterClaim.data?.experience || 0) > beforeXp ||
+      Number(afterClaim.data?.level || 1) > Number(selected.data?.level || 1);
+    assert(afterClaim.ok && xpAdvanced, `${label}: mission XP persists on Character`);
+    assert(!afterClaim.data?.active_mission_id, `${label}: mission claim clears active pointer`);
+
+    const claimReplay = await nodeReq("/api/functions/ClaimMission", {
+      method: "POST",
+      token: jwt,
+      body: { mission_id: missionId, won: true, idempotencyKey: claimKey },
+    });
+    assert(
+      claimReplay.ok && claimReplay.data?.idempotentReplay === true,
+      `${label}: mission claim retry replays without conflict`,
+    );
+    const afterReplay = await nodeReq(`/api/entities/Character/${characterId}`, { token: jwt });
+    assert(
+      Number(afterReplay.data?.experience || 0) === Number(afterClaim.data?.experience || 0)
+        && Number(afterReplay.data?.level || 1) === Number(afterClaim.data?.level || 1),
+      `${label}: mission claim retry does not duplicate XP`,
+    );
+  }
 
   const staleJwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.invalid";
   const reconnect = await fetchMeWithReconnect(nakamaToken, email, staleJwt);

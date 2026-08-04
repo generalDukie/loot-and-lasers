@@ -167,7 +167,13 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	return root
 
 
-static func make_level_up_sheet(from_level: int, to_level: int, character: Dictionary, on_close: Callable) -> Control:
+static func make_level_up_sheet(
+	from_level: int,
+	to_level: int,
+	character: Dictionary,
+	on_close: Callable,
+	attribute_awards: Array = []
+) -> Control:
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -219,6 +225,34 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 	name.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(name)
 	col.add_child(name)
+
+	if not attribute_awards.is_empty():
+		var awards_title := Label.new()
+		awards_title.text = "Permanent attributes awarded"
+		awards_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		awards_title.add_theme_font_size_override("font_size", 12)
+		awards_title.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_display_font(awards_title)
+		col.add_child(awards_title)
+		var tallies := {}
+		for entry in attribute_awards:
+			if typeof(entry) != TYPE_DICTIONARY:
+				continue
+			var stat := str(entry.get("stat", "")).strip_edges()
+			if stat.is_empty():
+				continue
+			tallies[stat] = int(tallies.get(stat, 0)) + 1
+		var award_line := Label.new()
+		var parts: PackedStringArray = []
+		for stat_key in ["strength", "agility", "intellect", "vitality", "luck"]:
+			if tallies.has(stat_key):
+				parts.append("+%s %s" % [tallies[stat_key], stat_key.capitalize()])
+		award_line.text = ", ".join(parts) if not parts.is_empty() else "%s permanent attributes" % attribute_awards.size()
+		award_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		award_line.add_theme_font_size_override("font_size", 14)
+		award_line.add_theme_color_override("font_color", Color("#FBBF24"))
+		ClientUi.apply_display_font(award_line)
+		col.add_child(award_line)
 
 	# Derived combat deltas at the new level vs old.
 	var totals := StatsRules.display_totals(character, [])
@@ -279,12 +313,24 @@ static func make_level_up_sheet(from_level: int, to_level: int, character: Dicti
 	return root
 
 
-static func pending_level_up(prev_character: Dictionary, next_character: Dictionary) -> Dictionary:
+static func pending_level_up(
+	prev_character: Dictionary,
+	next_character: Dictionary,
+	progression: Dictionary = {}
+) -> Dictionary:
 	var from_l := int(prev_character.get("level", 1))
 	var to_l := int(next_character.get("level", from_l))
+	if typeof(progression) == TYPE_DICTIONARY and not progression.is_empty():
+		from_l = int(progression.get("previous_level", from_l))
+		to_l = int(progression.get("level", to_l))
 	if to_l <= from_l:
 		return {}
-	return {"from_level": from_l, "to_level": to_l}
+	var awards: Array = []
+	if typeof(progression) == TYPE_DICTIONARY:
+		var raw: Variant = progression.get("attribute_awards", [])
+		if typeof(raw) == TYPE_ARRAY:
+			awards = raw
+	return {"from_level": from_l, "to_level": to_l, "attribute_awards": awards}
 
 
 ## Show combat-complete first; only after it closes, show level-up (never both).
@@ -300,6 +346,16 @@ static func present_complete_then_level_up(
 		return
 	var won := bool(summary.get("won", false))
 	var to_level := int(character.get("level", from_level))
+	var awards: Array = []
+	var prog: Variant = summary.get("progression", {})
+	if typeof(prog) == TYPE_DICTIONARY and not (prog as Dictionary).is_empty():
+		from_level = int((prog as Dictionary).get("previous_level", from_level))
+		to_level = int((prog as Dictionary).get("level", to_level))
+		var raw_awards: Variant = (prog as Dictionary).get("attribute_awards", [])
+		if typeof(raw_awards) == TYPE_ARRAY:
+			awards = raw_awards
+	elif typeof(summary.get("attribute_awards", null)) == TYPE_ARRAY:
+		awards = summary.get("attribute_awards", [])
 	var show_levelup := to_level > from_level and (won or not require_win_for_levelup)
 	var finished := {"done": false}
 
@@ -331,7 +387,7 @@ static func present_complete_then_level_up(
 				_dismiss_combat_overlay()
 				if captured_nav.is_valid():
 					captured_nav.call()
-			host.add_child(make_level_up_sheet(from_level, to_level, character, on_level_done))
+			host.add_child(make_level_up_sheet(from_level, to_level, character, on_level_done, awards))
 		else:
 			_dismiss_combat_overlay()
 			if nav.is_valid():

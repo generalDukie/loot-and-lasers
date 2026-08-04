@@ -132,6 +132,15 @@ function checkStatic() {
     fail(cat, "ProfileManager missing save busy-guard");
     return;
   }
+  if (/invoke_rpc\(\s*["']profile_/.test(mgr) || /RPC_GET|RPC_UPDATE/.test(mgr)) {
+    fail(cat, "ProfileManager must not call Nakama profile RPCs");
+    return;
+  }
+  if (!/SaveAccountPreferences|select_character|node_local_projection/.test(mgr)) {
+    fail(cat, "ProfileManager must project from Node");
+    return;
+  }
+  pass(cat, "ProfileManager is Node projection (no Nakama profile RPCs)");
   if (!/profile_get/.test(rpcDoc) || !/PHASE3_PROFILE/.test(rpcDoc)) {
     fail(cat, "NAKAMA_RPC.md missing Phase 3 docs");
     return;

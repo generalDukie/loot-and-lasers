@@ -579,6 +579,118 @@ func schedules_preview(body: Dictionary) -> Dictionary:
 	return _result(res, "preview")
 
 
+# —— Live ops / integrity (Restoration 26) ——
+
+func lookup_player(query: String, limit: int = 20) -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var res: Dictionary = await GameApiClient.invoke("LookupPlayer", {
+		"q": query,
+		"limit": limit,
+	})
+	return _result(res, "lookup")
+
+
+func inspect_character(character_id: String) -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var res: Dictionary = await GameApiClient.invoke("InspectCharacter", {
+		"character_id": character_id,
+	})
+	return _result(res, "inspect")
+
+
+func get_ops_dashboard() -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var res: Dictionary = await GameApiClient.invoke("GetOpsDashboard", {})
+	return _result(res, "ops")
+
+
+func get_runtime_config() -> Dictionary:
+	var res: Dictionary = await GameApiClient.invoke("GetRuntimeConfig", {})
+	return _result(res, "runtime_config")
+
+
+func set_feature_flag(flag: String, enabled: bool, reason: String) -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var res: Dictionary = await GameApiClient.invoke("SetFeatureFlag", {
+		"flag": flag,
+		"enabled": enabled,
+		"reason": reason,
+	})
+	return _result(res, "flag_set")
+
+
+func set_maintenance_mode(enabled: bool, message: String = "", reason: String = "admin_ui") -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var res: Dictionary = await GameApiClient.invoke("SetMaintenanceMode", {
+		"enabled": enabled,
+		"message": message,
+		"reason": reason,
+	})
+	return _result(res, "maintenance")
+
+
+func run_integrity_audit(character_id: String = "", account_id: String = "", quarantine: bool = false) -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var body := {"quarantine": quarantine}
+	if not character_id.is_empty():
+		body["character_id"] = character_id
+	if not account_id.is_empty():
+		body["account_id"] = account_id
+	var res: Dictionary = await GameApiClient.invoke("RunIntegrityAudit", body)
+	return _result(res, "integrity_audit")
+
+
+func apply_data_repair(repair_type: String, character_id: String, apply: bool = false) -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var res: Dictionary = await GameApiClient.invoke("ApplyDataRepair", {
+		"repair_type": repair_type,
+		"character_id": character_id,
+		"apply": apply,
+	})
+	return _result(res, "repair")
+
+
+func run_migration(migration_id: String, apply: bool = false) -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var res: Dictionary = await GameApiClient.invoke("RunMigration", {
+		"migration_id": migration_id,
+		"apply": apply,
+	})
+	return _result(res, "migration")
+
+
+func arena_suspend(character_id: String, hours: int, reason: String) -> Dictionary:
+	return await moderation("arena_suspend", {
+		"character_id": character_id,
+		"hours": hours,
+		"reason": reason,
+	})
+
+
+func arena_ban(character_id: String, reason: String) -> Dictionary:
+	return await moderation("arena_ban", {"character_id": character_id, "reason": reason})
+
+
+func arena_unban(character_id: String, reason: String = "") -> Dictionary:
+	return await moderation("arena_unban", {"character_id": character_id, "reason": reason})
+
+
 func _query_string(params: Dictionary) -> String:
 	if params.is_empty():
 		return ""

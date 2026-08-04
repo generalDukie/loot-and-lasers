@@ -517,12 +517,11 @@ export function generateItem(rarity, playerLevel, type, playerClass) {
 }
 
 // ═══════════════════════════════════════════
-// ATTRIBUTE POINTS — bought with Stardust (unlimited)
-// Free level-up points removed; each permanent +1 costs escalating SD.
+// ATTRIBUTE POINTS — Stardust purchases + free permanent attrs on level-up
 // ═══════════════════════════════════════════
 export const STAT_POINTS_START = 0;
-/** @deprecated Attributes are purchased with Stardust — level-ups grant 0. */
-export const STAT_POINTS_PER_LEVEL = 0;
+/** Permanent free attributes awarded automatically per level gained (Prompt 04). */
+export const STAT_POINTS_PER_LEVEL = 2;
 
 /** Design chart waypoints (1-indexed purchase → Stardust cost). */
 const ATTR_PURCHASE_COST_WAYPOINTS = [
@@ -595,14 +594,16 @@ export function getNextAttributePointCost(character, stat) {
   return getAttributePointCost(getAttributePurchaseCount(character, stat) + 1);
 }
 
-/** Level-ups no longer grant free attribute points (Stardust sink instead). */
+/** Permanent attrs awarded for crossing one level threshold. */
 export function getStatPointsForLevel(_level) {
-  return 0;
+  return STAT_POINTS_PER_LEVEL;
 }
 
-/** @deprecated Always 0 — kept so level-up call sites stay stable. */
-export function getStatPointsForLevelRange(_fromLevel, _toLevel) {
-  return 0;
+/** Total permanent free attrs awarded when leveling from→to (exclusive of from). */
+export function getStatPointsForLevelRange(fromLevel, toLevel) {
+  const from = Math.max(1, Math.floor(Number(fromLevel) || 1));
+  const to = Math.max(from, Math.floor(Number(toLevel) || from));
+  return (to - from) * STAT_POINTS_PER_LEVEL;
 }
 
 // ═══════════════════════════════════════════
@@ -667,7 +668,7 @@ function mulberry32(a) {
 export { getShopWindow, getShopGameDayKey, msUntilNextShopGameDay };
 
 /** Nova cost to reroll a market stall (after free refresh is used). */
-export const SHOP_REFRESH_COST = 10;
+export const SHOP_REFRESH_COST = 20;
 
 const VENDOR_LINES = [
   "Cash only. No names. No receipts.",
@@ -689,197 +690,53 @@ export function getVendorLine(seed = 0) {
   return VENDOR_LINES[i];
 }
 
-/** Haggle: ~40% buy at 15–20% off; otherwise listing is yanked (no purchase). */
-export function rollHaggle(rng = Math.random) {
-  const r = typeof rng === "function" ? rng : Math.random;
-  if (r() < 0.4) {
-    const pct = 15 + Math.floor(r() * 6); // 15–20 inclusive
-    const mult = 1 - pct / 100;
-    return { ok: true, mult, key: "deal", pct, label: `They blinked — ${pct}% off` };
-  }
-  return {
-    ok: false,
-    mult: 0,
-    key: "refused",
-    label: "Deal soured — they yanked the listing",
-  };
+/** @deprecated Client mirror only — Node `rollHaggle` is authoritative (Restoration 12A/12C). */
+export function rollHaggle(..._args) {
+  obsoleteShopClient("rollHaggle");
 }
 
 /**
- * Persistable market state for the current 12h window + Hot Deal game-day (2 PM ET).
- * Free refresh resets every window; Hot Deal counters reset on hot_day change.
+ * @deprecated Obsolete client shop authority (Restoration 12C).
+ * Node `economyFormulas.normalizeShopMeta` + EnsureShop own persistence.
+ * These stubs throw so stray callers cannot silently diverge.
  */
-export function normalizeShopMeta(character, win = getShopWindow(), day = getShopGameDayKey()) {
-  const prev = character?.shop_meta || {};
-  const hot_day = day;
-  const hot_purchased = prev.hot_day === day ? !!prev.hot_purchased : false;
-  const hot_yanked = prev.hot_day === day ? !!prev.hot_yanked : false;
-  const hot_manual_refresh_count =
-    prev.hot_day === day ? Math.max(0, Math.floor(prev.hot_manual_refresh_count || 0)) : 0;
-  if (!prev.window_idx || prev.window_idx !== win.idx) {
-    return {
-      window_idx: win.idx,
-      gear_refresh: 0,
-      cons_refresh: 0,
-      free_refresh_used: false,
-      manual_refresh_count: 0,
-      purchased: {},
-      yanked: {},
-      hot_day,
-      hot_purchased,
-      hot_yanked,
-      hot_manual_refresh_count,
-    };
-  }
-  return {
-    window_idx: win.idx,
-    gear_refresh: Math.max(0, Math.floor(prev.gear_refresh || 0)),
-    cons_refresh: Math.max(0, Math.floor(prev.cons_refresh || 0)),
-    free_refresh_used: !!prev.free_refresh_used,
-    manual_refresh_count: Math.max(0, Math.floor(prev.manual_refresh_count || 0)),
-    purchased: prev.purchased && typeof prev.purchased === "object" ? { ...prev.purchased } : {},
-    yanked: prev.yanked && typeof prev.yanked === "object" ? { ...prev.yanked } : {},
-    hot_day,
-    hot_purchased,
-    hot_yanked,
-    hot_manual_refresh_count,
-  };
+function obsoleteShopClient(name) {
+  throw new Error(
+    `Obsolete client ${name} — use Node EnsureShop / server/src/shared/economyFormulas.js (Restoration 12C)`
+  );
 }
 
-export function shopGearSeed(meta, win = getShopWindow()) {
-  return (win?.idx || 0) + (meta?.gear_refresh || 0);
+/** @deprecated */
+export function normalizeShopMeta(..._args) {
+  obsoleteShopClient("normalizeShopMeta");
 }
 
-export function shopConsSeed(meta, win = getShopWindow()) {
-  return (win?.idx || 0) + (meta?.cons_refresh || 0);
+/** @deprecated */
+export function shopGearSeed(..._args) {
+  obsoleteShopClient("shopGearSeed");
 }
 
-function pickShopGearType(r) {
-  return SHOP_GEAR_TYPES[Math.floor(r() * SHOP_GEAR_TYPES.length)];
-}
-
-function priceShopItem(item, mult = 1.2) {
-  const cost = Math.max(5 * XP_STARDUST_SCALE, Math.round(computeStardustValue(item) * mult));
-  const nova_cost = computeNovaCrystalCost(item);
-  return { cost, nova_cost };
-}
-
-function makeScrapCrate(seed, i, r, playerLevel, playerClass) {
-  const a = _rollItem("common", Math.max(1, playerLevel), pickShopGearType(r), r, playerClass);
-  const b = _rollItem("common", Math.max(1, playerLevel), pickShopGearType(r), r, playerClass);
-  const base = priceShopItem(a, 1.1).cost + priceShopItem(b, 1.1).cost;
-  return {
-    name: "Scrap Crate",
-    type: "material",
-    rarity: "common",
-    emoji: "📦",
-    stats: {},
-    level_requirement: 1,
-    flavor_text: "Two common scraps, no questions asked.",
-    _slotId: `${seed}-crate-${i}`,
-    _bundle: "scrap_crate",
-    bundle_items: [a, b],
-    cost: Math.max(8, Math.round(base * 0.82)),
-    nova_cost: 0,
-  };
+/** @deprecated */
+export function shopConsSeed(..._args) {
+  obsoleteShopClient("shopConsSeed");
 }
 
 /**
- * Black Market stock (legacy generator). ~8% chance a filler slot is a scrap crate bundle.
- * @param {string} [playerClass] Class for Common–Epic 60/40 pool selection.
+ * @deprecated Do not use for production stock — Node `generateSimpleShopStock` /
+ * EnsureShop is authoritative (Restoration 12A/12C).
  */
-export function generateShopInventory(seed, playerLevel, playerClass) {
-  const rng = mulberry32(seed * 7919 + 13);
-  const r = () => rng();
-  const slots = [];
-
-  for (let i = 0; i < 5; i++) {
-    if (r() < 0.08) {
-      slots.push(makeScrapCrate(seed, i, r, playerLevel, playerClass));
-      continue;
-    }
-    const type = pickShopGearType(r);
-    const roll = r();
-    const rarity = clampRarityByLevel(
-      roll < 0.4 ? "common" : roll < 0.7 ? "uncommon" : roll < 0.88 ? "rare" : roll < 0.97 ? "epic" : "legendary",
-      playerLevel
-    );
-    const item = _rollItem(rarity, Math.max(1, playerLevel), type, r, playerClass);
-    const { cost, nova_cost } = priceShopItem(item, 1.2);
-    slots.push({ ...item, _slotId: `${seed}-${i}`, cost, nova_cost });
-  }
-
-  // Class signature weapon — prefer the player's class for skin + pool bias.
-  const classKeys = Object.keys(CLASS_WEAPONS);
-  const cwClass = playerClass && CLASS_WEAPONS[playerClass]
-    ? playerClass
-    : classKeys[Math.floor(r() * classKeys.length)];
-  const cwRoll = r();
-  const cwRarity = clampRarityByLevel(
-    cwRoll < 0.25 ? "uncommon" : cwRoll < 0.60 ? "rare" : cwRoll < 0.88 ? "epic" : "legendary",
-    playerLevel
-  );
-  const cwItem = generateClassWeapon(cwClass, cwRarity, Math.max(1, playerLevel), r);
-  const cwPriced = priceShopItem(cwItem, 1.35);
-  slots.push({ ...cwItem, _slotId: `${seed}-cw`, cost: cwPriced.cost, nova_cost: cwPriced.nova_cost });
-  return slots;
+export function generateShopInventory(..._args) {
+  obsoleteShopClient("generateShopInventory");
 }
 
-/** One spotlight piece per ET day — not affected by Black Market restock. */
-export function generateHotDeal(dayKey, playerLevel, playerClass) {
-  const dayNum = String(dayKey || getShopGameDayKey()).split("-").reduce((a, p) => a + Number(p || 0), 0);
-  const rng = mulberry32(dayNum * 104729 + 77);
-  const r = () => rng();
-  const type = pickShopGearType(r);
-  const roll = r();
-  const rarity = clampRarityByLevel(
-    roll < 0.15 ? "uncommon" : roll < 0.45 ? "rare" : roll < 0.78 ? "epic" : "legendary",
-    playerLevel
-  );
-  const item = _rollItem(rarity, Math.max(1, playerLevel), type, r, playerClass);
-  const { cost, nova_cost } = priceShopItem(item, 1.05); // slight list discount vs normal
-  return {
-    ...item,
-    _slotId: `hot-${dayKey}`,
-    _hotDeal: true,
-    cost,
-    nova_cost,
-  };
+/** @deprecated Node `generateSimpleHotDeal` is authoritative (Restoration 12A/12C). */
+export function generateHotDeal(..._args) {
+  obsoleteShopClient("generateHotDeal");
 }
 
-function makeStimTrio(seed, i, rng) {
-  const picks = [];
-  for (let n = 0; n < 3; n++) {
-    picks.push(CONSUMABLES[Math.floor(rng() * CONSUMABLES.length)]);
-  }
-  const raw = picks.reduce((s, p) => s + (p._cost || p.sell_value || 25), 0);
-  return {
-    name: "Stim Trio",
-    type: "consumable",
-    rarity: "rare",
-    flavor_text: "Three stims, one handshake.",
-    consumable: { stat: "all", mult: 0, duration_hours: 0, tier: "bundle" },
-    _slotId: `cons-${seed}-trio-${i}`,
-    _bundle: "stim_trio",
-    bundle_items: picks,
-    _cost: Math.max(30, Math.round(raw * 0.85)),
-    sell_value: Math.round(raw * 0.4),
-  };
-}
-
-// Shop consumables — 6 slots; ~10% chance a slot is a Stim Trio bundle.
-export function generateShopConsumableSlots(seed) {
-  const rng = mulberry32(seed * 4099 + 7);
-  const slots = [];
-  for (let i = 0; i < 6; i++) {
-    if (rng() < 0.10) {
-      slots.push(makeStimTrio(seed, i, rng));
-      continue;
-    }
-    const def = randomConsumable(rng);
-    slots.push({ ...def, _slotId: `cons-${seed}-${i}` });
-  }
-  return slots;
+/** @deprecated */
+export function generateShopConsumableSlots(..._args) {
+  obsoleteShopClient("generateShopConsumableSlots");
 }
 
 // ═══════════════════════════════════════════
@@ -1096,12 +953,14 @@ export function computeMissionJunkSellValue(missionStardustOrLevel = 1, maybeFue
 }
 
 /**
- * Passthrough for non-mission grants. Pacing lives in getExpForLevel + XP/fuel.
- * Kept so call sites stay stable.
+ * Scale flat XP grants (dailies/promos) with the XP/fuel chart.
+ * Matches server `shared/rewards.js` so UI previews stay honest.
  */
-export function scaleXpReward(baseXp, _level = 1) {
+export function scaleXpReward(baseXp, level = 1) {
   const base = Math.max(0, Number(baseXp) || 0);
-  return Math.max(base > 0 ? 1 : 0, Math.round(base));
+  const rate = getMissionXpPerFuel(level);
+  const atOne = getMissionXpPerFuel(1);
+  return Math.max(base > 0 ? 1 : 0, Math.round(base * (rate / atOne)));
 }
 
 /**
@@ -1147,7 +1006,7 @@ export const FUEL_MAX = 100;
 // Fuel is a flat pool that refills to full every 24h (no per-minute regen).
 export const FUEL_CYCLE_MS = 24 * 60 * 60 * 1000;
 export const FUEL_PURCHASE_AMOUNT = 20;
-export const FUEL_PURCHASE_COST = 10; // nova crystals
+export const FUEL_PURCHASE_COST = 20; // nova crystals (display)
 export const FUEL_PURCHASE_MAX = 10; // per 24h cycle (200 fuel total)
 /** Smallest chargeable fuel unit (L1 short jobs = 15s = 0.25 fuel). */
 export const MISSION_MIN_FUEL = 0.25;
@@ -1481,18 +1340,20 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
   }
 
   const now = Number(nowMs) || Date.now();
-  const stat = item.consumable.stat;
-  if (!stat) return { ok: false, reason: "Not a stim." };
+  const stat = String(item.consumable.stat || "").toLowerCase();
+  const VALID = ["strength", "agility", "intellect", "vitality", "luck"];
+  if (!VALID.includes(stat)) {
+    return { ok: false, reason: "Invalid Stim attribute." };
+  }
 
   const rarity = resolveStimRarity(item);
-  const durationHours =
-    Number(item.consumable.duration_hours) ||
-    CONSUMABLE_TIERS[rarity]?.duration_hours ||
-    6;
-  const mult =
-    item.consumable.mult != null
-      ? Number(item.consumable.mult)
-      : CONSUMABLE_TIERS[rarity]?.mult ?? 0.05;
+  const tier = CONSUMABLE_TIERS[rarity];
+  if (!tier || STIM_RARITY_RANK[rarity] == null) {
+    return { ok: false, reason: "Invalid Stim rarity." };
+  }
+  // Authoritative mechanics — never trust item.consumable.mult / duration_hours.
+  const durationHours = tier.duration_hours;
+  const mult = tier.mult;
   const baseMs = durationHours * MS_PER_HOUR;
   const maxMs = baseMs * MAX_BUFF_STACKS;
   const refreshAt = maxMs - baseMs / 2;
@@ -1565,7 +1426,7 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
     }
     buffs[sameStatIdx] = makeStimBuff({
       stat,
-      mult: existing.mult ?? mult,
+      mult,
       name: item.name,
       rarity,
       durationHours,
@@ -1578,7 +1439,7 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
   const newRemaining = Math.min(remaining + baseMs, maxMs);
   buffs[sameStatIdx] = makeStimBuff({
     stat,
-    mult: existing.mult ?? mult,
+    mult,
     name: item.name,
     rarity,
     durationHours,

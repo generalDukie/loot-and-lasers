@@ -7,6 +7,14 @@ import { Swords, Zap, ChevronRight } from "lucide-react";
 import { computePermanentTotalStats, computeDerivedStats } from "@/lib/statEngine";
 import { CLASSES } from "@/lib/gameData";
 import { resolveAbilityBanner } from "@/lib/classPassives";
+import {
+  reduceCombatStatus,
+  resolveCombatFloater,
+  isCombatDevDiagnosticsEnabled,
+} from "@/lib/combatPresentation";
+import CombatStatusStrip from "@/components/game/CombatStatusStrip";
+import CombatEventLog from "@/components/game/CombatEventLog";
+import CombatDevDiagnostics from "@/components/game/CombatDevDiagnostics";
 import { ArenaBackdrop, ArenaFloor } from "@/components/game/ArenaBackdrop";
 import ArenaWeaponVisual from "@/components/game/ArenaWeaponVisual";
 import GameViewportOverlayPortal from "@/components/game/GameViewportOverlayPortal";
@@ -146,44 +154,28 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
       </motion.div>
 
       <AnimatePresence>
-        {floating && !floating.dodged && !floating.shieldHit && !floating.heal && (
-          <motion.div
-            key={`d${evIdx}`}
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-            initial={{ opacity: 0, y: 0, scale: 0.6 }} animate={{ opacity: 1, y: -52, scale: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.7 }}
-          >
-            <span className={`font-display font-black ${floating.crit ? "text-amber-300 text-3xl" : "text-red-400 text-xl"}`} style={{ textShadow: "0 0 8px currentColor" }}>
-              {floating.crit && "CRIT "}-{floating.damage}
-            </span>
-          </motion.div>
-        )}
-        {floating && floating.shieldHit && (
-          <motion.div
-            key={`s${evIdx}`}
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-            initial={{ opacity: 0, y: 0 }} animate={{ opacity: 1, y: -40 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}
-          >
-            <span className="font-display font-bold text-cyan-300 text-lg" style={{ textShadow: "0 0 8px currentColor" }}>SHIELD</span>
-          </motion.div>
-        )}
-        {floating && floating.heal && (
-          <motion.div
-            key={`he${evIdx}`}
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-            initial={{ opacity: 0, y: 0, scale: 0.6 }} animate={{ opacity: 1, y: -44, scale: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.7 }}
-          >
-            <span className="font-display font-bold text-green-300 text-xl" style={{ textShadow: "0 0 8px currentColor" }}>+{floating.heal}</span>
-          </motion.div>
-        )}
-        {floating && floating.dodged && (
-          <motion.div
-            key={`dg${evIdx}`}
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-            initial={{ opacity: 0, y: 0 }} animate={{ opacity: 1, y: -34 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}
-          >
-            <span className="font-display font-bold text-cyan-300 text-lg" style={{ textShadow: "0 0 8px currentColor" }}>DODGE</span>
-          </motion.div>
-        )}
+        {(() => {
+          const floater = resolveCombatFloater(floating);
+          if (!floater) return null;
+          const bigCrit = floater.kind === "crit" || floater.kind === "true";
+          return (
+            <motion.div
+              key={`f${evIdx}-${floater.kind}-${floater.label}`}
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              initial={{ opacity: 0, y: 0, scale: 0.6 }}
+              animate={{ opacity: 1, y: floater.kind === "dodge" || floater.kind === "miss" || floater.kind === "forced_miss" ? -34 : -52, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.65 }}
+            >
+              <span
+                className={`font-display font-black ${bigCrit ? "text-3xl" : "text-lg"}`}
+                style={{ color: floater.color, textShadow: "0 0 8px currentColor" }}
+              >
+                {floater.label}
+              </span>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
       </div>
       <div className="mt-1 flex flex-col items-center gap-1">
@@ -317,11 +309,21 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
   }, [phase, battle.winner]);
 
   const ev = phase === "fight" ? battle.events[idx] : null;
-  const isQuiet = ev?.type === "regen";
+  const isQuiet = ev?.type === "regen" || ev?.type === "barrier" || (ev?.type === "passive" && !(ev?.damage > 0));
   const attacker = ev?.attacker;
-  const defender = ev?.defender;
+  const defender = ev?.defender || (ev?.type === "barrier" || ev?.type === "passive" ? ev?.side : null);
   const isBigHit = !!(ev && !ev.dodged && ev.damage && (ev.crit || ev.type === "ability" || ev.type === "drone"));
   const combo = phase === "fight" ? comboAt(battle.events, idx) : 0;
+  const combatStatus = reduceCombatStatus(battle.events, phase === "fight" ? idx : battle.events.length - 1);
+  const showDev = isCombatDevDiagnosticsEnabled();
+
+  const floatFor = (side) => {
+    if (!ev) return null;
+    if (ev.defender === side) return ev;
+    if (!ev.defender && ev.side === side) return ev;
+    if (ev.type === "miss" && ev.defender === side) return ev;
+    return null;
+  };
 
   return (
     <GameViewportOverlayPortal className="z-[100] flex flex-col bg-[#040214]">
@@ -336,18 +338,24 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
           </span>
         </div>
       )}
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 px-4 pt-8 items-center relative z-30">
-        <HpBar name={player.name} hp={hp.player} max={battle.playerMaxHp} color="#22D3EE" emoji={CLASSES[player.class]?.emoji} />
-        <div className="text-center px-2">
+      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 px-4 pt-8 items-start relative z-30">
+        <div>
+          <HpBar name={player.name} hp={hp.player} max={battle.playerMaxHp} color="#22D3EE" emoji={CLASSES[player.class]?.emoji} />
+          <CombatStatusStrip status={combatStatus.player} align="left" />
+        </div>
+        <div className="text-center px-2 pt-2">
           <Swords className="w-5 h-5 text-amber-300/80 mx-auto" />
         </div>
-        <HpBar name={opponent.name} hp={hp.opponent} max={battle.opponentMaxHp} color="#FB7185" align="right" emoji={CLASSES[opponent.class]?.emoji} />
+        <div>
+          <HpBar name={opponent.name} hp={hp.opponent} max={battle.opponentMaxHp} color="#FB7185" align="right" emoji={CLASSES[opponent.class]?.emoji} />
+          <CombatStatusStrip status={combatStatus.opponent} align="right" />
+        </div>
       </div>
 
       <motion.div animate={shake} className="flex-1 flex items-center justify-center gap-8 sm:gap-16 relative z-10">
         <ArenaFloor pulse={isBigHit} accent={accent} />
-        <Fighter entity={player} side="player" lunge={attacker === "player" && !isQuiet} hurt={defender === "player" && !isQuiet} color="#22D3EE" flip={false} floating={ev && defender === "player" ? ev : null} attackEvent={ev && attacker === "player" ? ev : null} evIdx={idx} big={defender === "player" && isBigHit} weaponItem={playerWeapon} />
-        <Fighter entity={opponent} side="opponent" lunge={attacker === "opponent" && !isQuiet} hurt={defender === "opponent" && !isQuiet} color="#FB7185" flip floating={ev && defender === "opponent" ? ev : null} attackEvent={ev && attacker === "opponent" ? ev : null} evIdx={idx} big={defender === "opponent" && isBigHit} weaponItem={opponentWeapon} />
+        <Fighter entity={player} side="player" lunge={attacker === "player" && !isQuiet} hurt={defender === "player" && !isQuiet && !!(ev?.damage || ev?.dodged || ev?.missed || ev?.type === "miss")} color="#22D3EE" flip={false} floating={floatFor("player")} attackEvent={ev && attacker === "player" ? ev : null} evIdx={idx} big={defender === "player" && isBigHit} weaponItem={playerWeapon} />
+        <Fighter entity={opponent} side="opponent" lunge={attacker === "opponent" && !isQuiet} hurt={defender === "opponent" && !isQuiet && !!(ev?.damage || ev?.dodged || ev?.missed || ev?.type === "miss")} color="#FB7185" flip floating={floatFor("opponent")} attackEvent={ev && attacker === "opponent" ? ev : null} evIdx={idx} big={defender === "opponent" && isBigHit} weaponItem={opponentWeapon} />
         <AnimatePresence>
           {flash && (
             <motion.div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(255,255,255,0.22), transparent 70%)" }} initial={{ opacity: 0.9 }} animate={{ opacity: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} />
@@ -358,6 +366,11 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
         <div className="absolute bottom-2 left-2 w-6 h-6 border-b-2 border-l-2 border-cyan-400/30 rounded-bl-lg pointer-events-none" />
         <div className="absolute bottom-2 right-2 w-6 h-6 border-b-2 border-r-2 border-rose-400/30 rounded-br-lg pointer-events-none" />
       </motion.div>
+
+      {phase === "fight" && <CombatEventLog events={battle.events} currentIdx={idx} />}
+      {showDev && phase === "fight" && (
+        <CombatDevDiagnostics events={battle.events} currentIdx={idx} status={combatStatus} />
+      )}
 
       {/* Combo callout — appears after 2+ consecutive hits by the same attacker */}
       <div className="h-10 flex items-center justify-center relative">

@@ -4,7 +4,7 @@ import { api } from "@/api/gameClient";
 import { Flag, Search, Users } from "lucide-react";
 import { GUILD_MAX_MEMBERS } from "@/lib/gameData";
 import GuildRecruitingList from "@/components/game/GuildRecruitingList";
-import { requestToJoinGuild } from "@/lib/guildUtils";
+import { requestToJoinGuild, joinGuildById } from "@/lib/guildUtils";
 import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
 import StardustIcon from "@/components/game/StardustIcon";
 import { trackStardustSpend } from "@/lib/stardustTracker";
@@ -50,29 +50,10 @@ export default function GuildCreation({ character, onJoined }) {
     }
     setBusy(true); setError("");
     try {
-      const existing = await api.entities.GuildMember.filter({ guild_id: g.id, character_id: character.id });
-      if (existing.length) { onJoined(); return; }
-      await api.entities.GuildMember.create({
-        guild_id: g.id,
-        character_id: character.id,
-        character_name: character.name,
-        character_level: character.level,
-        character_race: character.race,
-        role: "member",
-        contributed_missions: 0,
-        contributed_stardust: 0,
-        joined_date: new Date().toISOString(),
-      });
-      await api.entities.Guild.update(g.id, { member_count: (g.member_count || 1) + 1 });
-      await api.entities.GuildLog.create({
-        guild_id: g.id,
-        entry_type: "join",
-        message: "joined the guild",
-        character_name: character.name,
-      });
+      await joinGuildById(character, g.id);
       onJoined();
     } catch (e) {
-      setError("Could not join that guild.");
+      setError(e?.message || "Could not join that guild.");
       setBusy(false);
     }
   }

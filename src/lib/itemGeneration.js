@@ -421,6 +421,77 @@ export function rollItemStats({
   };
 }
 
+/** Prompt 07 conceptual aliases — same implementations. */
+export const GetGearSlotMultiplier = getSlotMultiplier;
+export const GetGearRarityStatMultiplier = getRarityBudgetMultiplier;
+export const GetGearStatCount = getRarityAttributeCount;
+export const GetMinimumStatAllocation = getRarityMinStatShare;
+export const SelectGearAttributes = selectItemAttributes;
+export const AllocateGearStats = allocateStatBudget;
+
+/**
+ * Source-independent gear payload (Restoration 07).
+ * Reward/shop systems choose level, type, rarity; this finalizes persistent stats.
+ * `generationContext` is metadata only — it must not change budget math.
+ *
+ * @param {object} opts
+ * @param {number} opts.itemLevel
+ * @param {string} opts.itemType
+ * @param {string} opts.rarity
+ * @param {() => number} [opts.rng]
+ * @param {string|null} [opts.className]
+ * @param {object|null} [opts.generationContext]
+ */
+export function GenerateGearItem({
+  itemLevel,
+  itemType,
+  rarity,
+  rng = Math.random,
+  className = null,
+  generationContext = null,
+} = {}) {
+  void generationContext;
+  const L = Math.max(1, Math.floor(Number(itemLevel) || 1));
+  if (!Number.isFinite(L) || L < 1) {
+    const err = new Error("Invalid item level");
+    err.status = 400;
+    err.code = "VALIDATION_ERROR";
+    throw err;
+  }
+  const type = EQUIPMENT_SLOTS.includes(itemType) ? itemType : null;
+  if (!type) {
+    const err = new Error("Invalid gear item type");
+    err.status = 400;
+    err.code = "VALIDATION_ERROR";
+    throw err;
+  }
+  const r = String(rarity || "").toLowerCase();
+  if (!RARITY_ATTR_COUNT[r]) {
+    const err = new Error("Invalid gear rarity");
+    err.status = 400;
+    err.code = "VALIDATION_ERROR";
+    throw err;
+  }
+
+  const rolled = rollItemStats({
+    itemLevel: L,
+    type,
+    rarity: r,
+    rng,
+    className,
+  });
+  const item = {
+    type,
+    rarity: r,
+    level_requirement: L,
+    level: L,
+    stats: rolled.stats,
+    is_equipped: false,
+  };
+  item.sell_value = computeItemVendorValue(item);
+  return item;
+}
+
 /** Legacy vendor factors (unused by GearSaleValue; kept for shop heuristics if any). */
 export const RARITY_SELL_FACTOR = {
   common: 0.55,

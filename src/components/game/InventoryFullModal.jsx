@@ -10,7 +10,6 @@ import {
   countItems,
   hydratePendingLootFromServer,
 } from "@/lib/inventoryCap";
-import { prepareConsumableBuffs } from "@/hooks/useInventory";
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { useToast } from "@/components/ui/use-toast";
@@ -228,28 +227,27 @@ export default function InventoryFullModal({ character, onCharacterChange }) {
     if (!character || busyId || !isStim(item)) return;
     setBusyId(item.id || "focus-use");
     try {
-      if (mode === "loot" && isFocus) {
-        const fresh = await api.entities.Character.get(character.id);
-        const prepared = prepareConsumableBuffs(fresh, item);
-        if (!prepared.ok) {
-          toast({ title: "Can't use", description: prepared.reason, variant: "destructive" });
-          return;
-        }
-        await api.entities.Character.update(character.id, { active_buffs: prepared.buffs });
-        onCharacterChange?.({ active_buffs: prepared.buffs });
-        clearPendingItem();
-        setItems([]);
-        toast({ title: `🧪 Used ${item.name}`, description: "Buff applied — inventory pressure cleared." });
-        return;
-      }
-
       if (mode === "unequip" && isFocus) {
         toast({ title: "Can't use", description: "Unequip or dissolve this piece first.", variant: "destructive" });
         return;
       }
 
-      await api.functions.invoke("UseConsumable", { item_id: item.id });
-      toast({ title: `🧪 Used ${item.name}`, description: "Slot freed." });
+      // Always server-authoritative — never Character.update(active_buffs).
+      if (!item.id) {
+        toast({ title: "Can't use", description: "Stim is not in inventory yet.", variant: "destructive" });
+        return;
+      }
+      const res = await api.functions.invoke("UseConsumable", { item_id: item.id });
+      const patch = res.patch || res.data?.patch || {};
+      const full = res.character || res.data?.character;
+      if (full) onCharacterChange?.(full);
+      else if (patch.active_buffs) onCharacterChange?.({ active_buffs: patch.active_buffs });
+      toast({ title: `🧪 Used ${item.name}`, description: "Buff applied." });
+      if (mode === "loot" && isFocus) {
+        clearPendingItem();
+        setItems([]);
+        return;
+      }
       if (mode === "loot") {
         await refreshBag();
         return;

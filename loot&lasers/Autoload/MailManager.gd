@@ -1,6 +1,5 @@
 extends Node
-## Phase 20 — Account-level mail (Nakama MailService).
-## UI scripts call this manager; do not invoke mail RPCs from scenes directly.
+## Phase 20 / Restoration 23 — Character mail via Node GetInbox / SendMail / ClaimMailReward.
 
 signal inbox_loaded(messages: Array)
 signal message_loaded(message: Dictionary)
@@ -28,7 +27,7 @@ var _signals_bound := false
 
 
 func _ready() -> void:
-	print("[MailManager] ready (Nakama mail)")
+	print("[MailManager] ready (Node mail)")
 	_ensure_realtime_binds()
 
 
@@ -115,51 +114,31 @@ func _map_type_to_ui(t: String) -> String:
 
 
 func _summary_to_ui(s: Dictionary) -> Dictionary:
-	var sid := str(s.get("mail_id", ""))
+	## Accept Node mailService.serializeMail or legacy Nakama summary shapes.
+	var sid := str(s.get("id", s.get("mail_id", "")))
 	return {
 		"id": sid,
 		"mail_id": sid,
 		"subject": str(s.get("subject", "")),
-		"body": str(s.get("preview", "")),
-		"from_name": str(s.get("sender_display_name", "")),
-		"to_name": "",
-		"mail_type": _map_type_to_ui(str(s.get("type", ""))),
-		"folder": str(s.get("mailbox", mail_folder)),
+		"body": str(s.get("body", s.get("preview", ""))),
+		"from_name": str(s.get("from_name", s.get("sender_display_name", ""))),
+		"from_id": str(s.get("from_id", "")),
+		"to_name": str(s.get("to_name", "")),
+		"mail_type": _map_type_to_ui(str(s.get("mail_type", s.get("type", "")))),
+		"folder": str(s.get("folder", s.get("mailbox", mail_folder))),
 		"read": bool(s.get("read", false)),
-		"has_rewards": bool(s.get("has_unclaimed_attachments", false)),
-		"claimed": not bool(s.get("has_unclaimed_attachments", false)),
-		"created_date": str(s.get("created_at", "")),
+		"has_rewards": bool(s.get("has_rewards", s.get("has_unclaimed_attachments", false))),
+		"claimed": bool(s.get("claimed", false)),
+		"guild_id": str(s.get("guild_id", "")),
+		"created_date": str(s.get("created_date", s.get("created_at", ""))),
 		"expires_at": str(s.get("expires_at", "")),
-		"preview": str(s.get("preview", "")),
+		"expired": bool(s.get("expired", false)),
+		"preview": str(s.get("body", s.get("preview", ""))).substr(0, 80),
 	}
 
 
 func _full_to_ui(m: Dictionary) -> Dictionary:
-	var sid := str(m.get("mail_id", ""))
-	var sender: Dictionary = m.get("sender", {}) if typeof(m.get("sender", {})) == TYPE_DICTIONARY else {}
-	var unclaimed := bool(m.get("has_unclaimed_attachments", false))
-	var mailbox := str(m.get("mailbox", mail_folder))
-	if bool(m.get("deleted", false)):
-		mailbox = "deleted"
-	return {
-		"id": sid,
-		"mail_id": sid,
-		"subject": str(m.get("subject", "")),
-		"body": str(m.get("body", "")),
-		"from_name": str(sender.get("display_name", "")),
-		"from_id": str(sender.get("sender_user_id", "")),
-		"to_name": "",
-		"mail_type": _map_type_to_ui(str(m.get("type", ""))),
-		"folder": mailbox,
-		"read": bool(m.get("read", false)),
-		"has_rewards": unclaimed,
-		"claimed": not unclaimed and typeof(m.get("attachments", [])) == TYPE_ARRAY and (m.get("attachments") as Array).size() > 0,
-		"attachments": m.get("attachments", []),
-		"created_date": str(m.get("created_at", "")),
-		"expires_at": str(m.get("expires_at", "")),
-		"expired": bool(m.get("expired", false)),
-		"target_character_id": str(m.get("target_character_id", "")),
-	}
+	return _summary_to_ui(m)
 
 
 func _on_rt_connection(connected: bool) -> void:
@@ -207,20 +186,13 @@ func load_mail(folder: String = "inbox", cursor: String = "", filters: Dictionar
 		return inbox
 	_busy = true
 	_set_loading(true)
-	var payload := {
-		"limit": int(filters.get("limit", 30)),
-		"cursor": cursor,
+	var res: Dictionary = await GameApiClient.invoke("GetInbox", {
 		"folder": mail_folder,
-		"include_archived": bool(filters.get("include_archived", false)),
-	}
-	if bool(filters.get("unread_only", false)):
-		payload["unread_only"] = true
-	if bool(filters.get("attachments_only", false)):
-		payload["attachments_only"] = true
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_get_inbox", payload)
+		"limit": int(filters.get("limit", 100)),
+	})
 	_busy = false
 	_set_loading(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		inbox = []
 		_fail(str(res.get("error", "Failed to load mail")))
 		inbox_loaded.emit(inbox)
@@ -232,12 +204,9 @@ func load_mail(folder: String = "inbox", cursor: String = "", filters: Dictionar
 	for r in rows:
 		if typeof(r) == TYPE_DICTIONARY:
 			mapped.append(_summary_to_ui(r))
-	if cursor.is_empty():
-		inbox = mapped
-	else:
-		inbox.append_array(mapped)
-	next_cursor = str(data.get("next_cursor", ""))
-	has_more_pages = bool(data.get("has_more", false))
+	inbox = mapped
+	next_cursor = ""
+	has_more_pages = false
 	if data.has("unread_count"):
 		_set_unread(int(data.get("unread_count", 0)))
 	else:
@@ -247,8 +216,8 @@ func load_mail(folder: String = "inbox", cursor: String = "", filters: Dictionar
 
 
 func refresh_unread() -> int:
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_get_unread_count", {})
-	if bool(res.get("success", false)):
+	var res: Dictionary = await GameApiClient.invoke("GetInbox", {"folder": "inbox", "limit": 1})
+	if bool(res.get("ok", false)):
 		var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
 		_set_unread(int(data.get("unread_count", 0)))
 	return unread_count
@@ -257,118 +226,86 @@ func refresh_unread() -> int:
 func load_message(mail_id: String) -> Dictionary:
 	if mail_id.is_empty():
 		return _fail("Missing mail_id")
-	_set_loading(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_get_message", {"mail_id": mail_id})
-	_set_loading(false)
-	if not bool(res.get("success", false)):
-		return _fail(str(res.get("error", "Failed to load message")))
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
-	var mail: Dictionary = data.get("mail", {}) if typeof(data.get("mail", {})) == TYPE_DICTIONARY else {}
-	selected_message = _full_to_ui(mail)
-	message_loaded.emit(selected_message)
-	return {"ok": true, "success": true, "data": selected_message, "error": ""}
+	await load_mail(mail_folder)
+	for m in inbox:
+		if typeof(m) == TYPE_DICTIONARY and str(m.get("id", "")) == mail_id:
+			selected_message = m
+			message_loaded.emit(selected_message)
+			return {"ok": true, "success": true, "data": selected_message, "error": ""}
+	return _fail("Mail not found")
 
 
 func mark_read(mail_id: String) -> Dictionary:
 	if mail_id.is_empty():
 		return _fail("Missing mail_id")
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_mark_read", {"mail_id": mail_id})
+	var res: Dictionary = await GameApiClient.invoke("MarkMailRead", {"mail_id": mail_id, "read": true})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		return _fail(str(res.get("error", "Mark read failed")))
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
-	if data.has("unread_count"):
-		_set_unread(int(data.get("unread_count", unread_count)))
 	for m in inbox:
 		if typeof(m) == TYPE_DICTIONARY and str(m.get("id", "")) == mail_id:
 			m["read"] = true
 	mail_read_changed.emit(mail_id, true)
-	mail_changed.emit()
-	return {"ok": true, "success": true, "data": data, "error": ""}
+	await refresh_unread()
+	return {"ok": true, "success": true, "data": res.get("data", {}), "error": ""}
 
 
 func mark_unread(mail_id: String) -> Dictionary:
 	if mail_id.is_empty():
 		return _fail("Missing mail_id")
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_mark_unread", {"mail_id": mail_id})
+	var res: Dictionary = await GameApiClient.invoke("MarkMailRead", {"mail_id": mail_id, "read": false})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		return _fail(str(res.get("error", "Mark unread failed")))
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
-	if data.has("unread_count"):
-		_set_unread(int(data.get("unread_count", unread_count)))
 	for m in inbox:
 		if typeof(m) == TYPE_DICTIONARY and str(m.get("id", "")) == mail_id:
 			m["read"] = false
 	mail_read_changed.emit(mail_id, false)
-	mail_changed.emit()
-	return {"ok": true, "success": true, "data": data, "error": ""}
+	await refresh_unread()
+	return {"ok": true, "success": true, "data": res.get("data", {}), "error": ""}
 
 
 func delete_mail(mail_id: String) -> Dictionary:
 	if mail_id.is_empty():
 		return _fail("Missing mail_id")
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_delete", {
-		"mail_id": mail_id,
-		"request_id": _rid("mdel"),
-	})
+	var res: Dictionary = await GameApiClient.invoke("DeleteMail", {"mail_id": mail_id})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		return _fail(str(res.get("error", "Delete failed")))
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
-	if data.has("unread_count"):
-		_set_unread(int(data.get("unread_count", unread_count)))
 	await load_mail(mail_folder)
 	mail_deleted.emit(mail_id)
-	return {"ok": true, "success": true, "data": data, "error": ""}
+	return {"ok": true, "success": true, "data": res.get("data", {}), "error": ""}
 
 
 func restore_mail(mail_id: String) -> Dictionary:
 	if mail_id.is_empty():
 		return _fail("Missing mail_id")
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_delete", {
-		"mail_id": mail_id,
-		"restore": true,
-		"request_id": _rid("mres"),
-	})
+	var res: Dictionary = await GameApiClient.invoke("RestoreMail", {"mail_id": mail_id})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		return _fail(str(res.get("error", "Restore failed")))
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
-	if data.has("unread_count"):
-		_set_unread(int(data.get("unread_count", unread_count)))
 	await load_mail(mail_folder)
-	return {"ok": true, "success": true, "data": data, "error": ""}
+	return {"ok": true, "success": true, "data": res.get("data", {}), "error": ""}
 
 
 func claim_attachments(mail_id: String, target_character_id: String = "") -> Dictionary:
 	if mail_id.is_empty():
 		return _fail("Missing mail_id")
-	if target_character_id.is_empty():
-		target_character_id = str(GameManager.active_character.get("id", ""))
+	void target_character_id
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_claim_attachments", {
-		"mail_id": mail_id,
-		"target_character_id": target_character_id,
-		"request_id": _rid("mclaim"),
-	})
+	var res: Dictionary = await GameApiClient.invoke("ClaimMailReward", {"mail_id": mail_id})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		return _fail(str(res.get("error", "Claim failed")))
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
-	var wallet_applied := false
-	if CurrencyManager != null and typeof(data.get("wallet", null)) == TYPE_DICTIONARY:
-		wallet_applied = CurrencyManager.apply_authoritative_wallet(data.get("wallet"), "mail_claim")
-	if CurrencyManager != null and not wallet_applied and CurrencyManager.has_method("load_wallet"):
+	if CurrencyManager != null and CurrencyManager.has_method("load_wallet"):
 		await CurrencyManager.load_wallet()
 	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
-		await InventoryManager.load_inventory(target_character_id)
-	if data.has("mail") and typeof(data.get("mail")) == TYPE_DICTIONARY:
-		selected_message = _full_to_ui(data.get("mail"))
+		await InventoryManager.load_inventory(str(GameManager.active_character.get("id", "")))
 	await load_mail(mail_folder)
 	attachments_claimed.emit(data)
 	return {"ok": true, "success": true, "data": data, "error": ""}
@@ -383,14 +320,13 @@ func send_player_mail(recipient_user_id: String, subject: String, body: String) 
 	if recipient_user_id.is_empty():
 		return _fail("Missing recipient")
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("mail_send_player_text", {
-		"recipient_user_id": recipient_user_id,
+	var res: Dictionary = await GameApiClient.invoke("SendMail", {
+		"to_character_id": recipient_user_id,
 		"subject": subject,
 		"body": body,
-		"request_id": _rid("msend"),
 	})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		return _fail(str(res.get("error", "Send failed")))
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
 	mail_sent.emit(data)

@@ -1,4 +1,8 @@
-# Phase 15 — Secure shop service
+# Phase 15 — Secure shop service (SUPERSEDED by Restoration 12A)
+
+> **Status:** Godot no longer uses Nakama `shop_*` RPCs for live stalls.
+> Authoritative Black Market is Node `EnsureShop` / `RefreshShop` / `BuyShop*` —
+> see **`docs/PHASE_SHOPS_12A.md`**.
 
 Server-authoritative Black Market (`shop_id = general`) for offer load, buy, sell, and free refresh.
 

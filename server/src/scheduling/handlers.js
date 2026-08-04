@@ -6,8 +6,11 @@
 
 import { entities } from "../entities.js";
 import { clock } from "../shared/time/clock.js";
-import { dailyPeriodInfo, weeklyPeriodId, getWeekKey } from "../shared/time/periods.js";
 import { getShopWindow } from "../shared/economyFormulas.js";
+import {
+  executeDailyReset,
+  executeWeeklyReset,
+} from "../shared/schedulerService.js";
 
 const handlers = new Map();
 
@@ -20,24 +23,11 @@ export function getHandler(key) {
 }
 
 registerHandler("daily_reset_marker", async (_schedule, occurrence) => {
-  const info = dailyPeriodInfo({ region: "na" });
-  return {
-    type: "daily_reset",
-    periodId: info.periodId,
-    periodKey: info.periodKey,
-    scheduledAtUtc: occurrence.scheduledAtUtc,
-    markedAtUtc: clock.nowIso(),
-  };
+  return executeDailyReset({ scheduledAtUtc: occurrence.scheduledAtUtc });
 });
 
 registerHandler("weekly_reset_marker", async (_schedule, occurrence) => {
-  return {
-    type: "weekly_reset",
-    periodId: weeklyPeriodId({ region: "na" }),
-    weekKey: getWeekKey(),
-    scheduledAtUtc: occurrence.scheduledAtUtc,
-    markedAtUtc: clock.nowIso(),
-  };
+  return executeWeeklyReset({ scheduledAtUtc: occurrence.scheduledAtUtc });
 });
 
 registerHandler("shop_rotation_marker", async (_schedule, occurrence) => {

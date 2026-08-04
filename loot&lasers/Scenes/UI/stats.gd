@@ -491,10 +491,10 @@ func _refresh_values() -> void:
 	if c.is_empty():
 		return
 	var eq: Array = StatsManager.equipped_items
-	var display: Dictionary = StatsRules.display_totals(c, eq)
-	var permanent: Dictionary = StatsRules.permanent_totals(c, eq)
-	var naked: Dictionary = StatsRules.naked_totals(c)
-	var derived: Dictionary = StatsRules.derived(c, permanent)
+	var display: Dictionary = StatsManager.display_totals(c, eq)
+	var permanent: Dictionary = StatsManager.permanent_totals(c, eq)
+	var naked: Dictionary = StatsManager.naked_totals(c)
+	var derived: Dictionary = StatsManager.derived_stats(c, permanent)
 	var stardust: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 
 	if is_instance_valid(_stardust_lab):
@@ -503,7 +503,7 @@ func _refresh_values() -> void:
 	var cheapest := 999999999
 	var can_buy_any := false
 	for stat in StatsRules.ATTR_KEYS:
-		var cost_i := StatsRules.next_cost(c, str(stat))
+		var cost_i := StatsManager.next_cost(c, str(stat))
 		cheapest = mini(cheapest, cost_i)
 		if CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost_i):
 			can_buy_any = true
@@ -526,7 +526,7 @@ func _refresh_values() -> void:
 			continue
 		var total := int(display.get(stat, 0))
 		var bonus := total - int(naked.get(stat, 0))
-		var cost := StatsRules.next_cost(c, str(stat))
+		var cost := StatsManager.next_cost(c, str(stat))
 		var affordable := CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost)
 
 		var value_lab := row["value"] as Label
@@ -1725,7 +1725,7 @@ func _buy_once(stat: String) -> void:
 	if _busy:
 		return
 	var label := str(StatsRules.ATTR_LABELS.get(stat, stat))
-	var cost := StatsRules.next_cost(GameManager.active_character, stat)
+	var cost := StatsManager.next_cost(GameManager.active_character, stat)
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
 		_stop_hold()
 		_status.text = "Need %s ✦ for the next %s point." % [cost, label]

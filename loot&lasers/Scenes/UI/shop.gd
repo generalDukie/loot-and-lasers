@@ -31,8 +31,14 @@ func _boot() -> void:
 	var res: Dictionary = await ShopManager.ensure_shop()
 	if not res.ok:
 		_set_status(str(res.get("error", "EnsureShop failed")))
-	_win_idx = int(GameData.get_shop_window().get("idx", 0))
+	_win_idx = int(_shop_window().get("idx", 0))
 	_populate()
+
+
+func _shop_window() -> Dictionary:
+	if not ShopManager.shop_window.is_empty():
+		return ShopManager.shop_window
+	return GameData.get_shop_window()
 
 
 func _load_equipped() -> void:
@@ -122,7 +128,7 @@ func _set_status(text: String) -> void:
 
 func _on_tick() -> void:
 	_update_meta()
-	var idx := int(GameData.get_shop_window().get("idx", 0))
+	var idx := int(_shop_window().get("idx", 0))
 	if idx != _win_idx and not _busy:
 		_win_idx = idx
 		_refresh_window()
@@ -187,7 +193,7 @@ func _offline_panel() -> VBoxContainer:
 
 
 func _update_meta() -> void:
-	var win: Dictionary = GameData.get_shop_window()
+	var win: Dictionary = _shop_window()
 	var day := ProgressManager.today_et()
 	var seed := int(win.get("idx", 0)) * 17 + day.length() * 3
 	_vendor.text = "“%s”" % GameData.get_vendor_line(seed)
@@ -207,9 +213,17 @@ func _update_meta() -> void:
 	))
 	_currency_row.add_child(ClientUi.make_currency_chip(
 		"⏱",
-		GameData.format_shop_countdown(int(win.get("secondsLeft", 0))),
+		GameData.format_shop_countdown(_seconds_left()),
 		ClientUi.CYAN
 	))
+
+
+func _seconds_left() -> int:
+	var win := _shop_window()
+	if win.has("endsAt"):
+		var now_ms := int(Time.get_unix_time_from_system() * 1000.0)
+		return maxi(0, int((int(win.get("endsAt", 0)) - now_ms) / 1000))
+	return int(win.get("secondsLeft", 0))
 
 
 # ─── Hot Deal ───────────────────────────────────────────────────────────────
@@ -699,16 +713,17 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 	if _busy:
 		return
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
-	if haggle:
-		# Phase 15: haggle is display-only; purchase uses full authoritative price.
-		pass
-	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
+	# Client affordability check is UX only — Node recalculates / haggles authoritatively.
+	if not haggle and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
 		_set_status("Need %s ✦ — you have %s." % [cost, sd])
+		return
+	if nova > 0 and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, nova):
+		_set_status("Need %s 💎" % nova)
 		return
 	_busy = true
 	_busy_slot = slot_id
-	_set_status("Buying gear…")
-	var res: Dictionary = await ShopManager.buy_gear(slot_id, is_hot, false)
+	_set_status("Buying gear…" if not haggle else "Haggling…")
+	var res: Dictionary = await ShopManager.buy_gear(slot_id, is_hot, haggle)
 	_busy = false
 	_busy_slot = ""
 	if not res.ok:
@@ -716,7 +731,13 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 		_update_meta()
 		return
 	var purchase: Dictionary = ShopManager.last_purchase
+	if bool(purchase.get("haggle_failed", false)):
+		_set_status(str(purchase.get("haggle_note", "Deal soured — listing yanked")))
+		_populate()
+		return
 	var msg := _purchase_msg(purchase, "Purchased!")
+	if str(purchase.get("haggle_note", "")) != "":
+		msg = "%s · %s" % [purchase.get("haggle_note", ""), msg]
 	_set_status(msg)
 	await _load_equipped()
 	_populate()

@@ -45,7 +45,13 @@ extends RefCounted
 
 
 static func make_default() -> CombatBeatConfig:
-	return CombatBeatConfig.new()
+	var cfg := CombatBeatConfig.new()
+	if SettingsManager != null:
+		cfg.speed = SettingsManager.combat_anim_speed
+		var shake_scale: float = SettingsManager.screen_shake_scale
+		cfg.shake_crit *= shake_scale
+		cfg.shake_hit *= shake_scale
+	return cfg
 
 
 func scaled(seconds: float) -> float:

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "node src/index.js",
+    "dev": "node --watch --import ./scripts/register-src-alias.mjs src/index.js",
+    "start": "node --import ./scripts/register-src-alias.mjs src/index.js",
     "seed": "node src/seed.js",
     "smoke": "node scripts/smoke-test.mjs",
     "test:time": "node scripts/test-time.mjs",
@@ -13,7 +13,10 @@
     "test:rewards": "node scripts/test-rewards.mjs",
     "test:wallet-bridge": "node scripts/test-wallet-bridge.mjs",
     "backup:export": "node scripts/export-data.mjs",
-    "backup:import": "node scripts/import-data.mjs"
+    "backup:import": "node scripts/import-data.mjs",
+    "integrity:audit": "node scripts/run-integrity-audit.mjs",
+    "integrity:migrate": "node scripts/run-migration.mjs",
+    "integrity:restore-drill": "node scripts/restore-drill.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -21,7 +24,7 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "nanoid": "^5.1.5",
-    "nodemailer": "^6.9.14",
+    "nodemailer": "^9.0.3",
     "ws": "^8.18.3"
   }
 }

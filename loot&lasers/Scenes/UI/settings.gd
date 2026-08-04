@@ -219,6 +219,14 @@ func _build_audio() -> VBoxContainer:
 		SettingsManager.set_sfx_volume(v, false)
 	, true))
 
+	var play_bg := CheckButton.new()
+	play_bg.text = "Play music when unfocused"
+	play_bg.button_pressed = SettingsManager.play_music_when_unfocused
+	play_bg.toggled.connect(func(on: bool) -> void:
+		SettingsManager.set_play_music_when_unfocused(on, true)
+	)
+	col.add_child(play_bg)
+
 	var tip := Label.new()
 	tip.text = "Station ambience and cantina music use Music. Combat / UI cues use SFX."
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -244,11 +252,30 @@ func _build_display() -> VBoxContainer:
 	_fullscreen.text = "Fullscreen"
 	_fullscreen.button_pressed = SettingsManager.fullscreen
 	_fullscreen.toggled.connect(func(on: bool) -> void:
-		SettingsManager.fullscreen = on
+		SettingsManager.set_window_mode("fullscreen" if on else "maximized", true)
+		_fullscreen.button_pressed = SettingsManager.fullscreen
+	)
+	col.add_child(_fullscreen)
+
+	var vsync_btn := CheckButton.new()
+	vsync_btn.text = "VSync"
+	vsync_btn.button_pressed = SettingsManager.vsync
+	vsync_btn.toggled.connect(func(on: bool) -> void:
+		SettingsManager.vsync = on
 		SettingsManager.apply_settings()
 		SettingsManager.save_settings()
 	)
-	col.add_child(_fullscreen)
+	col.add_child(vsync_btn)
+
+	col.add_child(ClientUi.make_section_header("", "Accessibility", "Presentation only — does not change combat math."))
+	var speed_norm := clampf((SettingsManager.combat_anim_speed - 0.35) / 1.65, 0.0, 1.0)
+	col.add_child(_volume_row("Combat animation speed", "⏱", speed_norm, func(v: float) -> void:
+		SettingsManager.set_combat_anim_speed(0.35 + clampf(v, 0.0, 1.0) * 1.65, true)
+	))
+	col.add_child(_volume_row("Screen shake", "📳", SettingsManager.screen_shake_scale, func(v: float) -> void:
+		SettingsManager.set_screen_shake_scale(v, true)
+	, true))
+
 	var fs_hint := Label.new()
 	fs_hint.text = "Tip: press F11 anytime to toggle fullscreen (including from the editor Play window)."
 	fs_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

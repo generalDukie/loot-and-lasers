@@ -39,42 +39,20 @@ func set_status(status: String) -> void:
 func ping() -> void:
 	if _busy:
 		return
-	# Nakama status presence when socket is up (account-level).
-	if RealtimeManager.is_nakama_connected() and NakamaManager.socket != null:
-		var status_payload := {"status": current_status}
-		NakamaManager.socket.update_status_async(JSON.stringify(status_payload))
 	var c: Dictionary = GameManager.active_character
 	var cid := str(c.get("id", ""))
 	if cid.is_empty() or AuthManager.access_token.is_empty():
 		return
 	_busy = true
-	var now := Time.get_datetime_string_from_system(true)
-	if _presence_id.is_empty():
-		var found: Dictionary = await GameApiClient.request(
-			"POST", "/api/entities/PlayerPresence/filter",
-			{"query": {"character_id": cid}, "limit": 1}, true
-		)
-		if found.ok and typeof(found.data) == TYPE_ARRAY and (found.data as Array).size() > 0:
-			_presence_id = str(found.data[0].get("id", ""))
-	if _presence_id.is_empty():
-		var created: Dictionary = await GameApiClient.request("POST", "/api/entities/PlayerPresence", {
-			"character_id": cid,
-			"character_name": str(c.get("name", "")),
-			"status": current_status,
-			"last_seen_at": now,
-		}, true)
-		if created.ok and typeof(created.data) == TYPE_DICTIONARY:
-			_presence_id = str(created.data.get("id", ""))
-	else:
-		await GameApiClient.request(
-			"PATCH", "/api/entities/PlayerPresence/%s" % _presence_id.uri_encode(),
-			{
-				"status": current_status,
-				"last_seen_at": now,
-				"character_name": str(c.get("name", "")),
-			},
-			true
-		)
+	# Optional Nakama status side-channel (account-level); Node owns authority.
+	if RealtimeManager.is_nakama_connected() and NakamaManager.socket != null:
+		var status_payload := {"status": current_status}
+		NakamaManager.socket.update_status_async(JSON.stringify(status_payload))
+	var res: Dictionary = await GameApiClient.invoke("SetPresence", {"status": current_status})
+	if bool(res.get("ok", false)) and typeof(res.get("data", {})) == TYPE_DICTIONARY:
+		var presence: Variant = res.data.get("presence", {})
+		if typeof(presence) == TYPE_DICTIONARY:
+			_presence_id = str(presence.get("id", _presence_id))
 	_busy = false
 
 
@@ -115,35 +93,26 @@ static func status_label(status: String) -> String:
 func load_for(character_id: String) -> Dictionary:
 	if character_id.is_empty():
 		return {}
-	var res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/PlayerPresence/filter",
-		{"query": {"character_id": character_id}, "limit": 1}, true
-	)
-	if res.ok and typeof(res.data) == TYPE_ARRAY and (res.data as Array).size() > 0:
-		return res.data[0]
-	return {}
+	var map: Dictionary = await load_map([character_id])
+	return map.get(character_id, {}) if typeof(map.get(character_id, {})) == TYPE_DICTIONARY else {}
 
 
 func load_map(character_ids: Array) -> Dictionary:
-	var wanted := {}
+	var ids: Array = []
 	for id in character_ids:
 		var s := str(id)
 		if not s.is_empty():
-			wanted[s] = true
-	if wanted.is_empty():
+			ids.append(s)
+	if ids.is_empty():
 		return {}
-	var res: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/PlayerPresence?sort=-created_date&limit=200", null, true
-	)
-	var out := {}
-	if res.ok and typeof(res.data) == TYPE_ARRAY:
-		for p in res.data:
-			if typeof(p) != TYPE_DICTIONARY:
-				continue
-			var cid := str(p.get("character_id", ""))
-			if wanted.has(cid):
-				out[cid] = p
-	return out
+	var res: Dictionary = await GameApiClient.invoke("GetPresenceMap", {"character_ids": ids})
+	if not bool(res.get("ok", false)):
+		return {}
+	var data: Variant = res.get("data", {})
+	if typeof(data) != TYPE_DICTIONARY:
+		return {}
+	var presence: Variant = data.get("presence", {})
+	return presence if typeof(presence) == TYPE_DICTIONARY else {}
 
 
 static func _age_ms(iso: String) -> float:

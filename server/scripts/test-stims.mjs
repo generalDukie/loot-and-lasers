@@ -353,5 +353,79 @@ test("MAX caps exported", () => {
   assert.equal(MAX_ACTIVE_STAT_TYPES, 3);
 });
 
+test("forged item mult/duration clamped to rarity tier", () => {
+  const now = Date.parse("2026-08-01T12:00:00.000Z");
+  const forged = {
+    name: "Forged Rare Strength Stim",
+    type: "consumable",
+    rarity: "rare",
+    consumable: {
+      stat: "strength",
+      mult: 0.99,
+      duration_hours: 999,
+      tier: "rare",
+    },
+  };
+  const res = prepareConsumableBuffs(charWithBuffs([]), forged, [], now);
+  assert.equal(res.ok, true);
+  assert.equal(res.buffs[0].mult, 0.1);
+  assert.equal(res.buffs[0].duration_hours, 12);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - now, 12 * HOUR);
+});
+
+test("Common/Legendary rarity rejected; invalid attribute rejected", () => {
+  const now = Date.parse("2026-08-01T12:00:00.000Z");
+  const common = {
+    name: "Common Strength Stim",
+    type: "consumable",
+    rarity: "common",
+    consumable: { stat: "strength", mult: 0.05, duration_hours: 6, tier: "common" },
+  };
+  // resolveStimRarity maps common → uncommon (legacy), then clamps to uncommon tier
+  const mapped = prepareConsumableBuffs(charWithBuffs([]), common, [], now);
+  assert.equal(mapped.ok, true);
+  assert.equal(mapped.buffs[0].rarity, "uncommon");
+  assert.equal(mapped.buffs[0].mult, 0.05);
+
+  const badStat = {
+    name: "Epic Crit Stim",
+    type: "consumable",
+    rarity: "epic",
+    consumable: { stat: "crit_chance", mult: 0.2, duration_hours: 24, tier: "epic" },
+  };
+  assert.equal(prepareConsumableBuffs(charWithBuffs([]), badStat, [], now).ok, false);
+
+  const webForged = webPrepare(
+    charWithBuffs([]),
+    {
+      name: "x",
+      type: "consumable",
+      rarity: "epic",
+      consumable: { stat: "luck", mult: 0.5, duration_hours: 100, tier: "epic" },
+    },
+    [],
+    now,
+  );
+  assert.equal(webForged.ok, true);
+  assert.equal(webForged.buffs[0].mult, 0.2);
+  assert.equal(webForged.buffs[0].duration_hours, 24);
+});
+
+test("unstimulated attributes unchanged", () => {
+  const now = Date.now();
+  const ch = charWithBuffs([], {
+    strength: 100,
+    agility: 80,
+    intellect: 60,
+    vitality: 90,
+    luck: 40,
+  });
+  const res = prepareConsumableBuffs(ch, stimItem("strength", "rare"), undefined, now);
+  const buffed = { ...ch, active_buffs: res.buffs };
+  assert.equal(computeTotalStats(buffed, []).strength, 110);
+  assert.equal(computeTotalStats(buffed, []).agility, 80);
+  assert.equal(computeTotalStats(buffed, []).intellect, 60);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 if (failed) process.exit(1);

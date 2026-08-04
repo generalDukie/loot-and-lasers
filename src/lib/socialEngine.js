@@ -1,6 +1,5 @@
 import { api } from "@/api/gameClient";
 import { getCurrentUserId, getCurrentUser } from "@/lib/currentUser";
-import { normalizeForSearch } from "@/lib/utils";
 
 // Short-lived cache + backoff retry for the most frequently-called fetch.
 // Many pages/engines call getMyCharacter() on mount and on intervals; without
@@ -144,125 +143,102 @@ export async function setActiveCharacter(characterId) {
   bustMyCharacterCache();
 }
 
-// Search players by name (case-insensitive partial match).
+// Search players by name (case-insensitive partial match) — Node SearchCharacters.
 export async function searchCharacters(query, excludeId) {
   const q = (query || "").trim();
   if (!q) return [];
-  const norm = (s) => normalizeForSearch(s);
-  const nq = norm(q);
-  const all = await api.entities.Character.list("-created_date", 200);
-  return all.filter((c) => c.id !== excludeId && norm(c.name).includes(nq)).slice(0, 20);
+  const res = await api.functions.invoke("SearchCharacters", { query: q, limit: 20 });
+  const results = Array.isArray(res?.results) ? res.results : Array.isArray(res?.data?.results) ? res.data.results : [];
+  return results.filter((c) => c.id !== excludeId).slice(0, 20);
 }
 
 export async function getFriends(characterId) {
-  return api.entities.Friendship.filter({ participant_ids: characterId });
+  void characterId;
+  const res = await api.functions.invoke("GetSocialState", {});
+  const data = res?.data || res || {};
+  return Array.isArray(data.friends) ? data.friends : [];
 }
 
 export async function getIncomingRequests(characterId) {
-  return api.entities.FriendRequest.filter({ to_character_id: characterId, status: "pending" });
+  void characterId;
+  const res = await api.functions.invoke("GetSocialState", {});
+  const data = res?.data || res || {};
+  return Array.isArray(data.incoming_requests) ? data.incoming_requests : [];
 }
 
 export async function getOutgoingRequests(characterId) {
-  return api.entities.FriendRequest.filter({ from_character_id: characterId, status: "pending" });
+  void characterId;
+  const res = await api.functions.invoke("GetSocialState", {});
+  const data = res?.data || res || {};
+  return Array.isArray(data.outgoing_requests) ? data.outgoing_requests : [];
 }
 
 export async function getBlocks(characterId) {
-  return api.entities.Block.filter({ blocker_id: characterId });
+  void characterId;
+  const res = await api.functions.invoke("GetSocialState", {});
+  const data = res?.data || res || {};
+  return Array.isArray(data.blocks) ? data.blocks : [];
 }
 
 export async function isBlockedBy(blockerId, blockedId) {
-  const list = await api.entities.Block.filter({ blocker_id: blockerId, blocked_id: blockedId });
-  return list.length > 0;
+  const blocks = await getBlocks(blockerId);
+  return blocks.some((b) => b.blocked_id === blockedId);
 }
 
 export async function getCharacterById(id) {
-  const all = await api.entities.Character.list("-created_date", 200);
-  return all.find((c) => c.id === id) || null;
+  const res = await api.functions.invoke("GetPublicProfile", { character_id: id });
+  return res?.profile || res?.data?.profile || null;
 }
 
 // Fetch full character records for a list of ids (deduped).
 export async function getCharactersByIds(ids) {
   const uniq = [...new Set(ids.filter(Boolean))];
   if (uniq.length === 0) return [];
-  const all = await api.entities.Character.list("-created_date", 200);
-  const set = new Set(uniq);
-  return all.filter((c) => set.has(c.id));
+  const res = await api.functions.invoke("GetCharactersByIds", { ids: uniq });
+  return Array.isArray(res?.characters)
+    ? res.characters
+    : Array.isArray(res?.data?.characters)
+      ? res.data.characters
+      : [];
 }
 
 export async function getPresenceMap(characterIds) {
   if (!characterIds.length) return {};
-  const all = await api.entities.PlayerPresence.list("-created_date", 200);
-  const set = new Set(characterIds);
-  const map = {};
-  all.filter((p) => set.has(p.character_id)).forEach((p) => { map[p.character_id] = p; });
-  return map;
+  const res = await api.functions.invoke("GetPresenceMap", { character_ids: characterIds });
+  return res?.presence || res?.data?.presence || {};
 }
 
 export async function sendFriendRequest(fromChar, toChar) {
   if (fromChar.id === toChar.id) throw new Error("Cannot friend yourself.");
-  const blocked = await isBlockedBy(toChar.id, fromChar.id);
-  if (blocked) throw new Error("You cannot send a request to this player.");
-  const existing = await api.entities.FriendRequest.filter({
-    $or: [
-      { from_character_id: fromChar.id, to_character_id: toChar.id, status: "pending" },
-      { from_character_id: toChar.id, to_character_id: fromChar.id, status: "pending" },
-    ],
+  const res = await api.functions.invoke("SendFriendRequest", {
+    to_character_id: toChar.id,
   });
-  if (existing.length > 0) throw new Error("A request is already pending between you.");
-  const friends = await getFriends(fromChar.id);
-  const already = friends.some((f) => (f.participant_ids || []).includes(toChar.id));
-  if (already) throw new Error("You are already friends.");
-
-  const req = await api.entities.FriendRequest.create({
-    from_character_id: fromChar.id, to_character_id: toChar.id,
-    from_name: fromChar.name, to_name: toChar.name, status: "pending",
-  });
-  // The notification is a side effect — if it fails (rate limit, permission),
-  // it must NOT surface as a "could not send" error since the request itself
-  // already succeeded.
-  try {
-    await api.asServiceRole.entities.AppNotification.create({
-      owner_id: toChar.id, type: "friend_request", title: fromChar.name,
-      body: "sent you a friend request", related_id: req.id, read: false,
-    });
-  } catch {}
-  return req;
+  if (res?.error) throw new Error(res.error);
+  return res?.request || res?.data?.request || res;
 }
 
 export async function acceptRequest(request, myChar) {
-  const participants = [request.from_character_id, request.to_character_id].sort();
-  await api.entities.Friendship.create({ participant_ids: participants });
-  await api.entities.FriendRequest.update(request.id, { status: "accepted" });
-  await api.asServiceRole.entities.AppNotification.create({
-    owner_id: request.from_character_id, type: "system", title: myChar.name,
-    body: "accepted your friend request", read: false,
-  });
+  void myChar;
+  await api.functions.invoke("AcceptFriendRequest", { request_id: request.id });
 }
 
 export async function declineRequest(request) {
-  await api.entities.FriendRequest.update(request.id, { status: "declined" });
+  await api.functions.invoke("DeclineFriendRequest", { request_id: request.id });
 }
 
 export async function removeFriend(characterId, otherId) {
-  const friends = await getFriends(characterId);
-  const f = friends.find((fr) => (fr.participant_ids || []).includes(otherId));
-  if (f) await api.entities.Friendship.delete(f.id);
+  void characterId;
+  await api.functions.invoke("RemoveFriend", { character_id: otherId });
 }
 
 export async function blockPlayer(blocker, blocked) {
-  // Remove friendship + decline pending requests, then block.
-  await removeFriend(blocker.id, blocked.id);
-  const pend = await api.entities.FriendRequest.filter({ from_character_id: blocked.id, to_character_id: blocker.id, status: "pending" });
-  if (pend[0]) await api.entities.FriendRequest.update(pend[0].id, { status: "declined" });
-  const existing = await api.entities.Block.filter({ blocker_id: blocker.id, blocked_id: blocked.id });
-  if (existing.length === 0) {
-    await api.entities.Block.create({ blocker_id: blocker.id, blocked_id: blocked.id, blocked_name: blocked.name });
-  }
+  void blocker;
+  await api.functions.invoke("BlockPlayer", { character_id: blocked.id });
 }
 
 export async function unblockPlayer(blockerId, blockedId) {
-  const list = await api.entities.Block.filter({ blocker_id: blockerId, blocked_id: blockedId });
-  if (list[0]) await api.entities.Block.delete(list[0].id);
+  void blockerId;
+  await api.functions.invoke("UnblockPlayer", { character_id: blockedId });
 }
 
 export async function reportPlayer(reporterId, reported, reason, context, snapshot) {

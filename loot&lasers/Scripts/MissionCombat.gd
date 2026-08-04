@@ -1,7 +1,8 @@
 class_name MissionCombat
 extends RefCounted
-## Soft end-of-mission combat (client-side). Mirrors missionCombat.js +
-## arenaEngine simulateBattle with class passives (ClassPassives.gd).
+## Local combat math mirror (presentation / preview only).
+## Consequential mission/dungeon settlement uses Node Prepare* + committed events.
+## Local ClassPassives hooks must never be trusted for rewards.
 
 const ENEMY_ATTR_MULT := 0.28
 const PLAYER_BASE := 50

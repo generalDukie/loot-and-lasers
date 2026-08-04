@@ -28,8 +28,6 @@ import { pushNotification } from "@/lib/notificationEngine";
 import { getNexusOwnerGuildId } from "@/lib/nexusEngine";
 import { useToast } from "@/components/ui/use-toast";
 import { playMissionComplete } from "@/lib/audioEngine";
-import { generateMissionEncounter } from "@/lib/missionCombat";
-import { simulateBattle } from "@/lib/arenaEngine";
 import { pickMissionExploreSceneIndex } from "@/components/game/MissionExploreBackdrop";
 import { getCollectionStats, applyXpBonus } from "@/lib/collectionBonus";
 import confetti from "canvas-confetti";
@@ -65,16 +63,18 @@ export function computeMissionGains(character, mission, nexusBonus, gearTotal = 
 
 // Skip cost scales with REMAINING mission time — skipping near the end is cheap,
 // skipping at launch costs the full duration's worth (5 💎 per minute remaining).
-export const SKIP_CRYSTALS_PER_MINUTE = 5;
+export const SKIP_CRYSTALS_PER_MINUTE = 5; // superseded — retained for reference
 
+/** Fuel-based mission skip (display Nova). Matches server skipCostFor. */
 export function skipCostFor(mission, nowMs = Date.now()) {
-  if (!mission || !mission.end_time) return 0;
-  const remainingMs = Math.max(0, new Date(mission.end_time).getTime() - nowMs);
-  if (remainingMs <= 0) return 0;
-  // Use fractional minutes so cost ticks down during short missions too
-  // (ceil-to-whole-minute first made sub-minute waits look like a flat fee).
-  const remainingMinutes = remainingMs / 60000;
-  return Math.max(1, Math.ceil(remainingMinutes * SKIP_CRYSTALS_PER_MINUTE));
+  if (!mission) return 0;
+  if (mission.end_time) {
+    const remainingMs = Math.max(0, new Date(mission.end_time).getTime() - nowMs);
+    if (remainingMs <= 0) return 0;
+  }
+  const fuel = Number(mission.fuel_cost ?? mission.original_fuel_cost ?? 0) || 0;
+  const half = Math.max(1, Math.ceil(Math.max(0, fuel) * 0.2));
+  return half / 2;
 }
 
 /**
@@ -370,17 +370,25 @@ export function useMissionManager() {
     settlingBattleRef.current = false;
     setClaiming(true);
     try {
-      let playerItems = [];
-      try {
-        playerItems = (await api.entities.Item.filter({ character_id: char.id, is_equipped: true })) || [];
-      } catch (e) {}
-      const enemy = generateMissionEncounter(char, mission);
-      const battle = simulateBattle(char, enemy, playerItems);
-      setMissionBattle({ enemy, battle, playerItems });
+      const res = await api.functions.invoke("PrepareMissionCombat", {
+        mission_id: mission.id,
+      });
+      const data = res?.data || res || {};
+      const enemy = data.enemy || {};
+      const battle = data.battle || {
+        winner: data.winner,
+        events: data.events || [],
+        playerMaxHp: data.playerMaxHp,
+        opponentMaxHp: data.opponentMaxHp,
+        initiativeFirstSide: data.opening_side,
+        playerEnd: data.playerEnd,
+        opponentEnd: data.opponentEnd,
+      };
+      setMissionBattle({ enemy, battle, playerItems: [], combat_id: data.combat_id });
     } catch (e) {
       claimingRef.current = false;
       setClaiming(false);
-      toast({ title: "Battle failed to start", description: "Try claiming again.", variant: "destructive" });
+      toast({ title: "Battle failed to start", description: e?.message || "Try claiming again.", variant: "destructive" });
     }
   }, [character, missionBattle, toast]);
 
@@ -431,9 +439,7 @@ export function useMissionManager() {
     try {
       const res = await api.functions.invoke("ClaimMission", {
         mission_id: missionSnapshot.id,
-        won: true,
-        species_id: enemy?.speciesId || null,
-        nexus_bonus: nexusBonus,
+        idempotencyKey: `mission:${missionSnapshot.id}`,
       });
       const patch = res.patch || res.data?.patch || {};
       const fullChar = res.character || res.data?.character;

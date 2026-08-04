@@ -26,9 +26,16 @@ import {
   ACQUIRE_TARGET_CRIT_BONUS,
   FIRE_SUPPORT_FRAC,
   DEFENSIVE_PROTOCOL_REDUCTION,
+  PASSIVE_BY_CLASS,
+  DIRTY_TRICKS,
+  ORBITAL_EFFECTS,
+  OVERCLOCK_DEALT_PER_STACK,
+  PHANTOM_SIGNAL_CHARGES,
+  passiveNameForClass,
 } from "../../src/lib/classPassives.js";
-import { simulateBattle } from "../../src/lib/arenaEngine.js";
+import { simulateBattle, resolveNormalAttack, buildFighter } from "../../src/lib/arenaEngine.js";
 import { CRIT_CAP, DODGE_CAP, CRIT_MULT } from "../../src/lib/statEngine.js";
+import { SimulateCombat } from "../src/shared/combatService.js";
 
 let passed = 0;
 let failed = 0;
@@ -288,7 +295,7 @@ test("18–20. Overclock stacks, multipliers, crit removes 3", () => {
 // ── Orbital Assistant ────────────────────────────────────────
 test("21–23. Orbital Assistant every 2nd turn; Fire Support secondary True", () => {
   const eng = fighter("Cosmic Engineer", "player", { standardAttack: 100 });
-  const foe = fighter("Vanguard", "opponent", { hp: 1000 });
+  const foe = fighter("Vanguard", "opponent", { hp: 1000, dodge: 0 });
   onCombatStart(eng);
   onCombatStart(foe);
   const events = [];
@@ -305,7 +312,24 @@ test("21–23. Orbital Assistant every 2nd turn; Fire Support secondary True", (
   assert.equal(fs.type, "secondary");
   assert.equal(fs.isNormalAttack, false);
   assert.equal(fs.damageType, "TRUE");
+  assert.equal(fs.canDodge, true);
+  assert.equal(fs.canCrit, false);
   assert.equal(fs.damage, Math.round(100 * FIRE_SUPPORT_FRAC));
+});
+
+test("23b. Fire Support can be Dodged (not a normal attack)", () => {
+  const eng2 = fighter("Cosmic Engineer", "player", { standardAttack: 100 });
+  const foe2 = fighter("Vanguard", "opponent", { hp: 1000, dodge: 1 });
+  onCombatStart(eng2);
+  onCombatStart(foe2);
+  eng2.passiveState.engineerTurns = 1;
+  const ev2 = [];
+  // effect pick 0 → fire_support; dodge roll 0 → dodge succeeds
+  maybeOrbitalAssistant(eng2, foe2, ev2, seqRng([0, 0]));
+  assert.ok(ev2.some((e) => e.kind === "fire_support_dodged" && e.dodged));
+  assert.ok(!ev2.some((e) => e.kind === "fire_support" && (e.damage || 0) > 0));
+  assert.equal(foe2.hp, 1000);
+  assert.ok(ev2.some((e) => e.kind === "kinetic_tantrum_normal"));
 });
 
 test("24. Defensive Protocol reduces next hit by 25%", () => {
@@ -365,7 +389,6 @@ test("27. Seeded combat is deterministic", () => {
 test("Phantom miss does not activate Kinetic on Vanguard attacker", () => {
   const player = baseChar("Vanguard");
   const opp = baseChar("Shadow Operative");
-  // Force: opponent goes first? We need Vanguard to attack Shadow while charges remain.
   // Initiative: rng < 0.5 → player first. Use 0.1 so player (Vanguard) attacks first into Phantom.
   const rng = seqRng([0.1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
   const result = simulateBattle(player, opp, [], [], { rng });
@@ -373,6 +396,117 @@ test("Phantom miss does not activate Kinetic on Vanguard attacker", () => {
   assert.equal(firstCombat?.type, "miss");
   assert.equal(firstCombat?.missKind, "phantom_signal");
   assert.ok(!result.events.some((e) => e.kind === "kinetic_tantrum_strong" || e.kind === "kinetic_tantrum_normal"));
+});
+
+// ── Restoration 09 expansions ────────────────────────────────
+test("Registry maps six finalized classes; no superseded names", () => {
+  assert.equal(Object.keys(PASSIVE_BY_CLASS).length, 6);
+  assert.equal(PASSIVE_BY_CLASS.Vanguard, "Kinetic Tantrum");
+  assert.equal(PASSIVE_BY_CLASS["Astral Warden"], "Astral Barrier");
+  assert.equal(PASSIVE_BY_CLASS["Shadow Operative"], "Phantom Signal");
+  assert.equal(PASSIVE_BY_CLASS["Void Runner"], "Dirty Tricks");
+  assert.equal(PASSIVE_BY_CLASS.Technomancer, "Overclock");
+  assert.equal(PASSIVE_BY_CLASS["Cosmic Engineer"], "Orbital Assistant");
+  const blob = JSON.stringify(PASSIVE_BY_CLASS);
+  assert.ok(!blob.includes("Temper Flare"));
+  assert.ok(!blob.includes("Now You See Me"));
+  assert.ok(!blob.includes("Bag of Tricks"));
+  assert.equal(passiveNameForClass("UnknownClass"), null);
+  assert.equal(PHANTOM_SIGNAL_CHARGES, 2);
+  assert.equal(OVERCLOCK_DEALT_PER_STACK, 0.125);
+  assert.equal(DIRTY_TRICKS.length, 3);
+  assert.equal(ORBITAL_EFFECTS.length, 3);
+});
+
+test("Overclock gains stack on Dodged and Missed normal attacks", () => {
+  const tech = buildFighter(baseChar("Technomancer"), [], "player");
+  const foe = buildFighter(
+    { ...baseChar("Vanguard"), missionEnemy: true, suppressClassPassive: true },
+    [],
+    "opponent",
+  );
+  onCombatStart(tech);
+  onCombatStart(foe);
+  foe.dodge = 1;
+  tech.crit = 0;
+  const events = [];
+  resolveNormalAttack(tech, foe, events, { rng: () => 0 });
+  assert.equal(events.filter((e) => e.type === "dodge").length, 1);
+  assert.equal(tech.passiveState.overclockStacks, 1);
+  assert.ok(events.some((e) => e.kind === "overclock_stack_gained"));
+});
+
+test("Barrier broken event emits when barrier depletes", () => {
+  const w = fighter("Astral Warden", "player", { hp: 500, maxHp: 500, barrier: 10 });
+  const events = [];
+  applyDamageWithBarrier(w, 25, events);
+  assert.ok(events.some((e) => e.kind === "barrier_absorbed"));
+  assert.ok(events.some((e) => e.kind === "barrier_broken"));
+  assert.equal(w.barrier, 0);
+});
+
+test("Mission/Dungeon SimulateCombat share passive engine (seeded)", () => {
+  const player = baseChar("Void Runner");
+  const opponent = {
+    ...baseChar("Vanguard"),
+    id: "foe",
+    missionEnemy: true,
+    suppressClassPassive: true,
+  };
+  const a = SimulateCombat({ player, opponent, rng: seededRng(55), mode: "mission" });
+  const b = SimulateCombat({ player, opponent, rng: seededRng(55), mode: "dungeon" });
+  assert.equal(a.winner, b.winner);
+  assert.deepEqual(
+    a.events.filter((e) => e.type === "passive").map((e) => e.kind),
+    b.events.filter((e) => e.type === "passive").map((e) => e.kind),
+  );
+});
+
+test("Statistical: Dirty Tricks ~1/3 each", () => {
+  const counts = { flashbang: 0, targeting_beacon: 0, stim_injector: 0 };
+  const n = 3000;
+  for (let i = 0; i < n; i++) {
+    const v = fighter("Void Runner");
+    onCombatStart(v, seededRng(i * 97 + 3));
+    counts[v.passiveState.dirtyTrick] += 1;
+  }
+  for (const k of DIRTY_TRICKS) {
+    const rate = counts[k] / n;
+    assert.ok(rate > 0.30 && rate < 0.37, `${k} rate ${rate}`);
+  }
+});
+
+test("Statistical: Astral Barrier ~10% per Warden turn", () => {
+  let procs = 0;
+  const n = 4000;
+  for (let i = 0; i < n; i++) {
+    const w = fighter("Astral Warden", "player", { maxHp: 1000, hp: 1000 });
+    onCombatStart(w);
+    const events = onTurnStart(w, seededRng(i * 13 + 7));
+    if (events.length) procs += 1;
+  }
+  const rate = procs / n;
+  assert.ok(rate > 0.08 && rate < 0.12, `barrier proc ${rate}`);
+});
+
+test("Statistical: Orbital Assistant actions ~1/3 each when triggered", () => {
+  const counts = { fire_support: 0, defensive_protocol: 0, acquire_target: 0 };
+  const n = 3000;
+  for (let i = 0; i < n; i++) {
+    const eng = fighter("Cosmic Engineer", "player", { standardAttack: 50 });
+    const foe = fighter("Vanguard", "opponent", { hp: 1e9, dodge: 0 });
+    onCombatStart(eng);
+    onCombatStart(foe);
+    eng.passiveState.engineerTurns = 1;
+    const events = [];
+    maybeOrbitalAssistant(eng, foe, events, seededRng(i * 41 + 9));
+    const act = events.find((e) => e.kind === "orbital_assistant_activated");
+    if (act) counts[act.effect] += 1;
+  }
+  for (const k of ORBITAL_EFFECTS) {
+    const rate = counts[k] / n;
+    assert.ok(rate > 0.30 && rate < 0.37, `${k} rate ${rate}`);
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

@@ -1,12 +1,9 @@
 import { api } from "@/api/gameClient";
 
-export async function getUnreadCounts(characterId) {
-  const all = await api.entities.AppNotification.filter({ owner_id: characterId, read: false });
-  const counts = {
-    friend_request: 0, private_message: 0, mail: 0, chat_mention: 0, daily: 0, system: 0, stat_points: 0, total: all.length,
-  };
-  all.forEach((n) => { counts[n.type] = (counts[n.type] || 0) + 1; });
-  return counts;
+/** Unread badge counts — Node GetNotifications. */
+export async function getUnreadCounts(_characterId) {
+  const res = await api.functions.invoke("GetNotifications", { unread_only: true, limit: 100 });
+  return res?.counts || { total: 0 };
 }
 
 const localAlertListeners = new Set();
@@ -29,36 +26,59 @@ export function subscribeNotifications(characterId, callback) {
   });
 }
 
-export function markRead(id) {
-  return api.entities.AppNotification.update(id, { read: true });
+export async function listNotifications({ unreadOnly = false, limit = 50 } = {}) {
+  const res = await api.functions.invoke("GetNotifications", {
+    unread_only: unreadOnly,
+    limit,
+  });
+  return Array.isArray(res?.notifications) ? res.notifications : [];
 }
 
-// Create an in-app notification shown in the bottom-right NotificationCenter
-// (blue bell). toast() also pushes here while a character is active, and
-// still shows a floating toast with a fade-out.
-export function pushNotification({ owner_id, type = "system", title, body, related_id }) {
-  return api.entities.AppNotification.create({ owner_id, type, title, body, related_id });
+export function markRead(id) {
+  return api.functions.invoke("MarkNotificationRead", { id });
+}
+
+/**
+ * Persist a notification via Node CreateNotification (social whitelist).
+ * Floating toasts must NOT call this — use emitLocalAlert only.
+ */
+export function pushNotification({ owner_id, type = "system", title, body, related_id, idempotency_key }) {
+  return api.functions.invoke("CreateNotification", {
+    owner_id,
+    type,
+    title,
+    body,
+    related_id,
+    idempotency_key,
+  });
 }
 
 export function markAllReadByType(characterId, type) {
-  return api.entities.AppNotification.updateMany(
-    { owner_id: characterId, type, read: false },
-    { $set: { read: true } }
-  );
+  // Full mark-all then clients refilter — type-scoped update-many retired.
+  void characterId;
+  void type;
+  return api.functions.invoke("MarkAllNotificationsRead", {});
+}
+
+export function markAllRead() {
+  return api.functions.invoke("MarkAllNotificationsRead", {});
+}
+
+export function dismissNotification(id) {
+  return api.functions.invoke("DismissNotification", { id });
 }
 
 // Legacy helper — free attribute points were removed (Stardust sink).
-// Clears any leftover "stat_points" notifications.
 export async function syncStatPointsNotification(character) {
   if (!character?.id) return;
-  let existing = [];
   try {
-    const all = await api.entities.AppNotification.filter({ owner_id: character.id }, "-created_date", 80);
-    existing = (all || []).filter((n) => n.type === "stat_points");
-  } catch (e) {
-    return;
+    const list = await listNotifications({ limit: 80 });
+    await Promise.all(
+      list
+        .filter((n) => n.type === "stat_points" && !n.read)
+        .map((n) => markRead(n.id).catch(() => {}))
+    );
+  } catch {
+    /* ignore */
   }
-  await Promise.all(
-    existing.filter((n) => !n.read).map((n) => api.entities.AppNotification.update(n.id, { read: true }).catch(() => {}))
-  );
 }

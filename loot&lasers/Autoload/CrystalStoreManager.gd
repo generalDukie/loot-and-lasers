@@ -136,9 +136,4 @@ func pack_by_id(pack_id: String) -> Dictionary:
 
 
 func _apply_character_payload(data: Dictionary) -> void:
-	var patch: Variant = data.get("patch", {})
-	if typeof(patch) == TYPE_DICTIONARY:
-		GameManager.apply_active_character_patch(patch, "crystal_store_purchase")
-	var ch: Variant = data.get("character", {})
-	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.apply_active_character(ch, "crystal_store_purchase")
+	GameApiClient.apply_authoritative_response(data, "crystal_store_purchase")

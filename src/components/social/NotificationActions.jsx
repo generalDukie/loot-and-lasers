@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api } from "@/api/gameClient";
 import { acceptRequest, declineRequest } from "@/lib/socialEngine";
+import { markRead } from "@/lib/notificationEngine";
 import { useToast } from "@/components/ui/use-toast";
 import { Check, X } from "lucide-react";
 
@@ -29,8 +30,8 @@ export default function NotificationActions({ notification, myChar, onResolved }
         await declineRequest(req);
         toast({ title: "Request declined" });
       }
-      // Dismiss the notification once handled so it leaves the actionable list.
-      await api.entities.AppNotification.update(notification.id, { read: true });
+      // Mark read via Node RPC (entity CRUD updates are locked).
+      await markRead(notification.id);
       onResolved?.(notification.id);
     } catch (e) {
       toast({ title: "Couldn't update request", description: e?.message || String(e) });

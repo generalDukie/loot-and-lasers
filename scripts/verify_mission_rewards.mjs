@@ -135,9 +135,12 @@ function staticChecks() {
   } else pass("phase14_mission_basic loot table present");
 
   const mm = read("loot&lasers/Autoload/MissionManager.gd");
-  if (!mm.includes('invoke_rpc("mission_claim"') && !mm.includes("mission_claim")) {
-    fail("MissionManager missing mission_claim");
-  } else pass("MissionManager calls mission_claim");
+  if (!mm.includes('ClaimMission') && !mm.includes("claim_mission")) {
+    fail("MissionManager missing Node ClaimMission path");
+  } else pass("MissionManager uses Node ClaimMission");
+  if (/invoke_rpc\(\s*["']mission_/.test(mm)) {
+    fail("MissionManager still invokes Nakama mission_* RPCs");
+  } else pass("MissionManager does not invoke Nakama mission RPCs");
   if (/rewards_deferred:\s*true/.test(mm) && /Mission complete — rewards deferred/.test(mm)) {
     fail("legacy deferred claim path still active");
   } else pass("legacy deferred claim path removed");

@@ -93,29 +93,24 @@ func _refresh() -> void:
 
 	await _load_guild_tags()
 
-	var res: Dictionary = await GameApiClient.request(
-		"GET",
-		"/api/entities/Character?sort=-arena_rating&limit=100",
-		null,
-		true
-	)
+	# Node GetArenaLeaderboard — authoritative order (rating → wins → id).
+	var board: Dictionary = await ArenaManager.load_rankings()
 	_busy = false
-	if not res.ok or typeof(res.data) != TYPE_ARRAY:
-		_set_status(str(res.get("error", "Failed to load leaderboard")), ClientUi.DANGER)
+	if not bool(board.get("ok", false)):
+		_set_status(str(board.get("error", "Failed to load leaderboard")), ClientUi.DANGER)
 		return
 
+	var data: Dictionary = board.get("data", {}) if typeof(board.get("data", null)) == TYPE_DICTIONARY else {}
+	var raw: Array = data.get("rankings", []) if typeof(data.get("rankings", null)) == TYPE_ARRAY else []
 	var rows: Array = []
-	for row in res.data:
-		if typeof(row) == TYPE_DICTIONARY:
-			rows.append(row)
-	# Stable secondary sort by wins (web: rating then wins).
-	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var ra := int(a.get("arena_rating", 1000))
-		var rb := int(b.get("arena_rating", 1000))
-		if ra != rb:
-			return ra > rb
-		return int(a.get("arena_wins", 0)) > int(b.get("arena_wins", 0))
-	)
+	for row in raw:
+		if typeof(row) != TYPE_DICTIONARY:
+			continue
+		var r: Dictionary = row
+		# Normalize id for challenge / highlight helpers.
+		if str(r.get("id", "")).is_empty() and not str(r.get("character_id", "")).is_empty():
+			r["id"] = r["character_id"]
+		rows.append(r)
 
 	if rows.is_empty():
 		_set_status("No commanders ranked yet.", ClientUi.MUTED)

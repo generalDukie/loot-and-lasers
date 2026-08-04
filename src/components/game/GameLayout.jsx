@@ -10,6 +10,7 @@ import PersistentGameFrame from "@/components/game/PersistentGameFrame";
 import ShellSidebar from "@/components/game/ShellSidebar";
 import ShellOperativePanel from "@/components/game/ShellOperativePanel";
 import ShellTopChrome from "@/components/game/ShellTopChrome";
+import ConnectivityBanner from "@/components/game/ConnectivityBanner";
 import InventoryFullModal from "@/components/game/InventoryFullModal";
 import DailyLoginModal from "@/components/social/DailyLoginModal";
 import NotificationCenter from "@/components/social/NotificationCenter";
@@ -129,6 +130,7 @@ export default function GameLayout() {
         <div className="relative z-10 h-full w-full min-h-0">
           <PersistentGameFrame>
             <div className="relative flex flex-col h-full min-h-0">
+              <ConnectivityBanner />
               <ShellTopChrome
                 character={character}
                 onToggleRail={() => setRailOpen((v) => !v)}

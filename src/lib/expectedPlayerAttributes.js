@@ -140,7 +140,8 @@ export function expectedPlayerAttributes(level) {
 
 /**
  * Realistic power for a player who keeps gear roughly on-level.
- * Level-ups grant 0 free attrs; progression comes from equipped set budgets.
+ * Benchmark uses base + equipped-set fill (not live Character.stats).
+ * Free level attrs and Stardust buys are outside this gear-fill estimate.
  * GEAR_FILL ≈ uncommon-common blend of a full 8-slot set.
  * Used for mission soft-encounter budgets (separate from ExpectedPlayerAttributes).
  */

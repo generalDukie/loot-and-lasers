@@ -1,6 +1,11 @@
 --[[
-  Phase 15 — Secure shop service (Nakama Lua).
+  SUPERSEDED (Restoration 12A/12C) — do not use for live Godot/web shops.
 
+  Authoritative Black Market is Node:
+    EnsureShop / RefreshShop / BuyShopGear / BuyShopConsumable
+    (Character.shop_meta). See docs/PHASE_SHOPS_12A.md and PHASE_SHOPS_12C.md.
+
+  This Nakama module remains only as a historical Phase 15 artifact.
   Public RPCs: shop_get, shop_buy, shop_sell, shop_refresh
 
   Soft currency only (stardust). No premium store / Nova restock in this phase.

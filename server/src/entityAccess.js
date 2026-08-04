@@ -6,6 +6,7 @@
 import { entities } from "./entities.js";
 import { expForLevel } from "./shared/rewards.js";
 import { CLASS_BASE_STATS, FUEL_MAX } from "./shared/economyFormulas.js";
+import { assertCharacterCreateShape } from "./shared/characterSheet.js";
 import { assertNameHasNoDigits, NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
 import { assertCanCreateCharacter, EntitlementError } from "./entitlements/index.js";
 
@@ -37,6 +38,8 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "mission_gear_miss_streak",
   "mining_end_time",
   "mining_reward",
+  "mining_start_time",
+  "mining_hours",
   "shop_meta",
   "weekly_nova_quests",
   "arena_rating",
@@ -55,6 +58,8 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "arena_rewarded_wins_today",
   "arena_rewarded_wins_date",
   "arena_bot_raid_at",
+  "arena_pending_combat",
+  "arena_opponent_offers",
   "dungeon_deaths",
   "dungeon_deaths_date",
   "dungeon_clears",
@@ -65,6 +70,8 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "dungeon_planet",
   "dungeon_enemy",
   "dungeon_extra_lives",
+  "dungeon_pending_combat",
+  "dungeon_continue_credit",
   "owned_ships",
   "ship_mod_loadouts",
   "ship_mods",
@@ -85,10 +92,12 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "discovered_gear",
   "equipped_cosmetics",
   "active_cosmetic_frame",
+  // Slot index — server EquipItem / UnequipItem / Dissolve only
+  "equipped_items",
 ]);
 
-/** Non-admin Item.update may only touch these fields. */
-export const ITEM_ALLOWED_UPDATE_FIELDS = new Set(["is_equipped", "locked"]);
+/** Non-admin Item.update may only touch these fields (equip via EquipItem/UnequipItem). */
+export const ITEM_ALLOWED_UPDATE_FIELDS = new Set(["locked"]);
 
 /** Character ids belonging to this auth user. */
 export function characterIdsForUser(userId) {
@@ -119,6 +128,27 @@ const CHARACTER_SCOPED_READ_TYPES = new Set([
   "NovaSpendEvent",
   "StardustSpendEvent",
   "PlayerPresence",
+  "AppNotification",
+  "PlayerModeration",
+]);
+
+/**
+ * Authenticated public directory/feed documents.
+ * Every other entity type must define an account/character scope below.
+ */
+export const PUBLIC_READ_TYPES = new Set([
+  "ArenaMatch",
+  "ChatMessage",
+  "GalaxyNews",
+  "Guild",
+  "GuildBattle",
+  "GuildChallenge",
+  "GuildMember",
+  "GuildWar",
+  "GuildWarReady",
+  "Nexus",
+  "NexusHallOfFame",
+  "SiteConfig",
 ]);
 
 export function canReadDoc(user, type, doc) {
@@ -132,10 +162,49 @@ export function canReadDoc(user, type, doc) {
     if (doc.owner_id && characterOwnedByUser(user, doc.owner_id)) return true;
     return false;
   }
-  if (["PromoCode", "PlayerModeration", "PrivateMessage", "Mail"].includes(type)) {
+  if (PUBLIC_READ_TYPES.has(type)) return true;
+  if (type === "PromoCode") {
     return canWriteDoc(user, type, doc);
   }
-  return true;
+  // Restoration 23 — social reads stay owner-scoped; writes go through RPCs only.
+  if (type === "Mail") {
+    if (doc.owner_id && characterOwnedByUser(user, doc.owner_id)) return true;
+    if (doc.from_id && characterOwnedByUser(user, doc.from_id)) return true;
+    return ownsDocViaCreatedBy(user, doc);
+  }
+  if (type === "PrivateMessage") {
+    if (doc.sender_id && characterOwnedByUser(user, doc.sender_id)) return true;
+    if (doc.recipient_id && characterOwnedByUser(user, doc.recipient_id)) return true;
+    return ownsDocViaCreatedBy(user, doc);
+  }
+  if (type === "PrivateConversation") {
+    const ids = characterIdsForUser(user.id);
+    const parts = doc.participant_ids || [doc.a_id, doc.b_id].filter(Boolean);
+    return parts.some((id) => ids.includes(id));
+  }
+  if (type === "FriendRequest") {
+    return !!(
+      (doc.from_character_id && characterOwnedByUser(user, doc.from_character_id)) ||
+      (doc.to_character_id && characterOwnedByUser(user, doc.to_character_id)) ||
+      (doc.from_id && characterOwnedByUser(user, doc.from_id)) ||
+      (doc.to_id && characterOwnedByUser(user, doc.to_id))
+    );
+  }
+  if (type === "Friendship") {
+    return !!(
+      (Array.isArray(doc.participant_ids) &&
+        doc.participant_ids.some((id) => characterOwnedByUser(user, id))) ||
+      (doc.character_a_id && characterOwnedByUser(user, doc.character_a_id)) ||
+      (doc.character_b_id && characterOwnedByUser(user, doc.character_b_id))
+    );
+  }
+  if (type === "Block") {
+    return !!(doc.blocker_id && characterOwnedByUser(user, doc.blocker_id));
+  }
+  if (["GuildLog", "Report", "NexusAssault"].includes(type)) {
+    return canWriteDoc(user, type, doc);
+  }
+  return false;
 }
 
 /** Types only admins may create/update/delete via entity CRUD. */
@@ -171,77 +240,40 @@ export function canWriteDoc(user, type, doc) {
     case "HubLayout":
     case "NovaSpendEvent":
     case "StardustSpendEvent":
-    case "PlayerPresence":
       if (ownsDocViaCreatedBy(user, doc)) return true;
       if (doc.character_id && characterOwnedByUser(user, doc.character_id)) return true;
       if (doc.owner_id && characterOwnedByUser(user, doc.owner_id)) return true;
-      return false;
-
-    case "Mail":
-      // Recipient (owner_id = character id) or sender
-      if (doc.owner_id && characterOwnedByUser(user, doc.owner_id)) return true;
-      if (doc.from_id && characterOwnedByUser(user, doc.from_id)) return true;
-      if (ownsDocViaCreatedBy(user, doc)) return true;
       return false;
 
     case "AppNotification":
-      if (doc.character_id && characterOwnedByUser(user, doc.character_id)) return true;
-      if (doc.owner_id && characterOwnedByUser(user, doc.owner_id)) return true;
-      return ownsDocViaCreatedBy(user, doc);
-
-    case "Block":
-      return doc.blocker_id && characterOwnedByUser(user, doc.blocker_id);
+      // Restoration 22 — mutate only via Mark/Dismiss RPCs (notificationService).
+      return false;
 
     case "FriendRequest":
-      return (
-        (doc.from_id && characterOwnedByUser(user, doc.from_id)) ||
-        (doc.to_id && characterOwnedByUser(user, doc.to_id))
-      );
-
     case "Friendship":
-      return (
-        (doc.character_a_id && characterOwnedByUser(user, doc.character_a_id)) ||
-        (doc.character_b_id && characterOwnedByUser(user, doc.character_b_id))
-      );
-
-    case "PrivateConversation": {
-      const ids = characterIdsForUser(user.id);
-      const parts = doc.participant_ids || [doc.a_id, doc.b_id].filter(Boolean);
-      return parts.some((id) => ids.includes(id));
-    }
-
-    case "PrivateMessage":
-      if (doc.sender_id && characterOwnedByUser(user, doc.sender_id)) return true;
-      if (doc.recipient_id && characterOwnedByUser(user, doc.recipient_id)) return true;
-      return ownsDocViaCreatedBy(user, doc);
-
+    case "Block":
     case "ChatMessage":
-      return doc.sender_id && characterOwnedByUser(user, doc.sender_id);
+    case "PrivateMessage":
+    case "PrivateConversation":
+    case "Mail":
+    case "PlayerPresence":
+    case "GuildMember":
+      // Restoration 23 — mutate only via social/mail/guild RPCs.
+      return false;
 
     case "Report":
       return ownsDocViaCreatedBy(user, doc);
 
     case "Guild":
-    case "GuildMember":
     case "GuildLog":
     case "GuildChallenge":
     case "GuildBattle":
     case "GuildWar":
-    case "GuildWarReady": {
-      // Member of the guild may mutate membership-adjacent records; leaders handled in app logic.
-      const guildId = type === "Guild" ? doc.id : doc.guild_id;
-      if (!guildId) return ownsDocViaCreatedBy(user, doc);
-      const ids = characterIdsForUser(user.id);
-      const membership = entities.GuildMember.filter({ guild_id: guildId }, null, 500)
-        .find((m) => ids.includes(m.character_id));
-      return !!membership || ownsDocViaCreatedBy(user, doc);
-    }
-
+    case "GuildWarReady":
     case "ArenaMatch":
-      return ownsDocViaCreatedBy(user, doc);
-
     case "NexusAssault":
-      return ownsDocViaCreatedBy(user, doc);
+      // Mutations only via guild/arena/nexus RPCs (no client XP/war/assault forge).
+      return false;
 
     default:
       return ownsDocViaCreatedBy(user, doc);
@@ -264,31 +296,41 @@ export function canCreateType(user, type, data = {}) {
       // Loot / missions only via server functions for non-admins.
       return false;
 
-    case "Character":
-    case "DailyLogin":
-    case "HubLayout":
-    case "Mail":
     case "AppNotification":
-    case "Block":
+      // Restoration 22 — create only via notificationService / trusted server paths.
+      return false;
+
     case "FriendRequest":
     case "Friendship":
-    case "PrivateConversation":
-    case "PrivateMessage":
+    case "Block":
     case "ChatMessage":
-    case "Report":
-    case "Guild":
+    case "PrivateMessage":
+    case "PrivateConversation":
+    case "Mail":
+    case "PlayerPresence":
     case "GuildMember":
+      // Restoration 23 — social mutations via social/mail/guild RPCs only.
+      return false;
+
+    case "Character":
+    case "HubLayout":
+    case "Report":
+      return true;
+
+    case "Guild":
     case "GuildLog":
     case "GuildChallenge":
     case "GuildBattle":
     case "GuildWar":
     case "GuildWarReady":
+    case "NexusAssault":
+    case "DailyLogin":
     case "ArenaMatch":
-    case "PlayerPresence":
     case "NovaSpendEvent":
     case "StardustSpendEvent":
-    case "NexusAssault":
-      return true;
+      // Forgeable progression / economy mirrors — Node service RPCs only.
+      return false;
+
     default:
       return false;
   }
@@ -382,8 +424,9 @@ export function sanitizeCreatePayload(user, type, data = {}) {
         throw err;
       }
       out.stats = { ...base };
-      // Starting currency is wholly server-authored.
-      out.nova_crystals = existingCount === 0 ? 100 : 0;
+      // Starting currency is wholly server-authored (display 25 Nova = 50 half-units).
+      out.nova_crystals = existingCount === 0 ? 50 : 0;
+      out.economy_nova_scale = 2;
 
       // Strip other locked progression fields if client forged them.
       for (const key of CHARACTER_ECONOMY_FIELDS) {
@@ -396,11 +439,13 @@ export function sanitizeCreatePayload(user, type, data = {}) {
           || key === "missions_completed" || key === "highest_sector"
           || key === "active_mission_id" || key === "mission_end_time"
           || key === "nova_crystals" || key === "stats"
+          || key === "equipped_items"
         ) {
           continue;
         }
         delete out[key];
       }
+      assertCharacterCreateShape(out);
     }
   }
 
@@ -525,6 +570,10 @@ export function scopeReadQuery(user, type, query = {}) {
     };
   }
 
+  if (PUBLIC_READ_TYPES.has(type)) {
+    return query;
+  }
+
   if (type === "PromoCode") {
     // Players may look up a single code string for redeem UX; no full list dumps.
     if (query.code && typeof query.code === "string") return { code: query.code };
@@ -533,9 +582,65 @@ export function scopeReadQuery(user, type, query = {}) {
     throw err;
   }
 
-  if (type === "PlayerModeration") {
+  if (type === "Block") {
     const ids = characterIdsForUser(user.id);
-    return { ...query, character_id: { $in: ids } };
+    return {
+      $and: [
+        query && Object.keys(query).length ? query : { id: { $exists: true } },
+        { blocker_id: { $in: ids } },
+      ],
+    };
+  }
+
+  if (type === "FriendRequest") {
+    const ids = characterIdsForUser(user.id);
+    const ownership = [];
+    for (const id of ids) {
+      ownership.push(
+        { from_id: id },
+        { to_id: id },
+        { from_character_id: id },
+        { to_character_id: id },
+      );
+    }
+    return {
+      $and: [
+        query && Object.keys(query).length ? query : { id: { $exists: true } },
+        { $or: ownership.length ? ownership : [{ id: "__no_owned_friend_requests__" }] },
+      ],
+    };
+  }
+
+  if (type === "Friendship") {
+    const ids = characterIdsForUser(user.id);
+    const ownership = [];
+    for (const id of ids) {
+      ownership.push(
+        { participant_ids: id },
+        { character_a_id: id },
+        { character_b_id: id },
+      );
+    }
+    return {
+      $and: [
+        query && Object.keys(query).length ? query : { id: { $exists: true } },
+        { $or: ownership.length ? ownership : [{ id: "__no_owned_friendships__" }] },
+      ],
+    };
+  }
+
+  if (type === "PrivateConversation") {
+    const ids = characterIdsForUser(user.id);
+    const ownership = [];
+    for (const id of ids) {
+      ownership.push({ participant_ids: id }, { a_id: id }, { b_id: id });
+    }
+    return {
+      $and: [
+        query && Object.keys(query).length ? query : { id: { $exists: true } },
+        { $or: ownership.length ? ownership : [{ id: "__no_owned_conversations__" }] },
+      ],
+    };
   }
 
   if (type === "PrivateMessage") {
@@ -564,7 +669,37 @@ export function scopeReadQuery(user, type, query = {}) {
     };
   }
 
-  return query;
+  if (type === "GuildLog") {
+    const ids = characterIdsForUser(user.id);
+    const guildIds = [];
+    for (const id of ids) {
+      for (const membership of entities.GuildMember.filter({ character_id: id }, null, 100)) {
+        if (membership.guild_id && !guildIds.includes(membership.guild_id)) {
+          guildIds.push(membership.guild_id);
+        }
+      }
+    }
+    return {
+      $and: [
+        query && Object.keys(query).length ? query : { id: { $exists: true } },
+        { guild_id: { $in: guildIds.length ? guildIds : ["__no_owned_guild_logs__"] } },
+      ],
+    };
+  }
+
+  if (type === "Report" || type === "NexusAssault") {
+    return {
+      $and: [
+        query && Object.keys(query).length ? query : { id: { $exists: true } },
+        { created_by_id: user.id },
+      ],
+    };
+  }
+
+  const err = new Error(`${type} is not listable`);
+  err.status = 403;
+  err.code = "ENTITY_LIST_FORBIDDEN";
+  throw err;
 }
 
 export function assertCanWrite(user, type, doc) {

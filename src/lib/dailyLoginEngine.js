@@ -27,7 +27,7 @@ export const DAILY_REWARDS = [
   { day: 20, rewards: { nova_crystals: 8 } },
   { day: 21, rewards: { item_rarity: "rare", stardust: 1500 } },
   { day: 22, rewards: { experience: 2000 } },
-  { day: 23, rewards: { collectible: { type: "consumable", name: "Major Vitality Stim", rarity: "rare", consumable: { stat: "vitality", mult: 0.15, duration_hours: 12, tier: "major" }, flavor_text: "Boosts Vitality by 15% for 12 hours.", sell_value: 600 } } },
+  { day: 23, rewards: { collectible: { type: "consumable", name: "Rare Vitality Stim", rarity: "rare", consumable: { stat: "vitality", mult: 0.10, duration_hours: 12, tier: "rare" }, flavor_text: "Boosts Vitality by 10% for 12 hours (stacks duration up to 36h).", sell_value: 600 } } },
   { day: 24, rewards: { stardust: 2000 } },
   { day: 25, rewards: { item_rarity: "epic" } },
   { day: 26, rewards: { nova_crystals: 10 } },

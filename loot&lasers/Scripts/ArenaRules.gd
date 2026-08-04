@@ -3,10 +3,10 @@ extends RefCounted
 ## Arena matchmaking / Elo / rewards — mirrors src/lib/arenaEngine.js (subset).
 
 const DAILY_FREE_BATTLES := 10
-const PAID_BATTLE_COST := 5
+const PAID_BATTLE_COST := 15
 const REFRESH_MS := 5 * 60 * 1000
 const REFRESH_COST := 500
-const BATTLE_COOLDOWN_MS := 5 * 60 * 1000
+const BATTLE_COOLDOWN_MS := 10 * 60 * 1000
 const SKIP_COST := 1
 const CHALLENGER_SLOTS := 3
 const MAX_REAL_OPPONENTS := 2
@@ -463,7 +463,14 @@ static func format_eta_short(ms: int) -> String:
 
 
 static func ms_until_et_midnight() -> int:
-	## Approximate Eastern as UTC-4 (EDT). Lobby-only ETA for free-battle reset.
+	## Prefer ProgressManager server sync; local fallback only when unsynced.
+	if ProgressManager != null and not ProgressManager.last_time_payload.is_empty():
+		return ProgressManager.ms_until_daily_reset_display()
+	return ms_until_et_midnight_local_fallback()
+
+
+static func ms_until_et_midnight_local_fallback() -> int:
+	## Approximate Eastern as UTC-4 (EDT). Lobby-only ETA when /api/time/now unavailable.
 	var unix := int(Time.get_unix_time_from_system())
 	var et := unix - 4 * 3600
 	var day_sec := posmod(et, 86400)

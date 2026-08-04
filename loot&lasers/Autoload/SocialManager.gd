@@ -1,6 +1,6 @@
 extends Node
-## Friends · guild. Phase 19: friends/blocks are Nakama account-level.
-## Phase 20: mail delegated to MailManager (Nakama). Guild remains on Node.
+## Friends · guild · mail. Restoration 23: Node owns social persistence.
+## Nakama may still transport realtime; Godot is presentation-only.
 
 signal mail_changed
 signal friends_changed
@@ -38,7 +38,7 @@ var guild_log: Array = []
 
 
 func _ready() -> void:
-	print("[SocialManager] ready (Nakama friends; MailManager mail; Node guild)")
+	print("[SocialManager] ready (Node social)")
 
 
 func is_loading() -> bool:
@@ -204,33 +204,39 @@ func handle_guild_mail(mail: Dictionary, accept: bool) -> Dictionary:
 			"has_rewards": false,
 			"guild_id": guild_id,
 		}, true)
-		await GameApiClient.request("POST", "/api/entities/AppNotification", {
+		await GameApiClient.invoke("CreateNotification", {
 			"owner_id": requester_id,
 			"type": "mail",
 			"title": gname,
 			"body": "Your join request was accepted!",
-			"read": false,
-		}, true)
+		})
 		await load_mail(mail_folder)
 		return join
 	return {"ok": false, "error": "Not a guild mail"}
 
 
-# ── Friends (Nakama account-level) ────────────────────────────
+# ── Friends (Node GetSocialState / friend RPCs — Restoration 23) ─
+
+func _node_data(res: Dictionary) -> Dictionary:
+	if not bool(res.get("ok", false)):
+		return {}
+	var data: Variant = res.get("data", {})
+	return data if typeof(data) == TYPE_DICTIONARY else {}
+
 
 func load_social_state() -> Dictionary:
 	if _busy:
 		return {"ok": false, "error": "Social request already in progress"}
 	_busy = true
 	_set_loading(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("social_get_state", {})
+	var res: Dictionary = await GameApiClient.invoke("GetSocialState", {})
 	_busy = false
 	_set_loading(false)
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "social_get_state failed"))
+	if not bool(res.get("ok", false)):
+		var err := str(res.get("error", "GetSocialState failed"))
 		social_error.emit(err)
 		return {"ok": false, "error": err}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var data := _node_data(res)
 	_apply_social_state(data)
 	return {"ok": true, "error": "", "data": data}
 
@@ -240,28 +246,31 @@ func load_friends() -> Dictionary:
 
 
 func search_characters(query: String) -> Array:
-	## User search is deferred (Phase 19). Keep empty rather than scraping Character list.
 	var q := query.strip_edges()
-	if q.length() < 3:
+	if q.length() < 2:
 		return []
-	return []
+	var res: Dictionary = await GameApiClient.invoke("SearchCharacters", {"query": q, "limit": 20})
+	if not bool(res.get("ok", false)):
+		return []
+	var data := _node_data(res)
+	var results: Variant = data.get("results", [])
+	return results if typeof(results) == TYPE_ARRAY else []
 
 
 func send_friend_request(to_char: Dictionary) -> Dictionary:
-	var target := str(to_char.get("user_id", to_char.get("id", "")))
+	var target := str(to_char.get("id", to_char.get("character_id", "")))
 	if target.is_empty():
-		return {"ok": false, "error": "Missing target user id"}
+		return {"ok": false, "error": "Missing target character id"}
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("friend_request_send", {
-		"target_user_id": target,
-		"request_id": _rid("frs"),
+	var res: Dictionary = await GameApiClient.invoke("SendFriendRequest", {
+		"to_character_id": target,
 	})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "friend_request_send failed"))
+	if not bool(res.get("ok", false)):
+		var err := str(res.get("error", "SendFriendRequest failed"))
 		social_error.emit(err)
 		return {"ok": false, "error": err}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var data := _node_data(res)
 	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
 		_apply_social_state(data["state"])
 	friend_request_sent.emit()
@@ -269,75 +278,84 @@ func send_friend_request(to_char: Dictionary) -> Dictionary:
 
 
 func accept_friend(request: Dictionary) -> Dictionary:
-	var target := str(request.get("user_id", request.get("from_character_id", request.get("id", ""))))
-	return await accept_friend_request(target)
-
-
-func accept_friend_request(target_user_id: String) -> Dictionary:
-	if target_user_id.is_empty():
-		return {"ok": false, "error": "Missing target"}
+	var rid := str(request.get("id", request.get("request_id", "")))
+	if rid.is_empty():
+		return {"ok": false, "error": "Missing request id"}
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("friend_request_accept", {
-		"target_user_id": target_user_id,
-		"request_id": _rid("fra"),
-	})
+	var res: Dictionary = await GameApiClient.invoke("AcceptFriendRequest", {"request_id": rid})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "accept failed"))
 		social_error.emit(err)
 		return {"ok": false, "error": err}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var data := _node_data(res)
 	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
 		_apply_social_state(data["state"])
 	friend_request_accepted.emit()
 	return {"ok": true, "error": "", "data": data}
 
 
-func decline_friend(request: Dictionary) -> Dictionary:
-	var target := str(request.get("user_id", request.get("from_character_id", request.get("id", ""))))
-	return await decline_friend_request(target)
-
-
-func decline_friend_request(target_user_id: String) -> Dictionary:
-	if target_user_id.is_empty():
+func accept_friend_request(request_or_user_id: String) -> Dictionary:
+	## Prefer FriendRequest id; fall back to matching incoming by from_character_id.
+	if request_or_user_id.is_empty():
 		return {"ok": false, "error": "Missing target"}
+	for req in incoming_requests:
+		if typeof(req) != TYPE_DICTIONARY:
+			continue
+		if str(req.get("id", "")) == request_or_user_id or str(req.get("from_character_id", "")) == request_or_user_id:
+			return await accept_friend(req)
+	return await accept_friend({"id": request_or_user_id})
+
+
+func decline_friend(request: Dictionary) -> Dictionary:
+	var rid := str(request.get("id", request.get("request_id", "")))
+	if rid.is_empty():
+		return {"ok": false, "error": "Missing request id"}
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("friend_request_decline", {
-		"target_user_id": target_user_id,
-		"request_id": _rid("frd"),
-	})
+	var res: Dictionary = await GameApiClient.invoke("DeclineFriendRequest", {"request_id": rid})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "decline failed"))
 		social_error.emit(err)
 		return {"ok": false, "error": err}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var data := _node_data(res)
 	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
 		_apply_social_state(data["state"])
 	friend_request_declined.emit()
 	return {"ok": true, "error": "", "data": data}
 
 
+func decline_friend_request(request_or_user_id: String) -> Dictionary:
+	if request_or_user_id.is_empty():
+		return {"ok": false, "error": "Missing target"}
+	for req in incoming_requests:
+		if typeof(req) != TYPE_DICTIONARY:
+			continue
+		if str(req.get("id", "")) == request_or_user_id or str(req.get("from_character_id", "")) == request_or_user_id:
+			return await decline_friend(req)
+	for req in outgoing_requests:
+		if typeof(req) != TYPE_DICTIONARY:
+			continue
+		if str(req.get("id", "")) == request_or_user_id or str(req.get("to_character_id", "")) == request_or_user_id:
+			return await decline_friend(req)
+	return await decline_friend({"id": request_or_user_id})
+
+
 func cancel_friend_request(request: Dictionary) -> Dictionary:
-	# Outgoing cancel = friend_remove / delete pending via remove.
-	var target := str(request.get("user_id", request.get("to_character_id", request.get("id", ""))))
-	return await remove_friend(target)
+	return await decline_friend(request)
 
 
 func remove_friend(other_id: String) -> Dictionary:
 	if other_id.is_empty():
 		return {"ok": false, "error": "Missing id"}
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("friend_remove", {
-		"target_user_id": other_id,
-		"request_id": _rid("frm"),
-	})
+	var res: Dictionary = await GameApiClient.invoke("RemoveFriend", {"character_id": other_id})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "remove failed"))
 		social_error.emit(err)
 		return {"ok": false, "error": err}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var data := _node_data(res)
 	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
 		_apply_social_state(data["state"])
 	friend_removed.emit()
@@ -345,15 +363,21 @@ func remove_friend(other_id: String) -> Dictionary:
 
 
 func friend_other_id(friendship: Dictionary) -> String:
+	var mine := char_id()
+	var parts: Variant = friendship.get("participant_ids", [])
+	if typeof(parts) == TYPE_ARRAY:
+		for pid in parts:
+			if str(pid) != mine:
+				return str(pid)
 	return str(friendship.get("user_id", friendship.get("id", "")))
 
 
-# ── Blocks (Nakama account-level) ─────────────────────────────
+# ── Blocks (Node BlockPlayer RPCs) ────────────────────────────
 
 func load_blocks() -> Array:
-	var res: Dictionary = await NakamaManager.invoke_rpc("block_list_get", {})
-	if bool(res.get("success", false)):
-		var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var res: Dictionary = await GameApiClient.invoke("GetSocialState", {})
+	if bool(res.get("ok", false)):
+		var data := _node_data(res)
 		blocks = data.get("blocks", []) if typeof(data.get("blocks", [])) == TYPE_ARRAY else []
 	else:
 		blocks = []
@@ -372,16 +396,13 @@ func block_character(other_id: String, _other_name: String = "") -> Dictionary:
 	if other_id.is_empty():
 		return {"ok": false, "error": "Missing ids"}
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("user_block", {
-		"target_user_id": other_id,
-		"request_id": _rid("blk"),
-	})
+	var res: Dictionary = await GameApiClient.invoke("BlockPlayer", {"character_id": other_id})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "block failed"))
 		social_error.emit(err)
 		return {"ok": false, "error": err}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var data := _node_data(res)
 	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
 		_apply_social_state(data["state"])
 	user_blocked.emit()
@@ -396,16 +417,13 @@ func unblock(other_id: String) -> Dictionary:
 	if other_id.is_empty():
 		return {"ok": false, "error": "Missing id"}
 	_set_mutating(true)
-	var res: Dictionary = await NakamaManager.invoke_rpc("user_unblock", {
-		"target_user_id": other_id,
-		"request_id": _rid("ubk"),
-	})
+	var res: Dictionary = await GameApiClient.invoke("UnblockPlayer", {"character_id": other_id})
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "unblock failed"))
 		social_error.emit(err)
 		return {"ok": false, "error": err}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var data := _node_data(res)
 	if typeof(data.get("state", {})) == TYPE_DICTIONARY:
 		_apply_social_state(data["state"])
 	user_unblocked.emit()
@@ -456,99 +474,34 @@ func ensure_guild_challenge() -> Dictionary:
 	guild_challenge = {}
 	if my_guild.is_empty():
 		return {"ok": false, "error": "No guild"}
-	var gid := str(my_guild.get("id", ""))
-	# Prefer any active challenge so web/Godot week_key drift does not fork progress.
-	var active: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/GuildChallenge/filter",
-		{"query": {"guild_id": gid, "status": "active"}, "sort": "-created_date", "limit": 1}, true
-	)
-	if active.ok and typeof(active.data) == TYPE_ARRAY and (active.data as Array).size() > 0:
-		guild_challenge = active.data[0]
-		return {"ok": true, "challenge": guild_challenge}
-	var wk := _week_key()
-	var existing: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/GuildChallenge/filter",
-		{"query": {"guild_id": gid, "week_key": wk}, "limit": 1}, true
-	)
-	if existing.ok and typeof(existing.data) == TYPE_ARRAY and (existing.data as Array).size() > 0:
-		guild_challenge = existing.data[0]
-		return {"ok": true, "challenge": guild_challenge}
-	var tiers := [
-		{"title": "Weekly Operations", "base": 20, "sd": 5000, "gxp": 600},
-		{"title": "Strike Directive", "base": 35, "sd": 9000, "gxp": 1000},
-		{"title": "Galactic Offensive", "base": 55, "sd": 15000, "gxp": 1600},
-		{"title": "Apex Crusade", "base": 80, "sd": 24000, "gxp": 2600},
-	]
-	var tier_idx := mini(3, int(floor(float(my_guild.get("level", 1)) / 3.0)))
-	var tier: Dictionary = tiers[tier_idx]
-	var members_n := maxi(1, int(my_guild.get("member_count", guild_members.size())))
-	var goal := int(tier["base"]) + members_n * 5
-	var create: Dictionary = await GameApiClient.request("POST", "/api/entities/GuildChallenge", {
-		"guild_id": gid,
-		"week_key": wk,
-		"title": str(tier["title"]),
-		"goal": goal,
-		"progress": 0,
-		"status": "active",
-		"reward_stardust": int(tier["sd"]),
-		"reward_guild_xp": int(tier["gxp"]),
-		"ends_at": Time.get_datetime_string_from_unix_time(int(Time.get_unix_time_from_system()) + 7 * 86400, true),
-	}, true)
-	if create.ok and typeof(create.data) == TYPE_DICTIONARY:
-		guild_challenge = create.data
-	return create
+	var res: Dictionary = await GameApiClient.invoke("EnsureGuildChallenge", {})
+	if not bool(res.get("ok", false)):
+		return {"ok": false, "error": str(res.get("error", "EnsureGuildChallenge failed"))}
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	if typeof(data.get("challenge", null)) == TYPE_DICTIONARY:
+		guild_challenge = data.challenge
+	if typeof(data.get("guild", null)) == TYPE_DICTIONARY:
+		my_guild = data.guild
+		guild_changed.emit()
+	return {"ok": true, "challenge": guild_challenge}
 
 
-func add_challenge_progress(amount: int = 1) -> Dictionary:
-	if my_guild.is_empty():
-		await load_my_guild()
-	if my_guild.is_empty():
-		return {"ok": false, "error": "No guild"}
+func add_challenge_progress(_amount: int = 1) -> Dictionary:
+	# Progress is applied server-side via ContributeGuildMission / ContributeGuildArenaWin.
+	# Kept as a refresh helper for callers that still await this API.
 	await ensure_guild_challenge()
-	if guild_challenge.is_empty() or str(guild_challenge.get("status", "")) != "active":
+	if guild_challenge.is_empty():
 		return {"ok": false, "error": "No active challenge"}
-	var goal := int(guild_challenge.get("goal", 1))
-	var new_progress := int(guild_challenge.get("progress", 0)) + amount
-	var completed := new_progress >= goal
-	var patch := {"progress": goal if completed else new_progress}
-	if completed:
-		patch["status"] = "completed"
-	var upd: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/GuildChallenge/%s" % str(guild_challenge.get("id", "")).uri_encode(),
-		patch, true
-	)
-	if not upd.ok:
-		return upd
-	guild_challenge = upd.data if typeof(upd.data) == TYPE_DICTIONARY else guild_challenge
-	if completed:
-		await _apply_guild_xp(int(guild_challenge.get("reward_guild_xp", 0)))
-	return {"ok": true, "completed": completed, "challenge": guild_challenge, "reward_stardust": int(guild_challenge.get("reward_stardust", 0)) if completed else 0}
+	return {
+		"ok": true,
+		"completed": str(guild_challenge.get("status", "")) == "completed",
+		"challenge": guild_challenge,
+		"reward_stardust": 0,
+	}
 
 
-func _apply_guild_xp(xp_amount: int) -> void:
-	if xp_amount <= 0 or my_guild.is_empty():
-		return
-	var g: Dictionary = my_guild
-	var exp := int(g.get("experience", 0)) + xp_amount
-	var level := int(g.get("level", 1))
-	var exp_to_next := int(g.get("experience_to_next", 1000))
-	var leveled := false
-	while exp >= exp_to_next:
-		exp -= exp_to_next
-		level += 1
-		exp_to_next = int(floor(float(exp_to_next) * 1.4))
-		leveled = true
-	await GameApiClient.request(
-		"PATCH", "/api/entities/Guild/%s" % str(g.get("id", "")).uri_encode(),
-		{"experience": exp, "level": level, "experience_to_next": exp_to_next}, true
-	)
-	if leveled:
-		await GameApiClient.request("POST", "/api/entities/GuildLog", {
-			"guild_id": str(g.get("id", "")),
-			"entry_type": "levelup",
-			"message": "reached Guild Level %s!" % level,
-			"character_name": "Challenge System",
-		}, true)
+func _apply_guild_xp(_xp_amount: int) -> void:
+	# Guild XP is applied only by Node contribute RPCs.
 	await load_my_guild()
 
 
@@ -558,60 +511,27 @@ func contribute_mission(mission: Dictionary = {}, gains: Dictionary = {}) -> voi
 		await load_my_guild()
 	if my_membership.is_empty() or my_guild.is_empty():
 		return
-	var character := active_char()
-	var stardust := int(gains.get("stardust", 0))
-	var xp := int(gains.get("experience", 0))
-	var g: Dictionary = my_guild
-	var new_exp := int(g.get("experience", 0)) + int(floor(float(xp) * 0.5))
-	var level := int(g.get("level", 1))
-	var exp_to_next := int(g.get("experience_to_next", 1000))
-	var leveled := false
-	while new_exp >= exp_to_next:
-		new_exp -= exp_to_next
-		level += 1
-		exp_to_next = int(floor(float(exp_to_next) * 1.4))
-		leveled = true
-	await GameApiClient.request(
-		"PATCH", "/api/entities/Guild/%s" % str(g.get("id", "")).uri_encode(),
-		{
-			"experience": new_exp,
-			"level": level,
-			"experience_to_next": exp_to_next,
-			"total_missions": int(g.get("total_missions", 0)) + 1,
-			"total_stardust": int(g.get("total_stardust", 0)) + stardust,
-		}, true
-	)
-	await GameApiClient.request(
-		"PATCH", "/api/entities/GuildMember/%s" % str(my_membership.get("id", "")).uri_encode(),
-		{
-			"contributed_missions": int(my_membership.get("contributed_missions", 0)) + 1,
-			"contributed_stardust": int(my_membership.get("contributed_stardust", 0)) + stardust,
-			"character_level": int(character.get("level", 1)),
-		}, true
-	)
-	await GameApiClient.request("POST", "/api/entities/GuildLog", {
-		"guild_id": str(g.get("id", "")),
-		"entry_type": "mission",
-		"message": "completed \"%s\" at %s" % [str(mission.get("name", "a mission")), str(mission.get("location", "?"))],
-		"character_name": str(character.get("name", "")),
-		"amount": stardust,
-	}, true)
-	if leveled:
-		await GameApiClient.request("POST", "/api/entities/GuildLog", {
-			"guild_id": str(g.get("id", "")),
-			"entry_type": "levelup",
-			"message": "reached Guild Level %s!" % level,
-			"character_name": str(character.get("name", "")),
-		}, true)
-	var ch: Dictionary = await add_challenge_progress(1)
-	if bool(ch.get("completed", false)) and int(ch.get("reward_stardust", 0)) > 0:
-		await GameApiClient.request("POST", "/api/entities/GuildLog", {
-			"guild_id": str(g.get("id", "")),
-			"entry_type": "levelup",
-			"message": "Weekly Challenge complete! +%s SD bonus (claim pending)" % int(ch.get("reward_stardust", 0)),
-			"character_name": str(character.get("name", "")),
-		}, true)
-	await load_my_guild()
+	var res: Dictionary = await GameApiClient.invoke("ContributeGuildMission", {
+		"mission": {
+			"name": str(mission.get("name", "a mission")),
+			"location": str(mission.get("location", "?")),
+		},
+		"gains": {
+			"stardust": int(gains.get("stardust", 0)),
+			"experience": int(gains.get("experience", 0)),
+		},
+	})
+	if bool(res.get("ok", false)) and typeof(res.get("data", null)) == TYPE_DICTIONARY:
+		var data: Dictionary = res.data
+		if typeof(data.get("guild", null)) == TYPE_DICTIONARY:
+			my_guild = data.guild
+		if typeof(data.get("membership", null)) == TYPE_DICTIONARY:
+			my_membership = data.membership
+		if typeof(data.get("challenge", null)) == TYPE_DICTIONARY:
+			guild_challenge = data.challenge
+		guild_changed.emit()
+	else:
+		await load_my_guild()
 
 
 ## After an arena win — mirrors guildUtils.contributeArenaWin.
@@ -620,21 +540,16 @@ func contribute_arena_win() -> void:
 		await load_my_guild()
 	if my_membership.is_empty() or my_guild.is_empty():
 		return
-	var character := active_char()
-	await GameApiClient.request("POST", "/api/entities/GuildLog", {
-		"guild_id": str(my_guild.get("id", "")),
-		"entry_type": "arena",
-		"message": "won an Arena duel",
-		"character_name": str(character.get("name", "")),
-	}, true)
-	var ch: Dictionary = await add_challenge_progress(1)
-	if bool(ch.get("completed", false)) and int(ch.get("reward_stardust", 0)) > 0:
-		await GameApiClient.request("POST", "/api/entities/GuildLog", {
-			"guild_id": str(my_guild.get("id", "")),
-			"entry_type": "levelup",
-			"message": "Weekly Challenge complete! +%s SD bonus (claim pending)" % int(ch.get("reward_stardust", 0)),
-			"character_name": str(character.get("name", "")),
-		}, true)
+	var res: Dictionary = await GameApiClient.invoke("ContributeGuildArenaWin", {})
+	if bool(res.get("ok", false)) and typeof(res.get("data", null)) == TYPE_DICTIONARY:
+		var data: Dictionary = res.data
+		if typeof(data.get("guild", null)) == TYPE_DICTIONARY:
+			my_guild = data.guild
+		if typeof(data.get("challenge", null)) == TYPE_DICTIONARY:
+			guild_challenge = data.challenge
+		guild_changed.emit()
+	else:
+		await load_my_guild()
 
 
 func load_guild_log(limit: int = 30) -> Array:
@@ -662,29 +577,31 @@ func can_manage_guild() -> bool:
 func set_guild_recruiting(open: bool) -> Dictionary:
 	if not can_manage_guild() or my_guild.is_empty():
 		return {"ok": false, "error": "Only the guild leader can change recruiting"}
-	var gid := str(my_guild.get("id", ""))
-	var res: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/Guild/%s" % gid.uri_encode(),
-		{"recruiting": open}, true
-	)
-	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
-		my_guild = res.data
-		guild_changed.emit()
-	return res
+	var res: Dictionary = await GameApiClient.invoke("UpdateGuildSettings", {
+		"settings": {"recruiting": open},
+	})
+	if bool(res.get("ok", false)) and typeof(res.get("data", null)) == TYPE_DICTIONARY:
+		var data: Dictionary = res.data
+		if typeof(data.get("guild", null)) == TYPE_DICTIONARY:
+			my_guild = data.guild
+			guild_changed.emit()
+			return {"ok": true, "data": my_guild}
+	return {"ok": false, "error": str(res.get("error", "UpdateGuildSettings failed"))}
 
 
 func set_guild_public_listing(visible: bool) -> Dictionary:
 	if not can_manage_guild() or my_guild.is_empty():
 		return {"ok": false, "error": "Only the guild leader can change listing"}
-	var gid := str(my_guild.get("id", ""))
-	var res: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/Guild/%s" % gid.uri_encode(),
-		{"public_listing": visible}, true
-	)
-	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
-		my_guild = res.data
-		guild_changed.emit()
-	return res
+	var res: Dictionary = await GameApiClient.invoke("UpdateGuildSettings", {
+		"settings": {"public_listing": visible},
+	})
+	if bool(res.get("ok", false)) and typeof(res.get("data", null)) == TYPE_DICTIONARY:
+		var data: Dictionary = res.data
+		if typeof(data.get("guild", null)) == TYPE_DICTIONARY:
+			my_guild = data.guild
+			guild_changed.emit()
+			return {"ok": true, "data": my_guild}
+	return {"ok": false, "error": str(res.get("error", "UpdateGuildSettings failed"))}
 
 
 func request_to_join_guild(guild: Dictionary) -> Dictionary:
@@ -745,13 +662,12 @@ func request_to_join_guild(guild: Dictionary) -> Dictionary:
 			"has_rewards": false,
 			"guild_id": gid,
 		}, true)
-		await GameApiClient.request("POST", "/api/entities/AppNotification", {
+		await GameApiClient.invoke("CreateNotification", {
 			"owner_id": rid,
 			"type": "mail",
 			"title": str(me.get("name", "")),
 			"body": "wants to join %s" % gname,
-			"read": false,
-		}, true)
+		})
 	return {"ok": true}
 
 
@@ -761,46 +677,10 @@ func invite_to_guild(target: Dictionary) -> Dictionary:
 	var tid := str(target.get("id", ""))
 	if tid.is_empty():
 		return {"ok": false, "error": "Missing target"}
-	var existing: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/GuildMember/filter",
-		{"query": {"character_id": tid}, "limit": 1}, true
-	)
-	if existing.ok and typeof(existing.data) == TYPE_ARRAY and (existing.data as Array).size() > 0:
-		return {"ok": false, "error": "Already in a guild"}
-	var gid := str(my_guild.get("id", ""))
-	var dup: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/Mail/filter",
-		{"query": {"owner_id": tid, "mail_type": "guild_invite", "guild_id": gid, "folder": "inbox"}, "limit": 1}, true
-	)
-	if dup.ok and typeof(dup.data) == TYPE_ARRAY and (dup.data as Array).size() > 0:
-		return {"ok": false, "error": "Invite already pending"}
-	var me := active_char()
-	var gname := str(my_guild.get("name", "guild"))
-	var mail: Dictionary = await GameApiClient.request("POST", "/api/entities/Mail", {
-		"owner_id": tid,
-		"from_id": str(me.get("id", "")),
-		"from_name": str(me.get("name", "")),
-		"to_id": tid,
-		"to_name": str(target.get("name", "")),
-		"subject": "Guild Invitation: %s" % gname,
-		"body": "%s has invited you to join %s." % [str(me.get("name", "")), gname],
-		"mail_type": "guild_invite",
-		"folder": "inbox",
-		"read": false,
-		"claimed": false,
-		"has_rewards": false,
-		"guild_id": gid,
-	}, true)
-	if not mail.ok:
-		return mail
-	await GameApiClient.request("POST", "/api/entities/AppNotification", {
-		"owner_id": tid,
-		"type": "mail",
-		"title": str(me.get("name", "")),
-		"body": "invited you to join %s" % gname,
-		"read": false,
-	}, true)
-	return {"ok": true, "mail": mail.data}
+	var res: Dictionary = await GameApiClient.invoke("InviteGuildMember", {"character_id": tid})
+	if not bool(res.get("ok", false)):
+		return {"ok": false, "error": str(res.get("error", "Invite failed"))}
+	return {"ok": true, "mail": _node_data(res).get("mail", {})}
 
 
 func send_player_mail(to_char: Dictionary, subject: String, body: String) -> Dictionary:
@@ -880,54 +760,20 @@ func create_guild(name: String, tag: String, description: String = "") -> Dictio
 
 
 func join_guild(guild_id: String) -> Dictionary:
-	return await _join_character_into_guild(active_char(), guild_id)
+	if guild_id.is_empty():
+		return {"ok": false, "error": "Missing guild"}
+	var res: Dictionary = await GameApiClient.invoke("JoinGuild", {"guild_id": guild_id})
+	if not bool(res.get("ok", false)):
+		return {"ok": false, "error": str(res.get("error", "JoinGuild failed"))}
+	await load_my_guild()
+	return {"ok": true}
 
 
 func _join_character_into_guild(character: Dictionary, guild_id: String) -> Dictionary:
-	if guild_id.is_empty() or character.is_empty():
-		return {"ok": false, "error": "Missing guild or character"}
-	var gres: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/Guild/%s" % guild_id.uri_encode(), null, true
-	)
-	if not gres.ok or typeof(gres.data) != TYPE_DICTIONARY:
-		return {"ok": false, "error": "Guild not found"}
-	var guild: Dictionary = gres.data
-	if int(guild.get("member_count", 0)) >= 50:
-		return {"ok": false, "error": "Guild is full"}
-	var existing: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/GuildMember/filter",
-		{"query": {"character_id": str(character.get("id", ""))}, "limit": 1}, true
-	)
-	if existing.ok and typeof(existing.data) == TYPE_ARRAY and (existing.data as Array).size() > 0:
-		if str(existing.data[0].get("guild_id", "")) == guild_id:
-			return {"ok": true, "alreadyMember": true}
-		return {"ok": false, "error": "Already in a guild"}
-	var create: Dictionary = await GameApiClient.request("POST", "/api/entities/GuildMember", {
-		"guild_id": guild_id,
-		"character_id": str(character.get("id", "")),
-		"character_name": str(character.get("name", "")),
-		"character_level": int(character.get("level", 1)),
-		"character_race": str(character.get("race", "")),
-		"role": "member",
-		"contributed_missions": 0,
-		"contributed_stardust": 0,
-		"joined_date": Time.get_datetime_string_from_system(true),
-	}, true)
-	if not create.ok:
-		return create
-	await GameApiClient.request(
-		"PATCH", "/api/entities/Guild/%s" % guild_id.uri_encode(),
-		{"member_count": int(guild.get("member_count", 1)) + 1}, true
-	)
-	await GameApiClient.request("POST", "/api/entities/GuildLog", {
-		"guild_id": guild_id,
-		"entry_type": "join",
-		"message": "joined the guild",
-		"character_name": str(character.get("name", "")),
-	}, true)
-	if str(character.get("id", "")) == char_id():
-		await load_my_guild()
-	return {"ok": true}
+	## Only the active character can join via JoinGuild (server uses session character).
+	if str(character.get("id", "")) != char_id():
+		return {"ok": false, "error": "Can only join with active character"}
+	return await join_guild(guild_id)
 
 
 func report_player(reported: Dictionary, reason: String, context: String = "profile", snapshot: String = "") -> Dictionary:
@@ -951,43 +797,23 @@ func report_player(reported: Dictionary, reason: String, context: String = "prof
 func load_public_profile(character_id: String) -> Dictionary:
 	if character_id.is_empty():
 		return {"ok": false, "error": "Missing character"}
-	var cres: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/Character/%s" % character_id.uri_encode(), null, true
-	)
-	if not cres.ok or typeof(cres.data) != TYPE_DICTIONARY:
-		return {"ok": false, "error": "Character not found"}
-	var character: Dictionary = cres.data
-	var items_res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/Item/filter",
-		{"query": {"character_id": character_id, "is_equipped": true}, "limit": 40}, true
-	)
-	var equipped: Array = items_res.data if items_res.ok and typeof(items_res.data) == TYPE_ARRAY else []
-	var stats_res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/CharacterStats/filter",
-		{"query": {"character_id": character_id}, "limit": 1}, true
-	)
-	var career: Dictionary = {}
-	if stats_res.ok and typeof(stats_res.data) == TYPE_ARRAY and (stats_res.data as Array).size() > 0:
-		career = stats_res.data[0]
+	var res: Dictionary = await GameApiClient.invoke("GetPublicProfile", {"character_id": character_id})
+	if not bool(res.get("ok", false)):
+		return {"ok": false, "error": str(res.get("error", "Character not found"))}
+	var data := _node_data(res)
+	var profile: Dictionary = data.get("profile", {}) if typeof(data.get("profile", {})) == TYPE_DICTIONARY else {}
 	var guild_tag := ""
-	var mem: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/GuildMember/filter",
-		{"query": {"character_id": character_id}, "limit": 1}, true
-	)
-	if mem.ok and typeof(mem.data) == TYPE_ARRAY and (mem.data as Array).size() > 0:
-		var gid := str(mem.data[0].get("guild_id", ""))
-		if not gid.is_empty():
-			var gres: Dictionary = await GameApiClient.request(
-				"GET", "/api/entities/Guild/%s" % gid.uri_encode(), null, true
-			)
-			if gres.ok and typeof(gres.data) == TYPE_DICTIONARY:
-				guild_tag = str(gres.data.get("tag", ""))
-	var presence: Dictionary = await PresenceManager.load_for(character_id)
+	var guild: Variant = profile.get("guild", null)
+	if typeof(guild) == TYPE_DICTIONARY:
+		guild_tag = str(guild.get("tag", ""))
+	var presence: Dictionary = profile.get("presence", {}) if typeof(profile.get("presence", {})) == TYPE_DICTIONARY else {}
+	var statistics: Dictionary = profile.get("statistics", {}) if typeof(profile.get("statistics", {})) == TYPE_DICTIONARY else {}
 	return {
 		"ok": true,
-		"character": character,
-		"equipped": equipped,
-		"career": career,
+		"character": profile,
+		"profile": profile,
+		"equipped": [],
+		"career": statistics,
 		"guild_tag": guild_tag,
 		"presence": presence,
 	}
@@ -996,71 +822,12 @@ func load_public_profile(character_id: String) -> Dictionary:
 func leave_guild() -> Dictionary:
 	if my_membership.is_empty():
 		return {"ok": false, "error": "Not in a guild"}
-	var mid := str(my_membership.get("id", ""))
-	var gid := str(my_membership.get("guild_id", ""))
-	var role := str(my_membership.get("role", "member"))
-	var my_name := str(my_membership.get("character_name", ""))
-	var others: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/GuildMember/filter",
-		{"query": {"guild_id": gid}, "limit": 100}, true
-	)
-	var remaining: Array = []
-	if others.ok and typeof(others.data) == TYPE_ARRAY:
-		for m in others.data:
-			if typeof(m) != TYPE_DICTIONARY:
-				continue
-			if str(m.get("id", "")) == mid:
-				continue
-			remaining.append(m)
-
-	# Delete membership first so we never orphan the row.
-	var res: Dictionary = await GameApiClient.request(
-		"DELETE", "/api/entities/GuildMember/%s" % mid.uri_encode(), null, true
-	)
-	if not res.ok:
-		return res
-
-	if remaining.is_empty():
-		# Last member — wipe guild wars/logs/ready then the guild (web departFromGuild).
-		await GameApiClient.request("POST", "/api/entities/GuildLog/delete-many", {"query": {"guild_id": gid}}, true)
-		await GameApiClient.request("POST", "/api/entities/GuildWarReady/delete-many", {"query": {"guild_id": gid}}, true)
-		await GameApiClient.request("POST", "/api/entities/GuildWar/delete-many", {"query": {"attacker_guild_id": gid}}, true)
-		await GameApiClient.request("POST", "/api/entities/GuildWar/delete-many", {"query": {"defender_guild_id": gid}}, true)
-		await GameApiClient.request("DELETE", "/api/entities/Guild/%s" % gid.uri_encode(), null, true)
-		await load_my_guild()
-		return {"ok": true, "guild_deleted": true}
-
-	var patch := {"member_count": remaining.size()}
-	if role == "leader":
-		remaining.sort_custom(func(a, b):
-			var ra := 2 if str(a.get("role", "")) == "officer" else (1 if str(a.get("role", "")) == "member" else 0)
-			var rb := 2 if str(b.get("role", "")) == "officer" else (1 if str(b.get("role", "")) == "member" else 0)
-			if ra != rb:
-				return ra > rb
-			var la := int(a.get("character_level", 1))
-			var lb := int(b.get("character_level", 1))
-			if la != lb:
-				return la > lb
-			return str(a.get("joined_date", "")) < str(b.get("joined_date", ""))
-		)
-		var next_m: Dictionary = remaining[0]
-		await GameApiClient.request(
-			"PATCH", "/api/entities/GuildMember/%s" % str(next_m.get("id", "")).uri_encode(),
-			{"role": "leader"}, true
-		)
-		patch["leader_id"] = str(next_m.get("character_id", ""))
-		patch["leader_name"] = str(next_m.get("character_name", ""))
-		await GameApiClient.request("POST", "/api/entities/GuildLog", {
-			"guild_id": gid,
-			"entry_type": "leave",
-			"message": "departed — leadership passed to %s" % str(next_m.get("character_name", "")),
-			"character_name": my_name,
-		}, true)
-	await GameApiClient.request(
-		"PATCH", "/api/entities/Guild/%s" % gid.uri_encode(), patch, true
-	)
+	var res: Dictionary = await GameApiClient.invoke("LeaveGuild", {})
+	if not bool(res.get("ok", false)):
+		return {"ok": false, "error": str(res.get("error", "LeaveGuild failed"))}
 	await load_my_guild()
-	return {"ok": true}
+	var data := _node_data(res)
+	return {"ok": true, "guild_deleted": bool(data.get("guildDeleted", false))}
 
 
 func guild_tag_label() -> String:

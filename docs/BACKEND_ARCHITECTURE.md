@@ -13,6 +13,8 @@ Stardust, and Nova. Existing Nakama gameplay modules and storage are restoration
 debt from the incomplete migration. They must not be expanded or treated as the
 target authority.
 See `docs/WALLET_ARCHITECTURE.md`.
+Production readiness verdict (Rest 28): `docs/PHASE_PRODUCTION_READINESS.md`
+(**not** production-ready until dual-authority debt, DR, and load certification clear).
 
 ### Auth bridge (current)
 
@@ -38,7 +40,7 @@ Do not create new Nakama gameplay services.
 | 5 | Legacy Nakama wallet | `wallet_get` (+ internal credit/debit) | retained; not the Godot display ledger |
 | 6 | Equipment | `equipment_get` | no |
 | 7 | Missions core | `missions_get`, `missions_refresh`, `mission_start`, `mission_status` | board/active; **no rewards** |
-| 8 | Mission authority | same RPCs | **Nakama is sole mission SoT** |
+| 8 | Historical mission prototype | same RPCs | legacy storage; not live Godot authority |
 | 9 | Shared runtime + verification | `modules/lib/*`, `npm run verify:backend` | infrastructure only |
 | 10 | Remote config + feature flags | `config_get` | system storage; mutations internal-only |
 | 11 | Equipment mutations | `equipment_get`, `equipment_equip`, `equipment_unequip` | equipment + inventory moves |
@@ -73,20 +75,20 @@ Rules:
 
 ## Legacy Nakama mission implementation
 
-This is a historical implementation that must be restored to Node in a dedicated
-gameplay phase. The authentication foundation does not resume Nakama mission state
-during boot.
+This is a historical implementation retained for migration verification. The live
+Godot Cantina now uses Node `LaunchMission`, `SkipMission`, `ClaimMission`, and
+`FailMission`; boot does not resume Nakama mission state. Unreachable Nakama
+mission client code remains scheduled for removal after compatibility verification.
 
 | Concern | Authority |
 |---------|-----------|
-| Mission generation | Target: Node; legacy: Nakama `missions_get` / `missions_refresh` |
-| Mission ownership | Target: Node; legacy: Character-level Nakama storage |
-| Mission start | Target: Node; legacy: Nakama `mission_start` |
-| Timers / completion eligibility | Target: Node; legacy: Nakama `mission_status` |
-| Local board cfg | **Display cache only** — never generates; Nakama wins on conflict |
-| Node `LaunchMission` / `Mission` entity | **Not used** for live Cantina |
-| Rewards / XP / loot | Mission claim service; XP remains deferred where documented |
-| Fuel / Nova payment | Trusted Nakama→Node wallet bridge; Node Character ledger |
+| Mission board | Godot display board matching the web client; Node snapshots authoritative launch data |
+| Mission ownership | Node Mission row + selected owned Character |
+| Mission start | Node `LaunchMission` |
+| Timers / completion eligibility | Node Mission timestamps and status |
+| Local board cfg | Display cache only; never authoritative gameplay state |
+| Rewards / XP / loot | Node `ClaimMission` reward pipeline |
+| Fuel / Nova payment | Node gameplay functions and Character ledger |
 
 Collections: `mission_boards/<character_id>`, `active_missions/<character_id>`.
 
@@ -122,15 +124,20 @@ See `docs/PHASE13_LOOT_GENERATION.md`.
 
 ## Legacy Nakama mission rewards (Phase 14)
 
-`mission_claim` connects MissionService → LootService → RewardService.
-Snapshot reward references at mission generation. Stardust + sample loot; XP explicitly unsupported.
-Godot `MissionManager` claims via Nakama only. See `docs/PHASE14_MISSION_REWARDS.md`.
+`mission_claim` connects the historical Nakama MissionService → LootService →
+RewardService. It remains a legacy verification surface; live Godot mission claims
+use Node because the Nakama implementation leaves XP unsupported and writes loot
+to a separate inventory. See `docs/PHASE14_MISSION_REWARDS.md`.
 
-## Legacy Nakama shops (Phase 15)
+## Shops (Restoration 12A) / Legacy Nakama Phase 15
 
-`modules/shops.lua` — character-level `general` shop. Soft currency buy/sell; free cooldown refresh.
-Godot `ShopManager` uses Nakama; Node EnsureShop/BuyShop disabled for stalls.
-See `docs/PHASE15_SHOPS.md`.
+**Authoritative:** Node `EnsureShop` / `RefreshShop` / `BuyShopGear` / `BuyShopConsumable`
+persist stock on `Character.shop_meta`. Godot `ShopManager` calls Node via
+`GameApiClient`. See `docs/PHASE_SHOPS_12A.md`.
+
+**Legacy:** `modules/shops.lua` (`shop_get` / `shop_buy` / `shop_sell` / `shop_refresh`)
+remains on disk from Phase 15 but is **not** the live Godot path. See
+`docs/PHASE15_SHOPS.md` (superseded).
 
 ## Legacy Nakama combat engine (Phase 17)
 

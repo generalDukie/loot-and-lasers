@@ -9,6 +9,7 @@ var patrol := false
 var pending_enemy: Dictionary = {}
 var pending_battle: Dictionary = {}
 var pending_player_items: Array = []
+var pending_enemy_index: int = 1
 var last_finish: Dictionary = {}
 
 
@@ -23,6 +24,7 @@ func clear_local() -> void:
 	pending_enemy = {}
 	pending_battle = {}
 	pending_player_items = []
+	pending_enemy_index = 1
 	last_finish = {}
 
 
@@ -33,6 +35,15 @@ func active_char() -> Dictionary:
 func sync_state() -> Dictionary:
 	var res: Dictionary = await GameApiClient.invoke("SyncDungeonState", {})
 	_apply(res)
+	_apply_dungeon_blob(res)
+	state_changed.emit()
+	return res
+
+
+func refresh_status() -> Dictionary:
+	var res: Dictionary = await GameApiClient.invoke("GetDungeonStatus", {})
+	_apply(res)
+	_apply_dungeon_blob(res)
 	state_changed.emit()
 	return res
 
@@ -40,6 +51,7 @@ func sync_state() -> Dictionary:
 func skip_cooldown() -> Dictionary:
 	var res: Dictionary = await GameApiClient.invoke("SkipDungeonCooldown", {})
 	_apply(res)
+	_apply_dungeon_blob(res)
 	state_changed.emit()
 	return res
 
@@ -47,6 +59,7 @@ func skip_cooldown() -> Dictionary:
 func pay_continue() -> Dictionary:
 	var res: Dictionary = await GameApiClient.invoke("PayDungeonContinue", {})
 	_apply(res)
+	_apply_dungeon_blob(res)
 	state_changed.emit()
 	return res
 
@@ -111,31 +124,64 @@ func prepare_fight() -> Dictionary:
 		var paid: Dictionary = await pay_continue()
 		if not paid.ok:
 			return paid
-	pending_enemy = DungeonRules.generate_enemy(planet, enemy_idx)
-	pending_player_items = await _load_equipped()
-	pending_battle = MissionCombat.simulate_battle(active_char(), pending_enemy, pending_player_items, [])
-	return {"ok": true, "enemy": pending_enemy, "battle": pending_battle}
+
+	var body := {
+		"planet_id": selected_planet_id,
+		"enemy_index": enemy_idx,
+		"patrol": patrol,
+		"viewing_wormhole": viewing_wormhole,
+	}
+	var res: Dictionary = await GameApiClient.invoke("PrepareDungeonCombat", body)
+	if not res.ok:
+		return {"ok": false, "error": str(res.get("error", "PrepareDungeonCombat failed"))}
+	var payload: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	pending_enemy = payload.get("enemy", {}) if typeof(payload.get("enemy", {})) == TYPE_DICTIONARY else {}
+	# Fallback display name if summary is thin.
+	if pending_enemy.is_empty() and not planet.is_empty():
+		pending_enemy = {"name": "Frontier Foe", "level": 1}
+	var battle: Dictionary = payload.get("battle", {}) if typeof(payload.get("battle", {})) == TYPE_DICTIONARY else {}
+	if battle.is_empty() and typeof(payload.get("events", null)) == TYPE_ARRAY:
+		battle = {
+			"winner": payload.get("winner", ""),
+			"events": payload.get("events", []),
+			"playerMaxHp": payload.get("playerMaxHp", 0),
+			"opponentMaxHp": payload.get("opponentMaxHp", 0),
+			"initiativeFirstSide": payload.get("opening_side", ""),
+			"playerEnd": payload.get("playerEnd", {}),
+			"opponentEnd": payload.get("opponentEnd", {}),
+		}
+	pending_battle = battle
+	pending_player_items = []
+	pending_enemy_index = int(payload.get("enemy_index", enemy_idx))
+	var cid := str(payload.get("combat_id", ""))
+	if not cid.is_empty():
+		pending_battle["combat_id"] = cid
+	if typeof(payload.get("dungeon", null)) == TYPE_DICTIONARY:
+		var dungeon: Dictionary = payload.dungeon
+		for k in ["dungeon_cooldown_until", "dungeon_cooldown_at", "dungeon_cooldown_ms", "dungeon_continue_credit"]:
+			if dungeon.has(k):
+				GameManager.active_character[k] = dungeon[k]
+		GameManager.active_character["pending_combat_id"] = dungeon.get("pending_combat_id", cid)
+	if typeof(payload.get("character", null)) == TYPE_DICTIONARY:
+		GameManager.apply_active_character(payload.character, "dungeon_prepare")
+	return {"ok": true, "enemy": pending_enemy, "battle": pending_battle, "combat_id": cid}
 
 
 func finish_battle() -> Dictionary:
-	if pending_battle.is_empty() or pending_enemy.is_empty():
+	if pending_battle.is_empty():
 		return {"ok": false, "error": "No pending battle"}
-	var won := str(pending_battle.get("winner", "")) == "player"
-	var max_hit := 0
-	for ev in pending_battle.get("events", []):
-		if typeof(ev) != TYPE_DICTIONARY:
-			continue
-		if str(ev.get("attacker", "")) == "player":
-			max_hit = maxi(max_hit, int(ev.get("damage", 0)))
+	# Settlement uses committed Node combat; body.won is ignored server-side.
+	var combat_id := str(pending_battle.get("combat_id", ""))
+	if combat_id.is_empty():
+		combat_id = str(GameManager.active_character.get("pending_combat_id", ""))
 	var body := {
-		"won": won,
 		"planet_id": selected_planet_id,
-		"enemy_index": _enemy_index_for_finish(),
+		"enemy_index": pending_enemy_index if pending_enemy_index > 0 else _enemy_index_for_finish(),
 		"patrol": patrol,
 		"viewing_wormhole": viewing_wormhole,
-		"species_id": pending_enemy.get("speciesId", 1),
-		"max_hit": max_hit,
 	}
+	if not combat_id.is_empty():
+		body["combat_id"] = combat_id
 	var res: Dictionary = await GameApiClient.invoke("FinishDungeonBattle", body)
 	_apply(res)
 	last_finish = res.data if res.ok and typeof(res.data) == TYPE_DICTIONARY else {}
@@ -146,6 +192,7 @@ func finish_battle() -> Dictionary:
 	pending_enemy = {}
 	pending_battle = {}
 	pending_player_items = []
+	pending_enemy_index = 1
 	state_changed.emit()
 	return res
 
@@ -157,6 +204,7 @@ func _enemy_index_for_finish() -> int:
 	var parts := id.split("-")
 	if parts.size() >= 3:
 		return clampi(int(parts[2]), 1, DungeonRules.ENEMIES_PER_PLANET)
+	# Prefer meta from prepare response enemy_index if present on pending battle path.
 	return current_enemy_index()
 
 
@@ -181,3 +229,22 @@ func _apply(res: Dictionary) -> void:
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
 		GameManager.apply_active_character(ch, "dungeon_mutation")
+	_apply_dungeon_blob(res)
+
+
+func _apply_dungeon_blob(res: Dictionary) -> void:
+	if not res.ok:
+		return
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	if typeof(data.get("dungeon", null)) != TYPE_DICTIONARY:
+		return
+	var dungeon: Dictionary = data.dungeon
+	for k in [
+		"dungeon_planet", "dungeon_enemy", "dungeon_deaths", "dungeon_deaths_date",
+		"dungeon_clears", "dungeon_nodes_cleared", "dungeon_continue_credit",
+		"dungeon_cooldown_until", "dungeon_cooldown_at", "dungeon_cooldown_ms",
+	]:
+		if dungeon.has(k):
+			GameManager.active_character[k] = dungeon[k]
+	GameManager.active_character["pending_combat_id"] = dungeon.get("pending_combat_id", "")
+	GameManager.active_character["dungeon"] = dungeon

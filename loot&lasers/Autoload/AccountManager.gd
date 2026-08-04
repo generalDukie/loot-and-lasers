@@ -77,47 +77,13 @@ func slot_capacity() -> int:
 	return mini(MAX_SLOTS, 1 + int(AuthManager.user.get("purchased_slots", 0)))
 
 
-func purge_and_delete_character(character_id: String, character_name: String = "") -> Dictionary:
+func purge_and_delete_character(character_id: String, _character_name: String = "") -> Dictionary:
 	if character_id.is_empty():
 		return {"ok": false, "error": "Missing character id"}
-	# Leave guild first
-	await SocialManager.load_my_guild()
-	if str(SocialManager.my_membership.get("character_id", "")) == character_id \
-			or str(GameManager.active_character.get("id", "")) == character_id:
-		if not SocialManager.my_membership.is_empty():
-			await SocialManager.leave_guild()
-
-	var cleanups: Array = [
-		["Item", {"character_id": character_id}],
-		["Mission", {"character_id": character_id}],
-		["Mail", {"owner_id": character_id}],
-		["AppNotification", {"owner_id": character_id}],
-		["GuildMember", {"character_id": character_id}],
-		["PlayerPresence", {"character_id": character_id}],
-		["DailyLogin", {"character_id": character_id}],
-		["ChatMessage", {"sender_id": character_id}],
-		["PrivateMessage", {"sender_id": character_id}],
-		["PrivateMessage", {"recipient_id": character_id}],
-		["FriendRequest", {"from_character_id": character_id}],
-		["FriendRequest", {"to_character_id": character_id}],
-		["Block", {"blocker_id": character_id}],
-		["Block", {"blocked_id": character_id}],
-		["Report", {"reporter_id": character_id}],
-		["Report", {"reported_id": character_id}],
-		["GalaxyNews", {"character_id": character_id}],
-	]
-	if not character_name.is_empty():
-		cleanups.append(["GalaxyNews", {"character_name": character_name}])
-
-	for entry in cleanups:
-		await GameApiClient.request(
-			"POST", "/api/entities/%s/delete-many" % entry[0],
-			{"query": entry[1]}, true
-		)
-
-	var del: Dictionary = await GameApiClient.request(
-		"DELETE", "/api/entities/Character/%s" % character_id.uri_encode(), null, true
-	)
+	# Entity deleteMany is locked for social/mail/news — Node owns the purge.
+	var del: Dictionary = await GameApiClient.invoke("DeleteMyCharacter", {
+		"character_id": character_id,
+	})
 	if del.ok and str(GameManager.active_character.get("id", "")) == character_id:
 		GameManager.clear_active_character("account_character_deleted")
 	return del

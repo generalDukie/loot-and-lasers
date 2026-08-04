@@ -27,11 +27,7 @@ export default function ArenaNewsFeed({ compact = false }) {
 
   const load = useCallback(async () => {
     try {
-      const cutoff = new Date(Date.now() - NEWS_TTL_MS).toISOString();
-      try {
-        await api.entities.GalaxyNews.deleteMany({ created_date: { $lt: cutoff } });
-      } catch { /* best-effort purge */ }
-
+      // Client filters to fresh entries; server owns create/prune of GalaxyNews.
       const n = await api.entities.GalaxyNews.list("-created_date", 40);
       setNews((n || []).filter((entry) => isFresh(entry)));
     } catch { /* galaxy can stay quiet */ }

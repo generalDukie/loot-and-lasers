@@ -16,6 +16,7 @@ const TAB_DEFS: Array = [
 	{"id": "entitlements", "label": "Entitlements"},
 	{"id": "server", "label": "Server"},
 	{"id": "economy", "label": "Economy"},
+	{"id": "ops", "label": "Ops"},
 ]
 
 var _status: Label
@@ -169,6 +170,7 @@ func _build() -> void:
 	_build_entitlements()
 	_build_server()
 	_build_economy()
+	_build_ops()
 
 	_status = ClientUi.make_status()
 	outer.add_child(_status)
@@ -1023,6 +1025,96 @@ func _build_economy() -> void:
 	_econ_lab.text = "Load a snapshot to view circulation."
 	col.add_child(_econ_lab)
 	_add_tab("economy", col)
+
+
+# ─── Ops (live operations) ─────────────────────────────────
+
+func _build_ops() -> void:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	col.add_child(ClientUi.make_section_header("OPS", "Live operations", "Maintenance, flags, integrity — Node enforces."))
+	var dash_lab := RichTextLabel.new()
+	dash_lab.bbcode_enabled = true
+	dash_lab.fit_content = true
+	dash_lab.text = "Load dashboard for live snapshot."
+	col.add_child(dash_lab)
+	var load_d := _btn("Refresh Ops Dashboard", true)
+	load_d.pressed.connect(func() -> void:
+		_run("Loading ops…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.get_ops_dashboard()
+			if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+				var d: Dictionary = res.data.get("dashboard", res.data)
+				if typeof(d) != TYPE_DICTIONARY:
+					d = res.data
+				var maint: Dictionary = d.get("maintenance", {}) if typeof(d.get("maintenance", null)) == TYPE_DICTIONARY else {}
+				dash_lab.text = "[b]Accounts[/b] %s · [b]Characters[/b] %s · [b]Presence[/b] %s\n[b]Open reports[/b] %s · [b]Quarantine[/b] %s\n[b]Maintenance[/b] %s — %s" % [
+					str(d.get("accounts", 0)),
+					str(d.get("characters", 0)),
+					str(d.get("players_online_estimate", 0)),
+					str(d.get("open_reports", 0)),
+					str(d.get("pending_quarantine", 0)),
+					str(maint.get("enabled", false)),
+					str(maint.get("message", "")),
+				]
+			return res
+		)
+	)
+	col.add_child(load_d)
+
+	var maint_on := _btn("Enable Maintenance")
+	maint_on.pressed.connect(func() -> void:
+		_run("Enabling maintenance…", func() -> Dictionary:
+			return await AdminManager.set_maintenance_mode(true, "Temporary maintenance", _why())
+		)
+	)
+	col.add_child(maint_on)
+	var maint_off := _btn("Disable Maintenance")
+	maint_off.pressed.connect(func() -> void:
+		_run("Disabling maintenance…", func() -> Dictionary:
+			return await AdminManager.set_maintenance_mode(false, "", _why())
+		)
+	)
+	col.add_child(maint_off)
+
+	var flag_row := HBoxContainer.new()
+	flag_row.add_theme_constant_override("separation", 6)
+	col.add_child(flag_row)
+	var flag_name := LineEdit.new()
+	flag_name.placeholder_text = "feature_flag"
+	flag_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	flag_row.add_child(flag_name)
+	var flag_on := _btn("Flag ON")
+	flag_on.pressed.connect(func() -> void:
+		_run("Setting flag…", func() -> Dictionary:
+			return await AdminManager.set_feature_flag(flag_name.text.strip_edges(), true, _why())
+		)
+	)
+	flag_row.add_child(flag_on)
+	var flag_off := _btn("Flag OFF")
+	flag_off.pressed.connect(func() -> void:
+		_run("Clearing flag…", func() -> Dictionary:
+			return await AdminManager.set_feature_flag(flag_name.text.strip_edges(), false, _why())
+		)
+	)
+	flag_row.add_child(flag_off)
+
+	var audit_btn := _btn("Integrity Audit (selected character)")
+	audit_btn.pressed.connect(func() -> void:
+		_run("Running integrity audit…", func() -> Dictionary:
+			return await AdminManager.run_integrity_audit(_char_id.text.strip_edges(), "", false)
+		)
+	)
+	col.add_child(audit_btn)
+
+	var arena_s := _btn("Arena Suspend 24h")
+	arena_s.pressed.connect(func() -> void:
+		_run("Suspending arena…", func() -> Dictionary:
+			return await AdminManager.arena_suspend(_char_id.text.strip_edges(), 24, _why())
+		)
+	)
+	col.add_child(arena_s)
+
+	_add_tab("ops", col)
 
 
 func _fill_kv_list(host: VBoxContainer, res: Dictionary) -> void:

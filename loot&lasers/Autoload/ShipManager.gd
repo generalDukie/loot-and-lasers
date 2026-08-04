@@ -54,10 +54,7 @@ func claim_scout_milestone() -> Dictionary:
 func _apply(res: Dictionary) -> void:
 	if not res.ok:
 		return
-	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
-	var patch: Variant = data.get("patch", {})
-	if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
-		GameManager.apply_active_character_patch(patch, "ship_mutation")
-	var ch: Variant = data.get("character", {})
-	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.apply_active_character(ch, "ship_mutation")
+	GameApiClient.apply_authoritative_response(
+		res.data if typeof(res.data) == TYPE_DICTIONARY else {},
+		"ship_mutation"
+	)

@@ -35,28 +35,24 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     Promise.all([
-      api.entities.Character.list("-arena_rating", 100),
+      api.functions.invoke("GetArenaLeaderboard", { limit: 100, offset: 0 }),
       api.entities.GuildMember.list(),
       api.entities.Guild.list(),
     ])
-      .then(([list, members, guilds]) => {
+      .then(([board, members, guilds]) => {
         const gTag = {};
         guilds.forEach((g) => (gTag[g.id] = g.tag || g.name || ""));
         const cToGuild = {};
         members.forEach((m) => {
           if (m.character_id) cToGuild[m.character_id] = gTag[m.guild_id] || "";
         });
-        const ranked = list
-          .map((c) => ({
-            ...c,
-            _score: c.arena_rating || 1000,
-            _guild: cToGuild[c.id] || "",
-          }))
-          .sort(
-            (a, b) =>
-              (b.arena_rating || 1000) - (a.arena_rating || 1000) ||
-              (b.arena_wins || 0) - (a.arena_wins || 0)
-          );
+        const list = Array.isArray(board?.rankings) ? board.rankings : [];
+        const ranked = list.map((c) => ({
+          ...c,
+          id: c.id || c.character_id,
+          _score: c.arena_rating || 1000,
+          _guild: cToGuild[c.id || c.character_id] || "",
+        }));
         setChars(ranked);
       })
       .catch(() => setChars([]));

@@ -3,10 +3,11 @@
  */
 import { entities } from "../entities.js";
 import { db, withTransactionAsync } from "../db.js";
-import { randomItem, randomItemForClass } from "../shared/rewards.js";
+import { randomItemForClass } from "../shared/rewards.js";
 import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
-import { mergeDiscoveredGear } from "../shared/discovery.js";
+import { mergeDiscoveredGear, rollCombatCollectibleDiscoveries } from "../shared/discovery.js";
+import { notifyAchievementsUnlocked } from "../shared/notificationService.js";
 import {
   auditShopPurchase,
   auditFuelPurchase,
@@ -15,6 +16,16 @@ import {
   ActorTypes,
   newCorrelationId,
 } from "../audit/index.js";
+import {
+  debitNova,
+  debitNovaHalfUnits,
+  creditNova,
+  readNovaHalfUnits,
+  fromNovaHalfUnits,
+  getBalances,
+  hasNova,
+  novaDebitPatch,
+} from "../shared/currencyService.js";
 import {
   ATTR_STAT_KEYS,
   getNextAttributePointCost,
@@ -34,8 +45,8 @@ import {
   rollMissionEfficiency,
   computeMissionXpFromFuel,
   computeMissionStardustFromFuel,
-  computeMissionJunkSellValue,
   skipCostFor,
+  skipCostHalfUnits,
   SHOP_REFRESH_COST,
   HOT_DEAL_REFRESH_COUNT,
   getShopWindow,
@@ -51,18 +62,15 @@ import {
   generateSimpleShopStock,
   generateSimpleHotDeal,
   prepareConsumableBuffs,
+  getActiveStims,
+  MAX_ACTIVE_STAT_TYPES,
   stimShopPurchasePrice,
   rollItemRarity,
-  rollMissionGearRarity,
-  rollMissionGearDrop,
   missionGearMissStreak,
   missionGearDropChance,
-  MISSION_STIM_CHANCE_AFTER_GEAR_FAIL,
-  MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL,
   applyXpToCharacter,
+  consumeProgression,
   getInventoryCap,
-  randomConsumable,
-  priceStimOffer,
   progressWeeklyNovaQuest,
 } from "../shared/economyFormulas.js";
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
@@ -83,6 +91,23 @@ import {
   snapshotDefinitionRef,
   RewardErrors,
 } from "../rewards/index.js";
+import { resolveSelectedCharacter } from "../gameplayContext.js";
+import {
+  buildAttributeSheet,
+  loadEquippedItemsForCharacter,
+} from "../shared/characterAttributes.js";
+import { settleMissionItemChain } from "../shared/missionRewards.js";
+import { serializeShopPresentation, assertShopPurchaseClientSafe, shopMetaHasStock } from "../shared/shopService.js";
+import {
+  prepareMissionCombatForCharacter,
+  readMissionCombat,
+  publicCombatResult,
+} from "../shared/combatService.js";
+import {
+  buildInventorySnapshot,
+  equipItemForCharacter,
+  unequipItemForCharacter,
+} from "../shared/inventoryEquipment.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -92,13 +117,7 @@ function httpErr(status, message, code) {
 }
 
 function requireMyChar(user) {
-  const list = entities.Character.filter({ created_by_id: user.id }, "-created_date", 50);
-  if (!list.length) httpErr(404, "No character");
-  const activeId = user.active_character_id;
-  if (!activeId) httpErr(409, "No selected character");
-  const active = list.find((c) => c.id === activeId);
-  if (!active) httpErr(403, "Selected character is not owned by this account");
-  return active;
+  return resolveSelectedCharacter(user);
 }
 
 function normalizeOperationKey(value) {
@@ -275,6 +294,91 @@ export async function DissolveJunk(user, body) {
   }
 }
 
+// ── GetInventory ─────────────────────────────────────────────
+/** Read-only bag + equipped snapshot for the selected Character. */
+export async function GetInventory(user, _body = {}) {
+  try {
+    const character = requireMyChar(user);
+    const snap = buildInventorySnapshot(character);
+    return { status: 200, body: { success: true, ...snap } };
+  } catch (err) {
+    if (err.status) {
+      return {
+        status: err.status,
+        body: { error: err.message, code: err.code },
+      };
+    }
+    throw err;
+  }
+}
+
+// ── EquipItem ────────────────────────────────────────────────
+export async function EquipItem(user, body = {}) {
+  const itemId = body?.item_id || body?.itemId;
+  try {
+    const result = await withTransactionAsync(async () => {
+      const ch = requireMyChar(user);
+      return equipItemForCharacter(ch, itemId);
+    });
+    return { status: 200, body: result };
+  } catch (err) {
+    if (err.status) {
+      return {
+        status: err.status,
+        body: { error: err.message, code: err.code },
+      };
+    }
+    throw err;
+  }
+}
+
+// ── UnequipItem ──────────────────────────────────────────────
+export async function UnequipItem(user, body = {}) {
+  const itemId = body?.item_id || body?.itemId;
+  try {
+    const result = await withTransactionAsync(async () => {
+      const ch = requireMyChar(user);
+      return unequipItemForCharacter(ch, itemId);
+    });
+    return { status: 200, body: result };
+  } catch (err) {
+    if (err.status) {
+      return {
+        status: err.status,
+        body: { error: err.message, code: err.code },
+      };
+    }
+    throw err;
+  }
+}
+
+// ── GetCharacterAttributes ───────────────────────────────────
+/** Read-only authoritative attribute + derived-stat sheet for the selected Character. */
+export async function GetCharacterAttributes(user, _body = {}) {
+  try {
+    const character = requireMyChar(user);
+    const equipped = loadEquippedItemsForCharacter(character.id);
+    const sheet = buildAttributeSheet(character, equipped);
+    return {
+      status: 200,
+      body: {
+        success: true,
+        sheet,
+        character,
+        equipped_items: equipped,
+      },
+    };
+  } catch (err) {
+    if (err.status) {
+      return {
+        status: err.status,
+        body: { error: err.message, code: err.code },
+      };
+    }
+    throw err;
+  }
+}
+
 // ── BuyAttribute ─────────────────────────────────────────────
 export async function BuyAttribute(user, body) {
   const stat = body?.stat;
@@ -303,7 +407,11 @@ export async function BuyAttribute(user, body) {
         attribute_purchases: Object.values(byStat).reduce((a, b) => a + (b || 0), 0),
       };
       const character = entities.Character.update(ch.id, patch);
-      return { success: true, cost, stat, patch, character };
+      const sheet = buildAttributeSheet(
+        character,
+        loadEquippedItemsForCharacter(character.id),
+      );
+      return { success: true, cost, stat, patch, character, sheet };
     });
     return { status: 200, body: result };
   } catch (err) {
@@ -325,6 +433,7 @@ export async function BuyFuel(user, body = {}) {
           ...replay,
           patch: {},
           character: ch,
+          balances: getBalances(ch),
           idempotent_replay: true,
         };
       }
@@ -333,46 +442,53 @@ export async function BuyFuel(user, body = {}) {
 
       const purchases = ch.fuel_purchases || 0;
       if (purchases >= FUEL_PURCHASE_MAX) httpErr(400, "Fuel purchase limit reached this cycle");
-      if ((ch.nova_crystals || 0) < FUEL_PURCHASE_COST) httpErr(400, "Not enough Nova Crystals");
+      if (!hasNova(ch, FUEL_PURCHASE_COST)) httpErr(400, "Not enough Nova Crystals");
 
       const max = ch.max_fuel || FUEL_MAX;
       const fuel = ch.fuel || 0;
-      // Need room for a full pack — otherwise Nova would burn with little/no fuel gained.
       if (fuel > max - FUEL_PURCHASE_AMOUNT) {
         httpErr(400, `Tank too full — need ${max - FUEL_PURCHASE_AMOUNT} fuel or less to buy +${FUEL_PURCHASE_AMOUNT}`);
       }
 
-      const beforeNova = ch.nova_crystals || 0;
+      const beforeNovaHalf = readNovaHalfUnits(ch);
       const beforeFuel = fuel;
-      const patch = {
-        ...(resetPatch || {}),
-        nova_crystals: beforeNova - FUEL_PURCHASE_COST,
-        fuel: Math.min(max, fuel + FUEL_PURCHASE_AMOUNT),
-        fuel_purchases: purchases + 1,
-        fuel_updated_at: new Date().toISOString(),
-      };
-      const character = entities.Character.update(ch.id, patch);
+      const mut = debitNova({
+        user,
+        character: ch,
+        amount: FUEL_PURCHASE_COST,
+        category: "buy_fuel",
+        reasonCode: "buy_fuel",
+        extraPatch: {
+          ...(resetPatch || {}),
+          fuel: Math.min(max, fuel + FUEL_PURCHASE_AMOUNT),
+          fuel_purchases: purchases + 1,
+          fuel_updated_at: clock.nowIso(),
+        },
+      });
       auditFuelPurchase({
         user,
         character: ch,
-        beforeNova,
-        afterNova: patch.nova_crystals,
+        beforeNova: fromNovaHalfUnits(beforeNovaHalf),
+        afterNova: fromNovaHalfUnits(readNovaHalfUnits(mut.character)),
         beforeFuel,
-        afterFuel: patch.fuel,
+        afterFuel: mut.character.fuel,
         cost: FUEL_PURCHASE_COST,
         correlationId: newCorrelationId(),
       });
       const receipt = {
         request_id: requestId,
         nova_debited: FUEL_PURCHASE_COST,
+        nova_half_units_debited: FUEL_PURCHASE_COST * 2,
         fuel_granted: FUEL_PURCHASE_AMOUNT,
+        transaction_id: mut.transaction.transaction_id,
+        balances: mut.balances,
       };
       saveWalletOperation(user.id, "buy_fuel", requestId, receipt);
-      return { success: true, ...receipt, patch, character };
+      return { success: true, ...receipt, patch: mut.patch, character: mut.character };
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
     throw err;
   }
 }
@@ -387,7 +503,7 @@ export async function BuyFuelMount(user, body) {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
       if ((ch.stardust || 0) < mount.stardust) httpErr(400, "Not enough stardust");
-      if (mount.crystals && (ch.nova_crystals || 0) < mount.crystals) {
+      if (mount.crystals && !hasNova(ch, mount.crystals)) {
         httpErr(400, "Not enough Nova Crystals");
       }
 
@@ -419,7 +535,9 @@ export async function BuyFuelMount(user, body) {
 
       const patch = {
         stardust: (ch.stardust || 0) - mount.stardust,
-        nova_crystals: (ch.nova_crystals || 0) - (mount.crystals || 0),
+        ...(mount.crystals
+          ? { ...novaDebitPatch(ch, mount.crystals) }
+          : { economy_nova_scale: 2 }),
         active_fuel_mounts: [entry],
       };
       const character = entities.Character.update(ch.id, patch);
@@ -433,26 +551,118 @@ export async function BuyFuelMount(user, body) {
 }
 
 // ── UseConsumable ────────────────────────────────────────────
-export async function UseConsumable(user, body) {
+export async function UseConsumable(user, body = {}) {
   const itemId = body?.item_id;
   if (!itemId) return { status: 400, body: { error: "Missing item_id" } };
 
+  // Strip client-forged mechanical fields — rarity/mult/duration come from item + tiers.
+  if (body && typeof body === "object") {
+    for (const k of [
+      "mult",
+      "bonus",
+      "bonus_percent",
+      "duration",
+      "duration_hours",
+      "rarity",
+      "attribute",
+      "stat",
+      "expires_at",
+      "active_buffs",
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(body, k)) delete body[k];
+    }
+  }
+
+  const requestId = (() => {
+    try {
+      return normalizeOperationKey(body?.request_id || body?.idempotencyKey || "");
+    } catch {
+      return "";
+    }
+  })();
+  // Natural idempotency: one item instance can only activate once.
+  const settleKey = requestId || `item:${String(itemId).trim()}`;
+
   try {
     const result = await withTransactionAsync(async () => {
+      const prior = getWalletOperation(user.id, "use_consumable", settleKey);
+      if (prior) {
+        const ch = requireMyChar(user);
+        const live = entities.Character.get(ch.id) || ch;
+        return {
+          ...prior,
+          character: live,
+          patch: {},
+          sheet: buildAttributeSheet(live, loadEquippedItemsForCharacter(live.id)),
+          active_stims: getActiveStims(live),
+          idempotent_replay: true,
+        };
+      }
+
       const ch = requireMyChar(user);
       const item = entities.Item.get(itemId);
       if (!item) httpErr(404, "Item not found");
       if (item.character_id !== ch.id) httpErr(403, "Not your item");
 
-      const prepared = prepareConsumableBuffs(ch, item);
+      const prepared = prepareConsumableBuffs(ch, item, undefined, clock.nowMs());
       if (!prepared.ok) httpErr(400, prepared.reason);
 
       entities.Item.delete(itemId);
       const patch = { active_buffs: prepared.buffs };
       const character = entities.Character.update(ch.id, patch);
-      return { success: true, patch, character };
+      const sheet = buildAttributeSheet(
+        character,
+        loadEquippedItemsForCharacter(character.id),
+      );
+      const receipt = {
+        success: true,
+        patch,
+        item_id: itemId,
+        active_stims: getActiveStims(character),
+      };
+      saveWalletOperation(user.id, "use_consumable", settleKey, receipt);
+      return {
+        success: true,
+        patch,
+        character,
+        sheet,
+        active_stims: receipt.active_stims,
+      };
     });
     return { status: 200, body: result };
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    throw err;
+  }
+}
+
+export async function GetActiveStims(user) {
+  try {
+    const ch = requireMyChar(user);
+    const now = clock.nowMs();
+    const active = getActiveStims(ch, now);
+    // Soft-clean expired rows from persistence (non-authoritative for combat — expiry filter is).
+    const live = (ch.active_buffs || []).filter((b) => new Date(b.expires_at).getTime() > now);
+    let character = ch;
+    if (live.length !== (ch.active_buffs || []).length) {
+      character = entities.Character.update(ch.id, { active_buffs: live });
+    }
+    const sheet = buildAttributeSheet(
+      character,
+      loadEquippedItemsForCharacter(character.id),
+    );
+    return {
+      status: 200,
+      body: {
+        success: true,
+        active_stims: active,
+        active_buffs: live,
+        sheet,
+        character,
+        server_time_ms: now,
+        max_active_attributes: MAX_ACTIVE_STAT_TYPES,
+      },
+    };
   } catch (err) {
     if (err.status) return { status: err.status, body: { error: err.message } };
     throw err;
@@ -527,10 +737,8 @@ export async function LaunchMission(user, body) {
 
       const LOOT_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
       const lootType = LOOT_TYPES[String(template.name).length % 8];
-      const lootRarity = rollMissionGearRarity(secureRandom);
       const missStreak = missionGearMissStreak(ch);
       const lootDropChance = missionGearDropChance(missStreak);
-      const lootDrops = rollMissionGearDrop(missStreak, secureRandom);
       const rewardDef = snapshotDefinitionRef("mission_completion");
 
       const startNow = clock.now();
@@ -544,8 +752,8 @@ export async function LaunchMission(user, body) {
         ? ((Math.floor(rawScene) % EXPLORE_SCENE_COUNT) + EXPLORE_SCENE_COUNT) % EXPLORE_SCENE_COUNT
         : Math.floor(secureRandom() * EXPLORE_SCENE_COUNT);
 
-      // Snapshot reward definition + loot rolls at start (resolvePolicy: start).
-      // Strip any client-authored currency/XP/item payloads from template.rewards.
+      // Snapshot reward definition at start. Item rolls (Gear/Stim/Junk) settle
+      // exactly once in ClaimMission — not here (Restoration 11).
       const { stardust: _sd, experience: _xp, items: _items, credits: _cr, ...safeTemplateRewards } =
         template.rewards || {};
 
@@ -561,9 +769,7 @@ export async function LaunchMission(user, body) {
         end_time: endTime.toISOString(),
         rewards: {
           ...safeTemplateRewards,
-          loot_rarity: lootRarity,
           loot_type: lootType,
-          loot_drops: lootDrops,
           loot_drop_chance: lootDropChance,
           loot_miss_streak: missStreak,
           reward_definition_key: rewardDef.definitionKey,
@@ -594,7 +800,7 @@ export async function LaunchMission(user, body) {
   }
 }
 
-// ── ClaimMission / FailMission ───────────────────────────────
+// ── PrepareMissionCombat / ClaimMission / FailMission ────────
 /** Clear a character's pointer to a mission row that no longer exists. */
 function releaseDanglingMission(ch) {
   const patch = { active_mission_id: "", mission_end_time: "" };
@@ -610,9 +816,65 @@ function releaseDanglingMission(ch) {
   };
 }
 
+/**
+ * Authoritative mission soft-encounter simulation (Restoration 08).
+ * Idempotent: replaying returns the committed combat_result.
+ */
+export async function PrepareMissionCombat(user, body = {}) {
+  try {
+    const result = await withTransactionAsync(async () => {
+      const ch = requireMyChar(user);
+      const missionId = body?.mission_id || ch.active_mission_id;
+      if (!missionId) httpErr(400, "Missing mission_id", "VALIDATION_ERROR");
+
+      let mission = entities.Mission.get(missionId);
+      if (!mission) httpErr(404, "Mission not found", "NOT_FOUND");
+      if (mission.character_id !== ch.id) {
+        httpErr(403, "Not your mission", "CHARACTER_NOT_OWNED");
+      }
+      if (mission.status === "claimed" || mission.status === "failed") {
+        httpErr(409, "Mission already resolved", "REWARD_ALREADY_CLAIMED");
+      }
+
+      const now = clock.nowMs();
+      const charEnd = ch.mission_end_time ? new Date(ch.mission_end_time).getTime() : 0;
+      const missionEnd = mission.end_time ? new Date(mission.end_time).getTime() : 0;
+      const effectiveEnd =
+        mission.status === "completed"
+          ? (charEnd || missionEnd)
+          : (missionEnd || charEnd);
+      if (effectiveEnd && effectiveEnd > now) {
+        httpErr(400, "Mission not finished yet", TimeErrors.COOLDOWN_ACTIVE);
+      }
+
+      // Reject client-supplied combatants / outcomes (security).
+      if (body?.player || body?.enemy || body?.battle || body?.winner != null || body?.events) {
+        httpErr(400, "Client combat payloads are not accepted", "CLIENT_COMBAT_REJECTED");
+      }
+      if (body?.rng_seed != null || body?.seed != null) {
+        httpErr(400, "Client RNG seeds are not accepted", "CLIENT_RNG_REJECTED");
+      }
+
+      const prepared = prepareMissionCombatForCharacter(ch, mission, secureRandom);
+      const pub = publicCombatResult(prepared.combat);
+      return {
+        success: true,
+        replay: prepared.replay,
+        combat_id: prepared.combat.combat_id,
+        ...pub,
+        enemy: pub.enemy,
+        battle: pub.battle,
+      };
+    });
+    return { status: 200, body: result };
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    throw err;
+  }
+}
+
 export async function ClaimMission(user, body) {
   const missionId = body?.mission_id;
-  const won = body?.won !== false && body?.won !== "false";
   if (!missionId) return { status: 400, body: { error: "Missing mission_id" } };
 
   const suspicious = detectSuspiciousRewardFields(body);
@@ -666,11 +928,28 @@ export async function ClaimMission(user, body) {
         mission = entities.Mission.update(mission.id, { status: "completed" });
       }
 
+      // Authoritative combat — never trust body.won / client battle payloads.
+      let combat = readMissionCombat(mission);
+      if (!combat?.combat_id) {
+        const prepared = prepareMissionCombatForCharacter(ch, mission, secureRandom);
+        combat = prepared.combat;
+        mission = prepared.mission || entities.Mission.get(missionId);
+      }
+      const won = combat.winner === "player";
+
       if (!won) {
         entities.Mission.update(mission.id, { status: "failed" });
         const patch = { active_mission_id: "", mission_end_time: "" };
         const character = entities.Character.update(ch.id, patch);
-        return { success: true, won: false, patch, character, items: [], gains: null };
+        return {
+          success: true,
+          won: false,
+          combat_id: combat.combat_id,
+          patch,
+          character,
+          items: [],
+          gains: null,
+        };
       }
 
       const defVersion =
@@ -695,49 +974,23 @@ export async function ClaimMission(user, body) {
           const nexusBonus = resolveNexusBonus(live.id);
           const gains = computeMissionGains(live, mission, nexusBonus);
           const rewards = mission.rewards || {};
-          const itemTemplates = [];
-          let gearDropped = false;
-          let stimDropped = false;
-          let junkDropped = false;
-          if (rewards.loot_drops !== false) {
-            gearDropped = true;
-            const rarity =
-              rewards.loot_rarity ||
-              rollMissionGearRarity(secureRandom);
-            itemTemplates.push(
-              randomItem(rarity, live.level || 1, rewards.loot_type, secureRandom, live.class)
-            );
-          } else {
-            // Exclusive chain: Gear miss → Stim (25%) → Junk (75% of remaining).
-            if (secureRandom() < MISSION_STIM_CHANCE_AFTER_GEAR_FAIL) {
-              stimDropped = true;
-              const { _cost, ...consItem } = randomConsumable(secureRandom);
-              itemTemplates.push(priceStimOffer(consItem, live.level || 1));
-            } else if (secureRandom() < MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL) {
-              junkDropped = true;
-              const level = Math.max(1, live.level || 1);
-              const junkName = rewards.collectible?.name || "Salvaged Trinket";
-              itemTemplates.push({
-                name: junkName,
-                type: "material",
-                rarity: "common",
-                level_requirement: level,
-                stats: {},
-                flavor_text: "A curious trinket recovered on mission.",
-                sell_value: computeMissionJunkSellValue(gains.stardustBase || gains.stardustGain || 0, secureRandom),
-              });
-            }
-          }
-          void stimDropped;
-          void junkDropped;
+          const missStreak = missionGearMissStreak(live);
+          const chain = settleMissionItemChain({
+            character: live,
+            mission,
+            missionStardustReward: gains.stardustBase || gains.stardustGain || 0,
+            missStreak,
+            rng: secureRandom,
+          });
           // Species discovery only from mission snapshot — never client species_id
           const speciesId = rewards.species_id || null;
           return {
             stardust: gains.stardustGain || 0,
             experience: gains.xpGain,
-            itemTemplates,
+            itemTemplates: chain.itemTemplates,
             species_id: speciesId,
-            gearDropped,
+            gearDropped: chain.gearDropped,
+            itemOutcome: chain.itemOutcome,
             gainsMeta: {
               stardustBase: gains.stardustBase,
               xpBase: gains.xpBase,
@@ -746,7 +999,10 @@ export async function ClaimMission(user, body) {
               collectionPct: gains.collectionPct,
               fuelSpent: gains.fuelCost,
               nexusBonus,
-              gearDropped,
+              gearDropped: chain.gearDropped,
+              itemOutcome: chain.itemOutcome,
+              gearChance: chain.gearChance,
+              pityBefore: chain.pityBefore,
             },
             bonusReasons: nexusBonus ? ["nexus_control"] : [],
           };
@@ -800,20 +1056,30 @@ export async function ClaimMission(user, body) {
             ...(payload.itemTemplates || []),
           ], patch);
 
+          const rolled = rollCombatCollectibleDiscoveries(live, patch, { win: true });
+          const discoveries = rolled.found;
+
           entities.Mission.update(mission.id, { status: "claimed" });
 
           const ach = mergeAchievementUnlocks(live, patch);
           Object.assign(patch, ach.patch);
 
+          const progression = consumeProgression(patch);
           const character = entities.Character.update(live.id, patch);
+          if (ach.newly_unlocked?.length) {
+            notifyAchievementsUnlocked(character.id, ach.newly_unlocked);
+          }
           return {
             success: true,
             won: true,
             patch,
             character,
+            progression,
             items,
             pending_loot: pendingLoot,
             newly_unlocked: ach.newly_unlocked,
+            discoveries,
+            item_outcome: payload.itemOutcome || (gearDropped ? "GEAR" : "NONE"),
             gains: {
               stardust: payload.stardust || 0,
               experience: payload.experience || 0,
@@ -877,19 +1143,29 @@ export async function DebitNovaCrystals(user, body) {
           idempotent_replay: true,
         };
       }
-      if ((ch.nova_crystals || 0) < amount) {
+      if (!hasNova(ch, amount)) {
         httpErr(400, "Not enough Nova Crystals");
       }
-      const patch = { nova_crystals: (ch.nova_crystals || 0) - amount };
-      const character = entities.Character.update(ch.id, patch);
+      const mut = debitNova({
+        user,
+        character: ch,
+        amount,
+        category: purpose || "debit_nova",
+        reasonCode: purpose || "debit_nova",
+        relatedEntityType: "mission",
+        relatedEntityId: missionId,
+        idempotencyKey: requestId ? `debit_nova_${requestId}` : "",
+      });
       const receipt = {
         request_id: requestId,
         amount,
         purpose,
         mission_id: missionId,
+        transaction_id: mut.transaction?.transaction_id,
+        balances: mut.balances,
       };
       saveWalletOperation(user.id, "mission_skip_nova", requestId, receipt);
-      return { success: true, ...receipt, patch, character };
+      return { success: true, ...receipt, patch: mut.patch, character: mut.character };
     });
     return { status: 200, body: result };
   } catch (err) {
@@ -924,21 +1200,62 @@ export async function SkipMission(user, body) {
         httpErr(400, "Mission is not in progress");
       }
 
-      const cost = skipCostFor(mission);
-      if ((ch.nova_crystals || 0) < cost) httpErr(400, "Not enough Nova Crystals");
+      const halfCost = skipCostHalfUnits(mission);
+      const displayCost = skipCostFor(mission);
+      if (halfCost > 0 && readNovaHalfUnits(ch) < halfCost) {
+        httpErr(400, "Not enough Nova Crystals");
+      }
 
       entities.Mission.update(mission.id, { status: "completed" });
-      const patch = {
-        nova_crystals: (ch.nova_crystals || 0) - cost,
-        mission_end_time: new Date().toISOString(),
-      };
-      const character = entities.Character.update(ch.id, patch);
+      let character = ch;
+      let patch = { mission_end_time: clock.nowIso() };
+      let transaction = null;
+      if (halfCost > 0) {
+        const mut = debitNovaHalfUnits({
+          user,
+          character: ch,
+          amountHalfUnits: halfCost,
+          category: "mission_skip",
+          reasonCode: "mission_skip",
+          relatedEntityType: "mission",
+          relatedEntityId: mission.id,
+          idempotencyKey: `mission_skip_${mission.id}`,
+          extraPatch: patch,
+        });
+        character = mut.character;
+        patch = mut.patch;
+        transaction = mut.transaction;
+        if (mut.replay) {
+          return {
+            success: true,
+            skip_cost: displayCost,
+            skip_cost_half_units: halfCost,
+            mission: entities.Mission.get(mission.id),
+            patch: {},
+            character,
+            balances: mut.balances,
+            idempotent_replay: true,
+            transaction,
+          };
+        }
+      } else {
+        character = entities.Character.update(ch.id, patch);
+      }
       const updatedMission = entities.Mission.get(mission.id);
-      return { success: true, skip_cost: cost, mission: updatedMission, patch, character };
+      return {
+        success: true,
+        skip_cost: displayCost,
+        skip_cost_half_units: halfCost,
+        mission: updatedMission,
+        patch,
+        character,
+        balances: getBalances(character),
+        transaction,
+      };
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
     throw err;
   }
 }
@@ -1002,7 +1319,8 @@ export async function EnsureShop(user) {
 
       const patch = { shop_meta: meta };
       const character = entities.Character.update(ch.id, patch);
-      return { success: true, shop_meta: meta, patch, character };
+      const presentation = serializeShopPresentation(meta, win);
+      return { success: true, shop_meta: meta, patch, character, ...presentation };
     });
     return { status: 200, body: result };
   } catch (err) {
@@ -1034,21 +1352,55 @@ function replaceArmoryListing(meta, win, ch, slotId, isHot, outcome = "purchased
 
 // ── BuyShopGear ──────────────────────────────────────────────
 export async function BuyShopGear(user, body) {
+  try {
+    assertShopPurchaseClientSafe(body);
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    throw err;
+  }
+
   const slotId = body?.slot_id;
   const haggle = !!body?.haggle;
   const isHot = !!body?.is_hot;
   if (!slotId) return { status: 400, body: { error: "Missing slot_id" } };
 
+  let requestId = "";
+  try {
+    requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message } };
+    throw err;
+  }
+
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
       const win = getShopWindow();
-      let meta = normalizeShopMeta(ch, win, getShopGameDayKey());
-      if (
-        !(Array.isArray(meta.shop_stock) && meta.shop_stock.length) &&
-        !(Array.isArray(meta.gear_stock) && meta.gear_stock.length)
-      ) {
-        meta = buildShopStock(ch, meta, win);
+      const day = getShopGameDayKey();
+
+      if (requestId) {
+        const replay = getWalletOperation(user.id, "buy_shop_gear", requestId);
+        if (replay) {
+          const live = entities.Character.get(ch.id) || ch;
+          return {
+            success: true,
+            ...replay,
+            patch: {},
+            character: live,
+            idempotent_replay: true,
+            ...serializeShopPresentation(live.shop_meta || {}, win),
+          };
+        }
+      }
+
+      let meta = normalizeShopMeta(ch, win, day);
+      if (!shopMetaHasStock(meta)) {
+        httpErr(409, "Shop stock expired — call EnsureShop", "SHOP_STOCK_EXPIRED");
+      }
+
+      const clientRefresh = body?.refresh_id ?? body?.window_idx;
+      if (clientRefresh != null && Number(clientRefresh) !== Number(meta.window_idx)) {
+        httpErr(409, "Shop refresh generation mismatch — reload shop", "SHOP_GENERATION_MISMATCH");
       }
 
       let slot;
@@ -1056,52 +1408,66 @@ export async function BuyShopGear(user, body) {
         ? meta.shop_stock
         : meta.gear_stock || [];
       if (isHot) {
-        if (meta.hot_purchased || meta.hot_yanked) httpErr(409, "Hot deal already gone");
+        if (meta.hot_purchased || meta.hot_yanked) httpErr(409, "Hot deal already gone", "SHOP_SOLD_OUT");
         slot = meta.hot_deal;
         if (!slot || slot._slotId !== slotId) httpErr(404, "Hot deal slot not found");
       } else {
-        if (meta.purchased?.[slotId] || meta.yanked?.[slotId]) httpErr(409, "Already gone");
+        if (meta.purchased?.[slotId] || meta.yanked?.[slotId]) {
+          httpErr(409, "Already gone", "SHOP_SOLD_OUT");
+        }
         slot = stock.find((s) => s._slotId === slotId);
         if (!slot) httpErr(404, "Slot not found");
         if (slot.type === "consumable") httpErr(400, "Use BuyShopConsumable for stims");
       }
 
-      let stardustCost = slot.cost || 0;
+      let stardustCost = Number(slot.cost || 0);
       let haggleNote = null;
       if (haggle) {
         if (slot._bundle) httpErr(400, "Can't haggle bundles");
         const outcome = rollHaggle();
         haggleNote = outcome.label;
         if (!outcome.ok) {
-          // Haggle fail — listing is gone; restock the stall immediately.
           const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot, "yanked");
           const patch = { shop_meta: nextMeta };
           const character = entities.Character.update(ch.id, patch);
-          return {
-            success: true,
+          const receipt = {
+            request_id: requestId || null,
+            transaction_id: requestId || newCorrelationId(),
+            slot_id: slotId,
+            is_hot: isHot,
+            haggle: true,
             haggle_failed: true,
             haggle_note: haggleNote,
             cost: 0,
             nova_cost: 0,
             items: [],
+            pending_loot: [],
+            refresh_id: nextMeta.window_idx,
+            vendor: "gear",
+          };
+          if (requestId) saveWalletOperation(user.id, "buy_shop_gear", requestId, receipt);
+          return {
+            success: true,
+            ...receipt,
             patch,
             character,
+            ...serializeShopPresentation(nextMeta, win),
           };
         }
         stardustCost = Math.max(1, Math.round(stardustCost * outcome.mult));
       }
-      const novaCost = slot.nova_cost || 0;
+      const novaCost = Number(slot.nova_cost || 0);
       if ((ch.stardust || 0) < stardustCost) httpErr(400, "Not enough stardust");
-      if (novaCost && (ch.nova_crystals || 0) < novaCost) httpErr(400, "Not enough Nova Crystals");
+      if (novaCost && !hasNova(ch, novaCost)) httpErr(400, "Not enough Nova Crystals");
 
-      // Buy / successful haggle — grant item, then restock that stall slot.
       const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot, "purchased");
-
+      const beforeStardust = ch.stardust || 0;
+      const beforeNovaDisplay = fromNovaHalfUnits(readNovaHalfUnits(ch));
       const patch = {
-        stardust: (ch.stardust || 0) - stardustCost,
+        stardust: beforeStardust - stardustCost,
         shop_meta: nextMeta,
+        ...(novaCost ? novaDebitPatch(ch, novaCost) : {}),
       };
-      if (novaCost) patch.nova_crystals = (ch.nova_crystals || 0) - novaCost;
 
       const payloads = slot._bundle === "scrap_crate" && Array.isArray(slot.bundle_items)
         ? slot.bundle_items
@@ -1121,58 +1487,107 @@ export async function BuyShopGear(user, body) {
       ], patch);
 
       const character = entities.Character.update(ch.id, patch);
-      if (!haggleNote || true) {
-        // Always audit successful purchases (haggle fail returns earlier).
-        auditShopPurchase({
-          user,
-          character: ch,
-          beforeStardust: ch.stardust || 0,
-          afterStardust: patch.stardust ?? ch.stardust,
-          beforeNova: ch.nova_crystals || 0,
-          afterNova: patch.nova_crystals ?? ch.nova_crystals,
-          item: items[0] || null,
-          cost: stardustCost,
-          novaCost,
-          correlationId: newCorrelationId(),
-        });
-      }
-      return {
-        success: true,
+      const corr = newCorrelationId();
+      auditShopPurchase({
+        user,
+        character: ch,
+        beforeStardust,
+        afterStardust: patch.stardust,
+        beforeNova: beforeNovaDisplay,
+        afterNova: novaCost
+          ? fromNovaHalfUnits(patch.nova_crystals)
+          : beforeNovaDisplay,
+        item: items[0] || null,
+        cost: stardustCost,
+        novaCost,
+        correlationId: corr,
+      });
+
+      const receipt = {
+        request_id: requestId || null,
+        transaction_id: requestId || corr,
+        slot_id: slotId,
+        is_hot: isHot,
+        haggle: !!haggle,
         haggle_failed: false,
         haggle_note: haggleNote,
         cost: stardustCost,
         nova_cost: novaCost,
         items,
         pending_loot: pendingLoot,
+        refresh_id: nextMeta.window_idx,
+        vendor: "gear",
+        item_ids: items.map((i) => i.id).filter(Boolean),
+      };
+      if (requestId) saveWalletOperation(user.id, "buy_shop_gear", requestId, receipt);
+
+      return {
+        success: true,
+        ...receipt,
         patch,
         character,
+        ...serializeShopPresentation(nextMeta, win),
       };
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
     throw err;
   }
 }
 
 // ── BuyShopConsumable ────────────────────────────────────────
 export async function BuyShopConsumable(user, body) {
+  try {
+    assertShopPurchaseClientSafe(body);
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    throw err;
+  }
+
   const slotId = body?.slot_id;
   const slotIndex = body?.slot_index;
   if (slotId == null && slotIndex == null) {
     return { status: 400, body: { error: "Missing slot_id or slot_index" } };
   }
 
+  let requestId = "";
+  try {
+    requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message } };
+    throw err;
+  }
+
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
       const win = getShopWindow();
-      let meta = normalizeShopMeta(ch, win, getShopGameDayKey());
-      if (
-        !(Array.isArray(meta.shop_stock) && meta.shop_stock.length) &&
-        !(Array.isArray(meta.cons_stock) && meta.cons_stock.length)
-      ) {
-        meta = buildShopStock(ch, meta, win);
+      const day = getShopGameDayKey();
+
+      if (requestId) {
+        const replay = getWalletOperation(user.id, "buy_shop_consumable", requestId);
+        if (replay) {
+          const live = entities.Character.get(ch.id) || ch;
+          return {
+            success: true,
+            ...replay,
+            patch: {},
+            character: live,
+            idempotent_replay: true,
+            ...serializeShopPresentation(live.shop_meta || {}, win),
+          };
+        }
+      }
+
+      let meta = normalizeShopMeta(ch, win, day);
+      if (!shopMetaHasStock(meta)) {
+        httpErr(409, "Shop stock expired — call EnsureShop", "SHOP_STOCK_EXPIRED");
+      }
+
+      const clientRefresh = body?.refresh_id ?? body?.window_idx;
+      if (clientRefresh != null && Number(clientRefresh) !== Number(meta.window_idx)) {
+        httpErr(409, "Shop refresh generation mismatch — reload shop", "SHOP_GENERATION_MISMATCH");
       }
 
       const stock = Array.isArray(meta.shop_stock) && meta.shop_stock.length
@@ -1182,7 +1597,9 @@ export async function BuyShopConsumable(user, body) {
       let idx = slotIndex;
       let slot;
       if (slotId != null) {
-        if (meta.purchased?.[slotId] || meta.yanked?.[slotId]) httpErr(409, "Already gone");
+        if (meta.purchased?.[slotId] || meta.yanked?.[slotId]) {
+          httpErr(409, "Already gone", "SHOP_SOLD_OUT");
+        }
         idx = stock.findIndex((s) => s._slotId === slotId);
         slot = stock[idx];
       } else {
@@ -1191,10 +1608,12 @@ export async function BuyShopConsumable(user, body) {
       if (!slot || idx < 0) httpErr(404, "Consumable slot not found");
       if (slot.type !== "consumable") httpErr(400, "Not a stim offer");
 
-      const cost = slot.cost ?? slot._cost ?? stimShopPurchasePrice(slot.rarity, ch.level || 1);
+      // Persisted listing cost only — never trust client; fallback is server formula.
+      const cost = Number(slot.cost ?? slot._cost ?? stimShopPurchasePrice(slot.rarity, ch.level || 1));
       if ((ch.stardust || 0) < cost) httpErr(400, "Not enough stardust");
 
-      const patch = { stardust: (ch.stardust || 0) - cost };
+      const beforeStardust = ch.stardust || 0;
+      const patch = { stardust: beforeStardust - cost };
       const payloads = slot._bundle === "stim_trio" && Array.isArray(slot.bundle_items)
         ? slot.bundle_items.map(({ _cost, _slotId, ...rest }) => rest)
         : [stripShopFields(slot)];
@@ -1206,7 +1625,6 @@ export async function BuyShopConsumable(user, body) {
         collectGrant(grantOrCompensate(ch, p, patch), items, pendingLoot, grantCtx);
       }
 
-      // Sold out until next full shop refresh — do not refill the slot.
       const nextMeta = {
         ...meta,
         purchased: { ...(meta.purchased || {}), [slot._slotId]: true },
@@ -1214,11 +1632,49 @@ export async function BuyShopConsumable(user, body) {
       patch.shop_meta = nextMeta;
 
       const character = entities.Character.update(ch.id, patch);
-      return { success: true, cost, items, pending_loot: pendingLoot, patch, character };
+      const corr = newCorrelationId();
+      auditShopPurchase({
+        user,
+        character: ch,
+        beforeStardust,
+        afterStardust: patch.stardust,
+        beforeNova: ch.nova_crystals || 0,
+        afterNova: ch.nova_crystals || 0,
+        item: items[0] || null,
+        cost,
+        novaCost: 0,
+        correlationId: corr,
+      });
+
+      const receipt = {
+        request_id: requestId || null,
+        transaction_id: requestId || corr,
+        slot_id: slot._slotId,
+        is_hot: false,
+        haggle: false,
+        haggle_failed: false,
+        haggle_note: null,
+        cost,
+        nova_cost: 0,
+        items,
+        pending_loot: pendingLoot,
+        refresh_id: nextMeta.window_idx,
+        vendor: "supply",
+        item_ids: items.map((i) => i.id).filter(Boolean),
+      };
+      if (requestId) saveWalletOperation(user.id, "buy_shop_consumable", requestId, receipt);
+
+      return {
+        success: true,
+        ...receipt,
+        patch,
+        character,
+        ...serializeShopPresentation(nextMeta, win),
+      };
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
     throw err;
   }
 }
@@ -1242,7 +1698,7 @@ export async function RefreshShop(user, body) {
         if (meta.free_refresh_used && useFree) httpErr(400, "Free refresh already used this period");
         meta = { ...meta, free_refresh_used: true };
       } else {
-        if ((ch.nova_crystals || 0) < SHOP_REFRESH_COST) {
+        if (!hasNova(ch, SHOP_REFRESH_COST)) {
           httpErr(400, "Not enough Nova Crystals");
         }
         novaCost = SHOP_REFRESH_COST;
@@ -1275,15 +1731,35 @@ export async function RefreshShop(user, body) {
         purchased: {},
         yanked: {},
       };
-      // Manual refresh regenerates the 8 slots only; Hot Deal was updated above iff count hit 10.
       meta = buildShopStock(ch, meta, win, { refreshHotDeal: false });
 
-      const patch = {
-        nova_crystals: (ch.nova_crystals || 0) - novaCost,
+      let character = ch;
+      let patch = { shop_meta: meta };
+      if (novaCost > 0) {
+        const mut = debitNova({
+          user,
+          character: ch,
+          amount: novaCost,
+          category: "shop_refresh",
+          reasonCode: "shop_refresh",
+          extraPatch: { shop_meta: meta },
+        });
+        character = mut.character;
+        patch = mut.patch;
+      } else {
+        character = entities.Character.update(ch.id, patch);
+      }
+      return {
+        success: true,
+        which: "all",
         shop_meta: meta,
+        patch,
+        character,
+        used_free: novaCost === 0,
+        nova_debited: novaCost,
+        balances: getBalances(character),
+        ...serializeShopPresentation(meta, win),
       };
-      const character = entities.Character.update(ch.id, patch);
-      return { success: true, which: "all", shop_meta: meta, patch, character, used_free: novaCost === 0 };
     });
     return { status: 200, body: result };
   } catch (err) {
@@ -1295,12 +1771,18 @@ export async function RefreshShop(user, body) {
 export const ECONOMY_HANDLERS = {
   DissolveItem,
   DissolveJunk,
+  GetInventory,
+  EquipItem,
+  UnequipItem,
+  GetCharacterAttributes,
   BuyAttribute,
   BuyFuel,
   BuyFuelMount,
   UseConsumable,
+  GetActiveStims,
   SyncFuelCycle,
   LaunchMission,
+  PrepareMissionCombat,
   ClaimMission,
   FailMission,
   SkipMission,

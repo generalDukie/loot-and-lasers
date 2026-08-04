@@ -26,6 +26,7 @@ import {
   hasStimInjector,
   OVERCLOCK_CRIT_STACK_LOSS,
   passiveNameForClass,
+  createPassiveState,
 } from "@/lib/classPassives";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
 import { generateArenaBot, ARENA_BOT_CLASSES } from "@/lib/arenaBotGenerator";
@@ -34,10 +35,10 @@ import { generateArenaBot, ARENA_BOT_CLASSES } from "@/lib/arenaBotGenerator";
 // Losses never grant XP or stardust. Beyond the free quota, each battle costs nova
 // crystals and yields rating only, but can be fought indefinitely to climb.
 export const ARENA_DAILY_FREE_BATTLES = 10;
-export const ARENA_PAID_BATTLE_COST = 5; // nova crystals per battle after the free quota
+export const ARENA_PAID_BATTLE_COST = 15; // nova crystals per battle after the free quota
 export const ARENA_REFRESH_MS = 5 * 60 * 1000;
 export const ARENA_REFRESH_COST = 500; // stardust (10× scale)
-export const ARENA_BATTLE_COOLDOWN_MS = 5 * 60 * 1000; // 5-minute cooldown between battles
+export const ARENA_BATTLE_COOLDOWN_MS = 10 * 60 * 1000; // 10-minute cooldown between battles
 export const ARENA_SKIP_COST = 1; // nova crystals to skip the cooldown
 export const ARENA_CHALLENGER_SLOTS = 3;
 /** Prefer this many real players when the population supports it (rest filled with bots). */
@@ -389,7 +390,7 @@ export function snapshotOpponent(opp) {
   };
 }
 
-function buildFighter(c, items, side) {
+export function buildFighter(c, items, side) {
   // Effective totals — Stim multipliers apply as the final attribute step.
   const stats = computeTotalStats(c, items);
   const cls = CLASSES[c.class] || CLASSES.Vanguard;
@@ -419,7 +420,7 @@ function buildFighter(c, items, side) {
     stats,
     suppressClassPassive: suppress,
     passive: suppress ? null : passiveNameForClass(className),
-    passiveState: null,
+    passiveState: createPassiveState(),
   };
 }
 
@@ -427,7 +428,7 @@ function buildFighter(c, items, side) {
  * Resolve one basic hit after dodge/miss has already been resolved:
  * raw → optional outgoing mult (Overclock) → crit → mitigation → incoming taken mult → round.
  */
-function resolveBasicHit(attacker, defender, {
+export function resolveBasicHit(attacker, defender, {
   canCrit = true,
   forceCrit = false,
   critChanceBonus = 0,
@@ -462,7 +463,7 @@ function resolveBasicHit(attacker, defender, {
   return { finalDamage, crit };
 }
 
-function applyHealing(target, healAmount) {
+export function applyHealing(target, healAmount) {
   const amount = Math.max(0, healAmount || 0);
   const missing = Math.max(0, (target.maxHp || 0) - target.hp);
   const healed = Math.min(missing, amount);
@@ -488,7 +489,7 @@ function mitigationTypeForEnum(damageTypeEnum) {
  * Execute one normal attack from attacker → defender.
  * Returns { killed, events appended to shared events array }.
  */
-function resolveNormalAttack(attacker, defender, events, {
+export function resolveNormalAttack(attacker, defender, events, {
   rng,
   forcedDamageTypeEnum = null,
   forcedCanDodge = true,
@@ -498,6 +499,20 @@ function resolveNormalAttack(attacker, defender, events, {
   const mitigationType = mitigationTypeForEnum(damageTypeEnum);
   const mods = beginNormalAttackModifiers(attacker);
 
+  /** After any normal-attack attempt (hit/miss/dodge): consume mods, Overclock, Orbital. */
+  const finishNormalAttackAttempt = (outcome, killed = false) => {
+    endNormalAttackModifiers(attacker, mods, events);
+    // Missed/Dodged normal attacks still grant Overclock stacks.
+    if (attacker.className === "Technomancer") {
+      gainOverclockStack(attacker, events);
+    }
+    // Skip drone action if combat already ended on this attack.
+    if (!killed && defender.hp > 0 && attacker.hp > 0) {
+      maybeOrbitalAssistant(attacker, defender, events, rng);
+    }
+    return { killed, outcome };
+  };
+
   // Phantom Signal: forced miss (not a dodge) — does not trigger Kinetic Tantrum.
   if (forcedCanDodge !== false) {
     const phantom = tryPhantomSignalMiss(defender, events);
@@ -506,9 +521,9 @@ function resolveNormalAttack(attacker, defender, events, {
       if (last) {
         last.attacker = attacker.side;
         last.defender = defender.side;
+        last.isNormalAttack = true;
       }
-      endNormalAttackModifiers(attacker, mods, events);
-      return { killed: false, outcome: "miss" };
+      return finishNormalAttackAttempt("miss", false);
     }
   }
 
@@ -542,8 +557,7 @@ function resolveNormalAttack(attacker, defender, events, {
         activateKineticTantrum(attacker, "strong", events);
       }
 
-      endNormalAttackModifiers(attacker, mods, events);
-      return { killed: false, outcome: "dodge" };
+      return finishNormalAttackAttempt("dodge", false);
     }
   }
 
@@ -583,19 +597,12 @@ function resolveNormalAttack(attacker, defender, events, {
   });
 
   // Enemy Crit vs Technomancer removes Overclock stacks after crit is confirmed.
+  // Uses pre-removal stacks for the incoming +5%/stack already applied above.
   if (hit.crit && defender.className === "Technomancer") {
     removeOverclockStacks(defender, OVERCLOCK_CRIT_STACK_LOSS, events);
   }
 
-  endNormalAttackModifiers(attacker, mods, events);
-
-  // After normal attack: Overclock gain, Orbital Assistant.
-  if (attacker.className === "Technomancer") {
-    gainOverclockStack(attacker, events);
-  }
-  maybeOrbitalAssistant(attacker, defender, events, rng);
-
-  return { killed: defender.hp <= 0, outcome: "hit" };
+  return finishNormalAttackAttempt("hit", defender.hp <= 0);
 }
 
 /**
@@ -663,6 +670,13 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = [], opt
     defender = playerGoesFirst ? B : A;
     initiativeFirstSide = attacker.side;
   }
+
+  events.push({
+    type: "initiative",
+    opening_side: initiativeFirstSide,
+    attacker: initiativeFirstSide,
+    text: `${initiativeFirstSide === "player" ? A.name : B.name} opens combat`,
+  });
 
   let round = 0;
   while (A.hp > 0 && B.hp > 0 && round < 5000) {

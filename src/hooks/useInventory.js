@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/api/gameClient";
-import { prepareConsumableBuffs, getInventoryCap } from "@/lib/gameData";
+import { prepareConsumableBuffs } from "@/lib/gameData";
 import { enforceInventoryCap, setPendingUnequip, tryClaimPendingIfSpaceAvailable, getPending } from "@/lib/inventoryCap";
 import { EQUIPPABLE_TYPES } from "@/lib/inventoryJunk";
 
@@ -23,26 +23,17 @@ export function useInventory(character, onCharacterChange) {
       // Heal stims/materials that were "equipped" by the old backpack Equip button.
       const stray = (all || []).filter((i) => i.is_equipped && !EQUIPPABLE_TYPES.includes(i.type));
       if (stray.length) {
-        const eq = { ...(character.equipped_items || {}) };
-        let eqDirty = false;
         for (const s of stray) {
           try {
-            await api.entities.Item.update(s.id, { is_equipped: false });
+            await api.functions.invoke("UnequipItem", { item_id: s.id });
           } catch { /* best-effort */ }
           s.is_equipped = false;
-          if (eq[s.type] === s.id) {
-            delete eq[s.type];
-            eqDirty = true;
-          }
         }
-        if (eqDirty) {
-          try {
-            await api.entities.Character.update(character.id, { equipped_items: eq });
-            onCharacterChange?.({ equipped_items: eq });
-          } catch { /* best-effort */ }
-        }
+        const refreshed = await api.entities.Item.filter({ character_id: character.id });
+        setItems(refreshed || all || []);
+      } else {
+        setItems(all || []);
       }
-      setItems(all || []);
       await enforceInventoryCap(character);
     } catch (e) {
       // Rate-limited or transient — keep the last-known inventory rather than
@@ -51,58 +42,37 @@ export function useInventory(character, onCharacterChange) {
     }
   }, [character, onCharacterChange]);
 
-  // Optimistic equip/unequip: update local item state immediately so the
-  // character sheet's derived stats (damage, health, etc.) reflect the change
-  // without waiting for the server round-trip. DB writes persist in the
-  // background; on failure we roll back to the pre-action snapshot.
+  // Equip / unequ via Node EquipItem / UnequipItem (atomic + attribute sheet).
   const equip = useCallback(async (item) => {
     if (!character) return;
-    // Stims/materials are not gear — equipping them only hid them from the bag.
     if (!EQUIPPABLE_TYPES.includes(item?.type)) return;
     const snapshot = items;
+    const wasEquipped = !!item.is_equipped;
 
-    if (item.is_equipped) {
-      const bagCount = items.filter((i) => !i.is_equipped).length;
-      if (bagCount >= getInventoryCap(character)) {
+    try {
+      const fn = wasEquipped ? "UnequipItem" : "EquipItem";
+      const res = await api.functions.invoke(fn, { item_id: item.id });
+      const body = res?.data || res || {};
+      if (Array.isArray(body.items)) {
+        setItems(body.items);
+      } else {
+        await load();
+      }
+      if (body.character) {
+        onCharacterChange?.(body.character);
+      } else if (body.equipped_map) {
+        onCharacterChange?.({ equipped_items: body.equipped_map });
+      }
+    } catch (e) {
+      setItems(snapshot);
+      onCharacterChange?.({ equipped_items: character.equipped_items || {} });
+      if (wasEquipped && /inventory full/i.test(e?.message || "")) {
         setPendingUnequip(item);
         return;
       }
-      const eq = { ...(character.equipped_items || {}) };
-      delete eq[item.type];
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, is_equipped: false } : i)));
-      onCharacterChange?.({ equipped_items: eq });
-      try {
-        await api.entities.Item.update(item.id, { is_equipped: false });
-        await api.entities.Character.update(character.id, { equipped_items: eq });
-      } catch (e) {
-        setItems(snapshot);
-        onCharacterChange?.({ equipped_items: character.equipped_items || {} });
-        if (/inventory full/i.test(e?.message || "")) {
-          setPendingUnequip(item);
-          return;
-        }
-        throw e;
-      }
-    } else {
-      const cur = items.find((i) => i.type === item.type && i.is_equipped);
-      const eq = { ...(character.equipped_items || {}), [item.type]: item.id };
-      setItems((prev) => prev.map((i) => {
-        if (i.id === item.id) return { ...i, is_equipped: true };
-        if (cur && i.id === cur.id) return { ...i, is_equipped: false };
-        return i;
-      }));
-      onCharacterChange?.({ equipped_items: eq });
-      try {
-        // Equip first so a full bag still has room to receive the displaced piece.
-        await api.entities.Item.update(item.id, { is_equipped: true });
-        if (cur) await api.entities.Item.update(cur.id, { is_equipped: false });
-        await api.entities.Character.update(character.id, { equipped_items: eq });
-      } catch (e) {
-        setItems(snapshot);
-        throw e;
-      }
+      throw e;
     }
-  }, [character, items, onCharacterChange]);
+  }, [character, items, onCharacterChange, load]);
 
   const sell = useCallback(async (item) => {
     if (!character) return;

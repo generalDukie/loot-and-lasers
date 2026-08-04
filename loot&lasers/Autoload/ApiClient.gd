@@ -1,6 +1,10 @@
 extends Node
 ## HTTP client for the Loot & Lasers Node API.
 ## Base URL follows BackendEnvironment (local/staging) unless overridden.
+##
+## Client envelope (additive):
+##   { ok, status, error, code, data, details, retryable, attempts }
+## Mutations are never auto-retried unless `idempotent` is true.
 
 signal base_url_changed(url: String)
 
@@ -9,6 +13,18 @@ const CONFIG_PATH := "user://godot_client.cfg"
 ## Boot probe — fail fast so splash → login stays snappy if the API is down/slow.
 const HEALTH_TIMEOUT_SEC := 0.75
 const DEFAULT_TIMEOUT_SEC := 30.0
+## One automatic re-attempt after the first failure for safe reads / idempotent calls.
+const DEFAULT_SAFE_RETRIES := 1
+const RETRY_BACKOFF_SEC := 0.25
+
+const CODE_UNAUTHORIZED := "UNAUTHORIZED"
+const CODE_FORBIDDEN := "FORBIDDEN"
+const CODE_NOT_FOUND := "NOT_FOUND"
+const CODE_CONFLICT := "CONFLICT"
+const CODE_VALIDATION_ERROR := "VALIDATION_ERROR"
+const CODE_TIMEOUT := "TIMEOUT"
+const CODE_NETWORK_ERROR := "NETWORK_ERROR"
+const CODE_INTERNAL_ERROR := "INTERNAL_ERROR"
 
 var base_url: String = DEFAULT_BASE_URL
 
@@ -95,8 +111,16 @@ func prefer_reachable_base_url() -> Dictionary:
 	}
 
 
-func invoke(function_name: String, body: Dictionary = {}) -> Dictionary:
-	return await request("POST", "/api/functions/%s" % function_name, body, true)
+func invoke(function_name: String, body: Dictionary = {}, idempotent: bool = false) -> Dictionary:
+	return await request(
+		"POST",
+		"/api/functions/%s" % function_name,
+		body,
+		true,
+		DEFAULT_TIMEOUT_SEC,
+		true,
+		idempotent
+	)
 
 
 func request(
@@ -105,29 +129,65 @@ func request(
 	body: Variant = null,
 	authed: bool = true,
 	timeout_sec: float = DEFAULT_TIMEOUT_SEC,
-	allow_reauth: bool = true
+	allow_reauth: bool = true,
+	idempotent: bool = false,
+	max_retries: int = -1
+) -> Dictionary:
+	var retries := max_retries
+	if retries < 0:
+		retries = DEFAULT_SAFE_RETRIES if _is_retry_eligible(method, idempotent) else 0
+	var attempts := maxi(1, retries + 1)
+	var last: Dictionary = {}
+
+	for attempt in range(attempts):
+		last = await _request_once(method, path, body, authed, timeout_sec, allow_reauth)
+		last["attempts"] = attempt + 1
+		if last.get("ok", false):
+			return last
+		# Auth re-bridge already consumed allow_reauth inside _request_once.
+		allow_reauth = false
+		if attempt >= attempts - 1:
+			break
+		if not bool(last.get("retryable", false)):
+			break
+		if not _is_retry_eligible(method, idempotent):
+			break
+		await get_tree().create_timer(RETRY_BACKOFF_SEC * float(attempt + 1)).timeout
+
+	return last
+
+
+func _request_once(
+	method: String,
+	path: String,
+	body: Variant,
+	authed: bool,
+	timeout_sec: float,
+	allow_reauth: bool
 ) -> Dictionary:
 	if authed and allow_reauth and AuthManager != null:
 		var expires_at := int(AuthManager.node_token_expires_at)
 		if expires_at > 0 and expires_at <= Time.get_unix_time_from_system() + AuthManager.NODE_REFRESH_SKEW_SEC:
 			var proactive: Dictionary = await AuthManager.refresh_node_gameplay_session()
 			if not proactive.get("success", false):
-				return {
-					"ok": false,
-					"status": int(proactive.get("status", 401)),
-					"error": str(proactive.get("error", "Gameplay session expired")),
-					"data": {},
-				}
+				return _client_error(
+					int(proactive.get("status", 401)),
+					str(proactive.get("error", "Gameplay session expired")),
+					CODE_UNAUTHORIZED
+				)
+
 	var http := HTTPRequest.new()
 	http.timeout = maxf(0.25, timeout_sec)
 	add_child(http)
 
 	var headers: PackedStringArray = ["Content-Type: application/json", "Accept: application/json"]
+	var request_id := _new_request_id()
+	headers.append("X-Request-Id: %s" % request_id)
 	if authed:
 		var token := AuthManager.access_token
 		if token.is_empty():
 			http.queue_free()
-			return {"ok": false, "status": 0, "error": "Not logged in", "data": {}}
+			return _client_error(0, "Not logged in", CODE_UNAUTHORIZED)
 		headers.append("Authorization: Bearer %s" % token)
 
 	var url := "%s%s" % [base_url, path]
@@ -136,10 +196,12 @@ func request(
 		payload = JSON.stringify(body)
 
 	var http_method := _method_enum(method)
+	var started_ms := Time.get_ticks_msec()
 	var err := http.request(url, headers, http_method, payload)
 	if err != OK:
 		http.queue_free()
-		return {"ok": false, "status": 0, "error": "Request failed to start (%s)" % err, "data": {}}
+		_diag_fail(method, path, request_id, 0, "Request failed to start", CODE_NETWORK_ERROR)
+		return _client_error(0, "Request failed to start (%s)" % err, CODE_NETWORK_ERROR, true)
 
 	var completed: Array = await http.request_completed
 	http.queue_free()
@@ -147,38 +209,190 @@ func request(
 	var result: int = completed[0]
 	var status_code: int = completed[1]
 	var response_body: PackedByteArray = completed[3]
+	var duration_ms := Time.get_ticks_msec() - started_ms
 
 	if result != HTTPRequest.RESULT_SUCCESS:
-		return {
-			"ok": false,
-			"status": status_code,
-			"error": "Network error (%s). Is the API running on %s?" % [result, base_url],
-			"data": {},
-		}
+		var transport := _transport_failure(result, status_code)
+		transport["request_id"] = request_id
+		_diag_fail(method, path, request_id, status_code, str(transport.get("error", "transport")), str(transport.get("code", CODE_NETWORK_ERROR)), duration_ms)
+		return transport
 
 	var text := response_body.get_string_from_utf8()
 	var data: Variant = {}
 	if not text.is_empty():
-		var parsed: Variant = JSON.parse_string(text)
-		if parsed != null:
-			data = parsed
+		var json := JSON.new()
+		if json.parse(text) == OK:
+			data = json.data
 		else:
 			data = {"raw": text}
 
-	var ok := status_code >= 200 and status_code < 300
-	var error_msg := ""
-	if not ok:
-		if typeof(data) == TYPE_DICTIONARY and data.has("error"):
-			error_msg = str(data["error"])
-		else:
-			error_msg = "HTTP %s" % status_code
+	var envelope := _normalize_http_envelope(status_code, data)
+	envelope["request_id"] = request_id
+	if typeof(data) == TYPE_DICTIONARY and str(data.get("request_id", "")).is_empty() == false:
+		envelope["request_id"] = str(data.get("request_id"))
+
+	if not bool(envelope.get("ok", false)):
+		_diag_fail(method, path, str(envelope.get("request_id", request_id)), status_code, str(envelope.get("error", "")), str(envelope.get("code", "")), duration_ms)
 
 	if status_code == 401 and authed and allow_reauth and AuthManager != null:
 		var refreshed: Dictionary = await AuthManager.refresh_node_gameplay_session()
 		if refreshed.get("success", false):
-			return await request(method, path, body, authed, timeout_sec, false)
+			return await _request_once(method, path, body, authed, timeout_sec, false)
 
-	return {"ok": ok, "status": status_code, "error": error_msg, "data": data}
+	return envelope
+
+
+## Apply server-authored character / patch / wallet / attribute sheet fields.
+## Does not invent a second cache — only GameManager + CurrencyManager + StatsManager.
+func apply_authoritative_response(data: Variant, source: String = "api") -> Dictionary:
+	var out := {
+		"character_applied": false,
+		"patch_applied": false,
+		"wallet_applied": false,
+		"sheet_applied": false,
+		"items_applied": false,
+	}
+	if typeof(data) != TYPE_DICTIONARY:
+		return out
+	var body: Dictionary = data
+
+	var ch: Variant = body.get("character", null)
+	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty() and GameManager != null:
+		GameManager.apply_active_character(ch, source)
+		out["character_applied"] = true
+	else:
+		var patch: Variant = body.get("patch", null)
+		if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty() and GameManager != null:
+			GameManager.apply_active_character_patch(patch, source)
+			out["patch_applied"] = true
+
+	var wallet: Variant = body.get("wallet", null)
+	if typeof(wallet) == TYPE_DICTIONARY and CurrencyManager != null:
+		if CurrencyManager.apply_authoritative_wallet(wallet, source):
+			out["wallet_applied"] = true
+
+	if StatsManager != null and StatsManager.has_method("apply_inventory_snapshot"):
+		if StatsManager.apply_inventory_snapshot(body):
+			out["items_applied"] = true
+			out["sheet_applied"] = not StatsManager.authoritative_sheet.is_empty()
+
+	return out
+
+
+func default_error_code(status: int) -> String:
+	if status == 401:
+		return CODE_UNAUTHORIZED
+	if status == 403:
+		return CODE_FORBIDDEN
+	if status == 404:
+		return CODE_NOT_FOUND
+	if status == 409:
+		return CODE_CONFLICT
+	if status == 400 or status == 422:
+		return CODE_VALIDATION_ERROR
+	if status == 408:
+		return CODE_TIMEOUT
+	return CODE_INTERNAL_ERROR
+
+
+func is_safe_read_method(method: String) -> bool:
+	var m := method.to_upper()
+	return m == "GET" or m == "HEAD"
+
+
+func is_retry_eligible(method: String, idempotent: bool = false) -> bool:
+	return _is_retry_eligible(method, idempotent)
+
+
+func is_transient_failure(result: Dictionary) -> bool:
+	if bool(result.get("retryable", false)):
+		return true
+	var status := int(result.get("status", 0))
+	if status in [0, 408, 425, 429, 502, 503, 504]:
+		return true
+	var code := str(result.get("code", ""))
+	return code == CODE_TIMEOUT or code == CODE_NETWORK_ERROR
+
+
+func _is_retry_eligible(method: String, idempotent: bool) -> bool:
+	return idempotent or is_safe_read_method(method)
+
+
+func _normalize_http_envelope(status_code: int, data: Variant) -> Dictionary:
+	var ok := status_code >= 200 and status_code < 300
+	var error_msg := ""
+	var code := ""
+	var details: Variant = null
+	var retryable := false
+
+	if typeof(data) == TYPE_DICTIONARY:
+		var body: Dictionary = data
+		if body.has("code"):
+			code = str(body.get("code", ""))
+		if body.has("details"):
+			details = body.get("details")
+		if not ok:
+			if body.has("error"):
+				error_msg = str(body["error"])
+			elif body.has("message"):
+				error_msg = str(body["message"])
+
+	if not ok and error_msg.is_empty():
+		error_msg = "HTTP %s" % status_code
+	if not ok and code.is_empty():
+		code = default_error_code(status_code)
+	if ok:
+		code = str(code)
+
+	if not ok:
+		retryable = status_code in [408, 425, 429, 502, 503, 504]
+
+	return {
+		"ok": ok,
+		"status": status_code,
+		"error": error_msg,
+		"code": code,
+		"data": data,
+		"details": details,
+		"retryable": retryable,
+		"attempts": 1,
+	}
+
+
+func _transport_failure(result: int, status_code: int) -> Dictionary:
+	var code := CODE_NETWORK_ERROR
+	var msg := "Network error (%s). Is the API running on %s?" % [result, base_url]
+	if result == HTTPRequest.RESULT_TIMEOUT:
+		code = CODE_TIMEOUT
+		msg = "Request timed out talking to %s" % base_url
+	elif result == HTTPRequest.RESULT_CANT_CONNECT \
+		or result == HTTPRequest.RESULT_CANT_RESOLVE \
+		or result == HTTPRequest.RESULT_CONNECTION_ERROR:
+		code = CODE_NETWORK_ERROR
+		msg = "Could not connect to Node API at %s" % base_url
+	return {
+		"ok": false,
+		"status": status_code,
+		"error": msg,
+		"code": code,
+		"data": {},
+		"details": {"http_result": result},
+		"retryable": true,
+		"attempts": 1,
+	}
+
+
+func _client_error(status: int, error_msg: String, code: String, retryable: bool = false) -> Dictionary:
+	return {
+		"ok": false,
+		"status": status,
+		"error": error_msg,
+		"code": code,
+		"data": {},
+		"details": null,
+		"retryable": retryable,
+		"attempts": 1,
+	}
 
 
 func _method_enum(method: String) -> int:
@@ -193,6 +407,8 @@ func _method_enum(method: String) -> int:
 			return HTTPClient.METHOD_PATCH
 		"DELETE":
 			return HTTPClient.METHOD_DELETE
+		"HEAD":
+			return HTTPClient.METHOD_HEAD
 		_:
 			return HTTPClient.METHOD_GET
 
@@ -203,3 +419,34 @@ func _load_base_url() -> void:
 		base_url = str(cfg.get_value("api", "base_url", DEFAULT_BASE_URL)).rstrip("/")
 	else:
 		base_url = DEFAULT_BASE_URL
+
+
+func _new_request_id() -> String:
+	return "g%d-%d" % [Time.get_unix_time_from_system(), randi() % 100000]
+
+
+func _diag_fail(
+	method: String,
+	path: String,
+	request_id: String,
+	status: int,
+	error_msg: String,
+	code: String,
+	duration_ms: int = 0
+) -> void:
+	if DiagnosticLogger == null:
+		return
+	DiagnosticLogger.warn("GameApiClient", "api_request_failed", {
+		"method": method,
+		"path": path,
+		"request_id": request_id,
+		"status": status,
+		"code": code,
+		"error": error_msg,
+		"duration_ms": duration_ms,
+	})
+	DiagnosticLogger.breadcrumb("api_fail", {
+		"path": path,
+		"status": status,
+		"request_id": request_id,
+	})

@@ -17,9 +17,13 @@ export const MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL = 0.75;
 /** @deprecated use MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL */
 export const MISSION_JUNK_CHANCE_ON_GEAR_FAIL = MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL;
 export const JUNK_AVG_MISSION_REWARD_RATIO = 0.45;
+/** Prompt 11 alias */
+export const JUNK_MISSION_REWARD_MULTIPLIER = JUNK_AVG_MISSION_REWARD_RATIO;
 /** Uniform multiplier range around base junk value (mean multiplier = 1.0). */
 export const JUNK_VALUE_MULT_MIN = 0.6;
 export const JUNK_VALUE_MULT_MAX = 1.4;
+export const JUNK_VARIANCE_MIN = JUNK_VALUE_MULT_MIN;
+export const JUNK_VARIANCE_MAX = JUNK_VALUE_MULT_MAX;
 
 export const GEAR_BASE_FUEL_EQUIVALENT = 2.0;
 export const RARITY_SALE_MULT = Object.freeze({
@@ -62,7 +66,7 @@ export const MINING_EFFICIENCY = 0.03;
 
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 
-/** StardustPerFuel anchors (authoritative absolute values). */
+/** @deprecated Historical PCHIP waypoints — not production authority (Restoration 11). */
 export const STARDUST_PER_FUEL_ANCHORS = Object.freeze([
   [1, 50],
   [10, 80],
@@ -76,7 +80,7 @@ export const STARDUST_PER_FUEL_ANCHORS = Object.freeze([
   [300, 75000],
 ]);
 
-/** AttributePurchaseCost anchors (absolute Stardust). */
+/** AttributePurchaseCost anchors (absolute Stardust) — still PCHIP (not mission rewards). */
 export const ATTRIBUTE_PURCHASE_COST_ANCHORS = Object.freeze([
   [1, 100],
   [10, 150],
@@ -95,7 +99,7 @@ export const ATTRIBUTE_PURCHASE_COST_ANCHORS = Object.freeze([
   [650, 10000000],
 ]);
 
-// ── Log-space monotone cubic PCHIP ───────────────────────────
+// ── Log-space monotone cubic PCHIP (AttributePurchaseCost only) ─
 
 /**
  * Fritsch–Carlson monotone cubic Hermite derivatives for y values.
@@ -178,8 +182,18 @@ export function getMissionStardustPerFuel(level = 1) {
   return StardustPerFuel(level);
 }
 
+/**
+ * Infinite Stardust-per-Fuel (Restoration 11) — no waypoint table / PCHIP.
+ * StardustPerFuel(L) = ROUND(50 + 1.009 × (L-1)^1.625 × (1 + (L/166.66)^3.055))
+ */
 export function StardustPerFuel(level = 1) {
-  return logPchipAnchors(STARDUST_PER_FUEL_ANCHORS, Math.max(1, Math.floor(level || 1)));
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  if (L <= 1) return 50;
+  const growth =
+    1.009
+    * (L - 1) ** 1.625
+    * (1 + (L / 166.66) ** 3.055);
+  return Math.max(1, Math.round(50 + growth));
 }
 
 export function AttributePurchaseCost(purchaseNumber = 1) {
@@ -211,8 +225,8 @@ export function computeMiningReward(level, hours) {
 }
 
 /**
- * Snapshot junk vendor value for a mission drop.
- * BaseJunkValue = MissionStardustReward × 0.225
+ * Snapshot junk vendor value for a mission drop (Restoration 11).
+ * BaseJunkValue = MissionStardustReward × 0.45
  * JunkValue = ROUND(BaseJunkValue × Uniform(0.60, 1.40))
  * Pass rng at drop time so the value is fixed on the item.
  * @param {number} missionStardustReward

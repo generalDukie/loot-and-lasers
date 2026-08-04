@@ -13,7 +13,7 @@ import {
   searchAuditLogs,
   verifyAuditIntegrity,
 } from "./writer.js";
-import { ActorTypes } from "./registry.js";
+import { AuditPermissions, adminHasAuditPermission, ActorTypes } from "./registry.js";
 import { assertImmutable } from "./store.js";
 
 function handleErr(res, err) {
@@ -31,8 +31,8 @@ function handleErr(res, err) {
   return res.status(500).json({ error: "Internal error", code: AuditErrors.WRITE_FAILED });
 }
 
-function requireAdmin(req, res) {
-  if (!req.user || !isAdmin(req.user)) {
+function requireAdmin(req, res, permission = AuditPermissions.VIEW) {
+  if (!req.user || !isAdmin(req.user) || !adminHasAuditPermission(req.user, permission)) {
     res.status(403).json({ error: "Admin only", code: AuditErrors.FORBIDDEN });
     return false;
   }

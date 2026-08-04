@@ -9,6 +9,9 @@ const MISSION_GEAR_BASE_CHANCE := 0.2
 const MISSION_GEAR_PITY_INCREMENT := 0.025
 ## Soft upper bound so pity never exceeds a guaranteed drop. Spec has no 50% cap.
 const MISSION_GEAR_DROP_CAP := 1.0
+const MISSION_STIM_CHANCE_AFTER_GEAR_FAIL := 0.25
+const MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL := 0.75
+## @deprecated alias — prefer MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL
 const MISSION_JUNK_CHANCE_ON_GEAR_FAIL := 0.75
 const JUNK_AVG_MISSION_REWARD_RATIO := 0.45
 const JUNK_VALUE_MULT_MIN := 0.6
@@ -29,7 +32,8 @@ const ARENA_REWARDED_WINS_PER_DAY := 10
 const ARENA_WIN_FUEL_EQUIVALENT := 2.25
 const MINING_EFFICIENCY := 0.03
 
-## StardustPerFuel anchors (authoritative absolute values).
+## @deprecated Historical PCHIP waypoints — not production authority (Restoration 11).
+## AttributePurchaseCost still uses PCHIP; StardustPerFuel uses the closed form below.
 const STARDUST_PER_FUEL_ANCHORS := [
 	[1, 50],
 	[10, 80],
@@ -143,8 +147,13 @@ static func log_pchip_anchors(anchors: Array, x: float) -> int:
 	return maxi(1, int(round(exp(y_log))))
 
 
+## StardustPerFuel(L) = ROUND(50 + 1.009 × (L-1)^1.625 × (1 + (L/166.66)^3.055))
 static func stardust_per_fuel(level: int = 1) -> int:
-	return log_pchip_anchors(STARDUST_PER_FUEL_ANCHORS, float(maxi(1, level)))
+	var L := maxi(1, level)
+	if L <= 1:
+		return 50
+	var growth := 1.009 * pow(float(L - 1), 1.625) * (1.0 + pow(float(L) / 166.66, 3.055))
+	return maxi(1, int(round(50.0 + growth)))
 
 
 static func attribute_purchase_cost(purchase_number: int = 1) -> int:

@@ -1,7 +1,7 @@
 extends Node
-## Black Market shop — Nakama shop state with Node Character wallet bridge.
-## Fuel packs remain on Node (BuyFuel) via MissionManager.
-## Stall Stardust mutations are server-to-server and returned as a normalized wallet.
+## Black Market — Node EnsureShop / RefreshShop / BuyShop* authority (Restoration 12A/12B).
+## Nakama is auth only. Purchases are atomic on Node; Godot never deducts currency or inserts items.
+## Fuel packs remain MissionManager.buy_fuel (BuyFuel).
 
 signal shop_loaded(shop: Dictionary)
 signal shop_refreshed(shop: Dictionary)
@@ -13,30 +13,39 @@ signal loading_changed(loading: bool)
 signal mutation_state_changed(mutating: bool)
 
 const FUEL_PURCHASE_AMOUNT := 20
-const FUEL_PURCHASE_COST := 10
+const FUEL_PURCHASE_COST := 20
 const FUEL_PURCHASE_MAX := 10
-## Legacy Nova restock cost (Node). Nakama Phase 15 refresh is free when eligible.
-const SHOP_REFRESH_COST := 0
+const SHOP_REFRESH_COST := 20
 const DEFAULT_SHOP_ID := "general"
 
 var shop_meta: Dictionary = {}
+var shop_window: Dictionary = {}
+var vendors: Dictionary = {}
+var refresh_info: Dictionary = {}
+var haggle_info: Dictionary = {}
 var last_purchase: Dictionary = {}
 var loading := false
 var mutating := false
 
 var _busy := false
+var _pending_buy_request_id := ""
 
 
 func _ready() -> void:
-	print("[ShopManager] ready (Nakama shop authority)")
+	print("[ShopManager] ready (Node shop authority)")
 
 
 func clear_local() -> void:
 	shop_meta = {}
+	shop_window = {}
+	vendors = {}
+	refresh_info = {}
+	haggle_info = {}
 	last_purchase = {}
 	loading = false
 	mutating = false
 	_busy = false
+	_pending_buy_request_id = ""
 
 
 func is_loading() -> bool:
@@ -52,144 +61,164 @@ func get_shop(_shop_id: String = DEFAULT_SHOP_ID) -> Dictionary:
 
 
 func get_refresh_remaining(_shop_id: String = DEFAULT_SHOP_ID) -> int:
-	return int(shop_meta.get("refresh_seconds_remaining", 0))
+	if shop_window.has("secondsLeft"):
+		return int(shop_window.get("secondsLeft", 0))
+	return int(GameData.get_shop_window().get("secondsLeft", 0))
 
 
 func ensure_shop() -> Dictionary:
-	return await load_shop("", DEFAULT_SHOP_ID)
+	return await load_shop()
 
 
-func load_shop(character_id: String = "", shop_id: String = DEFAULT_SHOP_ID) -> Dictionary:
+func load_shop(_character_id: String = "", _shop_id: String = DEFAULT_SHOP_ID) -> Dictionary:
 	if _busy:
 		return _fail("Shop request already in progress")
 	_busy = true
 	_set_loading(true)
-	var payload := _character_payload(character_id)
-	payload["shop_id"] = shop_id if not shop_id.is_empty() else DEFAULT_SHOP_ID
-	payload["level"] = int(GameManager.active_character.get("level", 1))
-	var res: Dictionary = await NakamaManager.invoke_rpc("shop_get", payload)
+	var res: Dictionary = await GameApiClient.invoke("EnsureShop", {})
 	_busy = false
 	_set_loading(false)
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "shop_get failed"))
+	if not res.ok:
+		var err := str(res.get("error", "EnsureShop failed"))
 		shop_error.emit(err)
 		return {"ok": false, "error": err, "data": {}}
-	_apply_shop_data(res.get("data", {}))
+	_apply_shop_payload(res.data if typeof(res.data) == TYPE_DICTIONARY else {})
+	_apply_character_payload(res)
 	shop_loaded.emit(shop_meta)
 	shop_changed.emit(shop_meta)
-	return {"ok": true, "error": "", "data": {"shop_meta": shop_meta, "shop": shop_meta}}
+	return {"ok": true, "error": "", "data": res.data if typeof(res.data) == TYPE_DICTIONARY else {}}
 
 
 func buy_fuel() -> Dictionary:
-	var res: Dictionary = await MissionManager.buy_fuel()
-	return res
+	return await MissionManager.buy_fuel()
 
 
 func buy_consumable(slot_id: String) -> Dictionary:
-	return await buy_offer("", DEFAULT_SHOP_ID, slot_id)
-
-
-func buy_gear(slot_id: String, _is_hot: bool = false, _haggle: bool = false) -> Dictionary:
-	## Haggle / hot deal deferred — Phase 15 buys the authoritative offer as-is.
-	return await buy_offer("", DEFAULT_SHOP_ID, slot_id)
-
-
-func buy_offer(character_id: String, shop_id: String, offer_id: String) -> Dictionary:
-	if offer_id.is_empty():
-		return _fail("Missing offer_id")
+	if slot_id.is_empty():
+		return _fail("Missing slot_id")
 	if _busy:
 		return _fail("Shop request already in progress")
 	_busy = true
 	_set_mutating(true)
-	var payload := _character_payload(character_id)
-	payload["shop_id"] = shop_id if not shop_id.is_empty() else DEFAULT_SHOP_ID
-	payload["offer_id"] = offer_id
-	payload["request_id"] = "shop_buy:%s:%s:%d" % [
-		payload["shop_id"],
-		offer_id,
-		int(shop_meta.get("revision", 1)),
-	]
-	if shop_meta.has("revision"):
-		payload["expected_revision"] = int(shop_meta.get("revision", 1))
-	var res: Dictionary = await NakamaManager.invoke_rpc("shop_buy", payload)
+	if _pending_buy_request_id.is_empty():
+		_pending_buy_request_id = _new_request_id("shop-stim")
+	var res: Dictionary = await GameApiClient.invoke("BuyShopConsumable", {
+		"slot_id": slot_id,
+		"request_id": _pending_buy_request_id,
+		"refresh_id": int(shop_meta.get("window_idx", shop_window.get("idx", 0))),
+	})
 	_busy = false
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "shop_buy failed"))
+	if not res.ok:
+		var err := str(res.get("error", "BuyShopConsumable failed"))
 		shop_error.emit(err)
 		return {"ok": false, "error": err, "data": {}}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", null)) == TYPE_DICTIONARY else {}
-	_apply_shop_data(data)
+	_pending_buy_request_id = ""
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	_apply_shop_payload(data)
+	_apply_character_payload(res)
 	last_purchase = {
-		"kind": "gear",
-		"cost": int(data.get("amount", 0)),
+		"kind": "stim",
+		"cost": int(data.get("cost", 0)),
 		"nova_cost": 0,
-		"items": [{
-			"id": str(data.get("item_instance_id", "")),
-			"item_id": str(data.get("item_id", "")),
-		}],
-		"pending_loot": [],
+		"items": data.get("items", []),
+		"pending_loot": data.get("pending_loot", []),
+		"transaction_id": str(data.get("transaction_id", "")),
+		"idempotent_replay": bool(data.get("idempotent_replay", false)),
 	}
-	await _apply_wallet_or_reconcile(data, "shop_buy")
 	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
-		await InventoryManager.load_inventory(str(payload.get("character_id", "")))
+		await InventoryManager.load_inventory(str(GameManager.active_character.get("id", "")))
 	item_purchased.emit(data)
 	shop_changed.emit(shop_meta)
 	return {"ok": true, "error": "", "data": data}
 
 
-func sell_item(character_id: String, item_instance_id: String, quantity: int = 1) -> Dictionary:
-	if item_instance_id.is_empty():
-		return _fail("Missing item_instance_id")
+func buy_gear(slot_id: String, is_hot: bool = false, haggle: bool = false) -> Dictionary:
+	if slot_id.is_empty():
+		return _fail("Missing slot_id")
 	if _busy:
 		return _fail("Shop request already in progress")
 	_busy = true
 	_set_mutating(true)
-	var payload := _character_payload(character_id)
-	payload["item_instance_id"] = item_instance_id
-	payload["quantity"] = quantity
-	payload["request_id"] = "shop_sell:%s:%s" % [payload.get("shop_id", DEFAULT_SHOP_ID), item_instance_id]
-	var res: Dictionary = await NakamaManager.invoke_rpc("shop_sell", payload)
+	if _pending_buy_request_id.is_empty():
+		_pending_buy_request_id = _new_request_id("shop-gear")
+	var res: Dictionary = await GameApiClient.invoke("BuyShopGear", {
+		"slot_id": slot_id,
+		"is_hot": is_hot,
+		"haggle": haggle,
+		"request_id": _pending_buy_request_id,
+		"refresh_id": int(shop_meta.get("window_idx", shop_window.get("idx", 0))),
+	})
 	_busy = false
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "shop_sell failed"))
+	if not res.ok:
+		var err := str(res.get("error", "BuyShopGear failed"))
 		shop_error.emit(err)
 		return {"ok": false, "error": err, "data": {}}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", null)) == TYPE_DICTIONARY else {}
-	await _apply_wallet_or_reconcile(data, "shop_sell")
+	_pending_buy_request_id = ""
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	_apply_shop_payload(data)
+	_apply_character_payload(res)
+	last_purchase = {
+		"kind": "gear",
+		"cost": int(data.get("cost", 0)),
+		"nova_cost": int(data.get("nova_cost", 0)),
+		"items": data.get("items", []),
+		"pending_loot": data.get("pending_loot", []),
+		"haggle_failed": bool(data.get("haggle_failed", false)),
+		"haggle_note": str(data.get("haggle_note", "")),
+		"transaction_id": str(data.get("transaction_id", "")),
+		"idempotent_replay": bool(data.get("idempotent_replay", false)),
+	}
 	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
-		await InventoryManager.load_inventory(str(payload.get("character_id", "")))
-	item_sold.emit(data)
+		await InventoryManager.load_inventory(str(GameManager.active_character.get("id", "")))
+	item_purchased.emit(data)
+	shop_changed.emit(shop_meta)
 	return {"ok": true, "error": "", "data": data}
 
 
+func buy_offer(_character_id: String, _shop_id: String, offer_id: String) -> Dictionary:
+	## Compatibility wrapper — Node routes gear vs stim by offer type.
+	if is_stim_slot(_find_slot(offer_id)):
+		return await buy_consumable(offer_id)
+	return await buy_gear(offer_id, false, false)
+
+
+func sell_item(_character_id: String, item_instance_id: String, _quantity: int = 1) -> Dictionary:
+	## Inventory dissolve/sell remains on Node inventory paths (Part B / inventory).
+	if item_instance_id.is_empty():
+		return _fail("Missing item_instance_id")
+	if InventoryManager != null and InventoryManager.has_method("dissolve_item"):
+		var res: Dictionary = await InventoryManager.dissolve_item(item_instance_id)
+		if res.ok:
+			item_sold.emit(res.data if typeof(res.data) == TYPE_DICTIONARY else {})
+		return res
+	return _fail("Sell not available")
+
+
 func refresh_shop(_which: String = "all") -> Dictionary:
-	return await refresh_shop_for("", DEFAULT_SHOP_ID)
+	return await refresh_shop_for()
 
 
-func refresh_shop_for(character_id: String = "", shop_id: String = DEFAULT_SHOP_ID) -> Dictionary:
+func refresh_shop_for(_character_id: String = "", _shop_id: String = DEFAULT_SHOP_ID) -> Dictionary:
 	if _busy:
 		return _fail("Shop request already in progress")
 	_busy = true
 	_set_mutating(true)
-	var payload := _character_payload(character_id)
-	payload["shop_id"] = shop_id if not shop_id.is_empty() else DEFAULT_SHOP_ID
-	payload["level"] = int(GameManager.active_character.get("level", 1))
-	payload["request_id"] = "shop_refresh:%s:%d" % [
-		payload["shop_id"],
-		int(shop_meta.get("revision", 1)),
-	]
-	var res: Dictionary = await NakamaManager.invoke_rpc("shop_refresh", payload)
+	var use_free := not bool(shop_meta.get("free_refresh_used", false))
+	var res: Dictionary = await GameApiClient.invoke("RefreshShop", {
+		"which": "all",
+		"use_free": use_free,
+	})
 	_busy = false
 	_set_mutating(false)
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "shop_refresh failed"))
+	if not res.ok:
+		var err := str(res.get("error", "RefreshShop failed"))
 		shop_error.emit(err)
 		return {"ok": false, "error": err, "data": {}}
-	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", null)) == TYPE_DICTIONARY else {}
-	_apply_shop_data(data)
-	await _apply_wallet_or_reconcile(data, "shop_refresh")
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	_apply_shop_payload(data)
+	_apply_character_payload(res)
 	shop_refreshed.emit(shop_meta)
 	shop_changed.emit(shop_meta)
 	return {"ok": true, "error": "", "data": data}
@@ -199,9 +228,6 @@ func shop_stock() -> Array:
 	var stock: Variant = shop_meta.get("shop_stock", [])
 	if typeof(stock) == TYPE_ARRAY and (stock as Array).size() > 0:
 		return stock
-	var offers: Variant = shop_meta.get("offers", [])
-	if typeof(offers) == TYPE_ARRAY:
-		return offers
 	return gear_stock()
 
 
@@ -222,41 +248,42 @@ func is_stim_slot(item: Dictionary) -> bool:
 
 
 func hot_deal() -> Dictionary:
-	return {}
+	var hot: Variant = shop_meta.get("hot_deal", {})
+	return hot if typeof(hot) == TYPE_DICTIONARY else {}
 
 
 func is_hot_purchased() -> bool:
-	return false
+	return bool(shop_meta.get("hot_purchased", false))
 
 
 func is_hot_yanked() -> bool:
-	return false
+	return bool(shop_meta.get("hot_yanked", false))
 
 
 func is_slot_purchased(slot_id: String) -> bool:
 	var purchased: Variant = shop_meta.get("purchased", {})
 	if typeof(purchased) == TYPE_DICTIONARY and bool((purchased as Dictionary).get(slot_id, false)):
 		return true
-	for row in shop_stock():
-		if typeof(row) == TYPE_DICTIONARY and str(row.get("offer_id", row.get("_slotId", ""))) == slot_id:
-			return bool(row.get("purchased", false))
 	return false
 
 
-func is_slot_yanked(_slot_id: String) -> bool:
+func is_slot_yanked(slot_id: String) -> bool:
+	var yanked: Variant = shop_meta.get("yanked", {})
+	if typeof(yanked) == TYPE_DICTIONARY and bool((yanked as Dictionary).get(slot_id, false)):
+		return true
 	return false
 
 
 func slot_cost_sd(item: Dictionary) -> int:
+	if item.has("final_price"):
+		return int(item.get("final_price", 0))
 	if item.has("_cost"):
 		return int(item.get("_cost", 0))
-	if typeof(item.get("price", null)) == TYPE_DICTIONARY:
-		return int((item.get("price") as Dictionary).get("amount", 0))
 	return int(item.get("cost", 0))
 
 
-func slot_cost_nova(_item: Dictionary) -> int:
-	return 0
+func slot_cost_nova(item: Dictionary) -> int:
+	return int(item.get("nova_cost", 0))
 
 
 func fuel_purchases_left() -> int:
@@ -278,34 +305,42 @@ func can_buy_fuel() -> Dictionary:
 	return {"ok": true}
 
 
-func _character_payload(character_id: String) -> Dictionary:
-	var cid := character_id.strip_edges()
-	if cid.is_empty():
-		cid = str(GameManager.active_character.get("id", ""))
-	var payload := {}
-	if not cid.is_empty():
-		payload["character_id"] = cid
-	return payload
+func _find_slot(slot_id: String) -> Dictionary:
+	for row in shop_stock():
+		if typeof(row) == TYPE_DICTIONARY and str(row.get("_slotId", "")) == slot_id:
+			return row
+	var hot := hot_deal()
+	if str(hot.get("_slotId", "")) == slot_id:
+		return hot
+	return {}
 
 
-func _apply_shop_data(data: Variant) -> void:
-	if typeof(data) != TYPE_DICTIONARY:
-		return
+func _apply_shop_payload(data: Dictionary) -> void:
 	var meta: Variant = data.get("shop_meta", null)
-	if typeof(meta) != TYPE_DICTIONARY:
-		meta = data.get("shop", null)
 	if typeof(meta) == TYPE_DICTIONARY:
 		shop_meta = (meta as Dictionary).duplicate(true)
+	var win: Variant = data.get("shop_window", null)
+	if typeof(win) == TYPE_DICTIONARY:
+		shop_window = (win as Dictionary).duplicate(true)
+	var v: Variant = data.get("vendors", null)
+	if typeof(v) == TYPE_DICTIONARY:
+		vendors = (v as Dictionary).duplicate(true)
+	var r: Variant = data.get("refresh", null)
+	if typeof(r) == TYPE_DICTIONARY:
+		refresh_info = (r as Dictionary).duplicate(true)
+	var h: Variant = data.get("haggle", null)
+	if typeof(h) == TYPE_DICTIONARY:
+		haggle_info = (h as Dictionary).duplicate(true)
 
 
-func _apply_wallet_or_reconcile(data: Dictionary, source: String) -> void:
-	if CurrencyManager == null:
+func _apply_character_payload(res: Dictionary) -> void:
+	if typeof(res.get("data", null)) != TYPE_DICTIONARY:
 		return
-	var normalized: Variant = data.get("wallet", null)
-	if typeof(normalized) == TYPE_DICTIONARY:
-		if CurrencyManager.apply_authoritative_wallet(normalized, source):
-			return
-	await CurrencyManager.reconcile_wallet()
+	GameApiClient.apply_authoritative_response(res.data, "shop_node_action")
+
+
+func _new_request_id(prefix: String) -> String:
+	return "%s-%s-%d" % [prefix, str(Time.get_unix_time_from_system()), randi()]
 
 
 func _set_loading(value: bool) -> void:

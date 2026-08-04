@@ -1,0 +1,75 @@
+---
+description: Git commit convention — Phase/Fix/Refactor/Docs milestones, verify before commit
+alwaysApply: true
+---
+
+# Git commit convention (Loot & Lasers)
+
+## When to commit
+
+- **Never commit automatically** after making changes.
+- Commit only when the user asks for a commit/checkpoint/push.
+- Every commit = one complete, tested milestone. Do not mix unrelated features.
+- Do not commit broken or partially implemented work.
+
+## Before every commit
+
+1. Verify no credentials, cookies, session tokens, `.env` files, or secrets are staged.
+2. Verify no vendor SDK files were modified unless explicitly requested (`loot&lasers/addons/com.heroiclabs.nakama/` etc.).
+3. Verify the project compiles (no new GDScript errors).
+4. Verify the game launches and the affected feature works.
+5. Provide a **short summary of what changed** to the user.
+6. Only if all checks pass, then:
+
+```bash
+git add .
+git commit -m "<message>"
+git push
+```
+
+If any check fails: do **not** commit; fix first and explain what blocked the commit.
+
+## Commit message format
+
+### Milestones
+
+```
+Phase X - Feature Name
+```
+
+Examples:
+
+- `Phase 1 - Nakama authentication`
+- `Phase 2 - Nakama RPC framework`
+- `Phase 3 - Player profile service`
+- `Phase 4 - Inventory service`
+- `Phase 5 - Currency service`
+- `Phase 6 - Mission service`
+- `Phase 7 - Arena service`
+- `Phase 8 - Guild service`
+- `Phase 9 - Mail and chat`
+- `Phase 10 - Admin tools`
+
+### Bug fixes
+
+```
+Fix - Short description
+```
+
+Examples: `Fix - Hero page freeze`, `Fix - Inventory refresh race condition`
+
+### Refactors
+
+```
+Refactor - Short description
+```
+
+Examples: `Refactor - AuthManager session flow`, `Refactor - InventoryManager networking`
+
+### Documentation
+
+```
+Docs - Short description
+```
+
+Examples: `Docs - Backend architecture`, `Docs - RPC usage guide`

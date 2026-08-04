@@ -7,6 +7,7 @@ import { isEmailSendingEnabled, sendEmail, recordEmailFallback, getEmailConfigSu
 import { getEmailLog } from "./emailLog.js";
 import { NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
 import { auditAuthEvent, AuditResults } from "./audit/index.js";
+import { apiErrorBody } from "./apiResponse.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "lootandlasers-dev-secret-change-me";
 const TOKEN_TTL = process.env.JWT_TTL || "30d";
@@ -21,9 +22,9 @@ const IS_PROD = process.env.NODE_ENV === "production";
 const EMAIL_SENDING_ENABLED = isEmailSendingEnabled();
 
 function devOnlyExtras(payload) {
-  // In production without SMTP configured we fall back to dev-style codes so
-  // the app can still be usable locally and in simple hosting sandboxes.
-  return IS_PROD && EMAIL_SENDING_ENABLED ? {} : payload;
+  // Never expose OTP / reset tokens to clients in production — even if SMTP is off.
+  if (IS_PROD) return {};
+  return payload;
 }
 
 const PUBLIC_CLIENT_URL = process.env.PUBLIC_CLIENT_URL || "http://localhost:8787";
@@ -128,7 +129,14 @@ export function authMiddleware(req, res, next) {
 }
 
 export function requireAuth(req, res, next) {
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+  if (!req.user) {
+    return res.status(401).json(apiErrorBody(
+      Object.assign(new Error("Unauthorized"), {
+        status: 401,
+        code: "UNAUTHORIZED",
+      }),
+    ));
+  }
   next();
 }
 
@@ -455,12 +463,12 @@ export function createAuthRouter(express) {
         return res.status(500).json({ error: "Failed to send verification code" });
       }
     } else {
-      console.log(`[auth] OTP for ${email}: ${code}`);
+      // Never print OTP to console (sensitive). Dev fallback retained in masked email log ring.
       recordEmailFallback({
         type: "otp",
         to: email,
         subject: "Loot & Lasers verification code",
-        note: "code logged to server console",
+        note: process.env.NODE_ENV === "production" ? "smtp_off" : `dev_otp=${code}`,
       });
     }
 
@@ -596,12 +604,12 @@ export function createAuthRouter(express) {
           return res.status(500).json({ error: "Failed to send reset email" });
         }
       } else {
-        console.log(`[auth] Reset token for ${email}: ${token}`);
+        // Never print reset tokens to console.
         recordEmailFallback({
           type: "reset",
           to: email,
           subject: "Reset your Loot & Lasers password",
-          note: "token logged to server console",
+          note: process.env.NODE_ENV === "production" ? "smtp_off" : `dev_token=${token}`,
         });
       }
 

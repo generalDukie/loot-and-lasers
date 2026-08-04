@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { RACES, CLASSES, FUEL_COLOR, STARDUST_COLOR, XP_COLOR, formatFuelAmount } from "@/lib/gameData";
@@ -11,6 +11,35 @@ import StardustIcon from "@/components/game/StardustIcon";
  * XP, and currencies. Compact so nav can fill the rail without scrolling.
  */
 export default function ShellOperativePanel({ character }) {
+  const prev = useRef(null);
+  const [deltaFlash, setDeltaFlash] = useState(null);
+
+  useEffect(() => {
+    if (!character) return undefined;
+    const next = {
+      fuel: character.fuel ?? 0,
+      stardust: character.stardust || 0,
+      nova: character.nova_crystals || 0,
+    };
+    const p = prev.current;
+    prev.current = next;
+    if (!p) return undefined;
+    const flashes = [];
+    if (next.stardust !== p.stardust) {
+      flashes.push({ key: "stardust", delta: next.stardust - p.stardust, color: STARDUST_COLOR });
+    }
+    if (next.nova !== p.nova) {
+      flashes.push({ key: "nova", delta: next.nova - p.nova, color: "#FFD700" });
+    }
+    if (next.fuel !== p.fuel) {
+      flashes.push({ key: "fuel", delta: next.fuel - p.fuel, color: FUEL_COLOR });
+    }
+    if (!flashes.length) return undefined;
+    setDeltaFlash(flashes);
+    const t = setTimeout(() => setDeltaFlash(null), 1400);
+    return () => clearTimeout(t);
+  }, [character?.fuel, character?.stardust, character?.nova_crystals, character?.id]);
+
   if (!character) {
     return (
       <div className="p-2.5 text-[10px] text-muted-foreground italic">
@@ -32,9 +61,10 @@ export default function ShellOperativePanel({ character }) {
   const stardustLabel = (character.stardust || 0).toLocaleString();
   const novaLabel = (character.nova_crystals || 0).toLocaleString();
   const currencyFontSize = railCurrencyFontSize(fuelLabel, stardustLabel, novaLabel);
+  const flashFor = (key) => (deltaFlash || []).find((f) => f.key === key);
 
   return (
-    <div className="flex flex-col gap-2 p-2.5 shrink-0">
+    <div className="flex flex-col gap-2 p-2.5 shrink-0 relative">
       <Link
         to="/character"
         className="group flex flex-col items-center text-center"
@@ -82,6 +112,7 @@ export default function ShellOperativePanel({ character }) {
           color={FUEL_COLOR}
           fontSize={currencyFontSize}
           block
+          flash={flashFor("fuel")}
         />
         <CurrencyPill
           icon={<StardustIcon className="w-2.5 h-2.5 shrink-0" glow={false} />}
@@ -89,6 +120,7 @@ export default function ShellOperativePanel({ character }) {
           color={STARDUST_COLOR}
           fontSize={currencyFontSize}
           block
+          flash={flashFor("stardust")}
         />
         <Link to="/crystal-store" className="min-w-0">
           <CurrencyPill
@@ -98,6 +130,7 @@ export default function ShellOperativePanel({ character }) {
             fontSize={currencyFontSize}
             interactive
             block
+            flash={flashFor("nova")}
           />
         </Link>
       </div>
@@ -120,10 +153,8 @@ export default function ShellOperativePanel({ character }) {
   );
 }
 
-/** Shrink font only once values are long enough to crowd the rail. */
 function railCurrencyFontSize(...labels) {
   const maxLen = Math.max(...labels.map((label) => String(label).length));
-  // Slightly larger for readability, still shrinks as values get long.
   if (maxLen <= 6) return 12;
   if (maxLen <= 8) return 11;
   if (maxLen <= 10) return 10;
@@ -131,13 +162,18 @@ function railCurrencyFontSize(...labels) {
   return 8;
 }
 
-function CurrencyPill({ icon, value, color, interactive, fontSize = 10, block }) {
+function CurrencyPill({ icon, value, color, interactive = false, fontSize = 10, block = false, flash = null }) {
   return (
     <span
-      className={`${block ? "flex w-full" : "inline-flex"} items-center justify-center gap-1 min-w-0 px-1.5 py-1 rounded-md border border-border/40 bg-muted/25 tabular-nums font-display font-semibold leading-none whitespace-nowrap overflow-hidden ${
+      className={`relative ${block ? "flex w-full" : "inline-flex"} items-center justify-center gap-1 min-w-0 px-1.5 py-1 rounded-md border border-border/40 bg-muted/25 tabular-nums font-display font-semibold leading-none whitespace-nowrap overflow-visible ${
         interactive ? "hover:border-amber-400/45 transition-colors" : ""
       }`}
-      style={{ color, fontSize: `${fontSize}px` }}
+      style={{
+        color,
+        fontSize: `${fontSize}px`,
+        boxShadow: flash ? `0 0 10px ${color}55` : undefined,
+        background: flash ? `${color}22` : undefined,
+      }}
     >
       {icon}
       {value}
@@ -156,6 +192,14 @@ function CurrencyPill({ icon, value, color, interactive, fontSize = 10, block })
           aria-hidden
         >
           +
+        </span>
+      )}
+      {flash && (
+        <span
+          className="absolute -top-2 right-0 text-[9px] font-display font-black pointer-events-none"
+          style={{ color: flash.delta >= 0 ? color : "#F87171" }}
+        >
+          {flash.delta >= 0 ? `+${flash.delta}` : String(flash.delta)}
         </span>
       )}
     </span>

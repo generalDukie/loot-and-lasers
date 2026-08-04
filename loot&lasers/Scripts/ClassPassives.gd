@@ -1,6 +1,9 @@
 class_name ClassPassives
 extends RefCounted
-## Player class passives — mirrors src/lib/classPassives.js (arenaEngine hooks).
+## Presentation helpers + legacy local-sim mirror of src/lib/classPassives.js.
+## Authoritative passive outcomes come from Node combat events (Prompt 08/09).
+## Do not settle mission/dungeon rewards from this script — playback banners only;
+## non-settlement local previews (e.g. guild-war UX) may still call simulation hooks.
 
 const PASSIVE_BY_CLASS := {
 	"Vanguard": "Kinetic Tantrum",
@@ -237,6 +240,26 @@ static func maybe_orbital(engineer: Dictionary, opponent: Dictionary) -> Array:
 	})
 	if effect == "fire_support":
 		var raw := maxi(0, int(round(float(engineer.get("standardAttack", 0)) * FIRE_SUPPORT_FRAC)))
+		# Mirror Node: Fire Support is secondary True Damage and can be Dodged.
+		var opp_dodge := float(opponent.get("dodge", 0))
+		if opp_dodge > 0.0 and randf() < opp_dodge:
+			events.append({
+				"type": "dodge",
+				"kind": "fire_support_dodged",
+				"secondaryKind": "fire_support",
+				"passive": "Orbital Assistant",
+				"attacker": engineer["side"],
+				"defender": opponent["side"],
+				"damage": 0,
+				"crit": false,
+				"dodged": true,
+				"isNormalAttack": false,
+				"damageType": "TRUE",
+				"canCrit": false,
+				"canDodge": true,
+				"text": "%s dodges Fire Support!" % opponent["name"],
+			})
+			return events
 		var barrier := int(opponent.get("barrier", 0))
 		var hp_dmg := raw
 		var absorbed := 0
@@ -246,14 +269,21 @@ static func maybe_orbital(engineer: Dictionary, opponent: Dictionary) -> Array:
 			hp_dmg = raw - absorbed
 		opponent["hp"] = maxi(0, int(opponent.get("hp", 0)) - hp_dmg)
 		events.append({
-			"type": "drone",
+			"type": "secondary",
 			"ability": "Fire Support",
+			"kind": "fire_support",
+			"secondaryKind": "fire_support",
+			"passive": "Orbital Assistant",
 			"attacker": engineer["side"],
 			"defender": opponent["side"],
 			"damage": hp_dmg,
 			"barrierAbsorbed": absorbed,
 			"shieldHit": absorbed > 0,
 			"crit": false,
+			"isNormalAttack": false,
+			"damageType": "TRUE",
+			"canCrit": false,
+			"canDodge": true,
 			"text": "Orbital Assistant Fire Support deals %s True Damage" % hp_dmg,
 		})
 	elif effect == "defensive_protocol":
@@ -304,10 +334,13 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 	var kind := str(ev.get("kind", ev.get("missKind", ev.get("secondaryKind", ""))))
 	var is_passiveish := t == "passive" \
 		or (t == "miss" and str(ev.get("missKind", "")) == "phantom_signal") \
-		or (t == "secondary" and bool(ev.get("passive", false)))
+		or (t == "secondary" and bool(ev.get("passive", false))) \
+		or (t == "dodge" and str(ev.get("kind", "")) == "fire_support_dodged")
 	var banner_kinds := {
 		"dirty_trick_selected": true,
 		"orbital_assistant_activated": true,
+		"fire_support": true,
+		"fire_support_dodged": true,
 		"kinetic_tantrum_normal": true,
 		"kinetic_tantrum_strong": true,
 		"astral_barrier_created": true,

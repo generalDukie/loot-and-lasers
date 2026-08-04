@@ -228,13 +228,16 @@ export default function ShopPage() {
 
     setBusySlot(slot._slotId);
     try {
+      const requestId = `shop-gear-${slot._slotId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const res = await api.functions.invoke("BuyShopGear", {
         slot_id: slot._slotId,
         haggle,
         is_hot: isHot,
+        request_id: requestId,
+        refresh_id: shopMeta?.window_idx,
       });
       const patch = res.patch || res.data?.patch || {};
-      const meta = patch.shop_meta || shopMeta;
+      const meta = res.shop_meta || res.data?.shop_meta || patch.shop_meta || shopMeta;
       const items = res.items || res.data?.items || [];
       applyPendingLootFromResponse(res);
       const haggleNote = res.haggle_note ?? res.data?.haggle_note;
@@ -329,9 +332,14 @@ export default function ShopPage() {
     }
     setBusySlot(slot._slotId);
     try {
-      const res = await api.functions.invoke("BuyShopConsumable", { slot_id: slot._slotId });
+      const requestId = `shop-stim-${slot._slotId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const res = await api.functions.invoke("BuyShopConsumable", {
+        slot_id: slot._slotId,
+        request_id: requestId,
+        refresh_id: shopMeta?.window_idx,
+      });
       const patch = res.patch || res.data?.patch || {};
-      const meta = patch.shop_meta;
+      const meta = res.shop_meta || res.data?.shop_meta || patch.shop_meta;
       const items = res.items || res.data?.items || [];
       applyPendingLootFromResponse(res);
       const anyCreated = items.length > 0;

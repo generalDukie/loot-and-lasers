@@ -1,8 +1,7 @@
 extends Node
-## Mission lifecycle — Nakama mission authority with Node Character wallet bridge.
-## Board / start / timer / claim: Nakama RPCs; required Fuel/Nova and Stardust
-## rewards are applied server-to-server to the normalized Character wallet.
-## Fuel buy/sync remain direct Node economy actions. XP grants remain deferred.
+## Mission lifecycle — Node gameplay authority.
+## The cantina board is a client-side preview matching the web client. Node validates
+## launch, owns mission state/timers, and atomically grants XP, Stardust, and loot.
 
 signal board_changed(offers: Array)
 signal active_mission_changed(mission: Dictionary)
@@ -45,7 +44,7 @@ var _pending_fuel_request_id := ""
 
 
 func _ready() -> void:
-	print("[MissionManager] ready (Nakama mission authority)")
+	print("[MissionManager] ready (Node mission authority)")
 
 
 func _await_nakama_idle(timeout_sec: float = 12.0) -> bool:
@@ -108,60 +107,30 @@ func refresh_character() -> Dictionary:
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		GameManager.apply_active_character(res.data, "mission_refresh")
 		character_updated.emit(res.data)
-		await _restore_active_mission_from_nakama()
+		await _restore_active_mission_from_node()
 	return res
 
 
-## Load board exclusively from Nakama `missions_get` (or refresh).
-## Local cfg is written only as a display cache after a successful Nakama load.
-## Never calls MissionBoard.build_board for authoritative offers.
+## The board is display-only, matching the web client. Node snapshots and validates
+## all authoritative costs/rewards when LaunchMission is called.
 func ensure_board(force_reroll: bool = false) -> Array:
 	var character: Dictionary = GameManager.active_character
 	var cid := str(character.get("id", ""))
 	if cid.is_empty():
 		offers = []
 		board_changed.emit(offers)
-		mission_error.emit("No active character for mission board")
 		return offers
 
-	var synced: Dictionary = await _ensure_profile_character(cid)
-	if not synced.get("success", false):
-		offers = []
-		board_changed.emit(offers)
-		mission_error.emit(str(synced.get("error", "Could not sync selected character")))
-		return offers
-
-	var res: Dictionary
-	if force_reroll:
-		res = await refresh_missions(cid)
-	else:
-		res = await load_missions(cid)
-
-	if not res.get("success", false):
-		# Do not invent missions. Optional stale cache for offline UX messaging only.
+	if not force_reroll:
 		var cached := _load_board_cache(cid)
 		if not cached.is_empty():
 			offers = cached
 			board_changed.emit(offers)
-			mission_error.emit(str(res.get("error", "Nakama board unavailable — showing cached display only")))
-		else:
-			offers = []
-			board_changed.emit(offers)
-			mission_error.emit(str(res.get("error", "Nakama board unavailable")))
-		return offers
+			return offers
 
-	offers = _offers_from_nakama_board(nakama_board)
-	# Always keep 3 selectable contracts. Launch removes a slot server-side; top-up
-	# happens in Nakama ensure_board when deployed. Fall back to a forced refresh once.
-	if offers.size() < 3 and not force_reroll and not has_active_mission():
-		var refill: Dictionary = await refresh_missions(cid)
-		if refill.get("success", false):
-			offers = _offers_from_nakama_board(nakama_board)
-		elif offers.size() < 3:
-			mission_error.emit("Board underfilled (%d/3) — try again shortly" % offers.size())
+	offers = MissionBoard.build_board(character)
 	_save_board_cache(cid, offers)
 	board_changed.emit(offers)
-	_apply_nakama_active_to_local()
 	return offers
 
 
@@ -169,63 +138,70 @@ func reroll_board() -> Array:
 	return await ensure_board(true)
 
 
-## Start via Nakama `mission_start`; the server bridges the authoritative Fuel debit.
+## Node snapshots the mission, reward definition, loot roll, timer, and Fuel debit.
 func launch_offer(offer: Dictionary) -> Dictionary:
-	var mission_id := str(offer.get("mission_id", offer.get("id", ""))).strip_edges()
-	if mission_id.is_empty():
-		return {"ok": false, "error": "mission_id is required", "data": {}}
-
-	var cid := str(GameManager.active_character.get("id", ""))
-	var synced: Dictionary = await _ensure_profile_character(cid)
-	if not synced.get("success", false):
-		return {
-			"ok": false,
-			"error": str(synced.get("error", "Could not sync selected character")),
-			"data": {},
-		}
-
-	var res: Dictionary = await start_mission(mission_id)
-	if not res.get("success", false):
-		return {
-			"ok": false,
-			"error": str(res.get("error", "Launch failed")),
-			"data": res.get("data", {}),
-			"status_code": int(res.get("status_code", 0)),
-		}
-
-	_apply_nakama_active_to_local()
-	_apply_wallet_from_data(res.get("data", {}), "mission_start")
+	var template := offer.duplicate(true)
+	var res: Dictionary = await GameApiClient.invoke("LaunchMission", {"template": template})
+	if not res.ok:
+		mission_error.emit(str(res.get("error", "Launch failed")))
+		return res
+	_apply_character_payload(res)
+	if typeof(res.data) == TYPE_DICTIONARY and typeof(res.data.get("mission", {})) == TYPE_DICTIONARY:
+		active_mission = res.data["mission"]
+		active_mission_missing = false
+		active_mission_changed.emit(active_mission)
 	_clear_board_cache(str(GameManager.active_character.get("id", "")))
 	offers = []
 	board_changed.emit(offers)
-	return {
-		"ok": true,
-		"error": "",
-		"data": {"mission": active_mission},
-		"status_code": int(res.get("status_code", 200)),
-	}
+	return res
 
 
-## Restore active mission from Nakama `mission_status` (not Node Mission filter).
+## Restore the Node-owned mission selected by Character.active_mission_id.
 func fetch_active_mission() -> Dictionary:
-	var synced: Dictionary = await _ensure_profile_character(str(GameManager.active_character.get("id", "")))
-	if not synced.get("success", false):
-		active_mission = {}
-		active_mission_missing = false
-		return {"ok": false, "error": str(synced.get("error", "profile sync failed")), "data": {}}
-	var res: Dictionary = await refresh_mission_status("", true)
-	if not res.get("success", false):
+	var mid := str(GameManager.active_character.get("active_mission_id", ""))
+	if mid.is_empty():
 		active_mission = {}
 		active_mission_missing = false
 		active_mission_changed.emit(active_mission)
-		return {
-			"ok": false,
-			"error": str(res.get("error", "mission_status failed")),
-			"data": {},
+		return {"ok": true, "data": {}}
+	var res: Dictionary = await GameApiClient.request(
+		"POST",
+		"/api/entities/Mission/filter",
+		{"query": {"id": mid}, "sort": "-created_date", "limit": 1},
+		true
+	)
+	if res.ok and typeof(res.data) == TYPE_ARRAY and not res.data.is_empty():
+		var row: Dictionary = res.data[0]
+		var status := str(row.get("status", "in_progress"))
+		if status in ["claimed", "failed"]:
+			active_mission_missing = true
+			active_mission = {
+				"id": mid,
+				"name": str(row.get("name", "Resolved Mission")),
+				"end_time": "",
+				"status": status,
+			}
+		else:
+			active_mission_missing = false
+			active_mission = row
+			if str(active_mission.get("end_time", "")).is_empty():
+				var fallback := str(GameManager.active_character.get("mission_end_time", ""))
+				if not fallback.is_empty():
+					active_mission["end_time"] = fallback
+			if status == "completed":
+				var end_now := str(GameManager.active_character.get("mission_end_time", ""))
+				if not end_now.is_empty():
+					active_mission["end_time"] = end_now
+	elif res.ok:
+		active_mission_missing = true
+		active_mission = {
+			"id": mid,
+			"name": "Lost Mission Record",
+			"end_time": "",
+			"status": "in_progress",
 		}
-
-	_apply_nakama_active_to_local()
-	return {"ok": true, "data": active_mission, "nakama": nakama_active}
+	active_mission_changed.emit(active_mission)
+	return res
 
 
 func resume_or_hub() -> void:
@@ -301,184 +277,88 @@ func _parse_iso_unix(iso: String) -> int:
 
 
 func current_mission_id() -> String:
-	var mission_raw: Variant = nakama_active.get("mission", {})
-	if typeof(mission_raw) == TYPE_DICTIONARY:
-		var nid := str((mission_raw as Dictionary).get("mission_id", ""))
-		if not nid.is_empty():
-			return nid
-	return str(active_mission.get("mission_id", active_mission.get("id", "")))
+	var authoritative := str(GameManager.active_character.get("active_mission_id", ""))
+	if not authoritative.is_empty():
+		return authoritative
+	return str(active_mission.get("id", ""))
 
 
-## Skip remaining wait via Nakama `mission_skip`; the server bridges the Nova debit
-## and compensates it if the mission state write fails.
+## Node atomically debits Nova and completes the authoritative Mission row.
 func skip_mission() -> Dictionary:
 	var mid := current_mission_id()
 	if mid.is_empty():
 		return {"ok": false, "error": "No active mission to skip", "data": {}}
-
-	var expected_cost := 0
-	var rem := seconds_remaining()
-	if rem > 0:
-		expected_cost = maxi(1, int(ceil((float(rem) / 60.0) * 5.0)))
-	if expected_cost > 0:
-		if CurrencyManager != null and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, expected_cost):
-			return {"ok": false, "error": "Not enough Nova Crystals", "data": {}}
-
-	var op := await _acquire_nakama()
-	if op == 0:
-		return _fail_nakama("Mission request busy — try again")
-	var payload := _nakama_character_payload("")
-	payload["mission_id"] = mid
-	payload["request_id"] = "skip-%s-%d" % [
-		mid.substr(0, mini(8, mid.length())),
-		int(Time.get_unix_time_from_system()),
-	]
-	var res: Dictionary = await NakamaManager.invoke_rpc("mission_skip", payload)
-	_release_nakama(op)
-
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "Mission skip failed"))
-		mission_error.emit(err)
-		return {"ok": false, "error": err, "data": {}}
-
-	var data: Variant = res.get("data", {})
-	if typeof(data) != TYPE_DICTIONARY:
-		return {"ok": false, "error": "Malformed skip response", "data": {}}
-
-	var skip_data: Dictionary = data
-	var bridge_wallet_applied := _apply_wallet_from_data(skip_data, "mission_skip")
-	if typeof(skip_data.get("active", null)) == TYPE_DICTIONARY:
-		nakama_active = (skip_data.get("active") as Dictionary).duplicate(true)
-		# Ensure has_active so local finish checks stay consistent.
-		nakama_active["has_active"] = true
-	elif typeof(skip_data.get("mission", null)) == TYPE_DICTIONARY:
-		nakama_active = {"mission": skip_data.get("mission"), "has_active": true, "is_complete": true}
-	_apply_nakama_active_to_local()
-	# Force local finished state even if envelope shape drifts.
-	if typeof(nakama_active.get("mission", null)) == TYPE_DICTIONARY:
-		(nakama_active["mission"] as Dictionary)["status"] = "complete"
-		active_mission["status"] = "complete"
-		active_mission["completes_at_unix"] = int(Time.get_unix_time_from_system())
-	mission_status_changed.emit(nakama_active)
-
-	var already_done := bool(skip_data.get("already_complete", false)) or bool(skip_data.get("replay", false))
-	var charge := int(skip_data.get("skip_cost", expected_cost))
-	if charge < 0:
-		charge = 0
-	if already_done:
-		charge = 0
-
-	if charge > 0 and not bridge_wallet_applied:
-		var debit: Dictionary = await GameApiClient.invoke("DebitNovaCrystals", {
-			"amount": charge,
-			"purpose": "mission_skip",
-			"mission_id": mid,
-			"request_id": "mission_skip:%s" % mid,
-		})
-		if not bool(debit.get("ok", false)):
-			var debit_err := str(debit.get("error", "Could not spend Nova Crystals"))
-			if typeof(debit.get("data", null)) == TYPE_DICTIONARY and debit.data.has("error"):
-				debit_err = str(debit.data["error"])
-			print("[MissionManager] WARNING: skip completed but Nova debit failed — %s" % debit_err)
-			skip_data["debit_warning"] = debit_err
-		else:
-			_apply_character_payload(debit)
-			skip_data["nova_debited"] = charge
-	elif charge > 0:
-		skip_data["nova_debited"] = charge
-
-	return {"ok": true, "error": "", "data": skip_data}
+	var res: Dictionary = await GameApiClient.invoke("SkipMission", {"mission_id": mid})
+	_apply_character_payload(res)
+	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+		var mission_raw: Variant = res.data.get("mission", null)
+		if typeof(mission_raw) == TYPE_DICTIONARY and not (mission_raw as Dictionary).is_empty():
+			active_mission = (mission_raw as Dictionary).duplicate(true)
+			active_mission["status"] = "completed"
+			var end_now := str(GameManager.active_character.get("mission_end_time", ""))
+			if not end_now.is_empty():
+				active_mission["end_time"] = end_now
+			active_mission_missing = bool(res.data.get("mission_missing", false))
+			active_mission_changed.emit(active_mission)
+	elif not res.ok:
+		mission_error.emit(str(res.get("error", "Mission skip failed")))
+	return res
 
 
-## Claim completed mission rewards via Nakama mission_claim (server-authoritative).
-## Does not mutate wallet/inventory locally — refreshes managers from server result.
-func claim_mission(_won: bool = true) -> Dictionary:
-	return await claim_mission_for("", "")
+## Claim/fail through Node's atomic reward pipeline. ClaimMission owns XP, level,
+## Stardust, inventory capacity, pending loot, achievements, and idempotent replay.
+func claim_mission(won: bool = true) -> Dictionary:
+	return await _claim_node_mission(won, "")
 
 
 func claim_mission_for(character_id: String = "", mission_id: String = "") -> Dictionary:
+	# Compatibility wrapper for callers that pass explicit ids. Ownership remains
+	# bound to the authenticated Node account; character_id is never trusted.
+	var _unused_character_id := character_id
+	return await _claim_node_mission(true, mission_id)
+
+
+func _claim_node_mission(won: bool, mission_id: String) -> Dictionary:
 	var mid := mission_id.strip_edges()
 	if mid.is_empty():
-		var nakama_mission: Variant = nakama_active.get("mission", {})
-		if typeof(nakama_mission) == TYPE_DICTIONARY:
-			mid = str(nakama_mission.get("mission_id", ""))
-		if mid.is_empty():
-			mid = str(active_mission.get("mission_id", active_mission.get("id", "")))
+		mid = current_mission_id()
 	if mid.is_empty():
-		return {"ok": false, "error": "mission_id is required", "data": {}}
-
-	# Sync status unless we already know the mission is claimable (e.g. just skipped).
-	if not is_mission_finished():
-		var status_res: Dictionary = await refresh_mission_status(character_id, true)
-		if not status_res.get("success", false):
-			var status_err := str(status_res.get("error", "Could not refresh mission status"))
-			mission_error.emit(status_err)
-			return {"ok": false, "error": status_err, "data": {}}
-
-	var status := _nakama_mission_status()
-	if status == "active" and not is_mission_finished():
-		return {"ok": false, "error": "Mission not finished yet", "data": {}}
-
-	var op := await _acquire_nakama()
-	if op == 0:
-		return _fail_nakama("Mission request busy — try again")
+		return {"ok": false, "error": "No active mission", "data": {}}
 	mission_claim_started.emit()
-	var payload := _nakama_character_payload(character_id)
-	payload["mission_id"] = mid
-	payload["request_id"] = "claim-%s-%d" % [
-		mid.substr(0, mini(8, mid.length())),
-		int(Time.get_unix_time_from_system()),
-	]
-	var res: Dictionary = await NakamaManager.invoke_rpc("mission_claim", payload)
-	_release_nakama(op)
-
-	if not bool(res.get("success", false)):
+	var res: Dictionary
+	# Node ignores client won — combat_result is authoritative (Restoration 08/11).
+	if won:
+		res = await GameApiClient.invoke("ClaimMission", {
+			"mission_id": mid,
+			"idempotencyKey": "mission:%s" % mid,
+		})
+	else:
+		res = await GameApiClient.invoke("FailMission", {
+			"mission_id": mid,
+			"idempotencyKey": "mission:%s" % mid,
+		})
+		if not res.ok:
+			res = await GameApiClient.invoke("ClaimMission", {
+				"mission_id": mid,
+				"idempotencyKey": "mission:%s" % mid,
+			})
+	if not res.ok:
 		var err := str(res.get("error", "Mission claim failed"))
 		mission_error.emit(err)
 		mission_claim_failed.emit(err)
-		return {"ok": false, "error": err, "data": {}}
+		return res
 
-	var data: Variant = res.get("data", {})
-	if typeof(data) != TYPE_DICTIONARY:
-		var bad := "Malformed claim response"
-		mission_claim_failed.emit(bad)
-		return {"ok": false, "error": bad, "data": {}}
-
-	var claim_data: Dictionary = data
-	_apply_wallet_from_data(claim_data, "mission_claim")
-	var reward: Dictionary = {}
-	if typeof(claim_data.get("reward", null)) == TYPE_DICTIONARY:
-		reward = claim_data.get("reward")
-	var gains: Dictionary = {}
-	if typeof(claim_data.get("gains", null)) == TYPE_DICTIONARY:
-		gains = claim_data.get("gains")
+	var mission_snapshot := active_mission.duplicate(true)
+	_apply_character_payload(res)
+	last_claim_result = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	# Presentation follows Node combat/reward authority — not the caller hint.
+	var settled_won := bool(last_claim_result.get("won", won))
+	if settled_won and not bool(last_claim_result.get("mission_missing", false)):
+		GameManager.remember_loot_from_claim(last_claim_result)
 	else:
-		var stardust := 0
-		var currency: Variant = reward.get("currency", [])
-		if typeof(currency) == TYPE_ARRAY:
-			for row in currency:
-				if typeof(row) == TYPE_DICTIONARY and str(row.get("currency_id", "")) == "stardust":
-					stardust += int(row.get("amount", 0))
-		gains = {
-			"stardust": stardust,
-			"experience": 0,
-			"experience_status": "unsupported",
-		}
-
-	last_claim_result = {
-		"gains": gains,
-		"reward": reward,
-		"items": reward.get("items", []) if typeof(reward.get("items", null)) == TYPE_ARRAY else [],
-		"mission": claim_data.get("mission", {}),
-		"rewards_deferred": false,
-		"message": "",
-		"replay": bool(claim_data.get("replay", false)),
-	}
-
-	if CurrencyManager != null and not claim_data.has("wallet") and CurrencyManager.has_method("load_wallet"):
-		await CurrencyManager.load_wallet()
+		GameManager.recent_loot_ids = PackedStringArray()
 	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
-		await InventoryManager.load_inventory(str(payload.get("character_id", "")))
+		await InventoryManager.load_inventory(str(GameManager.active_character.get("id", "")))
 
 	active_mission = {}
 	active_mission_missing = false
@@ -489,12 +369,15 @@ func claim_mission_for(character_id: String = "", mission_id: String = "") -> Di
 	active_mission_changed.emit(active_mission)
 	claim_ready.emit(last_claim_result)
 	mission_claimed.emit(last_claim_result)
-	reward_received.emit(reward)
-	await ensure_board(false)
-	return {"ok": true, "error": "", "data": last_claim_result}
+	reward_received.emit(last_claim_result)
+	if settled_won and not bool(last_claim_result.get("mission_missing", false)):
+		var gains: Dictionary = last_claim_result.get("gains", {}) if typeof(last_claim_result.get("gains", {})) == TYPE_DICTIONARY else {}
+		await SocialManager.contribute_mission(mission_snapshot, gains)
+	await ensure_board(true)
+	return res
 
 
-## Soft end-of-mission encounter (client-side), matching web generateMissionEncounter + simulateBattle.
+## Soft end-of-mission encounter — Node simulates + commits; Godot plays events only.
 ## Call after the mission timer is finished (or after a successful skip).
 func prepare_combat(_refresh: bool = true) -> Dictionary:
 	if not is_mission_finished():
@@ -507,34 +390,42 @@ func prepare_combat(_refresh: bool = true) -> Dictionary:
 	if ch.is_empty():
 		return {"ok": false, "error": "No active character", "data": {}}
 
-	# Ensure nested stats exist for MissionCombat.build_fighter.
-	var stats_src: Dictionary = StatsRules.raw_stats(ch)
-	var fighter_char := ch.duplicate(true)
-	fighter_char["stats"] = stats_src
+	var mid := str(active_mission.get("id", ch.get("active_mission_id", "")))
+	if mid.is_empty():
+		return {"ok": false, "error": "No active mission", "data": {}}
 
-	pending_enemy = MissionCombat.generate_encounter(fighter_char, active_mission)
-	pending_player_items = await _load_equipped_items()
-	pending_battle = MissionCombat.simulate_battle(
-		fighter_char, pending_enemy, pending_player_items, []
-	)
+	var res: Dictionary = await GameApiClient.invoke("PrepareMissionCombat", {"mission_id": mid})
+	if not res.ok:
+		return {"ok": false, "error": str(res.get("error", "PrepareMissionCombat failed")), "data": {}}
+
+	var payload: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	pending_enemy = payload.get("enemy", {}) if typeof(payload.get("enemy", {})) == TYPE_DICTIONARY else {}
+	var battle: Dictionary = payload.get("battle", {}) if typeof(payload.get("battle", {})) == TYPE_DICTIONARY else {}
+	if battle.is_empty() and typeof(payload.get("events", null)) == TYPE_ARRAY:
+		battle = {
+			"winner": payload.get("winner", ""),
+			"events": payload.get("events", []),
+			"playerMaxHp": payload.get("playerMaxHp", 0),
+			"opponentMaxHp": payload.get("opponentMaxHp", 0),
+			"initiativeFirstSide": payload.get("opening_side", ""),
+			"playerEnd": payload.get("playerEnd", {}),
+			"opponentEnd": payload.get("opponentEnd", {}),
+		}
+	pending_battle = battle
+	pending_player_items = []
 	return {
 		"ok": true,
 		"error": "",
-		"data": {"enemy": pending_enemy, "battle": pending_battle},
+		"data": {"enemy": pending_enemy, "battle": pending_battle, "combat_id": payload.get("combat_id", "")},
 	}
 
 
 func resolve_combat_outcome() -> Dictionary:
 	if pending_battle.is_empty():
 		return {"ok": false, "error": "No pending battle", "data": {}}
+	# Winner comes from committed Node combat — never re-simulate locally.
 	var won := str(pending_battle.get("winner", "")) == "player"
-	if not won:
-		# Soft fail: clear duel state. Mission stays complete so the player can fight again.
-		pending_enemy = {}
-		pending_battle = {}
-		pending_player_items = []
-		return {"ok": true, "error": "", "data": {"gains": {}, "items": [], "failed": true}}
-	return await claim_mission(true)
+	return await claim_mission(won)
 
 
 func _load_equipped_items() -> Array:
@@ -548,67 +439,25 @@ func _load_equipped_items() -> Array:
 	return res.data if res.ok and typeof(res.data) == TYPE_ARRAY else []
 
 
-## Nakama mission session: in-flight or awaiting claim (claimed is cleared on next start).
+## Character.active_mission_id is the single authoritative active pointer.
 func has_active_mission() -> bool:
-	var s := _nakama_mission_status()
-	if s in ["active", "complete", "reward_pending", "reward_failed"]:
-		return true
-	var local_status := str(active_mission.get("status", ""))
-	return local_status in ["active", "in_progress", "complete", "completed", "reward_pending", "reward_failed"]
+	return not str(GameManager.active_character.get("active_mission_id", "")).is_empty()
 
 
 # ---------------------------------------------------------------------------
-# Nakama RPCs
+# Legacy Nakama mission RPCs — hard-disabled (Node LaunchMission/ClaimMission)
 # ---------------------------------------------------------------------------
 
-func load_missions(character_id: String = "") -> Dictionary:
-	return await _nakama_board_rpc("missions_get", character_id, false)
+func load_missions(_character_id: String = "") -> Dictionary:
+	return _fail_nakama("Nakama missions_get disabled — use Node Cantina / LaunchMission", 410)
 
 
-func refresh_missions(character_id: String = "") -> Dictionary:
-	return await _nakama_board_rpc("missions_refresh", character_id, true)
+func refresh_missions(_character_id: String = "") -> Dictionary:
+	return _fail_nakama("Nakama missions_refresh disabled — use Node mission offers", 410)
 
 
-func start_mission(mission_id: String, character_id: String = "") -> Dictionary:
-	if mission_id.strip_edges().is_empty():
-		return _fail_nakama("mission_id is required")
-
-	var op := await _acquire_nakama()
-	if op == 0:
-		return _fail_nakama("Mission request busy — try again")
-	var payload := _nakama_character_payload(character_id)
-	payload["mission_id"] = mission_id.strip_edges()
-	var res: Dictionary = await NakamaManager.invoke_rpc("mission_start", payload)
-	_release_nakama(op)
-
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "mission_start failed"))
-		mission_error.emit(err)
-		return {
-			"ok": false,
-			"success": false,
-			"error": err,
-			"data": {},
-			"status_code": int(res.get("status_code", 0)),
-		}
-
-	var data: Variant = res.get("data", {})
-	if typeof(data) != TYPE_DICTIONARY:
-		return _fail_nakama("Malformed mission_start response")
-
-	nakama_active = (data as Dictionary).duplicate(true)
-	_apply_nakama_active_to_local()
-	var mission: Variant = nakama_active.get("mission", {})
-	if typeof(mission) == TYPE_DICTIONARY:
-		mission_started.emit(mission)
-		mission_status_changed.emit(nakama_active)
-	return {
-		"ok": true,
-		"success": true,
-		"error": "",
-		"data": nakama_active,
-		"status_code": int(res.get("status_code", 200)),
-	}
+func start_mission(_mission_id: String, _character_id: String = "") -> Dictionary:
+	return _fail_nakama("Nakama mission_start disabled — use MissionManager.launch_offer", 410)
 
 
 func get_active_mission(character_id: String = "") -> Dictionary:
@@ -617,57 +466,29 @@ func get_active_mission(character_id: String = "") -> Dictionary:
 
 func refresh_mission_status(character_id: String = "", force: bool = false) -> Dictionary:
 	var now := Time.get_ticks_msec() / 1000.0
-	if not force and (now - _last_status_at) < STATUS_MIN_INTERVAL_SEC and not nakama_active.is_empty():
+	if not force and (now - _last_status_at) < STATUS_MIN_INTERVAL_SEC and not active_mission.is_empty():
 		return {
 			"ok": true,
 			"success": true,
 			"error": "",
-			"data": nakama_active,
+			"data": active_mission,
 			"status_code": 200,
 			"cached": true,
 		}
-
-	var op := await _acquire_nakama()
-	if op == 0:
-		# Soft-fail for polls: keep last snapshot instead of hard erroring the UI.
-		if not force and not nakama_active.is_empty():
-			return {
-				"ok": true,
-				"success": true,
-				"error": "",
-				"data": nakama_active,
-				"status_code": 200,
-				"cached": true,
-			}
-		return _fail_nakama("Mission request busy — try again")
-	var res: Dictionary = await NakamaManager.invoke_rpc("mission_status", _nakama_character_payload(character_id))
-	_release_nakama(op)
+	var _unused_character_id := character_id
+	var res: Dictionary = await fetch_active_mission()
 	_last_status_at = Time.get_ticks_msec() / 1000.0
-
-	if not bool(res.get("success", false)):
+	if not res.ok:
 		var err := str(res.get("error", "mission_status failed"))
 		mission_error.emit(err)
-		return {
-			"ok": false,
-			"success": false,
-			"error": err,
-			"data": {},
-			"status_code": int(res.get("status_code", 0)),
-		}
-
-	var data: Variant = res.get("data", {})
-	if typeof(data) != TYPE_DICTIONARY:
-		return _fail_nakama("Malformed mission_status response")
-
-	nakama_active = (data as Dictionary).duplicate(true)
-	_apply_nakama_active_to_local()
-	mission_status_changed.emit(nakama_active)
+		return res
+	mission_status_changed.emit(active_mission)
 	return {
 		"ok": true,
 		"success": true,
 		"error": "",
-		"data": nakama_active,
-		"status_code": int(res.get("status_code", 200)),
+		"data": active_mission,
+		"status_code": int(res.get("status", 200)),
 	}
 
 
@@ -696,62 +517,17 @@ func _ensure_profile_character(character_id: String) -> Dictionary:
 	}
 
 
-func _nakama_board_rpc(rpc_id: String, character_id: String, is_refresh: bool) -> Dictionary:
-	var op := await _acquire_nakama()
-	if op == 0:
-		return _fail_nakama("Mission request busy — try again")
-	var payload := _nakama_character_payload(character_id)
-	var ch: Dictionary = GameManager.active_character
-	payload["level"] = int(ch.get("level", 1))
-	payload["highest_sector"] = int(ch.get("highest_sector", 0))
-	var res: Dictionary = await NakamaManager.invoke_rpc(rpc_id, payload)
-	_release_nakama(op)
-
-	if not bool(res.get("success", false)):
-		var err := str(res.get("error", "%s failed" % rpc_id))
-		mission_error.emit(err)
-		return {
-			"ok": false,
-			"success": false,
-			"error": err,
-			"data": {},
-			"status_code": int(res.get("status_code", 0)),
-		}
-
-	var data: Variant = res.get("data", {})
-	if typeof(data) != TYPE_DICTIONARY:
-		return _fail_nakama("Malformed %s response" % rpc_id)
-
-	var board: Variant = (data as Dictionary).get("board", {})
-	if typeof(board) == TYPE_DICTIONARY:
-		nakama_board = (board as Dictionary).duplicate(true)
-		if is_refresh:
-			missions_refreshed.emit(nakama_board)
-		else:
-			missions_loaded.emit(nakama_board)
-
-	var active: Variant = (data as Dictionary).get("active", null)
-	if typeof(active) == TYPE_DICTIONARY:
-		nakama_active = (active as Dictionary).duplicate(true)
-		mission_status_changed.emit(nakama_active)
-	elif (data as Dictionary).has("active") and (data as Dictionary).get("active") == null:
-		nakama_active = {}
-
-	return {
-		"ok": true,
-		"success": true,
-		"error": "",
-		"data": data,
-		"status_code": int(res.get("status_code", 200)),
-	}
+func _nakama_board_rpc(rpc_id: String, _character_id: String, _is_refresh: bool) -> Dictionary:
+	return _fail_nakama(
+		"Nakama %s disabled — Node owns mission board/lifecycle" % rpc_id,
+		410
+	)
 
 
 func _nakama_character_payload(character_id: String = "") -> Dictionary:
 	var cid := character_id.strip_edges()
-	if cid.is_empty():
-		cid = str(GameManager.active_character.get("id", ""))
-	if cid.is_empty() and ProfileManager != null:
-		cid = str(ProfileManager.profile.get("selected_character_id", ""))
+	if cid.is_empty() and GameManager != null:
+		cid = GameManager.selected_character_id()
 	var payload: Dictionary = {}
 	if not cid.is_empty():
 		payload["character_id"] = cid
@@ -851,7 +627,7 @@ func _apply_nakama_active_to_local() -> void:
 	active_mission_changed.emit(active_mission)
 
 
-func _restore_active_mission_from_nakama() -> void:
+func _restore_active_mission_from_node() -> void:
 	await fetch_active_mission()
 
 
@@ -876,28 +652,19 @@ func _fail_nakama(error: String, status_code: int = 0) -> Dictionary:
 func _apply_character_payload(res: Dictionary) -> void:
 	if not res.ok:
 		return
-	if typeof(res.data) != TYPE_DICTIONARY:
-		return
-	var ch: Variant = res.data.get("character", null)
-	if typeof(ch) == TYPE_DICTIONARY and not ch.is_empty():
-		GameManager.apply_active_character(ch, "mission_node_action")
-		character_updated.emit(ch)
-		return
-	var patch: Variant = res.data.get("patch", null)
-	if typeof(patch) == TYPE_DICTIONARY and not patch.is_empty():
-		GameManager.apply_active_character_patch(patch, "mission_node_action")
+	var applied: Dictionary = GameApiClient.apply_authoritative_response(res.data, "mission_node_action")
+	if bool(applied.get("character_applied", false)) \
+		or bool(applied.get("patch_applied", false)) \
+		or bool(applied.get("wallet_applied", false)):
 		character_updated.emit(GameManager.active_character)
 
 
 func _apply_wallet_from_data(data: Variant, source: String) -> bool:
-	if CurrencyManager == null or typeof(data) != TYPE_DICTIONARY:
-		return false
-	var wallet_data: Variant = (data as Dictionary).get("wallet", null)
-	if typeof(wallet_data) != TYPE_DICTIONARY:
-		return false
-	if CurrencyManager.apply_authoritative_wallet(wallet_data, source):
+	var applied: Dictionary = GameApiClient.apply_authoritative_response(data, source)
+	if bool(applied.get("wallet_applied", false)):
 		character_updated.emit(GameManager.active_character)
-	return true
+		return true
+	return false
 
 
 ## Non-authoritative display cache only — never used to invent missions.

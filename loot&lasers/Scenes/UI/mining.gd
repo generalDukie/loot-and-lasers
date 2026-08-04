@@ -46,6 +46,7 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 
 func _boot() -> void:
 	await MissionManager.refresh_character()
+	await MiningManager.refresh_status()
 	_populate()
 	_tick = Timer.new()
 	_tick.wait_time = 1.0

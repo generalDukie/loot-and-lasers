@@ -32,6 +32,19 @@ import { createArenaRouter } from "./arena/index.js";
 import { createAuditRouter, auditAdminEntityWrite } from "./audit/index.js";
 import { migrateLegacyEntitlements } from "./entitlements/migrate.js";
 import { createWalletBridgeRouter } from "./walletBridge.js";
+import { normalizeFunctionBody, sendApiError } from "./apiResponse.js";
+import { assertWritesAllowed, getMaintenanceState } from "./shared/maintenanceGate.js";
+import { assertSchemaCompatible } from "./shared/migrationFramework.js";
+import {
+  requestContextMiddleware,
+  GetLiveness,
+  GetReadiness,
+  GetBuildInfoPublic,
+  CreateStructuredLogger,
+  incCounter,
+} from "./shared/observability/index.js";
+import "./shared/integrityStore.js";
+import "./shared/migrations/registerBuiltins.js";
 import "./entitlements/hooks.js";
 import "./rewards/store.js";
 import "./arena/store.js";
@@ -40,6 +53,47 @@ import "./audit/store.js";
 const PORT = Number(process.env.PORT || 8787);
 const IS_PROD = process.env.NODE_ENV === "production";
 const app = express();
+const bootLog = CreateStructuredLogger("boot");
+
+/** RPCs allowed during maintenance (reads + recovery). */
+const MAINTENANCE_ALLOWED_FUNCTIONS = new Set([
+  "GetRecoveryState",
+  "RecoverAmbiguousRequest",
+  "GetAccountPreferences",
+  "GetGameTime",
+  "GetNotifications",
+  "GetAchievements",
+  "GetCollections",
+  "GetSocialState",
+  "GetPublicProfile",
+  "GetInbox",
+  "GetMyGuild",
+  "GetPresenceMap",
+  "GetCharactersByIds",
+  "GetChatHistory",
+  "GetRuntimeConfig",
+  "GetOpsDashboard",
+  "GetOpsTelemetry",
+  "RecordClientAnalytics",
+  "LookupPlayer",
+  "InspectCharacter",
+  "RunIntegrityAudit",
+  "ApplyDataRepair",
+  "SetMaintenanceMode",
+  "RunMigration",
+  "SetFeatureFlag",
+  "UpdateRuntimeConfig",
+  "AdminModeration",
+]);
+
+function enforceMaintenanceWrites(req, res, next) {
+  try {
+    assertWritesAllowed(req.user);
+    next();
+  } catch (err) {
+    sendApiError(res, err, { fallbackMessage: "Maintenance in progress" });
+  }
+}
 
 if (process.env.TRUST_PROXY === "true") {
   app.set("trust proxy", 1);
@@ -52,10 +106,26 @@ if (IS_PROD && (!process.env.JWT_SECRET || process.env.JWT_SECRET === "lootandla
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
+app.use(requestContextMiddleware);
 app.use(authMiddleware);
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, app: "lootandlasers", appId: APP_ID });
+  // Backward-compatible alias → readiness (Docker / Godot clients)
+  const body = GetReadiness();
+  res.status(body.ok ? 200 : 503).json(body);
+});
+
+app.get("/health/live", (_req, res) => {
+  res.json(GetLiveness());
+});
+
+app.get("/health/ready", (_req, res) => {
+  const body = GetReadiness();
+  res.status(body.ok ? 200 : 503).json(body);
+});
+
+app.get("/health/build", (_req, res) => {
+  res.json(GetBuildInfoPublic());
 });
 
 app.use("/api/auth", createAuthRouter(express));
@@ -84,19 +154,31 @@ function requestFingerprint(value) {
   return createHash("sha256").update(stableJson(value)).digest("hex");
 }
 
+function readLimit(value, fallback = 100, max = 500) {
+  if (value == null || value === "") return fallback;
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1 || limit > max) {
+    const err = new Error(`limit must be an integer between 1 and ${max}`);
+    err.status = 422;
+    err.code = "INVALID_LIMIT";
+    throw err;
+  }
+  return limit;
+}
+
 app.get("/api/entities/:type", requireAuth, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
     const sort = req.query.sort || "-created_date";
-    const limit = req.query.limit != null ? Number(req.query.limit) : 100;
+    const limit = readLimit(req.query.limit);
     const scoped = scopeReadQuery(req.user, req.params.type, {});
     if (scoped && Object.keys(scoped).length > 0) {
       return res.json(store.filter(scoped, sort, limit));
     }
     res.json(store.list(sort, limit));
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not list entities" });
   }
 });
 
@@ -104,11 +186,12 @@ app.post("/api/entities/:type/filter", requireAuth, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
-    const { query = {}, sort = "-created_date", limit = 100 } = req.body || {};
+    const { query = {}, sort = "-created_date" } = req.body || {};
+    const limit = readLimit(req.body?.limit);
     const scoped = scopeReadQuery(req.user, req.params.type, query);
     res.json(store.filter(scoped, sort, limit));
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not filter entities" });
   }
 });
 
@@ -128,11 +211,11 @@ app.get("/api/entities/:type/:id", requireAuth, (req, res) => {
     assertCanRead(req.user, req.params.type, doc);
     res.json(doc);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not read entity" });
   }
 });
 
-app.post("/api/entities/:type", requireAuth, (req, res) => {
+app.post("/api/entities/:type", requireAuth, enforceMaintenanceWrites, (req, res) => {
   let transactionOpen = false;
   try {
     const store = getStore(req.params.type);
@@ -217,11 +300,11 @@ app.post("/api/entities/:type", requireAuth, (req, res) => {
     if (transactionOpen) {
       try { db.exec("ROLLBACK"); } catch { /* ignore rollback failure */ }
     }
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not create entity" });
   }
 });
 
-app.put("/api/entities/:type/:id", requireAuth, (req, res) => {
+app.put("/api/entities/:type/:id", requireAuth, enforceMaintenanceWrites, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
@@ -251,11 +334,11 @@ app.put("/api/entities/:type/:id", requireAuth, (req, res) => {
     }
     res.json(updated);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not update entity" });
   }
 });
 
-app.patch("/api/entities/:type/:id", requireAuth, (req, res) => {
+app.patch("/api/entities/:type/:id", requireAuth, enforceMaintenanceWrites, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
@@ -285,11 +368,11 @@ app.patch("/api/entities/:type/:id", requireAuth, (req, res) => {
     }
     res.json(updated);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not update entity" });
   }
 });
 
-app.delete("/api/entities/:type/:id", requireAuth, (req, res) => {
+app.delete("/api/entities/:type/:id", requireAuth, enforceMaintenanceWrites, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
@@ -313,11 +396,11 @@ app.delete("/api/entities/:type/:id", requireAuth, (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not delete entity" });
   }
 });
 
-app.post("/api/entities/:type/delete-many", requireAuth, (req, res) => {
+app.post("/api/entities/:type/delete-many", requireAuth, enforceMaintenanceWrites, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
@@ -350,11 +433,11 @@ app.post("/api/entities/:type/delete-many", requireAuth, (req, res) => {
     }
     res.json({ deleted });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not delete entities" });
   }
 });
 
-app.post("/api/entities/:type/update-many", requireAuth, (req, res) => {
+app.post("/api/entities/:type/update-many", requireAuth, enforceMaintenanceWrites, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
@@ -384,11 +467,11 @@ app.post("/api/entities/:type/update-many", requireAuth, (req, res) => {
     }
     res.json(updated);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not update entities" });
   }
 });
 
-app.post("/api/entities/:type/bulk", requireAuth, (req, res) => {
+app.post("/api/entities/:type/bulk", requireAuth, enforceMaintenanceWrites, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
@@ -403,20 +486,54 @@ app.post("/api/entities/:type/bulk", requireAuth, (req, res) => {
     });
     res.status(201).json(created);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendApiError(res, err, { fallbackMessage: "Could not create entities" });
   }
 });
 
 // ── Cloud functions ──────────────────────────────────────────
 app.post("/api/functions/:name", requireAuth, async (req, res) => {
+  const fnLog = CreateStructuredLogger("rpc");
+  const op = String(req.params.name || "unknown").slice(0, 64);
   try {
     const handler = FUNCTION_HANDLERS[req.params.name];
-    if (!handler) return res.status(404).json({ error: "Unknown function" });
+    if (!handler) {
+      incCounter("rpc_unknown_total", { operation: "unknown" });
+      return res.status(404).json({ error: "Unknown function", code: "NOT_FOUND" });
+    }
+    const maintenance = getMaintenanceState();
+    if (maintenance.enabled && !MAINTENANCE_ALLOWED_FUNCTIONS.has(req.params.name)) {
+      assertWritesAllowed(req.user);
+    }
+    const started = Date.now();
     const result = await handler(req.user, req.body || {});
-    res.status(result.status || 200).json(result.body);
+    const status = result.status || 200;
+    incCounter("rpc_requests_total", {
+      operation: op,
+      status_class: `${Math.floor(status / 100)}xx`,
+    });
+    if (status >= 500) {
+      fnLog.error("rpc_failed", {
+        request_id: req.requestId,
+        operation: op,
+        status,
+        duration_ms: Date.now() - started,
+        code: result.body?.code,
+      });
+    }
+    const body = normalizeFunctionBody(result.body, status);
+    if (body && typeof body === "object" && !Array.isArray(body) && req.requestId) {
+      body.request_id = body.request_id || req.requestId;
+    }
+    res.status(status).json(body);
   } catch (err) {
-    console.error(`[function ${req.params.name}]`, err);
-    res.status(500).json({ error: err.message });
+    incCounter("rpc_unexpected_errors_total", { operation: op });
+    fnLog.error("rpc_exception", {
+      request_id: req.requestId,
+      operation: op,
+      code: err?.code || "INTERNAL_ERROR",
+      error: String(err?.message || err),
+    });
+    sendApiError(res, err, { fallbackMessage: "Gameplay request failed" });
   }
 });
 
@@ -431,15 +548,18 @@ wss.on("connection", (ws, req) => {
   const token = url.searchParams.get("token") || null;
   const user = userFromWsToken(token);
   if (!user) {
+    incCounter("ws_auth_failures_total", { reason: "unauthorized" });
     ws.send(JSON.stringify({ type: "error", error: "Unauthorized" }));
     ws.close(4401, "Unauthorized");
     return;
   }
+  incCounter("ws_connections_total", { result: "ok" });
   addSubscriber(ws, { entityType, user });
   ws.send(JSON.stringify({ type: "connected", entity: entityType }));
 });
 
 server.listen(PORT, () => {
+  bootLog.info("api_listening", { port: PORT, static: !!servingStatic });
   console.log(`Loot & Lasers API listening on http://localhost:${PORT}`);
   console.log(`WebSocket: ws://localhost:${PORT}/ws`);
   if (servingStatic) console.log(`Serving client from ${resolveStaticDir()}`);
@@ -447,11 +567,18 @@ server.listen(PORT, () => {
     ensureDefaultSchedules();
     startScheduler({ intervalMs: Number(process.env.SCHEDULE_TICK_MS) || 15_000 });
   } catch (err) {
+    bootLog.error("scheduler_start_failed", { error: String(err?.message || err) });
     console.error("[scheduler] failed to start:", err);
   }
   migrateLegacyEntitlements()
     .then((r) => {
-      if (!r?.skipped) console.log("[entitlements] legacy migration:", r);
+      if (!r?.skipped) {
+        bootLog.info("entitlements_legacy_migration", {});
+        console.log("[entitlements] legacy migration:", r);
+      }
     })
-    .catch((err) => console.error("[entitlements] migration failed:", err));
+    .catch((err) => {
+      bootLog.error("entitlements_migration_failed", { error: String(err?.message || err) });
+      console.error("[entitlements] migration failed:", err);
+    });
 });

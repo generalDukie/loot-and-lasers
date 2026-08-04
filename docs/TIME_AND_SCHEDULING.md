@@ -65,9 +65,24 @@ Absolute UTC epoch windows of 6 hours (`getShopWindow`). Period id: `shop-rotati
 
 ## APIs
 
-- `GET /api/time/now` — serverTimeUtc, daily/weekly/shop period ids  
+- `GET /api/time/now` — serverTimeUtc, daily/weekly/shop period ids (via `getGameTime()`)
+- `GetGameTime` function — same payload for Godot/`GameApiClient.invoke`
 - `GET /api/time/zones` — known IANA list  
-- Admin ` /api/schedules/*` — list, preview, create, pause, resume, tick, audit  
+- Admin `/api/schedules/*` — list, preview, create, pause, resume, tick (`recoverMissedSchedules`), audit  
+
+## Shared façade (Restoration 21)
+
+`server/src/shared/schedulerService.js`:
+
+| API | Role |
+|-----|------|
+| `getGameTime()` | Authoritative clock + period payload |
+| `executeDailyReset()` | Midnight marker + registered hooks (no Character wipe) |
+| `executeWeeklyReset()` | Monday marker + hooks |
+| `recoverMissedSchedules()` | Alias of `tickScheduler()` catch-up |
+| `serializeCooldown()` | Display remaining_ms from absolute end |
+
+Daily/weekly **eligibility** remains claim-time (`todayET` / `getWeekKey`). See `docs/PHASE_SCHEDULER.md`.
 
 ## Worker
 
@@ -84,11 +99,14 @@ Tables auto-create in SQLite: `schedules`, `schedule_occurrences`, `schedule_aud
 
 `src/lib/gameTime.js` stores a server offset from `/api/time/now` (synced in `GameLayout`). Use `estimateServerNowMs()` for countdowns only. Never submit client “now” as completion proof.
 
+Godot: `ProgressManager.sync_server_time()` → `ms_until_daily_reset_display()`; `ArenaRules.ms_until_et_midnight()` prefers that sync.
+
 ## Adding a schedule
 
 1. Register a handler in `server/src/scheduling/handlers.js`  
-2. Create via admin Schedules tab or `createSchedule({ key, localTime, timeZoneId, recurrence, handlerKey, ... })`  
-3. Preview occurrences before enabling  
+2. Optionally `registerDailyHook` / `registerWeeklyHook` in `schedulerService.js` for period markers  
+3. Create via admin Schedules tab or `createSchedule({ key, localTime, timeZoneId, recurrence, handlerKey, ... })`  
+4. Preview occurrences before enabling  
 
 ## Time-zone database
 
@@ -98,6 +116,7 @@ Zone rules come from the Node/ICU `Intl` data bundled with the runtime. Upgrade 
 
 ```bash
 npm run test:time
+npm run test:scheduler
 ```
 
 ## Legacy notes
@@ -106,3 +125,4 @@ npm run test:time
 - Weekly keys previously used pure UTC ISO weeks; game systems now use ET Monday weeks  
 - No player trade system / feature-flag store in repo yet — `eventWindows.js` is ready for UTC windows when those land  
 - Crafting timers not present — use mission pattern (server start + absolute end) when added  
+- Casino daily limits and statistics daily warehouses were never implemented — do not invent via scheduler

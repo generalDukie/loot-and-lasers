@@ -1,5 +1,8 @@
 // ═══════════════════════════════════════════
-// DISCOVERY — species/artifacts/relics found in battle
+// DISCOVERY — presentation helpers only (Restoration 20).
+// Authoritative species/gear/artifact/relic persistence is Node-only
+// (mission claim / arena finish / dungeon finish / reward deliver).
+// Callers must use `.found` for toast UI — never write `.updates` to Character.
 // ═══════════════════════════════════════════
 import { ALIEN_SPECIES, ARTIFACTS, RELICS } from "@/lib/collectibles";
 import { gearCatalogKey } from "@/lib/gameData";

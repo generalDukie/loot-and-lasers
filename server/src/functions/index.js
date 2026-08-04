@@ -1,5 +1,98 @@
-import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, getStatPointsForLevelRange, randomItem } from "../shared/rewards.js";
-import { mergeAchievementUnlocks } from "../shared/achievements.js";
+import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, randomItem } from "../shared/rewards.js";
+import { grantCharacterXp, consumeProgression } from "../shared/characterProgression.js";
+import {
+  mergeAchievementUnlocks,
+  assertAchievementClientSafe,
+  serializeCharacterAchievements,
+  ACHIEVEMENTS,
+} from "../shared/achievements.js";
+import { serializeCollections } from "../shared/discovery.js";
+import { getCollectionPercentage } from "../shared/collectionBonus.js";
+import {
+  createNotification,
+  listNotifications,
+  getUnreadCounts,
+  markNotificationRead,
+  markAllNotificationsRead,
+  dismissNotification,
+  notifyAchievementsUnlocked,
+  CLIENT_CREATABLE_TYPES,
+  assertNotificationClientSafe,
+} from "../shared/notificationService.js";
+import {
+  serializePublicProfile,
+  searchCharacters,
+  getSocialState,
+  sendFriendRequest,
+  acceptFriendRequest,
+  declineFriendRequest,
+  removeFriend,
+  blockPlayer,
+  unblockPlayer,
+  setPresence,
+  getPresenceMap,
+  getCharactersByIds,
+} from "../shared/socialService.js";
+import {
+  listMail,
+  getUnreadMailCount,
+  getUnclaimedMailCount,
+  sendPlayerMail,
+  markMailRead,
+  deleteMail,
+  restoreMail,
+} from "../shared/mailService.js";
+import {
+  getMyGuildState,
+  joinGuild,
+  leaveGuild,
+  inviteToGuild,
+  acceptGuildInvite,
+  requestToJoinGuild,
+  acceptGuildRequest,
+  kickGuildMember,
+  ensureWeeklyChallenge,
+  contributeGuildMission,
+  contributeGuildArenaWin,
+  updateGuildSettings,
+  toggleGuildWarReady,
+  resolveGuildWar,
+  applyRivalGuildWarResult,
+} from "../shared/guildSocialService.js";
+import { deleteMyCharacter } from "../shared/characterLifecycleService.js";
+import {
+  getAccountPreferences,
+  saveAccountPreferences,
+  ACCOUNT_PREFERENCE_KEYS,
+  LOCAL_DEVICE_SETTING_KEYS,
+} from "../shared/preferencesService.js";
+import {
+  RunIntegrityAudit,
+  ApplyDataRepair,
+  ValidateAccountIntegrity,
+  ValidateCharacterIntegrity,
+  INTEGRITY_VALIDATOR_VERSION,
+} from "../shared/integrityService.js";
+import { RecoverAmbiguousRequest, GetPlayerRecoveryState } from "../shared/recoveryService.js";
+import { getMaintenanceState, setMaintenanceMode, assertWritesAllowed } from "../shared/maintenanceGate.js";
+import { RunMigration, listMigrations, assertSchemaCompatible } from "../shared/migrationFramework.js";
+import "../shared/migrations/registerBuiltins.js";
+import { isAdmin } from "../entityAccess.js";
+import {
+  LookupPlayer,
+  InspectCharacter,
+  GetOpsDashboard,
+  GetOpsTelemetry,
+  GetRuntimeConfiguration,
+  UpdateRuntimeConfiguration,
+  SetFeatureFlag,
+  listAdminPermissionsForUser,
+  AdminPermissions,
+  applyArenaModeration,
+} from "../shared/adminOpsService.js";
+import {
+  RecordAnalyticsEvent,
+} from "../shared/observability/index.js";
 import { createService, entities } from "../entities.js";
 import { db, nowIso, withTransactionAsync } from "../db.js";
 import { getUserById } from "../auth.js";
@@ -7,12 +100,13 @@ import { ECONOMY_HANDLERS } from "./economy.js";
 import { getInventoryCap, STARDUST_MAX } from "../shared/economyFormulas.js";
 import { countBagOccupancy } from "../shared/inventoryGrant.js";
 import { todayET, clock, TimeErrors } from "../shared/time/index.js";
+import { getGameTime } from "../shared/schedulerService.js";
 import {
   grantEntitlement,
   titleEntitlementKeyForAchievement,
   grantProductBundle,
 } from "../entitlements/index.js";
-import { ACHIEVEMENTS } from "../shared/achievements.js";
+import { resolveSelectedCharacter } from "../gameplayContext.js";
 import {
   ClaimKeys,
   executeRewardClaim,
@@ -32,12 +126,12 @@ import {
 
 const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
 
-/** Resolve the account-global selected Character; never fall back implicitly. */
-async function myCharacter(user) {
-  const activeId = user.active_character_id;
-  if (!activeId) return null;
-  const active = entities.Character.get(activeId);
-  return active?.created_by_id === user.id ? active : null;
+/**
+ * Resolve the account-global selected Character via shared gameplay context.
+ * Soft-null when nothing is selected (preserves prior 404 "No character" call sites).
+ */
+function myCharacter(user) {
+  return resolveSelectedCharacter(user, { required: false });
 }
 
 function svc(user) {
@@ -344,16 +438,42 @@ export async function RedeemPromoCode(user, body) {
   return { status: 200, body: { success: true, ...result } };
 }
 
+export async function GetGameTime(user, _body = {}) {
+  if (!user) return { status: 401, body: { error: "Unauthorized" } };
+  return {
+    status: 200,
+    body: {
+      success: true,
+      ...getGameTime(),
+    },
+  };
+}
+
 export async function SyncAchievements(user, body = {}) {
+  try {
+    assertAchievementClientSafe(body);
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
   const character = await myCharacter(user);
   if (!character) return { status: 404, body: { error: "No character" } };
 
+  // Retroactive evaluation from current Character statistics (idempotent).
   const { patch: achPatch, newly_unlocked } = mergeAchievementUnlocks(character);
   const patch = { ...achPatch };
   const titles = new Set(patch.unlocked_titles || character.unlocked_titles || []);
 
-  // Mirror new achievement titles into character-scoped entitlements.
-  for (const achId of newly_unlocked || []) {
+  // Mirror achievement titles into character-scoped entitlements (idempotent keys).
+  const toGrant = newly_unlocked?.length
+    ? newly_unlocked
+    : [];
+  // Also backfill titles for already-unlocked achievements when Sync runs.
+  const allIds = new Set([
+    ...(character.unlocked_achievements || []),
+    ...(patch.unlocked_achievements || []),
+    ...toGrant,
+  ]);
+  for (const achId of allIds) {
     const a = ACHIEVEMENTS.find((x) => x.id === achId);
     if (!a?.title || !character.created_by_id) continue;
     try {
@@ -385,6 +505,9 @@ export async function SyncAchievements(user, body = {}) {
   if (Object.keys(patch).length) {
     updated = entities.Character.update(character.id, patch);
   }
+  if (newly_unlocked?.length) {
+    notifyAchievementsUnlocked(updated.id, newly_unlocked);
+  }
 
   return {
     status: 200,
@@ -392,6 +515,148 @@ export async function SyncAchievements(user, body = {}) {
       success: true,
       character: updated,
       newly_unlocked,
+      achievements: serializeCharacterAchievements(updated),
+    },
+  };
+}
+
+export async function GetNotifications(user, body = {}) {
+  try {
+    assertNotificationClientSafe(body || {});
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
+  const character = await myCharacter(user);
+  if (!character) return { status: 404, body: { error: "No character" } };
+  const unreadOnly = !!body?.unread_only;
+  const notifications = listNotifications(character.id, {
+    unreadOnly,
+    limit: body?.limit,
+  });
+  return {
+    status: 200,
+    body: {
+      success: true,
+      notifications,
+      counts: getUnreadCounts(character.id),
+    },
+  };
+}
+
+export async function CreateNotification(user, body = {}) {
+  try {
+    assertNotificationClientSafe(body || {});
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
+  const character = await myCharacter(user);
+  if (!character) return { status: 404, body: { error: "No character" } };
+  const type = String(body.type || "system").toLowerCase();
+  if (!CLIENT_CREATABLE_TYPES.includes(type)) {
+    return {
+      status: 403,
+      body: { error: "Type not creatable by client", code: "NOTIFICATION_TYPE_FORBIDDEN" },
+    };
+  }
+  const ownerId = String(body.owner_id || "").trim();
+  if (!ownerId) {
+    return { status: 400, body: { error: "owner_id required" } };
+  }
+  // Reject forging achievement / reward unlocks via social create.
+  if (/achievement|unlocked|arena_defense|mining|mission/i.test(String(body.title || ""))) {
+    if (type === "system" && !body.related_id) {
+      /* allow generic system social messages */
+    }
+  }
+  try {
+    const result = createNotification({
+      owner_id: ownerId,
+      type,
+      title: body.title,
+      body: body.body,
+      related_id: body.related_id,
+      priority: body.priority || "normal",
+      idempotency_key: body.idempotency_key || body.request_id || null,
+    });
+    return { status: 200, body: { success: true, ...result } };
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
+}
+
+export async function MarkNotificationRead(user, body = {}) {
+  const character = await myCharacter(user);
+  if (!character) return { status: 404, body: { error: "No character" } };
+  try {
+    const notification = markNotificationRead(character.id, body?.id || body?.notification_id);
+    return {
+      status: 200,
+      body: { success: true, notification, counts: getUnreadCounts(character.id) },
+    };
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
+}
+
+export async function MarkAllNotificationsRead(user, _body = {}) {
+  const character = await myCharacter(user);
+  if (!character) return { status: 404, body: { error: "No character" } };
+  try {
+    const result = markAllNotificationsRead(character.id);
+    return { status: 200, body: { success: true, ...result } };
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
+}
+
+export async function DismissNotification(user, body = {}) {
+  const character = await myCharacter(user);
+  if (!character) return { status: 404, body: { error: "No character" } };
+  try {
+    const notification = dismissNotification(character.id, body?.id || body?.notification_id);
+    return {
+      status: 200,
+      body: { success: true, notification, counts: getUnreadCounts(character.id) },
+    };
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
+}
+
+/** Read-only achievement list (no mutation). */
+export async function GetAchievements(user, body = {}) {
+  try {
+    assertAchievementClientSafe(body || {});
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
+  const character = await myCharacter(user);
+  if (!character) return { status: 404, body: { error: "No character" } };
+  return {
+    status: 200,
+    body: {
+      success: true,
+      ...serializeCharacterAchievements(character),
+    },
+  };
+}
+
+/** Cosmic Vault collection ownership summary. */
+export async function GetCollections(user, body = {}) {
+  try {
+    assertAchievementClientSafe(body || {});
+  } catch (err) {
+    return { status: err.status || 400, body: { error: err.message, code: err.code } };
+  }
+  const character = await myCharacter(user);
+  if (!character) return { status: 404, body: { error: "No character" } };
+  const gearTotal = Math.max(0, Math.floor(Number(body?.gear_total) || 0));
+  return {
+    status: 200,
+    body: {
+      success: true,
+      percentage: getCollectionPercentage(character, gearTotal),
+      ...serializeCollections(character, { gearTotal }),
     },
   };
 }
@@ -510,13 +775,14 @@ export async function SendMessage(user, body) {
       read_by_recipient: false,
     });
 
-    entities.AppNotification.create({
+    createNotification({
       owner_id: recipientId,
       type: "private_message",
       title: character.name,
       body: filtered.slice(0, 80),
       related_id: conversation.id,
-      read: false,
+      priority: "normal",
+      idempotency_key: `pm:${msg.id}`,
     });
 
     return { status: 200, body: { message: msg, conversation_id: conversation.id } };
@@ -1000,28 +1266,26 @@ async function adminModerationInner(user, body) {
       patch.arena_attempts_date = todayET();
     }
     if (deltas.experience != null && deltas.experience !== 0) {
-      let newExp = (ch.experience || 0) + Number(deltas.experience);
-      let newLevel = ch.level || 1;
-      let expToNext = ch.experience_to_next_level || expForLevel(newLevel);
-      const prevLevel = newLevel;
-      if (deltas.experience > 0) {
-        while (newExp >= expToNext) {
-          newExp -= expToNext;
-          newLevel++;
-          expToNext = expForLevel(newLevel);
-        }
-      } else {
-        newExp = Math.max(0, newExp);
+      const xpDelta = Number(deltas.experience);
+      if (!Number.isFinite(xpDelta)) {
+        return { status: 400, body: { error: "Invalid experience delta" } };
       }
-      const statPoints = getStatPointsForLevelRange(prevLevel, newLevel);
-      patch.experience = newExp;
-      patch.level = newLevel;
-      patch.experience_to_next_level = expToNext;
-      if (statPoints > 0) patch.unspent_stat_points = (ch.unspent_stat_points || 0) + statPoints;
+      if (xpDelta > 0) {
+        const granted = grantCharacterXp({
+          character: ch,
+          xpAmount: xpDelta,
+          source: "admin_currency_adjust",
+        });
+        Object.assign(patch, granted.patch);
+        if (granted.progression) patch.__progression = granted.progression;
+      } else {
+        patch.experience = Math.max(0, (ch.experience || 0) + Math.floor(xpDelta));
+      }
     }
     if (!Object.keys(patch).length) {
       return { status: 400, body: { error: "No currency deltas provided" } };
     }
+    const progression = consumeProgression(patch);
     const updated = entities.Character.update(character_id, patch);
     const corr = newCorrelationId();
     for (const key of ["stardust", "nova_crystals", "fuel"]) {
@@ -1059,7 +1323,7 @@ async function adminModerationInner(user, body) {
       changeSet: { deltas },
       correlationId: corr,
     });
-    return { status: 200, body: { success: true, character: updated, character_name: ch.name } };
+    return { status: 200, body: { success: true, character: updated, character_name: ch.name, progression } };
   }
 
   if (action === "reset_player") {
@@ -1172,29 +1436,869 @@ async function adminModerationInner(user, body) {
       active: true,
       redeemed_by: [],
     });
+    auditAdminModeration(user, "create_promo_code", {
+      targetType: "promo_code",
+      targetId: created.id,
+      reason: body.reason || "create_promo_code",
+      afterState: {
+        code: created.code,
+        active: created.active,
+        max_redemptions: created.max_redemptions,
+      },
+      changeSet: { rewards: Object.keys(created.rewards || {}) },
+    });
     return { status: 200, body: { success: true, promo_code: created } };
   }
 
   if (action === "delete_promo_code") {
+    const existing = entities.PromoCode.get(body.promo_code_id);
     entities.PromoCode.delete(body.promo_code_id);
+    auditAdminModeration(user, "delete_promo_code", {
+      targetType: "promo_code",
+      targetId: body.promo_code_id,
+      reason: body.reason || "delete_promo_code",
+      beforeState: existing
+        ? { code: existing.code, active: existing.active }
+        : null,
+      afterState: { deleted: true },
+    });
     return { status: 200, body: { success: true } };
   }
 
   if (action === "toggle_promo_code") {
+    const existing = entities.PromoCode.get(body.promo_code_id);
     const updated = entities.PromoCode.update(body.promo_code_id, { active: body.active });
+    auditAdminModeration(user, "toggle_promo_code", {
+      targetType: "promo_code",
+      targetId: body.promo_code_id,
+      reason: body.reason || "toggle_promo_code",
+      beforeState: existing ? { active: existing.active } : null,
+      afterState: { active: !!body.active },
+    });
     return { status: 200, body: { success: true, promo_code: updated } };
+  }
+
+  if (
+    action === "arena_ban" ||
+    action === "arena_unban" ||
+    action === "arena_suspend" ||
+    action === "arena_unsuspend" ||
+    action === "suspend" ||
+    action === "unsuspend"
+  ) {
+    const { character_id, reason, hours } = body;
+    if (!reason) return { status: 400, body: { error: "reason required" } };
+    if (!character_id) return { status: 400, body: { error: "character_id required" } };
+
+    let arenaBanned = null;
+    let arenaSuspended = null;
+    let suspendedUntil = undefined;
+
+    if (action === "arena_ban") arenaBanned = true;
+    if (action === "arena_unban") {
+      arenaBanned = false;
+      arenaSuspended = false;
+      suspendedUntil = null;
+    }
+    if (action === "arena_suspend" || action === "suspend") {
+      arenaSuspended = true;
+      const h = Math.max(1, Number(hours) || 24);
+      suspendedUntil = new Date(Date.now() + h * 3600000).toISOString();
+    }
+    if (action === "arena_unsuspend" || action === "unsuspend") {
+      arenaSuspended = false;
+      suspendedUntil = null;
+    }
+
+    const out = applyArenaModeration(user, {
+      characterId: character_id,
+      arenaBanned,
+      arenaSuspended,
+      suspendedUntil,
+      reason,
+    });
+    return { status: 200, body: { success: true, moderation: out.moderation } };
   }
 
   return { status: 400, body: { error: "Unknown action" } };
 }
+
+// ── Social / profiles / mail / guild membership (Restoration 23) ──
+
+function socialOk(body) {
+  return { status: 200, body };
+}
+
+function socialCatch(err) {
+  if (err?.status) return { status: err.status, body: { error: err.message, code: err.code } };
+  throw err;
+}
+
+export async function GetPublicProfile(user, body = {}) {
+  try {
+    if (!user) return { status: 401, body: { error: "Unauthorized" } };
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const targetId = String(body.character_id || body.id || "").trim();
+    if (!targetId) return { status: 400, body: { error: "character_id required" } };
+    const profile = serializePublicProfile(targetId);
+    if (!profile) return { status: 404, body: { error: "Character not found" } };
+    return socialOk({ success: true, profile });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function SearchCharacters(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const results = searchCharacters(body.query || body.q || "", {
+      excludeId: character.id,
+      limit: body.limit,
+    });
+    return socialOk({ success: true, results });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetSocialState(user) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    return socialOk({ success: true, ...getSocialState(character.id) });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function SendFriendRequest(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = sendFriendRequest(character, body.to_character_id || body.character_id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function AcceptFriendRequest(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = acceptFriendRequest(character, body.request_id || body.id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function DeclineFriendRequest(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = declineFriendRequest(character, body.request_id || body.id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function RemoveFriend(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = removeFriend(character, body.character_id || body.friend_id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function BlockPlayer(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = blockPlayer(character, body.character_id || body.blocked_id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function UnblockPlayer(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = unblockPlayer(character, body.character_id || body.blocked_id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function SetPresence(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = setPresence(character, body.status || "online");
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetPresenceMap(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const ids = Array.isArray(body.character_ids) ? body.character_ids : [];
+    return socialOk({ success: true, presence: getPresenceMap(ids) });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetCharactersByIds(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const ids = Array.isArray(body.ids) ? body.ids : [];
+    return socialOk({ success: true, characters: getCharactersByIds(ids.slice(0, 50)) });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetChatHistory(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const channel = String(body.channel || "global").toLowerCase();
+    const lim = Math.max(1, Math.min(100, Number(body.limit) || 50));
+    if (channel === "global") {
+      const messages = entities.ChatMessage.list("-created_date", lim) || [];
+      return socialOk({ success: true, messages: messages.reverse() });
+    }
+    if (channel === "private") {
+      const conversationId = String(body.conversation_id || "").trim();
+      const recipientId = String(body.recipient_id || "").trim();
+      let convId = conversationId;
+      if (!convId && recipientId) {
+        const convs = entities.PrivateConversation.list(null, 10000) || [];
+        const found = convs.find((c) => {
+          const p = c.participant_ids || [];
+          return p.includes(character.id) && p.includes(recipientId);
+        });
+        convId = found?.id || "";
+      }
+      if (!convId) return socialOk({ success: true, messages: [], conversation_id: null });
+      const conv = entities.PrivateConversation.get(convId);
+      const parts = conv?.participant_ids || [];
+      if (!parts.includes(character.id)) {
+        return { status: 403, body: { error: "Not your conversation" } };
+      }
+      const messages =
+        entities.PrivateMessage.filter({ conversation_id: convId }, "-created_date", lim) || [];
+      return socialOk({
+        success: true,
+        conversation_id: convId,
+        messages: messages.reverse(),
+      });
+    }
+    return { status: 400, body: { error: "Unknown channel" } };
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetInbox(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const folder = body.folder || "inbox";
+    const mail = listMail(character.id, { folder, limit: body.limit });
+    return socialOk({
+      success: true,
+      mail,
+      unread_count: getUnreadMailCount(character.id),
+      unclaimed_count: getUnclaimedMailCount(character.id),
+    });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function SendMail(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = sendPlayerMail(
+      character,
+      body.to_character_id || body.to_id,
+      body.subject,
+      body.body,
+    );
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function MarkMailRead(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const mail = markMailRead(character.id, body.mail_id || body.id, body.read !== false);
+    return socialOk({ success: true, mail });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function DeleteMail(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const mail = deleteMail(character.id, body.mail_id || body.id);
+    return socialOk({ success: true, mail });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function RestoreMail(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const mail = restoreMail(character.id, body.mail_id || body.id);
+    return socialOk({ success: true, mail });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetMyGuild(user) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    return socialOk({ success: true, ...getMyGuildState(character.id) });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function JoinGuild(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = joinGuild(character, body.guild_id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function LeaveGuild(user) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = leaveGuild(character);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function InviteGuildMember(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = inviteToGuild(character, body.character_id || body.to_character_id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function AcceptGuildInvite(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = acceptGuildInvite(character, body.mail_id || body.id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function RequestJoinGuild(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = requestToJoinGuild(character, body.guild_id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function AcceptGuildRequest(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = acceptGuildRequest(
+      character,
+      body.guild_id,
+      body.character_id || body.from_id || body.requester_id,
+    );
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function KickGuildMember(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = kickGuildMember(character, body.character_id || body.target_id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function EnsureGuildChallenge(user) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = ensureWeeklyChallenge(character);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function ContributeGuildMission(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const mission = body.mission && typeof body.mission === "object" ? body.mission : {};
+    const gains = body.gains && typeof body.gains === "object" ? body.gains : {
+      stardust: body.stardust,
+      experience: body.experience ?? body.xp,
+    };
+    const out = contributeGuildMission(character, mission, gains);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function ContributeGuildArenaWin(user) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = contributeGuildArenaWin(character);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function UpdateGuildSettings(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const patch = body.settings && typeof body.settings === "object" ? body.settings : body;
+    const out = updateGuildSettings(character, patch);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function ToggleGuildWarReady(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = toggleGuildWarReady(character, body.war_id || body.id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function ResolveGuildWar(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = resolveGuildWar(character, body.war_id || body.id);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function ApplyRivalGuildWarResult(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const out = applyRivalGuildWarResult(character, body);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function MarkConversationRead(user, body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const conversationId = String(body.conversation_id || "").trim();
+    if (!conversationId) return { status: 400, body: { error: "conversation_id required" } };
+    const conv = entities.PrivateConversation.get(conversationId);
+    if (!conv || !(conv.participant_ids || []).includes(character.id)) {
+      return { status: 403, body: { error: "Not your conversation" } };
+    }
+    const msgs =
+      entities.PrivateMessage.filter(
+        { conversation_id: conversationId, recipient_id: character.id, read_by_recipient: false },
+        null,
+        200,
+      ) || [];
+    for (const m of msgs) {
+      entities.PrivateMessage.update(m.id, { read_by_recipient: true });
+    }
+    return socialOk({ success: true, marked: msgs.length });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function DeleteMyCharacter(user, body = {}) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    const out = deleteMyCharacter(user, body.character_id || body.id);
+    return socialOk(out);
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetAccountPreferences(user) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    const preferences = getAccountPreferences(user.id);
+    return socialOk({
+      success: true,
+      preferences,
+      synchronizable_keys: ACCOUNT_PREFERENCE_KEYS,
+      local_device_keys: LOCAL_DEVICE_SETTING_KEYS,
+    });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function SaveAccountPreferences(user, body = {}) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    const patch = body.preferences && typeof body.preferences === "object" ? body.preferences : body;
+    const preferences = saveAccountPreferences(user.id, patch);
+    return socialOk({ success: true, preferences });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+/** Player-safe: committed state lookup after lost response. Never mutates. */
+export async function RecoverAmbiguousRequestRpc(user, body = {}) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    const out = RecoverAmbiguousRequest(user.id, body || {});
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+/** Player-safe recovery presentation flags (maintenance / review / pending loot). */
+export async function GetRecoveryState(user) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    const character = await myCharacter(user);
+    const recovery = GetPlayerRecoveryState(user, character);
+    const maintenance = getMaintenanceState();
+    return socialOk({
+      success: true,
+      recovery,
+      maintenance: {
+        enabled: maintenance.enabled,
+        message: maintenance.message,
+      },
+      validator_version: INTEGRITY_VALIDATOR_VERSION,
+    });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+/** Admin / internal: scoped integrity audit. No public repair controls for players. */
+export async function RunIntegrityAuditRpc(user, body = {}) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    if (!isAdmin(user)) return { status: 403, body: { error: "Admin only", code: "FORBIDDEN" } };
+    const accountId = body.account_id || body.accountId || null;
+    const characterId = body.character_id || body.characterId || null;
+    if (!accountId && !characterId) {
+      return { status: 400, body: { error: "account_id or character_id required" } };
+    }
+    const report = RunIntegrityAudit({
+      accountId,
+      characterId,
+      quarantine: !!body.quarantine,
+      includeOrphans: !!body.include_orphans,
+      includeScheduler: !!body.include_scheduler,
+    });
+    return socialOk({ success: true, report });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+/** Admin: dry-run by default. Explicit apply=true required to mutate. */
+export async function ApplyDataRepairRpc(user, body = {}) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    if (!isAdmin(user)) return { status: 403, body: { error: "Admin only", code: "FORBIDDEN" } };
+    const dryRun = body.apply !== true;
+    const out = ApplyDataRepair({
+      repairType: body.repair_type || body.repairType,
+      characterId: body.character_id || body.characterId,
+      dryRun,
+      actor: `admin:${user.id}`,
+    });
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+/** Admin: set Node-enforced maintenance mode. */
+export async function SetMaintenanceModeRpc(user, body = {}) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    if (!isAdmin(user)) return { status: 403, body: { error: "Admin only", code: "FORBIDDEN" } };
+    const state = setMaintenanceMode({
+      enabled: !!body.enabled,
+      message: body.message || null,
+      allow_reads: body.allow_reads !== false,
+      allow_admin_writes: body.allow_admin_writes !== false,
+      operator: `admin:${user.id}`,
+    });
+    return socialOk({ success: true, maintenance: state });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+/** Admin: dry-run migration by default. */
+export async function RunMigrationRpc(user, body = {}) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    if (!isAdmin(user)) return { status: 403, body: { error: "Admin only", code: "FORBIDDEN" } };
+    const migrationId = body.migration_id || body.migrationId;
+    if (!migrationId) return { status: 400, body: { error: "migration_id required" } };
+    const dryRun = body.apply !== true;
+    const report = await RunMigration(migrationId, {
+      dryRun,
+      resume: !!body.resume,
+      operator: `admin:${user.id}`,
+      env: process.env.NODE_ENV || "development",
+    });
+    return socialOk({
+      success: true,
+      migrations_available: listMigrations().map((m) => ({
+        id: m.id,
+        description: m.description,
+        target_version: m.targetVersion,
+      })),
+      report,
+    });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function LookupPlayerRpc(user, body = {}) {
+  try {
+    const out = LookupPlayer(user, body);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function InspectCharacterRpc(user, body = {}) {
+  try {
+    const characterId = body.character_id || body.characterId || body.id;
+    const out = InspectCharacter(user, characterId);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetOpsDashboardRpc(user) {
+  try {
+    const dashboard = GetOpsDashboard(user);
+    return socialOk({
+      success: true,
+      dashboard,
+      permissions: listAdminPermissionsForUser(user),
+    });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function GetOpsTelemetryRpc(user) {
+  try {
+    const out = GetOpsTelemetry(user);
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+/**
+ * Client analytics ingest — untrusted, schema-validated, never authoritative.
+ * Does not grant rewards or progression.
+ */
+export async function RecordClientAnalytics(user, body = {}) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    const result = RecordAnalyticsEvent({
+      name: body.name || body.event,
+      properties: body.properties || {},
+      source: "godot_client",
+      consent: body.consent !== false,
+      opted_out: body.opted_out === true,
+    });
+    return socialOk({ success: true, ...result, authoritative: false });
+  } catch (err) {
+    // Analytics must never fail gameplay — return soft success
+    return socialOk({ success: true, accepted: false, reason: "isolated_failure", authoritative: false });
+  }
+}
+
+/** Any authenticated user may read runtime config (flags + maintenance display). */
+export async function GetRuntimeConfig(user) {
+  try {
+    if (!user?.id) return { status: 401, body: { error: "Unauthorized" } };
+    return socialOk({ success: true, ...GetRuntimeConfiguration() });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function SetFeatureFlagRpc(user, body = {}) {
+  try {
+    const out = SetFeatureFlag(user, {
+      flag: body.flag || body.key,
+      enabled: body.enabled,
+      reason: body.reason,
+    });
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+export async function UpdateRuntimeConfigRpc(user, body = {}) {
+  try {
+    const patch = body.patch && typeof body.patch === "object" ? body.patch : body;
+    const { reason, ...rest } = patch;
+    const out = UpdateRuntimeConfiguration(user, rest, body.reason || reason || "");
+    return socialOk({ success: true, ...out });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
+/** Internal helper used by tests — validate one account without admin gate when called directly. */
+export { ValidateAccountIntegrity, ValidateCharacterIntegrity, assertWritesAllowed, assertSchemaCompatible, AdminPermissions };
 
 export const FUNCTION_HANDLERS = {
   ClaimDailyLogin,
   ClaimMailReward,
   RedeemPromoCode,
   SyncAchievements,
+  GetAchievements,
+  GetCollections,
+  GetGameTime,
+  GetNotifications,
+  CreateNotification,
+  MarkNotificationRead,
+  MarkAllNotificationsRead,
+  DismissNotification,
   SendMessage,
   ResolveNexusAssault,
   AdminModeration,
+  GetPublicProfile,
+  SearchCharacters,
+  GetSocialState,
+  SendFriendRequest,
+  AcceptFriendRequest,
+  DeclineFriendRequest,
+  RemoveFriend,
+  BlockPlayer,
+  UnblockPlayer,
+  SetPresence,
+  GetPresenceMap,
+  GetCharactersByIds,
+  GetChatHistory,
+  MarkConversationRead,
+  GetInbox,
+  SendMail,
+  MarkMailRead,
+  DeleteMail,
+  RestoreMail,
+  GetMyGuild,
+  JoinGuild,
+  LeaveGuild,
+  InviteGuildMember,
+  AcceptGuildInvite,
+  RequestJoinGuild,
+  AcceptGuildRequest,
+  KickGuildMember,
+  EnsureGuildChallenge,
+  ContributeGuildMission,
+  ContributeGuildArenaWin,
+  UpdateGuildSettings,
+  ToggleGuildWarReady,
+  ResolveGuildWar,
+  ApplyRivalGuildWarResult,
+  DeleteMyCharacter,
+  GetAccountPreferences,
+  SaveAccountPreferences,
+  RecoverAmbiguousRequest: RecoverAmbiguousRequestRpc,
+  GetRecoveryState,
+  RunIntegrityAudit: RunIntegrityAuditRpc,
+  ApplyDataRepair: ApplyDataRepairRpc,
+  SetMaintenanceMode: SetMaintenanceModeRpc,
+  RunMigration: RunMigrationRpc,
+  LookupPlayer: LookupPlayerRpc,
+  InspectCharacter: InspectCharacterRpc,
+  GetOpsDashboard: GetOpsDashboardRpc,
+  GetOpsTelemetry: GetOpsTelemetryRpc,
+  RecordClientAnalytics,
+  GetRuntimeConfig,
+  SetFeatureFlag: SetFeatureFlagRpc,
+  UpdateRuntimeConfig: UpdateRuntimeConfigRpc,
   ...ECONOMY_HANDLERS,
 };

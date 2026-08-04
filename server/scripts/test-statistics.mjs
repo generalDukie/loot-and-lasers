@@ -1,0 +1,277 @@
+/**
+ * Statistics / leaderboard authority tests (Restoration 19).
+ * Run: npm run test:statistics
+ */
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { createHash } from "node:crypto";
+
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ll-stats-"));
+process.env.DB_PATH = path.join(tmpDir, "test-stats.db");
+
+const { db } = await import("../src/db.js");
+const { entities } = await import("../src/entities.js");
+const {
+  STATISTIC_DEFINITIONS,
+  LEADERBOARD_DEFINITIONS,
+  serializeCharacterStatistics,
+  serializePublicProfileStatistics,
+  serializeLeaderboardPage,
+  getNearbyArenaEntries,
+  sortedArenaCharacters,
+} = await import("../src/shared/statisticsService.js");
+const { computeArenaRank, listArenaLeaderboard } = await import("../src/shared/arenaService.js");
+const {
+  GetCharacterStatistics,
+  GetPublicProfileStatistics,
+  GetArenaLeaderboard,
+} = await import("../src/functions/economyFollowOn.js");
+
+let passed = 0;
+let failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    passed += 1;
+    console.log(`  ✓ ${name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`  ✗ ${name}`);
+    console.error(`    ${err.stack || err.message}`);
+  }
+}
+
+async function testAsync(name, fn) {
+  try {
+    await fn();
+    passed += 1;
+    console.log(`  ✓ ${name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`  ✗ ${name}`);
+    console.error(`    ${err.stack || err.message}`);
+  }
+}
+
+function hashPw(pw) {
+  return createHash("sha256").update(pw).digest("hex");
+}
+
+function insertUser(id, email) {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO users (id, email, password_hash, role, email_verified, created_date, updated_date)
+     VALUES (?, ?, ?, 'user', 1, ?, ?)`,
+  ).run(id, email, hashPw("x"), now, now);
+  return { id, email, role: "user", active_character_id: null };
+}
+
+function makeChar(ownerId, opts = {}) {
+  const ch = entities.Character.create({
+    name: opts.name || `C-${Math.random().toString(36).slice(2, 7)}`,
+    created_by_id: ownerId,
+    level: opts.level ?? 10,
+    class: opts.class || "vanguard",
+    race: opts.race || "human",
+    arena_rating: opts.arena_rating ?? 1000,
+    arena_wins: opts.arena_wins ?? 0,
+    arena_losses: opts.arena_losses ?? 0,
+    arena_battles: opts.arena_battles ?? 0,
+    arena_streak: opts.arena_streak ?? 0,
+    arena_max_streak: opts.arena_max_streak ?? 0,
+    missions_completed: opts.missions_completed ?? 0,
+    dungeon_clears: opts.dungeon_clears ?? 0,
+    highest_damage: opts.highest_damage ?? 0,
+    highest_sector: opts.highest_sector ?? 1,
+    total_stardust_earned: opts.total_stardust_earned ?? 0,
+    stardust: opts.stardust ?? 0,
+    ...opts.extra,
+  });
+  return ch;
+}
+
+console.log("\nStatistics / Leaderboards (Restoration 19)\n");
+
+test("statistic definition IDs are unique", () => {
+  const ids = STATISTIC_DEFINITIONS.map((d) => d.id);
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+test("statistic definitions have required fields", () => {
+  for (const d of STATISTIC_DEFINITIONS) {
+    assert.ok(d.id);
+    assert.ok(["character", "account"].includes(d.scope));
+    assert.ok(d.value_type);
+    assert.ok(d.op);
+    assert.ok(d.source);
+    assert.ok(d.period);
+  }
+});
+
+test("leaderboard definitions unique and arena_rating present", () => {
+  const ids = LEADERBOARD_DEFINITIONS.map((d) => d.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.includes("arena_rating"));
+  assert.equal(LEADERBOARD_DEFINITIONS[0].nakama_mirror, false);
+  assert.equal(LEADERBOARD_DEFINITIONS[0].sort, "desc");
+});
+
+test("serialize owner stats includes private earned + balance separately", () => {
+  const u = insertUser("u-own", "own@t.test");
+  const ch = makeChar(u.id, {
+    missions_completed: 7,
+    total_stardust_earned: 5000,
+    stardust: 200,
+    highest_damage: 999,
+    arena_max_streak: 4,
+  });
+  const s = serializeCharacterStatistics(ch, { includePrivate: true });
+  assert.equal(s.missions_completed, 7);
+  assert.equal(s.total_stardust_earned, 5000);
+  assert.equal(s.stardust, 200);
+  assert.notEqual(s.total_stardust_earned, s.stardust);
+  assert.equal(s.personal_records.highest_damage.value, 999);
+  assert.equal(s.personal_records.arena_max_streak.value, 4);
+});
+
+test("public profile stats omit currency", () => {
+  const u = insertUser("u-pub", "pub@t.test");
+  const ch = makeChar(u.id, { total_stardust_earned: 9000, stardust: 400 });
+  const s = serializePublicProfileStatistics(ch);
+  assert.equal(s.total_stardust_earned, undefined);
+  assert.equal(s.stardust, undefined);
+  assert.ok(s.missions_completed !== undefined);
+});
+
+test("arena rank ordering: rating then wins then id", () => {
+  const u = insertUser("u-rank", "rank@t.test");
+  const a = makeChar(u.id, { name: "A", arena_rating: 1200, arena_wins: 1 });
+  const b = makeChar(u.id, { name: "B", arena_rating: 1200, arena_wins: 5 });
+  const c = makeChar(u.id, { name: "C", arena_rating: 1500, arena_wins: 0 });
+  const sorted = sortedArenaCharacters().filter((x) =>
+    [a.id, b.id, c.id].includes(x.id),
+  );
+  assert.equal(sorted[0].id, c.id);
+  assert.equal(sorted[1].id, b.id);
+  assert.equal(sorted[2].id, a.id);
+  assert.equal(computeArenaRank(c.id), sortedArenaCharacters().findIndex((x) => x.id === c.id) + 1);
+});
+
+test("leaderboard pagination no overlap", () => {
+  const u = insertUser("u-page", "page@t.test");
+  for (let i = 0; i < 8; i++) {
+    makeChar(u.id, { name: `P${i}`, arena_rating: 1000 + i, arena_wins: i });
+  }
+  const p0 = serializeLeaderboardPage({ limit: 3, offset: 0 });
+  const p1 = serializeLeaderboardPage({ limit: 3, offset: 3 });
+  const ids0 = new Set(p0.rankings.map((r) => r.character_id));
+  for (const r of p1.rankings) {
+    assert.equal(ids0.has(r.character_id), false);
+  }
+  assert.equal(p0.rankings[0].rank, 1);
+  assert.equal(p1.rankings[0].rank, 4);
+  assert.ok(p0.rankings[0].id);
+});
+
+test("nearby includes self and correct rank", () => {
+  const u = insertUser("u-near", "near@t.test");
+  const chars = [];
+  for (let i = 0; i < 11; i++) {
+    chars.push(makeChar(u.id, { name: `N${i}`, arena_rating: 2000 - i * 10, arena_wins: 0 }));
+  }
+  const mid = chars[5];
+  const near = getNearbyArenaEntries(mid.id, { radius: 2 });
+  assert.ok(near.player_rank > 0);
+  assert.ok(near.entries.some((e) => e.is_self));
+  assert.ok(near.entries.length <= 5);
+  const self = near.entries.find((e) => e.is_self);
+  assert.equal(self.rank, near.player_rank);
+});
+
+test("tie group deterministic by character id", () => {
+  const u = insertUser("u-tie", "tie@t.test");
+  const x = makeChar(u.id, { name: "X", arena_rating: 1111, arena_wins: 3 });
+  const y = makeChar(u.id, { name: "Y", arena_rating: 1111, arena_wins: 3 });
+  const page = listArenaLeaderboard({ limit: 200, offset: 0 });
+  const pair = page.filter((r) => r.character_id === x.id || r.character_id === y.id);
+  assert.equal(pair.length, 2);
+  const expectedFirst = String(x.id).localeCompare(String(y.id)) < 0 ? x.id : y.id;
+  assert.equal(pair[0].character_id, expectedFirst);
+});
+
+await testAsync("GetCharacterStatistics returns owner counters", async () => {
+  const u = insertUser("u-gcs", "gcs@t.test");
+  const ch = makeChar(u.id, { missions_completed: 12, arena_wins: 3 });
+  db.prepare("UPDATE users SET active_character_id = ? WHERE id = ?").run(ch.id, u.id);
+  const user = { ...u, active_character_id: ch.id };
+  const res = await GetCharacterStatistics(user, {});
+  assert.equal(res.status, 200);
+  assert.equal(res.body.statistics.missions_completed, 12);
+  assert.equal(res.body.statistics.arena_wins, 3);
+});
+
+await testAsync("GetCharacterStatistics rejects client mutation keys", async () => {
+  const u = insertUser("u-mut", "mut@t.test");
+  const ch = makeChar(u.id, {});
+  db.prepare("UPDATE users SET active_character_id = ? WHERE id = ?").run(ch.id, u.id);
+  const user = { ...u, active_character_id: ch.id };
+  const res = await GetCharacterStatistics(user, { arena_wins: 9999 });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, "STAT_CLIENT_MUTATION");
+});
+
+await testAsync("GetPublicProfileStatistics hides stardust", async () => {
+  const u1 = insertUser("u-p1", "p1@t.test");
+  const u2 = insertUser("u-p2", "p2@t.test");
+  const viewer = makeChar(u1.id, {});
+  const target = makeChar(u2.id, { total_stardust_earned: 777, stardust: 50, missions_completed: 2 });
+  db.prepare("UPDATE users SET active_character_id = ? WHERE id = ?").run(viewer.id, u1.id);
+  const res = await GetPublicProfileStatistics(
+    { ...u1, active_character_id: viewer.id },
+    { character_id: target.id },
+  );
+  assert.equal(res.status, 200);
+  assert.equal(res.body.statistics.missions_completed, 2);
+  assert.equal(res.body.statistics.total_stardust_earned, undefined);
+  assert.equal(res.body.statistics.stardust, undefined);
+});
+
+await testAsync("GetArenaLeaderboard page + nearby + player_rank", async () => {
+  const u = insertUser("u-lb", "lb@t.test");
+  for (let i = 0; i < 5; i++) {
+    makeChar(u.id, { name: `L${i}`, arena_rating: 1300 + i * 20 });
+  }
+  const me = makeChar(u.id, { name: "Me", arena_rating: 1350, arena_wins: 2 });
+  db.prepare("UPDATE users SET active_character_id = ? WHERE id = ?").run(me.id, u.id);
+  const res = await GetArenaLeaderboard(
+    { ...u, active_character_id: me.id },
+    { limit: 50, offset: 0, nearby: true, nearby_radius: 3 },
+  );
+  assert.equal(res.status, 200);
+  assert.ok(Array.isArray(res.body.rankings));
+  assert.ok(res.body.player_rank >= 1);
+  assert.ok(res.body.nearby);
+  assert.ok(res.body.nearby.entries.some((e) => e.is_self));
+  assert.equal(res.body.leaderboard_id, "arena_rating");
+});
+
+await testAsync("client score/rank on leaderboard body is stripped not trusted", async () => {
+  const u = insertUser("u-forge", "forge@t.test");
+  const me = makeChar(u.id, { arena_rating: 1000 });
+  db.prepare("UPDATE users SET active_character_id = ? WHERE id = ?").run(me.id, u.id);
+  const res = await GetArenaLeaderboard(
+    { ...u, active_character_id: me.id },
+    { limit: 10, arena_rating: 99999, rank: 1 },
+  );
+  assert.equal(res.status, 200);
+  const selfRow = res.body.rankings.find((r) => r.character_id === me.id);
+  if (selfRow) {
+    assert.equal(selfRow.arena_rating, 1000);
+  }
+});
+
+console.log(`\n${passed} passed, ${failed} failed\n`);
+if (failed) process.exit(1);

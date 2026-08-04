@@ -4,12 +4,11 @@ import { trackNovaSpend } from "@/lib/novaTracker";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { getInstalledMods, getStatPointsForLevelRange } from "@/lib/gameData";
-import { simulateBattle } from "@/lib/arenaEngine";
 import { DUNGEON_PLANETS, getInfinitePlanet, getDungeonPlanetById, WORMHOLE_ID, getWormholePlanet } from "@/lib/dungeonData";
 import {
   DUNGEON_ENEMIES_PER_PLANET, DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST,
   DUNGEON_BATTLE_COOLDOWN_MS, DUNGEON_SKIP_COST, DUNGEON_WIN_COOLDOWN_MS, DUNGEON_LOSS_COOLDOWN_MS,
-  generateDungeonEnemy, computeDungeonRewards, isDungeonUnlockedByLevel, getDungeonUnlockLevel,
+  isDungeonUnlockedByLevel, getDungeonUnlockLevel,
 } from "@/lib/dungeonEngine";
 import { processDiscovery } from "@/lib/discovery";
 import { applyPendingLootFromResponse } from "@/lib/inventoryCap";
@@ -95,10 +94,15 @@ export default function GalaxyMapPage() {
   const paidContinue = freeLivesLeft <= 0;
   const realMods = character ? getInstalledMods(character).length : 0;
   const flavorMods = character?.ship_mods || [];
-  const cdMs = character?.dungeon_cooldown_ms ?? DUNGEON_BATTLE_COOLDOWN_MS;
-  const cooldownEnds = character?.dungeon_cooldown_at
-    ? new Date(character.dungeon_cooldown_at).getTime() + cdMs
+  const cdUntil = character?.dungeon_cooldown_until
+    ? new Date(character.dungeon_cooldown_until).getTime()
     : 0;
+  const cdMs = character?.dungeon_cooldown_ms ?? DUNGEON_BATTLE_COOLDOWN_MS;
+  const cooldownEnds = cdUntil > 0
+    ? cdUntil
+    : (character?.dungeon_cooldown_at
+      ? new Date(character.dungeon_cooldown_at).getTime() + cdMs
+      : 0);
   const cooldownActive = now < cooldownEnds;
 
   async function skipCooldown() {
@@ -148,16 +152,45 @@ export default function GalaxyMapPage() {
     }
 
     const fightPlanet = viewingWormhole ? getInfinitePlanet(infiniteDepth) : planet;
-    const enemy = generateDungeonEnemy(fightPlanet, fightIndex, character.level);
-    const battle = simulateBattle(character, enemy, equippedItems);
-    const rewards = computeDungeonRewards(fightPlanet, fightIndex, character.level, battle.winner === "player", { patrol, className: character.class });
-    setBattleState({ enemy, battle, rewards, enemyIndex: fightIndex, patrol, planet: viewingWormhole ? getWormholePlanet(infiniteDepth) : fightPlanet, viewingWormhole });
+    let prep;
+    try {
+      prep = await api.functions.invoke("PrepareDungeonCombat", {
+        planet_id: fightPlanet.id,
+        enemy_index: fightIndex,
+        patrol,
+        viewing_wormhole: viewingWormhole,
+      });
+    } catch (e) {
+      toast({ title: "Battle failed to start", description: e?.message || "Try again.", variant: "destructive" });
+      return;
+    }
+    const data = prep?.data || prep || {};
+    if (data.character) setCharacter((c) => ({ ...c, ...data.character }));
+    const enemy = data.enemy || {};
+    const battle = data.battle || {
+      winner: data.winner,
+      events: data.events || [],
+      playerMaxHp: data.playerMaxHp,
+      opponentMaxHp: data.opponentMaxHp,
+      initiativeFirstSide: data.opening_side,
+      playerEnd: data.playerEnd,
+      opponentEnd: data.opponentEnd,
+    };
+    setBattleState({
+      enemy,
+      battle,
+      rewards: null,
+      enemyIndex: data.enemy_index || fightIndex,
+      patrol,
+      planet: viewingWormhole ? getWormholePlanet(infiniteDepth) : fightPlanet,
+      viewingWormhole,
+      combat_id: data.combat_id,
+    });
   }
 
   async function finishBattle() {
-    const { enemy, battle, rewards, enemyIndex: fightIndex, patrol: wasPatrol, planet: fightPlanet, viewingWormhole: wasWormhole } = battleState;
+    const { enemy, battle, enemyIndex: fightIndex, patrol: wasPatrol, planet: fightPlanet, viewingWormhole: wasWormhole } = battleState;
     const won = battle.winner === "player";
-    const maxPlayerHit = Math.max(0, ...battle.events.filter((e) => e.attacker === "player" && e.damage).map((e) => e.damage));
     const prevLevel = character.level;
     let collectPct = 0;
     ({ percentage: collectPct } = getCollectionStats(character));
@@ -165,13 +198,11 @@ export default function GalaxyMapPage() {
     let res;
     try {
       res = await api.functions.invoke("FinishDungeonBattle", {
-        won,
         planet_id: fightPlanet.id,
         enemy_index: fightIndex,
         patrol: wasPatrol,
         viewing_wormhole: wasWormhole,
-        species_id: enemy.speciesId,
-        max_hit: maxPlayerHit,
+        combat_id: battleState.combat_id,
       });
     } catch (e) {
       toast({ title: "Could not settle dungeon fight", description: e?.message || "Try again.", variant: "destructive" });
@@ -181,11 +212,12 @@ export default function GalaxyMapPage() {
     }
     const update = res.patch || res.data?.patch || {};
     const fullChar = res.character || res.data?.character;
+    const dungeonMeta = res.dungeon || res.data?.dungeon || {};
     toastNewAchievements(res, toast);
     const serverRewards = res.rewards || res.data?.rewards || {};
     const boostedXp = won ? (serverRewards.experience || 0) : 0;
     const newLevel = (fullChar || update).level ?? character.level;
-    const unlockedShipMod = null;
+    const unlockedShipMod = res.ship_mod ?? res.data?.ship_mod ?? null;
     const items = res.items || res.data?.items || [];
     applyPendingLootFromResponse(res);
     const gearItem = items[0] || null;
@@ -201,30 +233,14 @@ export default function GalaxyMapPage() {
         : `Next fight costs ${DUNGEON_CONTINUE_COST} 💎.`;
     }
 
-    if (won) {
-      void api.entities.GalaxyNews.create({
-        message: wasPatrol
-          ? `🛰️ ${character.name} patrolled ${fightPlanet.name} and defeated ${enemy.name}.`
-          : rewards.isBoss
-          ? `👑 ${character.name} conquered ${fightPlanet.bossName}!`
-          : `⚔️ ${character.name} cleared enemy ${fightIndex} on ${fightPlanet.name}.`,
-        entry_type: "victory",
-        character_name: character.name,
-        character_id: character.id,
-      });
-    } else {
-      void api.entities.GalaxyNews.create({
-        message: `💀 ${character.name} fell to ${enemy.name} on ${fightPlanet.name}.`,
-        entry_type: "defeat",
-        character_name: character.name,
-        character_id: character.id,
-      });
-    }
+    const isBoss = !!(enemy.isBoss || enemy.boss || serverRewards.isBoss || fightIndex === DUNGEON_ENEMIES_PER_PLANET);
+
+    // Galaxy news is posted server-side by FinishDungeonBattle
 
     const { found: discFound } = processDiscovery(character, { win: won, speciesId: battleState.enemy.speciesId });
-    setCharacter((c) => ({ ...c, ...(fullChar || update) }));
+    setCharacter((c) => ({ ...c, ...(fullChar || update), ...dungeonMeta }));
     setBattleState(null);
-    if (!wasPatrol && won && rewards.isBoss) {
+    if (!wasPatrol && won && isBoss) {
       if (fightPlanet.id === DUNGEON_PLANETS.length) setSelectedPlanetId(WORMHOLE_ID);
       else if (!wasWormhole) setSelectedPlanetId(null);
     }
@@ -235,11 +251,11 @@ export default function GalaxyMapPage() {
       title: won
         ? (wasPatrol
             ? `Patrolled — defeated ${enemy.name}`
-            : (rewards.isBoss ? `Defeated ${enemy.name}` : `Cleared enemy ${fightIndex}`))
+            : (isBoss ? `Defeated ${enemy.name}` : `Cleared enemy ${fightIndex}`))
         : `Fell to ${enemy.name}`,
-      subtitle: `${fightPlanet.name}${rewards.isBoss ? " · Boss" : ""}${wasPatrol ? " · Patrol" : ""}`,
-      xp: boostedXp > 0 ? { base: serverRewards.base_experience || rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
-      stardust: won ? { total: serverRewards.stardust ?? rewards.stardust ?? 0 } : undefined,
+      subtitle: `${fightPlanet.name}${isBoss ? " · Boss" : ""}${wasPatrol ? " · Patrol" : ""}`,
+      xp: boostedXp > 0 ? { base: serverRewards.base_experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
+      stardust: won ? { total: serverRewards.stardust ?? 0 } : undefined,
       leveledUp: newLevel > prevLevel,
       prevLevel,
       newLevel,
@@ -295,6 +311,7 @@ export default function GalaxyMapPage() {
           fromLevel={levelUp.fromLevel}
           toLevel={levelUp.toLevel}
           character={character}
+          attributeAwards={levelUp.attributeAwards}
           onConfirm={() => setLevelUp(null)}
         />
       )}

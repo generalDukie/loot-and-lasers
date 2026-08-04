@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { getActiveCharacterId } from "@/lib/activeCharacter";
-import { pushNotification, emitLocalAlert } from "@/lib/notificationEngine";
+import { emitLocalAlert } from "@/lib/notificationEngine";
 
 const TOAST_LIMIT = 20;
 const TOAST_DURATION = 8000; // visible duration — paused while hovered
@@ -140,13 +140,7 @@ function toast({ ...props }) {
   if (characterId) {
     const title = props.title ? String(props.title) : "Alert";
     const body = props.description ? String(props.description) : undefined;
-    pushNotification({
-      owner_id: characterId,
-      type: "system",
-      title,
-      body,
-    }).catch(() => {});
-    // Immediate bell feedback without waiting on websocket debounce.
+    // Restoration 22: floating toasts are ephemeral — do not persist every toast.
     emitLocalAlert({ title, body });
   }
 

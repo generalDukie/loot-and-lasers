@@ -126,16 +126,19 @@ function staticChecks() {
   if (
     !/func equip_item\(item_id: String\)/.test(auth)
     || !/func unequip_item\(item_id: String\)/.test(auth)
-    || !/via=node_item_patch/.test(auth)
-    || !/Hero-listed Node items|Node Item compatibility/i.test(heroDocs)
+    || !/EquipItem/.test(auth)
+    || !/Hero-listed Node items|Node Item compatibility|EquipItem/i.test(heroDocs + auth)
   ) {
     fail("AuthManager Node Item compatibility path is missing or undocumented");
   } else pass("AuthManager Node Item compatibility path documented");
 
   const mgr = read("loot&lasers/Autoload/EquipmentManager.gd");
-  if (!mgr.includes("RPC_EQUIP") || !mgr.includes("equip_item")) {
-    fail("EquipmentManager missing mutation API");
-  } else pass("EquipmentManager mutation API present");
+  if (!/Nakama equipment RPCs blocked|equipment_equip is disabled/.test(mgr)) {
+    fail("EquipmentManager must refuse Nakama equipment mutations");
+  } else pass("EquipmentManager refuses Nakama equipment mutations");
+  if (!mgr.includes("node_items") || !mgr.includes("AuthManager.list_items")) {
+    fail("EquipmentManager must load from Node Items");
+  } else pass("EquipmentManager loads from Node Items");
 
   // UI must not write storage or call mutation RPCs directly
   let bad = null;
@@ -145,7 +148,7 @@ function staticChecks() {
       if (fs.statSync(full).isDirectory()) {
         if (name === "addons" || name === "Autoload") continue;
         scan(full);
-      } else if (name.endsWith(".gd") && (name.includes("inventory") || name.includes("stats"))) {
+      } else if (name.endsWith(".gd") && (name.includes("inventory") || name.includes("stats")) ) {
         const src = fs.readFileSync(full, "utf8");
         if (/invoke_rpc\(\s*["']equipment_equip/.test(src) || /storage_write/.test(src)) {
           bad = path.relative(ROOT, full);
@@ -155,7 +158,7 @@ function staticChecks() {
   }
   scan(path.join(ROOT, "loot&lasers", "Scenes"));
   if (bad) fail(`UI direct equipment mutation RPC: ${bad}`);
-  else pass("UI routes equip via EquipmentManager");
+  else pass("UI routes equip via AuthManager / EquipmentManager gate");
 
   if (/inventory_write|inventory_set|inventory_put/.test(eq) && /nk\.register_rpc.*inventory_write/.test(eq)) {
     fail("generic inventory write RPC introduced");

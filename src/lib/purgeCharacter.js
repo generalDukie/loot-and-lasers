@@ -1,46 +1,15 @@
 import { api } from "@/api/gameClient";
 
-// Best-effort delete of every record tied to a character. Each cleanup is
-// wrapped in its own try/catch so a single failing entity can't block the
-// rest of the purge (or the character deletion itself).
-//
-// GalaxyNews is keyed by character_id (and legacy character_name), so callers
-// should pass the name to fully clear a character's news footprint.
-export async function purgeCharacter(characterId, characterName) {
-  const byId = [
-    ["Item", { character_id: characterId }],
-    ["Mission", { character_id: characterId }],
-    ["Mail", { owner_id: characterId }],
-    ["AppNotification", { owner_id: characterId }],
-    ["GuildMember", { character_id: characterId }],
-    ["PlayerPresence", { character_id: characterId }],
-    ["DailyLogin", { character_id: characterId }],
-    ["ChatMessage", { sender_id: characterId }],
-    ["PrivateMessage", { sender_id: characterId }],
-    ["PrivateMessage", { recipient_id: characterId }],
-    ["FriendRequest", { from_character_id: characterId }],
-    ["FriendRequest", { to_character_id: characterId }],
-    ["Block", { blocker_id: characterId }],
-    ["Block", { blocked_id: characterId }],
-    ["Report", { reporter_id: characterId }],
-    ["Report", { reported_id: characterId }],
-  ];
-
-  for (const [entity, query] of byId) {
-    try {
-      await api.entities[entity].deleteMany(query);
-    } catch (e) {
-      // keep going — partial cleanup is better than none
-    }
-  }
-
-  // GalaxyNews references the character by id (preferred) and legacy name.
-  try {
-    await api.entities.GalaxyNews.deleteMany({ character_id: characterId });
-  } catch (e) { /* best-effort */ }
-  if (characterName) {
-    try {
-      await api.entities.GalaxyNews.deleteMany({ character_name: characterName });
-    } catch (e) { /* best-effort */ }
-  }
+/**
+ * Permanently delete a character and related rows via Node DeleteMyCharacter.
+ * Entity deleteMany is locked for social/mail/news — do not call those from the client.
+ */
+export async function purgeCharacter(characterId, _characterName) {
+  void _characterName;
+  const res = await api.functions.invoke("DeleteMyCharacter", {
+    character_id: characterId,
+  });
+  const data = res?.data || res || {};
+  if (data.error) throw new Error(data.error);
+  return data;
 }

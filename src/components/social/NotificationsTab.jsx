@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { api } from "@/api/gameClient";
-import { markRead, subscribeNotifications } from "@/lib/notificationEngine";
+import { markRead, markAllRead, listNotifications, subscribeNotifications } from "@/lib/notificationEngine";
 import { Bell, Users, MessageSquare, Mail, Gift, CheckCheck, Star } from "lucide-react";
 import NotificationActions from "@/components/social/NotificationActions";
 
@@ -13,6 +12,12 @@ export const TYPE_META = {
   daily: { label: "Daily Reward", icon: Gift, color: "#FFD700" },
   system: { label: "System", icon: Bell, color: "#FB7185" },
   stat_points: { label: "Attribute Points", icon: Star, color: "#22D3EE" },
+  achievement: { label: "Achievement", icon: Star, color: "#FFD700" },
+  arena_defense: { label: "Arena Defense", icon: Bell, color: "#EF4444" },
+  arena: { label: "Arena", icon: Bell, color: "#F97316" },
+  mining: { label: "Mining", icon: Gift, color: "#A3E635" },
+  mission: { label: "Mission", icon: Bell, color: "#38BDF8" },
+  dungeon: { label: "Dungeon", icon: Bell, color: "#A855F7" },
 };
 
 export function timeAgo(dateStr) {
@@ -31,7 +36,7 @@ export default function NotificationsTab({ myChar }) {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const all = await api.entities.AppNotification.filter({ owner_id: myChar.id }, "-created_date", 50);
+    const all = await listNotifications({ limit: 50 });
     setItems(all || []);
     setLoading(false);
   }, [myChar]);
@@ -49,10 +54,7 @@ export default function NotificationsTab({ myChar }) {
   }
 
   async function handleMarkAllRead() {
-    await api.entities.AppNotification.updateMany(
-      { owner_id: myChar.id, read: false },
-      { $set: { read: true } }
-    );
+    await markAllRead();
     await load();
   }
 

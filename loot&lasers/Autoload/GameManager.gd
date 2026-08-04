@@ -108,6 +108,15 @@ func apply_active_character_patch(patch: Dictionary, source: String = "manager")
 	active_character_changed.emit(active_character, source)
 
 
+## Live selected Character id: GameManager cache first, then Node account pointer.
+## Never use ProfileManager — that is Nakama metadata, not gameplay selection SoT.
+func selected_character_id() -> String:
+	var cid := str(active_character.get("id", "")).strip_edges()
+	if cid.is_empty() and AuthManager != null and typeof(AuthManager.user) == TYPE_DICTIONARY:
+		cid = str(AuthManager.user.get("active_character_id", "")).strip_edges()
+	return cid
+
+
 func clear_active_character(source: String = "logout") -> void:
 	active_character = {}
 	recent_loot_ids = PackedStringArray()
@@ -117,6 +126,8 @@ func clear_active_character(source: String = "logout") -> void:
 	combat_overlay_kind = "arena"
 	if CurrencyManager != null:
 		CurrencyManager.clear_local()
+	if CareerStatsManager != null:
+		CareerStatsManager.clear_local()
 	active_character_changed.emit(active_character, source)
 
 

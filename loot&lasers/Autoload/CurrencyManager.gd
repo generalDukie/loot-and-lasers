@@ -74,6 +74,11 @@ func format_balance(currency_id: String) -> String:
 	if currency_id == CURRENCY_FUEL:
 		var rounded := snappedf(float(value), 0.01)
 		return str(int(rounded)) if is_equal_approx(rounded, float(int(rounded))) else "%.2f" % rounded
+	if currency_id == CURRENCY_NOVA:
+		var half := snappedf(value, 0.5)
+		if is_equal_approx(half, float(int(half))):
+			return str(int(half))
+		return "%.1f" % half
 	return str(int(value))
 
 
@@ -171,7 +176,12 @@ func apply_character_snapshot(
 
 	var balances := _empty_balances()
 	for currency_id in CURRENCY_IDS:
-		balances[currency_id] = _normalize_balance(currency_id, character.get(currency_id, 0))
+		if currency_id == CURRENCY_NOVA:
+			balances[currency_id] = _normalize_balance(
+				currency_id, _nova_display_from_character(character)
+			)
+		else:
+			balances[currency_id] = _normalize_balance(currency_id, character.get(currency_id, 0))
 
 	if request_sequence <= 0:
 		request_sequence = next_request_sequence()
@@ -187,7 +197,7 @@ func apply_character_snapshot(
 	var changed: Array = []
 	for currency_id in CURRENCY_IDS:
 		var value_changed := not old_balances.has(currency_id)
-		if not value_changed and currency_id == CURRENCY_FUEL:
+		if not value_changed and (currency_id == CURRENCY_FUEL or currency_id == CURRENCY_NOVA):
 			value_changed = not is_equal_approx(
 				float(old_balances.get(currency_id, 0)),
 				float(balances[currency_id])
@@ -277,7 +287,21 @@ func _empty_balances() -> Dictionary:
 func _normalize_balance(currency_id: String, value: Variant) -> Variant:
 	if currency_id == CURRENCY_FUEL:
 		return maxf(0.0, snappedf(float(value), 0.01))
+	if currency_id == CURRENCY_NOVA:
+		# Display Nova may be .0 or .5 (server half-units serialized as display).
+		return maxf(0.0, snappedf(float(value), 0.5))
 	return maxi(0, int(value))
+
+
+## Convert Character.nova_crystals half-units → display when economy_nova_scale == 2.
+func _nova_display_from_character(character: Dictionary) -> float:
+	var raw := float(character.get(CURRENCY_NOVA, 0))
+	if int(character.get("economy_nova_scale", 1)) == 2:
+		return raw / 2.0
+	# Prefer explicit display field from economy responses.
+	if character.has("nova_display"):
+		return float(character.get("nova_display", 0))
+	return raw
 
 
 func _set_loading(value: bool) -> void:

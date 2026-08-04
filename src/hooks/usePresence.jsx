@@ -14,19 +14,7 @@ export function usePresence(character, status = "online") {
     async function ping() {
       if (!active) return;
       try {
-        const existing = await api.entities.PlayerPresence.filter({ character_id: character.id });
-        const now = new Date().toISOString();
-        if (existing[0]) {
-          await api.entities.PlayerPresence.update(existing[0].id, {
-            status: statusRef.current, last_seen_at: now,
-            character_name: character.name,
-          });
-        } else {
-          await api.entities.PlayerPresence.create({
-            character_id: character.id, character_name: character.name,
-            status: statusRef.current, last_seen_at: now,
-          });
-        }
+        await api.functions.invoke("SetPresence", { status: statusRef.current });
       } catch (_) { /* ignore */ }
     }
 
@@ -39,7 +27,9 @@ export function usePresence(character, status = "online") {
 // Determine display status from a presence record (online if seen < 90s ago).
 export function presenceStatus(presence) {
   if (!presence) return "offline";
-  const age = Date.now() - new Date(presence.last_seen_at).getTime();
-  if (age > 90000) return "offline";
-  return presence.status === "in_mission" ? "in_mission" : "online";
+  if (typeof presence.online === "boolean") return presence.online ? (presence.status || "online") : "offline";
+  if (!presence.last_seen_at) return "offline";
+  return Date.now() - new Date(presence.last_seen_at).getTime() < 90000
+    ? (presence.status || "online")
+    : "offline";
 }

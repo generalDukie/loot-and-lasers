@@ -90,67 +90,30 @@ export function weekEndDate() {
 // ── Weekly challenges ──
 
 export async function ensureWeeklyChallenge(guild) {
-  const weekKey = getWeekKey();
-  const existing = await api.entities.GuildChallenge.filter({ guild_id: guild.id, week_key: weekKey });
-  if (existing.length > 0) return existing[0];
-
-  const tierIdx = Math.min(CHALLENGE_TIERS.length - 1, Math.floor((guild.level || 1) / 3));
-  const tier = CHALLENGE_TIERS[tierIdx];
-  const goal = tier.baseGoal + (guild.member_count || 1) * 5;
-  return await api.entities.GuildChallenge.create({
-    guild_id: guild.id,
-    week_key: weekKey,
-    title: tier.title,
-    goal,
-    progress: 0,
-    status: "active",
-    reward_stardust: tier.stardust,
-    reward_guild_xp: tier.guildXp,
-    ends_at: weekEndDate(),
-  });
+  void guild;
+  const res = await api.functions.invoke("EnsureGuildChallenge", {});
+  const data = res?.data || res || {};
+  if (data.error) throw new Error(data.error);
+  return data.challenge;
 }
 
 export async function addChallengeProgress(guild, amount = 1) {
-  let challenges = await api.entities.GuildChallenge.filter({ guild_id: guild.id, status: "active" });
-  if (challenges.length === 0) {
-    challenges = [await ensureWeeklyChallenge(guild)];
-  }
-  const ch = challenges[0];
-  if (ch.status !== "active") return null;
-
-  const newProgress = (ch.progress || 0) + amount;
-  const completed = newProgress >= (ch.goal || 1);
-  if (completed) {
-    await api.entities.GuildChallenge.update(ch.id, { progress: ch.goal, status: "completed" });
-    await applyGuildXp(guild.id, ch.reward_guild_xp || 0);
-    return { challenge: { ...ch, progress: ch.goal, status: "completed" }, completed: true, reward_stardust: ch.reward_stardust || 0 };
-  }
-  await api.entities.GuildChallenge.update(ch.id, { progress: newProgress });
-  return { challenge: { ...ch, progress: newProgress }, completed: false };
+  void guild;
+  void amount;
+  // Progress is applied inside ContributeGuildMission / ContributeGuildArenaWin.
+  const challenge = await ensureWeeklyChallenge(guild);
+  return {
+    challenge,
+    completed: challenge?.status === "completed",
+    reward_stardust: 0,
+  };
 }
 
 export async function applyGuildXp(guildId, xpAmount) {
-  const g = await api.entities.Guild.get(guildId);
-  let exp = (g.experience || 0) + xpAmount;
-  let level = g.level || 1;
-  let expToNext = g.experience_to_next || 1000;
-  let leveled = false;
-  while (exp >= expToNext) {
-    exp -= expToNext;
-    level++;
-    expToNext = Math.floor(expToNext * 1.4);
-    leveled = true;
-  }
-  await api.entities.Guild.update(guildId, { experience: exp, level, experience_to_next: expToNext });
-  if (leveled) {
-    await api.entities.GuildLog.create({
-      guild_id: guildId,
-      entry_type: "levelup",
-      message: `reached Guild Level ${level}!`,
-      character_name: "Challenge System",
-    });
-  }
-  return { level, leveled };
+  void guildId;
+  void xpAmount;
+  // Guild XP is applied only by Node contribute / challenge RPCs.
+  return { level: null, leveled: false };
 }
 
 // ── Guild battles ──
@@ -221,68 +184,39 @@ export function computeGuildBattleRewards(playerGuild, rivalGuild, playerWon) {
 }
 
 export async function applyWarResult(guild, members, rival, simulation, character) {
+  void members;
   const playerWon = simulation.winner === "attacker";
-  const rewards = computeGuildBattleRewards(guild, rival, playerWon);
-
-  const g = await api.entities.Guild.get(guild.id);
-  let exp = (g.experience || 0) + rewards.guild_xp;
-  let level = g.level || 1;
-  let expToNext = g.experience_to_next || 1000;
-  let leveled = false;
-  while (exp >= expToNext) {
-    exp -= expToNext;
-    level++;
-    expToNext = Math.floor(expToNext * 1.4);
-    leveled = true;
-  }
-
-  await api.entities.Guild.update(guild.id, {
-    experience: exp,
-    level,
-    experience_to_next: expToNext,
-    war_wins: (g.war_wins || 0) + (playerWon ? 1 : 0),
-    war_losses: (g.war_losses || 0) + (playerWon ? 0 : 1),
+  const rivalRes = await api.functions.invoke("ApplyRivalGuildWarResult", {
+    won: playerWon,
+    rival_id: rival.id,
+    rival_name: rival.name,
+    rival_level: rival.level || 1,
+    atk_power: simulation.atkPower || 0,
+    def_power: simulation.defPower || 0,
+    events: simulation.events || [],
   });
+  const rivalData = rivalRes?.data || rivalRes || {};
+  if (rivalData.error) throw new Error(rivalData.error);
 
-  const fresh = await api.entities.Character.get(character.id);
   const payout = await api.functions.invoke("ApplyGuildWarResult", {
     won: playerWon,
-    reward_stardust: rewards.stardust,
   });
-  const patch = payout.patch || payout.data?.patch || {};
-  Object.assign(fresh, patch);
+  const payData = payout?.data || payout || {};
+  if (payData.error) throw new Error(payData.error);
+  const patch = payData.patch || {};
+  if (character && Object.keys(patch).length) {
+    Object.assign(character, patch);
+  }
 
-  await api.entities.GuildBattle.create({
-    attacker_guild_id: guild.id,
-    defender_guild_id: rival.id,
-    attacker_guild_name: guild.name,
-    defender_guild_name: rival.name,
-    attacker_guild_level: g.level,
-    defender_guild_level: rival.level,
-    attacker_power: simulation.atkPower,
-    defender_power: simulation.defPower,
-    winner_side: simulation.winner,
-    events: simulation.events,
-    reward_stardust: rewards.stardust,
-    reward_guild_xp: rewards.guild_xp,
-    initiated_by: character.name,
-  });
-
-  await api.entities.GuildLog.create({
-    guild_id: guild.id,
-    entry_type: "war",
-    message: playerWon ? `defeated ${rival.name} in a guild war` : `lost a guild war to ${rival.name}`,
-    character_name: character.name,
-    amount: rewards.stardust,
-  });
-
-  void api.entities.GalaxyNews.create({
-    message: playerWon ? `⚔️ ${guild.name} conquered ${rival.name} in a Guild War!` : `🛡️ ${rival.name} repelled ${guild.name}'s invasion.`,
-    entry_type: playerWon ? "victory" : "defeat",
-    character_name: guild.name,
-  });
-
-  return { playerWon, rewards, leveled, newLevel: level };
+  const rewards = rivalData.rewards || { stardust: 0, guild_xp: 0 };
+  const g = rivalData.guild || guild;
+  return {
+    playerWon,
+    rewards,
+    leveled: (g.level || 1) > (guild.level || 1),
+    newLevel: g.level || guild.level || 1,
+    character: payData.character || character,
+  };
 }
 
 // ═══════════════════════════════════════════
@@ -294,22 +228,14 @@ export async function applyWarResult(guild, members, rival, simulation, characte
 // ═══════════════════════════════════════════
 
 export async function declareGuildWar(attackerGuild, defenderGuild, character) {
-  const now = new Date();
-  const deadline = new Date(now.getTime() + GUILD_WAR_READY_HOURS * 3600 * 1000);
-  return await api.entities.GuildWar.create({
-    attacker_guild_id: attackerGuild.id,
-    attacker_guild_name: attackerGuild.name,
-    attacker_guild_tag: attackerGuild.tag || "",
+  void attackerGuild;
+  void character;
+  const res = await api.functions.invoke("DeclareGuildWar", {
     defender_guild_id: defenderGuild.id,
-    defender_guild_name: defenderGuild.name,
-    defender_guild_tag: defenderGuild.tag || "",
-    status: "readying",
-    declared_at: now.toISOString(),
-    ready_deadline: deadline.toISOString(),
-    initiated_by: character.name,
-    attacker_ready_count: 0,
-    defender_ready_count: 0,
   });
+  const data = res?.data || res || {};
+  if (data.error) throw new Error(data.error);
+  return data.war || data;
 }
 
 export async function listGuildWars(guildId) {
@@ -336,21 +262,12 @@ export function isWarReadyExpired(war, now = Date.now()) {
 }
 
 export async function toggleReady(war, character, membership) {
-  const side = war.attacker_guild_id === membership.guild_id ? "attacker" : "defender";
-  const existing = await api.entities.GuildWarReady.filter({ war_id: war.id, character_id: character.id });
-  if (existing.length > 0) {
-    await api.entities.GuildWarReady.delete(existing[0].id);
-    return { ready: false };
-  }
-  await api.entities.GuildWarReady.create({
-    war_id: war.id,
-    guild_id: membership.guild_id,
-    character_id: character.id,
-    character_name: character.name,
-    character_level: character.level || 1,
-    side,
-  });
-  return { ready: true };
+  void character;
+  void membership;
+  const res = await api.functions.invoke("ToggleGuildWarReady", { war_id: war.id });
+  const data = res?.data || res || {};
+  if (data.error) throw new Error(data.error);
+  return { ready: !!data.ready };
 }
 
 async function loadWarFighters(war, side) {
@@ -402,87 +319,19 @@ function computeWarRewards(totalFighters, winnerSide) {
 }
 
 export async function resolveGuildWar(war) {
+  if (war.status === "completed") return war;
   if (war.status !== "readying") return war;
   if (!isWarReadyExpired(war)) return war;
 
-  const attackers = await loadWarFighters(war, "attacker");
-  const defenders = await loadWarFighters(war, "defender");
-
-  let winnerSide, duels;
-  if (defenders.length === 0) {
-    winnerSide = "attacker";
-    duels = [];
-  } else if (attackers.length === 0) {
-    winnerSide = "defender";
-    duels = [];
-  } else {
-    const gauntlet = simulateGauntlet(
-      attackers.map((f) => ({ character: f.character, items: f.items })),
-      defenders.map((f) => ({ character: f.character, items: f.items }))
-    );
-    winnerSide = gauntlet.winner;
-    duels = gauntlet.duels;
-  }
-
-  const totalFighters = attackers.length + defenders.length;
-  const rewards = computeWarRewards(totalFighters, winnerSide);
-  const nowIso = new Date().toISOString();
-
-  await api.entities.GuildWar.update(war.id, {
-    status: "completed",
-    winner_side: winnerSide,
-    battle_log: duels,
-    resolved_at: nowIso,
-    attacker_ready_count: attackers.length,
-    defender_ready_count: defenders.length,
-    reward_stardust: rewards.stardust,
-    reward_guild_xp: rewards.guild_xp,
-  });
-
-  const winGuildId = winnerSide === "attacker" ? war.attacker_guild_id : war.defender_guild_id;
-  await applyGuildXp(winGuildId, rewards.guild_xp);
-
-  const [atkGuild, defGuild] = await Promise.all([
-    api.entities.Guild.get(war.attacker_guild_id),
-    api.entities.Guild.get(war.defender_guild_id),
-  ]);
-  await api.entities.Guild.update(war.attacker_guild_id, {
-    war_wins: (atkGuild.war_wins || 0) + (winnerSide === "attacker" ? 1 : 0),
-    war_losses: (atkGuild.war_losses || 0) + (winnerSide === "attacker" ? 0 : 1),
-  });
-  await api.entities.Guild.update(war.defender_guild_id, {
-    war_wins: (defGuild.war_wins || 0) + (winnerSide === "defender" ? 1 : 0),
-    war_losses: (defGuild.war_losses || 0) + (winnerSide === "defender" ? 0 : 1),
-  });
-
-  await api.entities.GuildLog.create({
-    guild_id: winGuildId,
-    entry_type: "war",
-    message:
-      winnerSide === "attacker"
-        ? `defeated ${war.defender_guild_name} in a guild war`
-        : `repelled ${war.attacker_guild_name}'s invasion`,
-    character_name: war.initiated_by,
-    amount: rewards.stardust,
-  });
-  void api.entities.GalaxyNews.create({
-    message:
-      winnerSide === "attacker"
-        ? `⚔️ ${war.attacker_guild_name} conquered ${war.defender_guild_name} in a Guild War!`
-        : `🛡️ ${war.defender_guild_name} repelled ${war.attacker_guild_name}'s invasion.`,
-    entry_type: winnerSide === "attacker" ? "victory" : "defeat",
-    character_name: war.attacker_guild_name,
-  });
-
-  return {
+  const res = await api.functions.invoke("ResolveGuildWar", { war_id: war.id });
+  const data = res?.data || res || {};
+  if (data.error) throw new Error(data.error);
+  return data.war || {
     ...war,
     status: "completed",
-    winner_side: winnerSide,
-    battle_log: duels,
-    resolved_at: nowIso,
-    reward_stardust: rewards.stardust,
-    reward_guild_xp: rewards.guild_xp,
-    attacker_ready_count: attackers.length,
-    defender_ready_count: defenders.length,
+    winner_side: data.winner_side,
+    battle_log: data.battle_log || [],
+    reward_stardust: data.rewards?.stardust,
+    reward_guild_xp: data.rewards?.guild_xp,
   };
 }

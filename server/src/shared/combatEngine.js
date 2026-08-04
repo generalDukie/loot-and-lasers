@@ -1,0 +1,29 @@
+/**
+ * Layer 2 / Restoration 08 — shared combat simulation.
+ * Authoritative source: src/lib/arenaEngine.js (+ classPassives + statEngine).
+ * Requires Node `@/` alias (server start / tests use register-src-alias).
+ */
+export {
+  simulateBattle,
+  buildFighter,
+  resolveNormalAttack,
+  resolveBasicHit,
+  applyHealing,
+} from "../../../src/lib/arenaEngine.js";
+
+export {
+  rollBasicAttackDamage,
+  calculateStrengthDamage,
+  calculateTechDamage,
+  calculateAgilityDamage,
+  mitigationForDamageType,
+  getMaxHP,
+  CRIT_MULT,
+  AGI_VARIANCE_MIN,
+  AGI_VARIANCE_MAX,
+  UNIVERSAL_VARIANCE_MIN,
+  UNIVERSAL_VARIANCE_MAX,
+  DAMAGE_BASE,
+  DAMAGE_COEFF,
+  DAMAGE_EXP,
+} from "./statEngine.js";

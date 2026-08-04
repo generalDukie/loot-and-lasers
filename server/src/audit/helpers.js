@@ -45,6 +45,15 @@ export function auditAdminModeration(user, moderationAction, detail = {}) {
     reset_player: "admin_player_reset",
     set_role: "account_role_changed",
     transfer_guild: "guild_leadership_transferred",
+    create_promo_code: "admin_player_edit",
+    delete_promo_code: "admin_player_edit",
+    toggle_promo_code: "admin_player_edit",
+    arena_ban: "player_banned",
+    arena_unban: "player_unbanned",
+    arena_suspend: "player_banned",
+    arena_unsuspend: "player_unbanned",
+    suspend: "player_banned",
+    unsuspend: "player_unbanned",
   };
   const action = map[moderationAction] || "admin_player_edit";
 

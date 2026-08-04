@@ -60,10 +60,24 @@ export default function SpaceMiningPage() {
   const remaining = mining ? endTime - now : 0;
   const complete = mining && remaining <= 0;
   const reward = mining ? character.mining_reward || 0 : computeMiningReward(character.level, hours);
-  // Derive total duration from reward: reward = level × 12 × hours, so hours = reward / (level × 12)
-  const totalDurationMs = mining ? ((reward / Math.max(1, (character.level || 1) * 12)) * 3600000) : 0;
-  const startTime = mining ? endTime - totalDurationMs : 0;
-  const progressPct = mining && totalDurationMs > 0 ? Math.min(100, Math.max(0, ((now - startTime) / totalDurationMs) * 100)) : 0;
+  // Prefer server-persisted start/hours (authoritative). Never reverse-engineer from stale level×12.
+  const persistedHours = Number(character.mining_hours) || 0;
+  const startFromServer = character.mining_start_time
+    ? new Date(character.mining_start_time).getTime()
+    : 0;
+  const totalDurationMs = mining
+    ? (persistedHours > 0
+      ? persistedHours * 3600000
+      : startFromServer > 0 && endTime > startFromServer
+        ? endTime - startFromServer
+        : Math.max(0, endTime - now) || 1)
+    : 0;
+  const startTime = mining
+    ? (startFromServer > 0 ? startFromServer : endTime - totalDurationMs)
+    : 0;
+  const progressPct = mining && totalDurationMs > 0
+    ? Math.min(100, Math.max(0, ((now - startTime) / totalDurationMs) * 100))
+    : 0;
 
   async function startMining() {
     if (character.active_mission_id && character.mission_end_time) {
@@ -74,7 +88,8 @@ export default function SpaceMiningPage() {
     try {
       const res = await api.functions.invoke("StartMining", { hours });
       const patch = res.patch || res.data?.patch || {};
-      setCharacter((c) => ({ ...c, ...patch }));
+      const mining = res.mining || res.data?.mining || {};
+      setCharacter((c) => ({ ...c, ...patch, ...mining }));
       toast({ title: "Mining started!", description: `Collect ${patch.mining_reward || 0} ${STARDUST_GLYPH} in ${hours}h.` });
     } catch (e) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -85,10 +100,12 @@ export default function SpaceMiningPage() {
   async function collectMining() {
     setBusy(true);
     try {
-      const res = await api.functions.invoke("CollectMining", {});
+      const requestId = `mine_collect_${character.id}_${Date.now()}`;
+      const res = await api.functions.invoke("CollectMining", { request_id: requestId });
       const patch = res.patch || res.data?.patch || {};
+      const mining = res.mining || res.data?.mining || {};
       const r = res.stardust_gained ?? res.data?.stardust_gained ?? 0;
-      setCharacter((c) => ({ ...c, ...patch }));
+      setCharacter((c) => ({ ...c, ...patch, ...mining }));
       toast({ title: "Node collected!", description: `+${r} ${STARDUST_GLYPH} stardust harvested.` });
     } catch (e) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -101,7 +118,8 @@ export default function SpaceMiningPage() {
     try {
       const res = await api.functions.invoke("CancelMining", {});
       const patch = res.patch || res.data?.patch || {};
-      setCharacter((c) => ({ ...c, ...patch }));
+      const mining = res.mining || res.data?.mining || {};
+      setCharacter((c) => ({ ...c, ...patch, ...mining }));
       toast({ title: "Mining aborted", description: "Drone recalled — no stardust recovered. Let it finish to collect the full yield." });
     } catch (e) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -187,7 +205,7 @@ export default function SpaceMiningPage() {
                 {reward} <StardustIcon className="w-3 h-3" glow={false} /> projected
               </span>
               <span className="text-[10px] text-muted-foreground">
-                ({character.level} × 12 × {hours}h)
+                (SPF × 0.03 × {hours * 60}m)
               </span>
             </div>
 

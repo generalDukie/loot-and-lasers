@@ -82,6 +82,7 @@ export default function MissionsPage() {
           fromLevel={levelUp.fromLevel}
           toLevel={levelUp.toLevel}
           character={character}
+          attributeAwards={levelUp.attributeAwards}
           onConfirm={() => setLevelUp(null)}
         />
       )}

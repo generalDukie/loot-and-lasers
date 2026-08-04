@@ -1,11 +1,17 @@
 import { api } from "@/api/gameClient";
+import { listNotifications, markRead } from "@/lib/notificationEngine";
 
 const GLOBAL_LIMIT = 50;
 
+function unwrap(res) {
+  return res?.data && typeof res.data === "object" ? { ...res, ...res.data } : res || {};
+}
+
 // ── Global Chat ──
 
-export function loadGlobal() {
-  return api.entities.ChatMessage.list("-created_date", GLOBAL_LIMIT);
+export async function loadGlobal() {
+  const res = unwrap(await api.functions.invoke("GetChatHistory", { channel: "global", limit: GLOBAL_LIMIT }));
+  return Array.isArray(res.messages) ? res.messages : [];
 }
 
 export function subscribeGlobal(callback) {
@@ -26,8 +32,15 @@ export async function getConversations(characterId) {
   return all.filter((c) => (c.participant_ids || []).includes(characterId));
 }
 
-export function getMessages(conversationId) {
-  return api.entities.PrivateMessage.filter({ conversation_id: conversationId }, "-created_date", 50);
+export async function getMessages(conversationId) {
+  const res = unwrap(
+    await api.functions.invoke("GetChatHistory", {
+      channel: "private",
+      conversation_id: conversationId,
+      limit: 50,
+    }),
+  );
+  return Array.isArray(res.messages) ? res.messages : [];
 }
 
 export function subscribePrivate(conversationId, callback) {
@@ -47,11 +60,10 @@ export async function sendPrivate(recipientId, content) {
 }
 
 export async function markConversationRead(conversationId, myCharId) {
-  await api.entities.PrivateMessage.updateMany(
-    { conversation_id: conversationId, recipient_id: myCharId, read_by_recipient: false },
-    { $set: { read_by_recipient: true } }
+  void myCharId;
+  await api.functions.invoke("MarkConversationRead", { conversation_id: conversationId });
+  const notifs = (await listNotifications({ unreadOnly: true, limit: 100 })).filter(
+    (n) => n.type === "private_message" && n.related_id === conversationId,
   );
-  // Clear related notifications
-  const notifs = await api.entities.AppNotification.filter({ owner_id: myCharId, type: "private_message", related_id: conversationId, read: false });
-  await Promise.all(notifs.map((n) => api.entities.AppNotification.update(n.id, { read: true })));
+  await Promise.all(notifs.map((n) => markRead(n.id).catch(() => {})));
 }

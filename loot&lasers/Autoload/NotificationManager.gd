@@ -1,5 +1,6 @@
 extends Node
-## AppNotification inbox — list, mark read, friend-request actions.
+## AppNotification inbox — Node GetNotifications / MarkRead (Restoration 22).
+## Presentation only: Godot never creates authoritative gameplay alerts.
 
 signal notifications_changed
 
@@ -30,15 +31,21 @@ func load_inbox() -> Array:
 		unread_count = 0
 		notifications_changed.emit()
 		return notifications
-	var res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/AppNotification/filter",
-		{"query": {"owner_id": cid}, "sort": "-created_date", "limit": 50}, true
-	)
-	notifications = res.data if res.ok and typeof(res.data) == TYPE_ARRAY else []
-	unread_count = 0
-	for n in notifications:
-		if typeof(n) == TYPE_DICTIONARY and not bool(n.get("read", false)):
-			unread_count += 1
+	var res: Dictionary = await GameApiClient.invoke("GetNotifications", {"limit": 50})
+	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+		var rows: Variant = res.data.get("notifications", [])
+		notifications = rows if typeof(rows) == TYPE_ARRAY else []
+		var counts: Variant = res.data.get("counts", {})
+		if typeof(counts) == TYPE_DICTIONARY and counts.has("total"):
+			unread_count = int(counts["total"])
+		else:
+			unread_count = 0
+			for n in notifications:
+				if typeof(n) == TYPE_DICTIONARY and not bool(n.get("read", false)):
+					unread_count += 1
+	else:
+		notifications = []
+		unread_count = 0
 	notifications_changed.emit()
 	return notifications
 
@@ -48,11 +55,19 @@ func refresh_unread() -> int:
 	if cid.is_empty():
 		unread_count = 0
 		return 0
-	var res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/AppNotification/filter",
-		{"query": {"owner_id": cid, "read": false}, "sort": "-created_date", "limit": 100}, true
-	)
-	unread_count = res.data.size() if res.ok and typeof(res.data) == TYPE_ARRAY else 0
+	var res: Dictionary = await GameApiClient.invoke("GetNotifications", {
+		"unread_only": true,
+		"limit": 100,
+	})
+	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+		var counts: Variant = res.data.get("counts", {})
+		if typeof(counts) == TYPE_DICTIONARY:
+			unread_count = int(counts.get("total", 0))
+		else:
+			var rows: Variant = res.data.get("notifications", [])
+			unread_count = rows.size() if typeof(rows) == TYPE_ARRAY else 0
+	else:
+		unread_count = 0
 	notifications_changed.emit()
 	return unread_count
 
@@ -60,10 +75,7 @@ func refresh_unread() -> int:
 func mark_read(notification_id: String) -> Dictionary:
 	if notification_id.is_empty():
 		return {"ok": false, "error": "Missing id"}
-	var res: Dictionary = await GameApiClient.request(
-		"PATCH", "/api/entities/AppNotification/%s" % notification_id.uri_encode(),
-		{"read": true}, true
-	)
+	var res: Dictionary = await GameApiClient.invoke("MarkNotificationRead", {"id": notification_id})
 	if res.ok:
 		await load_inbox()
 	return res
@@ -73,10 +85,16 @@ func mark_all_read() -> Dictionary:
 	var cid := char_id()
 	if cid.is_empty():
 		return {"ok": false, "error": "No character"}
-	var res: Dictionary = await GameApiClient.request(
-		"POST", "/api/entities/AppNotification/update-many",
-		{"query": {"owner_id": cid, "read": false}, "update": {"$set": {"read": true}}}, true
-	)
+	var res: Dictionary = await GameApiClient.invoke("MarkAllNotificationsRead", {})
+	if res.ok:
+		await load_inbox()
+	return res
+
+
+func dismiss(notification_id: String) -> Dictionary:
+	if notification_id.is_empty():
+		return {"ok": false, "error": "Missing id"}
+	var res: Dictionary = await GameApiClient.invoke("DismissNotification", {"id": notification_id})
 	if res.ok:
 		await load_inbox()
 	return res
@@ -114,13 +132,12 @@ func act_on(notification: Dictionary, accept: bool) -> Dictionary:
 		result = await SocialManager.accept_friend(request)
 		if result.ok:
 			var me := GameManager.active_character
-			await GameApiClient.request("POST", "/api/entities/AppNotification", {
+			await GameApiClient.invoke("CreateNotification", {
 				"owner_id": str(request.get("from_character_id", "")),
 				"type": "system",
 				"title": str(me.get("name", "")),
 				"body": "accepted your friend request",
-				"read": false,
-			}, true)
+			})
 	else:
 		result = await SocialManager.decline_friend(request)
 	await mark_read(nid)

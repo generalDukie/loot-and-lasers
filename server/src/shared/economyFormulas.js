@@ -8,6 +8,7 @@ import {
   getMissionStardustPerFuel,
   getStatPointsForLevelRange,
 } from "./rewards.js";
+import { grantCharacterXp } from "./characterProgression.js";
 import { XP_STARDUST_SCALE } from "./economyConstants.js";
 
 /** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
@@ -67,6 +68,7 @@ export {
   rollDungeonBossRarity,
   JunkSaleValue,
   GearSaleValue,
+  ArenaWinStardust,
   StardustPerFuel,
 };
 
@@ -183,14 +185,15 @@ export function clampStardust(amount) {
 }
 export const FUEL_CYCLE_MS = 24 * 60 * 60 * 1000;
 export const FUEL_PURCHASE_AMOUNT = 20;
-export const FUEL_PURCHASE_COST = 10;
+/** Finalized: 20 Fuel costs 20 Nova (flat). */
+export const FUEL_PURCHASE_COST = 20;
 export const FUEL_PURCHASE_MAX = 10;
 export const MISSION_MIN_FUEL = 0.25;
 
-export function checkFuelReset(character) {
+export function checkFuelReset(character, nowMs = clock.nowMs()) {
   const max = character.max_fuel || FUEL_MAX;
   const resetAt = character.fuel_reset_at ? new Date(character.fuel_reset_at) : null;
-  const now = Date.now();
+  const now = Number(nowMs) || clock.nowMs();
   const fuelVal = Number(character.fuel);
   const fuelMissing = character.fuel == null || !Number.isFinite(fuelVal);
   if (fuelMissing || !resetAt || now - resetAt.getTime() >= FUEL_CYCLE_MS) {
@@ -214,8 +217,8 @@ export function getFuelMountById(id) {
   return FUEL_MOUNTS.find((m) => m.id === id) || null;
 }
 
-export function getActiveFuelMounts(character) {
-  const now = Date.now();
+export function getActiveFuelMounts(character, nowMs = clock.nowMs()) {
+  const now = Number(nowMs) || clock.nowMs();
   return (character?.active_fuel_mounts || []).filter(
     (m) => new Date(m.expires_at).getTime() > now
   );
@@ -446,18 +449,41 @@ export function computeMissionJunkSellValue(missionStardustReward, rng = Math.ra
   return JunkSaleValue(missionStardustReward, rng);
 }
 
-export const SKIP_CRYSTALS_PER_MINUTE = 5;
+/**
+ * Mission skip Nova cost from original Fuel (Restoration 15).
+ * Half-units: MAX(1, CEILING(fuel × 0.20)) → display 0.5 / 1 / 1.5 / …
+ * Elapsed time does not reduce cost. Already-complete missions → 0.
+ *
+ * @deprecated SKIP_CRYSTALS_PER_MINUTE — superseded time-based skip.
+ */
+export const SKIP_CRYSTALS_PER_MINUTE = 5; // retained for audit/migration reference only
 
-export function skipCostFor(mission, nowMs = Date.now()) {
-  if (!mission || !mission.end_time) return 0;
-  const remainingMs = Math.max(0, new Date(mission.end_time).getTime() - nowMs);
-  if (remainingMs <= 0) return 0;
-  const remainingMinutes = remainingMs / 60000;
-  return Math.max(1, Math.ceil(remainingMinutes * SKIP_CRYSTALS_PER_MINUTE));
+export function skipCostFor(mission, _nowMs = clock.nowMs()) {
+  if (!mission) return 0;
+  // Naturally complete → no charge (caller should use completion path).
+  if (mission.end_time) {
+    const remainingMs = Math.max(0, new Date(mission.end_time).getTime() - (_nowMs || clock.nowMs()));
+    if (remainingMs <= 0) return 0;
+  }
+  const fuel =
+    typeof mission.fuel_cost === "number"
+      ? mission.fuel_cost
+      : typeof mission.original_fuel_cost === "number"
+        ? mission.original_fuel_cost
+        : 0;
+  // Lazy import avoided — inline half-unit formula (same as currencyService).
+  const half = Math.max(1, Math.ceil(Math.max(0, Number(fuel) || 0) * 0.2));
+  return half / 2; // display Nova (.0 or .5)
+}
+
+/** Skip cost in integer half-Nova units. */
+export function skipCostHalfUnits(mission, nowMs = clock.nowMs()) {
+  return Math.round(skipCostFor(mission, nowMs) * 2);
 }
 
 // ── Shop ─────────────────────────────────────────────────────
-export const SHOP_REFRESH_COST = 10;
+/** Finalized paid Gear Shop refresh. */
+export const SHOP_REFRESH_COST = 20;
 export const SHOP_SLOT_COUNT = 8;
 export const SHOP_GEAR_CHANCE = 0.8;
 export const SHOP_STIM_CHANCE = 0.2;
@@ -803,6 +829,64 @@ export const STIM_RARITY_RANK = { uncommon: 1, rare: 2, epic: 3 };
 
 const CONSUMABLE_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
 
+export const STIM_ATTRIBUTES = Object.freeze([...CONSUMABLE_STATS]);
+
+/**
+ * Authoritative Stim mechanics from rarity only — ignore client/item forged
+ * mult / duration_hours (except for resolving rarity via resolveStimRarity).
+ */
+export function getStimDefinition(rarityOrSource) {
+  const rarity =
+    typeof rarityOrSource === "string"
+      ? resolveStimRarity({ rarity: rarityOrSource })
+      : resolveStimRarity(rarityOrSource);
+  const tier = CONSUMABLE_TIERS[rarity];
+  if (!tier) return null;
+  return {
+    rarity,
+    mult: tier.mult,
+    bonus_percent: Math.round(tier.mult * 100),
+    duration_hours: tier.duration_hours,
+    max_duration_hours: tier.duration_hours * MAX_BUFF_STACKS,
+    base_duration_ms: tier.duration_hours * MS_PER_HOUR,
+    max_duration_ms: stimMaxDurationMs(tier.duration_hours),
+    label: tier.label,
+  };
+}
+
+export function serializeActiveStim(buff, nowMs = clock.nowMs()) {
+  if (!buff || typeof buff !== "object") return null;
+  const expires = new Date(buff.expires_at).getTime();
+  const remaining = Math.max(0, expires - (Number(nowMs) || clock.nowMs()));
+  const rarity = resolveStimRarity(buff);
+  const def = getStimDefinition(rarity);
+  return {
+    attribute: buff.stat,
+    stat: buff.stat,
+    rarity,
+    bonus_percent: Math.round(Number(buff.mult || def?.mult || 0) * 100),
+    mult: Number(buff.mult || def?.mult || 0),
+    name: buff.name || null,
+    activated_at: buff.activated_at || null,
+    expires_at: buff.expires_at,
+    remaining_ms: remaining,
+    remaining_hours: remaining / MS_PER_HOUR,
+    max_duration_hours: def?.max_duration_hours ?? null,
+    duration_hours: buff.duration_hours ?? def?.duration_hours ?? null,
+    stacks: buff.stacks ?? 1,
+    status: remaining > 0 ? "active" : "expired",
+  };
+}
+
+export function getActiveStims(character, nowMs = clock.nowMs()) {
+  const now = Number(nowMs) || clock.nowMs();
+  const source = character?.active_buffs || [];
+  return (source || [])
+    .filter((b) => b && new Date(b.expires_at).getTime() > now)
+    .map((b) => serializeActiveStim(b, now))
+    .filter(Boolean);
+}
+
 export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, tier]) =>
   CONSUMABLE_STATS.map((stat) => ({
     name: `${tier.label} ${stat.charAt(0).toUpperCase() + stat.slice(1)} Stim`,
@@ -921,7 +1005,7 @@ function makeStimBuff({ stat, mult, name, rarity, durationHours, stacks, expires
  * @param {array} [sourceBuffs]
  * @param {number} [nowMs]
  */
-export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Date.now()) {
+export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = clock.nowMs()) {
   if (!character || item?.type !== "consumable" || !item.consumable) {
     return { ok: false, reason: "Not a stim." };
   }
@@ -930,19 +1014,20 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
     return { ok: false, reason: "Open the Stim Trio bundle first." };
   }
 
-  const now = Number(nowMs) || Date.now();
-  const stat = item.consumable.stat;
-  if (!stat) return { ok: false, reason: "Not a stim." };
+  const now = Number(nowMs) || clock.nowMs();
+  const stat = String(item.consumable.stat || "").toLowerCase();
+  if (!CONSUMABLE_STATS.includes(stat)) {
+    return { ok: false, reason: "Invalid Stim attribute." };
+  }
 
   const rarity = resolveStimRarity(item);
-  const durationHours =
-    Number(item.consumable.duration_hours) ||
-    CONSUMABLE_TIERS[rarity]?.duration_hours ||
-    6;
-  const mult =
-    item.consumable.mult != null
-      ? Number(item.consumable.mult)
-      : CONSUMABLE_TIERS[rarity]?.mult ?? 0.05;
+  const tier = CONSUMABLE_TIERS[rarity];
+  if (!tier || STIM_RARITY_RANK[rarity] == null) {
+    return { ok: false, reason: "Invalid Stim rarity." };
+  }
+  // Authoritative mechanics — never trust item.consumable.mult / duration_hours.
+  const durationHours = tier.duration_hours;
+  const mult = tier.mult;
   const baseMs = durationHours * MS_PER_HOUR;
   const maxMs = baseMs * MAX_BUFF_STACKS;
   const refreshAt = maxMs - baseMs / 2;
@@ -1004,6 +1089,7 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
   }
 
   // Same rarity: duration stack / max-stack refresh (bonus never stacks).
+  // Always keep canonical tier mult (never inherit forged existing.mult).
   const remaining = Math.max(0, new Date(existing.expires_at).getTime() - now);
   let stacks = Number(existing.stacks);
   if (!Number.isFinite(stacks) || stacks < 1) {
@@ -1017,7 +1103,7 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
     }
     buffs[sameStatIdx] = makeStimBuff({
       stat,
-      mult: existing.mult ?? mult,
+      mult,
       name: item.name,
       rarity,
       durationHours,
@@ -1031,7 +1117,7 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
   const nextStacks = Math.min(MAX_BUFF_STACKS, stacks + 1);
   buffs[sameStatIdx] = makeStimBuff({
     stat,
-    mult: existing.mult ?? mult,
+    mult,
     name: item.name,
     rarity,
     durationHours,
@@ -1042,8 +1128,8 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
 }
 
 /** Pure helper — remove one active Stim effect by identity. */
-export function dismissActiveBuff(character, { stat, expires_at, name } = {}, nowMs = Date.now()) {
-  const now = Number(nowMs) || Date.now();
+export function dismissActiveBuff(character, { stat, expires_at, name } = {}, nowMs = clock.nowMs()) {
+  const now = Number(nowMs) || clock.nowMs();
   if (!stat) return { ok: false, reason: "Missing stat" };
   const source = character?.active_buffs || [];
   const next = source.filter((b) => {
@@ -1108,32 +1194,36 @@ export function rollItemRarity(chanceString, playerLevel = 1) {
   return RARITY_ORDER[idx];
 }
 
-/** Apply XP and level-ups onto a character patch (mutates patch in place). */
+/** Apply XP and level-ups onto a character patch (mutates patch in place).
+ * Returns the additive progression summary (also stored on patch.__progression).
+ */
 export function applyXpToCharacter(ch, xpGain, patch = {}) {
-  let newExp = (patch.experience ?? ch.experience ?? 0) + (xpGain || 0);
-  let newLevel = patch.level ?? ch.level ?? 1;
-  let expToNext = patch.experience_to_next_level ?? ch.experience_to_next_level ?? expForLevel(newLevel);
-  const prevLevel = newLevel;
-  while (newExp >= expToNext) {
-    newExp -= expToNext;
-    newLevel++;
-    expToNext = expForLevel(newLevel);
-  }
-  const statPoints = getStatPointsForLevelRange(prevLevel, newLevel);
-  patch.experience = newExp;
-  patch.level = newLevel;
-  patch.experience_to_next_level = expToNext;
-  if (statPoints > 0) {
-    patch.unspent_stat_points = (patch.unspent_stat_points ?? ch.unspent_stat_points ?? 0) + statPoints;
-  }
-  return patch;
+  const merged = {
+    ...ch,
+    experience: patch.experience ?? ch.experience,
+    level: patch.level ?? ch.level,
+    experience_to_next_level: patch.experience_to_next_level ?? ch.experience_to_next_level,
+    stats: patch.stats ?? ch.stats,
+    class: patch.class ?? ch.class,
+  };
+  const granted = grantCharacterXp({
+    character: merged,
+    xpAmount: xpGain,
+    source: "applyXpToCharacter",
+  });
+  Object.assign(patch, granted.patch);
+  patch.__progression = granted.progression;
+  return granted.progression;
 }
+
+export { consumeProgression } from "./characterProgression.js";
 
 export { getMissionXpPerFuel, getMissionStardustPerFuel, expForLevel };
 
 // ── Arena ────────────────────────────────────────────────────
 export const ARENA_DAILY_FREE_BATTLES = 10;
-export const ARENA_PAID_BATTLE_COST = 5;
+/** Finalized: additional Arena battle entitlement. */
+export const ARENA_PAID_BATTLE_COST = 15;
 export const ARENA_REFRESH_COST = 50 * XP_STARDUST_SCALE;
 export const ARENA_SKIP_COST = 1;
 export const ARENA_ELO_K = 28;
@@ -1195,7 +1285,8 @@ export function computeArenaRewards(player, opp, won, freeOrOpts = true) {
 export const DUNGEON_ENEMIES_PER_PLANET = 10;
 export const DUNGEON_DEATHS_PER_DAY = 3;
 export const DUNGEON_CONTINUE_COST = 5;
-export const DUNGEON_SKIP_COST = 10;
+/** Finalized: dungeon cooldown skip. */
+export const DUNGEON_SKIP_COST = 25;
 export const DUNGEON_WIN_COOLDOWN_MS = 10 * 60 * 1000;
 export const DUNGEON_LOSS_COOLDOWN_MS = 25 * 60 * 1000;
 export const DUNGEON_PATROL_REWARD_MULT = 0.4;

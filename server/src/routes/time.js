@@ -6,19 +6,12 @@ import { requireAuth } from "../auth.js";
 import { isAdmin } from "../entityAccess.js";
 import {
   clock,
-  todayET,
-  msUntilNextETMidnight,
-  dailyPeriodInfo,
-  weeklyPeriodId,
-  getWeekKey,
-  weekEndUtc,
   DEFAULT_GAME_ZONE,
-  zonedShortName,
   KNOWN_ZONES,
   isValidTimeZone,
   TimeErrors,
 } from "../shared/time/index.js";
-import { getShopWindow } from "../shared/economyFormulas.js";
+import { getGameTime, recoverMissedSchedules } from "../shared/schedulerService.js";
 import {
   listSchedules,
   getSchedule,
@@ -27,7 +20,6 @@ import {
   previewOccurrences,
   listAudit,
 } from "../scheduling/store.js";
-import { tickScheduler } from "../scheduling/worker.js";
 
 function adminOnly(req, res) {
   if (!isAdmin(req.user)) {
@@ -41,33 +33,12 @@ export function createTimeRouter(express) {
   const router = express.Router();
 
   /** Authoritative server time for client countdown sync. */
-  router.get("/now", requireAuth, (req, res) => {
-    const now = clock.now();
-    const daily = dailyPeriodInfo({ region: "na" });
-    const shop = getShopWindow(clock.nowMs());
+  router.get("/now", requireAuth, (_req, res) => {
+    const gt = getGameTime();
     res.json({
-      serverTimeUtc: clock.nowIso(),
+      ...gt,
       requestReceivedAtUtc: clock.nowIso(),
       responseGeneratedAtUtc: clock.nowIso(),
-      gameTimeZoneId: DEFAULT_GAME_ZONE,
-      gameTimeZoneLabel: zonedShortName(now, DEFAULT_GAME_ZONE),
-      dailyPeriodId: daily.periodId,
-      dailyPeriodKey: daily.periodKey,
-      nextDailyResetAtUtc: daily.nextResetAtUtc,
-      msUntilDailyReset: daily.remainingMs,
-      weeklyPeriodId: weeklyPeriodId({ region: "na" }),
-      weekKey: getWeekKey(),
-      weekEndsAtUtc: weekEndUtc().toISOString(),
-      shopWindow: {
-        idx: shop.idx,
-        startsAtUtc: new Date(shop.startsAt).toISOString(),
-        endsAtUtc: new Date(shop.endsAt).toISOString(),
-        secondsLeft: shop.secondsLeft,
-        rotationPeriodId: `shop-rotation:global:${shop.idx}`,
-      },
-      // legacy helpers for existing UI
-      todayET: todayET(),
-      msUntilNextETMidnight: msUntilNextETMidnight(),
     });
   });
 
@@ -136,8 +107,8 @@ export function createScheduleRouter(express) {
 
   router.post("/tick", requireAuth, async (req, res) => {
     if (!adminOnly(req, res)) return;
-    const result = await tickScheduler();
-    res.json(result);
+    const result = await recoverMissedSchedules();
+    res.json({ ok: true, ...result });
   });
 
   router.get("/:id", requireAuth, (req, res) => {

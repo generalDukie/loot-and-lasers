@@ -31,7 +31,7 @@ export const DUNGEON_EXTRA_LIFE_COST = DUNGEON_CONTINUE_COST;
 export const DUNGEON_BATTLE_COOLDOWN_MS = 30 * 60 * 1000;
 export const DUNGEON_WIN_COOLDOWN_MS = 10 * 60 * 1000; // shorter after a win
 export const DUNGEON_LOSS_COOLDOWN_MS = 25 * 60 * 1000; // longer after a loss
-export const DUNGEON_SKIP_COST = 10; // Nova crystals to skip the cooldown
+export const DUNGEON_SKIP_COST = 25; // Nova crystals to skip the cooldown
 /** Patrol (cleared-world) reward multiplier */
 export const DUNGEON_PATROL_REWARD_MULT = 0.4;
 /** Milestone chest every N node clears */

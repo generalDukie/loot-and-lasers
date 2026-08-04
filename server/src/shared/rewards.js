@@ -1,14 +1,15 @@
 import { getCollectionPercentage, applyXpBonus } from "./collectionBonus.js";
 import { mergeAchievementUnlocks } from "./achievements.js";
+import { mergeCollectionIds } from "./discovery.js";
 import {
   EQUIPMENT_SLOTS,
-  rollItemStats,
-  computeItemVendorValue,
+  GenerateGearItem,
 } from "./itemGeneration.js";
 import { XP_STARDUST_SCALE } from "./economyConstants.js";
 
 export { XP_STARDUST_SCALE };
 export { StardustPerFuel, StardustPerFuel as getMissionStardustPerFuel } from "./stardustEconomy.js";
+export { GenerateGearItem } from "./itemGeneration.js";
 
 /** Prefer live getInventoryCap from economyFormulas (wired below / via hooks). */
 function getInventoryCap(ch) {
@@ -39,29 +40,38 @@ function pick(arr, rng = Math.random) {
 }
 
 /**
- * Live loot / shop gear roller — budgeted attributes by level, slot, and rarity.
+ * Live loot / shop gear roller — wraps shared GenerateGearItem + naming.
  * Pass `className` (player class) so Common–Epic use the per-item 60/40 favored pool.
  * Legendary ignores class and stays fully class-neutral.
+ * generationContext is optional metadata (source id) and does not alter stats.
  */
-export function randomItem(rarity, level = 1, type, rng = Math.random, className) {
+export function randomItem(
+  rarity,
+  level = 1,
+  type,
+  rng = Math.random,
+  className,
+  generationContext = null,
+) {
   const itemLevel = Math.max(1, level || 1);
   const t = type && EQUIPMENT_SLOTS.includes(type)
     ? type
     : pick(EQUIPMENT_SLOTS, rng);
   const names = ITEM_NAMES[t] || ITEM_NAMES.weapon;
-  const { stats } = rollItemStats({ itemLevel, type: t, rarity, rng, className });
+  const base = GenerateGearItem({
+    itemLevel,
+    itemType: t,
+    rarity,
+    rng,
+    className,
+    generationContext,
+  });
   const baseName = pick(names, rng);
-  const item = {
+  return {
+    ...base,
     name: baseName,
     base_name: baseName,
-    type: t,
-    rarity,
-    level_requirement: itemLevel,
-    stats,
-    is_equipped: false,
   };
-  item.sell_value = computeItemVendorValue(item);
-  return item;
 }
 
 /** Bind randomItem to a player's class for shop stock / loot helpers. */
@@ -133,18 +143,19 @@ export function scaleXpReward(baseXp, level = 1) {
   return Math.max(base > 0 ? 1 : 0, Math.round(base * (rate / atOne)));
 }
 
-export function getStatPointsForLevel(_level) {
-  return 0;
-}
-
-export function getStatPointsForLevelRange(_fromLevel, _toLevel) {
-  return 0;
-}
+export {
+  getStatPointsForLevel,
+  getStatPointsForLevelRange,
+  LEVEL_UP_ATTRS_PER_LEVEL,
+} from "./characterProgression.js";
+import { grantCharacterXp } from "./characterProgression.js";
+import { createPendingLoot } from "../rewards/store.js";
 
 export async function applyCharacterRewards(gameService, characterId, rewards) {
   const ch = await gameService.asServiceRole.entities.Character.get(characterId);
   const patch = {};
   const items = [];
+  const pending_loot = [];
 
   if (rewards.stardust) {
     patch.stardust = (ch.stardust || 0) + rewards.stardust;
@@ -157,79 +168,86 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
     const collectPct = getCollectionPercentage(ch, allItems.length);
     const scaled = scaleXpReward(rewards.experience, ch.level || 1);
     const boostedXp = applyXpBonus(scaled, collectPct);
-    let newExp = (ch.experience || 0) + boostedXp;
-    let newLevel = ch.level || 1;
-    let expToNext = ch.experience_to_next_level || expForLevel(newLevel);
-    const prevLevel = newLevel;
-    while (newExp >= expToNext) {
-      newExp -= expToNext;
-      newLevel++;
-      expToNext = expForLevel(newLevel);
-    }
-    const statPoints = getStatPointsForLevelRange(prevLevel, newLevel);
-    patch.experience = newExp;
-    patch.level = newLevel;
-    patch.experience_to_next_level = expToNext;
-    if (statPoints > 0) patch.unspent_stat_points = (ch.unspent_stat_points || 0) + statPoints;
+    const granted = grantCharacterXp({
+      character: ch,
+      xpAmount: boostedXp,
+      source: "applyCharacterRewards",
+    });
+    Object.assign(patch, granted.patch);
+    if (granted.progression) patch.__progression = granted.progression;
   }
 
   if (rewards.item_rarity) {
+    const it = randomItem(rewards.item_rarity, ch.level || 1, undefined, Math.random, ch.class);
+    const payload = {
+      ...it,
+      owner_id: ch.created_by_id,
+      character_id: ch.id,
+      is_equipped: false,
+    };
     const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
     const bagCount = owned.filter((i) => !i.is_equipped).length;
     if (bagCount >= getInventoryCap(ch)) {
-      const comp = {
-        common: 8 * XP_STARDUST_SCALE,
-        uncommon: 20 * XP_STARDUST_SCALE,
-        rare: 50 * XP_STARDUST_SCALE,
-        epic: 120 * XP_STARDUST_SCALE,
-        legendary: 280 * XP_STARDUST_SCALE,
-      }[rewards.item_rarity] || (8 * XP_STARDUST_SCALE);
-      patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
-      patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
-    } else {
-      const it = randomItem(rewards.item_rarity, ch.level || 1, undefined, Math.random, ch.class);
-      const created = await gameService.asServiceRole.entities.Item.create({
-        ...it, owner_id: ch.created_by_id, character_id: ch.id,
+      const pl = createPendingLoot({
+        accountId: ch.created_by_id,
+        characterId: ch.id,
+        item: payload,
       });
+      pending_loot.push({ id: pl.id, item: pl.item });
+    } else {
+      const created = await gameService.asServiceRole.entities.Item.create(payload);
       items.push(created);
     }
   }
   if (rewards.collectible) {
     const c = rewards.collectible;
     if (c.type === "consumable") {
+      const payload = {
+        name: c.name,
+        type: "consumable",
+        rarity: c.rarity || "uncommon",
+        level_requirement: 1,
+        stats: {},
+        consumable: c.consumable,
+        flavor_text: c.flavor_text || "Granted via promo code.",
+        sell_value: c.sell_value || (25 * XP_STARDUST_SCALE),
+        is_equipped: false,
+        owner_id: ch.created_by_id,
+        character_id: ch.id,
+      };
       const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
       const bagCount = owned.filter((i) => !i.is_equipped).length;
       if (bagCount >= getInventoryCap(ch)) {
-        const comp = c.sell_value || (25 * XP_STARDUST_SCALE);
-        patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + comp;
-        patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + comp;
-      } else {
-        const created = await gameService.asServiceRole.entities.Item.create({
-          name: c.name,
-          type: "consumable",
-          rarity: c.rarity || "uncommon",
-          level_requirement: 1,
-          stats: {},
-          consumable: c.consumable,
-          flavor_text: c.flavor_text || "Granted via promo code.",
-          sell_value: c.sell_value || (25 * XP_STARDUST_SCALE),
-          is_equipped: false,
-          owner_id: ch.created_by_id,
-          character_id: ch.id,
+        const pl = createPendingLoot({
+          accountId: ch.created_by_id,
+          characterId: ch.id,
+          item: payload,
         });
+        pending_loot.push({ id: pl.id, item: pl.item });
+      } else {
+        const created = await gameService.asServiceRole.entities.Item.create(payload);
         items.push(created);
       }
     }
-    if (c.kind === "species" && c.id) patch.discovered_species = [...(ch.discovered_species || []), c.id];
-    if (c.kind === "artifact" && c.id) patch.collected_artifacts = [...(ch.collected_artifacts || []), c.id];
-    if (c.kind === "relic" && c.id) patch.collected_relics = [...(ch.collected_relics || []), c.id];
+    if (c.kind === "species" && c.id) {
+      mergeCollectionIds(ch, patch, "discovered_species", [c.id]);
+    }
+    if (c.kind === "artifact" && c.id) {
+      mergeCollectionIds(ch, patch, "collected_artifacts", [c.id]);
+    }
+    if (c.kind === "relic" && c.id) {
+      mergeCollectionIds(ch, patch, "collected_relics", [c.id]);
+    }
   }
 
   const ach = mergeAchievementUnlocks(ch, patch);
   Object.assign(patch, ach.patch);
 
+  const progression = patch.__progression || null;
+  delete patch.__progression;
+
   await gameService.asServiceRole.entities.Character.update(characterId, patch);
-  return { patch, items, newly_unlocked: ach.newly_unlocked };
+  return { patch, items, pending_loot, newly_unlocked: ach.newly_unlocked, progression };
 }
 
 export const DAILY_REWARDS = [
@@ -255,7 +273,7 @@ export const DAILY_REWARDS = [
   { day: 20, rewards: { nova_crystals: 8 } },
   { day: 21, rewards: { item_rarity: "rare", stardust: 1500 } },
   { day: 22, rewards: { experience: 2000 } },
-  { day: 23, rewards: { collectible: { type: "consumable", name: "Major Vitality Stim", rarity: "rare", consumable: { stat: "vitality", mult: 0.15, duration_hours: 12, tier: "major" }, flavor_text: "Boosts Vitality by 15% for 12 hours.", sell_value: 600 } } },
+  { day: 23, rewards: { collectible: { type: "consumable", name: "Rare Vitality Stim", rarity: "rare", consumable: { stat: "vitality", mult: 0.10, duration_hours: 12, tier: "rare" }, flavor_text: "Boosts Vitality by 10% for 12 hours (stacks duration up to 36h).", sell_value: 600 } } },
   { day: 24, rewards: { stardust: 2000 } },
   { day: 25, rewards: { item_rarity: "epic" } },
   { day: 26, rewards: { nova_crystals: 10 } },

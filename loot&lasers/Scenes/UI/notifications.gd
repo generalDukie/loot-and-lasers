@@ -9,6 +9,12 @@ const TYPE_META := {
 	"daily": {"label": "Daily Reward", "color": Color("#FFD700")},
 	"system": {"label": "System", "color": Color("#FB7185")},
 	"stat_points": {"label": "Attribute Points", "color": Color("#22D3EE")},
+	"achievement": {"label": "Achievement", "color": Color("#FFD700")},
+	"arena_defense": {"label": "Arena Defense", "color": Color("#EF4444")},
+	"arena": {"label": "Arena", "color": Color("#F97316")},
+	"mining": {"label": "Mining", "color": Color("#A3E635")},
+	"mission": {"label": "Mission", "color": Color("#38BDF8")},
+	"dungeon": {"label": "Dungeon", "color": Color("#A855F7")},
 }
 
 var _status: Label

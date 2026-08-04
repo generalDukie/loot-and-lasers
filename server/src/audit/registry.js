@@ -231,7 +231,7 @@ export const AuditPermissions = Object.freeze({
   VERIFY_INTEGRITY: "audit_logs.verify_integrity",
 });
 
-/** Current project: admins get full audit access; refine when roles expand. */
-export function adminHasAuditPermission(_user, _permission) {
-  return true;
+/** Current project: only role=admin has audit access. */
+export function adminHasAuditPermission(user, _permission) {
+  return user?.role === "admin";
 }

@@ -1,7 +1,6 @@
 extends Control
 ## Active mission — full explore art + overlaid rocket timer (web MissionsPage in-flight).
 
-const SKIP_CRYSTALS_PER_MINUTE := 5.0
 const GOOFY_STATUS := [
 	{"at": 0.0, "msg": "🚀 Igniting thrusters..."},
 	{"at": 0.15, "msg": "Spilled space coffee..."},
@@ -309,12 +308,18 @@ func _populate() -> void:
 	_explore.configure(mname, seed_s, scene_i)
 
 
-func _skip_cost_now() -> int:
+## Mission skip preview — Fuel-based half-Nova (matches Node skipCostFor).
+## Cost = MAX(0.5, CEILING(fuel × 0.20)) half-units. Elapsed time ignored.
+func _skip_cost_now() -> float:
 	var rem := MissionManager.seconds_remaining()
 	if rem <= 0:
-		return 0
-	var minutes := float(rem) / 60.0
-	return maxi(1, int(ceil(minutes * SKIP_CRYSTALS_PER_MINUTE)))
+		return 0.0
+	var m: Dictionary = MissionManager.active_mission
+	var fuel := float(m.get("fuel_cost", m.get("original_fuel_cost", 0)))
+	if fuel <= 0.0:
+		return 0.5
+	var half := maxi(1, int(ceil(fuel * 0.2)))
+	return float(half) / 2.0
 
 
 func _goofy_for_progress(progress: float) -> String:

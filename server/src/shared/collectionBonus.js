@@ -1,10 +1,16 @@
-// Collection bonus calculations for XP rewards.
+/**
+ * Collection bonus — XP % from discoveries.
+ * Denominators follow live catalog lengths from src/lib (Layer 2 parity).
+ */
+import {
+  SPECIES_COUNT,
+  ARTIFACT_COUNT,
+  RELIC_COUNT,
+} from "../../../src/lib/collectibles.js";
+import { DUNGEON_PLANETS } from "../../../src/lib/dungeonData.js";
 
-const SPECIES_COUNT = 30;
-const ARTIFACT_COUNT = 100;
-const RELIC_COUNT = 500;
-const BADGE_COUNT = 10;
-const COLLECTION_BASE_TOTAL = SPECIES_COUNT + ARTIFACT_COUNT + RELIC_COUNT + BADGE_COUNT;
+export const COLLECTION_BASE_TOTAL =
+  SPECIES_COUNT + ARTIFACT_COUNT + RELIC_COUNT + DUNGEON_PLANETS.length;
 
 export function getCollectionPercentage(character, gearTotal) {
   const species = (character?.discovered_species || []).length;

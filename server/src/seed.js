@@ -5,12 +5,20 @@ import { entities } from "./entities.js";
 
 const email = process.env.SEED_EMAIL || "admin@loot.local";
 const password = process.env.SEED_PASSWORD || "admin123";
+const usingDefaultPassword = !process.env.SEED_PASSWORD;
 
 async function main() {
   const existing = db.prepare("SELECT id FROM users WHERE email = ? COLLATE NOCASE").get(email);
   if (existing) {
     console.log(`Admin already exists: ${email}`);
   } else {
+    if (usingDefaultPassword && process.env.NODE_ENV === "production") {
+      console.error("[seed] Refusing default SEED_PASSWORD in production. Set SEED_PASSWORD.");
+      process.exit(1);
+    }
+    if (usingDefaultPassword) {
+      console.warn("[seed] WARNING: using default SEED_PASSWORD=admin123 — set SEED_PASSWORD for non-dev environments.");
+    }
     const ts = nowIso();
     const id = nanoid();
     const hash = await bcrypt.hash(password, 10);

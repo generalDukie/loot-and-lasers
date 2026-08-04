@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, CheckCheck, Calendar, X } from "lucide-react";
-import { api } from "@/api/gameClient";
-import { getUnreadCounts, subscribeNotifications, subscribeLocalAlerts, markRead, syncStatPointsNotification } from "@/lib/notificationEngine";
+import { getUnreadCounts, listNotifications, subscribeNotifications, subscribeLocalAlerts, markRead, markAllRead, syncStatPointsNotification } from "@/lib/notificationEngine";
 import { canClaimToday, getProgress } from "@/lib/dailyLoginEngine";
 import { TYPE_META, timeAgo } from "@/components/social/NotificationsTab";
 import NotificationActions from "@/components/social/NotificationActions";
@@ -24,7 +23,7 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
     loadingRef.current = true;
     try {
       const [all, c, prog] = await Promise.all([
-        api.entities.AppNotification.filter({ owner_id: myChar.id }, "-created_date", 50),
+        listNotifications({ limit: 50 }),
         getUnreadCounts(myChar.id),
         getProgress(myChar.id),
       ]);
@@ -108,10 +107,7 @@ export default function NotificationCenter({ myChar, onOpenDaily }) {
 
   async function handleMarkAllRead() {
     if (!myChar) return;
-    await api.entities.AppNotification.updateMany(
-      { owner_id: myChar.id, read: false },
-      { $set: { read: true } }
-    );
+    await markAllRead();
     await load();
   }
 

@@ -5,8 +5,14 @@ const PROMPT_CFG := "user://godot_daily_prompt.cfg"
 
 var daily_progress: Dictionary = {}
 var last_sync: Dictionary = {}
+var last_achievements: Dictionary = {}
+var last_collections: Dictionary = {}
 ## Authoritative ET day key from GET /api/time/now (falls back to local approx).
 var server_today_et: String = ""
+## serverNow ≈ localUnixMs + server_offset_ms (display countdowns only).
+var server_offset_ms: int = 0
+var ms_until_daily_reset: int = 0
+var last_time_payload: Dictionary = {}
 
 
 func _ready() -> void:
@@ -16,7 +22,12 @@ func _ready() -> void:
 func clear_local() -> void:
 	daily_progress = {}
 	last_sync = {}
+	last_achievements = {}
+	last_collections = {}
 	server_today_et = ""
+	server_offset_ms = 0
+	ms_until_daily_reset = 0
+	last_time_payload = {}
 
 
 func sync_server_time() -> Dictionary:
@@ -28,7 +39,38 @@ func sync_server_time() -> Dictionary:
 			key = str(data.get("dailyPeriodKey", ""))
 		if not key.is_empty():
 			server_today_et = key
+		var server_iso := str(data.get("serverTimeUtc", data.get("responseGeneratedAtUtc", "")))
+		if not server_iso.is_empty():
+			var server_ms := _parse_iso_ms(server_iso)
+			if server_ms > 0:
+				server_offset_ms = server_ms - int(Time.get_unix_time_from_system() * 1000)
+		ms_until_daily_reset = int(data.get("msUntilDailyReset", data.get("msUntilNextETMidnight", 0)))
+		last_time_payload = data
 	return res
+
+
+func estimate_server_now_ms() -> int:
+	return int(Time.get_unix_time_from_system() * 1000) + server_offset_ms
+
+
+## Prefer Node nextDailyResetAtUtc; fallback to local ET approx.
+func ms_until_daily_reset_display() -> int:
+	if not last_time_payload.is_empty():
+		var next_iso := str(last_time_payload.get("nextDailyResetAtUtc", ""))
+		if not next_iso.is_empty():
+			var ends := _parse_iso_ms(next_iso)
+			if ends > 0:
+				return maxi(0, ends - estimate_server_now_ms())
+		if ms_until_daily_reset > 0:
+			return maxi(0, ms_until_daily_reset)
+	return ArenaRules.ms_until_et_midnight_local_fallback()
+
+
+func _parse_iso_ms(iso: String) -> int:
+	var t := Time.get_unix_time_from_datetime_string(iso)
+	if t <= 0:
+		return 0
+	return int(t * 1000)
 
 
 ## Prefer server calendar day; fallback approximates America/New_York (UTC−5, no DST).
@@ -156,6 +198,27 @@ func sync_achievements(title = null) -> Dictionary:
 	_apply_character(res)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		last_sync = res.data
+		var ach: Variant = res.data.get("achievements", null)
+		if typeof(ach) == TYPE_DICTIONARY:
+			last_achievements = ach
+	return res
+
+
+## Read-only hydrate — does not unlock; SyncAchievements evaluates retroactively.
+func load_achievements() -> Dictionary:
+	var res: Dictionary = await GameApiClient.invoke("GetAchievements", {})
+	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+		last_achievements = res.data
+		GameApiClient.apply_authoritative_response(res.data, "get_achievements")
+	return res
+
+
+func load_collections(gear_total: int = 0) -> Dictionary:
+	var res: Dictionary = await GameApiClient.invoke("GetCollections", {
+		"gear_total": maxi(0, gear_total),
+	})
+	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+		last_collections = res.data
 	return res
 
 
@@ -195,10 +258,7 @@ func unlocked_achievements() -> Array:
 func _apply_character(res: Dictionary) -> void:
 	if not res.ok:
 		return
-	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
-	var patch: Variant = data.get("patch", {})
-	if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
-		GameManager.apply_active_character_patch(patch, "progress_mutation")
-	var ch: Variant = data.get("character", {})
-	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.apply_active_character(ch, "progress_mutation")
+	GameApiClient.apply_authoritative_response(
+		res.data if typeof(res.data) == TYPE_DICTIONARY else {},
+		"progress_mutation"
+	)

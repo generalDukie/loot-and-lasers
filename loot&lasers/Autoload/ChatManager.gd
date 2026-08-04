@@ -1,6 +1,6 @@
 extends Node
-## Global chat + DMs — Phase 19: Nakama chat RPCs + RealtimeManager socket.
-## Mail/guild notifications remain on Node via RealtimeManager legacy poll.
+## Global chat + DMs — Node SendMessage / GetChatHistory (Restoration 23).
+## Nakama socket remains optional transport for live channel events.
 
 signal global_message_received(message: Dictionary)
 signal dm_received(message: Dictionary)
@@ -20,7 +20,7 @@ var _busy := false
 
 
 func _ready() -> void:
-	print("[ChatManager] ready (Nakama chat)")
+	print("[ChatManager] ready (Node chat)")
 	if not RealtimeManager.nakama_connection_changed.is_connected(_on_rt_connection):
 		RealtimeManager.nakama_connection_changed.connect(_on_rt_connection)
 	if not RealtimeManager.nakama_channel_message.is_connected(_on_channel_message):
@@ -93,12 +93,12 @@ func send_global_message(content: String) -> Dictionary:
 	if _busy:
 		return {"ok": false, "error": "Chat busy"}
 	_busy = true
-	var res: Dictionary = await NakamaManager.invoke_rpc("chat_send_global", {
+	var res: Dictionary = await GameApiClient.invoke("SendMessage", {
+		"channel": "global",
 		"content": content,
-		"request_id": _rid("cg"),
 	})
 	_busy = false
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "send failed"))
 		chat_error.emit(err)
 		return {"ok": false, "error": err}
@@ -110,12 +110,9 @@ func send_global_message(content: String) -> Dictionary:
 	return {"ok": true, "error": "", "data": data}
 
 
-func load_global_history(cursor: String = "") -> Dictionary:
-	var payload := {"limit": 50}
-	if not cursor.is_empty():
-		payload["cursor"] = cursor
-	var res: Dictionary = await NakamaManager.invoke_rpc("chat_get_global_history", payload)
-	if not bool(res.get("success", false)):
+func load_global_history(_cursor: String = "") -> Dictionary:
+	var res: Dictionary = await GameApiClient.invoke("GetChatHistory", {"channel": "global", "limit": 50})
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "history failed"))
 		chat_error.emit(err)
 		return {"ok": false, "error": err}
@@ -135,13 +132,13 @@ func send_dm(user_id: String, content: String) -> Dictionary:
 	if _busy:
 		return {"ok": false, "error": "Chat busy"}
 	_busy = true
-	var res: Dictionary = await NakamaManager.invoke_rpc("chat_send_dm", {
-		"target_user_id": user_id,
+	var res: Dictionary = await GameApiClient.invoke("SendMessage", {
+		"channel": "private",
+		"recipient_id": user_id,
 		"content": content,
-		"request_id": _rid("cd"),
 	})
 	_busy = false
-	if not bool(res.get("success", false)):
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "DM failed"))
 		chat_error.emit(err)
 		return {"ok": false, "error": err}
@@ -155,12 +152,13 @@ func send_dm(user_id: String, content: String) -> Dictionary:
 	return {"ok": true, "error": "", "data": data}
 
 
-func load_dm_history(user_id: String, cursor: String = "") -> Dictionary:
-	var payload := {"target_user_id": user_id, "limit": 50}
-	if not cursor.is_empty():
-		payload["cursor"] = cursor
-	var res: Dictionary = await NakamaManager.invoke_rpc("chat_get_dm_history", payload)
-	if not bool(res.get("success", false)):
+func load_dm_history(user_id: String, _cursor: String = "") -> Dictionary:
+	var res: Dictionary = await GameApiClient.invoke("GetChatHistory", {
+		"channel": "private",
+		"recipient_id": user_id,
+		"limit": 50,
+	})
+	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "DM history failed"))
 		chat_error.emit(err)
 		return {"ok": false, "error": err}
@@ -174,18 +172,16 @@ func load_dm_history(user_id: String, cursor: String = "") -> Dictionary:
 
 
 func mark_conversation_read(user_id: String) -> Dictionary:
-	var last_id := ""
-	var conv: Dictionary = get_conversation(user_id)
-	var msgs: Array = conv.get("messages", [])
-	if msgs.size() > 0 and typeof(msgs[msgs.size() - 1]) == TYPE_DICTIONARY:
-		last_id = str(msgs[msgs.size() - 1].get("message_id", ""))
-	var res: Dictionary = await NakamaManager.invoke_rpc("chat_mark_read", {
-		"target_user_id": user_id,
-		"last_read_message_id": last_id,
-		"request_id": _rid("cr"),
+	var conv_id := ""
+	var hist: Dictionary = await GameApiClient.invoke("GetChatHistory", {
+		"channel": "private",
+		"recipient_id": user_id,
+		"limit": 1,
 	})
-	if not bool(res.get("success", false)):
-		return {"ok": false, "error": str(res.get("error", "mark_read failed"))}
+	if bool(hist.get("ok", false)) and typeof(hist.get("data", {})) == TYPE_DICTIONARY:
+		conv_id = str(hist.data.get("conversation_id", ""))
+	if not conv_id.is_empty():
+		await GameApiClient.invoke("MarkConversationRead", {"conversation_id": conv_id})
 	if conversations.has(user_id):
 		conversations[user_id]["unread"] = 0
 	unread_changed.emit(get_total_unread_count())

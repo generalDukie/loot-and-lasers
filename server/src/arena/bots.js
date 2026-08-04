@@ -15,6 +15,8 @@ import {
   eloRatingDelta,
 } from "../shared/economyFormulas.js";
 import { generateArenaBot } from "../../../src/lib/arenaBotGenerator.js";
+import { tryCreateNotification } from "../shared/notificationService.js";
+// Attribute budgets: ExpectedPlayerAttributes (shared re-export of src/lib).
 
 const BOT_NAMES = [
   "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
@@ -306,7 +308,7 @@ export function processIncomingBotRaids(character, { maxRaids = BOT_RAIDS_PER_PU
 
     // Notify the player.
     try {
-      entities.AppNotification.create({
+      tryCreateNotification({
         owner_id: live.id,
         type: "arena_defense",
         title: result.playerWon
@@ -316,7 +318,8 @@ export function processIncomingBotRaids(character, { maxRaids = BOT_RAIDS_PER_PU
           ? `You held the Arena (+${result.playerRatingDelta} rating). ${freshBot.name} is now ${updatedBot?.arena_rating ?? "?"} rating.`
           : `Lost ${Math.abs(result.playerRatingDelta)} rating. ${freshBot.name} climbs to ${updatedBot?.arena_rating ?? "?"}.`,
         related_id: freshBot.id,
-        read: false,
+        priority: "high",
+        idempotency_key: `arena_defense:${live.id}:${freshBot.id}:${clock.nowIso().slice(0, 13)}`,
       });
     } catch (err) {
       console.error("[arena bots] notify failed", err?.message || err);

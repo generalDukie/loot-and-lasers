@@ -384,9 +384,11 @@ func fetch_me() -> Dictionary:
 
 
 func update_me(patch: Dictionary) -> Dictionary:
-	# Godot account fields go to Nakama profile — never Node :8787 auth/me.
-	if patch.has("full_name") or patch.has("display_name"):
-		var display := str(patch.get("display_name", patch.get("full_name", ""))).strip_edges()
+	# Account fields that affect identity/display go to Node — never Nakama profile RPCs.
+	if patch.has("full_name") or patch.has("display_name") or patch.has("legacy_name"):
+		var display := str(
+			patch.get("legacy_name", patch.get("display_name", patch.get("full_name", "")))
+		).strip_edges()
 		if ProfileManager != null and not display.is_empty():
 			var pref: Dictionary = await ProfileManager.update_display_name(display)
 			if pref.get("success", false) or pref.get("ok", false):
@@ -503,141 +505,63 @@ func patch_character(character_id: String, patch: Dictionary) -> Dictionary:
 	return await GameApiClient.request("PATCH", "/api/entities/Character/%s" % character_id, patch, true)
 
 
-## Equip an unequipped bag item via Node Item PATCH (web useInventory parity).
-## Hero UI lists Node Item rows; Nakama EquipmentManager remains for shop-migrated gear.
+## Equip an unequipped bag item via Node EquipItem (atomic swap + sheet).
 func equip_item(item_id: String) -> Dictionary:
 	if item_id.is_empty():
 		return {"ok": false, "error": "Missing item_id", "data": {}, "status": 0}
-	var list_res: Dictionary = await list_items()
-	if not list_res.get("ok", false):
+	var res: Dictionary = await GameApiClient.invoke("EquipItem", {"item_id": item_id})
+	if not res.get("ok", false):
+		var err := str(res.get("error", "Equip failed"))
+		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
+			err = str(res.data["error"])
 		return {
 			"ok": false,
-			"error": str(list_res.get("error", "Could not load items")),
-			"data": {},
-			"status": int(list_res.get("status", 0)),
+			"error": err,
+			"data": res.get("data", {}),
+			"status": int(res.get("status", 0)),
+			"code": str(res.get("code", "")),
 		}
-	var items: Array = list_res.get("data", []) if typeof(list_res.get("data", null)) == TYPE_ARRAY else []
-	var target: Dictionary = {}
-	for it in items:
-		if typeof(it) == TYPE_DICTIONARY and str(it.get("id", "")) == item_id:
-			target = it
-			break
-	if target.is_empty():
-		return {"ok": false, "error": "Item not found", "data": {}, "status": 404}
-	var item_type := str(target.get("type", ""))
-	if not InventoryRules.is_equippable(item_type):
-		return {"ok": false, "error": "Item is not equippable", "data": {}, "status": 400}
-	if bool(target.get("is_equipped", false)):
-		return {"ok": true, "error": "", "data": {"item": target, "already": true}, "status": 200}
-
-	var current: Dictionary = {}
-	for it in items:
-		if typeof(it) != TYPE_DICTIONARY:
-			continue
-		if str(it.get("type", "")) == item_type and bool(it.get("is_equipped", false)):
-			current = it
-			break
-
-	var equip_res: Dictionary = await patch_item(item_id, {"is_equipped": true})
-	if not equip_res.get("ok", false):
-		var err := str(equip_res.get("error", "Equip failed"))
-		if typeof(equip_res.get("data", null)) == TYPE_DICTIONARY and equip_res.data.has("error"):
-			err = str(equip_res.data["error"])
-		return {"ok": false, "error": err, "data": equip_res.get("data", {}), "status": int(equip_res.get("status", 0))}
-
-	if not current.is_empty():
-		var swap_id := str(current.get("id", ""))
-		if not swap_id.is_empty() and swap_id != item_id:
-			var swap_res: Dictionary = await patch_item(swap_id, {"is_equipped": false})
-			if not swap_res.get("ok", false):
-				# Best-effort rollback so two pieces of the same type are not equipped.
-				await patch_item(item_id, {"is_equipped": false})
-				var serr := str(swap_res.get("error", "Equip swap failed"))
-				return {"ok": false, "error": serr, "data": swap_res.get("data", {}), "status": int(swap_res.get("status", 0))}
-
-	var cid := str(GameManager.active_character.get("id", ""))
-	var eq: Dictionary = {}
-	var raw_eq: Variant = GameManager.active_character.get("equipped_items", {})
-	if typeof(raw_eq) == TYPE_DICTIONARY:
-		eq = (raw_eq as Dictionary).duplicate(true)
-	eq[item_type] = item_id
-	if not cid.is_empty():
-		var char_res: Dictionary = await patch_character(cid, {"equipped_items": eq})
-		if char_res.get("ok", false):
-			var ch: Variant = char_res.get("data", {})
-			if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-				GameManager.apply_active_character(ch, "auth_equip_item")
-			else:
-				GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_equip_item")
-		else:
-			GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_equip_item")
-	else:
-		GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_equip_item")
-
-	print("[AuthManager] equip_item ok id=%s type=%s via=node_item_patch" % [item_id.substr(0, mini(8, item_id.length())), item_type])
-	return {"ok": true, "error": "", "data": {"item_id": item_id, "type": item_type}, "status": 200}
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	GameApiClient.apply_authoritative_response(data, "auth_equip_item")
+	if StatsManager != null and StatsManager.has_method("apply_inventory_snapshot"):
+		StatsManager.apply_inventory_snapshot(data)
+	print("[AuthManager] equip_item ok id=%s via=EquipItem" % item_id.substr(0, mini(8, item_id.length())))
+	return {"ok": true, "error": "", "data": data, "status": 200}
 
 
-## Unequip a worn item into the bag via Node Item PATCH (web useInventory parity).
+## Unequip a worn item into the bag via Node UnequipItem.
 func unequip_item(item_id: String) -> Dictionary:
 	if item_id.is_empty():
 		return {"ok": false, "error": "Missing item_id", "data": {}, "status": 0}
-	var list_res: Dictionary = await list_items()
-	if not list_res.get("ok", false):
+	var res: Dictionary = await GameApiClient.invoke("UnequipItem", {"item_id": item_id})
+	if not res.get("ok", false):
+		var err := str(res.get("error", "Unequip failed"))
+		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
+			err = str(res.data["error"])
 		return {
 			"ok": false,
-			"error": str(list_res.get("error", "Could not load items")),
-			"data": {},
-			"status": int(list_res.get("status", 0)),
+			"error": err,
+			"data": res.get("data", {}),
+			"status": int(res.get("status", 0)),
+			"code": str(res.get("code", "")),
 		}
-	var items: Array = list_res.get("data", []) if typeof(list_res.get("data", null)) == TYPE_ARRAY else []
-	var target: Dictionary = {}
-	for it in items:
-		if typeof(it) == TYPE_DICTIONARY and str(it.get("id", "")) == item_id:
-			target = it
-			break
-	if target.is_empty():
-		return {"ok": false, "error": "Item not found", "data": {}, "status": 404}
-	if not bool(target.get("is_equipped", false)):
-		return {"ok": true, "error": "", "data": {"already": true}, "status": 200}
-	var item_type := str(target.get("type", ""))
-
-	var unequip_res: Dictionary = await patch_item(item_id, {"is_equipped": false})
-	if not unequip_res.get("ok", false):
-		var err := str(unequip_res.get("error", "Unequip failed"))
-		if typeof(unequip_res.get("data", null)) == TYPE_DICTIONARY and unequip_res.data.has("error"):
-			err = str(unequip_res.data["error"])
-		return {"ok": false, "error": err, "data": unequip_res.get("data", {}), "status": int(unequip_res.get("status", 0))}
-
-	var cid := str(GameManager.active_character.get("id", ""))
-	var eq: Dictionary = {}
-	var raw_eq: Variant = GameManager.active_character.get("equipped_items", {})
-	if typeof(raw_eq) == TYPE_DICTIONARY:
-		eq = (raw_eq as Dictionary).duplicate(true)
-	if eq.get(item_type, "") == item_id or str(eq.get(item_type, "")) == item_id:
-		eq.erase(item_type)
-	if not cid.is_empty():
-		var char_res: Dictionary = await patch_character(cid, {"equipped_items": eq})
-		if char_res.get("ok", false):
-			var ch: Variant = char_res.get("data", {})
-			if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-				GameManager.apply_active_character(ch, "auth_unequip_item")
-			else:
-				GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_unequip_item")
-		else:
-			GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_unequip_item")
-	else:
-		GameManager.apply_active_character_patch({"equipped_items": eq}, "auth_unequip_item")
-
-	print("[AuthManager] unequip_item ok id=%s type=%s via=node_item_patch" % [item_id.substr(0, mini(8, item_id.length())), item_type])
-	return {"ok": true, "error": "", "data": {"item_id": item_id, "type": item_type}, "status": 200}
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	GameApiClient.apply_authoritative_response(data, "auth_unequip_item")
+	if StatsManager != null and StatsManager.has_method("apply_inventory_snapshot"):
+		StatsManager.apply_inventory_snapshot(data)
+	print("[AuthManager] unequip_item ok id=%s via=UnequipItem" % item_id.substr(0, mini(8, item_id.length())))
+	return {"ok": true, "error": "", "data": data, "status": 200}
 
 
 ## Apply a stim: deletes the item and patches character.active_buffs.
 func use_consumable(item_id: String) -> Dictionary:
 	if item_id.is_empty():
 		return {"ok": false, "error": "Missing item_id", "data": {}}
-	var res: Dictionary = await GameApiClient.invoke("UseConsumable", {"item_id": item_id})
+	var body := {
+		"item_id": item_id,
+		"request_id": "stim-%s-%s" % [item_id, Time.get_ticks_msec()],
+	}
+	var res: Dictionary = await GameApiClient.invoke("UseConsumable", body)
 	if not res.ok:
 		var err := str(res.get("error", "UseConsumable failed"))
 		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
@@ -651,6 +575,20 @@ func use_consumable(item_id: String) -> Dictionary:
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
 		GameManager.apply_active_character(ch, "auth_use_consumable")
 	return {"ok": true, "error": "", "data": data, "status": 200}
+
+
+## Rehydrate active Stims after reconnect (server filters expired).
+func refresh_active_stims() -> Dictionary:
+	var res: Dictionary = await GameApiClient.invoke("GetActiveStims", {})
+	if not res.ok:
+		return {"ok": false, "error": str(res.get("error", "GetActiveStims failed")), "data": {}}
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	var ch: Variant = data.get("character", {})
+	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
+		GameManager.apply_active_character(ch, "auth_refresh_stims")
+	elif typeof(data.get("active_buffs", null)) == TYPE_ARRAY:
+		GameManager.apply_active_character_patch({"active_buffs": data["active_buffs"]}, "auth_refresh_stims")
+	return {"ok": true, "error": "", "data": data}
 
 
 ## Manually remove an active Stim effect (discards remaining duration).
@@ -832,6 +770,8 @@ func _apply_auth_payload(data: Variant) -> void:
 	_save_token()
 	auth_changed.emit(not access_token.is_empty() or is_nakama_authenticated())
 	user_changed.emit(user)
+	if not access_token.is_empty() and SettingsManager != null:
+		SettingsManager.load_account_preferences()
 
 
 func _save_token() -> void:

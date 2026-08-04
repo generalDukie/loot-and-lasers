@@ -1,6 +1,6 @@
-﻿extends Control
+extends Control
 ## Shared duel overlay — mirrors web ArenaBattleOverlay (arena + mission + dungeon).
-## Simulation stays in MissionCombat; this file is presentation + settlement only.
+## Node owns combat simulation; this file is presentation + settlement only.
 
 const FIGHTER_SIZE := Vector2(200, 260)
 
@@ -30,6 +30,10 @@ var _player_hp_name: Label
 var _enemy_hp_name: Label
 var _player_hp_nums: Label
 var _enemy_hp_nums: Label
+var _player_status: Label
+var _enemy_status: Label
+var _combat_log: RichTextLabel
+var _dev_diag: Label
 var _skip_btn: Button
 var _stage: Control
 var _fighters: Control
@@ -132,6 +136,7 @@ func _build() -> void:
 	_player_hp_name = p_hp.get_meta("name_lab")
 	_player_hp = p_hp.get_meta("bar")
 	_player_hp_nums = p_hp.get_meta("nums")
+	_player_status = p_hp.get_meta("status")
 
 	var mid := VBoxContainer.new()
 	mid.custom_minimum_size.x = 48
@@ -150,6 +155,7 @@ func _build() -> void:
 	_enemy_hp_name = e_hp.get_meta("name_lab")
 	_enemy_hp = e_hp.get_meta("bar")
 	_enemy_hp_nums = e_hp.get_meta("nums")
+	_enemy_status = e_hp.get_meta("status")
 
 	_stage = Control.new()
 	_stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -326,6 +332,38 @@ func _build() -> void:
 	_sheet_host.visible = false
 	add_child(_sheet_host)
 
+	_combat_log = RichTextLabel.new()
+	_combat_log.bbcode_enabled = true
+	_combat_log.fit_content = true
+	_combat_log.scroll_active = true
+	_combat_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_combat_log.set_anchors_preset(PRESET_BOTTOM_RIGHT)
+	_combat_log.anchor_left = 1.0
+	_combat_log.anchor_top = 1.0
+	_combat_log.anchor_right = 1.0
+	_combat_log.anchor_bottom = 1.0
+	_combat_log.offset_left = -300
+	_combat_log.offset_top = -150
+	_combat_log.offset_right = -12
+	_combat_log.offset_bottom = -72
+	_combat_log.add_theme_font_size_override("normal_font_size", 12)
+	_combat_log.add_theme_color_override("default_color", Color(1, 1, 1, 0.72))
+	_combat_log.z_index = 25
+	add_child(_combat_log)
+
+	_dev_diag = Label.new()
+	_dev_diag.visible = CombatPresentation.is_dev_diagnostics_enabled()
+	_dev_diag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dev_diag.set_anchors_preset(PRESET_TOP_LEFT)
+	_dev_diag.offset_left = 12
+	_dev_diag.offset_top = 56
+	_dev_diag.offset_right = 320
+	_dev_diag.offset_bottom = 140
+	_dev_diag.add_theme_font_size_override("font_size", 12)
+	_dev_diag.add_theme_color_override("font_color", Color("#FCD34D", 0.9))
+	_dev_diag.z_index = 40
+	add_child(_dev_diag)
+
 
 func _make_hp_side(align_right: bool) -> VBoxContainer:
 	var col := VBoxContainer.new()
@@ -350,9 +388,17 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	nums.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(nums)
 	col.add_child(nums)
+	var status := Label.new()
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
+	status.add_theme_font_size_override("font_size", 12)
+	status.add_theme_color_override("font_color", Color("#A5B4FC", 0.95))
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ClientUi.apply_display_font(status)
+	col.add_child(status)
 	col.set_meta("name_lab", name_lab)
 	col.set_meta("bar", bar)
 	col.set_meta("nums", nums)
+	col.set_meta("status", status)
 	return col
 
 
@@ -740,7 +786,10 @@ func _event_duration(ev: Dictionary) -> float:
 func _combo_at(i: int) -> int:
 	if i < 0 or i >= _events.size():
 		return 0
-	var ev: Dictionary = _events[i]
+	var raw: Variant = _events[i]
+	if typeof(raw) != TYPE_DICTIONARY:
+		return 0
+	var ev: Dictionary = raw
 	var ev_type := str(ev.get("type", ""))
 	if ev.is_empty() or bool(ev.get("dodged", false)) or ev_type in ["regen", "dodge", "miss", "passive"]:
 		return 0
@@ -749,9 +798,10 @@ func _combo_at(i: int) -> int:
 	var count := 0
 	var j := i
 	while j >= 0:
-		var e: Dictionary = _events[j]
-		if typeof(e) != TYPE_DICTIONARY:
+		var raw_e: Variant = _events[j]
+		if typeof(raw_e) != TYPE_DICTIONARY:
 			break
+		var e: Dictionary = raw_e
 		var et := str(e.get("type", ""))
 		if str(e.get("attacker", "")) == str(ev.get("attacker", "")) \
 				and not bool(e.get("dodged", false)) \
@@ -769,10 +819,11 @@ func _run_playback() -> void:
 	while _playing and not _finished and _event_i < _events.size():
 		if gen != _generation:
 			return
-		var ev: Dictionary = _events[_event_i]
-		if typeof(ev) != TYPE_DICTIONARY:
+		var raw: Variant = _events[_event_i]
+		if typeof(raw) != TYPE_DICTIONARY:
 			_event_i += 1
 			continue
+		var ev: Dictionary = raw
 		_combo = _combo_at(_event_i)
 		_update_combo(str(ev.get("attacker", "")))
 		await _play_one_event(ev, gen)
@@ -837,40 +888,53 @@ func _begin_event_fx(ev: Dictionary) -> void:
 func _land_event(ev: Dictionary) -> void:
 	var t := str(ev.get("type", ""))
 	var defender := _card_for(ev.get("defender", null))
+	if defender == null and (t == "barrier" or t == "passive"):
+		defender = _card_for(ev.get("side", null))
 	var attacker := _card_for(ev.get("attacker", null))
 	var side := str(ev.get("attacker", "player"))
 	var weapon: Dictionary = _player_weapon if side == "player" else _enemy_weapon
+
+	_refresh_status_presentation()
+	_append_combat_log(ev)
+
+	var floater: Dictionary = CombatPresentation.floater_label(ev)
+	if not floater.is_empty():
+		var host: Control = defender if defender else attacker
+		if host:
+			var floater_color: Color = floater.get("color", Color.WHITE) as Color
+			_fx.float_text(host, str(floater.get("label", "")), floater_color, bool(floater.get("crit", false)))
 
 	if int(ev.get("heal", 0)) > 0:
 		var heal := int(ev.get("heal", 0))
 		var to_player := str(ev.get("defender", "player")) == "player"
 		_hp.apply_heal(to_player, heal)
-		_fx.float_text(defender if defender else attacker, "+%s" % heal, Color("#86EFAC"), false)
 		AudioManager.play_ui("claim")
 		return
 
 	if t == "dodge" or t == "miss" or bool(ev.get("dodged", false)):
-		var dodge := t == "dodge" or bool(ev.get("dodged", false))
-		_fx.float_text(defender, "DODGE" if dodge else "MISS", Color("#67E8F9") if dodge else Color("#94A3B8"), false)
+		if t == "dodge" or bool(ev.get("dodged", false)):
+			_motion.slip(defender, str(ev.get("defender", "player")))
 		AudioManager.play_ui("dodge")
 		return
 
 	if t == "passive" and int(ev.get("damage", 0)) <= 0:
-		_fx.float_text(attacker if attacker else _player_card, "✧", Color("#C084FC"), false)
 		AudioManager.play_ui("ability")
+		return
+
+	if t == "barrier":
+		if defender:
+			_motion.guard(defender)
+		AudioManager.play_ui("dodge")
 		return
 
 	var shield := bool(ev.get("shieldHit", false))
 	var dmg := int(ev.get("damage", 0))
 	if shield and dmg <= 0:
 		_motion.guard(defender)
-		_fx.float_text(defender, "BLOCK", Color("#67E8F9"), false)
 		AudioManager.play_ui("dodge")
 		return
 	if shield and dmg > 0:
 		_motion.guard(defender)
-		# Partial absorb: one readable float, then impact continues below.
-		_fx.float_text(defender, "SHIELD −%s" % dmg, Color("#67E8F9"), false)
 		AudioManager.play_ui("dodge")
 
 	if dmg <= 0:
@@ -879,15 +943,6 @@ func _land_event(ev: Dictionary) -> void:
 	var crit := bool(ev.get("crit", false))
 	var ability := t == "drone" or t == "ability"
 	_motion.impact(defender, crit or ability, _fx)
-	if not shield:
-		if crit:
-			_fx.float_text(defender, "CRIT −%s" % dmg, Color("#FBBF24"), true)
-		elif ability:
-			_fx.float_text(defender, "−%s" % dmg, Color("#C4B5FD"), true)
-		else:
-			_fx.float_text(defender, "−%s" % dmg, Color("#FCA5A5"), false)
-	elif crit:
-		_fx.float_text(defender, "CRIT", Color("#FBBF24"), true)
 	AudioManager.play_attack(str(weapon.get("style", "swing")), crit, ability)
 	var to_player := str(ev.get("defender", "")) == "player"
 	var flash_col := Color(1.0, 0.35, 0.35) if to_player else (Color(1.0, 0.85, 0.35) if crit else Color(0.4, 0.9, 1.0))
@@ -913,6 +968,45 @@ func _maybe_ability_banner(ev: Dictionary) -> void:
 	if banner.is_empty():
 		return
 	_show_ability_banner(banner)
+
+
+func _refresh_status_presentation() -> void:
+	var status: Dictionary = CombatPresentation.reduce_status(_events, _event_i)
+	var player_side: Dictionary = status.get("player", {}) as Dictionary
+	var opponent_side: Dictionary = status.get("opponent", {}) as Dictionary
+	if _player_status:
+		_player_status.text = CombatPresentation.status_chip_text(player_side)
+	if _enemy_status:
+		_enemy_status.text = CombatPresentation.status_chip_text(opponent_side)
+	if _dev_diag and _dev_diag.visible:
+		var ev: Dictionary = {}
+		if _event_i >= 0 and _event_i < _events.size() and typeof(_events[_event_i]) == TYPE_DICTIONARY:
+			ev = _events[_event_i]
+		_dev_diag.text = "COMBAT DEV\nidx %s/%s\ntype=%s kind=%s\ndmg=%s crit=%s dtype=%s" % [
+			_event_i,
+			maxi(0, _events.size() - 1),
+			str(ev.get("type", "—")),
+			str(ev.get("kind", ev.get("missKind", "—"))),
+			str(ev.get("damage", 0)),
+			str(bool(ev.get("crit", false))),
+			str(ev.get("damageType", "—")),
+		]
+
+
+func _append_combat_log(ev: Dictionary) -> void:
+	if _combat_log == null:
+		return
+	var line := CombatPresentation.format_log_line(ev, _event_i)
+	_combat_log.append_text(line + "\n")
+	# Keep last ~10 lines readable without a huge panel.
+	var txt := _combat_log.get_parsed_text()
+	var lines := txt.split("\n")
+	if lines.size() > 12:
+		var keep := PackedStringArray()
+		for i in range(maxi(0, lines.size() - 10), lines.size()):
+			keep.append(lines[i])
+		_combat_log.clear()
+		_combat_log.append_text("\n".join(keep))
 
 
 func _hide_ability_banner() -> void:
@@ -1112,12 +1206,22 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 	var gains: Dictionary = data.get("gains", {}) if typeof(data.get("gains", {})) == TYPE_DICTIONARY else {}
 	var items: Array = data.get("items", []) if typeof(data.get("items", [])) == TYPE_ARRAY else []
 	var gear = items[0] if items.size() > 0 and typeof(items[0]) == TYPE_DICTIONARY else null
+	var outcome := str(data.get("item_outcome", "")).to_upper()
 	var go_cantina := func() -> void: GameManager.go_cantina()
 	var go_secondary := func() -> void:
 		if won:
 			GameManager.go_inventory()
 		else:
 			GameManager.go_hub()
+	var note := ""
+	if won and items.size() > 1:
+		note = "%s item(s) recovered" % items.size()
+	elif won and outcome == "NONE":
+		note = "No item recovered this run."
+	elif won and outcome == "STIM":
+		note = "Stim recovered."
+	elif won and outcome == "JUNK":
+		note = "Junk recovered."
 	var summary := {
 		"won": won,
 		"mode": "mission",
@@ -1126,7 +1230,8 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 		"xp": int(gains.get("experience", 0)) if won else 0,
 		"stardust": int(gains.get("stardust", 0)) if won else 0,
 		"gear_item": gear,
-		"note": ("%s item(s) recovered" % items.size()) if won and items.size() > 1 else "",
+		"note": note,
+		"progression": data.get("progression", {}) if typeof(data.get("progression", {})) == TYPE_DICTIONARY else {},
 		"actions": [
 			{"label": "Cantina", "primary": true, "callback": go_cantina},
 			{"label": "Inventory" if won else "Hub", "primary": false, "callback": go_secondary},
@@ -1192,6 +1297,7 @@ func _show_dungeon_result(data: Dictionary) -> void:
 		"stardust": int(rewards.get("stardust", 0)) if won else 0,
 		"gear_item": gear,
 		"note": note,
+		"progression": data.get("progression", {}) if typeof(data.get("progression", {})) == TYPE_DICTIONARY else {},
 		"actions": [
 			{"label": "Back to Frontier", "primary": true, "callback": func() -> void: GameManager.go_galaxy()},
 			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
@@ -1228,6 +1334,7 @@ func _show_result(result: Dictionary) -> void:
 		"stardust": int(rewards.get("stardust", 0)),
 		"rating_delta": delta,
 		"note": note,
+		"progression": result.get("progression", {}) if typeof(result.get("progression", {})) == TYPE_DICTIONARY else {},
 		"actions": [
 			{"label": "Back to Arena", "primary": true, "callback": func() -> void: GameManager.go_arena()},
 			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},

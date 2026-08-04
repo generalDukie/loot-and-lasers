@@ -91,6 +91,11 @@ export default function AccountSettings() {
     setSavingDisplay(true);
     try {
       await api.auth.updateMe({ legacy_display: next });
+      // Also stamp via preferences RPC (Restoration 24 whitelist).
+      try {
+        const { saveAccountPreferences } = await import("@/lib/preferencesEngine");
+        await saveAccountPreferences({ legacy_display: next });
+      } catch { /* auth.updateMe already applied */ }
       const uid = (await api.auth.me()).id;
       const roster = await api.entities.Character.filter({ created_by_id: uid }, "-created_date", 50);
       await Promise.all(

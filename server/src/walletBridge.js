@@ -59,11 +59,19 @@ function parseEntity(row) {
 }
 
 function balancesOf(character) {
+  const rawNova = Math.max(0, Math.floor(Number(character?.nova_crystals) || 0));
+  const scale = Number(character?.economy_nova_scale) === 2 ? 2 : 1;
   return {
     fuel: Number(character?.fuel) || 0,
     stardust: Math.max(0, Math.floor(Number(character?.stardust) || 0)),
-    nova_crystals: Math.max(0, Math.floor(Number(character?.nova_crystals) || 0)),
+    // Compatibility wallet returns display Nova (.0 / .5).
+    nova_crystals: scale === 2 ? rawNova / 2 : rawNova,
   };
+}
+
+function novaStorageDelta(character, displayDelta) {
+  const scale = Number(character?.economy_nova_scale) === 2 ? 2 : 1;
+  return displayDelta * scale;
 }
 
 function requireToken(value, name, max = 128) {
@@ -208,18 +216,33 @@ export function applyWalletOperation(input, { broadcast = true } = {}) {
     }
 
     const before = balancesOf(character);
-    const rawAfter = before[request.currency] + request.delta;
-    if (!Number.isFinite(rawAfter) || rawAfter < 0) {
-      throw walletError(409, `Insufficient ${request.currency}`, "INSUFFICIENT_FUNDS");
+    let storageBefore;
+    let storageAfter;
+    if (request.currency === "nova_crystals") {
+      storageBefore = Math.max(0, Math.floor(Number(character?.nova_crystals) || 0));
+      const delta = novaStorageDelta(character, request.delta);
+      storageAfter = storageBefore + delta;
+      if (!Number.isFinite(storageAfter) || storageAfter < 0) {
+        throw walletError(409, `Insufficient ${request.currency}`, "INSUFFICIENT_FUNDS");
+      }
+      if (storageAfter > Number.MAX_SAFE_INTEGER) {
+        throw walletError(409, "Balance limit exceeded", "BALANCE_LIMIT");
+      }
+    } else {
+      const rawAfter = before[request.currency] + request.delta;
+      if (!Number.isFinite(rawAfter) || rawAfter < 0) {
+        throw walletError(409, `Insufficient ${request.currency}`, "INSUFFICIENT_FUNDS");
+      }
+      if (rawAfter > Number.MAX_SAFE_INTEGER) {
+        throw walletError(409, "Balance limit exceeded", "BALANCE_LIMIT");
+      }
+      storageAfter = request.currency === "stardust"
+        ? clampStardust(rawAfter)
+        : request.currency === "fuel"
+          ? Math.round(rawAfter * 100) / 100
+          : rawAfter;
     }
-    if (rawAfter > Number.MAX_SAFE_INTEGER) {
-      throw walletError(409, "Balance limit exceeded", "BALANCE_LIMIT");
-    }
-    const after = request.currency === "stardust"
-      ? clampStardust(rawAfter)
-      : request.currency === "fuel"
-        ? Math.round(rawAfter * 100) / 100
-        : rawAfter;
+    const after = storageAfter;
     const updatedAt = nowIso();
     const revisionRow = db.prepare(
       "SELECT COALESCE(MAX(revision), 0) + 1 AS revision FROM wallet_operations WHERE account_id = ?"
@@ -229,6 +252,7 @@ export function applyWalletOperation(input, { broadcast = true } = {}) {
     const next = {
       ...character,
       [request.currency]: after,
+      ...(request.currency === "nova_crystals" ? { economy_nova_scale: 2 } : {}),
       wallet_revision: revision,
       updated_date: updatedAt,
     };

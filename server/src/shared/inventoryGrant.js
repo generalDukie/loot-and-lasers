@@ -40,6 +40,24 @@ export function grantItemOrPending(ch, itemPayload) {
 }
 
 /**
+ * Persist a GenerateGearItem / randomItem payload through the shared inventory path.
+ * Does not regenerate stats — snapshots the provided fields.
+ */
+export function PersistGeneratedItem(ch, generatedItem) {
+  if (!generatedItem || typeof generatedItem !== "object") {
+    const err = new Error("Missing generated item");
+    err.status = 400;
+    throw err;
+  }
+  return grantItemOrPending(ch, {
+    ...generatedItem,
+    owner_id: ch.created_by_id,
+    character_id: ch.id,
+    is_equipped: false,
+  });
+}
+
+/**
  * Collect a grant result into items / pending_loot arrays.
  * Pending overflow MUST be persisted via createPendingLoot so the client can AcceptPendingLoot.
  *

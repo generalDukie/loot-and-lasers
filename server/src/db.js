@@ -271,6 +271,46 @@ db.exec(`
   }
 })();
 
+/** Restoration 15 — convert Character.nova_crystals to integer half-units (×2). */
+(() => {
+  const META_KEY = "nova_half_units_v1";
+  const existing = db.prepare("SELECT value FROM app_meta WHERE key = ?").get(META_KEY);
+  if (existing?.value === "done") return;
+
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    const rows = db.prepare("SELECT id, data FROM entities WHERE type = 'Character'").all();
+    const update = db.prepare("UPDATE entities SET data = ?, updated_date = ? WHERE id = ? AND type = 'Character'");
+    const now = new Date().toISOString();
+    for (const row of rows) {
+      let data;
+      try {
+        data = JSON.parse(row.data);
+      } catch {
+        continue;
+      }
+      if (Number(data.economy_nova_scale) === 2) {
+        update.run(JSON.stringify(data), now, row.id);
+        continue;
+      }
+      const raw = Number(data.nova_crystals) || 0;
+      const half = Math.max(0, Math.floor(raw * 2));
+      data.nova_crystals = half;
+      data.economy_nova_scale = 2;
+      update.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
+    }
+    db.prepare(
+      "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    ).run(META_KEY, "done");
+    db.exec("COMMIT");
+    console.log(`[migrate] Nova half-units applied (${META_KEY})`);
+  } catch (err) {
+    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+    console.error("[migrate] Nova half-units failed:", err);
+    throw err;
+  }
+})();
+
 import { clock } from "./shared/time/clock.js";
 
 export function nowIso() {

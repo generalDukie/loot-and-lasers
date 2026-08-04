@@ -73,13 +73,22 @@ async function fetchRealOpponents(char, maxReal = ARENA_MAX_REAL_OPPONENTS, excl
   }
 }
 
-// Mixes real players (when available) with persistent ladder bots to fill slots.
-// Prefers up to ARENA_MAX_REAL_OPPONENTS reals from the rating band; fills a 3rd
-// real slot only when another fair (wide-band) match exists. Rest are ladder bots
-// (falling back to ephemeral bots if the ladder is unreachable).
-// `excludeIds` lists real character ids already on screen so a replacement
-// can never duplicate a challenger still showing in the current refresh.
+// Prefer server-authored offers (stable offer_id). Fall back to legacy client mix.
 async function buildOpponentPool(char, catalogItems, excludeIds = []) {
+  void excludeIds;
+  try {
+    const res = await api.functions.invoke("GetArenaOpponents", {});
+    const offers = res.opponents || res.data?.opponents || [];
+    if (offers.length) {
+      return offers.map((o) => ({
+        ...o,
+        offer_id: o.offer_id,
+        isBot: !!(o.isBot || o.is_bot),
+        equippedItems: [],
+      }));
+    }
+  } catch { /* fall through to legacy */ }
+
   const candidates = await fetchRealOpponents(char, ARENA_CHALLENGER_SLOTS, excludeIds);
   const myRating = char.arena_rating || 1000;
   let real = candidates.slice(0, ARENA_MAX_REAL_OPPONENTS);
@@ -278,7 +287,7 @@ export default function ArenaPage() {
   // When the player is on cooldown, each challenger's button becomes a
   // "Skip & Challenge" action — one click pays the skip cost and fights that
   // opponent, removing the old two-step skip-then-challenge flow.
-  function handleChallenge(opp, opts = {}) {
+  async function handleChallenge(opp, opts = {}) {
     if (cooldownActive && !opts.skip) {
       toast({ title: "Battle Cooldown", description: `Skip with ${ARENA_SKIP_COST} 💎 to fight now.`, variant: "destructive" });
       return;
@@ -290,6 +299,48 @@ export default function ArenaPage() {
       toast({ title: "Not enough Nova Crystals", description: `Need ${totalCost} 💎 to fight now.`, variant: "destructive" });
       return;
     }
+
+    const offerId = opp.offer_id || opp.offerId;
+    if (offerId) {
+      try {
+        const prep = await api.functions.invoke("PrepareArenaCombat", {
+          offer_id: offerId,
+          is_free: isFree,
+          skip_cooldown: !!skipping,
+        });
+        const combat = prep.combat || prep.data?.combat;
+        const battle = combat?.battle || {
+          winner: combat?.winner,
+          events: combat?.events || [],
+          playerMaxHp: combat?.playerMaxHp,
+          opponentMaxHp: combat?.opponentMaxHp,
+          playerEnd: combat?.playerEnd,
+          opponentEnd: combat?.opponentEnd,
+          initiativeFirstSide: combat?.opening_side,
+        };
+        const won = battle.winner === "player";
+        const rewards = computeRewards(character, opp, won, isFree);
+        setBattleState({
+          battle,
+          opp: { ...opp, ...(prep.opponent || {}) },
+          rewards,
+          isFree: prep.is_free ?? isFree,
+          skipped: skipping,
+          combat_id: combat?.combat_id,
+          offer_id: offerId,
+        });
+        return;
+      } catch (e) {
+        toast({
+          title: "Could not start Arena battle",
+          description: e?.message || "Try refreshing opponents.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Legacy path (no offer_id) — client sim only for playback; Finish still strips won.
     const oppItems = resolveOpponentItems(opp, catalogItems);
     const battle = simulateBattle(character, opp, equippedItems, oppItems);
     const rewards = computeRewards(character, opp, battle.winner === "player", isFree);
@@ -312,34 +363,33 @@ export default function ArenaPage() {
   }
 
   async function finishBattle() {
-    const { battle, opp, rewards, isFree, skipped, challengeId, policyVersion } = battleState;
+    const { battle, opp, rewards, isFree, skipped, challengeId, policyVersion, combat_id, offer_id } = battleState;
     const { percentage: collectPct } = getCollectionStats(character);
     const prevLevel = character.level;
     const prevStreak = character.arena_streak || 0;
-    const maxPlayerHit = Math.max(0, ...battle.events.filter((e) => e.attacker === "player" && e.damage).map((e) => e.damage));
     const skipCost = skipped ? ARENA_SKIP_COST : 0;
     const battleCost = isFree ? 0 : ARENA_PAID_BATTLE_COST;
 
     let res;
     try {
-      res = await api.functions.invoke("FinishArenaBattle", {
-        won: rewards.won,
-        is_free: isFree,
-        skipped: !!skipped,
-        skip_cooldown: !!skipped,
-        opponent: {
-          arena_rating: opp.arena_rating,
-          id: opp.realCharacterId || opp.id,
-          speciesId: opp.speciesId,
-          isBot: !!opp.isBot,
-          arena_bot_id: opp.arena_bot_id || null,
-        },
-        max_hit: maxPlayerHit,
-        species_id: opp.speciesId,
-        ...(challengeId
-          ? { challenge_id: challengeId, policyVersion }
-          : {}),
-      });
+      if (challengeId) {
+        res = await api.functions.invoke("FinishArenaBattle", {
+          won: rewards.won,
+          is_free: isFree,
+          skipped: !!skipped,
+          skip_cooldown: !!skipped,
+          challenge_id: challengeId,
+          policyVersion,
+        });
+      } else {
+        res = await api.functions.invoke("FinishArenaBattle", {
+          combat_id: combat_id || undefined,
+          offer_id: offer_id || undefined,
+          is_free: isFree,
+          skipped: !!skipped,
+          skip_cooldown: !!skipped,
+        });
+      }
     } catch (e) {
       toast({ title: "Could not settle arena battle", description: e?.message || "Try again.", variant: "destructive" });
       setBattleState(null);
@@ -350,41 +400,29 @@ export default function ArenaPage() {
     const fullChar = res.character || res.data?.character;
     toastNewAchievements(res, toast);
     const serverRewards = res.rewards || res.data?.rewards || rewards;
+    const won = challengeId
+      ? !!rewards.won
+      : (res.winner ? res.winner === "player" : !!serverRewards.won);
     const boostedXp = serverRewards.experience || 0;
-    const stardustGain = rewards.won ? (serverRewards.stardust || 0) : 0;
+    const stardustGain = won ? (serverRewards.stardust || 0) : 0;
     const newLevel = update.level ?? character.level;
     const newRating = update.arena_rating ?? (character.arena_rating || 1000);
-    const newStreak = update.arena_streak ?? (rewards.won ? prevStreak + 1 : 0);
+    const newStreak = update.arena_streak ?? (won ? prevStreak + 1 : 0);
     const oppItems = resolveOpponentItems(opp, catalogItems);
     const gearItems = oppItems.map((it) => ({
       id: it.id, name: it.name, type: it.type, rarity: it.rarity, base_name: it.base_name,
     }));
-    const { found: discFound } = processDiscovery(character, { win: rewards.won, speciesId: opp.speciesId, gearItems });
+    const { found: discFound } = processDiscovery(character, { win: won, speciesId: opp.speciesId, gearItems });
     if ((skipCost || 0) + (battleCost || 0)) void trackNovaSpend(character, (skipCost || 0) + (battleCost || 0), "arena");
 
-    // Galaxy news (fire-and-forget so a feed hiccup never blocks rewards)
-    const pname = character.name;
-    void api.entities.GalaxyNews.create({
-      message: rewards.won ? `🚀 ${pname} defeated ${opp.name} in the Arena.` : `💀 ${opp.name} defeated ${pname} in the Arena.`,
-      entry_type: rewards.won ? "victory" : "defeat",
-      character_name: pname,
-      character_id: character.id,
-    });
-    if (rewards.won && [5, 10, 15, 20].includes(newStreak)) {
-      void api.entities.GalaxyNews.create({ message: `🔥 ${pname} is on a ${newStreak}-match win streak!`, entry_type: "streak", character_name: pname, character_id: character.id });
-    }
-    if (!rewards.won && prevStreak >= 5) {
-      void api.entities.GalaxyNews.create({ message: `💀 ${pname}'s ${prevStreak}-match win streak has ended.`, entry_type: "streak", character_name: pname, character_id: character.id });
-    }
-
     // Feed Arena wins into the guild weekly challenge (fire-and-forget)
-    if (rewards.won) void contributeArenaWin(character);
+    if (won) void contributeArenaWin(character);
 
     // Personal match log for revenge rematches
     void recordArenaMatch({
       characterId: character.id,
       opp,
-      won: rewards.won,
+      won,
       ratingDelta: serverRewards.arena_rating_delta ?? rewards.arena_rating_delta,
       ratingAfter: newRating,
     }).then(async () => {
@@ -410,18 +448,18 @@ export default function ArenaPage() {
 
     setCompleteSummary({
       mode: "arena",
-      won: rewards.won,
-      title: rewards.won ? `Defeated ${opp.name}` : `Defeated by ${opp.name}`,
+      won,
+      title: won ? `Defeated ${opp.name}` : `Defeated by ${opp.name}`,
       subtitle: `Lv ${opp.level} · ${opp.race} · ${opp.class}`,
-      xp: rewards.won && boostedXp > 0 ? { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
-      stardust: rewards.won && stardustGain > 0 ? { total: stardustGain } : undefined,
+      xp: won && boostedXp > 0 ? { base: rewards.experience || 0, collectionPct: collectPct, total: boostedXp } : undefined,
+      stardust: won && stardustGain > 0 ? { total: stardustGain } : undefined,
       ratingDelta: serverRewards.arena_rating_delta ?? rewards.arena_rating_delta,
       leveledUp: newLevel > prevLevel,
       prevLevel,
       newLevel,
       statPoints: getStatPointsForLevelRange(prevLevel, newLevel),
       discoveries: discFound,
-      note: !rewards.won
+      note: !won
         ? "No rewards on defeat"
         : (!isFree ? `Paid battle (−${ARENA_PAID_BATTLE_COST} 💎) — rating only` : undefined),
     });
@@ -473,6 +511,7 @@ export default function ArenaPage() {
           fromLevel={levelUp.fromLevel}
           toLevel={levelUp.toLevel}
           character={character}
+          attributeAwards={levelUp.attributeAwards}
           onConfirm={() => setLevelUp(null)}
         />
       )}

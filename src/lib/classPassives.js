@@ -44,6 +44,8 @@ const ORBITAL_LABELS = Object.freeze({
 const BANNER_KINDS = new Set([
   "dirty_trick_selected",
   "orbital_assistant_activated",
+  "fire_support",
+  "fire_support_dodged",
   "kinetic_tantrum_normal",
   "kinetic_tantrum_strong",
   "astral_barrier_created",
@@ -85,7 +87,8 @@ export function resolveAbilityBanner(ev, player, opponent) {
   const isPassiveish =
     ev.type === "passive" ||
     (ev.type === "miss" && ev.missKind === "phantom_signal") ||
-    (ev.type === "secondary" && ev.passive);
+    (ev.type === "secondary" && ev.passive) ||
+    (ev.type === "dodge" && ev.kind === "fire_support_dodged");
   if (!isPassiveish || !BANNER_KINDS.has(kind)) return null;
 
   let resolvedSide = "player";
@@ -106,6 +109,8 @@ export function resolveAbilityBanner(ev, player, opponent) {
     detail = DIRTY_TRICK_LABELS[ev.dirtyTrick] || titleCaseKey(ev.dirtyTrick);
   } else if (kind === "orbital_assistant_activated") {
     detail = ORBITAL_LABELS[ev.effect] || titleCaseKey(ev.effect);
+  } else if (kind === "fire_support" || kind === "fire_support_dodged") {
+    detail = ORBITAL_LABELS.fire_support;
   } else if (kind === "kinetic_tantrum_strong") {
     detail = "Strong";
   } else if (kind === "kinetic_tantrum_normal") {
@@ -266,6 +271,7 @@ export function onTurnStart(fighter, rng = Math.random) {
 export function activateKineticTantrum(vanguard, strength, events) {
   if (vanguard.className !== "Vanguard") return;
   const ps = vanguard.passiveState;
+  if (!ps) return;
   if (strength === "normal" && ps.kineticTantrum === "strong") {
     // Strong always overrides Normal — never downgrade.
     events.push({
@@ -398,6 +404,7 @@ export function overclockTakenMultiplier(fighter) {
 export function gainOverclockStack(fighter, events) {
   if (fighter.className !== "Technomancer") return;
   const ps = fighter.passiveState;
+  if (!ps) return;
   ps.overclockStacks += 1;
   events.push({
     type: "passive",
@@ -412,6 +419,7 @@ export function gainOverclockStack(fighter, events) {
 export function removeOverclockStacks(fighter, amount, events) {
   if (fighter.className !== "Technomancer") return;
   const ps = fighter.passiveState;
+  if (!ps) return;
   const before = ps.overclockStacks;
   ps.overclockStacks = Math.max(0, before - amount);
   events.push({
@@ -461,6 +469,15 @@ export function applyDamageWithBarrier(target, pipelineDamage, events, { isDamag
       barrierRemaining: target.barrier,
       text: `${target.name}'s barrier absorbs ${barrierAbsorbed}`,
     });
+    if (target.barrier <= 0) {
+      events.push({
+        type: "barrier",
+        kind: "barrier_broken",
+        side: target.side,
+        barrierRemaining: 0,
+        text: `${target.name}'s Astral Barrier breaks`,
+      });
+    }
   }
 
   target.hp = Math.max(0, target.hp - hpDamage);
@@ -488,9 +505,33 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
   });
 
   if (effect === "fire_support") {
-    // Secondary True Damage event — 60% of sheet standard attack.
+    // Secondary True Damage — 60% of sheet standard attack. Not a normal attack.
+    // CanDodge by default; cannot Crit; bypasses Might/Tech resistance.
     const raw = Math.round((engineer.standardAttack || 0) * FIRE_SUPPORT_FRAC);
     const trueDmg = Math.max(0, raw);
+    if ((opponent.dodge || 0) > 0 && rng() < opponent.dodge) {
+      events.push({
+        type: "dodge",
+        secondaryKind: "fire_support",
+        passive: "Orbital Assistant",
+        kind: "fire_support_dodged",
+        attacker: engineer.side,
+        defender: opponent.side,
+        damage: 0,
+        crit: false,
+        dodged: true,
+        missed: false,
+        isNormalAttack: false,
+        damageType: "TRUE",
+        canCrit: false,
+        canDodge: true,
+        text: `${opponent.name} dodges Fire Support!`,
+      });
+      if (opponent.className === "Vanguard") {
+        activateKineticTantrum(opponent, "normal", events);
+      }
+      return;
+    }
     const res = applyDamageWithBarrier(opponent, trueDmg, events, { isDamagingHit: true });
     events.push({
       type: "secondary",
@@ -508,13 +549,14 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
       isNormalAttack: false,
       damageType: "TRUE",
       canCrit: false,
-      canDodge: false,
+      canDodge: true,
       text: `Orbital Assistant Fire Support deals ${res.hpDamage} True Damage`,
     });
     return;
   }
 
   if (effect === "defensive_protocol") {
+    // Re-select while pending: refresh one instance — do not stack reductions.
     ps.nextIncomingDamageMult = 1 - DEFENSIVE_PROTOCOL_REDUCTION;
     events.push({
       type: "passive",
@@ -528,6 +570,7 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
   }
 
   if (effect === "acquire_target") {
+    // Re-select while pending: keep a single +40pp bonus — do not stack to +80.
     ps.nextAttackCritBonus = ACQUIRE_TARGET_CRIT_BONUS;
     events.push({
       type: "passive",

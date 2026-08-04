@@ -37,19 +37,52 @@ function dungeonUnlocksBetween(fromLevel, toLevel) {
 
 /** Build a pending level-up payload from a mission/combat complete summary. */
 export function pendingLevelUpFromSummary(summary) {
+  const prog = summary?.progression;
+  if (prog && Number(prog.levels_gained) > 0) {
+    return {
+      fromLevel: Math.floor(Number(prog.previous_level)),
+      toLevel: Math.floor(Number(prog.level)),
+      attributeAwards: Array.isArray(prog.attribute_awards) ? prog.attribute_awards : [],
+    };
+  }
   if (!summary?.leveledUp || !summary.newLevel) return null;
   const to = Math.floor(Number(summary.newLevel));
   const from = Math.floor(Number(summary.prevLevel ?? to - 1));
   if (!(to > from)) return null;
-  return { fromLevel: from, toLevel: to };
+  return {
+    fromLevel: from,
+    toLevel: to,
+    attributeAwards: Array.isArray(summary.attribute_awards) ? summary.attribute_awards : [],
+  };
 }
 
 /**
  * Content-area level-up sheet (GameplayOverlayPortal — centered on the page,
  * not under/over the side nav). Shown after mission/combat complete is confirmed.
  */
-export default function LevelUpOverlay({ open, fromLevel, toLevel, character, onConfirm }) {
+export default function LevelUpOverlay({
+  open,
+  fromLevel,
+  toLevel,
+  character,
+  onConfirm,
+  attributeAwards = [],
+}) {
   const [equipped, setEquipped] = useState([]);
+
+  const awardLine = useMemo(() => {
+    if (!Array.isArray(attributeAwards) || !attributeAwards.length) return "";
+    const tallies = {};
+    for (const entry of attributeAwards) {
+      const stat = String(entry?.stat || "").trim();
+      if (!stat) continue;
+      tallies[stat] = (tallies[stat] || 0) + 1;
+    }
+    return ["strength", "agility", "intellect", "vitality", "luck"]
+      .filter((k) => tallies[k])
+      .map((k) => `+${tallies[k]} ${k}`)
+      .join(", ");
+  }, [attributeAwards]);
 
   useEffect(() => {
     if (!open || !character?.id) {
@@ -139,8 +172,12 @@ export default function LevelUpOverlay({ open, fromLevel, toLevel, character, on
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-2">
-            Soft-capped combat stats scale with level. Buy attributes with Stardust anytime.
+			Soft-capped combat stats scale with level. Permanent attributes are awarded
+            automatically on level-up; buy more with Stardust anytime.
           </p>
+          {awardLine ? (
+            <p className="text-[12px] font-display font-semibold text-amber-300 mt-2">{awardLine}</p>
+          ) : null}
         </div>
 
         <div className="rounded-xl border border-border/50 bg-card/50 p-3 space-y-2">

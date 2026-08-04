@@ -9,9 +9,9 @@ import AccountSettings from "@/components/settings/AccountSettings";
 import AudioSettings from "@/components/settings/AudioSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import { getMyCharacter } from "@/lib/socialEngine";
-import { departFromGuild } from "@/lib/guildUtils";
 import { purgeCharacter } from "@/lib/purgeCharacter";
 import PageStage from "@/components/game/PageStage";
+import { migrateBrowserSettingsIfNeeded } from "@/lib/preferencesEngine";
 
 export default function SettingsPage() {
   const [deleting, setDeleting] = useState(false);
@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    migrateBrowserSettingsIfNeeded();
     getMyCharacter().then((c) => {
       if (!c) return;
       setRedeemed(c.promo_codes_redeemed || []);
@@ -58,9 +59,7 @@ export default function SettingsPage() {
     setDeleting(true);
     const myChar = await getMyCharacter();
     if (myChar) {
-      await departFromGuild(myChar.id);
       await purgeCharacter(myChar.id, myChar.name);
-      await api.entities.Character.delete(myChar.id);
     }
     toast({ title: "Character deleted", description: "You can create a new operative now." });
     window.location.href = "/";

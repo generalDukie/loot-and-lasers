@@ -3,6 +3,9 @@ extends Node
 ## Game-specific systems stay in their own managers and call into this.
 ## See docs/NAKAMA_RPC.md for the manager-facing RPC contract.
 ##
+## Critical authority rule: Nakama is auth/session/identity only.
+## Gameplay RPCs are hard-blocked on the Godot client (Node owns gameplay).
+##
 ## Primary RPC API (do not name methods `rpc` — conflicts with Node.rpc):
 ##   await NakamaManager.call_rpc("id", payload)
 ##   await NakamaManager.call_authenticated_rpc("id", payload)
@@ -24,6 +27,12 @@ const RPC_TIMEOUT_SEC := 10.0
 const RPC_TRANSIENT_RETRIES := 2
 ## Base delay between transient retries (seconds); doubles each attempt.
 const RPC_RETRY_BACKOFF_SEC := 0.35
+
+## Sole non-auth RPCs still permitted (read-only client config). Everything else
+## must go through Node GameApiClient — including profile/inventory/missions/equip.
+const ALLOWED_CLIENT_RPCS := {
+	"config_get": true,
+}
 
 var client: NakamaClient
 var session: NakamaSession
@@ -121,18 +130,11 @@ func run_connection_smoke_test() -> Dictionary:
 	if not bool(auth_res.get("success", false)):
 		return {"success": false, "steps": steps, "diagnostics": get_connection_diagnostics()}
 
-	var profile_res: Dictionary = await invoke_rpc("profile_get", {})
+	# Gameplay RPCs (profile/inventory/missions/…) are client-blocked by design.
 	steps.append({
-		"step": "profile_get",
-		"ok": bool(profile_res.get("success", false)),
-		"error": str(profile_res.get("error", "")),
-	})
-
-	var inv_res: Dictionary = await invoke_rpc("inventory_get", {})
-	steps.append({
-		"step": "inventory_get",
-		"ok": bool(inv_res.get("success", false)),
-		"error": str(inv_res.get("error", "")),
+		"step": "gameplay_rpc_gate",
+		"ok": not is_client_rpc_allowed("mission_start"),
+		"detail": "Nakama gameplay RPCs blocked; Node is authority",
 	})
 
 	var sock_res: Dictionary = await connect_socket()
@@ -544,6 +546,11 @@ func invoke_rpc(rpc_id: String, payload: Dictionary = {}, options: Dictionary = 
 	return _promote_server_envelope(res)
 
 
+## True only for allowlisted non-gameplay client RPCs (currently config_get).
+func is_client_rpc_allowed(rpc_id: String) -> bool:
+	return bool(ALLOWED_CLIENT_RPCS.get(rpc_id.strip_edges(), false))
+
+
 func _execute_rpc(
 	rpc_id: String,
 	payload: Variant,
@@ -553,6 +560,15 @@ func _execute_rpc(
 	var id := rpc_id.strip_edges()
 	if id.is_empty():
 		return _rpc_fail("Missing RPC id")
+
+	# Critical: never let the Godot client exercise Nakama gameplay authority.
+	if not is_client_rpc_allowed(id):
+		var blocked := (
+			"Nakama RPC '%s' blocked — gameplay authority is Node only" % id
+		)
+		push_warning("[NakamaManager] %s" % blocked)
+		rpc_failed.emit(id, blocked, 410)
+		return _rpc_fail(blocked, 410)
 
 	var timeout_sec := float(options.get("timeout_sec", RPC_TIMEOUT_SEC))
 	var retries := int(options.get("retries", RPC_TRANSIENT_RETRIES))

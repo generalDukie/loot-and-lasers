@@ -58,41 +58,33 @@ function test(name, fn) {
 
 console.log("\nStardust economy tests\n");
 
-test("StardustPerFuel anchors exact", () => {
-  for (const [lvl, val] of STARDUST_PER_FUEL_ANCHORS) {
-    assert.equal(StardustPerFuel(lvl), val, `L${lvl}`);
-    assert.equal(getMissionStardustPerFuel(lvl), val, `alias L${lvl}`);
+test("StardustPerFuel closed-form (Restoration 11)", () => {
+  const f = (L) => {
+    if (L <= 1) return 50;
+    return Math.round(50 + 1.009 * (L - 1) ** 1.625 * (1 + (L / 166.66) ** 3.055));
+  };
+  for (const L of [1, 10, 25, 50, 100, 200, 300, 500, 1000]) {
+    assert.equal(StardustPerFuel(L), f(L), `L${L}`);
+    assert.equal(getMissionStardustPerFuel(L), f(L), `alias L${L}`);
   }
+  // Historical anchors are no longer production authority.
+  assert.ok(Array.isArray(STARDUST_PER_FUEL_ANCHORS) && STARDUST_PER_FUEL_ANCHORS.length > 0);
 });
 
-test("StardustPerFuel monotone between anchors", () => {
+test("StardustPerFuel monotone and uncapped", () => {
   let prev = StardustPerFuel(1);
-  for (let L = 2; L <= 320; L++) {
+  for (let L = 2; L <= 520; L++) {
     const v = StardustPerFuel(L);
     assert.ok(v >= prev, `L${L}: ${v} < ${prev}`);
     prev = v;
   }
-});
-
-test("StardustPerFuel stays within surrounding anchors", () => {
-  for (let i = 0; i < STARDUST_PER_FUEL_ANCHORS.length - 1; i++) {
-    const [x0, y0] = STARDUST_PER_FUEL_ANCHORS[i];
-    const [x1, y1] = STARDUST_PER_FUEL_ANCHORS[i + 1];
-    for (let L = x0 + 1; L < x1; L++) {
-      const v = StardustPerFuel(L);
-      assert.ok(v >= y0 && v <= y1, `L${L}=${v} not in [${y0},${y1}]`);
-    }
-  }
-});
-
-test("StardustPerFuel >300 keeps rising", () => {
-  assert.ok(StardustPerFuel(301) > StardustPerFuel(300));
-  assert.ok(StardustPerFuel(350) > StardustPerFuel(301));
+  assert.ok(StardustPerFuel(1000) > StardustPerFuel(500));
 });
 
 test("MissionStardust = SD/F * fuel", () => {
-  assert.equal(MissionStardustReward(50, 5), 600 * 5);
-  assert.equal(computeMissionStardustFromFuel(5, 50, 0.5), 3000); // efficiency ignored
+  const rate50 = StardustPerFuel(50);
+  assert.equal(MissionStardustReward(50, 5), rate50 * 5);
+  assert.equal(computeMissionStardustFromFuel(5, 50, 0.5), rate50 * 5); // efficiency ignored
   assert.equal(MissionStardustReward(1, 2), 100);
 });
 
@@ -148,7 +140,7 @@ test("Junk value 45% base with ±40% variance", () => {
 });
 
 test("Gear sale values", () => {
-  const rate = StardustPerFuel(50); // 600
+  const rate = StardustPerFuel(50);
   assert.equal(
     GearSaleValue({ type: "armor", rarity: "rare", level_requirement: 50 }),
     Math.round(rate * 2 * 1.0 * 1.0)
@@ -195,7 +187,8 @@ test("Dungeon rarity tables", () => {
 
 test("Arena first 10 wins/day", () => {
   assert.equal(ARENA_REWARDED_WINS_PER_DAY, 10);
-  assert.equal(ArenaWinStardust(50), Math.round(2.25 * 600));
+  const sd50 = StardustPerFuel(50);
+  assert.equal(ArenaWinStardust(50), Math.round(2.25 * sd50));
   assert.equal(arenaWinGrantsStardust(0), true);
   assert.equal(arenaWinGrantsStardust(9), true);
   assert.equal(arenaWinGrantsStardust(10), false);
@@ -218,8 +211,9 @@ test("Arena first 10 wins/day", () => {
 
 test("Mining 3% efficiency", () => {
   assert.equal(MINING_EFFICIENCY, 0.03);
-  assert.equal(MiningStardust(50, 1), Math.round(600 * 0.03));
-  assert.equal(computeMiningReward(50, 1), Math.round(600 * 0.03 * 60));
+  const sd50 = StardustPerFuel(50);
+  assert.equal(MiningStardust(50, 1), Math.round(sd50 * 0.03));
+  assert.equal(computeMiningReward(50, 1), Math.round(sd50 * 0.03 * 60));
 });
 
 test("Attribute purchase anchors + independent counters", () => {

@@ -256,10 +256,12 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
     return () => clearTimeout(t);
   }, [phase]);
 
+  const events = Array.isArray(battle?.events) ? battle.events : [];
+
   useEffect(() => {
     if (phase !== "fight") return;
-    if (idx >= battle.events.length) { setPhase("outro"); return; }
-    const ev = battle.events[idx];
+    if (idx >= events.length) { setPhase("outro"); return; }
+    const ev = events[idx];
     const dur = eventDuration(ev);
     // Class passive / ability callout (name + rolled variant when applicable).
     let bannerTimer;
@@ -291,7 +293,7 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
       setIdx((i) => i + 1);
     }, dur);
     return () => { clearTimeout(land); clearTimeout(next); clearTimeout(bannerTimer); };
-  }, [phase, idx, battle.events, shake, player, opponent]);
+  }, [phase, idx, events, shake, player, opponent]);
 
   useEffect(() => {
     if (phase !== "outro") return;
@@ -308,13 +310,13 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
     return undefined;
   }, [phase, battle.winner]);
 
-  const ev = phase === "fight" ? battle.events[idx] : null;
+  const ev = phase === "fight" ? events[idx] : null;
   const isQuiet = ev?.type === "regen" || ev?.type === "barrier" || (ev?.type === "passive" && !(ev?.damage > 0));
   const attacker = ev?.attacker;
   const defender = ev?.defender || (ev?.type === "barrier" || ev?.type === "passive" ? ev?.side : null);
   const isBigHit = !!(ev && !ev.dodged && ev.damage && (ev.crit || ev.type === "ability" || ev.type === "drone"));
-  const combo = phase === "fight" ? comboAt(battle.events, idx) : 0;
-  const combatStatus = reduceCombatStatus(battle.events, phase === "fight" ? idx : battle.events.length - 1);
+  const combo = phase === "fight" ? comboAt(events, idx) : 0;
+  const combatStatus = reduceCombatStatus(events, phase === "fight" ? idx : events.length - 1);
   const showDev = isCombatDevDiagnosticsEnabled();
 
   const floatFor = (side) => {
@@ -367,9 +369,9 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
         <div className="absolute bottom-2 right-2 w-6 h-6 border-b-2 border-r-2 border-rose-400/30 rounded-br-lg pointer-events-none" />
       </motion.div>
 
-      {phase === "fight" && <CombatEventLog events={battle.events} currentIdx={idx} />}
+      {phase === "fight" && <CombatEventLog events={events} currentIdx={idx} />}
       {showDev && phase === "fight" && (
-        <CombatDevDiagnostics events={battle.events} currentIdx={idx} status={combatStatus} />
+        <CombatDevDiagnostics events={events} currentIdx={idx} status={combatStatus} />
       )}
 
       {/* Combo callout — appears after 2+ consecutive hits by the same attacker */}

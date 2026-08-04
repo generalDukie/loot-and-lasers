@@ -786,7 +786,10 @@ func _event_duration(ev: Dictionary) -> float:
 func _combo_at(i: int) -> int:
 	if i < 0 or i >= _events.size():
 		return 0
-	var ev: Dictionary = _events[i]
+	var raw: Variant = _events[i]
+	if typeof(raw) != TYPE_DICTIONARY:
+		return 0
+	var ev: Dictionary = raw
 	var ev_type := str(ev.get("type", ""))
 	if ev.is_empty() or bool(ev.get("dodged", false)) or ev_type in ["regen", "dodge", "miss", "passive"]:
 		return 0
@@ -795,9 +798,10 @@ func _combo_at(i: int) -> int:
 	var count := 0
 	var j := i
 	while j >= 0:
-		var e: Dictionary = _events[j]
-		if typeof(e) != TYPE_DICTIONARY:
+		var raw_e: Variant = _events[j]
+		if typeof(raw_e) != TYPE_DICTIONARY:
 			break
+		var e: Dictionary = raw_e
 		var et := str(e.get("type", ""))
 		if str(e.get("attacker", "")) == str(ev.get("attacker", "")) \
 				and not bool(e.get("dodged", false)) \
@@ -815,10 +819,11 @@ func _run_playback() -> void:
 	while _playing and not _finished and _event_i < _events.size():
 		if gen != _generation:
 			return
-		var ev: Dictionary = _events[_event_i]
-		if typeof(ev) != TYPE_DICTIONARY:
+		var raw: Variant = _events[_event_i]
+		if typeof(raw) != TYPE_DICTIONARY:
 			_event_i += 1
 			continue
+		var ev: Dictionary = raw
 		_combo = _combo_at(_event_i)
 		_update_combo(str(ev.get("attacker", "")))
 		await _play_one_event(ev, gen)
@@ -896,7 +901,8 @@ func _land_event(ev: Dictionary) -> void:
 	if not floater.is_empty():
 		var host: Control = defender if defender else attacker
 		if host:
-			_fx.float_text(host, str(floater.get("label", "")), floater.get("color", Color.WHITE), bool(floater.get("crit", false)))
+			var floater_color: Color = floater.get("color", Color.WHITE) as Color
+			_fx.float_text(host, str(floater.get("label", "")), floater_color, bool(floater.get("crit", false)))
 
 	if int(ev.get("heal", 0)) > 0:
 		var heal := int(ev.get("heal", 0))
@@ -966,12 +972,16 @@ func _maybe_ability_banner(ev: Dictionary) -> void:
 
 func _refresh_status_presentation() -> void:
 	var status: Dictionary = CombatPresentation.reduce_status(_events, _event_i)
+	var player_side: Dictionary = status.get("player", {}) as Dictionary
+	var opponent_side: Dictionary = status.get("opponent", {}) as Dictionary
 	if _player_status:
-		_player_status.text = CombatPresentation.status_chip_text(status.get("player", {}))
+		_player_status.text = CombatPresentation.status_chip_text(player_side)
 	if _enemy_status:
-		_enemy_status.text = CombatPresentation.status_chip_text(status.get("opponent", {}))
+		_enemy_status.text = CombatPresentation.status_chip_text(opponent_side)
 	if _dev_diag and _dev_diag.visible:
-		var ev: Dictionary = _events[_event_i] if _event_i >= 0 and _event_i < _events.size() and typeof(_events[_event_i]) == TYPE_DICTIONARY else {}
+		var ev: Dictionary = {}
+		if _event_i >= 0 and _event_i < _events.size() and typeof(_events[_event_i]) == TYPE_DICTIONARY:
+			ev = _events[_event_i]
 		_dev_diag.text = "COMBAT DEV\nidx %s/%s\ntype=%s kind=%s\ndmg=%s crit=%s dtype=%s" % [
 			_event_i,
 			maxi(0, _events.size() - 1),

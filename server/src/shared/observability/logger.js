@@ -33,11 +33,11 @@ export function setLogLevel(level) {
   if (n != null) minLevel = n;
 }
 
-function emit(severity) {
+function emit(payload) {
   const line = JSON.stringify(payload);
-  if (severity.severity === "error" || severity === "critical") {
+  if (payload.severity === "error" || payload.severity === "critical") {
     console.error(line);
-  } else if (severity.severity === "warn") {
+  } else if (payload.severity === "warn") {
     console.warn(line);
   } else {
     console.log(line);

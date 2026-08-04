@@ -1,8 +1,9 @@
-# Deploy Node API to Hetzner staging (178.156.210.186:8787).
+# Deploy Node API to Hetzner staging (public HTTPS -> 127.0.0.1:8787).
 # Prerequisites: SSH key authorized for root@178.156.210.186; Docker on the host.
 #
 # Usage (from repo root, PowerShell):
 #   .\scripts\deploy-hetzner-node-api.ps1
+#   .\scripts\deploy-hetzner-node-api.ps1 -IdentityFile "$env:USERPROFILE\.ssh\id_ed25519"
 
 param(
   [string]$HostIp = "178.156.210.186",
@@ -93,13 +94,13 @@ Write-Host "Extracting and building on host..."
 Invoke-Remote "bash ${RemoteDir}/_deploy.sh && rm -f ${RemoteDir}/_deploy.sh"
 
 Write-Host ""
-Write-Host "Public health check..."
+Write-Host "Public health check (HTTPS reverse proxy)..."
 try {
-  $h = Invoke-WebRequest -Uri "http://${HostIp}:8787/health" -UseBasicParsing -TimeoutSec 15
+  $h = Invoke-WebRequest -Uri "https://${HostIp}/health" -UseBasicParsing -TimeoutSec 15
   Write-Host $h.Content
 } catch {
-  Write-Warning "Container may be up, but public :8787 failed: $($_.Exception.Message)"
-  Write-Warning "Allow TCP 8787 in the Hetzner Cloud Firewall for this server."
+  Write-Warning "HTTPS /health failed: $($_.Exception.Message)"
+  Write-Warning "Node binds 127.0.0.1:8787 - confirm nginx proxies 443 to that port."
 }
 
-Write-Host "Done. Staging NODE URL: http://${HostIp}:8787"
+Write-Host "Done. Staging NODE URL: https://${HostIp}"

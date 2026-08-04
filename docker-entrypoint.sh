@@ -2,8 +2,11 @@
 set -e
 cd /app/server
 
+# Shared web rules under /app/src/lib use the @/ import alias.
+ALIAS="--import ./scripts/register-src-alias.mjs"
+
 if [ "${RUN_SEED:-true}" = "true" ]; then
-  node src/seed.js
+  node $ALIAS src/seed.js
 fi
 
-exec node src/index.js
+exec node $ALIAS src/index.js

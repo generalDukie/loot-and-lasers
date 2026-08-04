@@ -199,7 +199,10 @@ async function runPlayer(label) {
   assert(created.status === 201 && created.data?.id, `${label}: create character (${created.status})`);
   const characterId = created.data.id;
   assert(created.data.created_by_id === nodeUserId, `${label}: character owned by Node user`);
-  assert.ok(created.data.nova_crystals === 50 || created.data.nova_crystals === 25, `${label}: starter Nova is server-authored`);
+  assert(
+    created.data.nova_crystals === 50 || created.data.nova_crystals === 25,
+    `${label}: starter Nova is server-authored`,
+  );
 
   const replay = await nodeReq("/api/entities/Character", {
     method: "POST",

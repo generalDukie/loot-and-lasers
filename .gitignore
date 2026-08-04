@@ -76,5 +76,10 @@ docker-data/
 **/nakama_device_id.txt
 **/nakama_device_id_*.txt
 **/nakama_secrets.cfg
+**/release_client.cfg
 **/remote_config_cache.json
 **/backend_env.cfg
+
+# Generated desktop exports and installer artifacts
+/build/
+/installer/output/

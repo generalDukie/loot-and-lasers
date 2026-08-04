@@ -27,16 +27,29 @@ func _result(res: Dictionary, fallback_msg: String = "") -> Dictionary:
 	elif msg.is_empty():
 		msg = fallback_msg if not fallback_msg.is_empty() else "Request failed"
 	var audit_id := ""
+	var correlation_id := ""
+	var reference_id := ""
 	if typeof(data) == TYPE_DICTIONARY:
 		audit_id = str(data.get("audit_id", data.get("auditId", "")))
-	return {
+		correlation_id = str(data.get("correlation_id", data.get("correlationId", "")))
+		reference_id = str(data.get("transaction_id", data.get("id", "")))
+		if audit_id.is_empty() == false:
+			msg = "%s · audit=%s" % [msg, audit_id.substr(0, 12)]
+		elif correlation_id.is_empty() == false:
+			msg = "%s · corr=%s" % [msg, correlation_id.substr(0, 12)]
+	var out := {
 		"ok": ok,
 		"message": msg,
 		"error_code": str(res.get("status", 0)),
+		"status": int(res.get("status", 0)),
 		"data": data if typeof(data) == TYPE_DICTIONARY else {},
 		"raw": data,
 		"audit_id": audit_id,
+		"correlation_id": correlation_id,
+		"reference_id": reference_id,
 	}
+	admin_action_finished.emit(out)
+	return out
 
 
 func _require_admin() -> Dictionary:
@@ -157,6 +170,24 @@ func search_players(query: String = "", limit: int = 200) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
+	var q := query.strip_edges()
+	# Prefer authoritative LookupPlayer when a query is present (name / id / email / nakama).
+	if not q.is_empty():
+		var look: Dictionary = await lookup_player(q, clampi(limit, 1, 50))
+		if look.ok and typeof(look.data) == TYPE_DICTIONARY:
+			var chars: Array = look.data.get("characters", []) if typeof(look.data.get("characters", null)) == TYPE_ARRAY else []
+			var accounts: Array = look.data.get("accounts", []) if typeof(look.data.get("accounts", null)) == TYPE_ARRAY else []
+			look["data"] = {
+				"players": chars,
+				"characters": chars,
+				"accounts": accounts,
+				"query": q,
+			}
+			look["raw"] = chars
+			look["message"] = "Found %s character(s), %s account(s)." % [chars.size(), accounts.size()]
+			return look
+		if not look.ok:
+			return look
 	var res: Dictionary = await GameApiClient.request(
 		"GET", "/api/entities/Character?sort=-created_date&limit=%s" % clampi(limit, 1, 500), null, true
 	)
@@ -169,18 +200,7 @@ func search_players(query: String = "", limit: int = 200) -> Dictionary:
 		rows = raw
 	elif typeof(raw) == TYPE_DICTIONARY and typeof(raw.get("data", null)) == TYPE_ARRAY:
 		rows = raw["data"]
-	var q := query.strip_edges().to_lower()
-	if not q.is_empty():
-		var filtered: Array = []
-		for row in rows:
-			if typeof(row) != TYPE_DICTIONARY:
-				continue
-			var name := str(row.get("name", "")).to_lower()
-			var cid := str(row.get("id", "")).to_lower()
-			if name.find(q) >= 0 or cid.find(q) >= 0:
-				filtered.append(row)
-		rows = filtered
-	out["data"] = {"players": rows}
+	out["data"] = {"players": rows, "accounts": []}
 	out["raw"] = rows
 	return out
 

@@ -19,7 +19,13 @@ var _tick: Timer
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_populate()
 
 
 func _boot() -> void:
@@ -90,7 +96,7 @@ func _populate() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 
-	var nova := int(GameManager.active_character.get("nova_crystals", 0))
+	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	_balance_lab.text = "💎  %s  Nova Crystals" % _fmt_int(nova)
 
 	_list.add_child(_make_quests_panel())

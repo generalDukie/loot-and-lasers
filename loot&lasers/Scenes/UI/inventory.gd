@@ -29,7 +29,13 @@ var _selected_id := ""
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _refresh()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_refresh()
 
 
 func _build() -> void:
@@ -163,7 +169,8 @@ func _refresh() -> void:
 	var cap := InventoryRules.bag_cap(ch)
 	_header.text = "%s · Lv %s · Bag %s/%s · Power %s · ✦ %s" % [
 		LegacyName.full_name(ch), str(ch.get("level", 1)), bag_n, cap,
-		str(StatsRules.combat_power(ch, _equipped_items())), str(ch.get("stardust", 0)),
+		str(StatsRules.combat_power(ch, _equipped_items())),
+		str(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)),
 	]
 	_update_buffs(ch)
 	_rebuild_doll(ch)
@@ -687,20 +694,11 @@ func _on_use(item_id: String, item_name: String) -> void:
 
 
 func _on_equip(item_id: String) -> void:
-	if _busy or EquipmentManager.is_mutating():
+	if _busy:
 		return
 	_busy = true
 	_status.text = "Equipping…"
-	var item_type := ""
-	var list_res: Dictionary = await InventoryManager.list_character_items()
-	if list_res.get("ok", false) and typeof(list_res.get("data", null)) == TYPE_ARRAY:
-		var found := InventoryRules.find_by_id(list_res.data, item_id)
-		item_type = str(found.get("type", ""))
-	if item_type.is_empty():
-		_busy = false
-		_fail("Cannot resolve item type for equip")
-		return
-	var res: Dictionary = await EquipmentManager.equip_from_bag(item_id, item_type)
+	var res: Dictionary = await AuthManager.equip_item(item_id)
 	_busy = false
 	if not res.ok:
 		_fail(str(res.get("error", "Equip failed")))
@@ -712,11 +710,11 @@ func _on_equip(item_id: String) -> void:
 
 
 func _on_unequip(item_id: String) -> void:
-	if _busy or EquipmentManager.is_mutating():
+	if _busy:
 		return
 	_busy = true
 	_status.text = "Unequipping…"
-	var res: Dictionary = await EquipmentManager.unequip_by_instance("", item_id)
+	var res: Dictionary = await AuthManager.unequip_item(item_id)
 	_busy = false
 	if not res.ok:
 		var err := str(res.get("error", "Unequip failed"))

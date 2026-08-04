@@ -20,12 +20,24 @@ func _ready() -> void:
 
 
 func _boot() -> void:
-	_status.text = "Loading friends…"
+	_set_status("Loading friends…")
 	await SocialManager.load_friends()
 	await SocialManager.load_blocks()
 	await _warm_names()
 	await _warm_presence()
 	_populate()
+	_set_status("")
+
+
+func _set_status(text: String = "", danger: bool = false) -> void:
+	if not is_instance_valid(_status):
+		return
+	_status.text = text
+	_status.visible = not text.is_empty()
+	_status.add_theme_color_override(
+		"font_color",
+		ClientUi.DANGER if danger else ClientUi.MUTED
+	)
 
 
 func _warm_names() -> void:
@@ -134,6 +146,7 @@ func _build() -> void:
 		_filter_row.add_child(fb)
 
 	_status = ClientUi.make_status()
+	_status.visible = false
 	root.add_child(_status)
 
 	var scroll := ScrollContainer.new()
@@ -197,7 +210,6 @@ func _populate() -> void:
 	var meta := find_child("FriendsMeta", true, false) as Label
 	if meta:
 		meta.text = "%s friends · %s online" % [SocialManager.friendships.size(), online_n]
-	_status.text = "Ready."
 
 	if _tab == "requests":
 		_list.add_child(_section("INCOMING (%s)" % SocialManager.incoming_requests.size()))
@@ -359,7 +371,7 @@ func _on_search() -> void:
 	if _busy:
 		return
 	_busy = true
-	_status.text = "Searching…"
+	_set_status("Searching…")
 	var hits: Array = await SocialManager.search_characters(_search.text)
 	_busy = false
 	for c in _list.get_children():
@@ -375,7 +387,7 @@ func _on_search() -> void:
 	ClientUi.apply_ghost_button(back_list)
 	back_list.pressed.connect(func() -> void: _populate())
 	_list.add_child(back_list)
-	_status.text = "%s matches" % hits.size()
+	_set_status("%s matches" % hits.size())
 
 
 func _make_search_row(c: Dictionary) -> PanelContainer:
@@ -419,23 +431,26 @@ func _on_report(c: Dictionary) -> void:
 	if _busy:
 		return
 	_busy = true
-	_status.text = "Reporting…"
+	_set_status("Reporting…")
 	var res: Dictionary = await SocialManager.report_player(c, "Inappropriate profile", "profile")
 	_busy = false
-	_status.text = "Report submitted." if res.ok else _err(res)
+	if res.ok:
+		_set_status("Report submitted.")
+	else:
+		_set_status(_err(res), true)
 
 
 func _on_add(c: Dictionary) -> void:
 	if _busy:
 		return
 	_busy = true
-	_status.text = "Sending request…"
+	_set_status("Sending request…")
 	var res: Dictionary = await SocialManager.send_friend_request(c)
 	_busy = false
 	if not res.ok:
-		_status.text = _err(res)
+		_set_status(_err(res), true)
 		return
-	_status.text = "Request sent."
+	_set_status("Request sent.")
 	await _warm_names()
 	await _warm_presence()
 	_populate()
@@ -448,9 +463,9 @@ func _on_accept(req: Dictionary) -> void:
 	var res: Dictionary = await SocialManager.accept_friend(req)
 	_busy = false
 	if not res.ok:
-		_status.text = _err(res)
+		_set_status(_err(res), true)
 		return
-	_status.text = "Accepted."
+	_set_status("Accepted.")
 	await _warm_names()
 	await _warm_presence()
 	_populate()
@@ -489,7 +504,10 @@ func _on_block(other_id: String, other_name: String) -> void:
 	_busy = true
 	var res: Dictionary = await SocialManager.block_character(other_id, other_name)
 	_busy = false
-	_status.text = "Blocked." if res.ok else _err(res)
+	if res.ok:
+		_set_status("Blocked.")
+	else:
+		_set_status(_err(res), true)
 	_populate()
 
 

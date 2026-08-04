@@ -1,7 +1,7 @@
 extends Node
-## Black Market shop — Phase 15: Nakama shop_get / shop_buy / shop_sell / shop_refresh.
+## Black Market shop — Nakama shop state with Node Character wallet bridge.
 ## Fuel packs remain on Node (BuyFuel) via MissionManager.
-## Soft currency (stardust) only for stall buy/sell. Free cooldown refresh (no Nova restock).
+## Stall Stardust mutations are server-to-server and returned as a normalized wallet.
 
 signal shop_loaded(shop: Dictionary)
 signal shop_refreshed(shop: Dictionary)
@@ -29,6 +29,14 @@ var _busy := false
 
 func _ready() -> void:
 	print("[ShopManager] ready (Nakama shop authority)")
+
+
+func clear_local() -> void:
+	shop_meta = {}
+	last_purchase = {}
+	loading = false
+	mutating = false
+	_busy = false
 
 
 func is_loading() -> bool:
@@ -96,7 +104,11 @@ func buy_offer(character_id: String, shop_id: String, offer_id: String) -> Dicti
 	var payload := _character_payload(character_id)
 	payload["shop_id"] = shop_id if not shop_id.is_empty() else DEFAULT_SHOP_ID
 	payload["offer_id"] = offer_id
-	payload["request_id"] = "buy-%s-%d" % [offer_id.substr(0, mini(12, offer_id.length())), Time.get_unix_time_from_system()]
+	payload["request_id"] = "shop_buy:%s:%s:%d" % [
+		payload["shop_id"],
+		offer_id,
+		int(shop_meta.get("revision", 1)),
+	]
 	if shop_meta.has("revision"):
 		payload["expected_revision"] = int(shop_meta.get("revision", 1))
 	var res: Dictionary = await NakamaManager.invoke_rpc("shop_buy", payload)
@@ -118,8 +130,7 @@ func buy_offer(character_id: String, shop_id: String, offer_id: String) -> Dicti
 		}],
 		"pending_loot": [],
 	}
-	if CurrencyManager != null and CurrencyManager.has_method("load_wallet"):
-		await CurrencyManager.load_wallet()
+	await _apply_wallet_or_reconcile(data, "shop_buy")
 	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
 		await InventoryManager.load_inventory(str(payload.get("character_id", "")))
 	item_purchased.emit(data)
@@ -137,7 +148,7 @@ func sell_item(character_id: String, item_instance_id: String, quantity: int = 1
 	var payload := _character_payload(character_id)
 	payload["item_instance_id"] = item_instance_id
 	payload["quantity"] = quantity
-	payload["request_id"] = "sell-%s-%d" % [item_instance_id.substr(0, mini(12, item_instance_id.length())), Time.get_unix_time_from_system()]
+	payload["request_id"] = "shop_sell:%s:%s" % [payload.get("shop_id", DEFAULT_SHOP_ID), item_instance_id]
 	var res: Dictionary = await NakamaManager.invoke_rpc("shop_sell", payload)
 	_busy = false
 	_set_mutating(false)
@@ -146,8 +157,7 @@ func sell_item(character_id: String, item_instance_id: String, quantity: int = 1
 		shop_error.emit(err)
 		return {"ok": false, "error": err, "data": {}}
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", null)) == TYPE_DICTIONARY else {}
-	if CurrencyManager != null and CurrencyManager.has_method("load_wallet"):
-		await CurrencyManager.load_wallet()
+	await _apply_wallet_or_reconcile(data, "shop_sell")
 	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
 		await InventoryManager.load_inventory(str(payload.get("character_id", "")))
 	item_sold.emit(data)
@@ -166,7 +176,10 @@ func refresh_shop_for(character_id: String = "", shop_id: String = DEFAULT_SHOP_
 	var payload := _character_payload(character_id)
 	payload["shop_id"] = shop_id if not shop_id.is_empty() else DEFAULT_SHOP_ID
 	payload["level"] = int(GameManager.active_character.get("level", 1))
-	payload["request_id"] = "ref-%d-%d" % [Time.get_unix_time_from_system(), randi() % 100000]
+	payload["request_id"] = "shop_refresh:%s:%d" % [
+		payload["shop_id"],
+		int(shop_meta.get("revision", 1)),
+	]
 	var res: Dictionary = await NakamaManager.invoke_rpc("shop_refresh", payload)
 	_busy = false
 	_set_mutating(false)
@@ -176,8 +189,7 @@ func refresh_shop_for(character_id: String = "", shop_id: String = DEFAULT_SHOP_
 		return {"ok": false, "error": err, "data": {}}
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", null)) == TYPE_DICTIONARY else {}
 	_apply_shop_data(data)
-	if CurrencyManager != null and CurrencyManager.has_method("load_wallet"):
-		await CurrencyManager.load_wallet()
+	await _apply_wallet_or_reconcile(data, "shop_refresh")
 	shop_refreshed.emit(shop_meta)
 	shop_changed.emit(shop_meta)
 	return {"ok": true, "error": "", "data": data}
@@ -254,8 +266,8 @@ func fuel_purchases_left() -> int:
 
 func can_buy_fuel() -> Dictionary:
 	var c: Dictionary = GameManager.active_character
-	var nova := int(c.get("nova_crystals", 0))
-	var fuel := int(c.get("fuel", 0))
+	var nova: float = float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)) if CurrencyManager != null else 0.0
+	var fuel: float = float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_FUEL)) if CurrencyManager != null else 0.0
 	var max_fuel := int(c.get("max_fuel", 100))
 	if fuel_purchases_left() <= 0:
 		return {"ok": false, "error": "Daily fuel purchases used up"}
@@ -284,6 +296,16 @@ func _apply_shop_data(data: Variant) -> void:
 		meta = data.get("shop", null)
 	if typeof(meta) == TYPE_DICTIONARY:
 		shop_meta = (meta as Dictionary).duplicate(true)
+
+
+func _apply_wallet_or_reconcile(data: Dictionary, source: String) -> void:
+	if CurrencyManager == null:
+		return
+	var normalized: Variant = data.get("wallet", null)
+	if typeof(normalized) == TYPE_DICTIONARY:
+		if CurrencyManager.apply_authoritative_wallet(normalized, source):
+			return
+	await CurrencyManager.reconcile_wallet()
 
 
 func _set_loading(value: bool) -> void:

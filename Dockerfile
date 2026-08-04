@@ -22,6 +22,9 @@ COPY server/package.json server/package-lock.json ./server/
 RUN cd server && npm ci --omit=dev
 
 COPY server/ ./server/
+# Node gameplay handlers import shared deterministic rules from the web source
+# tree. Keep that source of truth available in the production runtime image.
+COPY src/lib ./src/lib
 COPY --from=client-build /app/dist ./dist
 
 ENV NODE_ENV=production

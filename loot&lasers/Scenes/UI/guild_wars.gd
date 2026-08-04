@@ -10,7 +10,13 @@ var _busy := false
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_populate()
 
 
 func _boot() -> void:
@@ -97,12 +103,16 @@ func _populate() -> void:
 		return
 	_meta.text = "[%s] %s · %s · ✨ %s SD · declare costs %s" % [
 		str(guild.get("tag", "")), str(guild.get("name", "")), role,
-		str(GameManager.active_character.get("stardust", 0)),
+		str(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)),
 		GuildWarManager.DECLARE_COST,
 	]
 
 	_list.add_child(ClientUi.make_section_header("DECLARE", "Choose a Target", "Leaders & officers only · %s SD." % GuildWarManager.DECLARE_COST))
 	var can_declare := role == "leader" or role == "officer"
+	var can_afford := CurrencyManager.can_afford(
+		CurrencyManager.CURRENCY_STARDUST,
+		GuildWarManager.DECLARE_COST
+	)
 	var targets := 0
 	for g in SocialManager.guild_browse:
 		if typeof(g) != TYPE_DICTIONARY:
@@ -111,7 +121,7 @@ func _populate() -> void:
 		if gid == str(guild.get("id", "")):
 			continue
 		targets += 1
-		_list.add_child(_target_row(g, can_declare))
+		_list.add_child(_target_row(g, can_declare, can_afford))
 	if targets == 0:
 		_list.add_child(_lab("No other guilds to declare on."))
 
@@ -124,7 +134,7 @@ func _populate() -> void:
 		await _add_war_card(w)
 
 
-func _target_row(g: Dictionary, can_declare: bool) -> PanelContainer:
+func _target_row(g: Dictionary, can_declare: bool, can_afford: bool) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.07, 0.08, 0.12, 0.95), Color(0.55, 0.35, 0.3, 0.45), 10, 1
@@ -142,6 +152,7 @@ func _target_row(g: Dictionary, can_declare: bool) -> PanelContainer:
 		var btn := Button.new()
 		btn.text = "Declare"
 		ClientUi.apply_primary_button(btn)
+		btn.disabled = not can_afford
 		var capt := str(g.get("id", ""))
 		btn.pressed.connect(func() -> void: _on_declare(capt))
 		row.add_child(btn)
@@ -235,6 +246,12 @@ func _empty(t: String) -> PanelContainer:
 
 func _on_declare(gid: String) -> void:
 	if _busy:
+		return
+	if not CurrencyManager.can_afford(
+		CurrencyManager.CURRENCY_STARDUST,
+		GuildWarManager.DECLARE_COST
+	):
+		_status.text = "Need %s SD to declare war." % GuildWarManager.DECLARE_COST
 		return
 	_busy = true
 	_status.text = "Declaring…"

@@ -12,6 +12,13 @@ func _ready() -> void:
 	print("[NotificationManager] ready")
 
 
+func clear_local() -> void:
+	notifications = []
+	unread_count = 0
+	_busy = false
+	notifications_changed.emit()
+
+
 func char_id() -> String:
 	return str(GameManager.active_character.get("id", ""))
 

@@ -2,6 +2,11 @@
 
 Connects authoritative missions to **RewardService** and **LootService** so completed missions can be claimed exactly once.
 
+Wallet repair update: mission start, claim, and skip preserve Nakama mission
+authority while applying Fuel, Stardust, and Nova to the selected Node Character
+through the trusted idempotent bridge. Godot only uses the old direct Nova debit as
+a compatibility fallback for a server that does not return a normalized wallet.
+
 ## Flow
 
 ```

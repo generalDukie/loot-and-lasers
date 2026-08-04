@@ -2,15 +2,15 @@ services:
   cockroachdb:
     image: cockroachdb/cockroach:latest-v24.1
     command: start-single-node --insecure --store=attrs=ssd,path=/var/lib/cockroach/
-    restart: "no"
+    restart: unless-stopped
     volumes:
       - data:/var/lib/cockroach
     expose:
       - "8080"
       - "26257"
     ports:
-      - "26257:26257"
-      - "8080:8080"
+      - "127.0.0.1:26257:26257"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health?ready=1"]
       interval: 3s
@@ -23,8 +23,8 @@ services:
       - "-ecx"
       - >
           /nakama/nakama migrate up --database.address root@cockroachdb:26257 &&
-          exec /nakama/nakama --name nakama1 --database.address root@cockroachdb:26257 --logger.level DEBUG --session.token_expiry_sec 7200 --metrics.prometheus_port 9100 --runtime.env "LOOT_DEV_WALLET_MUTATIONS=1" --runtime.env "LOOT_ENVIRONMENT=development" --runtime.env "LOOT_DEV_REWARD_TEST=1" --runtime.env "LOOT_DEV_LOOT_TEST=1" --runtime.env "LOOT_DEV_MAIL_TEST=1"
-    restart: "no"
+          exec /nakama/nakama --name nakama1 --database.address root@cockroachdb:26257 --logger.level DEBUG --session.token_expiry_sec 7200 --metrics.prometheus_port 9100 --runtime.env "LOOT_DEV_WALLET_MUTATIONS=${LOOT_DEV_WALLET_MUTATIONS:-1}" --runtime.env "LOOT_ENVIRONMENT=${LOOT_ENVIRONMENT:-development}" --runtime.env "LOOT_DEV_REWARD_TEST=${LOOT_DEV_REWARD_TEST:-1}" --runtime.env "LOOT_DEV_LOOT_TEST=${LOOT_DEV_LOOT_TEST:-1}" --runtime.env "LOOT_DEV_MAIL_TEST=${LOOT_DEV_MAIL_TEST:-1}" --runtime.env "LOOT_NODE_INTERNAL_URL=${LOOT_NODE_INTERNAL_URL:-http://loot-node-api:8787}" --runtime.env "LOOT_WALLET_BRIDGE_SECRET=${LOOT_WALLET_BRIDGE_SECRET:-}"
+    restart: unless-stopped
     links:
       - "cockroachdb:db"
     depends_on:
@@ -34,15 +34,18 @@ services:
         condition: service_started
     volumes:
       - ./:/nakama/data
+    networks:
+      - default
+      - loot_backend
     expose:
       - "7349"
       - "7350"
       - "7351"
       - "9100"
     ports:
-      - "7349:7349"
-      - "7350:7350"
-      - "7351:7351"
+      - "127.0.0.1:7349:7349"
+      - "127.0.0.1:7350:7350"
+      - "127.0.0.1:7351:7351"
     healthcheck:
       test: ["CMD", "/nakama/nakama", "healthcheck"]
       interval: 10s
@@ -50,6 +53,7 @@ services:
       retries: 5
   prometheus:
     image: prom/prometheus
+    restart: unless-stopped
     entrypoint: /bin/sh -c
     command: |
       'sh -s <<EOF
@@ -71,6 +75,9 @@ services:
       prometheus --config.file=./prometheus.yml
       EOF'
     ports:
-      - '9090:9090'
+      - '127.0.0.1:9090:9090'
 volumes:
   data:
+networks:
+  loot_backend:
+    name: loot_backend

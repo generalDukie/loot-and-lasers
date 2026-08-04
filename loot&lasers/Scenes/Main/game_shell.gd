@@ -19,6 +19,9 @@ var _activity: Button
 var _activity_label: Label
 var _clock: Label
 var _portrait_host: CenterContainer
+var _console_class_icon: Label
+var _console_portrait_btn: Button
+var _hero_page_open := false
 var _notif_btn: Button
 var _notif_badge: Label
 var _notif_dock: Control
@@ -59,14 +62,16 @@ func _ready() -> void:
 	timer.timeout.connect(_refresh_chrome)
 	add_child(timer)
 	timer.start()
-	if CurrencyManager != null and CurrencyManager.has_signal("wallet_changed"):
-		CurrencyManager.wallet_changed.connect(func(_w: Dictionary) -> void:
-			_refresh_chrome()
-		)
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	var target := GameManager.pending_page_path
 	if target.is_empty():
 		target = GameManager.SCENE_HUB
 	show_page(target)
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_refresh_chrome()
 
 
 func _notification(what: int) -> void:
@@ -854,6 +859,7 @@ func show_page(path: String) -> void:
 	if outgoing_page != null and is_instance_valid(outgoing_page):
 		_content.move_child(outgoing_page, 0)
 	_restack_content_layers()
+	_hero_page_open = path == GameManager.SCENE_STATS
 	if _page is Control:
 		var page_control := _page as Control
 		page_control.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -864,6 +870,7 @@ func show_page(path: String) -> void:
 		call_deferred("_animate_page_entry", page_control)
 	_update_nav_state()
 	_refresh_chrome()
+	_apply_console_portrait_mode()
 	# Unlock immediately after mount — never hold the nav lock across network awaits
 	# (Hero sheet boots with awaits; a hung refresh used to freeze the whole shell).
 	_page_swap_busy = false
@@ -1451,15 +1458,11 @@ func _character_stamp() -> Array:
 	var mining_tick := -1
 	if MiningManager.is_mining_busy():
 		mining_tick = int(ceil(float(MiningManager.remaining_ms()) / 1000.0))
-	var sd := int(c.get("stardust", 0))
-	var nova := int(c.get("nova_crystals", 0))
-	if CurrencyManager != null and CurrencyManager.has_wallet():
-		sd = CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
 	return [
 		c.get("id", ""),
-		sd,
-		nova,
-		c.get("fuel", 0),
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST),
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA),
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_FUEL),
 		c.get("max_fuel", 0),
 		c.get("level", 0),
 		c.get("experience", 0),
@@ -1561,17 +1564,16 @@ func _refresh_chrome() -> void:
 	]
 	_operative_title.text = str(character.get("active_title", ""))
 	_set_readout(_fuel_value, "%s / %s" % [
-		_format_rail_amount(character.get("fuel", 0)),
+		CurrencyManager.format_balance(CurrencyManager.CURRENCY_FUEL),
 		_format_rail_amount(character.get("max_fuel", 100)),
 	])
-	# Mission rewards land in the Nakama wallet; Nova skip still spends Character crystals.
-	var stardust := int(character.get("stardust", 0))
-	var nova := int(character.get("nova_crystals", 0))
-	if CurrencyManager != null and CurrencyManager.has_wallet():
-		stardust = CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
-	_set_readout(_stardust_value, _format_rail_amount(stardust))
-	_set_readout(_nova_value, _format_rail_amount(nova))
-	if CurrencyManager != null and not CurrencyManager.loading and not CurrencyManager.has_wallet():
+	_set_readout(_stardust_value, _format_rail_amount(
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
+	))
+	_set_readout(_nova_value, _format_rail_amount(
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)
+	))
+	if not CurrencyManager.loading and not CurrencyManager.has_wallet():
 		CurrencyManager.load_wallet()
 	_fit_currency_fonts()
 	var xp := int(character.get("experience", 0))
@@ -1603,14 +1605,56 @@ func _refresh_chrome() -> void:
 		var empty := StyleBoxEmpty.new()
 		portrait_btn.add_theme_stylebox_override("focus", empty)
 		var portrait := AvatarRenderer.make_portrait(character, 200.0)
+		portrait.name = "ConsolePortrait"
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		portrait_btn.add_child(portrait)
+		var class_lab := Label.new()
+		class_lab.name = "ConsoleClassIcon"
+		class_lab.visible = false
+		class_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		class_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		class_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		class_lab.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		class_lab.add_theme_font_size_override("font_size", 96)
+		class_lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
+		ClientUi.apply_display_font(class_lab)
+		portrait_btn.add_child(class_lab)
 		portrait_btn.pressed.connect(func() -> void: GameManager.go_stats())
 		_portrait_host.add_child(portrait_btn)
+		_console_portrait_btn = portrait_btn
+		_console_class_icon = class_lab
 	else:
 		var existing := _portrait_host.get_child(0)
+		_console_portrait_btn = existing as Button
+		_console_class_icon = existing.get_node_or_null("ConsoleClassIcon") as Label
 		for n in existing.find_children("*", "Control", true, false):
-			if n.has_method("set_character"):
+			if n.has_method("set_character") and str(n.name) == "ConsolePortrait":
 				n.call("set_character", character)
 				break
+	_apply_console_portrait_mode()
+
+
+func _apply_console_portrait_mode() -> void:
+	if not is_instance_valid(_portrait_host) or _portrait_host.get_child_count() == 0:
+		return
+	var btn := _portrait_host.get_child(0) as Control
+	if btn == null:
+		return
+	var portrait := btn.get_node_or_null("ConsolePortrait") as Control
+	var class_lab := btn.get_node_or_null("ConsoleClassIcon") as Label
+	var ch: Dictionary = GameManager.active_character
+	var class_key := str(ch.get("class", "Vanguard"))
+	var info: Dictionary = GameData.class_info(class_key)
+	var emoji := str(info.get("emoji", "⚔"))
+	if class_lab != null:
+		class_lab.text = emoji
+		class_lab.visible = _hero_page_open
+	if portrait != null:
+		portrait.visible = not _hero_page_open
+		if portrait.has_method("set_active"):
+			portrait.call("set_active", not _hero_page_open and visible)
+	if btn is Button:
+		(btn as Button).tooltip_text = (
+			"%s — Hero sheet open" % class_key if _hero_page_open else "Open character sheet"
+		)

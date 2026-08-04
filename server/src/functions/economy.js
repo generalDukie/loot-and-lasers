@@ -2,7 +2,7 @@
  * Server-authoritative economy function handlers (Critical #2).
  */
 import { entities } from "../entities.js";
-import { withTransactionAsync } from "../db.js";
+import { db, withTransactionAsync } from "../db.js";
 import { randomItem, randomItemForClass } from "../shared/rewards.js";
 import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
@@ -95,11 +95,49 @@ function requireMyChar(user) {
   const list = entities.Character.filter({ created_by_id: user.id }, "-created_date", 50);
   if (!list.length) httpErr(404, "No character");
   const activeId = user.active_character_id;
-  if (activeId) {
-    const active = list.find((c) => c.id === activeId);
-    if (active) return active;
+  if (!activeId) httpErr(409, "No selected character");
+  const active = list.find((c) => c.id === activeId);
+  if (!active) httpErr(403, "Selected character is not owned by this account");
+  return active;
+}
+
+function normalizeOperationKey(value) {
+  const key = String(value || "").trim();
+  if (!key) return "";
+  if (key.length > 128 || !/^[A-Za-z0-9:_-]+$/.test(key)) {
+    httpErr(400, "Invalid request_id");
   }
-  return list[0];
+  return key;
+}
+
+function getWalletOperation(accountId, operationType, operationKey) {
+  if (!operationKey) return null;
+  const row = db.prepare(`
+    SELECT result_json
+    FROM wallet_operations
+    WHERE account_id = ? AND operation_type = ? AND operation_key = ?
+  `).get(accountId, operationType, operationKey);
+  if (!row) return null;
+  try {
+    return JSON.parse(row.result_json);
+  } catch {
+    return {};
+  }
+}
+
+function saveWalletOperation(accountId, operationType, operationKey, result) {
+  if (!operationKey) return;
+  db.prepare(`
+    INSERT INTO wallet_operations (
+      account_id, operation_type, operation_key, result_json, created_at
+    ) VALUES (?, ?, ?, ?, ?)
+  `).run(
+    accountId,
+    operationType,
+    operationKey,
+    JSON.stringify(result || {}),
+    clock.nowIso(),
+  );
 }
 
 function applyFuelResetIfNeeded(ch) {
@@ -275,10 +313,21 @@ export async function BuyAttribute(user, body) {
 }
 
 // ── BuyFuel ──────────────────────────────────────────────────
-export async function BuyFuel(user) {
+export async function BuyFuel(user, body = {}) {
+  const requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
   try {
     const result = await withTransactionAsync(async () => {
       let ch = requireMyChar(user);
+      const replay = getWalletOperation(user.id, "buy_fuel", requestId);
+      if (replay) {
+        return {
+          success: true,
+          ...replay,
+          patch: {},
+          character: ch,
+          idempotent_replay: true,
+        };
+      }
       const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch);
       ch = resetCh;
 
@@ -313,7 +362,13 @@ export async function BuyFuel(user) {
         cost: FUEL_PURCHASE_COST,
         correlationId: newCorrelationId(),
       });
-      return { success: true, patch, character };
+      const receipt = {
+        request_id: requestId,
+        nova_debited: FUEL_PURCHASE_COST,
+        fuel_granted: FUEL_PURCHASE_AMOUNT,
+      };
+      saveWalletOperation(user.id, "buy_fuel", requestId, receipt);
+      return { success: true, ...receipt, patch, character };
     });
     return { status: 200, body: result };
   } catch (err) {
@@ -796,6 +851,9 @@ export async function DebitNovaCrystals(user, body) {
   const amount = Math.floor(Number(body?.amount));
   const purpose = String(body?.purpose || "");
   const missionId = String(body?.mission_id || "");
+  const requestId = normalizeOperationKey(
+    body?.request_id || body?.idempotencyKey || `mission_skip:${missionId}`,
+  );
   if (!Number.isFinite(amount) || amount < 1 || amount > 5000) {
     return { status: 400, body: { error: "Invalid amount" } };
   }
@@ -809,12 +867,29 @@ export async function DebitNovaCrystals(user, body) {
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
+      const replay = getWalletOperation(user.id, "mission_skip_nova", requestId);
+      if (replay) {
+        return {
+          success: true,
+          ...replay,
+          patch: {},
+          character: ch,
+          idempotent_replay: true,
+        };
+      }
       if ((ch.nova_crystals || 0) < amount) {
         httpErr(400, "Not enough Nova Crystals");
       }
       const patch = { nova_crystals: (ch.nova_crystals || 0) - amount };
       const character = entities.Character.update(ch.id, patch);
-      return { success: true, amount, purpose, mission_id: missionId, patch, character };
+      const receipt = {
+        request_id: requestId,
+        amount,
+        purpose,
+        mission_id: missionId,
+      };
+      saveWalletOperation(user.id, "mission_skip_nova", requestId, receipt);
+      return { success: true, ...receipt, patch, character };
     });
     return { status: 200, body: result };
   } catch (err) {

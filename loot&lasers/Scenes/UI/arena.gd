@@ -27,7 +27,13 @@ var _revenge_busy_id := ""
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_update_lobby_chrome()
 
 
 func _boot() -> void:
@@ -841,8 +847,10 @@ func _on_refresh() -> void:
 	_set_status("Refreshing…")
 	var charge := not ArenaManager.can_free_refresh()
 	if charge:
-		var sd := int(GameManager.active_character.get("stardust", 0))
-		if sd < ArenaRules.REFRESH_COST:
+		if not CurrencyManager.can_afford(
+			CurrencyManager.CURRENCY_STARDUST,
+			ArenaRules.REFRESH_COST
+		):
 			_set_status("Need %s ✦ for instant refresh." % ArenaRules.REFRESH_COST)
 			_busy = false
 			_update_lobby_chrome()

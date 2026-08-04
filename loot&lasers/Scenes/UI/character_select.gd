@@ -22,7 +22,13 @@ var _card_buttons: Dictionary = {} # id -> Button
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _refresh()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_update_slot_actions()
 
 
 func _build() -> void:
@@ -252,7 +258,16 @@ func _update_slot_actions() -> void:
 	_create_btn.visible = can_create
 	_create_btn.disabled = _switching or _busy
 	_unlock_btn.visible = can_purchase
-	_unlock_btn.disabled = _switching or _busy or _characters.is_empty()
+	var can_afford_slot := CurrencyManager.can_afford(
+		CurrencyManager.CURRENCY_NOVA,
+		AccountManager.SLOT_NOVA_COST
+	)
+	_unlock_btn.disabled = _switching or _busy or _characters.is_empty() or not can_afford_slot
+	_unlock_btn.tooltip_text = (
+		"Unlock another operative slot"
+		if can_afford_slot
+		else "Not enough Nova Crystals"
+	)
 	_enter_btn.disabled = _selected_id.is_empty() or _switching
 	_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	if can_create:
@@ -381,12 +396,11 @@ func _on_unlock_slot() -> void:
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = "Create an operative before buying a slot."
 		return
-	var nova := 0
-	for c in _characters:
-		if typeof(c) == TYPE_DICTIONARY and str(c.get("id", "")) == debit_id:
-			nova = int(c.get("nova_crystals", 0))
-			break
-	if nova < AccountManager.SLOT_NOVA_COST:
+	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
+	if not CurrencyManager.can_afford(
+		CurrencyManager.CURRENCY_NOVA,
+		AccountManager.SLOT_NOVA_COST
+	):
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = "Need %s 💎 to unlock a slot — you have %s." % [
 			AccountManager.SLOT_NOVA_COST, nova,
@@ -472,7 +486,17 @@ func _enter(character: Dictionary) -> void:
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = str(res.get("error", "Could not select character"))
 		return
-	GameManager.go_hub(character)
+	_status.text = "Loading operative…"
+	var loaded: Dictionary = await AuthManager.get_selected_character()
+	if not loaded.ok or typeof(loaded.get("data", null)) != TYPE_DICTIONARY:
+		_switching = false
+		_enter_btn.text = "↪  Enter Game"
+		_update_slot_actions()
+		_rebuild_cards()
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = str(loaded.get("error", "Could not load selected character"))
+		return
+	GameManager.go_hub(loaded.data)
 
 
 func _on_logout() -> void:

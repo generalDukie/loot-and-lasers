@@ -24,6 +24,7 @@ local transactions = require("lib.transactions")
 local ids = require("lib.ids")
 local remote_config = require("config")
 local social = require("social")
+local wallet_bridge = require("lib.wallet_bridge")
 
 local MAIL_COLLECTION = "mail_messages"
 local SENT_COLLECTION = "mail_sent"
@@ -607,7 +608,7 @@ local function list_mails(user_id, collection, limit, cursor)
   return objects, next_cursor or "", nil
 end
 
-local function claim_mail_attachments_internal(user_id, mail_id, character_id, request_id)
+local function claim_mail_attachments_internal(user_id, mail_id, character_id, request_id, bridge_context)
   local doc, version, found = read_mail(user_id, mail_id)
   if not found or type(doc) ~= "table" then
     return nil, "Mail not found", 404
@@ -624,10 +625,31 @@ local function claim_mail_attachments_internal(user_id, mail_id, character_id, r
   if doc.has_unclaimed_attachments ~= true or not has_unclaimed(doc.attachments) then
     -- Idempotent: already claimed — return current state
     if doc.claimed_at ~= nil and doc.claimed_at ~= "" then
+      local replay_wallet = nil
+      local replay_character = nil
+      if type(doc.attachments) == "table" then
+        for i = 1, #doc.attachments do
+          local attachment = doc.attachments[i]
+          if type(attachment) == "table" and attachment.type == "currency" then
+            local refreshed, refresh_err = wallet_bridge.apply(bridge_context, {
+              character_id = character_id,
+              operation_type = "mail_reward_stardust",
+              operation_key = "mail_reward:" .. mail_id .. ":step:" .. tostring(i),
+              reference_id = mail_id,
+              amount = attachment.amount,
+            })
+            if refresh_err ~= nil then return nil, refresh_err, 503 end
+            replay_wallet = refreshed.wallet
+            replay_character = refreshed.character
+          end
+        end
+      end
       return {
         mail = client_safe_mail(doc),
         already_claimed = true,
         reward = nil,
+        wallet = replay_wallet,
+        character = replay_character,
       }, nil, 200
     end
     return nil, "No unclaimed attachments", 400
@@ -684,11 +706,33 @@ local function claim_mail_attachments_internal(user_id, mail_id, character_id, r
       return nil, "Conflicting reuse of request_id", 409
     end
     if existing_tx.status == "completed" then
+      local replay_wallet = nil
+      local replay_character = nil
+      local applied = existing_tx.reward_result and existing_tx.reward_result.applied
+      if type(applied) == "table" then
+        for i = 1, #applied do
+          local entry = applied[i]
+          if type(entry) == "table" and entry.type == "currency" then
+            local refreshed, refresh_err = wallet_bridge.apply(bridge_context, {
+              character_id = existing_tx.character_id or character_id,
+              operation_type = "mail_reward_stardust",
+              operation_key = transaction_id .. ":step:" .. tostring(i),
+              reference_id = mail_id,
+              amount = entry.amount,
+            })
+            if refresh_err ~= nil then return nil, refresh_err, 503 end
+            replay_wallet = refreshed.wallet
+            replay_character = refreshed.character
+          end
+        end
+      end
       local fresh = read_mail(user_id, mail_id)
       return {
         mail = client_safe_mail(fresh or doc),
         already_claimed = true,
         reward = existing_tx.reward_result,
+        wallet = replay_wallet,
+        character = replay_character,
       }, nil, 200
     end
   end
@@ -698,6 +742,7 @@ local function claim_mail_attachments_internal(user_id, mail_id, character_id, r
     mail_id = mail_id,
     transaction_id = transaction_id,
     status = "reward_applying",
+    character_id = character_id,
     created_at = iso_now(),
   }
   storage.write_one(user_id, TX_COLLECTION, request_id, intent, nil, 1, 0)
@@ -713,6 +758,7 @@ local function claim_mail_attachments_internal(user_id, mail_id, character_id, r
     reason = "mail_attachment_claim",
     rewards = rewards,
     metadata = { request_id = request_id },
+    bridge_context = bridge_context,
   }
   local result, rerr = rewards_mod.apply_reward_bundle(bundle)
   if rerr ~= nil or (result and result.success ~= true) then
@@ -745,10 +791,24 @@ local function claim_mail_attachments_internal(user_id, mail_id, character_id, r
   intent.updated_at = now
   storage.write_one(user_id, TX_COLLECTION, request_id, intent, nil, 1, 0)
 
+  local normalized_wallet = nil
+  local authoritative_character = nil
+  if type(result.applied) == "table" then
+    for i = 1, #result.applied do
+      if type(result.applied[i]) == "table" and result.applied[i].wallet ~= nil then
+        normalized_wallet = result.applied[i].wallet
+        authoritative_character = result.applied[i].character
+        break
+      end
+    end
+  end
+
   return {
     mail = client_safe_mail(doc),
     already_claimed = false,
     reward = result,
+    wallet = normalized_wallet,
+    character = authoritative_character,
   }, nil, 200
 end
 
@@ -1090,7 +1150,9 @@ local function rpc_mail_claim_attachments(context, payload)
     character_id = body.target_character_id
   end
 
-  local data, err, code = claim_mail_attachments_internal(user_id, mail_id, character_id, request_id)
+  local data, err, code = claim_mail_attachments_internal(
+    user_id, mail_id, character_id, request_id, context
+  )
   if err ~= nil then
     return responses.fail_status(err, code or 400)
   end

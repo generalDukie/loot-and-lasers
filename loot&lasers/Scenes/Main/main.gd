@@ -80,7 +80,7 @@ func _boot() -> void:
 		return
 
 	_set_status("Restoring session...")
-	var nakama_res: Dictionary = await AuthManager.ensure_nakama_session()
+	var nakama_res: Dictionary = await AuthManager.ensure_nakama_session(_set_status)
 	if not nakama_res.get("success", false):
 		_set_status("Ready")
 		GameManager.go_login()
@@ -110,14 +110,11 @@ func _boot() -> void:
 		return
 
 	_set_status("Loading operative...")
-	var char_res: Dictionary = await AuthManager.get_character(active_id)
+	var char_res: Dictionary = await AuthManager.get_selected_character()
 	if char_res.ok and typeof(char_res.data) == TYPE_DICTIONARY:
-		GameManager.active_character = char_res.data
-		await MissionManager.fetch_active_mission()
-		if MissionManager.has_active_mission():
-			GameManager.go_mission_run()
-		else:
-			GameManager.go_hub(char_res.data)
+		GameManager.apply_active_character(char_res.data, "boot_character")
+		GameManager.go_hub(char_res.data)
 	else:
-		# Nakama auth OK; Node character load optional.
+		# Authentication is valid, but gameplay cannot proceed without a
+		# Node-owned selected Character.
 		GameManager.go_character_select()

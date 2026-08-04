@@ -1,12 +1,19 @@
 # Phase 12 — Central reward service
 
+> Wallet repair update: Stardust reward steps now use the private
+> Nakama→Node bridge so the selected Node Character remains the compatibility
+> ledger. The legacy Nakama wallet is no longer the player-facing reward balance.
+> See `docs/WALLET_ARCHITECTURE.md`.
+
 Server-authoritative reward orchestrator for **trusted backend modules**.
 This phase originally did not connect missions, arena, shops, mail, daily login, or admin grants.
 **Phase 14** wired missions; **Phase 20** wires mail attachment claims (`source_type: mail`).
 
 ## Responsibility
 
-`modules/rewards.lua` validates and applies reward bundles, records idempotent transactions, and delegates currency credits to `wallet.credit_currency`.
+`modules/rewards.lua` validates and applies reward bundles, records idempotent
+transactions, and delegates Stardust credits to `lib.wallet_bridge`, which writes
+the selected Node Character ledger.
 
 The normal Godot client must **not** submit reward bundles.
 

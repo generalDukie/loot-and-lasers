@@ -31,13 +31,13 @@ const NODE = (process.env.API_URL || process.env.LOOT_NODE_API_URL || "http://12
 const ENV = (process.env.LOOT_NAKAMA_ENV || "local").trim().toLowerCase();
 const NAKAMA_DEFAULTS = {
   local: { host: "127.0.0.1", port: 7350, key: "defaultkey" },
-  staging: { host: "178.156.210.186", port: 7350, key: "" },
+  staging: { host: "178.156.210.186", port: 8443, key: "", scheme: "https" },
 };
 const ep = NAKAMA_DEFAULTS[ENV] || NAKAMA_DEFAULTS.local;
 const NAKAMA = (
   process.env.NAKAMA_HTTP_URL ||
   process.env.LOOT_NAKAMA_HTTP_URL ||
-  `http://${ep.host}:${ep.port}`
+  `${ep.scheme || "http"}://${ep.host}:${ep.port}`
 ).replace(/\/$/, "");
 
 function readStagingKey() {
@@ -93,6 +93,11 @@ function alphaName(prefix = "Flow") {
   return `${prefix}${letters}`;
 }
 
+function jwtPayload(token) {
+  const part = String(token || "").split(".")[1] || "";
+  return JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
+}
+
 async function nakamaEmail(email, password, create) {
   const res = await fetch(
     `${NAKAMA}/v2/account/authenticate/email?create=${create ? "true" : "false"}`,
@@ -109,9 +114,8 @@ async function nakamaEmail(email, password, create) {
   return { ok: res.ok, status: res.status, body };
 }
 
-async function bridge(nakamaToken, email, password = "") {
+async function bridge(nakamaToken, email) {
   const payload = { nakama_token: nakamaToken, email };
-  if (password) payload.password = password;
   const res = await fetch(`${NODE}/api/auth/nakama-bridge`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -145,7 +149,7 @@ async function fetchMeWithReconnect(nakamaToken, email, staleJwt) {
   if (meStale.ok) {
     return { ok: false, error: "stale JWT unexpectedly accepted" };
   }
-  const again = await bridge(nakamaToken, email, "");
+  const again = await bridge(nakamaToken, email);
   if (!again.ok || !again.body.access_token) {
     return { ok: false, error: `re-bridge failed: ${again.body.error || again.status}` };
   }
@@ -168,11 +172,17 @@ async function runPlayer(label) {
   assert(reg.ok && reg.body.token, `${label}: Nakama register`);
   const nakamaToken = reg.body.token;
 
-  const linked = await bridge(nakamaToken, email, password);
+  const linked = await bridge(nakamaToken, email);
   assert(linked.ok && linked.body.access_token, `${label}: Node bridge`);
   const nodeUserId = linked.body.user?.id;
   assert(!!nodeUserId, `${label}: Node user id`);
   assert(linked.body.user?.email === email, `${label}: bridged email`);
+  const gameplayClaims = jwtPayload(linked.body.access_token);
+  const nakamaClaims = jwtPayload(nakamaToken);
+  assert(gameplayClaims.sub === linked.body.nakama_user_id, `${label}: JWT subject is Nakama user`);
+  assert(gameplayClaims.token_use === "nakama_gameplay", `${label}: gameplay token type`);
+  assert(gameplayClaims.exp <= nakamaClaims.exp, `${label}: JWT capped by Nakama expiry`);
+  assert(gameplayClaims.exp - gameplayClaims.iat <= 15 * 60, `${label}: short gameplay JWT`);
 
   let jwt = linked.body.access_token;
 
@@ -180,14 +190,47 @@ async function runPlayer(label) {
   assert(me.ok && me.data?.id === nodeUserId, `${label}: /me`);
 
   const name = alphaName("Op");
+  const requestId = `char-${stamp}`;
   const created = await nodeReq("/api/entities/Character", {
     method: "POST",
     token: jwt,
-    body: { name, race: "human", class: "Vanguard", nova_crystals: 500 },
+    body: { request_id: requestId, name, race: "human", class: "Vanguard", nova_crystals: 500 },
   });
   assert(created.status === 201 && created.data?.id, `${label}: create character (${created.status})`);
   const characterId = created.data.id;
   assert(created.data.created_by_id === nodeUserId, `${label}: character owned by Node user`);
+  assert(created.data.nova_crystals === 100, `${label}: starter Nova is server-authored`);
+
+  const replay = await nodeReq("/api/entities/Character", {
+    method: "POST",
+    token: jwt,
+    body: { request_id: requestId, name, race: "human", class: "Vanguard", nova_crystals: 500 },
+  });
+  assert(replay.ok && replay.data?.id === characterId, `${label}: create replay returns same character`);
+  const conflict = await nodeReq("/api/entities/Character", {
+    method: "POST",
+    token: jwt,
+    body: {
+      request_id: requestId,
+      name: alphaName("Different"),
+      race: "human",
+      class: "Vanguard",
+    },
+  });
+  assert(conflict.status === 409, `${label}: create request conflict is rejected`);
+
+  const clearSelection = await nodeReq("/api/auth/me", {
+    method: "PATCH",
+    token: jwt,
+    body: { active_character_id: null },
+  });
+  assert(clearSelection.ok && !clearSelection.data?.active_character_id, `${label}: clear selection`);
+  const withoutSelection = await nodeReq("/api/functions/BuyFuel", {
+    method: "POST",
+    token: jwt,
+    body: { request_id: `no-selection-${stamp}` },
+  });
+  assert(withoutSelection.status === 409, `${label}: gameplay rejects missing selection`);
 
   const select = await nodeReq("/api/auth/me", {
     method: "PATCH",
@@ -195,6 +238,8 @@ async function runPlayer(label) {
     body: { active_character_id: characterId },
   });
   assert(select.ok && select.data?.active_character_id === characterId, `${label}: select character`);
+  const selected = await nodeReq("/api/auth/selected-character", { token: jwt });
+  assert(selected.ok && selected.data?.id === characterId, `${label}: load selected character`);
 
   const list = await nodeReq("/api/entities/Character/filter", {
     method: "POST",
@@ -216,10 +261,17 @@ async function runPlayer(label) {
 
   const login = await nakamaEmail(email, password, false);
   assert(login.ok && login.body.token, `${label}: Nakama login`);
-  const bridgedLogin = await bridge(login.body.token, email, password);
+  const bridgedLogin = await bridge(login.body.token, email);
   assert(
     bridgedLogin.ok && bridgedLogin.body.user?.id === nodeUserId,
     `${label}: login re-bridge same Node user`,
+  );
+  const selectedOnSecondSession = await nodeReq("/api/auth/selected-character", {
+    token: bridgedLogin.body.access_token,
+  });
+  assert(
+    selectedOnSecondSession.ok && selectedOnSecondSession.data?.id === characterId,
+    `${label}: account-global selection restored on second session`,
   );
 
   return {
@@ -260,16 +312,9 @@ async function main() {
     "player-a list excludes friend character",
   );
 
-  // Ownership isolation: friend character must not be attributed to A.
+  // Ownership isolation: a foreign Character is never readable.
   const cross = await nodeReq(`/api/entities/Character/${b.characterId}`, { token: a.jwt });
-  if (cross.ok && cross.data?.id) {
-    assert(
-      cross.data.created_by_id === b.nodeUserId && cross.data.created_by_id !== a.nodeUserId,
-      "friend character remains owned by player-b",
-    );
-  } else {
-    pass("player-a cross-get blocked or missing");
-  }
+  assert(!cross.ok && [403, 404].includes(cross.status), "player-a cross-get is denied");
 
   console.log("\n--- Summary ---");
   console.log(`Result: ${passed} passed, ${failed} failed`);

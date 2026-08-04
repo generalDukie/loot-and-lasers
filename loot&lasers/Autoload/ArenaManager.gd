@@ -39,6 +39,26 @@ func _ready() -> void:
 	print("[ArenaManager] ready (Nakama arena authority)")
 
 
+func clear_local() -> void:
+	opponents = []
+	equipped_items = []
+	free_battles_left = ArenaRules.DAILY_FREE_BATTLES
+	refresh_at_unix_ms = 0
+	pending_opp = {}
+	pending_battle = {}
+	pending_rewards = {}
+	pending_is_free = true
+	pending_skipped = false
+	pending_challenge_id = ""
+	pending_policy_version = ""
+	last_result = {}
+	match_history = []
+	arena_state = {}
+	loading = false
+	battling = false
+	_busy = false
+
+
 func is_loading() -> bool:
 	return loading
 

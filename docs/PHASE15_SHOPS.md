@@ -2,6 +2,10 @@
 
 Server-authoritative Black Market (`shop_id = general`) for offer load, buy, sell, and free refresh.
 
+Wallet repair update: shop state and price derivation remain in Nakama. Stardust
+debits/credits use the trusted Nakama→Node bridge, return a normalized Character
+wallet, and compensate an applied debit if item grant fails.
+
 ## Ownership
 
 **Character-level** generated offers. Authenticated `user_id` from session; `character_id` must match `selected_character_id`.

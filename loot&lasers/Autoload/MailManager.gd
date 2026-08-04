@@ -360,7 +360,10 @@ func claim_attachments(mail_id: String, target_character_id: String = "") -> Dic
 	if not bool(res.get("success", false)):
 		return _fail(str(res.get("error", "Claim failed")))
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
-	if CurrencyManager != null and CurrencyManager.has_method("load_wallet"):
+	var wallet_applied := false
+	if CurrencyManager != null and typeof(data.get("wallet", null)) == TYPE_DICTIONARY:
+		wallet_applied = CurrencyManager.apply_authoritative_wallet(data.get("wallet"), "mail_claim")
+	if CurrencyManager != null and not wallet_applied and CurrencyManager.has_method("load_wallet"):
 		await CurrencyManager.load_wallet()
 	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
 		await InventoryManager.load_inventory(target_character_id)

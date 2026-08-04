@@ -15,7 +15,13 @@ var _win_idx := -1
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_update_meta()
 
 
 func _boot() -> void:
@@ -181,7 +187,6 @@ func _offline_panel() -> VBoxContainer:
 
 
 func _update_meta() -> void:
-	var c: Dictionary = GameManager.active_character
 	var win: Dictionary = GameData.get_shop_window()
 	var day := ProgressManager.today_et()
 	var seed := int(win.get("idx", 0)) * 17 + day.length() * 3
@@ -190,8 +195,16 @@ func _update_meta() -> void:
 	for child in _currency_row.get_children():
 		child.queue_free()
 	# Web header chips: Nova (amber) · Stardust · shop-window clock
-	_currency_row.add_child(ClientUi.make_currency_chip("💎", c.get("nova_crystals", 0), Color("#FCD34D")))
-	_currency_row.add_child(ClientUi.make_currency_chip("✦", c.get("stardust", 0), GameData.STARDUST_COLOR))
+	_currency_row.add_child(ClientUi.make_currency_chip(
+		"💎",
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA),
+		Color("#FCD34D")
+	))
+	_currency_row.add_child(ClientUi.make_currency_chip(
+		"✦",
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST),
+		GameData.STARDUST_COLOR
+	))
 	_currency_row.add_child(ClientUi.make_currency_chip(
 		"⏱",
 		GameData.format_shop_countdown(int(win.get("secondsLeft", 0))),
@@ -663,8 +676,8 @@ func _on_refresh(which: String) -> void:
 func _on_buy_cons(slot_id: String, cost: int) -> void:
 	if _busy:
 		return
-	var sd := int(CurrencyManager.get_balance("stardust")) if CurrencyManager != null else int(GameManager.active_character.get("stardust", 0))
-	if sd < cost:
+	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
 		_set_status("Need %s ✦ — you have %s." % [cost, sd])
 		return
 	_busy = true
@@ -685,11 +698,11 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: int) -> void:
 	if _busy:
 		return
-	var sd := int(CurrencyManager.get_balance("stardust")) if CurrencyManager != null else int(GameManager.active_character.get("stardust", 0))
+	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	if haggle:
 		# Phase 15: haggle is display-only; purchase uses full authoritative price.
 		pass
-	if sd < cost:
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
 		_set_status("Need %s ✦ — you have %s." % [cost, sd])
 		return
 	_busy = true

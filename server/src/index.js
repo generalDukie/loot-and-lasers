@@ -1,14 +1,16 @@
 import http from "node:http";
+import { createHash } from "node:crypto";
 import express from "express";
 import cors from "cors";
 import { WebSocketServer } from "ws";
 import { authMiddleware, createAuthRouter, requireAuth, APP_ID, getUserById } from "./auth.js";
 import { entities } from "./entities.js";
 import { FUNCTION_HANDLERS } from "./functions/index.js";
-import { addSubscriber, userFromWsToken } from "./realtime.js";
+import { addSubscriber, broadcastEntity, userFromWsToken } from "./realtime.js";
 import { attachStaticApp, resolveStaticDir } from "./static.js";
 import {
   assertCanCreate,
+  assertCanRead,
   assertCanWrite,
   assertCanDelete,
   canWriteDoc,
@@ -20,7 +22,7 @@ import {
   scopeReadQuery,
 } from "./entityAccess.js";
 import { assertCanUnequipToBag } from "./shared/inventoryGrant.js";
-import "./db.js";
+import { db, nowIso } from "./db.js";
 import { ensureDefaultSchedules } from "./scheduling/bootstrap.js";
 import { startScheduler } from "./scheduling/worker.js";
 import { createTimeRouter, createScheduleRouter } from "./routes/time.js";
@@ -29,6 +31,7 @@ import { createRewardRouter } from "./routes/rewards.js";
 import { createArenaRouter } from "./arena/index.js";
 import { createAuditRouter, auditAdminEntityWrite } from "./audit/index.js";
 import { migrateLegacyEntitlements } from "./entitlements/migrate.js";
+import { createWalletBridgeRouter } from "./walletBridge.js";
 import "./entitlements/hooks.js";
 import "./rewards/store.js";
 import "./arena/store.js";
@@ -62,10 +65,23 @@ app.use("/api/entitlements", createEntitlementRouter(express));
 app.use("/api/rewards", createRewardRouter(express));
 app.use("/api/arena", createArenaRouter(express));
 app.use("/api/audit", createAuditRouter(express));
+app.use("/internal/wallet", createWalletBridgeRouter(express));
 
 // ── Entity CRUD ──────────────────────────────────────────────
 function getStore(type) {
   return entities[type] || null;
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function requestFingerprint(value) {
+  return createHash("sha256").update(stableJson(value)).digest("hex");
 }
 
 app.get("/api/entities/:type", requireAuth, (req, res) => {
@@ -102,15 +118,14 @@ app.get("/api/entities/:type/:id", requireAuth, (req, res) => {
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
     if (req.params.type === "User") {
       const u = getUserById(req.params.id);
-      if (u) return res.json(u);
+      if (u) {
+        assertCanRead(req.user, "User", u);
+        return res.json(u);
+      }
     }
     const doc = store.get(req.params.id);
     if (!doc) return res.status(404).json({ error: "Not found" });
-    if (["PromoCode", "PlayerModeration", "PrivateMessage"].includes(req.params.type)) {
-      if (!isAdmin(req.user) && !canWriteDoc(req.user, req.params.type, doc)) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-    }
+    assertCanRead(req.user, req.params.type, doc);
     res.json(doc);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -118,15 +133,75 @@ app.get("/api/entities/:type/:id", requireAuth, (req, res) => {
 });
 
 app.post("/api/entities/:type", requireAuth, (req, res) => {
+  let transactionOpen = false;
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
-    assertCanCreate(req.user, req.params.type, req.body || {});
-    const data = sanitizeCreatePayload(req.user, req.params.type, req.body || {});
+    const rawBody = { ...(req.body || {}) };
+    const requestId = String(
+      req.headers["idempotency-key"] || rawBody.request_id || "",
+    ).trim();
+    delete rawBody.request_id;
+    if (
+      req.params.type === "Character"
+      && req.authIdentity?.token_use === "nakama_gameplay"
+      && !/^[A-Za-z0-9._:-]{8,128}$/.test(requestId)
+    ) {
+      return res.status(400).json({ error: "Character creation requires a valid request_id" });
+    }
+
+    const fingerprint = req.params.type === "Character" && requestId
+      ? requestFingerprint(rawBody)
+      : "";
+    if (fingerprint) {
+      const prior = db.prepare(`
+        SELECT request_fingerprint, result_json
+        FROM character_creation_requests
+        WHERE account_id = ? AND request_id = ?
+      `).get(req.user.id, requestId);
+      if (prior) {
+        if (prior.request_fingerprint !== fingerprint) {
+          return res.status(409).json({ error: "request_id was already used with different input" });
+        }
+        res.set("X-Idempotent-Replay", "true");
+        return res.status(200).json(JSON.parse(prior.result_json));
+      }
+    }
+
+    if (fingerprint) {
+      db.exec("BEGIN IMMEDIATE");
+      transactionOpen = true;
+    }
+    assertCanCreate(req.user, req.params.type, rawBody);
+    const data = sanitizeCreatePayload(req.user, req.params.type, rawBody);
     const created = store.create(data, {
       created_by_id: req.user.id,
       created_by: req.user.email,
+      emit: !fingerprint,
     });
+    if (fingerprint) {
+      const account = db.prepare("SELECT active_character_id FROM users WHERE id = ?").get(req.user.id);
+      if (!account?.active_character_id) {
+        db.prepare(
+          "UPDATE users SET active_character_id = ?, updated_date = ? WHERE id = ?",
+        ).run(created.id, nowIso(), req.user.id);
+      }
+      db.prepare(`
+        INSERT INTO character_creation_requests (
+          account_id, request_id, request_fingerprint, character_id, result_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        req.user.id,
+        requestId,
+        fingerprint,
+        created.id,
+        JSON.stringify(created),
+        nowIso(),
+      );
+      db.exec("COMMIT");
+      transactionOpen = false;
+      broadcastEntity("Character", "create", created);
+    }
     if (isAdmin(req.user)) {
       auditAdminEntityWrite({
         user: req.user,
@@ -139,6 +214,9 @@ app.post("/api/entities/:type", requireAuth, (req, res) => {
     }
     res.status(201).json(created);
   } catch (err) {
+    if (transactionOpen) {
+      try { db.exec("ROLLBACK"); } catch { /* ignore rollback failure */ }
+    }
     res.status(err.status || 500).json({ error: err.message });
   }
 });

@@ -1,7 +1,7 @@
 extends Node
-## Phase 11 — Nakama-authoritative equipment (get / equip / unequip).
-## Architecture: UI → EquipmentManager → Nakama RPCs → equipment + inventory storage.
-## Node AuthManager.equip_item / unequip_item are legacy and disabled for Godot.
+## Phase 11 — Nakama equipment RPCs for Nakama inventory instance IDs.
+## Hero/Inventory UIs that list Node Item rows use AuthManager.equip_item / unequip_item
+## (Node Item PATCH). Do not pass Node Item UUIDs into equipment_equip until bridged.
 
 signal equipment_loaded(equipment: Dictionary)
 signal item_equipped(equipment: Dictionary, inventory: Dictionary)

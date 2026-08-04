@@ -412,7 +412,19 @@ func refresh_session() -> Dictionary:
 		_clear_saved_session()
 		return _fail("Refresh token expired")
 
-	var result: NakamaSession = await client.session_refresh_async(session)
+	var timeout_sec := BackendEnvironment.get_auth_timeout_sec()
+	var box: Dictionary = {"session": null, "done": false}
+	_refresh_session_worker(box)
+	var start_ms := Time.get_ticks_msec()
+	while not bool(box.get("done", false)):
+		if Time.get_ticks_msec() - start_ms >= int(timeout_sec * 1000.0):
+			print("[NakamaManager] ERROR: session refresh timed out (%ss)" % str(timeout_sec))
+			_clear_session_memory()
+			_clear_saved_session()
+			return _fail("Nakama session refresh timed out", 408)
+		await get_tree().process_frame
+
+	var result: NakamaSession = box.get("session") as NakamaSession
 	if result == null or result.is_exception():
 		var err := _exception_message(result)
 		print("[NakamaManager] ERROR: session refresh failed — %s" % err)
@@ -423,6 +435,12 @@ func refresh_session() -> Dictionary:
 	_set_session(result, false)
 	print("[NakamaManager] Nakama session refreshed user_id=%s" % session.user_id)
 	return {"success": true, "data": {"user_id": session.user_id}, "error": "", "status_code": 200}
+
+
+func _refresh_session_worker(box: Dictionary) -> void:
+	var result: NakamaSession = await client.session_refresh_async(session)
+	box["session"] = result
+	box["done"] = true
 
 
 func logout() -> Dictionary:

@@ -27,6 +27,7 @@ local remote_config = require("config")
 local reward_formulas = require("data.mission_reward_formulas")
 local rewards = require("rewards")
 local loot = require("loot")
+local wallet_bridge = require("lib.wallet_bridge")
 
 local BOARD_COLLECTION = "mission_boards"
 local ACTIVE_COLLECTION = "active_missions"
@@ -461,6 +462,75 @@ local function generate_board_missions(character_id, level, highest_sector)
   return missions
 end
 
+--- Fill an under-sized board back up to board_size() (e.g. after mission_start removes a slot).
+local function top_up_board_missions(board, character_id, level, highest_sector)
+  local size = board_size()
+  if type(board) ~= "table" then
+    return board
+  end
+  if type(board.missions) ~= "table" then
+    board.missions = empty_array()
+  end
+  local need = size - #board.missions
+  if need <= 0 then
+    return board
+  end
+
+  local used_patrons = {}
+  local used_templates = {}
+  for _, existing in ipairs(board.missions) do
+    if type(existing) == "table" then
+      local tid = existing.template_id or ""
+      if tid ~= "" then
+        used_templates[tid] = true
+      end
+      local patron = existing.metadata and existing.metadata.patron
+      if type(patron) == "table" and patron.name then
+        used_patrons[patron.name] = true
+      end
+    end
+  end
+
+  local filtered = filter_templates(level, highest_sector)
+  local shuffled = shuffle_copy(filtered)
+  for i = 1, #shuffled do
+    if need <= 0 then
+      break
+    end
+    local tpl = shuffled[i]
+    if not used_templates[tpl.template_id] then
+      local m = build_mission(character_id, tpl, level)
+      local patron = m.metadata.patron
+      local pname = patron and patron.name or ""
+      if used_patrons[pname] then
+        for _ = 1, 8 do
+          local alt = QUEST_GIVERS[rand_int(1, #QUEST_GIVERS)]
+          if not used_patrons[alt.name] then
+            m.metadata.patron = alt
+            pname = alt.name
+            break
+          end
+        end
+      end
+      used_patrons[pname] = true
+      used_templates[tpl.template_id] = true
+      table.insert(board.missions, m)
+      need = need - 1
+    end
+  end
+
+  -- If templates were exhausted, allow duplicates to guarantee board_size.
+  while need > 0 and #filtered > 0 do
+    local tpl = filtered[rand_int(1, #filtered)]
+    local m = build_mission(character_id, tpl, level)
+    table.insert(board.missions, m)
+    need = need - 1
+  end
+
+  board.updated_at = now_ms()
+  return board
+end
+
 local function read_board(user_id, character_id)
   local objects = nk.storage_read({
     { collection = BOARD_COLLECTION, key = character_id, user_id = user_id },
@@ -569,10 +639,39 @@ end
 local function ensure_board(user_id, character_id, level, highest_sector, force_refresh)
   local board, version = read_board(user_id, character_id)
   local now = now_unix()
+  local size = board_size()
 
   if board ~= nil and type(board) == "table" and not force_refresh then
-    if type(board.missions) == "table" and #board.missions > 0 then
+    if type(board.missions) == "table" and #board.missions >= size then
       return board, version, false
+    end
+    -- After launch, slots are removed — top up to full size without refresh cooldown.
+    if type(board.missions) == "table" and #board.missions > 0 and #board.missions < size then
+      board = top_up_board_missions(board, character_id, level, highest_sector)
+      local last_err = "Failed to top up mission board"
+      for _ = 1, MAX_WRITE_RETRIES do
+        local okw, errw = pcall(function()
+          write_board(user_id, character_id, board, version)
+        end)
+        if okw then
+          return board, version, false
+        end
+        last_err = tostring(errw)
+        board, version = read_board(user_id, character_id)
+        if board == nil or type(board) ~= "table" then
+          break
+        end
+        if type(board.missions) == "table" and #board.missions >= size then
+          return board, version, false
+        end
+        if type(board.missions) == "table" and #board.missions > 0 then
+          board = top_up_board_missions(board, character_id, level, highest_sector)
+        else
+          break
+        end
+      end
+      -- Fall through to full regenerate if top-up writes keep failing.
+      nk.logger_warn(string.format("mission board top-up failed: %s", last_err))
     end
   end
 
@@ -603,8 +702,20 @@ local function ensure_board(user_id, character_id, level, highest_sector, force_
         return nil, nil, "Refresh cooldown active"
       end
     end
-    if not force_refresh and cur ~= nil and type(cur.missions) == "table" and #cur.missions > 0 then
-      return cur, ver, false
+    if not force_refresh and cur ~= nil and type(cur.missions) == "table" then
+      if #cur.missions >= size then
+        return cur, ver, false
+      end
+      if #cur.missions > 0 then
+        cur = top_up_board_missions(cur, character_id, level, highest_sector)
+        local ok_top, err_top = pcall(function()
+          write_board(user_id, character_id, cur, ver)
+        end)
+        if ok_top then
+          return cur, ver, false
+        end
+        last_err = tostring(err_top)
+      end
     end
     local ok, err = pcall(function()
       write_board(user_id, character_id, new_board, ver)
@@ -850,6 +961,23 @@ local function rpc_mission_start(context, payload)
     if duration == nil or duration < MIN_DURATION or duration > MAX_DURATION then
       error({ err = "Invalid mission duration", code = 422 })
     end
+    local fuel_cost = tonumber(found.reward_reference and found.reward_reference.fuel_cost)
+    local rounded_fuel_cost = fuel_cost and (math.floor(fuel_cost * 100 + 0.5) / 100) or nil
+    if fuel_cost == nil or rounded_fuel_cost < 0.01
+        or math.abs(fuel_cost - rounded_fuel_cost) > 0.000000001 then
+      error({ err = "Invalid mission fuel snapshot", code = 422 })
+    end
+    fuel_cost = rounded_fuel_cost
+    local wallet_result, wallet_err, wallet_code = wallet_bridge.apply(context, {
+      character_id = character_id,
+      operation_type = "mission_start_fuel",
+      operation_key = "mission_start:" .. found.mission_id,
+      reference_id = found.mission_id,
+      amount = fuel_cost,
+    })
+    if wallet_err ~= nil then
+      error({ err = wallet_err, code = wallet_code or 409 })
+    end
 
     local started = now_unix()
     local completes = started + math.floor(duration)
@@ -895,10 +1023,35 @@ local function rpc_mission_start(context, payload)
       board, board_ver = read_board(user_id, character_id)
     end
     if not wrote then
-      error({ err = last_err, code = 409 })
+      local cleanup_ok = pcall(function()
+        delete_active(user_id, character_id)
+      end)
+      if not cleanup_ok then
+        error({
+          err = "Mission start state is pending reconciliation; payment retained",
+          code = 503,
+        })
+      end
+      local _, compensation_err = wallet_bridge.apply(context, {
+        character_id = character_id,
+        operation_type = "mission_start_fuel_refund",
+        operation_key = "mission_start_refund:" .. found.mission_id,
+        reference_id = found.mission_id,
+        amount = fuel_cost,
+      })
+      if compensation_err ~= nil then
+        error({
+          err = "Mission start failed after payment; compensation pending, retry reconciliation",
+          code = 503,
+        })
+      end
+      error({ err = last_err .. " (fuel compensated)", code = 409 })
     end
 
-    return public_active(active_doc)
+    local response = public_active(active_doc)
+    response.wallet = wallet_result.wallet
+    response.character = wallet_result.character
+    return response
   end)
 
   if not ok then
@@ -1127,10 +1280,27 @@ local function rpc_mission_claim(context, payload)
         status = "unsupported",
         reason = "ProgressionService not available",
       }
+      local replay_wallet = nil
+      local replay_character = nil
+      local replay_amount = tonumber(mission.reward_reference and mission.reward_reference.stardust_amount) or 0
+      if replay_amount > 0 then
+        local replay_bridge, replay_err = wallet_bridge.apply(context, {
+          character_id = character_id,
+          operation_type = "mission_claim_stardust",
+          operation_key = "mission_reward:" .. mission.mission_id,
+          reference_id = mission.mission_id,
+          amount = replay_amount,
+        })
+        if replay_err ~= nil then error({ err = replay_err, code = 503 }) end
+        replay_wallet = replay_bridge.wallet
+        replay_character = replay_bridge.character
+      end
       return {
         mission = public_mission(mission),
         reward = build_claim_receipt(mission, mission.reward_receipt_summary, mission.loot_receipt_items, xp_note),
         replay = true,
+        wallet = replay_wallet,
+        character = replay_character,
       }
     end
 
@@ -1188,12 +1358,22 @@ local function rpc_mission_claim(context, payload)
     local loot_items = validation.empty_array()
     local reward_entries = validation.empty_array()
 
+    local wallet_result = nil
     if stardust_amount > 0 then
-      table.insert(reward_entries, {
-        type = "currency",
-        currency_id = "stardust",
+      wallet_result, rerr = wallet_bridge.apply(context, {
+        character_id = character_id,
+        operation_type = "mission_claim_stardust",
+        operation_key = reward_tid,
+        reference_id = mission.mission_id,
         amount = stardust_amount,
       })
+      if rerr ~= nil then
+        mission.status = "reward_failed"
+        mission.reward_status = "wallet_failed"
+        active_raw.mission = mission
+        write_active(user_id, character_id, active_raw, nil)
+        error({ err = tostring(rerr), code = 409 })
+      end
     end
 
     if ref.include_loot == true then
@@ -1238,6 +1418,14 @@ local function rpc_mission_claim(context, payload)
       mission.claimed_at = iso_utc(now_unix())
       mission.reward_status = "completed"
       mission.reward_receipt_summary = { applied = validation.empty_array() }
+      if wallet_result ~= nil then
+        table.insert(mission.reward_receipt_summary.applied, {
+          type = "currency",
+          currency_id = "stardust",
+          amount = stardust_amount,
+          balance_after = wallet_result.wallet.balances.stardust,
+        })
+      end
       mission.loot_receipt_items = loot_items
       active_raw.mission = mission
       write_active(user_id, character_id, active_raw, nil)
@@ -1250,6 +1438,8 @@ local function rpc_mission_claim(context, payload)
         mission = public_mission(mission),
         reward = build_claim_receipt(mission, mission.reward_receipt_summary, loot_items, xp_note),
         replay = false,
+        wallet = wallet_result and wallet_result.wallet or nil,
+        character = wallet_result and wallet_result.character or nil,
       }
     end
 
@@ -1296,6 +1486,14 @@ local function rpc_mission_claim(context, payload)
       transaction_id = reward_tid,
       status = "completed",
     }
+    if wallet_result ~= nil then
+      table.insert(mission.reward_receipt_summary.applied, {
+        type = "currency",
+        currency_id = "stardust",
+        amount = stardust_amount,
+        balance_after = wallet_result.wallet.balances.stardust,
+      })
+    end
     mission.loot_receipt_items = loot_items
     active_raw.mission = mission
     active_raw.updated_at = now_ms()
@@ -1323,6 +1521,8 @@ local function rpc_mission_claim(context, payload)
         experience = 0,
         experience_status = "unsupported",
       },
+      wallet = wallet_result and wallet_result.wallet or nil,
+      character = wallet_result and wallet_result.character or nil,
     }
   end)
 
@@ -1406,10 +1606,27 @@ local function rpc_mission_skip(context, payload)
       end
       local pub = public_active(active_raw)
       pub.has_active = true
+      local replay_wallet = nil
+      local replay_character = nil
+      local paid = tonumber(mission.skip_cost_paid) or 0
+      if paid > 0 and type(mission.skip_request_id) == "string" and mission.skip_request_id ~= "" then
+        local replay_bridge, replay_err = wallet_bridge.apply(context, {
+          character_id = character_id,
+          operation_type = "mission_skip_nova",
+          operation_key = "mission_skip:" .. mission.mission_id,
+          reference_id = mission.mission_id,
+          amount = paid,
+        })
+        if replay_err ~= nil then error({ err = replay_err, code = 503 }) end
+        replay_wallet = replay_bridge.wallet
+        replay_character = replay_bridge.character
+      end
       return {
         active = pub,
         skip_cost = 0,
         already_complete = true,
+        wallet = replay_wallet,
+        character = replay_character,
       }
     end
 
@@ -1446,8 +1663,19 @@ local function rpc_mission_skip(context, payload)
       }
     end
 
-    -- Timer skip only. Nova debit is Character-side (Node DebitNovaCrystals) until
-    -- premium currency fully migrates to the Nakama wallet. Cost is echoed for clients.
+    local wallet_result, wallet_err, wallet_code = wallet_bridge.apply(context, {
+      character_id = character_id,
+      operation_type = "mission_skip_nova",
+      operation_key = "mission_skip:" .. mission.mission_id,
+      reference_id = mission.mission_id,
+      amount = cost,
+    })
+    if wallet_err ~= nil then
+      error({ err = wallet_err, code = wallet_code or 409 })
+    end
+
+    -- Timer skip only. Nova was already debited from the authoritative Node
+    -- Character ledger through the trusted bridge above.
     local now = now_unix()
     mission.status = "complete"
     mission.completed_at = iso_utc(now)
@@ -1458,7 +1686,25 @@ local function rpc_mission_skip(context, payload)
     mission.updated_at = now_ms()
     active_raw.mission = mission
     active_raw.updated_at = now_ms()
-    write_active(user_id, character_id, active_raw, active_ver)
+    local write_ok, write_err = pcall(function()
+      write_active(user_id, character_id, active_raw, active_ver)
+    end)
+    if not write_ok then
+      local _, compensation_err = wallet_bridge.apply(context, {
+        character_id = character_id,
+        operation_type = "mission_skip_nova_refund",
+        operation_key = "mission_skip_refund:" .. mission.mission_id,
+        reference_id = mission.mission_id,
+        amount = cost,
+      })
+      if compensation_err ~= nil then
+        error({
+          err = "Mission skip failed after payment; compensation pending, retry reconciliation",
+          code = 503,
+        })
+      end
+      error({ err = tostring(write_err) .. " (Nova compensated)", code = 409 })
+    end
 
     logging.info("missions", "mission_skip", {
       user_id = user_id,
@@ -1473,6 +1719,8 @@ local function rpc_mission_skip(context, payload)
       active = pub,
       skip_cost = cost,
       already_complete = false,
+      wallet = wallet_result.wallet,
+      character = wallet_result.character,
     }
   end)
 

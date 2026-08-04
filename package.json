@@ -36,6 +36,7 @@
     "test:game-viewport": "node ./server/scripts/test-game-viewport.mjs",
     "test:godot-resolution": "node \"./loot&lasers/scripts/test-resolution-rules.mjs\"",
     "test:godot-auth-flow": "node scripts/verify_godot_auth_gameplay_flow.mjs",
+    "verify:wallet": "node scripts/verify_wallet_integration.mjs && npm --prefix server run test:wallet-bridge",
     "verify:backend": "node scripts/verify_backend.mjs",
     "checkpoint:backend": "node scripts/checkpoint_backend.mjs"
   },

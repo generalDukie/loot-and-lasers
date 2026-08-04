@@ -22,7 +22,7 @@ const STAT_ICONS := {
 	"all": "✦",
 }
 
-## When true (Hero loadout rail), show STIMS / MOUNTS section labels + timers.
+## When true (Hero loadout rail), show STIMS / MOUNTS section labels + compact timers.
 var side_sections := false
 var _stamp := ""
 var _removing := false
@@ -83,7 +83,7 @@ func refresh(character: Dictionary = {}) -> void:
 				flow.add_child(_mount_chip(m))
 		return
 
-	# Hero side rail: always visible with labeled timer sections.
+	# Hero side rail: always visible with labeled compact timer sections.
 	visible = true
 	add_child(_section_label("STIMS"))
 	if buffs.is_empty():
@@ -91,14 +91,14 @@ func refresh(character: Dictionary = {}) -> void:
 	else:
 		for b in buffs:
 			if typeof(b) == TYPE_DICTIONARY:
-				add_child(_buff_chip(b))
+				add_child(_buff_chip_compact(b))
 	add_child(_section_label("MOUNTS / FUEL"))
 	if mounts.is_empty():
 		add_child(_empty_hint("No fuel mounts"))
 	else:
 		for m in mounts:
 			if typeof(m) == TYPE_DICTIONARY:
-				add_child(_mount_chip(m))
+				add_child(_mount_chip_compact(m))
 
 
 func _make_stamp(buffs: Array, mounts: Array) -> String:
@@ -128,14 +128,19 @@ func _refresh_timers_only(buffs: Array, mounts: Array) -> void:
 		i += 1
 		if lab == null or not is_instance_valid(lab):
 			continue
-		var text := format_remaining(str(b.get("expires_at", "")))
-		lab.text = text
-		var col := lab.get_parent()
-		if col == null:
-			continue
-		var panel := col.get_parent()
-		if panel is Control:
-			(panel as Control).tooltip_text = "%s · expires in %s" % [str(b.get("name", "Stim")), text]
+		var remain := format_remaining(str(b.get("expires_at", "")))
+		var compact := bool(lab.get_meta("effect_compact", false))
+		if compact:
+			var pct := int(lab.get_meta("effect_pct", 0))
+			lab.text = "+%s%% · %s" % [pct, format_remaining_compact(str(b.get("expires_at", "")))]
+		else:
+			lab.text = remain
+		var panel := _timer_panel(lab)
+		if panel != null:
+			var pct2 := int(round(float(b.get("mult", 0)) * 100.0))
+			panel.tooltip_text = "%s · +%s%% · expires in %s" % [
+				str(b.get("name", "Stim")), pct2, remain,
+			]
 	for m in mounts:
 		if typeof(m) != TYPE_DICTIONARY:
 			continue
@@ -145,14 +150,25 @@ func _refresh_timers_only(buffs: Array, mounts: Array) -> void:
 		i += 1
 		if lab2 == null or not is_instance_valid(lab2):
 			continue
-		var text2 := format_remaining(str(m.get("expires_at", "")))
-		lab2.text = text2
-		var col2 := lab2.get_parent()
-		if col2 == null:
-			continue
-		var panel2 := col2.get_parent()
-		if panel2 is Control:
-			(panel2 as Control).tooltip_text = "%s · expires in %s" % [str(m.get("name", "Mount")), text2]
+		var remain2 := format_remaining(str(m.get("expires_at", "")))
+		var compact2 := bool(lab2.get_meta("effect_compact", false))
+		if compact2:
+			var spd := int(lab2.get_meta("effect_pct", 0))
+			lab2.text = "−%s%% · %s" % [spd, format_remaining_compact(str(m.get("expires_at", "")))]
+		else:
+			lab2.text = remain2
+		var panel2 := _timer_panel(lab2)
+		if panel2 != null:
+			panel2.tooltip_text = "%s · expires in %s" % [str(m.get("name", "Mount")), remain2]
+
+
+func _timer_panel(lab: Label) -> Control:
+	var n: Node = lab.get_parent()
+	while n != null:
+		if n is PanelContainer:
+			return n as Control
+		n = n.get_parent()
+	return null
 
 
 func _collect_timer_labels(node: Node, out: Array) -> void:
@@ -195,6 +211,87 @@ static func format_remaining(expires_at: String) -> String:
 	if m > 0:
 		return "%sm %ss" % [m, s]
 	return "%ss" % s
+
+
+static func format_remaining_compact(expires_at: String) -> String:
+	var exp := StatsRules.parse_iso_unix(expires_at)
+	var left := maxi(0, exp - int(Time.get_unix_time_from_system()))
+	var h := int(left / 3600)
+	var m := int((left % 3600) / 60)
+	var s := left % 60
+	if h > 0:
+		return "%d:%02d:%02d" % [h, m, s]
+	return "%02d:%02d" % [m, s]
+
+
+## Compact Hero-rail chip: "+15% · 04:32" (+ remove). Full detail in tooltip.
+func _buff_chip_compact(buff: Dictionary) -> PanelContainer:
+	var stat := str(buff.get("stat", "all"))
+	var color: Color = STAT_COLORS.get(stat, STAT_COLORS["all"])
+	var pct := int(round(float(buff.get("mult", 0)) * 100.0))
+	var remain_full := format_remaining(str(buff.get("expires_at", "")))
+	var remain := format_remaining_compact(str(buff.get("expires_at", "")))
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(color, 0.12), Color(color, 0.45), 6, 1)
+	)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	panel.add_child(row)
+	var head := Label.new()
+	head.set_meta("effect_timer", true)
+	head.set_meta("effect_compact", true)
+	head.set_meta("effect_pct", pct)
+	head.text = "+%s%% · %s" % [pct, remain]
+	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_theme_font_size_override("font_size", 14)
+	head.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(head)
+	row.add_child(head)
+	var remove_btn := Button.new()
+	remove_btn.text = "×"
+	remove_btn.tooltip_text = "Remove Stim"
+	remove_btn.custom_minimum_size = Vector2(24, 24)
+	remove_btn.pressed.connect(func() -> void: _request_remove_stim(buff))
+	row.add_child(remove_btn)
+	var icon_stat := str(STAT_ICONS.get(stat, "✦"))
+	var label := "ALL" if stat == "all" else "%s %s" % [icon_stat, stat]
+	panel.tooltip_text = "%s · +%s%% %s · expires in %s" % [
+		str(buff.get("name", "Stim")), pct, label, remain_full,
+	]
+	panel.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+			_request_remove_stim(buff)
+	)
+	return panel
+
+
+func _mount_chip_compact(mount: Dictionary) -> PanelContainer:
+	var color := Color("#FBBF24")
+	var spd := int(round(float(mount.get("speed", 0)) * 100.0))
+	var remain_full := format_remaining(str(mount.get("expires_at", "")))
+	var remain := format_remaining_compact(str(mount.get("expires_at", "")))
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(color, 0.1), Color(color, 0.45), 6, 1)
+	)
+	var head := Label.new()
+	head.set_meta("effect_timer", true)
+	head.set_meta("effect_compact", true)
+	head.set_meta("effect_pct", spd)
+	head.text = "−%s%% · %s" % [spd, remain]
+	head.add_theme_font_size_override("font_size", 14)
+	head.add_theme_color_override("font_color", Color("#FDE68A"))
+	ClientUi.apply_display_font(head)
+	panel.add_child(head)
+	panel.tooltip_text = "%s · −%s%% mission time · expires in %s" % [
+		str(mount.get("name", "Mount")), spd, remain_full,
+	]
+	return panel
 
 
 func _buff_chip(buff: Dictionary) -> PanelContainer:

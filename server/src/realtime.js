@@ -1,4 +1,4 @@
-import { verifyToken, getUserById } from "./auth.js";
+import { verifyToken, getUserById, getUserByNakamaId } from "./auth.js";
 
 const subscribers = new Set();
 
@@ -10,6 +10,15 @@ const SENSITIVE_TYPES = new Set([
   "Mail",
   "PlayerModeration",
   "ModerationConfig",
+  "User",
+  "Character",
+  "Item",
+  "Mission",
+  "DailyLogin",
+  "HubLayout",
+  "NovaSpendEvent",
+  "StardustSpendEvent",
+  "PlayerPresence",
 ]);
 
 export function addSubscriber(ws, { entityType = "*", user = null } = {}) {
@@ -50,10 +59,30 @@ export function broadcastEntity(entityType, eventType, data) {
   }
 }
 
+/** Account-scoped event on the existing websocket transport. */
+export function broadcastWalletUpdated(accountId, data) {
+  if (!accountId) return;
+  const payload = JSON.stringify({
+    entity: "Wallet",
+    type: "wallet_updated",
+    data,
+  });
+  for (const sub of subscribers) {
+    if (sub.ws.readyState !== 1 || sub.user?.id !== accountId) continue;
+    try {
+      sub.ws.send(payload);
+    } catch {
+      subscribers.delete(sub);
+    }
+  }
+}
+
 /** Authenticate a WS upgrade token; returns user or null. */
 export function userFromWsToken(token) {
   if (!token) return null;
   const payload = verifyToken(token);
   if (!payload?.sub) return null;
-  return getUserById(payload.sub);
+  return payload.token_use === "nakama_gameplay"
+    ? getUserByNakamaId(payload.sub)
+    : getUserById(payload.sub);
 }

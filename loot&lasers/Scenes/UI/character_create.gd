@@ -17,6 +17,7 @@ var _busy := false
 var _is_first := true
 var _existing_char_count := 0
 var _checked := false
+var _create_request_id := ""
 
 var _race_name := ""
 var _class_name := ""
@@ -1487,7 +1488,9 @@ func _on_create() -> void:
 	_refresh_nav_gates()
 	_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	_status.text = "Creating…"
-	var res: Dictionary = await AuthManager.create_character(payload)
+	if _create_request_id.is_empty():
+		_create_request_id = "char-%s" % Crypto.new().generate_random_bytes(16).hex_encode()
+	var res: Dictionary = await AuthManager.create_character(payload, _create_request_id)
 	_busy = false
 	_refresh_nav_gates()
 	if not res.ok:
@@ -1497,7 +1500,17 @@ func _on_create() -> void:
 	var character: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var cid := str(character.get("id", ""))
 	if not cid.is_empty():
-		await AuthManager.select_character(cid)
-		GameManager.go_hub(character)
+		var selected: Dictionary = await AuthManager.select_character(cid)
+		if not selected.ok:
+			_status.add_theme_color_override("font_color", ClientUi.DANGER)
+			_status.text = str(selected.get("error", "Character created, but selection failed."))
+			return
+		var loaded: Dictionary = await AuthManager.get_selected_character()
+		if not loaded.ok or typeof(loaded.get("data", null)) != TYPE_DICTIONARY:
+			_status.add_theme_color_override("font_color", ClientUi.DANGER)
+			_status.text = str(loaded.get("error", "Character created, but loading failed."))
+			return
+		_create_request_id = ""
+		GameManager.go_hub(loaded.data)
 	else:
 		GameManager.go_character_select()

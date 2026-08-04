@@ -79,6 +79,22 @@ func health(timeout_sec: float = HEALTH_TIMEOUT_SEC) -> Dictionary:
 	return await request("GET", "/health", null, false, timeout_sec)
 
 
+## Probe the one authoritative Node gameplay API. Never fall back from staging
+## to localhost, which would silently switch the player to another SQLite DB.
+func prefer_reachable_base_url() -> Dictionary:
+	var primary := base_url
+	var health_primary: Dictionary = await health(HEALTH_TIMEOUT_SEC)
+	if health_primary.get("ok", false):
+		return {"ok": true, "base_url": base_url, "fallback": false, "error": ""}
+
+	return {
+		"ok": false,
+		"base_url": primary,
+		"fallback": false,
+		"error": str(health_primary.get("error", "Node API unreachable")),
+	}
+
+
 func invoke(function_name: String, body: Dictionary = {}) -> Dictionary:
 	return await request("POST", "/api/functions/%s" % function_name, body, true)
 
@@ -88,8 +104,20 @@ func request(
 	path: String,
 	body: Variant = null,
 	authed: bool = true,
-	timeout_sec: float = DEFAULT_TIMEOUT_SEC
+	timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+	allow_reauth: bool = true
 ) -> Dictionary:
+	if authed and allow_reauth and AuthManager != null:
+		var expires_at := int(AuthManager.node_token_expires_at)
+		if expires_at > 0 and expires_at <= Time.get_unix_time_from_system() + AuthManager.NODE_REFRESH_SKEW_SEC:
+			var proactive: Dictionary = await AuthManager.refresh_node_gameplay_session()
+			if not proactive.get("success", false):
+				return {
+					"ok": false,
+					"status": int(proactive.get("status", 401)),
+					"error": str(proactive.get("error", "Gameplay session expired")),
+					"data": {},
+				}
 	var http := HTTPRequest.new()
 	http.timeout = maxf(0.25, timeout_sec)
 	add_child(http)
@@ -144,6 +172,11 @@ func request(
 			error_msg = str(data["error"])
 		else:
 			error_msg = "HTTP %s" % status_code
+
+	if status_code == 401 and authed and allow_reauth and AuthManager != null:
+		var refreshed: Dictionary = await AuthManager.refresh_node_gameplay_session()
+		if refreshed.get("success", false):
+			return await request(method, path, body, authed, timeout_sec, false)
 
 	return {"ok": ok, "status": status_code, "error": error_msg, "data": data}
 

@@ -37,8 +37,30 @@ Do not install Git hooks unless the user asks.
 8. Docker Nakama logs (skipped if Docker unavailable)
 9. All `scripts/verify_*.mjs` except `verify_backend.mjs`
 
+## Authentication foundation checks
+
+`scripts/verify_nakama_node_bridge.mjs` verifies Nakama email auth, stable
+Nakama-user → Node-account mapping, concurrent first-exchange convergence,
+password-free exchange, and gameplay JWT claims. Gameplay tokens must use the
+Nakama user id as `sub`, include issuer/audience/`iat`/`exp`/`jti`, expire within
+15 minutes, and never outlive the Nakama session.
+
+`npm run test:godot-auth-flow` verifies two isolated accounts, authoritative
+Character creation/selection/loading, server-authored starter currency,
+idempotent create replay/conflict behavior, JWT re-exchange, and denial of
+cross-account Character reads.
+
+The Godot headless audit verifies environment-scoped token code, startup,
+selection, and logout scripts compile. Staging validation additionally requires
+the shared Node API health endpoint to be externally reachable.
+
+`res://Scripts/test_auth_foundation.tscn` is the local GDScript integration test.
+It registers through Nakama, exchanges a Node token, creates/replays/selects/loads
+a Character, then proves logout clears both sessions and shared client caches.
+
 ## Phase scripts discovered
 
+- `verify_wallet_integration.mjs`
 - `verify_wallet_security.mjs`
 - `verify_equipment_readonly.mjs`
 - `verify_missions_core.mjs`
@@ -49,17 +71,30 @@ Do not install Git hooks unless the user asks.
 - `verify_social_chat.mjs`
 - `verify_mail_service.mjs`
 
+## Global wallet checks
+
+`npm run verify:wallet` asserts one CurrencyManager autoload; normalized Fuel,
+Stardust, and Nova state; manager-to-CurrencyManager routing; wallet subscriptions
+for active-player currency surfaces; no UI-authored balance mutation; logout
+clearing; reconnect reconciliation; Node operation receipts; and mission/Fuel/Nova
+idempotency markers. It returns non-zero on any failure and is also discovered by
+`npm run verify:backend`.
+
 ## Phase 10 checks
 
 `verify_remote_config.mjs` asserts `config_get`, absence of mutation RPCs, client-visible filtering, defaults (`board_size=3`, cooldown `15`), `RemoteConfigManager` autoload, and cache gitignore.
 
 ## Phase 11 checks
 
-`verify_equipment_mutations.mjs` asserts equip/unequip registration, ownership, slot allowlist, request_id idempotency, swap preservation, legacy AuthManager path disabled, and UI routing via EquipmentManager.
+`verify_equipment_mutations.mjs` asserts equip/unequip registration, ownership, slot
+allowlist, request_id idempotency, swap preservation, Nakama EquipmentManager APIs,
+and the documented AuthManager Node-Item compatibility path used by Hero/Inventory.
 
 ## Phase 12 checks
 
-`verify_reward_service.mjs` asserts no public grant RPCs, wallet integration, premium blocked, duplicate/conflict transaction handling, missions unwired, and gated `dev_reward_test` soft-currency behavior.
+`verify_reward_service.mjs` asserts no public grant RPCs, trusted wallet-bridge
+integration, premium blocked, duplicate/conflict transaction handling, mission
+wiring, and gated `dev_reward_test` soft-currency behavior.
 
 ## Phase 13 checks
 
@@ -88,6 +123,19 @@ Do not install Git hooks unless the user asks.
 ## Phase 20 checks
 
 `verify_mail_service.mjs` asserts `mail.lua` RPCs, no public system/attach RPCs, ownership/sender authority, player text-only, block checks, pagination bounds, RewardService claims, MailManager autoload, and gated `dev_mail_create_fixture`.
+
+## Wallet repair checks
+
+`verify_wallet_integration.mjs` checks the normalized Character authority, manager
+and UI subscriptions, logout clearing, request IDs, realtime reconciliation, Node
+idempotency schema, trusted bridge integration, and architecture docs.
+
+- `npm --prefix server run test:wallet-bridge` covers secret rejection, ownership,
+  insufficient funds, exact-once replay/conflicts, compensation, non-negative
+  balances, and hundredth-unit Fuel.
+- Godot `res://Scripts/test_wallet_client.tscn` covers three-currency hydration,
+  fractional Fuel formatting, stale revision rejection, logout clearing, and
+  account/character isolation.
 
 ## Troubleshooting
 

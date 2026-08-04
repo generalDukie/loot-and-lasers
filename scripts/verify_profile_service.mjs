@@ -120,8 +120,12 @@ function checkStatic() {
     fail(cat, "ProfileManager not in project.godot");
     return;
   }
-  if (!/ensure_profile/.test(auth) || !/set_selected_character_id/.test(auth)) {
-    fail(cat, "AuthManager missing profile hooks");
+  if (!/ensure_profile/.test(auth)) {
+    fail(cat, "AuthManager missing account profile hook");
+    return;
+  }
+  if (/ProfileManager\.set_selected_character_id/.test(auth)) {
+    fail(cat, "AuthManager must keep selected Character authoritative on Node");
     return;
   }
   if (!/_save_busy/.test(mgr)) {
@@ -143,7 +147,7 @@ function checkStatic() {
       return;
     }
   }
-  pass(cat, "profile module, manager, auth hooks, docs present");
+  pass(cat, "account profile hooks present; selected Character remains on Node");
 }
 
 async function checkLive() {

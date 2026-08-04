@@ -15,6 +15,7 @@ var _mode_create_btn: Button
 var _mode_join_btn: Button
 var _create_block: VBoxContainer
 var _join_block: VBoxContainer
+var _create_submit_btn: Button
 var _show_war_picker := false
 var _busy := false
 
@@ -22,7 +23,17 @@ var _busy := false
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _boot()
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	if is_instance_valid(_create_submit_btn):
+		_create_submit_btn.disabled = not CurrencyManager.can_afford(
+			CurrencyManager.CURRENCY_STARDUST,
+			CREATE_COST
+		)
 
 
 func _boot() -> void:
@@ -169,11 +180,15 @@ func _make_creation_flow() -> VBoxContainer:
 	_desc_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	ClientUi.apply_body_font(_desc_edit)
 	_create_block.add_child(_desc_edit)
-	var create_btn := Button.new()
-	create_btn.text = "FOUND GUILD · ✦ %s" % CREATE_COST
-	ClientUi.apply_primary_button(create_btn)
-	create_btn.pressed.connect(_on_create)
-	_create_block.add_child(create_btn)
+	_create_submit_btn = Button.new()
+	_create_submit_btn.text = "FOUND GUILD · ✦ %s" % CREATE_COST
+	ClientUi.apply_primary_button(_create_submit_btn)
+	_create_submit_btn.disabled = not CurrencyManager.can_afford(
+		CurrencyManager.CURRENCY_STARDUST,
+		CREATE_COST
+	)
+	_create_submit_btn.pressed.connect(_on_create)
+	_create_block.add_child(_create_submit_btn)
 
 	_join_block = VBoxContainer.new()
 	_join_block.add_theme_constant_override("separation", 8)
@@ -1103,8 +1118,7 @@ func _on_create() -> void:
 	if _has_digits(gname):
 		_set_status(NAME_NO_DIGITS_MSG)
 		return
-	var sd := int(GameManager.active_character.get("stardust", 0))
-	if sd < CREATE_COST:
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, CREATE_COST):
 		_set_status("You need %s ✦ to found a guild." % CREATE_COST)
 		return
 	_busy = true

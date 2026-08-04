@@ -44,8 +44,6 @@ static var _space_shader: Shader
 static var _app_theme: Theme
 static var _painted_style_cache: Dictionary = {}
 static var _button_style_cache: Dictionary = {}
-## Soft nebula renders fine at lower internal resolution; stretch hides the difference.
-const SPACE_RENDER_SCALE := 0.4
 
 
 static func _space_layout_size() -> Vector2i:
@@ -482,33 +480,28 @@ static func _gradient_layer(colors: PackedColorArray, radial := false, opacity :
 	layer.stretch_mode = TextureRect.STRETCH_SCALE
 	layer.modulate.a = opacity
 	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	layer.grow_vertical = Control.GROW_DIRECTION_BOTH
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return layer
 
 
 static func _space_material_layer(mood: String, opacity: float, intensity: float) -> Control:
-	## Render the heavy nebula shader at reduced resolution, then stretch.
-	## Soft clouds/stars look identical; GPU cost drops roughly with scale².
+	## Full-rect shader wash. (Previous SubViewportContainer + stretch path pinned the
+	## nebula to the top-left on character select / login when the container failed to expand.)
 	var host := Control.new()
 	host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	host.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	host.grow_vertical = Control.GROW_DIRECTION_BOTH
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.set_meta("space_host", true)
 
-	var layout := _space_layout_size()
-	var vp_size := Vector2i(
-		maxi(320, int(float(layout.x) * SPACE_RENDER_SCALE)),
-		maxi(180, int(float(layout.y) * SPACE_RENDER_SCALE))
-	)
-	var viewport := SubViewport.new()
-	viewport.transparent_bg = true
-	viewport.handle_input_locally = false
-	viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
-	viewport.size = vp_size
-
 	var layer := ColorRect.new()
-	layer.color = Color.WHITE
-	layer.size = Vector2(vp_size)
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	layer.grow_vertical = Control.GROW_DIRECTION_BOTH
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.color = Color.WHITE
 	if _space_shader == null and ResourceLoader.exists("res://Shaders/space_backdrop.gdshader"):
 		_space_shader = load("res://Shaders/space_backdrop.gdshader") as Shader
 	if _space_shader == null:
@@ -525,14 +518,7 @@ static func _space_material_layer(mood: String, opacity: float, intensity: float
 	material.set_shader_parameter("transparency", opacity)
 	layer.material = material
 	layer.set_meta("space_shader_rect", true)
-	viewport.add_child(layer)
-
-	var container := SubViewportContainer.new()
-	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	container.stretch = true
-	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	container.add_child(viewport)
-	host.add_child(container)
+	host.add_child(layer)
 	return host
 
 
@@ -582,6 +568,8 @@ static func make_screen(mood: String = "hub") -> Control:
 	screen.name = "AtmosphereScreen"
 	screen.set_meta("atmosphere_mood", mood)
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	screen.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	screen.grow_vertical = Control.GROW_DIRECTION_BOTH
 	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var palette: Array = _mood_palette(mood)
@@ -933,7 +921,7 @@ static func make_confirm_sheet(
 	return root
 
 
-## Non-blocking toast overlay (top-center). Safe if host is freed mid-tween.
+## Non-blocking toast overlay (top-center). Never steals clicks from page controls.
 static func show_toast(host: Node, title: String, body: String = "", duration: float = 3.5) -> void:
 	if host == null or not is_instance_valid(host):
 		return
@@ -944,15 +932,22 @@ static func show_toast(host: Node, title: String, body: String = "", duration: f
 		"panel",
 		panel_style(Color(0.08, 0.12, 0.1, 0.96), Color(0.45, 0.9, 0.65, 0.85))
 	)
+	# Anchor top-center with a fixed band — avoid broken offset_top==offset_bottom sizing.
 	panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.offset_top = 21
-	panel.offset_bottom = 21
-	panel.custom_minimum_size = Vector2(427, 0)
+	panel.offset_left = -213
+	panel.offset_right = 213
+	panel.offset_top = 24
+	panel.offset_bottom = 24
+	panel.custom_minimum_size = Vector2(426, 0)
 	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
 	var t := Label.new()
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	t.text = title
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.add_theme_font_size_override("font_size", 20)
@@ -960,6 +955,7 @@ static func show_toast(host: Node, title: String, body: String = "", duration: f
 	col.add_child(t)
 	if not body.is_empty():
 		var b := Label.new()
+		b.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.text = body
 		b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -967,15 +963,13 @@ static func show_toast(host: Node, title: String, body: String = "", duration: f
 		b.add_theme_color_override("font_color", Color(0.75, 0.88, 0.82))
 		col.add_child(b)
 	panel.modulate.a = 0.0
-	panel.position.y = -10.0
 	host.add_child(panel)
+	# Keep anchored; animate modulate only (position tweens fight anchor layout).
 	var tw := panel.create_tween()
-	tw.set_parallel(true)
 	tw.tween_property(panel, "modulate:a", 1.0, 0.2)
-	tw.tween_property(panel, "position:y", 0.0, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.chain().tween_interval(maxf(0.5, duration))
-	tw.chain().tween_property(panel, "modulate:a", 0.0, 0.35)
-	tw.chain().tween_callback(func() -> void:
+	tw.tween_interval(maxf(0.5, duration))
+	tw.tween_property(panel, "modulate:a", 0.0, 0.35)
+	tw.tween_callback(func() -> void:
 		if is_instance_valid(panel):
 			panel.queue_free()
 	)

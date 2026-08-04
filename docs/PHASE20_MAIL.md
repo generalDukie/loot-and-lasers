@@ -2,6 +2,11 @@
 
 Server-authoritative in-game mail for Loot & Lasers.
 
+Wallet repair update: currency attachments remain server-authored and idempotent,
+but Stardust delivery now targets the selected Node Character through the private
+wallet bridge. The claim response includes the normalized wallet for immediate UI
+fan-out.
+
 ## Ownership decision
 
 **Mail is account-level.** Inbox ownership is `recipient_user_id` (Nakama session user).

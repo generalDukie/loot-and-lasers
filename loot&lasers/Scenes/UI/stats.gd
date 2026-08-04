@@ -56,10 +56,15 @@ var _inspect_item_id := ""
 var _inspect_anchor: Control = null
 var _inspect_hide_token := 0
 var _sheet_ready := false
+var _doll_wrap: Control = null
+var _slot_panels: Dictionary = {} # type -> PanelContainer
+var _bag_slot_min_h := 48.0
 
 const EQUIP_SLOT_SIZE := 107.0 # 88 × 1.22 — loadout extends downward 22%
 const PORTRAIT_SIZE := 107.0
 const BAG_COLS := 5
+const INSPECT_HIDE_DELAY := 0.22
+const ARMOR_STAT_LABEL := "Might Resistance"
 
 
 func _ready() -> void:
@@ -67,9 +72,15 @@ func _ready() -> void:
 	clip_contents = true
 	_build()
 	StatsManager.character_changed.connect(_refresh_values)
+	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	# Defer network boot so shell show_page can finish mounting/animating
 	# without waiting on guild/stats requests (those used to freeze the rail).
 	call_deferred("_start_boot")
+
+
+func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_refresh_values()
 
 
 func _start_boot() -> void:
@@ -158,7 +169,7 @@ func _build() -> void:
 	triad.add_theme_constant_override("separation", 12)
 	hcol.add_child(triad)
 
-	# Lore rail — must not grow taller than the doll (no fit_content blowout).
+	# Lore rail — fill available triad height; scroll only when lore is genuinely long.
 	var lore_panel := PanelContainer.new()
 	lore_panel.custom_minimum_size = Vector2(293, 0)
 	lore_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -181,13 +192,14 @@ func _build() -> void:
 	_lore_lab = RichTextLabel.new()
 	_lore_lab.bbcode_enabled = true
 	_lore_lab.fit_content = false
-	_lore_lab.scroll_active = false
+	_lore_lab.scroll_active = true
+	_lore_lab.scroll_following = false
 	_lore_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_lore_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lore_lab.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_lore_lab.add_theme_font_size_override("normal_font_size", 13)
-	_lore_lab.add_theme_font_size_override("bold_font_size", 14)
-	_lore_lab.add_theme_color_override("default_color", Color(0.82, 0.88, 0.94))
+	_lore_lab.add_theme_font_size_override("normal_font_size", 16)
+	_lore_lab.add_theme_font_size_override("bold_font_size", 17)
+	_lore_lab.add_theme_color_override("default_color", Color(0.86, 0.91, 0.96))
 	ClientUi.apply_body_font(_lore_lab)
 	lore_outer.add_child(_lore_lab)
 
@@ -202,11 +214,15 @@ func _build() -> void:
 	var doll_wrap := CenterContainer.new()
 	doll_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	doll_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	doll_wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+	doll_wrap.set_drag_forwarding(_doll_drag_get, _doll_drag_can_drop, _doll_drag_drop)
+	_doll_wrap = doll_wrap
 	mid.add_child(doll_wrap)
 	_doll = GridContainer.new()
 	_doll.columns = 3
 	_doll.add_theme_constant_override("h_separation", 8)
 	_doll.add_theme_constant_override("v_separation", 8)
+	_doll.mouse_filter = Control.MOUSE_FILTER_PASS
 	doll_wrap.add_child(_doll)
 
 	_hero_name = Label.new()
@@ -324,7 +340,7 @@ func _build() -> void:
 	bag_row.add_theme_constant_override("separation", 8)
 	bag_col.add_child(bag_row)
 	var bag_label := Label.new()
-	bag_label.text = "🎒  BACKPACK"
+	bag_label.text = "BACKPACK"
 	bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_label.add_theme_font_size_override("font_size", 13)
 	bag_label.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -359,11 +375,12 @@ func _build() -> void:
 	_bag_inspect.visible = false
 	_bag_inspect.z_index = 80
 	_bag_inspect.mouse_filter = Control.MOUSE_FILTER_STOP
-	_bag_inspect.custom_minimum_size = Vector2(220, 0)
+	_bag_inspect.custom_minimum_size = Vector2(168, 0)
 	_bag_inspect.add_theme_stylebox_override("panel", _compact_inspect_style(ClientUi.CYAN))
 	add_child(_bag_inspect)
 	_bag_inspect_col = VBoxContainer.new()
 	_bag_inspect_col.add_theme_constant_override("separation", 2)
+	_bag_inspect_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_bag_inspect.add_child(_bag_inspect_col)
 	_bag_inspect.mouse_entered.connect(_cancel_hide_bag_inspect)
 	_bag_inspect.mouse_exited.connect(_schedule_hide_bag_inspect)
@@ -463,7 +480,7 @@ func _populate() -> void:
 
 	_sheet_ready = true
 	_refresh_values()
-	_status.text = ""
+	_set_action_status("")
 
 
 ## Live values only — never rebuilds rows, so a held button stays alive.
@@ -478,7 +495,7 @@ func _refresh_values() -> void:
 	var permanent: Dictionary = StatsRules.permanent_totals(c, eq)
 	var naked: Dictionary = StatsRules.naked_totals(c)
 	var derived: Dictionary = StatsRules.derived(c, permanent)
-	var stardust := int(c.get("stardust", 0))
+	var stardust: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 
 	if is_instance_valid(_stardust_lab):
 		_stardust_lab.text = "✦  %s" % _fmt_int(stardust)
@@ -488,7 +505,7 @@ func _refresh_values() -> void:
 	for stat in StatsRules.ATTR_KEYS:
 		var cost_i := StatsRules.next_cost(c, str(stat))
 		cheapest = mini(cheapest, cost_i)
-		if stardust >= cost_i:
+		if CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost_i):
 			can_buy_any = true
 
 	if is_instance_valid(_stardust_need):
@@ -510,7 +527,7 @@ func _refresh_values() -> void:
 		var total := int(display.get(stat, 0))
 		var bonus := total - int(naked.get(stat, 0))
 		var cost := StatsRules.next_cost(c, str(stat))
-		var affordable := stardust >= cost
+		var affordable := CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost)
 
 		var value_lab := row["value"] as Label
 		value_lab.text = str(total)
@@ -532,6 +549,8 @@ func _refresh_values() -> void:
 				"Spend %s ✦ · hold to keep buying" % cost if affordable
 				else "Need %s ✦ for the next point" % cost
 			)
+		if row.has("panel") and is_instance_valid(row["panel"]):
+			(row["panel"] as Control).tooltip_text = StatsRules.attribute_tooltip(str(stat), c, eq)
 
 	_update_combat(derived, permanent, display)
 
@@ -623,6 +642,8 @@ func _on_save_bio() -> void:
 
 
 func _rebuild_doll() -> void:
+	_slot_panels.clear()
+	_clear_slot_highlights()
 	for child in _doll.get_children():
 		child.queue_free()
 	var ch: Dictionary = GameManager.active_character
@@ -631,21 +652,28 @@ func _rebuild_doll() -> void:
 	for slot in FRAME_SLOTS:
 		var stype := str(slot.get("type", ""))
 		if stype == "_portrait":
-			# Center cell: avatar face (not a level tile). Equal outer size to gear slots.
+			# Center cell: animated AvatarPortrait (presentation only). Drop zone is doll_wrap.
 			var wrap := PanelContainer.new()
 			wrap.custom_minimum_size = cell
+			wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 				Color(0.07, 0.09, 0.14, 1.0), Color(ClientUi.CYAN, 0.85), 10, 2
 			))
 			var pad := MarginContainer.new()
+			pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			pad.add_theme_constant_override("margin_left", 4)
 			pad.add_theme_constant_override("margin_right", 4)
 			pad.add_theme_constant_override("margin_top", 4)
 			pad.add_theme_constant_override("margin_bottom", 4)
 			wrap.add_child(pad)
 			var center := CenterContainer.new()
+			center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			pad.add_child(center)
-			center.add_child(AvatarRenderer.make_portrait(ch, PORTRAIT_SIZE - 12.0))
+			var portrait := AvatarRenderer.make_portrait(ch, PORTRAIT_SIZE - 12.0)
+			portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if portrait.has_method("set_active"):
+				portrait.call("set_active", true)
+			center.add_child(portrait)
 			# Small level badge — corner only, never replaces the portrait.
 			var badge := PanelContainer.new()
 			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -668,6 +696,7 @@ func _rebuild_doll() -> void:
 			lvl.text = str(int(ch.get("level", 1)))
 			lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			lvl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			lvl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			lvl.add_theme_font_size_override("font_size", 13)
 			lvl.add_theme_color_override("font_color", ClientUi.VOID)
 			ClientUi.apply_display_font(lvl)
@@ -676,7 +705,9 @@ func _rebuild_doll() -> void:
 			_doll.add_child(wrap)
 			continue
 		var worn := InventoryRules.find_equipped_of_type(items, stype)
-		_doll.add_child(_make_slot_chip(stype, str(slot.get("label", stype)), worn))
+		var chip := _make_slot_chip(stype, str(slot.get("label", stype)), worn)
+		_slot_panels[stype] = chip
+		_doll.add_child(chip)
 
 
 func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> PanelContainer:
@@ -758,16 +789,41 @@ func _update_backpack() -> void:
 		"font_color",
 		ClientUi.WARNING if bag.size() >= cap else ClientUi.MUTED
 	)
+	var rows_n := maxi(1, int(ceil(float(cap) / float(BAG_COLS))))
+	var avail_h := _bag_grid.size.y
+	if avail_h < 8.0 and is_instance_valid(_backpack):
+		avail_h = maxf(0.0, _backpack.size.y - 48.0)
+	var sep := 6.0 * float(maxi(0, rows_n - 1))
+	_bag_slot_min_h = clampf((avail_h - sep) / float(rows_n), 48.0, 96.0)
 	var row: HBoxContainer = null
 	for i in range(cap):
 		if i % BAG_COLS == 0:
 			row = HBoxContainer.new()
-			row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_theme_constant_override("separation", 6)
 			_bag_grid.add_child(row)
 		var item: Dictionary = bag[i] if i < bag.size() else {}
 		row.add_child(_make_bag_slot(item))
+	if not _bag_grid.resized.is_connected(_on_bag_grid_resized):
+		_bag_grid.resized.connect(_on_bag_grid_resized)
+
+
+func _on_bag_grid_resized() -> void:
+	if _busy or not _sheet_ready:
+		return
+	var rows_n := maxi(1, _bag_grid.get_child_count())
+	var avail_h := _bag_grid.size.y
+	var sep := 6.0 * float(maxi(0, rows_n - 1))
+	var next_h := clampf((avail_h - sep) / float(rows_n), 48.0, 96.0)
+	if absf(next_h - _bag_slot_min_h) < 2.0:
+		return
+	_bag_slot_min_h = next_h
+	for row_n in _bag_grid.get_children():
+		if row_n is HBoxContainer:
+			for slot in row_n.get_children():
+				if slot is Control:
+					(slot as Control).custom_minimum_size.y = _bag_slot_min_h
 
 
 func _make_bag_slot(item: Dictionary) -> PanelContainer:
@@ -776,23 +832,18 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	var item_type := str(item.get("type", "")) if filled else ""
 	var can_equip := filled and InventoryRules.is_equippable(item_type) and not item_id.is_empty()
 	var can_use := filled and InventoryRules.is_consumable(item) and not item_id.is_empty()
-	var can_drag := can_equip
+	var can_drag := can_equip or can_use
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(0, 40)
+	panel.custom_minimum_size = Vector2(0, _bag_slot_min_h)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	if filled:
 		var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
 		panel.add_theme_stylebox_override(
 			"panel",
 			_bag_slot_style(Color(tint, 0.12), Color(tint, 0.6))
 		)
-		if can_equip:
-			panel.tooltip_text = ""
-		elif can_use:
-			panel.tooltip_text = ""
-		else:
-			panel.tooltip_text = "%s · %s" % [str(item.get("name", "Item")), str(item.get("rarity", ""))]
+		panel.tooltip_text = ""
 	else:
 		panel.add_theme_stylebox_override(
 			"panel",
@@ -803,7 +854,7 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 4)
 	panel.add_child(row)
@@ -812,12 +863,15 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 			var arrow: Label = _make_upgrade_arrow(item)
 			if arrow != null:
 				row.add_child(arrow)
-		row.add_child(GearIcon.make(item, 28.0))
+		var icon_sz := clampf(_bag_slot_min_h * 0.55, 28.0, 44.0)
+		row.add_child(GearIcon.make(item, icon_sz))
 		var name := Label.new()
 		name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		name.text = str(item.get("name", "Item")).substr(0, 12)
+		name.text = str(item.get("name", "Item"))
+		name.clip_text = true
+		name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		name.add_theme_font_size_override("font_size", 13)
 		name.add_theme_color_override(
 			"font_color",
@@ -849,17 +903,20 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	if filled and (can_equip or can_use or not item_id.is_empty()):
 		var captured := item.duplicate(true)
 		var captured_id := item_id
+		var captured_name := str(item.get("name", "Stim"))
 		panel.mouse_entered.connect(func() -> void:
 			_show_bag_inspect(panel, captured)
 		)
 		panel.mouse_exited.connect(_schedule_hide_bag_inspect)
-		if can_equip:
-			panel.gui_input.connect(func(ev: InputEvent) -> void:
-				if ev is InputEventMouseButton and ev.pressed and ev.double_click \
-						and ev.button_index == MOUSE_BUTTON_LEFT:
-					_hide_bag_inspect()
+		panel.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.double_click \
+					and ev.button_index == MOUSE_BUTTON_LEFT:
+				_hide_bag_inspect()
+				if can_use:
+					_on_use_stim(captured_id, captured_name)
+				elif can_equip:
 					_on_equip(captured_id)
-			)
+		)
 	return panel
 
 
@@ -921,7 +978,7 @@ func _cancel_hide_bag_inspect() -> void:
 func _schedule_hide_bag_inspect() -> void:
 	_inspect_hide_token += 1
 	var token := _inspect_hide_token
-	get_tree().create_timer(0.28).timeout.connect(func() -> void:
+	get_tree().create_timer(INSPECT_HIDE_DELAY).timeout.connect(func() -> void:
 		if token != _inspect_hide_token:
 			return
 		if _pointer_over_inspect_zone():
@@ -932,7 +989,7 @@ func _schedule_hide_bag_inspect() -> void:
 
 func _pointer_over_inspect_zone() -> bool:
 	var mouse := get_viewport().get_mouse_position()
-	var pad := 8.0
+	var pad := 14.0
 	if _bag_inspect != null and is_instance_valid(_bag_inspect) and _bag_inspect.visible:
 		if _bag_inspect.get_global_rect().grow(pad).has_point(mouse):
 			return true
@@ -966,19 +1023,24 @@ func _show_bag_inspect(anchor: Control, item: Dictionary) -> void:
 func _position_bag_inspect(anchor: Control) -> void:
 	var rect := anchor.get_global_rect()
 	var size := _bag_inspect.get_combined_minimum_size()
+	size.x = clampf(size.x, 168.0, 280.0)
 	_bag_inspect.size = size
 	var vp := get_viewport_rect().size
-	# Overlap the slot so the pointer can move from gear → bubble without a gap.
-	var overlap := 10.0
-	var pos := Vector2(rect.position.x, rect.position.y - size.y + overlap)
-	if pos.y < 8.0:
-		pos.y = rect.end.y - overlap
+	var gap := 8.0
+	# Prefer right of source slot so the popup does not cover the item/cursor.
+	var pos := Vector2(rect.end.x + gap, rect.position.y)
 	if pos.x + size.x > vp.x - 8.0:
-		pos.x = maxf(8.0, vp.x - size.x - 8.0)
+		pos.x = rect.position.x - size.x - gap
 	if pos.x < 8.0:
-		pos.x = 8.0
+		# Fall back above/below when horizontal space is gone.
+		pos.x = clampf(rect.position.x, 8.0, maxf(8.0, vp.x - size.x - 8.0))
+		pos.y = rect.position.y - size.y - gap
+		if pos.y < 8.0:
+			pos.y = rect.end.y + gap
 	if pos.y + size.y > vp.y - 8.0:
 		pos.y = maxf(8.0, vp.y - size.y - 8.0)
+	if pos.y < 8.0:
+		pos.y = 8.0
 	_bag_inspect.global_position = pos
 
 
@@ -1082,12 +1144,14 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 4)
+	actions.mouse_filter = Control.MOUSE_FILTER_STOP
 	_bag_inspect_col.add_child(actions)
 	if InventoryRules.is_consumable(item) and not item_id.is_empty():
 		var use_btn := Button.new()
 		use_btn.text = "Use"
 		use_btn.custom_minimum_size = Vector2(0, 26)
 		ClientUi.apply_primary_button(use_btn)
+		use_btn.mouse_entered.connect(_cancel_hide_bag_inspect)
 		use_btn.pressed.connect(func() -> void:
 			_hide_bag_inspect()
 			_on_use_stim(item_id, str(item.get("name", "Stim")))
@@ -1099,6 +1163,7 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 		equip_btn.text = "Swap" if swap else "Equip"
 		equip_btn.custom_minimum_size = Vector2(0, 26)
 		ClientUi.apply_primary_button(equip_btn)
+		equip_btn.mouse_entered.connect(_cancel_hide_bag_inspect)
 		equip_btn.pressed.connect(func() -> void:
 			_hide_bag_inspect()
 			_on_equip(item_id)
@@ -1110,16 +1175,28 @@ func _on_use_stim(item_id: String, item_name: String) -> void:
 	if _busy or item_id.is_empty():
 		return
 	_busy = true
-	_status.text = "Using %s…" % item_name
+	_set_action_status("Using %s…" % item_name)
+	print("[Hero] use_consumable id=%s via=AuthManager.Node" % item_id.substr(0, mini(8, item_id.length())))
 	var res: Dictionary = await AuthManager.use_consumable(item_id)
 	_busy = false
 	if not res.ok:
-		_status.text = str(res.get("error", "Use failed"))
+		_set_action_status(str(res.get("error", "Use failed")), true)
 		return
-	_status.text = "Used %s." % item_name
+	_set_action_status("Used %s." % item_name)
 	AudioManager.play_ui("stim")
 	await StatsManager.refresh()
 	_populate()
+
+
+func _set_action_status(text: String, danger: bool = false) -> void:
+	if not is_instance_valid(_status):
+		return
+	_status.text = text
+	_status.visible = not text.is_empty()
+	_status.add_theme_color_override(
+		"font_color",
+		ClientUi.DANGER if danger else ClientUi.MUTED
+	)
 
 
 func _make_item_drag(host: Control, item: Dictionary, from: String) -> Variant:
@@ -1133,7 +1210,76 @@ func _make_item_drag(host: Control, item: Dictionary, from: String) -> Variant:
 		"item_id": item_id,
 		"from": from,
 		"type": str(item.get("type", "")),
+		"consumable": InventoryRules.is_consumable(item),
 	}
+
+
+func _doll_drag_get(_at: Vector2) -> Variant:
+	return null
+
+
+func _doll_drag_can_drop(_at: Vector2, data: Variant) -> bool:
+	var ok := _can_drop_on_hero_display(data)
+	_highlight_drop_target(data if ok else {})
+	return ok
+
+
+func _doll_drag_drop(_at: Vector2, data: Variant) -> void:
+	_clear_slot_highlights()
+	_drop_on_hero_display(data)
+
+
+func _can_drop_on_hero_display(data: Variant) -> bool:
+	if typeof(data) != TYPE_DICTIONARY:
+		return false
+	if str(data.get("from", "")) != "bag":
+		return false
+	if bool(data.get("consumable", false)):
+		return true
+	var item_type := str(data.get("type", ""))
+	return InventoryRules.is_equippable(item_type)
+
+
+func _drop_on_hero_display(data: Variant) -> void:
+	if not _can_drop_on_hero_display(data):
+		_set_action_status("Cannot use that item on your operative.", true)
+		return
+	var item_id := str(data.get("item_id", ""))
+	if item_id.is_empty():
+		return
+	if bool(data.get("consumable", false)):
+		var item_name := "Stim"
+		for it in StatsManager.all_items:
+			if typeof(it) == TYPE_DICTIONARY and str(it.get("id", "")) == item_id:
+				item_name = str(it.get("name", "Stim"))
+				break
+		_on_use_stim(item_id, item_name)
+		return
+	_on_equip(item_id)
+
+
+func _highlight_drop_target(data: Variant) -> void:
+	_clear_slot_highlights()
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	if bool(data.get("consumable", false)):
+		if _doll_wrap != null and is_instance_valid(_doll_wrap):
+			_doll_wrap.modulate = Color(1.15, 1.2, 1.05, 1.0)
+		return
+	var item_type := str(data.get("type", ""))
+	if _slot_panels.has(item_type):
+		var panel: PanelContainer = _slot_panels[item_type]
+		if is_instance_valid(panel):
+			panel.modulate = Color(1.25, 1.3, 1.1, 1.0)
+
+
+func _clear_slot_highlights() -> void:
+	if _doll_wrap != null and is_instance_valid(_doll_wrap):
+		_doll_wrap.modulate = Color.WHITE
+	for k in _slot_panels.keys():
+		var panel: PanelContainer = _slot_panels[k]
+		if is_instance_valid(panel):
+			panel.modulate = Color.WHITE
 
 
 func _bag_drag_get(_at: Vector2) -> Variant:
@@ -1165,10 +1311,13 @@ func _can_drop_on_equip_slot(slot_type: String, data: Variant) -> bool:
 		return false
 	if str(data.get("from", "")) != "bag":
 		return false
+	if bool(data.get("consumable", false)):
+		return false
 	return str(data.get("type", "")) == slot_type
 
 
 func _drop_on_equip_slot(slot_type: String, data: Variant) -> void:
+	_clear_slot_highlights()
 	if not _can_drop_on_equip_slot(slot_type, data):
 		return
 	var item_id := str(data.get("item_id", ""))
@@ -1177,47 +1326,39 @@ func _drop_on_equip_slot(slot_type: String, data: Variant) -> void:
 
 
 func _on_equip(item_id: String) -> void:
-	if _busy or item_id.is_empty() or EquipmentManager.is_mutating():
+	if _busy or item_id.is_empty():
 		return
 	_busy = true
-	_status.text = "Equipping…"
-	var item_type := ""
-	var items: Array = StatsManager.all_items if typeof(StatsManager.all_items) == TYPE_ARRAY else []
-	for it in items:
-		if typeof(it) == TYPE_DICTIONARY and str(it.get("id", "")) == item_id:
-			item_type = str(it.get("type", ""))
-			break
-	if item_type.is_empty():
-		_busy = false
-		_status.text = "Cannot resolve item type for equip"
-		return
-	var res: Dictionary = await EquipmentManager.equip_from_bag(item_id, item_type)
+	_set_action_status("Equipping…")
+	print("[Hero] equip_item id=%s via=AuthManager.Node" % item_id.substr(0, mini(8, item_id.length())))
+	var res: Dictionary = await AuthManager.equip_item(item_id)
 	_busy = false
 	if not res.ok:
-		_status.text = str(res.get("error", "Equip failed"))
+		_set_action_status(str(res.get("error", "Equip failed")), true)
 		return
-	_status.text = "Equipped."
+	_set_action_status("Equipped.")
 	AudioManager.play_ui("equip")
 	await StatsManager.refresh()
 	_populate()
 
 
 func _on_unequip(item_id: String) -> void:
-	if _busy or item_id.is_empty() or EquipmentManager.is_mutating():
+	if _busy or item_id.is_empty():
 		return
 	_busy = true
-	_status.text = "Unequipping…"
-	var res: Dictionary = await EquipmentManager.unequip_by_instance("", item_id)
+	_set_action_status("Unequipping…")
+	print("[Hero] unequip_item id=%s via=AuthManager.Node" % item_id.substr(0, mini(8, item_id.length())))
+	var res: Dictionary = await AuthManager.unequip_item(item_id)
 	_busy = false
 	if not res.ok:
 		var err := str(res.get("error", "Unequip failed"))
-		_status.text = err
+		_set_action_status(err, true)
 		if err.to_lower().contains("inventory full"):
 			await InventoryManager.prompt_bag_pressure(self, "Free a bag slot before unequipping.")
 			await StatsManager.refresh()
 			_populate()
 		return
-	_status.text = "Unequipped."
+	_set_action_status("Unequipped.")
 	await StatsManager.refresh()
 	_populate()
 
@@ -1340,6 +1481,9 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 		10,
 		2 if is_primary else 1
 	))
+	panel.tooltip_text = StatsRules.attribute_tooltip(
+		stat, GameManager.active_character, StatsManager.equipped_items
+	)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	panel.add_child(row)
@@ -1395,7 +1539,7 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	buy.mouse_exited.connect(_stop_hold)
 	row.add_child(buy)
 
-	_stat_rows[stat] = {"value": value_lab, "bonus": bonus_lab, "buy": buy}
+	_stat_rows[stat] = {"panel": panel, "value": value_lab, "bonus": bonus_lab, "buy": buy}
 	return panel
 
 
@@ -1469,7 +1613,7 @@ func _make_combat_card() -> VBoxContainer:
 	def_row_b.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	def_row_b.add_theme_constant_override("separation", 6)
 	def_col.add_child(def_row_b)
-	def_row_b.add_child(_combat_tile("Armor", Color("#A78BFA")))
+	def_row_b.add_child(_combat_tile(ARMOR_STAT_LABEL, Color("#A78BFA")))
 	def_row_b.add_child(_combat_tile("Tech Resist", Color("#38BDF8")))
 	return root
 
@@ -1481,7 +1625,7 @@ func _update_combat(derived: Dictionary, permanent: Dictionary, display: Diction
 		"Crit Chance": "%s%% · %s×" % [_fmt_pct(float(derived.get("critChance", 0))), mult],
 		"Max Health": str(derived.get("health", 0)),
 		"Dodge Chance": "%s%%" % _fmt_pct(float(derived.get("dodgeChance", 0))),
-		"Armor": "%s%%" % _fmt_pct(float(derived.get("armor", 0))),
+		ARMOR_STAT_LABEL: "%s%%" % _fmt_pct(float(derived.get("armor", 0))),
 		"Tech Resist": "%s%%" % _fmt_pct(float(derived.get("techResist", 0))),
 	}
 	for key in values:
@@ -1582,7 +1726,7 @@ func _buy_once(stat: String) -> void:
 		return
 	var label := str(StatsRules.ATTR_LABELS.get(stat, stat))
 	var cost := StatsRules.next_cost(GameManager.active_character, stat)
-	if int(GameManager.active_character.get("stardust", 0)) < cost:
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
 		_stop_hold()
 		_status.text = "Need %s ✦ for the next %s point." % [cost, label]
 		_refresh_values()

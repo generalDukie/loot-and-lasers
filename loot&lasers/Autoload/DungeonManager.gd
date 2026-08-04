@@ -16,6 +16,16 @@ func _ready() -> void:
 	print("[DungeonManager] ready")
 
 
+func clear_local() -> void:
+	selected_planet_id = 1
+	viewing_wormhole = false
+	patrol = false
+	pending_enemy = {}
+	pending_battle = {}
+	pending_player_items = []
+	last_finish = {}
+
+
 func active_char() -> Dictionary:
 	return GameManager.active_character
 
@@ -167,7 +177,7 @@ func _apply(res: Dictionary) -> void:
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var patch: Variant = data.get("patch", {})
 	if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty():
-		GameManager.active_character.merge(patch, true)
+		GameManager.apply_active_character_patch(patch, "dungeon_mutation")
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.active_character = ch
+		GameManager.apply_active_character(ch, "dungeon_mutation")

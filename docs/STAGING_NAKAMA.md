@@ -7,7 +7,7 @@ Connect the Godot client to local Docker Nakama or the Hetzner staging host with
 | Id | Scheme | Host | Port | Server key |
 |----|--------|------|------|------------|
 | `local` | http | 127.0.0.1 | 7350 | `defaultkey` (Docker default) |
-| `staging` | http | 178.156.210.186 | 7350 | Hetzner `NAKAMA_SOCKET_SERVER_KEY` |
+| `staging` | https | 178.156.210.186 | 8443 | Hetzner `NAKAMA_SOCKET_SERVER_KEY` |
 
 Selection is owned by autoload `BackendEnvironment`.  
 `NakamaManager` remains the **only** Nakama client owner.  
@@ -71,9 +71,13 @@ LOOT_DEV_WALLET_MUTATIONS=0
 LOOT_DEV_REWARD_TEST=0
 LOOT_DEV_LOOT_TEST=0
 LOOT_DEV_MAIL_TEST=0
+NAKAMA_SOCKET_SERVER_KEY=<staging client server key>
 LOOT_NODE_INTERNAL_URL=http://loot-node-api:8787
 LOOT_WALLET_BRIDGE_SECRET=<shared server-only secret>
 ```
+
+Compose passes `NAKAMA_SOCKET_SERVER_KEY` to Nakama as `--socket.server_key`.
+Without that wiring Nakama silently uses its built-in `defaultkey`.
 
 ## Visible environment badge
 

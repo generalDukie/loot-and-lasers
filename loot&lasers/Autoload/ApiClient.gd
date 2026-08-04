@@ -46,10 +46,10 @@ func _urls_compatible(saved: String, env_url: String) -> bool:
 	# Never keep a URL pointed at Nakama (7350/7349/7351) — that is not the Node auth API.
 	if _looks_like_nakama_url(saved):
 		return false
-	# Staging: drop leftover localhost so LOOT_NODE_API_URL / secrets can win.
+	# Staging has one authoritative public HTTPS endpoint. Never retain a saved
+	# direct-port URL (such as :8787) or any other stale override.
 	if BackendEnvironment != null and BackendEnvironment.is_staging():
-		if saved.contains("127.0.0.1") or saved.contains("localhost"):
-			return false
+		return false
 	return saved.begins_with("http")
 
 

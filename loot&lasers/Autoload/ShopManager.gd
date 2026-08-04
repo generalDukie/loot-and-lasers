@@ -102,18 +102,36 @@ func buy_consumable(slot_id: String) -> Dictionary:
 	_set_mutating(true)
 	if _pending_buy_request_id.is_empty():
 		_pending_buy_request_id = _new_request_id("shop-stim")
+	var refresh_id := int(shop_meta.get("window_idx", shop_window.get("idx", 0)))
+	_diag_buy("shop_buy_started", {
+		"op": "BuyShopConsumable",
+		"request_id": _pending_buy_request_id,
+		"slot_id": slot_id,
+		"refresh_id": refresh_id,
+	})
 	var res: Dictionary = await GameApiClient.invoke("BuyShopConsumable", {
 		"slot_id": slot_id,
 		"request_id": _pending_buy_request_id,
-		"refresh_id": int(shop_meta.get("window_idx", shop_window.get("idx", 0))),
+		"refresh_id": refresh_id,
 	})
 	_busy = false
 	_set_mutating(false)
+	_diag_buy("shop_buy_finished", {
+		"op": "BuyShopConsumable",
+		"request_id": _pending_buy_request_id,
+		"slot_id": slot_id,
+		"status": int(res.get("status", 0)),
+		"ok": bool(res.get("ok", false)),
+		"error": str(res.get("error", "")),
+	})
+	# Keep pending id only for ambiguous transport failures (status 0) so retry is idempotent.
+	# Definitive HTTP outcomes (incl. Invalid request_id) must not reuse a rejected key.
+	if bool(res.get("ok", false)) or int(res.get("status", 0)) > 0:
+		_pending_buy_request_id = ""
 	if not res.ok:
 		var err := str(res.get("error", "BuyShopConsumable failed"))
 		shop_error.emit(err)
-		return {"ok": false, "error": err, "data": {}}
-	_pending_buy_request_id = ""
+		return {"ok": false, "error": err, "data": {}, "status": int(res.get("status", 0))}
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	_apply_shop_payload(data)
 	_apply_character_payload(res)
@@ -142,20 +160,40 @@ func buy_gear(slot_id: String, is_hot: bool = false, haggle: bool = false) -> Di
 	_set_mutating(true)
 	if _pending_buy_request_id.is_empty():
 		_pending_buy_request_id = _new_request_id("shop-gear")
+	var refresh_id := int(shop_meta.get("window_idx", shop_window.get("idx", 0)))
+	_diag_buy("shop_buy_started", {
+		"op": "BuyShopGear",
+		"request_id": _pending_buy_request_id,
+		"slot_id": slot_id,
+		"is_hot": is_hot,
+		"haggle": haggle,
+		"refresh_id": refresh_id,
+	})
 	var res: Dictionary = await GameApiClient.invoke("BuyShopGear", {
 		"slot_id": slot_id,
 		"is_hot": is_hot,
 		"haggle": haggle,
 		"request_id": _pending_buy_request_id,
-		"refresh_id": int(shop_meta.get("window_idx", shop_window.get("idx", 0))),
+		"refresh_id": refresh_id,
 	})
 	_busy = false
 	_set_mutating(false)
+	_diag_buy("shop_buy_finished", {
+		"op": "BuyShopGear",
+		"request_id": _pending_buy_request_id,
+		"slot_id": slot_id,
+		"status": int(res.get("status", 0)),
+		"ok": bool(res.get("ok", false)),
+		"error": str(res.get("error", "")),
+	})
+	# Keep pending id only for ambiguous transport failures (status 0) so retry is idempotent.
+	# Definitive HTTP outcomes (incl. Invalid request_id) must not reuse a rejected key.
+	if bool(res.get("ok", false)) or int(res.get("status", 0)) > 0:
+		_pending_buy_request_id = ""
 	if not res.ok:
 		var err := str(res.get("error", "BuyShopGear failed"))
 		shop_error.emit(err)
-		return {"ok": false, "error": err, "data": {}}
-	_pending_buy_request_id = ""
+		return {"ok": false, "error": err, "data": {}, "status": int(res.get("status", 0))}
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	_apply_shop_payload(data)
 	_apply_character_payload(res)
@@ -340,7 +378,16 @@ func _apply_character_payload(res: Dictionary) -> void:
 
 
 func _new_request_id(prefix: String) -> String:
-	return "%s-%s-%d" % [prefix, str(Time.get_unix_time_from_system()), randi()]
+	## Node normalizeOperationKey allows only [A-Za-z0-9:_-] (see economy.js).
+	## Time.get_unix_time_from_system() is a float; str() injects '.' and Node returns
+	## "Invalid request_id". Cast to int like MissionManager.buy_fuel / web Date.now().
+	return "%s-%d-%d" % [prefix, int(Time.get_unix_time_from_system()), randi() % 100000]
+
+
+func _diag_buy(event: String, fields: Dictionary = {}) -> void:
+	if DiagnosticLogger == null:
+		return
+	DiagnosticLogger.info("ShopManager", event, fields)
 
 
 func _set_loading(value: bool) -> void:

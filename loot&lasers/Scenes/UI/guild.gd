@@ -124,13 +124,9 @@ func _make_creation_flow() -> VBoxContainer:
 	var head := VBoxContainer.new()
 	head.add_theme_constant_override("separation", 4)
 	wrap.add_child(head)
-	var title := Label.new()
-	title.text = "👥  FORM A GUILD"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
-	ClientUi.apply_display_font(title)
-	head.add_child(title)
+	var title_center := CenterContainer.new()
+	title_center.add_child(UiIcon.make_title_row("users", "FORM A GUILD", ClientUi.CYAN_SOFT, 32, 28.0))
+	head.add_child(title_center)
 	var sub := Label.new()
 	sub.text = "Band together to share progression and mission glory."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -579,7 +575,7 @@ func _make_wars_panel(guild: Dictionary, wars: Array) -> PanelContainer:
 	ClientUi.apply_display_font(eye)
 	left.add_child(eye)
 	var title := Label.new()
-	title.text = "⚔  War Council"
+	title.text = "War Council"
 	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
@@ -650,12 +646,16 @@ func _make_battle_history(wars: Array, guild_id: String) -> PanelContainer:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
+	var head_row := HBoxContainer.new()
+	head_row.add_theme_constant_override("separation", 8)
+	col.add_child(head_row)
+	head_row.add_child(UiIcon.make("swords", Color(0.95, 0.65, 0.72), 18.0))
 	var t := Label.new()
-	t.text = "⚔  BATTLE HISTORY"
+	t.text = "BATTLE HISTORY"
 	t.add_theme_font_size_override("font_size", 16)
 	t.add_theme_color_override("font_color", Color(0.95, 0.65, 0.72))
 	ClientUi.apply_display_font(t)
-	col.add_child(t)
+	head_row.add_child(t)
 
 	var done: Array = []
 	for w in wars:
@@ -678,9 +678,7 @@ func _make_battle_history(wars: Array, guild_id: String) -> PanelContainer:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
 		col.add_child(row)
-		var icon := Label.new()
-		icon.text = "🏆" if won else "💀"
-		row.add_child(icon)
+		row.add_child(UiIcon.make("trophy" if won else "skull", ClientUi.SUCCESS if won else ClientUi.DANGER, 20.0))
 		var info := Label.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.text = "vs %s" % opponent
@@ -848,11 +846,7 @@ func _make_member_row(m: Dictionary, my_id: String) -> PanelContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	panel.add_child(row)
-	var icon := Label.new()
-	icon.text = "👑" if role == "leader" else "⭐"
-	icon.add_theme_font_size_override("font_size", 19)
-	icon.add_theme_color_override("font_color", color)
-	row.add_child(icon)
+	row.add_child(UiIcon.make("crown" if role == "leader" else "star", color, 19.0))
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 1)

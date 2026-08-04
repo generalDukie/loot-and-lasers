@@ -142,12 +142,7 @@ func _build() -> void:
 	mid.custom_minimum_size.x = 48
 	mid.alignment = BoxContainer.ALIGNMENT_CENTER
 	hp_row.add_child(mid)
-	var swords := Label.new()
-	swords.text = "⚔"
-	swords.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	swords.add_theme_font_size_override("font_size", 24)
-	swords.add_theme_color_override("font_color", Color("#FCD34D", 0.85))
-	mid.add_child(swords)
+	mid.add_child(UiIcon.make("swords", Color("#FCD34D", 0.85), 24.0))
 
 	var e_hp := _make_hp_side(true)
 	e_hp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -250,14 +245,19 @@ func _build() -> void:
 	vs_row.add_theme_font_size_override("font_size", 19)
 	ClientUi.apply_display_font(vs_row)
 	intro_col.add_child(vs_row)
+	var fight_row := HBoxContainer.new()
+	fight_row.name = "FightLab"
+	fight_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	fight_row.add_theme_constant_override("separation", 10)
+	intro_col.add_child(fight_row)
+	fight_row.add_child(UiIcon.make("swords", Color("#FBBF24"), 40.0))
 	var fight_lab := Label.new()
-	fight_lab.name = "FightLab"
-	fight_lab.text = "⚔  FIGHT!"
+	fight_lab.text = "FIGHT!"
 	fight_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fight_lab.add_theme_font_size_override("font_size", 48)
 	fight_lab.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(fight_lab)
-	intro_col.add_child(fight_lab)
+	fight_row.add_child(fight_lab)
 
 	_outro_layer = ColorRect.new()
 	_outro_layer.color = Color(0, 0, 0, 0.72)

@@ -56,15 +56,7 @@ func _build() -> void:
 	root.add_theme_constant_override("separation", 8)
 	margin.add_child(root)
 
-	var title_row := HBoxContainer.new()
-	title_row.add_theme_constant_override("separation", 8)
-	root.add_child(title_row)
-	var title := Label.new()
-	title.text = "👑  Galactic Command Nexus"
-	title.add_theme_font_size_override("font_size", 27)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	title_row.add_child(title)
+	root.add_child(UiIcon.make_title_row("crown", "Galactic Command Nexus", ClientUi.TEXT, 27, 28.0))
 
 	# NexusChatter — icon + rotating italic line.
 	var chatter_panel := PanelContainer.new()
@@ -75,9 +67,8 @@ func _build() -> void:
 	var chatter_row := HBoxContainer.new()
 	chatter_row.add_theme_constant_override("separation", 8)
 	chatter_panel.add_child(chatter_row)
-	var chatter_icon := Label.new()
-	chatter_icon.text = "📡"
-	chatter_icon.add_theme_font_size_override("font_size", 24)
+	var chatter_icon := UiIcon.make("radio", ClientUi.CYAN, 22.0)
+	chatter_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chatter_row.add_child(chatter_icon)
 	_chatter = Label.new()
 	_chatter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -192,10 +183,7 @@ func _populate() -> void:
 	var showcase_head := HBoxContainer.new()
 	showcase_head.add_theme_constant_override("separation", 8)
 	_owner_col.add_child(showcase_head)
-	var crown := Label.new()
-	crown.text = "👑"
-	crown.add_theme_font_size_override("font_size", 21)
-	showcase_head.add_child(crown)
+	showcase_head.add_child(UiIcon.make("crown", Color("#FBBF24"), 21.0))
 	var showcase_title := Label.new()
 	showcase_title.text = "GALACTIC COMMAND NEXUS"
 	showcase_title.add_theme_font_size_override("font_size", 16)
@@ -266,12 +254,16 @@ func _populate() -> void:
 			Color(0.12, 0.08, 0.02, 0.85), Color("#F59E0B", 0.45), 14, 1
 		))
 		owner_row.add_child(rank_chip)
+		var rank_row := HBoxContainer.new()
+		rank_row.add_theme_constant_override("separation", 6)
+		rank_chip.add_child(rank_row)
+		rank_row.add_child(UiIcon.make("trophy", Color("#FBBF24"), 16.0))
 		var rank_l := Label.new()
-		rank_l.text = "🏆  RANK #1"
+		rank_l.text = "RANK #1"
 		rank_l.add_theme_font_size_override("font_size", 15)
 		rank_l.add_theme_color_override("font_color", Color("#FBBF24"))
 		ClientUi.apply_display_font(rank_l)
-		rank_chip.add_child(rank_l)
+		rank_row.add_child(rank_l)
 
 		var stats := GridContainer.new()
 		stats.columns = 4
@@ -352,7 +344,7 @@ func _populate() -> void:
 	if NexusManager.owns_nexus(gid):
 		_owner_perk_panel.visible = true
 		var perk := Label.new()
-		perk.text = "👑 Your guild holds the Nexus — members enjoy +5% mission rewards and +5% guild experience."
+		perk.text = "Your guild holds the Nexus — members enjoy +5% mission rewards and +5% guild experience."
 		perk.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		perk.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		perk.add_theme_font_size_override("font_size", 16)

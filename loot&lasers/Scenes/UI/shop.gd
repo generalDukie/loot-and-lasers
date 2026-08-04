@@ -86,12 +86,7 @@ func _build() -> void:
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
 
-	var title := Label.new()
-	title.text = "🛒  Black Market"
-	title.add_theme_font_size_override("font_size", 29)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	head_l.add_child(title)
+	head_l.add_child(UiIcon.make_title_row("shopping-bag", "Black Market", ClientUi.TEXT, 29, 28.0))
 
 	_vendor = Label.new()
 	_vendor.add_theme_font_size_override("font_size", 15)
@@ -164,13 +159,9 @@ func _populate() -> void:
 func _offline_panel() -> VBoxContainer:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	var t := Label.new()
-	t.text = "🛒  Black Market is offline"
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	t.add_theme_font_size_override("font_size", 21)
-	t.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(t)
-	col.add_child(t)
+	var t_center := CenterContainer.new()
+	t_center.add_child(UiIcon.make_title_row("shopping-bag", "Black Market is offline", ClientUi.TEXT, 21, 24.0))
+	col.add_child(t_center)
 	var sub := Label.new()
 	sub.text = "Could not load bazaar stock. Restart the game API and retry."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -243,13 +234,17 @@ func _make_hot_banner(item: Dictionary) -> PanelContainer:
 	col.add_theme_constant_override("separation", 8)
 	panel.add_child(col)
 
+	var badge_row := HBoxContainer.new()
+	badge_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	badge_row.add_theme_constant_override("separation", 6)
+	col.add_child(badge_row)
+	badge_row.add_child(UiIcon.make("flame", Color("#FED7AA"), 18.0))
 	var badge := Label.new()
-	badge.text = "🔥  HOT DEAL · resets %s" % hot_eta
-	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.text = "HOT DEAL · resets %s" % hot_eta
 	badge.add_theme_font_size_override("font_size", 15)
 	badge.add_theme_color_override("font_color", Color("#FED7AA"))
 	ClientUi.apply_display_font(badge)
-	col.add_child(badge)
+	badge_row.add_child(badge)
 
 	var card := _make_gear_card(item, true, tint)
 	if sold or yanked:
@@ -286,12 +281,7 @@ func _make_market_section() -> PanelContainer:
 	var head_col := VBoxContainer.new()
 	head_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(head_col)
-	var t := Label.new()
-	t.text = "⚔  Black Market"
-	t.add_theme_font_size_override("font_size", 20)
-	t.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(t)
-	head_col.add_child(t)
+	head_col.add_child(UiIcon.make_title_row("shopping-bag", "Black Market", ClientUi.TEXT, 20, 24.0))
 	var h := Label.new()
 	h.text = "8 stalls · gear & stims mixed · haggle gear"
 	h.add_theme_font_size_override("font_size", 13)
@@ -388,17 +378,19 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 		Color(tint, 0.12), Color(tint, 0.4), 8, 1
 	))
 	top.add_child(icon_box)
-	var icon := Label.new()
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var icon_center := CenterContainer.new()
+	icon_box.add_child(icon_center)
 	if is_trio:
-		icon.text = "📦"
+		icon_center.add_child(UiIcon.make("package", tint, 22.0))
 	elif stat == "all":
-		icon.text = "✨"
+		icon_center.add_child(UiIcon.make("sparkles", tint, 22.0))
 	else:
+		var icon := Label.new()
+		icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		icon.text = str(GameData.STAT_ICONS.get(stat, "🧪"))
-	icon.add_theme_font_size_override("font_size", 19)
-	icon_box.add_child(icon)
+		icon.add_theme_font_size_override("font_size", 19)
+		icon_center.add_child(icon)
 
 	var title_col := VBoxContainer.new()
 	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -502,10 +494,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 	top.add_theme_constant_override("separation", 8)
 	col.add_child(top)
 	if is_bundle:
-		var crate := Label.new()
-		crate.text = "📦"
-		crate.add_theme_font_size_override("font_size", 29)
-		top.add_child(crate)
+		top.add_child(UiIcon.make("package", tint, 29.0))
 	else:
 		top.add_child(GearIcon.make(item, 36.0))
 

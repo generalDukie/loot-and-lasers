@@ -19,7 +19,7 @@ var _activity: Button
 var _activity_label: Label
 var _clock: Label
 var _portrait_host: CenterContainer
-var _console_class_icon: Label
+var _console_class_icon: Control
 var _console_portrait_btn: Button
 var _hero_page_open := false
 var _notif_btn: Button
@@ -322,11 +322,9 @@ func _make_top_chrome() -> Control:
 	switch_btn.pressed.connect(func() -> void: GameManager.go_character_select())
 	row.add_child(switch_btn)
 
-	var settings_btn := Button.new()
-	settings_btn.text = "⚙"
-	settings_btn.tooltip_text = "Settings"
-	settings_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var settings_btn := UiIcon.make_icon_button("settings", ClientUi.MUTED, 22.0, "Settings")
 	ClientUi.apply_ghost_button(settings_btn)
+	UiIcon.apply_button_icon_colors(settings_btn, ClientUi.MUTED)
 	settings_btn.pressed.connect(func() -> void: GameManager.go_settings())
 	row.add_child(settings_btn)
 
@@ -1049,22 +1047,17 @@ func _build_notification_center() -> void:
 
 	var header := HBoxContainer.new()
 	col.add_child(header)
-	var title := Label.new()
-	title.text = "🔔  Notifications"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 16)
-	title.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_display_font(title)
-	header.add_child(title)
+	var title_row := UiIcon.make_title_row("bell", "Notifications", ClientUi.MUTED, 16, 18.0)
+	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title_row)
 	_notif_meta = Label.new()
 	_notif_meta.add_theme_font_size_override("font_size", 13)
 	_notif_meta.add_theme_color_override("font_color", ClientUi.DANGER)
 	ClientUi.apply_body_font(_notif_meta)
 	header.add_child(_notif_meta)
-	var mark := Button.new()
-	mark.text = "✓✓"
-	mark.tooltip_text = "Mark all read"
+	var mark := UiIcon.make_icon_button("check-check", ClientUi.MUTED, 18.0, "Mark all read")
 	ClientUi.apply_ghost_button(mark)
+	UiIcon.apply_button_icon_colors(mark, ClientUi.MUTED)
 	mark.pressed.connect(func() -> void:
 		await NotificationManager.mark_all_read()
 		await _refresh_notification_center()
@@ -1088,13 +1081,15 @@ func _build_notification_center() -> void:
 	stack.add_child(fab_wrap)
 
 	_notif_btn = Button.new()
-	_notif_btn.text = "🔔"
+	_notif_btn.text = ""
 	_notif_btn.tooltip_text = "Open notifications"
 	_notif_btn.focus_mode = Control.FOCUS_NONE
 	_notif_btn.custom_minimum_size = Vector2(64, 64)
 	_notif_btn.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_notif_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	_notif_btn.add_theme_font_size_override("font_size", 24)
+	_notif_btn.icon = UiIcon.texture("bell")
+	_notif_btn.expand_icon = true
+	_notif_btn.add_theme_constant_override("icon_max_width", 28)
 	_style_notif_fab(false)
 	_notif_btn.pressed.connect(toggle_notifications)
 	ClientUi.apply_interaction_motion(_notif_btn, 1.06)
@@ -1154,15 +1149,13 @@ func _style_notif_fab(open: bool) -> void:
 	_notif_btn.add_theme_stylebox_override("hover", hover)
 	_notif_btn.add_theme_stylebox_override("pressed", hover)
 	_notif_btn.add_theme_stylebox_override("focus", style)
-	_notif_btn.add_theme_color_override("font_color", ClientUi.CYAN)
-	_notif_btn.add_theme_color_override("font_hover_color", ClientUi.CYAN_SOFT)
-	_notif_btn.add_theme_color_override("font_pressed_color", ClientUi.CYAN)
+	UiIcon.apply_button_icon_colors(_notif_btn, ClientUi.CYAN)
 
 
 func _sync_notif_fab() -> void:
 	if _notif_btn == null or not is_instance_valid(_notif_btn):
 		return
-	_notif_btn.text = "✕" if _notif_open else "🔔"
+	UiIcon.set_button_icon(_notif_btn, "x" if _notif_open else "bell", ClientUi.CYAN, 28.0)
 	_notif_btn.tooltip_text = "Minimize notifications" if _notif_open else "Open notifications"
 	_style_notif_fab(_notif_open)
 	_update_notif_badge()
@@ -1193,10 +1186,14 @@ func _refresh_notification_center() -> void:
 
 	if ProgressManager.can_claim_daily():
 		var daily := Button.new()
-		daily.text = "📅  Daily Reward Ready\nClaim your login reward"
+		daily.text = "  Daily Reward Ready\nClaim your login reward"
 		daily.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		daily.icon = UiIcon.texture("calendar")
+		daily.expand_icon = true
+		daily.add_theme_constant_override("icon_max_width", 20)
 		ClientUi.apply_ghost_button(daily)
 		daily.add_theme_color_override("font_color", ClientUi.GOLD)
+		UiIcon.apply_button_icon_colors(daily, ClientUi.GOLD)
 		daily.pressed.connect(func() -> void:
 			_set_notification_open(false)
 			GameManager.go_progress()
@@ -1609,25 +1606,20 @@ func _refresh_chrome() -> void:
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		portrait_btn.add_child(portrait)
-		var class_lab := Label.new()
-		class_lab.name = "ConsoleClassIcon"
-		class_lab.visible = false
-		class_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		class_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		class_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		class_lab.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		class_lab.add_theme_font_size_override("font_size", 96)
-		class_lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
-		ClientUi.apply_display_font(class_lab)
-		portrait_btn.add_child(class_lab)
+		var class_icon := UiIcon.make("swords", ClientUi.CYAN_SOFT, 72.0)
+		class_icon.name = "ConsoleClassIcon"
+		class_icon.visible = false
+		class_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		class_icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		portrait_btn.add_child(class_icon)
 		portrait_btn.pressed.connect(func() -> void: GameManager.go_stats())
 		_portrait_host.add_child(portrait_btn)
 		_console_portrait_btn = portrait_btn
-		_console_class_icon = class_lab
+		_console_class_icon = class_icon
 	else:
 		var existing := _portrait_host.get_child(0)
 		_console_portrait_btn = existing as Button
-		_console_class_icon = existing.get_node_or_null("ConsoleClassIcon") as Label
+		_console_class_icon = existing.get_node_or_null("ConsoleClassIcon")
 		for n in existing.find_children("*", "Control", true, false):
 			if n.has_method("set_character") and str(n.name) == "ConsolePortrait":
 				n.call("set_character", character)
@@ -1642,14 +1634,13 @@ func _apply_console_portrait_mode() -> void:
 	if btn == null:
 		return
 	var portrait := btn.get_node_or_null("ConsolePortrait") as Control
-	var class_lab := btn.get_node_or_null("ConsoleClassIcon") as Label
+	var class_lab := btn.get_node_or_null("ConsoleClassIcon") as Control
 	var ch: Dictionary = GameManager.active_character
 	var class_key := str(ch.get("class", "Vanguard"))
-	var info: Dictionary = GameData.class_info(class_key)
-	var emoji := str(info.get("emoji", "⚔"))
 	if class_lab != null:
-		class_lab.text = emoji
 		class_lab.visible = _hero_page_open
+		if class_lab is TextureRect:
+			UiIcon.set_tint(class_lab as TextureRect, ClientUi.CYAN_SOFT)
 	if portrait != null:
 		portrait.visible = not _hero_page_open
 		if portrait.has_method("set_active"):

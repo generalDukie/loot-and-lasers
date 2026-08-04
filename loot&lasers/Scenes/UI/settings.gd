@@ -49,12 +49,7 @@ func _build() -> void:
 	sheet.add_theme_constant_override("separation", 8)
 	center.add_child(sheet)
 
-	var title := Label.new()
-	title.text = "⚙  Settings"
-	title.add_theme_font_size_override("font_size", 27)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	sheet.add_child(title)
+	sheet.add_child(UiIcon.make_title_row("settings", "Settings", ClientUi.TEXT, 27, 28.0))
 
 	_status = ClientUi.make_status()
 	sheet.add_child(_status)
@@ -209,13 +204,13 @@ func _build_audio() -> VBoxContainer:
 	col.add_theme_constant_override("separation", 12)
 	col.add_child(_section_title("AUDIO"))
 
-	col.add_child(_volume_row("Master Volume", "🔊", SettingsManager.master_volume, func(v: float) -> void:
+	col.add_child(_volume_row("Master Volume", "volume-2", SettingsManager.master_volume, func(v: float) -> void:
 		SettingsManager.set_master_volume(v, false)
 	))
-	col.add_child(_volume_row("Music Volume", "🎵", SettingsManager.music_volume, func(v: float) -> void:
+	col.add_child(_volume_row("Music Volume", "music", SettingsManager.music_volume, func(v: float) -> void:
 		SettingsManager.set_music_volume(v, false)
 	))
-	col.add_child(_volume_row("SFX Volume", "⚡", SettingsManager.sfx_volume, func(v: float) -> void:
+	col.add_child(_volume_row("SFX Volume", "zap", SettingsManager.sfx_volume, func(v: float) -> void:
 		SettingsManager.set_sfx_volume(v, false)
 	, true))
 
@@ -269,10 +264,10 @@ func _build_display() -> VBoxContainer:
 
 	col.add_child(ClientUi.make_section_header("", "Accessibility", "Presentation only — does not change combat math."))
 	var speed_norm := clampf((SettingsManager.combat_anim_speed - 0.35) / 1.65, 0.0, 1.0)
-	col.add_child(_volume_row("Combat animation speed", "⏱", speed_norm, func(v: float) -> void:
+	col.add_child(_volume_row("Combat animation speed", "clock", speed_norm, func(v: float) -> void:
 		SettingsManager.set_combat_anim_speed(0.35 + clampf(v, 0.0, 1.0) * 1.65, true)
 	))
-	col.add_child(_volume_row("Screen shake", "📳", SettingsManager.screen_shake_scale, func(v: float) -> void:
+	col.add_child(_volume_row("Screen shake", "vibrate", SettingsManager.screen_shake_scale, func(v: float) -> void:
 		SettingsManager.set_screen_shake_scale(v, true)
 	, true))
 
@@ -328,11 +323,9 @@ func _build_codex_link() -> PanelContainer:
 		Color(ClientUi.CYAN, 0.1), Color(ClientUi.CYAN, 0.25), 8, 1
 	))
 	row.add_child(icon_box)
-	var icon := Label.new()
-	icon.text = "📖"
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon_box.add_child(icon)
+	var icon_center := CenterContainer.new()
+	icon_box.add_child(icon_center)
+	icon_center.add_child(UiIcon.make("book-open", ClientUi.CYAN, 22.0))
 	var text_col := VBoxContainer.new()
 	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_col.add_theme_constant_override("separation", 2)
@@ -409,10 +402,7 @@ func _danger_row(title: String, hint: String, destructive: bool, on_press: Calla
 	row.add_theme_constant_override("separation", 12)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(row)
-	var icon := Label.new()
-	icon.text = "🗑" if destructive else "↩"
-	icon.add_theme_font_size_override("font_size", 21)
-	icon.add_theme_color_override("font_color", ClientUi.DANGER if destructive else ClientUi.MUTED)
+	var icon := UiIcon.make("trash-2" if destructive else "undo-2", ClientUi.DANGER if destructive else ClientUi.MUTED, 21.0)
 	row.add_child(icon)
 	var text_col := VBoxContainer.new()
 	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -434,7 +424,7 @@ func _danger_row(title: String, hint: String, destructive: bool, on_press: Calla
 	return btn
 
 
-func _volume_row(label: String, icon: String, value: float, on_change: Callable, preview_sfx: bool = false) -> VBoxContainer:
+func _volume_row(label: String, icon_id: String, value: float, on_change: Callable, preview_sfx: bool = false) -> VBoxContainer:
 	var wrap := VBoxContainer.new()
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	wrap.add_theme_constant_override("separation", 4)
@@ -443,11 +433,7 @@ func _volume_row(label: String, icon: String, value: float, on_change: Callable,
 	head.add_theme_constant_override("separation", 8)
 	wrap.add_child(head)
 
-	var ic := Label.new()
-	ic.text = icon
-	ic.add_theme_font_size_override("font_size", 19)
-	ic.add_theme_color_override("font_color", ClientUi.CYAN)
-	head.add_child(ic)
+	head.add_child(UiIcon.make(icon_id, ClientUi.CYAN, 19.0))
 
 	var lab := Label.new()
 	lab.text = label

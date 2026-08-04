@@ -1,0 +1,208 @@
+extends RefCounted
+class_name UiIcon
+## Shared minimalist neon (Lucide) icons for chrome, page titles, and hub tiles.
+## Reuses Assets/Icons/nav white-stroke SVGs tinted via theme/modulate — same pack as NavIcon.
+
+const ICON_DIR := "res://Assets/Icons/nav/"
+const DEFAULT_SIZE := 22.0
+
+
+## Semantic aliases → lucide file id (without .svg).
+const ALIAS := {
+	"notifications": "bell",
+	"bell": "bell",
+	"settings": "settings",
+	"gear": "settings",
+	"close": "x",
+	"x": "x",
+	"check_all": "check-check",
+	"check-check": "check-check",
+	"check": "check",
+	"calendar": "calendar",
+	"daily": "calendar",
+	"lock": "lock",
+	"locked": "lock",
+	"trash": "trash-2",
+	"delete": "trash-2",
+	"undo": "undo-2",
+	"swords": "swords",
+	"combat": "swords",
+	"arena": "zap",
+	"gift": "gift",
+	"book": "book-open",
+	"codex": "book-open",
+	"volume": "volume-2",
+	"sfx": "volume-2",
+	"music": "music",
+	"vibrate": "vibrate",
+	"flame": "flame",
+	"streak": "flame",
+	"shield": "shield",
+	"target": "target",
+	"skull": "skull",
+	"star": "star",
+	"warning": "triangle-alert",
+	"alert": "triangle-alert",
+	"package": "package",
+	"loot": "package",
+	"sparkles": "sparkles",
+	"stardust": "sparkles",
+	"clock": "clock",
+	"timer": "clock",
+	"map": "map",
+	"scroll": "scroll-text",
+	"antenna": "antenna",
+	"radio": "radio",
+	"sofa": "sofa",
+	"lounge": "sofa",
+	"money": "circle-dollar-sign",
+	"dice": "dices",
+	"casino": "dice-5",
+	"landmark": "landmark",
+	"nexus": "crown",
+	"inbox": "inbox",
+	"mail": "mail",
+	"send": "send",
+	"wrench": "wrench",
+	"ban": "ban",
+	"ok": "circle-check",
+	"fail": "circle-x",
+	"loader": "loader",
+	"sword": "sword",
+	"axe": "axe",
+	"hammer": "hammer",
+	"heart": "heart",
+	"brain": "brain",
+	"wind": "wind",
+	"clover": "clover",
+	"bot": "bot",
+	"drama": "drama",
+	"telescope": "telescope",
+	"satellite": "satellite",
+	"earth": "earth",
+	"building": "building-2",
+	"hourglass": "hourglass",
+	"plus": "plus",
+	"minus": "minus",
+	"refresh": "refresh-cw",
+	"play": "play",
+	"pause": "pause",
+	"skip": "skip-forward",
+	"hero": "user",
+	"user": "user",
+	"friends": "users",
+	"users": "users",
+	"chat": "message-square",
+	"messages": "message-square",
+	"ship": "rocket",
+	"rocket": "rocket",
+	"galaxy": "orbit",
+	"void": "orbit",
+	"orbit": "orbit",
+	"mine": "pickaxe",
+	"mining": "pickaxe",
+	"pickaxe": "pickaxe",
+	"shop": "shopping-bag",
+	"market": "shopping-bag",
+	"shopping": "shopping-bag",
+	"trophy": "trophy",
+	"ranks": "trophy",
+	"progress": "trophy",
+	"crown": "crown",
+	"leaderboard": "crown",
+	"beer": "beer",
+	"cantina": "beer",
+	"zap": "zap",
+	"guild": "users",
+	"crystal": "sparkles",
+	"collectibles": "package",
+}
+
+
+static func resolve_id(icon_id: String) -> String:
+	var key := icon_id.strip_edges().to_lower()
+	if key.is_empty():
+		return "user"
+	if ALIAS.has(key):
+		return str(ALIAS[key])
+	return key
+
+
+static func texture(icon_id: String) -> Texture2D:
+	return NavIcon.texture_for(resolve_id(icon_id))
+
+
+static func make(icon_id: String, tint: Color = Color(ClientUi.CYAN), size: float = DEFAULT_SIZE) -> TextureRect:
+	return NavIcon.make(resolve_id(icon_id), tint, size)
+
+
+static func set_tint(tr: TextureRect, tint: Color) -> void:
+	NavIcon.set_tint(tr, tint)
+
+
+static func apply_button_icon_colors(btn: Button, tint: Color) -> void:
+	if btn == null:
+		return
+	btn.add_theme_color_override("icon_normal_color", tint)
+	btn.add_theme_color_override("icon_hover_color", tint.lightened(0.12))
+	btn.add_theme_color_override("icon_pressed_color", tint.darkened(0.08))
+	btn.add_theme_color_override("icon_disabled_color", Color(tint.r, tint.g, tint.b, 0.35))
+
+
+## Icon-only button (settings / notification FAB). Keeps tooltip + click area.
+static func make_icon_button(
+	icon_id: String,
+	tint: Color,
+	size: float = 28.0,
+	tooltip: String = ""
+) -> Button:
+	var btn := Button.new()
+	btn.text = ""
+	btn.tooltip_text = tooltip
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.custom_minimum_size = Vector2(maxi(40, int(size + 16.0)), maxi(36, int(size + 12.0)))
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	btn.icon = texture(icon_id)
+	btn.expand_icon = true
+	btn.add_theme_constant_override("icon_max_width", int(size))
+	apply_button_icon_colors(btn, tint)
+	btn.set_meta("ui_icon_id", resolve_id(icon_id))
+	return btn
+
+
+static func set_button_icon(btn: Button, icon_id: String, tint: Color, size: float = 28.0) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	btn.text = ""
+	btn.icon = texture(icon_id)
+	btn.expand_icon = true
+	btn.add_theme_constant_override("icon_max_width", int(size))
+	apply_button_icon_colors(btn, tint)
+	btn.set_meta("ui_icon_id", resolve_id(icon_id))
+
+
+## Title row: neon icon + text label (replaces "🔔 Notifications" patterns).
+static func make_title_row(
+	icon_id: String,
+	title: String,
+	tint: Color = Color(ClientUi.TEXT),
+	font_size: int = 28,
+	icon_size: float = 28.0
+) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(make(icon_id, tint, icon_size))
+	var lab := Label.new()
+	lab.text = title
+	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lab.add_theme_font_size_override("font_size", font_size)
+	lab.add_theme_color_override("font_color", tint)
+	ClientUi.apply_display_font(lab)
+	row.add_child(lab)
+	row.set_meta("title_label", lab)
+	return row
+
+
+## Hub / tile icon at a fixed size.
+static func make_tile_icon(icon_id: String, tint: Color, size: float = 36.0) -> TextureRect:
+	return make(icon_id, tint, size)

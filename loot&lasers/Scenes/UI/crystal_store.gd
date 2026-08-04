@@ -52,13 +52,9 @@ func _build() -> void:
 	header.add_theme_constant_override("separation", 12)
 	root.add_child(header)
 
-	var title := Label.new()
-	title.text = "💎  Crystal Store"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 27)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	header.add_child(title)
+	var title_row := UiIcon.make_title_row("sparkles", "Crystal Store", ClientUi.TEXT, 27, 28.0)
+	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title_row)
 
 	_balance = PanelContainer.new()
 	_balance.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
@@ -138,12 +134,7 @@ func _make_quests_panel() -> PanelContainer:
 	head_l.add_theme_constant_override("separation", 2)
 	head.add_child(head_l)
 
-	var title := Label.new()
-	title.text = "🎁  Weekly Nova Ops"
-	title.add_theme_font_size_override("font_size", 19)
-	title.add_theme_color_override("font_color", Color("#FCD34D"))
-	ClientUi.apply_display_font(title)
-	head_l.add_child(title)
+	head_l.add_child(UiIcon.make_title_row("gift", "Weekly Nova Ops", Color("#FCD34D"), 19, 22.0))
 
 	var sub := Label.new()
 	sub.name = "QuestCountdown"
@@ -255,7 +246,11 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 		row.add_child(done)
 	else:
 		var claim := Button.new()
-		claim.text = "💎  Claim" if claimable else "💎  Locked"
+		claim.text = "Claim" if claimable else "Locked"
+		claim.icon = UiIcon.texture("sparkles")
+		claim.expand_icon = true
+		claim.add_theme_constant_override("icon_max_width", 16)
+		UiIcon.apply_button_icon_colors(claim, Color("#FDE68A"))
 		claim.disabled = not claimable or _busy_id == qid
 		claim.custom_minimum_size = Vector2(112, 0)
 		_style_claim_button(claim)
@@ -321,12 +316,16 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 			Color(0.96, 0.62, 0.04, 0.20), Color(0.96, 0.62, 0.04, 0.40), 999, 1
 		))
 		badge_slot.add_child(badge)
+		var badge_row := HBoxContainer.new()
+		badge_row.add_theme_constant_override("separation", 4)
+		badge.add_child(badge_row)
+		badge_row.add_child(UiIcon.make("crown", Color("#FCD34D"), 14.0))
 		var badge_lab := Label.new()
-		badge_lab.text = "👑  POPULAR"
+		badge_lab.text = "POPULAR"
 		badge_lab.add_theme_font_size_override("font_size", 12)
 		badge_lab.add_theme_color_override("font_color", Color("#FCD34D"))
 		ClientUi.apply_display_font(badge_lab)
-		badge.add_child(badge_lab)
+		badge_row.add_child(badge_lab)
 
 	var gem_wrap := CenterContainer.new()
 	gem_wrap.custom_minimum_size.y = 75
@@ -335,12 +334,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	gem_glow.custom_minimum_size = Vector2(75, 75)
 	gem_glow.add_theme_stylebox_override("panel", _gem_glow_style(tint))
 	gem_wrap.add_child(gem_glow)
-	var gem := Label.new()
-	gem.text = "💎"
-	gem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	gem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	gem.add_theme_font_size_override("font_size", 37)
-	gem.add_theme_color_override("font_color", tint)
+	var gem := CurrencyIcon.make("nova", 40.0)
 	gem_glow.add_child(gem)
 	_bob_gem(gem)
 

@@ -199,12 +199,9 @@ func _show_legacy_modal() -> void:
 	badge_sb.set_corner_radius_all(10)
 	lock_badge.add_theme_stylebox_override("panel", badge_sb)
 	head.add_child(lock_badge)
-	var lock_lab := Label.new()
-	lock_lab.text = "🔒"
-	lock_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lock_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lock_lab.add_theme_font_size_override("font_size", 24)
-	lock_badge.add_child(lock_lab)
+	var lock_center := CenterContainer.new()
+	lock_badge.add_child(lock_center)
+	lock_center.add_child(UiIcon.make("lock", ClientUi.VIOLET, 24.0))
 	var head_copy := VBoxContainer.new()
 	head_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(head_copy)
@@ -271,9 +268,13 @@ func _show_legacy_modal() -> void:
 	)
 
 	var submit := Button.new()
-	submit.text = "🔒  Lock In Legacy Name"
+	submit.text = "Lock In Legacy Name"
+	submit.icon = UiIcon.texture("lock")
+	submit.expand_icon = true
+	submit.add_theme_constant_override("icon_max_width", 20)
 	submit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_primary_button(submit)
+	UiIcon.apply_button_icon_colors(submit, Color.WHITE)
 	col.add_child(submit)
 
 	submit.pressed.connect(func() -> void:
@@ -293,7 +294,7 @@ func _show_legacy_modal() -> void:
 		var res: Dictionary = await AccountManager.set_legacy_name(trimmed)
 		if not res.ok:
 			submit.disabled = false
-			submit.text = "🔒  Lock In Legacy Name"
+			submit.text = "Lock In Legacy Name"
 			err.text = str(res.get("error", "Try again."))
 			return
 		await AuthManager.fetch_me()
@@ -384,45 +385,45 @@ func _build() -> void:
 	root.add_child(deck)
 
 	deck.add_child(_dock_split(
-		"🛋️", "Hero / Ship Hangar", "#5CFFB0",
+		"sofa", "Hero / Ship Hangar", "#5CFFB0",
 		[
-			{"label": "Hero", "icon": "🦸", "color": "#5CFFB0", "action": func() -> void: GameManager.go_stats()},
-			{"label": "Ship Hangar", "icon": "🚀", "color": "#FFD700", "action": func() -> void: GameManager.go_ship()},
+			{"label": "Hero", "icon": "user", "color": "#5CFFB0", "action": func() -> void: GameManager.go_stats()},
+			{"label": "Ship Hangar", "icon": "rocket", "color": "#FFD700", "action": func() -> void: GameManager.go_ship()},
 		]
 	))
-	deck.add_child(_dock_tile("🧭", "Galactic Frontier", "#00E5FF", func() -> void: GameManager.go_galaxy()))
+	deck.add_child(_dock_tile("orbit", "Galactic Frontier", "#00E5FF", func() -> void: GameManager.go_galaxy()))
 	deck.add_child(_dock_split(
-		"⚔️", "Arena", "#FF4D6D",
+		"swords", "Arena", "#FF4D6D",
 		[
-			{"label": "Arena", "icon": "⚔️", "color": "#FF4D6D", "action": func() -> void: GameManager.go_arena()},
-			{"label": "Leaderboard", "icon": "🏆", "color": "#FBBF24", "action": func() -> void: GameManager.go_leaderboard()},
+			{"label": "Arena", "icon": "zap", "color": "#FF4D6D", "action": func() -> void: GameManager.go_arena()},
+			{"label": "Leaderboard", "icon": "trophy", "color": "#FBBF24", "action": func() -> void: GameManager.go_leaderboard()},
 		]
 	))
 	_missions_wrap = _dock_split(
-		"🍺", "Cantina", "#FF9E4F",
+		"beer", "Cantina", "#FF9E4F",
 		[
-			{"label": "Missions", "icon": "🍺", "color": "#FF9E4F", "action": _on_missions},
-			{"label": "Casino", "icon": "🎰", "color": "#F59E0B", "action": func() -> void: GameManager.go_casino()},
+			{"label": "Missions", "icon": "beer", "color": "#FF9E4F", "action": _on_missions},
+			{"label": "Casino", "icon": "dice-5", "color": "#F59E0B", "action": func() -> void: GameManager.go_casino()},
 		]
 	)
 	_missions_btn = _missions_wrap.get_meta("dock_button") as Button
 	deck.add_child(_missions_wrap)
 	deck.add_child(_dock_split(
-		"🛍️", "Bazaar", "#9D6BFF",
+		"shopping-bag", "Bazaar", "#9D6BFF",
 		[
-			{"label": "Black Market", "icon": "🛒", "color": "#4ADE80", "action": func() -> void: GameManager.go_shop()},
-			{"label": "Mining", "icon": "⛏️", "color": "#60A5FA", "action": func() -> void: GameManager.go_mining()},
-			{"label": "Crystals", "icon": "💎", "color": "#FFD700", "action": func() -> void: GameManager.go_crystal_store()},
-			{"label": "Void", "icon": "🌀", "color": "#9D6BFF", "action": func() -> void: GameManager.go_void()},
+			{"label": "Black Market", "icon": "shopping-bag", "color": "#4ADE80", "action": func() -> void: GameManager.go_shop()},
+			{"label": "Mining", "icon": "pickaxe", "color": "#60A5FA", "action": func() -> void: GameManager.go_mining()},
+			{"label": "Crystals", "icon": "sparkles", "color": "#FFD700", "action": func() -> void: GameManager.go_crystal_store()},
+			{"label": "Void", "icon": "orbit", "color": "#9D6BFF", "action": func() -> void: GameManager.go_void()},
 		]
 	))
 	deck.add_child(_dock_split(
-		"💬", "Social", "#FFD700",
+		"message-square", "Social", "#FFD700",
 		[
-			{"label": "Mail", "icon": "📬", "color": "#F87171", "action": func() -> void: GameManager.go_mail()},
-			{"label": "Friends", "icon": "👥", "color": "#34D399", "action": func() -> void: GameManager.go_friends()},
-			{"label": "Guild", "icon": "🏛️", "color": "#9D5CFF", "action": func() -> void: GameManager.go_guild()},
-			{"label": "Messages", "icon": "✉️", "color": "#38BDF8", "action": func() -> void: GameManager.go_messages()},
+			{"label": "Mail", "icon": "mail", "color": "#F87171", "action": func() -> void: GameManager.go_mail()},
+			{"label": "Friends", "icon": "users", "color": "#34D399", "action": func() -> void: GameManager.go_friends()},
+			{"label": "Guild", "icon": "landmark", "color": "#9D5CFF", "action": func() -> void: GameManager.go_guild()},
+			{"label": "Messages", "icon": "send", "color": "#38BDF8", "action": func() -> void: GameManager.go_messages()},
 		]
 	))
 
@@ -476,10 +477,8 @@ func _build() -> void:
 	sc_row.add_theme_constant_override("separation", 10)
 	showcase.add_child(sc_row)
 
-	var crown := Label.new()
+	var crown := UiIcon.make("crown", Color("#FBBF24"), 28.0)
 	crown.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	crown.text = "👑"
-	crown.add_theme_font_size_override("font_size", 27)
 	sc_row.add_child(crown)
 
 	var sc_copy := VBoxContainer.new()
@@ -526,9 +525,8 @@ func _build() -> void:
 	var chatter_row := HBoxContainer.new()
 	chatter_row.add_theme_constant_override("separation", 8)
 	chatter_panel.add_child(chatter_row)
-	var radio := Label.new()
-	radio.text = "📡"
-	radio.add_theme_font_size_override("font_size", 24)
+	var radio := UiIcon.make("radio", ClientUi.CYAN, 22.0)
+	radio.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chatter_row.add_child(radio)
 	_nexus_chatter = Label.new()
 	_nexus_chatter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -607,19 +605,39 @@ func _make_top_fade() -> TextureRect:
 	return overlay
 
 
-func _dock_tile(icon: String, label: String, tint_hex: String, action: Callable) -> Button:
+func _dock_tile(icon_id: String, label: String, tint_hex: String, action: Callable) -> Button:
+	var tint := Color(tint_hex)
 	var btn := Button.new()
-	btn.text = "%s\n%s" % [icon, label]
+	btn.text = ""
 	btn.tooltip_text = label
 	btn.custom_minimum_size = Vector2(0, 123)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	ClientUi.apply_dock_button(btn, Color(tint_hex))
+	ClientUi.apply_dock_button(btn, tint)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 6)
+	var icon := UiIcon.make(icon_id, tint, 34.0)
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(icon)
+	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.text = label
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lab.add_theme_font_size_override("font_size", 14)
+	lab.add_theme_color_override("font_color", tint)
+	ClientUi.apply_display_font(lab)
+	col.add_child(lab)
+	btn.add_child(col)
 	btn.pressed.connect(action)
 	return btn
 
 
-func _dock_split(icon: String, label: String, tint_hex: String, options: Array) -> Control:
+func _dock_split(icon_id: String, label: String, tint_hex: String, options: Array) -> Control:
+	var tint := Color(tint_hex)
 	var wrap := Control.new()
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -628,9 +646,27 @@ func _dock_split(icon: String, label: String, tint_hex: String, options: Array) 
 
 	var btn := Button.new()
 	btn.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	btn.text = "%s\n%s" % [icon, label]
+	btn.text = ""
 	btn.tooltip_text = label
-	ClientUi.apply_dock_button(btn, Color(tint_hex))
+	ClientUi.apply_dock_button(btn, tint)
+	var face := VBoxContainer.new()
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	face.alignment = BoxContainer.ALIGNMENT_CENTER
+	face.add_theme_constant_override("separation", 6)
+	var face_icon := UiIcon.make(icon_id, tint, 34.0)
+	face_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	face.add_child(face_icon)
+	var face_lab := Label.new()
+	face_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face_lab.text = label
+	face_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	face_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	face_lab.add_theme_font_size_override("font_size", 14)
+	face_lab.add_theme_color_override("font_color", tint)
+	ClientUi.apply_display_font(face_lab)
+	face.add_child(face_lab)
+	btn.add_child(face)
 	wrap.add_child(btn)
 	wrap.set_meta("dock_button", btn)
 
@@ -652,11 +688,15 @@ func _dock_split(icon: String, label: String, tint_hex: String, options: Array) 
 		if typeof(opt) != TYPE_DICTIONARY:
 			continue
 		var ob := Button.new()
-		ob.text = "%s  %s" % [str(opt.get("icon", "")), str(opt.get("label", "?"))]
+		ob.text = "  %s" % str(opt.get("label", "?"))
 		ob.add_theme_font_size_override("font_size", 15)
 		var opt_color := Color(str(opt.get("color", tint_hex)))
 		ClientUi.apply_ghost_button(ob)
 		ob.add_theme_color_override("font_color", opt_color)
+		ob.icon = UiIcon.texture(str(opt.get("icon", icon_id)))
+		ob.expand_icon = true
+		ob.add_theme_constant_override("icon_max_width", 18)
+		UiIcon.apply_button_icon_colors(ob, opt_color)
 		var act: Callable = opt.get("action", Callable())
 		ob.pressed.connect(func() -> void:
 			fly.visible = false

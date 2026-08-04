@@ -79,12 +79,7 @@ func _build() -> void:
 	eye.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.72))
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
-	var title := Label.new()
-	title.text = "🔔  Notifications"
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	head_l.add_child(title)
+	head_l.add_child(UiIcon.make_title_row("bell", "Notifications", ClientUi.TEXT, 24, 24.0))
 	_meta = Label.new()
 	_meta.add_theme_font_size_override("font_size", 15)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -146,12 +141,9 @@ func _populate() -> void:
 		var drow := HBoxContainer.new()
 		drow.add_theme_constant_override("separation", 8)
 		daily.add_child(drow)
-		var dlab := Label.new()
-		dlab.text = "⭐ Daily login ready"
-		dlab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		dlab.add_theme_color_override("font_color", Color("#FDE68A"))
-		ClientUi.apply_body_font(dlab)
-		drow.add_child(dlab)
+		var daily_title := UiIcon.make_title_row("calendar", "Daily login ready", Color("#FDE68A"), 16, 20.0)
+		daily_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		drow.add_child(daily_title)
 		var dbtn := Button.new()
 		dbtn.text = "Claim"
 		ClientUi.apply_primary_button(dbtn)
@@ -180,11 +172,9 @@ func _empty_state() -> PanelContainer:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
-	var icon := Label.new()
-	icon.text = "🔔"
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.add_theme_font_size_override("font_size", 37)
-	col.add_child(icon)
+	var icon_center := CenterContainer.new()
+	icon_center.add_child(UiIcon.make("bell", ClientUi.MUTED, 37.0))
+	col.add_child(icon_center)
 	var lab := Label.new()
 	lab.text = "No notifications yet."
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

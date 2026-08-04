@@ -46,13 +46,9 @@ func _build() -> void:
 
 	var head := HBoxContainer.new()
 	root.add_child(head)
-	var title := Label.new()
-	title.text = "🏆  Achievements"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	head.add_child(title)
+	var title_row := UiIcon.make_title_row("trophy", "Achievements", ClientUi.TEXT, 32, 28.0)
+	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title_row)
 	var daily := Button.new()
 	daily.text = "Claim Daily"
 	ClientUi.apply_ghost_button(daily)

@@ -19,6 +19,8 @@ const SETTING_PATH := "loot/backend/environment"
 const USER_ENV_PATH := "user://backend_env.cfg"
 const PROJECT_SECRETS_PATH := "res://Config/nakama_secrets.cfg"
 const USER_SECRETS_PATH := "user://nakama_secrets.cfg"
+const RELEASE_CLIENT_CONFIG_PATH := "res://Config/release_client.cfg"
+const RELEASE_FEATURE := "staging_client"
 
 ## Public connection endpoints only — no DB/console/SSH secrets here.
 ## node_api_base_url is the legacy Node gameplay API (characters/economy) — NOT Godot auth.
@@ -172,6 +174,10 @@ func _resolve_environment_id() -> String:
 	var from_os := _normalize_env_id(OS.get_environment("LOOT_NAKAMA_ENV"))
 	if not from_os.is_empty():
 		return from_os
+	# Exported friend builds are permanently staging-bound and require no
+	# machine-specific environment variables.
+	if OS.has_feature(RELEASE_FEATURE):
+		return ENV_STAGING
 	var cfg := ConfigFile.new()
 	if cfg.load(USER_ENV_PATH) == OK:
 		var from_user := _normalize_env_id(str(cfg.get_value("backend", "environment", "")))
@@ -205,6 +211,10 @@ func _load_staging_server_key() -> String:
 		from_os = OS.get_environment("LOOT_NAKAMA_SERVER_KEY").strip_edges()
 	if not from_os.is_empty():
 		return from_os
+	if OS.has_feature(RELEASE_FEATURE):
+		var from_release := _read_secret_field(RELEASE_CLIENT_CONFIG_PATH, "server_key")
+		if not from_release.is_empty():
+			return from_release
 	return _read_secret_value("server_key")
 
 

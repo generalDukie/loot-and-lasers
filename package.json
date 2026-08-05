@@ -36,6 +36,8 @@
     "test:settings": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-settings.mjs",
     "test:integrity": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-integrity.mjs",
     "test:admin": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-admin-ops.mjs",
+    "test:admin-ui-coverage": "node scripts/verify_admin_ui_coverage.mjs",
+    "test:neon-icons": "node scripts/verify_neon_icons.mjs",
     "test:observability": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-observability.mjs",
     "integrity:audit": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/run-integrity-audit.mjs",
     "integrity:migrate": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/run-migration.mjs",

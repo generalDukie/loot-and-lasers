@@ -4,7 +4,8 @@ extends Control
 var _balance_lab: Label
 var _status: Label
 var _hero_wrap: Control
-var _hero_emoji: Label
+var _hero_icon_host: Control
+var _hero_icon: TextureRect
 var _hero_glow: ColorRect
 var _hero_title: Label
 var _hero_sub: Label
@@ -75,13 +76,9 @@ func _build() -> void:
 	header.add_theme_constant_override("separation", 12)
 	root.add_child(header)
 
-	var title := Label.new()
-	title.text = "⛏  Space Mining"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 27)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	header.add_child(title)
+	var title_row := UiIcon.make_title_row("pickaxe", "Space Mining", ClientUi.TEXT, 27, 28.0)
+	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title_row)
 
 	_balance_lab = Label.new()
 	_balance_lab.add_theme_font_size_override("font_size", 16)
@@ -120,14 +117,18 @@ func _build() -> void:
 	_hero_glow.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_hero_wrap.add_child(_hero_glow)
 
-	_hero_emoji = Label.new()
-	_hero_emoji.text = "🪨"
-	_hero_emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_emoji.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_hero_emoji.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	_hero_emoji.add_theme_font_size_override("font_size", 75)
-	_hero_emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hero_wrap.add_child(_hero_emoji)
+	_hero_icon_host = Control.new()
+	_hero_icon_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hero_icon_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_hero_wrap.add_child(_hero_icon_host)
+
+	var hero_center := CenterContainer.new()
+	hero_center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	hero_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hero_icon_host.add_child(hero_center)
+
+	_hero_icon = UiIcon.make("pickaxe", ClientUi.MUTED, 72.0)
+	hero_center.add_child(_hero_icon)
 
 	_hero_title = Label.new()
 	_hero_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -356,20 +357,20 @@ func _populate() -> void:
 		phase = "busy"
 
 	if not mining:
-		_hero_emoji.text = "🪨"
+		_set_hero_icon("pickaxe", ClientUi.MUTED)
 		_hero_title.text = "Deploy Mining Drone"
 		_hero_title.add_theme_color_override("font_color", ClientUi.TEXT)
 		_hero_sub.text = "Set your drone to mine a stardust node. The longer it runs, the more you collect — yield scales with your level."
 		_set_glow(Color(0, 0, 0, 0), false)
 	elif ready:
-		_hero_emoji.text = "💎"
+		_set_hero_icon("sparkles", Color("#4ADE80"))
 		_hero_title.text = "NODE READY!"
 		_hero_title.add_theme_color_override("font_color", Color("#4ADE80"))
 		_hero_sub.text = "Your drone finished mining a stardust node."
 		_ready_reward.text = "+%s ✦" % reward
 		_set_glow(Color(0.13, 0.77, 0.37, 0.35), true)
 	else:
-		_hero_emoji.text = "⛏️"
+		_set_hero_icon("pickaxe", Color("#F59E0B"))
 		_hero_title.text = "Mining in Progress"
 		_hero_title.add_theme_color_override("font_color", ClientUi.TEXT)
 		_hero_sub.text = "Your drone is harvesting a stardust node..."
@@ -394,30 +395,38 @@ func _populate() -> void:
 		_set_status("", ClientUi.MUTED)
 
 
+func _set_hero_icon(icon_id: String, tint: Color, size: float = 72.0) -> void:
+	if _hero_icon == null:
+		return
+	_hero_icon.texture = UiIcon.texture(icon_id)
+	_hero_icon.custom_minimum_size = Vector2(size, size)
+	UiIcon.set_tint(_hero_icon, tint)
+
+
 func _restart_emoji_motion(phase: String) -> void:
 	if _emoji_tween != null and _emoji_tween.is_valid():
 		_emoji_tween.kill()
-	_hero_emoji.rotation = 0.0
-	_hero_emoji.position = Vector2.ZERO
-	_hero_emoji.scale = Vector2.ONE
+	_hero_icon_host.rotation = 0.0
+	_hero_icon_host.position = Vector2.ZERO
+	_hero_icon_host.scale = Vector2.ONE
 	# Pivot at visual center so rotate/bob reads like Framer Motion.
 	var sz := _hero_wrap.size
 	if sz.x < 1.0 or sz.y < 1.0:
 		sz = _hero_wrap.custom_minimum_size
-	_hero_emoji.pivot_offset = sz * 0.5
-	_emoji_tween = _hero_emoji.create_tween().set_loops()
+	_hero_icon_host.pivot_offset = sz * 0.5
+	_emoji_tween = _hero_icon_host.create_tween().set_loops()
 	match phase:
 		"idle":
-			_emoji_tween.tween_property(_hero_emoji, "rotation", TAU, 20.0).from(0.0)
+			_emoji_tween.tween_property(_hero_icon_host, "rotation", TAU, 20.0).from(0.0)
 		"busy":
-			_emoji_tween.tween_property(_hero_emoji, "position:y", -8.0, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-			_emoji_tween.tween_property(_hero_emoji, "position:y", 0.0, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			_emoji_tween.tween_property(_hero_icon_host, "position:y", -8.0, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			_emoji_tween.tween_property(_hero_icon_host, "position:y", 0.0, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		"ready":
-			_emoji_tween.tween_property(_hero_emoji, "scale", Vector2(1.15, 1.15), 0.4).set_trans(Tween.TRANS_SINE)
-			_emoji_tween.parallel().tween_property(_hero_emoji, "rotation", deg_to_rad(5.0), 0.4)
-			_emoji_tween.tween_property(_hero_emoji, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_SINE)
-			_emoji_tween.parallel().tween_property(_hero_emoji, "rotation", deg_to_rad(-5.0), 0.4)
-			_emoji_tween.tween_property(_hero_emoji, "rotation", 0.0, 0.2)
+			_emoji_tween.tween_property(_hero_icon_host, "scale", Vector2(1.15, 1.15), 0.4).set_trans(Tween.TRANS_SINE)
+			_emoji_tween.parallel().tween_property(_hero_icon_host, "rotation", deg_to_rad(5.0), 0.4)
+			_emoji_tween.tween_property(_hero_icon_host, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_SINE)
+			_emoji_tween.parallel().tween_property(_hero_icon_host, "rotation", deg_to_rad(-5.0), 0.4)
+			_emoji_tween.tween_property(_hero_icon_host, "rotation", 0.0, 0.2)
 
 
 func _set_glow(color: Color, pulse: bool) -> void:

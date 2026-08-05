@@ -44,13 +44,9 @@ func _build() -> void:
 	head.add_theme_constant_override("separation", 4)
 	root.add_child(head)
 
-	var title := Label.new()
-	title.text = "👑  Galactic Rankings"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 29)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	head.add_child(title)
+	var title_center := CenterContainer.new()
+	title_center.add_child(UiIcon.make_title_row("crown", "Galactic Rankings", ClientUi.TEXT, 29, 28.0))
+	head.add_child(title_center)
 
 	var sub := Label.new()
 	sub.text = "Ranked by arena rating · Challenge any eligible rival"

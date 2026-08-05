@@ -86,12 +86,9 @@ func _build() -> void:
 		Color(ClientUi.CYAN, 0.15), Color(ClientUi.CYAN, 0.35), 10, 1
 	))
 	title_row.add_child(icon_wrap)
-	var rocket := Label.new()
-	rocket.text = "🚀"
-	rocket.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rocket.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	rocket.add_theme_font_size_override("font_size", 21)
-	icon_wrap.add_child(rocket)
+	var icon_center := CenterContainer.new()
+	icon_wrap.add_child(icon_center)
+	icon_center.add_child(UiIcon.make("rocket", ClientUi.CYAN, 24.0))
 	var title := Label.new()
 	title.text = "Ship Hangar"
 	title.add_theme_font_size_override("font_size", 35)

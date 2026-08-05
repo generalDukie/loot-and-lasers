@@ -61,20 +61,20 @@ func _build() -> void:
 	title_row.add_theme_constant_override("separation", 10)
 	root.add_child(title_row)
 
-	var title := Label.new()
-	title.text = "🗺  Missions"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 29)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	title_row.add_child(title)
+	var title_row_item := UiIcon.make_title_row("map", "Missions", ClientUi.TEXT, 29, 28.0)
+	title_row_item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(title_row_item)
 
 	var controls := HBoxContainer.new()
 	controls.add_theme_constant_override("separation", 8)
 	title_row.add_child(controls)
 
 	_music_btn = Button.new()
-	_music_btn.text = "🔊  Music On"
+	_music_btn.text = "Music On"
+	_music_btn.icon = UiIcon.texture("volume-2")
+	_music_btn.expand_icon = true
+	_music_btn.add_theme_constant_override("icon_max_width", 16)
+	UiIcon.apply_button_icon_colors(_music_btn, ClientUi.MUTED)
 	ClientUi.apply_ghost_button(_music_btn)
 	_music_btn.add_theme_font_size_override("font_size", 15)
 	_music_btn.pressed.connect(_toggle_music)
@@ -117,10 +117,7 @@ func _build() -> void:
 	var mining_row := HBoxContainer.new()
 	mining_row.add_theme_constant_override("separation", 10)
 	_mining_banner.add_child(mining_row)
-	var mining_icon := Label.new()
-	mining_icon.text = "⛏"
-	mining_icon.add_theme_font_size_override("font_size", 27)
-	mining_row.add_child(mining_icon)
+	mining_row.add_child(UiIcon.make("pickaxe", Color("#FCD34D"), 24.0))
 	var mining_copy := VBoxContainer.new()
 	mining_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mining_copy.add_theme_constant_override("separation", 2)
@@ -377,7 +374,9 @@ func _toggle_music() -> void:
 func _update_music_btn() -> void:
 	if _music_btn == null:
 		return
-	_music_btn.text = "🔊  Music On" if _music_on else "🔇  Music Off"
+	_music_btn.text = "Music On" if _music_on else "Music Off"
+	_music_btn.icon = UiIcon.texture("volume-2" if _music_on else "music")
+	UiIcon.apply_button_icon_colors(_music_btn, ClientUi.MUTED)
 
 
 func _render() -> void:

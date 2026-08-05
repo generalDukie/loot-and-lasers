@@ -141,7 +141,7 @@ func _build() -> void:
 
 	# Email
 	form.add_child(_field_label("Email"))
-	_email = ClientUi.make_field("✉  you@example.com")
+	_email = ClientUi.make_field("you@example.com")
 	_email.custom_minimum_size.y = 59
 	form.add_child(_email)
 
@@ -160,7 +160,7 @@ func _build() -> void:
 	_forgot_link.pressed.connect(func() -> void: _set_mode("forgot"))
 	_password_row.add_child(_forgot_link)
 
-	_password = ClientUi.make_field("🔒  ••••••••", true)
+	_password = ClientUi.make_field("••••••••", true)
 	_password.custom_minimum_size.y = 59
 	form.add_child(_password)
 
@@ -170,7 +170,7 @@ func _build() -> void:
 	_confirm_wrap.add_theme_constant_override("separation", 6)
 	form.add_child(_confirm_wrap)
 	_confirm_wrap.add_child(_field_label("Confirm Password"))
-	_confirm = ClientUi.make_field("🔒  ••••••••", true)
+	_confirm = ClientUi.make_field("••••••••", true)
 	_confirm.custom_minimum_size.y = 59
 	_confirm_wrap.add_child(_confirm)
 

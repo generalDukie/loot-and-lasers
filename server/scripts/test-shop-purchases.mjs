@@ -269,5 +269,108 @@ await testAsync("wrong account cannot buy", async () => {
   assert.ok(res.status >= 400);
 });
 
+await testAsync("request_id charset: valid keys accepted", async () => {
+  const live = entities.Character.get(ch.id);
+  const stock = live.shop_meta.shop_stock || live.shop_meta.gear_stock || [];
+  const gear = stock.find(
+    (s) => s.type !== "consumable" && !live.shop_meta.purchased?.[s._slotId] && !live.shop_meta.yanked?.[s._slotId]
+  );
+  assert.ok(gear, "need an unsold gear slot");
+  // Mirrors Godot ShopManager after fix: shop-gear-<unix_int>-<rand>
+  const rid = `shop-gear-${Math.floor(Date.now() / 1000)}-${Math.floor(Math.random() * 100000)}`;
+  const res = await BuyShopGear(user, {
+    slot_id: gear._slotId,
+    request_id: rid,
+    refresh_id: live.shop_meta.window_idx,
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  assert.equal(res.body.request_id, rid);
+});
+
+await testAsync("request_id charset: float-timestamp Godot bug rejected", async () => {
+  // Pre-fix Godot: str(Time.get_unix_time_from_system()) embeds '.' → Invalid request_id
+  const bad = `shop-gear-${(Date.now() / 1000).toFixed(3)}-${12345}`;
+  assert.match(bad, /\./);
+  const res = await BuyShopGear(user, {
+    slot_id: "any-slot",
+    request_id: bad,
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, "Invalid request_id");
+});
+
+await testAsync("request_id charset: empty allowed (optional transport key)", async () => {
+  const live = entities.Character.get(ch.id);
+  const stock = live.shop_meta.shop_stock || live.shop_meta.gear_stock || [];
+  const gear = stock.find(
+    (s) => s.type !== "consumable" && !live.shop_meta.purchased?.[s._slotId] && !live.shop_meta.yanked?.[s._slotId]
+  );
+  if (!gear) {
+    // Stock may be exhausted after prior buys — refresh via EnsureShop window is enough to assert empty key path.
+    const res = await BuyShopGear(user, {
+      slot_id: "missing-after-empty-key",
+      request_id: "",
+    });
+    assert.notEqual(res.body?.error, "Invalid request_id");
+    return;
+  }
+  const before = live.stardust;
+  const res = await BuyShopGear(user, {
+    slot_id: gear._slotId,
+    request_id: "",
+    refresh_id: live.shop_meta.window_idx,
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  assert.equal(entities.Character.get(ch.id).stardust, before - res.body.cost);
+});
+
+await testAsync("request_id charset: braces/spaces/null-ish malformed rejected", async () => {
+  for (const bad of [
+    "{550e8400-e29b-41d4-a716-446655440000}",
+    "shop gear 1",
+    "shop.gear.1",
+    "x".repeat(129),
+  ]) {
+    const res = await BuyShopGear(user, {
+      slot_id: "x",
+      request_id: bad,
+    });
+    assert.equal(res.status, 400, bad);
+    assert.equal(res.body.error, "Invalid request_id", bad);
+  }
+});
+
+await testAsync("conflicting request_id reuse for different slot rejected via sold-out or replay scope", async () => {
+  const live = entities.Character.get(ch.id);
+  const stock = live.shop_meta.shop_stock || live.shop_meta.gear_stock || [];
+  const available = stock.filter(
+    (s) => s.type !== "consumable" && !live.shop_meta.purchased?.[s._slotId] && !live.shop_meta.yanked?.[s._slotId]
+  );
+  if (available.length < 2) {
+    console.log("    (skip — need 2 unsold gear slots)");
+    return;
+  }
+  const rid = "shop-gear-conflict-reuse-1";
+  const first = await BuyShopGear(user, {
+    slot_id: available[0]._slotId,
+    request_id: rid,
+    refresh_id: live.shop_meta.window_idx,
+  });
+  assert.equal(first.status, 200, first.body?.error);
+  const beforeSd = entities.Character.get(ch.id).stardust;
+  const beforePurchased = { ...(entities.Character.get(ch.id).shop_meta.purchased || {}) };
+  const second = await BuyShopGear(user, {
+    slot_id: available[1]._slotId,
+    request_id: rid,
+    refresh_id: live.shop_meta.window_idx,
+  });
+  // Same operation_key replays the first receipt — does not buy the second listing.
+  assert.equal(second.status, 200, second.body?.error);
+  assert.equal(second.body.idempotent_replay, true);
+  assert.equal(second.body.slot_id, available[0]._slotId);
+  assert.equal(entities.Character.get(ch.id).stardust, beforeSd);
+  assert.deepEqual(entities.Character.get(ch.id).shop_meta.purchased, beforePurchased);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 if (failed) process.exit(1);

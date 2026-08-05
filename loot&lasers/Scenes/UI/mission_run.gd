@@ -23,7 +23,7 @@ var _active_panel: PanelContainer
 var _explore: MissionExploreStage
 var _progress_track: Control
 var _progress_fill: ColorRect
-var _rocket: Label
+var _rocket: TextureRect
 var _overlay_timer: Label
 var _tick: Timer
 var _status_poll: Timer
@@ -258,17 +258,13 @@ func _build() -> void:
 	fill_right.anchor_left = 0.55
 	_progress_fill.add_child(fill_right)
 
-	_rocket = Label.new()
-	_rocket.text = "🚀"
-	_rocket.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_rocket.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_rocket.add_theme_font_size_override("font_size", 21)
+	_rocket = UiIcon.make("rocket", ClientUi.CYAN, 20.0)
 	_rocket.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rocket.set_anchors_preset(PRESET_CENTER_LEFT)
-	_rocket.offset_left = -16
-	_rocket.offset_right = 16
-	_rocket.offset_top = -16
-	_rocket.offset_bottom = 16
+	_rocket.offset_left = -10
+	_rocket.offset_right = 10
+	_rocket.offset_top = -10
+	_rocket.offset_bottom = 10
 	_progress_track.add_child(_rocket)
 
 	_tick = Timer.new()
@@ -393,8 +389,13 @@ func _set_progress(progress: float, done: bool) -> void:
 	_progress_fill.position = Vector2.ZERO
 	_progress_fill.size = Vector2(maxi(0, int(w * progress)), h)
 	_rocket.set_anchors_and_offsets_preset(PRESET_TOP_LEFT)
-	_rocket.position = Vector2(clampf(w * progress - 10.0, 0.0, maxf(w - 18.0, 0.0)), (h - 20.0) * 0.5)
-	_rocket.text = "🎉" if done else "🚀"
+	_rocket.position = Vector2(clampf(w * progress - 10.0, 0.0, maxf(w - 20.0, 0.0)), (h - 20.0) * 0.5)
+	if done:
+		_rocket.texture = UiIcon.texture("sparkles")
+		UiIcon.set_tint(_rocket, ClientUi.SUCCESS)
+	else:
+		_rocket.texture = UiIcon.texture("rocket")
+		UiIcon.set_tint(_rocket, ClientUi.CYAN)
 	_progress_fill.color = ClientUi.SUCCESS if done else ClientUi.CYAN.lerp(ClientUi.VIOLET, progress)
 
 

@@ -70,13 +70,9 @@ func _build() -> void:
 
 	var head := HBoxContainer.new()
 	root.add_child(head)
-	var title := Label.new()
-	title.text = "💬  Messages"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 29)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	head.add_child(title)
+	var title_row := UiIcon.make_title_row("message-square", "Messages", ClientUi.TEXT, 29, 28.0)
+	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title_row)
 	var new_dm := Button.new()
 	new_dm.text = "DM a friend…"
 	ClientUi.apply_ghost_button(new_dm)

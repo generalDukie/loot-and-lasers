@@ -34,12 +34,7 @@ func _build() -> void:
 	root.add_theme_constant_override("separation", 10)
 	margin.add_child(root)
 
-	var title := Label.new()
-	title.text = "💎  Cosmic Vault"
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	root.add_child(title)
+	root.add_child(UiIcon.make_title_row("package", "Cosmic Vault", ClientUi.TEXT, 32, 28.0))
 
 	var career := PanelContainer.new()
 	career.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(

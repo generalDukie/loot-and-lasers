@@ -28,6 +28,10 @@ static func set_tint(tr: TextureRect, tint: Color) -> void:
 	tr.set_meta("nav_tint", tint)
 
 
+static func texture_for(icon_id: String) -> Texture2D:
+	return _texture(icon_id)
+
+
 static func _texture(icon_id: String) -> Texture2D:
 	var key := icon_id.strip_edges().to_lower()
 	if key.is_empty():

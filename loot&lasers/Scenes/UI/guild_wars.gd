@@ -54,12 +54,7 @@ func _build() -> void:
 	eye.add_theme_color_override("font_color", Color(ClientUi.WARNING, 0.85))
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
-	var title := Label.new()
-	title.text = "⚔  Guild Wars"
-	title.add_theme_font_size_override("font_size", 29)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	head_l.add_child(title)
+	head_l.add_child(UiIcon.make_title_row("swords", "Guild Wars", ClientUi.TEXT, 29, 28.0))
 	_meta = Label.new()
 	_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_meta.add_theme_font_size_override("font_size", 15)

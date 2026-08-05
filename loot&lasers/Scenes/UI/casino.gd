@@ -81,13 +81,9 @@ func _build() -> void:
 	head.add_theme_constant_override("separation", 4)
 	root.add_child(head)
 
-	var title := Label.new()
-	title.text = "⚄  Nebula Casino"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 27)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	head.add_child(title)
+	var title_center := CenterContainer.new()
+	title_center.add_child(UiIcon.make_title_row("dice-5", "Nebula Casino", ClientUi.TEXT, 27, 28.0))
+	head.add_child(title_center)
 
 	var tag := Label.new()
 	tag.text = "Risk it for the glittering prize. The house always remembers."
@@ -167,10 +163,7 @@ func _make_sealed_banner() -> PanelContainer:
 	row.add_theme_constant_override("separation", 12)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	sealed.add_child(row)
-	var gem := Label.new()
-	gem.text = "💎"
-	gem.add_theme_font_size_override("font_size", 37)
-	row.add_child(gem)
+	row.add_child(CurrencyIcon.make("nova", 32.0))
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 2)

@@ -25,30 +25,45 @@ var _tab_bodies: Dictionary = {}
 var _active_tab := "reports"
 var _busy := false
 var _root: VBoxContainer
+var _env_banner: Label
+var _target_banner: Label
+var _session_lab: RichTextLabel
+var _selected_name := ""
+var _selected_account_id := ""
 
 var _char_id: LineEdit
 var _reason: LineEdit
 var _search: LineEdit
 var _player_list: VBoxContainer
 var _detail: RichTextLabel
+var _account_hits: VBoxContainer
 
 var _delta_sd: SpinBox
 var _delta_nova: SpinBox
 var _delta_fuel: SpinBox
 var _delta_xp: SpinBox
-var _item_type: LineEdit
-var _item_rarity: LineEdit
+var _item_type: OptionButton
+var _item_rarity: OptionButton
+var _item_level: SpinBox
 var _mute_minutes: SpinBox
 
 var _guild_id: LineEdit
 var _new_leader_id: LineEdit
+var _guild_list: VBoxContainer
+var _guild_members: VBoxContainer
 var _promo_code: LineEdit
 var _promo_label: LineEdit
+var _promo_sd: SpinBox
+var _promo_nova: SpinBox
+var _promo_max: SpinBox
 var _promo_list: VBoxContainer
 
 var _mail_subject: LineEdit
 var _mail_body: TextEdit
 var _mail_all: CheckBox
+var _mail_sd: SpinBox
+var _mail_nova: SpinBox
+var _mail_expires: SpinBox
 var _filter_words: TextEdit
 
 var _account_id: LineEdit
@@ -56,26 +71,46 @@ var _ent_key: LineEdit
 var _ent_qty: SpinBox
 var _ent_id: LineEdit
 var _ent_list: VBoxContainer
+var _ent_products: VBoxContainer
 
 var _reward_char: LineEdit
 var _reward_sd: SpinBox
 var _reward_nova: SpinBox
+var _reward_claim_id: LineEdit
 var _reward_list: VBoxContainer
 var _audit_q: LineEdit
+var _audit_entry_id: LineEdit
+var _audit_note: LineEdit
 var _audit_list: VBoxContainer
 var _email_list: VBoxContainer
 var _sched_list: VBoxContainer
+var _sched_audit_list: VBoxContainer
 var _econ_lab: RichTextLabel
 var _reports_list: VBoxContainer
+var _ops_out: RichTextLabel
+var _flag_name: LineEdit
+var _repair_type: OptionButton
+var _migration_id: LineEdit
+var _role_user_id: LineEdit
+var _rename_field: LineEdit
+var _arena_hours: SpinBox
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	clip_contents = true
 	_build()
+	_refresh_target_banner()
 	if not AdminManager.is_admin():
-		_status.text = "Admin access required (role=%s)." % str(AuthManager.user.get("role", "user"))
+		_status.text = "Admin access required (role=%s). Privileged controls disabled." % str(AuthManager.user.get("role", "user"))
 		_set_tabs_enabled(false)
+		if _env_banner:
+			_env_banner.text = "ADMIN LOCKED · role=%s · env=%s" % [
+				str(AuthManager.user.get("role", "user")),
+				BackendEnvironment.get_environment_id() if BackendEnvironment else "?",
+			]
+	else:
+		_status.text = "Ready. Select a target on Players, then use other tabs."
 
 
 func _exit_tree() -> void:
@@ -135,6 +170,21 @@ func _build() -> void:
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(title)
 	outer.add_child(title)
+
+	_env_banner = Label.new()
+	_env_banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_env_banner.add_theme_color_override("font_color", ClientUi.WARNING)
+	_env_banner.text = "ENV %s · role=%s · node=%s · permissions=admin (binary role; Node re-checks every request)" % [
+		BackendEnvironment.get_environment_id().to_upper() if BackendEnvironment else "?",
+		str(AuthManager.user.get("role", "user")),
+		str(GameApiClient.base_url) if GameApiClient else "?",
+	]
+	outer.add_child(_env_banner)
+
+	_target_banner = Label.new()
+	_target_banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_target_banner.add_theme_color_override("font_color", ClientUi.CYAN)
+	outer.add_child(_target_banner)
 
 	_tabs = HBoxContainer.new()
 	_tabs.add_theme_constant_override("separation", 3)
@@ -206,6 +256,15 @@ func _spin(prefix: String, min_v: float, max_v: float, val: float = 0.0) -> Spin
 	return s
 
 
+func _option(items: Array, selected: int = 0) -> OptionButton:
+	var ob := OptionButton.new()
+	ob.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for it in items:
+		ob.add_item(str(it))
+	ob.select(clampi(selected, 0, maxi(0, items.size() - 1)))
+	return ob
+
+
 func _confirm(title: String, text: String, on_ok: Callable) -> void:
 	var d := ConfirmationDialog.new()
 	d.title = title
@@ -224,6 +283,7 @@ func _confirm(title: String, text: String, on_ok: Callable) -> void:
 
 func _run(label: String, work: Callable) -> void:
 	if _busy:
+		_status.text = "Action already in progress — wait for the current result."
 		return
 	if not AdminManager.is_admin():
 		_status.text = "Admin access required."
@@ -237,26 +297,65 @@ func _run(label: String, work: Callable) -> void:
 	if typeof(res) != TYPE_DICTIONARY:
 		_status.text = "Unexpected response."
 		return
-	_status.text = str(res.get("message", "Done" if res.get("ok", false) else "Failed"))
-	if not bool(res.get("ok", false)) and str(res.get("message", "")).is_empty():
-		_status.text = "Failed."
+	var msg := str(res.get("message", "Done" if res.get("ok", false) else "Failed"))
+	if not bool(res.get("ok", false)) and msg.is_empty():
+		msg = "Failed."
+	var audit := str(res.get("audit_id", ""))
+	var corr := str(res.get("correlation_id", ""))
+	if not audit.is_empty() and msg.find("audit=") < 0:
+		msg = "%s · audit=%s" % [msg, audit.substr(0, 12)]
+	elif not corr.is_empty() and msg.find("corr=") < 0:
+		msg = "%s · corr=%s" % [msg, corr.substr(0, 12)]
+	_status.text = msg
 
 
 func _cid() -> String:
-	return _char_id.text.strip_edges()
+	return _char_id.text.strip_edges() if _char_id else ""
 
 
 func _why() -> String:
-	return _reason.text.strip_edges()
+	return _reason.text.strip_edges() if _reason else ""
+
+
+func _require_target_and_reason(need_reason := true) -> bool:
+	if _cid().is_empty():
+		_status.text = "Select or enter a target character_id first (Players tab)."
+		return false
+	if need_reason and _why().is_empty():
+		_status.text = "Reason is required for this action."
+		return false
+	return true
 
 
 func _confirm_mod(title: String, work: Callable) -> void:
-	if _cid().is_empty() or _why().is_empty():
-		_status.text = "character_id and reason are required."
+	if not _require_target_and_reason(true):
 		return
-	_confirm(title, "%s\nTarget: %s\nReason: %s" % [title, _cid(), _why()], func() -> void:
+	_confirm(title, "%s\nTarget: %s (%s)\nReason: %s" % [title, _selected_name if not _selected_name.is_empty() else "?", _cid(), _why()], func() -> void:
 		_run("Working…", work)
 	)
+
+
+func _refresh_target_banner() -> void:
+	if _target_banner == null:
+		return
+	if _cid().is_empty():
+		_target_banner.text = "Target: none selected — open Players to search/select before mutations."
+	else:
+		_target_banner.text = "Target: %s · character=%s · account=%s" % [
+			_selected_name if not _selected_name.is_empty() else "(unnamed)",
+			_cid(),
+			_selected_account_id if not _selected_account_id.is_empty() else "?",
+		]
+
+
+func _sync_target_fields() -> void:
+	_refresh_target_banner()
+	if _reward_char and not _cid().is_empty():
+		_reward_char.text = _cid()
+	if _account_id and not _selected_account_id.is_empty():
+		_account_id.text = _selected_account_id
+	if _role_user_id and not _selected_account_id.is_empty():
+		_role_user_id.text = _selected_account_id
 
 
 # ─── Reports ───────────────────────────────────────────────
@@ -329,21 +428,34 @@ func _make_report_row(row: Dictionary) -> Control:
 func _build_players() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("PLAYERS", "Search · Moderate · Economy", "All mutations require a reason."))
+	col.add_child(ClientUi.make_section_header("PLAYERS", "Search · Moderate · Economy", "Lookup accepts name, character id, account id, email, or Nakama user id."))
 
 	var find_row := HBoxContainer.new()
 	find_row.add_theme_constant_override("separation", 8)
 	col.add_child(find_row)
-	_search = ClientUi.make_field("Search name or character id")
+	_search = ClientUi.make_field("Search name / character id / account id / email / nakama id")
 	_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	find_row.add_child(_search)
 	var find_btn := _btn("Search", true)
 	find_btn.pressed.connect(_on_search_players)
 	find_row.add_child(find_btn)
+	var clear_btn := _btn("Clear Target")
+	clear_btn.pressed.connect(func() -> void:
+		_char_id.text = ""
+		_selected_name = ""
+		_selected_account_id = ""
+		_detail.text = ""
+		_sync_target_fields()
+		_status.text = "Target cleared."
+	)
+	find_row.add_child(clear_btn)
 
 	_player_list = VBoxContainer.new()
 	_player_list.add_theme_constant_override("separation", 4)
 	col.add_child(_player_list)
+	_account_hits = VBoxContainer.new()
+	_account_hits.add_theme_constant_override("separation", 4)
+	col.add_child(_account_hits)
 
 	_detail = RichTextLabel.new()
 	_detail.bbcode_enabled = true
@@ -354,9 +466,37 @@ func _build_players() -> void:
 	col.add_child(_detail)
 
 	_char_id = ClientUi.make_field("Target character_id")
+	_char_id.text_changed.connect(func(_t: String) -> void: _refresh_target_banner())
 	col.add_child(_char_id)
 	_reason = ClientUi.make_field("Reason (required for mutations)")
 	col.add_child(_reason)
+
+	var inspect_row := HBoxContainer.new()
+	inspect_row.add_theme_constant_override("separation", 8)
+	col.add_child(inspect_row)
+	var inspect_btn := _btn("Inspect Character", true)
+	inspect_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inspect_btn.pressed.connect(func() -> void:
+		if _cid().is_empty():
+			_status.text = "character_id required."
+			return
+		_run("Inspecting…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.inspect_character(_cid())
+			if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+				var ch: Variant = res.data.get("character", {})
+				if typeof(ch) == TYPE_DICTIONARY:
+					_selected_name = str(ch.get("name", _selected_name))
+					_selected_account_id = str(ch.get("created_by_id", _selected_account_id))
+					_sync_target_fields()
+				var inv: Variant = res.data.get("inventory", {})
+				var inv_count := 0
+				if typeof(inv) == TYPE_DICTIONARY:
+					inv_count = int(inv.get("count", 0))
+				_detail.text = "[b]Inspect[/b] ok · inventory=%s\n%s" % [inv_count, JSON.stringify(res.data).substr(0, 1200)]
+			return res
+		)
+	)
+	inspect_row.add_child(inspect_btn)
 
 	var mute_row := HBoxContainer.new()
 	mute_row.add_theme_constant_override("separation", 8)
@@ -393,7 +533,9 @@ func _build_players() -> void:
 
 	var reset := _btn("Reset Player Progress", false, true)
 	reset.pressed.connect(func() -> void:
-		_confirm("RESET PLAYER?", "Deletes items and resets progression for %s. Irreversible." % _cid(), func() -> void:
+		if not _require_target_and_reason(true):
+			return
+		_confirm("RESET PLAYER?", "Deletes items and resets progression for %s (%s). Irreversible.\nReason: %s" % [_selected_name, _cid(), _why()], func() -> void:
 			_run("Resetting…", func() -> Dictionary: return await AdminManager.reset_player(_cid(), _why()))
 		)
 	)
@@ -402,13 +544,18 @@ func _build_players() -> void:
 	var rename_row := HBoxContainer.new()
 	rename_row.add_theme_constant_override("separation", 8)
 	col.add_child(rename_row)
-	var rename_field := ClientUi.make_field("New character name")
-	rename_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rename_row.add_child(rename_field)
+	_rename_field = ClientUi.make_field("New character name")
+	_rename_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rename_row.add_child(_rename_field)
 	var rename_btn := _btn("Rename")
 	rename_btn.pressed.connect(func() -> void:
-		_run("Renaming…", func() -> Dictionary:
-			return await AdminManager.rename_character(_cid(), rename_field.text.strip_edges())
+		if _cid().is_empty() or _rename_field.text.strip_edges().is_empty():
+			_status.text = "character_id and new name are required."
+			return
+		_confirm("Rename character?", "%s → %s" % [_cid(), _rename_field.text.strip_edges()], func() -> void:
+			_run("Renaming…", func() -> Dictionary:
+				return await AdminManager.rename_character(_cid(), _rename_field.text.strip_edges())
+			)
 		)
 	)
 	rename_row.add_child(rename_btn)
@@ -416,29 +563,35 @@ func _build_players() -> void:
 	var role_row := HBoxContainer.new()
 	role_row.add_theme_constant_override("separation", 8)
 	col.add_child(role_row)
-	var uid := ClientUi.make_field("Account user_id for role change")
-	uid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	role_row.add_child(uid)
+	_role_user_id = ClientUi.make_field("Account user_id for role change")
+	_role_user_id.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	role_row.add_child(_role_user_id)
 	var promote := _btn("Promote Admin", false, true)
 	promote.pressed.connect(func() -> void:
-		_confirm("Promote to admin?", "Grant admin role to %s" % uid.text, func() -> void:
+		if _role_user_id.text.strip_edges().is_empty() or _why().is_empty():
+			_status.text = "account user_id and reason are required."
+			return
+		_confirm("Promote to admin?", "Grant admin role to %s\nReason: %s" % [_role_user_id.text.strip_edges(), _why()], func() -> void:
 			_run("Promoting…", func() -> Dictionary:
-				return await AdminManager.set_role(uid.text.strip_edges(), "admin", _why())
+				return await AdminManager.set_role(_role_user_id.text.strip_edges(), "admin", _why())
 			)
 		)
 	)
 	role_row.add_child(promote)
 	var demote := _btn("Demote User")
 	demote.pressed.connect(func() -> void:
-		_confirm("Demote to user?", "Remove admin from %s" % uid.text, func() -> void:
+		if _role_user_id.text.strip_edges().is_empty() or _why().is_empty():
+			_status.text = "account user_id and reason are required."
+			return
+		_confirm("Demote to user?", "Remove admin from %s\nReason: %s" % [_role_user_id.text.strip_edges(), _why()], func() -> void:
 			_run("Demoting…", func() -> Dictionary:
-				return await AdminManager.set_role(uid.text.strip_edges(), "user", _why())
+				return await AdminManager.set_role(_role_user_id.text.strip_edges(), "user", _why())
 			)
 		)
 	)
 	role_row.add_child(demote)
 
-	col.add_child(ClientUi.make_section_header("", "Currency deltas", "Positive adds, negative removes."))
+	col.add_child(ClientUi.make_section_header("", "Currency deltas", "Positive adds, negative removes. Node ledger is authoritative."))
 	var crow := HBoxContainer.new()
 	crow.add_theme_constant_override("separation", 6)
 	col.add_child(crow)
@@ -471,9 +624,12 @@ func _on_search_players() -> void:
 		var res: Dictionary = await AdminManager.search_players(_search.text)
 		for c in _player_list.get_children():
 			c.queue_free()
+		for c in _account_hits.get_children():
+			c.queue_free()
 		if not res.ok:
 			return res
 		var rows: Array = res.data.get("players", []) if typeof(res.data) == TYPE_DICTIONARY else []
+		var accounts: Array = res.data.get("accounts", []) if typeof(res.data) == TYPE_DICTIONARY else []
 		for row in rows:
 			if typeof(row) != TYPE_DICTIONARY:
 				continue
@@ -486,20 +642,43 @@ func _on_search_players() -> void:
 			var snap: Dictionary = row
 			b.pressed.connect(func() -> void: _select_player(snap))
 			_player_list.add_child(b)
-		res["message"] = "Found %s character(s)." % rows.size()
+		for acc in accounts:
+			if typeof(acc) != TYPE_DICTIONARY:
+				continue
+			var ab := _btn("Account · %s · role=%s · %s" % [
+				str(acc.get("email", "?")),
+				str(acc.get("role", "user")),
+				str(acc.get("id", "")).substr(0, 8),
+			])
+			ab.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			var asnap: Dictionary = acc
+			ab.pressed.connect(func() -> void:
+				_selected_account_id = str(asnap.get("id", ""))
+				if _role_user_id:
+					_role_user_id.text = _selected_account_id
+				if _account_id:
+					_account_id.text = _selected_account_id
+				_sync_target_fields()
+				_status.text = "Account selected: %s" % _selected_account_id
+			)
+			_account_hits.add_child(ab)
+		res["message"] = "Found %s character(s), %s account(s)." % [rows.size(), accounts.size()]
 		return res
 	)
 
 
 func _select_player(row: Dictionary) -> void:
 	_char_id.text = str(row.get("id", ""))
+	_selected_name = str(row.get("name", ""))
+	_selected_account_id = str(row.get("owner_id", row.get("created_by_id", row.get("created_by", ""))))
+	_sync_target_fields()
 	_detail.text = "[b]%s[/b]  Lv %s · %s · %s\nid=%s\nowner=%s\nSD %s · Nova %s · Fuel %s/%s" % [
 		str(row.get("name", "?")),
 		str(row.get("level", 1)),
 		str(row.get("race", "?")),
 		str(row.get("class", "?")),
 		str(row.get("id", "")),
-		str(row.get("owner_id", row.get("created_by", "?"))),
+		_selected_account_id if not _selected_account_id.is_empty() else "?",
 		str(row.get("stardust", 0)),
 		str(row.get("nova_crystals", 0)),
 		str(row.get("fuel", 0)),
@@ -524,19 +703,57 @@ func _select_player(row: Dictionary) -> void:
 func _build_guild() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("GUILDS", "Force leadership transfer", ""))
+	col.add_child(ClientUi.make_section_header("GUILDS", "List · Members · Transfer", "Select a guild, load members, then transfer."))
 	var load_g := _btn("Load Guilds", true)
 	load_g.pressed.connect(_on_load_guilds)
 	col.add_child(load_g)
+	_guild_list = VBoxContainer.new()
+	_guild_list.add_theme_constant_override("separation", 4)
+	col.add_child(_guild_list)
 	_guild_id = ClientUi.make_field("guild_id")
 	col.add_child(_guild_id)
+	var load_m := _btn("Load Guild Members")
+	load_m.pressed.connect(func() -> void:
+		if _guild_id.text.strip_edges().is_empty():
+			_status.text = "guild_id required."
+			return
+		_run("Loading members…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.list_guild_members(_guild_id.text.strip_edges())
+			for c in _guild_members.get_children():
+				c.queue_free()
+			if not res.ok:
+				return res
+			var rows: Array = res.raw if typeof(res.raw) == TYPE_ARRAY else []
+			if typeof(res.data) == TYPE_DICTIONARY and typeof(res.data.get("members", null)) == TYPE_ARRAY:
+				rows = res.data["members"]
+			for row in rows:
+				if typeof(row) != TYPE_DICTIONARY:
+					continue
+				var mid := str(row.get("character_id", row.get("id", "")))
+				var b := _btn("%s · %s" % [str(row.get("name", row.get("character_name", "?"))), mid.substr(0, 8)])
+				b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				b.pressed.connect(func() -> void:
+					_new_leader_id.text = mid
+					_status.text = "Leader candidate set: %s" % mid
+				)
+				_guild_members.add_child(b)
+			res["message"] = "Loaded %s member(s)." % rows.size()
+			return res
+		)
+	)
+	col.add_child(load_m)
+	_guild_members = VBoxContainer.new()
+	col.add_child(_guild_members)
 	_new_leader_id = ClientUi.make_field("new_leader character_id")
 	col.add_child(_new_leader_id)
 	var xfer := _btn("Transfer Leadership", false, true)
 	xfer.pressed.connect(func() -> void:
+		if _guild_id.text.strip_edges().is_empty() or _new_leader_id.text.strip_edges().is_empty():
+			_status.text = "guild_id and new_leader character_id required."
+			return
 		if _why().is_empty():
 			_reason.text = "admin guild transfer"
-		_confirm("Transfer guild leadership?", "Guild %s → %s" % [_guild_id.text, _new_leader_id.text], func() -> void:
+		_confirm("Transfer guild leadership?", "Guild %s → %s\nReason: %s" % [_guild_id.text, _new_leader_id.text, _why()], func() -> void:
 			_run("Transferring…", func() -> Dictionary:
 				return await AdminManager.transfer_guild(
 					_guild_id.text.strip_edges(),
@@ -547,22 +764,34 @@ func _build_guild() -> void:
 		)
 	)
 	col.add_child(xfer)
-	_add_tab("guild", col)
+	_add_tab("guild", col, true)
 
 
 func _on_load_guilds() -> void:
 	await _run("Loading guilds…", func() -> Dictionary:
 		var res: Dictionary = await AdminManager.list_guilds()
+		for c in _guild_list.get_children():
+			c.queue_free()
+		if not res.ok:
+			return res
 		var rows: Array = res.raw if typeof(res.raw) == TYPE_ARRAY else []
-		var lines: PackedStringArray = []
+		if typeof(res.data) == TYPE_DICTIONARY and typeof(res.data.get("data", null)) == TYPE_ARRAY:
+			rows = res.data["data"]
 		for g in rows:
-			if typeof(g) == TYPE_DICTIONARY:
-				lines.append("%s · %s · leader=%s" % [
-					str(g.get("name", "?")),
-					str(g.get("id", "")).substr(0, 8),
-					str(g.get("leader_id", "")).substr(0, 8),
-				])
-		_status.text = "Guilds:\n" + "\n".join(lines) if not lines.is_empty() else "No guilds."
+			if typeof(g) != TYPE_DICTIONARY:
+				continue
+			var gid := str(g.get("id", ""))
+			var b := _btn("%s · leader=%s · %s" % [
+				str(g.get("name", "?")),
+				str(g.get("leader_id", "")).substr(0, 8),
+				gid.substr(0, 8),
+			])
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.pressed.connect(func() -> void:
+				_guild_id.text = gid
+				_status.text = "Guild selected: %s" % gid
+			)
+			_guild_list.add_child(b)
 		res["message"] = "Loaded %s guild(s)." % rows.size()
 		return res
 	)
@@ -573,19 +802,38 @@ func _on_load_guilds() -> void:
 func _build_promo() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("PROMO CODES", "Create · Toggle · Delete", "Server promo CRUD currently lacks global audit writes."))
+	col.add_child(ClientUi.make_section_header("PROMO CODES", "Create · Toggle · Delete", "Configure rewards below before create."))
 	_promo_code = ClientUi.make_field("CODE")
 	col.add_child(_promo_code)
 	_promo_label = ClientUi.make_field("Label")
 	col.add_child(_promo_label)
-	var create := _btn("Create (100 SD)", true)
+	var prow := HBoxContainer.new()
+	prow.add_theme_constant_override("separation", 8)
+	col.add_child(prow)
+	_promo_sd = _spin("SD ", 0, 1000000, 100)
+	_promo_nova = _spin("Nova ", 0, 100000, 0)
+	_promo_max = _spin("Max uses ", 1, 100000, 100)
+	prow.add_child(_promo_sd)
+	prow.add_child(_promo_nova)
+	prow.add_child(_promo_max)
+	var create := _btn("Create Promo Code", true)
 	create.pressed.connect(func() -> void:
-		_run("Creating promo…", func() -> Dictionary:
-			return await AdminManager.create_promo_code(
-				_promo_code.text.strip_edges(),
-				_promo_label.text.strip_edges(),
-				{"stardust": 100},
-				100
+		if _promo_code.text.strip_edges().is_empty():
+			_status.text = "Promo code required."
+			return
+		var rewards := {}
+		if int(_promo_sd.value) > 0:
+			rewards["stardust"] = int(_promo_sd.value)
+		if int(_promo_nova.value) > 0:
+			rewards["nova_crystals"] = int(_promo_nova.value)
+		_confirm("Create promo?", "%s · rewards=%s · max=%s" % [_promo_code.text, str(rewards), int(_promo_max.value)], func() -> void:
+			_run("Creating promo…", func() -> Dictionary:
+				return await AdminManager.create_promo_code(
+					_promo_code.text.strip_edges(),
+					_promo_label.text.strip_edges(),
+					rewards,
+					int(_promo_max.value)
+				)
 			)
 		)
 	)
@@ -644,29 +892,29 @@ func _on_load_promos() -> void:
 func _build_grant() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("GRANT ITEM", "Uses Players target + reason", ""))
-	_item_type = ClientUi.make_field("type (weapon/armor/…)")
-	_item_type.text = "weapon"
+	col.add_child(ClientUi.make_section_header("GRANT ITEM", "Node generates gear via shared generator", "Uses Players target character + reason."))
+	var tip0 := Label.new()
+	tip0.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip0.text = "Current target: shown in banner above. Godot never invents item stats."
+	tip0.add_theme_color_override("font_color", ClientUi.MUTED)
+	col.add_child(tip0)
+	_item_type = _option(["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"], 0)
 	col.add_child(_item_type)
-	_item_rarity = ClientUi.make_field("rarity (common…legendary)")
-	_item_rarity.text = "rare"
+	_item_rarity = _option(["common", "uncommon", "rare", "epic", "legendary"], 2)
 	col.add_child(_item_rarity)
-	var give := _btn("Give Generated Item", true)
+	_item_level = _spin("Item level ", 1, 100, 1)
+	col.add_child(_item_level)
+	var give := _btn("Give Generated Gear", true)
 	give.pressed.connect(func() -> void:
-		_confirm_mod("Grant item?", func() -> Dictionary:
+		_confirm_mod("Grant generated gear?", func() -> Dictionary:
 			return await AdminManager.grant_item(_cid(), {
-				"generate": true,
-				"type": _item_type.text.strip_edges(),
-				"rarity": _item_rarity.text.strip_edges(),
+				"type": _item_type.get_item_text(_item_type.selected),
+				"rarity": _item_rarity.get_item_text(_item_rarity.selected),
+				"level": int(_item_level.value),
 			}, _why())
 		)
 	)
 	col.add_child(give)
-	var tip := Label.new()
-	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tip.text = "Set character_id and reason on the Players tab first. Currency grants are also on Players."
-	tip.add_theme_color_override("font_color", ClientUi.MUTED)
-	col.add_child(tip)
 	_add_tab("grant", col)
 
 
@@ -675,8 +923,10 @@ func _build_grant() -> void:
 func _build_rewards() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("REWARDS", "Compensation · Retry", ""))
+	col.add_child(ClientUi.make_section_header("REWARDS", "Compensation · Retry · Audit", "Uses Node /api/rewards admin routes."))
 	_reward_char = ClientUi.make_field("characterId for compensation")
+	if not _cid().is_empty():
+		_reward_char.text = _cid()
 	col.add_child(_reward_char)
 	var rrow := HBoxContainer.new()
 	rrow.add_theme_constant_override("separation", 8)
@@ -688,20 +938,58 @@ func _build_rewards() -> void:
 	var grant := _btn("Grant Compensation", true)
 	grant.pressed.connect(func() -> void:
 		if _why().is_empty():
-			_status.text = "Reason required."
+			_status.text = "Reason required (Players tab)."
 			return
-		_confirm("Grant compensation?", "SD %s · Nova %s" % [int(_reward_sd.value), int(_reward_nova.value)], func() -> void:
+		var cid := _reward_char.text.strip_edges()
+		if cid.is_empty():
+			cid = _cid()
+		if cid.is_empty():
+			_status.text = "characterId required."
+			return
+		_confirm("Grant compensation?", "Char %s · SD %s · Nova %s\nReason: %s" % [cid, int(_reward_sd.value), int(_reward_nova.value), _why()], func() -> void:
 			_run("Granting reward…", func() -> Dictionary:
 				return await AdminManager.rewards_grant({
-					"characterId": _reward_char.text.strip_edges(),
+					"characterId": cid,
 					"reason": _why(),
 					"stardust": int(_reward_sd.value),
 					"nova_crystals": int(_reward_nova.value),
+					"compensation": true,
 				})
 			)
 		)
 	)
 	col.add_child(grant)
+	_reward_claim_id = ClientUi.make_field("claim id for detail / retry")
+	col.add_child(_reward_claim_id)
+	var rrow2 := HBoxContainer.new()
+	rrow2.add_theme_constant_override("separation", 8)
+	col.add_child(rrow2)
+	var get_claim := _btn("Get Claim")
+	get_claim.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	get_claim.pressed.connect(func() -> void:
+		if _reward_claim_id.text.strip_edges().is_empty():
+			_status.text = "claim id required."
+			return
+		_run("Loading claim…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.rewards_get(_reward_claim_id.text.strip_edges())
+			_fill_kv_list(_reward_list, res)
+			return res
+		)
+	)
+	rrow2.add_child(get_claim)
+	var retry := _btn("Retry Delivery")
+	retry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	retry.pressed.connect(func() -> void:
+		if _reward_claim_id.text.strip_edges().is_empty() or _why().is_empty():
+			_status.text = "claim id and reason required."
+			return
+		_confirm("Retry reward delivery?", _reward_claim_id.text, func() -> void:
+			_run("Retrying delivery…", func() -> Dictionary:
+				return await AdminManager.rewards_retry(_reward_claim_id.text.strip_edges(), {"reason": _why()})
+			)
+		)
+	)
+	rrow2.add_child(retry)
 	var search := _btn("Search Recent Claims")
 	search.pressed.connect(func() -> void:
 		_run("Searching rewards…", func() -> Dictionary:
@@ -711,6 +999,15 @@ func _build_rewards() -> void:
 		)
 	)
 	col.add_child(search)
+	var audit_r := _btn("Recent Reward Audit")
+	audit_r.pressed.connect(func() -> void:
+		_run("Loading reward audit…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.rewards_audit({"limit": "50"})
+			_fill_kv_list(_reward_list, res)
+			return res
+		)
+	)
+	col.add_child(audit_r)
 	_reward_list = VBoxContainer.new()
 	col.add_child(_reward_list)
 	_add_tab("rewards", col)
@@ -721,7 +1018,7 @@ func _build_rewards() -> void:
 func _build_audit() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("AUDIT LOGS", "Search · Annotate", ""))
+	col.add_child(ClientUi.make_section_header("AUDIT LOGS", "Search · Detail · Timeline · Annotate", "Read-only search; annotate appends a note."))
 	_audit_q = ClientUi.make_field("action or accountId filter")
 	col.add_child(_audit_q)
 	var search := _btn("Search Audit", true)
@@ -740,6 +1037,50 @@ func _build_audit() -> void:
 		)
 	)
 	col.add_child(search)
+	var timeline := _btn("Account Timeline (selected account)")
+	timeline.pressed.connect(func() -> void:
+		var aid := _selected_account_id if not _selected_account_id.is_empty() else (_account_id.text.strip_edges() if _account_id else "")
+		if aid.is_empty():
+			_status.text = "Select an account (Players search) first."
+			return
+		_run("Loading timeline…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.audit_timeline(aid, {"limit": "50"})
+			_fill_kv_list(_audit_list, res)
+			return res
+		)
+	)
+	col.add_child(timeline)
+	_audit_entry_id = ClientUi.make_field("audit entry id")
+	col.add_child(_audit_entry_id)
+	var get_e := _btn("Get Entry + Integrity")
+	get_e.pressed.connect(func() -> void:
+		if _audit_entry_id.text.strip_edges().is_empty():
+			_status.text = "audit entry id required."
+			return
+		_run("Loading audit entry…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.audit_get(_audit_entry_id.text.strip_edges())
+			var integ: Dictionary = await AdminManager.audit_integrity(_audit_entry_id.text.strip_edges())
+			_fill_kv_list(_audit_list, res)
+			if integ.ok:
+				res["message"] = "%s · integrity checked" % str(res.get("message", "OK"))
+			return res
+		)
+	)
+	col.add_child(get_e)
+	_audit_note = ClientUi.make_field("Annotation note")
+	col.add_child(_audit_note)
+	var ann := _btn("Annotate Entry")
+	ann.pressed.connect(func() -> void:
+		if _audit_entry_id.text.strip_edges().is_empty() or _audit_note.text.strip_edges().is_empty():
+			_status.text = "entry id and note required."
+			return
+		_confirm("Annotate audit entry?", _audit_note.text, func() -> void:
+			_run("Annotating…", func() -> Dictionary:
+				return await AdminManager.audit_annotate(_audit_entry_id.text.strip_edges(), _audit_note.text.strip_edges())
+			)
+		)
+	)
+	col.add_child(ann)
 	_audit_list = VBoxContainer.new()
 	col.add_child(_audit_list)
 	_add_tab("audit", col)
@@ -790,35 +1131,57 @@ func _build_filter() -> void:
 func _build_mail() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("SYSTEM MAIL", "Broadcast or targeted", ""))
+	col.add_child(ClientUi.make_section_header("SYSTEM MAIL", "Broadcast or targeted", "Uses Players target unless Send to ALL is checked."))
 	_mail_subject = ClientUi.make_field("Subject")
 	col.add_child(_mail_subject)
 	_mail_body = TextEdit.new()
 	_mail_body.custom_minimum_size = Vector2(0, 100)
 	_mail_body.placeholder_text = "Body"
 	col.add_child(_mail_body)
+	var mrow := HBoxContainer.new()
+	mrow.add_theme_constant_override("separation", 8)
+	col.add_child(mrow)
+	_mail_sd = _spin("Reward SD ", 0, 1000000, 0)
+	_mail_nova = _spin("Reward Nova ", 0, 100000, 0)
+	_mail_expires = _spin("Expires days ", 1, 365, 14)
+	mrow.add_child(_mail_sd)
+	mrow.add_child(_mail_nova)
+	mrow.add_child(_mail_expires)
 	_mail_all = CheckBox.new()
-	_mail_all.text = "Send to ALL players"
+	_mail_all.text = "Send to ALL players (high risk)"
 	col.add_child(_mail_all)
 	var send := _btn("Send System Mail", true)
 	send.pressed.connect(func() -> void:
 		if _why().is_empty():
 			_status.text = "Reason required (Players tab)."
 			return
+		if _mail_subject.text.strip_edges().is_empty():
+			_status.text = "Subject required."
+			return
+		if not _mail_all.button_pressed and _cid().is_empty():
+			_status.text = "Select a target character or check Send to ALL."
+			return
 		var recipients: Variant = "all" if _mail_all.button_pressed else [_cid()]
-		_confirm("Send system mail?", str(recipients), func() -> void:
+		var rewards := {}
+		if int(_mail_sd.value) > 0:
+			rewards["stardust"] = int(_mail_sd.value)
+		if int(_mail_nova.value) > 0:
+			rewards["nova_crystals"] = int(_mail_nova.value)
+		_confirm("Send system mail?", "To: %s\nRewards: %s\nReason: %s" % [str(recipients), str(rewards), _why()], func() -> void:
 			_run("Sending mail…", func() -> Dictionary:
 				return await AdminManager.send_system_mail(
 					_mail_subject.text.strip_edges(),
 					_mail_body.text,
 					recipients,
-					_why()
+					_why(),
+					rewards,
+					int(_mail_expires.value)
 				)
 			)
 		)
 	)
 	col.add_child(send)
-	_add_tab("mail", col)
+	_add_tab("mail", col, true)
 
 
 # ─── Email ─────────────────────────────────────────────────
@@ -851,7 +1214,7 @@ func _build_email() -> void:
 func _build_schedules() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("SCHEDULES", "List · Pause · Tick", ""))
+	col.add_child(ClientUi.make_section_header("SCHEDULES", "List · Pause · Tick · Audit", "Create remains available via AdminManager for advanced payloads; use Pause/Resume here."))
 	var load_s := _btn("Load Schedules", true)
 	load_s.pressed.connect(func() -> void:
 		_run("Loading schedules…", func() -> Dictionary:
@@ -868,8 +1231,19 @@ func _build_schedules() -> void:
 		)
 	)
 	col.add_child(tick)
+	var audit_s := _btn("Load Schedule Audit")
+	audit_s.pressed.connect(func() -> void:
+		_run("Loading schedule audit…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.schedules_audit(50)
+			_fill_kv_list(_sched_audit_list, res)
+			return res
+		)
+	)
+	col.add_child(audit_s)
 	_sched_list = VBoxContainer.new()
 	col.add_child(_sched_list)
+	_sched_audit_list = VBoxContainer.new()
+	col.add_child(_sched_audit_list)
 	_add_tab("schedules", col)
 
 
@@ -916,7 +1290,7 @@ func _fill_schedule_list(res: Dictionary) -> void:
 func _build_entitlements() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("ENTITLEMENTS", "Grant · Revoke · Restore", ""))
+	col.add_child(ClientUi.make_section_header("ENTITLEMENTS", "Grant · Revoke · Restore · Products", "High-value keys require confirm:true (already sent)."))
 	_account_id = ClientUi.make_field("accountId")
 	_account_id.text = str(AuthManager.user.get("id", ""))
 	col.add_child(_account_id)
@@ -930,7 +1304,7 @@ func _build_entitlements() -> void:
 		if _why().is_empty():
 			_status.text = "Reason required."
 			return
-		_confirm("Grant entitlement?", _ent_key.text, func() -> void:
+		_confirm("Grant entitlement?", "%s × %s to %s" % [_ent_key.text, int(_ent_qty.value), _account_id.text], func() -> void:
 			_run("Granting entitlement…", func() -> Dictionary:
 				return await AdminManager.entitlements_grant({
 					"entitlementKey": _ent_key.text.strip_edges(),
@@ -977,8 +1351,31 @@ func _build_entitlements() -> void:
 		)
 	)
 	col.add_child(search)
+	var products := _btn("List Product Mappings")
+	products.pressed.connect(func() -> void:
+		_run("Loading products…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.entitlements_products()
+			_fill_kv_list(_ent_products, res)
+			return res
+		)
+	)
+	col.add_child(products)
+	var eaudit := _btn("Entitlement Audit")
+	eaudit.pressed.connect(func() -> void:
+		_run("Loading entitlement audit…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.entitlements_audit({
+				"accountId": _account_id.text.strip_edges(),
+				"limit": "50",
+			})
+			_fill_kv_list(_ent_list, res)
+			return res
+		)
+	)
+	col.add_child(eaudit)
 	_ent_list = VBoxContainer.new()
 	col.add_child(_ent_list)
+	_ent_products = VBoxContainer.new()
+	col.add_child(_ent_products)
 	_add_tab("entitlements", col)
 
 
@@ -987,10 +1384,29 @@ func _build_entitlements() -> void:
 func _build_server() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("SERVER", "Wipe unavailable", ""))
+	col.add_child(ClientUi.make_section_header("SERVER / SESSION", "Read-only session · wipe unavailable", ""))
+	_session_lab = RichTextLabel.new()
+	_session_lab.bbcode_enabled = true
+	_session_lab.fit_content = true
+	_session_lab.text = "Loading session…"
+	col.add_child(_session_lab)
+	var refresh := _btn("Refresh Session Info", true)
+	refresh.pressed.connect(func() -> void:
+		_session_lab.text = "[b]Environment[/b] %s\n[b]Role[/b] %s\n[b]Account[/b] %s\n[b]Email[/b] %s\n[b]Node[/b] %s\n[b]Permissions[/b] binary admin role (Node re-validates every request)\n[b]Target[/b] %s / %s" % [
+			BackendEnvironment.get_environment_id() if BackendEnvironment else "?",
+			str(AuthManager.user.get("role", "user")),
+			str(AuthManager.user.get("id", "")),
+			str(AuthManager.user.get("email", "")),
+			str(GameApiClient.base_url) if GameApiClient else "?",
+			_selected_name if not _selected_name.is_empty() else "(none)",
+			_cid() if not _cid().is_empty() else "(none)",
+		]
+		_status.text = "Session info refreshed."
+	)
+	col.add_child(refresh)
 	var lab := Label.new()
 	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lab.text = "Server Refresh wipe is not migrated. The web wipe UI is broken (unconstrained deleteMany is rejected by the API). No Godot wipe control until a safe constrained backend wipe exists."
+	lab.text = "Server Refresh wipe is intentionally not exposed. Unconstrained wipe is rejected by the API. Use Ops repairs/migrations for approved recovery."
 	lab.add_theme_color_override("font_color", ClientUi.WARNING)
 	col.add_child(lab)
 	_add_tab("server", col, true)
@@ -1032,12 +1448,12 @@ func _build_economy() -> void:
 func _build_ops() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.add_child(ClientUi.make_section_header("OPS", "Live operations", "Maintenance, flags, integrity — Node enforces."))
-	var dash_lab := RichTextLabel.new()
-	dash_lab.bbcode_enabled = true
-	dash_lab.fit_content = true
-	dash_lab.text = "Load dashboard for live snapshot."
-	col.add_child(dash_lab)
+	col.add_child(ClientUi.make_section_header("OPS", "Live operations", "Maintenance, flags, integrity, repairs, migrations, arena — Node enforces."))
+	_ops_out = RichTextLabel.new()
+	_ops_out.bbcode_enabled = true
+	_ops_out.fit_content = true
+	_ops_out.text = "Load dashboard for live snapshot."
+	col.add_child(_ops_out)
 	var load_d := _btn("Refresh Ops Dashboard", true)
 	load_d.pressed.connect(func() -> void:
 		_run("Loading ops…", func() -> Dictionary:
@@ -1047,7 +1463,7 @@ func _build_ops() -> void:
 				if typeof(d) != TYPE_DICTIONARY:
 					d = res.data
 				var maint: Dictionary = d.get("maintenance", {}) if typeof(d.get("maintenance", null)) == TYPE_DICTIONARY else {}
-				dash_lab.text = "[b]Accounts[/b] %s · [b]Characters[/b] %s · [b]Presence[/b] %s\n[b]Open reports[/b] %s · [b]Quarantine[/b] %s\n[b]Maintenance[/b] %s — %s" % [
+				_ops_out.text = "[b]Accounts[/b] %s · [b]Characters[/b] %s · [b]Presence[/b] %s\n[b]Open reports[/b] %s · [b]Quarantine[/b] %s\n[b]Maintenance[/b] %s — %s" % [
 					str(d.get("accounts", 0)),
 					str(d.get("characters", 0)),
 					str(d.get("players_online_estimate", 0)),
@@ -1061,17 +1477,38 @@ func _build_ops() -> void:
 	)
 	col.add_child(load_d)
 
-	var maint_on := _btn("Enable Maintenance")
+	var cfg_btn := _btn("Load Runtime Config")
+	cfg_btn.pressed.connect(func() -> void:
+		_run("Loading runtime config…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.get_runtime_config()
+			if res.ok:
+				_ops_out.text = "[b]Runtime config[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+			return res
+		)
+	)
+	col.add_child(cfg_btn)
+
+	var maint_on := _btn("Enable Maintenance", false, true)
 	maint_on.pressed.connect(func() -> void:
-		_run("Enabling maintenance…", func() -> Dictionary:
-			return await AdminManager.set_maintenance_mode(true, "Temporary maintenance", _why())
+		if _why().is_empty():
+			_status.text = "Reason required."
+			return
+		_confirm("Enable maintenance mode?", "Players blocked from writes.\nReason: %s" % _why(), func() -> void:
+			_run("Enabling maintenance…", func() -> Dictionary:
+				return await AdminManager.set_maintenance_mode(true, "Temporary maintenance", _why())
+			)
 		)
 	)
 	col.add_child(maint_on)
 	var maint_off := _btn("Disable Maintenance")
 	maint_off.pressed.connect(func() -> void:
-		_run("Disabling maintenance…", func() -> Dictionary:
-			return await AdminManager.set_maintenance_mode(false, "", _why())
+		if _why().is_empty():
+			_status.text = "Reason required."
+			return
+		_confirm("Disable maintenance mode?", "Reason: %s" % _why(), func() -> void:
+			_run("Disabling maintenance…", func() -> Dictionary:
+				return await AdminManager.set_maintenance_mode(false, "", _why())
+			)
 		)
 	)
 	col.add_child(maint_off)
@@ -1079,42 +1516,152 @@ func _build_ops() -> void:
 	var flag_row := HBoxContainer.new()
 	flag_row.add_theme_constant_override("separation", 6)
 	col.add_child(flag_row)
-	var flag_name := LineEdit.new()
-	flag_name.placeholder_text = "feature_flag"
-	flag_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	flag_row.add_child(flag_name)
+	_flag_name = LineEdit.new()
+	_flag_name.placeholder_text = "feature_flag (e.g. casino_enabled)"
+	_flag_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	flag_row.add_child(_flag_name)
 	var flag_on := _btn("Flag ON")
 	flag_on.pressed.connect(func() -> void:
-		_run("Setting flag…", func() -> Dictionary:
-			return await AdminManager.set_feature_flag(flag_name.text.strip_edges(), true, _why())
+		if _flag_name.text.strip_edges().is_empty() or _why().is_empty():
+			_status.text = "flag name and reason required."
+			return
+		_confirm("Enable feature flag?", "%s\nReason: %s" % [_flag_name.text, _why()], func() -> void:
+			_run("Setting flag…", func() -> Dictionary:
+				return await AdminManager.set_feature_flag(_flag_name.text.strip_edges(), true, _why())
+			)
 		)
 	)
 	flag_row.add_child(flag_on)
 	var flag_off := _btn("Flag OFF")
 	flag_off.pressed.connect(func() -> void:
-		_run("Clearing flag…", func() -> Dictionary:
-			return await AdminManager.set_feature_flag(flag_name.text.strip_edges(), false, _why())
+		if _flag_name.text.strip_edges().is_empty() or _why().is_empty():
+			_status.text = "flag name and reason required."
+			return
+		_confirm("Disable feature flag?", "%s\nReason: %s" % [_flag_name.text, _why()], func() -> void:
+			_run("Clearing flag…", func() -> Dictionary:
+				return await AdminManager.set_feature_flag(_flag_name.text.strip_edges(), false, _why())
+			)
 		)
 	)
 	flag_row.add_child(flag_off)
 
 	var audit_btn := _btn("Integrity Audit (selected character)")
 	audit_btn.pressed.connect(func() -> void:
+		if _cid().is_empty():
+			_status.text = "character_id required."
+			return
 		_run("Running integrity audit…", func() -> Dictionary:
-			return await AdminManager.run_integrity_audit(_char_id.text.strip_edges(), "", false)
+			var res: Dictionary = await AdminManager.run_integrity_audit(_cid(), "", false)
+			if res.ok:
+				_ops_out.text = "[b]Integrity audit[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+			return res
 		)
 	)
 	col.add_child(audit_btn)
 
-	var arena_s := _btn("Arena Suspend 24h")
-	arena_s.pressed.connect(func() -> void:
-		_run("Suspending arena…", func() -> Dictionary:
-			return await AdminManager.arena_suspend(_char_id.text.strip_edges(), 24, _why())
+	col.add_child(ClientUi.make_section_header("", "Data repair", "Dry-run first. Supported: clear_expired_stim_buffs, clear_invalid_equip_refs."))
+	_repair_type = _option(["clear_expired_stim_buffs", "clear_invalid_equip_refs"], 0)
+	col.add_child(_repair_type)
+	var dry := _btn("Dry-Run Repair")
+	dry.pressed.connect(func() -> void:
+		if _cid().is_empty():
+			_status.text = "character_id required."
+			return
+		_run("Dry-run repair…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.apply_data_repair(
+				_repair_type.get_item_text(_repair_type.selected), _cid(), false
+			)
+			if res.ok:
+				_ops_out.text = "[b]Repair dry-run[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+			return res
 		)
 	)
-	col.add_child(arena_s)
+	col.add_child(dry)
+	var apply_r := _btn("Apply Repair", false, true)
+	apply_r.pressed.connect(func() -> void:
+		if not _require_target_and_reason(true):
+			return
+		_confirm("APPLY repair?", "%s on %s\nReason: %s" % [_repair_type.get_item_text(_repair_type.selected), _cid(), _why()], func() -> void:
+			_run("Applying repair…", func() -> Dictionary:
+				var res: Dictionary = await AdminManager.apply_data_repair(
+					_repair_type.get_item_text(_repair_type.selected), _cid(), true
+				)
+				if res.ok:
+					_ops_out.text = "[b]Repair applied[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+				return res
+			)
+		)
+	)
+	col.add_child(apply_r)
 
-	_add_tab("ops", col)
+	col.add_child(ClientUi.make_section_header("", "Migration", "Dry-run default. Apply is critical — staging/prod gates on Node."))
+	_migration_id = ClientUi.make_field("migration_id (e.g. integrity_framework_v1)")
+	col.add_child(_migration_id)
+	var mig_dry := _btn("Dry-Run Migration")
+	mig_dry.pressed.connect(func() -> void:
+		if _migration_id.text.strip_edges().is_empty():
+			_status.text = "migration_id required."
+			return
+		_run("Dry-run migration…", func() -> Dictionary:
+			var res: Dictionary = await AdminManager.run_migration(_migration_id.text.strip_edges(), false)
+			if res.ok:
+				_ops_out.text = "[b]Migration dry-run[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+			return res
+		)
+	)
+	col.add_child(mig_dry)
+	var mig_apply := _btn("Apply Migration", false, true)
+	mig_apply.pressed.connect(func() -> void:
+		if _migration_id.text.strip_edges().is_empty() or _why().is_empty():
+			_status.text = "migration_id and reason required."
+			return
+		_confirm("APPLY MIGRATION?", "%s\nEnv: %s\nReason: %s\nIrreversible without restore." % [
+			_migration_id.text,
+			BackendEnvironment.get_environment_id() if BackendEnvironment else "?",
+			_why(),
+		], func() -> void:
+			_run("Applying migration…", func() -> Dictionary:
+				var res: Dictionary = await AdminManager.run_migration(_migration_id.text.strip_edges(), true)
+				if res.ok:
+					_ops_out.text = "[b]Migration applied[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+				return res
+			)
+		)
+	)
+	col.add_child(mig_apply)
+
+	col.add_child(ClientUi.make_section_header("", "Arena moderation", "Uses Players target + reason."))
+	_arena_hours = _spin("Suspend hours ", 1, 720, 24)
+	col.add_child(_arena_hours)
+	var arena_row := HBoxContainer.new()
+	arena_row.add_theme_constant_override("separation", 6)
+	col.add_child(arena_row)
+	var arena_s := _btn("Arena Suspend")
+	arena_s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	arena_s.pressed.connect(func() -> void:
+		_confirm_mod("Arena suspend?", func() -> Dictionary:
+			return await AdminManager.arena_suspend(_cid(), int(_arena_hours.value), _why())
+		)
+	)
+	arena_row.add_child(arena_s)
+	var arena_b := _btn("Arena Ban", false, true)
+	arena_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	arena_b.pressed.connect(func() -> void:
+		_confirm_mod("Arena ban?", func() -> Dictionary:
+			return await AdminManager.arena_ban(_cid(), _why())
+		)
+	)
+	arena_row.add_child(arena_b)
+	var arena_u := _btn("Arena Unban")
+	arena_u.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	arena_u.pressed.connect(func() -> void:
+		_confirm_mod("Arena unban?", func() -> Dictionary:
+			return await AdminManager.arena_unban(_cid(), _why())
+		)
+	)
+	arena_row.add_child(arena_u)
+
+	_add_tab("ops", col, true)
 
 
 func _fill_kv_list(host: VBoxContainer, res: Dictionary) -> void:

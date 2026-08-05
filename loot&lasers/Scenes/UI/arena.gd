@@ -109,12 +109,7 @@ func _build() -> void:
 	eye.add_theme_color_override("font_color", Color(ClientUi.CYAN_SOFT, 0.85))
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
-	var title := Label.new()
-	title.text = "⚔  Battle Arena"
-	title.add_theme_font_size_override("font_size", 29)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	head_l.add_child(title)
+	head_l.add_child(UiIcon.make_title_row("swords", "Battle Arena", ClientUi.TEXT, 29, 28.0))
 
 	var head_r := VBoxContainer.new()
 	head_r.add_theme_constant_override("separation", 0)
@@ -724,8 +719,12 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 		fight.text = "SKIP & FIGHT · %s 💎" % ArenaRules.SKIP_COST
 		_apply_skip_fight_button(fight)
 	else:
-		fight.text = "⚔  CHALLENGE"
+		fight.text = "CHALLENGE"
+		fight.icon = UiIcon.texture("swords")
+		fight.expand_icon = true
+		fight.add_theme_constant_override("icon_max_width", 18)
 		ClientUi.apply_primary_button(fight)
+		UiIcon.apply_button_icon_colors(fight, Color.WHITE)
 	fight.pressed.connect(func() -> void: _on_challenge(opp))
 	col.add_child(fight)
 	return panel

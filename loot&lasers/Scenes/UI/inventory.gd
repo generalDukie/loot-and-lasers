@@ -203,8 +203,7 @@ func _refresh() -> void:
 
 	if not bag.is_empty():
 		_list.add_child(_section("BAG (GEAR) — hover for stats · Equip / drag onto a slot"))
-		for it in bag:
-			_list.add_child(_make_row(it, false))
+		_list.add_child(_make_bag_grid(bag))
 	else:
 		var empty_hint := Label.new()
 		empty_hint.text = "Bag empty — drop equipped gear here to unequip"
@@ -215,12 +214,10 @@ func _refresh() -> void:
 		_list.add_child(empty_hint)
 	if not stims.is_empty():
 		_list.add_child(_section("STIMS"))
-		for it in stims:
-			_list.add_child(_make_row(it, false))
+		_list.add_child(_make_bag_grid(stims))
 	if not other.is_empty():
 		_list.add_child(_section("MATERIALS / OTHER"))
-		for it in other:
-			_list.add_child(_make_row(it, false))
+		_list.add_child(_make_bag_grid(other))
 
 	if _items.is_empty() and pending.is_empty():
 		_status.text = "Bag empty — run missions or open the shop."
@@ -353,6 +350,180 @@ func _ignore_mouse_tree(node: Node) -> void:
 		_ignore_mouse_tree(child)
 
 
+func _make_bag_grid(items: Array) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	for it in items:
+		if typeof(it) == TYPE_DICTIONARY:
+			grid.add_child(_make_bag_pane(it))
+	return grid
+
+
+## Compact backpack tile: name in the top ~25%, gear icon centered below.
+func _make_bag_pane(item: Dictionary) -> PanelContainer:
+	const PANE_W := 168.0
+	const PANE_H := 176.0
+	const NAME_BAND_H := PANE_H * 0.25
+
+	var is_new := str(item.get("id", "")) in GameManager.recent_loot_ids
+	var selected := str(item.get("id", "")) == _selected_id
+	var rarity_tint := ClientUi.rarity_color(str(item.get("rarity", "")))
+	var border := Color(0.35, 0.9, 0.55, 0.95) if is_new else Color(rarity_tint, 0.86)
+	if selected:
+		border = Color(1.0, 0.85, 0.35, 0.95)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(PANE_W, PANE_H)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := ClientUi.painted_panel_style(
+		Color(0.09, 0.11, 0.16, 0.98),
+		border,
+		10,
+		2 if selected or is_new else 1
+	)
+	style.content_margin_left = 6
+	style.content_margin_right = 6
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", style)
+	ClientUi.apply_interaction_motion(panel, 1.012)
+
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", 2)
+	panel.add_child(col)
+
+	# Name band — top ~25% of the pane; wraps long names without eating the icon area.
+	var name_band := Control.new()
+	name_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_band.custom_minimum_size = Vector2(0, NAME_BAND_H)
+	name_band.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(name_band)
+
+	var title := Label.new()
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.max_lines_visible = 3
+	title.clip_text = true
+	title.text = ("%s%s" % ["NEW · " if is_new else "", str(item.get("name", "Item"))])
+	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_color_override("font_color", rarity_tint.lightened(0.2))
+	title.add_theme_constant_override("line_spacing", -2)
+	ClientUi.apply_display_font(title)
+	name_band.add_child(title)
+
+	# Icon area — expand and truly center the glyph in remaining space.
+	var icon_wrap := CenterContainer.new()
+	icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	icon_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(icon_wrap)
+	icon_wrap.add_child(GearIcon.make(item, 56.0))
+	if InventoryRules.is_equippable(str(item.get("type", ""))):
+		var arrow: Control = _make_upgrade_arrow(item)
+		if arrow:
+			# Overlay in the icon band so it doesn't shove the glyph off-center.
+			arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			panel.add_child(arrow)
+			arrow.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+			arrow.offset_left = 8
+			arrow.offset_top = NAME_BAND_H + 8
+
+	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
+	var meta := Label.new()
+	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	meta.clip_text = true
+	if InventoryRules.is_consumable(item):
+		var cons: Dictionary = item.get("consumable", {}) if typeof(item.get("consumable", {})) == TYPE_DICTIONARY else {}
+		meta.text = "stim · +%s%%" % str(int(round(float(cons.get("mult", 0)) * 100.0)))
+	else:
+		meta.text = "%s · P%s" % [
+			str(item.get("rarity", "?")),
+			str(InventoryRules.class_power_rating(item, class_key)),
+		]
+	meta.add_theme_font_size_override("font_size", 12)
+	meta.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
+	ClientUi.apply_body_font(meta)
+	col.add_child(meta)
+
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	actions.add_theme_constant_override("separation", 4)
+	col.add_child(actions)
+
+	var item_id := str(item.get("id", ""))
+	var item_type := str(item.get("type", ""))
+	var locked := bool(item.get("locked", false))
+	var can_drag_equip := (
+		InventoryRules.is_equippable(item_type) and not item_id.is_empty()
+	)
+
+	if can_drag_equip:
+		panel.tooltip_text = "Double-click to equip · drag onto a loadout slot"
+		var captured_id := item_id
+		panel.mouse_entered.connect(func() -> void:
+			_selected_id = captured_id
+			_update_compare()
+		)
+		panel.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.double_click \
+					and ev.button_index == MOUSE_BUTTON_LEFT:
+				_on_equip(captured_id)
+		)
+
+	panel.set_drag_forwarding(
+		func(_at: Vector2) -> Variant:
+			return _make_item_drag(panel, item, "bag") if can_drag_equip else null,
+		func(_at: Vector2, data: Variant) -> bool:
+			return _can_drop_on_bag(data),
+		func(_at: Vector2, data: Variant) -> void:
+			_drop_on_bag(data)
+	)
+
+	if InventoryRules.is_consumable(item) and not item_id.is_empty():
+		var use_btn := Button.new()
+		use_btn.text = "Use"
+		use_btn.custom_minimum_size.y = 28
+		ClientUi.apply_primary_button(use_btn)
+		use_btn.pressed.connect(func() -> void: _on_use(item_id, str(item.get("name", "Stim"))))
+		actions.add_child(use_btn)
+	elif InventoryRules.is_equippable(item_type) and not item_id.is_empty():
+		var action := Button.new()
+		var swap := InventoryRules.find_equipped_of_type(_items, item_type)
+		action.text = "Swap" if not swap.is_empty() else "Equip"
+		action.custom_minimum_size.y = 28
+		ClientUi.apply_primary_button(action)
+		action.pressed.connect(func() -> void: _on_equip(item_id))
+		actions.add_child(action)
+
+	if not item_id.is_empty():
+		var lock_btn := Button.new()
+		lock_btn.text = "🔒" if locked else "🔓"
+		lock_btn.tooltip_text = "Unlock" if locked else "Lock"
+		lock_btn.custom_minimum_size = Vector2(28, 28)
+		ClientUi.apply_ghost_button(lock_btn)
+		lock_btn.pressed.connect(func() -> void: _on_toggle_lock(item_id, not locked))
+		actions.add_child(lock_btn)
+
+	if not locked and not item_id.is_empty():
+		var diss := Button.new()
+		diss.text = "✦"
+		diss.tooltip_text = "Dissolve"
+		diss.custom_minimum_size = Vector2(28, 28)
+		ClientUi.apply_ghost_button(diss)
+		diss.pressed.connect(func() -> void: _on_dissolve(item_id))
+		actions.add_child(diss)
+
+	return panel
+
+
 func _make_pending_row(pending: Dictionary) -> PanelContainer:
 	var item: Dictionary = {}
 	var raw: Variant = pending.get("item", {})
@@ -402,139 +573,6 @@ func _make_pending_row(pending: Dictionary) -> PanelContainer:
 	ClientUi.apply_ghost_button(diss)
 	diss.pressed.connect(func() -> void: _on_dissolve_pending(pid))
 	row.add_child(diss)
-	return panel
-
-
-func _make_row(item: Dictionary, is_equipped: bool) -> PanelContainer:
-	var is_new := str(item.get("id", "")) in GameManager.recent_loot_ids
-	var selected := str(item.get("id", "")) == _selected_id
-	var rarity_tint := ClientUi.rarity_color(str(item.get("rarity", "")))
-	var border := Color(0.35, 0.9, 0.55, 0.95) if is_new else Color(rarity_tint, 0.86)
-	if selected:
-		border = Color(1.0, 0.85, 0.35, 0.95)
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override(
-		"panel",
-		ClientUi.painted_panel_style(
-			Color(0.09, 0.11, 0.16, 0.98),
-			border,
-			10,
-			2 if selected or is_new else 1
-		)
-	)
-	ClientUi.apply_interaction_motion(panel, 1.006)
-	var row := HBoxContainer.new()
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", 10)
-	panel.add_child(row)
-	if InventoryRules.is_equippable(str(item.get("type", ""))) and not is_equipped:
-		var arrow: Control = _make_upgrade_arrow(item)
-		if arrow:
-			row.add_child(arrow)
-	row.add_child(GearIcon.make(item, 44.0))
-	var col := VBoxContainer.new()
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(col)
-	var title := Label.new()
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.text = ("%s%s" % ["NEW · " if is_new else "", str(item.get("name", "Item"))])
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", rarity_tint.lightened(0.2))
-	col.add_child(title)
-
-	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
-	var meta := Label.new()
-	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if InventoryRules.is_consumable(item):
-		var cons: Dictionary = item.get("consumable", {}) if typeof(item.get("consumable", {})) == TYPE_DICTIONARY else {}
-		meta.text = "stim · %s +%s%% · %sh" % [
-			str(cons.get("stat", "?")),
-			str(int(round(float(cons.get("mult", 0)) * 100.0))),
-			str(cons.get("duration_hours", "?")),
-		]
-	else:
-		meta.text = "%s · %s · P%s · sell ~%s" % [
-			str(item.get("type", "?")), str(item.get("rarity", "?")),
-			str(InventoryRules.class_power_rating(item, class_key)),
-			str(InventoryRules.estimate_sell_value(item)),
-		]
-	meta.add_theme_font_size_override("font_size", 16)
-	meta.add_theme_color_override("font_color", Color(0.65, 0.75, 0.85))
-	col.add_child(meta)
-
-	var item_id := str(item.get("id", ""))
-	var item_type := str(item.get("type", ""))
-	var locked := bool(item.get("locked", false))
-	var can_drag_equip := (
-		InventoryRules.is_equippable(item_type) and not item_id.is_empty() and not is_equipped
-	)
-	if can_drag_equip:
-		panel.tooltip_text = ""
-		var captured_id := item_id
-		panel.mouse_entered.connect(func() -> void:
-			_selected_id = captured_id
-			_update_compare()
-		)
-		panel.gui_input.connect(func(ev: InputEvent) -> void:
-			if ev is InputEventMouseButton and ev.pressed and ev.double_click \
-					and ev.button_index == MOUSE_BUTTON_LEFT:
-				_on_equip(captured_id)
-		)
-
-	# Bag rows accept equipped gear drops (unequip) and start drags for bag gear.
-	panel.set_drag_forwarding(
-		func(_at: Vector2) -> Variant:
-			return _make_item_drag(panel, item, "bag") if can_drag_equip else null,
-		func(_at: Vector2, data: Variant) -> bool:
-			return _can_drop_on_bag(data),
-		func(_at: Vector2, data: Variant) -> void:
-			_drop_on_bag(data)
-	)
-
-	if InventoryRules.is_equippable(item_type) and not item_id.is_empty() and not is_equipped:
-		var sel := Button.new()
-		sel.text = "Compare"
-		ClientUi.apply_ghost_button(sel)
-		sel.pressed.connect(func() -> void:
-			_selected_id = item_id
-			_update_compare()
-			_refresh()
-		)
-		row.add_child(sel)
-
-	if InventoryRules.is_consumable(item) and not item_id.is_empty():
-		var use_btn := Button.new()
-		use_btn.text = "Use"
-		ClientUi.apply_primary_button(use_btn)
-		use_btn.pressed.connect(func() -> void: _on_use(item_id, str(item.get("name", "Stim"))))
-		row.add_child(use_btn)
-	elif InventoryRules.is_equippable(item_type) and not item_id.is_empty():
-		var action := Button.new()
-		if is_equipped:
-			action.text = "Unequip"
-			ClientUi.apply_ghost_button(action)
-			action.pressed.connect(func() -> void: _on_unequip(item_id))
-		else:
-			var swap := InventoryRules.find_equipped_of_type(_items, item_type)
-			action.text = "Swap" if not swap.is_empty() else "Equip"
-			ClientUi.apply_primary_button(action)
-			action.pressed.connect(func() -> void: _on_equip(item_id))
-		row.add_child(action)
-
-	if not item_id.is_empty():
-		var lock_btn := Button.new()
-		lock_btn.text = "Unlock" if locked else "Lock"
-		ClientUi.apply_ghost_button(lock_btn)
-		lock_btn.pressed.connect(func() -> void: _on_toggle_lock(item_id, not locked))
-		row.add_child(lock_btn)
-
-	if not locked and not item_id.is_empty():
-		var diss := Button.new()
-		diss.text = "Dissolve"
-		ClientUi.apply_ghost_button(diss)
-		diss.pressed.connect(func() -> void: _on_dissolve(item_id))
-		row.add_child(diss)
 	return panel
 
 

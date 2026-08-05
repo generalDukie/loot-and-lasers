@@ -49,6 +49,31 @@ export default function CharacterSelectPage() {
     return () => { active = false; };
   }, [navigate]);
 
+  useEffect(() => {
+    if (!chars?.length || switching || purchasing) return undefined;
+    const onKey = (e) => {
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "Enter") return;
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleEnter();
+        return;
+      }
+      e.preventDefault();
+      const ids = chars.map((c) => c.id).filter(Boolean);
+      if (!ids.length) return;
+      const idx = Math.max(0, ids.indexOf(selectedId));
+      const next =
+        e.key === "ArrowUp"
+          ? Math.max(0, idx - 1)
+          : Math.min(ids.length - 1, idx + 1);
+      setSelectedId(ids[next]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chars, selectedId, switching, purchasing]);
+
   const purchased = user?.purchased_slots || 0;
   const totalSlots = Math.min(MAX_SLOTS, 1 + purchased);
   const canCreate = (chars?.length || 0) < totalSlots;

@@ -27,6 +27,50 @@ func _ready() -> void:
 	await _refresh()
 
 
+func _input(event: InputEvent) -> void:
+	if _busy or _switching or not _main_host.visible or _characters.is_empty():
+		return
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var key := event as InputEventKey
+	match key.keycode:
+		KEY_UP:
+			_move_selection(-1)
+			get_viewport().set_input_as_handled()
+		KEY_DOWN:
+			_move_selection(1)
+			get_viewport().set_input_as_handled()
+		KEY_ENTER, KEY_KP_ENTER:
+			# Leave Enter alone when focus is on create / unlock CTAs.
+			var focus := get_viewport().gui_get_focus_owner()
+			if focus == _create_btn or focus == _unlock_btn:
+				return
+			_enter_selected()
+			get_viewport().set_input_as_handled()
+
+
+func _move_selection(delta: int) -> void:
+	if _characters.is_empty():
+		return
+	var ids: Array[String] = []
+	for c in _characters:
+		if typeof(c) == TYPE_DICTIONARY:
+			var cid := str(c.get("id", ""))
+			if not cid.is_empty():
+				ids.append(cid)
+	if ids.is_empty():
+		return
+	var idx := ids.find(_selected_id)
+	if idx < 0:
+		idx = 0
+	else:
+		idx = clampi(idx + delta, 0, ids.size() - 1)
+	_select_card(ids[idx])
+	var card: Variant = _card_buttons.get(ids[idx], null)
+	if card is Control:
+		(card as Control).grab_focus()
+
+
 func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_update_slot_actions()
 

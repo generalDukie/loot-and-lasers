@@ -1087,13 +1087,13 @@ func _build_notification_center() -> void:
 	_notif_btn.custom_minimum_size = Vector2(64, 64)
 	_notif_btn.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_notif_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	_notif_btn.icon = UiIcon.texture("bell")
-	_notif_btn.expand_icon = true
-	_notif_btn.add_theme_constant_override("icon_max_width", 28)
+	# Prefer a centered child icon over Button.icon — Godot FABs left-bias expand_icon.
+	_notif_btn.icon = null
 	_style_notif_fab(false)
 	_notif_btn.pressed.connect(toggle_notifications)
 	ClientUi.apply_interaction_motion(_notif_btn, 1.06)
 	fab_wrap.add_child(_notif_btn)
+	_set_notif_fab_glyph("bell")
 
 	var badge_chip := PanelContainer.new()
 	badge_chip.visible = false
@@ -1149,13 +1149,31 @@ func _style_notif_fab(open: bool) -> void:
 	_notif_btn.add_theme_stylebox_override("hover", hover)
 	_notif_btn.add_theme_stylebox_override("pressed", hover)
 	_notif_btn.add_theme_stylebox_override("focus", style)
-	UiIcon.apply_button_icon_colors(_notif_btn, ClientUi.CYAN)
+
+
+func _set_notif_fab_glyph(icon_id: String) -> void:
+	if _notif_btn == null or not is_instance_valid(_notif_btn):
+		return
+	_notif_btn.icon = null
+	_notif_btn.text = ""
+	var host := _notif_btn.get_node_or_null("FabIconHost") as CenterContainer
+	if host == null:
+		host = CenterContainer.new()
+		host.name = "FabIconHost"
+		host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		_notif_btn.add_child(host)
+	for child in host.get_children():
+		child.queue_free()
+	var glyph := UiIcon.make(icon_id, ClientUi.CYAN, 28.0)
+	glyph.name = "FabIcon"
+	host.add_child(glyph)
 
 
 func _sync_notif_fab() -> void:
 	if _notif_btn == null or not is_instance_valid(_notif_btn):
 		return
-	UiIcon.set_button_icon(_notif_btn, "x" if _notif_open else "bell", ClientUi.CYAN, 28.0)
+	_set_notif_fab_glyph("x" if _notif_open else "bell")
 	_notif_btn.tooltip_text = "Minimize notifications" if _notif_open else "Open notifications"
 	_style_notif_fab(_notif_open)
 	_update_notif_badge()
@@ -1606,20 +1624,37 @@ func _refresh_chrome() -> void:
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		portrait_btn.add_child(portrait)
+		# Full-rect host so the class glyph is truly centered in the portrait button.
+		var class_host := CenterContainer.new()
+		class_host.name = "ConsoleClassIcon"
+		class_host.visible = false
+		class_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		class_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		portrait_btn.add_child(class_host)
 		var class_icon := UiIcon.make("swords", ClientUi.CYAN_SOFT, 72.0)
-		class_icon.name = "ConsoleClassIcon"
-		class_icon.visible = false
-		class_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		class_icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-		portrait_btn.add_child(class_icon)
+		class_icon.name = "ClassGlyph"
+		class_host.add_child(class_icon)
 		portrait_btn.pressed.connect(func() -> void: GameManager.go_stats())
 		_portrait_host.add_child(portrait_btn)
 		_console_portrait_btn = portrait_btn
-		_console_class_icon = class_icon
+		_console_class_icon = class_host
 	else:
 		var existing := _portrait_host.get_child(0)
 		_console_portrait_btn = existing as Button
 		_console_class_icon = existing.get_node_or_null("ConsoleClassIcon")
+		# Migrate older TextureRect-only placeholder into a centered host.
+		if _console_class_icon is TextureRect:
+			var old_icon := _console_class_icon as TextureRect
+			var migrate_host := CenterContainer.new()
+			migrate_host.name = "ConsoleClassIcon"
+			migrate_host.visible = old_icon.visible
+			migrate_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			migrate_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			existing.add_child(migrate_host)
+			old_icon.name = "ClassGlyph"
+			old_icon.get_parent().remove_child(old_icon)
+			migrate_host.add_child(old_icon)
+			_console_class_icon = migrate_host
 		for n in existing.find_children("*", "Control", true, false):
 			if n.has_method("set_character") and str(n.name) == "ConsolePortrait":
 				n.call("set_character", character)
@@ -1634,13 +1669,16 @@ func _apply_console_portrait_mode() -> void:
 	if btn == null:
 		return
 	var portrait := btn.get_node_or_null("ConsolePortrait") as Control
-	var class_lab := btn.get_node_or_null("ConsoleClassIcon") as Control
+	var class_host := btn.get_node_or_null("ConsoleClassIcon") as Control
 	var ch: Dictionary = GameManager.active_character
 	var class_key := str(ch.get("class", "Vanguard"))
-	if class_lab != null:
-		class_lab.visible = _hero_page_open
-		if class_lab is TextureRect:
-			UiIcon.set_tint(class_lab as TextureRect, ClientUi.CYAN_SOFT)
+	if class_host != null:
+		class_host.visible = _hero_page_open
+		var glyph := class_host.get_node_or_null("ClassGlyph") as TextureRect
+		if glyph == null and class_host is TextureRect:
+			glyph = class_host as TextureRect
+		if glyph != null:
+			UiIcon.set_tint(glyph, ClientUi.CYAN_SOFT)
 	if portrait != null:
 		portrait.visible = not _hero_page_open
 		if portrait.has_method("set_active"):

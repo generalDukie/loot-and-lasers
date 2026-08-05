@@ -1494,7 +1494,7 @@ func _stop_dice_roll_loop() -> void:
 	for face in [_dice_face_a, _dice_face_b]:
 		if not is_instance_valid(face):
 			continue
-		var settle := face.create_tween()
+		var settle: Tween = face.create_tween()
 		settle.set_parallel(true)
 		settle.tween_property(face, "rotation_degrees", 0.0, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		settle.tween_property(face, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)

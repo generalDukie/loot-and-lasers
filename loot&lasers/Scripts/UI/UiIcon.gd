@@ -162,11 +162,7 @@ static func make_icon_button(
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.custom_minimum_size = Vector2(maxi(40, int(size + 16.0)), maxi(36, int(size + 12.0)))
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	btn.icon = texture(icon_id)
-	btn.expand_icon = true
-	btn.add_theme_constant_override("icon_max_width", int(size))
-	apply_button_icon_colors(btn, tint)
-	btn.set_meta("ui_icon_id", resolve_id(icon_id))
+	set_button_icon(btn, icon_id, tint, size)
 	return btn
 
 
@@ -176,7 +172,20 @@ static func set_button_icon(btn: Button, icon_id: String, tint: Color, size: flo
 	btn.text = ""
 	btn.icon = texture(icon_id)
 	btn.expand_icon = true
+	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	btn.add_theme_constant_override("icon_max_width", int(size))
+	# Zero content margins so expand_icon centers in the full hit area (FAB / chrome).
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var sb := btn.get_theme_stylebox(state)
+		if sb is StyleBoxFlat:
+			var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+			flat.content_margin_left = 0
+			flat.content_margin_right = 0
+			flat.content_margin_top = 0
+			flat.content_margin_bottom = 0
+			btn.add_theme_stylebox_override(state, flat)
 	apply_button_icon_colors(btn, tint)
 	btn.set_meta("ui_icon_id", resolve_id(icon_id))
 

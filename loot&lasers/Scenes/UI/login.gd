@@ -143,6 +143,7 @@ func _build() -> void:
 	form.add_child(_field_label("Email"))
 	_email = ClientUi.make_field("you@example.com")
 	_email.custom_minimum_size.y = 59
+	_email.text_submitted.connect(_on_field_submitted)
 	form.add_child(_email)
 
 	# Password row label + Forgot
@@ -162,6 +163,7 @@ func _build() -> void:
 
 	_password = ClientUi.make_field("••••••••", true)
 	_password.custom_minimum_size.y = 59
+	_password.text_submitted.connect(_on_field_submitted)
 	form.add_child(_password)
 
 	# Confirm (register)
@@ -172,6 +174,7 @@ func _build() -> void:
 	_confirm_wrap.add_child(_field_label("Confirm Password"))
 	_confirm = ClientUi.make_field("••••••••", true)
 	_confirm.custom_minimum_size.y = 59
+	_confirm.text_submitted.connect(_on_field_submitted)
 	_confirm_wrap.add_child(_confirm)
 
 	# OTP
@@ -182,6 +185,7 @@ func _build() -> void:
 	_otp = ClientUi.make_field("6-digit code")
 	_otp.custom_minimum_size.y = 59
 	_otp.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_otp.text_submitted.connect(_on_field_submitted)
 	_otp_wrap.add_child(_otp)
 	_resend_btn = Button.new()
 	_resend_btn.text = "Didn't receive the code?  Resend"
@@ -255,6 +259,12 @@ func _build() -> void:
 	root.add_child(_footer)
 
 	_set_mode("login")
+	_email.grab_focus()
+
+
+func _on_field_submitted(_text: String = "") -> void:
+	# Enter in any auth field submits the active mode (login / register / forgot / OTP).
+	_on_primary()
 
 
 func _field_label(text: String) -> Label:

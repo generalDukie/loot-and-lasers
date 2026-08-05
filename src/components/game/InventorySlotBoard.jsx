@@ -215,7 +215,7 @@ export default function InventorySlotBoard({
                             setHoveredId(null);
                           }}
                           title={comparable ? "Double-click to equip · drag to rearrange" : "Hover for details · drag to rearrange"}
-                          className={`relative aspect-square rounded-md border flex items-center justify-center transition-all select-none ${
+                          className={`relative aspect-square rounded-md border flex flex-col transition-all select-none overflow-hidden ${
                             isPinned ? "ring-1 ring-primary/60" : ""
                           } ${
                             dragSnapshot.isDragging
@@ -255,18 +255,34 @@ export default function InventorySlotBoard({
                                 : <ArrowDown className="w-4 h-4 stroke-[3]" />}
                             </motion.span>
                           )}
-                          <GearVisual
-                            type={item.type}
-                            rarity={item.rarity}
-                            name={item.name}
-                            baseName={item.base_name}
-                            level_requirement={item.level_requirement}
-                            size={52}
-                            static
-                          />
+                          {/* Name band — top ~25% of the tile */}
+                          <div className="relative z-10 h-[25%] min-h-0 w-full px-1 pt-1 flex items-start justify-center pointer-events-none">
+                            <p
+                              className="w-full text-center font-display font-bold leading-[1.1] text-[11px] sm:text-[12px] line-clamp-3 break-words"
+                              style={{
+                                color,
+                                textShadow: "0 1px 2px hsl(222 22% 4% / 0.95)",
+                              }}
+                              title={item.name}
+                            >
+                              {item.name}
+                            </p>
+                          </div>
+                          {/* Icon — optically centered in the remaining pane */}
+                          <div className="relative z-0 flex-1 min-h-0 w-full flex items-center justify-center pb-3">
+                            <GearVisual
+                              type={item.type}
+                              rarity={item.rarity}
+                              name={item.name}
+                              baseName={item.base_name}
+                              level_requirement={item.level_requirement}
+                              size={44}
+                              static
+                            />
+                          </div>
                           {/* Quality always visible */}
                           <span
-                            className="absolute bottom-0.5 right-0.5 text-[7px] font-display font-black leading-none px-0.5 rounded-sm"
+                            className="absolute bottom-0.5 right-0.5 z-10 text-[7px] font-display font-black leading-none px-0.5 rounded-sm"
                             style={{
                               color,
                               background: "hsl(222 22% 6% / 0.9)",
@@ -276,7 +292,7 @@ export default function InventorySlotBoard({
                             {RARITY_LETTER[item.rarity] || "?"}
                           </span>
                           {item.locked && (
-                            <span className="absolute top-0.5 right-0.5 text-[7px] text-amber-400">🔒</span>
+                            <span className="absolute top-[26%] right-0.5 z-10 text-[7px] text-amber-400">🔒</span>
                           )}
                         </div>
                       );

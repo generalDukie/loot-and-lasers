@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
+import { bustMyCharacterCache } from "@/lib/socialEngine";
 
 // One-time setup modal: prompts the user for a permanent legacy (sur)name
 // that identifies their account across all characters. Once set it cannot
@@ -34,6 +35,8 @@ export default function LegacyNameModal({ open, onClose }) {
     setSaving(true);
     try {
       await api.auth.updateMe({ legacy_name: trimmed });
+      // Node stamps every owned Character on lock-in — drop the stale roster cache.
+      bustMyCharacterCache();
       await checkUserAuth();
       toast({ title: "Legacy name set", description: `${trimmed} is now your permanent legacy.` });
       onClose?.();

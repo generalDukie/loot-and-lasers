@@ -57,6 +57,9 @@ var _launch_preview_host: CenterContainer
 var _launch_name: Label
 var _launch_meta: Label
 var _launch_stats_host: VBoxContainer
+var _legacy_block: PanelContainer
+var _legacy_field: LineEdit
+var _legacy_meta: Label
 var _arrow_value_labs: Dictionary = {} # key -> Label
 
 
@@ -649,7 +652,111 @@ func _build_launch_page() -> Control:
 	_launch_stats_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_launch_stats_host.add_theme_constant_override("separation", 6)
 	split.add_child(_launch_stats_host)
+
+	page.add_child(_build_legacy_block())
 	return page
+
+
+## Web CharacterCreation Launch step — permanent surname on the 2nd+ operative.
+func _build_legacy_block() -> PanelContainer:
+	_legacy_block = PanelContainer.new()
+	_legacy_block.visible = false
+	_legacy_block.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(ClientUi.VIOLET, 0.07), Color(ClientUi.VIOLET, 0.35), 12, 1)
+	)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	_legacy_block.add_child(col)
+
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	col.add_child(head)
+	head.add_child(UiIcon.make("lock", ClientUi.VIOLET, 20.0))
+	var title := Label.new()
+	title.text = "Set Your Legacy Name"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_font_size_override("font_size", 17)
+	ClientUi.apply_display_font(title)
+	title.add_theme_color_override("font_color", ClientUi.TEXT)
+	head.add_child(title)
+	var once := Label.new()
+	once.text = "One-time · permanent"
+	once.add_theme_font_size_override("font_size", 13)
+	once.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(once)
+	head.add_child(once)
+
+	var body := Label.new()
+	body.text = "Your second operative locks in the account's surname — a permanent last name shared by every character you create, so other players can recognize them as the same person. It can never be changed."
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_font_size_override("font_size", 14)
+	body.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(body)
+	col.add_child(body)
+
+	_legacy_field = ClientUi.make_field("e.g. Voss, Nakamura, Khel…")
+	_legacy_field.max_length = 20
+	_legacy_field.text_changed.connect(_on_legacy_changed)
+	col.add_child(_legacy_field)
+
+	_legacy_meta = Label.new()
+	_legacy_meta.text = "0/20 · Displayed as: —"
+	_legacy_meta.add_theme_font_size_override("font_size", 13)
+	_legacy_meta.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_legacy_meta)
+	col.add_child(_legacy_meta)
+	return _legacy_block
+
+
+func _on_legacy_changed(text: String) -> void:
+	var cleaned := ""
+	for ch in text:
+		if ch >= "0" and ch <= "9":
+			continue
+		cleaned += ch
+	if cleaned != text:
+		var caret := _legacy_field.caret_column
+		_legacy_field.text = cleaned
+		_legacy_field.caret_column = mini(caret, cleaned.length())
+	_refresh_legacy_meta()
+	_refresh_nav_gates()
+
+
+func _refresh_legacy_meta() -> void:
+	if _legacy_meta == null:
+		return
+	var trimmed := _legacy_field.text.strip_edges()
+	var first := _name.text.strip_edges() if _name else ""
+	if first.is_empty():
+		first = "Operative"
+	_legacy_meta.text = "%s/20 · Displayed as: %s" % [
+		_legacy_field.text.length(),
+		("%s %s" % [first, trimmed]) if not trimmed.is_empty() else "—",
+	]
+
+
+func _legacy_required() -> bool:
+	return LegacyName.needs_legacy_name_for_create(_existing_char_count)
+
+
+func _has_digits(text: String) -> bool:
+	for ch in text:
+		if ch >= "0" and ch <= "9":
+			return true
+	return false
+
+
+func _legacy_ready() -> bool:
+	if not _legacy_required():
+		return true
+	if _legacy_field == null:
+		return false
+	var trimmed := _legacy_field.text.strip_edges()
+	if trimmed.length() < 2 or trimmed.length() > 20:
+		return false
+	return not _has_digits(trimmed)
 
 
 # ─── Arrow / chip helpers ────────────────────────────────────────────────────
@@ -1209,10 +1316,30 @@ func _refresh_launch() -> void:
 	for c in _launch_preview_host.get_children():
 		c.queue_free()
 	_launch_preview_host.add_child(AvatarRenderer.make_portrait(_fake_character(), 132.0))
+	if _legacy_block != null:
+		_legacy_block.visible = _legacy_required()
+		_refresh_legacy_meta()
 	var nm := _name.text.strip_edges() if _name else ""
-	_launch_name.text = nm if not nm.is_empty() else "Unnamed Operative"
+	var shown := LegacyName.full_name({
+		"name": nm,
+		"legacy_name": _pending_legacy_name(),
+		"legacy_display": LegacyName.normalize_display(
+			AuthManager.user.get("legacy_display", "surname") if AuthManager != null else "surname"
+		),
+	})
+	_launch_name.text = shown if not shown.is_empty() else "Unnamed Operative"
 	_launch_meta.text = "%s · %s" % [_race_name, _class_name]
 	_fill_stats_chart(_launch_stats_host, false)
+
+
+## Account surname, or the one being locked in on this Launch step.
+func _pending_legacy_name() -> String:
+	var last := ""
+	if AuthManager != null:
+		last = LegacyName.clean_text(AuthManager.user.get("legacy_name", ""))
+	if last.is_empty() and _legacy_field != null:
+		last = _legacy_field.text.strip_edges()
+	return last
 
 
 func _randomize_looks() -> void:
@@ -1310,8 +1437,10 @@ func _refresh_nav_gates() -> void:
 	if _next_btn != null:
 		_next_btn.disabled = not _can_advance_from(_step)
 	if _create_btn != null:
-		_create_btn.disabled = _busy or _name.text.strip_edges().length() < 2
+		_create_btn.disabled = _busy or _name.text.strip_edges().length() < 2 or not _legacy_ready()
 	_next_hint.text = ""
+	if _step == 3 and not _legacy_ready():
+		_next_hint.text = "Need a legacy name"
 	if _step == 2:
 		var trimmed := _name.text.strip_edges()
 		if trimmed.is_empty():
@@ -1482,6 +1611,25 @@ func _on_create() -> void:
 	if _race_name.is_empty() or _class_name.is_empty():
 		_status.text = "Pick a race and class first."
 		return
+	# Lock the account surname before the create so the operative inherits it.
+	if _legacy_required():
+		var legacy := _legacy_field.text.strip_edges()
+		if not _legacy_ready():
+			_status.add_theme_color_override("font_color", ClientUi.DANGER)
+			_status.text = NAME_NO_DIGITS_MSG if _has_digits(legacy) else "Legacy name must be 2–20 characters."
+			return
+		_busy = true
+		_refresh_nav_gates()
+		_status.add_theme_color_override("font_color", ClientUi.MUTED)
+		_status.text = "Locking legacy name…"
+		var legacy_res: Dictionary = await AccountManager.set_legacy_name(legacy)
+		_busy = false
+		_refresh_nav_gates()
+		if not legacy_res.ok:
+			_status.add_theme_color_override("font_color", ClientUi.DANGER)
+			_status.text = str(legacy_res.get("error", "Could not set legacy name."))
+			return
+		await AuthManager.fetch_me()
 
 	var payload := GameData.build_create_payload(char_name, _race_name, _class_name, _is_first, _appearance())
 	_busy = true

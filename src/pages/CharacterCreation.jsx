@@ -5,6 +5,7 @@ import { api } from "@/api/gameClient";
 import { RACES, CLASSES, STAT_COLORS } from "@/lib/gameData";
 import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
 import { bustMyCharacterCache } from "@/lib/socialEngine";
+import { needsLegacyNameForCreate, fullName } from "@/lib/legacyName";
 import RaceCard from "@/components/game/RaceCard";
 import ClassCard from "@/components/game/ClassCard";
 import ClassEmblem from "@/components/game/ClassEmblem";
@@ -12,7 +13,7 @@ import ClassStatsChart from "@/components/game/ClassStatsChart";
 import CharacterAvatar, { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
 import ArrowSelector from "@/components/game/ArrowSelector";
 import { popIn, staggerParent, staggerChild, btnPress } from "@/lib/juicyMotion";
-import { ChevronRight, ChevronLeft, Rocket, Check, X, Loader2, Dices } from "lucide-react";
+import { ChevronRight, ChevronLeft, Rocket, Check, X, Loader2, Dices, Lock } from "lucide-react";
 import GameCanvas from "@/components/game/GameCanvas";
 
 const RACE_ACCENT = {
@@ -61,6 +62,8 @@ export default function CharacterCreation() {
   const [userLegacyName, setUserLegacyName] = useState("");
   const [userLegacyDisplay, setUserLegacyDisplay] = useState("surname");
   const [existingCharCount, setExistingCharCount] = useState(0);
+  // Permanent surname captured on the Launch step when this is the 2nd+ operative.
+  const [legacyInput, setLegacyInput] = useState("");
   // Debounced name availability: "idle" | "checking" | "available" | "taken"
   const [nameStatus, setNameStatus] = useState("idle");
 
@@ -109,6 +112,12 @@ export default function CharacterCreation() {
 
   const race = form.race ? RACES[form.race] : null;
   const cls = form.class ? CLASSES[form.class] : null;
+
+  const needsLegacy = needsLegacyNameForCreate({ legacy_name: userLegacyName }, existingCharCount);
+  const trimmedLegacy = legacyInput.trim();
+  const legacyReady =
+    !needsLegacy
+    || (trimmedLegacy.length >= 2 && trimmedLegacy.length <= 20 && !nameHasDigits(trimmedLegacy));
 
   // Base class stats — racial % bonuses applied at compute time; previewed here.
   const baseStats = cls ? { ...cls.baseStats } : { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 };
@@ -171,9 +180,27 @@ export default function CharacterCreation() {
         setStep(2);
         return;
       }
+      // Lock the account surname first — the character must inherit it, and it
+      // can never be set again once this operative exists.
+      let legacyName = userLegacyName;
+      if (needsLegacy) {
+        if (trimmedLegacy.length < 2 || trimmedLegacy.length > 20) {
+          setError("Legacy name must be 2–20 characters.");
+          setLoading(false);
+          return;
+        }
+        if (nameHasDigits(trimmedLegacy)) {
+          setError(NAME_NO_DIGITS_MSG);
+          setLoading(false);
+          return;
+        }
+        const me = await api.auth.updateMe({ legacy_name: trimmedLegacy });
+        legacyName = me?.legacy_name || trimmedLegacy;
+        setUserLegacyName(legacyName);
+      }
       const created = await api.entities.Character.create({
         name: form.name.trim(),
-        legacy_name: userLegacyName || undefined,
+        legacy_name: legacyName || undefined,
         legacy_display: userLegacyDisplay,
         race: form.race,
         class: form.class,
@@ -217,6 +244,8 @@ export default function CharacterCreation() {
       : nameStatus === "too_short" ? "Need at least 2 characters"
       : null
     : step === 2 && !form.name.trim() ? "Need a name"
+    : step === 3 && needsLegacy && !legacyReady
+      ? trimmedLegacy && nameHasDigits(trimmedLegacy) ? NAME_NO_DIGITS_MSG : "Need a legacy name"
     : null;
 
   return (
@@ -556,7 +585,11 @@ export default function CharacterCreation() {
                         size={140}
                       />
                       <div className="text-center">
-                        <h3 className="font-display font-bold text-xl glow-cyan">{form.name}</h3>
+                        <h3 className="font-display font-bold text-xl glow-cyan">
+                          {fullName(
+                            { name: form.name, legacy_name: userLegacyName || trimmedLegacy, legacy_display: userLegacyDisplay },
+                          ) || form.name}
+                        </h3>
                         <p className="text-sm text-muted-foreground mt-0.5">{race.name} · {cls.name}</p>
                       </div>
                     </div>
@@ -566,6 +599,38 @@ export default function CharacterCreation() {
                       raceBonusNote={`Includes ${race.name} racial bonuses.`}
                     />
                   </div>
+
+                  {needsLegacy && (
+                    <div className="p-4 rounded-xl border border-accent/30 bg-accent/5 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-accent" />
+                        <h3 className="font-display font-semibold text-sm tracking-wide">Set Your Legacy Name</h3>
+                        <span className="text-[10px] text-muted-foreground">One-time · permanent</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Your second operative locks in the account's <b className="text-foreground">surname</b> — a permanent
+                        last name shared by every character you create, so other players can recognize them as the same person.
+                        <b className="text-destructive"> It can never be changed.</b>
+                      </p>
+                      <input
+                        value={legacyInput}
+                        onChange={(e) => setLegacyInput(stripDigitsFromName(e.target.value).slice(0, 20))}
+                        placeholder="e.g. Voss, Nakamura, Khel…"
+                        maxLength={20}
+                        disabled={loading}
+                        className="w-full bg-muted/40 border border-border/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-colors"
+                      />
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                        <span>{legacyInput.length}/20</span>
+                        <span>
+                          Displayed as:{" "}
+                          <b className="text-foreground">
+                            {trimmedLegacy ? `${form.name.trim() || "Operative"} ${trimmedLegacy}` : "—"}
+                          </b>
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>
@@ -603,7 +668,7 @@ export default function CharacterCreation() {
               <motion.button
                 {...btnPress}
                 onClick={handleCreate}
-                disabled={loading || form.name.trim().length < 2}
+                disabled={loading || form.name.trim().length < 2 || !legacyReady}
                 className="flex items-center gap-2 text-sm bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2.5 rounded-lg font-display font-bold tracking-wide disabled:opacity-50 transition-colors painted-btn"
               >
                 {loading ? (

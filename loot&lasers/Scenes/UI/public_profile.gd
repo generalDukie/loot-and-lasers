@@ -112,6 +112,18 @@ func _populate(data: Dictionary) -> void:
 	name_l.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(name_l)
 	info.add_child(name_l)
+
+	# Web PublicProfileSheet — headline is "The X Family" in family mode, so the
+	# operative behind it gets its own line.
+	var operative_line := LegacyName.profile_operative_line(character)
+	if not operative_line.is_empty():
+		var op_lab := Label.new()
+		op_lab.text = operative_line
+		op_lab.add_theme_font_size_override("font_size", 15)
+		op_lab.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
+		ClientUi.apply_body_font(op_lab)
+		info.add_child(op_lab)
+
 	var sub := Label.new()
 	sub.text = "Lv %s %s · %s · %s" % [
 		str(character.get("level", 1)),

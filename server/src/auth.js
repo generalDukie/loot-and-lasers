@@ -105,6 +105,19 @@ export function getUserByEmail(email) {
   return db.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").get(email);
 }
 
+/**
+ * Account legacy identity is the single source of truth — mirror it onto every
+ * operative so cached/stale character docs never disagree with the account.
+ */
+export function stampCharacterLegacy(userId, patch = {}) {
+  if (!userId || !patch || !Object.keys(patch).length) return;
+  try {
+    entities.Character.updateMany({ created_by_id: userId }, patch);
+  } catch {
+    // Character docs stay resolvable from the account row; never fail the write.
+  }
+}
+
 export function authMiddleware(req, res, next) {
   const header = req.headers.authorization || "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7) : null;
@@ -525,6 +538,8 @@ export function createAuthRouter(express) {
     const allowed = ["legacy_name", "legacy_display", "active_character_id"];
     const sets = [];
     const vals = [];
+    // Mirrored onto every operative so the account stays recognizable.
+    const legacyStamp = {};
     for (const key of allowed) {
       if (req.body?.[key] === undefined) continue;
       // Legacy surname is permanent once set.
@@ -540,12 +555,14 @@ export function createAuthRouter(express) {
         }
         sets.push("legacy_name = ?");
         vals.push(legacy);
+        legacyStamp.legacy_name = legacy;
         continue;
       }
       if (key === "legacy_display") {
         const mode = req.body.legacy_display === "family" ? "family" : "surname";
         sets.push("legacy_display = ?");
         vals.push(mode);
+        legacyStamp.legacy_display = mode;
         continue;
       }
       if (key === "active_character_id") {
@@ -565,6 +582,7 @@ export function createAuthRouter(express) {
     vals.push(nowIso());
     vals.push(req.user.id);
     db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+    stampCharacterLegacy(req.user.id, legacyStamp);
     res.json(getUserById(req.user.id));
   });
 

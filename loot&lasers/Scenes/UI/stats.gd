@@ -557,15 +557,11 @@ func _refresh_values() -> void:
 
 func _update_hero() -> void:
 	var c: Dictionary = GameManager.active_character
-	_hero_name.text = LegacyName.profile_display_name(c)
-
-	var show_operative := (
-		LegacyName.normalize_display(c.get("legacy_display", AuthManager.user.get("legacy_display", "surname"))) == "family"
-		and not str(c.get("legacy_name", AuthManager.user.get("legacy_name", ""))).strip_edges().is_empty()
-		and not str(c.get("name", "")).is_empty()
-	)
-	_operative_lab.visible = show_operative
-	_operative_lab.text = "Operative %s" % str(c.get("name", ""))
+	# Everyday name on the hero gear pane; family mode adds "The X Family" beneath.
+	_hero_name.text = LegacyName.full_name(c)
+	var family_line := LegacyName.hero_family_line(c)
+	_operative_lab.visible = not family_line.is_empty()
+	_operative_lab.text = family_line
 
 	var title := str(c.get("active_title", "")).strip_edges()
 	_title_lab.visible = not title.is_empty() and title != "<null>"

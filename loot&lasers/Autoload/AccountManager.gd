@@ -39,7 +39,14 @@ func buy_character_slot() -> Dictionary:
 
 
 func set_legacy_name(name: String) -> Dictionary:
-	return await AuthManager.update_me({"legacy_name": name.strip_edges()})
+	var legacy := name.strip_edges()
+	var res: Dictionary = await AuthManager.update_me({"legacy_name": legacy})
+	if not res.ok:
+		return res
+	# Node stamps every owned Character on lock-in; mirror it into the live cache.
+	if not GameManager.active_character.is_empty():
+		GameManager.apply_active_character_patch({"legacy_name": legacy}, "account_legacy_name")
+	return res
 
 
 func set_legacy_display(mode: String) -> Dictionary:

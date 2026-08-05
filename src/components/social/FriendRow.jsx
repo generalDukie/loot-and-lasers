@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { MessageSquare, UserCircle, X } from "lucide-react";
+import { fullName } from "@/lib/legacyName";
 
 export default function FriendRow({ friend, presence, onMessage, onProfile, onRemove }) {
   const status = presence?.status;
@@ -36,7 +37,7 @@ export default function FriendRow({ friend, presence, onMessage, onProfile, onRe
         <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card" style={{ background: dotColor }} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-display font-semibold text-sm truncate">{friend.name}</p>
+        <p className="font-display font-semibold text-sm truncate">{fullName(friend) || friend.name}</p>
         <p className="text-[10px] text-muted-foreground truncate">
           Lv {friend.level || 1} · {friend.class}{friend.guild_tag ? ` · [${friend.guild_tag}]` : ""} · {statusText}
         </p>

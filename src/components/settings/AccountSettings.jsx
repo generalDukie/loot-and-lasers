@@ -241,7 +241,9 @@ export default function AccountSettings() {
               }`}
             >
               <p className="text-xs font-display font-semibold">As surname</p>
-              <p className="text-[10px] mt-1 opacity-80">First + {legacyName}</p>
+              <p className="text-[10px] mt-1 opacity-80">
+                Shown after your operative name everywhere — HUD, lists, chat.
+              </p>
             </button>
             <button
               type="button"
@@ -254,10 +256,15 @@ export default function AccountSettings() {
               }`}
             >
               <p className="text-xs font-display font-semibold">Family only</p>
-              <p className="text-[10px] mt-1 opacity-80">{familyLabel(legacyName)}</p>
+              <p className="text-[10px] mt-1 opacity-80">
+                Just your first name in HUD and lists; “{familyLabel(legacyName)}” under your hero gear.
+              </p>
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground mt-2">
+            Either way, other players still see your family on public profiles — chat, guild, friends and rankings.
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">
             Profile preview: <span className="text-foreground font-display font-semibold">{profileDisplayName(previewChar)}</span>
             {savingDisplay && <Loader2 className="w-3 h-3 inline ml-1 animate-spin" />}
           </p>

@@ -4,6 +4,7 @@
  * gameplay documents are always scoped to the authenticated Node account.
  */
 import { entities } from "./entities.js";
+import { db } from "./db.js";
 import { expForLevel } from "./shared/rewards.js";
 import { CLASS_BASE_STATS, FUEL_MAX } from "./shared/economyFormulas.js";
 import { assertCharacterCreateShape } from "./shared/characterSheet.js";
@@ -377,6 +378,14 @@ export function sanitizeCreatePayload(user, type, data = {}) {
       throw err;
     }
     out.name = name;
+
+    // Surname belongs to the account — a client may never invent a different
+    // one for a new operative, or the family link stops being trustworthy.
+    const account = db
+      .prepare("SELECT legacy_name, legacy_display FROM users WHERE id = ?")
+      .get(user.id);
+    out.legacy_name = account?.legacy_name || "";
+    out.legacy_display = account?.legacy_display === "family" ? "family" : "surname";
 
     // Every new operative starts with a full fuel tank (admins included).
     const now = new Date().toISOString();

@@ -3,6 +3,7 @@
  * Node owns persistent relationships. Clients display and request mutations via RPCs.
  */
 import { entities } from "../entities.js";
+import { getUserRowById } from "../auth.js";
 import { clock } from "./time/clock.js";
 import { serializePublicProfileStatistics } from "./statisticsService.js";
 import { tryCreateNotification } from "./notificationService.js";
@@ -25,6 +26,29 @@ function normalizeForSearch(s) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+/**
+ * Legacy identity always resolves from the owning account row, so other players
+ * recognize every operative on an account even when the doc was never stamped.
+ * `cache` lets batch serializers avoid one user lookup per character.
+ */
+function accountLegacy(ch, cache = null) {
+  const ownerId = ch?.created_by_id || "";
+  let row = null;
+  if (ownerId) {
+    if (cache && cache.has(ownerId)) {
+      row = cache.get(ownerId);
+    } else {
+      row = getUserRowById(ownerId) || null;
+      if (cache) cache.set(ownerId, row);
+    }
+  }
+  const mode = row?.legacy_display || ch?.legacy_display;
+  return {
+    legacy_name: row?.legacy_name || ch?.legacy_name || null,
+    legacy_display: mode === "family" ? "family" : "surname",
+  };
 }
 
 export function isBlocked(blockerId, blockedId) {
@@ -138,6 +162,7 @@ export function serializePublicProfile(characterId) {
   return {
     id: ch.id,
     name: ch.name,
+    ...accountLegacy(ch),
     class: ch.class || null,
     race: ch.race || null,
     level: ch.level || 1,
@@ -160,6 +185,7 @@ export function searchCharacters(query, { excludeId = null, limit = SEARCH_LIMIT
   if (!q) return [];
   const lim = Math.max(1, Math.min(50, Number(limit) || SEARCH_LIMIT));
   const all = entities.Character.list("-created_date", 500) || [];
+  const legacyCache = new Map();
   const hits = [];
   for (const c of all) {
     if (excludeId && c.id === excludeId) continue;
@@ -167,6 +193,7 @@ export function searchCharacters(query, { excludeId = null, limit = SEARCH_LIMIT
     hits.push({
       id: c.id,
       name: c.name,
+      ...accountLegacy(c, legacyCache),
       level: c.level || 1,
       class: c.class || null,
       race: c.race || null,
@@ -386,12 +413,14 @@ export function getPresenceMap(characterIds = []) {
 
 export function getCharactersByIds(ids = []) {
   const uniq = [...new Set((ids || []).filter(Boolean))];
+  const legacyCache = new Map();
   return uniq
     .map((id) => entities.Character.get(id))
     .filter(Boolean)
     .map((c) => ({
       id: c.id,
       name: c.name,
+      ...accountLegacy(c, legacyCache),
       level: c.level || 1,
       class: c.class || null,
       race: c.race || null,

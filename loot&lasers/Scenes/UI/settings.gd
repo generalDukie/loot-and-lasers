@@ -124,7 +124,7 @@ func _build_account() -> VBoxContainer:
 	chg.pressed.connect(_on_change_password)
 	col.add_child(chg)
 
-	var existing_legacy := str(AuthManager.user.get("legacy_name", ""))
+	var existing_legacy := LegacyName.clean_text(AuthManager.user.get("legacy_name", ""))
 	if not existing_legacy.is_empty():
 		col.add_child(ClientUi.make_section_header("", "Legacy on Profile", "Locked surname: %s" % existing_legacy))
 		var mode_row := HBoxContainer.new()
@@ -144,6 +144,13 @@ func _build_account() -> VBoxContainer:
 			var mode := str(pair[1])
 			mb.pressed.connect(func() -> void: _on_legacy_display(mode))
 			mode_row.add_child(mb)
+		var mode_help := Label.new()
+		mode_help.text = "As surname: shown after your operative name everywhere — HUD, lists, chat.\nFamily only: just your first name in HUD and lists; \"%s\" under your hero gear.\nEither way, other players still see your family on public profiles." % LegacyName.family_label(existing_legacy)
+		mode_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		mode_help.add_theme_font_size_override("font_size", 13)
+		mode_help.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_body_font(mode_help)
+		col.add_child(mode_help)
 
 	col.add_child(ClientUi.make_section_header("", "Change Operative Name", "Letters only — no numbers. Cost: 500 Nova."))
 	_rename = ClientUi.make_field("New operative name")

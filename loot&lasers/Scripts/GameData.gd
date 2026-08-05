@@ -321,14 +321,20 @@ static func build_create_payload(
 	var looks := appearance if not appearance.is_empty() else default_appearance_for_race(race)
 	if not looks.has("skin_color"):
 		looks["skin_color"] = default_appearance_for_race(race).get("skin_color", "#2D5A3D")
+	# Legacy identity is account-owned; Node re-stamps it from the user row on create.
+	var legacy_name := ""
+	var legacy_display := "surname"
+	if AuthManager != null:
+		legacy_name = LegacyName.clean_text(AuthManager.user.get("legacy_name", ""))
+		legacy_display = LegacyName.normalize_display(AuthManager.user.get("legacy_display", "surname"))
 	return {
 		"name": char_name.strip_edges(),
 		"race": race,
 		"class": class_key,
 		"appearance": looks,
 		"equipped_items": {},
-		"legacy_name": "",
-		"legacy_display": "surname",
+		"legacy_name": legacy_name,
+		"legacy_display": legacy_display,
 	}
 
 

@@ -8,7 +8,12 @@ import CharacterAvatar from "@/components/game/CharacterAvatar";
 import EquippedFrame from "@/components/game/EquippedFrame";
 import ActiveEffectsPanel from "@/components/game/ActiveEffectsPanel";
 import { Users, Save } from "lucide-react";
-import { profileDisplayName, normalizeLegacyDisplay, LEGACY_DISPLAY_FAMILY } from "@/lib/legacyName";
+import {
+  fullName,
+  heroFamilyLine,
+  normalizeLegacyDisplay,
+  LEGACY_DISPLAY_FAMILY,
+} from "@/lib/legacyName";
 
 const paneClass = "bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl";
 
@@ -90,10 +95,7 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
   }
 
   const bioDirty = bio !== (character.bio || "");
-  const showOperative =
-    normalizeLegacyDisplay(character.legacy_display) === LEGACY_DISPLAY_FAMILY
-    && character.legacy_name
-    && character.name;
+  const familyLine = heroFamilyLine(character);
   const hasActiveEffects =
     getActiveBuffs(character).length > 0 || getActiveFuelMounts(character).length > 0;
   const levelBadge = Math.max(18, Math.round(26 * (slotSize / BASE_SLOT)));
@@ -194,11 +196,13 @@ export default function CharacterHeader({ character, guild, equippedItems, onUpd
 
             <div className="shrink-0 w-full max-w-[20rem] text-center min-w-0 pt-1.5">
               <h1 className="font-display font-bold text-base sm:text-lg tracking-wide leading-tight truncate">
-                {profileDisplayName(character)}
+                {fullName(character)}
               </h1>
-              {showOperative && (
-                <p className="text-[9px] text-muted-foreground/70 truncate">Operative {character.name}</p>
-              )}
+              {familyLine ? (
+                <p className="text-[10px] text-muted-foreground/80 font-display tracking-wide truncate">
+                  {familyLine}
+                </p>
+              ) : null}
               {character.active_title && (
                 <p className="text-[9px] font-display font-semibold text-amber-400/90 truncate">
                   {character.active_title}

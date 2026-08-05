@@ -9,6 +9,8 @@ import LegacyNameModal from "@/components/game/LegacyNameModal";
 import { getProgress, canClaimToday, todayUTC } from "@/lib/dailyLoginEngine";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { useAuth } from "@/lib/AuthContext";
+import { api } from "@/api/gameClient";
+import { needsLegacyName } from "@/lib/legacyName";
 
 export default function Home() {
   const { character, loading } = useMyCharacter();
@@ -41,9 +43,17 @@ export default function Home() {
     }
   }, [loading, character, navigate, user]);
 
-  // Prompt for a permanent legacy name if the account doesn't have one yet.
+  // Catch-up prompt for accounts that already run multiple operatives without a
+  // surname. Single-character accounts are asked during their second creation.
   useEffect(() => {
-    if (user && !user.legacy_name) setLegacyOpen(true);
+    if (!user?.id || user.legacy_name) return;
+    let active = true;
+    api.entities.Character.filter({ created_by_id: user.id }, "-created_date", 10)
+      .then((roster) => {
+        if (active && needsLegacyName(user, (roster || []).length)) setLegacyOpen(true);
+      })
+      .catch(() => {});
+    return () => { active = false; };
   }, [user]);
 
   if (loading || !character) {

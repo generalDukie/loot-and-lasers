@@ -75,9 +75,14 @@ func _maybe_daily_prompt() -> void:
 
 
 func _maybe_legacy_prompt() -> void:
-	## Web LegacyNameModal — one-time permanent surname for the account.
-	var existing := str(AuthManager.user.get("legacy_name", "")).strip_edges()
-	if not existing.is_empty():
+	## Web LegacyNameModal — catch-up for accounts that already run 2+ operatives
+	## without a surname. Single-character accounts are asked during create.
+	if not LegacyName.clean_text(AuthManager.user.get("legacy_name", "")).is_empty():
+		return
+	var roster: Dictionary = await AuthManager.list_characters()
+	if not roster.ok or typeof(roster.data) != TYPE_ARRAY:
+		return
+	if not LegacyName.needs_legacy_name((roster.data as Array).size()):
 		return
 	_show_legacy_modal()
 

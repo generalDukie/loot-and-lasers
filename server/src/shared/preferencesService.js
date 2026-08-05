@@ -3,7 +3,8 @@
  * Hardware / graphics / audio stay on the client — never stored here.
  */
 import { db } from "../db.js";
-import { getUserById } from "../auth.js";
+import { getUserById, getUserRowById, stampCharacterLegacy } from "../auth.js";
+import { NAME_NO_DIGITS_MSG } from "./nameRules.js";
 
 const LEGACY_DISPLAY = new Set(["surname", "family"]);
 
@@ -47,16 +48,32 @@ export function saveAccountPreferences(userId, patch = {}) {
   }
   const sets = [];
   const vals = [];
+  const legacyStamp = {};
   if (Object.prototype.hasOwnProperty.call(incoming, "legacy_display")) {
     const mode = incoming.legacy_display === "family" ? "family" : "surname";
     if (!LEGACY_DISPLAY.has(mode)) httpErr(400, "Invalid legacy_display");
     sets.push("legacy_display = ?");
     vals.push(mode);
+    legacyStamp.legacy_display = mode;
   }
   if (Object.prototype.hasOwnProperty.call(incoming, "legacy_name")) {
-    const name = incoming.legacy_name == null ? null : String(incoming.legacy_name).trim().slice(0, 48);
-    sets.push("legacy_name = ?");
-    vals.push(name || null);
+    // The surname is permanent — preferences sync may set it once, never rewrite
+    // or clear it, or an account could shed the identity other players know.
+    const locked = getUserRowById(userId)?.legacy_name || "";
+    const name = incoming.legacy_name == null ? "" : String(incoming.legacy_name).trim();
+    if (locked) {
+      if (name && name !== locked) {
+        httpErr(409, "Legacy name is permanent and cannot be changed", "LEGACY_NAME_LOCKED");
+      }
+    } else if (name) {
+      if (name.length < 2 || name.length > 20) {
+        httpErr(400, "Legacy name must be 2–20 characters");
+      }
+      if (/\d/.test(name)) httpErr(400, NAME_NO_DIGITS_MSG);
+      sets.push("legacy_name = ?");
+      vals.push(name);
+      legacyStamp.legacy_name = name;
+    }
   }
   if (!sets.length) {
     return getAccountPreferences(userId);
@@ -65,6 +82,7 @@ export function saveAccountPreferences(userId, patch = {}) {
   vals.push(new Date().toISOString());
   vals.push(userId);
   db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+  stampCharacterLegacy(userId, legacyStamp);
   return getAccountPreferences(userId);
 }
 

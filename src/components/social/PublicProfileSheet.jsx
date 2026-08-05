@@ -10,7 +10,12 @@ import { presenceStatus } from "@/hooks/usePresence";
 import { useToast } from "@/components/ui/use-toast";
 import { getGuildMembership, invitePlayerToGuild } from "@/lib/guildUtils";
 import { sendFriendRequest, getFriends, getOutgoingRequests } from "@/lib/socialEngine";
-import { profileDisplayName, normalizeLegacyDisplay, LEGACY_DISPLAY_FAMILY } from "@/lib/legacyName";
+import {
+  profileDisplayName,
+  cleanNameText,
+  normalizeLegacyDisplay,
+  LEGACY_DISPLAY_FAMILY,
+} from "@/lib/legacyName";
 
 export default function PublicProfileSheet({
   target,
@@ -173,8 +178,13 @@ export default function PublicProfileSheet({
               {profileDisplayName(target)}
               {target.active_title && <span className="text-[11px] text-amber-300/90 font-display">「{target.active_title}」</span>}
             </h3>
-            {normalizeLegacyDisplay(target.legacy_display) === LEGACY_DISPLAY_FAMILY && target.legacy_name && target.name && (
-              <p className="text-[11px] text-muted-foreground/80">Operative {target.name}</p>
+            {/* Headline already reads "The X Family" in family mode — name the operative. */}
+            {normalizeLegacyDisplay(target.legacy_display) === LEGACY_DISPLAY_FAMILY
+              && cleanNameText(target.legacy_name)
+              && cleanNameText(target.name) && (
+              <p className="text-[11px] text-muted-foreground/80">
+                Operative {cleanNameText(target.name)}
+              </p>
             )}
             <p className="text-xs text-muted-foreground">Lv {target.level || 1} · {target.class}{guildTag ? ` · [${guildTag}]` : ""}</p>
             <p className="text-[10px] mt-0.5" style={{ color: statusColor }}>

@@ -79,7 +79,7 @@ docker compose -f docker-compose.node-api.yml --env-file .env.node-api up -d --b
 sleep 4
 curl -fsS http://127.0.0.1:8787/health
 echo
-docker compose -f docker-compose.node-api.yml ps
+docker compose -f docker-compose.node-api.yml --env-file .env.node-api ps
 '@ | Set-Content -Path $remoteScriptPath -Encoding ascii -NoNewline
 # Ensure LF endings for bash
 $bytes = [System.IO.File]::ReadAllBytes($remoteScriptPath)

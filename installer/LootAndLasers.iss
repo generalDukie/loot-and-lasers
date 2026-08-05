@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.0"
+  #define MyAppVersion "0.1.7"
 #endif
 
 #define MyAppName "Loot & Lasers"

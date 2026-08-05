@@ -18,15 +18,20 @@ a server-side administrative secret.
 
 1. Godot 4.7.1 and its Windows export templates
 2. Inno Setup 6
-3. A 64-character hexadecimal `NAKAMA_SOCKET_SERVER_KEY` saved in the current
-   Windows user's environment
+3. The Hetzner staging socket key in **either**:
+   - `loot&lasers/Config/nakama_secrets.cfg` (`[staging] server_key=…`, preferred), or
+   - user env `NAKAMA_SOCKET_SERVER_KEY`
+
+   The value must match `/opt/lootandlasers/.env` on Hetzner (`NAKAMA_SOCKET_SERVER_KEY`).
+   A key that only exists on the build PC (and not on the server) produces
+   “Invalid server key” / auth failures on friend machines.
 
 ## Build
 
 From the repository root:
 
 ```powershell
-.\scripts\build-windows-installer.ps1 -Version "0.1.0"
+.\scripts\build-windows-installer.ps1 -Version "0.1.7"
 ```
 
 The script:
@@ -35,13 +40,13 @@ The script:
 2. writes a temporary, gitignored release configuration;
 3. exports the `Windows Staging` Godot preset;
 4. deletes the temporary configuration in a `finally` block;
-5. compiles `dist\LootAndLasers-Setup-0.1.0.exe`.
+5. compiles `dist\LootAndLasers-Setup-0.1.7.exe`.
 
 To use non-default tool locations:
 
 ```powershell
 .\scripts\build-windows-installer.ps1 `
-  -Version "0.1.0" `
+  -Version "0.1.7" `
   -GodotPath "C:\path\to\Godot_console.exe" `
   -InnoCompilerPath "C:\path\to\ISCC.exe"
 ```

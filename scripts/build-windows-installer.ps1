@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.1.0",
+    [string]$Version = "0.1.7",
     [string]$GodotPath = "",
     [string]$InnoCompilerPath = ""
 )
@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ProjectDir = Join-Path $Root "loot&lasers"
+$SecretsConfig = Join-Path $ProjectDir "Config\nakama_secrets.cfg"
 $ReleaseConfig = Join-Path $ProjectDir "Config\release_client.cfg"
 $ExportDir = Join-Path $Root "dist\windows"
 $ExportExe = Join-Path $ExportDir "LootAndLasers.exe"
@@ -31,9 +32,23 @@ function Resolve-Executable {
     throw "$Label was not found. Install it or pass its path explicitly."
 }
 
+function Read-StagingServerKeyFromSecrets([string]$Path) {
+    if (-not (Test-Path $Path)) { return "" }
+    foreach ($line in Get-Content -Path $Path) {
+        $trim = $line.Trim()
+        if ($trim.StartsWith(";") -or $trim.StartsWith("#")) { continue }
+        if ($trim -match '^\s*server_key\s*=\s*(.+)\s*$') {
+            return $Matches[1].Trim().Trim('"').Trim("'")
+        }
+    }
+    return ""
+}
+
 $Godot = Resolve-Executable -ExplicitPath $GodotPath -Label "Godot 4.7.1" -Candidates @(
     "godot",
     "godot4",
+    (Join-Path $env:USERPROFILE "Desktop\Stuff\Loot and lasers\Godot_v4.7.1-stable_win64_console.exe"),
+    (Join-Path $env:USERPROFILE "Desktop\Stuff\Loot and lasers\Godot_v4.7.1-stable_win64.exe"),
     (Join-Path $env:USERPROFILE "Downloads\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe"),
     (Join-Path $env:USERPROFILE "Downloads\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64.exe")
 )
@@ -44,13 +59,27 @@ $Inno = Resolve-Executable -ExplicitPath $InnoCompilerPath -Label "Inno Setup Co
     (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
 )
 
-$Key = $env:NAKAMA_SOCKET_SERVER_KEY
-if ([string]::IsNullOrWhiteSpace($Key)) {
-    $Key = [Environment]::GetEnvironmentVariable("NAKAMA_SOCKET_SERVER_KEY", "User")
+# Prefer gitignored secrets file (same source Godot editor uses), then process/user env.
+# This avoids baking a stale User env key that does not match Hetzner.
+$KeySource = ""
+$Key = Read-StagingServerKeyFromSecrets $SecretsConfig
+if (-not [string]::IsNullOrWhiteSpace($Key)) {
+    $KeySource = "Config/nakama_secrets.cfg"
+} else {
+    $Key = $env:NAKAMA_SOCKET_SERVER_KEY
+    if ([string]::IsNullOrWhiteSpace($Key)) {
+        $Key = [Environment]::GetEnvironmentVariable("NAKAMA_SOCKET_SERVER_KEY", "User")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Key)) {
+        $KeySource = "NAKAMA_SOCKET_SERVER_KEY"
+    }
 }
+$Key = if ($null -eq $Key) { "" } else { $Key.Trim() }
 if ($Key -notmatch "^[0-9a-fA-F]{64}$") {
-    throw "NAKAMA_SOCKET_SERVER_KEY must be the 64-character hexadecimal staging client key."
+    throw "Staging server key missing/invalid. Set loot&lasers/Config/nakama_secrets.cfg [staging] server_key or NAKAMA_SOCKET_SERVER_KEY to the 64-char hex key from Hetzner /opt/lootandlasers/.env."
 }
+
+Write-Host ("Using staging server key from {0} (len={1}, tail={2})" -f $KeySource, $Key.Length, $Key.Substring($Key.Length - 2))
 
 New-Item -ItemType Directory -Force -Path $ExportDir | Out-Null
 $releaseConfigContents = @"
@@ -60,7 +89,9 @@ server_key="$Key"
 "@
 
 try {
-    Set-Content -Path $ReleaseConfig -Value $releaseConfigContents -Encoding UTF8
+    # UTF-8 without BOM — BOM can break Godot ConfigFile section parsing on some builds.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($ReleaseConfig, ($releaseConfigContents -replace "`r`n", "`n"), $utf8NoBom)
 
     & $Godot --headless --path $ProjectDir --export-release "Windows Staging" $ExportExe
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ExportExe)) {

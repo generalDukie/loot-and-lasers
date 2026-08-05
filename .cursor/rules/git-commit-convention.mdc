@@ -19,13 +19,14 @@ alwaysApply: true
 3. Verify the project compiles (no new GDScript errors).
 4. Verify the game launches and the affected feature works.
 5. Provide a **short summary of what changed** to the user.
-6. Only if all checks pass, then:
+6. Only if all checks pass, then commit locally:
 
 ```bash
 git add .
 git commit -m "<message>"
-git push
 ```
+
+7. **Never** run `git push`. If the user asked to push, tell them to use **GitHub Desktop → Push origin**. See `publish-and-live-deploy.mdc` for Hetzner / Nakama / Godot live updates.
 
 If any check fails: do **not** commit; fix first and explain what blocked the commit.
 

@@ -1,0 +1,35 @@
+---
+description: Never CLI-push to GitHub; live updates via Desktop, Hetzner, Nakama, Godot
+alwaysApply: true
+---
+
+# Publish & live deploy (Loot & Lasers)
+
+## Never CLI-push to GitHub
+
+- **Do not** run `git push`, `git push origin`, or any remote publish via the shell/CLI.
+- The user's relevant remote workflow is **GitHub Desktop**. When they ask to "push", **commit locally** (if asked), then tell them to press **Push origin** in GitHub Desktop. Do not attempt the push yourself.
+- GitHub Desktop and `git push` hit the same GitHub remote; the user prefers Desktop for auth and habit. Respect that.
+
+## What "ship it" actually means
+
+Committing / syncing the repo is only one piece. For changes to matter in the live/staging game, ensure the right targets are updated:
+
+| Target | When needed | How |
+|--------|-------------|-----|
+| **GitHub Desktop repo** | Always for shared history | Local `git commit` → user **Push origin** in GitHub Desktop |
+| **Hetzner (Node API + web)** | Server / `src/` / `server/` / API behavior | Run `scripts/deploy-hetzner-node-api.ps1` from the local checkout (SSH upload of local files — not a GitHub pull) |
+| **Nakama** | Auth/realtime/RPC modules on Nakama | Deploy/update Nakama on the staging host as that stack requires (separate from the Node deploy script) |
+| **Godot client** | Desktop UX / Godot scripts/scenes | Only when the user **explicitly asks** for a new installer/export — never build `scripts/build-windows-installer.ps1` (or Godot export) unprompted |
+
+## Agent behavior when user asks to commit and push
+
+1. Commit locally per `git-commit-convention.mdc` (only when they ask).
+2. **Do not** `git push`.
+3. Remind them to push in **GitHub Desktop**.
+4. If the change should be live for players/testers, call out (and run only when asked): **Hetzner deploy** and **Nakama** update if those stacks changed. **Never** build a new Windows installer unless the user explicitly requests one.
+
+## Do not assume
+
+- Pushing to GitHub (Desktop or CLI) does **not** auto-deploy Hetzner, Nakama, or client installs.
+- An installer alone does not update the Node API; a Hetzner deploy alone does not update installed desktop clients.

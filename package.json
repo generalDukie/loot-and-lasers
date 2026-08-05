@@ -27,6 +27,7 @@
     "test:arena": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-arena.mjs",
     "test:arena-authority": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-arena-authority.mjs",
     "test:casino": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-casino.mjs",
+    "test:nova-balances": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-nova-balances.mjs",
     "test:statistics": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-statistics.mjs",
     "test:achievements": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-achievements.mjs",
     "test:scheduler": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-scheduler.mjs",

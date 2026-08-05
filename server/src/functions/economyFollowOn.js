@@ -98,6 +98,7 @@ import {
   CASINO_MAX_NOVA_BET,
   CASINO_WHEEL_TIERS,
   getCasinoMaxStardustBet,
+  getMissionStardustPerFuel,
   GUILD_CREATE_COST,
   GUILD_WAR_DECLARE_COST,
   GUILD_WAR_READY_HOURS,
@@ -154,11 +155,31 @@ import {
 import {
   assertCasinoClientSafe,
   serializeCasinoState,
-  validateCasinoBetAmount,
-  resolveCasinoOutcome,
   normalizeCasinoGameId,
   CASINO_RULES_VERSION,
+  GAME_IDS,
+  publicSessionState,
+  validateStardustWager,
+  validateNovaWager,
+  resolveGalacticDice,
+  resolveStardustWheel,
+  rollRefiningAttempt,
+  refiningMultForStage,
+  buildSmugglersBoard,
+  resolveSmugglersSelection,
+  floorPayout,
+  floorNovaCasinoPayout,
+  netFromGross,
+  REFINING_LADDER,
 } from "../shared/casinoService.js";
+import { NovaBalanceTypes } from "../shared/currencyService.js";
+import {
+  insertCasinoSession,
+  getCasinoSession,
+  findActiveCasinoSession,
+  updateCasinoSession,
+} from "../shared/casinoSessions.js";
+import { recordCasinoPlay } from "../shared/casinoStats.js";
 import {
   serializeCharacterStatistics,
   serializePublicProfileStatistics,
@@ -1559,14 +1580,88 @@ export const CancelMining = wrap((user, body = {}) => {
   return { success: true, patch, mining, character };
 });
 
-// ── Casino (server-authoritative rolls) ──────────────────────
+// ── Casino v2 (four finalized games) ─────────────────────────
+function requireSettleKey(body) {
+  let settleKey = "";
+  try {
+    settleKey = normalizeOperationKey(body.request_id || body.idempotencyKey || "");
+  } catch {
+    settleKey = "";
+  }
+  if (!settleKey) httpErr(400, "request_id required", "MISSING_REQUEST_ID");
+  return settleKey;
+}
+
+function settleGrossCurrency({
+  user,
+  character,
+  currency,
+  wager,
+  grossPayout,
+  settleKey,
+}) {
+  let live = entities.Character.get(character.id) || character;
+  // Always debit wager first.
+  if (currency === "stardust") {
+    const deb = debitStardust({
+      user,
+      character: live,
+      amount: wager,
+      category: "casino_wager",
+      reasonCode: "casino_settle",
+      idempotencyKey: `casino_wager_${settleKey}`,
+      relatedEntityType: "casino_wager",
+      relatedEntityId: settleKey,
+    });
+    live = deb.character;
+  } else {
+    const deb = debitNova({
+      user,
+      character: live,
+      amount: wager,
+      category: "casino_wager",
+      reasonCode: "casino_settle",
+      idempotencyKey: `casino_wager_${settleKey}`,
+    });
+    live = deb.character;
+  }
+  let patch = {};
+  if (grossPayout > 0) {
+    if (currency === "stardust") {
+      const cre = creditStardust({
+        user,
+        character: live,
+        amount: grossPayout,
+        category: "casino_payout",
+        reasonCode: "casino_settle",
+        idempotencyKey: `casino_pay_${settleKey}`,
+        relatedEntityType: "casino_wager",
+        relatedEntityId: settleKey,
+      });
+      live = cre.character;
+      patch = cre.patch || {};
+    } else {
+      const cre = creditNova({
+        user,
+        character: live,
+        amount: grossPayout,
+        category: "casino_payout",
+        reasonCode: "casino_settle",
+        idempotencyKey: `casino_pay_${settleKey}`,
+      });
+      live = cre.character;
+      patch = cre.patch || {};
+    }
+  }
+  return { character: live, patch };
+}
+
 export const GetCasinoState = wrap((user, body = {}) => {
   assertCasinoClientSafe(body);
   const ch = requireMyChar(user);
-  const casino = serializeCasinoState(ch);
   return {
     success: true,
-    casino,
+    casino: serializeCasinoState(ch, user),
     character: ch,
     balances: getBalances(ch),
   };
@@ -1579,10 +1674,23 @@ export const RecoverCasinoWager = wrap((user, body = {}) => {
   if (!key) httpErr(400, "request_id required");
   const prior = getWalletOperation(user.id, "casino_settle", key);
   if (!prior) {
+    const actionPrior = getWalletOperation(user.id, "casino_action", key);
+    if (actionPrior) {
+      const live = entities.Character.get(ch.id) || ch;
+      return {
+        success: true,
+        found: true,
+        ...actionPrior,
+        character: live,
+        balances: getBalances(live),
+        casino: serializeCasinoState(live, user),
+        recovered: true,
+      };
+    }
     return {
       success: true,
       found: false,
-      casino: serializeCasinoState(ch),
+      casino: serializeCasinoState(ch, user),
       character: ch,
       balances: getBalances(ch),
     };
@@ -1594,28 +1702,20 @@ export const RecoverCasinoWager = wrap((user, body = {}) => {
     ...prior,
     character: live,
     balances: getBalances(live),
+    casino: serializeCasinoState(live, user),
     recovered: true,
   };
 });
 
+/** One-shot settle: Galactic Dice + Stardust Wheel. */
 export const CasinoSettle = wrap((user, body = {}) => {
   assertCasinoClientSafe(body);
   const ch = requireMyChar(user);
-  const betCheck = validateCasinoBetAmount(body.bet);
-  if (!betCheck.ok) httpErr(400, betCheck.reason);
-  const bet = betCheck.bet;
   const game = normalizeCasinoGameId(body.game);
-
-  let settleKey = "";
-  try {
-    settleKey = normalizeOperationKey(body.request_id || body.idempotencyKey || "");
-  } catch {
-    settleKey = "";
+  if (game !== GAME_IDS.GALACTIC_DICE && game !== GAME_IDS.STARDUST_WHEEL) {
+    httpErr(400, "Use CasinoSessionStart for this game", "CASINO_SESSION_REQUIRED");
   }
-  if (!settleKey) {
-    settleKey = `auto:${Date.now().toString(36)}_${Math.floor(secureRandom() * 1e9).toString(36)}`;
-  }
-
+  const settleKey = requireSettleKey(body);
   const prior = getWalletOperation(user.id, "casino_settle", settleKey);
   if (prior) {
     const live = entities.Character.get(ch.id) || ch;
@@ -1623,131 +1723,42 @@ export const CasinoSettle = wrap((user, body = {}) => {
       ...prior,
       character: live,
       balances: getBalances(live),
-      casino: serializeCasinoState(live),
+      casino: serializeCasinoState(live, user),
       idempotent_replay: true,
     };
   }
 
-  // Affordability before roll — max loss is the wager for all recovered games.
+  const sdf = getMissionStardustPerFuel(ch.level || 1);
   const live0 = entities.Character.get(ch.id) || ch;
-  if (game === "dice" || game === "wheel") {
-    if ((live0.stardust || 0) < bet) httpErr(400, "Not enough stardust");
-  } else if (game === "flip" || game === "jackpot") {
-    if (!NOVA_CASINO_OPEN) httpErr(400, "Crystal tables sealed");
-    if (!hasNova(live0, bet)) httpErr(400, "Not enough Nova Crystals");
-  }
+  const betCheck = validateStardustWager(body.bet, sdf, live0.stardust || 0);
+  if (!betCheck.ok) httpErr(400, betCheck.reason);
+  const bet = betCheck.bet;
 
-  const resolved = resolveCasinoOutcome({
-    gameId: game,
-    bet,
-    choice: body.choice,
-    level: ch.level || 1,
-    rng: secureRandom,
-    randomInt: secureRandomInt,
-  });
-
-  const live = entities.Character.get(ch.id) || ch;
-  const beforeStardust = live.stardust || 0;
-  const beforeNova = live.nova_crystals || 0;
-
-  if (resolved.currency === "stardust" && resolved.delta < 0 && (live.stardust || 0) < Math.abs(resolved.delta)) {
-    httpErr(400, "Not enough stardust");
-  }
-  if (resolved.currency === "nova" && resolved.delta < 0 && !hasNova(live, Math.abs(resolved.delta))) {
-    httpErr(400, "Not enough Nova Crystals");
-  }
-
-  let character = live;
-  let patch = {};
-
-  if (resolved.delta === 0) {
-    const receipt = {
-      success: true,
-      push: true,
-      wager_id: settleKey,
-      game: resolved.game,
+  let resolved;
+  if (game === GAME_IDS.GALACTIC_DICE) {
+    resolved = resolveGalacticDice({
       bet,
-      gross_wager: resolved.gross_wager,
-      gross_payout: resolved.gross_payout,
-      net_result: 0,
-      delta_stardust: 0,
-      delta_crystals: 0,
-      outcome: resolved.outcome,
-      rules_version: CASINO_RULES_VERSION,
-      max_bet: getCasinoMaxStardustBet(ch.level || 1),
-    };
-    saveWalletOperation(user.id, "casino_settle", settleKey, receipt);
-    auditCasinoSettle({
-      user,
-      character: live,
-      game: resolved.game,
-      bet,
-      beforeStardust,
-      afterStardust: beforeStardust,
-      beforeNova,
-      afterNova: beforeNova,
-      outcome: resolved.outcome,
-      correlationId: newCorrelationId(),
-    });
-    return {
-      ...receipt,
-      patch: {},
-      character: live,
-      balances: getBalances(live),
-      casino: serializeCasinoState(live),
-    };
-  }
-
-  let mut;
-  if (resolved.currency === "stardust") {
-    if (resolved.delta > 0) {
-      mut = creditStardust({
-        user,
-        character: live,
-        amount: resolved.delta,
-        category: "casino_payout",
-        reasonCode: "casino_settle",
-        idempotencyKey: `casino_pay_${settleKey}`,
-        relatedEntityType: "casino_wager",
-        relatedEntityId: settleKey,
-      });
-    } else {
-      mut = debitStardust({
-        user,
-        character: live,
-        amount: Math.abs(resolved.delta),
-        category: "casino_wager",
-        reasonCode: "casino_settle",
-        idempotencyKey: `casino_wager_${settleKey}`,
-        relatedEntityType: "casino_wager",
-        relatedEntityId: settleKey,
-      });
-    }
-  } else if (resolved.delta > 0) {
-    mut = creditNova({
-      user,
-      character: live,
-      amount: resolved.delta,
-      category: "casino_payout",
-      reasonCode: "casino_settle",
-      idempotencyKey: `casino_pay_${settleKey}`,
+      choice: body.choice,
+      randomInt: secureRandomInt,
     });
   } else {
-    mut = debitNova({
-      user,
-      character: live,
-      amount: Math.abs(resolved.delta),
-      category: "casino_wager",
-      reasonCode: "casino_settle",
-      idempotencyKey: `casino_wager_${settleKey}`,
-    });
+    resolved = resolveStardustWheel({ bet, rng: secureRandom });
   }
-  character = mut.character;
-  patch = mut.patch || {};
+
+  const beforeStardust = live0.stardust || 0;
+  const beforeNova = live0.nova_crystals || 0;
+  const { character, patch } = settleGrossCurrency({
+    user,
+    character: live0,
+    currency: "stardust",
+    wager: bet,
+    grossPayout: resolved.gross_payout,
+    settleKey,
+  });
 
   auditCasinoSettle({
     user,
-    character: live,
+    character: live0,
     game: resolved.game,
     bet,
     beforeStardust,
@@ -1763,23 +1774,464 @@ export const CasinoSettle = wrap((user, body = {}) => {
     wager_id: settleKey,
     game: resolved.game,
     bet,
-    gross_wager: resolved.gross_wager,
+    wager: bet,
+    currency: "stardust",
+    choice: resolved.choice || null,
+    dice: resolved.dice || null,
+    total: resolved.total ?? null,
+    doubles: resolved.doubles ?? null,
+    natural_seven: resolved.natural_seven ?? null,
+    tier_id: resolved.tier_id || null,
+    label: resolved.label || null,
+    segment: resolved.segment || null,
+    payout_mult: resolved.payout_mult,
+    gross_wager: bet,
     gross_payout: resolved.gross_payout,
     net_result: resolved.net_result,
-    delta_stardust: resolved.currency === "stardust" ? resolved.delta : 0,
-    delta_crystals: resolved.currency === "nova" ? resolved.delta : 0,
+    delta_stardust: resolved.net_result,
+    delta_crystals: 0,
+    won: !!resolved.won,
+    shove: !!resolved.shove,
     outcome: resolved.outcome,
     rules_version: CASINO_RULES_VERSION,
-    max_bet: getCasinoMaxStardustBet(ch.level || 1),
     balances: getBalances(character),
   };
   saveWalletOperation(user.id, "casino_settle", settleKey, receipt);
-
+  recordCasinoPlay({
+    accountId: user.id,
+    gameId: resolved.game,
+    event: {
+      wager: bet,
+      gross_payout: resolved.gross_payout,
+      outcome: resolved.outcome,
+      won: !!resolved.won,
+      shove: !!resolved.shove,
+      choice: resolved.choice,
+      natural_seven: !!resolved.natural_seven,
+      doubles: !!resolved.doubles,
+    },
+  });
   return {
     ...receipt,
     patch,
     character,
-    casino: serializeCasinoState(character),
+    casino: serializeCasinoState(character, user),
+  };
+});
+
+/** Start Crystal Refining or Smuggler's Cache session (deducts wager once). */
+export const CasinoSessionStart = wrap((user, body = {}) => {
+  assertCasinoClientSafe(body);
+  const ch = requireMyChar(user);
+  const game = normalizeCasinoGameId(body.game);
+  if (game !== GAME_IDS.CRYSTAL_REFINING && game !== GAME_IDS.SMUGGLERS_CACHE) {
+    httpErr(400, "CasinoSessionStart is for Crystal Refining / Smuggler's Cache");
+  }
+  const settleKey = requireSettleKey(body);
+  const prior = getWalletOperation(user.id, "casino_settle", settleKey);
+  if (prior) {
+    const live = entities.Character.get(ch.id) || ch;
+    return {
+      ...prior,
+      character: live,
+      balances: getBalances(live),
+      casino: serializeCasinoState(live, user),
+      idempotent_replay: true,
+    };
+  }
+
+  const existing = findActiveCasinoSession(user.id, ch.id, game);
+  if (existing) {
+    httpErr(409, "An active session already exists for this game", "CASINO_SESSION_ACTIVE");
+  }
+
+  const live0 = entities.Character.get(ch.id) || ch;
+  const bal = getBalances(live0);
+  const betCheck = validateNovaWager(body.bet, bal.nova_wagerable);
+  if (!betCheck.ok) httpErr(400, betCheck.reason, betCheck.code || "INVALID_NOVA_WAGER");
+  const bet = betCheck.bet;
+
+  // Deduct wager once from WAGERABLE Nova only.
+  const deb = debitNova({
+    user,
+    character: live0,
+    amount: bet,
+    category: "casino_wager",
+    reasonCode: "casino_session_start",
+    idempotencyKey: `casino_wager_${settleKey}`,
+    balanceType: NovaBalanceTypes.WAGERABLE,
+    debitPolicy: NovaBalanceTypes.WAGERABLE,
+  });
+  let character = deb.character;
+  const sessionId = `cs_${settleKey}`;
+
+  let state;
+  let publicResult = {};
+  if (game === GAME_IDS.CRYSTAL_REFINING) {
+    // Start = deduct + first refine attempt (not guaranteed).
+    const success = rollRefiningAttempt(0, secureRandom);
+    if (!success) {
+      state = {
+        stage: 0,
+        shattered: true,
+        completed: true,
+        can_collect: false,
+        can_refine: false,
+        collectible_mult: 0,
+        gross_payout: 0,
+        net_result: -bet,
+        last_event: "crystal_shattered",
+      };
+      const session = insertCasinoSession({
+        session_id: sessionId,
+        account_id: user.id,
+        character_id: ch.id,
+        game_id: game,
+        status: "completed",
+        wager: bet,
+        currency: "nova",
+        state,
+        start_request_id: settleKey,
+      });
+      publicResult = {
+        session_id: sessionId,
+        event: "crystal_shattered",
+        session: publicSessionState(session),
+        gross_payout: 0,
+        net_result: -bet,
+      };
+    } else {
+      const mult = refiningMultForStage(1);
+      state = {
+        stage: 1,
+        shattered: false,
+        completed: false,
+        can_collect: true,
+        can_refine: true,
+        collectible_mult: mult,
+        last_event: "refinement_succeeded",
+      };
+      const session = insertCasinoSession({
+        session_id: sessionId,
+        account_id: user.id,
+        character_id: ch.id,
+        game_id: game,
+        status: "active",
+        wager: bet,
+        currency: "nova",
+        state,
+        start_request_id: settleKey,
+      });
+      publicResult = {
+        session_id: sessionId,
+        event: "refinement_succeeded",
+        session: publicSessionState(session),
+      };
+    }
+  } else {
+    const board = buildSmugglersBoard(secureRandom);
+    state = {
+      board,
+      selected_index: null,
+    };
+    const session = insertCasinoSession({
+      session_id: sessionId,
+      account_id: user.id,
+      character_id: ch.id,
+      game_id: game,
+      status: "active",
+      wager: bet,
+      currency: "nova",
+      state,
+      start_request_id: settleKey,
+    });
+    publicResult = {
+      session_id: sessionId,
+      event: "round_started",
+      session: publicSessionState(session),
+      crate_count: 6,
+    };
+  }
+
+  const receipt = {
+    success: true,
+    wager_id: settleKey,
+    game,
+    bet,
+    wager: bet,
+    currency: "nova",
+    session_id: sessionId,
+    gross_wager: bet,
+    gross_payout: publicResult.gross_payout ?? null,
+    net_result: publicResult.net_result ?? null,
+    outcome: publicResult.event,
+    rules_version: CASINO_RULES_VERSION,
+    ...publicResult,
+    balances: getBalances(character),
+  };
+  saveWalletOperation(user.id, "casino_settle", settleKey, receipt);
+  auditCasinoSettle({
+    user,
+    character: live0,
+    game,
+    bet,
+    beforeStardust: live0.stardust || 0,
+    afterStardust: character.stardust || 0,
+    beforeNova: live0.nova_crystals || 0,
+    afterNova: character.nova_crystals || 0,
+    outcome: publicResult.event || "session_start",
+    correlationId: newCorrelationId(),
+  });
+  if (game === GAME_IDS.CRYSTAL_REFINING) {
+    const shattered = publicResult.event === "crystal_shattered";
+    recordCasinoPlay({
+      accountId: user.id,
+      gameId: game,
+      event: {
+        count_game: false,
+        session_started: true,
+        session_settled: shattered,
+        wager: bet,
+        gross_payout: shattered ? 0 : 0,
+        successful_attempt: !shattered,
+        failed_attempt: shattered,
+        shattered,
+        stage_reached: shattered ? 0 : 1,
+      },
+    });
+  }
+  return {
+    ...receipt,
+    patch: deb.patch || {},
+    character,
+    casino: serializeCasinoState(character, user),
+  };
+});
+
+/** Refine / Collect / Select crate actions. */
+export const CasinoSessionAction = wrap((user, body = {}) => {
+  assertCasinoClientSafe(body);
+  const ch = requireMyChar(user);
+  const actionKey = requireSettleKey(body);
+  const prior = getWalletOperation(user.id, "casino_action", actionKey);
+  if (prior) {
+    const live = entities.Character.get(ch.id) || ch;
+    return {
+      ...prior,
+      character: live,
+      balances: getBalances(live),
+      casino: serializeCasinoState(live, user),
+      idempotent_replay: true,
+    };
+  }
+
+  const sessionId = String(body.session_id || "").trim();
+  const session = getCasinoSession(sessionId);
+  if (!session) httpErr(404, "Session not found", "CASINO_SESSION_NOT_FOUND");
+  if (session.account_id !== user.id || session.character_id !== ch.id) {
+    httpErr(403, "Session does not belong to this character", "CASINO_SESSION_FORBIDDEN");
+  }
+
+  const action = String(body.action || "").toLowerCase();
+  let character = entities.Character.get(ch.id) || ch;
+  let response = {};
+
+  if (session.game_id === GAME_IDS.CRYSTAL_REFINING) {
+    if (session.status !== "active") {
+      httpErr(409, "Session already settled", "CASINO_SESSION_SETTLED");
+    }
+    const st = { ...session.state };
+    if (action === "refine" || action === "refine_again") {
+      if (!st.can_refine || st.stage < 1 || st.stage >= 5) {
+        httpErr(400, "Cannot refine at this stage");
+      }
+      const nextIdx = st.stage; // 0-based attempt index for next = current stage
+      const success = rollRefiningAttempt(nextIdx, secureRandom);
+      if (!success) {
+        st.shattered = true;
+        st.completed = true;
+        st.can_collect = false;
+        st.can_refine = false;
+        st.gross_payout = 0;
+        st.net_result = -session.wager;
+        st.last_event = "crystal_shattered";
+        updateCasinoSession(sessionId, { status: "completed", state: st, last_action_request_id: actionKey });
+        response = {
+          event: "crystal_shattered",
+          session: publicSessionState(getCasinoSession(sessionId)),
+          gross_payout: 0,
+          net_result: -session.wager,
+        };
+      } else {
+        const newStage = st.stage + 1;
+        st.stage = newStage;
+        st.collectible_mult = refiningMultForStage(newStage);
+        st.last_event = newStage >= 5 ? "final_refinement_completed" : "refinement_succeeded";
+        if (newStage >= 5) {
+          const gross = floorNovaCasinoPayout(session.wager, st.collectible_mult);
+          const cre = creditNova({
+            user,
+            character,
+            amount: gross,
+            category: "casino_payout",
+            reasonCode: "casino_refining_complete",
+            idempotencyKey: `casino_pay_${actionKey}`,
+            balanceType: NovaBalanceTypes.WAGERABLE,
+          });
+          character = cre.character;
+          st.completed = true;
+          st.can_collect = false;
+          st.can_refine = false;
+          st.gross_payout = gross;
+          st.net_result = Math.round((gross - session.wager) * 2) / 2;
+          updateCasinoSession(sessionId, { status: "completed", state: st, last_action_request_id: actionKey });
+          response = {
+            event: "final_refinement_completed",
+            session: publicSessionState(getCasinoSession(sessionId)),
+            gross_payout: gross,
+            net_result: st.net_result,
+          };
+        } else {
+          st.can_collect = true;
+          st.can_refine = true;
+          updateCasinoSession(sessionId, { status: "active", state: st, last_action_request_id: actionKey });
+          response = {
+            event: "refinement_succeeded",
+            session: publicSessionState(getCasinoSession(sessionId)),
+          };
+        }
+      }
+    } else if (action === "collect") {
+      if (!st.can_collect || st.stage < 1 || st.stage > 4) {
+        httpErr(400, "Collect is only available after stages 1–4");
+      }
+      const gross = floorNovaCasinoPayout(session.wager, st.collectible_mult);
+      const cre = creditNova({
+        user,
+        character,
+        amount: gross,
+        category: "casino_payout",
+        reasonCode: "casino_refining_collect",
+        idempotencyKey: `casino_pay_${actionKey}`,
+        balanceType: NovaBalanceTypes.WAGERABLE,
+      });
+      character = cre.character;
+      st.completed = true;
+      st.can_collect = false;
+      st.can_refine = false;
+      st.gross_payout = gross;
+      st.net_result = Math.round((gross - session.wager) * 2) / 2;
+      st.last_event = "payout_collected";
+      updateCasinoSession(sessionId, { status: "completed", state: st, last_action_request_id: actionKey });
+      response = {
+        event: "payout_collected",
+        session: publicSessionState(getCasinoSession(sessionId)),
+        gross_payout: gross,
+        net_result: st.net_result,
+      };
+    } else {
+      httpErr(400, "Invalid action (refine|collect)");
+    }
+  } else if (session.game_id === GAME_IDS.SMUGGLERS_CACHE) {
+    if (action !== "select" && action !== "select_crate") {
+      httpErr(400, "Invalid action (select)");
+    }
+    if (session.status !== "active" || session.state.selected_index != null) {
+      httpErr(409, "Crate already selected", "CASINO_SESSION_SETTLED");
+    }
+    const resolved = resolveSmugglersSelection({
+      bet: session.wager,
+      board: session.state.board,
+      index: body.crate_index ?? body.index,
+    });
+    if (resolved.gross_payout > 0) {
+      const cre = creditNova({
+        user,
+        character,
+        amount: resolved.gross_payout,
+        category: "casino_payout",
+        reasonCode: "casino_cache_settle",
+        idempotencyKey: `casino_pay_${actionKey}`,
+        balanceType: NovaBalanceTypes.WAGERABLE,
+      });
+      character = cre.character;
+    }
+    const st = {
+      board: resolved.board,
+      selected_index: resolved.selected_index,
+      cargo_id: resolved.cargo_id,
+      label: resolved.label,
+      payout_mult: resolved.payout_mult,
+      gross_payout: resolved.gross_payout,
+      net_result: resolved.net_result,
+      outcome: resolved.outcome,
+    };
+    updateCasinoSession(sessionId, { status: "completed", state: st, last_action_request_id: actionKey });
+    response = {
+      event: "crate_opened",
+      session: publicSessionState(getCasinoSession(sessionId)),
+      selected_index: resolved.selected_index,
+      board: resolved.board,
+      label: resolved.label,
+      cargo_id: resolved.cargo_id,
+      payout_mult: resolved.payout_mult,
+      gross_payout: resolved.gross_payout,
+      net_result: resolved.net_result,
+      won: resolved.won,
+    };
+  } else {
+    httpErr(400, "Unknown session game");
+  }
+
+  const receipt = {
+    success: true,
+    action_id: actionKey,
+    session_id: sessionId,
+    game: session.game_id,
+    wager: session.wager,
+    currency: "nova",
+    rules_version: CASINO_RULES_VERSION,
+    ...response,
+    balances: getBalances(character),
+  };
+  saveWalletOperation(user.id, "casino_action", actionKey, receipt);
+  if (session.game_id === GAME_IDS.CRYSTAL_REFINING) {
+    const st = getCasinoSession(sessionId)?.state || {};
+    const settled = ["crystal_shattered", "payout_collected", "final_refinement_completed"].includes(response.event);
+    recordCasinoPlay({
+      accountId: user.id,
+      gameId: session.game_id,
+      event: {
+        count_game: false,
+        session_settled: settled,
+        wager: session.wager,
+        gross_payout: response.gross_payout ?? 0,
+        successful_attempt: response.event === "refinement_succeeded" || response.event === "final_refinement_completed",
+        failed_attempt: response.event === "crystal_shattered",
+        shattered: response.event === "crystal_shattered",
+        collect_stage: response.event === "payout_collected" ? st.stage : undefined,
+        fifth_stage: response.event === "final_refinement_completed",
+        stage_reached: st.stage || 0,
+      },
+    });
+  } else if (session.game_id === GAME_IDS.SMUGGLERS_CACHE && response.event === "crate_opened") {
+    recordCasinoPlay({
+      accountId: user.id,
+      gameId: session.game_id,
+      event: {
+        wager: session.wager,
+        gross_payout: response.gross_payout ?? 0,
+        cargo_id: response.cargo_id,
+        selected_index: response.selected_index,
+        won: !!response.won,
+        outcome: response.cargo_id,
+      },
+    });
+  }
+  return {
+    ...receipt,
+    character,
+    casino: serializeCasinoState(character, user),
   };
 });
 
@@ -1831,12 +2283,29 @@ export const ClaimWeeklyNovaQuest = wrap((user, body) => {
   if (state.claimed.includes(questId)) httpErr(400, "Already claimed");
   if ((state[quest.key] || 0) < quest.goal) httpErr(400, "Quest not complete");
   const nextState = { ...state, claimed: [...state.claimed, questId] };
+  const mut = creditNova({
+    user,
+    character: ch,
+    amount: quest.reward,
+    category: "weekly_quest",
+    reasonCode: `weekly_nova_${questId}`,
+    relatedEntityType: "character",
+    relatedEntityId: ch.id,
+    idempotencyKey: `weekly_nova_${ch.id}_${state.week_key || "w"}_${questId}`,
+    balanceType: NovaBalanceTypes.PROMOTIONAL,
+  });
   const patch = {
     weekly_nova_quests: nextState,
-    ...novaCreditPatch(ch, quest.reward),
+    ...mut.patch,
   };
-  const character = entities.Character.update(ch.id, patch);
-  return { success: true, quest, patch, character };
+  const character = entities.Character.update(mut.character.id, { weekly_nova_quests: nextState });
+  return {
+    success: true,
+    quest,
+    patch,
+    character,
+    balances: getBalances(character),
+  };
 });
 
 /** Crystal pack catalog — finalized Restoration 15 grants (display Nova). */
@@ -1878,9 +2347,10 @@ export const PurchaseCrystalPack = wrap((user, body) => {
     amount: pack.crystals,
     category: "nova_pack_grant",
     reasonCode: "nova_pack_grant",
-    relatedEntityType: "product",
-    relatedEntityId: pack.id,
+    relatedEntityType: "character",
+    relatedEntityId: ch.id,
     idempotencyKey: idem,
+    balanceType: NovaBalanceTypes.WAGERABLE,
   });
   return {
     success: true,
@@ -2133,6 +2603,8 @@ export const ECONOMY_FOLLOW_ON_HANDLERS = {
   GetCasinoState,
   RecoverCasinoWager,
   CasinoSettle,
+  CasinoSessionStart,
+  CasinoSessionAction,
   BuyCharacterSlot,
   ClaimWeeklyNovaQuest,
   PurchaseCrystalPack,

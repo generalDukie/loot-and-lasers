@@ -173,7 +173,6 @@ export function serializeShopVendors(meta) {
 }
 
 export function serializeShopPresentation(meta, win = getShopWindow()) {
-  const freeAvailable = !meta?.free_refresh_used;
   return {
     shop_meta: meta,
     shop_window: {
@@ -187,8 +186,8 @@ export function serializeShopPresentation(meta, win = getShopWindow()) {
     vendors: serializeShopVendors(meta),
     refresh: {
       cost_nova: SHOP_REFRESH_COST,
-      free_available: freeAvailable,
-      free_refresh_used: !!meta?.free_refresh_used,
+      free_available: false,
+      free_refresh_used: true,
       manual_refresh_count: Math.max(0, Math.floor(meta?.manual_refresh_count || 0)),
       hot_deal_refresh_every: HOT_DEAL_REFRESH_COUNT,
       hot_manual_refresh_count: Math.max(0, Math.floor(meta?.hot_manual_refresh_count || 0)),

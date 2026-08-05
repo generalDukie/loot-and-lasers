@@ -79,7 +79,7 @@ test("finalized Nova sink costs", () => {
   assert.equal(SHOP_REFRESH_COST, 20);
   assert.equal(ARENA_PAID_BATTLE_COST, 15);
   assert.equal(DUNGEON_SKIP_COST, 25);
-  assert.equal(STARTING_NOVA_DISPLAY, 25);
+  assert.equal(STARTING_NOVA_DISPLAY, 500);
 });
 
 test("Nova half-unit precision", () => {
@@ -120,11 +120,19 @@ test("StardustPerFuel shared primitive still authoritative", () => {
 
 test("Nova package catalog grants", () => {
   assert.equal(resolveNovaPackage("pack_2").crystals, 275);
+  assert.equal(resolveNovaPackage("pack_2").price_label, "$1.99");
+  assert.equal(resolveNovaPackage("pack_2").name, "Signal Shard");
   assert.equal(resolveNovaPackage("pack_5").crystals, 850);
+  assert.equal(resolveNovaPackage("pack_5").price_label, "$4.99");
   assert.equal(resolveNovaPackage("pack_10").crystals, 1950);
+  assert.equal(resolveNovaPackage("pack_10").price_label, "$9.99");
   assert.equal(resolveNovaPackage("pack_20").crystals, 4500);
+  assert.equal(resolveNovaPackage("pack_20").price_label, "$19.99");
   assert.equal(resolveNovaPackage("pack_50").crystals, 12750);
+  assert.equal(resolveNovaPackage("pack_50").price_label, "$49.99");
   assert.equal(resolveNovaPackage("pack_100").crystals, 30000);
+  assert.equal(resolveNovaPackage("pack_100").price_label, "$99.99");
+  assert.equal(resolveNovaPackage("pack_100").name, "Hypernova Cache");
   assert.equal(resolveNovaPackage("pouch").crystals, 850);
   assert.equal(Object.keys(NOVA_PACKAGES).filter((k) => k.startsWith("pack_")).length, 6);
 });

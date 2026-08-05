@@ -4,7 +4,8 @@ import { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
 const FIELDS = [
   { key: "stardust", label: "Stardust", icon: STARDUST_GLYPH },
-  { key: "nova_crystals", label: "Nova Crystals", icon: "💎" },
+  { key: "nova_wagerable", label: "Purchased Nova (wagerable)", icon: "💎" },
+  { key: "nova_promotional", label: "Bonus Nova (non-wagerable)", icon: "✨" },
   { key: "fuel", label: "Fuel", icon: "⛽" },
   { key: "experience", label: "Experience", icon: "⭐" },
 ];

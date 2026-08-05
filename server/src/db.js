@@ -311,6 +311,77 @@ db.exec(`
   }
 })();
 
+/**
+ * Dual Nova balances — wagerable vs promotional.
+ * Evidence: pack grants tied to character → wagerable; remainder → promotional.
+ * Uncertain balances (no pack evidence) → all promotional (never silently all-purchased).
+ */
+(() => {
+  const META_KEY = "nova_dual_balance_v1";
+  const existing = db.prepare("SELECT value FROM app_meta WHERE key = ?").get(META_KEY);
+  if (existing?.value === "done") return;
+
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    const rows = db.prepare("SELECT id, data FROM entities WHERE type = 'Character'").all();
+    const update = db.prepare("UPDATE entities SET data = ?, updated_date = ? WHERE id = ? AND type = 'Character'");
+    const now = new Date().toISOString();
+    let uncertain = 0;
+    let evidenced = 0;
+    for (const row of rows) {
+      let data;
+      try {
+        data = JSON.parse(row.data);
+      } catch {
+        continue;
+      }
+      if (data.nova_dual_balance_v1) {
+        update.run(JSON.stringify(data), now, row.id);
+        continue;
+      }
+      const total = Math.max(0, Math.floor(Number(data.nova_crystals) || 0));
+      let evidencedWagerable = 0;
+      try {
+        const ops = db.prepare(`
+          SELECT result_json FROM wallet_operations
+          WHERE operation_type = 'econ_credit_nova_crystals'
+        `).all();
+        for (const op of ops) {
+          let tx;
+          try { tx = JSON.parse(op.result_json || "{}"); } catch { continue; }
+          if (tx.category !== "nova_pack_grant") continue;
+          if (tx.related_entity_id !== row.id && tx.character_id !== row.id) continue;
+          const half = Number(tx.amount_half_units) || Math.round((Number(tx.amount) || 0) * 2);
+          if (half > 0) evidencedWagerable += half;
+        }
+      } catch { /* ignore */ }
+      const wagerable = Math.min(total, Math.max(0, evidencedWagerable));
+      const promotional = Math.max(0, total - wagerable);
+      const classification = evidencedWagerable > 0
+        ? (wagerable < total ? "pack_evidence_remainder_promotional" : "pack_evidence_full")
+        : (total > 0 ? "uncertain_remainder_as_promotional" : "empty");
+      if (classification.startsWith("uncertain")) uncertain += 1;
+      if (classification.startsWith("pack_")) evidenced += 1;
+      data.nova_wagerable_half = wagerable;
+      data.nova_promotional_half = promotional;
+      data.nova_crystals = total;
+      data.economy_nova_scale = 2;
+      data.nova_dual_balance_v1 = true;
+      data.nova_migration_classification = classification;
+      update.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
+    }
+    db.prepare(
+      "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    ).run(META_KEY, "done");
+    db.exec("COMMIT");
+    console.log(`[migrate] Nova dual balances applied (${META_KEY}) evidenced=${evidenced} uncertain_as_promo=${uncertain}`);
+  } catch (err) {
+    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+    console.error("[migrate] Nova dual balances failed:", err);
+    throw err;
+  }
+})();
+
 import { clock } from "./shared/time/clock.js";
 
 export function nowIso() {

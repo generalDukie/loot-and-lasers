@@ -41,7 +41,9 @@ func _run() -> void:
 	var character_id := str(character.get("id", ""))
 	if not _check(not character_id.is_empty(), "Character id returned"):
 		return
-	if not _check(int(character.get("nova_crystals", -1)) in [25, 50], "starter currency server-authored"):
+	if not _check(int(character.get("nova_crystals", -1)) == 1000, "starter Nova 500 display (1000 half-units)"):
+		return
+	if not _check(int(character.get("stardust", -1)) == 0, "starter Stardust is 0"):
 		return
 
 	var replay: Dictionary = await AuthManager.create_character(payload, request_id)

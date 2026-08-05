@@ -129,11 +129,43 @@ const createdPayload = sanitizeCreatePayload(account, "Character", {
   stats: { strength: 99 },
 });
 assertCharacterCreateShape(createdPayload);
-assert.equal(createdPayload.nova_crystals, 50);
+assert.equal(createdPayload.nova_crystals, 0);
+assert.equal(createdPayload.stardust, 0);
 assert.equal(createdPayload.level, 1);
 assert.deepEqual(createdPayload.stats, classBaseStats("Vanguard"));
 
+const { applyCharacterCreationStartingGrant, getBalances, STARTING_NOVA_DISPLAY, STARTING_STARDUST } =
+  await import("../src/shared/currencyService.js");
+
 const character = entities.Character.create(createdPayload);
+const granted = applyCharacterCreationStartingGrant(account, character);
+assert.equal(granted.balances.nova_crystals, STARTING_NOVA_DISPLAY);
+assert.equal(granted.balances.stardust, STARTING_STARDUST);
+assert.equal(granted.balances.nova_crystals, 500);
+assert.equal(granted.character.nova_crystals, 1000); // half-units
+assert.equal(granted.character.stardust, 0);
+
+// Second character on same account also gets 500 Nova / 0 Stardust
+// (build payload without slot-gate; grant path is what we verify here)
+const payload2 = {
+  ...createdPayload,
+  name: "FoundationTwo",
+  created_by_id: account.id,
+  created_by: account.email,
+  nova_crystals: 0,
+  stardust: 0,
+};
+const character2 = entities.Character.create(payload2);
+const granted2 = applyCharacterCreationStartingGrant(account, character2);
+assert.equal(granted2.balances.nova_crystals, 500);
+assert.equal(granted2.balances.stardust, 0);
+assert.notEqual(character.id, character2.id);
+
+// Retry grant is idempotent — no double Nova
+const replay = applyCharacterCreationStartingGrant(account, granted.character);
+assert.equal(replay.replay, true);
+assert.equal(getBalances(entities.Character.get(character.id)).nova_crystals, 500);
+
 account.active_character_id = character.id;
 
 const selected = resolveSelectedCharacter(account);

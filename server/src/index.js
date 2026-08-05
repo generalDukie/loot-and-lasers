@@ -23,6 +23,7 @@ import {
 } from "./entityAccess.js";
 import { assertCanUnequipToBag } from "./shared/inventoryGrant.js";
 import { db, nowIso } from "./db.js";
+import { applyCharacterCreationStartingGrant } from "./shared/currencyService.js";
 import { ensureDefaultSchedules } from "./scheduling/bootstrap.js";
 import { startScheduler } from "./scheduling/worker.js";
 import { createTimeRouter, createScheduleRouter } from "./routes/time.js";
@@ -257,11 +258,18 @@ app.post("/api/entities/:type", requireAuth, enforceMaintenanceWrites, (req, res
     }
     assertCanCreate(req.user, req.params.type, rawBody);
     const data = sanitizeCreatePayload(req.user, req.params.type, rawBody);
-    const created = store.create(data, {
+    let created = store.create(data, {
       created_by_id: req.user.id,
       created_by: req.user.email,
       emit: !fingerprint,
     });
+    // Per-character starting Nova (500) via economy ledger — not client/Nakama authored.
+    if (req.params.type === "Character" && !isAdmin(req.user)) {
+      const grant = applyCharacterCreationStartingGrant(req.user, created, {
+        requestId,
+      });
+      created = grant.character;
+    }
     if (fingerprint) {
       const account = db.prepare("SELECT active_character_id FROM users WHERE id = ?").get(req.user.id);
       if (!account?.active_character_id) {

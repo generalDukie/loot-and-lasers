@@ -243,10 +243,10 @@ func refresh_shop_for(_character_id: String = "", _shop_id: String = DEFAULT_SHO
 		return _fail("Shop request already in progress")
 	_busy = true
 	_set_mutating(true)
-	var use_free := not bool(shop_meta.get("free_refresh_used", false))
+	# Always paid restock (20 Nova) — infinite refreshes; no free/cooldown gate.
 	var res: Dictionary = await GameApiClient.invoke("RefreshShop", {
 		"which": "all",
-		"use_free": use_free,
+		"use_free": false,
 	})
 	_busy = false
 	_set_mutating(false)

@@ -290,11 +290,10 @@ export default function ShopPage() {
 
   async function refreshShop() {
     if (gearRefreshing || !shopMeta) return;
-    const freeLeft = !shopMeta.free_refresh_used;
-    if (!freeLeft && (character.nova_crystals || 0) < SHOP_REFRESH_COST) {
+    if ((character.nova_crystals || 0) < SHOP_REFRESH_COST) {
       toast({
         title: "Not enough Nova Crystals",
-        description: `Need ${SHOP_REFRESH_COST} 💎 to refresh (free refresh already used this period).`,
+        description: `Need ${SHOP_REFRESH_COST} 💎 to refresh.`,
         variant: "destructive",
       });
       return;
@@ -303,16 +302,13 @@ export default function ShopPage() {
     try {
       const res = await api.functions.invoke("RefreshShop", {
         which: "all",
-        use_free: freeLeft,
+        use_free: false,
       });
       applyShopResult(res);
-      const usedFree = res.used_free ?? res.data?.used_free ?? freeLeft;
-      if (!usedFree) void trackNovaSpend(character, SHOP_REFRESH_COST, "shop_refresh");
+      void trackNovaSpend(character, SHOP_REFRESH_COST, "shop_refresh");
       toast({
         title: "🔄 Black Market restocked",
-        description: usedFree
-          ? "Free refresh used — all 8 stalls rerolled."
-          : "Premium refresh — all 8 stalls rerolled.",
+        description: `Premium refresh (−${SHOP_REFRESH_COST} 💎) — all 8 stalls rerolled.`,
       });
     } catch (e) {
       toast({ title: "Refresh failed", description: e.message, variant: "destructive" });
@@ -392,8 +388,6 @@ export default function ShopPage() {
   const yanked = shopMeta.yanked || {};
   const hotSold = !!shopMeta.hot_purchased;
   const hotYanked = !!shopMeta.hot_yanked;
-  const freeLeft = !shopMeta.free_refresh_used;
-
   function isStimSlot(slot) {
     return slot?.type === "consumable" || slot?._offerKind === "stim";
   }
@@ -587,11 +581,7 @@ export default function ShopPage() {
                 className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md font-display font-semibold tracking-wide bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-400/30 disabled:opacity-50"
               >
                 <RefreshCw className={`w-3 h-3 ${gearRefreshing ? "animate-spin" : ""}`} />
-                {freeLeft ? (
-                  <>Free restock</>
-                ) : (
-                  <>Restock · <Gem className="w-2.5 h-2.5" /> {SHOP_REFRESH_COST}</>
-                )}
+                <>Restock · <Gem className="w-2.5 h-2.5" /> {SHOP_REFRESH_COST}</>
               </motion.button>
             </div>
 

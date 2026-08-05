@@ -2,10 +2,74 @@ extends Node
 ## Crystal store — pack catalog + weekly Nova quests (mirrors web weeklyNovaQuests.js).
 
 const PACKS := [
-	{"id": "pouch", "name": "Starter Pouch", "crystals": 500, "price": "$4.99", "bonus": "", "color": "#22D3EE"},
-	{"id": "cluster", "name": "Cosmic Cluster", "crystals": 1200, "price": "$9.99", "bonus": "+20%", "color": "#A855F7", "popular": true},
-	{"id": "vault", "name": "Stellar Vault", "crystals": 2800, "price": "$19.99", "bonus": "+25%", "color": "#F59E0B"},
-	{"id": "motherlode", "name": "Galactic Motherlode", "crystals": 6000, "price": "$39.99", "bonus": "+33%", "color": "#EF4444"},
+	{
+		"id": "pack_2",
+		"name": "Signal Shard",
+		"blurb": "A scout’s first haul from the fringe.",
+		"crystals": 275,
+		"price": "$1.99",
+		"usd": 1.99,
+		"bonus": "",
+		"color": "#67E8F9",
+		"tier": "spark",
+	},
+	{
+		"id": "pack_5",
+		"name": "Ember Pouch",
+		"blurb": "Warm crystals still humming from the kiln.",
+		"crystals": 850,
+		"price": "$4.99",
+		"usd": 4.99,
+		"bonus": "",
+		"color": "#22D3EE",
+		"tier": "ember",
+	},
+	{
+		"id": "pack_10",
+		"name": "Cosmic Cluster",
+		"blurb": "The operative favorite — dense and loud.",
+		"crystals": 1950,
+		"price": "$9.99",
+		"usd": 9.99,
+		"bonus": "",
+		"color": "#C084FC",
+		"tier": "cluster",
+		"popular": true,
+	},
+	{
+		"id": "pack_20",
+		"name": "Stellar Vault",
+		"blurb": "Sealed under guild wax for serious runs.",
+		"crystals": 4500,
+		"price": "$19.99",
+		"usd": 19.99,
+		"bonus": "",
+		"color": "#FBBF24",
+		"tier": "vault",
+	},
+	{
+		"id": "pack_50",
+		"name": "Void Motherlode",
+		"blurb": "Salvaged from a dark-sector freighter.",
+		"crystals": 12750,
+		"price": "$49.99",
+		"usd": 49.99,
+		"bonus": "",
+		"color": "#FB7185",
+		"tier": "motherlode",
+	},
+	{
+		"id": "pack_100",
+		"name": "Hypernova Cache",
+		"blurb": "Fleet-scale payload. Maximum yield.",
+		"crystals": 30000,
+		"price": "$99.99",
+		"usd": 99.99,
+		"bonus": "",
+		"color": "#FDE68A",
+		"tier": "hypernova",
+		"best_value": true,
+	},
 ]
 
 ## Mirrors WEEKLY_NOVA_QUESTS in src/lib/weeklyNovaQuests.js
@@ -133,6 +197,37 @@ func pack_by_id(pack_id: String) -> Dictionary:
 		if str(p["id"]) == pack_id:
 			return p
 	return {}
+
+
+func pack_value_bonus_pct(pack: Dictionary) -> int:
+	var base: Dictionary = PACKS[0] if PACKS.size() > 0 else {}
+	var base_usd := float(base.get("usd", 1.99))
+	var base_crystals := float(base.get("crystals", 275))
+	if base_usd <= 0.0 or base_crystals <= 0.0:
+		return 0
+	var base_rate := base_crystals / base_usd
+	var usd := float(pack.get("usd", 0))
+	var crystals := float(pack.get("crystals", 0))
+	if usd <= 0.0:
+		return 0
+	var rate := crystals / usd
+	return maxi(0, int(round((rate / base_rate - 1.0) * 100.0)))
+
+
+func featured_packs() -> Array:
+	var out: Array = []
+	for p in PACKS:
+		if bool(p.get("popular", false)) or bool(p.get("best_value", false)):
+			out.append(p)
+	return out
+
+
+func shelf_packs() -> Array:
+	var out: Array = []
+	for p in PACKS:
+		if not bool(p.get("popular", false)) and not bool(p.get("best_value", false)):
+			out.append(p)
+	return out
 
 
 func _apply_character_payload(data: Dictionary) -> void:

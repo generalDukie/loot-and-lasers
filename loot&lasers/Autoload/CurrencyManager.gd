@@ -65,6 +65,19 @@ func get_balances() -> Dictionary:
 	return (balances as Dictionary).duplicate(true) if typeof(balances) == TYPE_DICTIONARY else {}
 
 
+## Extra wallet fields (e.g. nova_wagerable / nova_promotional display amounts).
+func get_meta_balance(key: String, default_value: Variant = 0.0) -> Variant:
+	return wallet.get(key, default_value)
+
+
+func nova_wagerable() -> float:
+	return float(wallet.get("nova_wagerable", 0.0))
+
+
+func nova_promotional() -> float:
+	return float(wallet.get("nova_promotional", 0.0))
+
+
 func can_afford(currency_id: String, amount: float) -> bool:
 	return amount >= 0.0 and float(get_balance(currency_id)) + 0.0000001 >= amount
 
@@ -207,6 +220,8 @@ func apply_character_snapshot(
 		if value_changed:
 			changed.append(currency_id)
 
+	var nova_w := _read_nova_split(character, "nova_wagerable", "nova_wagerable_half")
+	var nova_p := _read_nova_split(character, "nova_promotional", "nova_promotional_half")
 	wallet = {
 		"wallet_version": 2,
 		"balances": balances,
@@ -216,6 +231,8 @@ func apply_character_snapshot(
 		"last_transaction_id": transaction_id,
 		"revision": _last_applied_sequence,
 		"server_revision": _last_server_revision,
+		"nova_wagerable": nova_w,
+		"nova_promotional": nova_p,
 	}
 	wallet_changed.emit(wallet)
 	if not changed.is_empty():
@@ -255,13 +272,19 @@ func apply_authoritative_wallet(payload: Dictionary, source: String = SOURCE_CHA
 	if typeof(balances) != TYPE_DICTIONARY:
 		return false
 	var character := GameManager.active_character.duplicate(true)
+	var bal := balances as Dictionary
 	for currency_id in CURRENCY_IDS:
-		if not (balances as Dictionary).has(currency_id):
+		if not bal.has(currency_id):
 			return false
 		character[currency_id] = _normalize_balance(
 			currency_id,
-			(balances as Dictionary).get(currency_id, 0)
+			bal.get(currency_id, 0)
 		)
+	# Authoritative display balances already (getBalances) — prefer split fields.
+	if bal.has("nova_wagerable"):
+		character["nova_wagerable"] = float(bal.get("nova_wagerable", 0))
+	if bal.has("nova_promotional"):
+		character["nova_promotional"] = float(bal.get("nova_promotional", 0))
 	var transaction_id := str(payload.get("transaction_id", ""))
 	var server_revision := int(payload.get("revision", 0))
 	if server_revision > 0 and server_revision < _last_server_revision:
@@ -274,6 +297,15 @@ func apply_authoritative_wallet(payload: Dictionary, source: String = SOURCE_CHA
 		for currency_id in CURRENCY_IDS:
 			GameManager.active_character[currency_id] = character[currency_id]
 	return applied
+
+
+func _read_nova_split(character: Dictionary, display_key: String, half_key: String) -> float:
+	if character.has(display_key):
+		return maxf(0.0, snappedf(float(character.get(display_key, 0)), 0.5))
+	if character.has(half_key):
+		return maxf(0.0, snappedf(float(character.get(half_key, 0)) / 2.0, 0.5))
+	# Prefer previous wallet value over treating total as wagerable.
+	return float(wallet.get(display_key, 0.0))
 
 
 func _empty_balances() -> Dictionary:

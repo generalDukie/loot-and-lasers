@@ -424,8 +424,10 @@ export function sanitizeCreatePayload(user, type, data = {}) {
         throw err;
       }
       out.stats = { ...base };
-      // Starting currency is wholly server-authored (display 25 Nova = 50 half-units).
-      out.nova_crystals = existingCount === 0 ? 50 : 0;
+      // Starting balances: Stardust=0, Nova=0 here; Nova granted via ledger after create.
+      out.stardust = 0;
+      out.total_stardust_earned = 0;
+      out.nova_crystals = 0;
       out.economy_nova_scale = 2;
 
       // Strip other locked progression fields if client forged them.

@@ -21,7 +21,12 @@ Nakama `wallets/wallet` remains a parallel legacy ledger via `walletBridge`
 - Stardust: integer (`clampStardust`)
 - Nova: integer half-units (`1 Nova = 2 units`); display `.0` / `.5` only
 - Migration `nova_half_units_v1`: existing balances ×2 + `economy_nova_scale: 2`
-- Starting Nova: **25 display** (50 half-units) on first character
+- Starting Nova: **500 display** (1000 half-units) on **every** new character
+- Starting Stardust: **0**
+- Grant path: `applyCharacterCreationStartingGrant` → `creditNova` ledger
+  (`character_creation_starting_nova`); Stardust init audited at 0
+- Idempotent per `character.id` — creation retries do not double-grant
+- Not account-wide; second/third characters each receive their own 500 Nova
 
 ### 6–8. Ledger & mutation API
 
@@ -51,6 +56,7 @@ Mission skip ignores elapsed time; naturally complete → 0 charge.
 ### 18–22. Premium packages
 
 Finalized grants: 275 / 850 / 1950 / 4500 / 12750 / 30000  
+Prices: $1.99 / $4.99 / $9.99 / $19.99 / $49.99 / $99.99  
 (`pack_2`…`pack_100`; legacy pouch/cluster aliases map to finalized packs).
 
 `PurchaseCrystalPack`: catalog grant + idempotent receipt key; production still
@@ -98,7 +104,7 @@ npm run test:mining    # 15 passed
 - Arena full matchmaking = Prompt 16
 - Ship purchase still uses `ship.cost` against Nova field (pre-existing quirk)
 - Stress/concurrency suite not added this phase
-- Godot auth foundation test still expects starter display 25/50 — update if
+- Godot auth foundation test expects starter display Nova **500** (1000 half-units)
   asserting raw storage
 
 ### Completion gates

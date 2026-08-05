@@ -292,28 +292,40 @@ async function main() {
     }
   }
 
-  // ── 4. CASINO ────────────────────────────────────────────
+  // ── 4. CASINO (casino_v2) ─────────────────────────────────
   banner(4, "CASINO");
   {
-    const dice = await invoke("CasinoSettle", { game: "dice", bet: 1000, choice: "high" });
-    if (dice.ok) {
-      const o = dice.data?.outcome || {};
-      ok(`Dice · roll=${o.dice} won=${o.won} ΔSD=${dice.data?.delta_stardust}`);
-      character = dice.data?.character || character;
+    const state = await invoke("GetCasinoState", {});
+    if (state.ok) {
+      ok(`GetCasinoState · games=${(state.data?.casino?.enabled_games || []).join(",")}`);
     } else {
-      fail(`CasinoSettle dice ${dice.status}: ${dice.error}`);
+      fail(`GetCasinoState ${state.status}: ${state.error}`);
     }
 
-    const wheel = await invoke("CasinoSettle", { game: "wheel", bet: 1000 });
+    const minBet = state.data?.casino?.stardust_limits?.min || 1000;
+    const dice = await invoke("CasinoSettle", {
+      game: "galactic_dice",
+      bet: minBet,
+      choice: "high",
+      request_id: `smoke-dice-${Date.now()}`,
+    });
+    if (dice.ok) {
+      ok(`Galactic Dice · total=${dice.data?.total} won=${dice.data?.won} net=${dice.data?.net_result}`);
+      character = dice.data?.character || character;
+    } else {
+      fail(`CasinoSettle galactic_dice ${dice.status}: ${dice.error}`);
+    }
+
+    const wheel = await invoke("CasinoSettle", {
+      game: "stardust_wheel",
+      bet: minBet,
+      request_id: `smoke-wheel-${Date.now()}`,
+    });
     if (wheel.ok) {
-      if (wheel.data?.push) ok(`Wheel · push`);
-      else {
-        const o = wheel.data?.outcome || {};
-        ok(`Wheel · ${o.label || o.mult + "x"} ΔSD=${wheel.data?.delta_stardust}`);
-      }
+      ok(`Stardust Wheel · ${wheel.data?.tier_id || wheel.data?.label} net=${wheel.data?.net_result}`);
       character = wheel.data?.character || character;
     } else {
-      fail(`CasinoSettle wheel ${wheel.status}: ${wheel.error}`);
+      fail(`CasinoSettle stardust_wheel ${wheel.status}: ${wheel.error}`);
     }
   }
 

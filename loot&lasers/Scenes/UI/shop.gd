@@ -289,13 +289,7 @@ func _make_market_section() -> PanelContainer:
 	head_col.add_child(h)
 
 	var restock := Button.new()
-	var rem := ShopManager.get_refresh_remaining()
-	if rem > 0:
-		restock.text = "Restock in %ss" % rem
-		restock.disabled = true
-	else:
-		restock.text = "Free Restock"
-		restock.disabled = false
+	restock.text = "Restock · 💎 %s" % ShopManager.SHOP_REFRESH_COST
 	_apply_restock_btn(restock, Color("#FBBF24"))
 	restock.pressed.connect(func() -> void: _on_refresh("all"))
 	head.add_child(restock)
@@ -661,8 +655,9 @@ func _apply_haggle_btn(btn: Button) -> void:
 func _on_refresh(which: String) -> void:
 	if _busy:
 		return
-	if ShopManager.get_refresh_remaining() > 0:
-		_set_status("Restock available in %ss." % ShopManager.get_refresh_remaining())
+	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
+	if nova < ShopManager.SHOP_REFRESH_COST:
+		_set_status("Need %s 💎 to refresh." % ShopManager.SHOP_REFRESH_COST)
 		return
 	_busy = true
 	_set_status("Refreshing %s…" % which)
@@ -672,7 +667,7 @@ func _on_refresh(which: String) -> void:
 		_set_status(str(res.get("error", "Refresh failed")))
 		_update_meta()
 		return
-	_set_status("🔄 Black Market restocked (free).")
+	_set_status("🔄 Black Market restocked (−%s 💎)." % ShopManager.SHOP_REFRESH_COST)
 	_populate()
 
 

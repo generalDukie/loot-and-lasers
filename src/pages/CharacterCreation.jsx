@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
-import { RACES, CLASSES, getExpForLevel, STAT_COLORS, FUEL_MAX } from "@/lib/gameData";
+import { RACES, CLASSES, STAT_COLORS } from "@/lib/gameData";
 import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
 import { bustMyCharacterCache } from "@/lib/socialEngine";
 import RaceCard from "@/components/game/RaceCard";
@@ -58,7 +58,6 @@ export default function CharacterCreation() {
     marking: "",
   });
   const [checked, setChecked] = useState(false);
-  const [startCrystals, setStartCrystals] = useState(100);
   const [userLegacyName, setUserLegacyName] = useState("");
   const [userLegacyDisplay, setUserLegacyDisplay] = useState("surname");
   const [existingCharCount, setExistingCharCount] = useState(0);
@@ -73,7 +72,6 @@ export default function CharacterCreation() {
         const maxSlots = Math.min(3, 1 + (me.purchased_slots || 0));
         if (list.length >= maxSlots) { navigate("/"); return; }
         setExistingCharCount(list.length);
-        setStartCrystals(list.length === 0 ? 100 : 0);
         setUserLegacyName(me.legacy_name || "");
         setUserLegacyDisplay(me.legacy_display === "family" ? "family" : "surname");
       } catch {
@@ -179,18 +177,6 @@ export default function CharacterCreation() {
         legacy_display: userLegacyDisplay,
         race: form.race,
         class: form.class,
-        level: 1,
-        experience: 0,
-        experience_to_next_level: getExpForLevel(1),
-        nova_crystals: startCrystals,
-        stats: baseStats,
-        unspent_stat_points: 0,
-        attribute_purchases: 0,
-        attribute_purchases_by_stat: { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 },
-        stardust: 0,
-        fuel: FUEL_MAX,
-        max_fuel: FUEL_MAX,
-        fuel_purchases: 0,
         appearance: {
           skin_color: form.skinColor || race.skinColors[0],
           eye_style: form.eyeStyle,
@@ -201,8 +187,6 @@ export default function CharacterCreation() {
           marking: form.marking,
         },
         equipped_items: {},
-        missions_completed: 0,
-        highest_sector: 1,
       });
       await api.auth.updateMe({ active_character_id: created.id });
       bustMyCharacterCache();

@@ -1468,33 +1468,35 @@ export function progressWeeklyNovaQuest(character, key, amount = 1) {
   return { ...state, [key]: nextVal };
 }
 
-// ── Casino ───────────────────────────────────────────────────
-export const NOVA_CASINO_OPEN = false;
-export const CASINO_MAX_NOVA_BET = 100;
-/** Max stardust bet ≈ 25× mission SD/F (floored at 100, capped). */
-export const CASINO_STARDUST_BET_SD_MULT = 25;
-export const CASINO_MAX_STARDUST_BET_CAP = 250_000 * XP_STARDUST_SCALE;
-export const CASINO_MIN_STARDUST_BET_FLOOR = 100 * XP_STARDUST_SCALE;
+// ── Casino (casino_v2 finalized games) ───────────────────────
+export const NOVA_CASINO_OPEN = true;
+export const CASINO_MAX_NOVA_BET = 1000;
+export const CASINO_MIN_NOVA_BET = 100;
+/** Max stardust bet = 50× mission SD/F; min = 1× SD/F. */
+export const CASINO_STARDUST_BET_SD_MULT = 50;
+export const CASINO_MAX_STARDUST_BET_CAP = 10_000_000 * XP_STARDUST_SCALE;
+export const CASINO_MIN_STARDUST_BET_FLOOR = 1;
 
 export function getCasinoMaxStardustBet(level = 1) {
-  const sdf = getMissionStardustPerFuel(level);
-  return Math.min(
-    CASINO_MAX_STARDUST_BET_CAP,
-    Math.max(CASINO_MIN_STARDUST_BET_FLOOR, sdf * CASINO_STARDUST_BET_SD_MULT),
-  );
+  const sdf = Math.max(1, Math.round(getMissionStardustPerFuel(level)));
+  return Math.min(CASINO_MAX_STARDUST_BET_CAP, sdf * CASINO_STARDUST_BET_SD_MULT);
 }
 
-/** @deprecated Prefer getCasinoMaxStardustBet(level) — kept as L1 floor reference. */
+export function getCasinoMinStardustBet(level = 1) {
+  return Math.max(1, Math.round(getMissionStardustPerFuel(level)));
+}
+
+/** @deprecated Prefer getCasinoMaxStardustBet(level). */
 export const CASINO_MAX_STARDUST_BET = CASINO_MIN_STARDUST_BET_FLOOR;
 
+/** Legacy wheel tiers kept for historical docs only — live odds in casinoGames.js. */
 export const CASINO_WHEEL_TIERS = [
-  { p: 0.50, mult: 0, label: "Bust" },
-  { p: 0.22, mult: 1, label: "Push" },
-  { p: 0.15, mult: 2, label: "2×" },
-  { p: 0.08, mult: 3, label: "3×" },
-  { p: 0.04, mult: 5, label: "5×" },
-  { p: 0.008, mult: 10, label: "10×" },
-  { p: 0.002, mult: 25, label: "25×" },
+  { p: 0.6, mult: 0, label: "Lose" },
+  { p: 0.2, mult: 1, label: "Shove" },
+  { p: 0.1, mult: 2, label: "2×" },
+  { p: 0.05, mult: 3, label: "3×" },
+  { p: 0.03, mult: 5, label: "5×" },
+  { p: 0.02, mult: 10, label: "10×" },
 ];
 
 export const GUILD_CREATE_COST = 500 * XP_STARDUST_SCALE;

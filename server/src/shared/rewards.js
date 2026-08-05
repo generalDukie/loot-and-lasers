@@ -150,18 +150,50 @@ export {
 } from "./characterProgression.js";
 import { grantCharacterXp } from "./characterProgression.js";
 import { createPendingLoot } from "../rewards/store.js";
+import {
+  creditNova,
+  NovaBalanceTypes,
+  toNovaHalfUnits,
+} from "./currencyService.js";
 
 export async function applyCharacterRewards(gameService, characterId, rewards) {
   const ch = await gameService.asServiceRole.entities.Character.get(characterId);
   const patch = {};
   const items = [];
   const pending_loot = [];
+  let live = ch;
 
   if (rewards.stardust) {
     patch.stardust = (ch.stardust || 0) + rewards.stardust;
     patch.total_stardust_earned = (ch.total_stardust_earned || 0) + rewards.stardust;
   }
-  if (rewards.nova_crystals) patch.nova_crystals = (ch.nova_crystals || 0) + rewards.nova_crystals;
+  if (rewards.nova_crystals) {
+    // Display Nova → promotional bucket via authoritative ledger.
+    const amount = Number(rewards.nova_crystals);
+    if (Number.isFinite(amount) && amount > 0) {
+      try {
+        toNovaHalfUnits(amount);
+      } catch {
+        // Daily rewards historically used whole crystals; coerce to .0
+      }
+      const display = Math.floor(amount * 2) / 2;
+      const mut = creditNova({
+        user: { id: ch.created_by_id },
+        character: live,
+        amount: display,
+        category: "reward_grant",
+        reasonCode: rewards.reason_code || "promotional_reward",
+        relatedEntityType: "character",
+        relatedEntityId: ch.id,
+        idempotencyKey: rewards.idempotencyKey || undefined,
+        balanceType: rewards.nova_balance_type === "wagerable"
+          ? NovaBalanceTypes.WAGERABLE
+          : NovaBalanceTypes.PROMOTIONAL,
+      });
+      live = mut.character;
+      Object.assign(patch, mut.patch);
+    }
+  }
   if (rewards.fuel) patch.fuel = Math.min(ch.max_fuel || 100, (ch.fuel || 0) + rewards.fuel);
   if (rewards.experience) {
     const allItems = await gameService.asServiceRole.entities.Item.filter({}, null, 500);

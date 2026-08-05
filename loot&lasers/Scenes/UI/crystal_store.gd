@@ -52,9 +52,17 @@ func _build() -> void:
 	header.add_theme_constant_override("separation", 12)
 	root.add_child(header)
 
-	var title_row := UiIcon.make_title_row("sparkles", "Crystal Store", ClientUi.TEXT, 27, 28.0)
-	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title_row)
+	var title_col := VBoxContainer.new()
+	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_col.add_theme_constant_override("separation", 2)
+	header.add_child(title_col)
+	title_col.add_child(UiIcon.make_title_row("sparkles", "Crystal Store", ClientUi.TEXT, 27, 28.0))
+	var sub := Label.new()
+	sub.text = "Under-table Nova drops · six sealed crates · pay what the fence quotes"
+	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(sub)
+	title_col.add_child(sub)
 
 	_balance = PanelContainer.new()
 	_balance.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
@@ -96,7 +104,8 @@ func _populate() -> void:
 	_balance_lab.text = "💎  %s  Nova Crystals" % _fmt_int(nova)
 
 	_list.add_child(_make_quests_panel())
-	_list.add_child(_make_packs_grid())
+	_list.add_child(_make_featured_section())
+	_list.add_child(_make_shelf_section())
 	_list.add_child(_make_uses_section())
 
 	var foot := HBoxContainer.new()
@@ -274,28 +283,177 @@ func _style_claim_button(btn: Button) -> void:
 	ClientUi.apply_interaction_motion(btn, 1.012)
 
 
-func _make_packs_grid() -> GridContainer:
+func _make_featured_section() -> VBoxContainer:
+	var wrap := VBoxContainer.new()
+	wrap.add_theme_constant_override("separation", 8)
+
+	var head := Label.new()
+	head.text = "⚡  FEATURED CONTRABAND"
+	head.add_theme_font_size_override("font_size", 14)
+	head.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(head)
+	wrap.add_child(head)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wrap.add_child(row)
+	for p in CrystalStoreManager.featured_packs():
+		row.add_child(_make_featured_card(p))
+	return wrap
+
+
+func _make_shelf_section() -> VBoxContainer:
+	var wrap := VBoxContainer.new()
+	wrap.add_theme_constant_override("separation", 8)
+
+	var head := Label.new()
+	head.text = "✦  CRYSTAL ASSAY SHELF"
+	head.add_theme_font_size_override("font_size", 14)
+	head.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(head)
+	wrap.add_child(head)
+
+	var shelf := PanelContainer.new()
+	shelf.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shelf.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.04, 0.08, 0.1, 0.92), Color(ClientUi.CYAN, 0.22), 16, 1
+	))
+	wrap.add_child(shelf)
+
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for p in CrystalStoreManager.PACKS:
+	shelf.add_child(grid)
+	for p in CrystalStoreManager.shelf_packs():
 		grid.add_child(_make_pack_card(p))
-	return grid
+	return wrap
+
+
+func _make_featured_card(p: Dictionary) -> PanelContainer:
+	var pid := str(p["id"])
+	var tint := Color(str(p.get("color", "#A855F7")))
+	var best := bool(p.get("best_value", false))
+	var bonus := CrystalStoreManager.pack_value_bonus_pct(p)
+
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.custom_minimum_size.y = 200
+	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.06, 0.07, 0.10, 0.88).lerp(Color(tint, 0.22), 0.55),
+		Color(tint, 0.45),
+		16,
+		2
+	))
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	panel.add_child(row)
+
+	var gem_wrap := CenterContainer.new()
+	gem_wrap.custom_minimum_size = Vector2(110, 0)
+	row.add_child(gem_wrap)
+	var gem_glow := PanelContainer.new()
+	gem_glow.custom_minimum_size = Vector2(88, 88)
+	gem_glow.add_theme_stylebox_override("panel", _gem_glow_style(tint))
+	gem_wrap.add_child(gem_glow)
+	var gem := CurrencyIcon.make("nova", 48.0)
+	gem_glow.add_child(gem)
+	_bob_gem(gem)
+
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 4)
+	row.add_child(col)
+
+	var badge_row := HBoxContainer.new()
+	badge_row.alignment = BoxContainer.ALIGNMENT_END
+	col.add_child(badge_row)
+	var badge := PanelContainer.new()
+	badge.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.96, 0.62, 0.04, 0.20) if not best else Color(0.99, 0.90, 0.54, 0.18),
+		Color(0.96, 0.62, 0.04, 0.40) if not best else Color(0.99, 0.90, 0.54, 0.45),
+		999,
+		1
+	))
+	badge_row.add_child(badge)
+	var badge_inner := HBoxContainer.new()
+	badge_inner.add_theme_constant_override("separation", 4)
+	badge.add_child(badge_inner)
+	badge_inner.add_child(UiIcon.make("crown" if not best else "sparkles", Color("#FCD34D"), 14.0))
+	var badge_lab := Label.new()
+	badge_lab.text = "BEST VALUE" if best else "POPULAR"
+	badge_lab.add_theme_font_size_override("font_size", 12)
+	badge_lab.add_theme_color_override("font_color", Color("#FDE68A") if best else Color("#FCD34D"))
+	ClientUi.apply_display_font(badge_lab)
+	badge_inner.add_child(badge_lab)
+
+	var name := Label.new()
+	name.text = str(p["name"])
+	name.add_theme_font_size_override("font_size", 22)
+	name.add_theme_color_override("font_color", tint)
+	ClientUi.apply_display_font(name)
+	col.add_child(name)
+
+	var blurb := Label.new()
+	blurb.text = str(p.get("blurb", ""))
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.add_theme_font_size_override("font_size", 13)
+	blurb.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(blurb)
+	col.add_child(blurb)
+
+	var amt := Label.new()
+	amt.text = "%s Nova" % _fmt_int(int(p["crystals"]))
+	amt.add_theme_font_size_override("font_size", 28)
+	amt.add_theme_color_override("font_color", ClientUi.TEXT)
+	ClientUi.apply_display_font(amt)
+	col.add_child(amt)
+
+	if bonus > 0:
+		var bpanel := PanelContainer.new()
+		bpanel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		bpanel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+			Color(0.13, 0.77, 0.37, 0.15), Color(0.13, 0.77, 0.37, 0.30), 999, 1
+		))
+		col.add_child(bpanel)
+		var b := Label.new()
+		b.text = "+%s%% vs Signal Shard" % bonus
+		b.add_theme_font_size_override("font_size", 12)
+		b.add_theme_color_override("font_color", Color("#4ADE80"))
+		ClientUi.apply_display_font(b)
+		bpanel.add_child(b)
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(spacer)
+
+	var buy := Button.new()
+	buy.text = str(p["price"])
+	buy.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	buy.custom_minimum_size = Vector2(140, 0)
+	ClientUi.apply_tinted_painted_button(buy, tint)
+	buy.pressed.connect(func() -> void: _on_buy(pid))
+	col.add_child(buy)
+	return panel
 
 
 func _make_pack_card(p: Dictionary) -> PanelContainer:
 	var pid := str(p["id"])
 	var tint := Color(str(p.get("color", "#A855F7")))
-	var popular := bool(p.get("popular", false))
+	var bonus := CrystalStoreManager.pack_value_bonus_pct(p)
+	var usd := float(p.get("usd", 0))
+	var crystals := int(p.get("crystals", 0))
+	var per_dollar := int(round(float(crystals) / usd)) if usd > 0.0 else 0
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size.y = 293
+	panel.custom_minimum_size.y = 300
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.06, 0.07, 0.10, 0.72).lerp(Color(tint, 0.14), 0.55),
-		Color(tint, 0.25),
+		Color(tint, 0.28),
 		14,
 		1
 	))
@@ -304,52 +462,44 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
 
-	# Reserve POPULAR badge height so cards stay aligned.
-	var badge_slot := Control.new()
-	badge_slot.custom_minimum_size.y = 24
-	col.add_child(badge_slot)
-	if popular:
-		var badge := PanelContainer.new()
-		badge.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-		badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-		badge.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-			Color(0.96, 0.62, 0.04, 0.20), Color(0.96, 0.62, 0.04, 0.40), 999, 1
-		))
-		badge_slot.add_child(badge)
-		var badge_row := HBoxContainer.new()
-		badge_row.add_theme_constant_override("separation", 4)
-		badge.add_child(badge_row)
-		badge_row.add_child(UiIcon.make("crown", Color("#FCD34D"), 14.0))
-		var badge_lab := Label.new()
-		badge_lab.text = "POPULAR"
-		badge_lab.add_theme_font_size_override("font_size", 12)
-		badge_lab.add_theme_color_override("font_color", Color("#FCD34D"))
-		ClientUi.apply_display_font(badge_lab)
-		badge_row.add_child(badge_lab)
+	var accent := ColorRect.new()
+	accent.custom_minimum_size.y = 3
+	accent.color = tint
+	col.add_child(accent)
 
 	var gem_wrap := CenterContainer.new()
-	gem_wrap.custom_minimum_size.y = 75
+	gem_wrap.custom_minimum_size.y = 72
 	col.add_child(gem_wrap)
 	var gem_glow := PanelContainer.new()
-	gem_glow.custom_minimum_size = Vector2(75, 75)
+	gem_glow.custom_minimum_size = Vector2(64, 64)
 	gem_glow.add_theme_stylebox_override("panel", _gem_glow_style(tint))
 	gem_wrap.add_child(gem_glow)
-	var gem := CurrencyIcon.make("nova", 40.0)
+	var gem := CurrencyIcon.make("nova", 36.0)
 	gem_glow.add_child(gem)
 	_bob_gem(gem)
 
 	var name := Label.new()
 	name.text = str(p["name"])
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.add_theme_font_size_override("font_size", 17)
+	name.add_theme_font_size_override("font_size", 16)
 	name.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(name)
 	col.add_child(name)
 
+	var blurb := Label.new()
+	blurb.text = str(p.get("blurb", ""))
+	blurb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.custom_minimum_size.y = 34
+	blurb.add_theme_font_size_override("font_size", 12)
+	blurb.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(blurb)
+	col.add_child(blurb)
+
 	var amt := Label.new()
-	amt.text = _fmt_int(int(p["crystals"]))
+	amt.text = _fmt_int(crystals)
 	amt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	amt.add_theme_font_size_override("font_size", 29)
+	amt.add_theme_font_size_override("font_size", 28)
 	amt.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(amt)
 	col.add_child(amt)
@@ -357,30 +507,36 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	var amt_sub := Label.new()
 	amt_sub.text = "Nova Crystals"
 	amt_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	amt_sub.add_theme_font_size_override("font_size", 13)
+	amt_sub.add_theme_font_size_override("font_size", 12)
 	amt_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(amt_sub)
 	col.add_child(amt_sub)
 
-	var bonus := str(p.get("bonus", ""))
-	var bonus_slot := Control.new()
-	bonus_slot.custom_minimum_size.y = 27
+	var bonus_slot := CenterContainer.new()
+	bonus_slot.custom_minimum_size.y = 26
 	col.add_child(bonus_slot)
-	if not bonus.is_empty():
-		var bwrap := CenterContainer.new()
-		bwrap.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		bonus_slot.add_child(bwrap)
-		var bpanel := PanelContainer.new()
-		bpanel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-			Color(0.13, 0.77, 0.37, 0.15), Color(0.13, 0.77, 0.37, 0.30), 999, 1
-		))
-		bwrap.add_child(bpanel)
-		var b := Label.new()
-		b.text = "%s BONUS" % bonus
-		b.add_theme_font_size_override("font_size", 13)
-		b.add_theme_color_override("font_color", Color("#4ADE80"))
-		ClientUi.apply_display_font(b)
-		bpanel.add_child(b)
+	var bpanel := PanelContainer.new()
+	bpanel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.13, 0.77, 0.37, 0.15) if bonus > 0 else Color(0.2, 0.22, 0.28, 0.35),
+		Color(0.13, 0.77, 0.37, 0.30) if bonus > 0 else Color(0.4, 0.42, 0.48, 0.35),
+		999,
+		1
+	))
+	bonus_slot.add_child(bpanel)
+	var b := Label.new()
+	b.text = ("+%s%% value" % bonus) if bonus > 0 else "Entry crate"
+	b.add_theme_font_size_override("font_size", 12)
+	b.add_theme_color_override("font_color", Color("#4ADE80") if bonus > 0 else ClientUi.MUTED)
+	ClientUi.apply_display_font(b)
+	bpanel.add_child(b)
+
+	var rate := Label.new()
+	rate.text = "~%s 💎 / $" % per_dollar
+	rate.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rate.add_theme_font_size_override("font_size", 12)
+	rate.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
+	ClientUi.apply_body_font(rate)
+	col.add_child(rate)
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL

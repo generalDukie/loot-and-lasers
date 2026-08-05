@@ -12,6 +12,16 @@ import { db } from "../db.js";
 import { clock } from "./time/clock.js";
 import { clampStardust, STARDUST_MAX } from "./economyFormulas.js";
 import { recordCurrencyChange, ActorTypes, newCorrelationId } from "../audit/index.js";
+import {
+  NovaBalanceTypes,
+  applyNovaSplitDelta,
+  defaultNovaBalanceTypeForCategory,
+  ensureNovaSplitFields,
+  getNovaBalanceViews,
+  normalizeNovaBalanceType,
+  floorNovaPayout,
+  floorNovaToHalf,
+} from "./novaBalances.js";
 
 export const CurrencyTypes = Object.freeze({
   STARDUST: "stardust",
@@ -19,13 +29,86 @@ export const CurrencyTypes = Object.freeze({
   FUEL: "fuel",
 });
 
+export { NovaBalanceTypes, floorNovaPayout, floorNovaToHalf, normalizeNovaBalanceType };
+
 /** 1 display Nova = 2 half-units. */
 export const NOVA_HALF_UNITS_PER_NOVA = 2;
 export const ECONOMY_NOVA_SCALE = 2;
 
-/** Starting Nova for the first character on an account (display). */
-export const STARTING_NOVA_DISPLAY = 25;
+/** Starting Nova for every new character (display). Per-character, not account-wide. */
+export const STARTING_NOVA_DISPLAY = 500;
 export const STARTING_NOVA_HALF_UNITS = STARTING_NOVA_DISPLAY * NOVA_HALF_UNITS_PER_NOVA;
+/** Starting Stardust for every new character. */
+export const STARTING_STARDUST = 0;
+
+export const CHARACTER_CREATION_NOVA_REASON = "character_creation_starting_nova";
+export const CHARACTER_CREATION_STARDUST_REASON = "character_creation_starting_stardust";
+export const CHARACTER_CREATION_CATEGORY = "character_creation";
+
+/**
+ * Atomically apply authoritative starting balances after Character.create.
+ * Nova credited through the economy ledger (idempotent per character id).
+ * Stardust remains 0 with an auditable init event.
+ * Safe to call again on the same character — Nova grant will not double.
+ */
+export function applyCharacterCreationStartingGrant(user, character, opts = {}) {
+  if (!character?.id) {
+    const e = new Error("Character required for starting grant");
+    e.status = 400;
+    throw e;
+  }
+  const requestId = String(opts.requestId || "").trim();
+  const idem = `character_creation_nova:${character.id}`;
+
+  // Ensure stardust field is the authoritative zero before Nova credit.
+  let live = character;
+  if (readStardust(live) !== STARTING_STARDUST) {
+    live = entities.Character.update(live.id, {
+      stardust: STARTING_STARDUST,
+      total_stardust_earned: Math.min(
+        Number(live.total_stardust_earned) || 0,
+        STARTING_STARDUST,
+      ),
+    });
+  }
+
+  if (user) {
+    recordCurrencyChange({
+      user,
+      character: live,
+      currencyType: CurrencyTypes.STARDUST,
+      before: STARTING_STARDUST,
+      after: STARTING_STARDUST,
+      amount: 0,
+      reasonCode: CHARACTER_CREATION_STARDUST_REASON,
+      correlationId: newCorrelationId(),
+      actorType: ActorTypes.SYSTEM,
+      idempotencyKey: `character_creation_stardust:${live.id}`,
+      reasonText: requestId
+        ? `Character creation starting Stardust=0 (request_id=${requestId})`
+        : "Character creation starting Stardust=0",
+    });
+  }
+
+  const mut = creditNova({
+    user,
+    character: live,
+    amount: STARTING_NOVA_DISPLAY,
+    category: CHARACTER_CREATION_CATEGORY,
+    reasonCode: CHARACTER_CREATION_NOVA_REASON,
+    relatedEntityType: "character",
+    relatedEntityId: live.id,
+    idempotencyKey: idem,
+    balanceType: NovaBalanceTypes.PROMOTIONAL,
+  });
+
+  return {
+    character: mut.character,
+    balances: mut.balances,
+    nova_grant: mut.transaction,
+    replay: !!mut.replay,
+  };
+}
 
 export function toNovaHalfUnits(displayNova) {
   const n = Number(displayNova);
@@ -73,26 +156,29 @@ export function hasNovaHalfUnits(character, halfUnits) {
   return readNovaHalfUnits(character) >= Math.max(0, Math.floor(Number(halfUnits) || 0));
 }
 
-/** Patch fragment for a display-Nova debit (does not persist). */
+/** Patch fragment for a display-Nova debit (does not persist). Promo-first. */
 export function novaDebitPatch(character, displayAmount) {
   const half = toNovaHalfUnits(displayAmount);
-  const after = readNovaHalfUnits(character) - half;
-  if (after < 0) {
-    const e = new Error("Not enough Nova Crystals");
-    e.status = 400;
-    e.code = "INSUFFICIENT_NOVA";
-    throw e;
-  }
-  return { nova_crystals: after, economy_nova_scale: ECONOMY_NOVA_SCALE };
+  const split = applyNovaSplitDelta(character, {
+    direction: "debit",
+    amountHalfUnits: half,
+    debitPolicy: "any",
+  });
+  return split.patch;
 }
 
-/** Patch fragment for a display-Nova credit (does not persist). */
-export function novaCreditPatch(character, displayAmount) {
+/**
+ * Patch fragment for a display-Nova credit (does not persist).
+ * Defaults to promotional; pass balanceType for wagerable.
+ */
+export function novaCreditPatch(character, displayAmount, balanceType = NovaBalanceTypes.PROMOTIONAL) {
   const half = toNovaHalfUnits(displayAmount);
-  return {
-    nova_crystals: readNovaHalfUnits(character) + half,
-    economy_nova_scale: ECONOMY_NOVA_SCALE,
-  };
+  const split = applyNovaSplitDelta(character, {
+    direction: "credit",
+    amountHalfUnits: half,
+    balanceType,
+  });
+  return split.patch;
 }
 
 export function readStardust(character) {
@@ -100,14 +186,29 @@ export function readStardust(character) {
 }
 
 export function getBalances(character) {
-  const novaHalf = readNovaHalfUnits(character);
+  const views = getNovaBalanceViews(character);
   return {
     fuel: Number(character?.fuel) || 0,
     stardust: readStardust(character),
-    nova_crystals: fromNovaHalfUnits(novaHalf),
-    nova_half_units: novaHalf,
+    nova_crystals: views.nova_crystals,
+    nova_half_units: views.nova_half_units,
+    nova_wagerable: views.nova_wagerable,
+    nova_wagerable_half: views.nova_wagerable_half,
+    nova_promotional: views.nova_promotional,
+    nova_promotional_half: views.nova_promotional_half,
+    nova_purchased: views.nova_purchased,
+    nova_bonus: views.nova_bonus,
     economy_nova_scale: ECONOMY_NOVA_SCALE,
   };
+}
+
+export function hasWagerableNova(character, displayAmount) {
+  try {
+    const views = getNovaBalanceViews(character);
+    return views.nova_wagerable_half >= toNovaHalfUnits(displayAmount);
+  } catch {
+    return false;
+  }
 }
 
 export function serializeEconomyState(character) {
@@ -180,6 +281,7 @@ function saveLedgerReceipt(accountId, operationType, operationKey, result) {
 
 /**
  * Credit Nova (amount in display Nova, .0 or .5).
+ * @param {string} [opts.balanceType] wagerable | promotional (default from category)
  * @returns {{ character, patch, transaction, balances, replay? }}
  */
 export function creditNova(opts) {
@@ -188,16 +290,23 @@ export function creditNova(opts) {
     currency: CurrencyTypes.NOVA,
     direction: "credit",
     amountHalfUnits: toNovaHalfUnits(opts.amount),
+    balanceType: opts.balanceType || opts.balance_type,
   });
 }
 
-/** Debit Nova (display Nova). */
+/**
+ * Debit Nova (display Nova).
+ * @param {string} [opts.balanceType] wagerable | promotional | omit for promo-first mixed
+ * @param {string} [opts.debitPolicy] alias of balanceType for debits
+ */
 export function debitNova(opts) {
   return mutateCurrency({
     ...opts,
     currency: CurrencyTypes.NOVA,
     direction: "debit",
     amountHalfUnits: toNovaHalfUnits(opts.amount),
+    balanceType: opts.balanceType || opts.balance_type,
+    debitPolicy: opts.debitPolicy || opts.debit_policy,
   });
 }
 
@@ -208,6 +317,7 @@ export function creditNovaHalfUnits(opts) {
     currency: CurrencyTypes.NOVA,
     direction: "credit",
     amountHalfUnits: Math.max(0, Math.floor(Number(opts.amountHalfUnits) || 0)),
+    balanceType: opts.balanceType || opts.balance_type,
   });
 }
 
@@ -217,6 +327,8 @@ export function debitNovaHalfUnits(opts) {
     currency: CurrencyTypes.NOVA,
     direction: "debit",
     amountHalfUnits: Math.max(0, Math.floor(Number(opts.amountHalfUnits) || 0)),
+    balanceType: opts.balanceType || opts.balance_type,
+    debitPolicy: opts.debitPolicy || opts.debit_policy,
   });
 }
 
@@ -266,6 +378,8 @@ function mutateCurrency({
   extraPatch = {},
   reasonCode = null,
   skipAudit = false,
+  balanceType = null,
+  debitPolicy = null,
 }) {
   if (!character?.id) {
     const e = new Error("Character required");
@@ -295,33 +409,51 @@ function mutateCurrency({
     }
   }
 
-  const beforeBalances = getBalances(character);
+  let working = character;
+  if (currency === CurrencyTypes.NOVA) {
+    working = ensureNovaSplitFields(character);
+  }
+
+  const beforeBalances = getBalances(working);
   const patch = { ...extraPatch };
   let deltaDisplay = 0;
   let before = 0;
   let after = 0;
+  let resolvedBalanceType = null;
+  let beforeWagerable = null;
+  let beforePromotional = null;
+  let afterWagerable = null;
+  let afterPromotional = null;
 
   if (currency === CurrencyTypes.NOVA) {
-    before = readNovaHalfUnits(character);
-    const delta = direction === "credit" ? amountHalfUnits : -amountHalfUnits;
-    after = before + delta;
-    if (after < 0) {
-      const e = new Error("Not enough Nova Crystals");
-      e.status = 400;
-      e.code = "INSUFFICIENT_NOVA";
-      throw e;
-    }
+    const creditType =
+      direction === "credit"
+        ? normalizeNovaBalanceType(balanceType) ||
+          defaultNovaBalanceTypeForCategory(category, reasonCode)
+        : null;
+    const split = applyNovaSplitDelta(working, {
+      direction,
+      amountHalfUnits,
+      balanceType: creditType || balanceType,
+      debitPolicy: debitPolicy || (direction === "debit" ? balanceType || "any" : null),
+    });
+    resolvedBalanceType = split.balance_type;
+    beforeWagerable = split.before_wagerable;
+    beforePromotional = split.before_promotional;
+    Object.assign(patch, split.patch);
+    before = beforeWagerable + beforePromotional;
+    after = split.patch.nova_crystals;
+    afterWagerable = split.patch.nova_wagerable_half;
+    afterPromotional = split.patch.nova_promotional_half;
     if (!Number.isSafeInteger(after)) {
       const e = new Error("Nova balance overflow");
       e.status = 400;
       e.code = "NOVA_OVERFLOW";
       throw e;
     }
-    patch.nova_crystals = after;
-    patch.economy_nova_scale = ECONOMY_NOVA_SCALE;
-    deltaDisplay = fromNovaHalfUnits(Math.abs(delta));
+    deltaDisplay = fromNovaHalfUnits(Math.abs(amountHalfUnits));
   } else if (currency === CurrencyTypes.STARDUST) {
-    before = readStardust(character);
+    before = readStardust(working);
     const delta = direction === "credit" ? amountStardust : -amountStardust;
     after = before + delta;
     if (after < 0) {
@@ -338,7 +470,7 @@ function mutateCurrency({
     }
     patch.stardust = after;
     if (direction === "credit" && delta > 0) {
-      patch.total_stardust_earned = (character.total_stardust_earned || 0) + delta;
+      patch.total_stardust_earned = (working.total_stardust_earned || 0) + delta;
     }
     deltaDisplay = Math.abs(delta);
   } else {
@@ -347,23 +479,37 @@ function mutateCurrency({
     throw e;
   }
 
-  const updated = entities.Character.update(character.id, patch);
+  const updated = entities.Character.update(working.id, patch);
   const txId = key || `tx_${clock.nowMs()}_${Math.floor(Math.random() * 1e6)}`;
   const transaction = {
     transaction_id: txId,
     category: category || opType,
     currency,
+    currency_type: currency === CurrencyTypes.NOVA ? "nova" : currency,
+    balance_type: resolvedBalanceType,
+    source: category || "economy",
+    destination: relatedEntityType || "character_wallet",
     direction,
     amount: deltaDisplay,
+    rounded_amount: deltaDisplay,
     amount_half_units: currency === CurrencyTypes.NOVA ? Math.abs(amountHalfUnits) : null,
     balance_before: currency === CurrencyTypes.NOVA ? fromNovaHalfUnits(before) : before,
     balance_after: currency === CurrencyTypes.NOVA ? fromNovaHalfUnits(after) : after,
     balance_before_half_units: currency === CurrencyTypes.NOVA ? before : null,
     balance_after_half_units: currency === CurrencyTypes.NOVA ? after : null,
+    wagerable_before: beforeWagerable != null ? fromNovaHalfUnits(beforeWagerable) : null,
+    wagerable_after: afterWagerable != null ? fromNovaHalfUnits(afterWagerable) : null,
+    promotional_before: beforePromotional != null ? fromNovaHalfUnits(beforePromotional) : null,
+    promotional_after: afterPromotional != null ? fromNovaHalfUnits(afterPromotional) : null,
     related_entity_type: relatedEntityType,
     related_entity_id: relatedEntityId,
+    character_id: working.id,
+    request_id: key || null,
+    reason: reasonCode || category || opType,
+    reason_code: reasonCode || category || opType,
     status: "COMPLETED",
     created_at: clock.nowIso(),
+    timestamp: clock.nowIso(),
   };
 
   if (key) saveLedgerReceipt(accountId, opType, key, transaction);
@@ -371,7 +517,7 @@ function mutateCurrency({
   if (!skipAudit && user) {
     recordCurrencyChange({
       user,
-      character,
+      character: working,
       currencyType: currency === CurrencyTypes.NOVA ? "nova_crystals" : "stardust",
       before: currency === CurrencyTypes.NOVA ? fromNovaHalfUnits(before) : before,
       after: currency === CurrencyTypes.NOVA ? fromNovaHalfUnits(after) : after,
@@ -381,6 +527,9 @@ function mutateCurrency({
       correlationId: newCorrelationId(),
       actorType: ActorTypes.PLAYER,
       idempotencyKey: key || undefined,
+      reasonText: resolvedBalanceType
+        ? `balance_type=${resolvedBalanceType}`
+        : undefined,
     });
   }
 
@@ -409,17 +558,81 @@ export function missionSkipCostDisplay(fuelCost) {
 
 /** Finalized Nova package catalog (display Nova grants). */
 export const NOVA_PACKAGES = Object.freeze({
-  pack_2: { id: "pack_2", name: "$2 Pack", crystals: 275, price_label: "$2", usd_hint: 2 },
-  pack_5: { id: "pack_5", name: "$5 Pack", crystals: 850, price_label: "$5", usd_hint: 5 },
-  pack_10: { id: "pack_10", name: "$10 Pack", crystals: 1950, price_label: "$10", usd_hint: 10 },
-  pack_20: { id: "pack_20", name: "$20 Pack", crystals: 4500, price_label: "$20", usd_hint: 20 },
-  pack_50: { id: "pack_50", name: "$50 Pack", crystals: 12750, price_label: "$50", usd_hint: 50 },
-  pack_100: { id: "pack_100", name: "$100 Pack", crystals: 30000, price_label: "$100", usd_hint: 100 },
+  pack_2: {
+    id: "pack_2",
+    name: "Signal Shard",
+    crystals: 275,
+    price_label: "$1.99",
+    usd_hint: 1.99,
+  },
+  pack_5: {
+    id: "pack_5",
+    name: "Ember Pouch",
+    crystals: 850,
+    price_label: "$4.99",
+    usd_hint: 4.99,
+  },
+  pack_10: {
+    id: "pack_10",
+    name: "Cosmic Cluster",
+    crystals: 1950,
+    price_label: "$9.99",
+    usd_hint: 9.99,
+  },
+  pack_20: {
+    id: "pack_20",
+    name: "Stellar Vault",
+    crystals: 4500,
+    price_label: "$19.99",
+    usd_hint: 19.99,
+  },
+  pack_50: {
+    id: "pack_50",
+    name: "Void Motherlode",
+    crystals: 12750,
+    price_label: "$49.99",
+    usd_hint: 49.99,
+  },
+  pack_100: {
+    id: "pack_100",
+    name: "Hypernova Cache",
+    crystals: 30000,
+    price_label: "$99.99",
+    usd_hint: 99.99,
+  },
   // Legacy aliases → nearest finalized pack (dev catalog continuity)
-  pouch: { id: "pack_5", name: "$5 Pack", crystals: 850, price_label: "$5", usd_hint: 5, alias_of: "pack_5" },
-  cluster: { id: "pack_10", name: "$10 Pack", crystals: 1950, price_label: "$10", usd_hint: 10, alias_of: "pack_10" },
-  vault: { id: "pack_20", name: "$20 Pack", crystals: 4500, price_label: "$20", usd_hint: 20, alias_of: "pack_20" },
-  motherlode: { id: "pack_50", name: "$50 Pack", crystals: 12750, price_label: "$50", usd_hint: 50, alias_of: "pack_50" },
+  pouch: {
+    id: "pack_5",
+    name: "Ember Pouch",
+    crystals: 850,
+    price_label: "$4.99",
+    usd_hint: 4.99,
+    alias_of: "pack_5",
+  },
+  cluster: {
+    id: "pack_10",
+    name: "Cosmic Cluster",
+    crystals: 1950,
+    price_label: "$9.99",
+    usd_hint: 9.99,
+    alias_of: "pack_10",
+  },
+  vault: {
+    id: "pack_20",
+    name: "Stellar Vault",
+    crystals: 4500,
+    price_label: "$19.99",
+    usd_hint: 19.99,
+    alias_of: "pack_20",
+  },
+  motherlode: {
+    id: "pack_50",
+    name: "Void Motherlode",
+    crystals: 12750,
+    price_label: "$49.99",
+    usd_hint: 49.99,
+    alias_of: "pack_50",
+  },
 });
 
 export function resolveNovaPackage(packId) {

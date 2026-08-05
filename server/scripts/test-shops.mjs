@@ -208,7 +208,7 @@ test("serialize presentation includes window + haggle rules", () => {
   const p = serializeShopPresentation(meta);
   assert.ok(p.shop_window.endsAt > p.shop_window.startsAt);
   assert.equal(p.refresh.cost_nova, SHOP_REFRESH_COST);
-  assert.equal(p.refresh.free_available, true);
+  assert.equal(p.refresh.free_available, false);
   assert.equal(p.haggle.success_chance, HAGGLE_SUCCESS_CHANCE);
   assert.ok(p.vendors.gear);
   assert.ok(p.vendors.supply);

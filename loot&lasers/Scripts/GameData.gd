@@ -315,7 +315,7 @@ static func build_create_payload(
 	char_name: String,
 	race: String,
 	class_key: String,
-	is_first: bool,
+	_is_first: bool,
 	appearance: Dictionary = {}
 ) -> Dictionary:
 	var looks := appearance if not appearance.is_empty() else default_appearance_for_race(race)
@@ -325,7 +325,6 @@ static func build_create_payload(
 		"name": char_name.strip_edges(),
 		"race": race,
 		"class": class_key,
-		"nova_crystals": 100 if is_first else 0,
 		"appearance": looks,
 		"equipped_items": {},
 		"legacy_name": "",

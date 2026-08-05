@@ -857,28 +857,30 @@ export function getMissionStardustPerFuel(level = 1) {
   return StardustPerFuel(level);
 }
 
-/** Max stardust casino bet scales with SD/F (25× rate, floor 100, cap 250k) — floors/caps at 10× scale. */
-export const CASINO_STARDUST_BET_SD_MULT = 25;
-export const CASINO_MAX_STARDUST_BET_CAP = 250_000 * XP_STARDUST_SCALE;
-export const CASINO_MIN_STARDUST_BET_FLOOR = 100 * XP_STARDUST_SCALE;
+/** Max stardust casino bet = 50× SD/F; min = 1× SD/F (casino_v2). */
+export const CASINO_STARDUST_BET_SD_MULT = 50;
+export const CASINO_MAX_STARDUST_BET_CAP = 10_000_000 * XP_STARDUST_SCALE;
+export const CASINO_MIN_STARDUST_BET_FLOOR = 1;
+export const CASINO_MIN_NOVA_BET = 100;
+export const CASINO_MAX_NOVA_BET = 1000;
 
-export function getCasinoMaxStardustBet(level = 1) {
-  const sdf = getMissionStardustPerFuel(level);
-  return Math.min(
-    CASINO_MAX_STARDUST_BET_CAP,
-    Math.max(CASINO_MIN_STARDUST_BET_FLOOR, sdf * CASINO_STARDUST_BET_SD_MULT),
-  );
+export function getCasinoMinStardustBet(level = 1) {
+  return Math.max(1, Math.round(getMissionStardustPerFuel(level)));
 }
 
-/** Stardust wheel tiers — probabilities must sum to 1; server is authoritative. */
+export function getCasinoMaxStardustBet(level = 1) {
+  const sdf = Math.max(1, Math.round(getMissionStardustPerFuel(level)));
+  return Math.min(CASINO_MAX_STARDUST_BET_CAP, sdf * CASINO_STARDUST_BET_SD_MULT);
+}
+
+/** Stardust wheel tiers — casino_v2 (90% RTP); server is authoritative. */
 export const CASINO_WHEEL_TIERS = [
-  { p: 0.50, mult: 0, label: "Bust", color: "#6B7280" },
-  { p: 0.22, mult: 1, label: "Push", color: "#9CA3AF" },
-  { p: 0.15, mult: 2, label: "2×", color: "#22C55E" },
-  { p: 0.08, mult: 3, label: "3×", color: "#3B82F6" },
-  { p: 0.04, mult: 5, label: "5×", color: "#A855F7" },
-  { p: 0.008, mult: 10, label: "10×", color: "#F59E0B" },
-  { p: 0.002, mult: 25, label: "25×", color: "#F97316" },
+  { id: "lose", p: 0.6, mult: 0, label: "Lose", color: "#6B7280" },
+  { id: "shove", p: 0.2, mult: 1, label: "Shove", color: "#9CA3AF" },
+  { id: "x2", p: 0.1, mult: 2, label: "2×", color: "#22C55E" },
+  { id: "x3", p: 0.05, mult: 3, label: "3×", color: "#3B82F6" },
+  { id: "x5", p: 0.03, mult: 5, label: "5×", color: "#A855F7" },
+  { id: "x10", p: 0.02, mult: 10, label: "10×", color: "#F59E0B" },
 ];
 
 /** Arena win Stardust = ARENA_WIN_FUEL_EQUIVALENT × SD/F(playerLevel). */

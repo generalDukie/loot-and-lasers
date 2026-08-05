@@ -1682,7 +1682,6 @@ export async function BuyShopConsumable(user, body) {
 // ── RefreshShop ──────────────────────────────────────────────
 export async function RefreshShop(user, body) {
   const which = body?.which || "gear";
-  const useFree = !!body?.use_free;
   if (which !== "gear" && which !== "consumables" && which !== "all") {
     return { status: 400, body: { error: "which must be 'gear', 'consumables', or 'all'" } };
   }
@@ -1693,16 +1692,13 @@ export async function RefreshShop(user, body) {
       const win = getShopWindow();
       let meta = normalizeShopMeta(ch, win, getShopGameDayKey());
 
-      let novaCost = 0;
-      if (useFree || !meta.free_refresh_used) {
-        if (meta.free_refresh_used && useFree) httpErr(400, "Free refresh already used this period");
-        meta = { ...meta, free_refresh_used: true };
-      } else {
-        if (!hasNova(ch, SHOP_REFRESH_COST)) {
-          httpErr(400, "Not enough Nova Crystals");
-        }
-        novaCost = SHOP_REFRESH_COST;
+      // Manual restock always costs Nova — unlimited refreshes per window.
+      // body.use_free is ignored (kept on the wire for older clients).
+      if (!hasNova(ch, SHOP_REFRESH_COST)) {
+        httpErr(400, "Not enough Nova Crystals");
       }
+      const novaCost = SHOP_REFRESH_COST;
+      meta = { ...meta, free_refresh_used: true };
 
       let hotCount = Math.max(0, Math.floor(meta.hot_manual_refresh_count || 0)) + 1;
       let hotDeal = meta.hot_deal;

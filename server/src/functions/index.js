@@ -1237,26 +1237,71 @@ async function adminModerationInner(user, body) {
     }
     const ch = entities.Character.get(character_id);
     if (!ch) return { status: 404, body: { error: "Character not found" } };
+    const {
+      creditNova,
+      debitNova,
+      getBalances,
+      NovaBalanceTypes,
+    } = await import("../shared/currencyService.js");
+    const { ensureNovaSplitFields: ensureSplit } = await import("../shared/novaBalances.js");
+    let live = ensureSplit(ch);
+    const beforeBal = getBalances(live);
     const before = {
-      stardust: ch.stardust || 0,
-      nova_crystals: ch.nova_crystals || 0,
-      fuel: ch.fuel || 0,
-      arena_attempts_left: ch.arena_attempts_left || 0,
-      experience: ch.experience || 0,
-      level: ch.level || 1,
+      stardust: live.stardust || 0,
+      nova_crystals: beforeBal.nova_crystals,
+      nova_wagerable: beforeBal.nova_wagerable,
+      nova_promotional: beforeBal.nova_promotional,
+      fuel: live.fuel || 0,
+      arena_attempts_left: live.arena_attempts_left || 0,
+      experience: live.experience || 0,
+      level: live.level || 1,
     };
     const patch = {};
     if (deltas.stardust != null && deltas.stardust !== 0) {
       patch.stardust = Math.min(
         STARDUST_MAX,
-        Math.max(0, (ch.stardust || 0) + Number(deltas.stardust)),
+        Math.max(0, (live.stardust || 0) + Number(deltas.stardust)),
       );
       if (deltas.stardust > 0) {
-        patch.total_stardust_earned = (ch.total_stardust_earned || 0) + Number(deltas.stardust);
+        patch.total_stardust_earned = (live.total_stardust_earned || 0) + Number(deltas.stardust);
       }
     }
-    if (deltas.nova_crystals != null && deltas.nova_crystals !== 0) {
-      patch.nova_crystals = Math.max(0, (ch.nova_crystals || 0) + Number(deltas.nova_crystals));
+    // Prefer explicit split deltas; legacy nova_crystals → promotional (safe default).
+    const wagerableDelta = Number(deltas.nova_wagerable ?? deltas.nova_purchased ?? 0) || 0;
+    const promoDelta = Number(
+      deltas.nova_promotional ?? deltas.nova_bonus ??
+      (wagerableDelta === 0 ? deltas.nova_crystals : 0) ?? 0,
+    ) || 0;
+    const targetUser = { id: live.created_by_id, role: "admin" };
+    if (wagerableDelta !== 0) {
+      const fn = wagerableDelta > 0 ? creditNova : debitNova;
+      const mut = fn({
+        user: targetUser,
+        character: live,
+        amount: Math.abs(wagerableDelta),
+        category: wagerableDelta > 0 ? "admin_purchased" : "admin_remove",
+        reasonCode: wagerableDelta > 0 ? "admin_grant_wagerable" : "admin_remove_wagerable",
+        idempotencyKey: `admin_nova_w_${live.id}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+        balanceType: NovaBalanceTypes.WAGERABLE,
+        debitPolicy: NovaBalanceTypes.WAGERABLE,
+      });
+      live = mut.character;
+      Object.assign(patch, mut.patch);
+    }
+    if (promoDelta !== 0) {
+      const fn = promoDelta > 0 ? creditNova : debitNova;
+      const mut = fn({
+        user: targetUser,
+        character: live,
+        amount: Math.abs(promoDelta),
+        category: "admin_promotional",
+        reasonCode: promoDelta > 0 ? "admin_grant_promotional" : "admin_remove_promotional",
+        idempotencyKey: `admin_nova_p_${live.id}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+        balanceType: NovaBalanceTypes.PROMOTIONAL,
+        debitPolicy: NovaBalanceTypes.PROMOTIONAL,
+      });
+      live = mut.character;
+      Object.assign(patch, mut.patch);
     }
     if (deltas.fuel != null && deltas.fuel !== 0) {
       patch.fuel = Math.max(0, Math.min(ch.max_fuel || 100, (ch.fuel || 0) + Number(deltas.fuel)));
@@ -1286,9 +1331,12 @@ async function adminModerationInner(user, body) {
       return { status: 400, body: { error: "No currency deltas provided" } };
     }
     const progression = consumeProgression(patch);
-    const updated = entities.Character.update(character_id, patch);
+    const updated = Object.keys(patch).length
+      ? entities.Character.update(character_id, patch)
+      : entities.Character.get(character_id);
+    const afterBal = getBalances(updated);
     const corr = newCorrelationId();
-    for (const key of ["stardust", "nova_crystals", "fuel"]) {
+    for (const key of ["stardust", "fuel"]) {
       if (deltas[key] != null && deltas[key] !== 0) {
         recordCurrencyChange({
           user,
@@ -1314,7 +1362,9 @@ async function adminModerationInner(user, body) {
       beforeState: before,
       afterState: {
         stardust: updated.stardust,
-        nova_crystals: updated.nova_crystals,
+        nova_crystals: afterBal.nova_crystals,
+        nova_wagerable: afterBal.nova_wagerable,
+        nova_promotional: afterBal.nova_promotional,
         fuel: updated.fuel,
         level: updated.level,
         experience: updated.experience,
@@ -1323,7 +1373,16 @@ async function adminModerationInner(user, body) {
       changeSet: { deltas },
       correlationId: corr,
     });
-    return { status: 200, body: { success: true, character: updated, character_name: ch.name, progression } };
+    return {
+      status: 200,
+      body: {
+        success: true,
+        character: updated,
+        character_name: ch.name,
+        progression,
+        balances: afterBal,
+      },
+    };
   }
 
   if (action === "reset_player") {
@@ -1340,7 +1399,8 @@ async function adminModerationInner(user, body) {
     entities.Item.deleteMany({ character_id });
     const updated = entities.Character.update(character_id, {
       level: 1, experience: 0, experience_to_next_level: expForLevel(1),
-      stardust: 0, nova_crystals: 0, unspent_stat_points: 0, attribute_purchases: 0,
+      stardust: 0, nova_crystals: 0, nova_wagerable_half: 0, nova_promotional_half: 0,
+      nova_dual_balance_v1: true, unspent_stat_points: 0, attribute_purchases: 0,
       attribute_purchases_by_stat: { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 },
       discovered_species: [], collected_artifacts: [], collected_relics: [],
       arena_wins: 0, arena_losses: 0, arena_rating: 1000,

@@ -1,15 +1,14 @@
 class_name CasinoWheelDisc
 extends Control
-## Conic stardust wheel — mirrors web StardustWheel segments + spin landing.
+## Conic stardust wheel — casino_v2 tiers (90% RTP). Land by tier_id or server segment mid.
 
 const TIERS: Array = [
-	{"p": 0.50, "mult": 0, "label": "Bust", "color": Color("#6B7280")},
-	{"p": 0.22, "mult": 1, "label": "Push", "color": Color("#9CA3AF")},
-	{"p": 0.15, "mult": 2, "label": "2×", "color": Color("#22C55E")},
-	{"p": 0.08, "mult": 3, "label": "3×", "color": Color("#3B82F6")},
-	{"p": 0.04, "mult": 5, "label": "5×", "color": Color("#A855F7")},
-	{"p": 0.008, "mult": 10, "label": "10×", "color": Color("#F59E0B")},
-	{"p": 0.002, "mult": 25, "label": "25×", "color": Color("#F97316")},
+	{"id": "lose", "p": 0.60, "mult": 0, "label": "Lose", "color": Color("#6B7280")},
+	{"id": "shove", "p": 0.20, "mult": 1, "label": "Shove", "color": Color("#9CA3AF")},
+	{"id": "x2", "p": 0.10, "mult": 2, "label": "2×", "color": Color("#22C55E")},
+	{"id": "x3", "p": 0.05, "mult": 3, "label": "3×", "color": Color("#3B82F6")},
+	{"id": "x5", "p": 0.03, "mult": 5, "label": "5×", "color": Color("#A855F7")},
+	{"id": "x10", "p": 0.02, "mult": 10, "label": "10×", "color": Color("#F59E0B")},
 ]
 
 var segments: Array = []
@@ -34,6 +33,7 @@ func _build_segments() -> void:
 	for t in TIERS:
 		var span := float(t.get("p", 0.0)) * 360.0
 		segments.append({
+			"id": str(t.get("id", "")),
 			"p": t.get("p", 0.0),
 			"mult": int(t.get("mult", 0)),
 			"label": str(t.get("label", "")),
@@ -45,6 +45,16 @@ func _build_segments() -> void:
 		angle += span
 
 
+func tier_for_id(tier_id: String) -> Dictionary:
+	var key := tier_id.strip_edges().to_lower()
+	if key.is_empty():
+		return {}
+	for seg in segments:
+		if str(seg.get("id", "")).to_lower() == key:
+			return seg
+	return {}
+
+
 func tier_for_mult(mult: int) -> Dictionary:
 	for seg in segments:
 		if int(seg.get("mult", -1)) == mult:
@@ -52,14 +62,32 @@ func tier_for_mult(mult: int) -> Dictionary:
 	return segments[0] if not segments.is_empty() else {}
 
 
-## Degrees to add so the pointer (top) lands inside the winning segment.
-func spin_delta_degrees(mult: int, current_deg: float, extra_turns: int = 7) -> float:
-	var seg := tier_for_mult(mult)
-	if seg.is_empty():
-		return 360.0 * float(extra_turns)
-	var span: float = float(seg.get("span", 10.0))
+## Prefer tier_id; optional server segment.mid in [0,1). Falls back to mult.
+func spin_delta_degrees(
+	mult: int,
+	current_deg: float,
+	extra_turns: int = 4,
+	tier_id: String = "",
+	segment_mid_01: float = -1.0,
+) -> float:
+	var mid_deg := -1.0
+	if segment_mid_01 >= 0.0:
+		mid_deg = fposmod(segment_mid_01, 1.0) * 360.0
+	elif not tier_id.is_empty():
+		var by_id := tier_for_id(tier_id)
+		if not by_id.is_empty():
+			mid_deg = float(by_id.get("mid", 0.0))
+	if mid_deg < 0.0:
+		var seg := tier_for_mult(mult)
+		if seg.is_empty():
+			return 360.0 * float(extra_turns)
+		mid_deg = float(seg.get("mid", 0.0))
+	var span := 12.0
+	var matched := tier_for_id(tier_id) if not tier_id.is_empty() else tier_for_mult(mult)
+	if not matched.is_empty():
+		span = float(matched.get("span", 12.0))
 	var jitter := (randf() * 0.5 - 0.25) * minf(span * 0.6, 12.0)
-	var target_mod := fposmod(360.0 - (float(seg.get("mid", 0.0)) + jitter), 360.0)
+	var target_mod := fposmod(360.0 - (mid_deg + jitter), 360.0)
 	var cur_mod := fposmod(current_deg, 360.0)
 	var delta := fposmod(target_mod - cur_mod, 360.0)
 	return 360.0 * float(extra_turns) + delta

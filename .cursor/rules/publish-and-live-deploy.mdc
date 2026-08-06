@@ -1,34 +1,39 @@
 ---
-description: Commit+push = agent pushes remote + deploys Hetzner/Nakama; no user clicks; no unprompted installer
+description: Commit+push = local commit (GitHub Desktop) + Hetzner/Nakama deploy; never push to GitHub remote
 alwaysApply: true
 ---
 
 # Publish & live deploy (Loot & Lasers)
 
-## “Commit and push” = fully agent-driven
+## Never push to the GitHub remote
 
-When the user says **commit and push** (or equivalent), the agent must do **all** of the following **without asking the user to click anything**:
+- **Do not** run `git push`, `git push origin`, or any publish to github.com.
+- The user’s partner owns the GitHub remote. This machine does **not** need to push upstream.
+- **GitHub Desktop** on this PC shows the **local** git repo. A local `git commit` is what updates that Desktop view. That is the only “repo update” this agent performs for Desktop.
 
-1. **Commit locally** per `git-commit-convention.mdc` (milestone commits; no secrets).
-2. **Push to the GitHub remote** that GitHub Desktop tracks (`origin`, usually `main`).  
-   - GitHub Desktop is not a separate repo — it syncs this same `origin`.  
-   - The agent performs the push (typically `git push -u origin HEAD` / `git push origin main`) using the machine’s stored credentials / Git Credential Manager (same store Desktop uses).  
-   - Do **not** tell the user to press Push origin. Do **not** leave push as a manual step.  
-   - If push fails for auth, fix or report the credential error; do not silently skip.
-3. **Deploy Hetzner Node API** — run `scripts/deploy-hetzner-node-api.ps1` from the local checkout (SSH identity typically `C:\Users\Caide\Desktop\Stuff\Loot and lasers\SSH\Farts`).
-4. **Deploy / reload Nakama** on staging — keep modules current and recreate/reload the Nakama service as needed (no game-data wipe). See `docs/STAGING_NAKAMA.md` / host compose when there is no dedicated script.
-5. **Never** build a Windows installer / Godot export unless the user **explicitly** asks for one.
+## “Commit and push” means (agent-driven, no GitHub remote)
+
+When the user says **commit and push** (or equivalent), do **all** of the following:
+
+1. **Commit locally** per `git-commit-convention.mdc` (milestone commits; no secrets).  
+   → This is the GitHub Desktop repository update.
+2. **Deploy Hetzner Node API** — run `scripts/deploy-hetzner-node-api.ps1` from the local checkout (SSH identity typically `C:\Users\Caide\Desktop\Stuff\Loot and lasers\SSH\Farts`).
+3. **Deploy / reload Nakama** on staging — keep modules current; recreate/reload Nakama as needed (no game-data wipe). See `docs/STAGING_NAKAMA.md` / host compose.
+4. **Never** build a Windows installer / Godot export unless the user **explicitly** asks for one.
+5. **Never** push to `origin` / GitHub.com.
 
 ## Targets
 
 | Target | On “commit and push” | Who |
 |--------|----------------------|-----|
-| **GitHub remote** (Desktop’s repo) | Yes — push | Agent |
+| **Local repo / GitHub Desktop** | Yes — `git commit` only | Agent |
+| **GitHub.com remote** | **No** — partner’s workflow | Partner |
 | **Hetzner Node API** | Yes — deploy | Agent |
 | **Nakama** | Yes — reload/deploy | Agent |
 | **Godot installer** | Only if asked | Agent when requested |
 
-## Notes
+## Do not
 
-- Prefer non-interactive push (`GIT_TERMINAL_PROMPT=0` where helpful) so Credential Manager can use saved creds without a cancelled GUI dialog.
-- Hetzner/Nakama deploy does not update installed desktop clients (needs a new installer when requested).
+- Ask the user to Push origin in Desktop (unless they explicitly want to sync for their partner).
+- Attempt CLI or Desktop automation that publishes to github.com.
+- Skip Hetzner/Nakama when they said commit and push (those are the live targets that matter here).

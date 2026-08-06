@@ -26,7 +26,7 @@ git add .
 git commit -m "<message>"
 ```
 
-7. If the user asked to **commit and push**, follow `publish-and-live-deploy.mdc`: the agent pushes `origin` (same remote GitHub Desktop uses), then deploys **Hetzner** and **Nakama** — no manual user steps. Do not build an installer unless they explicitly ask.
+7. If the user asked to **commit and push**, follow `publish-and-live-deploy.mdc`: commit locally (updates GitHub Desktop’s local repo view), deploy **Hetzner** and **Nakama**, and **never** `git push` to GitHub.com. Do not build an installer unless they explicitly ask.
 
 If any check fails: do **not** commit; fix first and explain what blocked the commit.
 

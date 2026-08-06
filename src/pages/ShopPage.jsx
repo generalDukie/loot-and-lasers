@@ -15,18 +15,20 @@ import {
   STARDUST_COLOR,
 } from "@/lib/gameData";
 import { getShopGameDayKey, msUntilNextShopGameDay, formatEtaShort } from "@/lib/gameTime";
-import { powerRating } from "@/components/game/StatCompareBubble";
+import { compareGearAttributes, formatStatDelta } from "@/components/game/StatCompareBubble";
 import GearVisual from "@/components/game/GearVisual";
 import { useToast } from "@/components/ui/use-toast";
 import { getMyCharacter, primeMyCharacterCache } from "@/lib/socialEngine";
 import { playHaggleWinGrowl } from "@/lib/shopHaggleSfx";
 import {
-  ShoppingBag, Clock, Gem, RefreshCw, ArrowUp, ArrowDown, Minus,
+  ShoppingBag, Clock, Gem, RefreshCw,
   Swords, PackageOpen, Flame, MessageSquare,
 } from "lucide-react";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
-import StatIcon from "@/components/game/StatIcon";
+import StatIcon, { StatIconLabel, STAT_PRESENTATION } from "@/components/game/StatIcon";
 import FitScaleFrame from "@/components/game/FitScaleFrame";
+
+const CORE_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
 
 function fmtCountdown(sec) {
   const h = Math.floor(sec / 3600);
@@ -35,7 +37,7 @@ function fmtCountdown(sec) {
   return `${h}h ${m}m ${String(s).padStart(2, "0")}s`;
 }
 
-function CompareBadge({ slot, equipped, characterClass }) {
+function CompareBadge({ slot, equipped }) {
   if (slot?._bundle) {
     return (
       <span className="inline-flex items-center gap-0.5 text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30">
@@ -43,7 +45,6 @@ function CompareBadge({ slot, equipped, characterClass }) {
       </span>
     );
   }
-  const my = powerRating(slot, characterClass);
   if (!equipped) {
     return (
       <span className="inline-flex items-center gap-0.5 text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-400/30">
@@ -51,49 +52,53 @@ function CompareBadge({ slot, equipped, characterClass }) {
       </span>
     );
   }
-  const eq = powerRating(equipped, characterClass);
-  const d = my - eq;
-  if (d > 0) {
-    return (
-      <span className="inline-flex items-center gap-0.5 text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-400/35">
-        <ArrowUp className="w-2.5 h-2.5" /> +{d} vs equipped
-      </span>
-    );
-  }
-  if (d < 0) {
-    return (
-      <span className="inline-flex items-center gap-0.5 text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-400/35">
-        <ArrowDown className="w-2.5 h-2.5" /> {d} vs equipped
-      </span>
-    );
-  }
+  const { total } = compareGearAttributes(slot, equipped);
+  const delta = formatStatDelta(total);
+  const tone =
+    delta.tone === "pos" ? "text-green-400 border-green-400/35 bg-green-500/15"
+      : delta.tone === "neg" ? "text-red-400 border-red-400/35 bg-red-500/15"
+        : "text-muted-foreground border-border/40 bg-muted/40";
   return (
-    <span className="inline-flex items-center gap-0.5 text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full bg-muted/40 text-muted-foreground border border-border/40">
-      <Minus className="w-2.5 h-2.5" /> Same power
+    <span className={`inline-flex items-center gap-1 text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full border ${tone}`}>
+      <span className="text-muted-foreground font-semibold tracking-wide">STAT Δ</span>
+      <span className="tabular-nums">{delta.text}</span>
     </span>
   );
 }
 
 function StatDeltaRow({ slot, equipped }) {
   if (slot?._bundle || !slot?.stats) return null;
-  const keys = Object.keys(slot.stats).filter((k) => (slot.stats[k] || 0) > 0 || (equipped?.stats?.[k] || 0) > 0);
+  const keys = CORE_STATS.filter((k) => (slot.stats[k] || 0) > 0 || (equipped?.stats?.[k] || 0) > 0);
   if (!keys.length) return null;
   return (
-    <div className="flex flex-wrap gap-x-2 gap-y-0.5 mb-1.5">
+    <div className={`${STAT_PRESENTATION.itemPane.wrap} mb-1.5`}>
       {keys.map((stat) => {
         const v = slot.stats[stat] || 0;
         const e = equipped?.stats?.[stat] || 0;
         const d = v - e;
         const color = getStatColor(stat);
+        const delta = formatStatDelta(d);
         return (
-          <span key={stat} className="text-[9px] tabular-nums font-medium inline-flex items-center gap-0.5" style={{ color }} title={equipped ? `Equipped ${e}` : "No piece equipped"}>
-            <StatIcon stat={stat} className="w-2.5 h-2.5" /> {v}
-            {equipped ? (
-              <span className={d > 0 ? "text-green-400" : d < 0 ? "text-red-400" : "text-muted-foreground"}>
-                {" "}({d > 0 ? "+" : ""}{d})
-              </span>
-            ) : null}
-          </span>
+          <StatIconLabel
+            key={stat}
+            stat={stat}
+            presentation="itemPane"
+            valueClassName={STAT_PRESENTATION.itemPane.value}
+            title={equipped ? `Equipped ${e}` : "No piece equipped"}
+          >
+            <span className="tabular-nums font-medium inline-flex items-center gap-1" style={{ color }}>
+              {v}
+              {equipped ? (
+                <span className={
+                  delta.tone === "pos" ? "text-green-400"
+                    : delta.tone === "neg" ? "text-red-400"
+                      : "text-muted-foreground"
+                }>
+                  {delta.text}
+                </span>
+              ) : null}
+            </span>
+          </StatIconLabel>
         );
       })}
     </div>
@@ -549,7 +554,7 @@ export default function ShopPage() {
                       <div className="min-w-0">
                         <h4 className="font-display font-bold text-base truncate" style={{ color }}>{slot.name}</h4>
                         <p className="text-[9px] text-muted-foreground capitalize">{slot.rarity} · {gearTypeLabel(slot.type)}</p>
-                        <div className="mt-1"><CompareBadge slot={slot} equipped={eq} characterClass={character.class} /></div>
+                        <div className="mt-1"><CompareBadge slot={slot} equipped={eq} /></div>
                       </div>
                     </div>
                     <div className="flex-1 flex flex-col min-w-0 justify-between">
@@ -631,14 +636,13 @@ export default function ShopPage() {
                 }
 
                 const eq = equippedByType[slot.type] || null;
-                const better = !owned && !slot._bundle && eq && powerRating(slot, character.class) > powerRating(eq, character.class);
                 return (
                   <motion.div
                     key={slot._slotId}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: owned ? 0.72 : 1, y: 0 }}
                     className={`relative h-full p-2.5 rounded-lg border bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden ${
-                      owned ? "opacity-70" : better ? "ring-1 ring-green-400/35" : ""
+                      owned ? "opacity-70" : ""
                     }`}
                     style={{ borderColor: color + "45", boxShadow: owned ? undefined : `0 0 12px ${color}12` }}
                   >
@@ -663,7 +667,7 @@ export default function ShopPage() {
                       </div>
                     </div>
                     <div className="mb-1">
-                      <CompareBadge slot={slot} equipped={eq} characterClass={character.class} />
+                      <CompareBadge slot={slot} equipped={eq} />
                     </div>
                     {slot._bundle ? (
                       <p className="text-[9px] text-muted-foreground mb-1.5 line-clamp-2">{slot.flavor_text}</p>

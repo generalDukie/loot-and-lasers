@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Droppable, Draggable } from "@hello-pangea/dnd";
-import { motion } from "framer-motion";
-import { Trash2, X, ArrowUp, ArrowDown } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import GearVisual from "@/components/game/GearVisual";
-import StatCompareBubble, { powerRating } from "@/components/game/StatCompareBubble";
+import StatCompareBubble from "@/components/game/StatCompareBubble";
 import GearInspectPortal from "@/components/game/GearInspectPortal";
+import NeonLockIcon from "@/components/game/NeonLockIcon";
+import { GearAttributeChips } from "@/components/game/StatIcon";
 import { RARITY_COLORS } from "@/lib/gameData";
 import { EQUIPPABLE_TYPES, listDissolveJunk } from "@/lib/inventoryJunk";
 import { sortItemsByOrder } from "@/lib/inventoryOrder";
@@ -171,11 +172,7 @@ export default function InventorySlotBoard({
                 const dragIndex = unequipped.findIndex((i) => i.id === item.id);
                 const color = RARITY_COLORS[item.rarity] || "#9CA3AF";
                 const comparable = EQUIPPABLE_TYPES.includes(item.type);
-                const eqSlot = equipped.find((i) => i.type === item.type) || null;
                 const isPinned = !desktopHover && pinnedId === item.id;
-                const powerDelta = comparable && eqSlot
-                  ? powerRating(item, characterClass) - powerRating(eqSlot, characterClass)
-                  : comparable && !eqSlot ? 1 : 0;
 
                 return (
                   <Draggable
@@ -234,31 +231,10 @@ export default function InventorySlotBoard({
                             ...(dragSnapshot.isDragging ? { zIndex: 9999 } : null),
                           }}
                         >
-                          {powerDelta !== 0 && comparable && (
-                            <motion.span
-                              className={`absolute -top-0.5 -left-0.5 z-20 flex items-center justify-center w-7 h-7 rounded-full border-2 ${
-                                powerDelta > 0
-                                  ? "bg-green-500/40 text-green-300 border-green-400/80"
-                                  : "bg-red-500/40 text-red-300 border-red-400/80"
-                              }`}
-                              style={{
-                                boxShadow: `0 0 12px ${powerDelta > 0 ? "#22c55e" : "#ef4444"}`,
-                              }}
-                              animate={{
-                                opacity: [1, 0.35, 1],
-                                scale: [1, 1.18, 1],
-                              }}
-                              transition={{ duration: 0.85, repeat: Infinity, ease: "easeInOut" }}
-                            >
-                              {powerDelta > 0
-                                ? <ArrowUp className="w-4 h-4 stroke-[3]" />
-                                : <ArrowDown className="w-4 h-4 stroke-[3]" />}
-                            </motion.span>
-                          )}
-                          {/* Name band — top ~25% of the tile */}
-                          <div className="relative z-10 h-[25%] min-h-0 w-full px-1 pt-1 flex items-start justify-center pointer-events-none">
+                          {/* Name band — top ~22% of the tile */}
+                          <div className="relative z-10 h-[22%] min-h-0 w-full px-1 pt-1 flex items-start justify-center pointer-events-none">
                             <p
-                              className="w-full text-center font-display font-bold leading-[1.1] text-[11px] sm:text-[12px] line-clamp-3 break-words"
+                              className="w-full text-center font-display font-bold leading-[1.1] text-[11px] sm:text-[12px] line-clamp-2 break-words"
                               style={{
                                 color,
                                 textShadow: "0 1px 2px hsl(222 22% 4% / 0.95)",
@@ -269,15 +245,24 @@ export default function InventorySlotBoard({
                             </p>
                           </div>
                           {/* Icon — optically centered in the remaining pane */}
-                          <div className="relative z-0 flex-1 min-h-0 w-full flex items-center justify-center pb-3">
+                          <div className="relative z-0 flex-1 min-h-0 w-full flex items-center justify-center">
                             <GearVisual
                               type={item.type}
                               rarity={item.rarity}
                               name={item.name}
                               baseName={item.base_name}
                               level_requirement={item.level_requirement}
-                              size={44}
+                              size={36}
                               static
+                            />
+                          </div>
+                          {/* Rolled attributes — contained in the tile footer */}
+                          <div className="relative z-10 w-full min-h-0 max-h-[38%] px-0.5 pb-3.5 overflow-hidden pointer-events-none">
+                            <GearAttributeChips
+                              stats={item.stats}
+                              presentation="itemPane"
+                              max={4}
+                              className="justify-center !gap-x-1 !gap-y-0.5"
                             />
                           </div>
                           {/* Quality always visible */}
@@ -292,7 +277,13 @@ export default function InventorySlotBoard({
                             {RARITY_LETTER[item.rarity] || "?"}
                           </span>
                           {item.locked && (
-                            <span className="absolute top-[26%] right-0.5 z-10 text-[7px] text-amber-400">🔒</span>
+                            <span
+                              className="absolute top-1 right-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-sm"
+                              style={{ background: "hsl(222 22% 6% / 0.9)" }}
+                              title="Locked"
+                            >
+                              <NeonLockIcon className="w-2.5 h-2.5" />
+                            </span>
                           )}
                         </div>
                       );

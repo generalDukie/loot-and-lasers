@@ -57,8 +57,34 @@ const DUNGEON_ARMOR_CAP := 75.0
 const DUNGEON_TECH_RESIST_CAP := 75.0
 const CRIT_MULT := 1.5
 const DAMAGE_BASE := 15.0
+const DAMAGE_BASE_RAMP_FLOOR := 5.0
+const DAMAGE_BASE_RAMP_FULL_LEVEL := 25
 const DAMAGE_COEFF := 0.0032
 const DAMAGE_EXP := 1.727
+
+
+## Linear flat ramp: 5 at L1 → 15 at L25+. Mission soft foes + arena bots only.
+static func ramped_damage_base(level: int) -> float:
+	var L := maxi(1, level)
+	if L >= DAMAGE_BASE_RAMP_FULL_LEVEL:
+		return DAMAGE_BASE
+	var span := float(DAMAGE_BASE_RAMP_FULL_LEVEL - 1)
+	return DAMAGE_BASE_RAMP_FLOOR + (DAMAGE_BASE - DAMAGE_BASE_RAMP_FLOOR) * (float(L - 1) / span)
+
+
+## Dungeon foes also set isBot — exclude them so dungeon stays on full flat 15.
+static func uses_ramped_damage_base(character: Dictionary) -> bool:
+	if bool(character.get("dungeonEnemy", false)):
+		return false
+	return bool(character.get("missionEnemy", false)) \
+		or bool(character.get("isBot", false)) \
+		or bool(character.get("is_bot", false))
+
+
+static func damage_base_for_combatant(character: Dictionary) -> float:
+	if uses_ramped_damage_base(character):
+		return ramped_damage_base(maxi(1, int(character.get("level", 1))))
+	return DAMAGE_BASE
 
 
 static func lerp_waypoints(level: float, points: Array) -> float:
@@ -151,9 +177,9 @@ static func max_hp(vitality: float) -> int:
 	return int(round(50.0 + 2.5 * v + 0.008 * pow(v, 2.0)))
 
 
-static func base_damage(primary: float) -> float:
+static func base_damage(primary: float, damage_base: float = DAMAGE_BASE) -> float:
 	var p := maxf(0.0, primary)
-	return DAMAGE_BASE + DAMAGE_COEFF * pow(p, DAMAGE_EXP)
+	return damage_base + DAMAGE_COEFF * pow(p, DAMAGE_EXP)
 
 
 static func apply_race_bonus(stats: Dictionary, race: Variant) -> Dictionary:
@@ -222,7 +248,8 @@ static func build_fighter(character: Dictionary, items: Array, side: String) -> 
 		dmg_type = "agility"
 	elif arch == "int":
 		dmg_type = "tech"
-	var sheet_atk := base_damage(primary_val)
+	var dmg_base := damage_base_for_combatant(character)
+	var sheet_atk := base_damage(primary_val, dmg_base)
 	# Match web computeDerivedStats: agility sheet damage uses ×0.925.
 	if arch == "agi":
 		sheet_atk *= 0.925
@@ -236,6 +263,7 @@ static func build_fighter(character: Dictionary, items: Array, side: String) -> 
 		"barrier": 0,
 		"primaryValue": primary_val,
 		"standardAttack": sheet_atk,
+		"damageBase": dmg_base,
 		"archetype": arch,
 		"crit": soft_cap_percent(level, float(stats.get("luck", 0)), crit_cap) / 100.0,
 		"dodge": soft_cap_percent(level, float(stats.get("agility", 0)), dodge_cap) / 100.0,
@@ -247,8 +275,8 @@ static func build_fighter(character: Dictionary, items: Array, side: String) -> 
 	}
 
 
-static func roll_damage(archetype: String, primary: float) -> float:
-	var raw := base_damage(primary)
+static func roll_damage(archetype: String, primary: float, damage_base: float = DAMAGE_BASE) -> float:
+	var raw := base_damage(primary, damage_base)
 	var uni := 0.90 + randf() * 0.20
 	if archetype == "agi":
 		var agi_var := 0.80 + randf() * 0.25
@@ -328,7 +356,11 @@ static func simulate_battle(player: Dictionary, enemy: Dictionary, player_items:
 			})
 			ClassPassives.end_attack_mods(attacker, mods)
 		else:
-			var dmg := roll_damage(str(attacker["archetype"]), float(attacker["primaryValue"]))
+			var dmg := roll_damage(
+				str(attacker["archetype"]),
+				float(attacker["primaryValue"]),
+				float(attacker.get("damageBase", DAMAGE_BASE)),
+			)
 			var crit_chance := float(attacker["crit"]) + float(mods.get("critBonusFlat", 0.0))
 			var crit := bool(mods.get("guaranteedCrit", false)) or randf() < crit_chance
 			var override_mult = mods.get("critMultOverride", null)

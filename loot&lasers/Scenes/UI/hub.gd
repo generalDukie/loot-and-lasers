@@ -2,8 +2,6 @@ extends Control
 ## Station hub — mirrors web Home.jsx + SpaceStationHub / NexusShowcase / NexusChatter.
 
 var _status: Label
-var _missions_btn: Button
-var _missions_wrap: Control
 var _open_flyout: PanelContainer = null
 var _nexus_owner: Label
 var _nexus_chatter: Label
@@ -413,15 +411,13 @@ func _build() -> void:
 			{"label": "Leaderboard", "icon": "trophy", "color": "#FBBF24", "action": func() -> void: GameManager.go_leaderboard()},
 		]
 	))
-	_missions_wrap = _dock_split(
+	deck.add_child(_dock_split(
 		"beer", "Cantina", "#FF9E4F",
 		[
 			{"label": "Missions", "icon": "beer", "color": "#FF9E4F", "action": _on_missions},
 			{"label": "Casino", "icon": "dice-5", "color": "#F59E0B", "action": func() -> void: GameManager.go_casino()},
 		]
-	)
-	_missions_btn = _missions_wrap.get_meta("dock_button") as Button
-	deck.add_child(_missions_wrap)
+	))
 	deck.add_child(_dock_split(
 		"shopping-bag", "Bazaar", "#9D6BFF",
 		[
@@ -791,10 +787,6 @@ func _populate() -> void:
 		_chatter_timer.start()
 	else:
 		_chatter_timer.stop()
-
-	# Keep Cantina label stable like web; mission state lives on Missions/Cantina page.
-	if _missions_btn:
-		_missions_btn.text = "🍺\nCantina"
 
 
 func _build_chatter_lines(nexus: Dictionary) -> PackedStringArray:

@@ -3,17 +3,65 @@
  * Observes combat events only — never mutates gameplay or combat authority.
  */
 
+import { STAT_COLORS } from "@/lib/gameData";
+
 const DEV_KEY = "ll_combat_dev_diagnostics";
 
+/**
+ * Damage float colors derive from Hero attribute panes (STAT_COLORS).
+ * Might ← strength, Reflex ← agility, Tech ← intellect, True ← white.
+ */
 export const DAMAGE_TYPE_COLORS = Object.freeze({
-  MIGHT: "#F87171",
-  REFLEX: "#4ADE80",
-  TECH: "#60A5FA",
-  TRUE: "#E879F9",
+  MIGHT: STAT_COLORS.strength,
+  REFLEX: STAT_COLORS.agility,
+  TECH: STAT_COLORS.intellect,
+  TRUE: "#FFFFFF",
   HEAL: "#86EFAC",
   BARRIER: "#67E8F9",
   NORMAL: "#FCA5A5",
 });
+
+/** Floater px sizes — damage +50% over prior 18px; crit = 2× enlarged normal. */
+export const FLOAT_FONT_PX = Object.freeze({
+  other: 18,
+  damage: 27,
+  crit: 54,
+});
+
+const CRIT_DARKEN = 0.18;
+
+function clampByte(n) {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+/** Slightly darken a #RRGGBB hex (Crit presentation only). */
+export function darkenHex(hex, amount = CRIT_DARKEN) {
+  const raw = String(hex || "").replace("#", "");
+  if (raw.length < 6) return hex;
+  const r = parseInt(raw.slice(0, 2), 16);
+  const g = parseInt(raw.slice(2, 4), 16);
+  const b = parseInt(raw.slice(4, 6), 16);
+  const f = 1 - Math.max(0, Math.min(1, amount));
+  return `#${[r, g, b].map((c) => clampByte(c * f).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Color for a damage event from its damageType field (not attacker class). */
+export function damageTypeColor(dtype, isCrit = false) {
+  const key = String(dtype || "NORMAL").toUpperCase();
+  const base =
+    key === "TRUE"
+      ? DAMAGE_TYPE_COLORS.TRUE
+      : key === "TECH"
+        ? DAMAGE_TYPE_COLORS.TECH
+        : key === "REFLEX"
+          ? DAMAGE_TYPE_COLORS.REFLEX
+          : key === "MIGHT"
+            ? DAMAGE_TYPE_COLORS.MIGHT
+            : DAMAGE_TYPE_COLORS.NORMAL;
+  // True Damage cannot Crit under combat rules — never apply Crit darken.
+  if (isCrit && key !== "TRUE") return darkenHex(base, CRIT_DARKEN);
+  return base;
+}
 
 export function isCombatDevDiagnosticsEnabled() {
   if (typeof window === "undefined") return false;
@@ -154,58 +202,60 @@ function applyEventToStatus(state, ev) {
   }
 }
 
+function otherFloater(kind, label, color) {
+  return {
+    kind,
+    label,
+    color,
+    fontSize: FLOAT_FONT_PX.other,
+    bold: false,
+    crit: false,
+  };
+}
+
 /** Floater presentation for a single event (defender-facing). */
 export function resolveCombatFloater(ev) {
   if (!ev) return null;
   if (ev.heal) {
-    return { kind: "heal", label: `+${ev.heal}`, color: DAMAGE_TYPE_COLORS.HEAL };
+    return otherFloater("heal", `+${ev.heal}`, DAMAGE_TYPE_COLORS.HEAL);
   }
   if (ev.dodged || ev.type === "dodge") {
-    return { kind: "dodge", label: "DODGE", color: "#67E8F9" };
+    return otherFloater("dodge", "DODGE", "#67E8F9");
   }
   if (ev.type === "miss" || ev.missed) {
     if (ev.missKind === "phantom_signal" || ev.kind === "phantom_signal_miss") {
-      return { kind: "forced_miss", label: "FORCED MISS", color: "#C084FC" };
+      return otherFloater("forced_miss", "FORCED MISS", "#C084FC");
     }
-    return { kind: "miss", label: "MISS", color: "#94A3B8" };
+    return otherFloater("miss", "MISS", "#94A3B8");
   }
   if (ev.type === "barrier" && ev.kind === "barrier_broken") {
-    return { kind: "barrier_break", label: "BARRIER BREAK", color: DAMAGE_TYPE_COLORS.BARRIER };
+    return otherFloater("barrier_break", "BARRIER BREAK", DAMAGE_TYPE_COLORS.BARRIER);
   }
   if (ev.type === "barrier" && ev.kind === "barrier_absorbed") {
-    return {
-      kind: "barrier",
-      label: `SHIELD −${ev.absorbed || 0}`,
-      color: DAMAGE_TYPE_COLORS.BARRIER,
-    };
+    return otherFloater("barrier", `SHIELD −${ev.absorbed || 0}`, DAMAGE_TYPE_COLORS.BARRIER);
   }
   if (ev.shieldHit && !(ev.damage > 0)) {
-    return { kind: "barrier", label: "BLOCK", color: DAMAGE_TYPE_COLORS.BARRIER };
+    return otherFloater("barrier", "BLOCK", DAMAGE_TYPE_COLORS.BARRIER);
   }
   if (ev.damage > 0) {
-    const dtype = ev.damageType || "NORMAL";
-    const color =
-      dtype === "TRUE"
-        ? DAMAGE_TYPE_COLORS.TRUE
-        : dtype === "TECH"
-          ? DAMAGE_TYPE_COLORS.TECH
-          : dtype === "REFLEX"
-            ? DAMAGE_TYPE_COLORS.REFLEX
-            : dtype === "MIGHT"
-              ? DAMAGE_TYPE_COLORS.MIGHT
-              : DAMAGE_TYPE_COLORS.NORMAL;
-    const prefix =
-      dtype === "TRUE" ? "TRUE " : ev.crit ? "CRIT " : "";
+    const dtype = String(ev.damageType || "NORMAL").toUpperCase();
+    // True Damage cannot Crit — ignore a stray crit flag for presentation.
+    const isCrit = !!ev.crit && dtype !== "TRUE";
+    const color = damageTypeColor(dtype, isCrit);
+    const prefix = dtype === "TRUE" ? "TRUE " : isCrit ? "CRIT " : "";
     const shieldNote = ev.shieldHit && ev.barrierAbsorbed ? ` · SHIELD −${ev.barrierAbsorbed}` : "";
     return {
-      kind: ev.crit ? "crit" : dtype === "TRUE" ? "true" : "damage",
+      kind: isCrit ? "crit" : dtype === "TRUE" ? "true" : "damage",
       label: `${prefix}−${ev.damage}${shieldNote}`,
       color,
       damageType: dtype,
+      fontSize: isCrit ? FLOAT_FONT_PX.crit : FLOAT_FONT_PX.damage,
+      bold: isCrit,
+      crit: isCrit,
     };
   }
   if (ev.type === "passive") {
-    return { kind: "buff", label: "✦", color: "#C084FC" };
+    return otherFloater("buff", "✦", "#C084FC");
   }
   return null;
 }

@@ -604,6 +604,7 @@ func _enc_cell(
 	var icon_col := ClientUi.CYAN
 	var label := str(idx)
 	var label_col := ClientUi.TEXT
+	var use_lock_icon := false
 
 	if is_boss:
 		border = Color("#FBBF24", 0.55)
@@ -632,8 +633,9 @@ func _enc_cell(
 	elif locked:
 		border = Color(0.3, 0.32, 0.38, 0.35)
 		bg = Color(0.05, 0.05, 0.07, 0.55)
-		icon = "🔒"
-		icon_col = Color(ClientUi.MUTED, 0.7)
+		icon = ""
+		use_lock_icon = true
+		icon_col = Color(ClientUi.MUTED, 0.85)
 		label_col = Color(ClientUi.MUTED, 0.6)
 
 	var cell := PanelContainer.new()
@@ -662,12 +664,18 @@ func _enc_cell(
 		next_bg.add_theme_stylebox_override("panel", next_style)
 		next_bg.add_child(next)
 		col.add_child(next_bg)
-	var icon_lab := Label.new()
-	icon_lab.text = icon
-	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lab.add_theme_font_size_override("font_size", 19)
-	icon_lab.add_theme_color_override("font_color", icon_col)
-	col.add_child(icon_lab)
+	if use_lock_icon:
+		var lock_wrap := CenterContainer.new()
+		lock_wrap.custom_minimum_size = Vector2(24, 24)
+		lock_wrap.add_child(UiIcon.make("lock", icon_col, 18.0))
+		col.add_child(lock_wrap)
+	else:
+		var icon_lab := Label.new()
+		icon_lab.text = icon
+		icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		icon_lab.add_theme_font_size_override("font_size", 19)
+		icon_lab.add_theme_color_override("font_color", icon_col)
+		col.add_child(icon_lab)
 	var lab := Label.new()
 	lab.text = label
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

@@ -136,42 +136,11 @@ static func compute_rewards(player: Dictionary, opp: Dictionary, won: bool, is_f
 	}
 
 
-## Risk label from blended rating + power gap (web assessMatchRisk).
-static func assess_match_risk(player_power: int, opp_power: int, player_rating: int, opp_rating: int) -> Dictionary:
-	var rating_gap := float(opp_rating - player_rating)
-	var power_gap := float(opp_power - player_power)
-	var score := rating_gap / 20.0 + power_gap / 18.0
-	if score <= -35.0:
-		return {"id": "favored", "label": "FAVORED", "tone": "emerald", "color": Color("#6EE7B7")}
-	if score <= -12.0:
-		return {"id": "edge", "label": "EDGE", "tone": "cyan", "color": Color("#67E8F9")}
-	if score <= 12.0:
-		return {"id": "even", "label": "EVEN", "tone": "amber", "color": Color("#FCD34D")}
-	if score <= 35.0:
-		return {"id": "underdog", "label": "UNDERDOG", "tone": "orange", "color": Color("#FB923C")}
-	return {"id": "danger", "label": "DANGER", "tone": "rose", "color": Color("#FB7185")}
-
-
-static func preview_arena_match(player: Dictionary, opp: Dictionary, is_free: bool, player_power: int = -1) -> Dictionary:
-	var my_power := player_power if player_power >= 0 else compute_power(player, [])
+## Pre-fight stakes preview used by challenger cards (rewards only — no risk badge).
+static func preview_arena_match(player: Dictionary, opp: Dictionary, is_free: bool, _player_power: int = -1) -> Dictionary:
 	var on_win := compute_rewards(player, opp, true, is_free)
 	var on_loss := compute_rewards(player, opp, false, is_free)
-	var risk := assess_match_risk(
-		my_power,
-		int(opp.get("power", 0)),
-		int(player.get("arena_rating", 1000)),
-		int(opp.get("arena_rating", 1000))
-	)
-	return {"onWin": on_win, "onLoss": on_loss, "risk": risk}
-
-
-static func format_last_online(mins: int) -> String:
-	if mins < 60:
-		return "%sm ago" % maxi(0, mins)
-	var h := mins / 60
-	if h < 24:
-		return "%sh ago" % h
-	return "%sd ago" % (h / 24)
+	return {"onWin": on_win, "onLoss": on_loss}
 
 
 static func allocate_attrs(total: int, shares: Dictionary, primary: String) -> Dictionary:

@@ -24,6 +24,11 @@ export {
   UNIVERSAL_VARIANCE_MIN,
   UNIVERSAL_VARIANCE_MAX,
   DAMAGE_BASE,
+  DAMAGE_BASE_RAMP_FLOOR,
+  DAMAGE_BASE_RAMP_FULL_LEVEL,
   DAMAGE_COEFF,
   DAMAGE_EXP,
+  getRampedDamageBase,
+  usesRampedDamageBase,
+  getDamageBaseForCombatant,
 } from "./statEngine.js";

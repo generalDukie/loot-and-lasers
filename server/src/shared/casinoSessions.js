@@ -11,7 +11,7 @@ export function ensureCasinoSessionsTable() {
       character_id TEXT NOT NULL,
       game_id TEXT NOT NULL,
       status TEXT NOT NULL,
-      wager INTEGER NOT NULL,
+      wager REAL NOT NULL,
       currency TEXT NOT NULL,
       state_json TEXT NOT NULL,
       start_request_id TEXT,
@@ -21,6 +21,41 @@ export function ensureCasinoSessionsTable() {
     );
     CREATE INDEX IF NOT EXISTS idx_casino_sessions_owner_status
       ON casino_sessions(account_id, character_id, game_id, status);
+  `);
+  migrateWagerColumnToReal();
+}
+
+/** Older builds used INTEGER affinity, which truncates .5 Nova wagers. */
+function migrateWagerColumnToReal() {
+  const row = db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='casino_sessions'`
+  ).get();
+  if (!row?.sql || !/\bwager\s+INTEGER\b/i.test(row.sql)) return;
+  db.exec(`
+    BEGIN;
+    CREATE TABLE casino_sessions_real (
+      session_id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      character_id TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      wager REAL NOT NULL,
+      currency TEXT NOT NULL,
+      state_json TEXT NOT NULL,
+      start_request_id TEXT,
+      last_action_request_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    INSERT INTO casino_sessions_real
+      SELECT session_id, account_id, character_id, game_id, status, wager, currency,
+             state_json, start_request_id, last_action_request_id, created_at, updated_at
+      FROM casino_sessions;
+    DROP TABLE casino_sessions;
+    ALTER TABLE casino_sessions_real RENAME TO casino_sessions;
+    CREATE INDEX IF NOT EXISTS idx_casino_sessions_owner_status
+      ON casino_sessions(account_id, character_id, game_id, status);
+    COMMIT;
   `);
 }
 

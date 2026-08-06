@@ -46,14 +46,14 @@ function Read-StagingServerKeyFromSecrets([string]$Path) {
 
 function Assert-BakedStagingKeyInExe([string]$ExePath, [string]$ExpectedKey) {
     if (-not (Test-Path $ExePath)) {
-        throw "Exported exe missing at $ExePath — cannot verify baked staging key."
+        throw "Exported exe missing at $ExePath - cannot verify baked staging key."
     }
     # Friend builds embed release_client.cfg inside the PCK. Confirm the exact
     # key bytes are present so a bad bake cannot ship as "Server key invalid".
     $bytes = [System.IO.File]::ReadAllBytes($ExePath)
     $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
     if (-not $ascii.Contains("release_client.cfg")) {
-        throw "Exported exe is missing release_client.cfg — staging key was not packaged."
+        throw "Exported exe is missing release_client.cfg - staging key was not packaged."
     }
     if ($ascii.Contains("nakama_secrets.cfg")) {
         throw "Exported exe unexpectedly contains nakama_secrets.cfg (must stay excluded)."
@@ -116,7 +116,7 @@ server_key="$Key"
 "@
 
 try {
-    # UTF-8 without BOM — BOM can break Godot ConfigFile section parsing on some builds.
+    # UTF-8 without BOM - BOM can break Godot ConfigFile section parsing on some builds.
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($ReleaseConfig, ($releaseConfigContents -replace "`r`n", "`n"), $utf8NoBom)
 

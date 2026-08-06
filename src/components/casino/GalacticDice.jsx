@@ -109,6 +109,7 @@ export default function GalacticDice({ character, onSettle, busy, minBet = 1, ma
           type="number"
           min={MIN}
           max={MAX}
+          step={1}
           value={bet}
           onChange={(e) => setBet(e.target.value)}
           className="w-28 bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-sm"

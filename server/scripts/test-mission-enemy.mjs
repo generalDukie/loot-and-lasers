@@ -23,6 +23,8 @@ import {
   UNIVERSAL_VARIANCE_MIN,
   UNIVERSAL_VARIANCE_MAX,
   getBaseDamageFromPrimary,
+  getDamageBaseForCombatant,
+  getRampedDamageBase,
 } from "../../src/lib/statEngine.js";
 import { simulateBattle } from "../../src/lib/arenaEngine.js";
 import { CLASSES } from "../../src/lib/gameData.js";
@@ -249,7 +251,18 @@ test("progressing player overwhelmingly favored vs mission enemy", () => {
   globalThis.__missionEnemyWinRates = results;
 });
 
-test("bare player can lose by mid levels without gear/attrs", () => {
+test("mission / arena-bot flat damage ramps; dungeon and players stay at 15", () => {
+  assert.equal(getRampedDamageBase(1), 5);
+  assert.equal(getRampedDamageBase(25), 15);
+  assert.equal(getDamageBaseForCombatant({ missionEnemy: true, level: 1 }), 5);
+  assert.equal(getDamageBaseForCombatant({ isBot: true, level: 1 }), 5);
+  assert.equal(getDamageBaseForCombatant({ isBot: true, level: 25 }), 15);
+  // Dungeon foes also set isBot — must keep full flat.
+  assert.equal(getDamageBaseForCombatant({ isBot: true, dungeonEnemy: true, level: 1 }), 15);
+  assert.equal(getDamageBaseForCombatant({ level: 1, class: "Vanguard" }), 15);
+});
+
+test("bare early player is favored vs mission enemy under ramped flat", () => {
   const level = 10;
   let wins = 0;
   const N = 40;
@@ -271,8 +284,7 @@ test("bare player can lose by mid levels without gear/attrs", () => {
     if (battle.winner === "player") wins += 1;
   }
   console.log(`    L${level} bare Vanguard: ${wins}/${N} (${((wins / N) * 100).toFixed(0)}%)`);
-  // Negligent players should not be near-guaranteed winners by L10.
-  assert.ok(wins / N < 0.85, `L${level} bare win rate too high: ${wins}/${N}`);
+  assert.ok(wins / N >= 0.85, `L${level} bare win rate too low: ${wins}/${N}`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

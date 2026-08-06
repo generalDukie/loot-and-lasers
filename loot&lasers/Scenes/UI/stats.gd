@@ -896,18 +896,35 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		icon_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		icon_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		col.add_child(icon_wrap)
-		var icon_sz := clampf(_bag_slot_min_h * 0.42, 24.0, 40.0)
+		var icon_sz := clampf(_bag_slot_min_h * 0.32, 20.0, 34.0)
 		icon_wrap.add_child(GearIcon.make(item, icon_sz))
 
-		if can_equip:
-			var arrow: Label = _make_upgrade_arrow(item)
-			if arrow != null:
-				# Sibling overlay under Control root — keeps icon centered.
-				arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				arrow.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-				arrow.offset_left = 2
-				arrow.offset_top = 0
-				root.add_child(arrow)
+		var stats_raw: Variant = item.get("stats", {})
+		if typeof(stats_raw) == TYPE_DICTIONARY:
+			var chips := HFlowContainer.new()
+			chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			chips.alignment = FlowContainer.ALIGNMENT_CENTER
+			chips.add_theme_constant_override("h_separation", 4)
+			chips.add_theme_constant_override("v_separation", 2)
+			col.add_child(chips)
+			var shown := 0
+			for k in ["strength", "agility", "intellect", "vitality", "luck"]:
+				var v := int(stats_raw.get(k, 0))
+				if v <= 0:
+					continue
+				if shown >= 4:
+					break
+				chips.add_child(StatIcon.make_labeled(
+					k,
+					"+%s" % v,
+					StatIcon.SIZE_ITEM_PANE,
+					20,
+					GameData.stat_color(k),
+					4
+				))
+				shown += 1
+
 	else:
 		var mark := Label.new()
 		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -947,28 +964,6 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 					_on_equip(captured_id)
 		)
 	return panel
-
-
-func _make_upgrade_arrow(item: Dictionary) -> Label:
-	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
-	var worn := InventoryRules.find_equipped_of_type(StatsManager.all_items, str(item.get("type", "")))
-	var my_p := InventoryRules.class_power_rating(item, class_key)
-	var eq_p := InventoryRules.class_power_rating(worn, class_key) if not worn.is_empty() else 0
-	var delta := my_p - eq_p if not worn.is_empty() else 1
-	if delta == 0:
-		return null
-	var lab := Label.new()
-	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 16)
-	ClientUi.apply_display_font(lab)
-	if delta > 0:
-		lab.text = "▲"
-		lab.add_theme_color_override("font_color", ClientUi.SUCCESS)
-	else:
-		lab.text = "▼"
-		lab.add_theme_color_override("font_color", ClientUi.DANGER)
-	return lab
 
 
 func _compact_inspect_style(accent: Color) -> StyleBoxFlat:
@@ -1078,7 +1073,6 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 		var old: Node = _bag_inspect_col.get_child(0)
 		_bag_inspect_col.remove_child(old)
 		old.free()
-	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
 	var item_id := str(item.get("id", ""))
 	var item_type := str(item.get("type", ""))
 	var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
@@ -1131,51 +1125,69 @@ func _rebuild_bag_inspect(item: Dictionary) -> void:
 			var d: int = int(row.get("delta", 0))
 			var lab := HBoxContainer.new()
 			lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			lab.add_theme_constant_override("separation", 4)
+			lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			lab.add_theme_constant_override("separation", 6)
 			var stat_key := str(row.get("stat", ""))
 			if StatIcon.has(stat_key):
-				lab.add_child(StatIcon.make(stat_key, 12.0))
-			var txt := Label.new()
-			txt.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var stat_abbr := stat_key.substr(0, 3).to_upper()
-			if worn.is_empty():
-				txt.text = "%s  +%s" % [stat_abbr, str(row.get("new", 0))]
-				txt.add_theme_color_override("font_color", GameData.stat_color(stat_key))
-			else:
-				var sign := "+" if d > 0 else ""
-				txt.text = "%s  %s  (%s%s)" % [
-					stat_abbr, str(row.get("new", 0)), sign, str(d),
-				]
-				txt.add_theme_color_override(
+				lab.add_child(StatIcon.make(stat_key, StatIcon.SIZE_TOOLTIP))
+			var abbr := Label.new()
+			abbr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			abbr.text = stat_key.substr(0, 3).to_upper()
+			abbr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			abbr.add_theme_font_size_override("font_size", 12)
+			abbr.add_theme_color_override("font_color", ClientUi.MUTED)
+			ClientUi.apply_body_font(abbr)
+			lab.add_child(abbr)
+			var val := Label.new()
+			val.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var nv: int = int(row.get("new", 0))
+			val.text = ("+%s" % nv) if nv > 0 else "0"
+			val.add_theme_font_size_override("font_size", 14)
+			val.add_theme_color_override(
+				"font_color",
+				tint if nv > 0 else ClientUi.MUTED
+			)
+			ClientUi.apply_body_font(val)
+			lab.add_child(val)
+			if InventoryRules.is_equippable(item_type):
+				var dlab := Label.new()
+				dlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				dlab.custom_minimum_size.x = 36
+				dlab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				dlab.text = InventoryRules.format_stat_delta(d)
+				dlab.add_theme_font_size_override("font_size", 13)
+				dlab.add_theme_color_override(
 					"font_color",
 					ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else ClientUi.MUTED)
 				)
-			txt.add_theme_font_size_override("font_size", 12)
-			ClientUi.apply_body_font(txt)
-			lab.add_child(txt)
+				ClientUi.apply_body_font(dlab)
+				lab.add_child(dlab)
 			_bag_inspect_col.add_child(lab)
 
 	if InventoryRules.is_equippable(item_type):
-		var my_p := InventoryRules.class_power_rating(item, class_key)
-		var eq_p := InventoryRules.class_power_rating(worn, class_key) if not worn.is_empty() else 0
-		var delta := my_p - eq_p
-		var verdict := Label.new()
-		verdict.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if worn.is_empty():
-			verdict.text = "▲ Empty slot — equip for pure gain"
-			verdict.add_theme_color_override("font_color", ClientUi.SUCCESS)
-		elif delta > 0:
-			verdict.text = "▲ BETTER (+%s)" % delta
-			verdict.add_theme_color_override("font_color", ClientUi.SUCCESS)
-		elif delta < 0:
-			verdict.text = "▼ WORSE (%s)" % delta
-			verdict.add_theme_color_override("font_color", ClientUi.DANGER)
-		else:
-			verdict.text = "— EVEN"
-			verdict.add_theme_color_override("font_color", ClientUi.MUTED)
-		verdict.add_theme_font_size_override("font_size", 12)
-		ClientUi.apply_display_font(verdict)
-		_bag_inspect_col.add_child(verdict)
+		var diffs: Dictionary = InventoryRules.compare_gear_attributes(item, worn)
+		var total: int = int(diffs.get("total", 0))
+		var footer := HBoxContainer.new()
+		footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		footer.add_theme_constant_override("separation", 6)
+		var total_lab := Label.new()
+		total_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		total_lab.text = "TOTAL STAT CHANGE:"
+		total_lab.add_theme_font_size_override("font_size", 11)
+		total_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_display_font(total_lab)
+		footer.add_child(total_lab)
+		var total_val := Label.new()
+		total_val.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		total_val.text = InventoryRules.format_stat_delta(total)
+		total_val.add_theme_font_size_override("font_size", 12)
+		total_val.add_theme_color_override(
+			"font_color",
+			ClientUi.SUCCESS if total > 0 else (ClientUi.DANGER if total < 0 else ClientUi.MUTED)
+		)
+		ClientUi.apply_display_font(total_val)
+		footer.add_child(total_val)
+		_bag_inspect_col.add_child(footer)
 
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 4)
@@ -1520,10 +1532,11 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 		stat, GameManager.active_character, StatsManager.equipped_items
 	)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 10)
+	row.custom_minimum_size.y = 76
 	panel.add_child(row)
 
-	var icon := StatIcon.make(stat, 22.0)
+	var icon := StatIcon.make(stat, StatIcon.SIZE_HERO_BUTTON)
 	row.add_child(icon)
 
 	var col := VBoxContainer.new()

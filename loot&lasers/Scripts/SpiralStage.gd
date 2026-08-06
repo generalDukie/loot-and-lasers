@@ -215,8 +215,12 @@ func _rebuild_buttons() -> void:
 		btn.custom_minimum_size = Vector2(59, 59)
 		btn.z_index = 10
 		btn.mouse_filter = Control.MOUSE_FILTER_STOP
-		btn.text = "🔒" if locked else ("✓" if cleared else str(planet.get("icon", "🪐")))
-		btn.add_theme_font_size_override("font_size", 23)
+		if locked:
+			UiIcon.set_button_icon(btn, "lock", Color(ClientUi.MUTED, 0.9), 22.0)
+		else:
+			btn.icon = null
+			btn.text = "✓" if cleared else str(planet.get("icon", "🪐"))
+			btn.add_theme_font_size_override("font_size", 23)
 		btn.disabled = locked
 		btn.mouse_default_cursor_shape = (
 			Control.CURSOR_FORBIDDEN if locked else Control.CURSOR_POINTING_HAND
@@ -248,8 +252,12 @@ func _rebuild_buttons() -> void:
 	_wormhole_button.focus_mode = Control.FOCUS_NONE
 	_wormhole_button.custom_minimum_size = Vector2(101, 101)
 	_wormhole_button.z_index = 12
-	_wormhole_button.text = "∞" if in_infinite else "🔒"
-	_wormhole_button.add_theme_font_size_override("font_size", 33)
+	if in_infinite:
+		_wormhole_button.icon = null
+		_wormhole_button.text = "∞"
+		_wormhole_button.add_theme_font_size_override("font_size", 33)
+	else:
+		UiIcon.set_button_icon(_wormhole_button, "lock", Color(ClientUi.MUTED, 0.9), 36.0)
 	_wormhole_button.disabled = not in_infinite
 	_wormhole_button.tooltip_text = (
 		"Inspect Wormhole · Depth %s" % maxi(1, active - 10)
@@ -506,13 +514,23 @@ func _refresh_button_looks() -> void:
 		var current: bool = not in_infinite and pid == story_front
 		var is_selected: bool = not DungeonManager.viewing_wormhole and pid == selected
 		if locked:
-			btn.text = "🔒"
+			UiIcon.set_button_icon(btn, "lock", Color(ClientUi.MUTED, 0.9), 22.0)
 		elif cleared and _zoom_id != pid:
+			btn.icon = null
 			btn.text = "✓"
+			btn.add_theme_font_size_override("font_size", 23)
 		else:
+			btn.icon = null
 			btn.text = str(planet.get("icon", "🪐"))
+			btn.add_theme_font_size_override("font_size", 23)
 		_style_planet_button(btn, tint, locked, current, is_selected, cleared)
 	if is_instance_valid(_wormhole_button):
+		if active > 10:
+			_wormhole_button.icon = null
+			_wormhole_button.text = "∞"
+			_wormhole_button.add_theme_font_size_override("font_size", 33)
+		else:
+			UiIcon.set_button_icon(_wormhole_button, "lock", Color(ClientUi.MUTED, 0.9), 36.0)
 		_style_wormhole_button(
 			active > 10,
 			DungeonManager.viewing_wormhole or _zoom_id == ZOOM_WORMHOLE

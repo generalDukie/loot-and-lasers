@@ -62,7 +62,8 @@ static func power_rating(item: Dictionary) -> int:
 	return sum
 
 
-## Class-weighted power for equip compare (mirrors StatCompareBubble).
+## Class-weighted power for dissolve-junk heuristics (mirrors web powerRating).
+## Not used for gear comparison presentation — see compare_gear_attributes.
 static func class_power_rating(item: Dictionary, class_key: String = "Vanguard") -> int:
 	var stats: Variant = item.get("stats", {})
 	if typeof(stats) != TYPE_DICTIONARY:
@@ -74,15 +75,41 @@ static func class_power_rating(item: Dictionary, class_key: String = "Vanguard")
 	return int(round(sum * 10.0))
 
 
+## Raw attribute diffs vs equipped (no class/rarity/power weighting).
+## Keys: strength, agility, intellect, vitality, luck, total.
+static func compare_gear_attributes(hovered: Dictionary, equipped: Dictionary = {}) -> Dictionary:
+	var a: Dictionary = hovered.get("stats", {}) if typeof(hovered.get("stats", {})) == TYPE_DICTIONARY else {}
+	var b: Dictionary = {}
+	if not equipped.is_empty() and typeof(equipped.get("stats", {})) == TYPE_DICTIONARY:
+		b = equipped.get("stats", {})
+	var out := {
+		"strength": 0, "agility": 0, "intellect": 0, "vitality": 0, "luck": 0, "total": 0,
+	}
+	var total := 0
+	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
+		var d := int(a.get(k, 0)) - int(b.get(k, 0))
+		out[k] = d
+		total += d
+	out["total"] = total
+	return out
+
+
+static func format_stat_delta(delta: int) -> String:
+	if delta > 0:
+		return "+%s" % delta
+	return str(delta)
+
+
 static func compare_lines(candidate: Dictionary, equipped: Dictionary) -> Array:
 	var out: Array = []
 	var a: Dictionary = candidate.get("stats", {}) if typeof(candidate.get("stats", {})) == TYPE_DICTIONARY else {}
 	var b: Dictionary = equipped.get("stats", {}) if typeof(equipped.get("stats", {})) == TYPE_DICTIONARY else {}
 	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
-		var dv := int(a.get(k, 0)) - int(b.get(k, 0))
-		if int(a.get(k, 0)) == 0 and int(b.get(k, 0)) == 0:
+		var nv := int(a.get(k, 0))
+		var ov := int(b.get(k, 0))
+		if nv == 0 and ov == 0:
 			continue
-		out.append({"stat": k, "delta": dv, "new": int(a.get(k, 0)), "old": int(b.get(k, 0))})
+		out.append({"stat": k, "delta": nv - ov, "new": nv, "old": ov})
 	return out
 
 

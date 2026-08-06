@@ -328,9 +328,31 @@ func _make_top_chrome() -> Control:
 	switch_btn.pressed.connect(func() -> void: GameManager.go_character_select())
 	row.add_child(switch_btn)
 
-	var settings_btn := UiIcon.make_icon_button("settings", ClientUi.MUTED, 22.0, "Settings")
+	# Web ShellTopChrome: Lucide Settings cog — CenterContainer child (same as notif FAB;
+	# Button.icon + expand_icon left-biases and ghost margins clip the glyph).
+	var settings_btn := Button.new()
+	settings_btn.focus_mode = Control.FOCUS_NONE
+	settings_btn.tooltip_text = "Settings"
+	settings_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	settings_btn.custom_minimum_size = Vector2(40, 36)
+	settings_btn.text = ""
+	settings_btn.icon = null
 	ClientUi.apply_ghost_button(settings_btn)
-	UiIcon.apply_button_icon_colors(settings_btn, ClientUi.MUTED)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var sb := settings_btn.get_theme_stylebox(state)
+		if sb is StyleBoxFlat:
+			var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+			flat.content_margin_left = 0
+			flat.content_margin_right = 0
+			flat.content_margin_top = 0
+			flat.content_margin_bottom = 0
+			settings_btn.add_theme_stylebox_override(state, flat)
+	var settings_host := CenterContainer.new()
+	settings_host.name = "SettingsIconHost"
+	settings_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	settings_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	settings_btn.add_child(settings_host)
+	settings_host.add_child(UiIcon.make("settings", ClientUi.MUTED, 22.0))
 	settings_btn.pressed.connect(func() -> void: GameManager.go_settings())
 	row.add_child(settings_btn)
 
@@ -1098,9 +1120,13 @@ func _build_notification_center() -> void:
 	_notif_meta.add_theme_color_override("font_color", ClientUi.DANGER)
 	ClientUi.apply_body_font(_notif_meta)
 	header.add_child(_notif_meta)
-	var mark := UiIcon.make_icon_button("check-check", ClientUi.MUTED, 18.0, "Mark all read")
+	var mark := Button.new()
+	mark.focus_mode = Control.FOCUS_NONE
+	mark.tooltip_text = "Mark all read"
+	mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	mark.custom_minimum_size = Vector2(34, 30)
 	ClientUi.apply_ghost_button(mark)
-	UiIcon.apply_button_icon_colors(mark, ClientUi.MUTED)
+	UiIcon.set_button_icon(mark, "check-check", ClientUi.MUTED, 18.0)
 	mark.pressed.connect(func() -> void:
 		await NotificationManager.mark_all_read()
 		await _refresh_notification_center()

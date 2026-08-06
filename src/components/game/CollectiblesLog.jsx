@@ -8,7 +8,8 @@ import { ACHIEVEMENTS, ACHIEVEMENT_CATEGORIES } from "@/lib/achievements";
 import SpeciesAvatar from "@/components/game/SpeciesAvatar";
 import CharacterStats from "@/components/game/CharacterStats";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Dna, Award, Scroll, Gem, Swords, Maximize2 } from "lucide-react";
+import { Dna, Award, Scroll, Gem, Swords, Maximize2, Trophy } from "lucide-react";
+import NeonLockIcon from "@/components/game/NeonLockIcon";
 
 const GEAR_EMOJI = { weapon: "⚔️", armor: "🛡️", helmet: "⛑️", boots: "🥾", legs: "🦵", neck: "📿", accessory: "💍", ship_module: "🚀", material: "📦", consumable: "🧪" };
 
@@ -142,7 +143,22 @@ export default function CollectiblesLog({ character }) {
                     <div key={p.id} className={`rounded-lg border p-3 flex flex-col items-center text-center ${earned ? "border-amber-500/40 bg-amber-500/5" : "border-dashed border-border/20 bg-muted/5"}`}>
                       <span className="text-3xl" style={{ filter: earned ? "none" : "grayscale(1) opacity(0.4)" }}>{p.icon}</span>
                       <p className="text-[10px] font-display font-bold mt-1" style={{ color: earned ? p.color : "#6b7280" }}>{p.name}</p>
-                      <p className="text-[8px] mt-0.5" style={{ color: earned ? "#FBBF24" : "#6b7280" }}>{earned ? "🏆 Conquered" : "🔒 Locked"}</p>
+                      <p
+                        className="text-[8px] mt-0.5 inline-flex items-center justify-center gap-0.5"
+                        style={{ color: earned ? "#FBBF24" : "#6b7280" }}
+                      >
+                        {earned ? (
+                          <>
+                            <Trophy className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                            Conquered
+                          </>
+                        ) : (
+                          <>
+                            <NeonLockIcon className="w-2.5 h-2.5" color="#6b7280" glow={false} />
+                            Locked
+                          </>
+                        )}
+                      </p>
                     </div>
                   );
                 })}
@@ -178,7 +194,12 @@ export default function CollectiblesLog({ character }) {
                   const color = RARITY_COLORS[r.rarity] || "#9CA3AF";
                   return (
                     <div key={r.id} className={`rounded-md border p-1.5 flex flex-col items-center text-center ${found ? "bg-card/30" : "border-dashed border-border/15 bg-muted/5"}`} style={found ? { borderColor: color + "55" } : {}}>
-                      <span className="text-base" style={{ filter: found ? "none" : "grayscale(1) opacity(0.4)" }}>{found ? r.emoji : "🔒"}</span>
+                      <span
+                        className="flex h-5 w-full items-center justify-center text-base"
+                        style={{ filter: found ? "none" : "grayscale(1) opacity(0.4)" }}
+                      >
+                        {found ? r.emoji : <NeonLockIcon className="w-4 h-4" color="#6b7280" glow={false} />}
+                      </span>
                       <p className="text-[8px] truncate w-full mt-0.5" style={{ color: found ? color : "#4b5563" }}>{found ? r.name : "???"}</p>
                       <p className="text-[7px] capitalize" style={{ color: found ? color : "#4b5563" }}>{found ? r.rarity : ""}</p>
                     </div>
@@ -197,7 +218,12 @@ export default function CollectiblesLog({ character }) {
                   const color = "#22D3EE";
                   return (
                     <div key={it.id} className={`rounded-lg border p-2 flex flex-col items-center text-center ${found ? "bg-card/40" : "border-dashed border-border/20 bg-muted/5"}`} style={found ? { borderColor: color + "55" } : {}}>
-                      <span className="text-2xl" style={{ filter: found ? "none" : "grayscale(1) opacity(0.4)" }}>{found ? (GEAR_EMOJI[it.type] || "📦") : "🔒"}</span>
+                      <span
+                        className="flex h-8 w-full items-center justify-center text-2xl"
+                        style={{ filter: found ? "none" : "grayscale(1) opacity(0.4)" }}
+                      >
+                        {found ? (GEAR_EMOJI[it.type] || "📦") : <NeonLockIcon className="w-6 h-6" color="#6b7280" glow={false} />}
+                      </span>
                       <p className="text-[9px] font-display font-bold mt-1 truncate w-full" style={{ color: found ? color : "#6b7280" }}>{found ? it.name : "???"}</p>
                       <p className="text-[8px] capitalize" style={{ color: found ? color : "#6b7280" }}>{found ? it.type.replace("_", " ") : "Unknown"}</p>
                     </div>
@@ -239,7 +265,7 @@ export default function CollectiblesLog({ character }) {
                                     {a.icon}
                                   </span>
                                 ) : (
-                                  <span className="text-[14px]">🔒</span>
+                                  <NeonLockIcon className="w-3.5 h-3.5" color="#9CA3AF" glow={false} />
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">

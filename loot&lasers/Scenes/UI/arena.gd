@@ -3,7 +3,6 @@ extends Control
 
 var _status: Label
 var _rating_label: Label
-var _stat_power: Label
 var _stat_wl: Label
 var _stat_streak: Label
 var _stat_free: Label
@@ -129,11 +128,10 @@ func _build() -> void:
 	head_r.add_child(_rating_label)
 
 	var chips := GridContainer.new()
-	chips.columns = 4
-	chips.add_theme_constant_override("h_separation", 6)
+	chips.columns = 3
+	chips.add_theme_constant_override("h_separation", 8)
 	chips.add_theme_constant_override("v_separation", 6)
 	stats_col.add_child(chips)
-	_stat_power = _add_stat_chip(chips, "⚡", "POWER", Color("#22D3EE"))
 	_stat_wl = _add_stat_chip(chips, "⚔", "W / L", Color("#60A5FA"))
 	_stat_streak = _add_stat_chip(chips, "🔥", "STREAK", Color("#FB7185"))
 	var free_wrap := _add_stat_chip_wrap(chips, "🛡", "FREE", Color("#FBBF24"))
@@ -478,12 +476,10 @@ func _populate_history() -> void:
 
 func _update_lobby_chrome() -> void:
 	var c: Dictionary = GameManager.active_character
-	var power := ArenaRules.compute_power(c, ArenaManager.equipped_items)
 	var free_left := ArenaManager.free_battles_left
 	var reset_eta := ArenaRules.format_eta_short(ArenaRules.ms_until_et_midnight())
 
 	_rating_label.text = str(c.get("arena_rating", 1000))
-	_stat_power.text = str(power)
 	_stat_wl.text = "%s / %s" % [str(c.get("arena_wins", 0)), str(c.get("arena_losses", 0))]
 	_stat_streak.text = str(c.get("arena_streak", 0))
 	_stat_free.text = "%s/%s" % [str(free_left), str(ArenaRules.DAILY_FREE_BATTLES)]
@@ -525,7 +521,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	))
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", 8)
 	panel.add_child(col)
 
 	# Portrait + level badge (web overlays the badge on the avatar foot).
@@ -607,20 +603,17 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var win_rate_txt := "%s%%" % str(int(round(100.0 * float(wins) / float(total_wl)))) if total_wl > 0 else "W/L"
 
 	var stats := GridContainer.new()
-	stats.columns = 3
-	stats.add_theme_constant_override("h_separation", 4)
+	stats.columns = 2
+	stats.add_theme_constant_override("h_separation", 6)
 	stats.add_theme_constant_override("v_separation", 4)
 	col.add_child(stats)
 	stats.add_child(_mini_stat("🏆", "RATING", str(opp.get("arena_rating", 1000)), Color("#FBBF24")))
-	stats.add_child(_mini_stat("⚡", "POWER", str(opp.get("power", 0)), Color("#67E8F9")))
 	stats.add_child(_mini_stat("🔥", win_rate_txt, "%s/%s" % [str(wins), str(losses)], Color("#FB7185"), true))
 
 	var is_free := ArenaManager.free_battles_left > 0
-	var player_power := ArenaRules.compute_power(GameManager.active_character, ArenaManager.equipped_items)
-	var preview := ArenaRules.preview_arena_match(GameManager.active_character, opp, is_free, player_power)
+	var preview := ArenaRules.preview_arena_match(GameManager.active_character, opp, is_free)
 	var on_win: Dictionary = preview.get("onWin", {})
 	var on_loss: Dictionary = preview.get("onLoss", {})
-	var risk: Dictionary = preview.get("risk", {})
 
 	var stake := PanelContainer.new()
 	stake.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
@@ -631,24 +624,13 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	stake_col.add_theme_constant_override("separation", 4)
 	stake.add_child(stake_col)
 
-	var stake_head := HBoxContainer.new()
-	stake_col.add_child(stake_head)
-	var risk_lab := Label.new()
-	risk_lab.text = str(risk.get("label", "EVEN"))
-	risk_lab.add_theme_font_size_override("font_size", 12)
-	var risk_color: Color = risk.get("color", Color("#FCD34D"))
-	risk_lab.add_theme_color_override("font_color", risk_color)
-	ClientUi.apply_display_font(risk_lab)
-	stake_head.add_child(risk_lab)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stake_head.add_child(spacer)
 	var stake_kind := Label.new()
 	stake_kind.text = "FREE" if is_free else "RATING"
+	stake_kind.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stake_kind.add_theme_font_size_override("font_size", 12)
 	stake_kind.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(stake_kind)
-	stake_head.add_child(stake_kind)
+	stake_col.add_child(stake_kind)
 
 	var stake_row := HBoxContainer.new()
 	stake_col.add_child(stake_row)
@@ -703,14 +685,6 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	lose_sub.add_theme_font_size_override("font_size", 12)
 	lose_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	lose_col.add_child(lose_sub)
-
-	var online := Label.new()
-	online.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	online.text = "⏱ %s" % ArenaRules.format_last_online(int(opp.get("lastOnlineMins", 0)))
-	online.add_theme_font_size_override("font_size", 13)
-	online.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
-	ClientUi.apply_body_font(online)
-	col.add_child(online)
 
 	var fight := Button.new()
 	fight.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -12,6 +12,14 @@ const LADDER = [
 ];
 const PRESETS = [100, 250, 500, 750, 1000];
 
+function parseNovaBet(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const half = Math.round(n * 2) / 2;
+  if (Math.abs(n * 2 - Math.round(n * 2)) > 1e-9) return null;
+  return half;
+}
+
 export default function CrystalRefining({
   character,
   onSessionStart,
@@ -23,12 +31,12 @@ export default function CrystalRefining({
   const [bet, setBet] = useState(CASINO_MIN_NOVA_BET);
   const [session, setSession] = useState(null);
   const [result, setResult] = useState(null);
-  const wager = Math.floor(Number(bet) || 0);
+  const wager = parseNovaBet(bet);
   const wagerOk =
-    Number.isInteger(wager) &&
+    wager != null &&
     wager >= CASINO_MIN_NOVA_BET &&
     wager <= CASINO_MAX_NOVA_BET &&
-    wager <= balance;
+    wager <= balance + 1e-9;
 
   useEffect(() => {
     if (activeSession?.session_id) {
@@ -145,11 +153,12 @@ export default function CrystalRefining({
               type="number"
               min={CASINO_MIN_NOVA_BET}
               max={CASINO_MAX_NOVA_BET}
+              step={0.5}
               value={bet}
               onChange={(e) => setBet(e.target.value)}
               className="w-28 bg-muted/50 border border-border rounded-lg px-2 py-1.5 text-sm"
             />
-            <span className="text-[10px] text-muted-foreground">100–1,000 Nova</span>
+            <span className="text-[10px] text-muted-foreground">100–1,000 · steps of 0.5</span>
           </div>
           <button type="button" onClick={start} disabled={busy || !wagerOk} className="w-full painted-btn py-2 text-sm disabled:opacity-40">
             Start Refining

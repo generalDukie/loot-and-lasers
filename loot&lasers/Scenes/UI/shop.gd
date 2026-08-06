@@ -474,16 +474,12 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 
 	var item_type := str(item.get("type", ""))
 	var eq: Dictionary = _equipped_of_type(item_type)
-	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
-	var better := false
-	if not owned and not is_bundle and not eq.is_empty():
-		better = InventoryRules.class_power_rating(item, class_key) > InventoryRules.class_power_rating(eq, class_key)
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var border := Color(tint, 0.7) if is_hot else (Color(ClientUi.SUCCESS, 0.45) if better else Color(tint, 0.45))
+	var border := Color(tint, 0.7) if is_hot else Color(tint, 0.45)
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.05, 0.05, 0.08, 0.96), border, 10, 2 if is_hot or better else 1
+		Color(0.05, 0.05, 0.08, 0.96), border, 10, 2 if is_hot else 1
 	))
 	if owned:
 		panel.modulate = Color(1, 1, 1, 0.72)
@@ -518,7 +514,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	title_col.add_child(sub)
 
-	col.add_child(_compare_badge(item, eq, class_key, is_bundle))
+	col.add_child(_compare_badge(item, eq, is_bundle))
 
 	if is_bundle:
 		var flavor := Label.new()
@@ -543,7 +539,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 	return panel
 
 
-func _compare_badge(slot: Dictionary, equipped: Dictionary, class_key: String, is_bundle: bool) -> PanelContainer:
+func _compare_badge(slot: Dictionary, equipped: Dictionary, is_bundle: bool) -> PanelContainer:
 	var panel := PanelContainer.new()
 	var text := ""
 	var color := ClientUi.MUTED
@@ -554,16 +550,9 @@ func _compare_badge(slot: Dictionary, equipped: Dictionary, class_key: String, i
 		text = "📦 Empty slot"
 		color = Color("#7DD3FC")
 	else:
-		var d := InventoryRules.class_power_rating(slot, class_key) - InventoryRules.class_power_rating(equipped, class_key)
-		if d > 0:
-			text = "▲ +%s vs equipped" % d
-			color = ClientUi.SUCCESS
-		elif d < 0:
-			text = "▼ %s vs equipped" % d
-			color = ClientUi.DANGER
-		else:
-			text = "— Same power"
-			color = ClientUi.MUTED
+		var total: int = int(InventoryRules.compare_gear_attributes(slot, equipped).get("total", 0))
+		text = "STAT Δ %s" % InventoryRules.format_stat_delta(total)
+		color = ClientUi.SUCCESS if total > 0 else (ClientUi.DANGER if total < 0 else ClientUi.MUTED)
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(color.r, color.g, color.b, 0.12), Color(color.r, color.g, color.b, 0.35), 8, 1
 	))
@@ -593,20 +582,24 @@ func _stat_delta_row(slot: Dictionary, equipped: Dictionary) -> HBoxContainer:
 		var cell := HBoxContainer.new()
 		cell.add_theme_constant_override("separation", 3)
 		if StatIcon.has(k):
-			cell.add_child(StatIcon.make(k, 12.0))
-		var lab := Label.new()
-		var color: Color = GameData.stat_color(k)
-		if equipped.is_empty():
-			lab.text = str(v)
-			lab.add_theme_color_override("font_color", color)
-		else:
+			cell.add_child(StatIcon.make(k, StatIcon.SIZE_ITEM_PANE))
+		var val := Label.new()
+		val.text = str(v)
+		val.add_theme_color_override("font_color", GameData.stat_color(k))
+		val.add_theme_font_size_override("font_size", 20)
+		ClientUi.apply_body_font(val)
+		cell.add_child(val)
+		if not equipped.is_empty():
 			var d := v - e
-			var dtxt := ("+%s" % d) if d > 0 else str(d)
-			lab.text = "%s (%s)" % [v, dtxt]
-			lab.add_theme_color_override("font_color", ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else color))
-		lab.add_theme_font_size_override("font_size", 12)
-		ClientUi.apply_body_font(lab)
-		cell.add_child(lab)
+			var dlab := Label.new()
+			dlab.text = InventoryRules.format_stat_delta(d)
+			dlab.add_theme_font_size_override("font_size", 16)
+			dlab.add_theme_color_override(
+				"font_color",
+				ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else ClientUi.MUTED)
+			)
+			ClientUi.apply_body_font(dlab)
+			cell.add_child(dlab)
 		row.add_child(cell)
 	return row
 

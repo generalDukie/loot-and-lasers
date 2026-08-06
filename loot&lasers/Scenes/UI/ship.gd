@@ -487,11 +487,17 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		ClientUi.apply_display_font(badge)
 		top.add_child(badge)
 	elif locked:
-		var badge2 := Label.new()
-		badge2.text = "🔒 Lv %s" % unlock
-		badge2.add_theme_font_size_override("font_size", 13)
-		badge2.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_display_font(badge2)
+		var badge2 := HBoxContainer.new()
+		badge2.add_theme_constant_override("separation", 4)
+		badge2.alignment = BoxContainer.ALIGNMENT_CENTER
+		var lock_icon := UiIcon.make("lock", Color(ClientUi.MUTED), 14.0)
+		badge2.add_child(lock_icon)
+		var badge2_lab := Label.new()
+		badge2_lab.text = "Lv %s" % unlock
+		badge2_lab.add_theme_font_size_override("font_size", 13)
+		badge2_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_display_font(badge2_lab)
+		badge2.add_child(badge2_lab)
 		top.add_child(badge2)
 
 	var desc := Label.new()
@@ -674,8 +680,15 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 		var buy := Button.new()
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-			buy.text = "🔒  %s ✦" % cost
+			buy.text = "  %s ✦" % cost
+			buy.icon = UiIcon.texture("lock")
+			buy.expand_icon = true
+			buy.alignment = HORIZONTAL_ALIGNMENT_CENTER
+			buy.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			buy.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+			buy.add_theme_constant_override("icon_max_width", 16)
 			ClientUi.apply_ghost_button(buy)
+			UiIcon.apply_button_icon_colors(buy, Color(ClientUi.MUTED))
 			buy.disabled = true
 		else:
 			buy.text = "Install · %s ✦" % cost

@@ -1,24 +1,9 @@
 import React from "react";
 import { motion } from "framer-motion";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
-import { Swords, Zap, Trophy, Clock, User, Flame } from "lucide-react";
+import { Swords, Zap, Trophy, User, Flame } from "lucide-react";
 import { avatarPropsFor, previewArenaMatch } from "@/lib/arenaEngine";
 import StardustIcon from "@/components/game/StardustIcon";
-
-function lastOnline(mins) {
-  if (mins < 60) return `${mins}m ago`;
-  const h = Math.floor(mins / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
-const RISK_STYLES = {
-  emerald: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
-  cyan: "bg-cyan-500/15 text-cyan-300 border-cyan-500/40",
-  amber: "bg-amber-500/15 text-amber-300 border-amber-500/40",
-  orange: "bg-orange-500/15 text-orange-300 border-orange-500/40",
-  rose: "bg-rose-500/15 text-rose-300 border-rose-500/40",
-};
 
 function fmtDelta(n) {
   return n > 0 ? `+${n}` : `${n}`;
@@ -27,7 +12,6 @@ function fmtDelta(n) {
 export default function ArenaOpponentCard({
   opponent,
   player,
-  playerPower,
   freeBattle = true,
   onChallenge,
   cooldownActive,
@@ -39,7 +23,7 @@ export default function ArenaOpponentCard({
     ? Math.round(((opponent.arena_wins || 0) / ((opponent.arena_wins || 0) + (opponent.arena_losses || 0))) * 100)
     : null;
 
-  const { onWin, onLoss, risk } = previewArenaMatch(player, opponent, { free: freeBattle, playerPower });
+  const { onWin, onLoss } = previewArenaMatch(player, opponent, { free: freeBattle });
 
   return (
     <motion.div
@@ -55,7 +39,7 @@ export default function ArenaOpponentCard({
           : "radial-gradient(ellipse 80% 50% at 50% 0%, rgba(52,211,153,0.16), transparent 60%)",
       }} />
 
-      <div className="relative px-3 pt-3 pb-2 flex flex-col items-center flex-1 min-h-0">
+      <div className="relative px-3 pt-3 pb-2 flex flex-col items-center justify-center flex-1 min-h-0 gap-1.5">
         <div className="relative shrink-0">
           <div
             className="rounded-xl overflow-hidden border-2"
@@ -74,35 +58,30 @@ export default function ArenaOpponentCard({
         </div>
 
         {!opponent.isBot ? (
-          <span className="mt-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[8px] font-display font-bold tracking-wide border border-emerald-500/35">
+          <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[8px] font-display font-bold tracking-wide border border-emerald-500/35">
             <User className="w-2.5 h-2.5" /> REAL
           </span>
         ) : (
-          <span className="mt-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300/80 text-[8px] font-display font-bold tracking-wide border border-cyan-500/25">
+          <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300/80 text-[8px] font-display font-bold tracking-wide border border-cyan-500/25">
             SIMULANT
           </span>
         )}
 
-        <h4 className="font-display font-bold text-sm mt-1 truncate max-w-full tracking-wide">{opponent.name}</h4>
+        <h4 className="font-display font-bold text-sm truncate max-w-full tracking-wide">{opponent.name}</h4>
         <p className="text-[10px] text-muted-foreground truncate max-w-full">{opponent.race} · {opponent.class}</p>
         {opponent.guild && (
           <p className="text-[9px] text-accent font-display font-semibold truncate max-w-full">{opponent.guild}</p>
         )}
 
-        <div className="mt-2 w-full grid grid-cols-3 gap-1 text-center">
-          <div className="rounded-md bg-background/40 border border-border/40 px-1 py-1">
-            <Trophy className="w-3 h-3 mx-auto text-amber-300" />
-            <p className="font-display font-bold text-xs text-amber-300 leading-tight">{opponent.arena_rating}</p>
+        <div className="mt-1 w-full grid grid-cols-2 gap-1.5 text-center">
+          <div className="rounded-md bg-background/40 border border-border/40 px-1.5 py-1.5">
+            <Trophy className="w-3.5 h-3.5 mx-auto text-amber-300" />
+            <p className="font-display font-bold text-sm text-amber-300 leading-tight">{opponent.arena_rating}</p>
             <p className="text-[7px] text-muted-foreground uppercase tracking-wide">Rating</p>
           </div>
-          <div className="rounded-md bg-background/40 border border-border/40 px-1 py-1">
-            <Zap className="w-3 h-3 mx-auto text-cyan-300" />
-            <p className="font-display font-bold text-xs text-cyan-300 leading-tight">{opponent.power}</p>
-            <p className="text-[7px] text-muted-foreground uppercase tracking-wide">Power</p>
-          </div>
-          <div className="rounded-md bg-background/40 border border-border/40 px-1 py-1">
-            <Flame className="w-3 h-3 mx-auto text-rose-300" />
-            <p className="font-display font-bold text-xs leading-tight">
+          <div className="rounded-md bg-background/40 border border-border/40 px-1.5 py-1.5">
+            <Flame className="w-3.5 h-3.5 mx-auto text-rose-300" />
+            <p className="font-display font-bold text-sm leading-tight">
               <span className="text-green-400">{opponent.arena_wins || 0}</span>
               <span className="text-muted-foreground/50">/</span>
               <span className="text-red-400">{opponent.arena_losses || 0}</span>
@@ -113,11 +92,8 @@ export default function ArenaOpponentCard({
           </div>
         </div>
 
-        <div className="mt-2 w-full rounded-lg border border-border/50 bg-background/35 overflow-hidden">
-          <div className="flex items-center justify-between gap-2 px-2 py-1 border-b border-border/40">
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-display font-black tracking-wider border ${RISK_STYLES[risk.tone]}`}>
-              {risk.label}
-            </span>
+        <div className="mt-1 w-full rounded-lg border border-border/50 bg-background/35 overflow-hidden">
+          <div className="flex items-center justify-center px-2 py-1 border-b border-border/40">
             <span className="text-[8px] text-muted-foreground font-display tracking-wide">
               {freeBattle ? "FREE" : "RATING"}
             </span>
@@ -141,10 +117,6 @@ export default function ArenaOpponentCard({
             </div>
           </div>
         </div>
-
-        <p className="mt-1.5 text-[9px] text-muted-foreground/80 flex items-center gap-1">
-          <Clock className="w-2.5 h-2.5" /> {lastOnline(opponent.lastOnlineMins)}
-        </p>
       </div>
 
       <div className="relative px-3 pb-3 pt-0 mt-auto shrink-0">

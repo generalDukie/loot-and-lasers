@@ -127,7 +127,7 @@ export default function CrystalStorePage() {
 
   function handleBuy(pkg) {
     toast({
-      title: "🔒 Checkout coming soon",
+      title: "Checkout coming soon",
       description: `${pkg.name} (${pkg.crystals.toLocaleString()} 💎) — Stripe payment is being connected.`,
     });
   }

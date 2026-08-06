@@ -120,7 +120,7 @@ func settle_stardust_wheel(bet: int, request_id: String = "") -> Dictionary:
 	return res
 
 
-func session_start(game_id: String, bet: int, request_id: String = "") -> Dictionary:
+func session_start(game_id: String, bet: float, request_id: String = "") -> Dictionary:
 	var key := request_id if not request_id.is_empty() else _begin_request("csstart")
 	var res: Dictionary = await GameApiClient.invoke("CasinoSessionStart", {
 		"game": game_id,

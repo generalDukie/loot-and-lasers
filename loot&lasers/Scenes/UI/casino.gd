@@ -37,13 +37,18 @@ var _active_game := GAME_DICE
 var _sd_wager := 0
 var _sd_wager_box: VBoxContainer
 var _sd_wager_lab: Label
+var _sd_wager_edit: LineEdit
 var _sd_quick_btns: Array[Button] = []
 
 # Shared nova wager (one strip for refining + cache)
-var _nova_wager := 100
+var _nova_wager := 100.0
 var _nova_wager_box: VBoxContainer
 var _nova_wager_lab: Label
+var _nova_wager_edit: LineEdit
 var _nova_preset_btns: Array[Button] = []
+var _syncing_wager_edit := false
+var _sd_edit_ok := true
+var _nova_edit_ok := true
 
 # Galactic Dice
 var _dice_choice := ""
@@ -276,29 +281,64 @@ func _build_header() -> VBoxContainer:
 
 
 func _build_nav() -> HBoxContainer:
+	## Hub-dock style tiles: game name only, tinted like station dock buttons.
+	## Stardust games (dice/wheel) = purple; Nova games (refine/cache) = yellow.
 	var nav := HBoxContainer.new()
 	nav.alignment = BoxContainer.ALIGNMENT_CENTER
 	nav.add_theme_constant_override("separation", 8)
+	var stardust_tint := GameData.STARDUST_COLOR
+	var nova_tint := Color("#FFD700")
 	var specs := [
-		{"id": GAME_DICE, "title": "Galactic Dice", "currency": "Stardust", "rules": "2d6 · Low 2× / Seven 5× / High 2×", "tint": GameData.STARDUST_COLOR},
-		{"id": GAME_WHEEL, "title": "Stardust Wheel", "currency": "Stardust", "rules": "Weighted spin · Shove returns stake", "tint": Color("#F59E0B")},
-		{"id": GAME_REFINE, "title": "Crystal Refining", "currency": "Nova", "rules": "Push luck · up to 50× ladder", "tint": Color("#FCD34D")},
-		{"id": GAME_CACHE, "title": "Smuggler's Cache", "currency": "Nova", "rules": "Pick 1 of 6 sealed crates", "tint": Color("#A78BFA")},
+		{"id": GAME_DICE, "title": "Galactic Dice", "tint": stardust_tint},
+		{"id": GAME_WHEEL, "title": "Stardust Wheel", "tint": stardust_tint},
+		{"id": GAME_REFINE, "title": "Crystal Refining", "tint": nova_tint},
+		{"id": GAME_CACHE, "title": "Smuggler's Cache", "tint": nova_tint},
 	]
 	for s in specs:
+		var tint: Color = s.tint
+		var title: String = str(s.title)
 		var btn := Button.new()
 		btn.toggle_mode = true
 		btn.focus_mode = Control.FOCUS_NONE
-		btn.custom_minimum_size = Vector2(220, 72)
+		btn.text = ""
+		btn.tooltip_text = title
+		btn.custom_minimum_size = Vector2(0, 72)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ClientUi.apply_ghost_button(btn)
-		btn.text = "%s\n%s · %s" % [s.title, s.currency, s.rules]
-		btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ClientUi.apply_dock_button(btn, tint)
+		var face := CenterContainer.new()
+		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		face.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		btn.add_child(face)
+		var lab := Label.new()
+		lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lab.text = title
+		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lab.add_theme_font_size_override("font_size", 14)
+		lab.add_theme_color_override("font_color", tint)
+		ClientUi.apply_display_font(lab)
+		face.add_child(lab)
+		btn.set_meta("nav_title", title)
+		btn.set_meta("nav_label", lab)
+		btn.set_meta("nav_tint", tint)
 		var gid: String = s.id
 		btn.pressed.connect(func() -> void: _select_game(gid))
 		nav.add_child(btn)
 		_nav_btns[gid] = btn
 	return nav
+
+
+func _refresh_nav_badges() -> void:
+	for id in _nav_btns.keys():
+		var btn: Button = _nav_btns[id]
+		var title := str(btn.get_meta("nav_title", btn.tooltip_text))
+		var lab: Label = btn.get_meta("nav_label") if btn.has_meta("nav_label") else null
+		var active := not CasinoManager.active_session(id).is_empty()
+		# Name only — session activity lives in tooltip so the face stays clean.
+		if lab != null and is_instance_valid(lab):
+			lab.text = title
+		btn.tooltip_text = ("%s — active session" % title) if active else title
 
 
 func _build_dice_panel() -> VBoxContainer:
@@ -596,11 +636,6 @@ func _build_cache_panel() -> VBoxContainer:
 func _build_sd_wager_row() -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	_sd_wager_lab = Label.new()
-	_sd_wager_lab.add_theme_font_size_override("font_size", 14)
-	_sd_wager_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_sd_wager_lab)
-	box.add_child(_sd_wager_lab)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	box.add_child(row)
@@ -613,17 +648,29 @@ func _build_sd_wager_row() -> VBoxContainer:
 		b.pressed.connect(func() -> void: _set_sd_wager_pct(p))
 		row.add_child(b)
 		_sd_quick_btns.append(b)
+	# Compact manual entry — whole stardust only (web Casino parity).
+	var entry := HBoxContainer.new()
+	entry.add_theme_constant_override("separation", 8)
+	box.add_child(entry)
+	_sd_wager_edit = _make_wager_edit(GameData.STARDUST_COLOR)
+	_sd_wager_edit.placeholder_text = "Bet"
+	_sd_wager_edit.text_submitted.connect(func(_t: String) -> void: _commit_sd_wager_edit())
+	_sd_wager_edit.focus_exited.connect(_commit_sd_wager_edit)
+	_sd_wager_edit.text_changed.connect(func(_t: String) -> void: _on_sd_wager_edit_changed())
+	entry.add_child(_sd_wager_edit)
+	_sd_wager_lab = Label.new()
+	_sd_wager_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sd_wager_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_sd_wager_lab.add_theme_font_size_override("font_size", 12)
+	_sd_wager_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_sd_wager_lab)
+	entry.add_child(_sd_wager_lab)
 	return box
 
 
 func _build_nova_wager_row() -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	_nova_wager_lab = Label.new()
-	_nova_wager_lab.add_theme_font_size_override("font_size", 14)
-	_nova_wager_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_nova_wager_lab)
-	box.add_child(_nova_wager_lab)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	box.add_child(row)
@@ -633,11 +680,55 @@ func _build_nova_wager_row() -> VBoxContainer:
 		b.text = str(amt)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ClientUi.apply_ghost_button(b)
-		var a := int(amt)
+		var a := float(amt)
 		b.pressed.connect(func() -> void: _set_nova_wager(a))
 		row.add_child(b)
 		_nova_preset_btns.append(b)
+	# Compact manual entry — Nova in 0.5 steps (web Casino parity).
+	var entry := HBoxContainer.new()
+	entry.add_theme_constant_override("separation", 8)
+	box.add_child(entry)
+	_nova_wager_edit = _make_wager_edit(Color("#FFD700"))
+	_nova_wager_edit.placeholder_text = "Bet"
+	_nova_wager_edit.text_submitted.connect(func(_t: String) -> void: _commit_nova_wager_edit())
+	_nova_wager_edit.focus_exited.connect(_commit_nova_wager_edit)
+	_nova_wager_edit.text_changed.connect(func(_t: String) -> void: _on_nova_wager_edit_changed())
+	entry.add_child(_nova_wager_edit)
+	_nova_wager_lab = Label.new()
+	_nova_wager_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_nova_wager_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_nova_wager_lab.add_theme_font_size_override("font_size", 12)
+	_nova_wager_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_nova_wager_lab)
+	entry.add_child(_nova_wager_lab)
 	return box
+
+
+func _make_wager_edit(tint: Color) -> LineEdit:
+	var edit := LineEdit.new()
+	edit.custom_minimum_size = Vector2(112, 34)
+	edit.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	edit.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	edit.context_menu_enabled = false
+	ClientUi.apply_body_font(edit)
+	edit.add_theme_font_size_override("font_size", 14)
+	edit.add_theme_stylebox_override(
+		"normal",
+		ClientUi.painted_panel_style(Color(0.05, 0.06, 0.09, 0.72), Color(tint, 0.35), 8, 1)
+	)
+	edit.add_theme_stylebox_override(
+		"hover",
+		ClientUi.painted_panel_style(Color(0.06, 0.07, 0.10, 0.82), Color(tint, 0.55), 8, 1)
+	)
+	edit.add_theme_stylebox_override(
+		"focus",
+		ClientUi.painted_panel_style(Color(0.05, 0.06, 0.09, 0.88), Color(tint, 0.85), 8, 2)
+	)
+	edit.add_theme_color_override("font_color", Color(0.94, 0.96, 0.98))
+	edit.add_theme_color_override("font_placeholder_color", ClientUi.MUTED)
+	edit.add_theme_color_override("caret_color", tint)
+	edit.add_theme_color_override("selection_color", Color(tint, 0.28))
+	return edit
 
 
 func _section_title(title: String, rules: String, tint: Color) -> VBoxContainer:
@@ -693,32 +784,6 @@ func _select_game(game_id: String) -> void:
 	_refresh_action_enabled()
 
 
-func _refresh_nav_badges() -> void:
-	for id in _nav_btns.keys():
-		var btn: Button = _nav_btns[id]
-		var base := btn.text.split("\n")[0]
-		# Rebuild from known titles
-		var titles := {
-			GAME_DICE: "Galactic Dice",
-			GAME_WHEEL: "Stardust Wheel",
-			GAME_REFINE: "Crystal Refining",
-			GAME_CACHE: "Smuggler's Cache",
-		}
-		var currency := "Stardust" if id == GAME_DICE or id == GAME_WHEEL else "Nova"
-		var rules := {
-			GAME_DICE: "2d6 · Low 2× / Seven 5× / High 2×",
-			GAME_WHEEL: "Weighted spin · Shove returns stake",
-			GAME_REFINE: "Push luck · up to 50× ladder",
-			GAME_CACHE: "Pick 1 of 6 sealed crates",
-		}
-		var title: String = titles.get(id, base)
-		var active := not CasinoManager.active_session(id).is_empty()
-		if active:
-			btn.text = "%s  · Active session\n%s · %s" % [title, currency, rules.get(id, "")]
-		else:
-			btn.text = "%s\n%s · %s" % [title, currency, rules.get(id, "")]
-
-
 func _init_default_wagers() -> void:
 	var bal := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	var mn := CasinoManager.stardust_min()
@@ -729,7 +794,7 @@ func _init_default_wagers() -> void:
 	else:
 		_sd_wager = 0
 	var nova_bal := CasinoManager.nova_spendable()
-	_nova_wager = 100 if nova_bal >= 100.0 else 0
+	_nova_wager = 100.0 if nova_bal >= 100.0 else 0.0
 
 
 func _refresh_balances() -> void:
@@ -754,7 +819,12 @@ func _refresh_wager_controls() -> void:
 	var mn := CasinoManager.stardust_min()
 	var mx := CasinoManager.stardust_max()
 	if is_instance_valid(_sd_wager_lab):
-		_sd_wager_lab.text = "Wager: %s stardust  (min %s · max %s)" % [_fmt(_sd_wager), _fmt(mn), _fmt(mx)]
+		_sd_wager_lab.text = "min %s · max %s · whole numbers" % [_fmt(mn), _fmt(mx)]
+		if not _sd_wager_valid():
+			_sd_wager_lab.add_theme_color_override("font_color", ClientUi.DANGER)
+		else:
+			_sd_wager_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	_sync_sd_wager_edit()
 	for i in _sd_quick_btns.size():
 		var pct: float = SD_QUICK_PCTS[i]
 		var amt := int(floor(float(sd_bal) * pct))
@@ -770,21 +840,29 @@ func _refresh_wager_controls() -> void:
 		or (not CasinoManager.active_session(GAME_CACHE).is_empty() and _active_game == GAME_CACHE)
 	)
 	if is_instance_valid(_nova_wager_lab):
+		var range_hint := "100–1,000 · steps of 0.5"
 		if AdminManager.is_admin():
-			_nova_wager_lab.text = "Wager: %s Nova  (100–1000 · Admin: any Nova)%s" % [
-				_fmt_nova(float(_nova_wager)),
-				" · locked to session" if nova_locked else "",
+			_nova_wager_lab.text = "%s · Admin: any Nova%s" % [
+				range_hint,
+				" · locked" if nova_locked else "",
 			]
 		else:
-			_nova_wager_lab.text = "Wager: %s Wagerable Nova  (100–1000 · Purchased only)%s" % [
-				_fmt_nova(float(_nova_wager)),
-				" · locked to session" if nova_locked else "",
+			_nova_wager_lab.text = "%s · Wagerable only%s" % [
+				range_hint,
+				" · locked" if nova_locked else "",
 			]
+		if not _nova_wager_valid() and not nova_locked:
+			_nova_wager_lab.add_theme_color_override("font_color", ClientUi.DANGER)
+		else:
+			_nova_wager_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	_sync_nova_wager_edit()
+	if is_instance_valid(_nova_wager_edit):
+		_nova_wager_edit.editable = not _busy and not nova_locked
 	for i in _nova_preset_btns.size():
-		var amt: int = NOVA_PRESETS[i]
+		var amt: float = float(NOVA_PRESETS[i])
 		var btn := _nova_preset_btns[i]
-		btn.disabled = _busy or nova_locked or float(amt) > nova_bal + 0.0001
-		btn.button_pressed = (_nova_wager == amt)
+		btn.disabled = _busy or nova_locked or amt > nova_bal + 0.0001
+		btn.button_pressed = is_equal_approx(_nova_wager, amt)
 
 
 func _refresh_action_enabled() -> void:
@@ -841,35 +919,178 @@ func _set_sd_wager_pct(pct: float) -> void:
 	if amt < mn or amt > mx or amt > bal or amt <= 0:
 		_set_status("Wager %s is outside allowed limits." % _fmt(amt), ClientUi.DANGER)
 		return
+	_sd_edit_ok = true
 	_sd_wager = amt
 	_refresh_wager_controls()
 	_refresh_action_enabled()
 
 
-func _set_nova_wager(amt: int) -> void:
+func _set_nova_wager(amt: float) -> void:
+	var snapped := snappedf(amt, 0.5)
 	var bal := CasinoManager.nova_spendable()
-	if float(amt) > bal + 0.0001:
+	if snapped > bal + 0.0001:
 		if AdminManager.is_admin():
-			_set_status("Not enough Nova for %s." % _fmt(amt), ClientUi.DANGER)
+			_set_status("Not enough Nova for %s." % _fmt_nova(snapped), ClientUi.DANGER)
 		else:
-			_set_status("Not enough Wagerable Nova for %s. Bonus Nova cannot be wagered." % _fmt(amt), ClientUi.DANGER)
+			_set_status(
+				"Not enough Wagerable Nova for %s. Bonus Nova cannot be wagered." % _fmt_nova(snapped),
+				ClientUi.DANGER
+			)
 		return
-	_nova_wager = amt
+	_nova_edit_ok = true
+	_nova_wager = snapped
 	_refresh_wager_controls()
 	_refresh_action_enabled()
 
 
+func _sync_sd_wager_edit() -> void:
+	if not is_instance_valid(_sd_wager_edit):
+		return
+	if _sd_wager_edit.has_focus():
+		return
+	_syncing_wager_edit = true
+	_sd_wager_edit.text = str(_sd_wager) if _sd_wager > 0 else ""
+	_sd_wager_edit.editable = not _busy
+	_syncing_wager_edit = false
+
+
+func _sync_nova_wager_edit() -> void:
+	if not is_instance_valid(_nova_wager_edit):
+		return
+	if _nova_wager_edit.has_focus():
+		return
+	_syncing_wager_edit = true
+	_nova_wager_edit.text = _fmt_nova(_nova_wager) if _nova_wager > 0.0 else ""
+	_syncing_wager_edit = false
+
+
+func _on_sd_wager_edit_changed() -> void:
+	if _syncing_wager_edit:
+		return
+	var parsed := _parse_sd_wager_text(_sd_wager_edit.text)
+	if parsed < 0:
+		_sd_edit_ok = false
+		if is_instance_valid(_sd_wager_lab):
+			_sd_wager_lab.add_theme_color_override("font_color", ClientUi.DANGER)
+		_refresh_action_enabled()
+		return
+	_sd_edit_ok = true
+	_sd_wager = parsed
+	for i in _sd_quick_btns.size():
+		var pct: float = SD_QUICK_PCTS[i]
+		var bal := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
+		var amt := int(floor(float(bal) * pct))
+		_sd_quick_btns[i].button_pressed = (_sd_wager == amt)
+	if is_instance_valid(_sd_wager_lab):
+		var mn := CasinoManager.stardust_min()
+		var mx := CasinoManager.stardust_max()
+		_sd_wager_lab.text = "min %s · max %s · whole numbers" % [_fmt(mn), _fmt(mx)]
+		_sd_wager_lab.add_theme_color_override(
+			"font_color", ClientUi.MUTED if _sd_wager_valid() else ClientUi.DANGER
+		)
+	_refresh_action_enabled()
+
+
+func _on_nova_wager_edit_changed() -> void:
+	if _syncing_wager_edit:
+		return
+	var parsed := _parse_nova_wager_text(_nova_wager_edit.text)
+	if parsed < 0.0:
+		_nova_edit_ok = false
+		if is_instance_valid(_nova_wager_lab):
+			_nova_wager_lab.add_theme_color_override("font_color", ClientUi.DANGER)
+		_refresh_action_enabled()
+		return
+	_nova_edit_ok = true
+	_nova_wager = parsed
+	for i in _nova_preset_btns.size():
+		_nova_preset_btns[i].button_pressed = is_equal_approx(_nova_wager, float(NOVA_PRESETS[i]))
+	if is_instance_valid(_nova_wager_lab):
+		_nova_wager_lab.add_theme_color_override(
+			"font_color", ClientUi.MUTED if _nova_wager_valid() else ClientUi.DANGER
+		)
+	_refresh_action_enabled()
+
+
+func _commit_sd_wager_edit() -> void:
+	if not is_instance_valid(_sd_wager_edit):
+		return
+	var parsed := _parse_sd_wager_text(_sd_wager_edit.text.strip_edges())
+	if parsed < 0:
+		_sd_edit_ok = _sd_wager > 0
+		_sync_sd_wager_edit()
+		_refresh_action_enabled()
+		return
+	_sd_edit_ok = true
+	_sd_wager = parsed
+	_refresh_wager_controls()
+	_refresh_action_enabled()
+
+
+func _commit_nova_wager_edit() -> void:
+	if not is_instance_valid(_nova_wager_edit):
+		return
+	var raw := _nova_wager_edit.text.strip_edges()
+	if raw.is_empty():
+		_nova_edit_ok = _nova_wager > 0.0
+		_sync_nova_wager_edit()
+		_refresh_action_enabled()
+		return
+	if not raw.is_valid_float():
+		_nova_edit_ok = _nova_wager > 0.0
+		_sync_nova_wager_edit()
+		_refresh_action_enabled()
+		return
+	var n := float(raw)
+	# Snap to nearest 0.5 on commit so typing "100.2" lands on a legal stake.
+	_nova_edit_ok = true
+	_nova_wager = snappedf(n, 0.5)
+	_refresh_wager_controls()
+	_refresh_action_enabled()
+
+
+func _parse_sd_wager_text(raw: String) -> int:
+	var t := raw.strip_edges()
+	if t.is_empty():
+		return -1
+	# Whole numbers only — reject decimals.
+	if not t.is_valid_int():
+		return -1
+	return maxi(0, int(t))
+
+
+func _parse_nova_wager_text(raw: String) -> float:
+	var t := raw.strip_edges()
+	if t.is_empty() or not t.is_valid_float():
+		return -1.0
+	var n := float(t)
+	if n < 0.0:
+		return -1.0
+	# Must already be on a 0.5 step while typing (allow "100." → 100).
+	var half := snappedf(n, 0.5)
+	if not is_equal_approx(n, half):
+		return -1.0
+	return half
+
+
 func _sd_wager_valid() -> bool:
+	if not _sd_edit_ok:
+		return false
 	var bal := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	return _sd_wager >= CasinoManager.stardust_min() and _sd_wager <= CasinoManager.stardust_max() and _sd_wager <= bal
 
 
 func _nova_wager_valid() -> bool:
+	if not _nova_edit_ok:
+		return false
 	var bal := CasinoManager.nova_spendable()
+	var half := snappedf(_nova_wager, 0.5)
+	if not is_equal_approx(_nova_wager, half):
+		return false
 	return (
-		_nova_wager >= CasinoManager.nova_min()
-		and _nova_wager <= CasinoManager.nova_max()
-		and float(_nova_wager) <= bal + 0.0001
+		_nova_wager >= float(CasinoManager.nova_min())
+		and _nova_wager <= float(CasinoManager.nova_max())
+		and _nova_wager <= bal + 0.0001
 	)
 
 
@@ -1093,10 +1314,11 @@ func _restore_refine_session() -> void:
 	var st: Dictionary = sess.get("state", {}) if typeof(sess.get("state", null)) == TYPE_DICTIONARY else {}
 	_refine_state = st.duplicate(true)
 	_refine_state["status"] = str(sess.get("status", "active"))
-	_refine_state["wager"] = int(sess.get("wager", st.get("wager", _nova_wager)))
-	_nova_wager = int(_refine_state.get("wager", _nova_wager))
+	_refine_state["wager"] = float(sess.get("wager", st.get("wager", _nova_wager)))
+	_nova_edit_ok = true
+	_nova_wager = float(_refine_state.get("wager", _nova_wager))
 	_refine_status.text = "Active session · stage %d · wager %s Nova" % [
-		int(_refine_state.get("stage", 0)), _fmt(int(_refine_state.get("wager", 0)))
+		int(_refine_state.get("stage", 0)), _fmt_nova(float(_refine_state.get("wager", 0)))
 	]
 	_rebuild_refine_ladder()
 	_refresh_wager_controls()
@@ -1234,7 +1456,7 @@ func _on_crystal_shattered(_data: Dictionary) -> void:
 func _on_payout_collected(data: Dictionary) -> void:
 	_refine_status.text = "Payout collected."
 	_refine_status.add_theme_color_override("font_color", ClientUi.SUCCESS)
-	_burst_fx(self, int(data.get("gross_payout", 0)) >= int(data.get("wager", _nova_wager)) * 8)
+	_burst_fx(self, float(data.get("gross_payout", 0)) >= float(data.get("wager", _nova_wager)) * 8.0)
 	AudioManager.play_ui("equip")
 
 
@@ -1261,10 +1483,11 @@ func _restore_cache_session() -> void:
 	var st: Dictionary = sess.get("state", {}) if typeof(sess.get("state", null)) == TYPE_DICTIONARY else {}
 	_cache_state = st.duplicate(true)
 	_cache_state["status"] = str(sess.get("status", "active"))
-	_cache_state["wager"] = int(sess.get("wager", st.get("wager", _nova_wager)))
-	_nova_wager = int(_cache_state.get("wager", _nova_wager))
+	_cache_state["wager"] = float(sess.get("wager", st.get("wager", _nova_wager)))
+	_nova_edit_ok = true
+	_nova_wager = float(_cache_state.get("wager", _nova_wager))
 	if bool(_cache_state.get("sealed", true)) and _cache_state.get("selected_index", null) == null:
-		_cache_status.text = "Active session · pick a sealed crate · wager %s Nova" % _fmt(int(_cache_state.get("wager", 0)))
+		_cache_status.text = "Active session · pick a sealed crate · wager %s Nova" % _fmt_nova(float(_cache_state.get("wager", 0)))
 		_reset_cache_crates_sealed()
 	else:
 		_cache_status.text = "Round settled."
@@ -1299,7 +1522,7 @@ func _cache_start() -> void:
 	var sess: Variant = data.get("session", {})
 	_cache_state = sess.duplicate(true) if typeof(sess) == TYPE_DICTIONARY else {"sealed": true, "status": "active"}
 	_cache_state["status"] = "active"
-	_cache_state["wager"] = int(data.get("wager", _nova_wager))
+	_cache_state["wager"] = float(data.get("wager", _nova_wager))
 	_cache_status.text = "Round live — pick one of six sealed crates."
 	_reset_cache_crates_sealed()
 	_set_status("", ClientUi.MUTED)

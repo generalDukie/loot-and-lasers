@@ -22,6 +22,8 @@ const ALIAS := {
 	"daily": "calendar",
 	"lock": "lock",
 	"locked": "lock",
+	"unlock": "unlock",
+	"unlocked": "unlock",
 	"trash": "trash-2",
 	"delete": "trash-2",
 	"undo": "undo-2",
@@ -150,6 +152,8 @@ static func apply_button_icon_colors(btn: Button, tint: Color) -> void:
 
 
 ## Icon-only button (settings / notification FAB). Keeps tooltip + click area.
+## Call this *after* apply_ghost_button / other style helpers — those set large
+## content margins that would otherwise clip a centered Lucide icon.
 static func make_icon_button(
 	icon_id: String,
 	tint: Color,
@@ -177,15 +181,21 @@ static func set_button_icon(btn: Button, icon_id: String, tint: Color, size: flo
 	btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	btn.add_theme_constant_override("icon_max_width", int(size))
 	# Zero content margins so expand_icon centers in the full hit area (FAB / chrome).
+	# Must run after ghost/painted styles — their px(14)/px(8) margins clip icons.
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var sb := btn.get_theme_stylebox(state)
+		var flat: StyleBoxFlat
 		if sb is StyleBoxFlat:
-			var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
-			flat.content_margin_left = 0
-			flat.content_margin_right = 0
-			flat.content_margin_top = 0
-			flat.content_margin_bottom = 0
-			btn.add_theme_stylebox_override(state, flat)
+			flat = (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		else:
+			flat = StyleBoxFlat.new()
+			flat.bg_color = Color(0, 0, 0, 0)
+			flat.set_corner_radius_all(8)
+		flat.content_margin_left = 0
+		flat.content_margin_right = 0
+		flat.content_margin_top = 0
+		flat.content_margin_bottom = 0
+		btn.add_theme_stylebox_override(state, flat)
 	apply_button_icon_colors(btn, tint)
 	btn.set_meta("ui_icon_id", resolve_id(icon_id))
 

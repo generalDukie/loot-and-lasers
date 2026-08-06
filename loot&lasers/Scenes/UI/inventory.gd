@@ -425,15 +425,6 @@ func _make_bag_pane(item: Dictionary) -> PanelContainer:
 	icon_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(icon_wrap)
 	icon_wrap.add_child(GearIcon.make(item, 56.0))
-	if InventoryRules.is_equippable(str(item.get("type", ""))):
-		var arrow: Control = _make_upgrade_arrow(item)
-		if arrow:
-			# Overlay in the icon band so it doesn't shove the glyph off-center.
-			arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			panel.add_child(arrow)
-			arrow.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-			arrow.offset_left = 8
-			arrow.offset_top = NAME_BAND_H + 8
 
 	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
 	var meta := Label.new()
@@ -505,10 +496,15 @@ func _make_bag_pane(item: Dictionary) -> PanelContainer:
 
 	if not item_id.is_empty():
 		var lock_btn := Button.new()
-		lock_btn.text = "🔒" if locked else "🔓"
 		lock_btn.tooltip_text = "Unlock" if locked else "Lock"
 		lock_btn.custom_minimum_size = Vector2(28, 28)
 		ClientUi.apply_ghost_button(lock_btn)
+		UiIcon.set_button_icon(
+			lock_btn,
+			"lock" if locked else "unlock",
+			Color("#FBBF24") if locked else Color(ClientUi.MUTED),
+			16.0
+		)
 		lock_btn.pressed.connect(func() -> void: _on_toggle_lock(item_id, not locked))
 		actions.add_child(lock_btn)
 
@@ -576,28 +572,6 @@ func _make_pending_row(pending: Dictionary) -> PanelContainer:
 	return panel
 
 
-func _make_upgrade_arrow(item: Dictionary) -> Control:
-	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
-	var worn := InventoryRules.find_equipped_of_type(_items, str(item.get("type", "")))
-	var my_p := InventoryRules.class_power_rating(item, class_key)
-	var eq_p := InventoryRules.class_power_rating(worn, class_key) if not worn.is_empty() else 0
-	var delta := my_p - eq_p if not worn.is_empty() else 1
-	if delta == 0:
-		return null
-	var lab := Label.new()
-	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 22)
-	ClientUi.apply_display_font(lab)
-	if delta > 0:
-		lab.text = "▲"
-		lab.add_theme_color_override("font_color", ClientUi.SUCCESS)
-	else:
-		lab.text = "▼"
-		lab.add_theme_color_override("font_color", ClientUi.DANGER)
-	return lab
-
-
 func _make_item_drag(host: Control, item: Dictionary, from: String) -> Variant:
 	if item.is_empty() or host == null:
 		return null
@@ -661,29 +635,21 @@ func _update_compare() -> void:
 	if cand.is_empty():
 		_compare_panel.visible = false
 		return
-	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
 	var worn := InventoryRules.find_equipped_of_type(_items, str(cand.get("type", "")))
-	var my_p := InventoryRules.class_power_rating(cand, class_key)
-	var eq_p := InventoryRules.class_power_rating(worn, class_key) if not worn.is_empty() else 0
-	var delta := my_p - eq_p
-	var verdict := "NEW SLOT"
+	var diffs: Dictionary = InventoryRules.compare_gear_attributes(cand, worn)
+	var total: int = int(diffs.get("total", 0))
+	var lines: PackedStringArray = ["COMPARE · %s" % str(cand.get("name", "?"))]
 	if not worn.is_empty():
-		if delta > 0:
-			verdict = "UPGRADE (+%s)" % delta
-		elif delta < 0:
-			verdict = "DOWNGRADE (%s)" % delta
-		else:
-			verdict = "EVEN"
-	var lines: PackedStringArray = ["COMPARE · %s · %s" % [str(cand.get("name", "?")), verdict]]
-	if not worn.is_empty():
-		lines.append("vs %s (P%s)" % [str(worn.get("name", "?")), str(eq_p)])
+		lines.append("vs %s" % str(worn.get("name", "?")))
 	for row in InventoryRules.compare_lines(cand, worn):
 		var d: int = int(row.get("delta", 0))
-		var sign := "+" if d > 0 else ""
-		lines.append("%s %s%s (%s → %s)" % [
-			str(row.get("stat", "?")).substr(0, 3).to_upper(), sign, str(d),
-			str(row.get("old", 0)), str(row.get("new", 0)),
+		lines.append("%s  %s  %s" % [
+			str(row.get("stat", "?")).substr(0, 3).to_upper(),
+			str(row.get("new", 0)),
+			InventoryRules.format_stat_delta(d),
 		])
+	if InventoryRules.is_equippable(str(cand.get("type", ""))):
+		lines.append("TOTAL STAT CHANGE: %s" % InventoryRules.format_stat_delta(total))
 	_compare.text = "\n".join(lines)
 	var tint := ClientUi.rarity_color(str(cand.get("rarity", "")))
 	_compare_panel.add_theme_stylebox_override(

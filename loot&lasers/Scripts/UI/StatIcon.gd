@@ -5,6 +5,12 @@ class_name StatIcon
 
 const ICON_DIR := "res://Assets/Icons/stats/"
 const DEFAULT_SIZE := 20.0
+## Web itemPane (~2× former 10px chips).
+const SIZE_ITEM_PANE := 20.0
+## Web tooltip compare row (~2× former 12px).
+const SIZE_TOOLTIP := 24.0
+## Web heroAttributeButton (~3× former 22–24px).
+const SIZE_HERO_BUTTON := 66.0
 const VALID := ["strength", "agility", "intellect", "vitality", "luck"]
 
 static var _cache: Dictionary = {}

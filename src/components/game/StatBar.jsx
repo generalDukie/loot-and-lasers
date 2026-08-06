@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { CLASSES, getStatDescription, STAT_COLORS, STARDUST_COLOR } from "@/lib/gameData";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
-import StatIcon from "@/components/game/StatIcon";
+import StatIcon, { STAT_PRESENTATION } from "@/components/game/StatIcon";
 
 const STAT_LABELS = {
   strength: "Strength",
@@ -115,17 +115,17 @@ export default function StatBar({
       <Tooltip>
         <TooltipTrigger asChild>
           <div
-            className={`relative flex items-center gap-2 rounded-lg border px-2 py-1 h-full min-h-0 min-w-0 transition-colors ${
+            className={`relative flex items-center gap-2 rounded-lg border px-2 py-1.5 h-full min-h-0 min-w-0 transition-colors ${
               isPrimary
                 ? "border-primary/50 bg-primary/8 shadow-[0_0_14px_hsl(190_90%_50%/0.1)]"
                 : "border-border/45 bg-muted/15"
             } ${canAdd ? "hover:bg-muted/25" : ""}`}
           >
             <div
-              className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
+              className={STAT_PRESENTATION.heroAttributeButton.well}
               style={{ backgroundColor: `${color}22`, boxShadow: `0 0 10px ${color}28` }}
             >
-              <StatIcon stat={stat} className="w-6 h-6" />
+              <StatIcon stat={stat} presentation="heroAttributeButton" />
             </div>
 
             <div className="min-w-0 flex-1 flex items-baseline gap-2">

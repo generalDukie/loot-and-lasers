@@ -901,7 +901,13 @@ func _land_event(ev: Dictionary) -> void:
 		var host: Control = defender if defender else attacker
 		if host:
 			var floater_color: Color = floater.get("color", Color.WHITE) as Color
-			_fx.float_text(host, str(floater.get("label", "")), floater_color, bool(floater.get("crit", false)))
+			_fx.float_text(
+				host,
+				str(floater.get("label", "")),
+				floater_color,
+				int(floater.get("font_size", CombatPresentation.FLOAT_FONT_OTHER)),
+				bool(floater.get("bold", false))
+			)
 
 	if int(ev.get("heal", 0)) > 0:
 		var heal := int(ev.get("heal", 0))

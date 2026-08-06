@@ -157,19 +157,28 @@ function Fighter({ entity, side, lunge, hurt, color, flip, floating, attackEvent
         {(() => {
           const floater = resolveCombatFloater(floating);
           if (!floater) return null;
-          const bigCrit = floater.kind === "crit" || floater.kind === "true";
+          const riseY =
+            floater.kind === "dodge" || floater.kind === "miss" || floater.kind === "forced_miss"
+              ? -34
+              : floater.crit
+                ? -44
+                : -52;
           return (
             <motion.div
               key={`f${evIdx}-${floater.kind}-${floater.label}`}
-              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-visible"
               initial={{ opacity: 0, y: 0, scale: 0.6 }}
-              animate={{ opacity: 1, y: floater.kind === "dodge" || floater.kind === "miss" || floater.kind === "forced_miss" ? -34 : -52, scale: 1 }}
+              animate={{ opacity: 1, y: riseY, scale: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.65 }}
             >
               <span
-                className={`font-display font-black ${bigCrit ? "text-3xl" : "text-lg"}`}
-                style={{ color: floater.color, textShadow: "0 0 8px currentColor" }}
+                className={`font-display leading-none ${floater.bold ? "font-black" : "font-bold"}`}
+                style={{
+                  color: floater.color,
+                  fontSize: floater.fontSize,
+                  textShadow: "0 0 8px currentColor",
+                }}
               >
                 {floater.label}
               </span>

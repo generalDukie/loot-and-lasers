@@ -3,7 +3,7 @@ import { RARITY_COLORS, computeStardustValue, STARDUST_COLOR } from "@/lib/gameD
 import GearVisual from "@/components/game/GearVisual";
 import { Check } from "lucide-react";
 import StardustIcon from "@/components/game/StardustIcon";
-import StatIcon from "@/components/game/StatIcon";
+import { GearAttributeChips } from "@/components/game/StatIcon";
 
 // Condensed single-line inventory row — keeps name, rarity, top stats, and
 // quick actions visible so many items fit in the scroll area at once.
@@ -28,11 +28,9 @@ export default function CompactItemRow({ item, onEquip, onSell, onUse, selectabl
           <p className="text-xs font-semibold break-words leading-tight" style={{ color }}>{item.name}</p>
           {item.is_equipped && <span className="text-[9px] bg-primary/20 text-primary px-1 rounded shrink-0">EQ</span>}
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          <span className="capitalize">{item.rarity}</span>
-          {item.stats && Object.entries(item.stats).filter(([, v]) => v > 0).slice(0, 4).map(([s, v]) => (
-            <span key={s} className="inline-flex items-center gap-0.5"><StatIcon stat={s} className="w-2.5 h-2.5" />{v}</span>
-          ))}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="capitalize text-[10px] text-muted-foreground shrink-0">{item.rarity}</span>
+          <GearAttributeChips stats={item.stats} presentation="itemPane" max={4} className="min-w-0" />
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">

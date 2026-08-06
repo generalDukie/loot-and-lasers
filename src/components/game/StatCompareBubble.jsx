@@ -1,16 +1,51 @@
 import React from "react";
-import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle, FlaskConical } from "lucide-react";
+import { Unlock, Swords, Recycle, FlaskConical } from "lucide-react";
 import { RARITY_COLORS, computeStardustValue, CLASSES, STARDUST_COLOR } from "@/lib/gameData";
-import StatIcon from "@/components/game/StatIcon";
+import StatIcon, { StatIconLabel, STAT_PRESENTATION } from "@/components/game/StatIcon";
 import StardustIcon from "@/components/game/StardustIcon";
+import NeonLockIcon from "@/components/game/NeonLockIcon";
 import { EQUIPPABLE_TYPES } from "@/lib/inventoryJunk";
 
 const STATS = ["strength", "agility", "intellect", "vitality", "luck"];
 
-// Class-aware stat weights — each class's primary stat counts most, secondary
-// next; vitality always carries a little defensive value. Different classes
-// value different stats, so the same item can be an upgrade for one class and
-// a downgrade for another.
+/** Raw integer attr on an item (display values). Missing → 0. */
+function attrValue(item, stat) {
+  return Math.floor(Number(item?.stats?.[stat]) || 0);
+}
+
+/**
+ * Authoritative gear attribute comparison — raw differences only.
+ * No class weighting, rarity, or combat-power scoring.
+ * @returns {{ strength: number, agility: number, intellect: number, vitality: number, luck: number, total: number }}
+ */
+export function compareGearAttributes(hoveredItem, equippedItem) {
+  const out = { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0, total: 0 };
+  let total = 0;
+  for (const s of STATS) {
+    const d = attrValue(hoveredItem, s) - attrValue(equippedItem, s);
+    out[s] = d;
+    total += d;
+  }
+  out.total = total;
+  return out;
+}
+
+/** Format a raw delta for presentation (no arrows / verdict words). */
+export function formatStatDelta(delta) {
+  const d = Math.trunc(Number(delta) || 0);
+  if (d > 0) return { text: `+${d}`, tone: "pos" };
+  if (d < 0) return { text: `${d}`, tone: "neg" };
+  return { text: "0", tone: "zero" };
+}
+
+const DELTA_TONE = {
+  pos: "text-green-400",
+  neg: "text-red-400",
+  zero: "text-muted-foreground",
+};
+
+// Class-aware stat weights — kept for dissolve-junk / shop helpers that still
+// need a power heuristic. Presentation no longer uses this for gear verdicts.
 export function classStatWeights(className) {
   const cls = CLASSES[className];
   const w = { strength: 1, agility: 1, intellect: 1, vitality: 1.5, luck: 1 };
@@ -23,28 +58,25 @@ export function classStatWeights(className) {
 
 // Items are already rarity-scaled at generation, so the power rating uses
 // raw stat values directly — no second multiplier. Stats are weighted by the
-// character's class so the verdict reflects what actually matters to them.
+// character's class (used by junk heuristics, not comparison UI).
 export function powerRating(item, className) {
   const w = classStatWeights(className);
   const sum = STATS.reduce((a, s) => a + (item.stats?.[s] || 0) * w[s], 0);
   return Math.round(sum * 10);
 }
 
-// Rich RPG-style comparison tooltip. Shows the hovered item side by side with
-// the currently equipped item in the same slot, with stat deltas, % changes,
-// a power rating, an overall verdict, and quick action buttons.
+// Rich RPG-style comparison tooltip. Shows the hovered item beside the
+// currently equipped piece with per-attribute raw deltas and a raw total.
 export default function StatCompareBubble({ item, equipped, onEquip, onSell, onUse, onLock, characterClass, className = "" }) {
   const color = RARITY_COLORS[item.rarity] || "#9CA3AF";
-  const myPower = powerRating(item, characterClass);
-  const eqPower = equipped ? powerRating(equipped, characterClass) : 0;
-  const powerDelta = myPower - eqPower;
-  const verdict = equipped ? (powerDelta > 0 ? "better" : powerDelta < 0 ? "worse" : "equal") : "new";
   const locked = !!item.locked;
   const canEquip = EQUIPPABLE_TYPES.includes(item.type);
   const isStim = item.type === "consumable" && !!item.consumable;
+  const diffs = equipped || canEquip ? compareGearAttributes(item, equipped || null) : null;
+  void characterClass;
 
   return (
-    <div className={`w-72 max-w-full rounded-xl border border-border/60 bg-popover/95 backdrop-blur-md p-3 shadow-2xl border-glow-cyan pointer-events-auto ${className}`}>
+    <div className={`w-80 max-w-[min(100vw-1.5rem,22rem)] rounded-xl border border-border/60 bg-popover/95 backdrop-blur-md p-3 shadow-2xl border-glow-cyan pointer-events-auto ${className}`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -56,7 +88,7 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onU
           title={locked ? "Unlock" : "Lock"}
           className={`p-1 rounded-md transition-colors ${locked ? "text-amber-400 bg-amber-500/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}
         >
-          {locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+          {locked ? <NeonLockIcon className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
         </button>
       </div>
 
@@ -69,39 +101,45 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onU
           </div>
           <p className="text-[11px] font-display font-semibold truncate mt-0.5" style={{ color: RARITY_COLORS[equipped.rarity] || "#9CA3AF" }}>{equipped.name}</p>
           {equipped.stats && Object.keys(equipped.stats).length > 0 && (
-            <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
+            <div className={STAT_PRESENTATION.tooltipEquipped.wrap}>
               {STATS.filter((s) => (equipped.stats?.[s] || 0) > 0).map((s) => (
-                <span key={s} className="text-[10px] text-muted-foreground inline-flex items-center gap-0.5"><StatIcon stat={s} className="w-2.5 h-2.5" />+{equipped.stats[s]}</span>
+                <StatIconLabel
+                  key={s}
+                  stat={s}
+                  presentation="tooltipEquipped"
+                  valueClassName={`${STAT_PRESENTATION.tooltipEquipped.value} text-muted-foreground`}
+                >
+                  +{equipped.stats[s]}
+                </StatIconLabel>
               ))}
             </div>
           )}
         </div>
       ) : null}
 
-      {/* Stat comparison */}
-      <div className="mt-2 space-y-1">
+      {/* Stat comparison — item value + compact raw delta (no arrows) */}
+      <div className={`mt-2 ${STAT_PRESENTATION.tooltip.wrap}`}>
         {STATS.map((s) => {
-          const v = item.stats?.[s] || 0;
-          const e = equipped?.stats?.[s] || 0;
+          const v = attrValue(item, s);
+          const e = attrValue(equipped, s);
           if (!v && !e) return null;
-          const d = v - e;
-          const pct = e > 0 && d !== 0 ? Math.round((d / e) * 100) : null;
+          const d = diffs ? diffs[s] : v - e;
+          const delta = formatStatDelta(d);
           return (
-            <div key={s} className="flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground inline-flex items-center gap-0.5"><StatIcon stat={s} className="w-3 h-3" /> {s.slice(0, 3).toUpperCase()}</span>
-              <span className="flex items-center gap-1.5">
-                <span className="font-display font-bold" style={{ color: v > 0 ? color : "#6b7280" }}>{v > 0 ? `+${v}` : "0"}</span>
-                {equipped ? (
-                  <span className="flex items-center gap-0.5 font-bold w-14 justify-end">
-                    {d > 0 ? (
-                      <span className="text-green-400 flex items-center"><TrendingUp className="w-3 h-3" />+{d}{pct !== null && <span className="text-[8px] opacity-70">({pct}%)</span>}</span>
-                    ) : d < 0 ? (
-                      <span className="text-red-400 flex items-center"><TrendingDown className="w-3 h-3" />−{Math.abs(d)}{pct !== null && <span className="text-[8px] opacity-70">({pct}%)</span>}</span>
-                    ) : (
-                      <span className="text-muted-foreground flex items-center"><Minus className="w-3 h-3" />=</span>
-                    )}
+            <div key={s} className="flex items-center justify-between gap-2 min-w-0">
+              <span className={`text-muted-foreground inline-flex items-center ${STAT_PRESENTATION.tooltip.gap} min-w-0`}>
+                <StatIcon stat={s} presentation="tooltip" />
+                <span className={STAT_PRESENTATION.tooltip.label}>{s.slice(0, 3).toUpperCase()}</span>
+              </span>
+              <span className="flex items-center gap-2.5 shrink-0 tabular-nums">
+                <span className={STAT_PRESENTATION.tooltip.value} style={{ color: v > 0 ? color : "#6b7280" }}>
+                  {v > 0 ? `+${v}` : "0"}
+                </span>
+                {(equipped || canEquip) && (
+                  <span className={`font-semibold w-10 text-right text-[12px] ${DELTA_TONE[delta.tone]}`}>
+                    {delta.text}
                   </span>
-                ) : null}
+                )}
               </span>
             </div>
           );
@@ -110,8 +148,8 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onU
 
       {/* Special effects */}
       {item.type === "consumable" && item.consumable && (
-        <p className="text-[10px] text-primary mt-2 pt-2 border-t border-border/40 inline-flex items-center gap-1 flex-wrap">
-          <StatIcon stat={item.consumable.stat} className="w-2.5 h-2.5" /> +{Math.round(item.consumable.mult * 100)}% {item.consumable.stat} · {item.consumable.duration_hours}h buff
+        <p className="text-[10px] text-primary mt-2 pt-2 border-t border-border/40 inline-flex items-center gap-1.5 flex-wrap">
+          <StatIcon stat={item.consumable.stat} presentation="tooltipEquipped" /> +{Math.round(item.consumable.mult * 100)}% {item.consumable.stat} · {item.consumable.duration_hours}h buff
         </p>
       )}
       {item.set_name && (
@@ -121,19 +159,18 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onU
         <p className="text-[9px] italic text-muted-foreground mt-1">"{item.flavor_text}"</p>
       )}
 
-      {/* Verdict */}
+      {/* Footer — raw total only (no better/worse judgment) */}
       {item.is_equipped && !equipped ? (
         <p className="text-[10px] text-primary mt-2 pt-2 border-t border-border/40 font-display font-bold tracking-wide">
           CURRENTLY EQUIPPED
         </p>
-      ) : equipped ? (
-        <p className={`text-[10px] font-display font-bold mt-2 pt-2 border-t border-border/40 flex items-center gap-1 ${verdict === "better" ? "text-green-400" : verdict === "worse" ? "text-red-400" : "text-muted-foreground"}`}>
-          {verdict === "better" ? <TrendingUp className="w-3 h-3" /> : verdict === "worse" ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-          {verdict === "better" ? "BETTER OVERALL" : verdict === "worse" ? "WORSE OVERALL" : "EVEN"}
-          <span className="text-muted-foreground/60 font-normal"> vs {equipped.name}</span>
+      ) : diffs && canEquip ? (
+        <p className="text-[10px] font-display font-bold mt-2 pt-2 border-t border-border/40 flex items-center gap-1.5 flex-wrap">
+          <span className="text-muted-foreground tracking-wide">TOTAL STAT CHANGE:</span>
+          <span className={`tabular-nums ${DELTA_TONE[formatStatDelta(diffs.total).tone]}`}>
+            {formatStatDelta(diffs.total).text}
+          </span>
         </p>
-      ) : ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"].includes(item.type) ? (
-        <p className="text-[10px] text-green-400 mt-2 pt-2 border-t border-border/40">Empty slot — equip for pure gain!</p>
       ) : null}
 
       {/* Actions */}
@@ -159,7 +196,9 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onU
           </button>
         )}
         {locked && (
-          <span className="text-[10px] text-amber-400/80 px-2 py-1 flex items-center gap-1"><Lock className="w-3 h-3" /> Locked</span>
+          <span className="text-[10px] text-amber-400/80 px-2 py-1 flex items-center justify-center gap-1">
+            <NeonLockIcon className="w-3 h-3" /> Locked
+          </span>
         )}
       </div>
     </div>

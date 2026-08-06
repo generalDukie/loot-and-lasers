@@ -16,7 +16,7 @@ import {
   ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST, ARENA_REFRESH_MS, ARENA_REFRESH_COST,
   ARENA_BATTLE_COOLDOWN_MS, ARENA_SKIP_COST, ARENA_CHALLENGER_SLOTS, ARENA_MAX_REAL_OPPONENTS,
   ARENA_RATING_BAND_WIDE,
-  computePower, generateOpponents, characterToOpponent, simulateBattle, computeRewards,
+  generateOpponents, characterToOpponent, simulateBattle, computeRewards,
   rankArenaCandidates, pickRankedCandidates, resolveOpponentItems, ladderBotToOpponent,
 } from "@/lib/arenaEngine";
 import { defenseSnapshotToOpponent } from "@/lib/arenaChallenge";
@@ -29,7 +29,7 @@ import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
 import LevelUpOverlay, { pendingLevelUpFromSummary } from "@/components/game/LevelUpOverlay";
 import { ArenaBackdrop } from "@/components/game/ArenaBackdrop";
 import FitScaleFrame from "@/components/game/FitScaleFrame";
-import { Swords, Zap, RefreshCw, Flame, Shield, Clock } from "lucide-react";
+import { Swords, RefreshCw, Flame, Shield, Clock } from "lucide-react";
 
 import { msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 import { STARDUST_GLYPH } from "@/components/game/StardustIcon";
@@ -189,7 +189,7 @@ export default function ArenaPage() {
     setOpponents(await buildOpponentPool(char, items));
     setMatchHistory(await loadArenaHistory(char.id));
     setLoading(false);
-    // Equipped gear feeds the power readout — load it best-effort so a hiccup
+    // Equipped gear for combat presentation — load best-effort so a hiccup
     // never traps the page on the loading spinner.
     try { setEquippedItems((await api.entities.Item.filter({ character_id: char.id, is_equipped: true })) || []); } catch (e) {}
   }, [navigate, setCharacter, toast]);
@@ -473,7 +473,6 @@ export default function ArenaPage() {
     );
   }
 
-  const power = computePower(character, equippedItems);
   const wins = character.arena_wins || 0;
   const losses = character.arena_losses || 0;
   const streak = character.arena_streak || 0;
@@ -543,8 +542,7 @@ export default function ArenaPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                <Stat icon={Zap} label="Power" value={power} color="#22D3EE" />
+              <div className="grid grid-cols-3 gap-1.5">
                 <Stat icon={Swords} label="W / L" value={`${wins} / ${losses}`} color="#60A5FA" />
                 <Stat icon={Flame} label="Streak" value={streak} color="#FB7185" />
                 <Stat icon={Shield} label="Free" value={`${freeBattlesLeft}/${ARENA_DAILY_FREE_BATTLES}`} hint={`resets ${formatEtaShort(msUntilNextETMidnight(now))}`} color="#FBBF24" />
@@ -584,7 +582,6 @@ export default function ArenaPage() {
                 <ArenaOpponentCard
                   opponent={o}
                   player={character}
-                  playerPower={power}
                   freeBattle={freeBattlesLeft > 0}
                   onChallenge={handleChallenge}
                   cooldownActive={cooldownActive}

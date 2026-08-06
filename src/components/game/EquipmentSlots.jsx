@@ -1,7 +1,7 @@
 import React from "react";
 import { RARITY_COLORS } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
-import StatIcon from "@/components/game/StatIcon";
+import { GearAttributeChips } from "@/components/game/StatIcon";
 
 const SLOT_CONFIG = [
   { key: "weapon", label: "Weapon", icon: "⚔️" },
@@ -32,18 +32,10 @@ export default function EquipmentSlots({ equippedItems }) {
             style={item ? { borderColor: rarityColor + "40" } : undefined}
           >
             {item ? (
-              <div className="flex flex-col items-center text-center">
+              <div className="flex flex-col items-center text-center min-w-0">
                 <GearVisual type={item.type} rarity={item.rarity} name={item.name} baseName={item.base_name} level_requirement={item.level_requirement} />
                 <p className="text-[11px] font-semibold truncate w-full mt-1" style={{ color: rarityColor }}>{item.name}</p>
-                {item.stats && Object.keys(item.stats).length > 0 && (
-                  <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 mt-1">
-                    {Object.entries(item.stats).filter(([, v]) => v > 0).map(([stat, val]) => (
-                      <span key={stat} className="text-[10px] text-foreground/80 inline-flex items-center gap-0.5">
-                        <StatIcon stat={stat} className="w-2.5 h-2.5" />+{val}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <GearAttributeChips stats={item.stats} presentation="itemPane" className="justify-center mt-1.5 w-full" />
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-4 text-center">

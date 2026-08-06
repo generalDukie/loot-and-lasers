@@ -3,19 +3,34 @@ class_name CombatPresentation
 ## Presentation helpers for duel overlays (Restoration 29).
 ## Observes combat events only — never mutates gameplay.
 
+## Floater sizes — damage +50% over prior 20px; crit = 2× enlarged normal.
+const FLOAT_FONT_OTHER := 20
+const FLOAT_FONT_DAMAGE := 30
+const FLOAT_FONT_CRIT := 60
+const CRIT_DARKEN := 0.18
 
+
+## Damage float colors ← Hero attribute panes (GameData.STAT_COLORS).
 static func damage_type_color(dtype: String) -> Color:
-	match dtype:
+	match String(dtype).to_upper():
 		"MIGHT":
-			return Color("#F87171")
+			return GameData.stat_color("strength")
 		"REFLEX":
-			return Color("#4ADE80")
+			return GameData.stat_color("agility")
 		"TECH":
-			return Color("#60A5FA")
+			return GameData.stat_color("intellect")
 		"TRUE":
-			return Color("#E879F9")
+			return Color.WHITE
 		_:
 			return Color("#FCA5A5")
+
+
+## Crit uses a slightly darkened Hero attribute color (not a universal Crit hue).
+static func damage_floater_color(dtype: String, is_crit: bool) -> Color:
+	var base := damage_type_color(dtype)
+	if is_crit and String(dtype).to_upper() != "TRUE":
+		return base.darkened(CRIT_DARKEN)
+	return base
 
 
 static func empty_side() -> Dictionary:
@@ -107,36 +122,55 @@ static func _apply(state: Dictionary, ev: Dictionary) -> void:
 			slot["drone_ready"] = true
 
 
+static func _other_floater(label: String, color: Color) -> Dictionary:
+	return {
+		"label": label,
+		"color": color,
+		"crit": false,
+		"bold": false,
+		"font_size": FLOAT_FONT_OTHER,
+	}
+
+
 static func floater_label(ev: Dictionary) -> Dictionary:
 	if int(ev.get("heal", 0)) > 0:
-		return {"label": "+%s" % int(ev.get("heal", 0)), "color": Color("#86EFAC"), "crit": false}
+		return _other_floater("+%s" % int(ev.get("heal", 0)), Color("#86EFAC"))
 	if str(ev.get("type", "")) == "dodge" or bool(ev.get("dodged", false)):
-		return {"label": "DODGE", "color": Color("#67E8F9"), "crit": false}
+		return _other_floater("DODGE", Color("#67E8F9"))
 	if str(ev.get("type", "")) == "miss" or bool(ev.get("missed", false)):
 		if str(ev.get("missKind", "")) == "phantom_signal" or str(ev.get("kind", "")) == "phantom_signal_miss":
-			return {"label": "FORCED MISS", "color": Color("#C084FC"), "crit": false}
-		return {"label": "MISS", "color": Color("#94A3B8"), "crit": false}
+			return _other_floater("FORCED MISS", Color("#C084FC"))
+		return _other_floater("MISS", Color("#94A3B8"))
 	if str(ev.get("type", "")) == "barrier":
 		if str(ev.get("kind", "")) == "barrier_broken":
-			return {"label": "BARRIER BREAK", "color": Color("#67E8F9"), "crit": false}
-		return {"label": "SHIELD −%s" % int(ev.get("absorbed", 0)), "color": Color("#67E8F9"), "crit": false}
+			return _other_floater("BARRIER BREAK", Color("#67E8F9"))
+		return _other_floater("SHIELD −%s" % int(ev.get("absorbed", 0)), Color("#67E8F9"))
 	var dmg := int(ev.get("damage", 0))
 	if bool(ev.get("shieldHit", false)) and dmg <= 0:
-		return {"label": "BLOCK", "color": Color("#67E8F9"), "crit": false}
+		return _other_floater("BLOCK", Color("#67E8F9"))
 	if dmg > 0:
-		var dtype := str(ev.get("damageType", ""))
-		var col := damage_type_color(dtype)
+		var dtype := str(ev.get("damageType", "")).to_upper()
+		# True Damage cannot Crit — ignore a stray crit flag for presentation.
+		var is_crit := bool(ev.get("crit", false)) and dtype != "TRUE"
+		var col := damage_floater_color(dtype, is_crit)
 		var prefix := ""
 		if dtype == "TRUE":
 			prefix = "TRUE "
-		elif bool(ev.get("crit", false)):
+		elif is_crit:
 			prefix = "CRIT "
 		var shield := ""
 		if bool(ev.get("shieldHit", false)) and int(ev.get("barrierAbsorbed", 0)) > 0:
 			shield = " · SHIELD −%s" % int(ev.get("barrierAbsorbed", 0))
-		return {"label": "%s−%s%s" % [prefix, dmg, shield], "color": col, "crit": bool(ev.get("crit", false)) or dtype == "TRUE"}
+		return {
+			"label": "%s−%s%s" % [prefix, dmg, shield],
+			"color": col,
+			"crit": is_crit,
+			"bold": is_crit,
+			"font_size": FLOAT_FONT_CRIT if is_crit else FLOAT_FONT_DAMAGE,
+			"damage_type": dtype,
+		}
 	if str(ev.get("type", "")) == "passive":
-		return {"label": "✧", "color": Color("#C084FC"), "crit": false}
+		return _other_floater("✧", Color("#C084FC"))
 	return {}
 
 

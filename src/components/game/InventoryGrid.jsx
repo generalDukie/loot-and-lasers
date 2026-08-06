@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Droppable, Draggable } from "@hello-pangea/dnd";
-import { motion } from "framer-motion";
 import CompactItemRow from "@/components/game/CompactItemRow";
-import StatCompareBubble, { powerRating } from "@/components/game/StatCompareBubble";
+import StatCompareBubble from "@/components/game/StatCompareBubble";
 import GearInspectPortal from "@/components/game/GearInspectPortal";
 import { btnPress } from "@/lib/juicyMotion";
-import { ArrowUp, ArrowDown, Trash2, X, GripVertical } from "lucide-react";
+import { Trash2, X, GripVertical } from "lucide-react";
 import { computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
 import { EQUIPPABLE_TYPES, listDissolveJunk } from "@/lib/inventoryJunk";
 import { sortItemsByOrder } from "@/lib/inventoryOrder";
@@ -28,37 +27,6 @@ function useDesktopHover() {
     return () => mq.removeEventListener("change", sync);
   }, []);
   return desktopHover;
-}
-
-function UpgradeBadge({ item, eqSlot, characterClass }) {
-  const empty = !eqSlot;
-  const d = empty ? 1 : powerRating(item, characterClass) - powerRating(eqSlot, characterClass);
-  if (!empty && d === 0) return null;
-  const better = empty || d > 0;
-  const color = better ? "#22c55e" : "#ef4444";
-  const title = empty
-    ? "Upgrade — empty slot, pure gain"
-    : better
-      ? "Upgrade — better than equipped"
-      : "Downgrade — worse than equipped";
-
-  return (
-    <motion.div
-      className={`absolute -top-0.5 -left-0.5 z-20 flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-        better ? "bg-green-500/40 text-green-300 border-green-400/80" : "bg-red-500/40 text-red-300 border-red-400/80"
-      }`}
-      style={{ boxShadow: `0 0 14px ${color}` }}
-      title={title}
-      animate={{
-        opacity: [1, 0.35, 1],
-        scale: [1, 1.18, 1],
-        boxShadow: [`0 0 10px ${color}`, `0 0 22px ${color}`, `0 0 10px ${color}`],
-      }}
-      transition={{ duration: 0.85, repeat: Infinity, ease: "easeInOut" }}
-    >
-      {better ? <ArrowUp className="w-5 h-5 stroke-[3]" /> : <ArrowDown className="w-5 h-5 stroke-[3]" />}
-    </motion.div>
-  );
 }
 
 // Shared inventory grid. Desktop: hover compare · double-click to equip.
@@ -196,7 +164,6 @@ export default function InventoryGrid({
                   const isSelectable = bulkMode && !item.locked;
                   const isSelected = selected.includes(item.id);
                   const isPinned = !desktopHover && pinnedId === item.id;
-                  const eqSlot = equipped.find((i) => i.type === item.type) || null;
                   return (
                     <Draggable
                       key={item.id}
@@ -272,7 +239,6 @@ export default function InventoryGrid({
                                   selected={isSelected}
                                   onToggleSelect={() => toggleSelect(item.id)}
                                 />
-                                {comparable && <UpgradeBadge item={item} eqSlot={eqSlot} characterClass={characterClass} />}
                               </div>
                             </div>
                           </div>

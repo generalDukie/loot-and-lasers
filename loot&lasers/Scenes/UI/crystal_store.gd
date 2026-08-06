@@ -631,7 +631,7 @@ func _on_buy(pack_id: String) -> void:
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		return
 	_status.add_theme_color_override("font_color", Color("#FCD34D"))
-	_status.text = "🔒 Checkout coming soon — %s (%s 💎). Stripe payment is being connected." % [
+	_status.text = "Checkout coming soon — %s (%s 💎). Stripe payment is being connected." % [
 		str(p.get("name", pack_id)),
 		_fmt_int(int(p.get("crystals", 0))),
 	]

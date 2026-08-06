@@ -6,9 +6,11 @@ import {
   computeTotalStats,
   computeDerivedStats,
   getClassWeights,
+  getDamageBaseForCombatant,
   rollBasicAttackDamage,
   mitigationForDamageType,
   CRIT_MULT,
+  DAMAGE_BASE,
 } from "@/lib/statEngine";
 import {
   onCombatStart,
@@ -400,6 +402,8 @@ export function buildFighter(c, items, side) {
   // damage/resist rules via computeDerivedStats(character.class) but must not
   // receive player class passives — blank className for passive hooks.
   const suppress = !!(c.suppressClassPassive || c.missionEnemy || c.dungeonEnemy);
+  // Mission soft foes + arena bots: ramped flat. Dungeon (also isBot) and players: full 15.
+  const damageBase = getDamageBaseForCombatant(c);
   return {
     side,
     name: c.name,
@@ -411,6 +415,7 @@ export function buildFighter(c, items, side) {
     archetype: derived.archetype,
     /** Sheet expected attack (no variance) — used by secondary effects like Fire Support. */
     standardAttack: derived.damage,
+    damageBase,
     crit: derived.critChance / 100,
     critMult: derived.critMult || CRIT_MULT,
     dodge: derived.dodgeChance / 100,
@@ -438,7 +443,8 @@ export function resolveBasicHit(attacker, defender, {
   incomingTakenMult = 1,
   rng = Math.random,
 } = {}) {
-  let damage = rollBasicAttackDamage(attacker.archetype, attacker.primaryValue, rng);
+  const flat = attacker.damageBase != null ? attacker.damageBase : DAMAGE_BASE;
+  let damage = rollBasicAttackDamage(attacker.archetype, attacker.primaryValue, rng, flat);
   damage *= outgoingMult;
 
   let crit = false;
@@ -759,29 +765,9 @@ export function computeRewards(player, opp, won, free = true) {
   };
 }
 
-/**
- * Risk label from blended rating + power gap (not the same as Elo payout).
- * Gives an honest "how hard is this fight?" read next to the reward chip.
- */
-export function assessMatchRisk(playerPower, oppPower, playerRating, oppRating) {
-  const ratingGap = (oppRating || 1000) - (playerRating || 1000);
-  const powerGap = (oppPower || 0) - (playerPower || 0);
-  // Power weighs a bit more than raw rating for fight feel.
-  const score = ratingGap / 20 + powerGap / 18;
-  if (score <= -35) return { id: "favored", label: "FAVORED", tone: "emerald" };
-  if (score <= -12) return { id: "edge", label: "EDGE", tone: "cyan" };
-  if (score <= 12) return { id: "even", label: "EVEN", tone: "amber" };
-  if (score <= 35) return { id: "underdog", label: "UNDERDOG", tone: "orange" };
-  return { id: "danger", label: "DANGER", tone: "rose" };
-}
-
 /** Pre-fight stakes preview used by challenger cards. */
-export function previewArenaMatch(player, opp, { free = true, playerPower } = {}) {
-  const myRating = player.arena_rating || 1000;
-  const theirRating = opp.arena_rating || 1000;
+export function previewArenaMatch(player, opp, { free = true } = {}) {
   const onWin = computeRewards(player, opp, true, free);
   const onLoss = computeRewards(player, opp, false, free);
-  const risk = assessMatchRisk(playerPower ?? player.power, opp.power, myRating, theirRating);
-  const winChance = Math.round(eloExpectedScore(myRating, theirRating) * 100);
-  return { onWin, onLoss, risk, winChance };
+  return { onWin, onLoss };
 }

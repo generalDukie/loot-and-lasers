@@ -94,6 +94,10 @@ export const DUNGEON_ARMOR_CAP = 75;
 export const DUNGEON_TECH_RESIST_CAP = 75;
 export const CRIT_MULT = 1.5;          // crit damage multiplier
 export const DAMAGE_BASE = 15;
+/** Early-game flat floor for mission soft foes + arena bots (not dungeon / not players). */
+export const DAMAGE_BASE_RAMP_FLOOR = 5;
+/** Level at which ramped flat reaches DAMAGE_BASE. */
+export const DAMAGE_BASE_RAMP_FULL_LEVEL = 25;
 export const DAMAGE_COEFF = 0.0032;
 export const DAMAGE_EXP = 1.727;
 export const AGI_VARIANCE_MIN = 0.80;
@@ -143,31 +147,59 @@ export function getAttributeTechResistancePercent(characterClass, level, totalIn
   return softCapPercent(level, totalIntellect, maxPercent);
 }
 
+/**
+ * Linear flat ramp: 5 at L1 → 15 at L25+. Used only for mission enemies / arena bots.
+ * Dungeon enemies and real players always keep DAMAGE_BASE (15).
+ */
+export function getRampedDamageBase(level) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  if (L >= DAMAGE_BASE_RAMP_FULL_LEVEL) return DAMAGE_BASE;
+  const span = DAMAGE_BASE_RAMP_FULL_LEVEL - 1;
+  return DAMAGE_BASE_RAMP_FLOOR
+    + (DAMAGE_BASE - DAMAGE_BASE_RAMP_FLOOR) * ((L - 1) / span);
+}
+
+/** Mission soft foes and arena bots only — never dungeon (dungeon foes also set isBot). */
+export function usesRampedDamageBase(character) {
+  if (!character || character.dungeonEnemy) return false;
+  return !!(character.missionEnemy || character.isBot || character.is_bot);
+}
+
+export function getDamageBaseForCombatant(character) {
+  if (usesRampedDamageBase(character)) {
+    return getRampedDamageBase(character.level);
+  }
+  return DAMAGE_BASE;
+}
+
 /** Raw base damage curve (no variance) — used for sheet display. */
-export function getBaseDamageFromPrimary(primaryAttribute) {
+export function getBaseDamageFromPrimary(primaryAttribute, damageBase = DAMAGE_BASE) {
   const p = Math.max(0, primaryAttribute || 0);
-  return DAMAGE_BASE + DAMAGE_COEFF * Math.pow(p, DAMAGE_EXP);
+  const flat = damageBase != null && Number.isFinite(Number(damageBase))
+    ? Number(damageBase)
+    : DAMAGE_BASE;
+  return flat + DAMAGE_COEFF * Math.pow(p, DAMAGE_EXP);
 }
 
-export function calculateStrengthDamage(totalStrength, rng = Math.random) {
-  return getBaseDamageFromPrimary(totalStrength) * randomBetween(UNIVERSAL_VARIANCE_MIN, UNIVERSAL_VARIANCE_MAX, rng);
+export function calculateStrengthDamage(totalStrength, rng = Math.random, damageBase = DAMAGE_BASE) {
+  return getBaseDamageFromPrimary(totalStrength, damageBase) * randomBetween(UNIVERSAL_VARIANCE_MIN, UNIVERSAL_VARIANCE_MAX, rng);
 }
 
-export function calculateTechDamage(totalIntellect, rng = Math.random) {
-  return getBaseDamageFromPrimary(totalIntellect) * randomBetween(UNIVERSAL_VARIANCE_MIN, UNIVERSAL_VARIANCE_MAX, rng);
+export function calculateTechDamage(totalIntellect, rng = Math.random, damageBase = DAMAGE_BASE) {
+  return getBaseDamageFromPrimary(totalIntellect, damageBase) * randomBetween(UNIVERSAL_VARIANCE_MIN, UNIVERSAL_VARIANCE_MAX, rng);
 }
 
-export function calculateAgilityDamage(totalAgility, rng = Math.random) {
-  return getBaseDamageFromPrimary(totalAgility)
+export function calculateAgilityDamage(totalAgility, rng = Math.random, damageBase = DAMAGE_BASE) {
+  return getBaseDamageFromPrimary(totalAgility, damageBase)
     * randomBetween(AGI_VARIANCE_MIN, AGI_VARIANCE_MAX, rng)
     * randomBetween(UNIVERSAL_VARIANCE_MIN, UNIVERSAL_VARIANCE_MAX, rng);
 }
 
 /** Roll one basic-attack raw damage for the given archetype (pre-crit / pre-mit). */
-export function rollBasicAttackDamage(archetype, primaryValue, rng = Math.random) {
-  if (archetype === "agi") return calculateAgilityDamage(primaryValue, rng);
-  if (archetype === "int") return calculateTechDamage(primaryValue, rng);
-  return calculateStrengthDamage(primaryValue, rng);
+export function rollBasicAttackDamage(archetype, primaryValue, rng = Math.random, damageBase = DAMAGE_BASE) {
+  if (archetype === "agi") return calculateAgilityDamage(primaryValue, rng, damageBase);
+  if (archetype === "int") return calculateTechDamage(primaryValue, rng, damageBase);
+  return calculateStrengthDamage(primaryValue, rng, damageBase);
 }
 
 /**
@@ -224,7 +256,9 @@ export function computeDerivedStats(totalStats, character) {
   const primaryValue = s(primaryStat);
 
   // Sheet damage = expected base (no variance). AGI average agility-variance ≈ 0.925.
-  const rawBase = getBaseDamageFromPrimary(primaryValue);
+  // Mission / arena-bot combatants use the early flat ramp; dungeon + players stay at 15.
+  const damageBase = getDamageBaseForCombatant(character);
+  const rawBase = getBaseDamageFromPrimary(primaryValue, damageBase);
   const damage = Math.round(archetype === "agi" ? rawBase * 0.925 : rawBase);
 
   const dungeonCaps = !!(character?.dungeonEnemy);

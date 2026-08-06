@@ -80,14 +80,16 @@ export default function GalaxyHolomap({ sectors, highestSector, onSelect }) {
             whileTap={unlocked ? { scale: 0.92 } : {}}
             onClick={() => onSelect(sector)}
           >
-            {/* Current-location pulse */}
+            {/* Current-location pulse — wrapper keeps Framer scale from drifting off-center */}
             {isCurrent && (
-              <motion.span
-                className="absolute w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2"
-                style={{ borderColor: sector.color }}
-                animate={{ scale: [1, 1.7], opacity: [0.7, 0] }}
-                transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
-              />
+              <span className="absolute left-1/2 top-0 -translate-x-1/2 w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center pointer-events-none">
+                <motion.span
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2"
+                  style={{ borderColor: sector.color }}
+                  animate={{ scale: [1, 1.7], opacity: [0.7, 0] }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
+                />
+              </span>
             )}
             {/* Orb */}
             <motion.div

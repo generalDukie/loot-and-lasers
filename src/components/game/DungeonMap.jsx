@@ -107,17 +107,21 @@ function WormholeIcon({ unlocked, selected, animate = true }) {
       )}
 
       {live && [0, 1, 2].map((i) => (
-        <motion.span
+        <span
           key={i}
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border pointer-events-none"
-          style={{
-            width: 74,
-            height: 74,
-            borderColor: i % 2 === 0 ? WORMHOLE_COLOR : WORMHOLE_CYAN,
-          }}
-          animate={{ scale: [0.55, 1.55], opacity: [0.7, 0] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut", delay: i * 0.75 }}
-        />
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        >
+          <motion.span
+            className="rounded-full border"
+            style={{
+              width: 74,
+              height: 74,
+              borderColor: i % 2 === 0 ? WORMHOLE_COLOR : WORMHOLE_CYAN,
+            }}
+            animate={{ scale: [0.55, 1.55], opacity: [0.7, 0] }}
+            transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut", delay: i * 0.75 }}
+          />
+        </span>
       ))}
 
       <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full drop-shadow-[0_0_20px_rgba(192,132,252,0.55)]">
@@ -491,18 +495,20 @@ export default function DungeonMap({
                   >
                     {state !== "locked" && !zooming && (
                       <span
-                        className="absolute w-14 h-14 rounded-full pointer-events-none blur-md opacity-35"
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 rounded-full pointer-events-none blur-md opacity-35"
                         style={{ background: `radial-gradient(circle, ${p.color}, transparent 70%)` }}
                       />
                     )}
 
                     {(state === "current" || selected) && !zooming && (
-                      <motion.span
-                        className="absolute w-11 h-11 rounded-full border-2"
-                        style={{ borderColor: p.color }}
-                        animate={{ scale: [1, 1.75], opacity: [0.75, 0] }}
-                        transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
-                      />
+                      <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <motion.span
+                          className="w-11 h-11 rounded-full border-2"
+                          style={{ borderColor: p.color }}
+                          animate={{ scale: [1, 1.75], opacity: [0.75, 0] }}
+                          transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
+                        />
+                      </span>
                     )}
 
                     <div

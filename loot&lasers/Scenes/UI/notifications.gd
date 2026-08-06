@@ -145,12 +145,16 @@ func _populate() -> void:
 		daily_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		drow.add_child(daily_title)
 		var dbtn := Button.new()
-		dbtn.text = "Claim"
+		dbtn.text = "Open"
 		ClientUi.apply_primary_button(dbtn)
 		dbtn.pressed.connect(func() -> void:
-			await ProgressManager.claim_daily()
-			await ProgressManager.load_daily()
-			_populate()
+			var shell := get_tree().current_scene
+			if shell != null and shell.has_method("open_daily_login_modal"):
+				shell.open_daily_login_modal()
+			else:
+				await ProgressManager.claim_daily()
+				await ProgressManager.load_daily()
+				_populate()
 		)
 		drow.add_child(dbtn)
 

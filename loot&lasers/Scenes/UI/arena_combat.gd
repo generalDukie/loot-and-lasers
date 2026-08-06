@@ -1175,12 +1175,25 @@ func _settle_and_show_rewards() -> void:
 		ProgressManager.toast_newly_unlocked(self, finish_data)
 		await _show_dungeon_result(finish_data)
 		return
-	var result: Dictionary = res.get("result", {}) if typeof(res.get("result", {})) == TYPE_DICTIONARY else {}
+	var result: Dictionary = res
+	# Prefer authoritative manager DTO; keep nested "result" only as legacy alias.
+	if typeof(res.get("result", null)) == TYPE_DICTIONARY and not bool(res.has("won")):
+		result = res.get("result", {})
 	if bool(result.get("won", false)):
 		AudioManager.play_ui("claim")
 	else:
 		AudioManager.play_ui("hit")
 	ProgressManager.toast_newly_unlocked(self, res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {})
+	print(
+		"[ArenaBattleResult] UI settle won=%s outcome=%s ranking=%s xp=%s sd=%s"
+		% [
+			str(result.get("won", false)),
+			str(result.get("outcome", "")),
+			str(result.get("rankingChange", result.get("rating_delta", 0))),
+			str((result.get("rewards", {}) as Dictionary).get("experience", 0) if typeof(result.get("rewards", {})) == TYPE_DICTIONARY else 0),
+			str((result.get("rewards", {}) as Dictionary).get("stardust", 0) if typeof(result.get("rewards", {})) == TYPE_DICTIONARY else 0),
+		]
+	)
 	await _show_result(result)
 
 

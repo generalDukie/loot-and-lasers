@@ -240,6 +240,10 @@ func _make_achievement_row(entry: Dictionary, ch: Dictionary) -> PanelContainer:
 
 
 func _on_claim_daily() -> void:
+	var shell := get_tree().current_scene
+	if shell != null and shell.has_method("open_daily_login_modal"):
+		shell.open_daily_login_modal()
+		return
 	if _busy:
 		return
 	_busy = true

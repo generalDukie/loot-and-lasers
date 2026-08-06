@@ -794,6 +794,10 @@ func _draw_planet_fx(side: float, offset: Vector2) -> void:
 		var pid := i + 1
 		var raw := SpiralMap.pct_to_px(nodes[i], side) + offset
 		var point := _xform(raw)
+		# Prefer live button center so the radar ring stays locked to the orb.
+		var btn: Button = _buttons.get(pid)
+		if is_instance_valid(btn) and btn.visible:
+			point = btn.position + btn.size * 0.5
 		var planet := DungeonRules.get_planet(pid)
 		var tint: Color = planet.get("color", ClientUi.CYAN)
 		var locked := not DungeonRules.is_unlocked(pid, level) or (not in_infinite and pid > story_front)
@@ -803,9 +807,11 @@ func _draw_planet_fx(side: float, offset: Vector2) -> void:
 		if not locked:
 			draw_circle(point, _xform_radius(31.0), Color(tint, 0.055))
 		if not zooming and ((pid == story_front and not in_infinite) or (pid == selected and not DungeonManager.viewing_wormhole)):
-			var pulse := _xform_radius(26.0 + fposmod(_elapsed * 18.0, 18.0))
-			var alpha := 0.5 * (1.0 - fposmod(_elapsed * 1.1, 1.0))
-			draw_arc(point, pulse, 0, TAU, 32, Color(tint, alpha), 1.5)
+			# Ring grows from just outside the chart orb (~22px radius).
+			var orb_r := maxf(btn.size.x * 0.5 if is_instance_valid(btn) else CHART_NODE_SIZE * 0.5, 18.0)
+			var pulse := orb_r + fposmod(_elapsed * 18.0, 18.0)
+			var alpha := 0.55 * (1.0 - fposmod(_elapsed * 1.1, 1.0))
+			draw_arc(point, pulse, 0, TAU, 48, Color(tint, alpha), 2.0)
 
 		if zooming:
 			continue

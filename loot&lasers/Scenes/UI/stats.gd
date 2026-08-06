@@ -648,56 +648,66 @@ func _rebuild_doll() -> void:
 	for slot in FRAME_SLOTS:
 		var stype := str(slot.get("type", ""))
 		if stype == "_portrait":
-			# Center cell: animated AvatarPortrait (presentation only). Drop zone is doll_wrap.
+			# Center cell: avatar portrait with a corner level badge (web EquippedFrame).
+			# PanelContainer must have exactly one content child — nest badge inside it.
 			var wrap := PanelContainer.new()
 			wrap.custom_minimum_size = cell
 			wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 				Color(0.07, 0.09, 0.14, 1.0), Color(ClientUi.CYAN, 0.85), 10, 2
 			))
-			var pad := MarginContainer.new()
-			pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			pad.add_theme_constant_override("margin_left", 4)
-			pad.add_theme_constant_override("margin_right", 4)
-			pad.add_theme_constant_override("margin_top", 4)
-			pad.add_theme_constant_override("margin_bottom", 4)
-			wrap.add_child(pad)
+			var host := Control.new()
+			host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			host.custom_minimum_size = cell - Vector2(8, 8)
+			host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			wrap.add_child(host)
+
 			var center := CenterContainer.new()
+			center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			pad.add_child(center)
-			var portrait := AvatarRenderer.make_portrait(ch, PORTRAIT_SIZE - 12.0)
+			host.add_child(center)
+			var portrait_sz := mini(PORTRAIT_SIZE - 12.0, EQUIP_SLOT_SIZE - 16.0)
+			var portrait := AvatarRenderer.make_portrait(ch, portrait_sz)
 			portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			if portrait.has_method("set_active"):
 				portrait.call("set_active", true)
 			center.add_child(portrait)
+
 			# Small level badge — corner only, never replaces the portrait.
 			var badge := PanelContainer.new()
 			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			badge.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			badge.offset_left = -29
-			badge.offset_top = -29
-			badge.offset_right = -2
-			badge.offset_bottom = -2
+			badge.anchor_left = 1.0
+			badge.anchor_top = 1.0
+			badge.anchor_right = 1.0
+			badge.anchor_bottom = 1.0
+			badge.offset_left = -28.0
+			badge.offset_top = -28.0
+			badge.offset_right = -2.0
+			badge.offset_bottom = -2.0
+			badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+			badge.grow_vertical = Control.GROW_DIRECTION_BEGIN
 			var bsb := StyleBoxFlat.new()
 			bsb.bg_color = ClientUi.CYAN
 			bsb.set_corner_radius_all(10)
 			bsb.set_border_width_all(2)
 			bsb.border_color = ClientUi.VOID
-			bsb.content_margin_left = 0
-			bsb.content_margin_right = 0
-			bsb.content_margin_top = 0
-			bsb.content_margin_bottom = 0
+			bsb.content_margin_left = 4
+			bsb.content_margin_right = 4
+			bsb.content_margin_top = 2
+			bsb.content_margin_bottom = 2
 			badge.add_theme_stylebox_override("panel", bsb)
 			var lvl := Label.new()
 			lvl.text = str(int(ch.get("level", 1)))
 			lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			lvl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			lvl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			lvl.add_theme_font_size_override("font_size", 13)
+			lvl.add_theme_font_size_override("font_size", 12)
 			lvl.add_theme_color_override("font_color", ClientUi.VOID)
 			ClientUi.apply_display_font(lvl)
 			badge.add_child(lvl)
-			wrap.add_child(badge)
+			host.add_child(badge)
 			_doll.add_child(wrap)
 			continue
 		var worn := InventoryRules.find_equipped_of_type(items, stype)

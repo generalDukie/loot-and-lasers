@@ -88,7 +88,8 @@ func format_balance(currency_id: String) -> String:
 		var rounded := snappedf(float(value), 0.01)
 		return str(int(rounded)) if is_equal_approx(rounded, float(int(rounded))) else "%.2f" % rounded
 	if currency_id == CURRENCY_NOVA:
-		var half := snappedf(value, 0.5)
+		# Display floors to the nearest 0.5 (half-crystal precision).
+		var half := floorf(maxf(0.0, value) * 2.0) / 2.0
 		if is_equal_approx(half, float(int(half))):
 			return str(int(half))
 		return "%.1f" % half
@@ -303,7 +304,7 @@ func _read_nova_split(character: Dictionary, display_key: String, half_key: Stri
 	if character.has(display_key):
 		return maxf(0.0, snappedf(float(character.get(display_key, 0)), 0.5))
 	if character.has(half_key):
-		return maxf(0.0, snappedf(float(character.get(half_key, 0)) / 2.0, 0.5))
+		return maxf(0.0, floorf(float(character.get(half_key, 0))) / 2.0)
 	# Prefer previous wallet value over treating total as wagerable.
 	return float(wallet.get(display_key, 0.0))
 
@@ -321,7 +322,7 @@ func _normalize_balance(currency_id: String, value: Variant) -> Variant:
 		return maxf(0.0, snappedf(float(value), 0.01))
 	if currency_id == CURRENCY_NOVA:
 		# Display Nova may be .0 or .5 (server half-units serialized as display).
-		return maxf(0.0, snappedf(float(value), 0.5))
+		return maxf(0.0, floorf(float(value) * 2.0) / 2.0)
 	return maxi(0, int(value))
 
 
@@ -329,11 +330,11 @@ func _normalize_balance(currency_id: String, value: Variant) -> Variant:
 func _nova_display_from_character(character: Dictionary) -> float:
 	var raw := float(character.get(CURRENCY_NOVA, 0))
 	if int(character.get("economy_nova_scale", 1)) == 2:
-		return raw / 2.0
+		return maxf(0.0, floorf(raw) / 2.0)
 	# Prefer explicit display field from economy responses.
 	if character.has("nova_display"):
-		return float(character.get("nova_display", 0))
-	return raw
+		return maxf(0.0, floorf(float(character.get("nova_display", 0)) * 2.0) / 2.0)
+	return maxf(0.0, floorf(raw * 2.0) / 2.0)
 
 
 func _set_loading(value: bool) -> void:

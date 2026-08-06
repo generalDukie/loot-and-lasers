@@ -366,7 +366,7 @@ func _show_compose() -> void:
 	for r in recipients:
 		if typeof(r) != TYPE_DICTIONARY:
 			continue
-		to_opt.add_item("%s (Lv %s)" % [str(r.get("name", "?")), str(r.get("level", 1))])
+		to_opt.add_item("%s (Lv %s)" % [str(r.get("name", "?")), int(r.get("level", 1))])
 		to_opt.set_item_metadata(to_opt.item_count - 1, r)
 	_detail.add_child(to_opt)
 

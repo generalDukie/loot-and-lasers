@@ -203,6 +203,22 @@ func _test_authoritative_response_application() -> void:
 	_check(bool(patched.get("patch_applied", false)), "patch applied via helper")
 	_check(int(GameManager.active_character.get("stardust", 0)) == 30, "patch merges into GameManager")
 
+	# Bare economy balances (SkipArenaCooldown shape) must still update the wallet.
+	var bare: Dictionary = GameApiClient.apply_authoritative_response({
+		"character": {
+			"id": "char-contract",
+			"fuel": 9,
+			"stardust": 30,
+			"nova_crystals": 1.5,
+		},
+		"balances": {"fuel": 9, "stardust": 30, "nova_crystals": 1.5},
+	}, "api_client_contract_bare_balances")
+	_check(bool(bare.get("character_applied", false)), "bare balances path applies character")
+	_check(
+		is_equal_approx(float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)), 1.5),
+		"bare balances update CurrencyManager nova"
+	)
+
 	GameManager.clear_active_character("api_client_contract_cleanup")
 	_check(GameManager.active_character.is_empty(), "cleanup clears character")
 	_check(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST) == 0, "cleanup clears wallet")

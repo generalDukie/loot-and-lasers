@@ -332,28 +332,79 @@ func send_player_mail(recipient_user_id: String, subject: String, body: String) 
 	return {"ok": true, "success": true, "data": data, "error": ""}
 
 
-## Legacy compose path — accepts friend/character dict; prefers user_id.
+## Legacy compose path — accepts friend/character dict; prefers character id.
 func send_player_mail_to(target: Dictionary, subject: String, body: String) -> Dictionary:
-	var rid := str(target.get("user_id", target.get("id", "")))
+	var rid := str(target.get("id", target.get("character_id", target.get("user_id", ""))))
 	return await send_player_mail(rid, subject, body)
 
 
+## Hydrate friend (+ guild) recipients with authoritative name/level like web MailPage.
 func mail_compose_recipients() -> Array:
-	var out: Array = []
+	var ids: Array = []
 	var seen := {}
+	var mine := ""
+	if GameManager != null and typeof(GameManager.active_character) == TYPE_DICTIONARY:
+		mine = str(GameManager.active_character.get("id", ""))
+
 	if SocialManager != null:
 		await SocialManager.load_social_state()
 		for f in SocialManager.friendships:
 			if typeof(f) != TYPE_DICTIONARY:
 				continue
 			var oid := SocialManager.friend_other_id(f)
-			if oid.is_empty() or seen.has(oid):
+			if oid.is_empty() or oid == mine or seen.has(oid):
 				continue
 			seen[oid] = true
-			out.append({
-				"id": oid,
-				"user_id": oid,
-				"name": str(f.get("display_name", f.get("username", oid))),
-				"level": 1,
-			})
+			ids.append(oid)
+
+		# Web also includes guild mates as compose targets.
+		await SocialManager.load_my_guild()
+		for m in SocialManager.guild_members:
+			if typeof(m) != TYPE_DICTIONARY:
+				continue
+			var mid := str(m.get("character_id", m.get("id", "")))
+			if mid.is_empty() or mid == mine or seen.has(mid):
+				continue
+			seen[mid] = true
+			ids.append(mid)
+
+	if ids.is_empty():
+		return []
+
+	var res: Dictionary = await GameApiClient.invoke("GetCharactersByIds", {"ids": ids})
+	if not bool(res.get("ok", false)):
+		# Fallback: show ids only if hydrate fails (should be rare).
+		var fallback: Array = []
+		for oid2 in ids:
+			fallback.append({"id": str(oid2), "name": str(oid2), "level": 1})
+		return fallback
+
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var chars: Array = data.get("characters", []) if typeof(data.get("characters", [])) == TYPE_ARRAY else []
+	var out: Array = []
+	var got := {}
+	for c in chars:
+		if typeof(c) != TYPE_DICTIONARY:
+			continue
+		var cid := str(c.get("id", ""))
+		if cid.is_empty() or got.has(cid):
+			continue
+		got[cid] = true
+		var nm := str(c.get("name", "")).strip_edges()
+		if nm.is_empty():
+			nm = cid
+		out.append({
+			"id": cid,
+			"character_id": cid,
+			"user_id": cid,
+			"name": nm,
+			"level": int(c.get("level", 1)),
+			"class": str(c.get("class", "")),
+			"race": str(c.get("race", "")),
+		})
+	# Preserve any unresolved ids at the end so compose still works.
+	for oid3 in ids:
+		var sid := str(oid3)
+		if not got.has(sid):
+			out.append({"id": sid, "character_id": sid, "user_id": sid, "name": sid, "level": 1})
 	return out

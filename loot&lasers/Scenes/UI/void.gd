@@ -31,7 +31,17 @@ func _ready() -> void:
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
-	_populate()
+	# Balance only — never rebuild the gear grid here. A mid-dissolve wallet
+	# pulse would briefly recreate a card that is already mid-suck / removed.
+	_refresh_balance()
+
+
+func _refresh_balance() -> void:
+	if _balance_lab == null or not is_instance_valid(_balance_lab):
+		return
+	_balance_lab.text = "✦  %s  stardust" % str(
+		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
+	)
 
 
 func _boot() -> void:
@@ -136,10 +146,6 @@ func _build() -> void:
 	_hole_stage.resized.connect(_sync_hole_aspect)
 	_hole_stage.add_child(black_hole)
 
-	# Web-style orbit rings over the shader (closest CSS ring equivalent).
-	_add_orbit_ring(250.0, Color(ClientUi.VIOLET, 0.40), 14.0, -1.0)
-	_add_orbit_ring(320.0, Color(ClientUi.CYAN, 0.30), 22.0, 1.0)
-
 	_burst_layer = Control.new()
 	_burst_layer.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_burst_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -222,28 +228,6 @@ func _build() -> void:
 	list.add_child(_grid)
 
 
-func _add_orbit_ring(diameter: float, color: Color, period: float, direction: float) -> void:
-	var ring := PanelContainer.new()
-	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ring.custom_minimum_size = Vector2(diameter, diameter)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0, 0, 0, 0)
-	style.border_color = color
-	style.set_border_width_all(2 if diameter < 300.0 else 1)
-	style.set_corner_radius_all(int(diameter / 2.0))
-	ring.add_theme_stylebox_override("panel", style)
-	ring.set_anchors_preset(PRESET_CENTER)
-	ring.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	ring.grow_vertical = Control.GROW_DIRECTION_BOTH
-	ring.offset_left = -diameter / 2.0
-	ring.offset_right = diameter / 2.0
-	ring.offset_top = -diameter / 2.0
-	ring.offset_bottom = diameter / 2.0
-	_hole_stage.add_child(ring)
-	var tween := ring.create_tween().set_loops()
-	tween.tween_property(ring, "rotation", TAU * direction, period).from(0.0)
-
-
 func _style_junk_button(btn: Button) -> void:
 	ClientUi.apply_display_font(btn)
 	btn.add_theme_font_size_override("font_size", 15)
@@ -306,10 +290,7 @@ func _unequipped() -> Array:
 
 
 func _populate() -> void:
-	var c := GameManager.active_character
-	_balance_lab.text = "✦  %s  stardust" % str(
-		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
-	)
+	_refresh_balance()
 
 	var pending: Array = InventoryManager.pending_loot
 	_pending_banner.visible = not pending.is_empty()
@@ -324,6 +305,7 @@ func _populate() -> void:
 				pname = str(first.get("name", "?"))
 		_pending_lab.text = "Item Waiting: %s\nFree a bag slot, then Claim on Inventory — it will not auto-fill when you dissolve." % pname
 
+	var c := GameManager.active_character
 	var cls := str(c.get("class", "Vanguard"))
 	var junk_ids: Array = InventoryRules.list_junk_ids(_items, cls)
 	_junk_btn.text = "Dissolve Junk (%s)" % junk_ids.size()
@@ -340,6 +322,22 @@ func _populate() -> void:
 		var card := _make_item_card(it)
 		_grid.add_child(card)
 		_card_by_id[str(it.get("id", ""))] = card
+
+
+func _remove_items_local(item_ids: Array) -> void:
+	if item_ids.is_empty():
+		return
+	var drop: Dictionary = {}
+	for iid in item_ids:
+		drop[str(iid)] = true
+	var next: Array = []
+	for it in _items:
+		if typeof(it) != TYPE_DICTIONARY:
+			continue
+		if drop.has(str(it.get("id", ""))):
+			continue
+		next.append(it)
+	_items = next
 
 
 func _make_item_card(it: Dictionary) -> PanelContainer:
@@ -483,15 +481,20 @@ func _on_dissolve(item_id: String) -> void:
 
 	var res: Dictionary = await InventoryManager.dissolve_item(item_id)
 	_busy = false
-	_sucking_ids.erase(item_id)
 	_set_hole_style(false)
 	if not res.ok:
+		_sucking_ids.erase(item_id)
 		_set_status(str(res.get("error", "Dissolve failed")), ClientUi.DANGER)
 		await _reload()
 		return
+	# Drop from local list before clearing suck state / reload so a wallet or
+	# character refresh cannot briefly recreate the dissolved card.
+	_remove_items_local([item_id])
+	_sucking_ids.erase(item_id)
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var gained := int(data.get("stardust_gained", preview))
 	_set_status("✦ Dissolved into stardust! +%s from %s" % [gained, name], GameData.STARDUST_COLOR)
+	_refresh_balance()
 	await _reload()
 
 
@@ -521,12 +524,14 @@ func _on_junk() -> void:
 
 	var res: Dictionary = await InventoryManager.dissolve_junk(ids)
 	_busy = false
-	_sucking_ids.clear()
 	_set_hole_style(false)
 	if not res.ok:
+		_sucking_ids.clear()
 		_set_status(str(res.get("error", "Dissolve failed")), ClientUi.DANGER)
 		await _reload()
 		return
+	_remove_items_local(ids)
+	_sucking_ids.clear()
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var gained := int(data.get("stardust_gained", preview_total))
 	var dissolved: Variant = data.get("dissolved", ids)
@@ -534,6 +539,7 @@ func _on_junk() -> void:
 	if typeof(dissolved) == TYPE_ARRAY:
 		n = (dissolved as Array).size()
 	_set_status("✦ Junk dissolved! %s items → +%s stardust" % [n, gained], GameData.STARDUST_COLOR)
+	_refresh_balance()
 	await _reload()
 
 
@@ -579,41 +585,63 @@ func _spawn_burst() -> void:
 	if _burst_layer == null or not is_instance_valid(_burst_layer):
 		return
 	var origin := _burst_layer.size * 0.5
-	for i in 16:
+	var dust := GameData.STARDUST_COLOR
+	var spark_colors: Array[Color] = [
+		dust,
+		Color(1.0, 1.0, 1.0, 1.0),
+		Color(0.98, 0.85, 1.0, 1.0),
+		Color(0.75, 0.55, 1.0, 1.0),
+		Color(0.55, 0.85, 1.0, 1.0),
+	]
+	var glyphs := ["✦", "✧", "⋆", "·", "✶", "⁕"]
+
+	# Soft circular bloom (not a square ColorRect).
+	var bloom := PanelContainer.new()
+	bloom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bloom.custom_minimum_size = Vector2(56, 56)
+	var bloom_style := StyleBoxFlat.new()
+	bloom_style.bg_color = Color(dust.r, dust.g, dust.b, 0.55)
+	bloom_style.set_corner_radius_all(999)
+	bloom_style.shadow_color = Color(dust.r, dust.g, dust.b, 0.65)
+	bloom_style.shadow_size = 18
+	bloom.add_theme_stylebox_override("panel", bloom_style)
+	bloom.pivot_offset = Vector2(28, 28)
+	bloom.position = origin - Vector2(28, 28)
+	bloom.scale = Vector2(0.35, 0.35)
+	bloom.modulate.a = 0.95
+	_burst_layer.add_child(bloom)
+	var bloom_tween := bloom.create_tween()
+	bloom_tween.set_parallel(true)
+	bloom_tween.tween_property(bloom, "scale", Vector2(2.8, 2.8), 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	bloom_tween.tween_property(bloom, "modulate:a", 0.0, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	bloom_tween.chain().tween_callback(bloom.queue_free)
+
+	# Dense sparkle spray.
+	for i in 36:
 		var spark := Label.new()
-		spark.text = "✦"
-		spark.add_theme_font_size_override("font_size", 12 + (i % 4) * 2)
-		spark.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
+		spark.text = glyphs[i % glyphs.size()]
+		spark.add_theme_font_size_override("font_size", 9 + (i % 5) * 3)
+		spark.add_theme_color_override("font_color", spark_colors[i % spark_colors.size()])
 		spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		spark.position = origin
+		spark.pivot_offset = Vector2(6, 8)
+		spark.scale = Vector2(0.2, 0.2)
 		_burst_layer.add_child(spark)
-		var angle := (float(i) / 16.0) * TAU + randf() * 0.4
-		var dist := 50.0 + randf() * 80.0
-		var delay := randf() * 0.06
+		var angle := (float(i) / 36.0) * TAU + randf() * 0.55
+		var dist := 36.0 + randf() * 110.0
+		var delay := randf() * 0.08
+		var life := 0.55 + randf() * 0.55
+		var end_scale := 0.55 + randf() * 1.15
 		var tween := spark.create_tween()
-		tween.tween_property(spark, "modulate:a", 1.0, 0.01).set_delay(delay)
-		tween.parallel().tween_property(
-			spark, "position", origin + Vector2(cos(angle), sin(angle)) * dist, 0.95
+		tween.set_parallel(true)
+		tween.tween_property(spark, "modulate:a", 1.0, 0.04).set_delay(delay)
+		tween.tween_property(
+			spark, "position", origin + Vector2(cos(angle), sin(angle)) * dist, life
 		).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		tween.parallel().tween_property(spark, "modulate:a", 0.0, 0.95).set_delay(delay)
-		tween.tween_callback(spark.queue_free)
-
-	var flash := ColorRect.new()
-	flash.color = Color(0.91, 0.47, 0.98, 0.55)
-	flash.custom_minimum_size = Vector2(93, 93)
-	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	flash.set_anchors_preset(PRESET_CENTER)
-	flash.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	flash.grow_vertical = Control.GROW_DIRECTION_BOTH
-	flash.offset_left = -47
-	flash.offset_right = 47
-	flash.offset_top = -47
-	flash.offset_bottom = 47
-	_burst_layer.add_child(flash)
-	var ft := flash.create_tween()
-	ft.tween_property(flash, "scale", Vector2(2.4, 2.4), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	ft.parallel().tween_property(flash, "modulate:a", 0.0, 0.5)
-	ft.tween_callback(flash.queue_free)
+		tween.tween_property(spark, "scale", Vector2(end_scale, end_scale), life * 0.45).set_delay(delay)
+		tween.tween_property(spark, "rotation", randf_range(-1.2, 1.2), life).set_delay(delay)
+		tween.tween_property(spark, "modulate:a", 0.0, life * 0.7).set_delay(delay + life * 0.3)
+		tween.chain().tween_callback(spark.queue_free)
 
 
 func _pulse_black_hole() -> void:

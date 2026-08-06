@@ -68,9 +68,9 @@ func _maybe_daily_prompt() -> void:
 		"🎁",
 		"Daily Login Rewards",
 		"Your daily login reward is ready. Claim it now to keep the streak going.",
-		"Claim Reward",
+		"Open Rewards",
 		"Later",
-		_on_daily_claim_from_hub
+		_on_daily_open_from_hub
 	)
 
 
@@ -323,6 +323,15 @@ func _dismiss_overlay(overlay: Control) -> void:
 		host.clear_overlays()
 	elif is_instance_valid(overlay):
 		overlay.queue_free()
+
+
+func _on_daily_open_from_hub() -> void:
+	var shell := get_tree().current_scene
+	if shell != null and shell.has_method("open_daily_login_modal"):
+		shell.open_daily_login_modal()
+		return
+	# Fallback: claim directly if shell overlay helper is unavailable.
+	await _on_daily_claim_from_hub()
 
 
 func _on_daily_claim_from_hub() -> void:

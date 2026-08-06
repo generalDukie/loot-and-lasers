@@ -140,6 +140,10 @@ import {
   clearArenaPendingCombat,
 } from "../shared/combatService.js";
 import {
+  normalizeArenaBattleResult,
+  logArenaBattleResultDiag,
+} from "../shared/arenaBattleResult.js";
+import {
   assertArenaClientSafe,
   assertArenaCooldownClear,
   assertArenaCooldownActive,
@@ -574,17 +578,35 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
       attemptsDate = today;
     }
     if (dc.replayed) {
+      const replayWinner = actuallyWon ? "player" : "opponent";
+      const replayRewards = {
+        won: actuallyWon,
+        free: false,
+        experience: 0,
+        stardust: 0,
+        arena_rating_delta: dc.ratingDelta,
+        direct_challenge: true,
+        replayed: true,
+      };
+      const replayOpponentId = String(
+        dc.challenge?.opponentCharacterId || dc.challenge?.opponent_character_id || "",
+      );
+      const battleResult = normalizeArenaBattleResult({
+        battleId: String(challengeId || ""),
+        playerId: ch.id,
+        opponentId: replayOpponentId,
+        winner: replayWinner,
+        rewards: replayRewards,
+        rankingChange: dc.ratingDelta,
+      });
       return {
         success: true,
-        rewards: {
-          won: actuallyWon,
-          free: false,
-          experience: 0,
-          stardust: 0,
-          arena_rating_delta: dc.ratingDelta,
-          direct_challenge: true,
-          replayed: true,
-        },
+        winner: replayWinner,
+        won: battleResult.playerWon,
+        outcome: battleResult.outcome,
+        player_won: battleResult.playerWon,
+        battle_result: battleResult,
+        rewards: replayRewards,
         is_free: false,
         nova_spent: 0,
         patch: {},
@@ -643,15 +665,53 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     if (ach.newly_unlocked?.length) {
       notifyAchievementsUnlocked(character.id, ach.newly_unlocked);
     }
+    const challengeWinner = actuallyWon ? "player" : "opponent";
+    const challengeRewards = {
+      ...baseRewards,
+      experience,
+      stardust,
+      arena_rating_delta: dc.ratingDelta,
+      won: actuallyWon,
+    };
+    const opponentId = String(
+      dc.challenge?.opponentCharacterId || dc.challenge?.opponent_character_id || "",
+    );
+    const battleResult = normalizeArenaBattleResult({
+      battleId: String(challengeId || ""),
+      playerId: character.id,
+      opponentId,
+      winner: challengeWinner,
+      rewards: challengeRewards,
+      rankingChange: dc.ratingDelta,
+    });
+    logArenaBattleResultDiag("FinishArenaBattle.direct_challenge", {
+      authenticatedPlayerId: user.id,
+      playerCombatantId: character.id,
+      opponentId,
+      winnerId: battleResult.winnerId,
+      winner: challengeWinner,
+      playerWon: battleResult.playerWon,
+      outcome: battleResult.outcome,
+      rankingChange: battleResult.rankingChange,
+      rewardsRequested: {
+        experience: challengeRewards.experience,
+        stardust: challengeRewards.stardust,
+        arena_rating_delta: challengeRewards.arena_rating_delta,
+      },
+      rewardsGranted: {
+        experience: challengeRewards.experience,
+        stardust: challengeRewards.stardust,
+        arena_rating_delta: challengeRewards.arena_rating_delta,
+      },
+    });
     return {
       success: true,
-      rewards: {
-        ...baseRewards,
-        experience,
-        stardust,
-        arena_rating_delta: dc.ratingDelta,
-        won: actuallyWon,
-      },
+      winner: challengeWinner,
+      won: battleResult.playerWon,
+      outcome: battleResult.outcome,
+      player_won: battleResult.playerWon,
+      battle_result: battleResult,
+      rewards: challengeRewards,
       is_free: useFree,
       nova_spent: novaCost,
       patch,
@@ -832,21 +892,64 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
   ).rank_position;
   const arena = serializeArenaState(character, clock.nowMs(), today);
 
+  const settledRewards = {
+    ...rewards,
+    experience: boostedXp,
+    stardust: stardustGain,
+    collectionPct: collectPct,
+    rating_before: prevRating,
+    rating_after: newRating,
+    rank_before: rankBefore,
+    rank_after: arena.rank_position,
+    won,
+  };
+  const opponentId = String(
+    meta.real_character_id ||
+      meta.arena_bot_id ||
+      meta.opponent_summary?.id ||
+      meta.opponent_summary?.character_id ||
+      "",
+  );
+  const battleResult = normalizeArenaBattleResult({
+    battleId: combatId,
+    playerId: character.id,
+    opponentId,
+    winner: pending.winner,
+    rewards: settledRewards,
+    rankingChange: rewards.arena_rating_delta,
+  });
+  logArenaBattleResultDiag("FinishArenaBattle.ladder", {
+    authenticatedPlayerId: user.id,
+    playerCombatantId: character.id,
+    opponentId,
+    winnerId: battleResult.winnerId,
+    winner: pending.winner,
+    playerWon: battleResult.playerWon,
+    outcome: battleResult.outcome,
+    rankingChange: battleResult.rankingChange,
+    rewardsRequested: {
+      experience: settledRewards.experience,
+      stardust: settledRewards.stardust,
+      arena_rating_delta: settledRewards.arena_rating_delta,
+    },
+    rewardsGranted: {
+      experience: settledRewards.experience,
+      stardust: settledRewards.stardust,
+      arena_rating_delta: settledRewards.arena_rating_delta,
+      rating_after: newRating,
+    },
+  });
+
   const resultBody = {
     success: true,
     combat_id: combatId,
     winner: pending.winner,
+    won: battleResult.playerWon,
+    outcome: battleResult.outcome,
+    player_won: battleResult.playerWon,
+    battle_result: battleResult,
     combat: publicCombatResult(pending),
-    rewards: {
-      ...rewards,
-      experience: boostedXp,
-      stardust: stardustGain,
-      collectionPct: collectPct,
-      rating_before: prevRating,
-      rating_after: newRating,
-      rank_before: rankBefore,
-      rank_after: arena.rank_position,
-    },
+    rewards: settledRewards,
     is_free: useFree,
     nova_spent: novaCost,
     opponent: meta.opponent_summary || null,
@@ -864,6 +967,10 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     success: true,
     combat_id: combatId,
     winner: pending.winner,
+    won: battleResult.playerWon,
+    outcome: battleResult.outcome,
+    player_won: battleResult.playerWon,
+    battle_result: battleResult,
     rewards: resultBody.rewards,
     is_free: useFree,
     nova_spent: novaCost,

@@ -353,12 +353,16 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 		stat = str(cons.get("stat", "all"))
 	var tint := Color("#FBBF24") if is_trio else GameData.stat_color(stat)
 	var rarity_tint := ClientUi.rarity_color(rarity)
+	var yanked := ShopManager.is_slot_yanked(slot_id)
+	var owned := ShopManager.is_slot_purchased(slot_id) or yanked
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.04, 0.05, 0.08, 0.96), Color(tint, 0.45), 10, 1
 	))
+	if owned:
+		panel.modulate = Color(1, 1, 1, 0.72)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
@@ -375,9 +379,9 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 	var icon_center := CenterContainer.new()
 	icon_box.add_child(icon_center)
 	if is_trio:
-		icon_center.add_child(UiIcon.make("package", tint, 22.0))
+		icon_center.add_child(UiIcon.make("package", 22.0, tint))
 	elif stat == "all":
-		icon_center.add_child(UiIcon.make("sparkles", tint, 22.0))
+		icon_center.add_child(UiIcon.make("sparkles", 22.0, tint))
 	else:
 		var icon := Label.new()
 		icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -426,23 +430,32 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 	ClientUi.apply_body_font(detail)
 	col.add_child(detail)
 
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	col.add_child(row)
-	var price := Label.new()
-	price.text = "✦ %s" % cost
-	price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	price.add_theme_font_size_override("font_size", 16)
-	price.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
-	ClientUi.apply_display_font(price)
-	row.add_child(price)
-	var buy := Button.new()
-	buy.text = "Open" if is_trio else "Buy"
-	ClientUi.apply_primary_button(buy)
-	buy.add_theme_font_size_override("font_size", 15)
-	var capt_cost := cost
-	buy.pressed.connect(func() -> void: _on_buy_cons(slot_id, capt_cost))
-	row.add_child(buy)
+	if owned:
+		var gone := Label.new()
+		gone.text = "YANKED" if yanked else "SOLD"
+		gone.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		gone.add_theme_font_size_override("font_size", 15)
+		gone.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_display_font(gone)
+		col.add_child(gone)
+	else:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		col.add_child(row)
+		var price := Label.new()
+		price.text = "✦ %s" % cost
+		price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		price.add_theme_font_size_override("font_size", 16)
+		price.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
+		ClientUi.apply_display_font(price)
+		row.add_child(price)
+		var buy := Button.new()
+		buy.text = "Open" if is_trio else "Buy"
+		ClientUi.apply_primary_button(buy)
+		buy.add_theme_font_size_override("font_size", 15)
+		var capt_cost := cost
+		buy.pressed.connect(func() -> void: _on_buy_cons(slot_id, capt_cost))
+		row.add_child(buy)
 	return panel
 
 

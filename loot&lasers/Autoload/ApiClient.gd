@@ -262,11 +262,46 @@ func apply_authoritative_response(data: Variant, source: String = "api") -> Dict
 		out["character_applied"] = true
 	else:
 		var patch: Variant = body.get("patch", null)
+		if typeof(patch) != TYPE_DICTIONARY or (patch as Dictionary).is_empty():
+			patch = body.get("applied", null)
 		if typeof(patch) == TYPE_DICTIONARY and not (patch as Dictionary).is_empty() and GameManager != null:
 			GameManager.apply_active_character_patch(patch, source)
 			out["patch_applied"] = true
 
 	var wallet: Variant = body.get("wallet", null)
+	if typeof(wallet) != TYPE_DICTIONARY or (wallet as Dictionary).is_empty():
+		var bal: Variant = body.get("balances", null)
+		if typeof(bal) == TYPE_DICTIONARY and not (bal as Dictionary).is_empty():
+			# Economy RPCs often return bare getBalances() — wrap for CurrencyManager.
+			var wrapped: Dictionary = {"balances": (bal as Dictionary).duplicate(true)}
+			var cid := str(body.get("character_id", "")).strip_edges()
+			if cid.is_empty() and typeof(ch) == TYPE_DICTIONARY:
+				cid = str((ch as Dictionary).get("id", "")).strip_edges()
+			if cid.is_empty() and GameManager != null:
+				cid = str(GameManager.active_character.get("id", "")).strip_edges()
+			if not cid.is_empty():
+				wrapped["character_id"] = cid
+			var txn := str(body.get("transaction_id", "")).strip_edges()
+			if txn.is_empty() and typeof(body.get("transaction", null)) == TYPE_DICTIONARY:
+				txn = str((body.get("transaction") as Dictionary).get("transaction_id", "")).strip_edges()
+			if not txn.is_empty():
+				wrapped["transaction_id"] = txn
+			if body.has("revision"):
+				wrapped["revision"] = body.get("revision")
+			wallet = wrapped
+		else:
+			wallet = null
+	elif typeof(wallet) == TYPE_DICTIONARY and not (wallet as Dictionary).has("balances"):
+		# Some payloads put currency keys on wallet itself.
+		var w := wallet as Dictionary
+		if w.has("fuel") or w.has("stardust") or w.has("nova_crystals"):
+			var nested: Dictionary = {"balances": w.duplicate(true)}
+			var wid := str(w.get("character_id", body.get("character_id", ""))).strip_edges()
+			if wid.is_empty() and GameManager != null:
+				wid = str(GameManager.active_character.get("id", "")).strip_edges()
+			if not wid.is_empty():
+				nested["character_id"] = wid
+			wallet = nested
 	if typeof(wallet) == TYPE_DICTIONARY and CurrencyManager != null:
 		if CurrencyManager.apply_authoritative_wallet(wallet, source):
 			out["wallet_applied"] = true

@@ -64,6 +64,8 @@ func _ready() -> void:
 	timer.start()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
+	if not GameManager.active_character_changed.is_connected(_on_active_character_changed):
+		GameManager.active_character_changed.connect(_on_active_character_changed)
 	var target := GameManager.pending_page_path
 	if target.is_empty():
 		target = GameManager.SCENE_HUB
@@ -71,6 +73,10 @@ func _ready() -> void:
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
+	_refresh_chrome()
+
+
+func _on_active_character_changed(_character: Dictionary, _source: String) -> void:
 	_refresh_chrome()
 
 
@@ -527,10 +533,35 @@ func _make_operative_panel() -> Control:
 	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	panel.add_theme_constant_override("separation", 2)
 
+	## Portrait + stim bubbles share one fixed-height band so active stims
+	## never grow the console or compress side-nav buttons.
+	var portrait_area := Control.new()
+	portrait_area.name = "OperativePortraitArea"
+	portrait_area.custom_minimum_size.y = 283
+	portrait_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	portrait_area.mouse_filter = Control.MOUSE_FILTER_PASS
+	panel.add_child(portrait_area)
+
 	_portrait_host = CenterContainer.new()
-	_portrait_host.custom_minimum_size.y = 283
+	_portrait_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_portrait_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(_portrait_host)
+	portrait_area.add_child(_portrait_host)
+
+	_effects = ActiveEffectsBar.make()
+	_effects.console_bubbles = true
+	_effects.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Overlay beside the head inside the fixed portrait band (does not grow console).
+	_effects.anchor_left = 1.0
+	_effects.anchor_right = 1.0
+	_effects.anchor_top = 0.0
+	_effects.anchor_bottom = 0.0
+	_effects.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_effects.grow_vertical = Control.GROW_DIRECTION_END
+	_effects.offset_left = -56
+	_effects.offset_right = -2
+	_effects.offset_top = 44
+	_effects.offset_bottom = 200
+	portrait_area.add_child(_effects)
 
 	_operative_name = Button.new()
 	_operative_name.flat = true
@@ -571,8 +602,6 @@ func _make_operative_panel() -> Control:
 	_stardust_value = _make_readout(panel, "stardust", Color("#E879F9"))
 	_nova_value = _make_readout(panel, "nova", Color("#FFD700"), true)
 
-	_effects = ActiveEffectsBar.make()
-	panel.add_child(_effects)
 	return panel
 
 
@@ -980,6 +1009,20 @@ func show_overlay_scene(path: String) -> void:
 		node.queue_free()
 
 
+func open_daily_login_modal() -> void:
+	var script: Variant = load("res://Scenes/UI/DailyLoginModal.gd")
+	if script == null:
+		push_warning("[GameShell] DailyLoginModal.gd missing")
+		return
+	var modal: Control = (script as GDScript).new()
+	show_overlay(modal)
+	if modal.has_signal("claimed"):
+		modal.claimed.connect(func(_payload: Dictionary) -> void:
+			_refresh_chrome()
+			await _refresh_notification_center()
+		)
+
+
 func clear_overlays() -> void:
 	if _overlay_host == null or not is_instance_valid(_overlay_host):
 		return
@@ -1214,7 +1257,7 @@ func _refresh_notification_center() -> void:
 		UiIcon.apply_button_icon_colors(daily, ClientUi.GOLD)
 		daily.pressed.connect(func() -> void:
 			_set_notification_open(false)
-			GameManager.go_progress()
+			open_daily_login_modal()
 		)
 		_notif_list.add_child(daily)
 
@@ -1585,9 +1628,7 @@ func _refresh_chrome() -> void:
 	_set_readout(_stardust_value, _format_rail_amount(
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
 	))
-	_set_readout(_nova_value, _format_rail_amount(
-		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)
-	))
+	_set_readout(_nova_value, CurrencyManager.format_balance(CurrencyManager.CURRENCY_NOVA))
 	if not CurrencyManager.loading and not CurrencyManager.has_wallet():
 		CurrencyManager.load_wallet()
 	_fit_currency_fonts()
@@ -1683,6 +1724,12 @@ func _apply_console_portrait_mode() -> void:
 		portrait.visible = not _hero_page_open
 		if portrait.has_method("set_active"):
 			portrait.call("set_active", not _hero_page_open and visible)
+	if is_instance_valid(_effects):
+		# Bubbles sit on the portrait face — hide with the face on Hero page.
+		_effects.modulate.a = 0.0 if _hero_page_open else 1.0
+		_effects.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE if _hero_page_open else Control.MOUSE_FILTER_STOP
+		)
 	if btn is Button:
 		(btn as Button).tooltip_text = (
 			"%s — Hero sheet open" % class_key if _hero_page_open else "Open character sheet"

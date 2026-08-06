@@ -107,12 +107,9 @@ func _payload(res: Dictionary) -> Dictionary:
 
 
 func _apply_character(data: Dictionary) -> void:
-	var ch: Variant = data.get("character", null)
-	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
-		GameManager.active_character = (ch as Dictionary).duplicate(true)
-	var bal: Variant = data.get("balances", null)
-	if typeof(bal) == TYPE_DICTIONARY and CurrencyManager.has_method("apply_balances"):
-		CurrencyManager.apply_balances(bal)
+	## Must go through GameApiClient → GameManager/CurrencyManager so the
+	## operative console sees spends (Nova skip, paid battles, etc.) immediately.
+	GameApiClient.apply_authoritative_response(data, "arena_node_action")
 
 
 func _apply_arena_state(data: Dictionary) -> void:
@@ -357,23 +354,87 @@ func finish_battle() -> Dictionary:
 	var data := _payload(res)
 	_apply_character(data)
 	_apply_arena_state(data)
-	var rewards: Dictionary = data.get("rewards", {}) if typeof(data.get("rewards", {})) == TYPE_DICTIONARY else {}
-	var won := str(data.get("winner", pending_battle.get("winner", "opponent"))) == "player"
-	var delta := int(rewards.get("arena_rating_delta", 0))
-	last_result = {
-		"ok": true,
-		"won": won,
-		"rewards": rewards,
-		"rating_delta": delta,
-		"data": data,
-	}
-	rating_changed.emit(int(rewards.get("rating_after", get_rating())), delta)
+	last_result = _normalize_battle_result(data)
+	print(
+		"[ArenaBattleResult] player=%s opp=%s winner=%s playerWon=%s outcome=%s ranking=%s rewards=%s"
+		% [
+			str(last_result.get("playerId", "")),
+			str(last_result.get("opponentId", "")),
+			str(last_result.get("winnerId", "")),
+			str(last_result.get("playerWon", false)),
+			str(last_result.get("outcome", "")),
+			str(last_result.get("rankingChange", 0)),
+			str(last_result.get("rewards", {})),
+		]
+	)
+	var rewards_out: Dictionary = last_result.get("rewards", {}) if typeof(last_result.get("rewards", {})) == TYPE_DICTIONARY else {}
+	rating_changed.emit(int(rewards_out.get("rating_after", get_rating())), int(last_result.get("rankingChange", 0)))
 	battle_completed.emit(last_result)
 	_set_battling(false)
 	pending_combat_id = ""
 	pending_offer_id = ""
 	await load_opponents()
 	return last_result
+
+
+## One authoritative arena result for UI, ranking display, rewards sheet, and history.
+func _normalize_battle_result(data: Dictionary) -> Dictionary:
+	var rewards: Dictionary = data.get("rewards", {}) if typeof(data.get("rewards", {})) == TYPE_DICTIONARY else {}
+	var battle: Dictionary = data.get("battle_result", {}) if typeof(data.get("battle_result", {})) == TYPE_DICTIONARY else {}
+	var winner := str(data.get("winner", ""))
+	if winner.is_empty() and not battle.is_empty():
+		winner = str(battle.get("winner", ""))
+	if winner.is_empty():
+		winner = str(pending_battle.get("winner", "opponent"))
+	var player_won := false
+	if data.has("won"):
+		player_won = bool(data.get("won"))
+	elif data.has("player_won"):
+		player_won = bool(data.get("player_won"))
+	elif battle.has("playerWon"):
+		player_won = bool(battle.get("playerWon"))
+	elif rewards.has("won"):
+		player_won = bool(rewards.get("won"))
+	else:
+		player_won = winner == "player"
+	var outcome := str(data.get("outcome", battle.get("outcome", "")))
+	if outcome.is_empty():
+		outcome = "victory" if player_won else "defeat"
+	var opp: Dictionary = pending_opp.duplicate(true)
+	if typeof(data.get("opponent", null)) == TYPE_DICTIONARY and not (data.get("opponent") as Dictionary).is_empty():
+		opp = (data.get("opponent") as Dictionary).duplicate(true)
+	var player_id := str(GameManager.active_character.get("id", ""))
+	var opponent_id := str(
+		opp.get("character_id", opp.get("realCharacterId", opp.get("id", battle.get("opponentId", ""))))
+	)
+	var ranking_change := int(
+		battle.get("rankingChange", rewards.get("arena_rating_delta", data.get("rankingChange", 0)))
+	)
+	var normalized_rewards: Dictionary = rewards.duplicate(true)
+	normalized_rewards["won"] = player_won
+	normalized_rewards["arena_rating_delta"] = ranking_change
+	var result := {
+		"ok": true,
+		"won": player_won,
+		"playerWon": player_won,
+		"player_won": player_won,
+		"outcome": outcome,
+		"winner": "player" if player_won else "opponent",
+		"battleId": str(data.get("combat_id", battle.get("battleId", pending_combat_id))),
+		"playerId": player_id,
+		"opponentId": opponent_id,
+		"winnerId": player_id if player_won else opponent_id,
+		"loserId": opponent_id if player_won else player_id,
+		"rankingChange": ranking_change,
+		"rating_delta": ranking_change,
+		"rewards": normalized_rewards,
+		"opp": opp,
+		"is_free": bool(data.get("is_free", pending_is_free)),
+		"nova_spent": int(data.get("nova_spent", 0)),
+		"progression": data.get("progression", {}) if typeof(data.get("progression", {})) == TYPE_DICTIONARY else {},
+		"data": data,
+	}
+	return result
 
 
 func skip_cooldown() -> Dictionary:

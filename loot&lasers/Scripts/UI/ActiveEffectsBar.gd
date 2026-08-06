@@ -24,6 +24,8 @@ const STAT_ICONS := {
 
 ## When true (Hero loadout rail), show STIMS / MOUNTS section labels + compact timers.
 var side_sections := false
+## When true (operative console): tiny colored bubbles beside the portrait — no rail growth.
+var console_bubbles := false
 var _stamp := ""
 var _removing := false
 
@@ -36,7 +38,7 @@ static func make(character: Dictionary = {}) -> ActiveEffectsBar:
 
 
 func _ready() -> void:
-	add_theme_constant_override("separation", 6)
+	add_theme_constant_override("separation", 3 if console_bubbles else 6)
 	if get_child_count() == 0:
 		refresh()
 	var tick := Timer.new()
@@ -67,6 +69,17 @@ func refresh(character: Dictionary = {}) -> void:
 		if child is Timer:
 			continue
 		child.queue_free()
+	if console_bubbles:
+		visible = not buffs.is_empty() or not mounts.is_empty()
+		if not visible:
+			return
+		for b in buffs:
+			if typeof(b) == TYPE_DICTIONARY:
+				add_child(_buff_bubble(b))
+		for m in mounts:
+			if typeof(m) == TYPE_DICTIONARY:
+				add_child(_mount_bubble(m))
+		return
 	if not side_sections:
 		visible = not buffs.is_empty() or not mounts.is_empty()
 		if not visible:
@@ -112,6 +125,7 @@ func _make_stamp(buffs: Array, mounts: Array) -> String:
 			continue
 		parts.append("m:%s:%s:%s" % [m.get("name", ""), m.get("speed", ""), m.get("expires_at", "")])
 	parts.append("side=%s" % side_sections)
+	parts.append("bubble=%s" % console_bubbles)
 	return "|".join(parts)
 
 
@@ -129,8 +143,11 @@ func _refresh_timers_only(buffs: Array, mounts: Array) -> void:
 		if lab == null or not is_instance_valid(lab):
 			continue
 		var remain := format_remaining(str(b.get("expires_at", "")))
+		var bubble := bool(lab.get_meta("effect_bubble", false))
 		var compact := bool(lab.get_meta("effect_compact", false))
-		if compact:
+		if bubble:
+			lab.text = format_remaining_compact(str(b.get("expires_at", "")))
+		elif compact:
 			var pct := int(lab.get_meta("effect_pct", 0))
 			lab.text = "+%s%% · %s" % [pct, format_remaining_compact(str(b.get("expires_at", "")))]
 		else:
@@ -151,8 +168,11 @@ func _refresh_timers_only(buffs: Array, mounts: Array) -> void:
 		if lab2 == null or not is_instance_valid(lab2):
 			continue
 		var remain2 := format_remaining(str(m.get("expires_at", "")))
+		var bubble2 := bool(lab2.get_meta("effect_bubble", false))
 		var compact2 := bool(lab2.get_meta("effect_compact", false))
-		if compact2:
+		if bubble2:
+			lab2.text = format_remaining_compact(str(m.get("expires_at", "")))
+		elif compact2:
 			var spd := int(lab2.get_meta("effect_pct", 0))
 			lab2.text = "−%s%% · %s" % [spd, format_remaining_compact(str(m.get("expires_at", "")))]
 		else:
@@ -222,6 +242,91 @@ static func format_remaining_compact(expires_at: String) -> String:
 	if h > 0:
 		return "%d:%02d:%02d" % [h, m, s]
 	return "%02d:%02d" % [m, s]
+
+
+## Operative-console bubble: colored pill by the portrait (+% / timer only).
+func _buff_bubble(buff: Dictionary) -> PanelContainer:
+	var stat := str(buff.get("stat", "all"))
+	var color: Color = STAT_COLORS.get(stat, STAT_COLORS["all"])
+	var pct := int(round(float(buff.get("mult", 0)) * 100.0))
+	var remain_full := format_remaining(str(buff.get("expires_at", "")))
+	var remain := format_remaining_compact(str(buff.get("expires_at", "")))
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.add_theme_stylebox_override("panel", _bubble_style(Color(color, 0.22), Color(color, 0.85)))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 0)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(col)
+	var pct_lab := Label.new()
+	pct_lab.text = "+%s%%" % pct
+	pct_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pct_lab.add_theme_font_size_override("font_size", 10)
+	pct_lab.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(pct_lab)
+	col.add_child(pct_lab)
+	var timer := Label.new()
+	timer.set_meta("effect_timer", true)
+	timer.set_meta("effect_bubble", true)
+	timer.text = remain
+	timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	timer.add_theme_font_size_override("font_size", 9)
+	timer.add_theme_color_override("font_color", Color(color, 0.92))
+	ClientUi.apply_display_font(timer)
+	col.add_child(timer)
+	var icon_stat := str(STAT_ICONS.get(stat, "✦"))
+	var label := "ALL" if stat == "all" else "%s %s" % [icon_stat, stat]
+	panel.tooltip_text = "%s · +%s%% %s · expires in %s\nRight-click to remove" % [
+		str(buff.get("name", "Stim")), pct, label, remain_full,
+	]
+	panel.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+			_request_remove_stim(buff)
+	)
+	return panel
+
+
+func _bubble_style(bg: Color, border: Color) -> StyleBoxFlat:
+	var style := ClientUi.painted_panel_style(bg, border, 10, 1).duplicate() as StyleBoxFlat
+	style.content_margin_left = 5
+	style.content_margin_right = 5
+	style.content_margin_top = 3
+	style.content_margin_bottom = 3
+	return style
+
+
+func _mount_bubble(mount: Dictionary) -> PanelContainer:
+	var color := Color("#FBBF24")
+	var spd := int(round(float(mount.get("speed", 0)) * 100.0))
+	var remain_full := format_remaining(str(mount.get("expires_at", "")))
+	var remain := format_remaining_compact(str(mount.get("expires_at", "")))
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.add_theme_stylebox_override("panel", _bubble_style(Color(color, 0.18), Color(color, 0.75)))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 0)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(col)
+	var pct_lab := Label.new()
+	pct_lab.text = "−%s%%" % spd
+	pct_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pct_lab.add_theme_font_size_override("font_size", 10)
+	pct_lab.add_theme_color_override("font_color", Color("#FDE68A"))
+	ClientUi.apply_display_font(pct_lab)
+	col.add_child(pct_lab)
+	var timer := Label.new()
+	timer.set_meta("effect_timer", true)
+	timer.set_meta("effect_bubble", true)
+	timer.text = remain
+	timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	timer.add_theme_font_size_override("font_size", 9)
+	timer.add_theme_color_override("font_color", Color("#FBBF24", 0.9))
+	ClientUi.apply_display_font(timer)
+	col.add_child(timer)
+	panel.tooltip_text = "%s · −%s%% mission time · expires in %s" % [
+		str(mount.get("name", "Mount")), spd, remain_full,
+	]
+	return panel
 
 
 ## Compact Hero-rail chip: "+15% · 04:32" (+ remove). Full detail in tooltip.

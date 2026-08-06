@@ -117,6 +117,11 @@ import {
   RewardErrors,
 } from "../rewards/index.js";
 import {
+  buildDailyLoginRewardState,
+  CYCLE_THEMES as DAILY_CYCLE_THEMES,
+} from "../shared/dailyLoginService.js";
+import { getBalances } from "../shared/currencyService.js";
+import {
   auditAdminModeration,
   recordCurrencyChange,
   recordItemOwnershipChange,
@@ -124,7 +129,7 @@ import {
   newCorrelationId,
 } from "../audit/index.js";
 
-const CYCLE_THEMES = ["Stardust Voyage", "Nebula Reckoning", "Void Ascension", "Quasar Dawn"];
+const CYCLE_THEMES = DAILY_CYCLE_THEMES;
 
 /**
  * Resolve the account-global selected Character via shared gameplay context.
@@ -136,6 +141,24 @@ function myCharacter(user) {
 
 function svc(user) {
   return createService(user);
+}
+
+export async function GetDailyLoginStatus(user, _body = {}) {
+  const character = await myCharacter(user);
+  if (!character) return { status: 404, body: { error: "No character", success: false } };
+  const existing = entities.DailyLogin.filter({ character_id: character.id });
+  const progress = existing[0] || null;
+  const daily_login = buildDailyLoginRewardState(progress);
+  return {
+    status: 200,
+    body: {
+      success: true,
+      daily_login,
+      ...daily_login,
+      character,
+      balances: getBalances(character),
+    },
+  };
 }
 
 export async function ClaimDailyLogin(user, body = {}) {
@@ -150,7 +173,19 @@ export async function ClaimDailyLogin(user, body = {}) {
     const result = await withTransactionAsync(async () => {
       const prior = getClaimByKey(claimKey);
       if (prior?.status === "completed" && prior.deliveredPayload) {
-        return { ...prior.deliveredPayload, idempotentReplay: true };
+        const live = entities.Character.get(character.id) || character;
+        const progList = entities.DailyLogin.filter({ character_id: character.id });
+        const progress = progList[0] || prior.deliveredPayload.progress || null;
+        const daily_login = buildDailyLoginRewardState(progress, { today });
+        return {
+          ...prior.deliveredPayload,
+          idempotentReplay: true,
+          already_claimed: true,
+          daily_login,
+          character: live,
+          balances: getBalances(live),
+          patch: prior.deliveredPayload.applied || prior.deliveredPayload.patch || {},
+        };
       }
 
       const existing = entities.DailyLogin.filter({ character_id: character.id });
@@ -222,15 +257,22 @@ export async function ClaimDailyLogin(user, body = {}) {
             claim,
           });
 
+          const live = entities.Character.get(character.id) || character;
+          const daily_login = buildDailyLoginRewardState(updated, { today });
+
           return {
             success: true,
             claimed_day: day,
             rewards: rewardEntry.rewards,
             applied: delivered.applied,
+            patch: delivered.applied,
             items: delivered.items,
             progress: updated,
+            daily_login,
             wrapped,
             reward_claim_id: claim.id,
+            character: live,
+            balances: getBalances(live),
           };
         },
       });
@@ -240,7 +282,20 @@ export async function ClaimDailyLogin(user, body = {}) {
     return { status: 200, body: result };
   } catch (err) {
     if (err.status === 409) {
-      return { status: 409, body: { error: err.message, progress: err.progress, code: err.code } };
+      const daily_login = buildDailyLoginRewardState(err.progress, { today });
+      const live = entities.Character.get(character.id) || character;
+      return {
+        status: 409,
+        body: {
+          error: err.message,
+          progress: err.progress,
+          code: err.code,
+          daily_login,
+          already_claimed: true,
+          character: live,
+          balances: getBalances(live),
+        },
+      };
     }
     if (err.code) {
       return { status: 400, body: { error: err.message, code: err.code } };
@@ -2295,6 +2350,7 @@ export { ValidateAccountIntegrity, ValidateCharacterIntegrity, assertWritesAllow
 
 export const FUNCTION_HANDLERS = {
   ClaimDailyLogin,
+  GetDailyLoginStatus,
   ClaimMailReward,
   RedeemPromoCode,
   SyncAchievements,

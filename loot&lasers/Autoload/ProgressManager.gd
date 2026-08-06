@@ -87,6 +87,90 @@ func can_claim_daily() -> bool:
 	return last != today_et()
 
 
+## Server-authored daily login calendar + claim eligibility.
+func load_daily_login_status() -> Dictionary:
+	await sync_server_time()
+	var res: Dictionary = await GameApiClient.invoke("GetDailyLoginStatus", {})
+	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+		var data: Dictionary = res.data
+		GameApiClient.apply_authoritative_response(data, "daily_login_status")
+		var dl: Variant = data.get("daily_login", data)
+		if typeof(dl) == TYPE_DICTIONARY:
+			_ingest_daily_login_state(dl)
+			return {"ok": true, "daily_login": dl, "data": data}
+	# Fallback: entity filter + local calendar labels (eligibility still from server progress).
+	await load_daily()
+	var local := build_local_daily_login_state()
+	return {"ok": true, "daily_login": local, "data": {}, "fallback": true}
+
+
+func _ingest_daily_login_state(dl: Dictionary) -> void:
+	var prog: Variant = dl.get("progress", null)
+	if typeof(prog) == TYPE_DICTIONARY and not (prog as Dictionary).is_empty():
+		daily_progress = prog
+		return
+	if dl.has("lastClaimedAt") or dl.has("currentDay"):
+		daily_progress = {
+			"last_claim_date": str(dl.get("lastClaimedAt", daily_progress.get("last_claim_date", ""))),
+			"current_day": int(dl.get("currentDay", daily_progress.get("current_day", 1))),
+			"claimed_days": _claimed_days_from_state(dl),
+			"cycle_theme": str(dl.get("cycleTheme", daily_progress.get("cycle_theme", "Stardust Voyage"))),
+		}
+
+
+func _claimed_days_from_state(dl: Dictionary) -> Array:
+	var out: Array = []
+	var rows: Array = dl.get("rewards", []) if typeof(dl.get("rewards", [])) == TYPE_ARRAY else []
+	for row in rows:
+		if typeof(row) == TYPE_DICTIONARY and str(row.get("status", "")) == "claimed":
+			out.append(int(row.get("day", 0)))
+	if out.is_empty():
+		var raw: Variant = daily_progress.get("claimed_days", [])
+		if typeof(raw) == TYPE_ARRAY:
+			return raw
+	return out
+
+
+## Client-side mirror for UI when GetDailyLoginStatus is unavailable.
+## Does not grant rewards; claimability uses ProgressManager.can_claim_daily().
+func build_local_daily_login_state() -> Dictionary:
+	var current_day := int(daily_progress.get("current_day", 1))
+	if current_day < 1:
+		current_day = 1
+	var last := str(daily_progress.get("last_claim_date", ""))
+	var can_claim := can_claim_daily()
+	var claimed_raw: Variant = daily_progress.get("claimed_days", [])
+	var claimed: Array = claimed_raw if typeof(claimed_raw) == TYPE_ARRAY else []
+	var claimed_set := {}
+	for d in claimed:
+		claimed_set[int(d)] = true
+	var rewards: Array = []
+	for entry in DailyLoginCatalog.ENTRIES:
+		var day := int(entry.day)
+		var status := "locked"
+		if claimed_set.has(day):
+			status = "claimed"
+		elif day == current_day and can_claim:
+			status = "available"
+		rewards.append({
+			"day": day,
+			"status": status,
+			"rewards": entry.rewards,
+			"label": DailyLoginCatalog.reward_label(entry.rewards),
+			"rewardType": "",
+			"rewardAmount": 0,
+		})
+	return {
+		"currentDay": current_day,
+		"lastClaimedAt": last if not last.is_empty() else null,
+		"canClaimToday": can_claim,
+		"streakCount": claimed.size(),
+		"cycleTheme": str(daily_progress.get("cycle_theme", "Stardust Voyage")),
+		"rewards": rewards,
+		"progress": daily_progress,
+	}
+
+
 ## Auto-open at most once per ET day per account (matches web loot_daily_shown_*).
 func should_prompt_daily() -> bool:
 	await sync_server_time()
@@ -125,6 +209,11 @@ func claim_daily() -> Dictionary:
 	# 409 Already claimed — treat as success so the client locks the day.
 	if not res.ok and int(res.get("status", 0)) == 409:
 		_apply_progress_from_payload(res.get("data", {}))
+		_apply_character(res)
+		if typeof(res.get("data", null)) == TYPE_DICTIONARY:
+			var dl409: Variant = res.data.get("daily_login", null)
+			if typeof(dl409) == TYPE_DICTIONARY:
+				_ingest_daily_login_state(dl409)
 		await load_daily()
 		if can_claim_daily():
 			_apply_progress_from_payload(res.get("data", {}))
@@ -140,6 +229,10 @@ func claim_daily() -> Dictionary:
 		}
 	_apply_character(res)
 	_apply_progress_from_payload(res.get("data", {}))
+	if res.ok and typeof(res.get("data", null)) == TYPE_DICTIONARY:
+		var dl: Variant = res.data.get("daily_login", null)
+		if typeof(dl) == TYPE_DICTIONARY:
+			_ingest_daily_login_state(dl)
 	await load_daily()
 	# Prefer server row; if filter lags/misses, keep claim payload progress.
 	if res.ok and can_claim_daily():

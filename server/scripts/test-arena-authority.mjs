@@ -199,6 +199,10 @@ await testAsync("Prepare + Finish settles once; ignores client won; cooldown app
     }),
   );
   assert.equal(finish.winner, serverWinner);
+  assert.equal(finish.won, serverWinner === "player");
+  assert.equal(finish.outcome, serverWinner === "player" ? "victory" : "defeat");
+  assert.equal(finish.battle_result.playerWon, serverWinner === "player");
+  assert.equal(finish.rewards.won, serverWinner === "player");
   assert.ok(finish.character.arena_cooldown_at);
   assert.equal(isArenaCooldownActive(finish.character), true);
 
@@ -267,6 +271,237 @@ await testAsync("self-match prevented via offer ownership", async () => {
     assert.notEqual(o.realCharacterId, ch1.id);
   }
   void user;
+});
+
+const {
+  normalizeArenaBattleResult,
+} = await import("../src/shared/arenaBattleResult.js");
+const { createDirectChallenge } = await import("../src/arena/index.js");
+
+test("normalizeArenaBattleResult maps player win to victory", () => {
+  const r = normalizeArenaBattleResult({
+    battleId: "b1",
+    playerId: "p1",
+    opponentId: "o1",
+    winner: "player",
+    rewards: { experience: 10, stardust: 5, arena_rating_delta: 12 },
+  });
+  assert.equal(r.outcome, "victory");
+  assert.equal(r.playerWon, true);
+  assert.equal(r.winnerId, "p1");
+  assert.equal(r.loserId, "o1");
+  assert.equal(r.rankingChange, 12);
+  assert.equal(r.rewards.won, true);
+});
+
+test("normalizeArenaBattleResult maps opponent win to defeat", () => {
+  const r = normalizeArenaBattleResult({
+    battleId: "b2",
+    playerId: "p1",
+    opponentId: "o1",
+    winner: "opponent",
+    rewards: { experience: 0, stardust: 0, arena_rating_delta: -8 },
+  });
+  assert.equal(r.outcome, "defeat");
+  assert.equal(r.playerWon, false);
+  assert.equal(r.winnerId, "o1");
+  assert.equal(r.loserId, "p1");
+});
+
+test("normalizeArenaBattleResult draw/invalid", () => {
+  assert.equal(
+    normalizeArenaBattleResult({ winner: "draw", playerId: "p", opponentId: "o" }).outcome,
+    "draw",
+  );
+  assert.equal(
+    normalizeArenaBattleResult({ invalid: true, playerId: "p", opponentId: "o" }).outcome,
+    "invalid",
+  );
+});
+
+function forcePendingWinner(characterId, winner) {
+  const ch = entities.Character.get(characterId);
+  assert.ok(ch?.arena_pending_combat?.combat_id, "pending combat required");
+  entities.Character.update(characterId, {
+    arena_pending_combat: {
+      ...ch.arena_pending_combat,
+      winner,
+    },
+  });
+}
+
+async function prepareLadder(user, characterId) {
+  // Clear cooldown so repeated tests can prepare.
+  entities.Character.update(characterId, {
+    arena_cooldown_at: null,
+    arena_pending_combat: null,
+  });
+  const offersRes = unwrap(await GetArenaOpponents(user, { force: true }));
+  assert.ok(offersRes.opponents?.length);
+  const offerId = offersRes.opponents[0].offer_id;
+  const prep = unwrap(await PrepareArenaCombat(user, { offer_id: offerId, is_free: true }));
+  assert.ok(prep.combat?.combat_id);
+  return { offerId, combatId: prep.combat.combat_id, prep };
+}
+
+await testAsync("attacker forced win: victory outcome + rewards + ranking agree", async () => {
+  const u = insertUser("u-arena-win", "win@test.local");
+  const ch = makeChar(u.id, {
+    name: "Winner",
+    level: 30,
+    rating: 1000,
+    nova: 100,
+    attempts: 10,
+    stardust: 5000,
+  });
+  const user = { id: u.id, active_character_id: ch.id, role: "user" };
+  const before = entities.Character.get(ch.id);
+  const { offerId, combatId } = await prepareLadder(user, ch.id);
+  forcePendingWinner(ch.id, "player");
+
+  const finish = unwrap(
+    await FinishArenaBattle(user, {
+      combat_id: combatId,
+      offer_id: offerId,
+      won: false, // tamper — ignored
+    }),
+  );
+  assert.equal(finish.winner, "player");
+  assert.equal(finish.won, true);
+  assert.equal(finish.player_won, true);
+  assert.equal(finish.outcome, "victory");
+  assert.equal(finish.battle_result.playerWon, true);
+  assert.equal(finish.battle_result.outcome, "victory");
+  assert.equal(finish.rewards.won, true);
+  assert.ok(finish.rewards.experience > 0, "free win should grant XP");
+  assert.ok(finish.rewards.arena_rating_delta > 0, "win should raise rating");
+  assert.equal(
+    finish.battle_result.rankingChange,
+    finish.rewards.arena_rating_delta,
+  );
+  const after = entities.Character.get(ch.id);
+  assert.equal(after.arena_wins, (before.arena_wins || 0) + 1);
+  assert.equal(after.arena_rating, before.arena_rating + finish.rewards.arena_rating_delta);
+});
+
+await testAsync("attacker forced loss: defeat outcome + no victory rewards", async () => {
+  const u = insertUser("u-arena-loss", "loss@test.local");
+  const ch = makeChar(u.id, {
+    name: "Loser",
+    level: 30,
+    rating: 1100,
+    nova: 100,
+    attempts: 10,
+    stardust: 5000,
+  });
+  const user = { id: u.id, active_character_id: ch.id, role: "user" };
+  const before = entities.Character.get(ch.id);
+  const { offerId, combatId } = await prepareLadder(user, ch.id);
+  forcePendingWinner(ch.id, "opponent");
+
+  const finish = unwrap(
+    await FinishArenaBattle(user, {
+      combat_id: combatId,
+      offer_id: offerId,
+      won: true, // tamper — ignored
+    }),
+  );
+  assert.equal(finish.winner, "opponent");
+  assert.equal(finish.won, false);
+  assert.equal(finish.outcome, "defeat");
+  assert.equal(finish.battle_result.playerWon, false);
+  assert.equal(finish.rewards.won, false);
+  assert.equal(finish.rewards.experience, 0);
+  assert.equal(finish.rewards.stardust, 0);
+  assert.ok(finish.rewards.arena_rating_delta <= 0);
+  const after = entities.Character.get(ch.id);
+  assert.equal(after.arena_losses, (before.arena_losses || 0) + 1);
+  assert.equal(after.arena_wins, before.arena_wins || 0);
+});
+
+await testAsync("duplicate FinishArenaBattle does not grant rewards twice", async () => {
+  const u = insertUser("u-arena-dup", "dup@test.local");
+  const ch = makeChar(u.id, {
+    name: "Dup",
+    level: 30,
+    rating: 1000,
+    nova: 100,
+    attempts: 10,
+    stardust: 5000,
+  });
+  const user = { id: u.id, active_character_id: ch.id, role: "user" };
+  const { offerId, combatId } = await prepareLadder(user, ch.id);
+  forcePendingWinner(ch.id, "player");
+
+  const first = unwrap(await FinishArenaBattle(user, { combat_id: combatId, offer_id: offerId }));
+  assert.equal(first.won, true);
+  const mid = entities.Character.get(ch.id);
+  const rating = mid.arena_rating;
+  const wins = mid.arena_wins;
+  const stardust = mid.stardust;
+  const xp = mid.experience;
+
+  const second = unwrap(await FinishArenaBattle(user, { combat_id: combatId, offer_id: offerId }));
+  assert.equal(second.idempotent_replay, true);
+  assert.equal(second.won, true);
+  assert.equal(second.outcome, "victory");
+  const after = entities.Character.get(ch.id);
+  assert.equal(after.arena_rating, rating);
+  assert.equal(after.arena_wins, wins);
+  assert.equal(after.stardust, stardust);
+  assert.equal(after.experience, xp);
+});
+
+await testAsync("direct challenge win outcome agrees with ranking/rewards", async () => {
+  const ua = insertUser("u-arena-chal-a", "chal-a@test.local");
+  const ub = insertUser("u-arena-chal-b", "chal-b@test.local");
+  const cha = makeChar(ua.id, { name: "Challenger", level: 25, rating: 1000, nova: 200, attempts: 10 });
+  const chb = makeChar(ub.id, { name: "Defender", level: 25, rating: 1000, nova: 50 });
+  const attacker = { id: ua.id, active_character_id: cha.id, role: "user" };
+
+  const createdWin = createDirectChallenge(attacker, {
+    opponentCharacterId: chb.id,
+    idempotencyKey: "chal-win-1",
+  });
+  assert.ok(createdWin.challenge?.challengeId);
+  const winFinish = unwrap(
+    await FinishArenaBattle(attacker, {
+      challenge_id: createdWin.challenge.challengeId,
+      won: true,
+      is_free: true,
+    }),
+  );
+  assert.equal(winFinish.won, true);
+  assert.equal(winFinish.outcome, "victory");
+  assert.equal(winFinish.winner, "player");
+  assert.equal(winFinish.battle_result.playerWon, true);
+  assert.ok((winFinish.rewards?.arena_rating_delta ?? 0) >= 0);
+});
+
+await testAsync("direct challenge loss outcome agrees with ranking/rewards", async () => {
+  const ua = insertUser("u-arena-chal-loss-a", "chal-loss-a@test.local");
+  const ub = insertUser("u-arena-chal-loss-b", "chal-loss-b@test.local");
+  const cha = makeChar(ua.id, { name: "ChallengerL", level: 25, rating: 1000, nova: 200, attempts: 10 });
+  const chb = makeChar(ub.id, { name: "DefenderL", level: 25, rating: 1200, nova: 50 });
+  const attacker = { id: ua.id, active_character_id: cha.id, role: "user" };
+
+  const createdLoss = createDirectChallenge(attacker, {
+    opponentCharacterId: chb.id,
+    idempotencyKey: "chal-loss-1",
+  });
+  const lossFinish = unwrap(
+    await FinishArenaBattle(attacker, {
+      challenge_id: createdLoss.challenge.challengeId,
+      won: false,
+      is_free: true,
+    }),
+  );
+  assert.equal(lossFinish.won, false);
+  assert.equal(lossFinish.outcome, "defeat");
+  assert.equal(lossFinish.winner, "opponent");
+  assert.equal(lossFinish.battle_result.playerWon, false);
+  assert.equal(lossFinish.rewards.experience, 0);
+  assert.equal(lossFinish.rewards.stardust, 0);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

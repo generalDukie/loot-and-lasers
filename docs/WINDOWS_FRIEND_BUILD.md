@@ -36,11 +36,14 @@ From the repository root:
 
 The script:
 
-1. validates the user-scoped staging client key;
-2. writes a temporary, gitignored release configuration;
-3. exports the `Windows Staging` Godot preset;
-4. deletes the temporary configuration in a `finally` block;
-5. compiles `dist\LootAndLasers-Setup-0.1.9.exe`.
+1. validates the staging client key from `nakama_secrets.cfg` (preferred) or `NAKAMA_SOCKET_SERVER_KEY`;
+2. writes a temporary, gitignored `Config/release_client.cfg`;
+3. exports the `Windows Staging` Godot preset (custom feature `staging_client`);
+4. **verifies** the exported exe embeds that exact key (fails the build on mismatch/missing bake);
+5. deletes the temporary configuration in a `finally` block;
+6. compiles `dist\LootAndLasers-Setup-0.1.9.exe`.
+
+Friend builds read **only** the baked `release_client.cfg` key — they ignore machine env vars. If login shows “Server key invalid” / “Staging server key invalid”, the installed build was baked with a key that does not match Hetzner; rebuild after syncing `nakama_secrets.cfg` to `/opt/lootandlasers/.env` `NAKAMA_SOCKET_SERVER_KEY`, then reinstall.
 
 To use non-default tool locations:
 

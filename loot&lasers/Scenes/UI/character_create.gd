@@ -11,6 +11,7 @@ const STAT_LABELS := {
 	"luck": "Luck",
 }
 const NAME_NO_DIGITS_MSG := "Names cannot contain numbers"
+const NAME_NO_SPACES_MSG := "Names cannot contain spaces"
 
 var _step := 0
 var _busy := false
@@ -30,7 +31,7 @@ var _eyebrows := ""
 var _marking := ""
 
 var _name: LineEdit
-var _name_status := "idle" # idle | checking | available | taken | too_short | has_digits
+var _name_status := "idle" # idle | checking | available | taken | too_short | has_digits | has_spaces
 var _name_check_token := 0
 var _name_hint: Label
 var _name_icon: Label
@@ -350,16 +351,14 @@ func _make_race_card(race_name: String) -> Button:
 	copy.add_child(bonuses)
 	var bonus_map: Dictionary = info.get("bonuses", {})
 	for stat in bonus_map.keys():
-		var chip := Label.new()
-		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		chip.text = "%s +%s%% %s" % [
-			str(GameData.STAT_ICONS.get(stat, "")),
-			str(int(round(float(bonus_map[stat]) * 100.0))),
+		var chip := StatIcon.make_labeled(
 			str(stat),
-		]
-		chip.add_theme_font_size_override("font_size", 12)
-		chip.add_theme_color_override("font_color", ClientUi.CYAN)
-		ClientUi.apply_body_font(chip)
+			"+%s%% %s" % [str(int(round(float(bonus_map[stat]) * 100.0))), str(stat)],
+			12.0,
+			12,
+			ClientUi.CYAN,
+			4
+		)
 		bonuses.add_child(chip)
 
 	btn.set_meta("accent", accent)
@@ -470,12 +469,7 @@ func _make_class_card(cls_name: String) -> Button:
 	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chips.add_theme_constant_override("separation", 4)
 	copy.add_child(chips)
-	var pri := Label.new()
-	pri.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pri.text = "%s %s" % [str(GameData.STAT_ICONS.get(primary, "")), primary]
-	pri.add_theme_font_size_override("font_size", 12)
-	pri.add_theme_color_override("font_color", ClientUi.VIOLET)
-	ClientUi.apply_body_font(pri)
+	var pri := StatIcon.make_labeled(primary, primary, 12.0, 12, ClientUi.VIOLET, 4)
 	chips.add_child(pri)
 	var special: Dictionary = info.get("special", {})
 	if not special.is_empty():
@@ -577,7 +571,7 @@ func _build_looks_page() -> Control:
 	ClientUi.apply_body_font(_name_hint)
 	form_col.add_child(_name_hint)
 	var letters_only := Label.new()
-	letters_only.text = "Letters only — no numbers."
+	letters_only.text = "Letters only — no numbers or spaces."
 	letters_only.add_theme_font_size_override("font_size", 13)
 	letters_only.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.75))
 	ClientUi.apply_body_font(letters_only)
@@ -744,6 +738,13 @@ func _legacy_required() -> bool:
 func _has_digits(text: String) -> bool:
 	for ch in text:
 		if ch >= "0" and ch <= "9":
+			return true
+	return false
+
+
+func _has_whitespace(text: String) -> bool:
+	for ch in text:
+		if ch == " " or ch == "\t" or ch == "\n" or ch == "\r":
 			return true
 	return false
 
@@ -1207,9 +1208,7 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool) -> void:
 		var inner := HBoxContainer.new()
 		inner.add_theme_constant_override("separation", 6)
 		row.add_child(inner)
-		var icon := Label.new()
-		icon.text = str(GameData.STAT_ICONS.get(stat, ""))
-		icon.add_theme_font_size_override("font_size", 15)
+		var icon := StatIcon.make(stat, 16.0)
 		inner.add_child(icon)
 		var nm := Label.new()
 		var suffix := ""
@@ -1447,6 +1446,8 @@ func _refresh_nav_gates() -> void:
 			_next_hint.text = "Need a name"
 		elif _name_status == "has_digits":
 			_next_hint.text = NAME_NO_DIGITS_MSG
+		elif _name_status == "has_spaces":
+			_next_hint.text = NAME_NO_SPACES_MSG
 		elif _name_status == "too_short":
 			_next_hint.text = "Need at least 2 characters"
 		elif _name_status == "checking":
@@ -1492,6 +1493,10 @@ func _schedule_name_check() -> void:
 			_name_status = "has_digits"
 			_update_name_status_ui()
 			return
+	if _has_whitespace(trimmed):
+		_name_status = "has_spaces"
+		_update_name_status_ui()
+		return
 	if trimmed.length() < 2:
 		_name_status = "too_short"
 		_update_name_status_ui()
@@ -1530,6 +1535,8 @@ func _name_status_message() -> String:
 			return "At least 2 characters."
 		"has_digits":
 			return NAME_NO_DIGITS_MSG
+		"has_spaces":
+			return NAME_NO_SPACES_MSG
 		_:
 			return "Need a name."
 
@@ -1550,6 +1557,11 @@ func _update_name_status_ui() -> void:
 			_name_icon.add_theme_color_override("font_color", ClientUi.DANGER)
 		"has_digits":
 			_name_hint.text = NAME_NO_DIGITS_MSG
+			_name_hint.add_theme_color_override("font_color", ClientUi.DANGER)
+			_name_icon.text = "✕"
+			_name_icon.add_theme_color_override("font_color", ClientUi.DANGER)
+		"has_spaces":
+			_name_hint.text = NAME_NO_SPACES_MSG
 			_name_hint.add_theme_color_override("font_color", ClientUi.DANGER)
 			_name_icon.text = "✕"
 			_name_icon.add_theme_color_override("font_color", ClientUi.DANGER)
@@ -1601,6 +1613,11 @@ func _on_create() -> void:
 			_status.text = NAME_NO_DIGITS_MSG
 			_set_step(2)
 			return
+	if _has_whitespace(char_name):
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = NAME_NO_SPACES_MSG
+		_set_step(2)
+		return
 	if _name_status != "available":
 		await _schedule_name_check()
 		if _name_status != "available":

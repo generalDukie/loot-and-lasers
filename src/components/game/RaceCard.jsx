@@ -1,6 +1,6 @@
 import React from "react";
-import { STAT_ICONS } from "@/lib/gameData";
 import CharacterAvatar, { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/components/game/CharacterAvatar";
+import StatIcon from "@/components/game/StatIcon";
 
 const RACE_ACCENT = {
   Zyrathi: "#FF6B1A",
@@ -61,8 +61,8 @@ export default function RaceCard({ race, selected, onClick }) {
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{race.tagline}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             {Object.entries(race.bonuses).map(([stat, val]) => (
-              <span key={stat} className="text-xs bg-muted/50 px-2 py-0.5 rounded-full text-primary">
-                {STAT_ICONS[stat]} +{Math.round(val * 100)}% {stat}
+              <span key={stat} className="text-xs bg-muted/50 px-2 py-0.5 rounded-full text-primary inline-flex items-center gap-1">
+                <StatIcon stat={stat} className="w-3 h-3" /> +{Math.round(val * 100)}% {stat}
               </span>
             ))}
           </div>

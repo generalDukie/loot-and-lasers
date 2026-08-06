@@ -88,8 +88,8 @@ func format_balance(currency_id: String) -> String:
 		var rounded := snappedf(float(value), 0.01)
 		return str(int(rounded)) if is_equal_approx(rounded, float(int(rounded))) else "%.2f" % rounded
 	if currency_id == CURRENCY_NOVA:
-		# Display floors to the nearest 0.5 (half-crystal precision).
-		var half := floorf(maxf(0.0, value) * 2.0) / 2.0
+		# Wallet always shows display Nova snapped to the nearest 0.5.
+		var half := _snap_nova_display(value)
 		if is_equal_approx(half, float(int(half))):
 			return str(int(half))
 		return "%.1f" % half
@@ -264,6 +264,11 @@ func apply_realtime_wallet(payload: Dictionary) -> bool:
 
 ## Apply a complete normalized wallet returned by a trusted Node action or the
 ## trusted Nakama→Node bridge. Partial balance payloads are rejected.
+##
+## `balances.nova_crystals` from Node getBalances() is always **display** Nova
+## (already converted from half-units). Never write that into Character storage
+## without converting back when economy_nova_scale == 2 — that caused the UI to
+## show ~half the true wallet after spends.
 func apply_authoritative_wallet(payload: Dictionary, source: String = SOURCE_CHARACTER) -> bool:
 	var character_id := str(payload.get("character_id", "")).strip_edges()
 	var selected_id := str(GameManager.active_character.get("id", "")).strip_edges()
@@ -277,15 +282,15 @@ func apply_authoritative_wallet(payload: Dictionary, source: String = SOURCE_CHA
 	for currency_id in CURRENCY_IDS:
 		if not bal.has(currency_id):
 			return false
-		character[currency_id] = _normalize_balance(
-			currency_id,
-			bal.get(currency_id, 0)
-		)
+		if currency_id == CURRENCY_NOVA:
+			_apply_nova_display_to_character(character, float(bal.get(currency_id, 0)))
+		else:
+			character[currency_id] = _normalize_balance(currency_id, bal.get(currency_id, 0))
 	# Authoritative display balances already (getBalances) — prefer split fields.
 	if bal.has("nova_wagerable"):
-		character["nova_wagerable"] = float(bal.get("nova_wagerable", 0))
+		character["nova_wagerable"] = _snap_nova_display(float(bal.get("nova_wagerable", 0)))
 	if bal.has("nova_promotional"):
-		character["nova_promotional"] = float(bal.get("nova_promotional", 0))
+		character["nova_promotional"] = _snap_nova_display(float(bal.get("nova_promotional", 0)))
 	var transaction_id := str(payload.get("transaction_id", ""))
 	var server_revision := int(payload.get("revision", 0))
 	if server_revision > 0 and server_revision < _last_server_revision:
@@ -297,14 +302,20 @@ func apply_authoritative_wallet(payload: Dictionary, source: String = SOURCE_CHA
 			wallet["server_revision"] = _last_server_revision
 		for currency_id in CURRENCY_IDS:
 			GameManager.active_character[currency_id] = character[currency_id]
+		if character.has("nova_display"):
+			GameManager.active_character["nova_display"] = character["nova_display"]
+		if character.has("nova_wagerable"):
+			GameManager.active_character["nova_wagerable"] = character["nova_wagerable"]
+		if character.has("nova_promotional"):
+			GameManager.active_character["nova_promotional"] = character["nova_promotional"]
 	return applied
 
 
 func _read_nova_split(character: Dictionary, display_key: String, half_key: String) -> float:
 	if character.has(display_key):
-		return maxf(0.0, snappedf(float(character.get(display_key, 0)), 0.5))
+		return _snap_nova_display(float(character.get(display_key, 0)))
 	if character.has(half_key):
-		return maxf(0.0, floorf(float(character.get(half_key, 0))) / 2.0)
+		return _snap_nova_display(float(character.get(half_key, 0)) / 2.0)
 	# Prefer previous wallet value over treating total as wagerable.
 	return float(wallet.get(display_key, 0.0))
 
@@ -317,24 +328,42 @@ func _empty_balances() -> Dictionary:
 	}
 
 
+func _snap_nova_display(value: float) -> float:
+	return maxf(0.0, snappedf(value, 0.5))
+
+
+## Write display Nova onto a Character dict without poisoning half-unit storage.
+func _apply_nova_display_to_character(character: Dictionary, display_raw: float) -> void:
+	var display := _snap_nova_display(display_raw)
+	character["nova_display"] = display
+	if int(character.get("economy_nova_scale", 1)) == 2:
+		character[CURRENCY_NOVA] = int(round(display * 2.0))
+	else:
+		character[CURRENCY_NOVA] = display
+
+
 func _normalize_balance(currency_id: String, value: Variant) -> Variant:
 	if currency_id == CURRENCY_FUEL:
 		return maxf(0.0, snappedf(float(value), 0.01))
 	if currency_id == CURRENCY_NOVA:
-		# Display Nova may be .0 or .5 (server half-units serialized as display).
-		return maxf(0.0, floorf(float(value) * 2.0) / 2.0)
+		return _snap_nova_display(float(value))
 	return maxi(0, int(value))
 
 
-## Convert Character.nova_crystals half-units → display when economy_nova_scale == 2.
+## Resolve Character Nova → wallet display units (nearest 0.5).
+## Prefer explicit display fields from economy responses; only divide when the
+## Character row is still in half-unit storage (economy_nova_scale == 2).
 func _nova_display_from_character(character: Dictionary) -> float:
+	if character.has("nova_display"):
+		return _snap_nova_display(float(character.get("nova_display", 0)))
+	if character.has("nova_wagerable") and character.has("nova_promotional"):
+		return _snap_nova_display(
+			float(character.get("nova_wagerable", 0)) + float(character.get("nova_promotional", 0))
+		)
 	var raw := float(character.get(CURRENCY_NOVA, 0))
 	if int(character.get("economy_nova_scale", 1)) == 2:
-		return maxf(0.0, floorf(raw) / 2.0)
-	# Prefer explicit display field from economy responses.
-	if character.has("nova_display"):
-		return maxf(0.0, floorf(float(character.get("nova_display", 0)) * 2.0) / 2.0)
-	return maxf(0.0, floorf(raw * 2.0) / 2.0)
+		return _snap_nova_display(raw / 2.0)
+	return _snap_nova_display(raw)
 
 
 func _set_loading(value: bool) -> void:

@@ -28,10 +28,8 @@ const {
   buildCooldownPatch,
   serializeDungeonState,
   pendingCombatMatches,
-  DUNGEON_CONTINUE_COST,
-  DUNGEON_DEATHS_PER_DAY,
 } = await import("../src/shared/dungeonService.js");
-const { todayET } = await import("../src/shared/economyFormulas.js");
+const { todayET, DUNGEON_BATTLE_COOLDOWN_MS } = await import("../src/shared/economyFormulas.js");
 const { commitDungeonPendingCombat } = await import("../src/shared/combatService.js");
 
 let passed = 0;
@@ -85,7 +83,7 @@ const ch = entities.Character.create({
   experience_to_next_level: 100,
   stardust: 5000,
   total_stardust_earned: 5000,
-  nova_crystals: 200, // half-units (100 display) — enough for continue + skip
+  nova_crystals: 200, // half-units (100 display) — enough for skip tests
   economy_nova_scale: 2,
   fuel: 50,
   max_fuel: 100,
@@ -286,37 +284,30 @@ await testAsync("SkipDungeonCooldown rejects when idle", async () => {
   assert.equal(res.body.code, "DUNGEON_NO_COOLDOWN");
 });
 
-await testAsync("continue credit required after daily deaths exhausted", async () => {
-  const today = todayET();
+await testAsync("death quotas no longer gate Prepare; PayDungeonContinue is deprecated stub", async () => {
   entities.Character.update(ch.id, {
-    dungeon_deaths: DUNGEON_DEATHS_PER_DAY,
-    dungeon_deaths_date: today,
+    dungeon_deaths: 99,
+    dungeon_deaths_date: todayET(),
     dungeon_continue_credit: false,
     dungeon_cooldown_until: null,
     dungeon_cooldown_at: null,
     dungeon_cooldown_ms: null,
+    dungeon_pending_combat: null,
   });
   const cur = entities.Character.get(ch.id);
-  const blocked = await PrepareDungeonCombat(user, {
-    planet_id: cur.dungeon_planet,
-    enemy_index: cur.dungeon_enemy,
-    patrol: false,
-  });
-  assert.equal(blocked.status, 402);
-  assert.equal(blocked.body.code, "DUNGEON_CONTINUE_REQUIRED");
-
-  const pay = await PayDungeonContinue(user, {});
-  assert.equal(pay.status, 200);
-  assert.equal(pay.body.cost, DUNGEON_CONTINUE_COST);
-  assert.equal(entities.Character.get(ch.id).dungeon_continue_credit, true);
-
   const prep = await PrepareDungeonCombat(user, {
     planet_id: cur.dungeon_planet,
     enemy_index: cur.dungeon_enemy,
     patrol: false,
   });
   assert.equal(prep.status, 200, prep.body?.error);
-  assert.equal(entities.Character.get(ch.id).dungeon_continue_credit, false);
+  assert.ok(prep.body.dungeon?.dungeon_cooldown_until);
+  assert.equal(prep.body.dungeon?.dungeon_cooldown_ms ?? DUNGEON_BATTLE_COOLDOWN_MS, DUNGEON_BATTLE_COOLDOWN_MS);
+
+  const pay = await PayDungeonContinue(user, {});
+  assert.equal(pay.status, 200);
+  assert.equal(pay.body.cost, 0);
+  assert.equal(pay.body.deprecated, true);
 });
 
 await testAsync("GetDungeonStatus restores cooldown/progress after reconnect", async () => {
@@ -348,7 +339,7 @@ await testAsync("pendingCombatMatches requires combat_id alignment", async () =>
 });
 
 await testAsync("forced pending settle grants inventory via grantItemOrPending path", async () => {
-  // Clear prior pending from continue test; inject a winning combat with no gear complexity —
+  // Clear prior pending from prepare; inject a winning combat with no gear complexity —
   // Finish still runs grant path when won && !patrol.
   freeze(2_200_000_000_000);
   const cur = entities.Character.get(ch.id);

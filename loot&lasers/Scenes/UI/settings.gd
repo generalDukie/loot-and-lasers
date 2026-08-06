@@ -516,8 +516,12 @@ func _on_promo() -> void:
 func _on_rename() -> void:
 	if _busy:
 		return
+	var new_name := _rename.text.strip_edges()
+	if new_name.find(" ") >= 0 or new_name.find("\t") >= 0:
+		_status.text = "Names cannot contain spaces"
+		return
 	_busy = true
-	var res: Dictionary = await AccountManager.rename_character(_rename.text, true)
+	var res: Dictionary = await AccountManager.rename_character(new_name, true)
 	_busy = false
 	_status.text = "Renamed to %s" % GameManager.active_character.get("name", "?") if res.ok else str(res.get("error", "Rename failed"))
 

@@ -97,8 +97,10 @@ const CLASS_TYPE_BASE := {
 	"intellect": {"strength": 6, "agility": 8, "intellect": 15, "vitality": 13, "luck": 8},
 }
 
+## Attribute badges are TextureRects via StatIcon — not emoji strings.
+## Kept empty so any leftover string concat stays blank rather than showing stale glyphs.
 const STAT_ICONS := {
-	"strength": "⚔", "agility": "💨", "intellect": "🧠", "vitality": "❤", "luck": "🍀",
+	"strength": "", "agility": "", "intellect": "", "vitality": "", "luck": "",
 }
 
 const STAT_COLORS := {

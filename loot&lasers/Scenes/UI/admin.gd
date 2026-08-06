@@ -552,9 +552,13 @@ func _build_players() -> void:
 		if _cid().is_empty() or _rename_field.text.strip_edges().is_empty():
 			_status.text = "character_id and new name are required."
 			return
-		_confirm("Rename character?", "%s → %s" % [_cid(), _rename_field.text.strip_edges()], func() -> void:
+		var new_name := _rename_field.text.strip_edges()
+		if new_name.find(" ") >= 0 or new_name.find("\t") >= 0:
+			_status.text = "Names cannot contain spaces"
+			return
+		_confirm("Rename character?", "%s → %s" % [_cid(), new_name], func() -> void:
 			_run("Renaming…", func() -> Dictionary:
-				return await AdminManager.rename_character(_cid(), _rename_field.text.strip_edges())
+				return await AdminManager.rename_character(_cid(), new_name)
 			)
 		)
 	)

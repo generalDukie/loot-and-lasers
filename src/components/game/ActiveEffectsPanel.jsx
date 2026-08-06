@@ -2,8 +2,9 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FlaskConical, Rocket, X, Zap } from "lucide-react";
 import { api } from "@/api/gameClient";
-import { getActiveBuffs, STAT_ICONS, getStatColor } from "@/lib/gameData";
+import { getActiveBuffs, getStatColor } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
+import StatIcon from "@/components/game/StatIcon";
 import { useToast } from "@/components/ui/use-toast";
 import {
   AlertDialog,
@@ -84,7 +85,11 @@ export default function ActiveEffectsPanel({ character, onUpdate, embedded = fal
       {buffs.map((b, i) => {
         const key = `buff-${b.name}-${i}`;
         const rarityLabel = b.rarity ? String(b.rarity).charAt(0).toUpperCase() + String(b.rarity).slice(1) : null;
-        const statLabel = b.stat === "all" ? "ALL" : (STAT_ICONS[b.stat] + " " + b.stat);
+        const statLabel = b.stat === "all" ? "ALL" : (
+          <span className="inline-flex items-center gap-0.5">
+            <StatIcon stat={b.stat} className="w-3 h-3" /> {b.stat}
+          </span>
+        );
         return (
           <BuffRow
             key={key}

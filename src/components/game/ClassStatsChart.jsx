@@ -1,5 +1,6 @@
 import React from "react";
-import { STAT_ICONS, getStatDescription, CLASSES } from "@/lib/gameData";
+import { getStatDescription, CLASSES } from "@/lib/gameData";
+import StatIcon from "@/components/game/StatIcon";
 
 const STAT_LABELS = {
   strength: "Strength",
@@ -54,7 +55,7 @@ export default function ClassStatsChart({ characterClass, stats, raceBonusNote, 
                 title={getStatDescription(stat, characterClass)}
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] leading-none">{STAT_ICONS[stat]}</span>
+                  <StatIcon stat={stat} className="w-3 h-3" />
                   <span className="text-[10px] font-display font-semibold tracking-wide flex-1 truncate" style={{ color: colors.text }}>
                     {STAT_LABELS[stat]}
                     {isPrimary && <span className="ml-1 text-[8px] uppercase tracking-wider opacity-80">Pri</span>}
@@ -104,7 +105,7 @@ export default function ClassStatsChart({ characterClass, stats, raceBonusNote, 
             }}
           >
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm leading-none">{STAT_ICONS[stat]}</span>
+              <StatIcon stat={stat} className="w-4 h-4" />
               <span className="text-xs font-display font-semibold tracking-wide flex-1" style={{ color: colors.text }}>
                 {STAT_LABELS[stat]}
                 {isPrimary && <span className="ml-1.5 text-[9px] uppercase tracking-wider opacity-80">Primary</span>}

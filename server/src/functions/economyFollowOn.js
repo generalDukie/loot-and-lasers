@@ -17,16 +17,12 @@ import {
   assertCooldownClear,
   assertCooldownActive,
   assertDungeonProgressAllowed,
-  assertContinueCredit,
-  consumeContinueCreditPatch,
   buildCooldownPatch,
   clearCooldownPatch,
   pendingCombatMatches,
   serializeDungeonState,
-  deathsToday,
-  DUNGEON_CONTINUE_COST,
+  cooldownRemainingMs,
   DUNGEON_SKIP_COST,
-  DUNGEON_DEATHS_PER_DAY,
 } from "../shared/dungeonService.js";
 import {
   debitNova,
@@ -110,7 +106,7 @@ import {
   GUILD_WAR_SIM_COST,
   dismissActiveBuff,
 } from "../shared/economyFormulas.js";
-import { assertNameHasNoDigits } from "../shared/nameRules.js";
+import { assertNameHasNoDigits, assertNameHasNoSpaces } from "../shared/nameRules.js";
 import {
   grantEntitlement,
   resolveCharacterSlotCapacity,
@@ -193,6 +189,7 @@ import {
   LEADERBOARD_DEFINITIONS,
 } from "../shared/statisticsService.js";
 import { secureRandom, secureRandomInt } from "../rewards/rng.js";
+import { isAdmin } from "../entityAccess.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -1055,14 +1052,13 @@ export const SyncDungeonState = wrap((user) => {
   const today = todayET();
   const nowMs = clock.nowMs();
   const patch = {};
-  if (ch.dungeon_deaths_date !== today) {
-    patch.dungeon_deaths = 0;
-    patch.dungeon_deaths_date = today;
-    patch.dungeon_extra_lives = 0;
-  }
   if ((ch.ship_mods || []).includes("Genesis Core") && (ch.dungeon_planet || 1) <= DUNGEON_STORY_PLANETS) {
     patch.dungeon_planet = DUNGEON_STORY_PLANETS + 1;
     patch.dungeon_enemy = 1;
+  }
+  // Clear obsolete continue credit if still set.
+  if (ch.dungeon_continue_credit) {
+    patch.dungeon_continue_credit = false;
   }
   let character = ch;
   if (Object.keys(patch).length) {
@@ -1130,38 +1126,17 @@ export const PayDungeonContinue = wrap((user, body = {}) => {
   assertDungeonClientSafe(body);
   const ch = requireMyChar(user);
   const today = todayET();
-  if (deathsToday(ch, today) < DUNGEON_DEATHS_PER_DAY) {
-    httpErr(400, "Continue fee not required", "DUNGEON_CONTINUE_NOT_NEEDED");
-  }
-  if (ch.dungeon_continue_credit) {
-    const dungeon = serializeDungeonState(ch, clock.nowMs(), today);
-    return {
-      success: true,
-      cost: 0,
-      already_credited: true,
-      patch: {},
-      dungeon,
-      character: ch,
-      balances: getBalances(ch),
-    };
-  }
-  const mut = debitNova({
-    user,
-    character: ch,
-    amount: DUNGEON_CONTINUE_COST,
-    category: "dungeon_continue",
-    reasonCode: "dungeon_continue",
-    extraPatch: { dungeon_continue_credit: true },
-  });
-  const dungeon = serializeDungeonState(mut.character, clock.nowMs(), today);
+  const dungeon = serializeDungeonState(ch, clock.nowMs(), today);
+  // Death quotas removed — continue fee is never required.
   return {
     success: true,
-    cost: DUNGEON_CONTINUE_COST,
-    patch: mut.patch,
+    cost: 0,
+    already_credited: true,
+    deprecated: true,
+    patch: {},
     dungeon,
-    character: mut.character,
-    balances: mut.balances,
-    transaction: mut.transaction,
+    character: ch,
+    balances: getBalances(ch),
   };
 });
 
@@ -1181,7 +1156,6 @@ export const PrepareDungeonCombat = wrap((user, body) => {
 
   const today = todayET();
   const nowMs = clock.nowMs();
-  assertCooldownClear(ch, nowMs);
 
   const encounter = assertDungeonProgressAllowed(ch, {
     planetId: body.planet_id ?? ch.dungeon_planet ?? 1,
@@ -1196,12 +1170,9 @@ export const PrepareDungeonCombat = wrap((user, body) => {
     enemyIndex: encounter.enemyIndex,
     patrol: encounter.patrol,
   });
+  // New fights require a clear shared cooldown; replaying an unfinished pending combat does not.
   if (!willReplay) {
-    assertContinueCredit(ch, today);
-    const creditPatch = consumeContinueCreditPatch(ch, today);
-    if (Object.keys(creditPatch).length) {
-      ch = entities.Character.update(ch.id, creditPatch);
-    }
+    assertCooldownClear(ch, nowMs);
   }
 
   const prepared = prepareDungeonCombatForCharacter(ch, {
@@ -1211,8 +1182,13 @@ export const PrepareDungeonCombat = wrap((user, body) => {
     viewingWormhole: encounter.viewingWormhole,
     rng: secureRandom,
   });
+  let rawChar = prepared.character || ch;
+  // Impose shared 1h cooldown as soon as the sim decides the outcome (not after replay).
+  // Replays of an existing pending combat do not refresh the timer.
+  if (!prepared.replay && !willReplay) {
+    rawChar = entities.Character.update(rawChar.id, buildCooldownPatch(prepared.combat?.winner === "player", nowMs));
+  }
   const pub = publicCombatResult(prepared.combat);
-  const rawChar = prepared.character || ch;
   const { dungeon_pending_combat: _pending, ...safeCharacter } = rawChar;
   void _pending;
   const dungeon = serializeDungeonState(rawChar, nowMs, today);
@@ -1395,10 +1371,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
     );
     if (weekly) patch.weekly_nova_quests = weekly;
   } else {
-    let deaths = ch.dungeon_deaths || 0;
-    if (ch.dungeon_deaths_date !== today) deaths = 0;
-    patch.dungeon_deaths = Math.min(DUNGEON_DEATHS_PER_DAY, deaths + 1);
-    patch.dungeon_deaths_date = today;
+    // Defeat — no death quota; shared cooldown already set at PrepareDungeonCombat.
   }
 
   const maxHit = maxPlayerHitFromCombat(pending);
@@ -1416,7 +1389,11 @@ export const FinishDungeonBattle = wrap((user, body) => {
     discoveries = rolled.found;
   }
 
-  Object.assign(patch, buildCooldownPatch(won, nowMs));
+  // Cooldown is imposed when the sim completes (PrepareDungeonCombat). Only backfill
+  // if an older pending fight somehow finished without a timer (legacy clients).
+  if (cooldownRemainingMs(ch, nowMs) <= 0) {
+    Object.assign(patch, buildCooldownPatch(won, nowMs));
+  }
 
   const ach = mergeAchievementUnlocks(ch, patch);
   Object.assign(patch, ach.patch);
@@ -1954,11 +1931,17 @@ export const CasinoSessionStart = wrap((user, body = {}) => {
 
   const live0 = entities.Character.get(ch.id) || ch;
   const bal = getBalances(live0);
-  const betCheck = validateNovaWager(body.bet, bal.nova_wagerable);
+  // Non-admins: purchased/wagerable Nova only. Admins may spend any Nova.
+  const adminNovaBypass = isAdmin(user);
+  const betCheck = validateNovaWager(
+    body.bet,
+    adminNovaBypass ? bal.nova_crystals : bal.nova_wagerable,
+    { allowAnyNova: adminNovaBypass },
+  );
   if (!betCheck.ok) httpErr(400, betCheck.reason, betCheck.code || "INVALID_NOVA_WAGER");
   const bet = betCheck.bet;
 
-  // Deduct wager once from WAGERABLE Nova only.
+  // Deduct wager once: wagerable-only for players; any Nova (promo then wagerable) for admins.
   const deb = debitNova({
     user,
     character: live0,
@@ -1966,8 +1949,12 @@ export const CasinoSessionStart = wrap((user, body = {}) => {
     category: "casino_wager",
     reasonCode: "casino_session_start",
     idempotencyKey: `casino_wager_${settleKey}`,
-    balanceType: NovaBalanceTypes.WAGERABLE,
-    debitPolicy: NovaBalanceTypes.WAGERABLE,
+    ...(adminNovaBypass
+      ? { debitPolicy: "any" }
+      : {
+          balanceType: NovaBalanceTypes.WAGERABLE,
+          debitPolicy: NovaBalanceTypes.WAGERABLE,
+        }),
   });
   let character = deb.character;
   const sessionId = `cs_${settleKey}`;
@@ -2615,6 +2602,7 @@ export const RenameCharacter = wrap(async (user, body) => {
   const name = String(body?.name || "").trim();
   if (!name || name.length < 2 || name.length > 24) httpErr(400, "Name must be 2–24 characters");
   assertNameHasNoDigits(name);
+  assertNameHasNoSpaces(name);
   const taken = entities.Character.filter({ name }, null, 5).filter((c) => c.id !== ch.id);
   if (taken.length) httpErr(409, "Name taken");
 

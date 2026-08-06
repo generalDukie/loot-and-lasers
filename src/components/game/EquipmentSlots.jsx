@@ -1,6 +1,7 @@
 import React from "react";
-import { RARITY_COLORS, STAT_ICONS } from "@/lib/gameData";
+import { RARITY_COLORS } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
+import StatIcon from "@/components/game/StatIcon";
 
 const SLOT_CONFIG = [
   { key: "weapon", label: "Weapon", icon: "⚔️" },
@@ -37,8 +38,8 @@ export default function EquipmentSlots({ equippedItems }) {
                 {item.stats && Object.keys(item.stats).length > 0 && (
                   <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 mt-1">
                     {Object.entries(item.stats).filter(([, v]) => v > 0).map(([stat, val]) => (
-                      <span key={stat} className="text-[10px] text-foreground/80">
-                        {STAT_ICONS[stat]}+{val}
+                      <span key={stat} className="text-[10px] text-foreground/80 inline-flex items-center gap-0.5">
+                        <StatIcon stat={stat} className="w-2.5 h-2.5" />+{val}
                       </span>
                     ))}
                   </div>

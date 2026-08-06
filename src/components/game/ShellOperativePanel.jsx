@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
-import { RACES, CLASSES, FUEL_COLOR, STARDUST_COLOR, XP_COLOR, formatFuelAmount } from "@/lib/gameData";
+import { RACES, CLASSES, FUEL_COLOR, STARDUST_COLOR, XP_COLOR, formatFuelAmount, novaDisplayFromCharacter, formatNovaAmount } from "@/lib/gameData";
 import { fullName } from "@/lib/legacyName";
 import { Fuel, Gem } from "lucide-react";
 import StardustIcon from "@/components/game/StardustIcon";
@@ -19,7 +19,7 @@ export default function ShellOperativePanel({ character }) {
     const next = {
       fuel: character.fuel ?? 0,
       stardust: character.stardust || 0,
-      nova: character.nova_crystals || 0,
+      nova: novaDisplayFromCharacter(character),
     };
     const p = prev.current;
     prev.current = next;
@@ -38,7 +38,7 @@ export default function ShellOperativePanel({ character }) {
     setDeltaFlash(flashes);
     const t = setTimeout(() => setDeltaFlash(null), 1400);
     return () => clearTimeout(t);
-  }, [character?.fuel, character?.stardust, character?.nova_crystals, character?.id]);
+  }, [character?.fuel, character?.stardust, character?.nova_crystals, character?.nova_display, character?.economy_nova_scale, character?.id]);
 
   if (!character) {
     return (
@@ -59,7 +59,7 @@ export default function ShellOperativePanel({ character }) {
   const fuelNow = character.fuel ?? 0;
   const fuelLabel = `${formatFuelAmount(fuelNow)}/${fuelMax}`;
   const stardustLabel = (character.stardust || 0).toLocaleString();
-  const novaLabel = (character.nova_crystals || 0).toLocaleString();
+  const novaLabel = formatNovaAmount(novaDisplayFromCharacter(character));
   const currencyFontSize = railCurrencyFontSize(fuelLabel, stardustLabel, novaLabel);
   const flashFor = (key) => (deltaFlash || []).find((f) => f.key === key);
 

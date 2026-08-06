@@ -1,6 +1,7 @@
 import React from "react";
-import { STAT_ICONS, STAT_COLORS } from "@/lib/gameData";
+import { STAT_COLORS } from "@/lib/gameData";
 import ClassEmblem from "@/components/game/ClassEmblem";
+import StatIcon from "@/components/game/StatIcon";
 
 export default function ClassCard({ cls, selected, onClick, compact = false }) {
   const accent = STAT_COLORS[cls.primaryStat] || STAT_COLORS.all;
@@ -29,8 +30,8 @@ export default function ClassCard({ cls, selected, onClick, compact = false }) {
             </div>
             <p className="text-[10px] text-muted-foreground truncate mt-0.5">{cls.tagline}</p>
             <div className="flex flex-wrap gap-1 mt-1">
-              <span className="text-[9px] bg-muted/50 px-1.5 py-px rounded-full text-accent truncate max-w-full">
-                {STAT_ICONS[cls.primaryStat]} {cls.primaryStat}
+              <span className="text-[9px] bg-muted/50 px-1.5 py-px rounded-full text-accent truncate max-w-full inline-flex items-center gap-0.5">
+                <StatIcon stat={cls.primaryStat} className="w-2.5 h-2.5" /> {cls.primaryStat}
               </span>
               {cls.special && (
                 <span className="text-[9px] bg-primary/10 px-1.5 py-px rounded-full text-primary font-medium truncate">
@@ -72,8 +73,8 @@ export default function ClassCard({ cls, selected, onClick, compact = false }) {
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{cls.tagline}</p>
           <div className="flex flex-wrap gap-2 mt-2">
-            <span className="text-xs bg-muted/50 px-2 py-0.5 rounded-full text-accent">
-              {STAT_ICONS[cls.primaryStat]} Primary: {cls.primaryStat}
+            <span className="text-xs bg-muted/50 px-2 py-0.5 rounded-full text-accent inline-flex items-center gap-1">
+              <StatIcon stat={cls.primaryStat} className="w-3 h-3" /> Primary: {cls.primaryStat}
             </span>
             {cls.special && (
               <span className="text-xs bg-primary/10 px-2 py-0.5 rounded-full text-primary font-medium">

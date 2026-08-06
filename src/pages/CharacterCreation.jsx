@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/api/gameClient";
 import { RACES, CLASSES, STAT_COLORS } from "@/lib/gameData";
-import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
+import { stripDigitsFromName, nameHasDigits, nameHasWhitespace, NAME_NO_DIGITS_MSG, NAME_NO_SPACES_MSG } from "@/lib/nameRules";
 import { bustMyCharacterCache } from "@/lib/socialEngine";
 import { needsLegacyNameForCreate, fullName } from "@/lib/legacyName";
 import RaceCard from "@/components/game/RaceCard";
@@ -89,6 +89,7 @@ export default function CharacterCreation() {
     const trimmed = form.name.trim();
     if (step !== 2 || !trimmed) { setNameStatus("idle"); return; }
     if (nameHasDigits(trimmed)) { setNameStatus("has_digits"); return; }
+    if (nameHasWhitespace(trimmed)) { setNameStatus("has_spaces"); return; }
     if (trimmed.length < 2) { setNameStatus("too_short"); return; }
     setNameStatus("checking");
     const t = setTimeout(async () => {
@@ -180,6 +181,12 @@ export default function CharacterCreation() {
         setStep(2);
         return;
       }
+      if (nameHasWhitespace(form.name.trim())) {
+        setError(NAME_NO_SPACES_MSG);
+        setLoading(false);
+        setStep(2);
+        return;
+      }
       // Lock the account surname first — the character must inherit it, and it
       // can never be set again once this operative exists.
       let legacyName = userLegacyName;
@@ -233,11 +240,12 @@ export default function CharacterCreation() {
 
   const canNext = step === 0 ? !!form.race
     : step === 1 ? !!form.class
-    : step === 2 ? form.name.trim().length >= 2 && !nameHasDigits(form.name) && nameStatus === "available"
+    : step === 2 ? form.name.trim().length >= 2 && !nameHasDigits(form.name) && !nameHasWhitespace(form.name.trim()) && nameStatus === "available"
     : true;
 
   const nextHint = step === 2 && form.name.trim()
     ? nameHasDigits(form.name) || nameStatus === "has_digits" ? NAME_NO_DIGITS_MSG
+      : nameHasWhitespace(form.name.trim()) || nameStatus === "has_spaces" ? NAME_NO_SPACES_MSG
       : form.name.trim().length < 2 ? "Need at least 2 characters"
       : nameStatus === "checking" ? "Checking name…"
       : nameStatus === "taken" ? "Name taken"
@@ -507,7 +515,7 @@ export default function CharacterCreation() {
                             placeholder="Something cool. Or stupid. Your call."
                             maxLength={24}
                             className={`w-full bg-muted/50 border rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-1 transition-colors ${
-                              nameStatus === "taken" || nameStatus === "too_short" || nameStatus === "has_digits" ? "border-destructive focus:border-destructive focus:ring-destructive/30"
+                              nameStatus === "taken" || nameStatus === "too_short" || nameStatus === "has_digits" || nameStatus === "has_spaces" ? "border-destructive focus:border-destructive focus:ring-destructive/30"
                               : nameStatus === "available" ? "border-green-500 focus:border-green-500 focus:ring-green-500/30"
                               : "border-border focus:border-primary focus:ring-primary/30"
                             }`}
@@ -518,7 +526,7 @@ export default function CharacterCreation() {
                           {nameStatus === "available" && (
                             <Check className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
                           )}
-                          {(nameStatus === "taken" || nameStatus === "too_short" || nameStatus === "has_digits") && (
+                          {(nameStatus === "taken" || nameStatus === "too_short" || nameStatus === "has_digits" || nameStatus === "has_spaces") && (
                             <X className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-destructive" />
                           )}
                         </div>
@@ -531,7 +539,10 @@ export default function CharacterCreation() {
                         {nameStatus === "has_digits" && (
                           <p className="text-[11px] text-destructive mt-1">{NAME_NO_DIGITS_MSG}</p>
                         )}
-                        <p className="text-[10px] text-muted-foreground/70 mt-1">Letters only — no numbers.</p>
+                        {nameStatus === "has_spaces" && (
+                          <p className="text-[11px] text-destructive mt-1">{NAME_NO_SPACES_MSG}</p>
+                        )}
+                        <p className="text-[10px] text-muted-foreground/70 mt-1">Letters only — no numbers or spaces.</p>
                       </div>
 
                       <div className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-2 border border-border/30">

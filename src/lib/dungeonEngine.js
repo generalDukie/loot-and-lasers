@@ -22,15 +22,19 @@ import {
 } from "@/lib/expectedPlayerAttributes";
 
 export const DUNGEON_ENEMIES_PER_PLANET = 10;
-export const DUNGEON_DEATHS_PER_DAY = 3; // free lives per day (ET rollover)
-export const DUNGEON_CONTINUE_COST = 5; // Nova crystals per fight after free lives are spent
+/** @deprecated Death quotas removed — infinite retries with shared cooldown. */
+export const DUNGEON_DEATHS_PER_DAY = 0;
+/** @deprecated Continue fee removed with death quotas. */
+export const DUNGEON_CONTINUE_COST = 0;
 /** @deprecated use DUNGEON_CONTINUE_COST */
 export const DUNGEON_REVIVE_COST = DUNGEON_CONTINUE_COST;
 export const DUNGEON_EXTRA_LIFE_COST = DUNGEON_CONTINUE_COST;
-/** Fallback / legacy cooldown length */
-export const DUNGEON_BATTLE_COOLDOWN_MS = 30 * 60 * 1000;
-export const DUNGEON_WIN_COOLDOWN_MS = 10 * 60 * 1000; // shorter after a win
-export const DUNGEON_LOSS_COOLDOWN_MS = 25 * 60 * 1000; // longer after a loss
+/** Shared post-sim cooldown for all dungeon / patrol / wormhole fights (1 hour). */
+export const DUNGEON_BATTLE_COOLDOWN_MS = 60 * 60 * 1000;
+/** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
+export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
+/** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
+export const DUNGEON_LOSS_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 export const DUNGEON_SKIP_COST = 25; // Nova crystals to skip the cooldown
 /** Patrol (cleared-world) reward multiplier */
 export const DUNGEON_PATROL_REWARD_MULT = 0.4;
@@ -273,8 +277,8 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
   };
 }
 
-export function dungeonCooldownMs(won) {
-  return won ? DUNGEON_WIN_COOLDOWN_MS : DUNGEON_LOSS_COOLDOWN_MS;
+export function dungeonCooldownMs(_won) {
+  return DUNGEON_BATTLE_COOLDOWN_MS;
 }
 
 /** Milestone chest every N career node clears (story + patrol). */

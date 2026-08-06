@@ -8,7 +8,7 @@ import { db } from "./db.js";
 import { expForLevel } from "./shared/rewards.js";
 import { CLASS_BASE_STATS, FUEL_MAX } from "./shared/economyFormulas.js";
 import { assertCharacterCreateShape } from "./shared/characterSheet.js";
-import { assertNameHasNoDigits, NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
+import { assertNameHasNoDigits, assertNameHasNoSpaces, NAME_NO_DIGITS_MSG, NAME_NO_SPACES_MSG } from "./shared/nameRules.js";
 import { assertCanCreateCharacter, EntitlementError } from "./entitlements/index.js";
 
 export function isAdmin(user) {
@@ -377,6 +377,11 @@ export function sanitizeCreatePayload(user, type, data = {}) {
       err.status = 400;
       throw err;
     }
+    if (/\s/.test(name)) {
+      const err = new Error(NAME_NO_SPACES_MSG);
+      err.status = 400;
+      throw err;
+    }
     out.name = name;
 
     // Surname belongs to the account — a client may never invent a different
@@ -501,6 +506,7 @@ export function sanitizeUpdatePayload(user, type, data = {}) {
     if (type === "Character" && out.name != null) {
       out.name = String(out.name).trim();
       assertNameHasNoDigits(out.name);
+      assertNameHasNoSpaces(out.name);
     }
     return out;
   }
@@ -518,6 +524,7 @@ export function sanitizeUpdatePayload(user, type, data = {}) {
         throw err;
       }
       assertNameHasNoDigits(out.name);
+      assertNameHasNoSpaces(out.name);
     }
   }
 

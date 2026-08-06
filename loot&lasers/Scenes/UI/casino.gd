@@ -728,7 +728,7 @@ func _init_default_wagers() -> void:
 		_sd_wager = starter
 	else:
 		_sd_wager = 0
-	var nova_bal := CasinoManager.nova_wagerable()
+	var nova_bal := CasinoManager.nova_spendable()
 	_nova_wager = 100 if nova_bal >= 100.0 else 0
 
 
@@ -737,11 +737,15 @@ func _refresh_balances() -> void:
 	var total_nova := float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	var wag := CasinoManager.nova_wagerable()
 	_balance_nova.text = "%s  (Wagerable %s)" % [_fmt_nova(total_nova), _fmt_nova(wag)]
-	_limits_lab.text = "Stardust %s–%s · Nova %s–%s · Casino uses Wagerable only" % [
+	var nova_rule := "Casino uses Wagerable only"
+	if AdminManager.is_admin():
+		nova_rule = "Admin: any Nova may be wagered"
+	_limits_lab.text = "Stardust %s–%s · Nova %s–%s · %s" % [
 		_fmt(CasinoManager.stardust_min()),
 		_fmt(CasinoManager.stardust_max()),
 		_fmt(CasinoManager.nova_min()),
 		_fmt(CasinoManager.nova_max()),
+		nova_rule,
 	]
 
 
@@ -760,16 +764,22 @@ func _refresh_wager_controls() -> void:
 		btn.disabled = _busy or not ok
 		btn.button_pressed = (_sd_wager == amt and ok)
 
-	var nova_bal := CasinoManager.nova_wagerable()
+	var nova_bal := CasinoManager.nova_spendable()
 	var nova_locked := (
 		(not CasinoManager.active_session(GAME_REFINE).is_empty() and _active_game == GAME_REFINE)
 		or (not CasinoManager.active_session(GAME_CACHE).is_empty() and _active_game == GAME_CACHE)
 	)
 	if is_instance_valid(_nova_wager_lab):
-		_nova_wager_lab.text = "Wager: %s Wagerable Nova  (100–1000 · Purchased only)%s" % [
-			_fmt_nova(float(_nova_wager)),
-			" · locked to session" if nova_locked else "",
-		]
+		if AdminManager.is_admin():
+			_nova_wager_lab.text = "Wager: %s Nova  (100–1000 · Admin: any Nova)%s" % [
+				_fmt_nova(float(_nova_wager)),
+				" · locked to session" if nova_locked else "",
+			]
+		else:
+			_nova_wager_lab.text = "Wager: %s Wagerable Nova  (100–1000 · Purchased only)%s" % [
+				_fmt_nova(float(_nova_wager)),
+				" · locked to session" if nova_locked else "",
+			]
 	for i in _nova_preset_btns.size():
 		var amt: int = NOVA_PRESETS[i]
 		var btn := _nova_preset_btns[i]
@@ -837,9 +847,12 @@ func _set_sd_wager_pct(pct: float) -> void:
 
 
 func _set_nova_wager(amt: int) -> void:
-	var bal := CasinoManager.nova_wagerable()
+	var bal := CasinoManager.nova_spendable()
 	if float(amt) > bal + 0.0001:
-		_set_status("Not enough Wagerable Nova for %s. Bonus Nova cannot be wagered." % _fmt(amt), ClientUi.DANGER)
+		if AdminManager.is_admin():
+			_set_status("Not enough Nova for %s." % _fmt(amt), ClientUi.DANGER)
+		else:
+			_set_status("Not enough Wagerable Nova for %s. Bonus Nova cannot be wagered." % _fmt(amt), ClientUi.DANGER)
 		return
 	_nova_wager = amt
 	_refresh_wager_controls()
@@ -852,7 +865,7 @@ func _sd_wager_valid() -> bool:
 
 
 func _nova_wager_valid() -> bool:
-	var bal := CasinoManager.nova_wagerable()
+	var bal := CasinoManager.nova_spendable()
 	return (
 		_nova_wager >= CasinoManager.nova_min()
 		and _nova_wager <= CasinoManager.nova_max()

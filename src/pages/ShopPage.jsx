@@ -8,7 +8,6 @@ import { useNavigate } from "react-router-dom";
 import {
   getShopWindow,
   RARITY_COLORS,
-  STAT_ICONS,
   SHOP_REFRESH_COST,
   gearTypeLabel,
   getStatColor,
@@ -26,6 +25,7 @@ import {
   Swords, PackageOpen, Flame, MessageSquare,
 } from "lucide-react";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
+import StatIcon from "@/components/game/StatIcon";
 import FitScaleFrame from "@/components/game/FitScaleFrame";
 
 function fmtCountdown(sec) {
@@ -86,8 +86,8 @@ function StatDeltaRow({ slot, equipped }) {
         const d = v - e;
         const color = getStatColor(stat);
         return (
-          <span key={stat} className="text-[9px] tabular-nums font-medium" style={{ color }} title={equipped ? `Equipped ${e}` : "No piece equipped"}>
-            {STAT_ICONS[stat]} {v}
+          <span key={stat} className="text-[9px] tabular-nums font-medium inline-flex items-center gap-0.5" style={{ color }} title={equipped ? `Equipped ${e}` : "No piece equipped"}>
+            <StatIcon stat={stat} className="w-2.5 h-2.5" /> {v}
             {equipped ? (
               <span className={d > 0 ? "text-green-400" : d < 0 ? "text-red-400" : "text-muted-foreground"}>
                 {" "}({d > 0 ? "+" : ""}{d})
@@ -594,7 +594,6 @@ export default function ShopPage() {
                 if (stim) {
                   const stat = slot.consumable?.stat || "all";
                   const tint = getStatColor(stat);
-                  const icon = stat === "all" ? "✨" : (STAT_ICONS[stat] || "🧪");
                   return (
                     <motion.div
                       key={slot._slotId}
@@ -612,10 +611,10 @@ export default function ShopPage() {
                       )}
                       <div className="flex items-center gap-2 mb-1.5">
                         <div
-                          className="w-9 h-9 rounded-lg border flex items-center justify-center text-base shrink-0"
+                          className="w-9 h-9 rounded-lg border flex items-center justify-center shrink-0"
                           style={{ backgroundColor: `${tint}18`, borderColor: `${tint}44` }}
                         >
-                          {icon}
+                          {stat === "all" ? "✨" : <StatIcon stat={stat} className="w-6 h-6" />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <h4 className="font-display font-semibold text-xs truncate" style={{ color }}>{slot.name}</h4>

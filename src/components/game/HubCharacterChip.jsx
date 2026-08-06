@@ -4,8 +4,9 @@ import { motion } from "framer-motion";
 import { Rocket, Sparkles } from "lucide-react";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
 import { fullName } from "@/lib/legacyName";
-import { getActiveBuffs, STAT_ICONS, MAX_ACTIVE_STAT_TYPES, getStatColor, XP_COLOR } from "@/lib/gameData";
+import { getActiveBuffs, MAX_ACTIVE_STAT_TYPES, getStatColor, XP_COLOR } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
+import StatIcon from "@/components/game/StatIcon";
 
 // Ticks every second so countdown labels stay live.
 function useNow() {
@@ -30,7 +31,6 @@ function remainingLabel(expiresAt, now) {
 
 function StimIcon({ buff, now, large }) {
   const isOmni = buff.stat === "all";
-  const icon = isOmni ? null : (STAT_ICONS[buff.stat] || "🧪");
   const color = getStatColor(buff.stat);
   const pct = Math.round((buff.mult || 0) * 100);
   const title = `${buff.name || buff.stat} · +${pct}% · ${remainingLabel(buff.expires_at, now)} left`;
@@ -39,7 +39,7 @@ function StimIcon({ buff, now, large }) {
       {isOmni ? (
         <Sparkles className={large ? "w-3.5 h-3.5" : "w-3 h-3"} style={{ color }} />
       ) : (
-        <span className={large ? "text-[12px]" : "text-[11px]"} aria-hidden>{icon}</span>
+        <StatIcon stat={buff.stat} className={large ? "w-3.5 h-3.5" : "w-3 h-3"} />
       )}
       <span
         className={`tabular-nums font-display font-black tracking-tight px-1 py-px rounded-sm ${

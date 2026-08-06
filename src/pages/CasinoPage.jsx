@@ -20,6 +20,7 @@ import StardustWheel from "@/components/casino/StardustWheel";
 import CrystalRefining from "@/components/casino/CrystalRefining";
 import SmugglersCache from "@/components/casino/SmugglersCache";
 import PageStage from "@/components/game/PageStage";
+import { useAuth } from "@/lib/AuthContext";
 
 function newRequestId(prefix) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
@@ -27,6 +28,7 @@ function newRequestId(prefix) {
 
 export default function CasinoPage() {
   const outlet = useOutletContext() || {};
+  const { user } = useAuth();
   const [localCharacter, setLocalCharacter] = useState(null);
   const character = outlet.character || localCharacter;
   const setSharedCharacter = outlet.setCharacter;
@@ -150,14 +152,17 @@ export default function CasinoPage() {
     casino?.nova_limits?.wagerable_balance ??
     casino?.nova_limits?.wagerable ??
     0;
+  const totalNova = casino?.nova_limits?.balance ?? character.nova_crystals ?? 0;
+  // Admins may wager any Nova; non-admins stay on wagerable-only.
+  const spendableNova = user?.role === "admin" ? totalNova : wagerableNova;
   const characterForCasino = {
     ...character,
-    nova_wagerable: wagerableNova,
+    nova_wagerable: spendableNova,
     balances: {
       ...(character.balances || {}),
-      nova_wagerable: wagerableNova,
+      nova_wagerable: spendableNova,
       nova_promotional: casino?.nova_limits?.promotional ?? 0,
-      nova_crystals: casino?.nova_limits?.balance ?? character.nova_crystals,
+      nova_crystals: totalNova,
     },
   };
   const activeRefine = (casino?.active_sessions || []).find((s) => s.game_id === "crystal_refining");
@@ -184,7 +189,8 @@ export default function CasinoPage() {
             </span>
           </span>
           <span className="text-[10px] text-muted-foreground">
-            Stardust {minSd.toLocaleString()}–{maxSd.toLocaleString()} · Nova {CASINO_MIN_NOVA_BET}–{CASINO_MAX_NOVA_BET} · Casino uses Wagerable only
+            Stardust {minSd.toLocaleString()}–{maxSd.toLocaleString()} · Nova {CASINO_MIN_NOVA_BET}–{CASINO_MAX_NOVA_BET} ·{" "}
+            {user?.role === "admin" ? "Admin: any Nova may be wagered" : "Casino uses Wagerable only"}
           </span>
           </div>
         </motion.div>

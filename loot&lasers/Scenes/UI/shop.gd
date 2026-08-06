@@ -379,16 +379,11 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 	var icon_center := CenterContainer.new()
 	icon_box.add_child(icon_center)
 	if is_trio:
-		icon_center.add_child(UiIcon.make("package", 22.0, tint))
+		icon_center.add_child(UiIcon.make("package", tint, 22.0))
 	elif stat == "all":
-		icon_center.add_child(UiIcon.make("sparkles", 22.0, tint))
+		icon_center.add_child(UiIcon.make("sparkles", tint, 22.0))
 	else:
-		var icon := Label.new()
-		icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		icon.text = str(GameData.STAT_ICONS.get(stat, "🧪"))
-		icon.add_theme_font_size_override("font_size", 19)
-		icon_center.add_child(icon)
+		icon_center.add_child(StatIcon.make(stat, 22.0))
 
 	var title_col := VBoxContainer.new()
 	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -595,20 +590,24 @@ func _stat_delta_row(slot: Dictionary, equipped: Dictionary) -> HBoxContainer:
 		var e := int(eq_stats.get(k, 0))
 		if v <= 0 and e <= 0:
 			continue
+		var cell := HBoxContainer.new()
+		cell.add_theme_constant_override("separation", 3)
+		if StatIcon.has(k):
+			cell.add_child(StatIcon.make(k, 12.0))
 		var lab := Label.new()
 		var color: Color = GameData.stat_color(k)
-		var icon := str(GameData.STAT_ICONS.get(k, ""))
 		if equipped.is_empty():
-			lab.text = "%s %s" % [icon, v]
+			lab.text = str(v)
 			lab.add_theme_color_override("font_color", color)
 		else:
 			var d := v - e
 			var dtxt := ("+%s" % d) if d > 0 else str(d)
-			lab.text = "%s %s (%s)" % [icon, v, dtxt]
+			lab.text = "%s (%s)" % [v, dtxt]
 			lab.add_theme_color_override("font_color", ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else color))
 		lab.add_theme_font_size_override("font_size", 12)
 		ClientUi.apply_body_font(lab)
-		row.add_child(lab)
+		cell.add_child(lab)
+		row.add_child(cell)
 	return row
 
 

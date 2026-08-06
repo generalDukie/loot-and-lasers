@@ -76,8 +76,8 @@ static func body_bbcode(section_id: String) -> String:
 				_stardust_h()
 				+ _p("The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, attribute buys, and arena challenger refreshes.")
 				+ _h("💎 Nova Crystals")
-				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free quotas (%s💎 per arena battle, %s💎 per frontier fight)." % [
-					str(ArenaRules.PAID_BATTLE_COST), str(DungeonRules.CONTINUE_COST)
+				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas (%s💎 per arena battle after free fights). Frontier cooldown skip costs %s💎." % [
+					str(ArenaRules.PAID_BATTLE_COST), str(DungeonRules.SKIP_COST)
 				])
 				+ "[font_size=11]%s[/font_size]\n" % _fuel("FUEL")
 				+ _p("Your mission energy. Each mission costs fuel based on its length. You get a pool of 100 that [b]resets to full every 24 hours[/b]. Need more sooner? Spend [b]%s Nova Crystals[/b] to buy +%s fuel, up to [b]%s times[/b] per cycle." % [
@@ -125,14 +125,14 @@ static func body_bbcode(section_id: String) -> String:
 			)
 		"galaxy":
 			return (
-				_p("The [b]Galaxy Map[/b] (Nav Deck) is a turn-based dungeon crawl across planets. Each planet has enemies to clear and a boss to defeat. You get [b]%s free lives per day[/b] (midnight Eastern); further fights cost [b]%s Nova Crystals[/b]." % [
-					str(DungeonRules.DEATHS_PER_DAY), str(DungeonRules.CONTINUE_COST)
+				_p("The [b]Galaxy Map[/b] (Nav Deck) is a turn-based dungeon crawl across planets. Each planet has enemies to clear and a boss to defeat. After every fight (win or loss) you wait a [b]1 hour cooldown[/b] shared across all worlds; skip it for [b]%s Nova Crystals[/b]." % [
+					str(DungeonRules.SKIP_COST)
 				])
 				+ _li("Fight enemies in sequence — battles are auto-simulated like the arena.")
 				+ _li("Defeating the [b]boss[/b] clears the planet and advances you to the next.")
 				+ _li("Rewards use [b]DRU[/b] (Dungeon Reward Units): 1 DRU ≈ 1 fuel of mission payout at the enemy's level. XP pays at 87% of that rate.")
 				+ _li("Loot and ship-mod unlocks drop from victories; bosses give the best hauls.")
-				+ _li("Losses grant [b]no[/b] XP or stardust — only a longer cooldown (and a spent life).")
+				+ _li("Losses grant [b]no[/b] XP or stardust — only the same 1 hour cooldown as a win.")
 				+ _tip("Your dungeon progress and highest sector are shown in your public stats.")
 			)
 		"market":

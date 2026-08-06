@@ -67,6 +67,17 @@ func nova_wagerable() -> float:
 	return CurrencyManager.nova_wagerable()
 
 
+## Nova the local client may wager: wagerable for players; total for admins.
+## Server still enforces role=admin on CasinoSessionStart.
+func nova_spendable() -> float:
+	if AdminManager.is_admin():
+		var lim: Variant = casino_state.get("nova_limits", {})
+		if typeof(lim) == TYPE_DICTIONARY and lim.has("balance"):
+			return float(lim["balance"])
+		return float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
+	return nova_wagerable()
+
+
 func nova_promotional() -> float:
 	var lim: Variant = casino_state.get("nova_limits", {})
 	if typeof(lim) == TYPE_DICTIONARY and lim.has("promotional"):

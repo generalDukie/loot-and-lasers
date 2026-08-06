@@ -1,11 +1,12 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
+import { RARITY_COLORS, gearTypeLabel, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import confetti from "canvas-confetti";
 import { Zap, Package, Sparkles, Trophy, Gift, FlaskConical, Swords, Skull } from "lucide-react";
 import StardustIcon from "@/components/game/StardustIcon";
+import StatIcon from "@/components/game/StatIcon";
 
 function RewardCard({ icon, accent, children }) {
   return (
@@ -125,7 +126,7 @@ export default function CombatCompleteOverlay({ summary, onClose }) {
                   {gearItem.stats && (
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {Object.entries(gearItem.stats).filter(([, v]) => v > 0).slice(0, 5).map(([s, v]) => (
-                        <span key={s} className="text-[10px] text-muted-foreground">{STAT_ICONS[s]}{v}</span>
+                        <span key={s} className="text-[10px] text-muted-foreground inline-flex items-center gap-0.5"><StatIcon stat={s} className="w-2.5 h-2.5" />{v}</span>
                       ))}
                     </div>
                   )}

@@ -113,11 +113,14 @@ export function validateStardustWager(bet, levelSdf, balance) {
 }
 
 /**
- * Validate Nova casino wager against WAGERABLE balance only.
+ * Validate Nova casino wager against available balance.
+ * Default: callers pass wagerable (purchased) Nova only.
+ * Admins may pass total Nova with `{ allowAnyNova: true }`.
  * @param {number} bet
- * @param {number} wagerableBalanceDisplay — Purchased Nova only
+ * @param {number} availableBalanceDisplay — Wagerable Nova, or total when allowAnyNova
+ * @param {{ allowAnyNova?: boolean }} [opts]
  */
-export function validateNovaWager(bet, wagerableBalanceDisplay) {
+export function validateNovaWager(bet, availableBalanceDisplay, opts = {}) {
   const check = validateNovaPrecisionWager(bet);
   if (!check.ok) return check;
   if (check.bet < NOVA_MIN_WAGER) {
@@ -126,8 +129,15 @@ export function validateNovaWager(bet, wagerableBalanceDisplay) {
   if (check.bet > NOVA_MAX_WAGER) {
     return { ok: false, reason: `Maximum wager is ${NOVA_MAX_WAGER} Nova Crystals` };
   }
-  const wagerable = Number(wagerableBalanceDisplay) || 0;
-  if (check.bet > wagerable + 1e-9) {
+  const available = Number(availableBalanceDisplay) || 0;
+  if (check.bet > available + 1e-9) {
+    if (opts.allowAnyNova) {
+      return {
+        ok: false,
+        reason: "Not enough Nova Crystals",
+        code: "INSUFFICIENT_NOVA",
+      };
+    }
     return {
       ok: false,
       reason: "Not enough Wagerable Nova. Purchased Nova is required for Casino wagers.",

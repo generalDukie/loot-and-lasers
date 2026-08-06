@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { STAT_ICONS, getStatDescription } from "@/lib/gameData";
+import { getStatDescription } from "@/lib/gameData";
+import StatIcon from "@/components/game/StatIcon";
 
 const STAT_LABELS = {
   strength: "Strength",
@@ -22,7 +23,7 @@ export default function StatAllocator({ stats, points, onAdd, onRemove, allowRem
       </div>
       {Object.entries(stats).map(([stat, val]) => (
         <div key={stat} className="flex items-center gap-2 bg-muted/20 rounded-lg px-2 py-1.5 border border-border/30">
-          <span className="text-base">{STAT_ICONS[stat]}</span>
+          <StatIcon stat={stat} className="w-4 h-4" />
           <div className="flex-1 min-w-0">
             <span className="text-xs font-medium">{STAT_LABELS[stat]}</span>
             <p className="text-[9px] text-muted-foreground/70 leading-tight truncate">{getStatDescription(stat, className)}</p>

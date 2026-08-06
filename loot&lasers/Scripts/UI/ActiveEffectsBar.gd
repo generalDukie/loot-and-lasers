@@ -13,15 +13,6 @@ const STAT_COLORS := {
 	"all": Color("#FBBF24"),
 }
 
-const STAT_ICONS := {
-	"strength": "⚔",
-	"agility": "💨",
-	"intellect": "🧠",
-	"vitality": "❤",
-	"luck": "🍀",
-	"all": "✦",
-}
-
 ## When true (Hero loadout rail), show STIMS / MOUNTS section labels + compact timers.
 var side_sections := false
 ## When true (operative console): tiny colored bubbles beside the portrait — no rail growth.
@@ -274,8 +265,7 @@ func _buff_bubble(buff: Dictionary) -> PanelContainer:
 	timer.add_theme_color_override("font_color", Color(color, 0.92))
 	ClientUi.apply_display_font(timer)
 	col.add_child(timer)
-	var icon_stat := str(STAT_ICONS.get(stat, "✦"))
-	var label := "ALL" if stat == "all" else "%s %s" % [icon_stat, stat]
+	var label := "ALL" if stat == "all" else str(stat)
 	panel.tooltip_text = "%s · +%s%% %s · expires in %s\nRight-click to remove" % [
 		str(buff.get("name", "Stim")), pct, label, remain_full,
 	]
@@ -361,8 +351,7 @@ func _buff_chip_compact(buff: Dictionary) -> PanelContainer:
 	remove_btn.custom_minimum_size = Vector2(24, 24)
 	remove_btn.pressed.connect(func() -> void: _request_remove_stim(buff))
 	row.add_child(remove_btn)
-	var icon_stat := str(STAT_ICONS.get(stat, "✦"))
-	var label := "ALL" if stat == "all" else "%s %s" % [icon_stat, stat]
+	var label := "ALL" if stat == "all" else str(stat)
 	panel.tooltip_text = "%s · +%s%% %s · expires in %s" % [
 		str(buff.get("name", "Stim")), pct, label, remain_full,
 	]
@@ -414,15 +403,18 @@ func _buff_chip(buff: Dictionary) -> PanelContainer:
 	var head_row := HBoxContainer.new()
 	head_row.add_theme_constant_override("separation", 4)
 	col.add_child(head_row)
+	if StatIcon.has(stat):
+		head_row.add_child(StatIcon.make(stat, 16.0))
+	elif stat == "all":
+		head_row.add_child(UiIcon.make("sparkles", color, 16.0))
 	var head := Label.new()
-	var icon_stat := str(STAT_ICONS.get(stat, "✦"))
-	var label := "ALL" if stat == "all" else "%s %s" % [icon_stat, stat]
+	var label := "ALL" if stat == "all" else str(stat)
 	var rarity := str(buff.get("rarity", "")).capitalize()
 	var pct := int(round(float(buff.get("mult", 0)) * 100.0))
 	if rarity.is_empty():
-		head.text = "⚗ +%s%% %s" % [pct, label]
+		head.text = "+%s%% %s" % [pct, label]
 	else:
-		head.text = "⚗ %s +%s%% %s" % [rarity, pct, label]
+		head.text = "%s +%s%% %s" % [rarity, pct, label]
 	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	head.add_theme_font_size_override("font_size", 15)

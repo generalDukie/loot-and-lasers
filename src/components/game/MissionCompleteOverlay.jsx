@@ -1,11 +1,12 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
-import { RARITY_COLORS, STAT_ICONS, gearTypeLabel, FUEL_COLOR, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
+import { RARITY_COLORS, gearTypeLabel, FUEL_COLOR, STARDUST_COLOR, XP_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import confetti from "canvas-confetti";
 import { Zap, Fuel, Package, Sparkles, MapPin, Clock, Trophy, Gift, FlaskConical } from "lucide-react";
 import StardustIcon from "@/components/game/StardustIcon";
+import StatIcon from "@/components/game/StatIcon";
 
 // Shared chrome for level-up / empty panes (not rarity-coded).
 const SUMMARY_ACCENT = "#FBBF24";
@@ -157,7 +158,7 @@ export default function MissionCompleteOverlay({ summary, onClose }) {
                   {gearItem.stats && (
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {Object.entries(gearItem.stats).filter(([, v]) => v > 0).slice(0, 5).map(([s, v]) => (
-                        <span key={s} className="text-[10px] text-muted-foreground">{STAT_ICONS[s]}{v}</span>
+                        <span key={s} className="text-[10px] text-muted-foreground inline-flex items-center gap-0.5"><StatIcon stat={s} className="w-2.5 h-2.5" />{v}</span>
                       ))}
                     </div>
                   )}

@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { STAT_ICONS, CLASSES, getStatDescription, STAT_COLORS, STARDUST_COLOR } from "@/lib/gameData";
+import { CLASSES, getStatDescription, STAT_COLORS, STARDUST_COLOR } from "@/lib/gameData";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
+import StatIcon from "@/components/game/StatIcon";
 
 const STAT_LABELS = {
   strength: "Strength",
@@ -121,10 +122,10 @@ export default function StatBar({
             } ${canAdd ? "hover:bg-muted/25" : ""}`}
           >
             <div
-              className="w-8 h-8 rounded-md flex items-center justify-center text-lg shrink-0"
+              className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
               style={{ backgroundColor: `${color}22`, boxShadow: `0 0 10px ${color}28` }}
             >
-              {STAT_ICONS[stat]}
+              <StatIcon stat={stat} className="w-6 h-6" />
             </div>
 
             <div className="min-w-0 flex-1 flex items-baseline gap-2">
@@ -227,10 +228,10 @@ export default function StatBar({
             </span>
           )}
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
             style={{ backgroundColor: `${color}20`, boxShadow: `0 0 10px ${color}25` }}
           >
-            {STAT_ICONS[stat]}
+            <StatIcon stat={stat} className="w-6 h-6" />
           </div>
           <p className="text-[8px] font-display font-bold tracking-[0.14em] text-muted-foreground uppercase leading-none">
             {STAT_SHORT[stat] || stat.slice(0, 3).toUpperCase()}

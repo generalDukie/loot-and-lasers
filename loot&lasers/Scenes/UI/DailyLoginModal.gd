@@ -76,7 +76,7 @@ func _build() -> void:
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", ClientUi.px(8))
 	head_left.add_child(title_row)
-	title_row.add_child(UiIcon.make("gift", 26, ClientUi.GOLD))
+	title_row.add_child(UiIcon.make("gift", ClientUi.GOLD, 26.0))
 	_title = Label.new()
 	_title.text = "Daily Login Rewards"
 	ClientUi.apply_display_font(_title, 20)
@@ -242,7 +242,7 @@ func _make_day_card(row: Dictionary) -> Control:
 	day_lbl.add_theme_color_override("font_color", ClientUi.MUTED)
 	vb.add_child(day_lbl)
 
-	vb.add_child(UiIcon.make(DailyLoginCatalog.reward_icon_id(rewards), 20, accent))
+	vb.add_child(UiIcon.make(DailyLoginCatalog.reward_icon_id(rewards), accent, 20.0))
 
 	var amt := Label.new()
 	amt.text = label
@@ -267,7 +267,7 @@ func _make_day_card(row: Dictionary) -> Control:
 		ready.add_theme_color_override("font_color", ClientUi.GOLD)
 		vb.add_child(ready)
 	elif status == "locked":
-		vb.add_child(UiIcon.make("lock", 12, ClientUi.MUTED))
+		vb.add_child(UiIcon.make("lock", ClientUi.MUTED, 12.0))
 
 	return card
 

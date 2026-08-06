@@ -44,6 +44,33 @@ function Read-StagingServerKeyFromSecrets([string]$Path) {
     return ""
 }
 
+function Assert-BakedStagingKeyInExe([string]$ExePath, [string]$ExpectedKey) {
+    if (-not (Test-Path $ExePath)) {
+        throw "Exported exe missing at $ExePath — cannot verify baked staging key."
+    }
+    # Friend builds embed release_client.cfg inside the PCK. Confirm the exact
+    # key bytes are present so a bad bake cannot ship as "Server key invalid".
+    $bytes = [System.IO.File]::ReadAllBytes($ExePath)
+    $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+    if (-not $ascii.Contains("release_client.cfg")) {
+        throw "Exported exe is missing release_client.cfg — staging key was not packaged."
+    }
+    if ($ascii.Contains("nakama_secrets.cfg")) {
+        throw "Exported exe unexpectedly contains nakama_secrets.cfg (must stay excluded)."
+    }
+    $needle = 'server_key="' + $ExpectedKey + '"'
+    if (-not $ascii.Contains($needle)) {
+        $rx = [regex]'server_key\s*=\s*"?([0-9a-fA-F]{16,})"?'
+        $hit = $rx.Match($ascii)
+        $foundTail = if ($hit.Success -and $hit.Groups[1].Value.Length -ge 2) {
+            $hit.Groups[1].Value.Substring($hit.Groups[1].Value.Length - 2)
+        } else { "missing" }
+        $expectTail = $ExpectedKey.Substring($ExpectedKey.Length - 2)
+        throw ("Exported exe baked staging key mismatch (found_tail={0}, expected_tail={1}). Rebuild after syncing Config/nakama_secrets.cfg to Hetzner NAKAMA_SOCKET_SERVER_KEY." -f $foundTail, $expectTail)
+    }
+    Write-Host ("Verified baked staging key in exe (len={0}, tail={1})" -f $ExpectedKey.Length, $ExpectedKey.Substring($ExpectedKey.Length - 2))
+}
+
 $Godot = Resolve-Executable -ExplicitPath $GodotPath -Label "Godot 4.7.1" -Candidates @(
     "godot",
     "godot4",
@@ -97,6 +124,8 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ExportExe)) {
         throw "Godot Windows export failed."
     }
+
+    Assert-BakedStagingKeyInExe -ExePath $ExportExe -ExpectedKey $Key
 
     & $Inno "/DMyAppVersion=$Version" $InstallerScript
     if ($LASTEXITCODE -ne 0) {

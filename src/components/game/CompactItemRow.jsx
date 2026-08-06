@@ -1,8 +1,9 @@
 import React from "react";
-import { RARITY_COLORS, STAT_ICONS, computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
+import { RARITY_COLORS, computeStardustValue, STARDUST_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import { Check } from "lucide-react";
 import StardustIcon from "@/components/game/StardustIcon";
+import StatIcon from "@/components/game/StatIcon";
 
 // Condensed single-line inventory row — keeps name, rarity, top stats, and
 // quick actions visible so many items fit in the scroll area at once.
@@ -30,7 +31,7 @@ export default function CompactItemRow({ item, onEquip, onSell, onUse, selectabl
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
           <span className="capitalize">{item.rarity}</span>
           {item.stats && Object.entries(item.stats).filter(([, v]) => v > 0).slice(0, 4).map(([s, v]) => (
-            <span key={s}>{STAT_ICONS[s]}{v}</span>
+            <span key={s} className="inline-flex items-center gap-0.5"><StatIcon stat={s} className="w-2.5 h-2.5" />{v}</span>
           ))}
         </div>
       </div>

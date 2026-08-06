@@ -1,7 +1,8 @@
 import React from "react";
-import { RARITY_COLORS, STAT_ICONS, computeStardustValue, gearTypeLabel, STARDUST_COLOR } from "@/lib/gameData";
+import { RARITY_COLORS, computeStardustValue, gearTypeLabel, STARDUST_COLOR } from "@/lib/gameData";
 import GearVisual from "@/components/game/GearVisual";
 import StardustIcon from "@/components/game/StardustIcon";
+import StatIcon from "@/components/game/StatIcon";
 
 export default function ItemCard({ item, onEquip, onSell, onUse, compact = false }) {
   const rarityColor = RARITY_COLORS[item.rarity];
@@ -49,16 +50,16 @@ export default function ItemCard({ item, onEquip, onSell, onUse, compact = false
       {item.stats && Object.keys(item.stats).length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3">
           {Object.entries(item.stats).filter(([, v]) => v > 0).map(([stat, val]) => (
-            <span key={stat} className="text-xs text-foreground/80">
-              {STAT_ICONS[stat]} +{val}
+            <span key={stat} className="text-xs text-foreground/80 inline-flex items-center gap-0.5">
+              <StatIcon stat={stat} className="w-3 h-3" /> +{val}
             </span>
           ))}
         </div>
       )}
 
       {item.type === "consumable" && item.consumable && (
-        <p className="text-xs text-primary mt-3">
-          {STAT_ICONS[item.consumable.stat]} +{Math.round(item.consumable.mult * 100)}% {item.consumable.stat} · {item.consumable.duration_hours}h
+        <p className="text-xs text-primary mt-3 inline-flex items-center gap-1 flex-wrap">
+          <StatIcon stat={item.consumable.stat} className="w-3 h-3" /> +{Math.round(item.consumable.mult * 100)}% {item.consumable.stat} · {item.consumable.duration_hours}h
         </p>
       )}
 

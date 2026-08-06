@@ -1,0 +1,20 @@
+---
+description: After every git pull, clearly summarize incoming commits and file changes
+alwaysApply: true
+---
+
+# Git pull — always summarize changes
+
+Whenever the user asks to **pull** from GitHub / origin (or the agent runs `git pull` / `git fetch` + merge/rebase as part of their request):
+
+1. Run the pull (or report if already up to date / blocked by local changes).
+2. **Always** report what changed between the previous local HEAD and the new HEAD — even if the delta is small.
+3. Format the summary so it is easy to scan:
+   - New tip commit(s): hash + subject
+   - Count of commits / files if useful
+   - **Highlights by area** (bullets): Godot client, web `src/`, server, docs/installer, etc.
+   - Call out new files and anything that may need a Hetzner/Nakama deploy or an installer (do not deploy/build unless asked, unless other rules say so for “commit and push”)
+4. If **Already up to date**, say so clearly and note any uncommitted local edits still present.
+5. If pull brought partner commits that conflict with local work, explain conflicts and next steps.
+
+Do not skip the change summary. The user relies on it to understand what their partner shipped.

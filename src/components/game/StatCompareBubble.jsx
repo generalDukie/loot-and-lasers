@@ -1,6 +1,7 @@
 import React from "react";
 import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Swords, Recycle, FlaskConical } from "lucide-react";
-import { STAT_ICONS, RARITY_COLORS, computeStardustValue, CLASSES, STARDUST_COLOR } from "@/lib/gameData";
+import { RARITY_COLORS, computeStardustValue, CLASSES, STARDUST_COLOR } from "@/lib/gameData";
+import StatIcon from "@/components/game/StatIcon";
 import StardustIcon from "@/components/game/StardustIcon";
 import { EQUIPPABLE_TYPES } from "@/lib/inventoryJunk";
 
@@ -70,7 +71,7 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onU
           {equipped.stats && Object.keys(equipped.stats).length > 0 && (
             <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
               {STATS.filter((s) => (equipped.stats?.[s] || 0) > 0).map((s) => (
-                <span key={s} className="text-[10px] text-muted-foreground">{STAT_ICONS[s]}+{equipped.stats[s]}</span>
+                <span key={s} className="text-[10px] text-muted-foreground inline-flex items-center gap-0.5"><StatIcon stat={s} className="w-2.5 h-2.5" />+{equipped.stats[s]}</span>
               ))}
             </div>
           )}
@@ -87,7 +88,7 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onU
           const pct = e > 0 && d !== 0 ? Math.round((d / e) * 100) : null;
           return (
             <div key={s} className="flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground">{STAT_ICONS[s]} {s.slice(0, 3).toUpperCase()}</span>
+              <span className="text-muted-foreground inline-flex items-center gap-0.5"><StatIcon stat={s} className="w-3 h-3" /> {s.slice(0, 3).toUpperCase()}</span>
               <span className="flex items-center gap-1.5">
                 <span className="font-display font-bold" style={{ color: v > 0 ? color : "#6b7280" }}>{v > 0 ? `+${v}` : "0"}</span>
                 {equipped ? (
@@ -109,8 +110,8 @@ export default function StatCompareBubble({ item, equipped, onEquip, onSell, onU
 
       {/* Special effects */}
       {item.type === "consumable" && item.consumable && (
-        <p className="text-[10px] text-primary mt-2 pt-2 border-t border-border/40">
-          {STAT_ICONS[item.consumable.stat]} +{Math.round(item.consumable.mult * 100)}% {item.consumable.stat} · {item.consumable.duration_hours}h buff
+        <p className="text-[10px] text-primary mt-2 pt-2 border-t border-border/40 inline-flex items-center gap-1 flex-wrap">
+          <StatIcon stat={item.consumable.stat} className="w-2.5 h-2.5" /> +{Math.round(item.consumable.mult * 100)}% {item.consumable.stat} · {item.consumable.duration_hours}h buff
         </p>
       )}
       {item.set_name && (

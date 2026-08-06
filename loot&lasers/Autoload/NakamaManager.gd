@@ -295,6 +295,8 @@ func _friendly_email_auth_error(raw: String, create: bool) -> String:
 	var low := raw.to_lower()
 	if low.contains("already in use") or low.contains("already exists") or low.contains("user already"):
 		return "An account with that email already exists. Log in instead."
+	if low.contains("server key") and low.contains("invalid"):
+		return "Staging server key invalid — this build's baked key does not match Nakama. Reinstall a friend build made with the current Hetzner NAKAMA_SOCKET_SERVER_KEY."
 	if low.contains("not found") or low.contains("user account not found") or low.contains("invalid credentials"):
 		return "Invalid email or password" if not create else raw
 	if low.contains("password") and (low.contains("short") or low.contains("least") or low.contains("8")):

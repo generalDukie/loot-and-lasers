@@ -17,7 +17,7 @@ function assert(cond, msg) {
   }
 }
 
-/** Letter-only names (no digits) — matches server nameRules. */
+/** Letter-only names (no digits/spaces) — matches server nameRules. */
 function alphaName(prefix = "Smoke") {
   const letters = Array.from({ length: 8 }, () =>
     String.fromCharCode(65 + Math.floor(Math.random() * 26))

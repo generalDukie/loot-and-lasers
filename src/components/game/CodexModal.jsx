@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { FUEL_PURCHASE_AMOUNT, FUEL_PURCHASE_COST, FUEL_PURCHASE_MAX, SHOP_REFRESH_COST, FUEL_COLOR, STARDUST_COLOR } from "@/lib/gameData";
 import { ARENA_DAILY_FREE_BATTLES, ARENA_PAID_BATTLE_COST } from "@/lib/arenaEngine";
-import { DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST } from "@/lib/dungeonEngine";
+import { DUNGEON_SKIP_COST } from "@/lib/dungeonEngine";
 import GameplayOverlayPortal from "@/components/game/GameplayOverlayPortal";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 
@@ -54,7 +54,7 @@ function renderSection(id) {
           <H><span className="inline-flex items-center gap-1" style={{ color: STARDUST_COLOR }}><StardustIcon className="w-3.5 h-3.5 inline" /> Stardust</span></H>
           <p>The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, attribute buys, and arena challenger refreshes.</p>
           <H>💎 Nova Crystals</H>
-          <p>Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free quotas ({ARENA_PAID_BATTLE_COST}💎 per arena battle, {DUNGEON_CONTINUE_COST}💎 per frontier fight).</p>
+          <p>Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas ({ARENA_PAID_BATTLE_COST}💎 per arena battle after free fights). Frontier cooldown skip costs {DUNGEON_SKIP_COST}💎.</p>
           <H><Fuel className="w-3 h-3 inline" style={{ color: FUEL_COLOR }} /> <span style={{ color: FUEL_COLOR }}>Fuel</span></H>
           <p>Your mission energy. Each mission costs fuel based on its length. You get a pool of 100 that <b>resets to full every 24 hours</b>. Need more sooner? Spend <b>{FUEL_PURCHASE_COST} Nova Crystals</b> to buy +{FUEL_PURCHASE_AMOUNT} fuel, up to <b>{FUEL_PURCHASE_MAX} times</b> per cycle.</p>
         </div>
@@ -103,13 +103,13 @@ function renderSection(id) {
     case "galaxy":
       return (
         <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
-          <p>The <b>Galaxy Map</b> (Nav Deck) is a turn-based dungeon crawl across planets. Each planet has enemies to clear and a boss to defeat. You get <b>{DUNGEON_DEATHS_PER_DAY} free lives per day</b> (midnight Eastern); further fights cost <b>{DUNGEON_CONTINUE_COST} Nova Crystals</b>.</p>
+          <p>The <b>Galaxy Map</b> (Nav Deck) is a turn-based dungeon crawl across planets. Each planet has enemies to clear and a boss to defeat. After every fight (win or loss) you wait a <b>1 hour cooldown</b> shared across all worlds; skip it for <b>{DUNGEON_SKIP_COST} Nova Crystals</b>.</p>
           <ul className="space-y-1.5">
             <Li>Fight enemies in sequence — battles are auto-simulated like the arena.</Li>
             <Li>Defeating the <b>boss</b> clears the planet and advances you to the next.</Li>
             <Li>Rewards use <b>DRU</b> (Dungeon Reward Units): 1 DRU ≈ 1 fuel of mission payout at the enemy's level. XP pays at 87% of that rate.</Li>
             <Li>Loot and ship-mod unlocks drop from victories; bosses give the best hauls.</Li>
-            <Li>Losses grant <b>no</b> XP or stardust — only a longer cooldown (and a spent life).</Li>
+            <Li>Losses grant <b>no</b> XP or stardust — only the same 1 hour cooldown as a win.</Li>
           </ul>
           <p className="text-xs text-muted-foreground">Your dungeon progress and highest sector are shown in your public stats.</p>
         </div>

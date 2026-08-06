@@ -204,19 +204,33 @@ func _test_authoritative_response_application() -> void:
 	_check(int(GameManager.active_character.get("stardust", 0)) == 30, "patch merges into GameManager")
 
 	# Bare economy balances (SkipArenaCooldown shape) must still update the wallet.
+	# Simulate scaled Character storage + display balances (live spend path).
+	GameManager.apply_active_character({
+		"id": "char-contract",
+		"fuel": 9,
+		"stardust": 30,
+		"nova_crystals": 20, # half-units → 10.0 display
+		"economy_nova_scale": 2,
+	}, "api_client_contract_scale_setup")
 	var bare: Dictionary = GameApiClient.apply_authoritative_response({
 		"character": {
 			"id": "char-contract",
 			"fuel": 9,
 			"stardust": 30,
-			"nova_crystals": 1.5,
+			"nova_crystals": 20,
+			"economy_nova_scale": 2,
 		},
-		"balances": {"fuel": 9, "stardust": 30, "nova_crystals": 1.5},
+		"balances": {"fuel": 9, "stardust": 30, "nova_crystals": 9.5},
 	}, "api_client_contract_bare_balances")
 	_check(bool(bare.get("character_applied", false)), "bare balances path applies character")
+	_check(bool(bare.get("wallet_applied", false)), "bare balances update wallet")
 	_check(
-		is_equal_approx(float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)), 1.5),
-		"bare balances update CurrencyManager nova"
+		is_equal_approx(float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)), 9.5),
+		"display balances do not get halved again under economy_nova_scale=2"
+	)
+	_check(
+		int(GameManager.active_character.get("nova_crystals", 0)) == 19,
+		"active character keeps half-unit storage after display wallet apply"
 	)
 
 	GameManager.clear_active_character("api_client_contract_cleanup")

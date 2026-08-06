@@ -1283,12 +1283,18 @@ export function computeArenaRewards(player, opp, won, freeOrOpts = true) {
 
 // ── Dungeon ──────────────────────────────────────────────────
 export const DUNGEON_ENEMIES_PER_PLANET = 10;
-export const DUNGEON_DEATHS_PER_DAY = 3;
-export const DUNGEON_CONTINUE_COST = 5;
-/** Finalized: dungeon cooldown skip. */
+/** @deprecated Death quotas removed — infinite retries with shared cooldown. */
+export const DUNGEON_DEATHS_PER_DAY = 0;
+/** @deprecated Continue fee removed with death quotas. */
+export const DUNGEON_CONTINUE_COST = 0;
+/** Finalized: dungeon cooldown skip (Nova crystals). */
 export const DUNGEON_SKIP_COST = 25;
-export const DUNGEON_WIN_COOLDOWN_MS = 10 * 60 * 1000;
-export const DUNGEON_LOSS_COOLDOWN_MS = 25 * 60 * 1000;
+/** Shared post-sim cooldown for all dungeon / patrol / wormhole fights. */
+export const DUNGEON_BATTLE_COOLDOWN_MS = 60 * 60 * 1000;
+/** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
+export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
+/** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
+export const DUNGEON_LOSS_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 export const DUNGEON_PATROL_REWARD_MULT = 0.4;
 /** @deprecated use DUNGEON_XP_BASE_FACTOR */
 export const DUNGEON_XP_DRU_MULT = DUNGEON_XP_BASE_FACTOR;
@@ -1389,8 +1395,8 @@ export function druToRewards(dru, enemyLevel) {
   };
 }
 
-export function dungeonCooldownMs(won) {
-  return won ? DUNGEON_WIN_COOLDOWN_MS : DUNGEON_LOSS_COOLDOWN_MS;
+export function dungeonCooldownMs(_won) {
+  return DUNGEON_BATTLE_COOLDOWN_MS;
 }
 
 export function computeMiningReward(level, hours) {

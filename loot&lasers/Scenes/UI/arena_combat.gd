@@ -559,7 +559,6 @@ func _boot_dungeon() -> void:
 		"is_boss": is_boss,
 		"enemy_name": str(enemy.get("name", "Foe")),
 		"enemy_index": _dungeon_enemy_index(enemy),
-		"free_lives_before": DungeonRules.free_lives_left(GameManager.active_character),
 	}
 	var accent := Color("#34D399")
 	var raw_accent: Variant = _dungeon_ctx.get("planet_color", accent)
@@ -1284,14 +1283,7 @@ func _show_dungeon_result(data: Dictionary) -> void:
 		subtitle += " · Patrol"
 	var note := ""
 	if not won:
-		var free_before := int(_dungeon_ctx.get("free_lives_before", 0))
-		var deaths_now := int(GameManager.active_character.get("dungeon_deaths", 0))
-		if free_before > 1:
-			note = "Death %s/%s. No rewards on defeat." % [deaths_now, DungeonRules.DEATHS_PER_DAY]
-		elif free_before == 1:
-			note = "Last free life spent. Further fights cost %s 💎." % DungeonRules.CONTINUE_COST
-		else:
-			note = "Next fight costs %s 💎." % DungeonRules.CONTINUE_COST
+		note = "No rewards on defeat."
 	elif items.size() > 1:
 		var milestone: Variant = items[items.size() - 1]
 		if typeof(milestone) == TYPE_DICTIONARY:

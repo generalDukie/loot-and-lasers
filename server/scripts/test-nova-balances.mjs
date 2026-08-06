@@ -56,13 +56,14 @@ function hashPw(pw) {
   return createHash("sha256").update(pw).digest("hex");
 }
 
-function insertUser(id, email) {
+function insertUser(id, email, role = "user") {
   const now = new Date().toISOString();
+  const safeRole = role === "admin" ? "admin" : "user";
   db.prepare(
     `INSERT INTO users (id, email, password_hash, role, email_verified, created_date, updated_date)
-     VALUES (?, ?, ?, 'user', 1, ?, ?)`,
-  ).run(id, email, hashPw("x"), now, now);
-  return { id, email, role: "user", active_character_id: null };
+     VALUES (?, ?, ?, ?, 1, ?, ?)`,
+  ).run(id, email, hashPw("x"), safeRole, now, now);
+  return { id, email, role: safeRole, active_character_id: null };
 }
 
 function makeChar(user, opts = {}) {
@@ -122,6 +123,14 @@ test("nova wager precision .5 ok, .25 rejected", () => {
   assert.equal(validateNovaWager(100.5, 1000).ok, true);
   assert.equal(validateNovaWager(100.25, 1000).ok, false);
   assert.equal(validateNovaWager(100.75, 1000).ok, false);
+});
+
+test("validateNovaWager allowAnyNova uses total balance messaging", () => {
+  const denied = validateNovaWager(100, 50, { allowAnyNova: true });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.code, "INSUFFICIENT_NOVA");
+  assert.match(denied.reason, /Nova Crystals/i);
+  assert.equal(validateNovaWager(100, 100, { allowAnyNova: true }).ok, true);
 });
 
 test("promotional cannot satisfy casino wager validation", () => {
@@ -228,6 +237,30 @@ await testAsync("session start rejects promotional-only balance", async () => {
   const bal = getBalances(entities.Character.get(ch.id));
   assert.equal(bal.nova_promotional, 2000);
   assert.equal(bal.nova_wagerable, 0);
+});
+
+await testAsync("admin session start may spend promotional Nova", async () => {
+  const user = insertUser("u-admin-sess", "admin-sess@t.l", "admin");
+  let ch = makeChar(user, { nova_half: 0 });
+  ch = creditNova({
+    user,
+    character: ch,
+    amount: 2000,
+    category: "reward_grant",
+    reasonCode: "promo",
+    balanceType: NovaBalanceTypes.PROMOTIONAL,
+    idempotencyKey: "admin-sess-promo",
+  }).character;
+  const res = unwrap(await CasinoSessionStart(user, {
+    game: "smugglers_cache",
+    bet: 100,
+    request_id: "admin-sess-ok-1",
+  }));
+  assert.equal(res.success, true);
+  const bal = getBalances(entities.Character.get(ch.id));
+  assert.equal(bal.nova_promotional, 1900);
+  assert.equal(bal.nova_wagerable, 0);
+  assert.equal(bal.nova_crystals, 1900);
 });
 
 await testAsync("session start succeeds with wagerable", async () => {

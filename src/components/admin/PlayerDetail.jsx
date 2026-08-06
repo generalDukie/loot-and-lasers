@@ -4,7 +4,7 @@ import { Ban, Volume2, RotateCcw, RefreshCw, Pencil, Check, X } from "lucide-rea
 import CurrencyAdjustForm from "./CurrencyAdjustForm";
 import ItemGrantForm from "./ItemGrantForm";
 import PromoteAdminButton from "./PromoteAdminButton";
-import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
+import { stripDigitsFromName, nameHasDigits, nameHasWhitespace, NAME_NO_DIGITS_MSG, NAME_NO_SPACES_MSG } from "@/lib/nameRules";
 import StardustIcon from "@/components/game/StardustIcon";
 
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
@@ -43,6 +43,10 @@ export default function PlayerDetail({ character, onAction, onRefresh }) {
     if (!trimmed || trimmed === character.name) { setEditingName(false); return; }
     if (nameHasDigits(trimmed)) {
       onAction?.({ action: "toast", message: NAME_NO_DIGITS_MSG, variant: "destructive" });
+      return;
+    }
+    if (nameHasWhitespace(trimmed)) {
+      onAction?.({ action: "toast", message: NAME_NO_SPACES_MSG, variant: "destructive" });
       return;
     }
     setSavingName(true);

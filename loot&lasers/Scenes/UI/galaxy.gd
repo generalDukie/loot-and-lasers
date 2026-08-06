@@ -3,8 +3,6 @@ extends Control
 
 var _status: Label
 var _subtitle: Label
-var _lives_label: Label
-var _lives_reset: Label
 var _meta_right: Label
 var _map_hint: Label
 var _detail_root: PanelContainer
@@ -29,7 +27,6 @@ var _cooldown_bar: PanelContainer
 var _cooldown_lab: Label
 var _skip_btn: Button
 var _fight_btn: Button
-var _continue_hint: Label
 var _map_stage: SpiralStage
 var _busy := false
 var _tick: Timer
@@ -114,22 +111,6 @@ func _build() -> void:
 	head_r.alignment = BoxContainer.ALIGNMENT_END
 	head_r.add_theme_constant_override("separation", 18)
 	header.add_child(head_r)
-
-	var lives_col := VBoxContainer.new()
-	lives_col.add_theme_constant_override("separation", 2)
-	head_r.add_child(lives_col)
-	_lives_label = Label.new()
-	_lives_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_lives_label.add_theme_font_size_override("font_size", 19)
-	_lives_label.add_theme_color_override("font_color", ClientUi.DANGER)
-	ClientUi.apply_display_font(_lives_label)
-	lives_col.add_child(_lives_label)
-	_lives_reset = Label.new()
-	_lives_reset.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_lives_reset.add_theme_font_size_override("font_size", 13)
-	_lives_reset.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
-	ClientUi.apply_display_font(_lives_reset)
-	lives_col.add_child(_lives_reset)
 
 	_meta_right = Label.new()
 	_meta_right.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -443,32 +424,16 @@ func _build() -> void:
 	_fight_btn.pressed.connect(_on_fight)
 	act_col.add_child(_fight_btn)
 
-	_continue_hint = Label.new()
-	_continue_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_continue_hint.visible = false
-	_continue_hint.add_theme_font_size_override("font_size", 13)
-	_continue_hint.add_theme_color_override("font_color", Color("#FBBF24", 0.85))
-	ClientUi.apply_body_font(_continue_hint)
-	act_col.add_child(_continue_hint)
-
 
 func _populate_meta() -> void:
 	var c := GameManager.active_character
 	var active := DungeonManager.current_planet_id()
 	var in_infinite := active > 10
 	var depth := maxi(1, active - 10)
-	_subtitle.text = "Cooldown: %sm wins · %sm losses%s" % [
-		str(int(DungeonRules.WIN_COOLDOWN_MS / 60000)),
-		str(int(DungeonRules.LOSS_COOLDOWN_MS / 60000)),
+	_subtitle.text = "1 hour cooldown, skip for %s💎%s" % [
+		str(DungeonRules.SKIP_COST),
 		(" · Wormhole depth %s" % depth) if in_infinite else "",
 	]
-
-	var lives := DungeonRules.free_lives_left(c)
-	var skulls := ""
-	for i in range(DungeonRules.DEATHS_PER_DAY):
-		skulls += "💀" if i < lives else "☠"
-	_lives_label.text = "%s  %s left" % [skulls, lives] if lives > 0 else "%s  0 left · paid" % skulls
-	_lives_reset.text = "⏱  resets %s" % ArenaRules.format_eta_short(ArenaRules.ms_until_et_midnight())
 
 	var installed_mods := ShipRules.loadout_for(c).size()
 	var relics: Variant = c.get("ship_mods", [])
@@ -606,7 +571,6 @@ func _update_detail() -> void:
 
 func _update_actions(wormhole: bool, patrol: bool, enemy_idx: int) -> void:
 	var cooldown := DungeonManager.cooldown_ms()
-	var paid := DungeonManager.needs_continue_fee()
 	var patrol_pct := int(round(DungeonRules.PATROL_REWARD_MULT * 100.0))
 
 	_cooldown_bar.visible = cooldown > 0
@@ -614,14 +578,8 @@ func _update_actions(wormhole: bool, patrol: bool, enemy_idx: int) -> void:
 		_cooldown_lab.text = "⏱  Cooldown %s" % DungeonRules.format_ms(cooldown)
 
 	_fight_btn.disabled = cooldown > 0 or _busy
-	_continue_hint.visible = paid and cooldown <= 0
 
-	if paid:
-		_fight_btn.text = "💎  Fight · %s 💎" % DungeonRules.CONTINUE_COST
-		ClientUi.apply_ghost_button(_fight_btn)
-		_fight_btn.add_theme_color_override("font_color", Color("#FDE68A"))
-		_continue_hint.text = "💀  Free lives spent — pay to continue"
-	elif patrol:
+	if patrol:
 		_fight_btn.text = "📡  Patrol · %s%%" % patrol_pct
 		ClientUi.apply_ghost_button(_fight_btn)
 		_fight_btn.add_theme_color_override("font_color", Color("#FEF3C7"))

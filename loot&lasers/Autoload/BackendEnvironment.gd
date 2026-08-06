@@ -7,9 +7,13 @@ extends Node
 ##   4. default: local
 ##
 ## Staging socket server key resolution (never logged in full):
-##   1. OS env NAKAMA_SOCKET_SERVER_KEY (or LOOT_NAKAMA_SERVER_KEY)
-##   2. res://Config/nakama_secrets.cfg [staging] server_key=  (gitignored)
-##   3. user://nakama_secrets.cfg [staging] server_key=
+##   Friend/release builds (custom feature staging_client):
+##     ONLY res://Config/release_client.cfg [staging] server_key=
+##     (baked by scripts/build-windows-installer.ps1 — no OS-env fallback)
+##   Editor / non-release staging:
+##     1. OS env NAKAMA_SOCKET_SERVER_KEY (or LOOT_NAKAMA_SERVER_KEY)
+##     2. res://Config/nakama_secrets.cfg [staging] server_key=  (gitignored)
+##     3. user://nakama_secrets.cfg [staging] server_key=
 ## Local uses the built-in defaultkey (Docker compose default).
 
 const ENV_LOCAL := "local"
@@ -209,10 +213,11 @@ func _build_resolved(env_id: String) -> Dictionary:
 
 
 func _load_staging_server_key() -> String:
+	# Friend installers must use the baked release key only. Falling back to a
+	# developer machine's NAKAMA_SOCKET_SERVER_KEY caused "Server key invalid"
+	# when an old/wrong env key shadowed a missing or stale release_client.cfg.
 	if OS.has_feature(RELEASE_FEATURE):
-		var from_release := _read_secret_field(RELEASE_CLIENT_CONFIG_PATH, "server_key")
-		if not from_release.is_empty():
-			return from_release
+		return _read_secret_field(RELEASE_CLIENT_CONFIG_PATH, "server_key")
 	var from_os := OS.get_environment("NAKAMA_SOCKET_SERVER_KEY").strip_edges()
 	if from_os.is_empty():
 		from_os = OS.get_environment("LOOT_NAKAMA_SERVER_KEY").strip_edges()

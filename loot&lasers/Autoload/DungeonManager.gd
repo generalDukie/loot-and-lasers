@@ -56,14 +56,6 @@ func skip_cooldown() -> Dictionary:
 	return res
 
 
-func pay_continue() -> Dictionary:
-	var res: Dictionary = await GameApiClient.invoke("PayDungeonContinue", {})
-	_apply(res)
-	_apply_dungeon_blob(res)
-	state_changed.emit()
-	return res
-
-
 func current_planet_id() -> int:
 	return maxi(1, int(active_char().get("dungeon_planet", 1)))
 
@@ -98,10 +90,6 @@ func cooldown_ms() -> int:
 	return DungeonRules.cooldown_remaining_ms(active_char())
 
 
-func needs_continue_fee() -> bool:
-	return DungeonRules.free_lives_left(active_char()) <= 0
-
-
 func prepare_fight() -> Dictionary:
 	var planet: Dictionary = DungeonRules.get_planet(selected_planet_id)
 	var enemy_idx := current_enemy_index()
@@ -120,10 +108,6 @@ func prepare_fight() -> Dictionary:
 		return gate
 	if cooldown_ms() > 0:
 		return {"ok": false, "error": "On cooldown (%s)" % DungeonRules.format_ms(cooldown_ms())}
-	if needs_continue_fee():
-		var paid: Dictionary = await pay_continue()
-		if not paid.ok:
-			return paid
 
 	var body := {
 		"planet_id": selected_planet_id,

@@ -1024,6 +1024,39 @@ export function formatFuelAmount(n) {
   return Number.isInteger(v) ? String(v) : v.toFixed(2);
 }
 
+/** Snap Nova to the nearest 0.5 (smallest spend unit). */
+export function snapNovaDisplay(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  return Math.round(v * 2) / 2;
+}
+
+/**
+ * Character.nova_crystals may be half-units (economy_nova_scale === 2) or display.
+ * Prefer nova_display / split display fields when present.
+ */
+export function novaDisplayFromCharacter(character) {
+  if (!character) return 0;
+  if (character.nova_display != null && character.nova_display !== "") {
+    return snapNovaDisplay(character.nova_display);
+  }
+  if (character.nova_wagerable != null || character.nova_promotional != null) {
+    return snapNovaDisplay(
+      (Number(character.nova_wagerable) || 0) + (Number(character.nova_promotional) || 0)
+    );
+  }
+  const raw = Number(character.nova_crystals) || 0;
+  if (Number(character.economy_nova_scale) === 2) {
+    return snapNovaDisplay(raw / 2);
+  }
+  return snapNovaDisplay(raw);
+}
+
+export function formatNovaAmount(n) {
+  const v = snapNovaDisplay(n);
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
 export function computeFuelCost(template) {
   // 1 fuel = 1 minute of mission time (15s = 0.25, 30s = 0.5, 60s = 1, etc.)
   const durationSeconds = Math.floor(template.duration_seconds || 60);
@@ -1477,6 +1510,7 @@ export const DIFFICULTY_COLORS = {
   legendary: "#EF4444",
 };
 
+/** Attribute emoji labels for text/chip UIs. Prefer `<StatIcon stat={…} />` for badge art. */
 export const STAT_ICONS = {
   strength: "⚔️",
   agility: "💨",

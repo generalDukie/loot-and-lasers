@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Skull, Crown, Swords, Gem, Lock, Check, Clock, Zap, Radar } from "lucide-react";
+import { Crown, Swords, Gem, Lock, Check, Clock, Zap, Radar } from "lucide-react";
 import { DUNGEON_PATROL_REWARD_MULT } from "@/lib/dungeonEngine";
 
 function fmtMs(ms) {
@@ -62,8 +62,6 @@ function EncounterCell({ idx, isBoss, isCurrent, isCleared, locked, patrol }) {
 export default function DungeonPlanetView({
   planet,
   currentEnemy,
-  paidContinue,
-  continueCost,
   onFight,
   cooldownActive,
   cooldownRemaining,
@@ -101,7 +99,7 @@ export default function DungeonPlanetView({
       />
 
       <div className="relative z-[1] flex-1 min-h-0 flex flex-col p-3 sm:p-3.5 pb-14">
-        {/* Clipped body ? keeps encounter grid from covering Fight */}
+        {/* Clipped body — keeps encounter grid from covering Fight */}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <header className="shrink-0 mb-2.5">
             <div className="flex items-start gap-2.5">
@@ -170,7 +168,7 @@ export default function DungeonPlanetView({
             <div className="shrink-0 mb-2 flex items-center justify-between gap-2 rounded-xl border border-amber-500/25 bg-amber-500/8 px-2.5 py-1.5">
               <span className="text-[10px] text-amber-100/90 flex items-center gap-1.5 min-w-0">
                 <Radar className="w-3.5 h-3.5 shrink-0 text-amber-300" />
-                <span className="truncate">Cleared world ? farm without advancing.</span>
+                <span className="truncate">Cleared world — farm without advancing.</span>
               </span>
               {onReturnToFront && (
                 <button
@@ -191,7 +189,7 @@ export default function DungeonPlanetView({
             >
               <Gem className="w-3.5 h-3.5 shrink-0 text-amber-300" />
               <p className="text-[10px] text-muted-foreground min-w-0 truncate">
-                Boss reward � <span className="font-display font-bold text-amber-200/95">{planet.shipMod}</span>
+                Boss reward · <span className="font-display font-bold text-amber-200/95">{planet.shipMod}</span>
               </p>
             </div>
           )}
@@ -201,7 +199,7 @@ export default function DungeonPlanetView({
               <p className="text-[9px] font-display uppercase tracking-[0.18em] text-muted-foreground">
                 Encounter path
               </p>
-              <p className="text-[9px] text-muted-foreground/80">1?9 � Boss</p>
+              <p className="text-[9px] text-muted-foreground/80">1–9 · Boss</p>
             </div>
             <div className="grid grid-cols-5 grid-rows-2 gap-1.5 flex-1 min-h-0 [grid-template-rows:repeat(2,minmax(0,1fr))]">
               {enemies.map((idx) => {
@@ -225,7 +223,7 @@ export default function DungeonPlanetView({
           </div>
         </div>
 
-        {/* Actions outside the clipped body ? never covered by encounter cells */}
+        {/* Actions outside the clipped body — never covered by encounter cells */}
         <div className="relative z-30 shrink-0 mt-2.5 space-y-2">
           {cooldownActive && (
             <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/8 px-2.5 py-1.5 gap-2">
@@ -238,7 +236,7 @@ export default function DungeonPlanetView({
                 onClick={onSkipCooldown}
                 className="text-[10px] px-2 py-1 rounded-lg border border-amber-400/35 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 font-display font-bold flex items-center gap-1 shrink-0"
               >
-                <Zap className="w-3 h-3" /> Skip � {cooldownSkipCost}??
+                <Zap className="w-3 h-3" /> Skip · {cooldownSkipCost}💎
               </button>
             </div>
           )}
@@ -248,27 +246,17 @@ export default function DungeonPlanetView({
             onClick={onFight}
             disabled={cooldownActive}
             className={`w-full text-xs sm:text-sm px-3 py-2.5 rounded-xl font-display font-bold tracking-wide flex items-center justify-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-              paidContinue
-                ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/40"
-                : patrol
+              patrol
                 ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-100 border border-amber-500/35"
                 : "painted-btn"
             }`}
           >
-            {paidContinue ? (
-              <><Gem className="w-4 h-4" /> Fight � {continueCost} ??</>
-            ) : patrol ? (
-              <><Radar className="w-4 h-4" /> Patrol � {patrolPct}%</>
+            {patrol ? (
+              <><Radar className="w-4 h-4" /> Patrol · {patrolPct}%</>
             ) : (
-              <><Swords className="w-4 h-4" /> Fight {currentEnemy}{currentEnemy === 10 ? " � BOSS" : ""}</>
+              <><Swords className="w-4 h-4" /> Fight {currentEnemy}{currentEnemy === 10 ? " · BOSS" : ""}</>
             )}
           </button>
-
-          {paidContinue && (
-            <p className="text-center text-[9px] text-amber-400/80 flex items-center justify-center gap-1">
-              <Skull className="w-3 h-3" /> Free lives spent ? pay to continue
-            </p>
-          )}
         </div>
       </div>
     </div>

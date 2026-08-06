@@ -13,7 +13,7 @@ import {
   profileDisplayName,
   familyLabel,
 } from "@/lib/legacyName";
-import { stripDigitsFromName, nameHasDigits, NAME_NO_DIGITS_MSG } from "@/lib/nameRules";
+import { stripDigitsFromName, nameHasDigits, nameHasWhitespace, NAME_NO_DIGITS_MSG, NAME_NO_SPACES_MSG } from "@/lib/nameRules";
 
 const NAME_CHANGE_COST = 500;
 
@@ -52,6 +52,10 @@ export default function ProfileSettings() {
     }
     if (nameHasDigits(trimmed)) {
       toast({ title: "Invalid name", description: NAME_NO_DIGITS_MSG, variant: "destructive" });
+      return;
+    }
+    if (nameHasWhitespace(trimmed)) {
+      toast({ title: "Invalid name", description: NAME_NO_SPACES_MSG, variant: "destructive" });
       return;
     }
     if ((char.nova_crystals || 0) < NAME_CHANGE_COST) {

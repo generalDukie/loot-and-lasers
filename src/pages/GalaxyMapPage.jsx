@@ -6,8 +6,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { getInstalledMods, getStatPointsForLevelRange } from "@/lib/gameData";
 import { DUNGEON_PLANETS, getInfinitePlanet, getDungeonPlanetById, WORMHOLE_ID, getWormholePlanet } from "@/lib/dungeonData";
 import {
-  DUNGEON_ENEMIES_PER_PLANET, DUNGEON_DEATHS_PER_DAY, DUNGEON_CONTINUE_COST,
-  DUNGEON_BATTLE_COOLDOWN_MS, DUNGEON_SKIP_COST, DUNGEON_WIN_COOLDOWN_MS, DUNGEON_LOSS_COOLDOWN_MS,
+  DUNGEON_ENEMIES_PER_PLANET,
+  DUNGEON_BATTLE_COOLDOWN_MS, DUNGEON_SKIP_COST,
   isDungeonUnlockedByLevel, getDungeonUnlockLevel,
 } from "@/lib/dungeonEngine";
 import { processDiscovery } from "@/lib/discovery";
@@ -20,8 +20,7 @@ import DungeonPlanetView from "@/components/game/DungeonPlanetView";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
 import LevelUpOverlay, { pendingLevelUpFromSummary } from "@/components/game/LevelUpOverlay";
-import { Satellite, Skull, Rocket } from "lucide-react";
-import { msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
+import { Satellite, Rocket } from "lucide-react";
 
 export default function GalaxyMapPage() {
   const [character, setCharacterState] = useState(null);
@@ -35,7 +34,6 @@ export default function GalaxyMapPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Keep the shared character cache in sync so remounts don't wipe dungeon_deaths.
   const setCharacter = useCallback((next) => {
     setCharacterState((prev) => {
       const value = typeof next === "function" ? next(prev) : next;
@@ -45,17 +43,20 @@ export default function GalaxyMapPage() {
   }, []);
 
   const load = useCallback(async () => {
-    // Force a fresh read — cached characters often omit post-battle dungeon_deaths.
     const char = await getMyCharacter({ force: true });
     if (!char) { navigate("/create-character"); return; }
     try {
       const sync = await api.functions.invoke("SyncDungeonState", {});
       const synced = sync.character || sync.data?.character;
       const patch = sync.patch || sync.data?.patch;
-      // Prefer the authoritative character from sync (includes today's death count
-      // even when patched:false). Fall back to patch-only merge.
+      const dungeon = sync.dungeon || sync.data?.dungeon;
       if (synced) Object.assign(char, synced);
       else if (patch) Object.assign(char, patch);
+      if (dungeon) {
+        if (dungeon.dungeon_cooldown_until) char.dungeon_cooldown_until = dungeon.dungeon_cooldown_until;
+        if (dungeon.dungeon_cooldown_at) char.dungeon_cooldown_at = dungeon.dungeon_cooldown_at;
+        if (dungeon.dungeon_cooldown_ms != null) char.dungeon_cooldown_ms = dungeon.dungeon_cooldown_ms;
+      }
     } catch (e) { /* non-blocking */ }
     setCharacter(char);
     setSelectedPlanetId(null);
@@ -74,7 +75,6 @@ export default function GalaxyMapPage() {
   const infiniteDepth = inInfinite ? rawPlanet - DUNGEON_PLANETS.length : 1;
   const storyPlanetId = inInfinite ? DUNGEON_PLANETS.length : Math.min(DUNGEON_PLANETS.length, rawPlanet);
 
-  // Default view: wormhole when infinite, otherwise the story front.
   const effectiveSelection = selectedPlanetId ?? (inInfinite ? WORMHOLE_ID : storyPlanetId);
   const viewingWormhole = effectiveSelection === WORMHOLE_ID;
   const patrol = typeof effectiveSelection === "number"
@@ -86,12 +86,7 @@ export default function GalaxyMapPage() {
     ? getWormholePlanet(infiniteDepth)
     : getDungeonPlanetById(effectiveSelection);
 
-  // Infinite / story crawl uses dungeon_enemy on the active front.
   const crawlEnemyIndex = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, character?.dungeon_enemy || 1));
-  const deaths = Math.min(DUNGEON_DEATHS_PER_DAY, character?.dungeon_deaths || 0);
-  const deathCap = DUNGEON_DEATHS_PER_DAY;
-  const freeLivesLeft = Math.max(0, deathCap - deaths);
-  const paidContinue = freeLivesLeft <= 0;
   const realMods = character ? getInstalledMods(character).length : 0;
   const flavorMods = character?.ship_mods || [];
   const cdUntil = character?.dungeon_cooldown_until
@@ -106,14 +101,29 @@ export default function GalaxyMapPage() {
   const cooldownActive = now < cooldownEnds;
 
   async function skipCooldown() {
+    if (!cooldownActive) {
+      toast({ title: "No cooldown", description: "Nothing to skip right now." });
+      return;
+    }
     if ((character.nova_crystals || 0) < DUNGEON_SKIP_COST) {
       toast({ title: "Not enough Nova Crystals", description: `Skip costs ${DUNGEON_SKIP_COST} 💎.`, variant: "destructive" });
       return;
     }
-    const res = await api.functions.invoke("SkipDungeonCooldown", {});
-    const upd = res.patch || res.data?.patch || {};
-    setCharacter((c) => ({ ...c, ...upd }));
-    void trackNovaSpend(character, DUNGEON_SKIP_COST, "dungeon_skip");
+    try {
+      const res = await api.functions.invoke("SkipDungeonCooldown", {});
+      const upd = res.patch || res.data?.patch || {};
+      const dungeon = res.dungeon || res.data?.dungeon || {};
+      setCharacter((c) => ({
+        ...c,
+        ...upd,
+        dungeon_cooldown_until: dungeon.dungeon_cooldown_until ?? null,
+        dungeon_cooldown_at: dungeon.dungeon_cooldown_at ?? null,
+        dungeon_cooldown_ms: dungeon.dungeon_cooldown_ms ?? null,
+      }));
+      void trackNovaSpend(character, DUNGEON_SKIP_COST, "dungeon_skip");
+    } catch (e) {
+      toast({ title: "Could not skip", description: e?.message || "Try again.", variant: "destructive" });
+    }
   }
 
   async function handleFight() {
@@ -133,19 +143,7 @@ export default function GalaxyMapPage() {
       toast({ title: "Battle Cooldown", description: `Wait or skip with ${DUNGEON_SKIP_COST} 💎.`, variant: "destructive" });
       return;
     }
-    if (paidContinue) {
-      if ((character.nova_crystals || 0) < DUNGEON_CONTINUE_COST) {
-        toast({ title: "Not enough Nova Crystals", description: `Continue costs ${DUNGEON_CONTINUE_COST} 💎.`, variant: "destructive" });
-        return;
-      }
-      const pay = await api.functions.invoke("PayDungeonContinue", {});
-      const payPatch = pay.patch || pay.data?.patch || {};
-      setCharacter((c) => ({ ...c, ...payPatch }));
-      void trackNovaSpend(character, DUNGEON_CONTINUE_COST, "dungeon_continue");
-    }
 
-    // Patrol: random regular enemy (1–9), 10% chance of boss rematch.
-    // Wormhole / story crawl: fight the current node.
     let fightIndex = crawlEnemyIndex;
     if (patrol) {
       fightIndex = Math.random() < 0.1 ? DUNGEON_ENEMIES_PER_PLANET : 1 + Math.floor(Math.random() * (DUNGEON_ENEMIES_PER_PLANET - 1));
@@ -166,6 +164,14 @@ export default function GalaxyMapPage() {
     }
     const data = prep?.data || prep || {};
     if (data.character) setCharacter((c) => ({ ...c, ...data.character }));
+    if (data.dungeon) {
+      setCharacter((c) => ({
+        ...c,
+        dungeon_cooldown_until: data.dungeon.dungeon_cooldown_until ?? c.dungeon_cooldown_until,
+        dungeon_cooldown_at: data.dungeon.dungeon_cooldown_at ?? c.dungeon_cooldown_at,
+        dungeon_cooldown_ms: data.dungeon.dungeon_cooldown_ms ?? c.dungeon_cooldown_ms,
+      }));
+    }
     const enemy = data.enemy || {};
     const battle = data.battle || {
       winner: data.winner,
@@ -205,40 +211,38 @@ export default function GalaxyMapPage() {
         combat_id: battleState.combat_id,
       });
     } catch (e) {
-      toast({ title: "Could not settle dungeon fight", description: e?.message || "Try again.", variant: "destructive" });
+      toast({ title: "Settle failed", description: e?.message || "Try again.", variant: "destructive" });
       setBattleState(null);
-      await load();
       return;
     }
-    const update = res.patch || res.data?.patch || {};
-    const fullChar = res.character || res.data?.character;
-    const dungeonMeta = res.dungeon || res.data?.dungeon || {};
-    toastNewAchievements(res, toast);
-    const serverRewards = res.rewards || res.data?.rewards || {};
-    const boostedXp = won ? (serverRewards.experience || 0) : 0;
-    const newLevel = (fullChar || update).level ?? character.level;
-    const unlockedShipMod = res.ship_mod ?? res.data?.ship_mod ?? null;
-    const items = res.items || res.data?.items || [];
-    applyPendingLootFromResponse(res);
-    const gearItem = items[0] || null;
-    const droppedConsumable = items.find((i) => i.type === "consumable") || null;
-    const milestoneItem = items.length > 1 ? items[items.length - 1] : null;
-    let defeatNote;
-    if (!won) {
-      const deathsNow = (fullChar || update).dungeon_deaths ?? (deaths + 1);
-      defeatNote = freeLivesLeft > 1
-        ? `Death ${deathsNow}/${deathCap}. No rewards on defeat.`
-        : freeLivesLeft === 1
-        ? `Last free life spent. Further fights cost ${DUNGEON_CONTINUE_COST} 💎.`
-        : `Next fight costs ${DUNGEON_CONTINUE_COST} 💎.`;
-    }
+
+    const data = res?.data || res || {};
+    const update = data.patch || {};
+    const fullChar = data.character;
+    const dungeonMeta = data.dungeon || {};
+    const serverRewards = data.rewards || data.receipt?.rewards || {};
+    const gearItem = data.gear || data.items?.[0] || null;
+    const unlockedShipMod = data.ship_mod || data.unlockedShipMod || null;
+    const droppedConsumable = data.consumable || null;
+    const milestoneItem = data.milestone_item || null;
+    const boostedXp = serverRewards.experience || 0;
+    const newLevel = fullChar?.level || update.level || character.level;
+    await applyPendingLootFromResponse(data);
+    toastNewAchievements(data);
+
+    const defeatNote = won ? "" : "No rewards on defeat.";
 
     const isBoss = !!(enemy.isBoss || enemy.boss || serverRewards.isBoss || fightIndex === DUNGEON_ENEMIES_PER_PLANET);
 
-    // Galaxy news is posted server-side by FinishDungeonBattle
-
     const { found: discFound } = processDiscovery(character, { win: won, speciesId: battleState.enemy.speciesId });
-    setCharacter((c) => ({ ...c, ...(fullChar || update), ...dungeonMeta }));
+    setCharacter((c) => ({
+      ...c,
+      ...(fullChar || update),
+      ...dungeonMeta,
+      dungeon_cooldown_until: dungeonMeta.dungeon_cooldown_until ?? c.dungeon_cooldown_until,
+      dungeon_cooldown_at: dungeonMeta.dungeon_cooldown_at ?? c.dungeon_cooldown_at,
+      dungeon_cooldown_ms: dungeonMeta.dungeon_cooldown_ms ?? c.dungeon_cooldown_ms,
+    }));
     setBattleState(null);
     if (!wasPatrol && won && isBoss) {
       if (fightPlanet.id === DUNGEON_PLANETS.length) setSelectedPlanetId(WORMHOLE_ID);
@@ -268,15 +272,13 @@ export default function GalaxyMapPage() {
     });
   }
 
-  if (loading) {
+  if (loading || !character) {
     return (
-      <div className="flex-1 min-h-0 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center py-20">
         <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
-
-  if (!character) return null;
 
   const displayEnemy = patrol ? 1 : crawlEnemyIndex;
 
@@ -322,24 +324,11 @@ export default function GalaxyMapPage() {
             <Satellite className="w-5 h-5 text-primary" /> Galactic Frontier
           </h1>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            Cooldown: {Math.round(DUNGEON_WIN_COOLDOWN_MS / 60000)}m wins · {Math.round(DUNGEON_LOSS_COOLDOWN_MS / 60000)}m losses
+            1 hour cooldown, skip for {DUNGEON_SKIP_COST} 💎
             {inInfinite ? ` · Wormhole depth ${infiniteDepth}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-4 text-xs">
-          <span className="flex flex-col items-end gap-0.5" title="Free lives today (ET midnight). After these, fights cost Nova Crystals.">
-            <span className="flex items-center gap-1.5">
-              {Array.from({ length: DUNGEON_DEATHS_PER_DAY }).map((_, i) => (
-                <Skull key={i} className={`w-4 h-4 ${i < freeLivesLeft ? "text-red-400" : "text-muted/30"}`} />
-              ))}
-              <span className="text-muted-foreground ml-1">
-                {freeLivesLeft > 0 ? `${freeLivesLeft} left` : "0 left · paid"}
-              </span>
-            </span>
-            <span className="text-[9px] text-muted-foreground/80 font-display tracking-wide">
-              resets {formatEtaShort(msUntilNextETMidnight(now))}
-            </span>
-          </span>
           <span className="flex items-center gap-1 text-accent" title="Active ship mod tiers / catalogued frontier relics">
             <Rocket className="w-3.5 h-3.5" /> {realMods} mods{flavorMods.length ? ` · ${flavorMods.length} relics` : ""}
           </span>
@@ -347,7 +336,6 @@ export default function GalaxyMapPage() {
       </div>
 
       <div className="flex-1 min-h-0 flex flex-row gap-2 sm:gap-3 overflow-hidden">
-        {/* Map stays under the planet pane so spiral nodes can't steal Fight clicks */}
         <div className="relative z-0 flex-[1.85] min-w-0 min-h-0 flex flex-col overflow-hidden isolate">
           <DungeonMap
             fill
@@ -365,8 +353,6 @@ export default function GalaxyMapPage() {
           <DungeonPlanetView
             planet={planet}
             currentEnemy={displayEnemy}
-            paidContinue={paidContinue}
-            continueCost={DUNGEON_CONTINUE_COST}
             onFight={handleFight}
             cooldownActive={cooldownActive}
             cooldownRemaining={cooldownEnds - now}

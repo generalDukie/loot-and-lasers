@@ -7,9 +7,9 @@ import CharacterAvatar from "@/components/game/CharacterAvatar";
 import EquippedFrame from "@/components/game/EquippedFrame";
 import { useEquippedItems } from "@/hooks/useEquippedItems";
 import { PRIMARY_STATS, computePermanentTotalStats, computeDerivedStats } from "@/lib/statEngine";
-import { STAT_ICONS } from "@/lib/gameData";
 import { NAV_GROUPS } from "@/lib/navGroups";
 import { getOverlayClampBounds } from "@/lib/gameViewportDom";
+import StatIcon from "@/components/game/StatIcon";
 
 const STAT_SHORT = {
   strength: "STR",
@@ -227,7 +227,7 @@ export default function CharacterNavMenu({ character, large = false, xpPct: xpPc
                       className="rounded-md bg-muted/30 border border-border/40 px-0.5 py-0.5 text-center"
                       title={key}
                     >
-                      <div className="text-[9px] leading-none">{STAT_ICONS[key]}</div>
+                      <div className="flex justify-center leading-none"><StatIcon stat={key} className="w-3 h-3" /></div>
                       <div className="text-[6px] font-display font-bold tracking-wide text-muted-foreground mt-0.5">
                         {STAT_SHORT[key]}
                       </div>

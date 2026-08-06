@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FlaskConical, Rocket } from "lucide-react";
-import { getActiveBuffs, STAT_ICONS, getStatColor } from "@/lib/gameData";
+import { getActiveBuffs, getStatColor } from "@/lib/gameData";
 import { getActiveFuelMounts } from "@/lib/fuelMounts";
+import StatIcon from "@/components/game/StatIcon";
 
 // Live countdown label for a buff expiry.
 function useCountdown(expiresAt) {
@@ -23,7 +24,6 @@ function useCountdown(expiresAt) {
 function BuffChip({ buff }) {
   const remaining = useCountdown(buff.expires_at);
   const color = getStatColor(buff.stat);
-  const statLabel = buff.stat === "all" ? "ALL" : (STAT_ICONS[buff.stat] + " " + buff.stat);
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.8 }}
@@ -35,8 +35,13 @@ function BuffChip({ buff }) {
     >
       <FlaskConical className="w-3.5 h-3.5 shrink-0" style={{ color }} />
       <div className="min-w-0">
-        <p className="text-[11px] font-display font-semibold leading-tight truncate" style={{ color }}>
-          +{Math.round((buff.mult || 0) * 100)}% {statLabel}
+        <p className="text-[11px] font-display font-semibold leading-tight truncate inline-flex items-center gap-1" style={{ color }}>
+          +{Math.round((buff.mult || 0) * 100)}%{" "}
+          {buff.stat === "all" ? "ALL" : (
+            <>
+              <StatIcon stat={buff.stat} className="w-3 h-3" /> {buff.stat}
+            </>
+          )}
         </p>
         <p className="text-[9px] text-muted-foreground leading-tight truncate">{buff.name}</p>
       </div>

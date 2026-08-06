@@ -8,9 +8,8 @@ import { clock } from "./time/clock.js";
 import {
   DUNGEON_STORY_PLANETS,
   DUNGEON_ENEMIES_PER_PLANET,
-  DUNGEON_DEATHS_PER_DAY,
-  DUNGEON_CONTINUE_COST,
   DUNGEON_SKIP_COST,
+  DUNGEON_BATTLE_COOLDOWN_MS,
   isDungeonUnlockedByLevel,
   getDungeonUnlockLevel,
   dungeonCooldownMs,
@@ -19,9 +18,8 @@ import {
 export {
   DUNGEON_STORY_PLANETS,
   DUNGEON_ENEMIES_PER_PLANET,
-  DUNGEON_DEATHS_PER_DAY,
-  DUNGEON_CONTINUE_COST,
   DUNGEON_SKIP_COST,
+  DUNGEON_BATTLE_COOLDOWN_MS,
 };
 
 export const DUNGEON_CLIENT_FORBIDDEN = Object.freeze([
@@ -79,13 +77,12 @@ export function crawlEnemy(character) {
   );
 }
 
-export function deathsToday(character, todayKey) {
-  if (character?.dungeon_deaths_date !== todayKey) return 0;
-  return Math.min(DUNGEON_DEATHS_PER_DAY, Math.max(0, Math.floor(Number(character?.dungeon_deaths) || 0)));
+export function deathsToday(_character, _todayKey) {
+  return 0;
 }
 
-export function freeLivesLeft(character, todayKey) {
-  return Math.max(0, DUNGEON_DEATHS_PER_DAY - deathsToday(character, todayKey));
+export function freeLivesLeft(_character, _todayKey) {
+  return Number.POSITIVE_INFINITY;
 }
 
 export function cooldownRemainingMs(character, nowMs = clock.nowMs()) {
@@ -116,8 +113,9 @@ export function assertCooldownActive(character, nowMs = clock.nowMs()) {
   }
 }
 
-export function buildCooldownPatch(won, nowMs = clock.nowMs()) {
-  const cdMs = dungeonCooldownMs(won);
+/** Shared 1h cooldown — outcome does not change duration. */
+export function buildCooldownPatch(_won, nowMs = clock.nowMs()) {
+  const cdMs = dungeonCooldownMs(_won);
   return {
     dungeon_cooldown_at: new Date(nowMs).toISOString(),
     dungeon_cooldown_ms: cdMs,
@@ -177,23 +175,17 @@ export function assertDungeonProgressAllowed(character, { planetId, enemyIndex, 
   return { planetId: pid, enemyIndex: eidx, patrol: false, viewingWormhole: wormhole };
 }
 
-export function needsContinueCredit(character, todayKey) {
-  return freeLivesLeft(character, todayKey) <= 0;
+/** @deprecated Death quotas removed — always false. */
+export function needsContinueCredit(_character, _todayKey) {
+  return false;
 }
 
-export function assertContinueCredit(character, todayKey) {
-  if (!needsContinueCredit(character, todayKey)) return;
-  if (!character?.dungeon_continue_credit) {
-    throw err(402, `Continue costs ${DUNGEON_CONTINUE_COST} Nova Crystals`, "DUNGEON_CONTINUE_REQUIRED");
-  }
-}
+/** @deprecated No-op; death quotas removed. */
+export function assertContinueCredit(_character, _todayKey) {}
 
-export function consumeContinueCreditPatch(character, todayKey) {
-  if (!needsContinueCredit(character, todayKey)) return {};
-  if (!character?.dungeon_continue_credit) {
-    throw err(402, `Continue costs ${DUNGEON_CONTINUE_COST} Nova Crystals`, "DUNGEON_CONTINUE_REQUIRED");
-  }
-  return { dungeon_continue_credit: false };
+/** @deprecated No-op; death quotas removed. */
+export function consumeContinueCreditPatch(_character, _todayKey) {
+  return {};
 }
 
 export function pendingCombatMatches(pending, { planetId, enemyIndex, patrol, combatId }) {
@@ -208,29 +200,27 @@ export function pendingCombatMatches(pending, { planetId, enemyIndex, patrol, co
   return true;
 }
 
-export function serializeDungeonState(character, nowMs = clock.nowMs(), todayKey) {
+export function serializeDungeonState(character, nowMs = clock.nowMs(), _todayKey) {
   const pending = character?.dungeon_pending_combat;
   const hasPending = !!(pending && typeof pending === "object" && pending.combat_id);
   const rem = cooldownRemainingMs(character, nowMs);
   const crawlP = crawlPlanet(character);
-  const deaths = todayKey != null ? deathsToday(character, todayKey) : Math.min(
-    DUNGEON_DEATHS_PER_DAY,
-    Math.max(0, Math.floor(Number(character?.dungeon_deaths) || 0)),
-  );
   return {
     dungeon_planet: crawlP,
     dungeon_enemy: crawlEnemy(character),
-    dungeon_deaths: deaths,
-    dungeon_deaths_date: character?.dungeon_deaths_date || null,
-    free_lives_left: Math.max(0, DUNGEON_DEATHS_PER_DAY - deaths),
+    dungeon_deaths: 0,
+    dungeon_deaths_date: null,
+    free_lives_left: null,
     dungeon_clears: character?.dungeon_clears || 0,
     dungeon_nodes_cleared: character?.dungeon_nodes_cleared || 0,
-    dungeon_continue_credit: !!character?.dungeon_continue_credit,
+    dungeon_continue_credit: false,
     cooldown_remaining_ms: rem,
     cooldown_active: rem > 0,
     dungeon_cooldown_until: character?.dungeon_cooldown_until || null,
     dungeon_cooldown_at: character?.dungeon_cooldown_at || null,
-    dungeon_cooldown_ms: character?.dungeon_cooldown_ms ?? null,
+    dungeon_cooldown_ms: character?.dungeon_cooldown_ms ?? DUNGEON_BATTLE_COOLDOWN_MS,
+    battle_cooldown_ms: DUNGEON_BATTLE_COOLDOWN_MS,
+    skip_cost: DUNGEON_SKIP_COST,
     pending_combat_id: hasPending ? pending.combat_id : null,
     pending_meta: hasPending
       ? {

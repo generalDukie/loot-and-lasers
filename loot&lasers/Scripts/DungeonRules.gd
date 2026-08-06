@@ -3,11 +3,16 @@ extends RefCounted
 ## Galactic Frontier — mirrors dungeonEngine.js / dungeonData.js (client sim + gates).
 
 const ENEMIES_PER_PLANET := 10
-const DEATHS_PER_DAY := 3
-const CONTINUE_COST := 5
-const SKIP_COST := 10
-const WIN_COOLDOWN_MS := 10 * 60 * 1000
-const LOSS_COOLDOWN_MS := 25 * 60 * 1000
+## @deprecated Death quotas removed — always 1h shared cooldown.
+const DEATHS_PER_DAY := 0
+## @deprecated Continue fee removed with death quotas.
+const CONTINUE_COST := 0
+const SKIP_COST := 25
+const BATTLE_COOLDOWN_MS := 60 * 60 * 1000
+## @deprecated use BATTLE_COOLDOWN_MS
+const WIN_COOLDOWN_MS := BATTLE_COOLDOWN_MS
+## @deprecated use BATTLE_COOLDOWN_MS
+const LOSS_COOLDOWN_MS := BATTLE_COOLDOWN_MS
 const PATROL_REWARD_MULT := 0.4
 const WORMHOLE_ID := "wormhole"
 
@@ -228,5 +233,6 @@ static func _parse_iso_ms(iso: String) -> float:
 	return float(Time.get_unix_time_from_datetime_dict(dict)) * 1000.0
 
 
-static func free_lives_left(character: Dictionary) -> int:
-	return maxi(0, DEATHS_PER_DAY - int(character.get("dungeon_deaths", 0)))
+## @deprecated Death quotas removed — always returns a sentinel so continue fees never gate.
+static func free_lives_left(_character: Dictionary) -> int:
+	return 999

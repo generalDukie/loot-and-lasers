@@ -1,35 +1,34 @@
 ---
-description: Never CLI-push to GitHub; live updates via Desktop, Hetzner, Nakama, Godot
+description: Commit+push = agent pushes remote + deploys Hetzner/Nakama; no user clicks; no unprompted installer
 alwaysApply: true
 ---
 
 # Publish & live deploy (Loot & Lasers)
 
-## Never CLI-push to GitHub
+## “Commit and push” = fully agent-driven
 
-- **Do not** run `git push`, `git push origin`, or any remote publish via the shell/CLI.
-- The user's relevant remote workflow is **GitHub Desktop**. When they ask to "push", **commit locally** (if asked), then tell them to press **Push origin** in GitHub Desktop. Do not attempt the push yourself.
-- GitHub Desktop and `git push` hit the same GitHub remote; the user prefers Desktop for auth and habit. Respect that.
+When the user says **commit and push** (or equivalent), the agent must do **all** of the following **without asking the user to click anything**:
 
-## What "ship it" actually means
+1. **Commit locally** per `git-commit-convention.mdc` (milestone commits; no secrets).
+2. **Push to the GitHub remote** that GitHub Desktop tracks (`origin`, usually `main`).  
+   - GitHub Desktop is not a separate repo — it syncs this same `origin`.  
+   - The agent performs the push (typically `git push -u origin HEAD` / `git push origin main`) using the machine’s stored credentials / Git Credential Manager (same store Desktop uses).  
+   - Do **not** tell the user to press Push origin. Do **not** leave push as a manual step.  
+   - If push fails for auth, fix or report the credential error; do not silently skip.
+3. **Deploy Hetzner Node API** — run `scripts/deploy-hetzner-node-api.ps1` from the local checkout (SSH identity typically `C:\Users\Caide\Desktop\Stuff\Loot and lasers\SSH\Farts`).
+4. **Deploy / reload Nakama** on staging — keep modules current and recreate/reload the Nakama service as needed (no game-data wipe). See `docs/STAGING_NAKAMA.md` / host compose when there is no dedicated script.
+5. **Never** build a Windows installer / Godot export unless the user **explicitly** asks for one.
 
-Committing / syncing the repo is only one piece. For changes to matter in the live/staging game, ensure the right targets are updated:
+## Targets
 
-| Target | When needed | How |
-|--------|-------------|-----|
-| **GitHub Desktop repo** | Always for shared history | Local `git commit` → user **Push origin** in GitHub Desktop |
-| **Hetzner (Node API + web)** | Server / `src/` / `server/` / API behavior | Run `scripts/deploy-hetzner-node-api.ps1` from the local checkout (SSH upload of local files — not a GitHub pull) |
-| **Nakama** | Auth/realtime/RPC modules on Nakama | Deploy/update Nakama on the staging host as that stack requires (separate from the Node deploy script) |
-| **Godot client** | Desktop UX / Godot scripts/scenes | Only when the user **explicitly asks** for a new installer/export — never build `scripts/build-windows-installer.ps1` (or Godot export) unprompted |
+| Target | On “commit and push” | Who |
+|--------|----------------------|-----|
+| **GitHub remote** (Desktop’s repo) | Yes — push | Agent |
+| **Hetzner Node API** | Yes — deploy | Agent |
+| **Nakama** | Yes — reload/deploy | Agent |
+| **Godot installer** | Only if asked | Agent when requested |
 
-## Agent behavior when user asks to commit and push
+## Notes
 
-1. Commit locally per `git-commit-convention.mdc` (only when they ask).
-2. **Do not** `git push`.
-3. Remind them to push in **GitHub Desktop**.
-4. If the change should be live for players/testers, call out (and run only when asked): **Hetzner deploy** and **Nakama** update if those stacks changed. **Never** build a new Windows installer unless the user explicitly requests one.
-
-## Do not assume
-
-- Pushing to GitHub (Desktop or CLI) does **not** auto-deploy Hetzner, Nakama, or client installs.
-- An installer alone does not update the Node API; a Hetzner deploy alone does not update installed desktop clients.
+- Prefer non-interactive push (`GIT_TERMINAL_PROMPT=0` where helpful) so Credential Manager can use saved creds without a cancelled GUI dialog.
+- Hetzner/Nakama deploy does not update installed desktop clients (needs a new installer when requested).

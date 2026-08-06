@@ -31,7 +31,7 @@ a server-side administrative secret.
 From the repository root:
 
 ```powershell
-.\scripts\build-windows-installer.ps1 -Version "0.1.7"
+.\scripts\build-windows-installer.ps1 -Version "0.1.8"
 ```
 
 The script:
@@ -40,13 +40,13 @@ The script:
 2. writes a temporary, gitignored release configuration;
 3. exports the `Windows Staging` Godot preset;
 4. deletes the temporary configuration in a `finally` block;
-5. compiles `dist\LootAndLasers-Setup-0.1.7.exe`.
+5. compiles `dist\LootAndLasers-Setup-0.1.8.exe`.
 
 To use non-default tool locations:
 
 ```powershell
 .\scripts\build-windows-installer.ps1 `
-  -Version "0.1.7" `
+  -Version "0.1.8" `
   -GodotPath "C:\path\to\Godot_console.exe" `
   -InnoCompilerPath "C:\path\to\ISCC.exe"
 ```

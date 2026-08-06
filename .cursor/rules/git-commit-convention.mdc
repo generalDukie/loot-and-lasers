@@ -26,7 +26,7 @@ git add .
 git commit -m "<message>"
 ```
 
-7. **Never** run `git push`. If the user asked to push, tell them to use **GitHub Desktop → Push origin**. See `publish-and-live-deploy.mdc` for Hetzner / Nakama / Godot live updates.
+7. If the user asked to **commit and push**, follow `publish-and-live-deploy.mdc`: the agent pushes `origin` (same remote GitHub Desktop uses), then deploys **Hetzner** and **Nakama** — no manual user steps. Do not build an installer unless they explicitly ask.
 
 If any check fails: do **not** commit; fix first and explain what blocked the commit.
 

@@ -54,7 +54,7 @@ var _bag_inspect: PanelContainer
 var _bag_inspect_col: VBoxContainer
 var _inspect_item_id := ""
 var _inspect_anchor: Control = null
-var _inspect_hide_token := 0
+var _inspect_is_equipped := false
 var _sheet_ready := false
 var _doll_wrap: Control = null
 var _slot_panels: Dictionary = {} # type -> PanelContainer
@@ -63,9 +63,8 @@ var _bag_slot_min_h := 56.0
 const EQUIP_SLOT_SIZE := 107.0 # 88 × 1.22 — loadout extends downward 22%
 const PORTRAIT_SIZE := 107.0
 const BAG_COLS := 5
-## Fixed backpack gear glyph — matches prior size when 2 attrs stacked (no fill-scale).
-const BAG_GEAR_ICON_PX := 32.0
-const INSPECT_HIDE_DELAY := 0.22
+## Backpack gear glyph — fraction of the middle band's shorter side (name/attrs unchanged).
+const BAG_GEAR_ICON_FILL := 0.6
 const ARMOR_STAT_LABEL := "Might Resistance"
 
 
@@ -390,8 +389,7 @@ func _build() -> void:
 	_bag_inspect_col.add_theme_constant_override("separation", 2)
 	_bag_inspect_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_bag_inspect.add_child(_bag_inspect_col)
-	_bag_inspect.mouse_entered.connect(_cancel_hide_bag_inspect)
-	_bag_inspect.mouse_exited.connect(_schedule_hide_bag_inspect)
+	_bag_inspect.mouse_exited.connect(_maybe_hide_bag_inspect)
 
 
 func _populate() -> void:
@@ -708,7 +706,7 @@ func _rebuild_doll() -> void:
 			bsb.content_margin_bottom = 2
 			badge.add_theme_stylebox_override("panel", bsb)
 			var lvl := Label.new()
-			lvl.text = str(int(ch.get("level", 1)))
+			lvl.text = ClientUi.format_level(ch.get("level", 1))
 			lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			lvl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			lvl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -786,7 +784,7 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 		panel.mouse_entered.connect(func() -> void:
 			_show_bag_inspect(panel, captured, true)
 		)
-		panel.mouse_exited.connect(_schedule_hide_bag_inspect)
+		panel.mouse_exited.connect(_hide_bag_inspect)
 		panel.gui_input.connect(func(ev: InputEvent) -> void:
 			if ev is InputEventMouseButton:
 				var mb := ev as InputEventMouseButton
@@ -850,7 +848,7 @@ func _on_bag_grid_resized() -> void:
 					(slot as Control).custom_minimum_size.y = _bag_slot_min_h
 
 
-## Backpack cell: name top, fixed-size gear icon centered, attrs bottom (max 2 rows).
+## Backpack cell: name top, gear icon centered in middle band (~60% of that band), attrs bottom.
 func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	var filled := not item.is_empty()
 	var item_id := str(item.get("id", "")) if filled else ""
@@ -923,7 +921,9 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		icon_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		icon_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		col.add_child(icon_wrap)
-		icon_wrap.add_child(GearIcon.make(item, BAG_GEAR_ICON_PX))
+		var gear := GearIcon.make(item, 8.0)
+		icon_wrap.add_child(gear)
+		_bind_bag_gear_icon_size(icon_wrap, gear)
 
 		var stats_raw: Variant = item.get("stats", {})
 		if typeof(stats_raw) == TYPE_DICTIONARY:
@@ -959,7 +959,7 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		panel.mouse_entered.connect(func() -> void:
 			_show_bag_inspect(panel, captured)
 		)
-		panel.mouse_exited.connect(_schedule_hide_bag_inspect)
+		panel.mouse_exited.connect(_maybe_hide_bag_inspect)
 		panel.gui_input.connect(func(ev: InputEvent) -> void:
 			if ev is InputEventMouseButton and ev.pressed and ev.double_click \
 					and ev.button_index == MOUSE_BUTTON_LEFT:
@@ -970,6 +970,22 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 					_on_equip(captured_id)
 		)
 	return panel
+
+
+func _bind_bag_gear_icon_size(wrap: Control, icon: Control) -> void:
+	var sync := func() -> void:
+		_sync_bag_gear_icon_size(wrap, icon)
+	wrap.resized.connect(sync)
+	sync.call_deferred()
+
+
+func _sync_bag_gear_icon_size(wrap: Control, icon: Control) -> void:
+	if not is_instance_valid(wrap) or not is_instance_valid(icon):
+		return
+	var side := minf(wrap.size.x, wrap.size.y) * BAG_GEAR_ICON_FILL
+	if side < 4.0:
+		return
+	icon.custom_minimum_size = Vector2(side, side)
 
 
 ## Positive bag stats in display order, capped at 5.
@@ -1054,30 +1070,25 @@ func _bag_slot_style(bg: Color, border: Color) -> StyleBoxFlat:
 	return sb
 
 
-func _cancel_hide_bag_inspect() -> void:
-	_inspect_hide_token += 1
-
-
-func _schedule_hide_bag_inspect() -> void:
-	_inspect_hide_token += 1
-	var token := _inspect_hide_token
-	get_tree().create_timer(INSPECT_HIDE_DELAY).timeout.connect(func() -> void:
-		if token != _inspect_hide_token:
-			return
-		if _pointer_over_inspect_zone():
-			return
+func _maybe_hide_bag_inspect() -> void:
+	# Backpack only — equipped slots close on leave via _hide_bag_inspect directly.
+	if _inspect_is_equipped:
 		_hide_bag_inspect()
-	)
+		return
+	if _pointer_over_inspect_zone():
+		return
+	_hide_bag_inspect()
 
 
 func _pointer_over_inspect_zone() -> bool:
 	var mouse := get_viewport().get_mouse_position()
-	var pad := 14.0
-	if _bag_inspect != null and is_instance_valid(_bag_inspect) and _bag_inspect.visible:
-		if _bag_inspect.get_global_rect().grow(pad).has_point(mouse):
-			return true
+	# Equipped inspect is stats-only: popup must not keep itself open or block neighbors.
+	if not _inspect_is_equipped:
+		if _bag_inspect != null and is_instance_valid(_bag_inspect) and _bag_inspect.visible:
+			if _bag_inspect.get_global_rect().has_point(mouse):
+				return true
 	if _inspect_anchor != null and is_instance_valid(_inspect_anchor):
-		if _inspect_anchor.get_global_rect().grow(pad).has_point(mouse):
+		if _inspect_anchor.get_global_rect().has_point(mouse):
 			return true
 	return false
 
@@ -1085,21 +1096,24 @@ func _pointer_over_inspect_zone() -> bool:
 func _hide_bag_inspect() -> void:
 	_inspect_item_id = ""
 	_inspect_anchor = null
+	_inspect_is_equipped = false
 	if _bag_inspect:
 		_bag_inspect.visible = false
+		_bag_inspect.mouse_filter = Control.MOUSE_FILTER_STOP
 
 
 func _show_bag_inspect(anchor: Control, item: Dictionary, equipped_preview := false) -> void:
-	_cancel_hide_bag_inspect()
 	var item_id := str(item.get("id", ""))
 	_inspect_item_id = item_id
 	_inspect_anchor = anchor
+	_inspect_is_equipped = equipped_preview
 	_rebuild_bag_inspect(item, equipped_preview)
+	# Equipped popups are view-only and must not steal hover from adjacent loadout slots.
+	_bag_inspect.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE if equipped_preview else Control.MOUSE_FILTER_STOP
+	)
 	_bag_inspect.visible = true
 	_bag_inspect.reset_size()
-	await get_tree().process_frame
-	if _inspect_item_id != item_id or not is_instance_valid(anchor):
-		return
 	_position_bag_inspect(anchor)
 
 
@@ -1109,7 +1123,8 @@ func _position_bag_inspect(anchor: Control) -> void:
 	size.x = clampf(size.x, 168.0, 280.0)
 	_bag_inspect.size = size
 	var vp := get_viewport_rect().size
-	var gap := 8.0
+	# Slight overlap with the slot so the pointer can cross without a dead frame.
+	var gap := -2.0
 	# Prefer right of source slot so the popup does not cover the item/cursor.
 	var pos := Vector2(rect.end.x + gap, rect.position.y)
 	if pos.x + size.x > vp.x - 8.0:
@@ -1148,7 +1163,7 @@ func _rebuild_bag_inspect(item: Dictionary, equipped_preview := false) -> void:
 	var meta := Label.new()
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meta.text = "%s · %s · Lv.%s" % [
-		str(item.get("rarity", "?")), item_type, str(item.get("level_requirement", "?")),
+		str(item.get("rarity", "?")), item_type, ClientUi.format_level(item.get("level_requirement", "?")),
 	]
 	meta.add_theme_font_size_override("font_size", 11)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -1263,7 +1278,6 @@ func _rebuild_bag_inspect(item: Dictionary, equipped_preview := false) -> void:
 		use_btn.text = "Use"
 		use_btn.custom_minimum_size = Vector2(0, 26)
 		ClientUi.apply_primary_button(use_btn)
-		use_btn.mouse_entered.connect(_cancel_hide_bag_inspect)
 		use_btn.pressed.connect(func() -> void:
 			_hide_bag_inspect()
 			_on_use_stim(item_id, str(item.get("name", "Stim")))
@@ -1275,7 +1289,6 @@ func _rebuild_bag_inspect(item: Dictionary, equipped_preview := false) -> void:
 		equip_btn.text = "Swap" if swap else "Equip"
 		equip_btn.custom_minimum_size = Vector2(0, 26)
 		ClientUi.apply_primary_button(equip_btn)
-		equip_btn.mouse_entered.connect(_cancel_hide_bag_inspect)
 		equip_btn.pressed.connect(func() -> void:
 			_hide_bag_inspect()
 			_on_equip(item_id)
@@ -1879,6 +1892,8 @@ func _hold_interval_ms(elapsed_ms: int) -> int:
 
 
 func _process(_delta: float) -> void:
+	if _bag_inspect != null and _bag_inspect.visible and not _pointer_over_inspect_zone():
+		_hide_bag_inspect()
 	if _hold_stat.is_empty():
 		return
 	# Buttons that go disabled mid-hold stop emitting button_up, so trust the device.

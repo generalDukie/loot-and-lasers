@@ -1,8 +1,6 @@
 extends Control
 ## Station hub — mirrors web Home.jsx + SpaceStationHub / NexusShowcase / NexusChatter.
 
-const STATION_HUB_TEX := preload("res://Assets/Textures/station-hub.png")
-
 var _status: Label
 var _open_flyout: PanelContainer = null
 var _nexus_owner: Label
@@ -367,7 +365,7 @@ func _build() -> void:
 	station_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	station_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	station_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	station_art.texture = STATION_HUB_TEX
+	station_art.texture = _load_station_texture("station-hub.png")
 	add_child(station_art)
 	add_child(_make_stage_gradient())
 	add_child(_make_stage_vignette())
@@ -407,7 +405,7 @@ func _build() -> void:
 		"sofa", "Hero / Ship Hangar", "#5CFFB0",
 		[
 			{"label": "Hero", "icon": "user", "color": "#5CFFB0", "action": func() -> void: GameManager.go_stats()},
-			{"label": "Ship Hangar", "icon": "rocket", "color": "#FFD700", "action": func() -> void: GameManager.go_ship()},
+			{"label": "Coming Soon", "icon": "rocket", "color": "#6B7280", "action": func() -> void: GameManager.go_ship()},
 		]
 	))
 	deck.add_child(_dock_tile("orbit", "Galactic Frontier", "#00E5FF", func() -> void: GameManager.go_galaxy()))
@@ -431,7 +429,7 @@ func _build() -> void:
 			{"label": "Black Market", "icon": "shopping-bag", "color": "#4ADE80", "action": func() -> void: GameManager.go_shop()},
 			{"label": "Mining", "icon": "pickaxe", "color": "#60A5FA", "action": func() -> void: GameManager.go_mining()},
 			{"label": "Crystals", "icon": "sparkles", "color": "#FFD700", "action": func() -> void: GameManager.go_crystal_store()},
-			{"label": "Void", "icon": "orbit", "color": "#9D6BFF", "action": func() -> void: GameManager.go_void()},
+			{"label": "Coming Soon", "icon": "orbit", "color": "#6B7280", "action": func() -> void: GameManager.go_void()},
 		]
 	))
 	deck.add_child(_dock_split(
@@ -761,6 +759,22 @@ func _dock_split(icon_id: String, label: String, tint_hex: String, options: Arra
 				_open_flyout = null
 	)
 	return wrap
+
+
+func _load_station_texture(file_name: String) -> Texture2D:
+	var rel := "res://Assets/Textures/%s" % file_name
+	# Prefer imported resource; fall back to raw PNG so a bad .import cannot blank the page.
+	if ResourceLoader.exists(rel):
+		var texture := load(rel) as Texture2D
+		if texture != null:
+			return texture
+	var path := ProjectSettings.globalize_path(rel)
+	if FileAccess.file_exists(path):
+		var image := Image.load_from_file(path)
+		if image != null and not image.is_empty():
+			return ImageTexture.create_from_image(image)
+	push_warning("Hub backdrop missing: %s" % rel)
+	return null
 
 
 func _populate() -> void:

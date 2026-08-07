@@ -234,6 +234,18 @@ func sell_item(_character_id: String, item_instance_id: String, _quantity: int =
 	return _fail("Sell not available")
 
 
+## Batch fence — reuses authoritative DissolveJunk (same payout path as Void).
+func sell_items(item_ids: Array) -> Dictionary:
+	if item_ids.is_empty():
+		return _fail("No items")
+	if InventoryManager == null or not InventoryManager.has_method("dissolve_junk"):
+		return _fail("Sell not available")
+	var res: Dictionary = await InventoryManager.dissolve_junk(item_ids, false)
+	if res.ok:
+		item_sold.emit(res.data if typeof(res.data) == TYPE_DICTIONARY else {})
+	return res
+
+
 func refresh_shop(_which: String = "all") -> Dictionary:
 	return await refresh_shop_for()
 
@@ -333,7 +345,7 @@ func can_buy_fuel() -> Dictionary:
 	var c: Dictionary = GameManager.active_character
 	var nova: float = float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)) if CurrencyManager != null else 0.0
 	var fuel: float = float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_FUEL)) if CurrencyManager != null else 0.0
-	var max_fuel := int(c.get("max_fuel", 100))
+	var max_fuel := ShipRules.effective_max_fuel(c)
 	if fuel_purchases_left() <= 0:
 		return {"ok": false, "error": "Daily fuel purchases used up"}
 	if nova < FUEL_PURCHASE_COST:

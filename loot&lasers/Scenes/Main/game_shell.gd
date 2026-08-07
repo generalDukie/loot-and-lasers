@@ -477,7 +477,13 @@ func _make_rail() -> Control:
 			btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			btn.size_flags_stretch_ratio = 1.0
 			btn.custom_minimum_size.y = 0 # no height floor — always fit all 15
-			btn.pressed.connect(_on_nav_pressed.bind(path))
+			var coming_soon := FeatureFlags.is_coming_soon(str(item.get("feature_id", "")))
+			if coming_soon:
+				btn.disabled = true
+				btn.tooltip_text = FeatureFlags.coming_soon_tooltip(str(item.get("feature_id", "")))
+				btn.mouse_default_cursor_shape = Control.CURSOR_ARROW
+			else:
+				btn.pressed.connect(_on_nav_pressed.bind(path))
 			var tutorial_id := ""
 			if path == GameManager.SCENE_STATS:
 				tutorial_id = "nav-hero"
@@ -523,10 +529,13 @@ func _make_rail() -> Control:
 				"label": name_lab,
 				"tint": tint,
 				"active": false,
+				"coming_soon": coming_soon,
+				"feature_id": str(item.get("feature_id", "")),
 			}
 			_nav_buttons[path] = entry
-			btn.mouse_entered.connect(func() -> void: _on_nav_hover(path, true))
-			btn.mouse_exited.connect(func() -> void: _on_nav_hover(path, false))
+			if not coming_soon:
+				btn.mouse_entered.connect(func() -> void: _on_nav_hover(path, true))
+				btn.mouse_exited.connect(func() -> void: _on_nav_hover(path, false))
 			_style_nav_button(entry, false)
 	return rail
 
@@ -548,26 +557,32 @@ func _style_nav_button(entry: Dictionary, active: bool) -> void:
 	var icon_tex: TextureRect = entry.get("icon")
 	var name_lab: NavNeonLabel = entry.get("label")
 	var tint: Color = entry.get("tint", ClientUi.CYAN)
+	var coming_soon := bool(entry.get("coming_soon", false))
 	if btn == null or not is_instance_valid(btn):
 		return
 	entry["active"] = active
-	ClientUi.apply_interaction_motion(btn, 1.015)
+	if not coming_soon:
+		ClientUi.apply_interaction_motion(btn, 1.015)
 	# No hover/active chrome — transparent always; feedback is the letter neon only.
 	var clear := Color(0, 0, 0, 0)
 	btn.add_theme_stylebox_override("normal", _nav_style(clear, clear))
 	btn.add_theme_stylebox_override("hover", _nav_style(clear, clear))
 	btn.add_theme_stylebox_override("pressed", _nav_style(clear, clear))
 	btn.add_theme_stylebox_override("focus", _nav_style(clear, clear))
+	btn.add_theme_stylebox_override("disabled", _nav_style(clear, clear))
 	btn.add_theme_color_override("font_color", Color(0, 0, 0, 0))
 	btn.add_theme_color_override("font_hover_color", Color(0, 0, 0, 0))
 	btn.add_theme_color_override("font_pressed_color", Color(0, 0, 0, 0))
-	btn.modulate = Color.WHITE
+	btn.add_theme_color_override("font_disabled_color", Color(0, 0, 0, 0))
+	# Grey out Coming Soon entries without removing them from the rail.
+	btn.modulate = Color(0.55, 0.55, 0.58, 0.72) if coming_soon else Color.WHITE
 
+	var draw_tint := Color(tint, 0.45) if coming_soon else tint
 	if icon_tex != null and is_instance_valid(icon_tex):
-		NavIcon.set_tint(icon_tex, tint)
+		NavIcon.set_tint(icon_tex, draw_tint)
 	if name_lab != null and is_instance_valid(name_lab):
-		name_lab.neon_tint = tint
-		name_lab.set_neon(active)
+		name_lab.neon_tint = draw_tint
+		name_lab.set_neon(false if coming_soon else active)
 
 
 func _nav_style(bg: Color, border: Color) -> StyleBoxFlat:
@@ -876,7 +891,7 @@ func _nav_groups() -> Array:
 			{"path": GameManager.SCENE_STATS, "label": "Hero", "icon": "user", "color": "#00E5FF"},
 			{"path": GameManager.SCENE_CANTINA, "label": "Cantina", "icon": "beer", "color": "#FF8C00"},
 			{"path": GameManager.SCENE_GALAXY, "label": "Galactic Frontier", "icon": "orbit", "color": "#BA55D3"},
-			{"path": GameManager.SCENE_SHIP, "label": "Ship Hangar", "icon": "rocket", "color": "#2DD4BF"},
+			{"path": GameManager.SCENE_SHIP, "label": "Coming Soon", "icon": "rocket", "color": "#2DD4BF", "feature_id": FeatureFlags.FEATURE_SHIP_HANGAR},
 		]},
 		{"name": "Social", "items": [
 			{"path": GameManager.SCENE_FRIENDS, "label": "Friends", "icon": "users", "color": "#A855F7"},
@@ -892,7 +907,7 @@ func _nav_groups() -> Array:
 		{"name": "Trade", "items": [
 			{"path": GameManager.SCENE_SHOP, "label": "Black Market", "icon": "shopping-bag", "color": "#9D6BFF"},
 			{"path": GameManager.SCENE_CASINO, "label": "Casino", "icon": "dice-5", "color": "#FBBF24"},
-			{"path": GameManager.SCENE_VOID, "label": "Void", "icon": "orbit", "color": "#14B8A6"},
+			{"path": GameManager.SCENE_VOID, "label": "Coming Soon", "icon": "orbit", "color": "#14B8A6", "feature_id": FeatureFlags.FEATURE_VOID},
 			{"path": GameManager.SCENE_MINING, "label": "Mine", "icon": "pickaxe", "color": "#EC4899"},
 		]},
 	]
@@ -901,12 +916,20 @@ func _nav_groups() -> Array:
 func _on_nav_pressed(path: String) -> void:
 	if path.is_empty():
 		return
+	if path == GameManager.SCENE_VOID and FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID):
+		return
+	if path == GameManager.SCENE_SHIP and FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
+		return
 	GameManager.open_game_page(path)
 
 
 ## Gate for GameManager.open_game_page — drops rapid / duplicate clicks before deferred load.
 func try_begin_page_nav(path: String) -> bool:
 	if path.is_empty():
+		return false
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID) and path == GameManager.SCENE_VOID:
+		return false
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR) and path == GameManager.SCENE_SHIP:
 		return false
 	if _page_swap_busy or _page_nav_pending:
 		return false
@@ -923,6 +946,10 @@ func try_begin_page_nav(path: String) -> bool:
 func show_page(path: String) -> void:
 	_page_nav_pending = false
 	if path.is_empty():
+		return
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID) and path == GameManager.SCENE_VOID:
+		return
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR) and path == GameManager.SCENE_SHIP:
 		return
 	# Never re-enter while a page is mounting — that freed nodes mid-_ready.
 	if _page_swap_busy:
@@ -972,8 +999,17 @@ func show_page(path: String) -> void:
 	_page = packed.instantiate()
 	# If the page script failed to compile, Godot still returns a bare Control.
 	# Leaving it full-rect + alpha 0 + MOUSE_FILTER_STOP freezes the whole shell.
-	if path == GameManager.SCENE_STATS and not _page.has_method("_populate"):
-		push_error("Hero sheet script failed to load — refusing blank input blocker")
+	var script_ok := true
+	if path == GameManager.SCENE_STATS:
+		script_ok = _page.has_method("_populate")
+	elif path == GameManager.SCENE_HUB:
+		script_ok = _page.has_method("_populate") and _page.has_method("_build")
+	elif path == GameManager.SCENE_CANTINA:
+		script_ok = _page.has_method("_render") and _page.has_method("_build")
+	elif path == GameManager.SCENE_SHOP:
+		script_ok = _page.has_method("_populate") and _page.has_method("_build")
+	if not script_ok:
+		push_error("Shell page script failed to load (%s) — refusing blank input blocker" % path)
 		_page.free()
 		_page = null
 		_page_path = ""
@@ -1020,9 +1056,11 @@ func _set_nav_buttons_enabled(enabled: bool) -> void:
 		var data: Dictionary = _nav_buttons[path]
 		var btn: Variant = data.get("button", null)
 		if btn is BaseButton and is_instance_valid(btn):
-			(btn as BaseButton).disabled = not enabled
+			var coming_soon := bool(data.get("coming_soon", false))
+			var allow := enabled and not coming_soon
+			(btn as BaseButton).disabled = not allow
 			(btn as BaseButton).mouse_default_cursor_shape = (
-				Control.CURSOR_ARROW if not enabled else Control.CURSOR_POINTING_HAND
+				Control.CURSOR_ARROW if not allow else Control.CURSOR_POINTING_HAND
 			)
 
 
@@ -1493,7 +1531,6 @@ func _nav_key_for_page(path: String) -> String:
 	if path in [GameManager.SCENE_MISSION_RUN, GameManager.SCENE_MISSION_COMBAT]:
 		return GameManager.SCENE_CANTINA
 	if path in [
-		GameManager.SCENE_INVENTORY,
 		GameManager.SCENE_PROGRESS,
 		GameManager.SCENE_COLLECTIBLES,
 		GameManager.SCENE_CODEX,
@@ -1730,14 +1767,14 @@ func _refresh_chrome() -> void:
 		return
 	_operative_name.text = LegacyName.full_name(character)
 	_operative_meta.text = "LV %s · %s · %s" % [
-		str(character.get("level", 1)),
+		ClientUi.format_level(character.get("level", 1)),
 		str(character.get("race", "?")),
 		str(character.get("class", "?")),
 	]
 	_operative_title.text = str(character.get("active_title", ""))
 	_set_readout(_fuel_value, "%s / %s" % [
 		CurrencyManager.format_balance(CurrencyManager.CURRENCY_FUEL),
-		_format_rail_amount(character.get("max_fuel", 100)),
+		_format_rail_amount(ShipRules.effective_max_fuel(character)),
 	])
 	_set_readout(_stardust_value, _format_rail_amount(
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)

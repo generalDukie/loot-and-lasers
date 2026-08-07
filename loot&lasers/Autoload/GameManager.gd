@@ -18,7 +18,6 @@ const SCENE_HUB := "res://Scenes/UI/hub.tscn"
 const SCENE_CANTINA := "res://Scenes/UI/cantina.tscn"
 const SCENE_MISSION_RUN := "res://Scenes/UI/mission_run.tscn"
 const SCENE_MISSION_COMBAT := "res://Scenes/UI/mission_combat.tscn"
-const SCENE_INVENTORY := "res://Scenes/UI/inventory.tscn"
 const SCENE_ARENA := "res://Scenes/UI/arena.tscn"
 const SCENE_ARENA_COMBAT := "res://Scenes/UI/arena_combat.tscn"
 const SCENE_SHOP := "res://Scenes/UI/shop.tscn"
@@ -150,8 +149,8 @@ func go_mission_combat() -> void:
 
 
 func go_inventory() -> void:
-	change_state(GameState.IN_GAME)
-	open_game_page(SCENE_INVENTORY)
+	## Legacy alias — paper-doll inventory page removed; Hero hosts the backpack.
+	go_stats()
 
 
 func go_arena() -> void:
@@ -175,6 +174,12 @@ func go_stats() -> void:
 
 
 func go_ship() -> void:
+	## Ship Hangar temporarily retired — Coming Soon. Do not open hangar or apply upgrades.
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
+		var host := get_tree().current_scene
+		if host != null:
+			ClientUi.show_toast(host, "Coming Soon", "Ship Hangar is offline for now.")
+		return
 	change_state(GameState.IN_GAME)
 	open_game_page(SCENE_SHIP)
 
@@ -232,6 +237,12 @@ func go_casino() -> void:
 
 
 func go_void() -> void:
+	## Void page retired from play — Coming Soon in nav. Do not open the old sell UI.
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID):
+		var host := get_tree().current_scene
+		if host != null:
+			ClientUi.show_toast(host, "Coming Soon", "The Void is offline for now.")
+		return
 	change_state(GameState.IN_GAME)
 	open_game_page(SCENE_VOID)
 
@@ -295,6 +306,12 @@ func go_codex() -> void:
 
 
 func open_game_page(path: String) -> void:
+	if path == SCENE_VOID:
+		go_void()
+		return
+	if path == SCENE_SHIP:
+		go_ship()
+		return
 	change_state(GameState.IN_GAME)
 	var current := get_tree().current_scene
 	if current != null and current.is_in_group("game_shell") and current.has_method("show_page"):

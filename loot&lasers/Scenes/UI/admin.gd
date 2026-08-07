@@ -649,7 +649,7 @@ func _on_search_players() -> void:
 				continue
 			var b := _btn("%s  ·  Lv%s  ·  %s" % [
 				str(row.get("name", "?")),
-				str(row.get("level", 1)),
+				ClientUi.format_level(row.get("level", 1)),
 				str(row.get("id", "")).substr(0, 8),
 			])
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -688,7 +688,7 @@ func _select_player(row: Dictionary) -> void:
 	_sync_target_fields()
 	_detail.text = "[b]%s[/b]  Lv %s · %s · %s\nid=%s\nowner=%s\nSD %s · Nova %s · Fuel %s/%s" % [
 		str(row.get("name", "?")),
-		str(row.get("level", 1)),
+		ClientUi.format_level(row.get("level", 1)),
 		str(row.get("race", "?")),
 		str(row.get("class", "?")),
 		str(row.get("id", "")),

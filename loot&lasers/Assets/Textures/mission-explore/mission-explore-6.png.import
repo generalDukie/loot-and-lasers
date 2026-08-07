@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b2vq2q4lx55o5"
-valid=false
+uid="uid://cecwawgs8c4t"
+path="res://.godot/imported/mission-explore-6.png-e00acfb46fe3cb382e49b5d585596a1e.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://Assets/Textures/mission-explore/mission-explore-6.png"
+dest_files=["res://.godot/imported/mission-explore-6.png-e00acfb46fe3cb382e49b5d585596a1e.ctex"]
 
 [params]
 

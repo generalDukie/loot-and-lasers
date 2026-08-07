@@ -645,7 +645,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	))
 	stack.add_child(badge)
 	var lvl := Label.new()
-	lvl.text = str(opp.get("level", 1))
+	lvl.text = ClientUi.format_level(opp.get("level", 1))
 	lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lvl.add_theme_font_size_override("font_size", 13)
 	lvl.add_theme_color_override("font_color", Color(0.03, 0.07, 0.10))
@@ -892,7 +892,7 @@ func _make_history_row(match: Dictionary) -> PanelContainer:
 	var guild := str(match.get("opponent_guild", ""))
 	var guild_bit := (" · %s" % guild) if not guild.is_empty() and guild != "<null>" else ""
 	var detail := Label.new()
-	detail.text = "%s · Lv %s%s · %s" % [outcome, str(match.get("opponent_level", 1)), guild_bit, delta_txt]
+	detail.text = "%s · Lv %s%s · %s" % [outcome, ClientUi.format_level(match.get("opponent_level", 1)), guild_bit, delta_txt]
 	detail.add_theme_font_size_override("font_size", 15)
 	detail.add_theme_color_override("font_color", ClientUi.SUCCESS if delta >= 0 else ClientUi.DANGER)
 	col.add_child(detail)

@@ -5,6 +5,7 @@
 // Tiers 1–2 cost stardust only; tiers 3–4 cost stardust + Nova Crystals.
 // ═══════════════════════════════════════════
 import { getModEffectTotal } from "@/lib/gameData";
+import { isShipHangarEnabled } from "@/lib/featureFlags";
 
 export const FUEL_MOUNTS = [
   { id: 1, name: "Ion Booster",        emoji: "⚡",  speed: 0.10, duration_hours: 1, stardust: 1200,  crystals: 0,  desc: "A quick ion burst for snappy errands." },
@@ -22,6 +23,7 @@ export function getFuelMountById(id) {
 }
 
 export function getActiveFuelMounts(character) {
+  if (!isShipHangarEnabled()) return [];
   const now = Date.now();
   return (character?.active_fuel_mounts || []).filter(
     (m) => new Date(m.expires_at).getTime() > now
@@ -31,6 +33,7 @@ export function getActiveFuelMounts(character) {
 // Speed does NOT stack — only the timer stacks. The strongest active mount's
 // speed is what applies (kept as a single active entry; max is defensive).
 export function getFuelSpeedTotal(character) {
+  if (!isShipHangarEnabled()) return 0;
   return getActiveFuelMounts(character).reduce((max, m) => Math.max(max, m.speed || 0), 0);
 }
 

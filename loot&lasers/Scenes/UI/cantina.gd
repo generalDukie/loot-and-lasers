@@ -5,7 +5,6 @@ extends Control
 const FUEL_COLOR := Color("#39FF14")
 const XP_COLOR := Color("#00E5FF")
 const STARDUST_COLOR := Color("#E879F9")
-const CANTINA_BG_TEX := preload("res://Assets/Textures/cantina-bg.png")
 
 var _list: HBoxContainer
 var _section_lab: Label
@@ -165,7 +164,7 @@ func _build() -> void:
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.texture = CANTINA_BG_TEX
+	bg.texture = _load_web_texture("cantina-bg.png")
 	stage.add_child(bg)
 
 	for orb in [
@@ -225,17 +224,9 @@ func _build() -> void:
 
 	var veil := ColorRect.new()
 	veil.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	veil.color = Color(0.025, 0.02, 0.05, 0.28)
+	veil.color = Color(0.025, 0.02, 0.05, 0.10)
 	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stage.add_child(veil)
-
-	var frame := PanelContainer.new()
-	frame.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	frame.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.03, 0.025, 0.06, 0.12), Color(0.45, 0.36, 0.5, 0.45), 16, 1
-	))
-	stage.add_child(frame)
 
 	_stage_hint = Label.new()
 	_stage_hint.text = "Hover a patron for the full job · click to accept"
@@ -384,9 +375,9 @@ func _render() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	var ch: Dictionary = GameManager.active_character
-	var max_fuel := int(ch.get("max_fuel", 100))
+	var max_fuel := ShipRules.effective_max_fuel(ch)
 	if max_fuel <= 0:
-		max_fuel = 100
+		max_fuel = ShipRules.FUEL_MAX_BASE
 	_fuel_chip.text = "⛽  %s/%s" % [
 		CurrencyManager.format_balance(CurrencyManager.CURRENCY_FUEL),
 		max_fuel,
@@ -430,6 +421,21 @@ func _render() -> void:
 			_list.add_child(_make_patron(offer))
 
 
+func _load_web_texture(file_name: String) -> Texture2D:
+	var rel := "res://Assets/Textures/%s" % file_name
+	if ResourceLoader.exists(rel):
+		var texture := load(rel) as Texture2D
+		if texture != null:
+			return texture
+	var path := ProjectSettings.globalize_path(rel)
+	if FileAccess.file_exists(path):
+		var image := Image.load_from_file(path)
+		if image != null and not image.is_empty():
+			return ImageTexture.create_from_image(image)
+	push_warning("Cantina backdrop missing: %s" % rel)
+	return null
+
+
 func _make_patron(offer: Dictionary) -> Button:
 	var patron: Dictionary = offer.get("patron", {}) if typeof(offer.get("patron", {})) == TYPE_DICTIONARY else {}
 	var ch := GameManager.active_character
@@ -453,8 +459,8 @@ func _make_patron(offer: Dictionary) -> Button:
 	]
 	button.add_theme_font_size_override("font_size", 16)
 	var tint := Color(str(patron.get("color", "#FF9E4F")))
-	button.add_theme_stylebox_override("normal", ClientUi.button_style(Color(tint, 0.12), Color(tint, 0.65)))
-	button.add_theme_stylebox_override("hover", ClientUi.button_style(Color(tint, 0.25), tint))
+	button.add_theme_stylebox_override("normal", ClientUi.button_style(Color(tint, 0.45), Color(tint, 0.85)))
+	button.add_theme_stylebox_override("hover", ClientUi.button_style(Color(tint, 0.90), tint))
 	button.add_theme_color_override("font_color", tint.lightened(0.2))
 	ClientUi.apply_display_font(button)
 	ClientUi.apply_interaction_motion(button, 1.035)
@@ -596,7 +602,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	footer.add_theme_font_size_override("font_size", 21)
 	ClientUi.apply_display_font(footer)
 	if state == "Locked":
-		footer.text = "Requires Level %s" % str(offer.get("level_requirement", "?"))
+		footer.text = "Requires Level %s" % ClientUi.format_level(offer.get("level_requirement", "?"))
 		footer.add_theme_color_override("font_color", ClientUi.DANGER)
 	elif state == "Busy":
 		footer.text = "Scouting — finish mining to launch"
@@ -851,7 +857,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	var disabled := state == "Locked" or state == "Busy"
 	if state == "Locked":
 		var lock_lab := Label.new()
-		lock_lab.text = "Requires Level %s" % str(offer.get("level_requirement", "?"))
+		lock_lab.text = "Requires Level %s" % ClientUi.format_level(offer.get("level_requirement", "?"))
 		lock_lab.add_theme_font_size_override("font_size", 19)
 		lock_lab.add_theme_color_override("font_color", ClientUi.DANGER)
 		ClientUi.apply_body_font(lock_lab)

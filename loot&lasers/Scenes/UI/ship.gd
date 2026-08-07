@@ -470,7 +470,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 			mile_lab.add_theme_color_override("font_color", FUEL_COLOR)
 		elif not bool(mile.get("eligible", false)):
 			mile_lab.text = "Scout tune at Lv %s (%s left)" % [
-				str(mile.get("level", 20)),
+				ClientUi.format_level(mile.get("level", 20)),
 				str(maxi(0, int(mile.get("level", 20)) - level)),
 			]
 			mile_lab.add_theme_color_override("font_color", ClientUi.MUTED)

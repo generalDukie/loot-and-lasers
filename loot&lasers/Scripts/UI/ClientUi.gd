@@ -39,6 +39,20 @@ static func pxv(v: Vector2) -> Vector2:
 	return ResolutionRules.pxv(v)
 
 
+## Whole level for UI labels (never "11.0"). Truncates fractional progress.
+static func format_level(value, fallback: Variant = 1) -> String:
+	if value == null:
+		value = fallback
+	if typeof(value) == TYPE_STRING:
+		var s := String(value).strip_edges()
+		if s.is_empty():
+			return str(int(fallback)) if typeof(fallback) != TYPE_STRING else String(fallback)
+		if not s.is_valid_float():
+			return s
+		return str(int(float(s)))
+	return str(int(float(value)))
+
+
 const DISPLAY_FONT_PATH := "res://Assets/Fonts/Exo2-VariableFont_wght.ttf"
 const BODY_FONT_PATH := "res://Assets/Fonts/Inter-VariableFont_opsz_wght.ttf"
 

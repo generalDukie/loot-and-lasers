@@ -105,6 +105,7 @@ import {
   NAME_CHANGE_COST,
   GUILD_WAR_SIM_COST,
   dismissActiveBuff,
+  isShipHangarEnabled,
 } from "../shared/economyFormulas.js";
 import { assertNameHasNoDigits, assertNameHasNoSpaces } from "../shared/nameRules.js";
 import {
@@ -1527,6 +1528,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
 
 // ── Ship ─────────────────────────────────────────────────────
 export const BuyShip = wrap((user, body) => {
+  if (!isShipHangarEnabled()) httpErr(503, "Ship Hangar is Coming Soon", "ship_hangar_offline");
   const ch = requireMyChar(user);
   const shipId = body.ship_id;
   const ship = SHIP_TYPES[shipId];
@@ -1548,6 +1550,7 @@ export const BuyShip = wrap((user, body) => {
 });
 
 export const BuyShipMod = wrap((user, body) => {
+  if (!isShipHangarEnabled()) httpErr(503, "Ship Hangar is Coming Soon", "ship_hangar_offline");
   const ch = requireMyChar(user);
   const catKey = body.category_key;
   const shipId = body.ship_id || getActiveShipId(ch);
@@ -1577,6 +1580,7 @@ export const BuyShipMod = wrap((user, body) => {
 });
 
 export const ActivateShip = wrap((user, body) => {
+  if (!isShipHangarEnabled()) httpErr(503, "Ship Hangar is Coming Soon", "ship_hangar_offline");
   const ch = requireMyChar(user);
   const shipId = body.ship_id;
   if (!SHIP_TYPES[shipId]) httpErr(400, "Unknown ship");
@@ -2598,6 +2602,7 @@ export const DeclareGuildWar = wrap((user, body) => {
 });
 
 export const DismissFuelMount = wrap((user, body) => {
+  if (!isShipHangarEnabled()) httpErr(503, "Ship Hangar is Coming Soon", "ship_hangar_offline");
   const ch = requireMyChar(user);
   const mountId = body.mount_id;
   const expiresAt = body.expires_at;
@@ -2626,6 +2631,7 @@ export const DismissActiveBuff = wrap((user, body) => {
 });
 
 export const ClaimScoutMilestone = wrap((user) => {
+  if (!isShipHangarEnabled()) httpErr(503, "Ship Hangar is Coming Soon", "ship_hangar_offline");
   const ch = requireMyChar(user);
   if ((ch.level || 1) < SCOUT_MILESTONE_LEVEL) httpErr(400, "Level too low");
   if (ch.ship_milestones?.scout_bay) httpErr(409, "Already claimed");

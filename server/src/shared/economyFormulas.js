@@ -50,6 +50,23 @@ import {
 } from "./stardustEconomy.js";
 
 export { XP_STARDUST_SCALE };
+
+/** Temporary Coming Soon gates — flip to restore hangar / void without hunting call sites. */
+export const FEATURE_FLAGS = {
+  shipHangarEnabled: false,
+  voidEnabled: false,
+};
+
+export function isFeatureEnabled(featureId) {
+  if (featureId === "ship_hangar") return FEATURE_FLAGS.shipHangarEnabled === true;
+  if (featureId === "void") return FEATURE_FLAGS.voidEnabled === true;
+  return true;
+}
+
+export function isShipHangarEnabled() {
+  return isFeatureEnabled("ship_hangar");
+}
+
 export {
   MISSION_GEAR_BASE_CHANCE,
   MISSION_GEAR_PITY_INCREMENT,
@@ -191,13 +208,15 @@ export const FUEL_PURCHASE_MAX = 10;
 export const MISSION_MIN_FUEL = 0.25;
 
 export function checkFuelReset(character, nowMs = clock.nowMs()) {
-  const max = character.max_fuel || FUEL_MAX;
+  const storedMax = character.max_fuel || FUEL_MAX;
+  // While hangar is retired, daily refill uses base tank only — do not overwrite saved max_fuel.
+  const max = getEffectiveMaxFuel(character);
   const resetAt = character.fuel_reset_at ? new Date(character.fuel_reset_at) : null;
   const now = Number(nowMs) || clock.nowMs();
   const fuelVal = Number(character.fuel);
   const fuelMissing = character.fuel == null || !Number.isFinite(fuelVal);
   if (fuelMissing || !resetAt || now - resetAt.getTime() >= FUEL_CYCLE_MS) {
-    return { fuel: max, max_fuel: max, fuel_reset_at: new Date(now).toISOString(), fuel_purchases: 0 };
+    return { fuel: max, max_fuel: storedMax, fuel_reset_at: new Date(now).toISOString(), fuel_purchases: 0 };
   }
   return null;
 }
@@ -218,6 +237,7 @@ export function getFuelMountById(id) {
 }
 
 export function getActiveFuelMounts(character, nowMs = clock.nowMs()) {
+  if (!isShipHangarEnabled()) return [];
   const now = Number(nowMs) || clock.nowMs();
   return (character?.active_fuel_mounts || []).filter(
     (m) => new Date(m.expires_at).getTime() > now
@@ -225,7 +245,14 @@ export function getActiveFuelMounts(character, nowMs = clock.nowMs()) {
 }
 
 export function getFuelSpeedTotal(character) {
+  if (!isShipHangarEnabled()) return 0;
   return getActiveFuelMounts(character).reduce((max, m) => Math.max(max, m.speed || 0), 0);
+}
+
+/** Gameplay max fuel while hangar is retired — base tank only (saved ship data intact). */
+export function getEffectiveMaxFuel(character) {
+  if (!isShipHangarEnabled()) return FUEL_MAX;
+  return character?.max_fuel || FUEL_MAX;
 }
 
 // ── Ship mods (effect totals for mission fuel/duration/rewards) ─
@@ -358,6 +385,7 @@ export function getInstalledMods(character, shipId) {
 }
 
 export function getModEffectTotal(character, effectKey) {
+  if (!isShipHangarEnabled()) return 0;
   const mult = getShipUpgradeMult(getActiveShipId(character));
   const modTotal = getInstalledMods(character).reduce((sum, m) => sum + (m[effectKey] || 0), 0) * mult;
   const ship = getActiveShipType(character);

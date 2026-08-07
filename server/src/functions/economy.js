@@ -38,9 +38,11 @@ import {
   MAX_FUEL_MOUNTS,
   getFuelMountById,
   getActiveFuelMounts,
+  getEffectiveMaxFuel,
   getEffectiveFuelCost,
   getEffectiveMissionDuration,
   getModEffectTotal,
+  isShipHangarEnabled,
   normalizeMissionEfficiency,
   rollMissionEfficiency,
   computeMissionXpFromFuel,
@@ -448,7 +450,7 @@ export async function BuyFuel(user, body = {}) {
       if (purchases >= FUEL_PURCHASE_MAX) httpErr(400, "Fuel purchase limit reached this cycle");
       if (!hasNova(ch, FUEL_PURCHASE_COST)) httpErr(400, "Not enough Nova Crystals");
 
-      const max = ch.max_fuel || FUEL_MAX;
+      const max = getEffectiveMaxFuel(ch);
       const fuel = ch.fuel || 0;
       if (fuel > max - FUEL_PURCHASE_AMOUNT) {
         httpErr(400, `Tank too full — need ${max - FUEL_PURCHASE_AMOUNT} fuel or less to buy +${FUEL_PURCHASE_AMOUNT}`);
@@ -499,6 +501,9 @@ export async function BuyFuel(user, body = {}) {
 
 // ── BuyFuelMount ─────────────────────────────────────────────
 export async function BuyFuelMount(user, body) {
+  if (!isShipHangarEnabled()) {
+    return { status: 503, body: { error: "Ship Hangar is Coming Soon", code: "ship_hangar_offline" } };
+  }
   const mountId = body?.mount_id;
   const mount = getFuelMountById(mountId);
   if (!mount) return { status: 400, body: { error: "Invalid mount_id" } };

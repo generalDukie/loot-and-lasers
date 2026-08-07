@@ -189,6 +189,8 @@ static func tier_cost(tier: Dictionary, ship_id: String) -> int:
 
 
 static func active_fuel_mounts(character: Dictionary) -> Array:
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
+		return []
 	var out: Array = []
 	var raw: Variant = character.get("active_fuel_mounts", [])
 	if typeof(raw) != TYPE_ARRAY:
@@ -204,10 +206,19 @@ static func active_fuel_mounts(character: Dictionary) -> Array:
 
 
 static func fuel_speed(character: Dictionary) -> float:
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
+		return 0.0
 	var best := 0.0
 	for m in active_fuel_mounts(character):
 		best = maxf(best, float(m.get("speed", 0)))
 	return best
+
+
+## Gameplay max fuel while hangar is retired — base tank only (saved ship data intact).
+static func effective_max_fuel(character: Dictionary) -> int:
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
+		return FUEL_MAX_BASE
+	return maxi(1, int(character.get("max_fuel", FUEL_MAX_BASE)))
 
 
 static func upgrade_mult(ship_id: String = "") -> float:
@@ -217,6 +228,8 @@ static func upgrade_mult(ship_id: String = "") -> float:
 
 ## Sum of a given effect across active-ship mods + hull inherent (web getModEffectTotal).
 static func mod_effect_total(character: Dictionary, effect_key: String) -> float:
+	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
+		return 0.0
 	var sid := active_ship_id(character)
 	var mult := upgrade_mult(sid)
 	var mod_sum := 0.0

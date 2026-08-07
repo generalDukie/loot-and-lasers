@@ -139,7 +139,7 @@ func _target_row(g: Dictionary, can_declare: bool, can_afford: bool) -> PanelCon
 	panel.add_child(row)
 	var info := Label.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.text = "[%s] %s · Lv %s" % [str(g.get("tag", "")), str(g.get("name", "?")), str(g.get("level", 1))]
+	info.text = "[%s] %s · Lv %s" % [str(g.get("tag", "")), str(g.get("name", "?")), ClientUi.format_level(g.get("level", 1))]
 	info.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(info)
 	row.add_child(info)

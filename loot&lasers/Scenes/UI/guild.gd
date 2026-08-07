@@ -310,7 +310,7 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 	var pills := HBoxContainer.new()
 	pills.add_theme_constant_override("separation", 8)
 	left.add_child(pills)
-	pills.add_child(_header_pill("🛡  LVL %s" % str(g.get("level", 1)), ClientUi.CYAN))
+	pills.add_child(_header_pill("🛡  LVL %s" % ClientUi.format_level(g.get("level", 1)), ClientUi.CYAN))
 	pills.add_child(_header_pill("👥  %s  MEMBERS" % str(SocialManager.guild_members.size()), ClientUi.VIOLET))
 	var led := Label.new()
 	led.text = "Led by %s" % str(g.get("leader_name", "?"))
@@ -470,7 +470,7 @@ func _make_challenge_panel(chg: Dictionary, g: Dictionary) -> PanelContainer:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rewards.add_child(spacer)
 	var glv := Label.new()
-	glv.text = "Guild Lv. %s" % str(g.get("level", 1))
+	glv.text = "Guild Lv. %s" % ClientUi.format_level(g.get("level", 1))
 	glv.add_theme_font_size_override("font_size", 15)
 	glv.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(glv)
@@ -700,7 +700,7 @@ func _make_war_target_row(g: Dictionary) -> HBoxContainer:
 	row.add_theme_constant_override("separation", 8)
 	var info := Label.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.text = "[%s] %s · Lv %s" % [str(g.get("tag", "")), str(g.get("name", "?")), str(g.get("level", 1))]
+	info.text = "[%s] %s · Lv %s" % [str(g.get("tag", "")), str(g.get("name", "?")), ClientUi.format_level(g.get("level", 1))]
 	info.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(info)
 	row.add_child(info)
@@ -875,7 +875,7 @@ func _make_member_row(m: Dictionary, my_id: String) -> PanelContainer:
 	name_row.add_child(role_lab)
 	var detail := Label.new()
 	detail.text = "Lvl %s · 🎯 %s · ✦ %s" % [
-		str(m.get("character_level", 1)),
+		ClientUi.format_level(m.get("character_level", 1)),
 		str(m.get("contributed_missions", 0)),
 		str(m.get("contributed_stardust", 0)),
 	]
@@ -979,7 +979,7 @@ func _make_browse_row(g: Dictionary) -> PanelContainer:
 	var detail := Label.new()
 	var invite_only: bool = g.get("recruiting", true) == false
 	detail.text = "Members %s · Lv %s · Leader %s · %s" % [
-		str(g.get("member_count", 0)), str(g.get("level", 1)), str(g.get("leader_name", "?")),
+		str(g.get("member_count", 0)), ClientUi.format_level(g.get("level", 1)), str(g.get("leader_name", "?")),
 		"invite-only" if invite_only else "open",
 	]
 	detail.add_theme_font_size_override("font_size", 15)

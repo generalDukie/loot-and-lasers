@@ -310,7 +310,7 @@ func _make_friend_row(friendship: Dictionary) -> PanelContainer:
 	else:
 		lab.text = "%s · Lv %s %s · %s" % [
 			LegacyName.full_name(other),
-			str(other.get("level", 1)),
+			ClientUi.format_level(other.get("level", 1)),
 			str(other.get("class", "")),
 			PresenceManager.status_label(st),
 		]
@@ -396,7 +396,7 @@ func _make_search_row(c: Dictionary) -> PanelContainer:
 	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lab.text = "%s · Lv %s %s" % [
 		LegacyName.full_name(c),
-		str(c.get("level", 1)),
+		ClientUi.format_level(c.get("level", 1)),
 		str(c.get("class", "")),
 	]
 	row.add_child(lab)

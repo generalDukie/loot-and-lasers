@@ -379,7 +379,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Web: Level {n} · {race} {class}
 	meta.text = "Level %s · %s %s" % [
-		str(character.get("level", 1)),
+		ClientUi.format_level(character.get("level", 1)),
 		str(character.get("race", "?")),
 		str(character.get("class", "?")),
 	]

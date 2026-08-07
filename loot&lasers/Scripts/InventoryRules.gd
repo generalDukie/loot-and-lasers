@@ -117,6 +117,15 @@ static func estimate_sell_value(item: Dictionary) -> int:
 	return StardustEconomy.gear_sale_value(item)
 
 
+## True if Void can dissolve this bag piece (unlocked + unequipped).
+static func is_sellable(item: Dictionary) -> bool:
+	if item.is_empty():
+		return false
+	if bool(item.get("locked", false)) or bool(item.get("is_equipped", false)):
+		return false
+	return not str(item.get("id", "")).is_empty()
+
+
 ## UI junk heuristic matching web listDissolveJunk (class-weighted power).
 static func is_dissolve_junk(item: Dictionary, items: Array, character_class: String = "") -> bool:
 	if bool(item.get("locked", false)) or bool(item.get("is_equipped", false)):

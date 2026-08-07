@@ -126,7 +126,7 @@ func _populate(data: Dictionary) -> void:
 
 	var sub := Label.new()
 	sub.text = "Lv %s %s · %s · %s" % [
-		str(character.get("level", 1)),
+		ClientUi.format_level(character.get("level", 1)),
 		str(character.get("class", "")),
 		str(character.get("race", "")),
 		PresenceManager.status_label(st),

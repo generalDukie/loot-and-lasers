@@ -1359,7 +1359,7 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 	var go_cantina := func() -> void: GameManager.go_cantina()
 	var go_secondary := func() -> void:
 		if won:
-			GameManager.go_inventory()
+			GameManager.go_stats()
 		else:
 			GameManager.go_hub()
 	var note := ""
@@ -1383,7 +1383,7 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 		"progression": data.get("progression", {}) if typeof(data.get("progression", {})) == TYPE_DICTIONARY else {},
 		"actions": [
 			{"label": "Cantina", "primary": true, "callback": go_cantina},
-			{"label": "Inventory" if won else "Hub", "primary": false, "callback": go_secondary},
+			{"label": "Hero" if won else "Hub", "primary": false, "callback": go_secondary},
 		],
 	}
 	CombatSheets.present_complete_then_level_up(

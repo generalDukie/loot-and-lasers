@@ -191,7 +191,7 @@ func _build_character_switcher() -> VBoxContainer:
 	var name := Label.new()
 	name.text = "%s · Lv %s %s" % [
 		str(character.get("name", "Operative")),
-		str(character.get("level", 1)),
+		ClientUi.format_level(character.get("level", 1)),
 		str(character.get("class", "")),
 	]
 	name.add_theme_color_override("font_color", ClientUi.TEXT)

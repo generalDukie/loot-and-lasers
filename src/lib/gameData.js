@@ -1,4 +1,5 @@
 import { getEffectiveMissionDuration } from "@/lib/fuelMounts";
+import { isShipHangarEnabled } from "@/lib/featureFlags";
 import {
   todayET,
   getShopWindow,
@@ -1798,6 +1799,7 @@ export function getInstalledMods(character, shipId) {
 
 // Sum of a given effect across active-ship mods PLUS the active ship's inherent bonus.
 export function getModEffectTotal(character, effectKey) {
+  if (!isShipHangarEnabled()) return 0;
   const mult = getShipUpgradeMult(getActiveShipId(character));
   const modTotal = getInstalledMods(character).reduce((sum, m) => sum + (m[effectKey] || 0), 0) * mult;
   const ship = getActiveShipType(character);

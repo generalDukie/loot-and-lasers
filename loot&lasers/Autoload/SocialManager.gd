@@ -641,7 +641,7 @@ func request_to_join_guild(guild: Dictionary) -> Dictionary:
 	var gname := str(guild.get("name", "guild"))
 	var subject := "Guild Join Request: %s" % gname
 	var body := "%s (Level %s, %s) is requesting to join %s." % [
-		str(me.get("name", "?")), str(me.get("level", 1)), str(me.get("race", "Unknown")), gname,
+		str(me.get("name", "?")), ClientUi.format_level(me.get("level", 1)), str(me.get("race", "Unknown")), gname,
 	]
 	for r in recipients:
 		var rid := str(r.get("character_id", ""))

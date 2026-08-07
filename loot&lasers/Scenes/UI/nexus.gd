@@ -324,7 +324,7 @@ func _populate() -> void:
 		reqs.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		reqs.text = "Your guild: %s · Lv %s · members %s · role %s\nEligibility: %s\nAssault CD: %s · Projected power %s" % [
 			str(guild.get("name", "?")),
-			str(guild.get("level", 0)),
+			ClientUi.format_level(guild.get("level", 0)),
 			str(members.size()),
 			role if not role.is_empty() else "—",
 			str(elig.get("error", "OK")) if not bool(elig.get("ok", false)) else "OK",

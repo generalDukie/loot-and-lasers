@@ -92,7 +92,7 @@ func _populate() -> void:
 	if title == "<null>":
 		title = ""
 	_meta.text = "%s · Lv %s · Daily day %s · last claim %s · title %s" % [
-		str(ch.get("name", "?")), str(ch.get("level", 1)),
+		str(ch.get("name", "?")), ClientUi.format_level(ch.get("level", 1)),
 		str(day), last if not last.is_empty() else "never",
 		title if not title.is_empty() else "(none)",
 	]

@@ -153,11 +153,11 @@ func _build() -> void:
 	actions.add_child(_junk_btn)
 
 	var inv := Button.new()
-	inv.text = "Open Inventory"
+	inv.text = "Open Hero"
 	inv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_primary_button(inv)
 	inv.pressed.connect(func() -> void:
-		GameManager.go_inventory()
+		GameManager.go_stats()
 		_finish("inventory")
 	)
 	actions.add_child(inv)

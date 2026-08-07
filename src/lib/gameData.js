@@ -138,7 +138,6 @@ export const CLASSES = {
     tagline: "Heavy hitter with reliable Strength damage",
     description: "Slow, heavy-hitting powerhouse. Vanguards wade into the thick of it with massive weapons — Strength fuels their damage, not armor.",
     primaryStat: "strength",
-    secondaryStat: "vitality",
     baseStats: { ...CLASS_TYPE_BASE_STATS.strength },
     special: {
       name: "Kinetic Tantrum",
@@ -152,7 +151,6 @@ export const CLASSES = {
     tagline: "Dodges attacks and lands devastating critical hits",
     description: "Operating from the shadows, these elite agents weave between blows and answer every dodge with a killing strike.",
     primaryStat: "agility",
-    secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.agility },
     special: {
       name: "Phantom Signal",
@@ -166,7 +164,6 @@ export const CLASSES = {
     tagline: "High burst Tech damage that partially pierces resists",
     description: "Blending psionic arts with overclocked tech, Technomancers unleash explosive Tech bursts. Intellect fuels damage — not Tech Resistance.",
     primaryStat: "intellect",
-    secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
     special: {
       name: "Overclock",
@@ -180,7 +177,6 @@ export const CLASSES = {
     tagline: "Strength-fueled survivor with shields and regeneration",
     description: "Not a healer — a survivor. Astral Wardens smash through fights with raw strength while layering shields and regeneration to simply refuse to die.",
     primaryStat: "strength",
-    secondaryStat: "vitality",
     baseStats: { ...CLASS_TYPE_BASE_STATS.strength },
     special: {
       name: "Astral Barrier",
@@ -194,7 +190,6 @@ export const CLASSES = {
     tagline: "Blazing agility — strikes come in pairs",
     description: "Born in the slipstreams between stars, Void Runners fight at a tempo others can't match. They weave, feint, and land a twin strike before the enemy finishes blinking.",
     primaryStat: "agility",
-    secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.agility },
     special: {
       name: "Dirty Tricks",
@@ -208,7 +203,6 @@ export const CLASSES = {
     tagline: "Gadgets, drones, and status effects win over time",
     description: "If it can be built, hacked, or jury-rigged, a Cosmic Engineer is already deploying it. Drones, poisons, burns, and EMPs turn the fight into a war of attrition they always win.",
     primaryStat: "intellect",
-    secondaryStat: "luck",
     baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
     special: {
       name: "Orbital Assistant",

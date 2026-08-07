@@ -152,10 +152,8 @@ func _guild_tag(c: Dictionary) -> String:
 	return str(_guild_by_char.get(str(c.get("id", "")), ""))
 
 
-func _class_emoji(c: Dictionary) -> String:
-	var class_key := str(c.get("class", ""))
-	var info: Dictionary = GameData.CLASS_CATALOG.get(class_key, {})
-	return str(info.get("emoji", "🛸"))
+func _class_key(c: Dictionary) -> String:
+	return str(c.get("class", ""))
 
 
 func _build_podium(rows: Array) -> void:
@@ -200,15 +198,8 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	wrap.add_theme_constant_override("separation", 4)
 
 	var medal: Color = MEDAL[medal_rank]
-	var emoji := Label.new()
+	var emoji := ClassIcon.make(_class_key(c), ClassIcon.SIZE_PODIUM)
 	emoji.name = "Emoji"
-	emoji.text = _class_emoji(c)
-	emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emoji.add_theme_font_size_override("font_size", 43)
-	emoji.add_theme_color_override("font_shadow_color", Color(medal, 0.75))
-	emoji.add_theme_constant_override("shadow_offset_x", 0)
-	emoji.add_theme_constant_override("shadow_offset_y", 0)
-	emoji.add_theme_constant_override("shadow_outline_size", 6)
 	wrap.add_child(emoji)
 
 	var name_row := HBoxContainer.new()
@@ -340,10 +331,8 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	ClientUi.apply_display_font(rank_lab)
 	id_row.add_child(rank_lab)
 
-	var emoji := Label.new()
+	var emoji := ClassIcon.make(_class_key(c), ClassIcon.SIZE_LEADERBOARD)
 	emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emoji.text = _class_emoji(c)
-	emoji.add_theme_font_size_override("font_size", 29)
 	id_row.add_child(emoji)
 
 	var mid := VBoxContainer.new()

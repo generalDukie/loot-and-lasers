@@ -58,7 +58,7 @@ var _player_card: Control
 var _enemy_card: Control
 var _backdrop: ArenaStageBackdrop
 var _ability_banner: PanelContainer
-var _ability_emoji: Label
+var _ability_icon: TextureRect
 var _ability_title: Label
 var _ability_detail: Label
 var _ability_class: Label
@@ -208,10 +208,9 @@ func _build() -> void:
 	var ab_col := VBoxContainer.new()
 	ab_col.add_theme_constant_override("separation", 2)
 	_ability_banner.add_child(ab_col)
-	_ability_emoji = Label.new()
-	_ability_emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_emoji.add_theme_font_size_override("font_size", 36)
-	ab_col.add_child(_ability_emoji)
+	_ability_icon = ClassIcon.make("Vanguard", ClassIcon.SIZE_BANNER)
+	_ability_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ab_col.add_child(_ability_icon)
 	_ability_title = Label.new()
 	_ability_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_ability_title.add_theme_font_size_override("font_size", 24)
@@ -644,10 +643,8 @@ func _start_duel(
 	_player_totals = StatsRules.display_totals(player, player_items)
 	_enemy_totals = StatsRules.display_totals(opp, opp_items)
 
-	var p_emoji := _class_emoji(str(player.get("class", "")))
-	var e_emoji := _class_emoji(str(opp.get("class", "")))
-	_player_hp_name.text = "%s  %s" % [p_emoji, player_name]
-	_enemy_hp_name.text = "%s  %s" % [opp_name, e_emoji]
+	_player_hp_name.text = player_name
+	_enemy_hp_name.text = opp_name
 
 	_clear_fighter_anchors()
 
@@ -689,13 +686,6 @@ func _start_duel(
 	_motion.start_idle(_enemy_card, 0.35)
 	_phase = "fight"
 	_run_playback()
-
-
-func _class_emoji(class_key: String) -> String:
-	var cat: Variant = GameData.CLASS_CATALOG.get(class_key, null)
-	if typeof(cat) == TYPE_DICTIONARY:
-		return str((cat as Dictionary).get("emoji", "✧"))
-	return "✧"
 
 
 func _make_fighter_anchor() -> Control:
@@ -853,10 +843,8 @@ func _portrait_card(character: Dictionary, tint: Color, weapon: Dictionary, is_p
 	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	head.add_theme_constant_override("separation", int(8 * s))
 	col.add_child(head)
-	var emoji := Label.new()
-	emoji.text = _class_emoji(str(character.get("class", "")))
-	emoji.add_theme_font_size_override("font_size", int(CLASS_ICON_BASE * s))
-	head.add_child(emoji)
+	var icon := ClassIcon.make(str(character.get("class", "")), CLASS_ICON_BASE * s)
+	head.add_child(icon)
 	var name := Label.new()
 	name.text = str(character.get("name", "?"))
 	name.add_theme_font_size_override("font_size", int(22 * s))
@@ -1176,7 +1164,7 @@ func _show_ability_banner(banner: Dictionary) -> void:
 		"panel",
 		ClientUi.painted_panel_style(Color(color, 0.14), Color(color, 0.7), 12, 2)
 	)
-	_ability_emoji.text = _class_emoji(str(banner.get("className", "")))
+	_ability_icon.texture = ClassIcon.texture(str(banner.get("className", "")))
 	_ability_title.text = str(banner.get("name", ""))
 	_ability_title.add_theme_color_override("font_color", color)
 	var detail := str(banner.get("detail", ""))

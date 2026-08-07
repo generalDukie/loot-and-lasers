@@ -1799,7 +1799,7 @@ func _refresh_chrome() -> void:
 		class_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		class_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		portrait_btn.add_child(class_host)
-		var class_icon := UiIcon.make("swords", ClientUi.CYAN_SOFT, 72.0)
+		var class_icon := ClassIcon.make(str(character.get("class", "Vanguard")), 72.0)
 		class_icon.name = "ClassGlyph"
 		class_host.add_child(class_icon)
 		portrait_btn.pressed.connect(func() -> void: GameManager.go_stats())
@@ -1846,7 +1846,9 @@ func _apply_console_portrait_mode() -> void:
 		if glyph == null and class_host is TextureRect:
 			glyph = class_host as TextureRect
 		if glyph != null:
-			UiIcon.set_tint(glyph, ClientUi.CYAN_SOFT)
+			glyph.texture = ClassIcon.texture(class_key)
+			glyph.modulate = Color.WHITE
+			glyph.custom_minimum_size = Vector2(72, 72)
 	if portrait != null:
 		portrait.visible = not _hero_page_open
 		if portrait.has_method("set_active"):

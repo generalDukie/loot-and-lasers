@@ -11,7 +11,7 @@ Shared deterministic game rules live in `src/lib/` (imported by the Node API). T
 - Seed admin: `npm run server:seed`
 - API smoke test: `npm run test:api`
 - Godot script audit: run Godot headless with `-s res://_audit_all.gd` from `loot&lasers/`
-- Windows friend installer: `.\scripts\build-windows-installer.ps1 -Version "0.1.13.2" -Interactive`
+- Windows friend installer: `.\scripts\build-windows-installer.ps1 -Version "0.1.14" -Interactive`
 
 ## Notes
 

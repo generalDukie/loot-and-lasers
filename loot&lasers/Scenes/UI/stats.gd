@@ -63,6 +63,8 @@ var _bag_slot_min_h := 56.0
 const EQUIP_SLOT_SIZE := 107.0 # 88 × 1.22 — loadout extends downward 22%
 const PORTRAIT_SIZE := 107.0
 const BAG_COLS := 5
+## Fixed backpack gear glyph — matches prior size when 2 attrs stacked (no fill-scale).
+const BAG_GEAR_ICON_PX := 32.0
 const INSPECT_HIDE_DELAY := 0.22
 const ARMOR_STAT_LABEL := "Might Resistance"
 
@@ -602,8 +604,8 @@ func _update_hero() -> void:
 	var lore_bb := "[color=#0DCADF][b]%s %s[/b][/color]\n%s" % [
 		str(race.get("emoji", "")), race_name, str(race.get("lore", "")),
 	]
-	lore_bb += "\n\n[color=#A78BFA][b]%s %s[/b][/color]\n%s" % [
-		str(cls.get("emoji", "")), class_name_key, str(cls.get("description", "")),
+	lore_bb += "\n\n[color=#A78BFA][b]%s[/b][/color]\n%s" % [
+		class_name_key, str(cls.get("description", "")),
 	]
 	if not special.is_empty():
 		lore_bb += "\n\n[color=#0DCADF][b]%s[/b][/color]\n%s" % [
@@ -848,7 +850,7 @@ func _on_bag_grid_resized() -> void:
 					(slot as Control).custom_minimum_size.y = _bag_slot_min_h
 
 
-## Backpack cell: name top-centered (wrap), gear icon centered in leftover space.
+## Backpack cell: name top, fixed-size gear icon centered, attrs bottom (max 2 rows).
 func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	var filled := not item.is_empty()
 	var item_id := str(item.get("id", "")) if filled else ""
@@ -890,7 +892,6 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 	if filled:
 		var rarity_tint := ClientUi.rarity_color(str(item.get("rarity", "")))
 		var name_h := clampf(_bag_slot_min_h * 0.26, 20.0, 30.0)
-		var stats_h := 22.0
 
 		var name_band := Control.new()
 		name_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -917,46 +918,18 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		ClientUi.apply_display_font(title)
 		name_band.add_child(title)
 
-		var icon_area := Control.new()
-		icon_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		icon_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		col.add_child(icon_area)
-		var icon := GearIcon.make(item, GearIcon.REF_SIZE)
-		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		icon_area.add_child(icon)
+		var icon_wrap := CenterContainer.new()
+		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		icon_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		col.add_child(icon_wrap)
+		icon_wrap.add_child(GearIcon.make(item, BAG_GEAR_ICON_PX))
 
 		var stats_raw: Variant = item.get("stats", {})
 		if typeof(stats_raw) == TYPE_DICTIONARY:
-			var stats_band := CenterContainer.new()
-			stats_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			stats_band.custom_minimum_size = Vector2(0, stats_h)
-			stats_band.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			stats_band.size_flags_vertical = Control.SIZE_SHRINK_END
-			col.add_child(stats_band)
-			var chips := HFlowContainer.new()
-			chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			chips.alignment = FlowContainer.ALIGNMENT_CENTER
-			chips.add_theme_constant_override("h_separation", 4)
-			chips.add_theme_constant_override("v_separation", 2)
-			stats_band.add_child(chips)
-			var shown := 0
-			for k in ["strength", "agility", "intellect", "vitality", "luck"]:
-				var v := int(stats_raw.get(k, 0))
-				if v <= 0:
-					continue
-				if shown >= 4:
-					break
-				chips.add_child(StatIcon.make_labeled(
-					k,
-					"+%s" % v,
-					StatIcon.SIZE_ITEM_PANE,
-					20,
-					GameData.stat_color(k),
-					4
-				))
-				shown += 1
+			var entries := _bag_attr_entries(stats_raw as Dictionary)
+			if not entries.is_empty():
+				col.add_child(_make_bag_attr_band(entries))
 
 	else:
 		var mark := Label.new()
@@ -997,6 +970,59 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 					_on_equip(captured_id)
 		)
 	return panel
+
+
+## Positive bag stats in display order, capped at 5.
+func _bag_attr_entries(stats_raw: Dictionary) -> Array:
+	var entries: Array = []
+	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
+		var v := int(stats_raw.get(k, 0))
+		if v <= 0:
+			continue
+		entries.append({"k": k, "v": v})
+		if entries.size() >= 5:
+			break
+	return entries
+
+
+## Bottom-anchored attr stack: 1–2 single row; else top = n - ceil(n/2), bottom = ceil(n/2).
+func _make_bag_attr_band(entries: Array) -> Control:
+	var band := VBoxContainer.new()
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	band.size_flags_vertical = Control.SIZE_SHRINK_END
+	band.alignment = BoxContainer.ALIGNMENT_CENTER
+	band.add_theme_constant_override("separation", 2)
+	var n := entries.size()
+	var top_n := 0
+	var bot_n := n
+	if n > 2:
+		bot_n = int(ceil(float(n) / 2.0))
+		top_n = n - bot_n
+	if top_n > 0:
+		band.add_child(_make_bag_attr_row(entries.slice(0, top_n)))
+	band.add_child(_make_bag_attr_row(entries.slice(top_n, n)))
+	return band
+
+
+func _make_bag_attr_row(entries: Array) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 4)
+	for e in entries:
+		var k := str(e.get("k", ""))
+		var v := int(e.get("v", 0))
+		row.add_child(StatIcon.make_labeled(
+			k,
+			str(v),
+			StatIcon.SIZE_ITEM_PANE,
+			20,
+			GameData.stat_color(k),
+			4
+		))
+	return row
 
 
 func _compact_inspect_style(accent: Color) -> StyleBoxFlat:

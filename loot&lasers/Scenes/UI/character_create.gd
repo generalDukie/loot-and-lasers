@@ -379,7 +379,8 @@ func _build() -> void:
 	nav.add_child(_next_btn)
 
 	_create_btn = Button.new()
-	_create_btn.text = "🚀  LAUNCH"
+	_create_btn.text = "LAUNCH"
+	_create_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_apply_scaled_primary(_create_btn)
 	_create_btn.pressed.connect(_on_create)
 	nav.add_child(_create_btn)
@@ -619,13 +620,8 @@ func _make_class_card(cls_name: String) -> Button:
 	row.add_theme_constant_override("separation", _si(8))
 	btn.add_child(row)
 
-	var emblem := Label.new()
-	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emblem.text = str(info.get("emoji", "✦"))
-	emblem.add_theme_font_size_override("font_size", _fs(29))
+	var emblem := ClassIcon.make(cls_name, _s(ClassIcon.SIZE_LIST))
 	emblem.custom_minimum_size = _sv(Vector2(48, 48))
-	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emblem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(emblem)
 
 	var copy := VBoxContainer.new()
@@ -636,7 +632,7 @@ func _make_class_card(cls_name: String) -> Button:
 
 	var nm := Label.new()
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	nm.text = "%s %s" % [str(info.get("emoji", "")), cls_name]
+	nm.text = cls_name
 	nm.add_theme_font_size_override("font_size", _fs(16))
 	ClientUi.apply_display_font(nm)
 	nm.add_theme_color_override("font_color", ClientUi.TEXT)
@@ -839,7 +835,7 @@ func _build_launch_page() -> Control:
 	_launch_stats_host = VBoxContainer.new()
 	_launch_stats_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_launch_stats_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_launch_stats_host.add_theme_constant_override("separation", _si(6))
+	_launch_stats_host.add_theme_constant_override("separation", _si(10))
 	split.add_child(_launch_stats_host)
 
 	page.add_child(_build_legacy_block())
@@ -1306,12 +1302,8 @@ func _refresh_class_detail() -> void:
 	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_theme_constant_override("separation", _si(12))
 	lore_outer.add_child(row)
-	var emblem := Label.new()
-	emblem.text = str(info.get("emoji", "✦"))
-	emblem.add_theme_font_size_override("font_size", _fs(56))
+	var emblem := ClassIcon.make(_class_name, _s(ClassIcon.SIZE_DETAIL))
 	emblem.custom_minimum_size = _sv(Vector2(88, 88))
-	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emblem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(emblem)
 
 	var copy := VBoxContainer.new()
@@ -1320,7 +1312,7 @@ func _refresh_class_detail() -> void:
 	copy.add_theme_constant_override("separation", _si(5))
 	row.add_child(copy)
 	var title := Label.new()
-	title.text = "%s %s" % [str(info.get("emoji", "")), _class_name]
+	title.text = _class_name
 	title.add_theme_font_size_override("font_size", _fs(20))
 	ClientUi.apply_display_font(title)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
@@ -1384,11 +1376,13 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 		return
 	var info := GameData.class_info(_class_name)
 	var primary := str(info.get("primaryStat", ""))
-	var secondary := str(info.get("secondaryStat", ""))
 	var stats := GameData.preview_stats(_race_name if not _race_name.is_empty() else "Zyrathi", _class_name)
 	var max_val := 1
 	for k in STAT_ORDER:
 		max_val = maxi(max_val, int(stats.get(k, 0)))
+
+	## Launch page: fill column height, keep bar width, scale chips/type to match.
+	var launch_fill := fill_space and host == _launch_stats_host
 
 	var head := HBoxContainer.new()
 	head.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -1396,24 +1390,54 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 	var h := Label.new()
 	h.text = "STARTING STATS"
 	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_theme_font_size_override("font_size", _fs(15 if fill_space else 13))
+	h.add_theme_font_size_override("font_size", _fs(18 if launch_fill else (15 if fill_space else 13)))
 	ClientUi.apply_display_font(h)
 	h.add_theme_color_override("font_color", ClientUi.MUTED)
 	head.add_child(h)
 	if not primary.is_empty():
 		var pri := Label.new()
 		pri.text = "Primary: %s" % str(STAT_LABELS.get(primary, primary))
-		pri.add_theme_font_size_override("font_size", _fs(14 if fill_space else 12))
+		pri.add_theme_font_size_override("font_size", _fs(16 if launch_fill else (14 if fill_space else 12)))
 		pri.add_theme_color_override("font_color", GameData.STAT_COLORS.get(primary, ClientUi.MUTED))
 		ClientUi.apply_body_font(pri)
 		head.add_child(pri)
 
-	var icon_sz := _s(22.0 if fill_space else (16.0 if compact else 18.0))
-	var name_fs := _fs(14 if fill_space else (10 if compact else 11))
-	var num_fs := _fs(20 if fill_space else 16)
-	var bar_size := _sv(Vector2(120 if fill_space else 75, 12 if fill_space else 8))
-	var row_pad_y := _si(8 if fill_space else 5)
-	var row_pad_x := _si(10 if fill_space else 8)
+	var icon_sz: float
+	var name_fs: int
+	var num_fs: int
+	var bar_size: Vector2
+	var row_pad_y: int
+	var row_pad_x: int
+	var row_sep: int
+	var corner: int
+	if launch_fill:
+		icon_sz = _s(34.0)
+		name_fs = _fs(18)
+		num_fs = _fs(26)
+		# Keep prior Launch bar width (75); grow height with the taller rows.
+		bar_size = _sv(Vector2(75, 18))
+		row_pad_y = _si(14)
+		row_pad_x = _si(12)
+		row_sep = _si(12)
+		corner = _si(10)
+	elif fill_space:
+		icon_sz = _s(22.0)
+		name_fs = _fs(14)
+		num_fs = _fs(20)
+		bar_size = _sv(Vector2(120, 12))
+		row_pad_y = _si(8)
+		row_pad_x = _si(10)
+		row_sep = _si(8)
+		corner = _si(8)
+	else:
+		icon_sz = _s(16.0 if compact else 18.0)
+		name_fs = _fs(10 if compact else 11)
+		num_fs = _fs(16)
+		bar_size = _sv(Vector2(75, 8))
+		row_pad_y = _si(5)
+		row_pad_x = _si(8)
+		row_sep = _si(6)
+		corner = _si(8)
 
 	for stat in STAT_ORDER:
 		var val := int(stats.get(stat, 0))
@@ -1421,16 +1445,15 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 		var row := PanelContainer.new()
 		if fill_space:
 			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var rsb := StyleBoxFlat.new()
 		rsb.bg_color = Color(color, 0.12)
-		rsb.set_border_width_all(maxi(1, _si(1)))
+		rsb.set_border_width_all(maxi(1, _si(1 if not launch_fill else 2)))
 		if stat == primary:
 			rsb.border_color = Color(color, 0.55)
-		elif stat == secondary:
-			rsb.border_color = Color(color, 0.28)
 		else:
 			rsb.border_color = Color(1, 1, 1, 0.08)
-		rsb.set_corner_radius_all(_si(8))
+		rsb.set_corner_radius_all(corner)
 		rsb.content_margin_left = row_pad_x
 		rsb.content_margin_right = row_pad_x
 		rsb.content_margin_top = row_pad_y
@@ -1441,16 +1464,12 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 		var inner := HBoxContainer.new()
 		inner.size_flags_vertical = Control.SIZE_EXPAND_FILL if fill_space else Control.SIZE_SHRINK_CENTER
 		inner.alignment = BoxContainer.ALIGNMENT_CENTER
-		inner.add_theme_constant_override("separation", _si(8 if fill_space else 6))
+		inner.add_theme_constant_override("separation", row_sep)
 		row.add_child(inner)
 		var icon := StatIcon.make(stat, icon_sz)
 		inner.add_child(icon)
 		var nm := Label.new()
-		var suffix := ""
-		if stat == primary:
-			suffix = " Primary"
-		elif stat == secondary:
-			suffix = " Sec"
+		var suffix := " Primary" if stat == primary else ""
 		nm.text = "%s%s" % [str(STAT_LABELS.get(stat, stat)), suffix]
 		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nm.add_theme_font_size_override("font_size", name_fs)
@@ -1469,13 +1488,15 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 		bar_bg.value = float(val)
 		bar_bg.show_percentage = false
 		bar_bg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		bar_bg.size_flags_horizontal = Control.SIZE_SHRINK_END
+		var bar_radius := _si(5 if launch_fill else 3)
 		var bar_bg_sb := StyleBoxFlat.new()
 		bar_bg_sb.bg_color = Color(0, 0, 0, 0.3)
-		bar_bg_sb.set_corner_radius_all(_si(3))
+		bar_bg_sb.set_corner_radius_all(bar_radius)
 		bar_bg.add_theme_stylebox_override("background", bar_bg_sb)
 		var bar_fill_sb := StyleBoxFlat.new()
 		bar_fill_sb.bg_color = color
-		bar_fill_sb.set_corner_radius_all(_si(3))
+		bar_fill_sb.set_corner_radius_all(bar_radius)
 		bar_bg.add_theme_stylebox_override("fill", bar_fill_sb)
 		inner.add_child(bar_bg)
 
@@ -1551,7 +1572,7 @@ func _refresh_launch() -> void:
 	})
 	_launch_name.text = shown if not shown.is_empty() else "Unnamed Operative"
 	_launch_meta.text = "%s · %s" % [_race_name, _class_name]
-	_fill_stats_chart(_launch_stats_host, false)
+	_fill_stats_chart(_launch_stats_host, false, true)
 
 
 ## Account surname, or the one being locked in on this Launch step.

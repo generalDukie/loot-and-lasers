@@ -37,12 +37,22 @@ export default function SettingsPage() {
     setRedeeming(true);
     try {
       const res = await api.functions.invoke("RedeemPromoCode", { code: code.trim() });
+      const payload = res?.data || res || {};
+      const redeemedCode = payload.code || code.trim().toUpperCase();
+      setRedeemed((prev) => [...new Set([...(prev || []), redeemedCode])]);
       toast({
-        title: `🎁 ${res.data.label || "Code redeemed!"}`,
-        description: "Rewards applied — reloading your operative.",
+        title: `🎁 ${payload.label || "Code redeemed!"}`,
+        description: "Rewards applied. You can redeem other unused codes anytime.",
       });
       setCode("");
-      setTimeout(() => { window.location.href = "/"; }, 1200);
+      // Soft reload character balances without blocking further promo entry.
+      try {
+        const c = await getMyCharacter();
+        if (c) {
+          setMyChar(c);
+          setRedeemed(c.promo_codes_redeemed || [redeemedCode]);
+        }
+      } catch { /* ignore */ }
     } catch (err) {
       toast({
         title: "Redemption failed",
@@ -96,7 +106,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <p className="font-display font-semibold text-sm">Codex &amp; Guide</p>
-                <p className="text-[11px] text-muted-foreground">How things work · New player tutorial</p>
+                <p className="text-[11px] text-muted-foreground">How things work · Full game manual</p>
               </div>
             </button>
 
@@ -135,26 +145,28 @@ export default function SettingsPage() {
             </div>
 
             {/* Danger zone */}
-            <div className="rounded-xl border border-border/40 bg-card/30 divide-y divide-border/40">
+            <div className="rounded-xl border border-border/40 bg-card/30 divide-y divide-border/40 overflow-hidden">
               <button
+                type="button"
                 onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-muted/20 transition-colors rounded-t-xl"
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-muted/20 transition-colors"
               >
-                <LogOut className="w-4 h-4 text-muted-foreground" />
-                <div>
-                  <p className="font-medium text-sm">Log Out</p>
-                  <p className="text-[11px] text-muted-foreground">Sign out of your account</p>
+                <LogOut className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm leading-tight">Log Out</p>
+                  <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">Sign out of your account</p>
                 </div>
               </button>
               <button
+                type="button"
                 onClick={handleDeleteCharacter}
                 disabled={deleting}
-                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-destructive/5 transition-colors text-destructive rounded-b-xl"
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-destructive/5 transition-colors text-destructive disabled:opacity-50"
               >
-                <Trash2 className="w-4 h-4" />
-                <div>
-                  <p className="font-medium text-sm">Delete Character</p>
-                  <p className="text-[11px] opacity-70">Permanently erase your operative and all progress</p>
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm leading-tight">Delete Character</p>
+                  <p className="text-[11px] opacity-70 leading-snug mt-0.5">Permanently erase your operative and all progress</p>
                 </div>
               </button>
             </div>

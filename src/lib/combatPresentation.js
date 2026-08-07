@@ -289,6 +289,45 @@ export function formatCombatLogLine(ev, i) {
   return `#${i + 1} ${ev.type || "event"}`;
 }
 
+/**
+ * Authoritative end HP for skip / outro presentation.
+ * Prefer flat EndHp → nested playerEnd.hp → replay of committed events (no re-sim).
+ */
+export function resolveBattleEndHp(battle) {
+  const pMax = Math.max(1, Number(battle?.playerMaxHp) || 1);
+  const oMax = Math.max(1, Number(battle?.opponentMaxHp) || 1);
+  if (typeof battle?.playerEndHp === "number" || typeof battle?.opponentEndHp === "number") {
+    return {
+      player: Math.max(0, Math.min(pMax, Number(battle.playerEndHp ?? pMax))),
+      opponent: Math.max(0, Math.min(oMax, Number(battle.opponentEndHp ?? oMax))),
+    };
+  }
+  const pe = battle?.playerEnd;
+  const oe = battle?.opponentEnd;
+  if (pe && typeof pe.hp === "number") {
+    return {
+      player: Math.max(0, Math.min(pMax, Number(pe.hp))),
+      opponent: Math.max(0, Math.min(oMax, Number(oe?.hp ?? 0))),
+    };
+  }
+  let player = pMax;
+  let opponent = oMax;
+  const events = Array.isArray(battle?.events) ? battle.events : [];
+  for (const ev of events) {
+    if (!ev) continue;
+    if (ev.heal) {
+      const max = ev.defender === "player" ? pMax : oMax;
+      if (ev.defender === "player") player = Math.min(max, player + ev.heal);
+      else if (ev.defender === "opponent") opponent = Math.min(max, opponent + ev.heal);
+      continue;
+    }
+    if (ev.dodged || !(ev.damage > 0)) continue;
+    if (ev.defender === "player") player = Math.max(0, player - ev.damage);
+    else if (ev.defender === "opponent") opponent = Math.max(0, opponent - ev.damage);
+  }
+  return { player, opponent };
+}
+
 export function dirtyTrickLabel(trick) {
   if (!trick) return null;
   const map = {

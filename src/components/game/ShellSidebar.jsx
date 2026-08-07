@@ -39,11 +39,23 @@ export default function ShellSidebar({ onNavigate, compact = false }) {
               </span>
             )}
             <div className="flex-1 min-h-0 flex flex-col">
-              {g.items.map(({ to, label, icon: Icon, color }) => (
+              {g.items.map(({ to, label, icon: Icon, color }) => {
+                const tutorialId =
+                  to === "/character"
+                    ? "nav-hero"
+                    : to === "/missions"
+                      ? "nav-cantina"
+                      : to === "/galaxy-map"
+                        ? "nav-frontier"
+                        : to === "/arena"
+                          ? "nav-arena"
+                          : undefined;
+                return (
                 <NavLink
                   key={to}
                   to={to}
                   title={label}
+                  data-tutorial={tutorialId}
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     `group flex flex-1 min-h-0 items-center gap-2.5 rounded-lg px-2.5 transition-colors border border-transparent ${
@@ -77,7 +89,8 @@ export default function ShellSidebar({ onNavigate, compact = false }) {
                     </>
                   )}
                 </NavLink>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}

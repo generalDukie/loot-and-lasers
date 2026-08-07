@@ -78,6 +78,20 @@ register({
   resolvePolicy: "claim",
 });
 
+register({
+  key: "onboarding_tutorial",
+  version: 1,
+  sourceType: RewardSources.ONBOARDING_TUTORIAL,
+  displayName: "Onboarding Tutorial Starter Pack",
+  resolvePolicy: "claim",
+  fixed: {
+    stardust: 1000,
+    nova_crystals: 25,
+    fuel: 20,
+  },
+  notes: "One-time starter pack on tutorial completion. Idempotent per character.",
+});
+
 export function getRewardDefinition(key, version = null) {
   const list = DEFINITIONS.get(key);
   if (!list?.length) return null;

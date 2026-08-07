@@ -32,7 +32,7 @@ export default function GuildCreation({ character, onJoined }) {
     try {
       await api.functions.invoke("CreateGuild", {
         name: name.trim(),
-        tag: tag.trim().toUpperCase().slice(0, 4),
+        tag: tag.trim().toUpperCase().slice(0, 5),
         description: description.trim(),
       });
       void trackStardustSpend(character, GUILD_CREATE_COST, "guild_create");
@@ -128,7 +128,7 @@ export default function GuildCreation({ character, onJoined }) {
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Tag (optional)</label>
-              <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="NOVA" maxLength={4}
+              <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="NOVA" maxLength={5}
                 className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm uppercase focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30" />
             </div>
             <div>

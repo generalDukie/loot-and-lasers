@@ -61,8 +61,8 @@ export default function AdminPage() {
         toast({
           title: data?.role === "admin" ? "Account promoted" : "Account demoted",
           description: data?.email
-            ? `${data.email} is now ${data.role} (all characters on that login).`
-            : `Role is now ${data?.role || "updated"}.`,
+            ? `${data.email} is now ${data.role}. They must re-login for Admin to unlock.`
+            : `Role is now ${data?.role || "updated"}. Target must re-login.`,
         });
       } else {
         toast({ title: "Done" });

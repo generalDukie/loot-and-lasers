@@ -138,6 +138,92 @@ export function readArenaOffers(character) {
   return o;
 }
 
+/** How many recently shown/fought opponent ids to remember for deprioritization. */
+export const ARENA_RECENT_OPPONENT_HISTORY = 10;
+
+/** Collect stable identity keys for an offer / public opponent card. */
+export function arenaOpponentIdentityIds(offerOrOpp) {
+  const opp = offerOrOpp?.opponent || offerOrOpp || {};
+  const ids = [];
+  if (opp.realCharacterId) ids.push(String(opp.realCharacterId));
+  if (opp.character_id) ids.push(String(opp.character_id));
+  if (opp.arena_bot_id) ids.push(String(opp.arena_bot_id));
+  if (opp.id && !String(opp.id).startsWith("bot-ephemeral")) ids.push(String(opp.id));
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function readRecentOpponentIds(character) {
+  const raw = character?.arena_recent_opponent_ids;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => String(x || "")).filter(Boolean);
+}
+
+function mergeRecentOpponentIds(previous, newlyShown) {
+  const out = [];
+  const seen = new Set();
+  for (const id of [...newlyShown, ...previous]) {
+    const key = String(id || "");
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+    if (out.length >= ARENA_RECENT_OPPONENT_HISTORY) break;
+  }
+  return out;
+}
+
+/**
+ * Prefer candidates outside softExclude; always honor hardExclude when pool allows.
+ * Falls back to soft-excluded ids only when needed to fill `count`.
+ */
+function pickCandidatesWithExclusions(ranked, count, hardExclude, softExclude) {
+  const hard = hardExclude instanceof Set ? hardExclude : new Set(hardExclude || []);
+  const soft = softExclude instanceof Set ? softExclude : new Set(softExclude || []);
+  const notHard = ranked.filter((c) => c && !hard.has(String(c.id)));
+  const preferred = notHard.filter((c) => !soft.has(String(c.id)));
+  let picked = pickRankedCandidates(preferred, count);
+  if (picked.length < count) {
+    const pickedIds = new Set(picked.map((c) => String(c.id)));
+    const fallbackPool = notHard.filter((c) => !pickedIds.has(String(c.id)));
+    picked = [
+      ...picked,
+      ...pickRankedCandidates(fallbackPool, count - picked.length),
+    ];
+  }
+  // Last resort: if hard-exclude emptied the pool (tiny population), allow hard ids
+  // except we still try to keep at least one non-hard when possible.
+  if (picked.length < count) {
+    const pickedIds = new Set(picked.map((c) => String(c.id)));
+    const rest = ranked.filter((c) => c && !pickedIds.has(String(c.id)));
+    picked = [...picked, ...pickRankedCandidates(rest, count - picked.length)];
+  }
+  return picked;
+}
+
+function pickBotsWithExclusions(character, needBots, hardExclude, softExclude) {
+  if (needBots <= 0) return [];
+  ensureBotPoolForPlayer(character);
+  const hard = [...hardExclude].map(String);
+  const soft = [...softExclude].map(String);
+  let bots = listBotsNearRating(character.arena_rating || 1000, {
+    limit: needBots + 6,
+    excludeIds: [...hard, ...soft],
+  });
+  if (bots.length < needBots) {
+    const more = listBotsNearRating(character.arena_rating || 1000, {
+      limit: needBots + 8,
+      excludeIds: hard,
+    });
+    const seen = new Set(bots.map((b) => b.id));
+    for (const b of more) {
+      if (seen.has(b.id)) continue;
+      bots.push(b);
+      seen.add(b.id);
+      if (bots.length >= needBots) break;
+    }
+  }
+  return bots.slice(0, needBots);
+}
+
 export function findArenaOffer(character, offerId) {
   const bag = readArenaOffers(character);
   if (!bag || !offerId) return null;
@@ -271,12 +357,31 @@ export function serializeArenaState(character, nowMs = clock.nowMs(), today = to
 /**
  * Build stable opponent offers: prefer real players, fill with ladder bots.
  * Stores full combat snapshots server-side; returns public cards only.
+ *
+ * @param {object} character
+ * @param {{ force?: boolean, excludeIds?: string[], preferExcludeIds?: string[] }} [opts]
+ *   force — ignore unexpired cache and mint a new board
+ *   excludeIds — hard-exclude when enough alternatives exist (e.g. just-fought)
+ *   preferExcludeIds — soft-exclude (previous board / recent history)
  */
-export function generateAndStoreArenaOffers(character, { force = false } = {}) {
+export function generateAndStoreArenaOffers(character, {
+  force = false,
+  excludeIds = [],
+  preferExcludeIds = [],
+} = {}) {
   const existing = readArenaOffers(character);
+  const previousBoardIds = (existing?.offers || []).flatMap(arenaOpponentIdentityIds);
   if (!force && existing?.offers?.length && existing.expires_at) {
     const exp = new Date(existing.expires_at).getTime();
     if (Number.isFinite(exp) && clock.nowMs() < exp) {
+      console.log("[ArenaOffers]", JSON.stringify({
+        mode: "replay_cache",
+        previousContenderIds: previousBoardIds,
+        opponentFought: excludeIds,
+        eligiblePoolSize: null,
+        excludedIds: excludeIds,
+        newlySelectedContenderIds: previousBoardIds,
+      }));
       return {
         character,
         offers: existing.offers.map(publicOpponentOffer),
@@ -295,14 +400,37 @@ export function generateAndStoreArenaOffers(character, { force = false } = {}) {
     tightBand: ARENA_RATING_BAND,
     wideBand: ARENA_RATING_BAND_WIDE,
   });
-  let realChars = pickRankedCandidates(ranked, ARENA_MAX_REAL_OPPONENTS);
+
+  const recent = readRecentOpponentIds(character);
+  const hardExclude = new Set(
+    [...(excludeIds || [])].map((x) => String(x || "")).filter(Boolean),
+  );
+  // Soft: previous board + recent history + caller prefer list (never reshuffle same 3).
+  const softExclude = new Set(
+    [
+      ...previousBoardIds,
+      ...recent,
+      ...(preferExcludeIds || []),
+    ]
+      .map((x) => String(x || ""))
+      .filter(Boolean),
+  );
+
+  let realTarget = ARENA_MAX_REAL_OPPONENTS;
   if (ranked.length > ARENA_MAX_REAL_OPPONENTS) {
     const third = ranked[ARENA_MAX_REAL_OPPONENTS];
     const gap = Math.abs((third.arena_rating || 1000) - (character.arena_rating || 1000));
     if (gap <= ARENA_RATING_BAND_WIDE) {
-      realChars = pickRankedCandidates(ranked, Math.min(3, ranked.length));
+      realTarget = Math.min(ARENA_CHALLENGER_SLOTS, ranked.length);
     }
   }
+
+  const realChars = pickCandidatesWithExclusions(
+    ranked,
+    realTarget,
+    hardExclude,
+    softExclude,
+  );
 
   const realOffers = realChars.map((ch) => {
     const items = loadEquippedItemsForCharacter(ch.id);
@@ -312,7 +440,6 @@ export function generateAndStoreArenaOffers(character, { force = false } = {}) {
       matchup: "Operative",
       opponent: {
         ...opp,
-        // Authoritative combatant for Prepare (full character + items).
         _combatant: { ...ch, stats: ch.stats || {} },
         _combatItems: items,
       },
@@ -320,10 +447,7 @@ export function generateAndStoreArenaOffers(character, { force = false } = {}) {
   });
 
   const needBots = Math.max(0, ARENA_CHALLENGER_SLOTS - realOffers.length);
-  ensureBotPoolForPlayer(character);
-  const bots = listBotsNearRating(character.arena_rating || 1000, {
-    limit: needBots + 2,
-  }).slice(0, needBots);
+  const bots = pickBotsWithExclusions(character, needBots, hardExclude, softExclude);
 
   const botOffers = bots.map((bot) => {
     const combatant = {
@@ -383,13 +507,14 @@ export function generateAndStoreArenaOffers(character, { force = false } = {}) {
       opponent: {
         ...combatant,
         power: computePower(combatant, []),
-        _combatant: combatant,
         _combatItems: [],
+        _combatant: combatant,
       },
     });
   }
 
   const offers = [...realOffers, ...botOffers].slice(0, ARENA_CHALLENGER_SLOTS);
+  const newlySelected = offers.flatMap(arenaOpponentIdentityIds);
   const nowIso = clock.nowIso();
   const expiresAt = new Date(clock.nowMs() + 5 * 60 * 1000).toISOString();
   const bag = {
@@ -397,15 +522,53 @@ export function generateAndStoreArenaOffers(character, { force = false } = {}) {
     expires_at: expiresAt,
     offers,
   };
+  const nextRecent = mergeRecentOpponentIds(recent, [
+    ...newlySelected,
+    ...[...hardExclude],
+  ]);
+
+  console.log("[ArenaOffers]", JSON.stringify({
+    mode: "mint",
+    previousContenderIds: previousBoardIds,
+    opponentFought: [...hardExclude],
+    eligiblePoolSize: ranked.length,
+    excludedIds: [...hardExclude],
+    softExcludedIds: [...softExclude],
+    newlySelectedContenderIds: newlySelected,
+  }));
+
   const updated = entities.Character.update(character.id, {
     arena_opponent_offers: bag,
+    arena_recent_opponent_ids: nextRecent,
   });
   return {
     character: updated,
     offers: offers.map(publicOpponentOffer),
     replay: false,
     expires_at: expiresAt,
+    debug: {
+      previousContenderIds: previousBoardIds,
+      opponentFought: [...hardExclude],
+      eligiblePoolSize: ranked.length,
+      excludedIds: [...hardExclude],
+      newlySelectedContenderIds: newlySelected,
+    },
   };
+}
+
+/**
+ * After a completed Arena fight: mint a fresh 3-pack, hard-excluding the fought
+ * opponent and soft-excluding the previous board / recent history.
+ */
+export function refreshArenaOffersAfterBattle(character, foughtOpponentId = "") {
+  const bag = readArenaOffers(character);
+  const previousIds = (bag?.offers || []).flatMap(arenaOpponentIdentityIds);
+  const fought = String(foughtOpponentId || "").trim();
+  return generateAndStoreArenaOffers(character, {
+    force: true,
+    excludeIds: fought ? [fought] : [],
+    preferExcludeIds: previousIds,
+  });
 }
 
 /**

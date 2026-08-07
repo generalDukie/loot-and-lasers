@@ -105,7 +105,7 @@ export default function ShellOperativePanel({ character }) {
         )}
       </Link>
 
-      <div className="flex flex-col gap-1 w-full min-w-0">
+      <div className="flex flex-col gap-1 w-full min-w-0" data-tutorial="shell-wallet">
         <CurrencyPill
           icon={<Fuel className="w-2.5 h-2.5 shrink-0" style={{ color: FUEL_COLOR }} />}
           value={fuelLabel}

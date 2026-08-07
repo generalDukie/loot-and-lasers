@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/api/gameClient";
-import { RACES } from "@/lib/gameData";
+import { CLASSES } from "@/lib/gameData";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { useToast } from "@/components/ui/use-toast";
 import { blockPlayer, reportPlayer } from "@/lib/socialEngine";
@@ -179,7 +179,7 @@ export default function LeaderboardPage() {
       <div className="flex items-end justify-center gap-3 sm:gap-6">
         {podiumOrder.map((c, i) => {
           const rank = c === top3[0] ? 0 : c === top3[1] ? 1 : 2;
-          const emoji = RACES[c.race]?.emoji || "🛸";
+          const emoji = CLASSES[c.class]?.emoji || "🛸";
           return (
             <motion.button
               key={c.id}
@@ -230,7 +230,7 @@ export default function LeaderboardPage() {
       <div className="space-y-2 w-full">
         {rest.map((c, i) => {
           const rank = i + 4;
-          const emoji = RACES[c.race]?.emoji || "🛸";
+          const emoji = CLASSES[c.class]?.emoji || "🛸";
           const disabledReason = challengeDisabledReason(me, c, previewCache[c.id]);
           const preview = previewCache[c.id];
           const canChallenge = !disabledReason && (!preview || preview.challengeAllowed);
@@ -320,6 +320,11 @@ export default function LeaderboardPage() {
           onMessage={(t) => {
             setProfile(null);
             navigate(`/messages?to=${t.id}`);
+          }}
+          onMail={(t) => {
+            setProfile(null);
+            const name = encodeURIComponent(t.name || "Player");
+            navigate(`/mail?to=${encodeURIComponent(t.id)}&name=${name}&level=${t.level || 1}`);
           }}
           onBlock={async (t) => {
             await blockPlayer(me, t);

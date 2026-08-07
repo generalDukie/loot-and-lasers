@@ -134,7 +134,7 @@ func prepare_fight() -> Dictionary:
 			"playerEnd": payload.get("playerEnd", {}),
 			"opponentEnd": payload.get("opponentEnd", {}),
 		}
-	pending_battle = battle
+	pending_battle = _normalize_battle_for_ui(battle)
 	pending_player_items = []
 	pending_enemy_index = int(payload.get("enemy_index", enemy_idx))
 	var cid := str(payload.get("combat_id", ""))
@@ -201,6 +201,26 @@ func _load_equipped() -> Array:
 		{"query": {"character_id": cid, "is_equipped": true}, "limit": 20}, true
 	)
 	return res.data if res.ok and typeof(res.data) == TYPE_ARRAY else []
+
+
+## Flatten Node combat payload so Skip / HP bars can read EndHp the same way as arena.
+func _normalize_battle_for_ui(battle: Dictionary) -> Dictionary:
+	if battle.is_empty():
+		return {}
+	var player_end: Dictionary = {}
+	var opp_end: Dictionary = {}
+	if typeof(battle.get("playerEnd", null)) == TYPE_DICTIONARY:
+		player_end = battle["playerEnd"]
+	if typeof(battle.get("opponentEnd", null)) == TYPE_DICTIONARY:
+		opp_end = battle["opponentEnd"]
+	var out := battle.duplicate(true)
+	if not out.has("playerEndHp") and player_end.has("hp"):
+		out["playerEndHp"] = int(player_end.get("hp", 0))
+	if not out.has("opponentEndHp") and opp_end.has("hp"):
+		out["opponentEndHp"] = int(opp_end.get("hp", 0))
+	out["playerMaxHp"] = int(out.get("playerMaxHp", 0))
+	out["opponentMaxHp"] = int(out.get("opponentMaxHp", 0))
+	return out
 
 
 func _apply(res: Dictionary) -> void:

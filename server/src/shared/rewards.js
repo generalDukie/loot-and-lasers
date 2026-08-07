@@ -328,11 +328,15 @@ export const PROMO_CODES = {
 };
 
 export async function redeemPromoCode(gameService, character, code) {
-  const entry = PROMO_CODES[code] || PROMO_CODES[Object.keys(PROMO_CODES).find((k) => k.toLowerCase() === String(code).toLowerCase())];
+  const raw = String(code || "").trim();
+  const entry = PROMO_CODES[raw]
+    || PROMO_CODES[Object.keys(PROMO_CODES).find((k) => k.toLowerCase() === raw.toLowerCase())];
   if (!entry) return { ok: false, status: 404, error: "Invalid promo code" };
-  const canonical = Object.keys(PROMO_CODES).find((k) => PROMO_CODES[k] === entry) || code;
+  const canonical = (
+    Object.keys(PROMO_CODES).find((k) => PROMO_CODES[k] === entry) || raw
+  ).toUpperCase();
   const redeemed = character.promo_codes_redeemed || [];
-  if (redeemed.includes(canonical) || redeemed.includes(code)) {
+  if (redeemed.some((c) => String(c || "").toUpperCase() === canonical)) {
     return { ok: false, status: 409, error: "Code already redeemed" };
   }
 
@@ -381,7 +385,9 @@ export async function redeemPromoCode(gameService, character, code) {
     }
     special.equipped_items = equipped;
   }
-  special.promo_codes_redeemed = [...(ch.promo_codes_redeemed || redeemed), canonical];
+  special.promo_codes_redeemed = [
+    ...new Set([...(ch.promo_codes_redeemed || redeemed).map(String), canonical]),
+  ];
   await gameService.asServiceRole.entities.Character.update(ch.id, special);
   return { ok: true, patch: { ...patch, ...special }, items, code: canonical, label: entry.label };
 }

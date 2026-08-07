@@ -62,14 +62,6 @@ const STARS = Array.from({ length: 36 }, (_, i) => {
   };
 });
 
-function segmentPath(a, b) {
-  const mx = (a.x + b.x) / 2;
-  const my = (a.y + b.y) / 2;
-  const cx = mx * 0.82 + WORMHOLE_POS.x * 0.18;
-  const cy = my * 0.82 + WORMHOLE_POS.y * 0.18;
-  return `M ${a.x} ${a.y} Q ${cx} ${cy}, ${b.x} ${b.y}`;
-}
-
 function radialLabelOffset(pos) {
   const dx = pos.x - WORMHOLE_POS.x;
   const dy = pos.y - WORMHOLE_POS.y;
@@ -381,8 +373,7 @@ export default function DungeonMap({
                   fill="none"
                   stroke={WORMHOLE_COLOR}
                   strokeWidth="0.45"
-                  strokeDasharray="1.2 3.2"
-                  strokeOpacity="0.35"
+                  strokeOpacity="0.55"
                 />
               ) : (
                 <motion.path
@@ -390,66 +381,7 @@ export default function DungeonMap({
                   fill="none"
                   stroke={WORMHOLE_COLOR}
                   strokeWidth="0.45"
-                  strokeDasharray="1.2 3.2"
-                  strokeOpacity="0.35"
-                  animate={{ strokeDashoffset: [0, -18] }}
-                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                />
-              )}
-
-              {NODE_POS.slice(0, -1).map((a, i) => {
-                const b = NODE_POS[i + 1];
-                const unlocked = inInfinite || planets[i + 1].id <= (front || 0);
-                const stroke = unlocked ? planets[i].color : "#3d3d4a";
-                if (zooming) {
-                  return (
-                    <path
-                      key={i}
-                      d={segmentPath(a, b)}
-                      fill="none"
-                      stroke={stroke}
-                      strokeWidth={unlocked ? 0.7 : 0.45}
-                      strokeDasharray="2 1.8"
-                      strokeOpacity={unlocked ? 0.75 : 0.22}
-                    />
-                  );
-                }
-                return (
-                  <motion.path
-                    key={i}
-                    d={segmentPath(a, b)}
-                    fill="none"
-                    stroke={stroke}
-                    strokeWidth={unlocked ? 0.7 : 0.45}
-                    strokeDasharray="2 1.8"
-                    strokeOpacity={unlocked ? 0.75 : 0.22}
-                    filter={unlocked ? "url(#routeGlow)" : undefined}
-                    animate={unlocked ? { strokeDashoffset: [0, -8] } : undefined}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                  />
-                );
-              })}
-
-              {zooming ? (
-                <path
-                  d={segmentPath(NODE_POS[9], WORMHOLE_POS)}
-                  fill="none"
-                  stroke={inInfinite ? WORMHOLE_COLOR : "#3d3d4a"}
-                  strokeWidth={1}
-                  strokeDasharray="2 2"
-                  strokeOpacity={inInfinite ? 0.85 : 0.25}
-                />
-              ) : (
-                <motion.path
-                  d={segmentPath(NODE_POS[9], WORMHOLE_POS)}
-                  fill="none"
-                  stroke={inInfinite ? WORMHOLE_COLOR : "#3d3d4a"}
-                  strokeWidth={1}
-                  strokeDasharray="2 2"
-                  strokeOpacity={inInfinite ? 0.85 : 0.25}
-                  filter={inInfinite ? "url(#routeGlow)" : undefined}
-                  animate={inInfinite ? { strokeDashoffset: [0, -14] } : undefined}
-                  transition={{ duration: 1.3, repeat: Infinity, ease: "linear" }}
+                  strokeOpacity="0.55"
                 />
               )}
             </svg>

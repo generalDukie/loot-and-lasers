@@ -208,6 +208,14 @@ func _populate(data: Dictionary) -> void:
 			GameManager.go_messages()
 		)
 		actions.add_child(msg)
+		var mail_btn := Button.new()
+		mail_btn.text = "Mail"
+		mail_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ClientUi.apply_ghost_button(mail_btn)
+		mail_btn.pressed.connect(func() -> void:
+			GameManager.go_mail(character)
+		)
+		actions.add_child(mail_btn)
 		var friend_state := _friend_state(me_id, tid)
 		var add := Button.new()
 		add.size_flags_horizontal = Control.SIZE_EXPAND_FILL

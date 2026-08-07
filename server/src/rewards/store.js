@@ -298,6 +298,7 @@ export const ClaimKeys = {
   admin: (idempotencyKey) => `admin:${idempotencyKey}`,
   weekly: (characterId, weekKey, questId) => `weekly:${characterId}:${weekKey}:${questId}`,
   arena: (characterId, battleKey) => `arena:${characterId}:${battleKey}`,
+  tutorial: (characterId) => `tutorial:${characterId}`,
 };
 
 function rowToPending(row) {

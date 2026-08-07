@@ -7,7 +7,7 @@ export const NAV_GROUPS = [
     items: [
       { to: "/character", label: "Hero", icon: User, color: "#00E5FF" },
       { to: "/missions", label: "Cantina", icon: Beer, color: "#FF8C00" },
-      { to: "/galaxy-map", label: "Galaxy", icon: Orbit, color: "#BA55D3" },
+      { to: "/galaxy-map", label: "Galactic Frontier", icon: Orbit, color: "#BA55D3" },
       { to: "/ship", label: "Ship Hangar", icon: Rocket, color: "#2DD4BF" },
     ],
   },

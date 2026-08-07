@@ -231,6 +231,11 @@ export default function FriendsPage() {
       {profile && (
         <PublicProfileSheet target={profile} myChar={me} onClose={() => setProfile(null)}
           onMessage={(t) => { setProfile(null); message(t); }}
+          onMail={(t) => {
+            setProfile(null);
+            const name = encodeURIComponent(t.name || "Player");
+            navigate(`/mail?to=${encodeURIComponent(t.id)}&name=${name}&level=${t.level || 1}`);
+          }}
           onBlock={async (t) => { await blockPlayer(me, t); toast({ title: "Player blocked" }); setProfile(null); load(); }}
           onReport={async (t) => { await reportPlayer(me.id, t, "Inappropriate profile", "profile"); toast({ title: "Report submitted" }); setProfile(null); }} />
       )}

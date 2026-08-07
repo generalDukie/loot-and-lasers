@@ -10,6 +10,7 @@ import { CLASS_BASE_STATS, FUEL_MAX } from "./shared/economyFormulas.js";
 import { assertCharacterCreateShape } from "./shared/characterSheet.js";
 import { assertNameHasNoDigits, assertNameHasNoSpaces, NAME_NO_DIGITS_MSG, NAME_NO_SPACES_MSG } from "./shared/nameRules.js";
 import { assertCanCreateCharacter, EntitlementError } from "./entitlements/index.js";
+import { defaultOnboardingState } from "./shared/tutorialService.js";
 
 export function isAdmin(user) {
   return user?.role === "admin";
@@ -61,6 +62,7 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "arena_bot_raid_at",
   "arena_pending_combat",
   "arena_opponent_offers",
+  "arena_recent_opponent_ids",
   "dungeon_deaths",
   "dungeon_deaths_date",
   "dungeon_clears",
@@ -95,6 +97,8 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "active_cosmetic_frame",
   // Slot index — server EquipItem / UnequipItem / Dissolve only
   "equipped_items",
+  // Interactive onboarding — server Get/Advance/Skip/CompleteTutorial only
+  "onboarding_tutorial",
 ]);
 
 /** Non-admin Item.update may only touch these fields (equip via EquipItem/UnequipItem). */
@@ -462,6 +466,8 @@ export function sanitizeCreatePayload(user, type, data = {}) {
         delete out[key];
       }
       assertCharacterCreateShape(out);
+      // New operatives start the interactive onboarding once (server-owned).
+      out.onboarding_tutorial = defaultOnboardingState();
     }
   }
 

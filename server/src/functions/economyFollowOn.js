@@ -147,6 +147,9 @@ import {
   clearArenaCooldownPatch,
   serializeArenaState,
   generateAndStoreArenaOffers,
+  refreshArenaOffersAfterBattle,
+  readArenaOffers,
+  arenaOpponentIdentityIds,
   resolveOfferCombatant,
   listArenaLeaderboard,
   isArenaCooldownActive,
@@ -317,7 +320,21 @@ export const GetArenaOpponents = wrap((user, body = {}) => {
   assertArenaClientSafe(body);
   let ch = requireMyChar(user);
   const force = !!body.refresh || !!body.force;
-  const result = generateAndStoreArenaOffers(ch, { force });
+  const excludeIds = []
+    .concat(body.exclude_ids || [])
+    .concat(body.excludeIds || [])
+    .map((x) => String(x || ""))
+    .filter(Boolean);
+  const preferExcludeIds = []
+    .concat(body.prefer_exclude_ids || [])
+    .concat(body.preferExcludeIds || [])
+    .map((x) => String(x || ""))
+    .filter(Boolean);
+  const result = generateAndStoreArenaOffers(ch, {
+    force,
+    excludeIds,
+    preferExcludeIds,
+  });
   ch = result.character;
   return {
     success: true,
@@ -326,6 +343,7 @@ export const GetArenaOpponents = wrap((user, body = {}) => {
     replay: result.replay,
     arena: serializeArenaState(ch, clock.nowMs(), todayET()),
     character: ch,
+    debug_offers: result.debug || null,
   };
 });
 
@@ -406,13 +424,19 @@ export const RefreshArenaOpponents = wrap((user, body = {}) => {
       stardust: (ch.stardust || 0) - ARENA_REFRESH_COST,
     });
   }
-  const result = generateAndStoreArenaOffers(ch, { force: true });
+  const bag = readArenaOffers(ch);
+  const previousIds = (bag?.offers || []).flatMap(arenaOpponentIdentityIds);
+  const result = generateAndStoreArenaOffers(ch, {
+    force: true,
+    preferExcludeIds: previousIds,
+  });
   return {
     success: true,
     charged: charge,
     cost: charge ? ARENA_REFRESH_COST : 0,
     opponents: result.offers,
     expires_at: result.expires_at,
+    debug_offers: result.debug || null,
     arena: serializeArenaState(result.character, clock.nowMs(), todayET()),
     character: result.character,
     balances: getBalances(result.character),
@@ -701,6 +725,18 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
         arena_rating_delta: challengeRewards.arena_rating_delta,
       },
     });
+    let opponents = null;
+    let expiresAt = null;
+    let debugOffers = null;
+    try {
+      const offerRefresh = refreshArenaOffersAfterBattle(character, opponentId);
+      character = offerRefresh.character;
+      opponents = offerRefresh.offers;
+      expiresAt = offerRefresh.expires_at;
+      debugOffers = offerRefresh.debug || null;
+    } catch (err) {
+      console.warn("[ArenaOffers] post-challenge refresh failed:", err?.message || err);
+    }
     return {
       success: true,
       winner: challengeWinner,
@@ -716,6 +752,9 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
       progression,
       challenge_id: challengeId,
       newly_unlocked: ach.newly_unlocked,
+      opponents,
+      expires_at: expiresAt,
+      debug_offers: debugOffers,
       arena: serializeArenaState(character, clock.nowMs(), today),
       balances: getBalances(character),
     };
@@ -959,6 +998,20 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     arena,
     balances: getBalances(character),
   };
+
+  // Fresh contender board after every settled ladder fight (not a UI reshuffle).
+  try {
+    const offerRefresh = refreshArenaOffersAfterBattle(character, opponentId);
+    character = offerRefresh.character;
+    resultBody.character = character;
+    resultBody.opponents = offerRefresh.offers;
+    resultBody.expires_at = offerRefresh.expires_at;
+    resultBody.debug_offers = offerRefresh.debug || null;
+    resultBody.arena = serializeArenaState(character, clock.nowMs(), today);
+    resultBody.balances = getBalances(character);
+  } catch (err) {
+    console.warn("[ArenaOffers] post-battle refresh failed:", err?.message || err);
+  }
 
   saveWalletOperation(user.id, "finish_arena", combatId, {
     success: true,
@@ -2465,7 +2518,7 @@ export const CreateGuild = wrap((user, body) => {
   const name = String(body.name || "").trim();
   if (!name) httpErr(400, "Guild needs a name");
   assertNameHasNoDigits(name, "Guild name");
-  const tag = String(body.tag || "").trim().toUpperCase().slice(0, 4);
+  const tag = String(body.tag || "").trim().toUpperCase().slice(0, 5);
   const description = String(body.description || "").trim();
   if ((ch.stardust || 0) < GUILD_CREATE_COST) httpErr(400, "Not enough stardust");
   const existing = entities.GuildMember.filter({ character_id: ch.id }, null, 5);

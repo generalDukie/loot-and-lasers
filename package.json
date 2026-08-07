@@ -25,6 +25,7 @@
     "test:entitlements": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-entitlements.mjs",
     "test:rewards": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-rewards.mjs",
     "test:daily-login": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-daily-login.mjs",
+    "test:tutorial": "node server/scripts/test-tutorial-onboarding.mjs",
     "test:arena": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-arena.mjs",
     "test:arena-authority": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-arena-authority.mjs",
     "test:casino": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-casino.mjs",

@@ -25,11 +25,12 @@ import ArenaOpponentCard from "@/components/game/ArenaOpponentCard";
 import ArenaBattleOverlay from "@/components/game/ArenaBattleOverlay";
 import ArenaNewsFeed from "@/components/game/ArenaNewsFeed";
 import ArenaMatchHistory from "@/components/game/ArenaMatchHistory";
+import FreeBattlesStatus from "@/components/game/FreeBattlesStatus";
 import CombatCompleteOverlay from "@/components/game/CombatCompleteOverlay";
 import LevelUpOverlay, { pendingLevelUpFromSummary } from "@/components/game/LevelUpOverlay";
 import { ArenaBackdrop } from "@/components/game/ArenaBackdrop";
 import FitScaleFrame from "@/components/game/FitScaleFrame";
-import { Swords, RefreshCw, Flame, Shield, Clock } from "lucide-react";
+import { Swords, RefreshCw, Flame, Clock } from "lucide-react";
 
 import { msUntilNextETMidnight, formatEtaShort } from "@/lib/gameTime";
 import { STARDUST_GLYPH } from "@/components/game/StardustIcon";
@@ -74,10 +75,19 @@ async function fetchRealOpponents(char, maxReal = ARENA_MAX_REAL_OPPONENTS, excl
 }
 
 // Prefer server-authored offers (stable offer_id). Fall back to legacy client mix.
-async function buildOpponentPool(char, catalogItems, excludeIds = []) {
-  void excludeIds;
+async function buildOpponentPool(char, catalogItems, opts = {}) {
+  const force = !!opts.force;
+  const excludeIds = Array.isArray(opts.excludeIds) ? opts.excludeIds.filter(Boolean) : [];
   try {
-    const res = await api.functions.invoke("GetArenaOpponents", {});
+    const res = await api.functions.invoke("GetArenaOpponents", {
+      force,
+      refresh: force,
+      exclude_ids: excludeIds,
+      prefer_exclude_ids: Array.isArray(opts.preferExcludeIds) ? opts.preferExcludeIds.filter(Boolean) : [],
+    });
+    if (res?.debug_offers || res?.data?.debug_offers) {
+      console.log("[ArenaOffers]", res.debug_offers || res.data.debug_offers);
+    }
     const offers = res.opponents || res.data?.opponents || [];
     if (offers.length) {
       return offers.map((o) => ({
@@ -111,7 +121,11 @@ async function buildOpponentPool(char, catalogItems, excludeIds = []) {
       ];
     }
   }
-  const pool = [...real, ...bots];
+  const exclude = new Set(excludeIds.map(String));
+  const pool = [...real, ...bots].filter((o) => {
+    const ids = [o.realCharacterId, o.arena_bot_id, o.id].filter(Boolean).map(String);
+    return !ids.some((id) => exclude.has(id));
+  });
   const seen = new Set();
   const deduped = pool.filter((o) => {
     const key = o.realCharacterId ? `real-${o.realCharacterId}` : (o.arena_bot_id || o.id);
@@ -119,7 +133,23 @@ async function buildOpponentPool(char, catalogItems, excludeIds = []) {
     seen.add(key);
     return true;
   });
-  return deduped.sort(() => Math.random() - 0.5);
+  return deduped.sort(() => Math.random() - 0.5).slice(0, ARENA_CHALLENGER_SLOTS);
+}
+
+function opponentIdentityIds(opp) {
+  if (!opp) return [];
+  return [opp.realCharacterId, opp.character_id, opp.arena_bot_id, opp.id]
+    .filter(Boolean)
+    .map(String);
+}
+
+function mapServerOffers(offers) {
+  return (offers || []).map((o) => ({
+    ...o,
+    offer_id: o.offer_id,
+    isBot: !!(o.isBot || o.is_bot),
+    equippedItems: [],
+  }));
 }
 
 export default function ArenaPage() {
@@ -269,7 +299,17 @@ export default function ArenaPage() {
 
   async function refreshOpponents() {
     if (canFreeRefresh) {
-      setOpponents(await buildOpponentPool(character, catalogItems));
+      // Timed free refresh must mint a new server board (not replay the 5‑min cache).
+      const res = await api.functions.invoke("RefreshArenaOpponents", { charge: false });
+      if (res?.debug_offers || res?.data?.debug_offers) {
+        console.log("[ArenaOffers]", res.debug_offers || res.data.debug_offers);
+      }
+      const offers = res.opponents || res.data?.opponents || [];
+      if (offers.length) setOpponents(mapServerOffers(offers));
+      else setOpponents(await buildOpponentPool(character, catalogItems, { force: true }));
+      const full = res.character || res.data?.character;
+      const patch = res.patch || res.data?.patch;
+      if (full || patch) setCharacter((c) => ({ ...c, ...(full || {}), ...(patch || {}) }));
       setRefreshAt(Date.now() + ARENA_REFRESH_MS);
       return;
     }
@@ -278,10 +318,16 @@ export default function ArenaPage() {
       return;
     }
     const res = await api.functions.invoke("RefreshArenaOpponents", { charge: true });
+    if (res?.debug_offers || res?.data?.debug_offers) {
+      console.log("[ArenaOffers]", res.debug_offers || res.data.debug_offers);
+    }
     const upd = res.patch || res.data?.patch || {};
-    setCharacter((c) => ({ ...c, ...upd }));
+    const full = res.character || res.data?.character;
+    setCharacter((c) => ({ ...c, ...upd, ...(full || {}) }));
     void trackStardustSpend(character, ARENA_REFRESH_COST, "arena_refresh");
-    setOpponents(await buildOpponentPool({ ...character, ...upd }, catalogItems));
+    const offers = res.opponents || res.data?.opponents || [];
+    if (offers.length) setOpponents(mapServerOffers(offers));
+    else setOpponents(await buildOpponentPool({ ...character, ...upd }, catalogItems, { force: true }));
   }
 
   // When the player is on cooldown, each challenger's button becomes a
@@ -432,14 +478,25 @@ export default function ArenaPage() {
     setCharacter((c) => ({ ...c, ...(fullChar || update) }));
     setFreeBattlesLeft((a) => Math.max(0, a - (isFree ? 1 : 0)));
     setBattleState(null);
-    // Replace the just-fought challenger with a fresh mixed (real+bots) pick,
-    // excluding real players already shown so no one appears twice at once.
-    // Revenge fights may not be on the board — only swap if they were.
-    const excludeIds = opponents.filter((o) => o.id !== opp.id).map((o) => o.realCharacterId).filter(Boolean);
-    const onBoard = opponents.some((o) => o.id === opp.id);
-    if (onBoard) {
-      const replacement = (await buildOpponentPool(character, catalogItems, excludeIds))[0];
-      setOpponents((prev) => prev.map((o) => (o.id === opp.id ? replacement : o)));
+
+    // Contender refresh is authoritative on FinishArenaBattle. Prefer that board;
+    // otherwise force a new GetArenaOpponents mint excluding the prior set + fought.
+    const previousIds = opponents.flatMap(opponentIdentityIds);
+    const foughtIds = opponentIdentityIds(opp);
+    const serverOffers = res.opponents || res.data?.opponents || [];
+    if (res?.debug_offers || res?.data?.debug_offers) {
+      console.log("[ArenaOffers]", res.debug_offers || res.data.debug_offers);
+    }
+    if (serverOffers.length) {
+      setOpponents(mapServerOffers(serverOffers));
+    } else {
+      setOpponents(
+        await buildOpponentPool(fullChar || { ...character, ...update }, catalogItems, {
+          force: true,
+          excludeIds: foughtIds,
+          preferExcludeIds: previousIds,
+        }),
+      );
     }
 
     if (discFound.length) {
@@ -542,13 +599,18 @@ export default function ArenaPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5">
                 <Stat icon={Swords} label="W / L" value={`${wins} / ${losses}`} color="#60A5FA" />
                 <Stat icon={Flame} label="Streak" value={streak} color="#FB7185" />
-                <Stat icon={Shield} label="Free" value={`${freeBattlesLeft}/${ARENA_DAILY_FREE_BATTLES}`} hint={`resets ${formatEtaShort(msUntilNextETMidnight(now))}`} color="#FBBF24" />
               </div>
             </div>
           </motion.div>
+
+          <FreeBattlesStatus
+            remaining={freeBattlesLeft}
+            dailyMax={ARENA_DAILY_FREE_BATTLES}
+            resetHint={formatEtaShort(msUntilNextETMidnight(now))}
+          />
 
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-[10px] font-display font-bold tracking-[0.18em] text-muted-foreground">CHALLENGERS</h2>
@@ -590,12 +652,6 @@ export default function ArenaPage() {
               </motion.div>
             ))}
           </div>
-
-          {freeBattlesLeft <= 0 && (
-            <div className="text-center text-[10px] text-muted-foreground rounded-md border border-border/40 bg-card/40 px-2 py-1">
-              Free battles used — keep climbing for {ARENA_PAID_BATTLE_COST} 💎 per battle (rating only).
-            </div>
-          )}
 
           <div className="grid gap-2.5 lg:grid-cols-2">
             <ArenaMatchHistory

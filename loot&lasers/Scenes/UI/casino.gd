@@ -300,27 +300,18 @@ func _build_nav() -> HBoxContainer:
 		var btn := Button.new()
 		btn.toggle_mode = true
 		btn.focus_mode = Control.FOCUS_NONE
-		btn.text = ""
+		btn.text = title
 		btn.tooltip_text = title
-		btn.custom_minimum_size = Vector2(0, 72)
+		btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		btn.clip_text = true
+		btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		# Equal tiles: shared width via EXPAND_FILL, fixed height for a stable dock row.
+		btn.custom_minimum_size = Vector2(0, 52)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ClientUi.apply_dock_button(btn, tint)
-		var face := CenterContainer.new()
-		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		face.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-		btn.add_child(face)
-		var lab := Label.new()
-		lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lab.text = title
-		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		lab.add_theme_font_size_override("font_size", 14)
-		lab.add_theme_color_override("font_color", tint)
-		ClientUi.apply_display_font(lab)
-		face.add_child(lab)
+		# Slightly larger than default dock chrome so titles stay readable on one line.
+		btn.add_theme_font_size_override("font_size", 13)
 		btn.set_meta("nav_title", title)
-		btn.set_meta("nav_label", lab)
 		btn.set_meta("nav_tint", tint)
 		var gid: String = s.id
 		btn.pressed.connect(func() -> void: _select_game(gid))
@@ -333,13 +324,13 @@ func _refresh_nav_badges() -> void:
 	for id in _nav_btns.keys():
 		var btn: Button = _nav_btns[id]
 		var title := str(btn.get_meta("nav_title", btn.tooltip_text))
-		var lab: Label = btn.get_meta("nav_label") if btn.has_meta("nav_label") else null
 		var active := not CasinoManager.active_session(id).is_empty()
 		# Name only — session activity lives in tooltip so the face stays clean.
-		if lab != null and is_instance_valid(lab):
-			lab.text = title
+		btn.text = title
 		btn.tooltip_text = ("%s — active session" % title) if active else title
-
+		btn.clip_text = true
+		btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 func _build_dice_panel() -> VBoxContainer:
 	var col := VBoxContainer.new()

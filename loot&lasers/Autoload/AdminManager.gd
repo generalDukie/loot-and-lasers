@@ -113,12 +113,16 @@ func reset_player(character_id: String, reason: String) -> Dictionary:
 	return await moderation("reset_player", {"character_id": character_id, "reason": reason})
 
 
-func set_role(user_id: String, role: String, reason: String) -> Dictionary:
-	return await moderation("set_role", {
-		"user_id": user_id,
+func set_role(user_id: String, role: String, reason: String, character_id: String = "") -> Dictionary:
+	var body := {
 		"role": role,
 		"reason": reason,
-	})
+	}
+	if not user_id.strip_edges().is_empty():
+		body["user_id"] = user_id.strip_edges()
+	if not character_id.strip_edges().is_empty():
+		body["character_id"] = character_id.strip_edges()
+	return await moderation("set_role", body)
 
 
 func transfer_guild(guild_id: String, new_leader_id: String, reason: String = "") -> Dictionary:

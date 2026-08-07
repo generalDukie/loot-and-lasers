@@ -167,7 +167,7 @@ func _make_creation_flow() -> VBoxContainer:
 	_create_block.add_child(_name_edit)
 	_create_block.add_child(_field_label("Tag (optional)"))
 	_tag_edit = ClientUi.make_field("NOVA")
-	_tag_edit.max_length = 4
+	_tag_edit.max_length = 5
 	_create_block.add_child(_tag_edit)
 	_create_block.add_child(_field_label("Description"))
 	_desc_edit = TextEdit.new()

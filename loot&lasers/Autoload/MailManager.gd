@@ -339,6 +339,7 @@ func send_player_mail_to(target: Dictionary, subject: String, body: String) -> D
 
 
 ## Hydrate friend (+ guild) recipients with authoritative name/level like web MailPage.
+## Callers may also mail any character via a forced recipient (profile / rankings).
 func mail_compose_recipients() -> Array:
 	var ids: Array = []
 	var seen := {}

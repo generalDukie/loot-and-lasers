@@ -68,7 +68,7 @@ static func reward_icon_id(rewards: Dictionary) -> String:
 			return "shield"
 		return "package"
 	if int(rewards.get("nova_crystals", 0)) > 0:
-		return "sparkle"
+		return "sparkles"
 	if int(rewards.get("experience", 0)) > 0:
 		return "star"
 	if int(rewards.get("fuel", 0)) > 0:

@@ -367,11 +367,15 @@ func _build_promo() -> VBoxContainer:
 
 
 func _build_danger() -> PanelContainer:
+	## Web Settings danger zone: stacked full-width rows (Log Out / Delete), no overlap.
 	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.clip_contents = true
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.06, 0.08, 0.12, 0.55), Color(0.28, 0.36, 0.48, 0.35), 12, 1
 	))
 	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 0)
 	panel.add_child(col)
 
@@ -387,6 +391,7 @@ func _build_danger() -> PanelContainer:
 
 	var sep := ColorRect.new()
 	sep.custom_minimum_size = Vector2(0, 1)
+	sep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sep.color = Color(0.28, 0.36, 0.48, 0.35)
 	col.add_child(sep)
 
@@ -403,26 +408,70 @@ func _build_danger() -> PanelContainer:
 func _danger_row(title: String, hint: String, destructive: bool, on_press: Callable) -> Button:
 	var btn := Button.new()
 	btn.flat = true
-	btn.custom_minimum_size = Vector2(0, 75)
+	btn.text = ""
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.clip_contents = true
+	btn.custom_minimum_size = Vector2(0, 72)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.pressed.connect(on_press)
+	# Transparent fill so nested labels own the visual; keep a light hover wash.
+	var empty := StyleBoxEmpty.new()
+	btn.add_theme_stylebox_override("normal", empty)
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = Color(ClientUi.DANGER, 0.08) if destructive else Color(1, 1, 1, 0.06)
+	hover.set_corner_radius_all(0)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", hover)
+	btn.add_theme_stylebox_override("focus", empty)
+
+	var pad := MarginContainer.new()
+	pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pad.add_theme_constant_override("margin_left", 16)
+	pad.add_theme_constant_override("margin_right", 16)
+	pad.add_theme_constant_override("margin_top", 12)
+	pad.add_theme_constant_override("margin_bottom", 12)
+	btn.add_child(pad)
+
 	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	btn.add_child(row)
-	var icon := UiIcon.make("trash-2" if destructive else "undo-2", ClientUi.DANGER if destructive else ClientUi.MUTED, 21.0)
+	pad.add_child(row)
+
+	var icon := UiIcon.make(
+		"trash-2" if destructive else "undo-2",
+		ClientUi.DANGER if destructive else ClientUi.MUTED,
+		21.0
+	)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(icon)
+
 	var text_col := VBoxContainer.new()
 	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	text_col.add_theme_constant_override("separation", 2)
+	text_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(text_col)
+
 	var t := Label.new()
 	t.text = title
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	t.autowrap_mode = TextServer.AUTOWRAP_OFF
+	t.clip_text = true
 	t.add_theme_font_size_override("font_size", 19)
 	t.add_theme_color_override("font_color", ClientUi.DANGER if destructive else ClientUi.TEXT)
 	ClientUi.apply_body_font(t)
 	text_col.add_child(t)
+
 	var h := Label.new()
 	h.text = hint
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	h.add_theme_font_size_override("font_size", 15)
 	h.add_theme_color_override("font_color", Color(ClientUi.DANGER, 0.7) if destructive else ClientUi.MUTED)

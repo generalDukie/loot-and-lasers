@@ -72,7 +72,7 @@ func spark(card: Control, crit: bool) -> void:
 		return
 	var mark := _acquire_spark()
 	mark.text = "✸" if crit else "✦"
-	mark.add_theme_font_size_override("font_size", 52 if crit else 30)
+	mark.add_theme_font_size_override("font_size", 64 if crit else 38)
 	mark.add_theme_color_override("font_color", Color("#FBBF24") if crit else Color(1, 1, 1, 0.95))
 	ClientUi.apply_display_font(mark)
 	mark.modulate = Color.WHITE
@@ -90,7 +90,7 @@ func spark(card: Control, crit: bool) -> void:
 		# Second ring for weight without slowing the beat.
 		var ring := _acquire_spark()
 		ring.text = "○"
-		ring.add_theme_font_size_override("font_size", 53)
+		ring.add_theme_font_size_override("font_size", 64)
 		ring.add_theme_color_override("font_color", Color("#FDE68A", 0.9))
 		ClientUi.apply_display_font(ring)
 		ring.modulate = Color.WHITE

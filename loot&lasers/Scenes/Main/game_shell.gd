@@ -70,6 +70,19 @@ func _ready() -> void:
 	if target.is_empty():
 		target = GameManager.SCENE_HUB
 	show_page(target)
+	_ensure_tutorial_coach()
+
+
+func _ensure_tutorial_coach() -> void:
+	if has_node("TutorialCoach"):
+		return
+	var script: Variant = load("res://Scenes/UI/TutorialCoach.gd")
+	if script == null:
+		return
+	var coach: Node = (script as GDScript).new()
+	coach.name = "TutorialCoach"
+	add_child(coach)
+	TutorialManager.refresh()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
@@ -454,6 +467,18 @@ func _make_rail() -> Control:
 			btn.size_flags_stretch_ratio = 1.0
 			btn.custom_minimum_size.y = 0 # no height floor — always fit all 15
 			btn.pressed.connect(_on_nav_pressed.bind(path))
+			var tutorial_id := ""
+			if path == GameManager.SCENE_STATS:
+				tutorial_id = "nav-hero"
+			elif path == GameManager.SCENE_CANTINA:
+				tutorial_id = "nav-cantina"
+			elif path == GameManager.SCENE_GALAXY:
+				tutorial_id = "nav-frontier"
+			elif path == GameManager.SCENE_ARENA:
+				tutorial_id = "nav-arena"
+			if not tutorial_id.is_empty():
+				btn.set_meta("tutorial_id", tutorial_id)
+				btn.add_to_group("tutorial_target")
 			group_box.add_child(btn)
 
 			var pad := MarginContainer.new()
@@ -620,9 +645,15 @@ func _make_operative_panel() -> Control:
 	ClientUi.apply_display_font(_operative_title)
 	panel.add_child(_operative_title)
 
-	_fuel_value = _make_readout(panel, "fuel", Color("#39FF14"))
-	_stardust_value = _make_readout(panel, "stardust", Color("#E879F9"))
-	_nova_value = _make_readout(panel, "nova", Color("#FFD700"), true)
+	var wallet := VBoxContainer.new()
+	wallet.name = "WalletReadouts"
+	wallet.set_meta("tutorial_id", "shell-wallet")
+	wallet.add_to_group("tutorial_target")
+	wallet.add_theme_constant_override("separation", 4)
+	panel.add_child(wallet)
+	_fuel_value = _make_readout(wallet, "fuel", Color("#39FF14"))
+	_stardust_value = _make_readout(wallet, "stardust", Color("#E879F9"))
+	_nova_value = _make_readout(wallet, "nova", Color("#FFD700"), true)
 
 	return panel
 
@@ -778,7 +809,7 @@ func _nav_groups() -> Array:
 		{"name": "Explore", "items": [
 			{"path": GameManager.SCENE_STATS, "label": "Hero", "icon": "user", "color": "#00E5FF"},
 			{"path": GameManager.SCENE_CANTINA, "label": "Cantina", "icon": "beer", "color": "#FF8C00"},
-			{"path": GameManager.SCENE_GALAXY, "label": "Galaxy", "icon": "orbit", "color": "#BA55D3"},
+			{"path": GameManager.SCENE_GALAXY, "label": "Galactic Frontier", "icon": "orbit", "color": "#BA55D3"},
 			{"path": GameManager.SCENE_SHIP, "label": "Ship Hangar", "icon": "rocket", "color": "#2DD4BF"},
 		]},
 		{"name": "Social", "items": [
@@ -925,6 +956,7 @@ func show_page(path: String) -> void:
 	_page_swap_busy = false
 	_set_nav_buttons_enabled(true)
 	_refresh_notif_after_nav()
+	TutorialManager.notify_page_changed(path)
 
 
 func _refresh_notif_after_nav() -> void:
@@ -1032,6 +1064,11 @@ func show_overlay_scene(path: String) -> void:
 
 
 func open_daily_login_modal() -> void:
+	## Avoid stacking duplicate modals if the player double-clicks Claim Daily.
+	if _overlay_host != null and is_instance_valid(_overlay_host):
+		for child in _overlay_host.get_children():
+			if child.get_script() != null and str(child.get_script().resource_path).ends_with("DailyLoginModal.gd"):
+				return
 	var script: Variant = load("res://Scenes/UI/DailyLoginModal.gd")
 	if script == null:
 		push_warning("[GameShell] DailyLoginModal.gd missing")
@@ -1039,10 +1076,12 @@ func open_daily_login_modal() -> void:
 	var modal: Control = (script as GDScript).new()
 	show_overlay(modal)
 	if modal.has_signal("claimed"):
-		modal.claimed.connect(func(_payload: Dictionary) -> void:
-			_refresh_chrome()
-			await _refresh_notification_center()
-		)
+		modal.claimed.connect(_on_daily_login_claimed)
+
+
+func _on_daily_login_claimed(_payload: Dictionary) -> void:
+	_refresh_chrome()
+	await _refresh_notification_center()
 
 
 func clear_overlays() -> void:

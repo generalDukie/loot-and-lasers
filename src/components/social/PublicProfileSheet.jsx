@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { X, UserPlus, MessageSquare, Ban, Flag, Shield, Users, Swords } from "lucide-react";
+import { X, UserPlus, MessageSquare, Mail, Ban, Flag, Shield, Users, Swords } from "lucide-react";
 import CharacterStats from "@/components/game/CharacterStats";
 import EquipmentSlots from "@/components/game/EquipmentSlots";
 import CharacterAvatar from "@/components/game/CharacterAvatar";
@@ -22,6 +22,7 @@ export default function PublicProfileSheet({
   myChar,
   onClose,
   onMessage,
+  onMail,
   onBlock,
   onReport,
   onChallenge,
@@ -268,6 +269,9 @@ export default function PublicProfileSheet({
                 />
               )}
               <Action icon={MessageSquare} label="Message" color="#22D3EE" onClick={() => onMessage?.(target)} />
+              {onMail && (
+                <Action icon={Mail} label="Mail" color="#F59E0B" onClick={() => onMail(target)} />
+              )}
               {friendState === "none" && (
                 <Action icon={UserPlus} label={sendingFriend ? "Sending…" : "Add Friend"} color="#A855F7" onClick={handleAddFriend} />
               )}

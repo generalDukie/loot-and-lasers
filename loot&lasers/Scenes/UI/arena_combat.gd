@@ -2,7 +2,12 @@ extends Control
 ## Shared duel overlay — mirrors web ArenaBattleOverlay (arena + mission + dungeon).
 ## Node owns combat simulation; this file is presentation + settlement only.
 
-const FIGHTER_SIZE := Vector2(200, 260)
+## Base sizes at ui_scale 1.0 (~1600×900 stage). Responsive via _combat_ui_scale().
+const FIGHTER_W_BASE := 300.0
+const FIGHTER_H_BASE := 360.0
+const PORTRAIT_BASE := 280.0
+const HP_BAR_H_BASE := 38.0
+const CLASS_ICON_BASE := 36.0
 
 const STAT_COLORS := {
 	"strength": Color("#F87171"),
@@ -61,12 +66,21 @@ var _player_weapon: Dictionary = {}
 var _enemy_weapon: Dictionary = {}
 var _player_weapon_label: Control
 var _enemy_weapon_label: Control
+var _matchup_panel: Control
+var _player_totals: Dictionary = {}
+var _enemy_totals: Dictionary = {}
+var _duel_player: Dictionary = {}
+var _duel_enemy: Dictionary = {}
+var _duel_player_items: Array = []
+var _duel_enemy_items: Array = []
 var _sheet_host: Control
 var _prev_level := 1
 var _generation := 0
 var _ability_tween: Tween
 var _theme_chip: Label
 var _dungeon_ctx: Dictionary = {}
+var _fighter_size: Vector2 = Vector2(FIGHTER_W_BASE, FIGHTER_H_BASE)
+var _portrait_px: float = PORTRAIT_BASE
 
 var _events: Array = []
 var _event_i := 0
@@ -120,14 +134,14 @@ func _build() -> void:
 	add_child(root)
 
 	var hp_pad := MarginContainer.new()
-	hp_pad.add_theme_constant_override("margin_left", 20)
-	hp_pad.add_theme_constant_override("margin_right", 20)
-	hp_pad.add_theme_constant_override("margin_top", 18)
-	hp_pad.add_theme_constant_override("margin_bottom", 4)
+	hp_pad.add_theme_constant_override("margin_left", 28)
+	hp_pad.add_theme_constant_override("margin_right", 28)
+	hp_pad.add_theme_constant_override("margin_top", 16)
+	hp_pad.add_theme_constant_override("margin_bottom", 6)
 	root.add_child(hp_pad)
 
 	var hp_row := HBoxContainer.new()
-	hp_row.add_theme_constant_override("separation", 12)
+	hp_row.add_theme_constant_override("separation", 16)
 	hp_pad.add_child(hp_row)
 
 	var p_hp := _make_hp_side(false)
@@ -139,10 +153,10 @@ func _build() -> void:
 	_player_status = p_hp.get_meta("status")
 
 	var mid := VBoxContainer.new()
-	mid.custom_minimum_size.x = 48
+	mid.custom_minimum_size.x = 64
 	mid.alignment = BoxContainer.ALIGNMENT_CENTER
 	hp_row.add_child(mid)
-	mid.add_child(UiIcon.make("swords", Color("#FCD34D", 0.85), 24.0))
+	mid.add_child(UiIcon.make("swords", Color("#FCD34D", 0.9), 32.0))
 
 	var e_hp := _make_hp_side(true)
 	e_hp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -196,21 +210,21 @@ func _build() -> void:
 	_ability_banner.add_child(ab_col)
 	_ability_emoji = Label.new()
 	_ability_emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_emoji.add_theme_font_size_override("font_size", 29)
+	_ability_emoji.add_theme_font_size_override("font_size", 36)
 	ab_col.add_child(_ability_emoji)
 	_ability_title = Label.new()
 	_ability_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_title.add_theme_font_size_override("font_size", 20)
+	_ability_title.add_theme_font_size_override("font_size", 24)
 	ClientUi.apply_display_font(_ability_title)
 	ab_col.add_child(_ability_title)
 	_ability_detail = Label.new()
 	_ability_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_detail.add_theme_font_size_override("font_size", 15)
+	_ability_detail.add_theme_font_size_override("font_size", 17)
 	ClientUi.apply_display_font(_ability_detail)
 	ab_col.add_child(_ability_detail)
 	_ability_class = Label.new()
 	_ability_class.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ability_class.add_theme_font_size_override("font_size", 12)
+	_ability_class.add_theme_font_size_override("font_size", 14)
 	ClientUi.apply_display_font(_ability_class)
 	ab_col.add_child(_ability_class)
 
@@ -221,7 +235,7 @@ func _build() -> void:
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_banner.modulate.a = 0.0
 	_banner.z_index = 25
-	_banner.add_theme_font_size_override("font_size", 56)
+	_banner.add_theme_font_size_override("font_size", 68)
 	_banner.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(_banner)
 	_stage.add_child(_banner)
@@ -242,19 +256,19 @@ func _build() -> void:
 	var vs_row := Label.new()
 	vs_row.name = "VsRow"
 	vs_row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vs_row.add_theme_font_size_override("font_size", 19)
+	vs_row.add_theme_font_size_override("font_size", 26)
 	ClientUi.apply_display_font(vs_row)
 	intro_col.add_child(vs_row)
 	var fight_row := HBoxContainer.new()
 	fight_row.name = "FightLab"
 	fight_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	fight_row.add_theme_constant_override("separation", 10)
+	fight_row.add_theme_constant_override("separation", 12)
 	intro_col.add_child(fight_row)
-	fight_row.add_child(UiIcon.make("swords", Color("#FBBF24"), 40.0))
+	fight_row.add_child(UiIcon.make("swords", Color("#FBBF24"), 48.0))
 	var fight_lab := Label.new()
 	fight_lab.text = "FIGHT!"
 	fight_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	fight_lab.add_theme_font_size_override("font_size", 48)
+	fight_lab.add_theme_font_size_override("font_size", 58)
 	fight_lab.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(fight_lab)
 	fight_row.add_child(fight_lab)
@@ -275,24 +289,24 @@ func _build() -> void:
 	outro_center.add_child(outro_col)
 	_outro_title = Label.new()
 	_outro_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_outro_title.add_theme_font_size_override("font_size", 64)
+	_outro_title.add_theme_font_size_override("font_size", 72)
 	ClientUi.apply_display_font(_outro_title)
 	outro_col.add_child(_outro_title)
 	_outro_sub = Label.new()
 	_outro_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_outro_sub.add_theme_font_size_override("font_size", 17)
+	_outro_sub.add_theme_font_size_override("font_size", 20)
 	_outro_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_outro_sub)
 	outro_col.add_child(_outro_sub)
 	_outro_btn = Button.new()
 	_outro_btn.text = "VIEW REWARDS"
-	_outro_btn.custom_minimum_size = Vector2(293, 59)
+	_outro_btn.custom_minimum_size = Vector2(320, 64)
 	ClientUi.apply_primary_button(_outro_btn)
 	_outro_btn.pressed.connect(_on_outro_continue)
 	outro_col.add_child(_outro_btn)
 
 	var combo_row := Control.new()
-	combo_row.custom_minimum_size.y = 48
+	combo_row.custom_minimum_size.y = 40
 	root.add_child(combo_row)
 	_combo_wrap = PanelContainer.new()
 	_combo_wrap.visible = false
@@ -304,21 +318,21 @@ func _build() -> void:
 	))
 	combo_row.add_child(_combo_wrap)
 	_combo_lab = Label.new()
-	_combo_lab.add_theme_font_size_override("font_size", 16)
+	_combo_lab.add_theme_font_size_override("font_size", 20)
 	_combo_lab.add_theme_color_override("font_color", Color("#FCD34D"))
 	ClientUi.apply_display_font(_combo_lab)
 	_combo_wrap.add_child(_combo_lab)
 
 	var skip_pad := MarginContainer.new()
-	skip_pad.add_theme_constant_override("margin_bottom", 28)
-	skip_pad.add_theme_constant_override("margin_top", 4)
+	skip_pad.add_theme_constant_override("margin_bottom", 24)
+	skip_pad.add_theme_constant_override("margin_top", 2)
 	root.add_child(skip_pad)
 	var skip_row := HBoxContainer.new()
 	skip_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	skip_pad.add_child(skip_row)
 	_skip_btn = Button.new()
 	_skip_btn.text = "⚡  SKIP TO RESULTS"
-	_skip_btn.custom_minimum_size = Vector2(293, 53)
+	_skip_btn.custom_minimum_size = Vector2(320, 58)
 	_apply_skip_cta(_skip_btn)
 	_skip_btn.pressed.connect(_on_skip)
 	skip_row.add_child(_skip_btn)
@@ -346,7 +360,7 @@ func _build() -> void:
 	_combat_log.offset_top = -150
 	_combat_log.offset_right = -12
 	_combat_log.offset_bottom = -72
-	_combat_log.add_theme_font_size_override("normal_font_size", 12)
+	_combat_log.add_theme_font_size_override("normal_font_size", 14)
 	_combat_log.add_theme_color_override("default_color", Color(1, 1, 1, 0.72))
 	_combat_log.z_index = 25
 	add_child(_combat_log)
@@ -367,10 +381,10 @@ func _build() -> void:
 
 func _make_hp_side(align_right: bool) -> VBoxContainer:
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 4)
+	col.add_theme_constant_override("separation", 6)
 	var name_lab := Label.new()
 	name_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
-	name_lab.add_theme_font_size_override("font_size", 19)
+	name_lab.add_theme_font_size_override("font_size", 28)
 	name_lab.add_theme_color_override("font_color", Color("#FB7185") if align_right else Color("#22D3EE"))
 	ClientUi.apply_display_font(name_lab)
 	col.add_child(name_lab)
@@ -378,19 +392,18 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	bar.min_value = 0
 	bar.max_value = 100
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 21)
-	ClientUi.apply_hp_bar(bar, Color("#FB7185") if align_right else Color("#22D3EE"))
-	# Web: remaining HP hugs center — approximate with fill from left (native ProgressBar).
+	bar.custom_minimum_size = Vector2(0, HP_BAR_H_BASE)
+	_apply_combat_hp_bar(bar, Color("#FB7185") if align_right else Color("#22D3EE"))
 	col.add_child(bar)
 	var nums := Label.new()
 	nums.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
-	nums.add_theme_font_size_override("font_size", 15)
-	nums.add_theme_color_override("font_color", ClientUi.MUTED)
+	nums.add_theme_font_size_override("font_size", 22)
+	nums.add_theme_color_override("font_color", Color("#E2E8F0"))
 	ClientUi.apply_display_font(nums)
 	col.add_child(nums)
 	var status := Label.new()
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
-	status.add_theme_font_size_override("font_size", 12)
+	status.add_theme_font_size_override("font_size", 15)
 	status.add_theme_color_override("font_color", Color("#A5B4FC", 0.95))
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ClientUi.apply_display_font(status)
@@ -402,9 +415,32 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	return col
 
 
+func _apply_combat_hp_bar(bar: ProgressBar, fill: Color) -> void:
+	## Chunky combat track — presentation only (does not change fill math).
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.02, 0.03, 0.055, 0.96)
+	track.border_color = Color(fill, 0.55)
+	track.set_border_width_all(2)
+	track.set_corner_radius_all(8)
+	track.content_margin_left = 2
+	track.content_margin_right = 2
+	track.content_margin_top = 2
+	track.content_margin_bottom = 2
+	var meter := StyleBoxFlat.new()
+	meter.bg_color = fill
+	meter.border_color = fill.lightened(0.28)
+	meter.border_width_top = 2
+	meter.border_width_bottom = 0
+	meter.border_width_left = 0
+	meter.border_width_right = 0
+	meter.set_corner_radius_all(6)
+	bar.add_theme_stylebox_override("background", track)
+	bar.add_theme_stylebox_override("fill", meter)
+
+
 func _apply_skip_cta(btn: Button) -> void:
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 17)
+	btn.add_theme_font_size_override("font_size", 19)
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(Color("#F59E0B"), Color("#FCD34D")))
 	btn.add_theme_stylebox_override("hover", ClientUi.button_style(Color("#FBBF24"), Color("#FDE68A")))
 	btn.add_theme_stylebox_override("pressed", ClientUi.button_style(Color("#D97706"), Color("#F59E0B")))
@@ -601,15 +637,26 @@ func _start_duel(
 	_prev_level = int(player.get("level", 1))
 	_player_weapon = GameData.weapon_from_items(player_items)
 	_enemy_weapon = GameData.weapon_from_items(opp_items)
+	_duel_player = player
+	_duel_enemy = opp
+	_duel_player_items = player_items
+	_duel_enemy_items = opp_items
+	_player_totals = StatsRules.display_totals(player, player_items)
+	_enemy_totals = StatsRules.display_totals(opp, opp_items)
 
 	var p_emoji := _class_emoji(str(player.get("class", "")))
 	var e_emoji := _class_emoji(str(opp.get("class", "")))
 	_player_hp_name.text = "%s  %s" % [p_emoji, player_name]
 	_enemy_hp_name.text = "%s  %s" % [opp_name, e_emoji]
 
+	_clear_fighter_anchors()
+
+	_recompute_fighter_metrics()
 	_player_card = _mount_fighter(_player_anchor, player, Color("#22D3EE"), _player_weapon, true)
 	_enemy_card = _mount_fighter(_enemy_anchor, opp, Color("#FB7185"), _enemy_weapon, false)
-	_layout_fighters()
+	_rebuild_matchup()
+	# Defer layout until stage has a real size (first frame after mount).
+	call_deferred("_layout_fighters")
 
 	var p_max := maxi(1, int(battle.get("playerMaxHp", 1)))
 	var e_max := maxi(1, int(battle.get("opponentMaxHp", 1)))
@@ -629,12 +676,13 @@ func _start_duel(
 	var intro_tw := _intro_layer.create_tween()
 	intro_tw.tween_property(_intro_layer, "modulate:a", 1.0, 0.22)
 	await get_tree().create_timer(_beats.intro_duration()).timeout
-	if not is_instance_valid(self) or _finished:
+	# Skip during intro cancels playback — leave Victory/Defeat + final HP on screen.
+	if not is_instance_valid(self) or _finished or not _playing or _phase == "outro":
 		return
 	var fade := _intro_layer.create_tween()
 	fade.tween_property(_intro_layer, "modulate:a", 0.0, 0.18)
 	await fade.finished
-	if not is_instance_valid(self) or _finished:
+	if not is_instance_valid(self) or _finished or not _playing or _phase == "outro":
 		return
 	_intro_layer.visible = false
 	_motion.start_idle(_player_card, 0.0)
@@ -652,125 +700,220 @@ func _class_emoji(class_key: String) -> String:
 
 func _make_fighter_anchor() -> Control:
 	var anchor := Control.new()
-	anchor.custom_minimum_size = FIGHTER_SIZE
-	anchor.size = FIGHTER_SIZE
+	anchor.name = "FighterAnchor"
+	anchor.custom_minimum_size = _fighter_size
+	anchor.size = _fighter_size
 	anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return anchor
+
+
+func _combat_ui_scale() -> float:
+	if _fighters == null or _fighters.size.x < 8.0 or _fighters.size.y < 8.0:
+		return 1.0
+	var sx := _fighters.size.x / 1600.0
+	var sy := _fighters.size.y / 900.0
+	return clampf(minf(sx, sy), 0.75, 1.3)
+
+
+func _recompute_fighter_metrics() -> void:
+	var s := _combat_ui_scale()
+	_portrait_px = PORTRAIT_BASE * s
+	_fighter_size = Vector2(FIGHTER_W_BASE * s, FIGHTER_H_BASE * s)
+	if _player_hp:
+		_player_hp.custom_minimum_size.y = HP_BAR_H_BASE * s
+	if _enemy_hp:
+		_enemy_hp.custom_minimum_size.y = HP_BAR_H_BASE * s
+	# Scale lunges with fighter footprint so travel still reads across the gap.
+	if _beats:
+		_beats.lunge_distance = 56.0 * s
+		_beats.slip_distance = 36.0 * s
+		_beats.float_rise_px = 64.0 * s
 
 
 func _layout_fighters() -> void:
 	if _fighters == null or _player_anchor == null or _enemy_anchor == null:
 		return
-	var gap := 64.0
-	var total_w := FIGHTER_SIZE.x * 2.0 + gap
-	var x0 := (_fighters.size.x - total_w) * 0.5
-	var y0 := maxf(8.0, (_fighters.size.y - FIGHTER_SIZE.y) * 0.42)
+	var s := _combat_ui_scale()
+	var desired_portrait := PORTRAIT_BASE * s
+	# First real size after mount (or meaningful scale change): remount at correct scale.
+	if _fighters.size.x > 64.0 and is_instance_valid(_player_card) \
+			and absf(desired_portrait - _portrait_px) > 10.0 \
+			and not _duel_player.is_empty():
+		_recompute_fighter_metrics()
+		_remount_current_fighters()
+	elif not is_instance_valid(_player_card):
+		_recompute_fighter_metrics()
+	s = _combat_ui_scale()
+	var matchup_w := 268.0 * clampf(s, 0.75, 1.3)
+	var gap := maxf(108.0 * s, matchup_w + 28.0)
+	var total_w := _fighter_size.x * 2.0 + gap
+	if total_w > _fighters.size.x - 24.0 and _fighters.size.x > 64.0:
+		gap = maxf(64.0, _fighters.size.x - 24.0 - _fighter_size.x * 2.0)
+	var x0 := maxf(12.0, (_fighters.size.x - (_fighter_size.x * 2.0 + gap)) * 0.5)
+	var y0 := maxf(12.0, (_fighters.size.y - _fighter_size.y) * 0.34)
+	_player_anchor.custom_minimum_size = _fighter_size
+	_player_anchor.size = _fighter_size
+	_enemy_anchor.custom_minimum_size = _fighter_size
+	_enemy_anchor.size = _fighter_size
 	_player_anchor.position = Vector2(x0, y0)
-	_enemy_anchor.position = Vector2(x0 + FIGHTER_SIZE.x + gap, y0)
+	_enemy_anchor.position = Vector2(x0 + _fighter_size.x + gap, y0)
+	if is_instance_valid(_player_card):
+		_player_card.size = _fighter_size
+		_player_card.pivot_offset = _fighter_size * 0.5
+	if is_instance_valid(_enemy_card):
+		_enemy_card.size = _fighter_size
+		_enemy_card.pivot_offset = _fighter_size * 0.5
+	_layout_matchup(x0, y0, gap, s)
+
+
+func _clear_fighter_anchors() -> void:
+	if is_instance_valid(_player_card):
+		_player_card = null
+	if is_instance_valid(_enemy_card):
+		_enemy_card = null
+	for child in _player_anchor.get_children():
+		_player_anchor.remove_child(child)
+		child.free()
+	for child in _enemy_anchor.get_children():
+		_enemy_anchor.remove_child(child)
+		child.free()
+
+
+func _remount_current_fighters() -> void:
+	_clear_fighter_anchors()
+	_player_card = _mount_fighter(_player_anchor, _duel_player, Color("#22D3EE"), _player_weapon, true)
+	_enemy_card = _mount_fighter(_enemy_anchor, _duel_enemy, Color("#FB7185"), _enemy_weapon, false)
+	_rebuild_matchup()
+	if _motion and is_instance_valid(_player_card):
+		_motion.start_idle(_player_card, 0.0)
+	if _motion and is_instance_valid(_enemy_card):
+		_motion.start_idle(_enemy_card, 0.35)
+
+
+func _layout_matchup(x0: float, y0: float, gap: float, s: float) -> void:
+	if not is_instance_valid(_matchup_panel):
+		return
+	_matchup_panel.reset_size()
+	var mw := maxf(220.0, _matchup_panel.get_combined_minimum_size().x)
+	var mh := maxf(120.0, _matchup_panel.get_combined_minimum_size().y)
+	var cx := x0 + _fighter_size.x + gap * 0.5
+	# Sit in the VS corridor between portrait midlines.
+	var cy := y0 + _fighter_size.y * 0.42
+	if gap < mw + 12.0:
+		# Narrow stages: tuck under the fighters instead of overlapping art.
+		cy = y0 + _fighter_size.y + 6.0 * s
+		cx = _fighters.size.x * 0.5
+	_matchup_panel.position = Vector2(cx - mw * 0.5, cy - mh * 0.5)
+	_matchup_panel.size = Vector2(mw, mh)
+
+
+func _rebuild_matchup() -> void:
+	if is_instance_valid(_matchup_panel):
+		_matchup_panel.queue_free()
+		_matchup_panel = null
+	if _stage == null:
+		return
+	_matchup_panel = CombatAttributeMatchup.make_panel(
+		_player_totals,
+		_enemy_totals,
+		_duel_player,
+		_duel_enemy,
+		_duel_player_items,
+		_duel_enemy_items,
+		_combat_ui_scale()
+	)
+	_matchup_panel.z_index = 8
+	_matchup_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_stage.add_child(_matchup_panel)
 
 
 func _mount_fighter(anchor: Control, character: Dictionary, tint: Color, weapon: Dictionary, is_player: bool) -> Control:
 	var card := _portrait_card(character, tint, weapon, is_player)
+	card.name = "PlayerCenter" if is_player else "EnemyCenter"
 	anchor.add_child(card)
-	card.size = FIGHTER_SIZE
+	card.size = _fighter_size
 	card.position = Vector2.ZERO
-	card.pivot_offset = FIGHTER_SIZE * 0.5
+	card.pivot_offset = _fighter_size * 0.5
 	return card
 
 
-
 func _portrait_card(character: Dictionary, tint: Color, weapon: Dictionary, is_player: bool) -> Control:
+	var s := _combat_ui_scale()
 	var frame := Control.new()
-	frame.custom_minimum_size = FIGHTER_SIZE
+	frame.custom_minimum_size = _fighter_size
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var col := VBoxContainer.new()
 	col.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	col.alignment = BoxContainer.ALIGNMENT_BEGIN
-	col.add_theme_constant_override("separation", 4)
+	col.add_theme_constant_override("separation", int(6 * s))
 	frame.add_child(col)
 
 	var head := HBoxContainer.new()
 	head.alignment = BoxContainer.ALIGNMENT_CENTER
-	head.add_theme_constant_override("separation", 6)
+	head.add_theme_constant_override("separation", int(8 * s))
 	col.add_child(head)
 	var emoji := Label.new()
 	emoji.text = _class_emoji(str(character.get("class", "")))
-	emoji.add_theme_font_size_override("font_size", 19)
+	emoji.add_theme_font_size_override("font_size", int(CLASS_ICON_BASE * s))
 	head.add_child(emoji)
 	var name := Label.new()
 	name.text = str(character.get("name", "?"))
-	name.add_theme_font_size_override("font_size", 17)
+	name.add_theme_font_size_override("font_size", int(22 * s))
 	name.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(name)
 	head.add_child(name)
+	var lvl := Label.new()
+	lvl.text = "Lv %s" % int(character.get("level", 1))
+	lvl.add_theme_font_size_override("font_size", int(16 * s))
+	lvl.add_theme_color_override("font_color", Color(tint, 0.75))
+	ClientUi.apply_display_font(lvl)
+	head.add_child(lvl)
 
+	var portrait_sz := _portrait_px
 	var portrait_wrap := Control.new()
-	portrait_wrap.custom_minimum_size = Vector2(224, 224)
+	portrait_wrap.name = "PlayerHitPoint" if is_player else "EnemyHitPoint"
+	portrait_wrap.custom_minimum_size = Vector2(portrait_sz, portrait_sz)
 	portrait_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(portrait_wrap)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	portrait_wrap.add_child(center)
-	var portrait := AvatarRenderer.make_portrait(character, 156.0)
+	var portrait := AvatarRenderer.make_portrait(character, portrait_sz)
 	if not is_player:
 		portrait.scale = Vector2(-1, 1)
-		portrait.pivot_offset = Vector2(78, 78)
+		portrait.pivot_offset = Vector2(portrait_sz * 0.5, portrait_sz * 0.5)
 	center.add_child(portrait)
 
 	var wlab := Control.new()
+	wlab.name = "PlayerAttackOrigin" if is_player else "EnemyAttackOrigin"
 	wlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wlab.custom_minimum_size = Vector2(53, 53)
+	var wicon := 48.0 * s
+	wlab.custom_minimum_size = Vector2(wicon + 8.0, wicon + 8.0)
 	wlab.set_anchors_preset(PRESET_CENTER_RIGHT if is_player else PRESET_CENTER_LEFT)
 	if is_player:
-		wlab.offset_left = -59
+		wlab.offset_left = -(wicon + 12.0)
 		wlab.offset_right = 0
 	else:
 		wlab.offset_left = 0
-		wlab.offset_right = 59
-	wlab.offset_top = -24
-	wlab.offset_bottom = 29
-	wlab.pivot_offset = Vector2(20, 20)
+		wlab.offset_right = wicon + 12.0
+	wlab.offset_top = -wicon * 0.5
+	wlab.offset_bottom = wicon * 0.5
+	wlab.pivot_offset = Vector2(wicon * 0.5, wicon * 0.5)
 	var witem := {
 		"name": str(weapon.get("name", "")),
 		"base_name": str(weapon.get("base_name", "")),
 		"type": "weapon",
 		"rarity": str(weapon.get("rarity", "common")),
 	}
-	wlab.add_child(GearIcon.make(witem, 40.0))
+	wlab.add_child(GearIcon.make(witem, wicon))
 	portrait_wrap.add_child(wlab)
 	if is_player:
 		_player_weapon_label = wlab
 	else:
 		_enemy_weapon_label = wlab
 
-	col.add_child(_fighter_stats_block(character, tint))
 	return frame
-
-
-func _fighter_stats_block(character: Dictionary, tint: Color) -> Label:
-	var items: Array = []
-	if str(character.get("id", "")) == str(GameManager.active_character.get("id", "")):
-		items = _player_items()
-	elif typeof(character.get("equippedItems", null)) == TYPE_ARRAY:
-		items = character.get("equippedItems", [])
-	var totals := StatsRules.display_totals(character, items)
-	var d := StatsRules.derived(character, totals)
-	var primary := str(d.get("primaryStat", "strength"))
-	var abbrev := {"strength": "STR", "agility": "AGI", "intellect": "INT", "vitality": "VIT", "luck": "LUK"}
-	var lab := Label.new()
-	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 15)
-	lab.add_theme_color_override("font_color", tint)
-	ClientUi.apply_display_font(lab)
-	lab.text = "%s %s · DMG %s · CRIT %.0f%% · DODGE %.0f%%" % [
-		abbrev.get(primary, "STR"),
-		str(int(totals.get(primary, 0))),
-		str(d.get("damage", 0)),
-		float(d.get("critChance", 0)),
-		float(d.get("dodgeChance", 0)),
-	]
-	return lab
 
 
 func _update_hp_ui() -> void:
@@ -1073,19 +1216,19 @@ func _card_for(side: Variant) -> Control:
 
 
 func _on_skip() -> void:
-	if _busy or _finished:
+	## Fast-forward presentation to the authoritative final HP, then Victory/Defeat.
+	## Does not re-simulate combat — consumes playerEnd / EndHp / event log from the committed battle.
+	if _busy or _finished or _phase == "outro":
 		return
 	_generation += 1
 	_playing = false
 	_hide_ability_banner()
-	var battle: Dictionary = _battle()
-	_hp.snap(
-		maxi(0, int(battle.get("playerEndHp", _hp.player_hp))),
-		maxi(0, int(battle.get("opponentEndHp", _hp.enemy_hp)))
-	)
+	if is_instance_valid(_intro_layer):
+		_intro_layer.visible = false
+	var end_hp := CombatPresentation.resolve_end_hp(_battle(), _hp.player_hp, _hp.enemy_hp)
+	_hp.snap(end_hp.x, end_hp.y)
 	_event_i = _events.size()
-	# Web SKIP calls onDone immediately (settle + rewards).
-	_settle_and_show_rewards()
+	_show_outro()
 
 
 func _show_outro() -> void:

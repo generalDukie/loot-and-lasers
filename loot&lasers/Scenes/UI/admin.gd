@@ -572,24 +572,34 @@ func _build_players() -> void:
 	role_row.add_child(_role_user_id)
 	var promote := _btn("Promote Admin", false, true)
 	promote.pressed.connect(func() -> void:
-		if _role_user_id.text.strip_edges().is_empty() or _why().is_empty():
-			_status.text = "account user_id and reason are required."
+		if _why().is_empty():
+			_status.text = "Reason is required for role changes."
 			return
-		_confirm("Promote to admin?", "Grant admin role to %s\nReason: %s" % [_role_user_id.text.strip_edges(), _why()], func() -> void:
+		var uid := _role_user_id.text.strip_edges() if _role_user_id else ""
+		var cid := _cid()
+		if uid.is_empty() and cid.is_empty():
+			_status.text = "Select a player (or enter account user_id)."
+			return
+		_confirm("Promote to admin?", "Grant admin role\nuser=%s\nchar=%s\nReason: %s" % [uid, cid, _why()], func() -> void:
 			_run("Promoting…", func() -> Dictionary:
-				return await AdminManager.set_role(_role_user_id.text.strip_edges(), "admin", _why())
+				return await AdminManager.set_role(uid, "admin", _why(), cid)
 			)
 		)
 	)
 	role_row.add_child(promote)
 	var demote := _btn("Demote User")
 	demote.pressed.connect(func() -> void:
-		if _role_user_id.text.strip_edges().is_empty() or _why().is_empty():
-			_status.text = "account user_id and reason are required."
+		if _why().is_empty():
+			_status.text = "Reason is required for role changes."
 			return
-		_confirm("Demote to user?", "Remove admin from %s\nReason: %s" % [_role_user_id.text.strip_edges(), _why()], func() -> void:
+		var uid := _role_user_id.text.strip_edges() if _role_user_id else ""
+		var cid := _cid()
+		if uid.is_empty() and cid.is_empty():
+			_status.text = "Select a player (or enter account user_id)."
+			return
+		_confirm("Demote to user?", "Remove admin\nuser=%s\nchar=%s\nReason: %s" % [uid, cid, _why()], func() -> void:
 			_run("Demoting…", func() -> Dictionary:
-				return await AdminManager.set_role(_role_user_id.text.strip_edges(), "user", _why())
+				return await AdminManager.set_role(uid, "user", _why(), cid)
 			)
 		)
 	)

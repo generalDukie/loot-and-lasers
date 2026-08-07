@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { api } from "@/api/gameClient";
 import AnimatedPage from "@/components/game/AnimatedPage";
@@ -14,12 +14,13 @@ import ConnectivityBanner from "@/components/game/ConnectivityBanner";
 import InventoryFullModal from "@/components/game/InventoryFullModal";
 import DailyLoginModal from "@/components/social/DailyLoginModal";
 import NotificationCenter from "@/components/social/NotificationCenter";
+import TutorialCoach from "@/components/game/TutorialCoach";
+import { TutorialProvider } from "@/lib/tutorial/TutorialContext";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
 import { usePresence } from "@/hooks/usePresence";
 import { enforceInventoryCap } from "@/lib/inventoryCap";
 import { primeMyCharacterCache } from "@/lib/socialEngine";
 import { applyServerTimeSync, lastTimeSyncAgeMs } from "@/lib/gameTime";
-
 /** Desktop operative side panel — % of the 16:9 game viewport (not browser vw). */
 const DESKTOP_RAIL_W = "clamp(21.5rem, 18.1%, 26.9rem)";
 const MOBILE_RAIL_W = "min(31.3rem, 92%)";
@@ -33,6 +34,7 @@ export default function GameLayout() {
   const { character, setCharacter } = useMyCharacter();
   const [dailyOpen, setDailyOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
+  const openDaily = useCallback(() => setDailyOpen(true), []);
 
   usePresence(character, "online");
 
@@ -124,7 +126,7 @@ export default function GameLayout() {
   );
 
   return (
-    <>
+    <TutorialProvider character={character} setCharacter={setCharacter} onOpenDaily={openDaily}>
       <GameCanvas>
         <SpaceBackground />
         <div className="relative z-10 h-full w-full min-h-0">
@@ -188,6 +190,7 @@ export default function GameLayout() {
       </GameCanvas>
 
       <AdminDock />
+      <TutorialCoach />
 
       <DailyLoginModal
         open={dailyOpen}
@@ -205,6 +208,6 @@ export default function GameLayout() {
         character={character}
         onCharacterChange={(patch) => setCharacter((c) => (c ? { ...c, ...patch } : c))}
       />
-    </>
+    </TutorialProvider>
   );
 }

@@ -636,7 +636,11 @@ func _dock_tile(icon_id: String, label: String, tint_hex: String, action: Callab
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lab.text = label
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lab.autowrap_mode = TextServer.AUTOWRAP_OFF
+	lab.clip_text = true
+	lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lab.add_theme_font_size_override("font_size", 14)
 	lab.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(lab)
@@ -671,7 +675,11 @@ func _dock_split(icon_id: String, label: String, tint_hex: String, options: Arra
 	face_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	face_lab.text = label
 	face_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	face_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	face_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	face_lab.autowrap_mode = TextServer.AUTOWRAP_OFF
+	face_lab.clip_text = true
+	face_lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	face_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	face_lab.add_theme_font_size_override("font_size", 14)
 	face_lab.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(face_lab)

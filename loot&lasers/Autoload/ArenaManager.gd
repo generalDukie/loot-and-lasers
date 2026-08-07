@@ -181,12 +181,18 @@ func load_equipped() -> Array:
 	return equipped_items
 
 
-func load_opponents(_character_id: String = "") -> Dictionary:
+func load_opponents(_character_id: String = "", force: bool = false, exclude_ids: Array = []) -> Dictionary:
 	if _busy:
 		return _fail("Arena request already in progress")
 	_busy = true
 	_set_loading(true)
-	var res: Dictionary = await GameApiClient.invoke("GetArenaOpponents", {})
+	var body := {}
+	if force:
+		body["force"] = true
+		body["refresh"] = true
+	if exclude_ids.size() > 0:
+		body["exclude_ids"] = exclude_ids
+	var res: Dictionary = await GameApiClient.invoke("GetArenaOpponents", body)
 	_busy = false
 	_set_loading(false)
 	if not bool(res.get("ok", false)):
@@ -195,6 +201,9 @@ func load_opponents(_character_id: String = "") -> Dictionary:
 	_apply_character(data)
 	_apply_arena_state(data)
 	opponents = _map_opponent_cards(data.get("opponents", []))
+	var debug_offers: Variant = data.get("debug_offers", null)
+	if typeof(debug_offers) == TYPE_DICTIONARY:
+		print("[ArenaOffers] %s" % JSON.stringify(debug_offers))
 	var expires := str(data.get("expires_at", ""))
 	if not expires.is_empty():
 		refresh_at_unix_ms = _parse_iso_unix(expires) * 1000
@@ -202,8 +211,8 @@ func load_opponents(_character_id: String = "") -> Dictionary:
 	return {"ok": true, "error": "", "data": data, "opponents": opponents}
 
 
-func build_opponent_pool() -> Array:
-	var res: Dictionary = await load_opponents()
+func build_opponent_pool(force: bool = false, exclude_ids: Array = []) -> Array:
+	var res: Dictionary = await load_opponents("", force, exclude_ids)
 	if not res.get("ok", false):
 		opponents = []
 	return opponents
@@ -223,6 +232,9 @@ func refresh_opponents(charge: bool = false) -> Dictionary:
 	_apply_character(data)
 	_apply_arena_state(data)
 	opponents = _map_opponent_cards(data.get("opponents", []))
+	var debug_offers: Variant = data.get("debug_offers", null)
+	if typeof(debug_offers) == TYPE_DICTIONARY:
+		print("[ArenaOffers] %s" % JSON.stringify(debug_offers))
 	mark_refresh_used()
 	opponents_loaded.emit(opponents)
 	return {"ok": true, "error": "", "opponents": opponents}
@@ -373,7 +385,30 @@ func finish_battle() -> Dictionary:
 	_set_battling(false)
 	pending_combat_id = ""
 	pending_offer_id = ""
-	await load_opponents()
+	# Prefer fresh board from FinishArenaBattle; otherwise force-mint excluding prior set.
+	var server_offers: Variant = data.get("opponents", null)
+	if typeof(server_offers) == TYPE_ARRAY and (server_offers as Array).size() > 0:
+		opponents = _map_opponent_cards(server_offers)
+		var debug_offers: Variant = data.get("debug_offers", null)
+		if typeof(debug_offers) == TYPE_DICTIONARY:
+			print("[ArenaOffers] %s" % JSON.stringify(debug_offers))
+		var expires := str(data.get("expires_at", ""))
+		if not expires.is_empty():
+			refresh_at_unix_ms = _parse_iso_unix(expires) * 1000
+		opponents_loaded.emit(opponents)
+	else:
+		var exclude: Array = []
+		for o in opponents:
+			if typeof(o) != TYPE_DICTIONARY:
+				continue
+			for key in ["realCharacterId", "character_id", "arena_bot_id", "id"]:
+				var v := str((o as Dictionary).get(key, ""))
+				if not v.is_empty() and not exclude.has(v):
+					exclude.append(v)
+		var fought := str(last_result.get("opponentId", ""))
+		if not fought.is_empty() and not exclude.has(fought):
+			exclude.append(fought)
+		await load_opponents("", true, exclude)
 	return last_result
 
 

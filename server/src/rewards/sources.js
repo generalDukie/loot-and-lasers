@@ -20,6 +20,7 @@ export const RewardSources = Object.freeze({
   MINING: "mining",
   CHARACTER_SLOT: "character_slot",
   RENAME: "rename",
+  ONBOARDING_TUTORIAL: "onboarding_tutorial",
 });
 
 const REGISTERED = new Set(Object.values(RewardSources));

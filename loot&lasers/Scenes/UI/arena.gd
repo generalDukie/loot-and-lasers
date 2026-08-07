@@ -5,12 +5,14 @@ var _status: Label
 var _rating_label: Label
 var _stat_wl: Label
 var _stat_streak: Label
-var _stat_free: Label
-var _stat_free_hint: Label
+var _free_panel: PanelContainer
+var _free_title: Label
+var _free_count: Label
+var _free_hint: Label
+var _free_support: Label
+var _free_segments: HBoxContainer
 var _cooldown_banner: Label
-var _paid_banner: Label
 var _cooldown_panel: PanelContainer
-var _paid_panel: PanelContainer
 var _refresh_btn: Button
 var _list: GridContainer
 var _history_list: VBoxContainer
@@ -128,15 +130,15 @@ func _build() -> void:
 	head_r.add_child(_rating_label)
 
 	var chips := GridContainer.new()
-	chips.columns = 3
+	chips.columns = 2
 	chips.add_theme_constant_override("h_separation", 8)
 	chips.add_theme_constant_override("v_separation", 6)
 	stats_col.add_child(chips)
 	_stat_wl = _add_stat_chip(chips, "⚔", "W / L", Color("#60A5FA"))
 	_stat_streak = _add_stat_chip(chips, "🔥", "STREAK", Color("#FB7185"))
-	var free_wrap := _add_stat_chip_wrap(chips, "🛡", "FREE", Color("#FBBF24"))
-	_stat_free = free_wrap["value"]
-	_stat_free_hint = free_wrap["hint"]
+
+	_free_panel = _build_free_battles_panel()
+	root.add_child(_free_panel)
 
 	var challengers_row := HBoxContainer.new()
 	challengers_row.add_theme_constant_override("separation", 8)
@@ -196,27 +198,6 @@ func _build() -> void:
 	_list.add_theme_constant_override("h_separation", 10)
 	_list.add_theme_constant_override("v_separation", 10)
 	body.add_child(_list)
-
-	# Web: paid banner sits under the challenger grid — keep it one thin line.
-	_paid_panel = PanelContainer.new()
-	_paid_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_paid_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.06, 0.06, 0.08, 0.9), Color(0.35, 0.4, 0.5, 0.4), 6, 1
-	))
-	_paid_panel.visible = false
-	body.add_child(_paid_panel)
-	var paid_pad := MarginContainer.new()
-	paid_pad.add_theme_constant_override("margin_left", 8)
-	paid_pad.add_theme_constant_override("margin_right", 8)
-	paid_pad.add_theme_constant_override("margin_top", 3)
-	paid_pad.add_theme_constant_override("margin_bottom", 3)
-	_paid_panel.add_child(paid_pad)
-	_paid_banner = Label.new()
-	_paid_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_paid_banner.add_theme_font_size_override("font_size", 13)
-	_paid_banner.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_paid_banner)
-	paid_pad.add_child(_paid_banner)
 
 	# Twin panes absorb remaining height (fills dead space under the arena board).
 	var bottom := HBoxContainer.new()
@@ -326,6 +307,82 @@ func _apply_skip_fight_button(btn: Button) -> void:
 func _add_stat_chip(parent: GridContainer, icon: String, label: String, color: Color) -> Label:
 	var wrap := _add_stat_chip_wrap(parent, icon, label, color)
 	return wrap["value"]
+
+
+func _build_free_battles_panel() -> PanelContainer:
+	## Primary daily free-battle status — mirrors web FreeBattlesStatus.
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.07, 0.06, 0.04, 0.97), Color("#FBBF24", 0.55), 12, 2
+	))
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_left", 14)
+	pad.add_theme_constant_override("margin_right", 14)
+	pad.add_theme_constant_override("margin_top", 12)
+	pad.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(pad)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	pad.add_child(col)
+
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	col.add_child(head)
+
+	var icon_box := PanelContainer.new()
+	icon_box.custom_minimum_size = Vector2(44, 44)
+	icon_box.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color("#FBBF24", 0.16), Color("#FBBF24", 0.45), 8, 1
+	))
+	head.add_child(icon_box)
+	var icon_lab := Label.new()
+	icon_lab.text = "⚔"
+	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	icon_lab.add_theme_font_size_override("font_size", 22)
+	icon_lab.add_theme_color_override("font_color", Color("#FBBF24"))
+	icon_box.add_child(icon_lab)
+
+	var head_l := VBoxContainer.new()
+	head_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head_l.add_theme_constant_override("separation", 2)
+	head.add_child(head_l)
+	_free_title = Label.new()
+	_free_title.text = "FREE ARENA BATTLES"
+	_free_title.add_theme_font_size_override("font_size", 13)
+	_free_title.add_theme_color_override("font_color", Color("#FBBF24"))
+	ClientUi.apply_display_font(_free_title)
+	head_l.add_child(_free_title)
+	_free_count = Label.new()
+	_free_count.add_theme_font_size_override("font_size", 28)
+	_free_count.add_theme_color_override("font_color", Color("#FBBF24"))
+	ClientUi.apply_display_font(_free_count)
+	head_l.add_child(_free_count)
+
+	_free_hint = Label.new()
+	_free_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_free_hint.add_theme_font_size_override("font_size", 12)
+	_free_hint.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(_free_hint)
+	head.add_child(_free_hint)
+
+	_free_segments = HBoxContainer.new()
+	_free_segments.add_theme_constant_override("separation", 4)
+	col.add_child(_free_segments)
+	for _i in ArenaRules.DAILY_FREE_BATTLES:
+		var seg := ColorRect.new()
+		seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		seg.custom_minimum_size = Vector2(0, 10)
+		seg.color = Color("#FBBF24")
+		_free_segments.add_child(seg)
+
+	_free_support = Label.new()
+	_free_support.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_free_support.add_theme_font_size_override("font_size", 13)
+	_free_support.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_free_support)
+	col.add_child(_free_support)
+	return panel
 
 
 func _add_stat_chip_wrap(parent: GridContainer, icon: String, label: String, color: Color) -> Dictionary:
@@ -477,14 +534,13 @@ func _populate_history() -> void:
 func _update_lobby_chrome() -> void:
 	var c: Dictionary = GameManager.active_character
 	var free_left := ArenaManager.free_battles_left
+	var daily_max := ArenaRules.DAILY_FREE_BATTLES
 	var reset_eta := ArenaRules.format_eta_short(ArenaRules.ms_until_et_midnight())
 
 	_rating_label.text = str(c.get("arena_rating", 1000))
 	_stat_wl.text = "%s / %s" % [str(c.get("arena_wins", 0)), str(c.get("arena_losses", 0))]
 	_stat_streak.text = str(c.get("arena_streak", 0))
-	_stat_free.text = "%s/%s" % [str(free_left), str(ArenaRules.DAILY_FREE_BATTLES)]
-	_stat_free_hint.visible = true
-	_stat_free_hint.text = "resets %s" % reset_eta
+	_refresh_free_battles_panel(free_left, daily_max, reset_eta)
 
 	if ArenaManager.cooldown_active():
 		_cooldown_panel.visible = true
@@ -495,10 +551,6 @@ func _update_lobby_chrome() -> void:
 	else:
 		_cooldown_panel.visible = false
 
-	_paid_panel.visible = free_left <= 0
-	if free_left <= 0:
-		_paid_banner.text = "Free battles used — %s 💎 per battle (rating only)." % ArenaRules.PAID_BATTLE_COST
-
 	if ArenaManager.can_free_refresh():
 		_refresh_btn.text = "Refresh"
 	else:
@@ -506,6 +558,47 @@ func _update_lobby_chrome() -> void:
 			str(ArenaRules.REFRESH_COST),
 			ArenaRules.format_ms(ArenaManager.refresh_remaining_ms()),
 		]
+
+
+func _refresh_free_battles_panel(free_left: int, daily_max: int, reset_eta: String) -> void:
+	if _free_panel == null:
+		return
+	var left := clampi(free_left, 0, daily_max)
+	var depleted := left <= 0
+	var final_one := left == 1
+	var accent := Color("#64748B") if depleted else (Color("#F59E0B") if final_one else Color("#FBBF24"))
+
+	_free_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.05, 0.055, 0.08, 0.96) if depleted else Color(0.07, 0.06, 0.04, 0.97),
+		Color(accent, 0.45 if depleted else 0.6),
+		12,
+		2
+	))
+	_free_title.add_theme_color_override("font_color", accent)
+	_free_count.add_theme_color_override("font_color", Color("#CBD5E1") if depleted else accent)
+	if depleted:
+		_free_count.text = "FREE BATTLES USED FOR TODAY"
+		_free_count.add_theme_font_size_override("font_size", 20)
+		_free_support.text = "Daily free quota spent (%s/%s). Keep climbing with paid battles for %s 💎 each — rating only." % [
+			str(daily_max), str(daily_max), str(ArenaRules.PAID_BATTLE_COST),
+		]
+	elif final_one:
+		_free_count.text = "1 / %s  FINAL FREE BATTLE" % daily_max
+		_free_count.add_theme_font_size_override("font_size", 26)
+		_free_support.text = "Last free battle of the day — use it for ranking progress and rewards."
+	else:
+		_free_count.text = "%s / %s  REMAINING" % [str(left), str(daily_max)]
+		_free_count.add_theme_font_size_override("font_size", 28)
+		_free_support.text = "Use your free Arena battles each day to earn ranking progress and rewards."
+
+	_free_hint.text = "Resets\n%s" % reset_eta
+
+	var i := 0
+	for child in _free_segments.get_children():
+		if child is ColorRect:
+			var filled := i < left
+			(child as ColorRect).color = Color(accent, 1.0 if filled else 0.22) if not depleted else Color("#64748B", 0.28)
+			i += 1
 
 
 func _make_card(opp: Dictionary) -> PanelContainer:

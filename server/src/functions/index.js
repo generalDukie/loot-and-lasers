@@ -97,6 +97,12 @@ import { createService, entities } from "../entities.js";
 import { db, nowIso, withTransactionAsync } from "../db.js";
 import { getUserById } from "../auth.js";
 import { ECONOMY_HANDLERS } from "./economy.js";
+import {
+  GetTutorialState,
+  AdvanceTutorial,
+  SkipTutorial,
+  CompleteTutorial,
+} from "./tutorial.js";
 import { getInventoryCap, STARDUST_MAX } from "../shared/economyFormulas.js";
 import { countBagOccupancy } from "../shared/inventoryGrant.js";
 import { todayET, clock, TimeErrors } from "../shared/time/index.js";
@@ -396,14 +402,24 @@ export async function RedeemPromoCode(user, body) {
   const character = await myCharacter(user);
   if (!character) return { status: 404, body: { error: "No character" } };
 
-  const code = (body?.code || "").trim();
-  if (!code) return { status: 400, body: { error: "Missing code" } };
+  const rawCode = (body?.code || "").trim();
+  if (!rawCode) return { status: 400, body: { error: "Missing code" } };
+  // Canonical form: one redemption per distinct code (case-insensitive), unlimited distinct codes.
+  const code = String(rawCode).toUpperCase();
 
   const suspicious = detectSuspiciousRewardFields(body);
   const claimKey = ClaimKeys.promo(user.id, code);
   const game = svc(user);
-  const found = entities.PromoCode.filter({ code });
-  const pc = found[0];
+
+  const alreadyOnCharacter = (character.promo_codes_redeemed || []).some(
+    (c) => String(c || "").toUpperCase() === code,
+  );
+
+  // Case-insensitive DB lookup (create stores uppercase; older rows may differ).
+  const allPromos = entities.PromoCode.filter({});
+  const pc =
+    allPromos.find((p) => String(p?.code || "").toUpperCase() === code) || null;
+
   if (pc) {
     try {
       const result = await withTransactionAsync(async () => {
@@ -418,8 +434,8 @@ export async function RedeemPromoCode(user, body) {
           err.status = 410;
           throw err;
         }
-        const redeemedBy = fresh.redeemed_by || [];
-        if (redeemedBy.includes(character.id)) {
+        const redeemedBy = Array.isArray(fresh.redeemed_by) ? fresh.redeemed_by : [];
+        if (redeemedBy.includes(character.id) || alreadyOnCharacter) {
           const err = new Error("Code already redeemed");
           err.status = 409;
           err.code = RewardErrors.REWARD_ALREADY_CLAIMED;
@@ -448,14 +464,27 @@ export async function RedeemPromoCode(user, body) {
             const delivered = await deliverViaApplyCharacterRewards({
               user,
               characterId: character.id,
-              payload,
+              payload: {
+                ...payload,
+                // Unique per claim so Nova ledger never collapses distinct promo codes.
+                idempotencyKey: `promo_nova:${claim.id}`,
+                reason_code: "promo_code_redeem",
+              },
               claim,
             });
+            const live = entities.Character.get(character.id) || character;
+            const prevRedeemed = Array.isArray(live.promo_codes_redeemed)
+              ? live.promo_codes_redeemed
+              : [];
+            const nextRedeemed = [
+              ...new Set([...prevRedeemed.map(String), code]),
+            ];
+            entities.Character.update(live.id, { promo_codes_redeemed: nextRedeemed });
             return {
               success: true,
               code,
               label: fresh.label,
-              patch: delivered.applied,
+              patch: { ...delivered.applied, promo_codes_redeemed: nextRedeemed },
               items: delivered.items,
               reward_claim_id: claim.id,
             };
@@ -469,6 +498,10 @@ export async function RedeemPromoCode(user, body) {
       if (err.code) return { status: 400, body: { error: err.message, code: err.code } };
       throw err;
     }
+  }
+
+  if (alreadyOnCharacter) {
+    return { status: 409, body: { error: "Code already redeemed", code: RewardErrors.REWARD_ALREADY_CLAIMED } };
   }
 
   const result = await redeemPromoCode(game, character, code);
@@ -1478,7 +1511,9 @@ async function adminModerationInner(user, body) {
 
   if (action === "set_role") {
     const { character_id, user_id, role, reason } = body;
-    if (!reason) return { status: 400, body: { error: "reason required for role changes" } };
+    if (!reason || !String(reason).trim()) {
+      return { status: 400, body: { error: "reason required for role changes" } };
+    }
     let targetUserId = user_id || null;
     if (!targetUserId && character_id) {
       const ch = entities.Character.get(character_id);
@@ -1496,8 +1531,21 @@ async function adminModerationInner(user, body) {
     db.prepare("UPDATE users SET role = ?, updated_date = ? WHERE id = ?")
       .run(targetRole, nowIso(), targetUserId);
     const updated = getUserById(targetUserId);
+    // Keep entities.User in sync when present; create a mirror doc if missing so admin UI loads.
     const userEnt = entities.User.get(targetUserId);
-    if (userEnt) entities.User.update(targetUserId, { role: targetRole });
+    if (userEnt) {
+      entities.User.update(targetUserId, { role: targetRole, email: updated.email });
+    } else {
+      try {
+        entities.User.create({
+          id: targetUserId,
+          email: updated.email,
+          role: targetRole,
+        });
+      } catch {
+        /* entity mirror is best-effort; auth users.role is authoritative */
+      }
+    }
     auditAdminModeration(user, "set_role", {
       targetType: "account",
       targetId: targetUserId,
@@ -1506,7 +1554,16 @@ async function adminModerationInner(user, body) {
       beforeState: { role: beforeRole },
       afterState: { role: targetRole },
     });
-    return { status: 200, body: { success: true, role: updated.role, user_id: targetUserId, email: updated.email } };
+    return {
+      status: 200,
+      body: {
+        success: true,
+        role: updated.role,
+        user_id: targetUserId,
+        email: updated.email,
+        note: "Target must re-login (or refresh session) before admin UI unlocks.",
+      },
+    };
   }
 
   if (action === "transfer_guild") {
@@ -1538,9 +1595,18 @@ async function adminModerationInner(user, body) {
   }
 
   if (action === "create_promo_code") {
-    const cleanCode = (body.code || "").trim();
+    const cleanCode = String(body.code || "").trim().toUpperCase();
     if (!cleanCode) return { status: 400, body: { error: "Code required" } };
-    if (entities.PromoCode.filter({ code: cleanCode })[0]) {
+    if (!/^[A-Z0-9_-]{2,48}$/.test(cleanCode)) {
+      return {
+        status: 400,
+        body: { error: "Code must be 2–48 chars: letters, numbers, _ or -" },
+      };
+    }
+    const existing = entities.PromoCode.filter({}).find(
+      (p) => String(p?.code || "").toUpperCase() === cleanCode,
+    );
+    if (existing) {
       return { status: 409, body: { error: "Code already exists" } };
     }
     const created = entities.PromoCode.create({
@@ -2416,5 +2482,9 @@ export const FUNCTION_HANDLERS = {
   GetRuntimeConfig,
   SetFeatureFlag: SetFeatureFlagRpc,
   UpdateRuntimeConfig: UpdateRuntimeConfigRpc,
+  GetTutorialState,
+  AdvanceTutorial,
+  SkipTutorial,
+  CompleteTutorial,
   ...ECONOMY_HANDLERS,
 };

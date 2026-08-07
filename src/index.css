@@ -228,6 +228,65 @@
 ::-webkit-scrollbar-thumb { background: hsl(230 20% 22%); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: hsl(190 90% 50% / 0.5); }
 
+/* Comms terminal — scoped chat polish */
+.chat-scroll::-webkit-scrollbar { width: 5px; }
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: hsl(190 40% 35% / 0.45);
+  border-radius: 4px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(190 90% 50% / 0.55);
+}
+.chat-compose-input:focus {
+  border-color: hsl(190 90% 50% / 0.55) !important;
+  box-shadow:
+    0 0 0 3px hsl(190 90% 50% / 0.12),
+    inset 0 1px 0 hsl(190 50% 60% / 0.1) !important;
+}
+.chat-send-btn:not(:disabled):hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.chat-send-btn:not(:disabled):active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 hsl(192 90% 22%), 0 0 10px hsl(190 90% 50% / 0.2) !important;
+}
+@keyframes chat-unread-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(190 90% 50% / 0.45); }
+  50% { box-shadow: 0 0 0 6px hsl(190 90% 50% / 0); }
+}
+.chat-unread-pulse {
+  animation: chat-unread-pulse 1.8s ease-out infinite;
+}
+
+/* Galactic mail terminal */
+.mail-scroll::-webkit-scrollbar { width: 5px; }
+.mail-scroll::-webkit-scrollbar-thumb {
+  background: hsl(40 40% 40% / 0.45);
+  border-radius: 4px;
+}
+.mail-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(40 80% 50% / 0.55);
+}
+@keyframes mail-unread-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(190 90% 50% / 0.5); }
+  50% { box-shadow: 0 0 0 5px hsl(190 90% 50% / 0); }
+}
+.mail-unread-pulse {
+  animation: mail-unread-pulse 1.8s ease-out infinite;
+}
+.mail-claim-btn:not(:disabled):hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.mail-claim-btn:not(:disabled):active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 hsl(32 80% 28%), 0 0 12px hsl(40 90% 50% / 0.25) !important;
+}
+.mail-list-item:active {
+  transform: scale(0.992);
+}
+
 /* Deep space base */
 .stars-bg {
   background-color: hsl(232 32% 4%);

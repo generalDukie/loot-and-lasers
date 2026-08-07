@@ -31,6 +31,7 @@ import {
 } from "@/lib/inventoryOrder";
 import { useToast } from "@/components/ui/use-toast";
 import { Sparkles, Backpack } from "lucide-react";
+import { emitTutorialAction } from "@/lib/tutorial/catalog";
 import StardustIcon, { STARDUST_GLYPH } from "@/components/game/StardustIcon";
 import { trackStardustSpend } from "@/lib/stardustTracker";
 
@@ -177,6 +178,7 @@ export default function CharacterPage() {
   async function handleEquip(item) {
     try {
       await inv.equip(item);
+      emitTutorialAction("equip");
     } catch (e) {
       toast({ title: "Equip failed", description: e?.message || "Try again.", variant: "destructive" });
       await load();
@@ -259,6 +261,7 @@ export default function CharacterPage() {
 
         <motion.div
           {...fadeUp(0.08)}
+          data-tutorial="hero-backpack"
           className="shrink-0 bg-card/40 backdrop-blur-sm border border-border/50 rounded-2xl px-2.5 py-2"
         >
           <div className="flex items-center gap-1.5 mb-1.5">

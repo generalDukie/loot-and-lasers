@@ -172,3 +172,19 @@ Equip, unequip, and stim use go through `AuthManager` → Node Item PATCH / `Use
 
 `EquipmentManager` still owns Nakama `equipment_*` RPCs for Nakama inventory instance IDs
 (e.g. shop grants). Do not send Node Item UUIDs into those RPCs until inventories are bridged.
+
+## Onboarding tutorial
+
+Interactive coach-mark onboarding for **new** characters only.
+
+| Piece | Location |
+|-------|----------|
+| Step catalog + state machine | `server/src/shared/tutorialService.js` |
+| RPCs | `GetTutorialState`, `AdvanceTutorial`, `SkipTutorial`, `CompleteTutorial` |
+| Character field | `onboarding_tutorial` (server-only; set on create) |
+| Starter pack | `ClaimKeys.tutorial(characterId)` + reward source `onboarding_tutorial` (1000 Stardust / 25 Nova / 20 Fuel) |
+| Web UI | `src/lib/tutorial/*`, `TutorialCoach`, `GameLayout` |
+| Godot UI | `TutorialManager` autoload + `TutorialCoach.gd` |
+
+Legacy characters without `onboarding_tutorial` are treated as already completed (never forced).
+Skip finishes without the starter pack; Complete claims the pack once (idempotent).

@@ -56,6 +56,8 @@ var combat_overlay_kind := "arena"
 var pending_profile: Dictionary = {}
 ## Optional character to open a DM with from Messages.
 var pending_dm_character: Dictionary = {}
+## Optional character to open Mail compose (any pilot — not friends-only).
+var pending_mail_character: Dictionary = {}
 ## Page scene currently requested inside the persistent in-game shell.
 var pending_page_path := ""
 
@@ -122,6 +124,7 @@ func clear_active_character(source: String = "logout") -> void:
 	recent_loot_ids = PackedStringArray()
 	pending_profile = {}
 	pending_dm_character = {}
+	pending_mail_character = {}
 	pending_page_path = ""
 	combat_overlay_kind = "arena"
 	if CurrencyManager != null:
@@ -186,7 +189,9 @@ func go_leaderboard() -> void:
 	open_game_page(SCENE_LEADERBOARD)
 
 
-func go_mail() -> void:
+func go_mail(to_character: Dictionary = {}) -> void:
+	if not to_character.is_empty():
+		pending_mail_character = to_character.duplicate(true)
 	change_state(GameState.IN_GAME)
 	open_game_page(SCENE_MAIL)
 

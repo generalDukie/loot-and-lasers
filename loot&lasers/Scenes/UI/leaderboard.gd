@@ -152,9 +152,9 @@ func _guild_tag(c: Dictionary) -> String:
 	return str(_guild_by_char.get(str(c.get("id", "")), ""))
 
 
-func _race_emoji(c: Dictionary) -> String:
-	var race := str(c.get("race", ""))
-	var info: Dictionary = GameData.RACE_CATALOG.get(race, {})
+func _class_emoji(c: Dictionary) -> String:
+	var class_key := str(c.get("class", ""))
+	var info: Dictionary = GameData.CLASS_CATALOG.get(class_key, {})
 	return str(info.get("emoji", "🛸"))
 
 
@@ -202,7 +202,7 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	var medal: Color = MEDAL[medal_rank]
 	var emoji := Label.new()
 	emoji.name = "Emoji"
-	emoji.text = _race_emoji(c)
+	emoji.text = _class_emoji(c)
 	emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emoji.add_theme_font_size_override("font_size", 43)
 	emoji.add_theme_color_override("font_shadow_color", Color(medal, 0.75))
@@ -342,7 +342,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 
 	var emoji := Label.new()
 	emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emoji.text = _race_emoji(c)
+	emoji.text = _class_emoji(c)
 	emoji.add_theme_font_size_override("font_size", 29)
 	id_row.add_child(emoji)
 

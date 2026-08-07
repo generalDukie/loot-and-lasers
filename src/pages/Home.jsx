@@ -4,7 +4,6 @@ import SpaceStationHub from "@/components/game/SpaceStationHub";
 import NexusShowcase from "@/components/game/NexusShowcase";
 import NexusChatter from "@/components/game/NexusChatter";
 import DailyLoginModal from "@/components/social/DailyLoginModal";
-import CodexModal from "@/components/game/CodexModal";
 import LegacyNameModal from "@/components/game/LegacyNameModal";
 import { getProgress, canClaimToday, todayUTC } from "@/lib/dailyLoginEngine";
 import { useMyCharacter } from "@/hooks/useMyCharacter";
@@ -16,7 +15,6 @@ export default function Home() {
   const { character, loading } = useMyCharacter();
   const { user } = useAuth();
   const [dailyOpen, setDailyOpen] = useState(false);
-  const [codexOpen, setCodexOpen] = useState(false);
   const [legacyOpen, setLegacyOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -28,18 +26,17 @@ export default function Home() {
     // + day so it resets at the next daily rollover. (Re-openable via Settings.)
     const dayKey = todayUTC();
     const shownFlag = `loot_daily_shown_${user?.id || "me"}_${dayKey}`;
-    if (!localStorage.getItem(shownFlag)) {
+    const onboarding = character.onboarding_tutorial;
+    const tutorialActive =
+      onboarding &&
+      (onboarding.status === "pending" || onboarding.status === "active");
+    if (!tutorialActive && !localStorage.getItem(shownFlag)) {
       getProgress(character.id)
         .then((prog) => {
           localStorage.setItem(shownFlag, "1");
           if (canClaimToday(prog)) setDailyOpen(true);
         })
         .catch(() => {});
-    }
-    // One-time Codex guide on first login after character creation (per character).
-    if (!localStorage.getItem(`loot_tutorial_${character.id}`)) {
-      setCodexOpen(true);
-      localStorage.setItem(`loot_tutorial_${character.id}`, "1");
     }
   }, [loading, character, navigate, user]);
 
@@ -71,7 +68,6 @@ export default function Home() {
         <NexusChatter />
       </SpaceStationHub>
       <DailyLoginModal open={dailyOpen} onClose={() => setDailyOpen(false)} myChar={character} />
-      <CodexModal open={codexOpen} onClose={() => setCodexOpen(false)} />
       <LegacyNameModal open={legacyOpen} onClose={() => setLegacyOpen(false)} />
     </>
   );

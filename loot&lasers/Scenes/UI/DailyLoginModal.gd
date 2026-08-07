@@ -79,13 +79,15 @@ func _build() -> void:
 	title_row.add_child(UiIcon.make("gift", ClientUi.GOLD, 26.0))
 	_title = Label.new()
 	_title.text = "Daily Login Rewards"
-	ClientUi.apply_display_font(_title, 20)
+	ClientUi.apply_display_font(_title)
+	_title.add_theme_font_size_override("font_size", 20)
 	_title.add_theme_color_override("font_color", ClientUi.TEXT)
 	title_row.add_child(_title)
 
 	_subtitle = Label.new()
 	_subtitle.text = "Stardust Voyage"
-	ClientUi.apply_body_font(_subtitle, 11)
+	ClientUi.apply_body_font(_subtitle)
+	_subtitle.add_theme_font_size_override("font_size", 11)
 	_subtitle.add_theme_color_override("font_color", ClientUi.MUTED)
 	head_left.add_child(_subtitle)
 
@@ -114,14 +116,16 @@ func _build() -> void:
 
 	_countdown = Label.new()
 	_countdown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ClientUi.apply_body_font(_countdown, 11)
+	ClientUi.apply_body_font(_countdown)
+	_countdown.add_theme_font_size_override("font_size", 11)
 	_countdown.add_theme_color_override("font_color", ClientUi.MUTED)
 	root.add_child(_countdown)
 
 	_status = Label.new()
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ClientUi.apply_body_font(_status, 12)
+	ClientUi.apply_body_font(_status)
+	_status.add_theme_font_size_override("font_size", 12)
 	_status.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	root.add_child(_status)
 
@@ -140,24 +144,39 @@ func _build() -> void:
 	note.text = "Missing a day doesn't reset your streak — continue from the next reward."
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ClientUi.apply_body_font(note, 10)
+	ClientUi.apply_body_font(note)
+	note.add_theme_font_size_override("font_size", 10)
 	note.add_theme_color_override("font_color", ClientUi.MUTED)
 	root.add_child(note)
 
 
 func _reload() -> void:
+	if not is_inside_tree() or not is_instance_valid(_claim_btn):
+		return
 	_busy = true
 	_claim_btn.disabled = true
 	_status.text = "Loading…"
+	_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	var res: Dictionary = await ProgressManager.load_daily_login_status()
+	if not is_inside_tree() or not is_instance_valid(_claim_btn):
+		return
 	_busy = false
 	if not bool(res.get("ok", false)):
 		_status.text = str(res.get("error", "Could not load daily rewards"))
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_claim_btn.disabled = true
 		_rebuild_grid_from_local()
 		return
-	_state = res.get("daily_login", {}) if typeof(res.get("daily_login", {})) == TYPE_DICTIONARY else {}
+	var dl: Variant = res.get("daily_login", {})
+	_state = dl if typeof(dl) == TYPE_DICTIONARY else {}
+	if _state.is_empty():
+		_rebuild_grid_from_local()
+		_status.text = "Loaded local calendar — claim may be unavailable until the server responds."
+		_status.add_theme_color_override("font_color", ClientUi.WARNING)
+		return
 	_apply_state()
+	if bool(res.get("fallback", false)):
+		_status.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 
 
 func _rebuild_grid_from_local() -> void:
@@ -166,6 +185,8 @@ func _rebuild_grid_from_local() -> void:
 
 
 func _apply_state() -> void:
+	if not is_instance_valid(_subtitle) or not is_instance_valid(_claim_btn):
+		return
 	var theme_name := str(_state.get("cycleTheme", _state.get("cycle_theme", "Stardust Voyage")))
 	var streak := int(_state.get("streakCount", 0))
 	_subtitle.text = "%s · Streak: %s day%s" % [theme_name, streak, "" if streak == 1 else "s"]
@@ -186,6 +207,8 @@ func _apply_state() -> void:
 
 
 func _rebuild_grid() -> void:
+	if not is_instance_valid(_grid):
+		return
 	for c in _grid.get_children():
 		c.queue_free()
 	var rows: Array = _state.get("rewards", []) if typeof(_state.get("rewards", [])) == TYPE_ARRAY else []
@@ -238,7 +261,8 @@ func _make_day_card(row: Dictionary) -> Control:
 	var day_lbl := Label.new()
 	day_lbl.text = "D%s" % day
 	day_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ClientUi.apply_body_font(day_lbl, 9)
+	ClientUi.apply_body_font(day_lbl)
+	day_lbl.add_theme_font_size_override("font_size", 9)
 	day_lbl.add_theme_color_override("font_color", ClientUi.MUTED)
 	vb.add_child(day_lbl)
 
@@ -248,7 +272,8 @@ func _make_day_card(row: Dictionary) -> Control:
 	amt.text = label
 	amt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	amt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ClientUi.apply_body_font(amt, 8)
+	ClientUi.apply_body_font(amt)
+	amt.add_theme_font_size_override("font_size", 8)
 	amt.add_theme_color_override("font_color", ClientUi.MUTED)
 	vb.add_child(amt)
 
@@ -256,14 +281,16 @@ func _make_day_card(row: Dictionary) -> Control:
 		var check := Label.new()
 		check.text = "Claimed"
 		check.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		ClientUi.apply_body_font(check, 8)
+		ClientUi.apply_body_font(check)
+		check.add_theme_font_size_override("font_size", 8)
 		check.add_theme_color_override("font_color", ClientUi.SUCCESS)
 		vb.add_child(check)
 	elif status == "available":
 		var ready := Label.new()
 		ready.text = "Today"
 		ready.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		ClientUi.apply_body_font(ready, 8)
+		ClientUi.apply_body_font(ready)
+		ready.add_theme_font_size_override("font_size", 8)
 		ready.add_theme_color_override("font_color", ClientUi.GOLD)
 		vb.add_child(ready)
 	elif status == "locked":
@@ -273,6 +300,8 @@ func _make_day_card(row: Dictionary) -> Control:
 
 
 func _refresh_countdown() -> void:
+	if not is_instance_valid(_countdown):
+		return
 	var ms: int = ProgressManager.ms_until_daily_reset_display()
 	var total_s := maxi(0, int(ms / 1000.0))
 	var hh := total_s / 3600
@@ -282,7 +311,7 @@ func _refresh_countdown() -> void:
 
 
 func _on_claim() -> void:
-	if _busy:
+	if _busy or not is_instance_valid(_claim_btn):
 		return
 	if not bool(_state.get("canClaimToday", false)):
 		_status.text = "Today's reward has already been claimed."
@@ -292,7 +321,10 @@ func _on_claim() -> void:
 	_claim_btn.disabled = true
 	_claim_btn.text = "Claiming…"
 	_status.text = "Granting reward…"
+	_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	var res: Dictionary = await ProgressManager.claim_daily()
+	if not is_inside_tree() or not is_instance_valid(_claim_btn):
+		return
 	_busy = false
 	if bool(res.get("already_claimed", false)) or int(res.get("status", 0)) == 409:
 		_status.text = "Today's reward has already been claimed."
@@ -317,7 +349,8 @@ func _on_claim() -> void:
 	claimed.emit(data)
 	# Keep modal open briefly so the player sees confirmation, then refresh grid.
 	await get_tree().create_timer(0.85).timeout
-	await _reload()
+	if is_inside_tree():
+		await _reload()
 
 
 func _close() -> void:

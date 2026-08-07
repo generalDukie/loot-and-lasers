@@ -3,10 +3,10 @@ class_name CombatPresentation
 ## Presentation helpers for duel overlays (Restoration 29).
 ## Observes combat events only — never mutates gameplay.
 
-## Floater sizes — damage +50% over prior 20px; crit = 2× enlarged normal.
-const FLOAT_FONT_OTHER := 20
-const FLOAT_FONT_DAMAGE := 30
-const FLOAT_FONT_CRIT := 60
+## Floater sizes — scaled up with combat readability pass; crit ≈ 2× normal damage.
+const FLOAT_FONT_OTHER := 26
+const FLOAT_FONT_DAMAGE := 40
+const FLOAT_FONT_CRIT := 76
 const CRIT_DARKEN := 0.18
 
 
@@ -193,6 +193,53 @@ static func status_chip_text(side: Dictionary) -> String:
 	if bool(side.get("drone_ready", false)):
 		parts.append("🛸")
 	return " · ".join(parts)
+
+
+## Authoritative end HP for skip / settle presentation.
+## Prefer flat EndHp (arena ingest) → nested playerEnd.hp → last event replay.
+static func resolve_end_hp(battle: Dictionary, fallback_player: int = -1, fallback_enemy: int = -1) -> Vector2i:
+	var p_max := maxi(1, int(battle.get("playerMaxHp", 1)))
+	var e_max := maxi(1, int(battle.get("opponentMaxHp", 1)))
+	if battle.has("playerEndHp") or battle.has("opponentEndHp"):
+		var p_flat := int(battle.get("playerEndHp", fallback_player if fallback_player >= 0 else p_max))
+		var e_flat := int(battle.get("opponentEndHp", fallback_enemy if fallback_enemy >= 0 else e_max))
+		return Vector2i(clampi(p_flat, 0, p_max), clampi(e_flat, 0, e_max))
+	var player_end: Variant = battle.get("playerEnd", null)
+	var opponent_end: Variant = battle.get("opponentEnd", null)
+	if typeof(player_end) == TYPE_DICTIONARY and (player_end as Dictionary).has("hp"):
+		var pe: Dictionary = player_end
+		var oe: Dictionary = opponent_end if typeof(opponent_end) == TYPE_DICTIONARY else {}
+		return Vector2i(
+			clampi(int(pe.get("hp", 0)), 0, p_max),
+			clampi(int(oe.get("hp", 0)), 0, e_max)
+		)
+	var p_hp := p_max
+	var e_hp := e_max
+	var events: Array = battle.get("events", []) if typeof(battle.get("events", [])) == TYPE_ARRAY else []
+	for raw in events:
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var ev: Dictionary = raw
+		var side := str(ev.get("defender", ""))
+		var heal := int(ev.get("heal", 0))
+		if heal > 0:
+			if side == "player":
+				p_hp = mini(p_max, p_hp + heal)
+			elif side == "opponent":
+				e_hp = mini(e_max, e_hp + heal)
+			continue
+		if bool(ev.get("dodged", false)):
+			continue
+		var dmg := int(ev.get("damage", 0))
+		if dmg <= 0:
+			continue
+		if side == "player":
+			p_hp = maxi(0, p_hp - dmg)
+		elif side == "opponent":
+			e_hp = maxi(0, e_hp - dmg)
+	if events.is_empty() and fallback_player >= 0 and fallback_enemy >= 0:
+		return Vector2i(clampi(fallback_player, 0, p_max), clampi(fallback_enemy, 0, e_max))
+	return Vector2i(p_hp, e_hp)
 
 
 static func format_log_line(ev: Dictionary, i: int) -> String:

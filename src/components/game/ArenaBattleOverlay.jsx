@@ -11,6 +11,7 @@ import {
   reduceCombatStatus,
   resolveCombatFloater,
   isCombatDevDiagnosticsEnabled,
+  resolveBattleEndHp,
 } from "@/lib/combatPresentation";
 import CombatStatusStrip from "@/components/game/CombatStatusStrip";
 import CombatEventLog from "@/components/game/CombatEventLog";
@@ -398,14 +399,19 @@ export default function ArenaBattleOverlay({ player, opponent, battle, onDone, p
         </AnimatePresence>
       </div>
 
-      {/* Skip — lifted from the bottom edge so PC taskbar hover doesn't steal clicks */}
+      {/* Skip — fast-forward to final HP + Victory/Defeat (not rewards). Lifted from bottom for taskbar. */}
       <div className="flex justify-center pb-10 sm:pb-12 -mt-2 relative z-40">
         <motion.button
           type="button"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            onDone?.();
+            if (phase === "outro") return;
+            const end = resolveBattleEndHp(battle);
+            setHp({ player: end.player, opponent: end.opponent });
+            setIdx(events.length);
+            setAbilityBanner(null);
+            setPhase("outro");
           }}
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}

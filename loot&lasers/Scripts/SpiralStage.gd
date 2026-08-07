@@ -712,92 +712,9 @@ func _draw_spiral(side: float, offset: Vector2) -> void:
 		var points := PackedVector2Array()
 		for point in guide:
 			points.append(_xform(SpiralMap.pct_to_px(point, side) + offset))
-		# Soft purple glow + dashed cyan spine (mockup parity).
+		# Soft purple spiral path only — no dotted planet-to-planet routes.
 		draw_polyline(points, Color(WORMHOLE_COLOR, 0.22), _xform_radius(6.0), true)
 		draw_polyline(points, Color(WORMHOLE_COLOR, 0.55), _xform_radius(2.0), true)
-		_draw_dashed_polyline(points, Color(ClientUi.CYAN, 0.35), _xform_radius(1.2), 10.0, 7.0)
-
-	var nodes: Array = layout.get("nodes", [])
-	var active := DungeonManager.current_planet_id()
-	var story_front := mini(active, 10)
-	var in_infinite := active > 10
-	for i in range(1, nodes.size()):
-		var a := SpiralMap.pct_to_px(nodes[i - 1], side) + offset
-		var b := SpiralMap.pct_to_px(nodes[i], side) + offset
-		var control := SpiralMap.pct_to_px(SpiralMap.segment_control(nodes[i - 1], nodes[i]), side) + offset
-		var route := _quadratic_points(a, control, b, 20)
-		var unlocked := in_infinite or i + 1 <= story_front
-		var planet := DungeonRules.get_planet(i)
-		var tint: Color = planet.get("color", ClientUi.CYAN) if unlocked else Color(0.28, 0.29, 0.34)
-		var xformed := PackedVector2Array()
-		for pt in route:
-			xformed.append(_xform(pt))
-		if unlocked:
-			draw_polyline(xformed, Color(tint, 0.35), _xform_radius(3.4), true)
-			_draw_dashed_polyline(xformed, Color(tint, 0.85), _xform_radius(1.8), 9.0, 6.0)
-		else:
-			_draw_dashed_polyline(xformed, Color(tint, 0.28), _xform_radius(1.2), 8.0, 8.0)
-		if unlocked and _zoom_id == ZOOM_NONE:
-			_draw_route_packets(xformed, tint, i)
-
-	if nodes.size() >= 10:
-		var a2 := SpiralMap.pct_to_px(nodes[9], side) + offset
-		var b2 := SpiralMap.pct_to_px(SpiralMap.WORMHOLE, side) + offset
-		var control2 := SpiralMap.pct_to_px(SpiralMap.segment_control(nodes[9], SpiralMap.WORMHOLE), side) + offset
-		var route2 := _quadratic_points(a2, control2, b2, 20)
-		var x2 := PackedVector2Array()
-		for pt in route2:
-			x2.append(_xform(pt))
-		var wh_tint := WORMHOLE_COLOR if in_infinite else Color(0.28, 0.29, 0.34)
-		_draw_dashed_polyline(x2, Color(wh_tint, 0.7 if in_infinite else 0.28), _xform_radius(1.8), 9.0, 6.0)
-
-
-func _draw_dashed_polyline(
-	points: PackedVector2Array, color: Color, width: float, dash: float, gap: float
-) -> void:
-	if points.size() < 2:
-		return
-	var carry := 0.0
-	var drawing := true
-	for i in range(1, points.size()):
-		var a: Vector2 = points[i - 1]
-		var b: Vector2 = points[i]
-		var seg := b - a
-		var seg_len := seg.length()
-		if seg_len <= 0.001:
-			continue
-		var dir := seg / seg_len
-		var t := 0.0
-		while t < seg_len:
-			var step := (dash if drawing else gap) - carry
-			var next_t := minf(seg_len, t + step)
-			if drawing:
-				draw_line(a + dir * t, a + dir * next_t, color, width, true)
-			var advanced := next_t - t
-			if advanced + 0.0001 >= step:
-				drawing = not drawing
-				carry = 0.0
-			else:
-				carry += advanced
-			t = next_t
-
-
-func _quadratic_points(a: Vector2, control: Vector2, b: Vector2, steps: int) -> PackedVector2Array:
-	var points := PackedVector2Array()
-	for i in steps:
-		var t := float(i) / float(steps - 1)
-		points.append((1.0 - t) * (1.0 - t) * a + 2.0 * (1.0 - t) * t * control + t * t * b)
-	return points
-
-
-func _draw_route_packets(route: PackedVector2Array, tint: Color, lane: int) -> void:
-	if route.size() < 2:
-		return
-	for packet in 2:
-		var progress := fposmod(_elapsed * (0.24 + lane * 0.006) + packet * 0.5 + lane * 0.11, 1.0)
-		var index := clampi(int(progress * float(route.size() - 1)), 0, route.size() - 1)
-		draw_circle(route[index], 2.3, Color(tint.lightened(0.35), 0.9))
-		draw_circle(route[index], 5.0, Color(tint, 0.13))
 
 
 func _draw_planet_fx(side: float, offset: Vector2) -> void:

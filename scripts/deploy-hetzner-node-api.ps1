@@ -4,20 +4,32 @@
 # Usage (from repo root, PowerShell):
 #   .\scripts\deploy-hetzner-node-api.ps1
 #   .\scripts\deploy-hetzner-node-api.ps1 -IdentityFile "$env:USERPROFILE\.ssh\id_ed25519"
+#   .\scripts\deploy-hetzner-node-api.ps1 -Interactive
+#       # prompts for key passphrase (no ssh-agent required)
 
 param(
   [string]$HostIp = "178.156.210.186",
   [string]$User = "root",
   [string]$RemoteDir = "/opt/lootandlasers",
-  [string]$IdentityFile = ""
+  [string]$IdentityFile = "",
+  [switch]$Interactive
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
+if (-not $IdentityFile) {
+  $defaultKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
+  if (Test-Path $defaultKey) { $IdentityFile = $defaultKey }
+}
+
 $sshTarget = "${User}@${HostIp}"
-$sshBase = @("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new")
+$sshBase = @("-o", "StrictHostKeyChecking=accept-new")
+if (-not $Interactive) {
+  # Non-interactive CI-style runs cannot prompt for a passphrase.
+  $sshBase += @("-o", "BatchMode=yes")
+}
 if ($IdentityFile) {
   $sshBase += @("-i", $IdentityFile, "-o", "IdentitiesOnly=yes")
 }
@@ -25,6 +37,10 @@ if ($IdentityFile) {
 function Invoke-Remote([string]$Cmd) {
   & ssh @sshBase $sshTarget $Cmd
   if ($LASTEXITCODE -ne 0) { throw "Remote command failed ($LASTEXITCODE): $Cmd" }
+}
+
+if ($Interactive) {
+  Write-Host "Interactive SSH (passphrase prompts allowed) using key: $IdentityFile"
 }
 
 Write-Host "Checking SSH $sshTarget..."

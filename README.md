@@ -1,6 +1,7 @@
 # Loot & Lasers
 
-Self-hosted idle sci-fi RPG. React client in `src/` + Express/SQLite API in `server/`.
+Self-hosted idle sci-fi RPG. Godot desktop client in `loot&lasers/` + Express/SQLite API in `server/`.
+Shared game rules used by the API live in `src/lib/`.
 
 ## Run locally
 
@@ -12,18 +13,9 @@ cd server
 npm install
 npm run seed    # admin@loot.local / admin123
 npm run dev     # :8787
-
-# Client (repo root, second terminal)
-npm install
-npm run dev     # :5173 — proxies /api and /ws to :8787
 ```
 
-Optional root `.env.local`:
-
-```env
-VITE_API_URL=http://localhost:8787
-VITE_APP_ID=lootandlasers-local
-```
+Open the Godot project in `loot&lasers/` (Godot 4.7.1) and run against the local API / staging as configured.
 
 ## API smoke test
 
@@ -34,16 +26,22 @@ npm run test:api
 # or: cd server && npm run smoke
 ```
 
-## Deploy (Docker)
+## Windows friend installer
 
-Single container serves the built client + API + WebSocket on one port. SQLite DB persists in a Docker volume.
+```powershell
+.\scripts\build-windows-installer.ps1 -Version "0.1.12" -Interactive
+```
+
+See `docs/WINDOWS_FRIEND_BUILD.md`.
+
+## Deploy (Docker — API only)
 
 ```bash
 cp env.example .env
 # Edit .env — set JWT_SECRET (openssl rand -hex 32) and SEED_PASSWORD
 
-docker compose up -d --build
-# → http://localhost:8787
+docker compose -f docker-compose.node-api.yml --env-file .env.node-api up -d --build
+# → API on :8787 (no browser SPA)
 ```
 
 | Variable | Purpose |
@@ -53,26 +51,8 @@ docker compose up -d --build
 | `APP_ID` | App identifier (default `lootandlasers-local`) |
 | `RUN_SEED` | Set `false` after first deploy to skip seed on restart |
 | `SMTP_HOST` (+ `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`) | Enables email OTP + password reset links |
-| `PUBLIC_CLIENT_URL` | Base URL used in reset links (default `http://localhost:8787`) |
+| `PUBLIC_CLIENT_URL` | Base URL used in reset links |
 
-Data volume: `lootandlasers-data` → `/app/server/data/game.db`
+Data volume: `node_api_data` → `/app/server/data/game.db`
 
 See `server/BACKUP.md` for JSON backup/restore of your database.
-
-## Layout
-
-| Path | Role |
-|------|------|
-| `src/` | Game client (React + Vite) |
-| `src/api/gameClient.js` | `api.auth` / `api.entities` / `api.functions` |
-| `server/` | API + SQLite DB |
-| `public/assets/` | Self-hosted game art |
-| `server/scripts/smoke-test.mjs` | API integration smoke test |
-| `server/BACKUP.md` | Database backup & restore |
-
-## Notes
-
-- Register OTP and password-reset tokens log to the API console in **development** only.
-- In production, set `SMTP_HOST` to enable actual email sending for OTP verification and password resets.
-- Admins can view recent email delivery events under **Admin → Email** (SMTP status, send test, delivery log).
-- Email + password auth only (no social login).

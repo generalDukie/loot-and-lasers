@@ -124,7 +124,6 @@ executed as a single unattended client E2E in this pass.**
 
 | Finding | Severity |
 |---------|----------|
-| Legacy web client still in repo (attack surface if deployed) | Medium |
 | Binary admin role (no finer GM tiers) — by product choice | Low / accepted |
 | No hosted APM/alerts/SLOs | Medium (ops) |
 | Rate limiting incomplete vs concurrent purchase/combat | Medium |
@@ -263,7 +262,6 @@ Integrity suite covers quarantine/repair dry-run; not full chaos.
 - Single unattended Godot E2E smoke (create→mission→claim→logout).
 - Rate limits on economy / arena / auth.
 - Formal alert runbooks wired to health probes.
-- Retire unused browser packages if web client is not launched.
 
 ### Safe to defer
 

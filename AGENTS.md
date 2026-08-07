@@ -2,35 +2,28 @@
 
 ## Project
 
-Loot & Lasers — self-hosted game. Client in `src/`, API in `server/`.
-Godot client (desktop port) in `loot&lasers/`.
+Loot & Lasers — self-hosted game. Godot desktop client in `loot&lasers/`, API in `server/`.
+Shared deterministic game rules live in `src/lib/` (imported by the Node API). There is no browser client.
 
 ## Commands
 
-- Frontend: `npm run dev`
 - API: `npm run server` (or `cd server && npm run dev`)
 - Seed admin: `npm run server:seed`
 - API smoke test: `npm run test:api`
 - Godot script audit: run Godot headless with `-s res://_audit_all.gd` from `loot&lasers/`
+- Windows friend installer: `.\scripts\build-windows-installer.ps1 -Version "0.1.12" -Interactive`
 
 ## Notes
 
-- Game client: `src/api/gameClient.js` (`api` export)
-- Do not add third-party hosted backend SDKs or vendor-specific Vite plugins
-- Prefer extending the `src/` client; keep game rules in `src/lib/`
+- Player client: Godot in `loot&lasers/`
+- Do not add third-party hosted backend SDKs
+- Keep authoritative game rules in `src/lib/` / `server/`; mirror in Godot only as needed for presentation
 - DB file: `server/data/game.db` (gitignored)
 
-## Godot ↔ web parity
+## Client source of truth
 
-**`src/` is the source of truth** for design, layout, copy, flow, and feel.
-
-When working in `loot&lasers/`:
-
-- Replicate the web UI/UX as closely as possible (layout, hierarchy, palette, typography, spacing, icons, animations, menus, gameplay flow).
-- Do **not** redesign or modernize unless the user explicitly asks.
-- Use Godot strengths for performance and animation fidelity — not for inventing a new look.
-- If exact parity is impossible, explain why and propose the closest visual/functional equivalent.
-- Always inspect the matching `src/` page or `src/components/game/*` component before changing Godot UI.
+**`loot&lasers/` (Godot) is the player client.** Design, layout, copy, and flow live there.
+Do not reintroduce a React/web SPA unless the user explicitly asks.
 
 ## Godot side nav ↔ operative console
 

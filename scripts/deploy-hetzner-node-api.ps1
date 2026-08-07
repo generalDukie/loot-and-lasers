@@ -64,8 +64,8 @@ if (-not (Get-Command tar -ErrorAction SilentlyContinue)) {
   --exclude=dist `
   --exclude=.git `
   Dockerfile docker-entrypoint.sh docker-compose.node-api.yml .env.node-api.example .dockerignore `
-  package.json package-lock.json index.html vite.config.js tailwind.config.js postcss.config.js jsconfig.json components.json `
-  public src server
+  package.json package-lock.json `
+  src/lib server
 if ($LASTEXITCODE -ne 0) { throw "tar failed" }
 
 Write-Host "Uploading archive..."

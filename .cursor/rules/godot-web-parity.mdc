@@ -1,37 +1,24 @@
 ---
-description: Godot client must replicate the web UI/UX as source of truth — no redesigns
+description: Godot is the sole player client — do not reintroduce a web SPA or redesign from web memory
 globs: loot&lasers/**/*
 alwaysApply: true
 ---
 
-# Godot ↔ Web parity (source of truth)
+# Godot client (source of truth)
 
-The **web client in `src/`** is the source of truth for Loot & Lasers design and gameplay UX.
+The **Godot client in `loot&lasers/`** is the only player-facing client for Loot & Lasers.
 
-The Godot client in `loot&lasers/` must **replicate the web experience as closely as possible**. Do **not** redesign, “modernize,” simplify, or invent a new visual language unless the user explicitly asks.
+There is **no browser/React game client**. Shared rules in `src/lib/` are for the Node API, not a UI SoT.
 
-## Before changing any Godot UI
+## When changing Godot UI
 
-1. Open the matching web implementation under `src/` (pages, `src/components/game/`, etc.).
-2. Match **layout, hierarchy, colors, typography, spacing, icons, copy, animations, menus, and flow**.
-3. Prefer Godot only for **performance / animation fidelity** (tweens, particles, shaders) — not for changing the design.
-4. If something cannot be reproduced exactly in Godot, **say why** and propose the **closest visual + functional equivalent** — do not silently substitute a different look.
-
-## Mapping
-
-| Web | Godot |
-|-----|--------|
-| `src/pages/*`, `src/components/game/*` | `loot&lasers/Scenes/UI/*`, `Scripts/UI/*` |
-| Design tokens / Tailwind theme / game CSS | `Scripts/UI/ClientUi.gd` + existing painted styles |
-| Game rules / formulas | Prefer shared server authority; mirror `src/lib/` in `loot&lasers/Scripts/` only as needed |
+1. Match existing Godot screens, `Scripts/UI/ClientUi.gd`, and established layout/copy in this project.
+2. Prefer Godot strengths for performance / animation fidelity (tweens, particles, shaders).
+3. Do **not** invent a new visual language, color theme, or layout system unless the user explicitly asks.
+4. Game rules / formulas: prefer shared server authority; mirror `src/lib/` in `loot&lasers/Scripts/` only as needed for presentation.
 
 ## Hard rules
 
 - **No drive-by redesigns** while “fixing” or “polishing.”
-- **No new color themes, fonts, or layout systems** that diverge from web.
-- **Copy and section structure** (e.g. Codex) must follow the web component, not a paraphrased GDScript version.
-- When auditing “does it look right?”, **diff against the live web UI**, not against AI taste.
-
-## When exact parity is blocked
-
-Call out limits clearly (e.g. no Lucide SVG set → closest emoji/icon atlas; HTML/CSS layout → Godot containers; Framer Motion → Tween equivalents). Ship the closest match; track gaps instead of inventing a new design.
+- **Do not** scaffold a new React/Vite SPA under `src/` for players.
+- Keep copy and section structure consistent with neighboring Godot screens.

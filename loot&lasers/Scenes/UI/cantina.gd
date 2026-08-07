@@ -430,17 +430,13 @@ func _render() -> void:
 
 
 func _load_web_texture(file_name: String) -> Texture2D:
-	for rel in [
-		"res://Assets/Textures/%s" % file_name,
-		"res://../public/assets/%s" % file_name,
-	]:
-		if ResourceLoader.exists(rel):
-			var texture := load(rel) as Texture2D
-			if texture != null:
-				return texture
-		var path := ProjectSettings.globalize_path(rel)
-		if not FileAccess.file_exists(path):
-			continue
+	var rel := "res://Assets/Textures/%s" % file_name
+	if ResourceLoader.exists(rel):
+		var texture := load(rel) as Texture2D
+		if texture != null:
+			return texture
+	var path := ProjectSettings.globalize_path(rel)
+	if FileAccess.file_exists(path):
 		var image := Image.load_from_file(path)
 		if image != null and not image.is_empty():
 			return ImageTexture.create_from_image(image)

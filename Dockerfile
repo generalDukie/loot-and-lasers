@@ -1,20 +1,5 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-alpine AS client-build
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN npm ci
-
-COPY index.html vite.config.js tailwind.config.js postcss.config.js jsconfig.json components.json ./
-COPY public ./public
-COPY src ./src
-
-# Same-origin API in production (served by Express)
-ENV VITE_API_URL=
-ENV VITE_APP_ID=lootandlasers-local
-RUN npm run build
-
 FROM node:22-alpine AS runtime
 WORKDIR /app
 
@@ -22,15 +7,12 @@ COPY server/package.json server/package-lock.json ./server/
 RUN cd server && npm ci --omit=dev
 
 COPY server/ ./server/
-# Node gameplay handlers import shared deterministic rules from the web source
-# tree. Keep that source of truth available in the production runtime image.
+# Shared deterministic game rules used by Node gameplay handlers.
 COPY src/lib ./src/lib
-COPY --from=client-build /app/dist ./dist
 
 ENV NODE_ENV=production
 ENV PORT=8787
-ENV STATIC_DIR=/app/dist
-ENV SERVE_STATIC=true
+ENV SERVE_STATIC=false
 ENV TRUST_PROXY=true
 ENV DB_PATH=/app/server/data/game.db
 

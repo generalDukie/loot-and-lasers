@@ -23,7 +23,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "8787"
-      SERVE_STATIC: "true"
+      SERVE_STATIC: "false"
       TRUST_PROXY: "true"
       RUN_SEED: "${RUN_SEED:-true}"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env.node-api}"

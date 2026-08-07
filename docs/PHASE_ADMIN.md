@@ -23,7 +23,7 @@ ops dashboard**, and **Godot Ops tab** parity. Multi-tier GM/Support roles were
 | Auth | Nakama session → Node gameplay JWT; `users.role` |
 | Gate | `isAdmin(user)` → `role === "admin"` |
 | Mutations | `AdminModeration` RPC + `/api/*/admin/*` |
-| Clients | `src/pages/AdminPage.jsx`, `loot&lasers/Scenes/UI/admin.gd` via `AdminManager` |
+| Clients | `loot&lasers/Scenes/UI/admin.gd` via `AdminManager` |
 
 ### 2. Existing roles
 | Role | Status |

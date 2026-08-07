@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bq8unlocklucide01"
-path="res://.godot/imported/unlock.svg-placeholder.ctex"
+uid="uid://seq46q1lhfma"
+path="res://.godot/imported/unlock.svg-dd35affe107e198b728e1da6be805d3c.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://Assets/Icons/nav/unlock.svg"
-dest_files=["res://.godot/imported/unlock.svg-placeholder.ctex"]
+dest_files=["res://.godot/imported/unlock.svg-dd35affe107e198b728e1da6be805d3c.ctex"]
 
 [params]
 

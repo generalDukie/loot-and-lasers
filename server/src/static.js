@@ -5,15 +5,19 @@ import express from "express";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** Resolve built client directory (repo root /dist in Docker, ../../dist locally). */
+/** Resolve optional static directory (legacy SPA dist). Off by default. */
 export function resolveStaticDir() {
   if (process.env.STATIC_DIR) return path.resolve(process.env.STATIC_DIR);
   return path.resolve(__dirname, "../../dist");
 }
 
-/** Serve Vite build + SPA fallback. Returns false when dist/ is missing. */
+/**
+ * Optionally serve a static directory when explicitly enabled.
+ * Godot is the player client; browser SPA serving is disabled unless SERVE_STATIC=true
+ * and index.html exists.
+ */
 export function attachStaticApp(app) {
-  if (process.env.SERVE_STATIC === "false") return false;
+  if (process.env.SERVE_STATIC !== "true") return false;
 
   const staticDir = resolveStaticDir();
   const indexHtml = path.join(staticDir, "index.html");

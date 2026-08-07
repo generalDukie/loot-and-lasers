@@ -18,32 +18,40 @@ a server-side administrative secret.
 
 1. Godot 4.7.1 and its Windows export templates
 2. Inno Setup 6
-3. The Hetzner staging socket key in **either**:
-   - `loot&lasers/Config/nakama_secrets.cfg` (`[staging] server_key=…`, preferred), or
-   - user env `NAKAMA_SOCKET_SERVER_KEY`
+3. SSH access to Hetzner (`root@178.156.210.186`) — the build script pulls the live
+   `NAKAMA_SOCKET_SERVER_KEY` from `/opt/lootandlasers/.env` automatically
 
-   The value must match `/opt/lootandlasers/.env` on Hetzner (`NAKAMA_SOCKET_SERVER_KEY`).
-   A key that only exists on the build PC (and not on the server) produces
-   “Invalid server key” / auth failures on friend machines.
+   Offline fallback (`-SkipRemoteKeySync`): local `Config/nakama_secrets.cfg` or
+   env `NAKAMA_SOCKET_SERVER_KEY`. Those must still match Hetzner or friends get
+   “Invalid server key”.
 
 ## Build
 
 From the repository root:
 
 ```powershell
-.\scripts\build-windows-installer.ps1 -Version "0.1.9"
+.\scripts\build-windows-installer.ps1 -Version "0.1.12"
+```
+
+If your SSH key is passphrase-protected (common), use:
+
+```powershell
+.\scripts\build-windows-installer.ps1 -Version "0.1.12" -Interactive
 ```
 
 The script:
 
-1. validates the staging client key from `nakama_secrets.cfg` (preferred) or `NAKAMA_SOCKET_SERVER_KEY`;
-2. writes a temporary, gitignored `Config/release_client.cfg`;
-3. exports the `Windows Staging` Godot preset (custom feature `staging_client`);
-4. **verifies** the exported exe embeds that exact key (fails the build on mismatch/missing bake);
-5. deletes the temporary configuration in a `finally` block;
-6. compiles `dist\LootAndLasers-Setup-0.1.9.exe`.
+1. **SSH to Hetzner and reads the live** `NAKAMA_SOCKET_SERVER_KEY` from `/opt/lootandlasers/.env` (source of truth);
+2. writes that key into gitignored `Config/nakama_secrets.cfg` so local editor + future builds stay aligned;
+3. writes a temporary, gitignored `Config/release_client.cfg`;
+4. exports the `Windows Staging` Godot preset (custom feature `staging_client`);
+5. **verifies** the exported exe embeds that exact key (fails the build on mismatch/missing bake);
+6. deletes the temporary configuration in a `finally` block;
+7. compiles `dist\LootAndLasers-Setup-0.1.12.exe`.
 
-Friend builds read **only** the baked `release_client.cfg` key — they ignore machine env vars. If login shows “Server key invalid” / “Staging server key invalid”, the installed build was baked with a key that does not match Hetzner; rebuild after syncing `nakama_secrets.cfg` to `/opt/lootandlasers/.env` `NAKAMA_SOCKET_SERVER_KEY`, then reinstall.
+You no longer need to hand-copy the key before each installer build. Use `-SkipRemoteKeySync` only for offline/emergency local bakes.
+
+Friend builds read **only** the baked `release_client.cfg` key — they ignore machine env vars. If login shows “Server key invalid” / “Staging server key invalid”, rebuild with remote sync enabled (default) so the bake matches Hetzner, then reinstall.
 
 To use non-default tool locations:
 

@@ -170,8 +170,8 @@ static func apply_interaction_motion(control: Control, hover_scale := 1.025) -> 
 			var target := hover if bool(control.get_meta("client_ui_hovered", false)) else idle
 			animate.call(target, 0.09)
 		)
-		# Global UI click/hover — AudioManager dedupes via meta + pool.
-		AudioManager.wire_button(button)
+		# UI SFX is wired by AudioManager's tree watcher (not Autoload refs here).
+		# class_name scripts cannot safely reference Autoloads at parse time.
 
 
 
@@ -302,6 +302,9 @@ static func apply_primary_button(btn: Button) -> void:
 	btn.add_theme_color_override("font_disabled_color", Color(0.40, 0.48, 0.52))
 	btn.set_meta("ui_sfx_kind", "confirm")
 	apply_interaction_motion(btn)
+
+
+static func apply_tinted_painted_button(btn: Button, tint: Color) -> void:
 	## Web Crystal Store pack price buttons — painted-btn with pack accent gradient.
 	apply_display_font(btn)
 	btn.add_theme_font_size_override("font_size", px(13))
@@ -317,6 +320,7 @@ static func apply_primary_button(btn: Button) -> void:
 	btn.add_theme_color_override("font_hover_color", ink)
 	btn.add_theme_color_override("font_pressed_color", ink)
 	btn.add_theme_color_override("font_disabled_color", Color(0.40, 0.48, 0.52))
+	btn.set_meta("ui_sfx_kind", "confirm")
 	apply_interaction_motion(btn)
 
 
@@ -379,6 +383,8 @@ static func apply_ghost_button(btn: Button) -> void:
 	btn.add_theme_color_override("font_pressed_color", TEXT)
 	btn.set_meta("ui_sfx_kind", "click")
 	apply_interaction_motion(btn)
+
+
 static func make_section_header(eyebrow: String, title: String, hint: String = "") -> VBoxContainer:
 	var wrap := VBoxContainer.new()
 	wrap.add_theme_constant_override("separation", 4)
@@ -657,6 +663,9 @@ static func apply_danger_button(btn: Button) -> void:
 	btn.add_theme_color_override("font_color", Color(1.0, 0.92, 0.92))
 	btn.set_meta("ui_sfx_kind", "error")
 	apply_interaction_motion(btn)
+
+
+static func make_subtitle(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

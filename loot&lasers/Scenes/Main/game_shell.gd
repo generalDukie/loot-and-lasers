@@ -51,7 +51,9 @@ const _WALLET_DIVIDER_GAP := 4.0
 const _WALLET_VALUE_GAP := 8.0
 const _WALLET_TRAILING_SIZE := 29.0
 var _last_nav_ms := 0
-const NAV_COOLDOWN_MS := 450
+const NAV_COOLDOWN_MS := 200
+## Temporary nav profiler — remove after perf pass is validated in play.
+const NAV_TIMING_LOG := true
 
 
 func _ready() -> void:
@@ -64,6 +66,8 @@ func _ready() -> void:
 	_build()
 	_refresh_chrome()
 	_set_decor_active(true)
+	AudioManager.start_station_ambient()
+	SettingsManager.apply_audio()
 	var timer := Timer.new()
 	timer.wait_time = 1.0
 	timer.timeout.connect(_refresh_chrome)
@@ -926,6 +930,7 @@ func show_page(path: String) -> void:
 	if path == _page_path and _page != null and is_instance_valid(_page):
 		return
 
+	var nav_t0 := Time.get_ticks_msec()
 	_page_swap_busy = true
 	# Failsafe — never leave the shell permanently locked if a page script errors mid-mount.
 	_page_swap_token += 1
@@ -954,32 +959,12 @@ func show_page(path: String) -> void:
 	if _page != null and is_instance_valid(_page):
 		var outgoing := _page
 		outgoing_page = outgoing
-		if outgoing is Control:
-			var outgoing_control := outgoing as Control
-			outgoing_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var exit_tween := outgoing_control.create_tween()
-			exit_tween.set_parallel(true)
-			exit_tween.tween_property(outgoing_control, "modulate:a", 0.0, 0.12)
-			exit_tween.tween_property(
-				outgoing_control,
-				"offset_left",
-				outgoing_control.offset_left - 12.0,
-				0.14
-			).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-			exit_tween.tween_property(
-				outgoing_control,
-				"offset_right",
-				outgoing_control.offset_right - 12.0,
-				0.14
-			).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-			exit_tween.chain().tween_callback(func() -> void:
-				if is_instance_valid(outgoing):
-					outgoing.queue_free()
-			)
-		else:
-			outgoing.queue_free()
+		# Instant free — exit tweens stacked with page boots and made every hop feel sluggish.
+		outgoing.queue_free()
 		_page = null
+	var load_t0 := Time.get_ticks_msec()
 	var packed := load(path) as PackedScene
+	var load_ms := Time.get_ticks_msec() - load_t0
 	if packed == null:
 		push_error("Could not load shell page: %s" % path)
 		_page_swap_busy = false
@@ -1017,13 +1002,15 @@ func show_page(path: String) -> void:
 	# (Hero sheet boots with awaits; a hung refresh used to freeze the whole shell).
 	_page_swap_busy = false
 	_set_nav_buttons_enabled(true)
-	_refresh_notif_after_nav()
-	TutorialManager.notify_page_changed(path)
-
-
-func _refresh_notif_after_nav() -> void:
-	await NotificationManager.refresh_unread()
+	# Badge updates from Realtime + opening the notif dock; avoid GetNotifications on every hop.
 	_update_notif_badge()
+	TutorialManager.notify_page_changed(path)
+	if NAV_TIMING_LOG:
+		print("[nav] path=%s load_ms=%d shell_ms=%d" % [
+			path.get_file(),
+			load_ms,
+			Time.get_ticks_msec() - nav_t0,
+		])
 
 
 func _set_nav_buttons_enabled(enabled: bool) -> void:
@@ -1463,19 +1450,19 @@ func _animate_page_entry(page_control: Control) -> void:
 	if page_control == null or not is_instance_valid(page_control):
 		return
 	# Keep anchors full-rect; only nudge offset for the slide-in so hit targets stay valid.
-	page_control.offset_left = 24.0
-	page_control.offset_right = 24.0
+	page_control.offset_left = 10.0
+	page_control.offset_right = 10.0
 	page_control.modulate.a = 0.0
 	var tween := page_control.create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(page_control, "offset_left", 0.0, 0.26).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-	tween.tween_property(page_control, "offset_right", 0.0, 0.26).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-	tween.tween_property(page_control, "modulate:a", 1.0, 0.2).set_ease(Tween.EASE_OUT)
+	tween.tween_property(page_control, "offset_left", 0.0, 0.12).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+	tween.tween_property(page_control, "offset_right", 0.0, 0.12).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+	tween.tween_property(page_control, "modulate:a", 1.0, 0.10).set_ease(Tween.EASE_OUT)
 	if _transition_flash != null and is_instance_valid(_transition_flash):
 		_transition_flash.modulate.a = 0.0
 		var flash := _transition_flash.create_tween()
-		flash.tween_property(_transition_flash, "modulate:a", 0.10, 0.06)
-		flash.tween_property(_transition_flash, "modulate:a", 0.0, 0.24).set_ease(Tween.EASE_OUT)
+		flash.tween_property(_transition_flash, "modulate:a", 0.06, 0.04)
+		flash.tween_property(_transition_flash, "modulate:a", 0.0, 0.12).set_ease(Tween.EASE_OUT)
 
 
 func _fit_page_to_stage() -> void:

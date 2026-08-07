@@ -1,6 +1,8 @@
 extends Control
 ## Station hub — mirrors web Home.jsx + SpaceStationHub / NexusShowcase / NexusChatter.
 
+const STATION_HUB_TEX := preload("res://Assets/Textures/station-hub.png")
+
 var _status: Label
 var _open_flyout: PanelContainer = null
 var _nexus_owner: Label
@@ -13,13 +15,17 @@ var _chatter_timer: Timer
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	# Paint from cached GameManager state immediately; refresh in background.
+	_populate()
 	await _boot()
 
 
 func _boot() -> void:
+	var boot_t0 := Time.get_ticks_msec()
 	await MissionManager.refresh_character()
 	await SocialManager.load_my_guild()
 	await SocialManager.refresh_unread()
+	# Unread badge TTL-cached; Realtime also pushes updates.
 	await NotificationManager.refresh_unread()
 	await NexusManager.load_nexus()
 	await InventoryManager.list_pending_loot()
@@ -30,6 +36,7 @@ func _boot() -> void:
 	PresenceManager.start(status)
 	AudioManager.start_hub_bed()
 	_populate()
+	print("[nav] hub boot_ms=%d" % [Time.get_ticks_msec() - boot_t0])
 	await _maybe_daily_prompt()
 	await _maybe_codex_prompt()
 	await _maybe_legacy_prompt()
@@ -360,7 +367,7 @@ func _build() -> void:
 	station_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	station_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	station_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	station_art.texture = _load_web_texture("station-hub.png")
+	station_art.texture = STATION_HUB_TEX
 	add_child(station_art)
 	add_child(_make_stage_gradient())
 	add_child(_make_stage_vignette())
@@ -754,22 +761,6 @@ func _dock_split(icon_id: String, label: String, tint_hex: String, options: Arra
 				_open_flyout = null
 	)
 	return wrap
-
-
-func _load_web_texture(file_name: String) -> Texture2D:
-	var rel := "res://Assets/Textures/%s" % file_name
-	# Imported resources must go through ResourceLoader in exported builds;
-	# their source PNG is remapped into the PCK and is not a disk file.
-	if ResourceLoader.exists(rel):
-		var texture := load(rel) as Texture2D
-		if texture != null:
-			return texture
-	var path := ProjectSettings.globalize_path(rel)
-	if FileAccess.file_exists(path):
-		var image := Image.load_from_file(path)
-		if image != null and not image.is_empty():
-			return ImageTexture.create_from_image(image)
-	return null
 
 
 func _populate() -> void:

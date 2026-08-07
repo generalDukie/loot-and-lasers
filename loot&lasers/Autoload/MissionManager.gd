@@ -21,9 +21,13 @@ signal reward_received(reward: Dictionary)
 
 const BOARD_CFG := "user://godot_mission_board.cfg"
 const STATUS_MIN_INTERVAL_SEC := 2.0
+## Skip Character GET on rapid page hops when GameManager already has this character.
+const CHARACTER_REFRESH_TTL_MS := 20000
 
 var offers: Array = []
 var active_mission: Dictionary = {}
+var _character_refresh_ms := 0
+var _character_refresh_id := ""
 ## True when a dangling / unreadable active pointer exists (legacy Node path).
 var active_mission_missing := false
 var last_claim_result: Dictionary = {}
@@ -99,16 +103,31 @@ func buy_fuel() -> Dictionary:
 	return res
 
 
-func refresh_character() -> Dictionary:
+func refresh_character(force: bool = false) -> Dictionary:
 	var cid := str(GameManager.active_character.get("id", ""))
 	if cid.is_empty():
 		return {"ok": false, "error": "No active character", "data": {}}
+	var now := Time.get_ticks_msec()
+	if (
+		not force
+		and cid == _character_refresh_id
+		and now - _character_refresh_ms < CHARACTER_REFRESH_TTL_MS
+		and not GameManager.active_character.is_empty()
+	):
+		return {"ok": true, "error": "", "data": GameManager.active_character, "cached": true}
 	var res: Dictionary = await AuthManager.get_character(cid)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		GameManager.apply_active_character(res.data, "mission_refresh")
 		character_updated.emit(res.data)
+		_character_refresh_ms = Time.get_ticks_msec()
+		_character_refresh_id = cid
 		await _restore_active_mission_from_node()
 	return res
+
+
+func invalidate_character_cache() -> void:
+	_character_refresh_ms = 0
+	_character_refresh_id = ""
 
 
 ## The board is display-only, matching the web client. Node snapshots and validates
@@ -656,6 +675,8 @@ func _apply_character_payload(res: Dictionary) -> void:
 	if bool(applied.get("character_applied", false)) \
 		or bool(applied.get("patch_applied", false)) \
 		or bool(applied.get("wallet_applied", false)):
+		_character_refresh_ms = Time.get_ticks_msec()
+		_character_refresh_id = str(GameManager.active_character.get("id", ""))
 		character_updated.emit(GameManager.active_character)
 
 

@@ -217,12 +217,15 @@ func _build_audio() -> VBoxContainer:
 	col.add_child(_volume_row("Music Volume", "music", SettingsManager.music_volume, func(v: float) -> void:
 		SettingsManager.set_music_volume(v, false)
 	))
-	col.add_child(_volume_row("SFX Volume", "zap", SettingsManager.sfx_volume, func(v: float) -> void:
+	col.add_child(_volume_row("SFX / UI Volume", "zap", SettingsManager.sfx_volume, func(v: float) -> void:
 		SettingsManager.set_sfx_volume(v, false)
 	, true))
+	col.add_child(_volume_row("Ambient Volume", "orbit", SettingsManager.ambient_volume, func(v: float) -> void:
+		SettingsManager.set_ambient_volume(v, false)
+	))
 
 	var play_bg := CheckButton.new()
-	play_bg.text = "Play music when unfocused"
+	play_bg.text = "Play music & ambience when unfocused"
 	play_bg.button_pressed = SettingsManager.play_music_when_unfocused
 	play_bg.toggled.connect(func(on: bool) -> void:
 		SettingsManager.set_play_music_when_unfocused(on, true)
@@ -230,7 +233,7 @@ func _build_audio() -> VBoxContainer:
 	col.add_child(play_bg)
 
 	var tip := Label.new()
-	tip.text = "Station ambience and cantina music use Music. Combat / UI cues use SFX."
+	tip.text = "Music = hub/cantina beds. Ambient = station hum (persists across pages). SFX = UI clicks and combat cues."
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tip.add_theme_font_size_override("font_size", 15)
 	tip.add_theme_color_override("font_color", ClientUi.MUTED)

@@ -5,6 +5,7 @@ extends Control
 const FUEL_COLOR := Color("#39FF14")
 const XP_COLOR := Color("#00E5FF")
 const STARDUST_COLOR := Color("#E879F9")
+const CANTINA_BG_TEX := preload("res://Assets/Textures/cantina-bg.png")
 
 var _list: HBoxContainer
 var _section_lab: Label
@@ -164,9 +165,7 @@ func _build() -> void:
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var external := _load_web_texture("cantina-bg.png")
-	if external != null:
-		bg.texture = external
+	bg.texture = CANTINA_BG_TEX
 	stage.add_child(bg)
 
 	for orb in [
@@ -337,6 +336,7 @@ func _build() -> void:
 
 func _boot() -> void:
 	_busy = true
+	var boot_t0 := Time.get_ticks_msec()
 	_status.text = "Syncing fuel…"
 	AudioManager.start_cantina_bed()
 	_music_on = true
@@ -344,7 +344,7 @@ func _boot() -> void:
 	if not MissionManager.mission_error.is_connected(_on_mission_error):
 		MissionManager.mission_error.connect(_on_mission_error)
 	await MissionManager.sync_fuel()
-	await MissionManager.refresh_character()
+	# sync_fuel already rehydrates character + wallet; skip a second Character GET.
 	if MissionManager.has_active_mission():
 		GameManager.go_mission_run()
 		return
@@ -353,6 +353,7 @@ func _boot() -> void:
 	await InventoryManager.list_pending_loot()
 	_busy = false
 	_render()
+	print("[nav] cantina boot_ms=%d" % [Time.get_ticks_msec() - boot_t0])
 
 
 func _on_mission_error(err: String) -> void:
@@ -427,20 +428,6 @@ func _render() -> void:
 	for offer in offers:
 		if typeof(offer) == TYPE_DICTIONARY:
 			_list.add_child(_make_patron(offer))
-
-
-func _load_web_texture(file_name: String) -> Texture2D:
-	var rel := "res://Assets/Textures/%s" % file_name
-	if ResourceLoader.exists(rel):
-		var texture := load(rel) as Texture2D
-		if texture != null:
-			return texture
-	var path := ProjectSettings.globalize_path(rel)
-	if FileAccess.file_exists(path):
-		var image := Image.load_from_file(path)
-		if image != null and not image.is_empty():
-			return ImageTexture.create_from_image(image)
-	return null
 
 
 func _make_patron(offer: Dictionary) -> Button:

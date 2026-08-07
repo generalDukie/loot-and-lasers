@@ -17,7 +17,7 @@ const MIN_WINDOW := Vector2i(960, 540)
 
 ## Local-only keys (must never POST to Node as authority).
 const LOCAL_KEYS := [
-	"master_volume", "music_volume", "sfx_volume",
+	"master_volume", "music_volume", "sfx_volume", "ambient_volume",
 	"window_mode", "fullscreen", "play_music_when_unfocused",
 	"vsync", "combat_anim_speed", "screen_shake_scale",
 ]
@@ -30,6 +30,8 @@ var _account_prefs: Dictionary = {}
 var master_volume: float = 1.0
 var music_volume: float = 0.8
 var sfx_volume: float = 1.0
+## Station / ship ambience (separate from music beds).
+var ambient_volume: float = 0.55
 ## Legacy mirror of window_mode == "fullscreen" | "exclusive"
 var fullscreen: bool = false
 ## windowed | maximized | fullscreen | exclusive
@@ -77,6 +79,7 @@ func load_settings() -> void:
 	master_volume = float(_config.get_value("audio", "master_volume", master_volume))
 	music_volume = float(_config.get_value("audio", "music_volume", music_volume))
 	sfx_volume = float(_config.get_value("audio", "sfx_volume", sfx_volume))
+	ambient_volume = float(_config.get_value("audio", "ambient_volume", ambient_volume))
 	play_music_when_unfocused = bool(_config.get_value("audio", "play_music_when_unfocused", play_music_when_unfocused))
 	fullscreen = bool(_config.get_value("display", "fullscreen", fullscreen))
 	window_mode = str(_config.get_value("display", "window_mode", ""))
@@ -93,6 +96,7 @@ func save_settings() -> Error:
 	_config.set_value("audio", "master_volume", master_volume)
 	_config.set_value("audio", "music_volume", music_volume)
 	_config.set_value("audio", "sfx_volume", sfx_volume)
+	_config.set_value("audio", "ambient_volume", ambient_volume)
 	_config.set_value("audio", "play_music_when_unfocused", play_music_when_unfocused)
 	_config.set_value("display", "fullscreen", fullscreen)
 	_config.set_value("display", "window_mode", window_mode)
@@ -109,6 +113,7 @@ func serialize_local_preferences() -> Dictionary:
 		"master_volume": master_volume,
 		"music_volume": music_volume,
 		"sfx_volume": sfx_volume,
+		"ambient_volume": ambient_volume,
 		"play_music_when_unfocused": play_music_when_unfocused,
 		"fullscreen": fullscreen,
 		"window_mode": window_mode,
@@ -186,9 +191,11 @@ func _apply_window_mode() -> void:
 ## Volume only — never touch window mode (sliders used to call apply_settings and break).
 func apply_audio() -> void:
 	var music := music_volume
+	var ambient := ambient_volume
 	if not play_music_when_unfocused and not _app_has_focus():
 		music = 0.0
-	AudioManager.apply_volumes(master_volume, music, sfx_volume)
+		ambient = 0.0
+	AudioManager.apply_volumes(master_volume, music, sfx_volume, ambient)
 
 
 func set_master_volume(v: float, persist: bool = true) -> void:
@@ -205,6 +212,12 @@ func set_music_volume(v: float, persist: bool = true) -> void:
 
 func set_sfx_volume(v: float, persist: bool = true) -> void:
 	sfx_volume = clampf(v, 0.0, 1.0)
+	apply_audio()
+	_persist_audio(persist)
+
+
+func set_ambient_volume(v: float, persist: bool = true) -> void:
+	ambient_volume = clampf(v, 0.0, 1.0)
 	apply_audio()
 	_persist_audio(persist)
 

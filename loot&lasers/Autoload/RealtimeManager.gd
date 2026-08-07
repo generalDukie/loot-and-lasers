@@ -52,6 +52,22 @@ func is_nakama_connected() -> bool:
 	return NakamaManager.socket != null and NakamaManager.socket.is_connected_to_host()
 
 
+func has_node_ws() -> bool:
+	return _socket != null and _socket.get_ready_state() == WebSocketPeer.STATE_OPEN
+
+
+func global_channel_id() -> String:
+	return _global_channel_id
+
+
+func chat_event_listener_count() -> int:
+	return chat_event.get_connections().size()
+
+
+func nakama_channel_listener_count() -> int:
+	return nakama_channel_message.get_connections().size()
+
+
 ## Preferred entry — connect Nakama socket once after auth.
 func start_nakama() -> Dictionary:
 	if _nakama_connecting:
@@ -87,6 +103,8 @@ func stop_nakama() -> void:
 
 
 func join_global_chat() -> Dictionary:
+	if not _global_channel_id.is_empty() and is_nakama_connected():
+		return {"ok": true, "channel_id": _global_channel_id, "cached": true}
 	if not is_nakama_connected():
 		var started: Dictionary = await start_nakama()
 		if not started.get("ok", false):
@@ -194,7 +212,9 @@ func start(entity: String = "ChatMessage") -> void:
 	_entity_filter = entity
 	_want_connect = true
 	_want_nakama = true
-	call_deferred("_boot_nakama_deferred")
+	# Connect Nakama once; repeated Hub visits must not stack join/boot work.
+	if not is_nakama_connected() and not _nakama_connecting:
+		call_deferred("_boot_nakama_deferred")
 	_connect_ws()
 	if not _poll_mail.is_stopped():
 		_poll_mail.stop()

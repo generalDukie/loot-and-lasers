@@ -20,28 +20,72 @@ var _recipient_id := ""
 var _busy := false
 var _picking_friend := false
 var _global_mode := true
+var _global_load_token := 0
+var _rendered_global_ids: Dictionary = {}
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
-	if not RealtimeManager.chat_event.is_connected(_on_chat_event):
-		RealtimeManager.chat_event.connect(_on_chat_event)
+	ChatManager._ensure_node_chat_binds()
+	if not ChatManager.global_message_received.is_connected(_on_global_message):
+		ChatManager.global_message_received.connect(_on_global_message)
+	if not ChatManager.message_sent.is_connected(_on_message_sent):
+		ChatManager.message_sent.connect(_on_message_sent)
+	ChatManager._debug_subs("messages_page_ready")
 	await _boot()
 
 
 func _exit_tree() -> void:
-	if RealtimeManager.chat_event.is_connected(_on_chat_event):
-		RealtimeManager.chat_event.disconnect(_on_chat_event)
+	if ChatManager.global_message_received.is_connected(_on_global_message):
+		ChatManager.global_message_received.disconnect(_on_global_message)
+	if ChatManager.message_sent.is_connected(_on_message_sent):
+		ChatManager.message_sent.disconnect(_on_message_sent)
 
 
-func _on_chat_event(entity: String, _data: Dictionary) -> void:
-	if entity == "PrivateMessagePoll" and not _active_convo.is_empty() and not _global_mode:
+func _on_global_message(message: Dictionary) -> void:
+	if not _global_mode:
+		return
+	_append_global_row(message, "server_broadcast")
+
+
+func _on_message_sent(message: Dictionary) -> void:
+	if _global_mode:
+		_append_global_row(message, "local_send")
+		return
+	# Private sends still refresh the active thread from cache/history.
+	if not _active_convo.is_empty() or not _recipient_id.is_empty():
 		await _load_thread()
-	elif entity == "ChatMessage" and _global_mode:
-		await _load_global_thread()
-	elif entity == "ChatMessage" and not _global_mode:
-		await _load_sidebar()
+
+
+func _append_global_row(message: Dictionary, source: String) -> void:
+	if not is_inside_tree() or _thread == null or not is_instance_valid(_thread):
+		return
+	var mid := ChatManager.message_id_of(message)
+	if mid.is_empty():
+		return
+	if _rendered_global_ids.has(mid):
+		if ChatManager.CHAT_DEBUG:
+			print("[chat-ui] skip row id=%s source=%s (already rendered)" % [mid, source])
+		return
+	_rendered_global_ids[mid] = true
+	# Drop empty-state placeholder if present.
+	if _thread.get_child_count() == 1:
+		var only := _thread.get_child(0)
+		if only is CenterContainer:
+			only.queue_free()
+	var me := ChatManager.char_id()
+	var mine := str(message.get("sender_id", "")) == me
+	var who := "You" if mine else str(message.get("sender_name", "?"))
+	_thread.add_child(_message_row(
+		str(message.get("content", "")),
+		who,
+		mine,
+		str(message.get("sender_guild_tag", ""))
+	))
+	if ChatManager.CHAT_DEBUG:
+		print("[chat-ui] render row id=%s source=%s sender=%s" % [mid, source, who])
+	_scroll_thread_bottom()
 
 
 func _boot() -> void:
@@ -549,7 +593,7 @@ func _on_send() -> void:
 		_compose.text = ""
 		_on_compose_changed("")
 		_status.text = ""
-		await _load_global_thread()
+		# Row is inserted once via message_sent / WS upsert — do not reload the whole thread.
 		return
 
 	var rid := _recipient_id
@@ -586,14 +630,30 @@ func _on_pick_friend() -> void:
 
 
 func _load_global_thread() -> void:
+	_global_load_token += 1
+	var token := _global_load_token
 	for c in _thread.get_children():
 		c.queue_free()
+	_rendered_global_ids.clear()
 	var msgs: Array = await ChatManager.load_global()
+	if token != _global_load_token:
+		if ChatManager.CHAT_DEBUG:
+			print("[chat-ui] stale history render ignored token=%d" % token)
+		return
+	if not is_inside_tree() or _thread == null or not is_instance_valid(_thread):
+		return
 	if msgs.is_empty():
 		_thread.add_child(_empty_state("Channel clear — be the first to broadcast."))
 		return
 	var me := ChatManager.char_id()
 	for m in msgs:
+		if typeof(m) != TYPE_DICTIONARY:
+			continue
+		var mid := ChatManager.message_id_of(m)
+		if not mid.is_empty() and _rendered_global_ids.has(mid):
+			continue
+		if not mid.is_empty():
+			_rendered_global_ids[mid] = true
 		var mine := str(m.get("sender_id", "")) == me
 		var who := "You" if mine else str(m.get("sender_name", "?"))
 		_thread.add_child(_message_row(
@@ -602,4 +662,6 @@ func _load_global_thread() -> void:
 			mine,
 			str(m.get("sender_guild_tag", ""))
 		))
+	if ChatManager.CHAT_DEBUG:
+		print("[chat-ui] history rendered count=%d source=cached_history" % _rendered_global_ids.size())
 	_scroll_thread_bottom()

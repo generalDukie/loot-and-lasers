@@ -798,6 +798,9 @@ func clear_session() -> void:
 	user = {}
 	_clear_node_session_only()
 	GameManager.clear_active_character("auth_session_cleared")
+	if AudioManager != null:
+		AudioManager.stop_station_ambient()
+		AudioManager.stop_music()
 	auth_changed.emit(false)
 	user_changed.emit(user)
 

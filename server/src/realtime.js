@@ -1,4 +1,4 @@
-import { verifyToken, getUserById, getUserByNakamaId } from "./auth.js";
+import { verifyToken, getUserById, getUserByNakamaId, gameplaySessionFromPayload } from "./auth.js";
 
 const subscribers = new Set();
 
@@ -77,12 +77,39 @@ export function broadcastWalletUpdated(accountId, data) {
   }
 }
 
+/** Close live sockets for an account — used when a newer login claims the session. */
+export function kickAccountSessions(accountId, { reason = "session_replaced", message = "Signed in elsewhere. Please log in again." } = {}) {
+  if (!accountId) return 0;
+  const payload = JSON.stringify({
+    entity: "Auth",
+    type: "session_kicked",
+    data: { reason, message },
+  });
+  let kicked = 0;
+  for (const sub of subscribers) {
+    if (sub.user?.id !== accountId) continue;
+    kicked += 1;
+    try {
+      if (sub.ws.readyState === 1) {
+        sub.ws.send(payload);
+      }
+      sub.ws.close(4403, reason);
+    } catch {
+      /* ignore */
+    }
+    subscribers.delete(sub);
+  }
+  return kicked;
+}
+
 /** Authenticate a WS upgrade token; returns user or null. */
 export function userFromWsToken(token) {
   if (!token) return null;
   const payload = verifyToken(token);
   if (!payload?.sub) return null;
-  return payload.token_use === "nakama_gameplay"
-    ? getUserByNakamaId(payload.sub)
-    : getUserById(payload.sub);
+  if (payload.token_use === "nakama_gameplay") {
+    const resolved = gameplaySessionFromPayload(payload);
+    return resolved.ok ? resolved.user : null;
+  }
+  return getUserById(payload.sub);
 }

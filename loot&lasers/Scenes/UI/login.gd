@@ -36,6 +36,10 @@ func _ready() -> void:
 		"[Login] Nakama auth env=%s host=%s:%s method=email (no :8787)"
 		% [diag.get("environment", ""), diag.get("host", ""), diag.get("port", "")]
 	)
+	var kicked := str(AuthManager.session_superseded_message).strip_edges()
+	if not kicked.is_empty():
+		call_deferred("_show_error", kicked)
+		AuthManager.session_superseded_message = ""
 
 
 func _build() -> void:

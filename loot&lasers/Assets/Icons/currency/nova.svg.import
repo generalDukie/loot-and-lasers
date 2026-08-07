@@ -16,7 +16,7 @@ dest_files=["res://.godot/imported/nova.svg-caf7d7acd09b5b57df413b00c4d7165d.cte
 [params]
 
 compress/mode=0
-compress/high_quality=false
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
@@ -38,6 +38,6 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=4.0
+svg/scale=16.0
 editor/scale_with_editor_scale=false
 editor/convert_colors_with_editor_theme=false

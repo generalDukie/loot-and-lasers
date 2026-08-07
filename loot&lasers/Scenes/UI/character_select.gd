@@ -333,6 +333,16 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	btn.disabled = _switching
 	var cid := str(character.get("id", ""))
 	btn.pressed.connect(func() -> void: _select_card(cid))
+	btn.gui_input.connect(func(ev: InputEvent) -> void:
+		if _busy or _switching:
+			return
+		if ev is InputEventMouseButton:
+			var mb := ev as InputEventMouseButton
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and mb.double_click:
+				_select_card(cid)
+				_enter(character)
+				get_viewport().set_input_as_handled()
+	)
 	_style_card(btn, is_selected)
 
 	var row := HBoxContainer.new()

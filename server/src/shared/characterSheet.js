@@ -4,12 +4,18 @@
  * live in characterAttributes.js (statEngine re-export).
  */
 import { CLASS_BASE_STATS } from "./economyFormulas.js";
+import { resolvePermanentAttributes } from "./statEngine.js";
 export {
   buildAttributeSheet,
   loadEquippedItemsForCharacter,
   readPermanentAttributes,
   ATTR_KEYS,
 } from "./characterAttributes.js";
+export {
+  ensureCharacterPermanentStats,
+  repairPermanentAttributes,
+  permanentStatsNeedClassBaseRepair,
+} from "./characterStatsRepair.js";
 
 /** Keys every server-authored Character create must expose after sanitization. */
 export const REQUIRED_CHARACTER_CREATE_KEYS = Object.freeze([
@@ -37,10 +43,7 @@ export function classBaseStats(className) {
  * Read persisted inputs other systems need without inventing derived combat.
  */
 export function readPersistedSheetInputs(character = {}) {
-  const stats =
-    character?.stats && typeof character.stats === "object"
-      ? { ...character.stats }
-      : {};
+  const stats = resolvePermanentAttributes(character);
   const purchases =
     character?.attribute_purchases_by_stat &&
     typeof character.attribute_purchases_by_stat === "object"

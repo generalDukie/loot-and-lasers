@@ -28,6 +28,8 @@ static func make(stat: String, size_px: float = DEFAULT_SIZE) -> TextureRect:
 	tr.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	tr.texture_repeat = CanvasItem.TEXTURE_REPEAT_DISABLED
 	tr.texture = texture(stat)
 	# Preserve authored badge colors.
 	tr.modulate = Color.WHITE

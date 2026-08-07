@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { migrateLegacyUserSessionColumns } from "./accountServerSession.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, "../data");
@@ -95,6 +96,12 @@ db.exec(`
     db.exec("ALTER TABLE users ADD COLUMN nakama_user_id TEXT");
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_nakama_user_id ON users(nakama_user_id)");
+  if (!cols.has("session_version")) {
+    db.exec("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!cols.has("active_nakama_session_key")) {
+    db.exec("ALTER TABLE users ADD COLUMN active_nakama_session_key TEXT");
+  }
   const duplicates = db.prepare(`
     SELECT nakama_user_id, COUNT(*) AS count
     FROM users
@@ -380,6 +387,76 @@ db.exec(`
     console.error("[migrate] Nova dual balances failed:", err);
     throw err;
   }
+})();
+
+/** One-time repair — merge missing class-base stats (50-point spread) for legacy rows. */
+(function migrateClassBaseStatsV1() {
+  const META_KEY = "class_base_stats_repair_v1";
+  const done = db.prepare("SELECT value FROM app_meta WHERE key = ?").get(META_KEY);
+  if (done?.value === "done") return;
+
+  const CLASS_BASE = {
+    Vanguard: { strength: 15, agility: 8, intellect: 6, vitality: 14, luck: 7 },
+    "Astral Warden": { strength: 15, agility: 8, intellect: 6, vitality: 14, luck: 7 },
+    "Shadow Operative": { strength: 7, agility: 15, intellect: 7, vitality: 11, luck: 10 },
+    "Void Runner": { strength: 7, agility: 15, intellect: 7, vitality: 11, luck: 10 },
+    Technomancer: { strength: 6, agility: 8, intellect: 15, vitality: 13, luck: 8 },
+    "Cosmic Engineer": { strength: 6, agility: 8, intellect: 15, vitality: 13, luck: 8 },
+  };
+  const ATTR_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
+
+  const sumStats = (stats) =>
+    ATTR_KEYS.reduce((s, k) => s + Math.max(0, Math.round(Number(stats?.[k]) || 0)), 0);
+
+  const repairRow = (character) => {
+    const base = CLASS_BASE[character?.class];
+    if (!base) return { stats: character?.stats || {}, repaired: false };
+    const current = {};
+    for (const k of ATTR_KEYS) {
+      current[k] = Math.max(0, Math.round(Number(character?.stats?.[k]) || 0));
+    }
+    if (sumStats(current) >= 50) return { stats: current, repaired: false };
+    const repaired = {};
+    for (const k of ATTR_KEYS) {
+      repaired[k] = (base[k] || 0) + (current[k] || 0);
+    }
+    return { stats: repaired, repaired: true };
+  };
+
+  const rows = db.prepare("SELECT id, data FROM entities WHERE type = 'Character'").all();
+  const update = db.prepare("UPDATE entities SET data = ?, updated_date = ? WHERE id = ? AND type = 'Character'");
+  const now = new Date().toISOString();
+  let repaired = 0;
+
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const row of rows) {
+      let data;
+      try {
+        data = JSON.parse(row.data);
+      } catch {
+        continue;
+      }
+      const { stats, repaired: needsRepair } = repairRow(data);
+      if (!needsRepair) continue;
+      data.stats = stats;
+      update.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
+      repaired += 1;
+    }
+    db.prepare(
+      "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run(META_KEY, "done");
+    db.exec("COMMIT");
+    console.log(`[migrate] Class base stats repair applied (${META_KEY}) repaired=${repaired}`);
+  } catch (err) {
+    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+    console.error("[migrate] Class base stats repair failed:", err);
+    throw err;
+  }
+})();
+
+(function migrateAccountServerSessionsFromUsers() {
+  migrateLegacyUserSessionColumns();
 })();
 
 import { clock } from "./shared/time/clock.js";

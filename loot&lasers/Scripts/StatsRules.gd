@@ -21,6 +21,8 @@ const CLASS_BASE_STATS := {
 	"Cosmic Engineer": {"strength": 6, "agility": 8, "intellect": 15, "vitality": 13, "luck": 8},
 }
 
+const CLASS_BASE_STAT_TOTAL := 50
+
 
 static func primary_stat(class_key: String) -> String:
 	return str(MissionCombat.PRIMARY_STAT.get(class_key, "strength"))
@@ -38,17 +40,14 @@ static func raw_stats(character: Dictionary) -> Dictionary:
 	if typeof(raw) == TYPE_DICTIONARY:
 		for k in ATTR_KEYS:
 			out[k] = int((raw as Dictionary).get(k, 0))
-	# If the sheet has no stored totals yet, fall back to class bases so UI isn't all zeros.
-	var any := false
+	var class_key := str(character.get("class", "Vanguard"))
+	var base: Dictionary = CLASS_BASE_STATS.get(class_key, CLASS_BASE_STATS["Vanguard"])
+	var cur_sum := 0
 	for k in ATTR_KEYS:
-		if int(out[k]) > 0:
-			any = true
-			break
-	if not any:
-		var class_key := str(character.get("class", "Vanguard"))
-		var base: Dictionary = CLASS_BASE_STATS.get(class_key, CLASS_BASE_STATS["Vanguard"])
+		cur_sum += int(out[k])
+	if cur_sum < CLASS_BASE_STAT_TOTAL:
 		for k in ATTR_KEYS:
-			out[k] = int(base.get(k, 0))
+			out[k] = int(base.get(k, 0)) + int(out[k])
 	return out
 
 
@@ -69,11 +68,10 @@ static func next_cost(character: Dictionary, stat: String) -> int:
 	return point_cost(purchase_count(character, stat) + 1)
 
 
-## Permanent totals: base/purchased + gear + race (no stims).
+## Permanent totals: base/purchased + gear (no stims). Race is flavor-only.
 static func permanent_totals(character: Dictionary, equipped: Array = []) -> Dictionary:
 	var base := raw_stats(character)
-	var merged := MissionCombat.merge_gear_stats(base, equipped)
-	return MissionCombat.apply_race_bonus(merged, character.get("race", null))
+	return MissionCombat.merge_gear_stats(base, equipped)
 
 
 ## Naked totals (no gear) for the green +bonus delta.

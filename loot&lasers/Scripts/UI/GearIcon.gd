@@ -2,6 +2,8 @@ class_name GearIcon
 extends Control
 ## Procedural gear glyph — mirrors web GearVisual / GearArtSvg silhouette role.
 
+const REF_SIZE := 40.0
+
 var item: Dictionary = {}
 var _variant := 0
 
@@ -42,15 +44,22 @@ func set_item(for_item: Dictionary) -> void:
 func _draw() -> void:
 	if size.x < 4.0 or size.y < 4.0:
 		return
+	var box := minf(size.x, size.y)
+	var scale := box / REF_SIZE
+	var ox := (size.x - REF_SIZE * scale) * 0.5
+	var oy := (size.y - REF_SIZE * scale) * 0.5
+	draw_set_transform(Vector2(ox, oy), 0.0, Vector2(scale, scale))
+	_draw_icon(Vector2(REF_SIZE * 0.5, REF_SIZE * 0.5))
+
+
+func _draw_icon(cx: float, cy: float) -> void:
 	var rarity := str(item.get("rarity", "common"))
 	var tint := ClientUi.rarity_color(rarity)
 	var itype := str(item.get("type", "weapon"))
-	var cx := size.x * 0.5
-	var cy := size.y * 0.5
 	# Plate.
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.04, 0.05, 0.08, 0.95), true)
-	draw_rect(Rect2(1, 1, size.x - 2, size.y - 2), Color(tint, 0.22), false, 1.5)
-	draw_circle(Vector2(cx, cy), minf(size.x, size.y) * 0.38, Color(tint, 0.12))
+	draw_rect(Rect2(Vector2.ZERO, Vector2(REF_SIZE, REF_SIZE)), Color(0.04, 0.05, 0.08, 0.95), true)
+	draw_rect(Rect2(1, 1, REF_SIZE - 2, REF_SIZE - 2), Color(tint, 0.22), false, 1.5)
+	draw_circle(Vector2(cx, cy), REF_SIZE * 0.38, Color(tint, 0.12))
 	match itype:
 		"weapon":
 			_draw_weapon(cx, cy, tint)

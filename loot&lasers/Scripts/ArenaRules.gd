@@ -72,17 +72,8 @@ static func expected_player_attributes(level: int) -> int:
 
 
 static func merge_stats(character: Dictionary, items: Array = []) -> Dictionary:
-	var base: Dictionary = {}
-	var raw: Variant = character.get("stats", {})
-	if typeof(raw) == TYPE_DICTIONARY:
-		base = (raw as Dictionary).duplicate()
-	else:
-		base = {"strength": 0, "agility": 0, "intellect": 0, "vitality": 0, "luck": 0}
-	# Match web computeTotalStats: gear on base first, then race % on the total.
-	return MissionCombat.apply_race_bonus(
-		MissionCombat.merge_gear_stats(base, items),
-		character.get("race", null)
-	)
+	var base := StatsRules.raw_stats(character)
+	return MissionCombat.merge_gear_stats(base, items)
 
 
 static func compute_power(character: Dictionary, items: Array = []) -> int:

@@ -63,31 +63,26 @@ const RACE_CATALOG := {
 		"emoji": "🐉",
 		"tagline": "Scaled hotheads from the Ember Nebula",
 		"lore": "Dragonfolk with armor for skin and a temper for fuel. They punch first, negotiate later, and insist the smoking crater was 'defensive.' Great at war. Terrible at dinner parties.",
-		"bonuses": {"strength": 0.03, "vitality": 0.02},
 	},
 	"Cognati": {
 		"emoji": "🤖",
 		"tagline": "Walking spreadsheets with laser opinions",
 		"lore": "Half chrome, half attitude, fully convinced they already simulated this conversation. They run the numbers, win the argument, then blue-screen when someone asks how their day was.",
-		"bonuses": {"intellect": 0.03, "agility": 0.02},
 	},
 	"Luminae": {
 		"emoji": "🌟",
 		"tagline": "Living disco balls with a hero complex",
 		"lore": "Starlight given legs and an ego. They light up corridors, blind friends by accident, and somehow always land on their feet. Bring sunglasses. And maybe a mirror.",
-		"bonuses": {"intellect": 0.02, "luck": 0.03},
 	},
 	"Grothak": {
 		"emoji": "💪",
 		"tagline": "High-gravity tanks who treat walls as suggestions",
 		"lore": "Grew up where the air weighs more than your regrets. Slow to start, impossible to stop, and vaguely offended by doors. If it needs smashing, hire a Grothak. If it needs subtlety… also hire a Grothak, then apologize.",
-		"bonuses": {"strength": 0.02, "vitality": 0.03},
 	},
 	"Synthara": {
 		"emoji": "🎭",
 		"tagline": "Face-swappers from the Shadow Reach",
 		"lore": "Professional strangers. They borrow faces, walk into restricted zones, and leave with the goods plus your dignity. Trust them? Sure. Just count the spoons afterward.",
-		"bonuses": {"agility": 0.03, "luck": 0.02},
 	},
 }
 
@@ -209,14 +204,9 @@ static func class_info(class_name_key: String) -> Dictionary:
 	return info
 
 
-static func preview_stats(race_name: String, class_name_key: String) -> Dictionary:
+static func preview_stats(_race_name: String, class_name_key: String) -> Dictionary:
 	var cls := class_info(class_name_key)
-	var stats: Dictionary = cls.get("baseStats", {}).duplicate()
-	var race := race_info(race_name)
-	var bonuses: Dictionary = race.get("bonuses", {})
-	for k in bonuses.keys():
-		stats[k] = int(round(float(stats.get(k, 0)) * (1.0 + float(bonuses[k]))))
-	return stats
+	return (cls.get("baseStats", {}) as Dictionary).duplicate()
 
 
 const WEAPON_EMOJIS := {

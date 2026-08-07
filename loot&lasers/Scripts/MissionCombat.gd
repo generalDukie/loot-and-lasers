@@ -25,14 +25,6 @@ const ARCHETYPE_SHARES := {
 	"TECH": {"intellect": 0.35, "vitality": 0.25, "luck": 0.2, "strength": 0.1, "agility": 0.1},
 }
 
-const RACE_BONUSES := {
-	"Zyrathi": {"strength": 0.03, "vitality": 0.02},
-	"Cognati": {"intellect": 0.03, "agility": 0.02},
-	"Luminae": {"intellect": 0.02, "luck": 0.03},
-	"Grothak": {"strength": 0.02, "vitality": 0.03},
-	"Synthara": {"agility": 0.03, "luck": 0.02},
-}
-
 const PRIMARY_STAT := {
 	"Vanguard": "strength",
 	"Astral Warden": "strength",
@@ -144,8 +136,7 @@ static func generate_encounter(character: Dictionary, mission: Dictionary = {}) 
 	var budget := enemy_budget(level)
 	var stats := distribute_attrs(budget, archetype)
 	var class_key: String = ARCHETYPE_CLASS[archetype]
-	var race_keys := RACE_BONUSES.keys()
-	var race_key: String = race_keys[randi() % race_keys.size()]
+	var race_key: String = GameData.RACES[randi() % GameData.RACES.size()]
 	return {
 		"id": "mission-foe-%s" % Time.get_unix_time_from_system(),
 		"name": ENCOUNTER_NAMES[randi() % ENCOUNTER_NAMES.size()],
@@ -182,16 +173,6 @@ static func base_damage(primary: float, damage_base: float = DAMAGE_BASE) -> flo
 	return damage_base + DAMAGE_COEFF * pow(p, DAMAGE_EXP)
 
 
-static func apply_race_bonus(stats: Dictionary, race: Variant) -> Dictionary:
-	var out := stats.duplicate()
-	if race == null:
-		return out
-	var bonuses: Dictionary = RACE_BONUSES.get(str(race), {})
-	for k in bonuses.keys():
-		out[k] = int(round(float(out.get(k, 0)) * (1.0 + float(bonuses[k]))))
-	return out
-
-
 static func merge_gear_stats(base_stats: Dictionary, items: Array) -> Dictionary:
 	var out := base_stats.duplicate()
 	for it in items:
@@ -215,13 +196,12 @@ static func damage_archetype(class_key: String) -> String:
 
 
 static func build_fighter(character: Dictionary, items: Array, side: String) -> Dictionary:
-	var base: Dictionary = character.get("stats", {}) if typeof(character.get("stats", {})) == TYPE_DICTIONARY else {}
+	var base: Dictionary = StatsRules.raw_stats(character)
 	var merged := merge_gear_stats(base, items)
 	var suppress := bool(character.get("suppressClassPassive", false)) \
 		or bool(character.get("missionEnemy", false)) \
 		or bool(character.get("dungeonEnemy", false))
-	var race = null if suppress else character.get("race", null)
-	var stats := apply_race_bonus(merged, race)
+	var stats := merged.duplicate()
 	var class_key := str(character.get("class", "Vanguard"))
 	var level := maxi(1, int(character.get("level", 1)))
 	var arch := damage_archetype(class_key)

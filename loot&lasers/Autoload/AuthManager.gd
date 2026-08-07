@@ -11,6 +11,7 @@ signal node_bridge_completed(result: Dictionary)
 const CONFIG_PATH := "user://godot_client.cfg"
 const BRIDGE_FLAG_KEY := "nakama_node_bridge_v1"
 const NODE_REFRESH_SKEW_SEC := 90
+const CODE_AUTH_SESSION_INVALID := "AUTH_SESSION_INVALID"
 
 var access_token: String = ""
 var user: Dictionary = {}
@@ -20,6 +21,8 @@ var node_token_expires_at := 0
 var node_token_nakama_user_id := ""
 var _bridge_in_progress := false
 var _node_auth_generation := 0
+var _superseded_handling := false
+var session_superseded_message := ""
 
 
 func _ready() -> void:
@@ -83,7 +86,7 @@ func _authenticate_email(email: String, password: String, create: bool) -> Dicti
 	# Node gameplay token if the exchange is unavailable.
 	_clear_node_session_only()
 	var clean_email := email.strip_edges().to_lower()
-	var bridge: Dictionary = await bridge_node_session(clean_email)
+	var bridge: Dictionary = await bridge_node_session(clean_email, "", true)
 	last_auth_diagnostics["node_bridge"] = bool(bridge.get("success", false))
 	if not bool(bridge.get("success", false)):
 		# Keep Nakama session; surface bridge failure so UI can show a useful error.
@@ -133,7 +136,7 @@ func _authenticate_email(email: String, password: String, create: bool) -> Dicti
 
 
 ## Exchange Nakama session for Node JWT (creates/links Node user as needed).
-func bridge_node_session(email: String = "", _password: String = "") -> Dictionary:
+func bridge_node_session(email: String = "", _password: String = "", force_claim: bool = false) -> Dictionary:
 	if GameApiClient == null:
 		return {"success": false, "error": "GameApiClient missing", "status": 0}
 	if not is_nakama_authenticated():
@@ -152,6 +155,7 @@ func bridge_node_session(email: String = "", _password: String = "") -> Dictiona
 	var body := {
 		"nakama_token": token,
 		"email": email.strip_edges().to_lower(),
+		"force_claim": force_claim,
 	}
 	_bridge_in_progress = true
 	var bridge_generation := _node_auth_generation
@@ -166,12 +170,20 @@ func bridge_node_session(email: String = "", _password: String = "") -> Dictiona
 	if not res.ok:
 		node_bridge_ok = false
 		var err := str(res.get("error", "Node bridge failed"))
-		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
-			err = str(res.data["error"])
+		var code := str(res.get("code", ""))
+		if typeof(res.get("data", null)) == TYPE_DICTIONARY:
+			var data: Dictionary = res.data
+			if data.has("error"):
+				err = str(data["error"])
+			if code.is_empty() and data.has("code"):
+				code = str(data["code"])
+		if code == CODE_AUTH_SESSION_INVALID:
+			await handle_session_superseded(err)
 		return _finish_node_bridge({
 			"success": false,
 			"error": err,
-			"status": int(res.get("status", 0)),
+			"status": int(res.get("status", 401)),
+			"code": code,
 		})
 
 	var response_nakama_id := ""
@@ -258,11 +270,14 @@ func refresh_node_gameplay_session() -> Dictionary:
 	var email := ""
 	if NakamaManager.has_method("get_account_email"):
 		email = str(NakamaManager.get_account_email()).strip_edges().to_lower()
-	var bridged: Dictionary = await bridge_node_session(email)
-	if not bridged.get("success", false) and int(bridged.get("status", 0)) == 401:
-		await logout_nakama()
-		clear_session()
-		GameManager.go_login()
+	var bridged: Dictionary = await bridge_node_session(email, "", false)
+	if not bridged.get("success", false):
+		if str(bridged.get("code", "")) == CODE_AUTH_SESSION_INVALID:
+			return bridged
+		if int(bridged.get("status", 0)) == 401:
+			await logout_nakama()
+			clear_session()
+			GameManager.go_login()
 	return bridged
 
 
@@ -619,6 +634,26 @@ func dismiss_active_buff(stat: String, expires_at: String = "", name: String = "
 func logout() -> void:
 	await logout_nakama()
 	clear_session()
+
+
+## Another device claimed this account — end local session without re-bridging.
+func handle_session_superseded(message: String = "") -> void:
+	if _superseded_handling:
+		return
+	_superseded_handling = true
+	session_superseded_message = message if not message.is_empty() else "Signed in elsewhere on this server. Please log in again."
+	if RealtimeManager != null and RealtimeManager.has_method("stop"):
+		RealtimeManager.stop()
+	elif RealtimeManager != null and RealtimeManager.has_method("stop_node"):
+		RealtimeManager.stop_node()
+	_clear_node_session_only()
+	await logout_nakama()
+	clear_session()
+	auth_changed.emit(false)
+	user_changed.emit({})
+	if GameManager != null and GameManager.has_method("go_login"):
+		GameManager.go_login()
+	_superseded_handling = false
 
 
 ## Restore Nakama email session, bridge Node JWT, then profile/wallet.

@@ -10,6 +10,8 @@ signal zoom_changed(zooming: bool)
 
 const WORMHOLE_COLOR := Color("#C084FC")
 const WORMHOLE_CYAN := Color("#67E8F9")
+## Light red padlock for level-gated worlds and sealed wormhole.
+const LEVEL_LOCK_TINT := Color("#FCA5A5")
 const ZOOM_NONE := 0
 const ZOOM_WORMHOLE := -1
 const ZOOM_SCALE := 2.85 # web 2.4; slightly further for inspect readability
@@ -215,11 +217,17 @@ func _rebuild_buttons() -> void:
 		btn.custom_minimum_size = Vector2(59, 59)
 		btn.z_index = 10
 		btn.mouse_filter = Control.MOUSE_FILTER_STOP
-		if locked:
-			UiIcon.set_button_icon(btn, "lock", Color(ClientUi.MUTED, 0.9), 22.0)
-		else:
+		if level_locked:
+			btn.text = ""
+			btn.icon = null
+		elif not locked:
 			btn.icon = null
 			btn.text = "✓" if cleared else str(planet.get("icon", "🪐"))
+			btn.add_theme_font_size_override("font_size", 23)
+		else:
+			# Story-locked but level-eligible — keep world icon, no padlock.
+			btn.icon = null
+			btn.text = str(planet.get("icon", "🪐"))
 			btn.add_theme_font_size_override("font_size", 23)
 		btn.disabled = locked
 		btn.mouse_default_cursor_shape = (
@@ -246,6 +254,8 @@ func _rebuild_buttons() -> void:
 		move_child(btn, 0)
 		_buttons[pid] = btn
 		_style_planet_button(btn, tint, locked, current, false, cleared)
+		if level_locked:
+			_apply_level_lock_icon(btn)
 
 	_wormhole_button = Button.new()
 	_wormhole_button.name = "Wormhole"
@@ -257,7 +267,8 @@ func _rebuild_buttons() -> void:
 		_wormhole_button.text = "∞"
 		_wormhole_button.add_theme_font_size_override("font_size", 33)
 	else:
-		UiIcon.set_button_icon(_wormhole_button, "lock", Color(ClientUi.MUTED, 0.9), 36.0)
+		_wormhole_button.text = ""
+		_wormhole_button.icon = null
 	_wormhole_button.disabled = not in_infinite
 	_wormhole_button.tooltip_text = (
 		"Inspect Wormhole · Depth %s" % maxi(1, active - 10)
@@ -268,6 +279,8 @@ func _rebuild_buttons() -> void:
 	add_child(_wormhole_button)
 	move_child(_wormhole_button, 0)
 	_style_wormhole_button(in_infinite, false)
+	if not in_infinite:
+		_apply_level_lock_icon(_wormhole_button)
 
 	# Overlays always on top
 	if is_instance_valid(_dim):
@@ -513,8 +526,9 @@ func _refresh_button_looks() -> void:
 		var cleared: bool = in_infinite or pid < story_front
 		var current: bool = not in_infinite and pid == story_front
 		var is_selected: bool = not DungeonManager.viewing_wormhole and pid == selected
-		if locked:
-			UiIcon.set_button_icon(btn, "lock", Color(ClientUi.MUTED, 0.9), 22.0)
+		if level_locked:
+			btn.text = ""
+			btn.icon = null
 		elif cleared and _zoom_id != pid:
 			btn.icon = null
 			btn.text = "✓"
@@ -524,17 +538,36 @@ func _refresh_button_looks() -> void:
 			btn.text = str(planet.get("icon", "🪐"))
 			btn.add_theme_font_size_override("font_size", 23)
 		_style_planet_button(btn, tint, locked, current, is_selected, cleared)
+		if level_locked:
+			_apply_level_lock_icon(btn)
 	if is_instance_valid(_wormhole_button):
 		if active > 10:
 			_wormhole_button.icon = null
 			_wormhole_button.text = "∞"
 			_wormhole_button.add_theme_font_size_override("font_size", 33)
 		else:
-			UiIcon.set_button_icon(_wormhole_button, "lock", Color(ClientUi.MUTED, 0.9), 36.0)
+			_wormhole_button.text = ""
+			_wormhole_button.icon = null
 		_style_wormhole_button(
 			active > 10,
 			DungeonManager.viewing_wormhole or _zoom_id == ZOOM_WORMHOLE
 		)
+		if active <= 10:
+			_apply_level_lock_icon(_wormhole_button)
+
+
+func _lock_icon_size_for_button(btn: Button) -> float:
+	var edge := minf(btn.custom_minimum_size.x, btn.custom_minimum_size.y)
+	if edge < 8.0:
+		return 22.0
+	return clampf(edge * 0.44, 18.0, 42.0)
+
+
+func _apply_level_lock_icon(btn: Button) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	var sz := _lock_icon_size_for_button(btn)
+	UiIcon.set_button_icon(btn, "lock", LEVEL_LOCK_TINT, sz)
 
 
 func _style_focus_hit(btn: Button, tint: Color) -> void:
@@ -622,6 +655,7 @@ func _position_buttons() -> void:
 		return
 	var nodes: Array = layout.get("nodes", [])
 	var zooming := _zoom_id != ZOOM_NONE
+	var level := int(GameManager.active_character.get("level", 1))
 	for i in nodes.size():
 		var pid := i + 1
 		var btn: Button = _buttons.get(pid)
@@ -638,6 +672,9 @@ func _position_buttons() -> void:
 			# Hit target only — surface art is drawn in _draw_focus_planet.
 			btn.text = ""
 			btn.add_theme_font_size_override("font_size", 1)
+		elif not DungeonRules.is_unlocked(pid, level):
+			btn.text = ""
+			_apply_level_lock_icon(btn)
 		else:
 			btn.add_theme_font_size_override("font_size", 23)
 	if is_instance_valid(_wormhole_button):
@@ -648,6 +685,9 @@ func _position_buttons() -> void:
 		_wormhole_button.custom_minimum_size = wsz
 		_wormhole_button.size = wsz
 		_wormhole_button.position = wp - wsz * 0.5
+		if DungeonManager.current_planet_id() <= 10:
+			_wormhole_button.text = ""
+			_apply_level_lock_icon(_wormhole_button)
 
 
 func _draw() -> void:

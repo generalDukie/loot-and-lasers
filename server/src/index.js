@@ -24,6 +24,7 @@ import {
 import { assertCanUnequipToBag } from "./shared/inventoryGrant.js";
 import { db, nowIso } from "./db.js";
 import { applyCharacterCreationStartingGrant } from "./shared/currencyService.js";
+import { ensureCharacterPermanentStats } from "./shared/characterStatsRepair.js";
 import { ensureDefaultSchedules } from "./scheduling/bootstrap.js";
 import { startScheduler } from "./scheduling/worker.js";
 import { createTimeRouter, createScheduleRouter } from "./routes/time.js";
@@ -210,6 +211,10 @@ app.get("/api/entities/:type/:id", requireAuth, (req, res) => {
     const doc = store.get(req.params.id);
     if (!doc) return res.status(404).json({ error: "Not found" });
     assertCanRead(req.user, req.params.type, doc);
+    if (req.params.type === "Character") {
+      const ensured = ensureCharacterPermanentStats(doc);
+      return res.json(ensured.character);
+    }
     res.json(doc);
   } catch (err) {
     sendApiError(res, err, { fallbackMessage: "Could not read entity" });
@@ -269,6 +274,8 @@ app.post("/api/entities/:type", requireAuth, enforceMaintenanceWrites, (req, res
         requestId,
       });
       created = grant.character;
+      const ensured = ensureCharacterPermanentStats(created);
+      created = ensured.character;
     }
     if (fingerprint) {
       const account = db.prepare("SELECT active_character_id FROM users WHERE id = ?").get(req.user.id);

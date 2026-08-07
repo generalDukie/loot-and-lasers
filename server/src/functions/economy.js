@@ -96,6 +96,7 @@ import {
   buildAttributeSheet,
   loadEquippedItemsForCharacter,
 } from "../shared/characterAttributes.js";
+import { ensureCharacterPermanentStats } from "../shared/characterStatsRepair.js";
 import { settleMissionItemChain } from "../shared/missionRewards.js";
 import { serializeShopPresentation, assertShopPurchaseClientSafe, shopMetaHasStock } from "../shared/shopService.js";
 import {
@@ -356,7 +357,9 @@ export async function UnequipItem(user, body = {}) {
 /** Read-only authoritative attribute + derived-stat sheet for the selected Character. */
 export async function GetCharacterAttributes(user, _body = {}) {
   try {
-    const character = requireMyChar(user);
+    let character = requireMyChar(user);
+    const ensured = ensureCharacterPermanentStats(character);
+    character = ensured.character;
     const equipped = loadEquippedItemsForCharacter(character.id);
     const sheet = buildAttributeSheet(character, equipped);
     return {
@@ -366,6 +369,7 @@ export async function GetCharacterAttributes(user, _body = {}) {
         sheet,
         character,
         equipped_items: equipped,
+        stats_repaired: ensured.repaired,
       },
     };
   } catch (err) {

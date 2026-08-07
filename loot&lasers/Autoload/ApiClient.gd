@@ -18,6 +18,7 @@ const DEFAULT_SAFE_RETRIES := 1
 const RETRY_BACKOFF_SEC := 0.25
 
 const CODE_UNAUTHORIZED := "UNAUTHORIZED"
+const CODE_AUTH_SESSION_INVALID := "AUTH_SESSION_INVALID"
 const CODE_FORBIDDEN := "FORBIDDEN"
 const CODE_NOT_FOUND := "NOT_FOUND"
 const CODE_CONFLICT := "CONFLICT"
@@ -235,6 +236,10 @@ func _request_once(
 		_diag_fail(method, path, str(envelope.get("request_id", request_id)), status_code, str(envelope.get("error", "")), str(envelope.get("code", "")), duration_ms)
 
 	if status_code == 401 and authed and allow_reauth and AuthManager != null:
+		if str(envelope.get("code", "")) == CODE_AUTH_SESSION_INVALID:
+			if AuthManager.has_method("handle_session_superseded"):
+				await AuthManager.handle_session_superseded(str(envelope.get("error", "")))
+			return envelope
 		var refreshed: Dictionary = await AuthManager.refresh_node_gameplay_session()
 		if refreshed.get("success", false):
 			return await _request_once(method, path, body, authed, timeout_sec, false)

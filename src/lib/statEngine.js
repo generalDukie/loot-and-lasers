@@ -3,7 +3,6 @@
 // ═══════════════════════════════════════════
 // Permanent TotalAttribute =
 //   Class Base + Level-Gained + Stardust-Purchased + Equipment
-//   (+ racial % at compute time; race is permanent, not a stim)
 //
 // character.stats already holds Class Base + Level-Gained + Purchased
 // (buys and server level grants mutate stats). Level-Gained = 2 attrs/level
@@ -18,19 +17,8 @@
 //  Vitality  → Max HP (all)
 //  Luck      → Crit Chance (all)
 //
-import { CLASSES, RACES, getActiveBuffs, applyBuffs } from "@/lib/gameData";
-
-// Racial bonuses are percentage-based multipliers (e.g. +6% Strength) applied
-// at permanent-stat compute time so they stay relevant at every level.
-export function applyRaceBonus(stats, race) {
-  const bonuses = RACES[race]?.bonuses;
-  if (!bonuses) return stats;
-  const out = { ...stats };
-  for (const [k, v] of Object.entries(bonuses)) {
-    out[k] = Math.round((out[k] || 0) * (1 + v));
-  }
-  return out;
-}
+import { CLASSES, getActiveBuffs, applyBuffs } from "@/lib/gameData";
+import { resolvePermanentAttributes } from "@/lib/characterStats.js";
 
 // ── Primary attribute keys (display order) ──
 export const PRIMARY_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -213,15 +201,15 @@ export function mitigationForDamageType(damageType, armorPercent, techResistPerc
 }
 
 // ── Total attributes ─────────────────────────────────────────
-/** Permanent totals: base+purchased stats + equipment + race. No stims. */
+/** Permanent totals: base+purchased stats + equipment. No stims. Race is flavor-only. */
 export function computePermanentTotalStats(character, equippedItems = []) {
-  const stats = { ...(character?.stats || {}) };
+  const stats = { ...resolvePermanentAttributes(character) };
   for (const it of equippedItems) {
     for (const [k, v] of Object.entries(it.stats || {})) {
       stats[k] = (stats[k] || 0) + (v || 0);
     }
   }
-  return applyRaceBonus(stats, character?.race);
+  return stats;
 }
 
 /**
@@ -299,3 +287,13 @@ export function computeCombatPower(character, equippedItems = []) {
   );
   return Math.round((character.level || 1) * 50 + weighted * 10);
 }
+
+export {
+  repairPermanentAttributes,
+  permanentStatsNeedClassBaseRepair,
+  resolvePermanentAttributes,
+  parseStoredStats,
+  normalizeAttrStats,
+  sumAttrStats,
+  classBaseStats,
+} from "@/lib/characterStats.js";

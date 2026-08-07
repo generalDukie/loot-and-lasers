@@ -12,9 +12,18 @@ Whenever the user asks to **pull** from GitHub / origin (or the agent runs `git 
 3. Format the summary so it is easy to scan:
    - New tip commit(s): hash + subject
    - Count of commits / files if useful
-   - **Highlights by area** (bullets): Godot client, web `src/`, server, docs/installer, etc.
-   - Call out new files and anything that may need a Hetzner/Nakama deploy or an installer (do not deploy/build unless asked, unless other rules say so for “commit and push”)
+   - **Highlights by area** (bullets): Godot client, `src/lib/`, server, docs/installer, etc.
+   - Call out notable new files or installer-version bumps if relevant
 4. If **Already up to date**, say so clearly and note any uncommitted local edits still present.
 5. If pull brought partner commits that conflict with local work, explain conflicts and next steps.
+
+## Partner already deployed (standing assumption)
+
+After a pull, **assume the partner already deployed** Hetzner Node API and Nakama for what they shipped.
+
+- Do **not** suggest, offer, or run a staging deploy “to pick up partner changes.”
+- Do **not** verify remote deploy health unless the user asks.
+- Still do **not** deploy/build on pull unless they explicitly ask (installer only when requested).
+- Deploy remains required only when **this machine** ships via “commit, push, and deploy” (see `publish-and-live-deploy.mdc`).
 
 Do not skip the change summary. The user relies on it to understand what their partner shipped.

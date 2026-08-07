@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { createHash } from "node:crypto";
 import { nanoid } from "nanoid";
 import { db, nowIso } from "./db.js";
 import { entities } from "./entities.js";
@@ -7,7 +8,14 @@ import { isEmailSendingEnabled, sendEmail, recordEmailFallback, getEmailConfigSu
 import { getEmailLog } from "./emailLog.js";
 import { NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
 import { auditAuthEvent, AuditResults } from "./audit/index.js";
-import { apiErrorBody } from "./apiResponse.js";
+import { apiErrorBody, ApiErrorCodes } from "./apiResponse.js";
+import { ensureCharacterPermanentStats } from "./shared/characterStatsRepair.js";
+import {
+  getServerId,
+  migrateLegacyUserSessionColumns,
+  readAccountServerSession,
+  writeAccountServerSession,
+} from "./accountServerSession.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "lootandlasers-dev-secret-change-me";
 const TOKEN_TTL = process.env.JWT_TTL || "30d";
@@ -55,7 +63,7 @@ function nakamaTokenExpiry(sessionToken) {
   return Number.isSafeInteger(exp) ? exp : 0;
 }
 
-export function signGameplayToken(nakamaUserId, nakamaExpiresAt) {
+export function signGameplayToken(nakamaUserId, nakamaExpiresAt, { sessionVersion = 1, serverId = getServerId() } = {}) {
   const now = Math.floor(Date.now() / 1000);
   const remaining = Number(nakamaExpiresAt) - now;
   if (!nakamaUserId || !Number.isFinite(remaining) || remaining <= 0) {
@@ -64,8 +72,10 @@ export function signGameplayToken(nakamaUserId, nakamaExpiresAt) {
     throw err;
   }
   const expiresIn = Math.max(1, Math.min(GAMEPLAY_JWT_TTL_SEC, Math.floor(remaining)));
+  const sv = Math.max(1, Math.floor(Number(sessionVersion) || 1));
+  const aid = String(serverId || getServerId()).trim() || getServerId();
   return jwt.sign(
-    { token_use: "nakama_gameplay" },
+    { token_use: "nakama_gameplay", sv, aid },
     JWT_SECRET,
     {
       subject: nakamaUserId,
@@ -90,6 +100,83 @@ export function verifyToken(token) {
   } catch {
     return null;
   }
+}
+
+/** Stable id for the Nakama session token (jti/sid or hash fallback). */
+export function nakamaSessionKey(sessionToken) {
+  const decoded = jwt.decode(sessionToken);
+  if (decoded?.jti) return String(decoded.jti);
+  if (decoded?.sid) return String(decoded.sid);
+  return createHash("sha256").update(String(sessionToken || "")).digest("hex").slice(0, 32);
+}
+
+export function gameplaySessionFromPayload(payload) {
+  const tokenAid = String(payload?.aid || "").trim();
+  const serverId = getServerId();
+  if (!tokenAid || tokenAid !== serverId) {
+    return {
+      ok: false,
+      code: ApiErrorCodes.AUTH_SESSION_INVALID,
+      message: "Gameplay token is for a different server.",
+    };
+  }
+  const row = getUserByNakamaId(payload.sub);
+  if (!row) {
+    return {
+      ok: false,
+      code: ApiErrorCodes.UNAUTHORIZED,
+      message: "Unauthorized",
+    };
+  }
+  const session = readAccountServerSession(row.id, serverId);
+  const tokenSv = Number(payload.sv);
+  const currentSv = Math.max(1, Math.floor(Number(session?.session_version) || 1));
+  if (!Number.isInteger(tokenSv) || tokenSv !== currentSv) {
+    return {
+      ok: false,
+      code: ApiErrorCodes.AUTH_SESSION_INVALID,
+      message: "Signed in elsewhere on this server. Please log in again.",
+    };
+  }
+  return { ok: true, user: publicUser(row) };
+}
+
+/**
+ * Claim or refresh the single active gameplay session for this account on this server.
+ * forceClaim=true on fresh login replaces other machines; refresh keeps the same Nakama session key.
+ */
+export function resolveBridgeSession(userRow, nakamaToken, { forceClaim = false } = {}) {
+  if (!userRow?.id) {
+    const err = new Error("Bridge user missing");
+    err.status = 500;
+    throw err;
+  }
+  const serverId = getServerId();
+  const sessionKey = nakamaSessionKey(nakamaToken);
+  const stored = readAccountServerSession(userRow.id, serverId);
+  const storedKey = stored?.active_nakama_session_key
+    ? String(stored.active_nakama_session_key)
+    : null;
+  let sessionVersion = Math.max(1, Math.floor(Number(stored?.session_version) || 1));
+
+  if (forceClaim) {
+    if (storedKey && storedKey !== sessionKey) {
+      sessionVersion += 1;
+    }
+    writeAccountServerSession(userRow.id, { sessionVersion, sessionKey }, serverId);
+    return { sessionVersion, sessionKey, serverId, superseded: !!(storedKey && storedKey !== sessionKey) };
+  }
+
+  if (storedKey && storedKey !== sessionKey) {
+    const err = new Error("Signed in elsewhere on this server. Please log in again.");
+    err.status = 401;
+    err.code = ApiErrorCodes.AUTH_SESSION_INVALID;
+    throw err;
+  }
+  if (!storedKey) {
+    writeAccountServerSession(userRow.id, { sessionVersion, sessionKey }, serverId);
+  }
+  return { sessionVersion, sessionKey, serverId, superseded: false };
 }
 
 export function getUserById(id) {
@@ -124,17 +211,26 @@ export function authMiddleware(req, res, next) {
   const token = bearer || req.headers["x-access-token"] || null;
   req.token = token || null;
   req.user = null;
+  req.authFailure = null;
   if (token) {
     const payload = verifyToken(token);
     if (payload?.sub) {
-      req.user = payload.token_use === "nakama_gameplay"
-        ? publicUser(getUserByNakamaId(payload.sub))
-        : getUserById(payload.sub);
+      if (payload.token_use === "nakama_gameplay") {
+        const resolved = gameplaySessionFromPayload(payload);
+        if (resolved.ok) {
+          req.user = resolved.user;
+        } else {
+          req.authFailure = { code: resolved.code, message: resolved.message };
+        }
+      } else {
+        req.user = getUserById(payload.sub);
+      }
       req.authIdentity = {
         token_use: payload.token_use || "legacy_node",
         subject: payload.sub,
         expires_at: payload.exp || null,
         token_id: payload.jti || null,
+        session_version: payload.sv ?? null,
       };
     }
   }
@@ -143,11 +239,10 @@ export function authMiddleware(req, res, next) {
 
 export function requireAuth(req, res, next) {
   if (!req.user) {
+    const code = req.authFailure?.code || ApiErrorCodes.UNAUTHORIZED;
+    const message = req.authFailure?.message || "Unauthorized";
     return res.status(401).json(apiErrorBody(
-      Object.assign(new Error("Unauthorized"), {
-        status: 401,
-        code: "UNAUTHORIZED",
-      }),
+      Object.assign(new Error(message), { status: 401, code }),
     ));
   }
   next();
@@ -253,7 +348,8 @@ export function createAuthRouter(express) {
     if (character.created_by_id !== req.user.id) {
       return res.status(403).json({ error: "Selected character does not belong to you" });
     }
-    return res.json(character);
+    const ensured = ensureCharacterPermanentStats(character);
+    return res.json(ensured.character);
   });
 
   /**
@@ -345,21 +441,46 @@ export function createAuthRouter(express) {
       if (!fresh) {
         return res.status(500).json({ error: "Bridge user missing after link" });
       }
-      const access_token = signGameplayToken(nakamaUserId, nakamaExpiresAt);
-      const pub = publicUser(fresh);
+
+      const forceClaim = Boolean(req.body?.force_claim);
+      let bridgeSession;
+      try {
+        bridgeSession = resolveBridgeSession(fresh, nakamaToken, { forceClaim });
+      } catch (err) {
+        const status = err.status && err.status >= 400 && err.status < 600 ? err.status : 401;
+        return res.status(status).json(apiErrorBody(err));
+      }
+      if (bridgeSession.superseded) {
+        const { kickAccountSessions } = await import("./realtime.js");
+        kickAccountSessions(fresh.id, { reason: "new_login" });
+      }
+
+      const access_token = signGameplayToken(nakamaUserId, nakamaExpiresAt, {
+        sessionVersion: bridgeSession.sessionVersion,
+        serverId: bridgeSession.serverId,
+      });
+      const pub = publicUser(getUserRowById(fresh.id) || fresh);
       auditAuthEvent({
         action: "nakama_bridge",
         user: pub,
         email,
         ipAddress: req.ip || req.headers["x-forwarded-for"] || null,
         result: AuditResults.SUCCESS,
-        metadata: { nakama_user_id: nakamaUserId },
+        metadata: {
+          nakama_user_id: nakamaUserId,
+          server_id: bridgeSession.serverId,
+          session_version: bridgeSession.sessionVersion,
+          force_claim: forceClaim,
+          superseded: bridgeSession.superseded,
+        },
       });
       res.json({
         success: true,
         access_token,
         user: pub,
         nakama_user_id: nakamaUserId,
+        server_id: bridgeSession.serverId,
+        session_version: bridgeSession.sessionVersion,
         expires_at: Math.min(
           nakamaExpiresAt,
           Math.floor(Date.now() / 1000) + GAMEPLAY_JWT_TTL_SEC,

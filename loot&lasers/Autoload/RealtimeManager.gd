@@ -297,6 +297,12 @@ func _handle_packet(packet: String) -> void:
 		_refreshing_friends = false
 	elif entity == "Wallet" or event_type == "wallet_updated":
 		_handle_wallet_event(payload if typeof(payload) == TYPE_DICTIONARY else {})
+	elif entity == "Auth" and event_type == "session_kicked":
+		var msg := "Signed in elsewhere on this server. Please log in again."
+		if typeof(payload) == TYPE_DICTIONARY:
+			msg = str(payload.get("message", msg))
+		if AuthManager != null and AuthManager.has_method("handle_session_superseded"):
+			AuthManager.handle_session_superseded(msg)
 
 
 func _handle_wallet_event(payload: Dictionary) -> void:

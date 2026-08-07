@@ -60,6 +60,35 @@ assert.equal(
 );
 console.log("  ✓ expectedPlayerAttributes re-export parity");
 
+const { repairPermanentAttributes } = await import("../../src/lib/characterStats.js");
+const { ensureCharacterPermanentStats } = await import("../src/shared/characterStatsRepair.js");
+
+{
+  const empty = {
+    id: "c-empty",
+    class: "Shadow Operative",
+    level: 1,
+    stats: {},
+  };
+  const fixed = repairPermanentAttributes(empty);
+  assert.equal(fixed.repaired, true);
+  assert.equal(fixed.stats.agility, 15);
+  assert.equal(
+    fixed.stats.strength + fixed.stats.agility + fixed.stats.intellect
+      + fixed.stats.vitality + fixed.stats.luck,
+    50,
+  );
+  const leveled = repairPermanentAttributes({
+    class: "Vanguard",
+    level: 2,
+    stats: { strength: 1, intellect: 1 },
+  });
+  assert.equal(leveled.repaired, true);
+  assert.equal(leveled.stats.strength, 16);
+  assert.equal(leveled.stats.intellect, 7);
+  console.log("  ✓ class base stat repair");
+}
+
 {
   const character = {
     id: "c-new",
@@ -221,6 +250,46 @@ console.log("  ✓ expectedPlayerAttributes re-export parity");
     buy.body.character.stats.vitality,
   );
   console.log("  ✓ GetCharacterAttributes + BuyAttribute sheet round-trip");
+}
+
+{
+  const account = {
+    id: "attr-user-empty",
+    email: "empty@example.com",
+    role: "user",
+    active_character_id: "",
+  };
+  const broken = entities.Character.create({
+    id: "attr-char-empty",
+    name: "EmptyStats",
+    class: "Technomancer",
+    race: "Luminae",
+    level: 1,
+    experience: 0,
+    experience_to_next_level: 100,
+    stardust: 0,
+    nova_crystals: 0,
+    fuel: 20,
+    max_fuel: 20,
+    stats: {},
+    attribute_purchases: 0,
+    attribute_purchases_by_stat: {
+      strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
+    },
+    equipped_items: {},
+    created_by_id: account.id,
+    created_by: account.email,
+    active_buffs: [],
+  });
+  account.active_character_id = broken.id;
+
+  const getRes = await GetCharacterAttributes(account, {});
+  assert.equal(getRes.status, 200, JSON.stringify(getRes.body));
+  assert.equal(getRes.body.stats_repaired, true);
+  assert.equal(getRes.body.sheet.permanent_attributes.intellect, 15);
+  const reloaded = entities.Character.get(broken.id);
+  assert.equal(reloaded.stats.intellect, 15);
+  console.log("  ✓ GetCharacterAttributes repairs missing class base stats");
 }
 
 console.log("\nPASS character attributes\n");

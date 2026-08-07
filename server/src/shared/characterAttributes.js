@@ -14,6 +14,7 @@ import {
   computeDerivedStats,
   computeCombatPower,
   CRIT_MULT,
+  resolvePermanentAttributes,
 } from "./statEngine.js";
 import { getActiveBuffs } from "../../../src/lib/gameData.js";
 import { getNextAttributePointCost } from "./economyFormulas.js";
@@ -28,15 +29,10 @@ export function emptyAttrMap() {
 
 /** Persisted permanent attributes (Character.stats). */
 export function readPermanentAttributes(character = {}) {
-  const stats = character?.stats && typeof character.stats === "object" ? character.stats : {};
-  const out = emptyAttrMap();
-  for (const k of ATTR_KEYS) {
-    out[k] = Math.max(0, Math.round(Number(stats[k]) || 0));
-  }
-  return out;
+  return resolvePermanentAttributes(character);
 }
 
-/** Raw flat gear bonuses before race / stims. */
+/** Raw flat gear bonuses before stims. */
 export function equipmentAttributeBonuses(equippedItems = []) {
   const out = emptyAttrMap();
   for (const it of equippedItems || []) {

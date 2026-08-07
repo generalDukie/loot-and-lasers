@@ -2,9 +2,9 @@ extends Control
 class_name BrandGradientTitle
 ## Draws brand text with a left→right cyan → teal → purple gradient (web SiteTitle clip).
 
-const COLOR_CYAN := Color("#A5F3FC")
-const COLOR_TEAL := Color("#14B8A6")
-const COLOR_PURPLE := Color("#A78BFA")
+const COLOR_CYAN := ClientUi.BRAND_GRAD_NEAR_WHITE
+const COLOR_TEAL := ClientUi.BRAND_GRAD_CYAN
+const COLOR_PURPLE := ClientUi.BRAND_GRAD_PURPLE
 
 var title_text := "LOOT & LASERS"
 var font_size := 22

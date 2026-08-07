@@ -16,6 +16,11 @@ const SUCCESS := Color("#62D89B")
 const DANGER := Color("#FF6B6B")
 const WARNING := Color("#F5A94E")
 
+## Hub "LOOT & LASERS" wordmark + XP bars (nearly white → cyan/teal → purple).
+const BRAND_GRAD_NEAR_WHITE := Color("#A5F3FC")
+const BRAND_GRAD_CYAN := Color("#14B8A6")
+const BRAND_GRAD_PURPLE := Color("#A78BFA")
+
 ## Target frame rate for all animated UI / decorative redraws.
 const ANIM_FPS := 120
 const ANIM_FRAME_SEC := 1.0 / float(ANIM_FPS)
@@ -799,6 +804,38 @@ static func apply_hp_bar(bar: ProgressBar, fill: Color) -> void:
 	meter.border_width_left = 0
 	meter.border_width_right = 0
 	meter.set_corner_radius_all(3)
+	bar.add_theme_stylebox_override("background", track)
+	bar.add_theme_stylebox_override("fill", meter)
+
+
+## XP fill matching the hub BrandGradientTitle wordmark (left→right).
+static func apply_xp_bar(bar: ProgressBar) -> void:
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.02, 0.03, 0.055, 0.96)
+	track.border_color = Color(0.22, 0.30, 0.40, 0.85)
+	track.set_border_width_all(1)
+	track.set_corner_radius_all(4)
+	track.content_margin_left = 1
+	track.content_margin_right = 1
+	track.content_margin_top = 1
+	track.content_margin_bottom = 1
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	gradient.colors = PackedColorArray([
+		BRAND_GRAD_NEAR_WHITE,
+		BRAND_GRAD_CYAN,
+		BRAND_GRAD_PURPLE,
+	])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 256
+	texture.height = 16
+	texture.fill_from = Vector2(0.0, 0.5)
+	texture.fill_to = Vector2(1.0, 0.5)
+	var meter := StyleBoxTexture.new()
+	meter.texture = texture
+	meter.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	meter.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
 	bar.add_theme_stylebox_override("background", track)
 	bar.add_theme_stylebox_override("fill", meter)
 

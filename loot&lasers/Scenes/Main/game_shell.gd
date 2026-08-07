@@ -43,6 +43,13 @@ var _activity_styles: Dictionary = {}
 var _page_swap_busy := false
 var _page_nav_pending := false
 var _page_swap_token := 0
+
+const _WALLET_PANE_HEIGHT := 48.0
+const _WALLET_ICON_INSET := 3.0
+const _WALLET_ICON_COLUMN := 38.0
+const _WALLET_DIVIDER_GAP := 4.0
+const _WALLET_VALUE_GAP := 8.0
+const _WALLET_TRAILING_SIZE := 29.0
 var _last_nav_ms := 0
 const NAV_COOLDOWN_MS := 450
 
@@ -630,12 +637,12 @@ func _make_operative_panel() -> Control:
 	_xp_label = Label.new()
 	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_xp_label.add_theme_font_size_override("font_size", 12)
-	_xp_label.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
+	_xp_label.add_theme_color_override("font_color", ClientUi.BRAND_GRAD_NEAR_WHITE)
 	panel.add_child(_xp_label)
 	_xp_bar = ProgressBar.new()
 	_xp_bar.show_percentage = false
 	_xp_bar.custom_minimum_size.y = 8
-	ClientUi.apply_hp_bar(_xp_bar, ClientUi.CYAN)
+	ClientUi.apply_xp_bar(_xp_bar)
 	panel.add_child(_xp_bar)
 
 	_operative_title = Label.new()
@@ -720,21 +727,52 @@ func _fit_currency_fonts() -> void:
 		lab.visible = true
 
 
+func _wallet_pane_inner_height() -> float:
+	# Wallet readout stylebox uses margin_y = 4 on top and bottom.
+	return _WALLET_PANE_HEIGHT - 8.0
+
+
+func _wallet_icon_display_size() -> float:
+	return _wallet_pane_inner_height() - _WALLET_ICON_INSET * 2.0
+
+
+func _wallet_readout_border_color(tint: Color) -> Color:
+	return Color(tint, 0.45)
+
+
+func _make_wallet_divider(color: Color, height: float) -> Control:
+	var host := Control.new()
+	host.custom_minimum_size = Vector2(1, height)
+	host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var line := ColorRect.new()
+	line.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	line.color = color
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(line)
+	return host
+
+
 func _make_readout(parent: Control, icon_id: String, tint: Color, open_store := false) -> Label:
 	var frame := PanelContainer.new()
-	# Keep pane height in the same console band; icons + bold amounts fit inside.
-	frame.custom_minimum_size.y = 48
+	var border_color := _wallet_readout_border_color(tint)
+	frame.custom_minimum_size.y = _WALLET_PANE_HEIGHT
 	frame.add_theme_stylebox_override(
 		"panel",
-		_shell_panel_style(Color(0.055, 0.07, 0.105, 0.96), Color(tint, 0.45), 7, 8, 4)
+		_shell_panel_style(Color(0.055, 0.07, 0.105, 0.96), border_color, 7, 8, 4)
 	)
 	parent.add_child(frame)
+	var inner_h := _wallet_pane_inner_height()
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 0)
 	frame.add_child(row)
 
-	var icon := CurrencyIcon.make(icon_id, 22.0)
+	var icon_col := CenterContainer.new()
+	icon_col.custom_minimum_size = Vector2(_WALLET_ICON_COLUMN, inner_h)
+	icon_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(icon_col)
+	var icon := CurrencyIcon.make(icon_id, _wallet_icon_display_size())
 	match icon_id:
 		"fuel":
 			icon.tooltip_text = "Fuel"
@@ -742,7 +780,18 @@ func _make_readout(parent: Control, icon_id: String, tint: Color, open_store := 
 			icon.tooltip_text = "Stardust"
 		_:
 			icon.tooltip_text = "Nova Crystals"
-	row.add_child(icon)
+	icon_col.add_child(icon)
+
+	var icon_gap := Control.new()
+	icon_gap.custom_minimum_size = Vector2(_WALLET_DIVIDER_GAP, 0)
+	icon_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon_gap)
+	row.add_child(_make_wallet_divider(border_color, inner_h))
+
+	var value_gap := Control.new()
+	value_gap.custom_minimum_size = Vector2(_WALLET_VALUE_GAP, 0)
+	value_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(value_gap)
 
 	var value := Label.new()
 	# Amount must always read clearly next to the icon — never clip away digits.
@@ -759,37 +808,56 @@ func _make_readout(parent: Control, icon_id: String, tint: Color, open_store := 
 	value.set_meta("readout_icon", icon)
 	row.add_child(value)
 
+	# Reserve the same trailing width on every row so values share one center line.
+	var trailing := CenterContainer.new()
+	trailing.custom_minimum_size = Vector2(_WALLET_TRAILING_SIZE, _WALLET_TRAILING_SIZE)
+	trailing.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	trailing.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(trailing)
 	if open_store:
-		var plus := Button.new()
-		plus.text = "+"
-		plus.focus_mode = Control.FOCUS_NONE
-		plus.custom_minimum_size = Vector2(29, 29)
-		plus.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		plus.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		plus.tooltip_text = "Crystal Store"
-		plus.add_theme_font_size_override("font_size", 24)
-		plus.add_theme_color_override("font_color", Color("#1A1400"))
-		plus.add_theme_color_override("font_hover_color", Color("#1A1400"))
-		plus.add_theme_color_override("font_pressed_color", Color("#1A1400"))
-		var plus_style := StyleBoxFlat.new()
-		plus_style.bg_color = Color(tint.lightened(0.05), 0.92)
-		plus_style.border_color = Color(tint.lightened(0.25), 1.0)
-		plus_style.set_border_width_all(1)
-		plus_style.set_corner_radius_all(5)
-		plus_style.content_margin_left = 0
-		plus_style.content_margin_right = 0
-		plus_style.content_margin_top = 0
-		plus_style.content_margin_bottom = 0
-		plus.add_theme_stylebox_override("normal", plus_style)
-		var plus_hover := plus_style.duplicate() as StyleBoxFlat
-		plus_hover.bg_color = Color(tint.lightened(0.2), 1.0)
-		plus.add_theme_stylebox_override("hover", plus_hover)
-		plus.add_theme_stylebox_override("pressed", plus_hover)
-		ClientUi.apply_bold_display_font(plus)
-		plus.pressed.connect(func() -> void: GameManager.go_crystal_store())
-		row.add_child(plus)
-		_start_nova_plus_pulse(plus)
+		trailing.add_child(_make_nova_store_button(tint))
 	return value
+
+
+func _make_nova_store_button(tint: Color) -> Button:
+	var plus := Button.new()
+	plus.focus_mode = Control.FOCUS_NONE
+	plus.text = ""
+	plus.custom_minimum_size = Vector2(_WALLET_TRAILING_SIZE, _WALLET_TRAILING_SIZE)
+	plus.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	plus.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	plus.tooltip_text = "Crystal Store"
+	var plus_style := StyleBoxFlat.new()
+	plus_style.bg_color = Color(tint.lightened(0.05), 0.92)
+	plus_style.border_color = Color(tint.lightened(0.25), 1.0)
+	plus_style.set_border_width_all(1)
+	plus_style.set_corner_radius_all(5)
+	plus_style.content_margin_left = 0
+	plus_style.content_margin_right = 0
+	plus_style.content_margin_top = 0
+	plus_style.content_margin_bottom = 0
+	plus.add_theme_stylebox_override("normal", plus_style)
+	var plus_hover := plus_style.duplicate() as StyleBoxFlat
+	plus_hover.bg_color = Color(tint.lightened(0.2), 1.0)
+	plus.add_theme_stylebox_override("hover", plus_hover)
+	plus.add_theme_stylebox_override("pressed", plus_hover)
+	plus.add_theme_stylebox_override("focus", plus_style.duplicate())
+	var plus_host := CenterContainer.new()
+	plus_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plus_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	plus.add_child(plus_host)
+	var plus_glyph := Label.new()
+	plus_glyph.text = "+"
+	plus_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plus_glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	plus_glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	plus_glyph.add_theme_font_size_override("font_size", 22)
+	plus_glyph.add_theme_color_override("font_color", Color("#1A1400"))
+	ClientUi.apply_bold_display_font(plus_glyph)
+	plus_host.add_child(plus_glyph)
+	plus.pressed.connect(func() -> void: GameManager.go_crystal_store())
+	_start_nova_plus_pulse(plus)
+	return plus
 
 func _start_nova_plus_pulse(plus: Button) -> void:
 	## Soft flash + scale pop so the Crystal Store affordance reads at a glance.

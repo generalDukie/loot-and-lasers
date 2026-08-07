@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bii3sixng31gf"
-path="res://.godot/imported/cantina-bg.png-3d3b92c7ad6b8e8c69f922cc46cf4bac.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://Assets/Textures/cantina-bg.png"
-dest_files=["res://.godot/imported/cantina-bg.png-3d3b92c7ad6b8e8c69f922cc46cf4bac.ctex"]
 
 [params]
 

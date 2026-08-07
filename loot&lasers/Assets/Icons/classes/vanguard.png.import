@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ba68t3qbhbswa"
-valid=false
+uid="uid://bgy0w2by4b8v4"
+path="res://.godot/imported/vanguard.png-4535dcca2990a4edd640ecb9daad8c39.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://Assets/Textures/mission-explore/mission-explore-4.png"
+source_file="res://Assets/Icons/classes/vanguard.png"
+dest_files=["res://.godot/imported/vanguard.png-4535dcca2990a4edd640ecb9daad8c39.ctex"]
 
 [params]
 

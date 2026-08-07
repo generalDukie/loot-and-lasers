@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ba68t3qbhbswa"
-valid=false
+uid="uid://cf738ergb04u4"
+path="res://.godot/imported/astral_warden.png-e19cc53a5abff78fdf2299bf4ed4a63d.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://Assets/Textures/mission-explore/mission-explore-4.png"
+source_file="res://Assets/Icons/classes/astral_warden.png"
+dest_files=["res://.godot/imported/astral_warden.png-e19cc53a5abff78fdf2299bf4ed4a63d.ctex"]
 
 [params]
 

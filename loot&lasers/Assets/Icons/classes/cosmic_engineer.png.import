@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ba68t3qbhbswa"
-valid=false
+uid="uid://c1g4sb42qlaeb"
+path="res://.godot/imported/cosmic_engineer.png-859c7a85db6b971a1ee8af70a2136df6.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://Assets/Textures/mission-explore/mission-explore-4.png"
+source_file="res://Assets/Icons/classes/cosmic_engineer.png"
+dest_files=["res://.godot/imported/cosmic_engineer.png-859c7a85db6b971a1ee8af70a2136df6.ctex"]
 
 [params]
 

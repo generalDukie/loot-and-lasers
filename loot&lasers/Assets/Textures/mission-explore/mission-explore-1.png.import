@@ -3,15 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bd465dt4dbdid"
-path="res://.godot/imported/mission-explore-1.png-05a74cf8d11e06a1fb730a7b531d6dce.ctex"
-metadata={
-"vram_texture": false
-}
+valid=false
 
 [deps]
 
 source_file="res://Assets/Textures/mission-explore/mission-explore-1.png"
-dest_files=["res://.godot/imported/mission-explore-1.png-05a74cf8d11e06a1fb730a7b531d6dce.ctex"]
 
 [params]
 

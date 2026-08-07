@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ba68t3qbhbswa"
-valid=false
+uid="uid://dn6v8oe4xg6o5"
+path="res://.godot/imported/technomancer.png-fd3476072da6a8207f08eb6f64cef987.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://Assets/Textures/mission-explore/mission-explore-4.png"
+source_file="res://Assets/Icons/classes/technomancer.png"
+dest_files=["res://.godot/imported/technomancer.png-fd3476072da6a8207f08eb6f64cef987.ctex"]
 
 [params]
 

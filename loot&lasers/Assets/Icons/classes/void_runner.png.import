@@ -2,12 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ba68t3qbhbswa"
-valid=false
+uid="uid://b08ti52nhpl6k"
+path="res://.godot/imported/void_runner.png-7dc277d086aae64beafbde566ceb5e3d.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
-source_file="res://Assets/Textures/mission-explore/mission-explore-4.png"
+source_file="res://Assets/Icons/classes/void_runner.png"
+dest_files=["res://.godot/imported/void_runner.png-7dc277d086aae64beafbde566ceb5e3d.ctex"]
 
 [params]
 

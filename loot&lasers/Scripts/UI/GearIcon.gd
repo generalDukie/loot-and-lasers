@@ -49,7 +49,7 @@ func _draw() -> void:
 	var ox := (size.x - REF_SIZE * scale) * 0.5
 	var oy := (size.y - REF_SIZE * scale) * 0.5
 	draw_set_transform(Vector2(ox, oy), 0.0, Vector2(scale, scale))
-	_draw_icon(Vector2(REF_SIZE * 0.5, REF_SIZE * 0.5))
+	_draw_icon(REF_SIZE * 0.5, REF_SIZE * 0.5)
 
 
 func _draw_icon(cx: float, cy: float) -> void:

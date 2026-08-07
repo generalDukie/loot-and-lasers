@@ -846,15 +846,9 @@ func _make_nova_store_button(tint: Color) -> Button:
 	plus_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plus_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	plus.add_child(plus_host)
-	var plus_glyph := Label.new()
-	plus_glyph.text = "+"
-	plus_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	plus_glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	plus_glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	plus_glyph.add_theme_font_size_override("font_size", 22)
-	plus_glyph.add_theme_color_override("font_color", Color("#1A1400"))
-	ClientUi.apply_bold_display_font(plus_glyph)
-	plus_host.add_child(plus_glyph)
+	# Lucide plus TextureRect — true geometric center (Label "+" sits low on font baseline).
+	var glyph_size := maxf(14.0, _WALLET_TRAILING_SIZE - 10.0)
+	plus_host.add_child(UiIcon.make("plus", Color("#1A1400"), glyph_size))
 	plus.pressed.connect(func() -> void: GameManager.go_crystal_store())
 	_start_nova_plus_pulse(plus)
 	return plus

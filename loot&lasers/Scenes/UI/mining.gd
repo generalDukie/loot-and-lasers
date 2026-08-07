@@ -15,7 +15,7 @@ var _ready_box: VBoxContainer
 var _hours: HSlider
 var _hours_lab: Label
 var _preview_chip: Label
-var _preview_formula: Label
+var _preview_icon: TextureRect
 var _progress: ProgressBar
 var _remain_lab: Label
 var _reward_lab: Label
@@ -68,6 +68,7 @@ func _build() -> void:
 	add_child(margin)
 
 	var root := VBoxContainer.new()
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_theme_constant_override("separation", 14)
 	margin.add_child(root)
 
@@ -89,13 +90,14 @@ func _build() -> void:
 	# Hero painted panel (web motion.div painted-panel p-6 text-center)
 	var hero := PanelContainer.new()
 	hero.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hero.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	hero.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hero.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.05, 0.05, 0.08, 0.97), Color(0.35, 0.40, 0.48, 0.45), 16, 1
 	))
 	root.add_child(hero)
 
 	var pad := MarginContainer.new()
+	pad.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	for k in ["margin_left", "margin_right"]:
 		pad.add_theme_constant_override(k, 20)
 	pad.add_theme_constant_override("margin_top", 18)
@@ -103,6 +105,7 @@ func _build() -> void:
 	hero.add_child(pad)
 
 	var hcol := VBoxContainer.new()
+	hcol.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hcol.add_theme_constant_override("separation", 10)
 	pad.add_child(hcol)
 
@@ -147,6 +150,7 @@ func _build() -> void:
 
 	# ── Idle: deploy drone ──
 	_idle_box = VBoxContainer.new()
+	_idle_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_idle_box.add_theme_constant_override("separation", 8)
 	hcol.add_child(_idle_box)
 
@@ -190,37 +194,52 @@ func _build() -> void:
 		tl.add_theme_color_override("font_color", ClientUi.MUTED)
 		tick_row.add_child(tl)
 
-	var preview_row := HBoxContainer.new()
-	preview_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	preview_row.add_theme_constant_override("separation", 8)
+	var preview_row := CenterContainer.new()
+	preview_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_idle_box.add_child(preview_row)
 
 	var chip := PanelContainer.new()
-	chip.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(ClientUi.VIOLET, 0.10), Color(ClientUi.VIOLET, 0.30), 999, 1
-	))
+	chip.custom_minimum_size = Vector2(420, 72)
+	chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var chip_style := ClientUi.painted_panel_style(
+		Color(ClientUi.VIOLET, 0.12), Color(ClientUi.VIOLET, 0.40), 14, 1
+	)
+	chip_style.content_margin_left = 20
+	chip_style.content_margin_right = 20
+	chip_style.content_margin_top = 12
+	chip_style.content_margin_bottom = 12
+	chip.add_theme_stylebox_override("panel", chip_style)
 	preview_row.add_child(chip)
+
+	var chip_row := HBoxContainer.new()
+	chip_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	chip_row.add_theme_constant_override("separation", 10)
+	chip.add_child(chip_row)
+	_preview_icon = CurrencyIcon.make("stardust", 32.0)
+	chip_row.add_child(_preview_icon)
 	_preview_chip = Label.new()
-	_preview_chip.add_theme_font_size_override("font_size", 15)
+	_preview_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_preview_chip.add_theme_font_size_override("font_size", 24)
 	_preview_chip.add_theme_color_override("font_color", Color("#C4B5FD"))
 	ClientUi.apply_display_font(_preview_chip)
-	chip.add_child(_preview_chip)
+	chip_row.add_child(_preview_chip)
 
-	_preview_formula = Label.new()
-	_preview_formula.add_theme_font_size_override("font_size", 13)
-	_preview_formula.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_preview_formula)
-	preview_row.add_child(_preview_formula)
+	var idle_spacer := Control.new()
+	idle_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	idle_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_idle_box.add_child(idle_spacer)
 
 	_start_btn = Button.new()
 	_start_btn.text = "⚡  Start Mining"
 	_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_start_btn.size_flags_vertical = Control.SIZE_SHRINK_END
 	ClientUi.apply_primary_button(_start_btn)
 	_start_btn.pressed.connect(_on_start)
 	_idle_box.add_child(_start_btn)
 
 	# ── Busy: in progress ──
 	_busy_box = VBoxContainer.new()
+	_busy_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_busy_box.add_theme_constant_override("separation", 8)
 	_busy_box.visible = false
 	hcol.add_child(_busy_box)
@@ -256,6 +275,7 @@ func _build() -> void:
 
 	# ── Ready: collect ──
 	_ready_box = VBoxContainer.new()
+	_ready_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_ready_box.add_theme_constant_override("separation", 10)
 	_ready_box.visible = false
 	hcol.add_child(_ready_box)
@@ -315,14 +335,10 @@ func _footer_tile(parent: HBoxContainer, label: String, color: Color) -> Label:
 
 
 func _refresh_idle_preview() -> void:
-	var c := GameManager.active_character
-	var level := maxi(1, int(c.get("level", 1)))
 	var h := int(_hours.value)
 	var preview := MiningManager.preview_reward(h)
-	var spf := StardustEconomy.stardust_per_fuel(level)
 	_hours_lab.text = "%sh" % h
-	_preview_chip.text = "%s ✦ projected" % preview
-	_preview_formula.text = "(%s × 0.03 × %sm)" % [spf, h * 60]
+	_preview_chip.text = "%s projected" % preview
 
 
 func _populate() -> void:

@@ -637,11 +637,20 @@ func logout() -> void:
 
 
 ## Another device claimed this account — end local session without re-bridging.
-func handle_session_superseded(message: String = "") -> void:
+## announce=true only for a live kick (WebSocket session_kicked). Silent clear for
+## stale restore / refresh AUTH_SESSION_INVALID so a second machine's login screen
+## does not show "signed in elsewhere" before that machine has logged in.
+func handle_session_superseded(message: String = "", announce: bool = false) -> void:
 	if _superseded_handling:
 		return
 	_superseded_handling = true
-	session_superseded_message = message if not message.is_empty() else "Signed in elsewhere on this server. Please log in again."
+	if announce:
+		session_superseded_message = (
+			message if not message.is_empty()
+			else "Signed in elsewhere on this server. Please log in again."
+		)
+	else:
+		session_superseded_message = ""
 	if RealtimeManager != null and RealtimeManager.has_method("stop"):
 		RealtimeManager.stop()
 	elif RealtimeManager != null and RealtimeManager.has_method("stop_node"):

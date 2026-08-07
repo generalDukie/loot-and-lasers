@@ -29,7 +29,7 @@ npm run test:api
 ## Windows friend installer
 
 ```powershell
-.\scripts\build-windows-installer.ps1 -Version "0.1.12" -Interactive
+.\scripts\build-windows-installer.ps1 -Version "0.1.13.2" -Interactive
 ```
 
 See `docs/WINDOWS_FRIEND_BUILD.md`.

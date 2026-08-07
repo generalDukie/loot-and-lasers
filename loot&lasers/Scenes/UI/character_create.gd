@@ -416,22 +416,52 @@ func _build_race_page() -> Control:
 	h2.add_theme_color_override("font_color", ClientUi.TEXT)
 	page.add_child(h2)
 
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", _si(10))
-	grid.add_theme_constant_override("v_separation", _si(10))
-	page.add_child(grid)
+	# Rows of 2; final odd race (Synthara) centered so the five-card spread reads even.
+	var races_host := VBoxContainer.new()
+	races_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	races_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	races_host.add_theme_constant_override("separation", _si(10))
+	page.add_child(races_host)
 
-	for race in GameData.RACES:
-		var card := _make_race_card(race)
-		grid.add_child(card)
-		_race_cards[race] = card
+	var races: PackedStringArray = GameData.RACES
+	var i := 0
+	while i < races.size():
+		var row := HBoxContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		row.add_theme_constant_override("separation", _si(10))
+		races_host.add_child(row)
+		var remaining := races.size() - i
+		if remaining == 1:
+			# Half-width card centered: spacer : card : spacer = 1 : 2 : 1
+			var spacer_l := Control.new()
+			spacer_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			spacer_l.size_flags_stretch_ratio = 1.0
+			row.add_child(spacer_l)
+			var solo := _make_race_card(str(races[i]))
+			solo.size_flags_stretch_ratio = 2.0
+			row.add_child(solo)
+			_race_cards[str(races[i])] = solo
+			var spacer_r := Control.new()
+			spacer_r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			spacer_r.size_flags_stretch_ratio = 1.0
+			row.add_child(spacer_r)
+			i += 1
+		else:
+			for _j in 2:
+				if i >= races.size():
+					break
+				var card := _make_race_card(str(races[i]))
+				row.add_child(card)
+				_race_cards[str(races[i])] = card
+				i += 1
 
+	# Always reserve lore-band height so cards stay at compact size before/after pick.
 	_lore_host = VBoxContainer.new()
-	_lore_host.visible = false
+	_lore_host.visible = true
+	_lore_host.custom_minimum_size.y = _si(148)
 	_lore_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lore_host.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	page.add_child(_lore_host)
 	return page
 
@@ -625,7 +655,7 @@ func _make_class_card(cls_name: String) -> Button:
 	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chips.add_theme_constant_override("separation", _si(4))
 	copy.add_child(chips)
-	var pri := StatIcon.make_labeled(primary, primary, _s(12.0), _fs(12), ClientUi.VIOLET, _si(4))
+	var pri := StatIcon.make_labeled(primary, primary, _s(24.0), _fs(12), ClientUi.VIOLET, _si(4))
 	chips.add_child(pri)
 	var special: Dictionary = info.get("special", {})
 	if not special.is_empty():
@@ -1150,10 +1180,11 @@ func _refresh_lore() -> void:
 		return
 	for c in _lore_host.get_children():
 		c.queue_free()
-	if _race_name.is_empty():
-		_lore_host.visible = false
-		return
+	# Keep reserved lore-band height even with no selection (avoids card resize snap).
 	_lore_host.visible = true
+	_lore_host.custom_minimum_size.y = _si(148)
+	if _race_name.is_empty():
+		return
 	var info := GameData.race_info(_race_name)
 	var accent: Color = GameData.RACE_ACCENT.get(_race_name, ClientUi.CYAN)
 
@@ -1216,6 +1247,7 @@ func _refresh_class_detail() -> void:
 		_class_detail_host.add_child(empty)
 		var wrap := VBoxContainer.new()
 		wrap.alignment = BoxContainer.ALIGNMENT_CENTER
+		wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		empty.add_child(wrap)
 		var star := Label.new()
 		star.text = "✦"
@@ -1245,88 +1277,107 @@ func _refresh_class_detail() -> void:
 	var accent: Color = GameData.STAT_COLORS.get(primary, ClientUi.VIOLET)
 	var special: Dictionary = info.get("special", {})
 
+	# Equal vertical halves: class lore (top) + starting stats (bottom).
 	var top := PanelContainer.new()
+	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	top.size_flags_stretch_ratio = 1.0
 	var tsb := StyleBoxFlat.new()
 	tsb.bg_color = Color(accent, 0.1)
 	tsb.set_border_width_all(maxi(1, _si(1)))
 	tsb.border_color = Color(1, 1, 1, 0.12)
 	tsb.set_corner_radius_all(_si(12))
-	tsb.content_margin_left = _si(12)
-	tsb.content_margin_right = _si(12)
-	tsb.content_margin_top = _si(10)
-	tsb.content_margin_bottom = _si(10)
+	tsb.content_margin_left = _si(14)
+	tsb.content_margin_right = _si(14)
+	tsb.content_margin_top = _si(12)
+	tsb.content_margin_bottom = _si(12)
 	top.add_theme_stylebox_override("panel", tsb)
 	_class_detail_host.add_child(top)
 
+	var lore_outer := VBoxContainer.new()
+	lore_outer.alignment = BoxContainer.ALIGNMENT_CENTER
+	lore_outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lore_outer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lore_outer.add_theme_constant_override("separation", _si(8))
+	top.add_child(lore_outer)
+
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", _si(10))
-	top.add_child(row)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_theme_constant_override("separation", _si(12))
+	lore_outer.add_child(row)
 	var emblem := Label.new()
 	emblem.text = str(info.get("emoji", "✦"))
-	emblem.add_theme_font_size_override("font_size", _fs(48))
-	emblem.custom_minimum_size = _sv(Vector2(75, 75))
+	emblem.add_theme_font_size_override("font_size", _fs(56))
+	emblem.custom_minimum_size = _sv(Vector2(88, 88))
 	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emblem.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(emblem)
 
 	var copy := VBoxContainer.new()
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	copy.add_theme_constant_override("separation", _si(4))
+	copy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	copy.add_theme_constant_override("separation", _si(5))
 	row.add_child(copy)
 	var title := Label.new()
 	title.text = "%s %s" % [str(info.get("emoji", "")), _class_name]
-	title.add_theme_font_size_override("font_size", _fs(17))
+	title.add_theme_font_size_override("font_size", _fs(20))
 	ClientUi.apply_display_font(title)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
 	copy.add_child(title)
 	var desc := Label.new()
 	desc.text = str(info.get("description", ""))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.add_theme_font_size_override("font_size", _fs(15))
+	desc.add_theme_font_size_override("font_size", _fs(16))
 	desc.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(desc)
 	copy.add_child(desc)
 	if not special.is_empty():
 		var sp_name := Label.new()
 		sp_name.text = str(special.get("name", ""))
-		sp_name.add_theme_font_size_override("font_size", _fs(15))
+		sp_name.add_theme_font_size_override("font_size", _fs(17))
 		ClientUi.apply_display_font(sp_name)
 		sp_name.add_theme_color_override("font_color", ClientUi.CYAN)
 		copy.add_child(sp_name)
 		var sp_fx := Label.new()
 		sp_fx.text = str(special.get("effect", ""))
 		sp_fx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sp_fx.add_theme_font_size_override("font_size", _fs(13))
+		sp_fx.add_theme_font_size_override("font_size", _fs(15))
 		sp_fx.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(sp_fx)
 		copy.add_child(sp_fx)
 		var sp_id := Label.new()
 		sp_id.text = str(special.get("identity", ""))
 		sp_id.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sp_id.add_theme_font_size_override("font_size", _fs(12))
+		sp_id.add_theme_font_size_override("font_size", _fs(14))
 		sp_id.add_theme_color_override("font_color", Color(ClientUi.GOLD, 0.85))
 		ClientUi.apply_body_font(sp_id)
 		copy.add_child(sp_id)
 
 	var stats_panel := PanelContainer.new()
+	stats_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stats_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stats_panel.size_flags_stretch_ratio = 1.0
 	var ssb := StyleBoxFlat.new()
 	ssb.bg_color = Color(0.04, 0.06, 0.1, 0.55)
 	ssb.set_border_width_all(maxi(1, _si(1)))
 	ssb.border_color = Color(1, 1, 1, 0.1)
 	ssb.set_corner_radius_all(_si(12))
-	ssb.content_margin_left = _si(10)
-	ssb.content_margin_right = _si(10)
-	ssb.content_margin_top = _si(8)
-	ssb.content_margin_bottom = _si(8)
+	ssb.content_margin_left = _si(12)
+	ssb.content_margin_right = _si(12)
+	ssb.content_margin_top = _si(10)
+	ssb.content_margin_bottom = _si(10)
 	stats_panel.add_theme_stylebox_override("panel", ssb)
 	_class_detail_host.add_child(stats_panel)
 	var stats_host := VBoxContainer.new()
+	stats_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stats_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stats_host.add_theme_constant_override("separation", _si(6))
 	stats_panel.add_child(stats_host)
-	_fill_stats_chart(stats_host, true)
+	_fill_stats_chart(stats_host, false, true)
 
 
-func _fill_stats_chart(host: VBoxContainer, compact: bool) -> void:
+func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = false) -> void:
 	for c in host.get_children():
 		c.queue_free()
 	if _class_name.is_empty():
@@ -1340,26 +1391,36 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool) -> void:
 		max_val = maxi(max_val, int(stats.get(k, 0)))
 
 	var head := HBoxContainer.new()
+	head.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	host.add_child(head)
 	var h := Label.new()
 	h.text = "STARTING STATS"
 	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_theme_font_size_override("font_size", _fs(13))
+	h.add_theme_font_size_override("font_size", _fs(15 if fill_space else 13))
 	ClientUi.apply_display_font(h)
 	h.add_theme_color_override("font_color", ClientUi.MUTED)
 	head.add_child(h)
 	if not primary.is_empty():
 		var pri := Label.new()
 		pri.text = "Primary: %s" % str(STAT_LABELS.get(primary, primary))
-		pri.add_theme_font_size_override("font_size", _fs(12))
+		pri.add_theme_font_size_override("font_size", _fs(14 if fill_space else 12))
 		pri.add_theme_color_override("font_color", GameData.STAT_COLORS.get(primary, ClientUi.MUTED))
 		ClientUi.apply_body_font(pri)
 		head.add_child(pri)
+
+	var icon_sz := _s(22.0 if fill_space else (16.0 if compact else 18.0))
+	var name_fs := _fs(14 if fill_space else (10 if compact else 11))
+	var num_fs := _fs(20 if fill_space else 16)
+	var bar_size := _sv(Vector2(120 if fill_space else 75, 12 if fill_space else 8))
+	var row_pad_y := _si(8 if fill_space else 5)
+	var row_pad_x := _si(10 if fill_space else 8)
 
 	for stat in STAT_ORDER:
 		var val := int(stats.get(stat, 0))
 		var color: Color = GameData.STAT_COLORS.get(stat, ClientUi.MUTED)
 		var row := PanelContainer.new()
+		if fill_space:
+			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		var rsb := StyleBoxFlat.new()
 		rsb.bg_color = Color(color, 0.12)
 		rsb.set_border_width_all(maxi(1, _si(1)))
@@ -1370,38 +1431,40 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool) -> void:
 		else:
 			rsb.border_color = Color(1, 1, 1, 0.08)
 		rsb.set_corner_radius_all(_si(8))
-		rsb.content_margin_left = _si(8)
-		rsb.content_margin_right = _si(8)
-		rsb.content_margin_top = _si(5)
-		rsb.content_margin_bottom = _si(5)
+		rsb.content_margin_left = row_pad_x
+		rsb.content_margin_right = row_pad_x
+		rsb.content_margin_top = row_pad_y
+		rsb.content_margin_bottom = row_pad_y
 		row.add_theme_stylebox_override("panel", rsb)
 		host.add_child(row)
 
 		var inner := HBoxContainer.new()
-		inner.add_theme_constant_override("separation", _si(6))
+		inner.size_flags_vertical = Control.SIZE_EXPAND_FILL if fill_space else Control.SIZE_SHRINK_CENTER
+		inner.alignment = BoxContainer.ALIGNMENT_CENTER
+		inner.add_theme_constant_override("separation", _si(8 if fill_space else 6))
 		row.add_child(inner)
-		var icon := StatIcon.make(stat, _s(16.0))
+		var icon := StatIcon.make(stat, icon_sz)
 		inner.add_child(icon)
 		var nm := Label.new()
 		var suffix := ""
 		if stat == primary:
-			suffix = " Pri"
+			suffix = " Primary"
 		elif stat == secondary:
 			suffix = " Sec"
 		nm.text = "%s%s" % [str(STAT_LABELS.get(stat, stat)), suffix]
 		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		nm.add_theme_font_size_override("font_size", _fs(10 if compact else 11))
+		nm.add_theme_font_size_override("font_size", name_fs)
 		ClientUi.apply_display_font(nm)
 		nm.add_theme_color_override("font_color", color.lightened(0.25))
 		inner.add_child(nm)
 		var num := Label.new()
 		num.text = str(val)
-		num.add_theme_font_size_override("font_size", _fs(16))
+		num.add_theme_font_size_override("font_size", num_fs)
 		ClientUi.apply_display_font(num)
 		num.add_theme_color_override("font_color", color.lightened(0.25))
 		inner.add_child(num)
 		var bar_bg := ProgressBar.new()
-		bar_bg.custom_minimum_size = _sv(Vector2(75, 8))
+		bar_bg.custom_minimum_size = bar_size
 		bar_bg.max_value = float(max_val)
 		bar_bg.value = float(val)
 		bar_bg.show_percentage = false

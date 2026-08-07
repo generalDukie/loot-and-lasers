@@ -302,7 +302,7 @@ func _handle_packet(packet: String) -> void:
 		if typeof(payload) == TYPE_DICTIONARY:
 			msg = str(payload.get("message", msg))
 		if AuthManager != null and AuthManager.has_method("handle_session_superseded"):
-			AuthManager.handle_session_superseded(msg)
+			AuthManager.handle_session_superseded(msg, true)
 
 
 func _handle_wallet_event(payload: Dictionary) -> void:

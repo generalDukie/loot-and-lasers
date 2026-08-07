@@ -78,7 +78,7 @@ export function broadcastWalletUpdated(accountId, data) {
 }
 
 /** Close live sockets for an account — used when a newer login claims the session. */
-export function kickAccountSessions(accountId, { reason = "session_replaced", message = "Signed in elsewhere. Please log in again." } = {}) {
+export function kickAccountSessions(accountId, { reason = "session_replaced", message = "Signed in elsewhere on this server. Please log in again." } = {}) {
   if (!accountId) return 0;
   const payload = JSON.stringify({
     entity: "Auth",

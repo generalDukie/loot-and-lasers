@@ -1,7 +1,7 @@
 class_name MissionBoard
 extends RefCounted
-## Client-side cantina offer generation (mirrors web generateDailyMissions).
-## Server recomputes rewards on ClaimMission — preview numbers are for UI only.
+## Display helpers for Cantina / mission UI (duration, preview gains).
+## Offer generation is server-authoritative via GetCantinaOffers — do not build boards here.
 
 const MISSION_MIN_FUEL := 0.25
 const MISSION_MIN_DURATION_SECONDS := 15
@@ -13,24 +13,6 @@ const XP_PER_FUEL_POWER := 0.032
 const XP_PER_FUEL_EXP := 1.67
 ## 0-based indices into the mission-explore art pool (6 images).
 const EXPLORE_SCENE_COUNT := 6
-
-## Mirrors web `ITEM_DROP_RATES` — preview chips on the mission detail sheet.
-const ITEM_DROP_RATES := {
-	"common": {"common": 85, "uncommon": 12, "rare": 3, "epic": 0, "legendary": 0},
-	"uncommon": {"common": 55, "uncommon": 35, "rare": 8, "epic": 2, "legendary": 0},
-	"rare": {"common": 25, "uncommon": 40, "rare": 25, "epic": 8, "legendary": 2},
-	"epic": {"common": 10, "uncommon": 25, "rare": 35, "epic": 22, "legendary": 8},
-	"legendary": {"common": 0, "uncommon": 10, "rare": 30, "epic": 35, "legendary": 25},
-}
-const LOOT_TYPES := ["weapon", "armor", "helmet", "boots", "accessory", "ship_module"]
-const RARITY_ORDER := ["common", "uncommon", "rare", "epic", "legendary"]
-const RARITY_COLORS := {
-	"common": Color("#9CA3AF"),
-	"uncommon": Color("#22C55E"),
-	"rare": Color("#3B82F6"),
-	"epic": Color("#A855F7"),
-	"legendary": Color("#F59E0B"),
-}
 
 const DURATION_RULES := {
 	1: {"min": 15, "max": 30, "step": 15},

@@ -94,7 +94,8 @@ legacy implementation debt, not examples to copy.
 
 ```gdscript
 # Today:
-# var res := await GameApiClient.invoke("LaunchMission", {"template": template})
+# var res := await GameApiClient.invoke("GetCantinaOffers", {})
+# var launch := await GameApiClient.invoke("LaunchMission", {"offer_id": offer_id})
 
 # Later:
 var res: Dictionary = await NakamaManager.call_authenticated_rpc(

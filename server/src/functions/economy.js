@@ -111,6 +111,15 @@ import {
   equipItemForCharacter,
   unequipItemForCharacter,
 } from "../shared/inventoryEquipment.js";
+import {
+  CANTINA_STATES,
+  generateCantinaOfferSet,
+  lockCantinaOffersPatch,
+  publicCantinaPayload,
+  resolveCantinaState,
+  resolveLaunchableCantinaOffer,
+  stampCantinaOffers,
+} from "../shared/cantinaOffers.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -706,18 +715,53 @@ export async function SyncFuelCycle(user) {
   }
 }
 
+// ── GetCantinaOffers ─────────────────────────────────────────
+/** Idempotent: return persisted offers, or generate only when READY_FOR_NEW_OFFERS. */
+export async function GetCantinaOffers(user, _body = {}) {
+  try {
+    const result = await withTransactionAsync(async () => {
+      const ch = requireMyChar(user);
+      let mission = null;
+      if (ch.active_mission_id) {
+        mission = entities.Mission.get(ch.active_mission_id);
+      }
+      const state = resolveCantinaState(ch, mission);
+      if (state === CANTINA_STATES.ACTIVE_MISSION || state === CANTINA_STATES.COMPLETED_UNCLAIMED) {
+        return publicCantinaPayload(ch, state, [], { generated: false, character: ch });
+      }
+      if (state === CANTINA_STATES.AVAILABLE_OFFERS) {
+        return publicCantinaPayload(ch, state, ch.cantina_offers, { generated: false, character: ch });
+      }
+      const offers = generateCantinaOfferSet(ch);
+      const patch = stampCantinaOffers(ch, offers, clock.nowIso());
+      const character = entities.Character.update(ch.id, patch);
+      return publicCantinaPayload(character, CANTINA_STATES.AVAILABLE_OFFERS, offers, {
+        generated: true,
+        patch,
+        character,
+      });
+    });
+    return { status: 200, body: result };
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    throw err;
+  }
+}
+
+function retireAndGenerateCantinaOffers(character, extraPatch = {}) {
+  const preview = { ...character, ...extraPatch, active_mission_id: "", mission_end_time: "" };
+  const offers = generateCantinaOfferSet(preview);
+  return {
+    ...stampCantinaOffers(preview, offers, clock.nowIso()),
+    offers,
+  };
+}
+
 // ── LaunchMission ────────────────────────────────────────────
 export async function LaunchMission(user, body) {
-  const template = body?.template;
-  if (!template?.name || !template?.duration_seconds) {
-    return { status: 400, body: { error: "Missing template fields" } };
-  }
-
-  // Hard bounds only — level pools gate generation, not accept/complete.
-  // Stale cantina offers (rolled at a prior level) must remain launchable.
-  const rawDuration = Math.floor(Number(template.duration_seconds));
-  if (!isLaunchableMissionDuration(rawDuration)) {
-    return { status: 400, body: { error: "Invalid mission duration", code: "INVALID_DURATION" } };
+  const offerId = String(body?.offer_id || body?.template?.id || "").trim();
+  if (!offerId) {
+    return { status: 400, body: { error: "Missing offer_id" } };
   }
 
   try {
@@ -729,6 +773,15 @@ export async function LaunchMission(user, body) {
       }
       if (countBagOccupancy(ch) >= getInventoryCap(ch)) {
         httpErr(400, "Inventory full — clear bag space before launching a mission");
+      }
+
+      const template = resolveLaunchableCantinaOffer(ch, offerId);
+
+      // Hard bounds only — level pools gate generation, not accept/complete.
+      // Stale cantina offers (rolled at a prior level) must remain launchable.
+      const rawDuration = Math.floor(Number(template.duration_seconds));
+      if (!isLaunchableMissionDuration(rawDuration)) {
+        httpErr(400, "Invalid mission duration", "INVALID_DURATION");
       }
 
       const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch);
@@ -762,13 +815,11 @@ export async function LaunchMission(user, body) {
       const startNow = clock.now();
       const endTime = new Date(startNow.getTime() + duration * 1000);
 
-      // Client may send explore_scene; otherwise pick one so the active-mission
-      // backdrop rotates instead of always landing on scene 0.
       const EXPLORE_SCENE_COUNT = 6;
       const rawScene = Number(template.explore_scene);
       const exploreScene = Number.isFinite(rawScene)
         ? ((Math.floor(rawScene) % EXPLORE_SCENE_COUNT) + EXPLORE_SCENE_COUNT) % EXPLORE_SCENE_COUNT
-        : Math.floor(secureRandom() * EXPLORE_SCENE_COUNT);
+        : 0;
 
       // Snapshot reward definition at start. Item rolls (Gear/Stim/Junk) settle
       // exactly once in ClaimMission — not here (Restoration 11).
@@ -777,6 +828,7 @@ export async function LaunchMission(user, body) {
 
       const mission = entities.Mission.create({
         character_id: ch.id,
+        cantina_offer_id: template.id,
         name: template.name,
         description: template.description || "",
         location: template.location || "",
@@ -803,6 +855,7 @@ export async function LaunchMission(user, body) {
 
       const patch = {
         ...(resetPatch || {}),
+        ...lockCantinaOffersPatch(),
         active_mission_id: mission.id,
         mission_end_time: endTime.toISOString(),
         fuel: Math.round((currentFuel - fuelCost) * 100) / 100,
@@ -821,7 +874,9 @@ export async function LaunchMission(user, body) {
 // ── PrepareMissionCombat / ClaimMission / FailMission ────────
 /** Clear a character's pointer to a mission row that no longer exists. */
 function releaseDanglingMission(ch) {
-  const patch = { active_mission_id: "", mission_end_time: "" };
+  const rolled = retireAndGenerateCantinaOffers(ch);
+  const { offers, ...offerPatch } = rolled;
+  const patch = { active_mission_id: "", mission_end_time: "", ...offerPatch };
   const character = entities.Character.update(ch.id, patch);
   return {
     success: true,
@@ -831,6 +886,8 @@ function releaseDanglingMission(ch) {
     character,
     items: [],
     gains: null,
+    cantina_offers: offers,
+    cantina_state: CANTINA_STATES.AVAILABLE_OFFERS,
   };
 }
 
@@ -957,7 +1014,9 @@ export async function ClaimMission(user, body) {
 
       if (!won) {
         entities.Mission.update(mission.id, { status: "failed" });
-        const patch = { active_mission_id: "", mission_end_time: "" };
+        const rolled = retireAndGenerateCantinaOffers(ch);
+        const { offers, ...offerPatch } = rolled;
+        const patch = { active_mission_id: "", mission_end_time: "", ...offerPatch };
         const character = entities.Character.update(ch.id, patch);
         return {
           success: true,
@@ -967,6 +1026,8 @@ export async function ClaimMission(user, body) {
           character,
           items: [],
           gains: null,
+          cantina_offers: offers,
+          cantina_state: CANTINA_STATES.AVAILABLE_OFFERS,
         };
       }
 
@@ -1083,6 +1144,10 @@ export async function ClaimMission(user, body) {
           Object.assign(patch, ach.patch);
 
           const progression = consumeProgression(patch);
+          const rolled = retireAndGenerateCantinaOffers({ ...live, ...patch }, patch);
+          const { offers: cantinaOffers, ...offerPatch } = rolled;
+          Object.assign(patch, offerPatch);
+
           const character = entities.Character.update(live.id, patch);
           if (ach.newly_unlocked?.length) {
             notifyAchievementsUnlocked(character.id, ach.newly_unlocked);
@@ -1097,6 +1162,8 @@ export async function ClaimMission(user, body) {
             pending_loot: pendingLoot,
             newly_unlocked: ach.newly_unlocked,
             discoveries,
+            cantina_offers: cantinaOffers,
+            cantina_state: CANTINA_STATES.AVAILABLE_OFFERS,
             item_outcome: payload.itemOutcome || (gearDropped ? "GEAR" : "NONE"),
             gains: {
               stardust: payload.stardust || 0,
@@ -1795,6 +1862,7 @@ export const ECONOMY_HANDLERS = {
   UseConsumable,
   GetActiveStims,
   SyncFuelCycle,
+  GetCantinaOffers,
   LaunchMission,
   PrepareMissionCombat,
   ClaimMission,

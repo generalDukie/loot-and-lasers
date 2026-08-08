@@ -113,19 +113,18 @@ async function main() {
     console.log(r.status < 400 ? "OK  " : "FAIL", name, r.status, String(detail).slice(0, 160));
   }
 
-  // Full mission path: launch (valid duration) → skip → prepare combat → claim.
+  // Full mission path: persist offers → launch (offer_id) → skip → prepare combat → claim.
+  const board = await call("/api/functions/GetCantinaOffers", "POST", {});
+  const offers = Array.isArray(board.data?.offers) ? board.data.offers : [];
+  console.log(
+    board.status < 400 && offers.length ? "OK  " : "FAIL",
+    "GetCantinaOffers",
+    board.status,
+    offers.length ? `${offers.length} offers` : board.data?.error || "no offers"
+  );
+  const offerId = offers[0]?.id;
   const launch = await call("/api/functions/LaunchMission", "POST", {
-    template: {
-      name: "Probe Mission",
-      description: "probe",
-      location: "Probe Reach",
-      sector: 1,
-      level_requirement: 1,
-      duration_seconds: 60,
-      stardust_efficiency: 1,
-      xp_efficiency: 1,
-      fuel_cost: 1,
-    },
+    offer_id: offerId,
   });
   const mid = launch.data?.mission?.id;
   console.log(launch.status < 400 ? "OK  " : "FAIL", "LaunchMission", launch.status, mid || launch.data?.error);

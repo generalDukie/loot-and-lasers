@@ -1,7 +1,6 @@
 extends Node
 ## Mission lifecycle — Node gameplay authority.
-## The cantina board is a client-side preview matching the web client. Node validates
-## launch, owns mission state/timers, and atomically grants XP, Stardust, and loot.
+## Cantina offers are server-persisted. The client only displays GetCantinaOffers.
 
 signal board_changed(offers: Array)
 signal active_mission_changed(mission: Dictionary)
@@ -20,8 +19,8 @@ signal mission_claim_failed(error: String)
 signal reward_received(reward: Dictionary)
 
 const BOARD_CFG := "user://godot_mission_board.cfg"
-## Bump when board shape changes (e.g. explore art no longer slot-tied).
-const BOARD_CACHE_VERSION := 2
+## Bump when board shape changes (server-persisted offer ids).
+const BOARD_CACHE_VERSION := 3
 const STATUS_MIN_INTERVAL_SEC := 2.0
 ## Skip Character GET on rapid page hops when GameManager already has this character.
 const CHARACTER_REFRESH_TTL_MS := 20000
@@ -132,9 +131,8 @@ func invalidate_character_cache() -> void:
 	_character_refresh_id = ""
 
 
-## The board is display-only, matching the web client. Node snapshots and validates
-## all authoritative costs/rewards when LaunchMission is called.
-func ensure_board(force_reroll: bool = false) -> Array:
+## Display persisted Cantina offers. Never generates locally — Node owns the set.
+func ensure_board(_force_reroll: bool = false) -> Array:
 	var character: Dictionary = GameManager.active_character
 	var cid := str(character.get("id", ""))
 	if cid.is_empty():
@@ -142,27 +140,39 @@ func ensure_board(force_reroll: bool = false) -> Array:
 		board_changed.emit(offers)
 		return offers
 
-	if not force_reroll:
+	var res: Dictionary = await GameApiClient.invoke("GetCantinaOffers", {})
+	if not res.ok:
 		var cached := _load_board_cache(cid)
 		if not cached.is_empty():
 			offers = cached
 			board_changed.emit(offers)
 			return offers
+		mission_error.emit(str(res.get("error", "Could not load mission offers")))
+		offers = []
+		board_changed.emit(offers)
+		return offers
 
-	offers = MissionBoard.build_board(character)
+	_apply_character_payload(res)
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	offers = _coerce_server_offers(data.get("offers", []))
 	_save_board_cache(cid, offers)
 	board_changed.emit(offers)
 	return offers
 
 
 func reroll_board() -> Array:
-	return await ensure_board(true)
+	## No client reroll — server returns the same persisted set until claim.
+	return await ensure_board(false)
 
 
 ## Node snapshots the mission, reward definition, loot roll, timer, and Fuel debit.
 func launch_offer(offer: Dictionary) -> Dictionary:
-	var template := offer.duplicate(true)
-	var res: Dictionary = await GameApiClient.invoke("LaunchMission", {"template": template})
+	var offer_id := str(offer.get("id", "")).strip_edges()
+	if offer_id.is_empty():
+		var err := "Missing mission offer id"
+		mission_error.emit(err)
+		return {"ok": false, "error": err, "data": {}}
+	var res: Dictionary = await GameApiClient.invoke("LaunchMission", {"offer_id": offer_id})
 	if not res.ok:
 		mission_error.emit(str(res.get("error", "Launch failed")))
 		return res
@@ -332,13 +342,6 @@ func claim_mission(won: bool = true) -> Dictionary:
 	return await _claim_node_mission(won, "")
 
 
-func claim_mission_for(character_id: String = "", mission_id: String = "") -> Dictionary:
-	# Compatibility wrapper for callers that pass explicit ids. Ownership remains
-	# bound to the authenticated Node account; character_id is never trusted.
-	var _unused_character_id := character_id
-	return await _claim_node_mission(true, mission_id)
-
-
 func _claim_node_mission(won: bool, mission_id: String) -> Dictionary:
 	var mid := mission_id.strip_edges()
 	if mid.is_empty():
@@ -394,7 +397,13 @@ func _claim_node_mission(won: bool, mission_id: String) -> Dictionary:
 	if settled_won and not bool(last_claim_result.get("mission_missing", false)):
 		var gains: Dictionary = last_claim_result.get("gains", {}) if typeof(last_claim_result.get("gains", {})) == TYPE_DICTIONARY else {}
 		await SocialManager.contribute_mission(mission_snapshot, gains)
-	await ensure_board(true)
+	var claimed_offers: Variant = last_claim_result.get("cantina_offers", null)
+	if typeof(claimed_offers) == TYPE_ARRAY and not (claimed_offers as Array).is_empty():
+		offers = _coerce_server_offers(claimed_offers)
+		_save_board_cache(str(GameManager.active_character.get("id", "")), offers)
+		board_changed.emit(offers)
+	else:
+		await ensure_board(false)
 	return res
 
 
@@ -691,6 +700,16 @@ func _apply_wallet_from_data(data: Variant, source: String) -> bool:
 	return false
 
 
+func _coerce_server_offers(raw: Variant) -> Array:
+	var out: Array = []
+	if typeof(raw) != TYPE_ARRAY:
+		return out
+	for row in raw:
+		if typeof(row) == TYPE_DICTIONARY:
+			out.append((row as Dictionary).duplicate(true))
+	return out
+
+
 ## Non-authoritative display cache only — never used to invent missions.
 func _load_board_cache(character_id: String) -> Array:
 	var cfg := ConfigFile.new()
@@ -701,11 +720,13 @@ func _load_board_cache(character_id: String) -> Array:
 	var raw: Variant = cfg.get_value(character_id, "offers", [])
 	if typeof(raw) != TYPE_ARRAY:
 		return []
-	# Reject legacy slot-tied boards missing per-mission art.
+	# Reject legacy boards missing per-mission art or server offer ids.
 	for row in raw:
 		if typeof(row) != TYPE_DICTIONARY:
 			return []
 		if not (row as Dictionary).has("explore_scene"):
+			return []
+		if str((row as Dictionary).get("id", "")).strip_edges().is_empty():
 			return []
 	return raw
 
@@ -715,7 +736,7 @@ func _save_board_cache(character_id: String, board: Array) -> void:
 	cfg.load(BOARD_CFG)
 	cfg.set_value(character_id, "offers", board)
 	cfg.set_value(character_id, "board_version", BOARD_CACHE_VERSION)
-	cfg.set_value(character_id, "cache_source", "local_board")
+	cfg.set_value(character_id, "cache_source", "server_offers")
 	cfg.set_value(character_id, "cached_at", Time.get_unix_time_from_system())
 	cfg.save(BOARD_CFG)
 

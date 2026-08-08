@@ -573,9 +573,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	var ch := GameManager.active_character
 	var patron: Dictionary = offer.get("patron", {}) if typeof(offer.get("patron", {})) == TYPE_DICTIONARY else {}
 	var gains: Dictionary = MissionBoard.compute_gains(ch, offer, false)
-	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
 	var dur := MissionBoard.estimate_duration(offer, ch)
-	var fuel_tint := FUEL_COLOR
 
 	var card_style := ClientUi.painted_panel_style(
 		Color(0.05, 0.045, 0.08, 0.97), Color(tint, 0.55), 18, 2
@@ -671,7 +669,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	_hover_body.add_child(rewards)
 	rewards.add_child(_make_reward_tile("★", str(gains.get("experience", "?")), "XP", XP_COLOR))
 	rewards.add_child(_make_reward_tile("✦", str(gains.get("stardust", "?")), "Stardust", STARDUST_COLOR))
-	rewards.add_child(_make_reward_tile("⛽", str(fuel), "Fuel", fuel_tint))
+	rewards.add_child(_make_reward_tile("🎁", "Chance", "Variety of items", ClientUi.GOLD))
 
 	var footer := Label.new()
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -752,19 +750,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	var ch := GameManager.active_character
 	var patron: Dictionary = offer.get("patron", {}) if typeof(offer.get("patron", {})) == TYPE_DICTIONARY else {}
 	var gains: Dictionary = MissionBoard.compute_gains(ch, offer, false)
-	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
 	var dur := MissionBoard.estimate_duration(offer, ch)
-	var fuel_tint := FUEL_COLOR
-	var rewards_raw: Variant = offer.get("rewards", {})
-	var rewards: Dictionary = rewards_raw if typeof(rewards_raw) == TYPE_DICTIONARY else {}
-	var rarity_chance := str(rewards.get("item_rarity_chance", "common"))
-	var drop_rates: Dictionary = MissionBoard.ITEM_DROP_RATES.get(
-		rarity_chance, MissionBoard.ITEM_DROP_RATES["common"]
-	) as Dictionary
-	var loot_type := str(rewards.get("loot_type", ""))
-	if loot_type.is_empty():
-		var types: Array = MissionBoard.LOOT_TYPES
-		loot_type = str(types[str(offer.get("name", "")).length() % types.size()])
 
 	var card_style := ClientUi.painted_panel_style(
 		Color(0.06, 0.055, 0.09, 0.98), Color(0.35, 0.4, 0.48, 0.55), 18, 1
@@ -895,65 +881,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	_preview_body.add_child(reward_row)
 	reward_row.add_child(_make_reward_tile("★", str(gains.get("experience", "?")), "XP", XP_COLOR))
 	reward_row.add_child(_make_reward_tile("✦", str(gains.get("stardust", "?")), "Stardust", STARDUST_COLOR))
-	reward_row.add_child(_make_reward_tile("⛽", str(fuel), "Fuel", fuel_tint))
-
-	# Possible loot
-	var loot_lab := Label.new()
-	loot_lab.text = "POSSIBLE LOOT"
-	loot_lab.add_theme_font_size_override("font_size", 16)
-	loot_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_display_font(loot_lab)
-	_preview_body.add_child(loot_lab)
-
-	var loot_box := PanelContainer.new()
-	var loot_style := ClientUi.painted_panel_style(
-		Color(0.08, 0.09, 0.12, 0.7), Color(0.4, 0.45, 0.52, 0.35), 12, 1
-	)
-	loot_style.content_margin_left = 12
-	loot_style.content_margin_right = 12
-	loot_style.content_margin_top = 10
-	loot_style.content_margin_bottom = 10
-	loot_box.add_theme_stylebox_override("panel", loot_style)
-	_preview_body.add_child(loot_box)
-	var loot_col := VBoxContainer.new()
-	loot_col.add_theme_constant_override("separation", 8)
-	loot_box.add_child(loot_col)
-	var loot_head := HBoxContainer.new()
-	loot_head.add_theme_constant_override("separation", 10)
-	loot_col.add_child(loot_head)
-	var gift := Label.new()
-	gift.text = "🎁"
-	gift.add_theme_font_size_override("font_size", 27)
-	loot_head.add_child(gift)
-	var loot_type_lab := Label.new()
-	loot_type_lab.text = loot_type.replace("_", " ").capitalize()
-	loot_type_lab.add_theme_font_size_override("font_size", 21)
-	loot_type_lab.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(loot_type_lab)
-	loot_head.add_child(loot_type_lab)
-
-	var rarity_row := HBoxContainer.new()
-	rarity_row.add_theme_constant_override("separation", 6)
-	loot_col.add_child(rarity_row)
-	for r in MissionBoard.RARITY_ORDER:
-		var pct := int(drop_rates.get(r, 0))
-		if pct <= 0:
-			continue
-		var rcol: Color = MissionBoard.RARITY_COLORS.get(r, ClientUi.MUTED)
-		var chip := PanelContainer.new()
-		var chip_style := ClientUi.painted_panel_style(Color(rcol, 0.18), Color(rcol, 0.0), 8, 0)
-		chip_style.content_margin_left = 8
-		chip_style.content_margin_right = 8
-		chip_style.content_margin_top = 3
-		chip_style.content_margin_bottom = 3
-		chip.add_theme_stylebox_override("panel", chip_style)
-		rarity_row.add_child(chip)
-		var chip_lab := Label.new()
-		chip_lab.text = "%s %s%%" % [str(r).substr(0, 3).capitalize(), pct]
-		chip_lab.add_theme_font_size_override("font_size", 16)
-		chip_lab.add_theme_color_override("font_color", rcol)
-		ClientUi.apply_display_font(chip_lab)
-		chip.add_child(chip_lab)
+	reward_row.add_child(_make_reward_tile("🎁", "Chance", "Variety of items", ClientUi.GOLD))
 
 	# Status + Start Mission — fuel does not gate launch (Nakama start has no debit).
 	var disabled := state == "Locked" or state == "Busy"
@@ -1089,11 +1017,6 @@ func _make_reward_tile(icon: String, value: String, label: String, color: Color)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
 	return tile
-
-
-func _confirm_contract(offer: Dictionary, tint: Color) -> void:
-	# Kept for compatibility — click now opens the detail sheet directly.
-	_open_mission_sheet(offer, tint, "Accept")
 
 
 func _on_launch(offer: Dictionary) -> void:

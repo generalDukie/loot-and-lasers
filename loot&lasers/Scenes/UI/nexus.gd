@@ -488,27 +488,28 @@ func _on_assault() -> void:
 	var members: Array = SocialManager.guild_members
 	var role := str(SocialManager.my_membership.get("role", ""))
 	if role != "leader" and role != "officer":
-		_set_status("Only leader/officer can assault.")
+		Notify.blocked("Not allowed", "Only a leader or officer can assault")
 		return
 	var elig: Dictionary = NexusManager.eligibility(guild, members)
 	if not bool(elig.get("ok", false)):
-		_set_status(str(elig.get("error", "Not eligible")))
+		Notify.blocked(str(elig.get("error", "Not eligible")))
 		return
 	if NexusManager.owns_nexus(str(guild.get("id", ""))):
-		_set_status("You already own the Nexus.")
+		Notify.blocked("You already own the Nexus")
 		return
 	if not NexusManager.is_vulnerable():
-		_set_status("Owner still protected.")
+		Notify.blocked("Owner still protected")
 		return
 	if NexusManager.assault_cooldown_ms() > 0:
-		_set_status("Assault on cooldown.")
+		Notify.blocked("Assault on cooldown")
 		return
 	_busy = true
 	_set_status("Resolving assault…")
 	var res: Dictionary = await NexusManager.resolve_assault(str(guild.get("id", "")))
 	_busy = false
 	if not res.ok:
-		_set_status(str(res.get("error", "Assault failed")))
+		if not Notify.from_result(res):
+			_set_status(str(res.get("error", "Assault failed")))
 		return
 	var data: Dictionary = NexusManager.last_assault
 	_set_status("Winner: %s · ownership changed: %s" % [

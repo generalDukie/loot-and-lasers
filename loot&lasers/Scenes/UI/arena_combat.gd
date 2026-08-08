@@ -595,7 +595,6 @@ func _boot_dungeon() -> void:
 		"planet_name": str(planet.get("name", "Frontier")),
 		"planet_icon": str(planet.get("icon", "")),
 		"planet_color": planet.get("color", Color("#34D399")),
-		"patrol": DungeonManager.patrol,
 		"is_boss": is_boss,
 		"enemy_name": str(enemy.get("name", "Foe")),
 		"enemy_index": _dungeon_enemy_index(enemy),
@@ -605,10 +604,9 @@ func _boot_dungeon() -> void:
 	if typeof(raw_accent) == TYPE_COLOR:
 		accent = raw_accent as Color
 	_backdrop.set_accent(accent)
-	_theme_chip.text = "%s %s%s" % [
+	_theme_chip.text = "%s %s" % [
 		_dungeon_ctx.get("planet_icon", ""),
 		_dungeon_ctx.get("planet_name", "Frontier"),
-		" · Patrol" if bool(_dungeon_ctx.get("patrol", false)) else "",
 	]
 	_theme_chip.add_theme_color_override("font_color", accent.lightened(0.25))
 	_theme_chip.visible = true
@@ -1367,15 +1365,10 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 			GameManager.go_stats()
 		else:
 			GameManager.go_hub()
+	# Items now render as their own reward panes; only note the empty-loot case.
 	var note := ""
-	if won and items.size() > 1:
-		note = "%s item(s) recovered" % items.size()
-	elif won and outcome == "NONE":
+	if won and outcome == "NONE":
 		note = "No item recovered this run."
-	elif won and outcome == "STIM":
-		note = "Stim recovered."
-	elif won and outcome == "JUNK":
-		note = "Junk recovered."
 	var summary := {
 		"won": won,
 		"mode": "mission",
@@ -1384,6 +1377,7 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 		"xp": int(gains.get("experience", 0)) if won else 0,
 		"stardust": int(gains.get("stardust", 0)) if won else 0,
 		"gear_item": gear,
+		"reward_items": items if won else [],
 		"note": note,
 		"progression": data.get("progression", {}) if typeof(data.get("progression", {})) == TYPE_DICTIONARY else {},
 		"actions": [
@@ -1406,13 +1400,10 @@ func _show_dungeon_result(data: Dictionary) -> void:
 	var enemy_name := str(_dungeon_ctx.get("enemy_name", "Foe"))
 	var planet_name := str(_dungeon_ctx.get("planet_name", "Frontier"))
 	var is_boss := bool(_dungeon_ctx.get("is_boss", false))
-	var was_patrol := bool(_dungeon_ctx.get("patrol", false))
 	var enemy_index := int(_dungeon_ctx.get("enemy_index", 1))
 	var title := ""
 	if won:
-		if was_patrol:
-			title = "Patrolled — defeated %s" % enemy_name
-		elif is_boss:
+		if is_boss:
 			title = "Defeated %s" % enemy_name
 		else:
 			title = "Cleared enemy %s" % enemy_index
@@ -1421,8 +1412,6 @@ func _show_dungeon_result(data: Dictionary) -> void:
 	var subtitle := planet_name
 	if is_boss:
 		subtitle += " · Boss"
-	if was_patrol:
-		subtitle += " · Patrol"
 	var note := ""
 	if not won:
 		note = "No rewards on defeat."
@@ -1443,6 +1432,7 @@ func _show_dungeon_result(data: Dictionary) -> void:
 		"xp": int(rewards.get("experience", 0)) if won else 0,
 		"stardust": int(rewards.get("stardust", 0)) if won else 0,
 		"gear_item": gear,
+		"reward_items": items if won else [],
 		"note": note,
 		"progression": data.get("progression", {}) if typeof(data.get("progression", {})) == TYPE_DICTIONARY else {},
 		"actions": [

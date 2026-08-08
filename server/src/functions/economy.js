@@ -78,7 +78,21 @@ import {
 import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
 import {
   isLaunchableMissionDuration,
+  rollMissionDurationSeconds,
+  remainingFuelDurationSeconds,
+  MISSION_MIN_FUEL,
 } from "../../../src/lib/missionDuration.js";
+import { MISSION_GEAR_RARITY_WEIGHTS } from "../../../src/lib/stardustEconomy.js";
+import {
+  MISSION_TEMPLATES,
+  LOW_FUEL_TEMPLATES,
+  MISSION_PATRONS,
+  MISSION_COLLECTIBLES,
+  exploreImageId,
+  shuffleInPlace,
+  pickExploreScenes,
+  missionLootTypeFromName,
+} from "../shared/missionTemplates.js";
 import { ECONOMY_FOLLOW_ON_HANDLERS } from "./economyFollowOn.js";
 import { clock, TimeErrors } from "../shared/time/index.js";
 import {
@@ -111,15 +125,6 @@ import {
   equipItemForCharacter,
   unequipItemForCharacter,
 } from "../shared/inventoryEquipment.js";
-import {
-  CANTINA_STATES,
-  generateCantinaOfferSet,
-  lockCantinaOffersPatch,
-  publicCantinaPayload,
-  resolveCantinaState,
-  resolveLaunchableCantinaOffer,
-  stampCantinaOffers,
-} from "../shared/cantinaOffers.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -213,6 +218,263 @@ function computeMissionGains(character, mission, nexusBonus) {
     xpGain: applyXpBonus(baseXp, percentage),
     collectionPct: percentage,
   };
+}
+
+// ── Mission board (server-authoritative offer generation) ────
+// Node owns all gameplay-relevant mission values. The client requests the board,
+// renders the returned offers, and launches by offer_id — it never sends duration,
+// fuel, efficiency, XP, or Stardust for the server to trust.
+const MISSION_BOARD_VERSION = 3;
+
+function makeMissionOfferId(index) {
+  const t = clock.nowMs().toString(36);
+  const r = Math.floor(secureRandom() * 1e9).toString(36);
+  return `off_${t}_${r}_${index}`;
+}
+
+function normalizeBoardFuel(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function boardCanAffordAny(ch, offers) {
+  const fuel = normalizeBoardFuel(ch.fuel);
+  for (const o of offers) {
+    const cost = getEffectiveFuelCost(ch, {
+      duration_seconds: o.duration_seconds,
+      fuel_cost: typeof o.fuel_cost === "number" ? o.fuel_cost : undefined,
+    });
+    if (cost <= fuel + 0.001) return true;
+  }
+  return false;
+}
+
+function generateDailyOffers(ch, rng) {
+  const level = ch.level || 1;
+  const maxSector = (ch.highest_sector || 1) + 1;
+  let pool = MISSION_TEMPLATES.filter(
+    (t) => (t.level_requirement || 1) <= level && (t.sector || 1) <= maxSector
+  );
+  if (pool.length === 0) {
+    pool = MISSION_TEMPLATES.filter((t) => (t.level_requirement || 1) <= level);
+  }
+  if (pool.length === 0) pool = MISSION_TEMPLATES.slice();
+  pool = shuffleInPlace(pool.slice(), rng);
+  const givers = shuffleInPlace(MISSION_PATRONS.slice(), rng);
+  const exploreIndices = pickExploreScenes(3, rng);
+  const offers = [];
+  for (let i = 0; i < 3; i++) {
+    const tpl = pool[i % pool.length];
+    const sceneI = exploreIndices[i];
+    offers.push({
+      offer_id: makeMissionOfferId(i),
+      name: tpl.name,
+      description: tpl.description,
+      location: tpl.location,
+      sector: tpl.sector,
+      level_requirement: tpl.level_requirement,
+      duration_seconds: rollMissionDurationSeconds(level, rng()),
+      stardust_efficiency: rollMissionEfficiency(level, rng),
+      xp_efficiency: rollMissionEfficiency(level, rng),
+      patron: givers[i % givers.length],
+      explore_scene: sceneI,
+      image_id: exploreImageId(sceneI),
+      collectible: MISSION_COLLECTIBLES[Math.floor(rng() * MISSION_COLLECTIBLES.length)],
+      low_fuel: false,
+    });
+  }
+  return offers;
+}
+
+function generateLowFuelOffers(ch, rng) {
+  const fuel = normalizeBoardFuel(ch.fuel);
+  if (fuel < MISSION_MIN_FUEL) return [];
+  const level = ch.level || 1;
+  const duration = remainingFuelDurationSeconds(fuel);
+  if (duration == null) return [];
+  const givers = shuffleInPlace(MISSION_PATRONS.slice(), rng);
+  const count = Math.min(3, LOW_FUEL_TEMPLATES.length);
+  const exploreIndices = pickExploreScenes(count, rng);
+  const pinned = Math.max(MISSION_MIN_FUEL, fuel);
+  const offers = [];
+  for (let i = 0; i < count; i++) {
+    const tpl = LOW_FUEL_TEMPLATES[i];
+    const sceneI = exploreIndices[i];
+    offers.push({
+      offer_id: makeMissionOfferId(100 + i),
+      name: tpl.name,
+      description: tpl.description,
+      location: tpl.location,
+      sector: 1,
+      level_requirement: 1,
+      duration_seconds: duration,
+      fuel_cost: pinned,
+      stardust_efficiency: rollMissionEfficiency(level, rng),
+      xp_efficiency: rollMissionEfficiency(level, rng),
+      patron: givers[i % givers.length],
+      explore_scene: sceneI,
+      image_id: exploreImageId(sceneI),
+      low_fuel: true,
+    });
+  }
+  return offers;
+}
+
+function generateMissionBoardOffers(ch, rng) {
+  const normal = generateDailyOffers(ch, rng);
+  if (boardCanAffordAny(ch, normal)) return normal;
+  const low = generateLowFuelOffers(ch, rng);
+  return low.length ? low : normal;
+}
+
+/**
+ * Recompute all gameplay-relevant preview values for a stored offer against the
+ * CURRENT character (ship mods, collection %, gear miss streak). Preview fields are
+ * derived, never persisted — the persisted offer only holds generation inputs.
+ */
+function serializeBoardOffer(ch, offer) {
+  const raw = Math.floor(Number(offer.duration_seconds));
+  const missionLike = {
+    duration_seconds: raw,
+    fuel_cost:
+      offer.low_fuel && typeof offer.fuel_cost === "number" ? offer.fuel_cost : undefined,
+    stardust_efficiency: offer.stardust_efficiency,
+    xp_efficiency: offer.xp_efficiency,
+  };
+  const gains = computeMissionGains(ch, missionLike, false);
+  const missStreak = missionGearMissStreak(ch);
+  return {
+    offer_id: offer.offer_id,
+    name: offer.name,
+    description: offer.description || "",
+    location: offer.location || "",
+    sector: offer.sector || 1,
+    level_requirement: offer.level_requirement || 1,
+    patron: offer.patron || null,
+    explore_scene: offer.explore_scene ?? -1,
+    image_id: offer.image_id || "",
+    collectible: offer.collectible || null,
+    low_fuel: !!offer.low_fuel,
+    duration_seconds: raw,
+    display_duration_seconds: getEffectiveMissionDuration(ch, { duration_seconds: raw }),
+    fuel_cost: gains.fuelCost,
+    preview_xp: gains.xpGain,
+    preview_stardust: gains.stardustGain,
+    xp_efficiency: gains.xpEfficiency,
+    stardust_efficiency: gains.efficiency,
+    loot_type: missionLootTypeFromName(offer.name),
+    gear_drop_chance: missionGearDropChance(missStreak),
+    rarity_weights: { ...MISSION_GEAR_RARITY_WEIGHTS },
+  };
+}
+
+/** Convert a persisted board offer into the authoritative LaunchMission template. */
+function offerToLaunchTemplate(offer) {
+  return {
+    name: offer.name,
+    description: offer.description || "",
+    location: offer.location || "",
+    sector: offer.sector || 1,
+    level_requirement: offer.level_requirement || 1,
+    patron: offer.patron || null,
+    explore_scene: offer.explore_scene,
+    duration_seconds: Math.floor(Number(offer.duration_seconds)),
+    fuel_cost: typeof offer.fuel_cost === "number" ? offer.fuel_cost : undefined,
+    stardust_efficiency: offer.stardust_efficiency,
+    xp_efficiency: offer.xp_efficiency,
+    rewards: {},
+  };
+}
+
+function hasValidMissionBoard(character) {
+  const board = character?.mission_board;
+  return !!(
+    board &&
+    board.version === MISSION_BOARD_VERSION &&
+    Array.isArray(board.offers) &&
+    board.offers.length > 0
+  );
+}
+
+function retireAndGenerateMissionBoard(character, extraPatch = {}) {
+  const preview = { ...character, ...extraPatch, active_mission_id: "", mission_end_time: "" };
+  const offers = generateMissionBoardOffers(preview, secureRandom);
+  const board = {
+    version: MISSION_BOARD_VERSION,
+    generated_at: clock.nowIso(),
+    character_level: preview.level || 1,
+    offers,
+  };
+  return {
+    mission_board: board,
+    mission_board_status: "available",
+    offers: offers.map((o) => serializeBoardOffer(preview, o)),
+  };
+}
+
+// ── GetMissionBoard ──────────────────────────────────────────
+// Authoritative Cantina board. Generates + persists only when READY_FOR_NEW_OFFERS.
+// Reconnects, page hops, and reroll flags re-serve the SAME persisted offers.
+// A new set is created only after claim/fail (or a dangling lock with no active mission).
+export async function GetMissionBoard(user, _body = {}) {
+  try {
+    const result = await withTransactionAsync(async () => {
+      let ch = requireMyChar(user);
+      const reset = checkFuelReset(ch);
+      const chForGen = reset ? { ...ch, ...reset } : ch;
+
+      if (ch.active_mission_id) {
+        let mission = entities.Mission.get(ch.active_mission_id);
+        const state =
+          mission && mission.status === "completed" ? "COMPLETED_UNCLAIMED" : "ACTIVE_MISSION";
+        return {
+          success: true,
+          state,
+          offers: [],
+          generated: false,
+          active_mission_id: ch.active_mission_id,
+          board_generated_at: ch.mission_board?.generated_at || "",
+        };
+      }
+
+      const locked = String(ch.mission_board_status || "") === "locked_active";
+      if (!locked && hasValidMissionBoard(ch)) {
+        const offers = ch.mission_board.offers.map((o) => serializeBoardOffer(chForGen, o));
+        return {
+          success: true,
+          state: "AVAILABLE_OFFERS",
+          offers,
+          generated: false,
+          board_generated_at: ch.mission_board.generated_at,
+        };
+      }
+
+      const rolled = retireAndGenerateMissionBoard(chForGen);
+      ch = entities.Character.update(ch.id, {
+        mission_board: rolled.mission_board,
+        mission_board_status: rolled.mission_board_status,
+      });
+      return {
+        success: true,
+        state: "AVAILABLE_OFFERS",
+        offers: rolled.offers,
+        generated: true,
+        board_generated_at: rolled.mission_board.generated_at,
+        patch: {
+          mission_board: rolled.mission_board,
+          mission_board_status: rolled.mission_board_status,
+        },
+        character: ch,
+      };
+    });
+    return { status: 200, body: result };
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+    throw err;
+  }
+}
+
+export async function GetCantinaOffers(user, body = {}) {
+  return GetMissionBoard(user, body);
 }
 
 // ── DissolveItem ─────────────────────────────────────────────
@@ -715,53 +977,11 @@ export async function SyncFuelCycle(user) {
   }
 }
 
-// ── GetCantinaOffers ─────────────────────────────────────────
-/** Idempotent: return persisted offers, or generate only when READY_FOR_NEW_OFFERS. */
-export async function GetCantinaOffers(user, _body = {}) {
-  try {
-    const result = await withTransactionAsync(async () => {
-      const ch = requireMyChar(user);
-      let mission = null;
-      if (ch.active_mission_id) {
-        mission = entities.Mission.get(ch.active_mission_id);
-      }
-      const state = resolveCantinaState(ch, mission);
-      if (state === CANTINA_STATES.ACTIVE_MISSION || state === CANTINA_STATES.COMPLETED_UNCLAIMED) {
-        return publicCantinaPayload(ch, state, [], { generated: false, character: ch });
-      }
-      if (state === CANTINA_STATES.AVAILABLE_OFFERS) {
-        return publicCantinaPayload(ch, state, ch.cantina_offers, { generated: false, character: ch });
-      }
-      const offers = generateCantinaOfferSet(ch);
-      const patch = stampCantinaOffers(ch, offers, clock.nowIso());
-      const character = entities.Character.update(ch.id, patch);
-      return publicCantinaPayload(character, CANTINA_STATES.AVAILABLE_OFFERS, offers, {
-        generated: true,
-        patch,
-        character,
-      });
-    });
-    return { status: 200, body: result };
-  } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
-    throw err;
-  }
-}
-
-function retireAndGenerateCantinaOffers(character, extraPatch = {}) {
-  const preview = { ...character, ...extraPatch, active_mission_id: "", mission_end_time: "" };
-  const offers = generateCantinaOfferSet(preview);
-  return {
-    ...stampCantinaOffers(preview, offers, clock.nowIso()),
-    offers,
-  };
-}
-
 // ── LaunchMission ────────────────────────────────────────────
 export async function LaunchMission(user, body) {
-  const offerId = String(body?.offer_id || body?.template?.id || "").trim();
-  if (!offerId) {
-    return { status: 400, body: { error: "Missing offer_id" } };
+  const boardOfferId = String(body?.board_offer_id || body?.offer_id || "").trim();
+  if (!boardOfferId) {
+    return { status: 400, body: { error: "Missing board_offer_id" } };
   }
 
   try {
@@ -774,14 +994,8 @@ export async function LaunchMission(user, body) {
       if (countBagOccupancy(ch) >= getInventoryCap(ch)) {
         httpErr(400, "Inventory full — clear bag space before launching a mission");
       }
-
-      const template = resolveLaunchableCantinaOffer(ch, offerId);
-
-      // Hard bounds only — level pools gate generation, not accept/complete.
-      // Stale cantina offers (rolled at a prior level) must remain launchable.
-      const rawDuration = Math.floor(Number(template.duration_seconds));
-      if (!isLaunchableMissionDuration(rawDuration)) {
-        httpErr(400, "Invalid mission duration", "INVALID_DURATION");
+      if (String(ch.mission_board_status || "") === "locked_active") {
+        httpErr(409, "No mission offers available");
       }
 
       const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch);
@@ -789,6 +1003,22 @@ export async function LaunchMission(user, body) {
 
       const level = ch.level || 1;
       const currentFuel = Math.round((ch.fuel ?? FUEL_MAX) * 100) / 100;
+
+      const board = ch.mission_board;
+      const offer =
+        board && Array.isArray(board.offers)
+          ? board.offers.find((o) => o.offer_id === boardOfferId)
+          : null;
+      if (!offer) httpErr(409, "That contract is no longer on the board", "OFFER_NOT_FOUND");
+      if ((offer.level_requirement || 1) > level) {
+        httpErr(403, `Requires level ${offer.level_requirement}`, "LEVEL_TOO_LOW");
+      }
+      const template = offerToLaunchTemplate(offer);
+
+      const rawDuration = Math.floor(Number(template.duration_seconds));
+      if (!isLaunchableMissionDuration(rawDuration)) {
+        httpErr(400, "Invalid mission duration", "INVALID_DURATION");
+      }
 
       const draft = {
         ...template,
@@ -828,7 +1058,7 @@ export async function LaunchMission(user, body) {
 
       const mission = entities.Mission.create({
         character_id: ch.id,
-        cantina_offer_id: template.id,
+        cantina_offer_id: boardOfferId,
         name: template.name,
         description: template.description || "",
         location: template.location || "",
@@ -855,7 +1085,7 @@ export async function LaunchMission(user, body) {
 
       const patch = {
         ...(resetPatch || {}),
-        ...lockCantinaOffersPatch(),
+        mission_board_status: "locked_active",
         active_mission_id: mission.id,
         mission_end_time: endTime.toISOString(),
         fuel: Math.round((currentFuel - fuelCost) * 100) / 100,
@@ -874,7 +1104,7 @@ export async function LaunchMission(user, body) {
 // ── PrepareMissionCombat / ClaimMission / FailMission ────────
 /** Clear a character's pointer to a mission row that no longer exists. */
 function releaseDanglingMission(ch) {
-  const rolled = retireAndGenerateCantinaOffers(ch);
+  const rolled = retireAndGenerateMissionBoard(ch);
   const { offers, ...offerPatch } = rolled;
   const patch = { active_mission_id: "", mission_end_time: "", ...offerPatch };
   const character = entities.Character.update(ch.id, patch);
@@ -887,7 +1117,7 @@ function releaseDanglingMission(ch) {
     items: [],
     gains: null,
     cantina_offers: offers,
-    cantina_state: CANTINA_STATES.AVAILABLE_OFFERS,
+    cantina_state: "AVAILABLE_OFFERS",
   };
 }
 
@@ -1014,7 +1244,7 @@ export async function ClaimMission(user, body) {
 
       if (!won) {
         entities.Mission.update(mission.id, { status: "failed" });
-        const rolled = retireAndGenerateCantinaOffers(ch);
+        const rolled = retireAndGenerateMissionBoard(ch);
         const { offers, ...offerPatch } = rolled;
         const patch = { active_mission_id: "", mission_end_time: "", ...offerPatch };
         const character = entities.Character.update(ch.id, patch);
@@ -1027,7 +1257,7 @@ export async function ClaimMission(user, body) {
           items: [],
           gains: null,
           cantina_offers: offers,
-          cantina_state: CANTINA_STATES.AVAILABLE_OFFERS,
+          cantina_state: "AVAILABLE_OFFERS",
         };
       }
 
@@ -1144,8 +1374,8 @@ export async function ClaimMission(user, body) {
           Object.assign(patch, ach.patch);
 
           const progression = consumeProgression(patch);
-          const rolled = retireAndGenerateCantinaOffers({ ...live, ...patch }, patch);
-          const { offers: cantinaOffers, ...offerPatch } = rolled;
+          const nextBoard = retireAndGenerateMissionBoard({ ...live, ...patch }, patch);
+          const { offers: cantinaOffers, ...offerPatch } = nextBoard;
           Object.assign(patch, offerPatch);
 
           const character = entities.Character.update(live.id, patch);
@@ -1163,7 +1393,7 @@ export async function ClaimMission(user, body) {
             newly_unlocked: ach.newly_unlocked,
             discoveries,
             cantina_offers: cantinaOffers,
-            cantina_state: CANTINA_STATES.AVAILABLE_OFFERS,
+            cantina_state: "AVAILABLE_OFFERS",
             item_outcome: payload.itemOutcome || (gearDropped ? "GEAR" : "NONE"),
             gains: {
               stardust: payload.stardust || 0,
@@ -1862,6 +2092,7 @@ export const ECONOMY_HANDLERS = {
   UseConsumable,
   GetActiveStims,
   SyncFuelCycle,
+  GetMissionBoard,
   GetCantinaOffers,
   LaunchMission,
   PrepareMissionCombat,

@@ -15,7 +15,7 @@ Builds on Prompt 08 (shared Combat Engine) and Prompt 06 (Inventory /
 Authoritative product model is the **Galactic Frontier crawl**:
 
 ```
-Select world / patrol / wormhole
+Select world / wormhole
   → Validate unlock (level table 1–10)
   → Validate crawl progress (active planet + enemy index)
   → Validate cooldown (dungeon_cooldown_until)
@@ -144,8 +144,8 @@ inventory grant path, GetDungeonStatus.
 - Formula tables still duplicated between `economyFormulas.js` and
   `dungeonEngine.js` (drift risk; not redesigned here).
 - `dungeon_extra_lives` remains unused (legacy Sync reset only).
-- Patrol enemy index still client-chosen among legal cleared-world indices
-  (outcome still Node-simmed).
+- Patrol/farm mode removed — dungeons are one-time story clears only; the active
+  node (planet + enemy index) is Node-validated on Prepare and Finish.
 
 ### Completion gates
 

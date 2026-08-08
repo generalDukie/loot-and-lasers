@@ -4,7 +4,7 @@ extends Control
 ## Zoom mirrors web: scale toward focus + lore panel. Focused planet is drawn larger
 ## and with more surface detail than the chart-node emoji.
 
-signal planet_pressed(planet_id: int, patrol: bool)
+signal planet_pressed(planet_id: int)
 signal wormhole_pressed
 signal zoom_changed(zooming: bool)
 
@@ -240,14 +240,13 @@ func _rebuild_buttons() -> void:
 		elif current:
 			btn.tooltip_text = "Inspect this world"
 		elif cleared:
-			btn.tooltip_text = "Patrol this world"
+			btn.tooltip_text = "Cleared — inspect this world"
 		else:
 			btn.tooltip_text = str(planet.get("name", ""))
 		var captured := pid
 		var is_current := current
-		var as_patrol := in_infinite or captured < story_front
 		btn.pressed.connect(func() -> void:
-			_on_planet_click(captured, as_patrol, is_current)
+			_on_planet_click(captured, is_current)
 		)
 		add_child(btn)
 		# Keep under overlays
@@ -294,9 +293,9 @@ func _rebuild_buttons() -> void:
 	_apply_zoom_ui()
 
 
-func _on_planet_click(planet_id: int, patrol: bool, is_current: bool) -> void:
+func _on_planet_click(planet_id: int, is_current: bool) -> void:
 	# Emit first; parent may refresh_state — that must NOT free this button synchronously.
-	planet_pressed.emit(planet_id, patrol)
+	planet_pressed.emit(planet_id)
 	if is_current:
 		if _zoom_id == planet_id:
 			clear_zoom()
@@ -796,7 +795,7 @@ func _draw_planet_fx(side: float, offset: Vector2) -> void:
 		if locked:
 			state = "Lv %s" % DungeonRules.unlock_level(pid)
 		elif in_infinite or pid < story_front:
-			state = "PATROL" if pid == selected and not DungeonManager.viewing_wormhole else ""
+			state = "CLEARED" if pid == selected and not DungeonManager.viewing_wormhole else ""
 		elif pid == story_front:
 			state = "HERE · TAP"
 		var title := "%s. %s" % [pid, str(planet.get("name", ""))]
@@ -817,7 +816,7 @@ func _draw_planet_fx(side: float, offset: Vector2) -> void:
 				HORIZONTAL_ALIGNMENT_CENTER,
 				60,
 				7,
-				(Color(ClientUi.GOLD, 0.9) if state == "PATROL" else Color(ClientUi.CYAN_SOFT, 0.7))
+				(Color(ClientUi.SUCCESS, 0.85) if state == "CLEARED" else Color(ClientUi.CYAN_SOFT, 0.7))
 				if not locked else Color(ClientUi.MUTED, 0.55)
 			)
 

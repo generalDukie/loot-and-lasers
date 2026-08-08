@@ -41,6 +41,8 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "cantina_offers",
   "cantina_offers_status",
   "cantina_offers_generated_at",
+  "mission_board",
+  "mission_board_status",
   "mining_end_time",
   "mining_reward",
   "mining_start_time",

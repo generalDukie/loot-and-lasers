@@ -11,7 +11,6 @@ import {
   POST_200_B,
   POST_200_Q,
   post200Growth,
-  missionXpPerFuelBase,
 } from "../src/shared/rewards.js";
 import {
   MISSION_XP_REBALANCE,
@@ -85,5 +84,5 @@ console.log(`  A=${POST_200_A} P=${POST_200_P} B=${POST_200_B} Q=${POST_200_Q}`)
 console.log(`  growth(200)=${post200Growth(200)} growth(300)=${post200Growth(300).toFixed(4)}`);
 console.log("\nTiming (300 Fuel/day, eff=1, mission×0.85 + dungeon first-clears):");
 for (const L of checkpoints) console.log(`  L${L}: ${hit[L]}d`);
-console.log("\nXP/Fuel pre-scale:", [1, 10, 50, 100, 200, 300, 400, 500, 700, 1000].map((L) => [L, missionXpPerFuelBase(L)]));
-console.log("XP-to-next scaled:", [100, 200, 300, 400, 500, 700, 1000].map((L) => [L, expForLevel(L)]));
+console.log("\nXP/Fuel (game scale):", [1, 10, 50, 100, 200, 300, 400, 500, 700, 1000].map((L) => [L, getMissionXpPerFuel(L)]));
+console.log("XP-to-next (game scale):", [100, 200, 300, 400, 500, 700, 1000].map((L) => [L, expForLevel(L)]));

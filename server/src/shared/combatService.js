@@ -225,7 +225,6 @@ export function commitDungeonPendingCombat(characterId, combatResult, meta = {})
       meta: {
         planet_id: meta.planetId,
         enemy_index: meta.enemyIndex,
-        patrol: !!meta.patrol,
         viewing_wormhole: !!meta.viewingWormhole,
       },
     },
@@ -352,15 +351,14 @@ export function prepareArenaCombatForCharacter(
  */
 export function prepareDungeonCombatForCharacter(
   character,
-  { planetId, enemyIndex, patrol = false, viewingWormhole = false, rng = secureRandom } = {},
+  { planetId, enemyIndex, viewingWormhole = false, rng = secureRandom } = {},
 ) {
   const pending = readDungeonPendingCombat(character);
   const meta = pending?.meta || {};
   if (
     pending?.combat_id &&
     Number(meta.planet_id) === Number(planetId) &&
-    Number(meta.enemy_index) === Number(enemyIndex) &&
-    !!meta.patrol === !!patrol
+    Number(meta.enemy_index) === Number(enemyIndex)
   ) {
     return { combat: pending, replay: true, character };
   }
@@ -368,7 +366,6 @@ export function prepareDungeonCombatForCharacter(
   const updated = commitDungeonPendingCombat(character.id, combat, {
     planetId,
     enemyIndex,
-    patrol,
     viewingWormhole,
   });
   return { combat, replay: false, character: updated };

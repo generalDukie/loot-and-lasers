@@ -126,7 +126,7 @@ outcome still deferred.
 ### 21. Idempotency strategy
 
 - Mission: second `PrepareMissionCombat` returns stored `combat_result`
-- Dungeon: same planet/enemy/patrol keys replay pending combat
+- Dungeon: same planet/enemy keys replay pending combat
 - Claim/Finish: reward claims + winner from committed combat (no re-roll)
 
 ### 22. Combat transaction strategy
@@ -165,7 +165,7 @@ Initiative ~50/50 (4000 trials, band 46–54%). Dodge ~20% and Crit ~15% within 
 - Internal derived key `armor` / `armorPercent` remains in code (UI copy = Might Resistance);
   no new “Armor” API field
 - `MissionCombat.gd` still exists for sheet preview / guild — not settlement authority
-- Patrol enemy index is still chosen client-side before Prepare (encounter selection, not math)
+- Dungeon patrol/farm mode removed — only the active story node is fightable (Node-validated)
 
 ### 29. Regression risks
 

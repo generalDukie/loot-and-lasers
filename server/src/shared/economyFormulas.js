@@ -1317,13 +1317,12 @@ export const DUNGEON_DEATHS_PER_DAY = 0;
 export const DUNGEON_CONTINUE_COST = 0;
 /** Finalized: dungeon cooldown skip (Nova crystals). */
 export const DUNGEON_SKIP_COST = 25;
-/** Shared post-sim cooldown for all dungeon / patrol / wormhole fights. */
+/** Shared post-sim cooldown for all dungeon / wormhole fights. */
 export const DUNGEON_BATTLE_COOLDOWN_MS = 60 * 60 * 1000;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_LOSS_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
-export const DUNGEON_PATROL_REWARD_MULT = 0.4;
 /** @deprecated use DUNGEON_XP_BASE_FACTOR */
 export const DUNGEON_XP_DRU_MULT = DUNGEON_XP_BASE_FACTOR;
 export const DUNGEON_MILESTONE_EVERY = 5;

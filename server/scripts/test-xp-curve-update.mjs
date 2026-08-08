@@ -6,9 +6,7 @@ import assert from "node:assert/strict";
 import { XP_STARDUST_SCALE } from "../src/shared/economyConstants.js";
 import {
   expForLevel,
-  xpToNextBase,
   post200Growth,
-  missionXpPerFuelBase,
   getMissionXpPerFuel,
   XP_REQUIREMENT_MULTIPLIER,
   POST_200_START_LEVEL,
@@ -122,14 +120,13 @@ test("centralized XP/Fuel + Post200 constants", () => {
   assert.ok(POST_200_A >= 0 && POST_200_B >= 0);
 });
 
-test("XP/Fuel pre-scale reference outputs", () => {
-  assert.equal(missionXpPerFuelBase(1), 10);
-  assert.equal(missionXpPerFuelBase(10), 16);
-  assert.ok(Math.abs(missionXpPerFuelBase(50) - 57) <= 1);
-  assert.ok(Math.abs(missionXpPerFuelBase(100) - 130) <= 1);
-  assert.ok(Math.abs(missionXpPerFuelBase(200) - 332) <= 1);
+test("XP/Fuel reference outputs (game scale)", () => {
+  // Design curve rounds to an integer, then ×10 game scale (values stay multiples of 10).
   assert.equal(getMissionXpPerFuel(1), 100);
   assert.equal(getMissionXpPerFuel(10), 160);
+  assert.ok(Math.abs(getMissionXpPerFuel(50) - 570) <= 10);
+  assert.ok(Math.abs(getMissionXpPerFuel(100) - 1300) <= 10);
+  assert.ok(Math.abs(getMissionXpPerFuel(200) - 3320) <= 10);
 });
 
 test("XP/Fuel monotonic and unbounded", () => {
@@ -172,8 +169,9 @@ test("Post200Growth = 1 at L200; continuous into L201", () => {
   assert.ok(post200Growth(201) > 1);
   assert.ok(post200Growth(201) - post200Growth(200) < 0.2);
   const base200 = Math.round(1.35 * 2.106 * 200 ** 1.532 * (1 + (200 / 266) ** 3.683));
-  assert.equal(xpToNextBase(200), base200);
-  assert.ok(xpToNextBase(201) >= xpToNextBase(200));
+  // Post200Growth(200) === 1, so expForLevel(200) === design × 10 game scale.
+  assert.equal(expForLevel(200), base200 * 10);
+  assert.ok(expForLevel(201) >= expForLevel(200));
 });
 
 test("XP requirement: multiplier, monotonic, no cap, finite at L1000+", () => {
@@ -183,7 +181,7 @@ test("XP requirement: multiplier, monotonic, no cap, finite at L1000+", () => {
     const v = expForLevel(L);
     assert.ok(Number.isFinite(v), `finite L${L}`);
     assert.ok(v > prev, `monotonic L${L}`);
-    assert.equal(v / xpToNextBase(L), XP_STARDUST_SCALE);
+    assert.equal(v % XP_STARDUST_SCALE, 0, `game scale multiple L${L}`);
     prev = v;
   }
 });

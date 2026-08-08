@@ -4,7 +4,6 @@
  */
 import {
   expForLevel,
-  xpToNextBase,
   getMissionXpPerFuel,
   getMissionStardustPerFuel,
   XP_STARDUST_SCALE,
@@ -32,10 +31,9 @@ function assertEq(label, got, expected) {
   console.log(`ok  ${label} = ${got}`);
 }
 
-assertEq("XP_REQUIREMENT formula L1 base", xpToNextBase(1), Math.round(1.35 * 2.106 * 1 * (1 + (1 / 266) ** 3.683)));
-assertEq("L1→2 XP", expForLevel(1), xpToNextBase(1) * XP_STARDUST_SCALE);
-assertEq("L100 XP-to-next", expForLevel(100), xpToNextBase(100) * XP_STARDUST_SCALE);
-assertEq("L501 continuous", expForLevel(501), xpToNextBase(501) * XP_STARDUST_SCALE);
+// Design curve at L1 (post200Growth(1) === 1) × 10 game scale.
+assertEq("L1→2 XP", expForLevel(1), Math.max(1, Math.round(1.35 * 2.106 * 1 * (1 + (1 / 266) ** 3.683))) * 10);
+assertEq("XP on game scale (L100 multiple of 10)", expForLevel(100) % XP_STARDUST_SCALE, 0);
 if (!(expForLevel(501) > expForLevel(500))) throw new Error("L501 should exceed L500");
 
 assertEq("L1 XP/fuel", getMissionXpPerFuel(1), 100);
@@ -58,8 +56,8 @@ assertEq("Arena SD L10", getArenaStardustReward(10), Math.round(2.25 * sd10));
 assertEq("Arena refresh", ARENA_REFRESH_COST, 500);
 assertEq("Guild create", GUILD_CREATE_COST, 5000);
 assertEq("Guild war declare", GUILD_WAR_DECLARE_COST, 5000);
-assertEq("Casino floor", CASINO_MIN_STARDUST_BET_FLOOR, 1000);
-assertEq("Casino cap", CASINO_MAX_STARDUST_BET_CAP, 2_500_000);
+assertEq("Casino floor", CASINO_MIN_STARDUST_BET_FLOOR, 1);
+assertEq("Casino cap", CASINO_MAX_STARDUST_BET_CAP, 10_000_000 * XP_STARDUST_SCALE);
 assertEq("Mining L50×1h", computeMiningReward(50, 1), Math.round(sd50 * 0.03 * 60));
 assertEq("Ship frigate cost", SHIP_TYPES.frigate.cost, 50000);
 

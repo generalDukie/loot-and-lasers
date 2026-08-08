@@ -520,7 +520,8 @@ func _on_fight() -> void:
 		await MissionManager.refresh_mission_status("", true)
 	if not MissionManager.is_mission_finished():
 		_busy = false
-		_set_status("Mission not finished yet — wait for the timer, or skip with Nova Crystals.", true)
+		Notify.blocked("Mission not finished", "Wait for the timer, or skip with Nova Crystals")
+		_set_status("", false)
 		_refresh_timer()
 		return
 
@@ -568,7 +569,7 @@ func _on_skip() -> void:
 		return
 	var crystals: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, cost):
-		_set_status("Not enough Nova Crystals — need %s 💎 (you have %s)." % [cost, crystals], true)
+		Notify.blocked("Not enough Nova Crystals", "Need %s 💎 (you have %s)" % [cost, crystals])
 		return
 
 	_busy = true
@@ -584,7 +585,8 @@ func _on_skip() -> void:
 			await _on_fight()
 			return
 		_busy = false
-		_set_status(err, true)
+		if not Notify.from_result(res):
+			_set_status(err, true)
 		_refresh_timer()
 		return
 

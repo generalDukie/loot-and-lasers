@@ -76,19 +76,19 @@ Rules:
 ## Legacy Nakama mission implementation
 
 This is a historical implementation retained for migration verification. The live
-Godot Cantina now uses Node `GetCantinaOffers`, `LaunchMission`, `SkipMission`,
+Godot Cantina now uses Node `GetMissionBoard`, `LaunchMission`, `SkipMission`,
 `ClaimMission`, and `FailMission`; boot does not resume Nakama mission state.
 Unreachable Nakama mission client code remains scheduled for removal after
 compatibility verification.
 
 | Concern | Authority |
 |---------|-----------|
-| Mission board | Node `GetCantinaOffers` persists 3 offers until accept → complete → claim |
+| Mission board | Node `GetMissionBoard` persists 3 offers until accept → complete → claim |
 | Offer reroll | Only after successful claim/fail (`READY_FOR_NEW_OFFERS`); never on page load |
 | Mission ownership | Node Mission row + selected owned Character |
-| Mission start | Node `LaunchMission` against a persisted `offer_id` |
+| Mission start | Node `LaunchMission` against a persisted `board_offer_id` |
 | Timers / completion eligibility | Node Mission timestamps and status |
-| Local board cfg | Display cache of server offers only; never generates missions |
+| Local board cfg | Not used; client only displays server offers |
 | Rewards / XP / loot | Node `ClaimMission` reward pipeline |
 | Fuel / Nova payment | Node gameplay functions and Character ledger |
 

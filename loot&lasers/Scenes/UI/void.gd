@@ -464,7 +464,7 @@ func _on_dissolve(item_id: String) -> void:
 	if it.is_empty():
 		return
 	if bool(it.get("locked", false)):
-		_set_status("Locked items can't be dissolved.", ClientUi.DANGER)
+		Notify.blocked("Item locked", "Locked items can't be dissolved")
 		return
 
 	_busy = true
@@ -484,7 +484,8 @@ func _on_dissolve(item_id: String) -> void:
 	_set_hole_style(false)
 	if not res.ok:
 		_sucking_ids.erase(item_id)
-		_set_status(str(res.get("error", "Dissolve failed")), ClientUi.DANGER)
+		if not Notify.from_result(res):
+			_set_status(str(res.get("error", "Dissolve failed")), ClientUi.DANGER)
 		await _reload()
 		return
 	# Drop from local list before clearing suck state / reload so a wallet or
@@ -527,7 +528,8 @@ func _on_junk() -> void:
 	_set_hole_style(false)
 	if not res.ok:
 		_sucking_ids.clear()
-		_set_status(str(res.get("error", "Dissolve failed")), ClientUi.DANGER)
+		if not Notify.from_result(res):
+			_set_status(str(res.get("error", "Dissolve failed")), ClientUi.DANGER)
 		await _reload()
 		return
 	_remove_items_local(ids)

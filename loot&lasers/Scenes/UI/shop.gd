@@ -2,11 +2,18 @@ extends Control
 ## Black Market — mirrors web ShopPage (header · hot deal · unified stalls · sell fence).
 
 const SELL_SLOT_COUNT := 5
-const SELL_SLOT_MIN_H := 72.0
-## Bag source is always laid out as 2 rows; staging is 1 matching row (2:1).
+## Fixed inventory-cell metrics — never scale with leftover page height.
+const SELL_SLOT_H := 104.0
+const SELL_SLOT_MIN_W := 108.0
+const SELL_ICON_SZ := 40.0
+const SELL_TITLE_FS := 11
+const SELL_VAL_FS := 12
 const SELL_SOURCE_ROWS := 2
-const SELL_GRID_V_SEP := 6
-const SELL_SECTION_SEP := 8
+const SELL_GRID_H_SEP := 8
+const SELL_GRID_V_SEP := 8
+const SELL_SECTION_SEP := 10
+const SELL_BTN_MIN_H := 56.0
+const SELL_BTN_MIN_W := 420.0
 ## Stall card scale (Hot Deal / Sell left alone). Vertical ~+15%; icons/fonts/chips more.
 const STALL_SEP := 6
 const STALL_TOP_SEP := 10
@@ -20,16 +27,6 @@ const STALL_BTN_FS := 17
 const STALL_CHIP_ICON := 28.0
 const STALL_CHIP_FS := 26
 const STALL_CHIP_SEP := 6
-## Shared hover compare popup (stall + Hot Deal).
-const INSPECT_MIN_W := 210.0
-const INSPECT_MAX_W := 340.0
-const INSPECT_TITLE_FS := 18
-const INSPECT_META_FS := 14
-const INSPECT_ROW_FS := 16
-const INSPECT_VAL_FS := 18
-const INSPECT_DELTA_FS := 16
-const INSPECT_ICON := 30.0
-
 var _status: Label
 var _currency_row: HBoxContainer
 var _vendor: Label
@@ -39,20 +36,12 @@ var _bag_items: Array = []
 ## Staging only — up to 5 item dicts (empty Dictionary = vacant). Not bag storage.
 var _sell_stage: Array = []
 var _sell_btn: Button
-## Sell pane layout — source (2 rows) + staging (1 row) under Hot Deal; cells match.
-var _sell_root: VBoxContainer
-var _sell_stage_row: HBoxContainer
-var _sell_source_area: Control
-var _sell_panels: Array = []
-var _sell_slot_h := SELL_SLOT_MIN_H
 var _busy := false
 var _busy_slot := ""
 var _tick: Timer
 var _win_idx := -1
-## Hover compare popup (backpack-style stats/compare only — Buy/Haggle stay on the card).
-var _gear_inspect: PanelContainer
-var _gear_inspect_col: VBoxContainer
-var _inspect_anchor: Control = null
+## Shared hover inspection panel (stall + Hot Deal).
+var _inspect: ItemInspectPopup
 
 
 func _ready() -> void:
@@ -178,17 +167,8 @@ func _build() -> void:
 	_list.add_theme_constant_override("separation", 10)
 	root.add_child(_list)
 
-	_gear_inspect = PanelContainer.new()
-	_gear_inspect.visible = false
-	_gear_inspect.z_index = 80
-	_gear_inspect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_gear_inspect.custom_minimum_size = Vector2(INSPECT_MIN_W, 0)
-	_gear_inspect.add_theme_stylebox_override("panel", _compact_inspect_style(ClientUi.CYAN))
-	add_child(_gear_inspect)
-	_gear_inspect_col = VBoxContainer.new()
-	_gear_inspect_col.add_theme_constant_override("separation", 2)
-	_gear_inspect_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_gear_inspect.add_child(_gear_inspect_col)
+	_inspect = ItemInspectPopup.new()
+	add_child(_inspect)
 
 	_tick = Timer.new()
 	_tick.wait_time = 1.0
@@ -634,7 +614,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		panel.mouse_entered.connect(func() -> void:
 			_show_gear_inspect(panel, captured)
 		)
-		panel.mouse_exited.connect(_hide_gear_inspect)
+		panel.mouse_exited.connect(_request_hide_gear_inspect)
 
 	if owned:
 		var gone := Label.new()
@@ -709,171 +689,28 @@ func _make_gear_attr_row(entries: Array, stall: bool = false) -> HBoxContainer:
 	return row
 
 
-func _compact_inspect_style(accent: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.04, 0.055, 0.1, 0.98)
-	sb.border_color = Color(accent, 0.8)
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(10)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 10
-	sb.shadow_color = Color(0, 0, 0, 0.4)
-	sb.shadow_size = 8
-	sb.shadow_offset = Vector2(0, 2)
-	return sb
+func _request_hide_gear_inspect() -> void:
+	if _inspect != null and is_instance_valid(_inspect):
+		_inspect.request_hide()
 
 
 func _hide_gear_inspect() -> void:
-	_inspect_anchor = null
-	if _gear_inspect:
-		_gear_inspect.visible = false
+	if _inspect != null and is_instance_valid(_inspect):
+		_inspect.force_hide()
 
 
 func _show_gear_inspect(anchor: Control, item: Dictionary) -> void:
-	if _gear_inspect == null or not is_instance_valid(_gear_inspect):
+	if _inspect == null or not is_instance_valid(_inspect):
 		return
-	_inspect_anchor = anchor
-	_rebuild_gear_inspect(item)
-	_gear_inspect.visible = true
-	_gear_inspect.reset_size()
-	_position_gear_inspect(anchor)
-
-
-func _position_gear_inspect(anchor: Control) -> void:
-	if _gear_inspect == null or anchor == null or not is_instance_valid(anchor):
-		return
-	var rect := anchor.get_global_rect()
-	var size := _gear_inspect.get_combined_minimum_size()
-	size.x = clampf(size.x, INSPECT_MIN_W, INSPECT_MAX_W)
-	_gear_inspect.size = size
-	var vp := get_viewport_rect().size
-	var gap := -2.0
-	var pos := Vector2(rect.end.x + gap, rect.position.y)
-	if pos.x + size.x > vp.x - 8.0:
-		pos.x = rect.position.x - size.x - gap
-	if pos.x < 8.0:
-		pos.x = clampf(rect.position.x, 8.0, maxf(8.0, vp.x - size.x - 8.0))
-		pos.y = rect.position.y - size.y - gap
-		if pos.y < 8.0:
-			pos.y = rect.end.y + gap
-	if pos.y + size.y > vp.y - 8.0:
-		pos.y = maxf(8.0, vp.y - size.y - 8.0)
-	if pos.y < 8.0:
-		pos.y = 8.0
-	_gear_inspect.global_position = pos
-
-
-func _rebuild_gear_inspect(item: Dictionary) -> void:
-	while _gear_inspect_col.get_child_count() > 0:
-		var old: Node = _gear_inspect_col.get_child(0)
-		_gear_inspect_col.remove_child(old)
-		old.free()
 	var item_type := str(item.get("type", ""))
-	var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
-	_gear_inspect.add_theme_stylebox_override("panel", _compact_inspect_style(tint))
-
-	var title := Label.new()
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.text = str(item.get("name", "Item"))
-	title.add_theme_font_size_override("font_size", INSPECT_TITLE_FS)
-	title.add_theme_color_override("font_color", tint.lightened(0.2))
-	ClientUi.apply_display_font(title)
-	_gear_inspect_col.add_child(title)
-
-	var meta := Label.new()
-	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	meta.text = "%s · %s · Lv.%s" % [
-		str(item.get("rarity", "?")),
-		GameData.gear_type_label(item_type) if not item_type.is_empty() else item_type,
-		ClientUi.format_level(item.get("level_requirement", "?")),
-	]
-	meta.add_theme_font_size_override("font_size", INSPECT_META_FS)
-	meta.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(meta)
-	_gear_inspect_col.add_child(meta)
-
 	var worn: Dictionary = {}
 	if InventoryRules.is_equippable(item_type):
 		worn = _equipped_of_type(item_type)
-	if not worn.is_empty():
-		var eq_lab := Label.new()
-		eq_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		eq_lab.text = "vs %s" % str(worn.get("name", "equipped"))
-		eq_lab.add_theme_font_size_override("font_size", INSPECT_META_FS)
-		eq_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_body_font(eq_lab)
-		_gear_inspect_col.add_child(eq_lab)
-
-	for row in InventoryRules.compare_lines(item, worn):
-		var d: int = int(row.get("delta", 0))
-		var lab := HBoxContainer.new()
-		lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lab.add_theme_constant_override("separation", 8)
-		var stat_key := str(row.get("stat", ""))
-		if StatIcon.has(stat_key):
-			lab.add_child(StatIcon.make(stat_key, INSPECT_ICON))
-		var abbr := Label.new()
-		abbr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		abbr.text = stat_key.substr(0, 3).to_upper()
-		abbr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		abbr.add_theme_font_size_override("font_size", INSPECT_ROW_FS)
-		abbr.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_body_font(abbr)
-		lab.add_child(abbr)
-		var val := Label.new()
-		val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var nv: int = int(row.get("new", 0))
-		val.text = ("+%s" % nv) if nv > 0 else "0"
-		val.add_theme_font_size_override("font_size", INSPECT_VAL_FS)
-		val.add_theme_color_override(
-			"font_color",
-			ClientUi.TEXT if nv > 0 else ClientUi.MUTED
-		)
-		ClientUi.apply_body_font(val)
-		lab.add_child(val)
-		if InventoryRules.is_equippable(item_type):
-			var dlab := Label.new()
-			dlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			dlab.custom_minimum_size.x = 44
-			dlab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			dlab.text = InventoryRules.format_stat_delta(d)
-			dlab.add_theme_font_size_override("font_size", INSPECT_DELTA_FS)
-			dlab.add_theme_color_override(
-				"font_color",
-				ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else ClientUi.MUTED)
-			)
-			ClientUi.apply_body_font(dlab)
-			lab.add_child(dlab)
-		_gear_inspect_col.add_child(lab)
-
-	if InventoryRules.is_equippable(item_type):
-		var diffs: Dictionary = InventoryRules.compare_gear_attributes(item, worn)
-		var total: int = int(diffs.get("total", 0))
-		var footer := HBoxContainer.new()
-		footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		footer.add_theme_constant_override("separation", 8)
-		var total_lab := Label.new()
-		total_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		total_lab.text = "TOTAL STAT CHANGE:"
-		total_lab.add_theme_font_size_override("font_size", INSPECT_META_FS)
-		total_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_display_font(total_lab)
-		footer.add_child(total_lab)
-		var total_val := Label.new()
-		total_val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		total_val.text = InventoryRules.format_stat_delta(total)
-		total_val.add_theme_font_size_override("font_size", INSPECT_ROW_FS)
-		total_val.add_theme_color_override(
-			"font_color",
-			ClientUi.SUCCESS if total > 0 else (ClientUi.DANGER if total < 0 else ClientUi.MUTED)
-		)
-		ClientUi.apply_display_font(total_val)
-		footer.add_child(total_val)
-		_gear_inspect_col.add_child(footer)
-
+	_inspect.present(anchor, item, {
+		"compare_with": worn,
+		"show_sell_value": false,
+		"actions": [],
+	})
 
 func _gear_actions(
 	item: Dictionary,
@@ -1045,14 +882,10 @@ func _err(res: Dictionary) -> String:
 # ── Sell fence (authoritative DissolveJunk / Void eligibility) ─────────────
 
 func _make_sell_section() -> VBoxContainer:
-	_sell_panels.clear()
-	_sell_slot_h = SELL_SLOT_MIN_H
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.size_flags_stretch_ratio = 1.0
+	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	col.add_theme_constant_override("separation", SELL_SECTION_SEP)
-	_sell_root = col
 
 	var gap := Control.new()
 	gap.custom_minimum_size.y = 6
@@ -1064,129 +897,133 @@ func _make_sell_section() -> VBoxContainer:
 
 	var head := Label.new()
 	head.text = "SELL ITEMS"
-	head.add_theme_font_size_override("font_size", 13)
-	head.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
+	head.add_theme_font_size_override("font_size", 15)
+	head.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(head)
 	col.add_child(head)
 
-	# Bag source = 2 item-rows tall; staging = 1 matching item row (even if bag is empty/short).
+	var bag_hint := Label.new()
+	bag_hint.text = "Bag — click or drag gear into the tray"
+	bag_hint.add_theme_font_size_override("font_size", 12)
+	bag_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
+	ClientUi.apply_body_font(bag_hint)
+	col.add_child(bag_hint)
+
 	var available := _sell_available_items()
+	var source_h := SELL_SLOT_H * float(SELL_SOURCE_ROWS) + float(SELL_GRID_V_SEP) * float(SELL_SOURCE_ROWS - 1)
+	var source_scroll := ScrollContainer.new()
+	source_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	source_scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	source_scroll.custom_minimum_size = Vector2(0, source_h)
+	source_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	source_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	col.add_child(source_scroll)
+
+	var source_grid := _make_sell_grid()
+	source_scroll.add_child(source_grid)
+	for it in available:
+		source_grid.add_child(_make_sell_bag_slot(it as Dictionary, false))
+	# Always reserve at least 2 full rows so the bag grid never collapses/stretches.
+	var min_cells := SELL_SLOT_COUNT * SELL_SOURCE_ROWS
+	while source_grid.get_child_count() < min_cells:
+		source_grid.add_child(_make_sell_bag_slot({}, false))
 	if available.is_empty():
-		var empty := Label.new()
-		empty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		empty.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		empty.text = "No sellable bag gear — unequipped unlocked items appear here."
-		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		empty.add_theme_font_size_override("font_size", 14)
-		empty.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_body_font(empty)
-		col.add_child(empty)
-		_sell_source_area = empty
-	else:
-		var source_scroll := ScrollContainer.new()
-		source_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		source_scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		source_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		col.add_child(source_scroll)
-		_sell_source_area = source_scroll
+		bag_hint.text = "Bag — unequipped unlocked items appear here"
 
-		var source_grid := GridContainer.new()
-		source_grid.columns = SELL_SLOT_COUNT
-		source_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		source_grid.add_theme_constant_override("h_separation", 6)
-		source_grid.add_theme_constant_override("v_separation", SELL_GRID_V_SEP)
-		source_scroll.add_child(source_grid)
-		for it in available:
-			source_grid.add_child(_make_sell_bag_slot(it as Dictionary, false))
+	var tray_hint := Label.new()
+	tray_hint.text = "Sell tray — up to %s items" % SELL_SLOT_COUNT
+	tray_hint.add_theme_font_size_override("font_size", 12)
+	tray_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
+	ClientUi.apply_body_font(tray_hint)
+	col.add_child(tray_hint)
 
-	var stage_row := HBoxContainer.new()
-	stage_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stage_row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	stage_row.add_theme_constant_override("separation", 6)
-	col.add_child(stage_row)
-	_sell_stage_row = stage_row
+	var stage_grid := _make_sell_grid()
+	stage_grid.custom_minimum_size.y = SELL_SLOT_H
+	col.add_child(stage_grid)
 	for i in SELL_SLOT_COUNT:
 		var staged: Dictionary = _sell_stage[i] if typeof(_sell_stage[i]) == TYPE_DICTIONARY else {}
-		stage_row.add_child(_make_sell_bag_slot(staged, true, i))
+		stage_grid.add_child(_make_sell_bag_slot(staged, true, i))
+
+	var btn_wrap := CenterContainer.new()
+	btn_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_wrap.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	col.add_child(btn_wrap)
 
 	_sell_btn = Button.new()
-	_sell_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_sell_btn.size_flags_vertical = Control.SIZE_SHRINK_END
-	_sell_btn.custom_minimum_size.y = 40
-	ClientUi.apply_primary_button(_sell_btn)
+	_sell_btn.custom_minimum_size = Vector2(SELL_BTN_MIN_W, SELL_BTN_MIN_H)
+	_sell_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_apply_sell_action_button(_sell_btn)
 	_sell_btn.pressed.connect(_on_confirm_sell)
-	col.add_child(_sell_btn)
+	btn_wrap.add_child(_sell_btn)
 	_refresh_sell_button()
-
-	if not col.resized.is_connected(_on_sell_root_resized):
-		col.resized.connect(_on_sell_root_resized)
-	call_deferred("_sync_sell_slot_layout")
 	return col
 
 
-func _on_sell_root_resized() -> void:
-	_sync_sell_slot_layout()
+func _make_sell_grid() -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = SELL_SLOT_COUNT
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	grid.add_theme_constant_override("h_separation", SELL_GRID_H_SEP)
+	grid.add_theme_constant_override("v_separation", SELL_GRID_V_SEP)
+	return grid
 
 
-func _sell_chrome_height() -> float:
-	if _sell_root == null or not is_instance_valid(_sell_root):
-		return 0.0
-	var h := 0.0
-	for c in _sell_root.get_children():
-		if c == _sell_source_area or c == _sell_stage_row:
-			continue
-		if c is Control and is_instance_valid(c):
-			h += maxf((c as Control).size.y, (c as Control).get_combined_minimum_size().y)
-	# One VBox separation between every adjacent pair of children.
-	var n := _sell_root.get_child_count()
-	if n > 1:
-		h += float(SELL_SECTION_SEP * (n - 1))
-	return h
+func _apply_sell_action_button(btn: Button) -> void:
+	## Primary fence CTA — larger painted cyan with soft glow; disabled stays muted.
+	ClientUi.apply_display_font(btn)
+	btn.add_theme_font_size_override("font_size", 18)
+	var top := Color(0.14, 0.88, 0.96)
+	var bottom := Color(0.05, 0.68, 0.82)
+	var border := Color(0.08, 0.78, 0.90)
+	var ink := Color(0.03, 0.05, 0.08)
+	var normal := _sell_btn_style(top, bottom, border, 0.55)
+	var hover := _sell_btn_style(Color(0.22, 0.94, 1.0), Color(0.10, 0.78, 0.90), Color(0.45, 0.95, 1.0), 0.85)
+	var pressed := _sell_btn_style(Color(0.06, 0.58, 0.72), Color(0.03, 0.42, 0.54), border, 0.35)
+	var disabled := _sell_btn_style(
+		Color(0.12, 0.14, 0.18), Color(0.08, 0.10, 0.13), Color(0.28, 0.32, 0.38, 0.7), 0.0
+	)
+	btn.add_theme_stylebox_override("normal", normal)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("disabled", disabled)
+	btn.add_theme_color_override("font_color", ink)
+	btn.add_theme_color_override("font_hover_color", ink)
+	btn.add_theme_color_override("font_pressed_color", ink)
+	btn.add_theme_color_override("font_disabled_color", Color(0.45, 0.50, 0.55))
+	btn.set_meta("ui_sfx_kind", "confirm")
+	ClientUi.apply_interaction_motion(btn, 1.03)
 
 
-func _sync_sell_slot_layout() -> void:
-	if _sell_root == null or not is_instance_valid(_sell_root):
-		return
-	if _sell_stage_row == null or not is_instance_valid(_sell_stage_row):
-		return
-	var avail := _sell_root.size.y - _sell_chrome_height()
-	# 2 source rows + 1 staging row + one in-grid v-sep between the two source rows.
-	var slot_h := (avail - float(SELL_GRID_V_SEP)) / float(SELL_SOURCE_ROWS + 1)
-	slot_h = maxf(SELL_SLOT_MIN_H, slot_h)
-	_sell_slot_h = slot_h
+func _sell_btn_style(top: Color, bottom: Color, border: Color, glow: float) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = top.lerp(bottom, 0.42)
+	s.border_color = border
+	s.set_border_width_all(2)
+	s.corner_radius_top_left = 12
+	s.corner_radius_top_right = 12
+	s.corner_radius_bottom_left = 12
+	s.corner_radius_bottom_right = 12
+	s.content_margin_left = 28
+	s.content_margin_right = 28
+	s.content_margin_top = 14
+	s.content_margin_bottom = 14
+	s.shadow_color = Color(border.r, border.g, border.b, clampf(glow, 0.0, 1.0) * 0.55)
+	s.shadow_size = 10 if glow > 0.01 else 0
+	s.shadow_offset = Vector2(0, 3)
+	return s
 
-	var source_h := slot_h * float(SELL_SOURCE_ROWS) + float(SELL_GRID_V_SEP)
-	if _sell_source_area != null and is_instance_valid(_sell_source_area):
-		_sell_source_area.custom_minimum_size.y = source_h
-		_sell_source_area.size.y = source_h
-	_sell_stage_row.custom_minimum_size.y = slot_h
-	_sell_stage_row.size.y = slot_h
 
-	var scale := slot_h / SELL_SLOT_MIN_H
-	var title_fs := int(round(clampf(11.0 * scale, 11.0, 22.0)))
-	var val_fs := int(round(clampf(12.0 * scale, 12.0, 24.0)))
-	var mark_fs := int(round(clampf(18.0 * scale, 18.0, 36.0)))
-	var icon_sz := clampf(36.0 * scale, 36.0, 96.0)
-	for panel_v in _sell_panels:
-		if typeof(panel_v) != TYPE_OBJECT or not is_instance_valid(panel_v):
-			continue
-		var panel := panel_v as PanelContainer
-		panel.custom_minimum_size = Vector2(112, slot_h)
-		panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		var title: Variant = panel.get_meta("sell_title", null)
-		if title is Label and is_instance_valid(title):
-			(title as Label).add_theme_font_size_override("font_size", title_fs)
-		var val: Variant = panel.get_meta("sell_val", null)
-		if val is Label and is_instance_valid(val):
-			(val as Label).add_theme_font_size_override("font_size", val_fs)
-		var mark: Variant = panel.get_meta("sell_mark", null)
-		if mark is Label and is_instance_valid(mark):
-			(mark as Label).add_theme_font_size_override("font_size", mark_fs)
-		var icon: Variant = panel.get_meta("sell_icon", null)
-		if icon is Control and is_instance_valid(icon):
-			(icon as Control).custom_minimum_size = Vector2(icon_sz, icon_sz)
-			if icon.has_method("queue_redraw"):
-				icon.queue_redraw()
+func _format_sell_amount(n: int) -> String:
+	var s := str(maxi(0, n))
+	var out := ""
+	var count := 0
+	for i in range(s.length() - 1, -1, -1):
+		if count > 0 and count % 3 == 0:
+			out = "," + out
+		out = s[i] + out
+		count += 1
+	return out
 
 
 func _sell_available_items() -> Array:
@@ -1233,40 +1070,42 @@ func _refresh_sell_button() -> void:
 	var total := _sell_preview_total()
 	_sell_btn.disabled = ids.is_empty() or _busy
 	if ids.is_empty():
-		_sell_btn.text = "Sell for 0 Stardust"
+		_sell_btn.text = "SELL ITEMS — SELECT GEAR"
 	else:
-		_sell_btn.text = "Sell for %s Stardust" % total
+		_sell_btn.text = "SELL ITEMS — ✦ %s" % _format_sell_amount(total)
 
 
 func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1) -> PanelContainer:
 	var filled := not item.is_empty()
 	var panel := PanelContainer.new()
+	# Equal stretch across the 5 columns; height is locked so icons never grow.
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	# Min width keeps Grid/HBox columns from collapsing Labels into vertical 1-glyph stacks.
-	panel.custom_minimum_size = Vector2(112, _sell_slot_h)
-	_sell_panels.append(panel)
+	panel.size_flags_stretch_ratio = 1.0
+	panel.custom_minimum_size = Vector2(SELL_SLOT_MIN_W, SELL_SLOT_H)
+	panel.clip_contents = true
 	if filled:
 		var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
 		panel.add_theme_stylebox_override("panel", _sell_slot_style(Color(tint, 0.14), Color(tint, 0.55)))
-		panel.tooltip_text = "%s — %s ✦ · click to %s" % [
+		panel.tooltip_text = "%s — ✦ %s · click to %s" % [
 			str(item.get("name", "Item")),
-			InventoryRules.estimate_sell_value(item),
+			_format_sell_amount(InventoryRules.estimate_sell_value(item)),
 			"remove" if is_stage else "stage for sale",
 		]
 	else:
 		panel.add_theme_stylebox_override(
 			"panel",
-			_sell_slot_style(Color(0.05, 0.06, 0.09, 0.7), Color(0.3, 0.35, 0.42, 0.35))
+			_sell_slot_style(Color(0.04, 0.05, 0.08, 0.78), Color(0.28, 0.34, 0.42, 0.42))
 		)
-		panel.tooltip_text = "Empty sell slot" if is_stage else "Empty"
-		panel.modulate.a = 0.55 if is_stage else 1.0
+		panel.tooltip_text = "Empty sell slot" if is_stage else ""
+		panel.modulate.a = 0.72 if is_stage else 0.45
 
 	var root := VBoxContainer.new()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_theme_constant_override("separation", 2)
+	root.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_theme_constant_override("separation", 3)
 	panel.add_child(root)
 
 	if filled:
@@ -1277,24 +1116,25 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		title.autowrap_mode = TextServer.AUTOWRAP_OFF
 		title.clip_text = true
 		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		title.custom_minimum_size.y = 16
 		title.text = str(item.get("name", "Item"))
-		title.add_theme_font_size_override("font_size", 11)
+		title.add_theme_font_size_override("font_size", SELL_TITLE_FS)
 		title.add_theme_color_override(
 			"font_color",
 			ClientUi.rarity_color(str(item.get("rarity", ""))).lightened(0.2)
 		)
 		ClientUi.apply_display_font(title)
 		root.add_child(title)
-		panel.set_meta("sell_title", title)
 
 		var icon_wrap := CenterContainer.new()
 		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		icon_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		icon_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		icon_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon_wrap.custom_minimum_size = Vector2(SELL_ICON_SZ, SELL_ICON_SZ)
 		root.add_child(icon_wrap)
-		var gear := GearIcon.make(item, 36.0)
+		var gear := GearIcon.make(item, SELL_ICON_SZ)
+		gear.custom_minimum_size = Vector2(SELL_ICON_SZ, SELL_ICON_SZ)
 		icon_wrap.add_child(gear)
-		panel.set_meta("sell_icon", gear)
 
 		var val := Label.new()
 		val.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1302,12 +1142,12 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		val.autowrap_mode = TextServer.AUTOWRAP_OFF
 		val.clip_text = true
-		val.text = "✦ %s" % InventoryRules.estimate_sell_value(item)
-		val.add_theme_font_size_override("font_size", 12)
+		val.custom_minimum_size.y = 16
+		val.text = "✦ %s" % _format_sell_amount(InventoryRules.estimate_sell_value(item))
+		val.add_theme_font_size_override("font_size", SELL_VAL_FS)
 		val.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 		ClientUi.apply_display_font(val)
 		root.add_child(val)
-		panel.set_meta("sell_val", val)
 	else:
 		var mark := Label.new()
 		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1316,11 +1156,10 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		mark.autowrap_mode = TextServer.AUTOWRAP_OFF
-		mark.text = "·"
-		mark.add_theme_font_size_override("font_size", 18)
-		mark.add_theme_color_override("font_color", ClientUi.MUTED)
+		mark.text = "—" if is_stage else "·"
+		mark.add_theme_font_size_override("font_size", 20 if is_stage else 16)
+		mark.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.75 if is_stage else 0.45))
 		root.add_child(mark)
-		panel.set_meta("sell_mark", mark)
 
 	if filled:
 		var captured := item.duplicate(true)
@@ -1365,10 +1204,10 @@ func _sell_slot_style(bg: Color, border: Color) -> StyleBoxFlat:
 	sb.border_color = border
 	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(8)
-	sb.content_margin_left = 4
-	sb.content_margin_right = 4
-	sb.content_margin_top = 3
-	sb.content_margin_bottom = 3
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
 	return sb
 
 

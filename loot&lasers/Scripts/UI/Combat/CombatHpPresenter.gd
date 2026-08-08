@@ -1,9 +1,13 @@
 class_name CombatHpPresenter
 extends RefCounted
 ## HP bar + numeral presentation with tweened fills and low-HP tint.
+## Orientation is a permanent side property (TextureProgressBar.fill_mode), never
+## toggled by damage, healing, tint refresh, or combat round.
+## Player (left): FILL_RIGHT_TO_LEFT — remaining HP hugs the center (right edge).
+## Enemy (right): FILL_LEFT_TO_RIGHT — remaining HP hugs the center (left edge).
 
-var player_bar: ProgressBar
-var enemy_bar: ProgressBar
+var player_bar: TextureProgressBar
+var enemy_bar: TextureProgressBar
 var player_nums: Label
 var enemy_nums: Label
 var cfg: CombatBeatConfig
@@ -19,11 +23,12 @@ var _enemy_tween: Tween
 const PLAYER_COLOR := Color("#22D3EE")
 const ENEMY_COLOR := Color("#FB7185")
 const LOW_COLOR := Color("#FB7185")
+const TRACK_COLOR := Color(0.02, 0.03, 0.055, 0.96)
 
 
 func setup(
-	p_bar: ProgressBar,
-	e_bar: ProgressBar,
+	p_bar: TextureProgressBar,
+	e_bar: TextureProgressBar,
 	p_nums: Label,
 	e_nums: Label,
 	config: CombatBeatConfig
@@ -33,6 +38,9 @@ func setup(
 	player_nums = p_nums
 	enemy_nums = e_nums
 	cfg = config if config != null else CombatBeatConfig.make_default()
+	# Permanent orientation — set once, never reassigned on hits.
+	_configure_side(player_bar, true, PLAYER_COLOR)
+	_configure_side(enemy_bar, false, ENEMY_COLOR)
 
 
 func reset(p_hp: int, p_max: int, e_hp: int, e_max: int) -> void:
@@ -100,7 +108,7 @@ func _kill_tweens() -> void:
 
 
 func _tween_bar(to_player: bool, target: float, flash: Color) -> void:
-	var bar: ProgressBar = player_bar if to_player else enemy_bar
+	var bar: TextureProgressBar = player_bar if to_player else enemy_bar
 	if bar == null or not is_instance_valid(bar):
 		return
 	if to_player:
@@ -127,32 +135,44 @@ func _apply_labels() -> void:
 
 
 func _apply_tints() -> void:
+	## Color only — never touch fill_mode, scale, or pivot.
 	var p_pct := 100.0 * float(player_hp) / float(player_max)
 	var e_pct := 100.0 * float(enemy_hp) / float(enemy_max)
 	if player_bar:
-		_apply_chunky_bar(player_bar, LOW_COLOR if (p_pct > 0.0 and p_pct < 25.0) else PLAYER_COLOR)
+		_tint_bar(player_bar, LOW_COLOR if (p_pct > 0.0 and p_pct < 25.0) else PLAYER_COLOR)
 	if enemy_bar:
-		_apply_chunky_bar(enemy_bar, LOW_COLOR if (e_pct > 0.0 and e_pct < 25.0) else ENEMY_COLOR)
+		_tint_bar(enemy_bar, LOW_COLOR if (e_pct > 0.0 and e_pct < 25.0) else ENEMY_COLOR)
 
 
-func _apply_chunky_bar(bar: ProgressBar, fill: Color) -> void:
-	## Keep combat bars thick when low-HP tint refreshes (presentation only).
-	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.02, 0.03, 0.055, 0.96)
-	track.border_color = Color(fill, 0.55)
-	track.set_border_width_all(2)
-	track.set_corner_radius_all(8)
-	track.content_margin_left = 2
-	track.content_margin_right = 2
-	track.content_margin_top = 2
-	track.content_margin_bottom = 2
-	var meter := StyleBoxFlat.new()
-	meter.bg_color = fill
-	meter.border_color = fill.lightened(0.28)
-	meter.border_width_top = 2
-	meter.border_width_bottom = 0
-	meter.border_width_left = 0
-	meter.border_width_right = 0
-	meter.set_corner_radius_all(6)
-	bar.add_theme_stylebox_override("background", track)
-	bar.add_theme_stylebox_override("fill", meter)
+func _configure_side(bar: TextureProgressBar, player_side: bool, fill: Color) -> void:
+	if bar == null or not is_instance_valid(bar):
+		return
+	bar.min_value = 0.0
+	bar.nine_patch_stretch = true
+	bar.stretch_margin_left = 6
+	bar.stretch_margin_top = 6
+	bar.stretch_margin_right = 6
+	bar.stretch_margin_bottom = 6
+	# Fixed for the whole fight — do not reassign in tint/damage paths.
+	bar.fill_mode = (
+		TextureProgressBar.FILL_RIGHT_TO_LEFT
+		if player_side
+		else TextureProgressBar.FILL_LEFT_TO_RIGHT
+	)
+	bar.scale = Vector2.ONE
+	bar.pivot_offset = Vector2.ZERO
+	bar.texture_under = _solid_tex(TRACK_COLOR)
+	bar.texture_progress = _solid_tex(Color.WHITE)
+	bar.tint_under = TRACK_COLOR
+	_tint_bar(bar, fill)
+
+
+func _tint_bar(bar: TextureProgressBar, fill: Color) -> void:
+	bar.tint_progress = fill
+	bar.tint_under = TRACK_COLOR
+
+
+static func _solid_tex(color: Color) -> Texture2D:
+	var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	img.fill(color)
+	return ImageTexture.create_from_image(img)

@@ -234,35 +234,53 @@ func _read_secret_value(field: String) -> String:
 
 
 func _read_secret_field(path: String, field: String) -> String:
+	# Prefer raw line parse for server_key: Godot ConfigFile can coerce bare hex
+	# into a number, and str(number) becomes a useless short token (e.g. "0").
+	var from_lines := _read_secret_field_lines(path, field)
+	if not from_lines.is_empty():
+		return from_lines
 	var cfg := ConfigFile.new()
 	var load_err := cfg.load(path)
-	if load_err == OK:
-		var from_cfg := str(cfg.get_value("staging", field, "")).strip_edges()
-		# ConfigFile may keep surrounding quotes on some values.
-		if from_cfg.begins_with("\"") and from_cfg.ends_with("\"") and from_cfg.length() >= 2:
-			from_cfg = from_cfg.substr(1, from_cfg.length() - 2)
-		if not from_cfg.is_empty():
-			return from_cfg
-	# Fallback: simple line parse if ConfigFile rejects bare hex tokens.
+	if load_err != OK:
+		return ""
+	var from_cfg := str(cfg.get_value("staging", field, "")).strip_edges()
+	# ConfigFile may keep surrounding quotes on some values.
+	if from_cfg.begins_with("\"") and from_cfg.ends_with("\"") and from_cfg.length() >= 2:
+		from_cfg = from_cfg.substr(1, from_cfg.length() - 2)
+	# Reject absurdly short keys from typed ConfigFile coercion.
+	if field == "server_key" and from_cfg.length() < 8:
+		return ""
+	return from_cfg
+
+
+func _read_secret_field_lines(path: String, field: String) -> String:
 	if not FileAccess.file_exists(path):
 		return ""
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		return ""
-	var prefix := "%s" % field
+	var in_staging := false
 	while not f.eof_reached():
 		var line := f.get_line().strip_edges()
-		if line.begins_with(prefix) and line.contains("="):
-			var parts := line.split("=", false, 1)
-			if parts.size() < 2:
-				continue
-			if str(parts[0]).strip_edges() != field:
-				continue
-			var v := str(parts[1]).strip_edges()
-			if v.begins_with("\"") and v.ends_with("\"") and v.length() >= 2:
-				v = v.substr(1, v.length() - 2)
-			if not v.is_empty():
-				return v
+		if line.is_empty() or line.begins_with(";") or line.begins_with("#"):
+			continue
+		if line.begins_with("[") and line.ends_with("]"):
+			in_staging = line.to_lower() == "[staging]"
+			continue
+		if not in_staging:
+			continue
+		if not line.contains("="):
+			continue
+		var parts := line.split("=", false, 1)
+		if parts.size() < 2:
+			continue
+		if str(parts[0]).strip_edges() != field:
+			continue
+		var v := str(parts[1]).strip_edges()
+		if v.begins_with("\"") and v.ends_with("\"") and v.length() >= 2:
+			v = v.substr(1, v.length() - 2)
+		if not v.is_empty():
+			return v
 	return ""
 
 

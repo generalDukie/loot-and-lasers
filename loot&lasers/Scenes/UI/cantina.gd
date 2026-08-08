@@ -439,7 +439,6 @@ func _load_web_texture(file_name: String) -> Texture2D:
 func _make_patron(offer: Dictionary) -> Button:
 	var patron: Dictionary = offer.get("patron", {}) if typeof(offer.get("patron", {})) == TYPE_DICTIONARY else {}
 	var ch := GameManager.active_character
-	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
 	var locked := int(offer.get("level_requirement", 1)) > int(ch.get("level", 1))
 	# Fuel affordability is preview-only; Nakama mission_start bridges the authoritative debit.
 	var mining := MiningManager.is_mining_busy()
@@ -449,23 +448,101 @@ func _make_patron(offer: Dictionary) -> Button:
 	elif locked:
 		state = "Locked"
 
+	var tint := Color(str(patron.get("color", "#FF9E4F")))
+	var scene_i := int(offer.get("explore_scene", -1))
+	var art := MissionExploreStage.texture_for_index(scene_i)
+
 	var button := Button.new()
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.custom_minimum_size = Vector2(213, 147)
-	button.text = "%s\n%s\n%s" % [
-		str(patron.get("emoji", "🧑‍🚀")),
-		str(patron.get("name", "Patron")),
-		state,
-	]
-	button.add_theme_font_size_override("font_size", 16)
-	var tint := Color(str(patron.get("color", "#FF9E4F")))
-	button.add_theme_stylebox_override("normal", ClientUi.button_style(Color(tint, 0.45), Color(tint, 0.85)))
-	button.add_theme_stylebox_override("hover", ClientUi.button_style(Color(tint, 0.90), tint))
-	button.add_theme_color_override("font_color", tint.lightened(0.2))
-	ClientUi.apply_display_font(button)
+	button.clip_text = true
+	button.text = ""
+	button.flat = true
+	button.focus_mode = Control.FOCUS_NONE
+	var empty := StyleBoxEmpty.new()
+	button.add_theme_stylebox_override("normal", empty)
+	button.add_theme_stylebox_override("hover", empty)
+	button.add_theme_stylebox_override("pressed", empty)
+	button.add_theme_stylebox_override("disabled", empty)
 	ClientUi.apply_interaction_motion(button, 1.035)
-	# Always clickable so locked/low-fuel contracts still open the detail sheet.
 	button.disabled = false
+
+	var frame := PanelContainer.new()
+	frame.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(tint, 0.2), Color(tint, 0.85), 14, 2)
+	)
+	button.add_child(frame)
+
+	var host := Control.new()
+	host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.clip_contents = true
+	frame.add_child(host)
+
+	if art != null:
+		var bg := TextureRect.new()
+		bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		bg.texture = art
+		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		host.add_child(bg)
+		var veil := ColorRect.new()
+		veil.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		veil.color = Color(0.04, 0.03, 0.08, 0.42)
+		veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		host.add_child(veil)
+	else:
+		var fill := ColorRect.new()
+		fill.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		fill.color = Color(tint, 0.35)
+		fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		host.add_child(fill)
+
+	var col := VBoxContainer.new()
+	col.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 4)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(col)
+
+	var emoji := Label.new()
+	emoji.text = str(patron.get("emoji", "🧑‍🚀"))
+	emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emoji.add_theme_font_size_override("font_size", 28)
+	emoji.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
+	emoji.add_theme_constant_override("shadow_offset_x", 1)
+	emoji.add_theme_constant_override("shadow_offset_y", 1)
+	emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(emoji)
+
+	var name_l := Label.new()
+	name_l.text = str(patron.get("name", "Patron"))
+	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_l.add_theme_font_size_override("font_size", 15)
+	name_l.add_theme_color_override("font_color", Color.WHITE)
+	name_l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	name_l.add_theme_constant_override("shadow_offset_x", 1)
+	name_l.add_theme_constant_override("shadow_offset_y", 1)
+	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ClientUi.apply_display_font(name_l)
+	col.add_child(name_l)
+
+	var state_l := Label.new()
+	state_l.text = state
+	state_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	state_l.add_theme_font_size_override("font_size", 13)
+	state_l.add_theme_color_override("font_color", tint.lightened(0.25))
+	state_l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	state_l.add_theme_constant_override("shadow_offset_x", 1)
+	state_l.add_theme_constant_override("shadow_offset_y", 1)
+	state_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ClientUi.apply_display_font(state_l)
+	col.add_child(state_l)
+
 	var captured := offer.duplicate(true)
 	button.mouse_entered.connect(func() -> void: _show_hover_preview(captured, tint, state))
 	button.mouse_exited.connect(func() -> void: _hide_hover_preview())
@@ -745,6 +822,31 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	close_btn.add_theme_color_override("font_hover_color", ClientUi.TEXT)
 	close_btn.pressed.connect(_close_mission_sheet)
 	head.add_child(close_btn)
+
+	# Mission artwork banner — same explore_scene as the in-progress backdrop.
+	var art := MissionExploreStage.texture_for_index(int(offer.get("explore_scene", -1)))
+	if art != null:
+		var art_frame := PanelContainer.new()
+		art_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		art_frame.custom_minimum_size = Vector2(0, 132)
+		art_frame.clip_contents = true
+		art_frame.add_theme_stylebox_override(
+			"panel",
+			ClientUi.painted_panel_style(Color(0.04, 0.04, 0.07, 1.0), Color(tint, 0.45), 12, 1)
+		)
+		_preview_body.add_child(art_frame)
+		var art_host := Control.new()
+		art_host.custom_minimum_size = Vector2(0, 128)
+		art_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		art_host.clip_contents = true
+		art_frame.add_child(art_host)
+		var art_tex := TextureRect.new()
+		art_tex.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		art_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		art_tex.texture = art
+		art_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art_host.add_child(art_tex)
 
 	# Full-width duration bar
 	var dur_row := PanelContainer.new()

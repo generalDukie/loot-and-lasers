@@ -95,6 +95,13 @@ func _set_battling(v: bool) -> void:
 	battle_state_changed.emit(v)
 
 
+## Client presentation lock only — call if the duel overlay is dismissed
+## before FinishArenaBattle (script error, nav away, empty overlay).
+func release_presentation_lock() -> void:
+	if battling:
+		_set_battling(false)
+
+
 func _fail(msg: String) -> Dictionary:
 	arena_error.emit(msg)
 	return {"ok": false, "error": msg, "data": {}}

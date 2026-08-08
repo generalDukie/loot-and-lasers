@@ -11,16 +11,41 @@ signal settings_changed
 signal account_preferences_changed(preferences: Dictionary)
 
 const SETTINGS_PATH := "user://settings.cfg"
-const SETTINGS_VERSION := 2
+const SETTINGS_VERSION := 3
 const DESIGN_SIZE := ResolutionRules.DESIGN_SIZE
 const MIN_WINDOW := Vector2i(960, 540)
 
 ## Local-only keys (must never POST to Node as authority).
 const LOCAL_KEYS := [
-	"master_volume", "music_volume", "sfx_volume", "ambient_volume",
+	"master_volume", "music_volume", "sfx_volume", "ambient_volume", "master_muted",
 	"window_mode", "fullscreen", "play_music_when_unfocused",
 	"vsync", "combat_anim_speed", "screen_shake_scale",
+	"notif_mission_complete", "notif_arena_ready", "notif_daily_reward",
+	"notif_mail", "notif_guild_activity",
+	"privacy_friend_requests", "privacy_guild_invites", "privacy_show_online",
 ]
+
+const DEFAULTS := {
+	"master_volume": 1.0,
+	"music_volume": 0.8,
+	"sfx_volume": 1.0,
+	"ambient_volume": 0.55,
+	"master_muted": false,
+	"play_music_when_unfocused": true,
+	"fullscreen": false,
+	"window_mode": "maximized",
+	"vsync": true,
+	"combat_anim_speed": 1.0,
+	"screen_shake_scale": 1.0,
+	"notif_mission_complete": true,
+	"notif_arena_ready": true,
+	"notif_daily_reward": true,
+	"notif_mail": true,
+	"notif_guild_activity": true,
+	"privacy_friend_requests": true,
+	"privacy_guild_invites": true,
+	"privacy_show_online": true,
+}
 
 var _config := ConfigFile.new()
 var _enforcing_size := false
@@ -32,6 +57,7 @@ var music_volume: float = 0.8
 var sfx_volume: float = 1.0
 ## Station / ship ambience (separate from music beds).
 var ambient_volume: float = 0.55
+var master_muted: bool = false
 ## Legacy mirror of window_mode == "fullscreen" | "exclusive"
 var fullscreen: bool = false
 ## windowed | maximized | fullscreen | exclusive
@@ -42,6 +68,16 @@ var vsync: bool = true
 var combat_anim_speed: float = 1.0
 ## 0 = no shake, 1 = full CombatBeatConfig shake.
 var screen_shake_scale: float = 1.0
+
+var notif_mission_complete: bool = true
+var notif_arena_ready: bool = true
+var notif_daily_reward: bool = true
+var notif_mail: bool = true
+var notif_guild_activity: bool = true
+
+var privacy_friend_requests: bool = true
+var privacy_guild_invites: bool = true
+var privacy_show_online: bool = true
 
 
 func _ready() -> void:
@@ -76,18 +112,27 @@ func load_settings() -> void:
 	var err := _config.load(SETTINGS_PATH)
 	if err != OK:
 		return
-	master_volume = float(_config.get_value("audio", "master_volume", master_volume))
-	music_volume = float(_config.get_value("audio", "music_volume", music_volume))
-	sfx_volume = float(_config.get_value("audio", "sfx_volume", sfx_volume))
-	ambient_volume = float(_config.get_value("audio", "ambient_volume", ambient_volume))
-	play_music_when_unfocused = bool(_config.get_value("audio", "play_music_when_unfocused", play_music_when_unfocused))
-	fullscreen = bool(_config.get_value("display", "fullscreen", fullscreen))
+	master_volume = float(_config.get_value("audio", "master_volume", DEFAULTS["master_volume"]))
+	music_volume = float(_config.get_value("audio", "music_volume", DEFAULTS["music_volume"]))
+	sfx_volume = float(_config.get_value("audio", "sfx_volume", DEFAULTS["sfx_volume"]))
+	ambient_volume = float(_config.get_value("audio", "ambient_volume", DEFAULTS["ambient_volume"]))
+	master_muted = bool(_config.get_value("audio", "master_muted", DEFAULTS["master_muted"]))
+	play_music_when_unfocused = bool(_config.get_value("audio", "play_music_when_unfocused", DEFAULTS["play_music_when_unfocused"]))
+	fullscreen = bool(_config.get_value("display", "fullscreen", DEFAULTS["fullscreen"]))
 	window_mode = str(_config.get_value("display", "window_mode", ""))
 	if window_mode.is_empty():
-		window_mode = "fullscreen" if fullscreen else "maximized"
-	vsync = bool(_config.get_value("display", "vsync", vsync))
-	combat_anim_speed = clampf(float(_config.get_value("accessibility", "combat_anim_speed", combat_anim_speed)), 0.35, 2.0)
-	screen_shake_scale = clampf(float(_config.get_value("accessibility", "screen_shake_scale", screen_shake_scale)), 0.0, 1.0)
+		window_mode = "fullscreen" if fullscreen else str(DEFAULTS["window_mode"])
+	vsync = bool(_config.get_value("display", "vsync", DEFAULTS["vsync"]))
+	combat_anim_speed = clampf(float(_config.get_value("accessibility", "combat_anim_speed", DEFAULTS["combat_anim_speed"])), 0.35, 2.0)
+	screen_shake_scale = clampf(float(_config.get_value("accessibility", "screen_shake_scale", DEFAULTS["screen_shake_scale"])), 0.0, 1.0)
+	notif_mission_complete = bool(_config.get_value("notifications", "mission_complete", DEFAULTS["notif_mission_complete"]))
+	notif_arena_ready = bool(_config.get_value("notifications", "arena_ready", DEFAULTS["notif_arena_ready"]))
+	notif_daily_reward = bool(_config.get_value("notifications", "daily_reward", DEFAULTS["notif_daily_reward"]))
+	notif_mail = bool(_config.get_value("notifications", "mail", DEFAULTS["notif_mail"]))
+	notif_guild_activity = bool(_config.get_value("notifications", "guild_activity", DEFAULTS["notif_guild_activity"]))
+	privacy_friend_requests = bool(_config.get_value("privacy", "friend_requests", DEFAULTS["privacy_friend_requests"]))
+	privacy_guild_invites = bool(_config.get_value("privacy", "guild_invites", DEFAULTS["privacy_guild_invites"]))
+	privacy_show_online = bool(_config.get_value("privacy", "show_online", DEFAULTS["privacy_show_online"]))
 	_migrate_settings_file_if_needed()
 
 
@@ -97,12 +142,21 @@ func save_settings() -> Error:
 	_config.set_value("audio", "music_volume", music_volume)
 	_config.set_value("audio", "sfx_volume", sfx_volume)
 	_config.set_value("audio", "ambient_volume", ambient_volume)
+	_config.set_value("audio", "master_muted", master_muted)
 	_config.set_value("audio", "play_music_when_unfocused", play_music_when_unfocused)
 	_config.set_value("display", "fullscreen", fullscreen)
 	_config.set_value("display", "window_mode", window_mode)
 	_config.set_value("display", "vsync", vsync)
 	_config.set_value("accessibility", "combat_anim_speed", combat_anim_speed)
 	_config.set_value("accessibility", "screen_shake_scale", screen_shake_scale)
+	_config.set_value("notifications", "mission_complete", notif_mission_complete)
+	_config.set_value("notifications", "arena_ready", notif_arena_ready)
+	_config.set_value("notifications", "daily_reward", notif_daily_reward)
+	_config.set_value("notifications", "mail", notif_mail)
+	_config.set_value("notifications", "guild_activity", notif_guild_activity)
+	_config.set_value("privacy", "friend_requests", privacy_friend_requests)
+	_config.set_value("privacy", "guild_invites", privacy_guild_invites)
+	_config.set_value("privacy", "show_online", privacy_show_online)
 	var err := _config.save(SETTINGS_PATH)
 	settings_changed.emit()
 	return err
@@ -114,14 +168,63 @@ func serialize_local_preferences() -> Dictionary:
 		"music_volume": music_volume,
 		"sfx_volume": sfx_volume,
 		"ambient_volume": ambient_volume,
+		"master_muted": master_muted,
 		"play_music_when_unfocused": play_music_when_unfocused,
 		"fullscreen": fullscreen,
 		"window_mode": window_mode,
 		"vsync": vsync,
 		"combat_anim_speed": combat_anim_speed,
 		"screen_shake_scale": screen_shake_scale,
+		"notif_mission_complete": notif_mission_complete,
+		"notif_arena_ready": notif_arena_ready,
+		"notif_daily_reward": notif_daily_reward,
+		"notif_mail": notif_mail,
+		"notif_guild_activity": notif_guild_activity,
+		"privacy_friend_requests": privacy_friend_requests,
+		"privacy_guild_invites": privacy_guild_invites,
+		"privacy_show_online": privacy_show_online,
 		"scope": "local_device",
 	}
+
+
+func restore_defaults() -> void:
+	master_volume = float(DEFAULTS["master_volume"])
+	music_volume = float(DEFAULTS["music_volume"])
+	sfx_volume = float(DEFAULTS["sfx_volume"])
+	ambient_volume = float(DEFAULTS["ambient_volume"])
+	master_muted = bool(DEFAULTS["master_muted"])
+	play_music_when_unfocused = bool(DEFAULTS["play_music_when_unfocused"])
+	fullscreen = bool(DEFAULTS["fullscreen"])
+	window_mode = str(DEFAULTS["window_mode"])
+	vsync = bool(DEFAULTS["vsync"])
+	combat_anim_speed = float(DEFAULTS["combat_anim_speed"])
+	screen_shake_scale = float(DEFAULTS["screen_shake_scale"])
+	notif_mission_complete = bool(DEFAULTS["notif_mission_complete"])
+	notif_arena_ready = bool(DEFAULTS["notif_arena_ready"])
+	notif_daily_reward = bool(DEFAULTS["notif_daily_reward"])
+	notif_mail = bool(DEFAULTS["notif_mail"])
+	notif_guild_activity = bool(DEFAULTS["notif_guild_activity"])
+	privacy_friend_requests = bool(DEFAULTS["privacy_friend_requests"])
+	privacy_guild_invites = bool(DEFAULTS["privacy_guild_invites"])
+	privacy_show_online = bool(DEFAULTS["privacy_show_online"])
+	apply_settings()
+	save_settings()
+
+
+## Client-side notification category filter (local prefs only).
+func allows_notification_type(ntype: String) -> bool:
+	var t := ntype.strip_edges().to_lower()
+	if t in ["mission_complete", "mission", "mission_ready"]:
+		return notif_mission_complete
+	if t in ["arena_ready", "arena", "duel_ready"]:
+		return notif_arena_ready
+	if t in ["daily_reward", "daily", "login_reward"]:
+		return notif_daily_reward
+	if t in ["mail", "message", "private_message"]:
+		return notif_mail
+	if t in ["guild_activity", "guild", "guild_invite", "guild_war"]:
+		return notif_guild_activity
+	return true
 
 
 func get_ui_state(key: String, default_value: Variant = null) -> Variant:
@@ -190,12 +293,20 @@ func _apply_window_mode() -> void:
 
 ## Volume only — never touch window mode (sliders used to call apply_settings and break).
 func apply_audio() -> void:
+	var master := 0.0 if master_muted else master_volume
 	var music := music_volume
 	var ambient := ambient_volume
 	if not play_music_when_unfocused and not _app_has_focus():
 		music = 0.0
 		ambient = 0.0
-	AudioManager.apply_volumes(master_volume, music, sfx_volume, ambient)
+	AudioManager.apply_volumes(master, music, sfx_volume, ambient)
+
+
+func set_master_muted(on: bool, persist: bool = true) -> void:
+	master_muted = on
+	apply_audio()
+	if persist:
+		save_settings()
 
 
 func set_master_volume(v: float, persist: bool = true) -> void:

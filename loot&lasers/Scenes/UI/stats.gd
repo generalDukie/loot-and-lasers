@@ -13,10 +13,8 @@ const FRAME_SLOTS: Array = [
 	{"type": "accessory", "label": "Ring"},
 ]
 
-## Hold-to-buy ramp — matches web StatBar (2/s accelerating to 10/s over 3s).
-const HOLD_START_RATE := 2.0
-const HOLD_END_RATE := 10.0
-const HOLD_RAMP_MS := 3000.0
+## Hold-to-buy ramp — preload so the page compiles even before global class cache refresh.
+const HoldRepeat := preload("res://Scripts/UI/HoldRepeatController.gd")
 
 var _status: Label
 var _list: VBoxContainer
@@ -43,25 +41,37 @@ var _combat_via: Label
 var _combat_stim: Label
 var _stat_rows: Dictionary = {}
 var _combat_values: Dictionary = {}
+var _hold = HoldRepeat.new()
 var _hold_stat := ""
-var _hold_started_ms := 0
-var _hold_next_ms := 0
+var _hold_queued := 0
+var _hold_inflight := 0
+var _hold_flushing := false
+var _hold_purchases_at_flush := -1
 var _busy := false
 var _saved_bio := ""
 var _operative_lab: Label
 var _title_lab: Label
-var _bag_inspect: PanelContainer
-var _bag_inspect_col: VBoxContainer
-var _inspect_item_id := ""
-var _inspect_anchor: Control = null
-var _inspect_is_equipped := false
+var _inspect: ItemInspectPopup
 var _sheet_ready := false
 var _doll_wrap: Control = null
 var _slot_panels: Dictionary = {} # type -> PanelContainer
 var _bag_slot_min_h := 56.0
+var _equip_slot_size := 107.0
+var _doll_scale_busy := false
+var _doll_layout_lock := false
 
-const EQUIP_SLOT_SIZE := 107.0 # 88 × 1.22 — loadout extends downward 22%
-const PORTRAIT_SIZE := 107.0
+## Baseline 3×3 doll cell — grows to fill the loadout pane (never shrinks below this).
+const EQUIP_SLOT_SIZE_MIN := 107.0
+const EQUIP_SLOT_RADIUS := 10
+const EQUIP_SLOT_BORDER := 2
+const EQUIP_SLOT_PAD := 5
+## Avatar fills the center cell content area (margins/borders reserved; badge overlays).
+const PORTRAIT_FILL := 0.98
+const EQUIP_ICON_SZ := 48.0
+const EQUIP_LABEL_FS := 11
+const EQUIP_NAME_FS := 12
+const EQUIP_GRID_INSET := 8.0
+const EQUIP_GRID_SEP := 8
 const BAG_COLS := 5
 ## Backpack gear glyph — fraction of the middle band's shorter side (name/attrs unchanged).
 const BAG_GEAR_ICON_FILL := 0.6
@@ -72,9 +82,13 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	clip_contents = true
 	_build()
+	_hold.stopped.connect(_on_hold_controller_stopped)
 	StatsManager.character_changed.connect(_refresh_values)
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
+	var win := get_window()
+	if win != null and not win.focus_exited.is_connected(_on_window_focus_out):
+		win.focus_exited.connect(_on_window_focus_out)
 	# Defer network boot so shell show_page can finish mounting/animating
 	# without waiting on guild/stats requests (those used to freeze the rail).
 	call_deferred("_start_boot")
@@ -91,6 +105,10 @@ func _start_boot() -> void:
 
 
 func _exit_tree() -> void:
+	_stop_upgrade_hold(true)
+	var win := get_window()
+	if win != null and win.focus_exited.is_connected(_on_window_focus_out):
+		win.focus_exited.disconnect(_on_window_focus_out)
 	if StatsManager.character_changed.is_connected(_refresh_values):
 		StatsManager.character_changed.disconnect(_refresh_values)
 
@@ -220,10 +238,11 @@ func _build() -> void:
 	mid.add_child(doll_wrap)
 	_doll = GridContainer.new()
 	_doll.columns = 3
-	_doll.add_theme_constant_override("h_separation", 8)
-	_doll.add_theme_constant_override("v_separation", 8)
+	_doll.add_theme_constant_override("h_separation", EQUIP_GRID_SEP)
+	_doll.add_theme_constant_override("v_separation", EQUIP_GRID_SEP)
 	_doll.mouse_filter = Control.MOUSE_FILTER_PASS
 	doll_wrap.add_child(_doll)
+	doll_wrap.resized.connect(_on_doll_wrap_resized)
 
 	var identity := VBoxContainer.new()
 	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -377,32 +396,22 @@ func _build() -> void:
 	_list.add_theme_constant_override("separation", 10)
 	right.add_child(_list)
 
-	# Hover inspect floats above clipped backpack slots (mirrors web StatCompareBubble).
-	_bag_inspect = PanelContainer.new()
-	_bag_inspect.visible = false
-	_bag_inspect.z_index = 80
-	_bag_inspect.mouse_filter = Control.MOUSE_FILTER_STOP
-	_bag_inspect.custom_minimum_size = Vector2(168, 0)
-	_bag_inspect.add_theme_stylebox_override("panel", _compact_inspect_style(ClientUi.CYAN))
-	add_child(_bag_inspect)
-	_bag_inspect_col = VBoxContainer.new()
-	_bag_inspect_col.add_theme_constant_override("separation", 2)
-	_bag_inspect_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bag_inspect.add_child(_bag_inspect_col)
-	_bag_inspect.mouse_exited.connect(_maybe_hide_bag_inspect)
+	_inspect = ItemInspectPopup.new()
+	add_child(_inspect)
+	_inspect.action_pressed.connect(_on_inspect_action)
 
 
 func _populate() -> void:
 	if not is_inside_tree() or not is_instance_valid(self):
 		return
 	_sheet_ready = false
+	_doll_layout_lock = true
 	_update_hero()
 	_rebuild_doll()
 	_update_backpack()
 	_stat_rows.clear()
 	_combat_values.clear()
-	for c in _list.get_children():
-		c.queue_free()
+	_clear_container_children(_list)
 
 	var c: Dictionary = GameManager.active_character
 	var primary := StatsRules.primary_stat(str(c.get("class", "Vanguard")))
@@ -487,6 +496,8 @@ func _populate() -> void:
 	_sheet_ready = true
 	_refresh_values()
 	_set_action_status("")
+	_doll_layout_lock = false
+	call_deferred("_sync_doll_scale")
 
 
 ## Live values only — never rebuilds rows, so a held button stays alive.
@@ -502,9 +513,14 @@ func _refresh_values() -> void:
 	var naked: Dictionary = StatsManager.naked_totals(c)
 	var derived: Dictionary = StatsManager.derived_stats(c, permanent)
 	var stardust: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
+	var hold_extra := _hold_pending_count()
+	var hold_cost := 0
+	if not _hold_stat.is_empty() and hold_extra > 0:
+		hold_cost = StatsRules.batch_cost(c, _hold_stat, hold_extra)
+	var shown_dust := maxi(0, stardust - hold_cost)
 
 	if is_instance_valid(_stardust_lab):
-		_stardust_lab.text = "✦  %s" % _fmt_int(stardust)
+		_stardust_lab.text = "✦  %s" % _fmt_int(shown_dust)
 
 	var cheapest := 999999999
 	var can_buy_any := false
@@ -530,10 +546,11 @@ func _refresh_values() -> void:
 		var row: Dictionary = _stat_rows[stat]
 		if not row.has("value") or not is_instance_valid(row["value"]):
 			continue
-		var total := int(display.get(stat, 0))
-		var bonus := total - int(naked.get(stat, 0))
-		var cost := StatsManager.next_cost(c, str(stat))
-		var affordable := CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost)
+		var preview_n := _hold_pending_count(str(stat))
+		var total := int(display.get(stat, 0)) + preview_n
+		var bonus := int(display.get(stat, 0)) - int(naked.get(stat, 0))
+		var cost := StatsRules.point_cost(StatsRules.purchase_count(c, str(stat)) + preview_n + 1)
+		var affordable := shown_dust >= cost or (str(stat) == _hold_stat and _hold.is_active())
 
 		var value_lab := row["value"] as Label
 		value_lab.text = str(total)
@@ -549,10 +566,11 @@ func _refresh_values() -> void:
 		var buy := row["buy"] as Button
 		if buy != null and is_instance_valid(buy):
 			buy.text = "Upgrade\n✦ %s" % _fmt_int(cost)
-			buy.disabled = not affordable
+			buy.disabled = not affordable and not (str(stat) == _hold_stat and _hold.is_active())
+			buy.modulate = Color(1.08, 1.12, 1.06) if str(stat) == _hold_stat and _hold.is_active() else Color.WHITE
 			buy.add_theme_font_size_override("font_size", 17)
 			buy.tooltip_text = (
-				"Spend %s ✦ · hold to keep buying" % cost if affordable
+				"Spend %s ✦ · hold to keep buying" % cost if affordable or (str(stat) == _hold_stat and _hold.is_active())
 				else "Need %s ✦ for the next point" % cost
 			)
 		if row.has("panel") and is_instance_valid(row["panel"]):
@@ -643,29 +661,117 @@ func _on_save_bio() -> void:
 	_bio_save.disabled = true
 
 
+func _equip_frame_style(bg: Color, border: Color) -> StyleBoxFlat:
+	## Tight, uniform chrome for every doll cell — no painted-panel margins that inflate rows.
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border
+	s.set_border_width_all(EQUIP_SLOT_BORDER)
+	s.set_corner_radius_all(_equip_radius())
+	s.content_margin_left = EQUIP_SLOT_PAD
+	s.content_margin_right = EQUIP_SLOT_PAD
+	s.content_margin_top = EQUIP_SLOT_PAD
+	s.content_margin_bottom = EQUIP_SLOT_PAD
+	return s
+
+
+func _equip_cell_size() -> Vector2:
+	return Vector2(_equip_slot_size, _equip_slot_size)
+
+
+func _equip_scale() -> float:
+	return _equip_slot_size / EQUIP_SLOT_SIZE_MIN
+
+
+func _equip_radius() -> int:
+	return clampi(int(round(float(EQUIP_SLOT_RADIUS) * _equip_scale())), EQUIP_SLOT_RADIUS, 16)
+
+
+func _equip_icon_size() -> float:
+	var chrome := float(EQUIP_SLOT_BORDER * 2 + EQUIP_SLOT_PAD * 2)
+	var inner := _equip_slot_size - chrome
+	var label_h := float(_equip_label_fs() + 4)
+	var name_h := float(_equip_name_fs() + 4)
+	return maxf(EQUIP_ICON_SZ, floorf(inner - label_h - name_h - 4.0))
+
+
+func _equip_label_fs() -> int:
+	return clampi(int(round(float(EQUIP_LABEL_FS) * _equip_scale())), EQUIP_LABEL_FS, 16)
+
+
+func _equip_name_fs() -> int:
+	return clampi(int(round(float(EQUIP_NAME_FS) * _equip_scale())), EQUIP_NAME_FS, 18)
+
+
+func _portrait_draw_size() -> float:
+	## Content box inside borders + pad, then fill most of it (badge overlays corner).
+	var chrome := float(EQUIP_SLOT_BORDER * 2 + EQUIP_SLOT_PAD * 2)
+	var inner := _equip_slot_size - chrome
+	return maxf(64.0, floorf(inner * PORTRAIT_FILL))
+
+
+func _on_doll_wrap_resized() -> void:
+	if _doll_layout_lock or not _sheet_ready:
+		return
+	_sync_doll_scale()
+
+
+func _sync_doll_scale() -> void:
+	if _doll_layout_lock or _doll_scale_busy or _doll_wrap == null or not is_instance_valid(_doll_wrap):
+		return
+	var next := _compute_equip_slot_size()
+	if absf(next - _equip_slot_size) < 2.0:
+		return
+	_doll_scale_busy = true
+	_equip_slot_size = next
+	if _doll != null and is_instance_valid(_doll) and _doll.get_child_count() > 0:
+		_rebuild_doll()
+	_doll_scale_busy = false
+
+
+func _compute_equip_slot_size() -> float:
+	if _doll_wrap == null or not is_instance_valid(_doll_wrap):
+		return EQUIP_SLOT_SIZE_MIN
+	var avail := _doll_wrap.size
+	if avail.x < 32.0 or avail.y < 32.0:
+		return maxf(EQUIP_SLOT_SIZE_MIN, _equip_slot_size)
+	var sep := float(EQUIP_GRID_SEP)
+	var max_w := (avail.x - EQUIP_GRID_INSET * 2.0 - sep * 2.0) / 3.0
+	var max_h := (avail.y - EQUIP_GRID_INSET * 2.0 - sep * 2.0) / 3.0
+	return maxf(EQUIP_SLOT_SIZE_MIN, floorf(minf(max_w, max_h)))
+
+
 func _rebuild_doll() -> void:
 	_hide_bag_inspect()
 	_slot_panels.clear()
 	_clear_slot_highlights()
-	for child in _doll.get_children():
-		child.queue_free()
+	_clear_container_children(_doll)
+	if not _doll_scale_busy:
+		var fitted := _compute_equip_slot_size()
+		if absf(fitted - _equip_slot_size) >= 2.0:
+			_equip_slot_size = fitted
 	var ch: Dictionary = GameManager.active_character
 	var items: Array = StatsManager.all_items
-	var cell := Vector2(EQUIP_SLOT_SIZE, EQUIP_SLOT_SIZE)
+	var cell := _equip_cell_size()
+	var badge_sz := clampf(roundf(26.0 * _equip_scale()), 26.0, 40.0)
+	var badge_fs := clampi(int(round(12.0 * _equip_scale())), 12, 16)
 	for slot in FRAME_SLOTS:
 		var stype := str(slot.get("type", ""))
 		if stype == "_portrait":
-			# Center cell: avatar portrait with a corner level badge (web EquippedFrame).
-			# PanelContainer must have exactly one content child — nest badge inside it.
+			# Center cell: large avatar + corner level badge. Outer size matches equip tiles.
 			var wrap := PanelContainer.new()
 			wrap.custom_minimum_size = cell
+			wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			wrap.clip_contents = true
 			wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-				Color(0.07, 0.09, 0.14, 1.0), Color(ClientUi.CYAN, 0.85), 10, 2
-			))
+			wrap.add_theme_stylebox_override(
+				"panel",
+				_equip_frame_style(Color(0.07, 0.09, 0.14, 1.0), Color(ClientUi.CYAN, 0.85))
+			)
 			var host := Control.new()
 			host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			host.custom_minimum_size = cell - Vector2(8, 8)
+			host.custom_minimum_size = Vector2.ZERO
 			host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			wrap.add_child(host)
@@ -674,9 +780,10 @@ func _rebuild_doll() -> void:
 			center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			host.add_child(center)
-			var portrait_sz := mini(PORTRAIT_SIZE - 12.0, EQUIP_SLOT_SIZE - 16.0)
+			var portrait_sz := _portrait_draw_size()
 			var portrait := AvatarRenderer.make_portrait(ch, portrait_sz)
 			portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			portrait.custom_minimum_size = Vector2(portrait_sz, portrait_sz)
 			if portrait.has_method("set_active"):
 				portrait.call("set_active", true)
 			center.add_child(portrait)
@@ -689,8 +796,8 @@ func _rebuild_doll() -> void:
 			badge.anchor_top = 1.0
 			badge.anchor_right = 1.0
 			badge.anchor_bottom = 1.0
-			badge.offset_left = -28.0
-			badge.offset_top = -28.0
+			badge.offset_left = -(badge_sz + 2.0)
+			badge.offset_top = -(badge_sz + 2.0)
 			badge.offset_right = -2.0
 			badge.offset_bottom = -2.0
 			badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -710,7 +817,7 @@ func _rebuild_doll() -> void:
 			lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			lvl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			lvl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			lvl.add_theme_font_size_override("font_size", 12)
+			lvl.add_theme_font_size_override("font_size", badge_fs)
 			lvl.add_theme_color_override("font_color", ClientUi.VOID)
 			ClientUi.apply_display_font(lvl)
 			badge.add_child(lvl)
@@ -727,7 +834,10 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 	var filled := not worn.is_empty()
 	var item_id := str(worn.get("id", "")) if filled else ""
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(EQUIP_SLOT_SIZE, EQUIP_SLOT_SIZE)
+	panel.custom_minimum_size = _equip_cell_size()
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	panel.clip_contents = true
 	panel.tooltip_text = (
 		"%s — drag to bag to unequip · double-click to unequip" % str(worn.get("name", "Item"))
 		if filled
@@ -736,37 +846,62 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 	if filled:
 		panel.tooltip_text = ""
 	var rarity_tint := ClientUi.rarity_color(str(worn.get("rarity", ""))) if filled else Color(0.3, 0.35, 0.45)
-	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+	panel.add_theme_stylebox_override("panel", _equip_frame_style(
 		Color(0.09, 0.12, 0.18, 1.0) if filled else Color(0.06, 0.07, 0.1, 1.0),
-		Color(rarity_tint, 0.9) if filled else Color(rarity_tint, 0.55),
-		10, 2
+		Color(rarity_tint, 0.9) if filled else Color(rarity_tint, 0.55)
 	))
 	ClientUi.apply_interaction_motion(panel, 1.02 if filled else 1.008)
 	var col := VBoxContainer.new()
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 2)
 	panel.add_child(col)
+
 	var eye := Label.new()
 	eye.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	eye.text = label.to_upper()
 	eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	eye.add_theme_font_size_override("font_size", 12)
+	eye.autowrap_mode = TextServer.AUTOWRAP_OFF
+	eye.clip_text = true
+	eye.custom_minimum_size.y = float(_equip_label_fs() + 3)
+	eye.add_theme_font_size_override("font_size", _equip_label_fs())
 	eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(eye)
 	col.add_child(eye)
+
+	var icon_wrap := CenterContainer.new()
+	icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	icon_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var icon_sz := _equip_icon_size()
+	icon_wrap.custom_minimum_size = Vector2(icon_sz, icon_sz)
+	col.add_child(icon_wrap)
 	if filled:
-		var icon_wrap := CenterContainer.new()
-		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon_wrap.custom_minimum_size = Vector2(0, 64)
-		col.add_child(icon_wrap)
-		icon_wrap.add_child(GearIcon.make(worn, 44.0))
+		var gear := GearIcon.make(worn, icon_sz)
+		gear.custom_minimum_size = Vector2(icon_sz, icon_sz)
+		icon_wrap.add_child(gear)
+	else:
+		var empty_mark := Label.new()
+		empty_mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		empty_mark.text = "·"
+		empty_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		empty_mark.add_theme_font_size_override("font_size", clampi(int(round(18.0 * _equip_scale())), 18, 28))
+		empty_mark.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
+		icon_wrap.add_child(empty_mark)
+
 	var name := Label.new()
 	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name.clip_text = true
+	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name.custom_minimum_size.y = float(_equip_name_fs() + 4)
 	name.text = str(worn.get("name", "—")) if filled else "empty"
-	name.add_theme_font_size_override("font_size", 13)
+	name.add_theme_font_size_override("font_size", _equip_name_fs())
 	name.add_theme_color_override("font_color", rarity_tint.lightened(0.15) if filled else ClientUi.MUTED)
 	ClientUi.apply_body_font(name)
 	col.add_child(name)
@@ -784,7 +919,7 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 		panel.mouse_entered.connect(func() -> void:
 			_show_bag_inspect(panel, captured, true)
 		)
-		panel.mouse_exited.connect(_hide_bag_inspect)
+		panel.mouse_exited.connect(_request_hide_inspect)
 		panel.gui_input.connect(func(ev: InputEvent) -> void:
 			if ev is InputEventMouseButton:
 				var mb := ev as InputEventMouseButton
@@ -798,8 +933,7 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 
 func _update_backpack() -> void:
 	_hide_bag_inspect()
-	for child in _bag_grid.get_children():
-		child.queue_free()
+	_clear_container_children(_bag_grid)
 	var bag: Array = []
 	for item in StatsManager.all_items:
 		if typeof(item) == TYPE_DICTIONARY and not bool(item.get("is_equipped", false)):
@@ -832,7 +966,7 @@ func _update_backpack() -> void:
 
 
 func _on_bag_grid_resized() -> void:
-	if _busy or not _sheet_ready:
+	if _busy or not _sheet_ready or _doll_layout_lock:
 		return
 	var rows_n := maxi(1, _bag_grid.get_child_count())
 	var avail_h := _bag_grid.size.y
@@ -959,7 +1093,7 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		panel.mouse_entered.connect(func() -> void:
 			_show_bag_inspect(panel, captured)
 		)
-		panel.mouse_exited.connect(_maybe_hide_bag_inspect)
+		panel.mouse_exited.connect(_request_hide_inspect)
 		panel.gui_input.connect(func(ev: InputEvent) -> void:
 			if ev is InputEventMouseButton and ev.pressed and ev.double_click \
 					and ev.button_index == MOUSE_BUTTON_LEFT:
@@ -1041,22 +1175,6 @@ func _make_bag_attr_row(entries: Array) -> HBoxContainer:
 	return row
 
 
-func _compact_inspect_style(accent: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.04, 0.055, 0.1, 0.98)
-	sb.border_color = Color(accent, 0.8)
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(8)
-	sb.content_margin_left = 8
-	sb.content_margin_right = 8
-	sb.content_margin_top = 6
-	sb.content_margin_bottom = 6
-	sb.shadow_color = Color(0, 0, 0, 0.4)
-	sb.shadow_size = 6
-	sb.shadow_offset = Vector2(0, 2)
-	return sb
-
-
 func _bag_slot_style(bg: Color, border: Color) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = bg
@@ -1070,283 +1188,45 @@ func _bag_slot_style(bg: Color, border: Color) -> StyleBoxFlat:
 	return sb
 
 
-func _maybe_hide_bag_inspect() -> void:
-	# Backpack only — equipped slots close on leave via _hide_bag_inspect directly.
-	if _inspect_is_equipped:
-		_hide_bag_inspect()
-		return
-	if _pointer_over_inspect_zone():
-		return
-	_hide_bag_inspect()
-
-
-func _pointer_over_inspect_zone() -> bool:
-	var mouse := get_viewport().get_mouse_position()
-	# Equipped inspect is stats-only: popup must not keep itself open or block neighbors.
-	if not _inspect_is_equipped:
-		if _bag_inspect != null and is_instance_valid(_bag_inspect) and _bag_inspect.visible:
-			if _bag_inspect.get_global_rect().has_point(mouse):
-				return true
-	if _inspect_anchor != null and is_instance_valid(_inspect_anchor):
-		if _inspect_anchor.get_global_rect().has_point(mouse):
-			return true
-	return false
+func _request_hide_inspect() -> void:
+	if _inspect != null and is_instance_valid(_inspect):
+		_inspect.request_hide()
 
 
 func _hide_bag_inspect() -> void:
-	_inspect_item_id = ""
-	_inspect_anchor = null
-	_inspect_is_equipped = false
-	if _bag_inspect:
-		_bag_inspect.visible = false
-		_bag_inspect.mouse_filter = Control.MOUSE_FILTER_STOP
+	if _inspect != null and is_instance_valid(_inspect):
+		_inspect.force_hide()
 
 
 func _show_bag_inspect(anchor: Control, item: Dictionary, equipped_preview := false) -> void:
-	var item_id := str(item.get("id", ""))
-	_inspect_item_id = item_id
-	_inspect_anchor = anchor
-	_inspect_is_equipped = equipped_preview
-	_rebuild_bag_inspect(item, equipped_preview)
-	# Equipped popups are view-only and must not steal hover from adjacent loadout slots.
-	_bag_inspect.mouse_filter = (
-		Control.MOUSE_FILTER_IGNORE if equipped_preview else Control.MOUSE_FILTER_STOP
-	)
-	_bag_inspect.visible = true
-	_bag_inspect.reset_size()
-	_position_bag_inspect(anchor)
-
-
-func _position_bag_inspect(anchor: Control) -> void:
-	var rect := anchor.get_global_rect()
-	var size := _bag_inspect.get_combined_minimum_size()
-	size.x = clampf(size.x, 168.0, 280.0)
-	_bag_inspect.size = size
-	var vp := get_viewport_rect().size
-	# Slight overlap with the slot so the pointer can cross without a dead frame.
-	var gap := -2.0
-	# Prefer right of source slot so the popup does not cover the item/cursor.
-	var pos := Vector2(rect.end.x + gap, rect.position.y)
-	if pos.x + size.x > vp.x - 8.0:
-		pos.x = rect.position.x - size.x - gap
-	if pos.x < 8.0:
-		# Fall back above/below when horizontal space is gone.
-		pos.x = clampf(rect.position.x, 8.0, maxf(8.0, vp.x - size.x - 8.0))
-		pos.y = rect.position.y - size.y - gap
-		if pos.y < 8.0:
-			pos.y = rect.end.y + gap
-	if pos.y + size.y > vp.y - 8.0:
-		pos.y = maxf(8.0, vp.y - size.y - 8.0)
-	if pos.y < 8.0:
-		pos.y = 8.0
-	_bag_inspect.global_position = pos
-
-
-func _rebuild_bag_inspect(item: Dictionary, equipped_preview := false) -> void:
-	while _bag_inspect_col.get_child_count() > 0:
-		var old: Node = _bag_inspect_col.get_child(0)
-		_bag_inspect_col.remove_child(old)
-		old.free()
-	var item_id := str(item.get("id", ""))
+	if _inspect == null or not is_instance_valid(_inspect):
+		return
 	var item_type := str(item.get("type", ""))
-	var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
-	_bag_inspect.add_theme_stylebox_override("panel", _compact_inspect_style(tint))
-
-	var title := Label.new()
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.text = str(item.get("name", "Item"))
-	title.add_theme_font_size_override("font_size", 14)
-	title.add_theme_color_override("font_color", tint.lightened(0.2))
-	ClientUi.apply_display_font(title)
-	_bag_inspect_col.add_child(title)
-
-	var meta := Label.new()
-	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	meta.text = "%s · %s · Lv.%s" % [
-		str(item.get("rarity", "?")), item_type, ClientUi.format_level(item.get("level_requirement", "?")),
-	]
-	meta.add_theme_font_size_override("font_size", 11)
-	meta.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(meta)
-	_bag_inspect_col.add_child(meta)
-
+	var item_id := str(item.get("id", ""))
 	var worn := {}
 	if not equipped_preview and InventoryRules.is_equippable(item_type):
 		worn = InventoryRules.find_equipped_of_type(StatsManager.all_items, item_type)
-	if not equipped_preview and not worn.is_empty():
-		var eq_lab := Label.new()
-		eq_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		eq_lab.text = "vs %s" % str(worn.get("name", "equipped"))
-		eq_lab.add_theme_font_size_override("font_size", 11)
-		eq_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_body_font(eq_lab)
-		_bag_inspect_col.add_child(eq_lab)
-
-	if InventoryRules.is_consumable(item):
-		var cons: Dictionary = item.get("consumable", {}) if typeof(item.get("consumable", {})) == TYPE_DICTIONARY else {}
-		var stim := Label.new()
-		stim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		stim.text = "stim · %s +%s%% · %sh" % [
-			str(cons.get("stat", "?")),
-			str(int(round(float(cons.get("mult", 0)) * 100.0))),
-			str(cons.get("duration_hours", "?")),
-		]
-		stim.add_theme_font_size_override("font_size", 12)
-		stim.add_theme_color_override("font_color", ClientUi.CYAN)
-		ClientUi.apply_body_font(stim)
-		_bag_inspect_col.add_child(stim)
-	elif equipped_preview:
-		_add_inspect_stat_rows(item, false)
-	else:
-		for row in InventoryRules.compare_lines(item, worn):
-			var d: int = int(row.get("delta", 0))
-			var lab := HBoxContainer.new()
-			lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			lab.add_theme_constant_override("separation", 6)
-			var stat_key := str(row.get("stat", ""))
-			if StatIcon.has(stat_key):
-				lab.add_child(StatIcon.make(stat_key, StatIcon.SIZE_TOOLTIP))
-			var abbr := Label.new()
-			abbr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			abbr.text = stat_key.substr(0, 3).to_upper()
-			abbr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			abbr.add_theme_font_size_override("font_size", 12)
-			abbr.add_theme_color_override("font_color", ClientUi.MUTED)
-			ClientUi.apply_body_font(abbr)
-			lab.add_child(abbr)
-			var val := Label.new()
-			val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var nv: int = int(row.get("new", 0))
-			val.text = ("+%s" % nv) if nv > 0 else "0"
-			val.add_theme_font_size_override("font_size", 14)
-			val.add_theme_color_override(
-				"font_color",
-				ClientUi.TEXT if nv > 0 else ClientUi.MUTED
-			)
-			ClientUi.apply_body_font(val)
-			lab.add_child(val)
-			if InventoryRules.is_equippable(item_type):
-				var dlab := Label.new()
-				dlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				dlab.custom_minimum_size.x = 36
-				dlab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-				dlab.text = InventoryRules.format_stat_delta(d)
-				dlab.add_theme_font_size_override("font_size", 13)
-				dlab.add_theme_color_override(
-					"font_color",
-					ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else ClientUi.MUTED)
-				)
-				ClientUi.apply_body_font(dlab)
-				lab.add_child(dlab)
-			_bag_inspect_col.add_child(lab)
-
-	if InventoryRules.is_equippable(item_type) and not equipped_preview:
-		var diffs: Dictionary = InventoryRules.compare_gear_attributes(item, worn)
-		var total: int = int(diffs.get("total", 0))
-		var footer := HBoxContainer.new()
-		footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		footer.add_theme_constant_override("separation", 6)
-		var total_lab := Label.new()
-		total_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		total_lab.text = "TOTAL STAT CHANGE:"
-		total_lab.add_theme_font_size_override("font_size", 11)
-		total_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_display_font(total_lab)
-		footer.add_child(total_lab)
-		var total_val := Label.new()
-		total_val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		total_val.text = InventoryRules.format_stat_delta(total)
-		total_val.add_theme_font_size_override("font_size", 12)
-		total_val.add_theme_color_override(
-			"font_color",
-			ClientUi.SUCCESS if total > 0 else (ClientUi.DANGER if total < 0 else ClientUi.MUTED)
-		)
-		ClientUi.apply_display_font(total_val)
-		footer.add_child(total_val)
-		_bag_inspect_col.add_child(footer)
-
-	if equipped_preview:
-		return
-
-	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 4)
-	actions.mouse_filter = Control.MOUSE_FILTER_STOP
-	_bag_inspect_col.add_child(actions)
-	if InventoryRules.is_consumable(item) and not item_id.is_empty():
-		var use_btn := Button.new()
-		use_btn.text = "Use"
-		use_btn.custom_minimum_size = Vector2(0, 26)
-		ClientUi.apply_primary_button(use_btn)
-		use_btn.pressed.connect(func() -> void:
-			_hide_bag_inspect()
-			_on_use_stim(item_id, str(item.get("name", "Stim")))
-		)
-		actions.add_child(use_btn)
-	elif InventoryRules.is_equippable(item_type) and not item_id.is_empty():
-		var equip_btn := Button.new()
-		var swap := not worn.is_empty()
-		equip_btn.text = "Swap" if swap else "Equip"
-		equip_btn.custom_minimum_size = Vector2(0, 26)
-		ClientUi.apply_primary_button(equip_btn)
-		equip_btn.pressed.connect(func() -> void:
-			_hide_bag_inspect()
-			_on_equip(item_id)
-		)
-		actions.add_child(equip_btn)
+	var actions: Array = []
+	if not equipped_preview and not item_id.is_empty():
+		if InventoryRules.is_consumable(item):
+			actions.append({"id": "use", "label": "Use"})
+		elif InventoryRules.is_equippable(item_type):
+			actions.append({"id": "equip", "label": "Swap" if not worn.is_empty() else "Equip"})
+	_inspect.present(anchor, item, {
+		"equipped_preview": equipped_preview,
+		"compare_with": worn,
+		"show_sell_value": not equipped_preview and not InventoryRules.is_consumable(item),
+		"actions": actions,
+	})
 
 
-func _add_inspect_stat_rows(item: Dictionary, show_delta: bool, compare_against: Dictionary = {}) -> void:
-	var stats_raw: Variant = item.get("stats", {})
-	if typeof(stats_raw) != TYPE_DICTIONARY:
-		return
-	var worn_stats: Dictionary = {}
-	if show_delta and typeof(compare_against.get("stats", {})) == TYPE_DICTIONARY:
-		worn_stats = compare_against.get("stats", {})
-	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
-		var nv := int(stats_raw.get(k, 0))
-		var ov := int(worn_stats.get(k, 0)) if show_delta else 0
-		if show_delta:
-			if nv == 0 and ov == 0:
-				continue
-		elif nv <= 0:
-			continue
-		var lab := HBoxContainer.new()
-		lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lab.add_theme_constant_override("separation", 6)
-		if StatIcon.has(k):
-			lab.add_child(StatIcon.make(k, StatIcon.SIZE_TOOLTIP))
-		var abbr := Label.new()
-		abbr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		abbr.text = k.substr(0, 3).to_upper()
-		abbr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		abbr.add_theme_font_size_override("font_size", 12)
-		abbr.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_body_font(abbr)
-		lab.add_child(abbr)
-		var val := Label.new()
-		val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		val.text = ("+%s" % nv) if nv > 0 else "0"
-		val.add_theme_font_size_override("font_size", 14)
-		val.add_theme_color_override("font_color", ClientUi.TEXT if nv > 0 else ClientUi.MUTED)
-		ClientUi.apply_body_font(val)
-		lab.add_child(val)
-		if show_delta:
-			var d := nv - ov
-			var dlab := Label.new()
-			dlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			dlab.custom_minimum_size.x = 36
-			dlab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			dlab.text = InventoryRules.format_stat_delta(d)
-			dlab.add_theme_font_size_override("font_size", 13)
-			dlab.add_theme_color_override(
-				"font_color",
-				ClientUi.SUCCESS if d > 0 else (ClientUi.DANGER if d < 0 else ClientUi.MUTED)
-			)
-			ClientUi.apply_body_font(dlab)
-			lab.add_child(dlab)
-		_bag_inspect_col.add_child(lab)
+func _on_inspect_action(action_id: String, item: Dictionary) -> void:
+	var item_id := str(item.get("id", ""))
+	_hide_bag_inspect()
+	if action_id == "use":
+		_on_use_stim(item_id, str(item.get("name", "Stim")))
+	elif action_id == "equip":
+		_on_equip(item_id)
 
 
 func _on_use_stim(item_id: String, item_name: String) -> void:
@@ -1363,7 +1243,7 @@ func _on_use_stim(item_id: String, item_name: String) -> void:
 	_set_action_status("Used %s." % item_name)
 	AudioManager.play_ui("stim")
 	await StatsManager.refresh()
-	_populate()
+	_refresh_after_inventory_change(false)
 
 
 func _set_action_status(text: String, danger: bool = false) -> void:
@@ -1517,7 +1397,7 @@ func _on_equip(item_id: String) -> void:
 	_set_action_status("Equipped.")
 	AudioManager.play_ui("equip")
 	await StatsManager.refresh()
-	_populate()
+	_refresh_after_inventory_change(true)
 
 
 func _on_unequip(item_id: String) -> void:
@@ -1534,11 +1414,11 @@ func _on_unequip(item_id: String) -> void:
 		if err.to_lower().contains("inventory full"):
 			await InventoryManager.prompt_bag_pressure(self, "Free a bag slot before unequipping.")
 			await StatsManager.refresh()
-			_populate()
+			_refresh_after_inventory_change(true)
 		return
 	_set_action_status("Unequipped.")
 	await StatsManager.refresh()
-	_populate()
+	_refresh_after_inventory_change(true)
 
 
 func _make_vault_teaser(c: Dictionary) -> PanelContainer:
@@ -1714,9 +1594,8 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	buy.custom_minimum_size = Vector2(117, 53)
 	ClientUi.apply_primary_button(buy)
 	buy.add_theme_font_size_override("font_size", 17)
-	buy.button_down.connect(func() -> void: _start_hold(stat))
-	buy.button_up.connect(_stop_hold)
-	buy.mouse_exited.connect(_stop_hold)
+	buy.button_down.connect(func() -> void: _start_upgrade_hold(stat))
+	buy.button_up.connect(func() -> void: _stop_upgrade_hold(true))
 	row.add_child(buy)
 
 	_stat_rows[stat] = {"panel": panel, "value": value_lab, "bonus": bonus_lab, "buy": buy}
@@ -1862,6 +1741,29 @@ func _fmt_pct(v: float) -> String:
 	return "%.1f" % v
 
 
+func _clear_container_children(host: Node) -> void:
+	if host == null or not is_instance_valid(host):
+		return
+	while host.get_child_count() > 0:
+		var child := host.get_child(host.get_child_count() - 1)
+		host.remove_child(child)
+		child.queue_free()
+
+
+func _refresh_after_inventory_change(rebuild_loadout: bool) -> void:
+	if not is_inside_tree() or not is_instance_valid(self):
+		return
+	_doll_layout_lock = true
+	_update_hero()
+	_update_backpack()
+	if rebuild_loadout:
+		_rebuild_doll()
+	if _sheet_ready:
+		_refresh_values()
+	_doll_layout_lock = false
+	call_deferred("_sync_doll_scale")
+
+
 func _fmt_int(n: int) -> String:
 	var s := str(n)
 	var out := ""
@@ -1874,65 +1776,141 @@ func _fmt_int(n: int) -> String:
 	return out
 
 
-## Press-and-hold auto-buy: fire once now, then repeat on a ramping interval.
-func _start_hold(stat: String) -> void:
-	_hold_stat = stat
-	_hold_started_ms = Time.get_ticks_msec()
-	_hold_next_ms = _hold_started_ms + _hold_interval_ms(0)
-	_buy_once(stat)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_stop_upgrade_hold(true)
 
 
-func _stop_hold() -> void:
-	_hold_stat = ""
-
-
-func _hold_interval_ms(elapsed_ms: int) -> int:
-	var t := clampf(float(elapsed_ms) / HOLD_RAMP_MS, 0.0, 1.0)
-	return int(round(1000.0 / (HOLD_START_RATE + (HOLD_END_RATE - HOLD_START_RATE) * t)))
+func _on_window_focus_out() -> void:
+	_stop_upgrade_hold(true)
 
 
 func _process(_delta: float) -> void:
-	if _bag_inspect != null and _bag_inspect.visible and not _pointer_over_inspect_zone():
-		_hide_bag_inspect()
+	if _inspect != null and is_instance_valid(_inspect) and _inspect.visible \
+			and not _inspect.is_pointer_over_zone():
+		_inspect.request_hide()
+	if _hold == null:
+		return
+	if _hold.is_active():
+		var win := get_window()
+		if win != null and not win.has_focus():
+			_stop_upgrade_hold(true)
+			return
+	_hold.tick()
+
+
+func _start_upgrade_hold(stat: String) -> void:
+	if _busy:
+		return
+	if _hold_flushing and _hold_stat != stat:
+		return
+	if not _hold_stat.is_empty() and _hold_stat != stat and (_hold_queued + _hold_inflight) > 0:
+		_stop_upgrade_hold(true)
+		return
+	_hold_stat = stat
+	_hold.start(_on_hold_fire, _can_hold_fire)
+
+
+func _stop_upgrade_hold(flush: bool = true) -> void:
+	if _hold != null and _hold.is_active():
+		_hold.stop()
+	if flush:
+		_flush_hold_queue()
+	_refresh_values()
+
+
+func _on_hold_controller_stopped() -> void:
+	_flush_hold_queue()
+	_refresh_values()
+
+
+func _hold_pending_count(stat: String = "") -> int:
+	if stat.is_empty():
+		stat = _hold_stat
+	if stat.is_empty() or stat != _hold_stat:
+		return 0
+	var extra := _hold_queued + _hold_inflight
+	if _hold_flushing and _hold_purchases_at_flush >= 0:
+		var already := StatsRules.purchase_count(GameManager.active_character, _hold_stat) - _hold_purchases_at_flush
+		extra = maxi(0, extra - already)
+	return extra
+
+
+func _can_hold_fire() -> bool:
 	if _hold_stat.is_empty():
-		return
-	# Buttons that go disabled mid-hold stop emitting button_up, so trust the device.
-	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		_stop_hold()
-		return
-	if _busy:
-		return
-	var now := Time.get_ticks_msec()
-	if now < _hold_next_ms:
-		return
-	_hold_next_ms = now + _hold_interval_ms(now - _hold_started_ms)
-	_buy_once(_hold_stat)
+		return false
+	if _hold_queued + _hold_inflight >= 20:
+		return true
+	var c: Dictionary = GameManager.active_character
+	var dust := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
+	var pending := _hold_pending_count()
+	var reserved := StatsRules.batch_cost(c, _hold_stat, pending)
+	var next := StatsRules.point_cost(StatsRules.purchase_count(c, _hold_stat) + pending + 1)
+	if next <= 0:
+		return false
+	return dust - reserved >= next
 
 
-func _buy_once(stat: String) -> void:
-	if _busy:
+func _on_hold_fire() -> void:
+	if _hold_queued + _hold_inflight >= 20:
+		_flush_hold_queue()
 		return
-	var label := str(StatsRules.ATTR_LABELS.get(stat, stat))
-	var cost := StatsManager.next_cost(GameManager.active_character, stat)
-	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		_stop_hold()
-		_status.text = "Need %s ✦ for the next %s point." % [cost, label]
-		_refresh_values()
+	_hold_queued += 1
+	if _hold_queued + _hold_inflight <= 1:
+		AudioManager.play_ui("click")
+	else:
+		AudioManager.play_ui("hover")
+	_refresh_values()
+	_flush_hold_queue()
+
+
+func _flush_hold_queue() -> void:
+	if _hold_flushing or _hold_stat.is_empty() or _hold_queued <= 0:
 		return
-
-	_busy = true
-	# buy_attribute applies the spend locally before the request, so the sheet and
-	# the shell readouts move on this frame.
-	var res: Dictionary = await StatsManager.buy_attribute(stat)
-	_busy = false
-
+	_hold_flushing = true
+	var stat := _hold_stat
+	var n := _hold_queued
+	_hold_queued = 0
+	_hold_inflight = n
+	_hold_purchases_at_flush = StatsRules.purchase_count(GameManager.active_character, stat)
+	_refresh_values()
+	var res: Dictionary = await StatsManager.buy_attribute(stat, n)
+	_hold_inflight = 0
+	_hold_flushing = false
+	_hold_purchases_at_flush = -1
+	if not is_inside_tree():
+		return
 	if not res.ok:
-		_stop_hold()
+		_hold_queued = 0
+		_hold.stop()
 		var err := str(res.get("error", "BuyAttribute failed"))
 		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
 			err = str(res.data["error"])
 		_status.text = err
+		_hold_stat = ""
+		_refresh_values()
 		return
-
-	var spent := int(StatsManager.last_buy.get("cost", cost))
-	_status.text = "+1 %s  ·  −%s ✦" % [label, spent]
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	var server_reported_count := data.has("count")
+	var applied := int(StatsManager.last_buy.get("count", 1))
+	if not server_reported_count:
+		applied = mini(1, n)
+	applied = clampi(applied, 0, n)
+	var leftover := n - applied
+	var label := str(StatsRules.ATTR_LABELS.get(stat, stat))
+	var spent := int(StatsManager.last_buy.get("cost", 0))
+	_status.text = "+%s %s  ·  −%s ✦" % [applied, label, spent]
+	if leftover > 0 and server_reported_count:
+		# Server bought as many as dust/cap allowed.
+		_hold.stop()
+		_hold_queued = 0
+		_hold_stat = ""
+		_refresh_values()
+		return
+	if leftover > 0:
+		_hold_queued += leftover
+	if _hold.is_active() or _hold_queued > 0:
+		_flush_hold_queue()
+		return
+	_hold_stat = ""
+	_refresh_values()

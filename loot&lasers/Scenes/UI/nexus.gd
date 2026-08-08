@@ -28,13 +28,13 @@ func _ready() -> void:
 
 
 func _boot() -> void:
-	_status.text = "Loading Nexus…"
+	_set_status("Loading Nexus…")
 	await SocialManager.load_my_guild()
 	var res: Dictionary = await NexusManager.load_nexus()
 	if not res.ok:
-		_status.text = str(res.get("error", "Failed to load Nexus"))
+		_set_status(str(res.get("error", "Failed to load Nexus")))
 	else:
-		_status.text = "Ready."
+		_set_status("")
 	_populate()
 	await _load_hof()
 
@@ -121,15 +121,6 @@ func _build() -> void:
 	))
 	left.add_child(_owner_perk_panel)
 
-	_status = ClientUi.make_status()
-	right.add_child(_status)
-
-	_log = Label.new()
-	_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_log.add_theme_font_size_override("font_size", 16)
-	_log.add_theme_color_override("font_color", ClientUi.MUTED)
-	right.add_child(_log)
-
 	var hof_panel := PanelContainer.new()
 	hof_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.07, 0.06, 0.03, 0.96), Color("#FBBF24", 0.4), 16, 1
@@ -147,6 +138,17 @@ func _build() -> void:
 	_hof.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hof.add_theme_constant_override("separation", 6)
 	hof_scroll.add_child(_hof)
+
+	_status = ClientUi.make_status()
+	_status.visible = false
+	right.add_child(_status)
+
+	_log = Label.new()
+	_log.visible = false
+	_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_log.add_theme_font_size_override("font_size", 16)
+	_log.add_theme_color_override("font_color", ClientUi.MUTED)
+	right.add_child(_log)
 
 	var refresh := Button.new()
 	refresh.text = "Refresh"
@@ -486,33 +488,33 @@ func _on_assault() -> void:
 	var members: Array = SocialManager.guild_members
 	var role := str(SocialManager.my_membership.get("role", ""))
 	if role != "leader" and role != "officer":
-		_status.text = "Only leader/officer can assault."
+		_set_status("Only leader/officer can assault.")
 		return
 	var elig: Dictionary = NexusManager.eligibility(guild, members)
 	if not bool(elig.get("ok", false)):
-		_status.text = str(elig.get("error", "Not eligible"))
+		_set_status(str(elig.get("error", "Not eligible")))
 		return
 	if NexusManager.owns_nexus(str(guild.get("id", ""))):
-		_status.text = "You already own the Nexus."
+		_set_status("You already own the Nexus.")
 		return
 	if not NexusManager.is_vulnerable():
-		_status.text = "Owner still protected."
+		_set_status("Owner still protected.")
 		return
 	if NexusManager.assault_cooldown_ms() > 0:
-		_status.text = "Assault on cooldown."
+		_set_status("Assault on cooldown.")
 		return
 	_busy = true
-	_status.text = "Resolving assault…"
+	_set_status("Resolving assault…")
 	var res: Dictionary = await NexusManager.resolve_assault(str(guild.get("id", "")))
 	_busy = false
 	if not res.ok:
-		_status.text = str(res.get("error", "Assault failed"))
+		_set_status(str(res.get("error", "Assault failed")))
 		return
 	var data: Dictionary = NexusManager.last_assault
-	_status.text = "Winner: %s · ownership changed: %s" % [
+	_set_status("Winner: %s · ownership changed: %s" % [
 		str(data.get("winner", "?")),
 		str(data.get("ownership_changed", false)),
-	]
+	])
 	var lines: PackedStringArray = []
 	var events: Variant = data.get("events", [])
 	if typeof(events) == TYPE_ARRAY:
@@ -520,5 +522,13 @@ func _on_assault() -> void:
 			if typeof(ev) == TYPE_DICTIONARY:
 				lines.append(str(ev.get("text", "")))
 	_log.text = "\n".join(lines)
+	_log.visible = not _log.text.strip_edges().is_empty()
 	_populate()
 	await _load_hof()
+
+
+func _set_status(text: String) -> void:
+	if not is_instance_valid(_status):
+		return
+	_status.text = text
+	_status.visible = not text.is_empty()

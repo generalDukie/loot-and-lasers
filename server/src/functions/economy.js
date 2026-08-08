@@ -391,23 +391,32 @@ export async function BuyAttribute(user, body) {
   if (!ATTR_STAT_KEYS.includes(stat)) {
     return { status: 400, body: { error: "Invalid stat" } };
   }
+  const requested = Math.min(20, Math.max(1, Math.floor(Number(body?.count ?? 1)) || 1));
 
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
-      const cost = getNextAttributePointCost(ch, stat);
-      if ((ch.stardust || 0) < cost) httpErr(400, "Not enough stardust");
-
       const byStat = {
         strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
         ...(ch.attribute_purchases_by_stat || {}),
       };
-      byStat[stat] = (byStat[stat] || 0) + 1;
       const stats = { ...(ch.stats || {}) };
-      stats[stat] = (stats[stat] || 0) + 1;
+      let working = { ...ch, stats, attribute_purchases_by_stat: byStat };
+      let totalCost = 0;
+      let applied = 0;
+      while (applied < requested) {
+        const cost = getNextAttributePointCost(working, stat);
+        if ((ch.stardust || 0) - totalCost < cost) break;
+        totalCost += cost;
+        byStat[stat] = (byStat[stat] || 0) + 1;
+        stats[stat] = (stats[stat] || 0) + 1;
+        working = { ...working, stats, attribute_purchases_by_stat: { ...byStat } };
+        applied += 1;
+      }
+      if (applied === 0) httpErr(400, "Not enough stardust");
 
       const patch = {
-        stardust: (ch.stardust || 0) - cost,
+        stardust: (ch.stardust || 0) - totalCost,
         stats,
         attribute_purchases_by_stat: byStat,
         attribute_purchases: Object.values(byStat).reduce((a, b) => a + (b || 0), 0),
@@ -417,7 +426,7 @@ export async function BuyAttribute(user, body) {
         character,
         loadEquippedItemsForCharacter(character.id),
       );
-      return { success: true, cost, stat, patch, character, sheet };
+      return { success: true, cost: totalCost, count: applied, stat, patch, character, sheet };
     });
     return { status: 200, body: result };
   } catch (err) {

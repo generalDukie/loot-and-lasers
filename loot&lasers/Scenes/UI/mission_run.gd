@@ -1,5 +1,5 @@
 extends Control
-## Active mission — full explore art + overlaid rocket timer (web MissionsPage in-flight).
+## Active mission — full-bleed explore art with overlaid status UI (Cantina in-progress).
 
 const GOOFY_STATUS := [
 	{"at": 0.0, "msg": "🚀 Igniting thrusters..."},
@@ -21,6 +21,8 @@ var _claim_btn: Button
 var _skip_btn: Button
 var _active_panel: PanelContainer
 var _explore: MissionExploreStage
+var _ui_layer: Control
+var _dim: ColorRect
 var _progress_track: Control
 var _progress_fill: ColorRect
 var _rocket: TextureRect
@@ -30,6 +32,7 @@ var _status_poll: Timer
 var _busy := false
 var _claimed := false
 var _ready_fx: Tween
+var _enter_tween: Tween
 
 
 func _ready() -> void:
@@ -46,7 +49,30 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 
 
 func _build() -> void:
+	# Void under art (visible only until texture loads).
 	add_child(ClientUi.make_page_bg(self, "void"))
+
+	# Full content-pane backdrop — does not cover side nav (page is already content-only).
+	_explore = MissionExploreStage.new()
+	_explore.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_explore.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_explore.modulate.a = 0.0
+	add_child(_explore)
+
+	# Subtle global dim so floating panels stay readable without hiding the art.
+	_dim = ColorRect.new()
+	_dim.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_dim.color = Color(0.02, 0.03, 0.07, 0.22)
+	_dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_dim.modulate.a = 0.0
+	add_child(_dim)
+
+	_ui_layer = Control.new()
+	_ui_layer.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_ui_layer.mouse_filter = Control.MOUSE_FILTER_PASS
+	_ui_layer.modulate.a = 0.0
+	_ui_layer.z_index = 10
+	add_child(_ui_layer)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -54,12 +80,14 @@ func _build() -> void:
 	margin.add_theme_constant_override("margin_right", 14)
 	margin.add_theme_constant_override("margin_top", 10)
 	margin.add_theme_constant_override("margin_bottom", 10)
-	add_child(margin)
+	margin.mouse_filter = Control.MOUSE_FILTER_PASS
+	_ui_layer.add_child(margin)
 
 	var root := VBoxContainer.new()
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_theme_constant_override("separation", 8)
+	root.mouse_filter = Control.MOUSE_FILTER_PASS
 	margin.add_child(root)
 
 	# Header — Missions + On Mission pill
@@ -70,6 +98,9 @@ func _build() -> void:
 	page_title.text = "Missions"
 	page_title.add_theme_font_size_override("font_size", 29)
 	page_title.add_theme_color_override("font_color", ClientUi.TEXT)
+	page_title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	page_title.add_theme_constant_override("shadow_offset_x", 1)
+	page_title.add_theme_constant_override("shadow_offset_y", 2)
 	ClientUi.apply_display_font(page_title)
 	head.add_child(page_title)
 	var on_mission := Label.new()
@@ -80,23 +111,26 @@ func _build() -> void:
 	var pill := PanelContainer.new()
 	pill.add_theme_stylebox_override(
 		"panel",
-		ClientUi.painted_panel_style(Color(ClientUi.CYAN, 0.12), Color(ClientUi.CYAN, 0.4), 14, 1)
+		ClientUi.painted_panel_style(Color(0.04, 0.08, 0.12, 0.78), Color(ClientUi.CYAN, 0.45), 14, 1)
 	)
 	pill.add_child(on_mission)
 	head.add_child(pill)
 	var head_spacer := Control.new()
 	head_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(head_spacer)
 
 	_status = ClientUi.make_status()
 	_status.visible = false
 	root.add_child(_status)
 
-	# Slim ACTIVE MISSION strip (title + Skip / Fight)
 	var active_eye := Label.new()
 	active_eye.text = "ACTIVE MISSION"
 	active_eye.add_theme_font_size_override("font_size", 13)
-	active_eye.add_theme_color_override("font_color", ClientUi.MUTED)
+	active_eye.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.95))
+	active_eye.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
+	active_eye.add_theme_constant_override("shadow_offset_x", 1)
+	active_eye.add_theme_constant_override("shadow_offset_y", 1)
 	ClientUi.apply_display_font(active_eye)
 	root.add_child(active_eye)
 
@@ -104,7 +138,7 @@ func _build() -> void:
 	_active_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_active_panel.add_theme_stylebox_override(
 		"panel",
-		ClientUi.painted_panel_style(Color(ClientUi.CYAN, 0.06), Color(ClientUi.CYAN, 0.45), 10, 1)
+		ClientUi.painted_panel_style(Color(0.04, 0.07, 0.12, 0.72), Color(ClientUi.CYAN, 0.45), 10, 1)
 	)
 	root.add_child(_active_panel)
 	var active_col := VBoxContainer.new()
@@ -128,21 +162,22 @@ func _build() -> void:
 
 	_skip_btn = Button.new()
 	_skip_btn.text = "Skip · Fight · 1 💎"
+	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	ClientUi.apply_display_font(_skip_btn)
 	_skip_btn.add_theme_font_size_override("font_size", 16)
 	_skip_btn.add_theme_color_override("font_color", Color("#FCD34D"))
 	_skip_btn.add_theme_color_override("font_hover_color", Color("#FEF3C7"))
 	_skip_btn.add_theme_stylebox_override(
 		"normal",
-		ClientUi.painted_panel_style(Color(0.12, 0.09, 0.03, 0.95), Color("#F59E0B", 0.45), 8, 1)
+		ClientUi.painted_panel_style(Color(0.12, 0.09, 0.03, 0.92), Color("#F59E0B", 0.45), 8, 1)
 	)
 	_skip_btn.add_theme_stylebox_override(
 		"hover",
-		ClientUi.painted_panel_style(Color(0.18, 0.12, 0.04, 0.98), Color("#FBBF24", 0.65), 8, 1)
+		ClientUi.painted_panel_style(Color(0.18, 0.12, 0.04, 0.96), Color("#FBBF24", 0.65), 8, 1)
 	)
 	_skip_btn.add_theme_stylebox_override(
 		"pressed",
-		ClientUi.painted_panel_style(Color(0.1, 0.07, 0.02, 0.98), Color("#D97706", 0.7), 8, 1)
+		ClientUi.painted_panel_style(Color(0.1, 0.07, 0.02, 0.96), Color("#D97706", 0.7), 8, 1)
 	)
 	_skip_btn.pressed.connect(_on_skip)
 	active_col.add_child(_skip_btn)
@@ -150,53 +185,50 @@ func _build() -> void:
 	_claim_btn = Button.new()
 	_claim_btn.text = "FIGHT ENCOUNTER"
 	_claim_btn.visible = false
+	_claim_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	ClientUi.apply_primary_button(_claim_btn)
 	_claim_btn.pressed.connect(_on_fight)
 	active_col.add_child(_claim_btn)
 
-	# OUT ON ASSIGNMENT — full remaining height
-	var stage_eye := Label.new()
-	stage_eye.text = "OUT ON ASSIGNMENT"
-	stage_eye.add_theme_font_size_override("font_size", 15)
-	stage_eye.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_display_font(stage_eye)
-	root.add_child(stage_eye)
+	# Flex spacer keeps the rocket timer pinned to the bottom of the content pane.
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(spacer)
 
-	var stage_frame := PanelContainer.new()
-	stage_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stage_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stage_frame.add_theme_stylebox_override(
-		"panel",
-		ClientUi.painted_panel_style(Color(0.02, 0.03, 0.06, 0.98), Color(0.35, 0.4, 0.55, 0.55), 14, 2)
-	)
-	root.add_child(stage_frame)
+	# Flavor caption over the art (stage chrome is off — host owns copy).
+	var caption := Label.new()
+	caption.name = "FlavorCaption"
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	caption.add_theme_font_size_override("font_size", 18)
+	caption.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 0.92))
+	caption.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	caption.add_theme_constant_override("shadow_offset_x", 1)
+	caption.add_theme_constant_override("shadow_offset_y", 2)
+	ClientUi.apply_display_font(caption)
+	root.add_child(caption)
 
-	var stage_host := Control.new()
-	stage_host.clip_contents = true
-	stage_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stage_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stage_host.custom_minimum_size = Vector2(267, 240)
-	stage_frame.add_child(stage_host)
-
-	_explore = MissionExploreStage.new()
-	_explore.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	stage_host.add_child(_explore)
-
-	# Rocket timer overlay — pinned near bottom of the image
-	var overlay := MarginContainer.new()
-	overlay.set_anchors_and_offsets_preset(PRESET_BOTTOM_WIDE)
-	overlay.offset_top = -117
-	overlay.offset_bottom = -16
-	overlay.offset_left = 21
-	overlay.offset_right = -21
+	var overlay := PanelContainer.new()
+	overlay.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.z_index = 5
-	stage_host.add_child(overlay)
+	overlay.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(0.03, 0.04, 0.08, 0.55), Color(0.35, 0.4, 0.55, 0.35), 12, 1)
+	)
+	root.add_child(overlay)
+
+	var overlay_pad := MarginContainer.new()
+	overlay_pad.add_theme_constant_override("margin_left", 14)
+	overlay_pad.add_theme_constant_override("margin_right", 14)
+	overlay_pad.add_theme_constant_override("margin_top", 10)
+	overlay_pad.add_theme_constant_override("margin_bottom", 10)
+	overlay_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(overlay_pad)
 
 	var overlay_col := VBoxContainer.new()
 	overlay_col.add_theme_constant_override("separation", 6)
 	overlay_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.add_child(overlay_col)
+	overlay_pad.add_child(overlay_col)
 
 	var time_row := HBoxContainer.new()
 	time_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -209,6 +241,9 @@ func _build() -> void:
 	_overlay_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_overlay_timer.add_theme_font_size_override("font_size", 17)
 	_overlay_timer.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
+	_overlay_timer.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
+	_overlay_timer.add_theme_constant_override("shadow_offset_x", 1)
+	_overlay_timer.add_theme_constant_override("shadow_offset_y", 1)
 	ClientUi.apply_display_font(_overlay_timer)
 	time_row.add_child(_overlay_timer)
 	_timer_label = _overlay_timer
@@ -229,7 +264,6 @@ func _build() -> void:
 	)
 	_progress_track.add_child(track_bg)
 
-	# Clip fill to rounded track; rocket sits on the tip and may overhang.
 	var fill_clip := Control.new()
 	fill_clip.name = "FillClip"
 	fill_clip.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -249,7 +283,6 @@ func _build() -> void:
 	_progress_fill.offset_right = 0
 	fill_clip.add_child(_progress_fill)
 
-	# Cyan → violet stand-in (web gradient).
 	var fill_right := ColorRect.new()
 	fill_right.name = "FillAccent"
 	fill_right.color = Color(ClientUi.VIOLET, 0.85)
@@ -272,7 +305,6 @@ func _build() -> void:
 	_tick.timeout.connect(_refresh_timer)
 	add_child(_tick)
 
-	# Authoritative status poll — separate from the local countdown tick.
 	_status_poll = Timer.new()
 	_status_poll.wait_time = 5.0
 	_status_poll.timeout.connect(_poll_status)
@@ -291,6 +323,7 @@ func _boot() -> void:
 		await MissionManager.fetch_active_mission()
 	_populate()
 	_refresh_timer()
+	_play_enter_transition()
 	_tick.start()
 	_status_poll.start()
 
@@ -301,7 +334,28 @@ func _populate() -> void:
 	_title.text = mname
 	var seed_s := str(m.get("mission_id", m.get("id", mname)))
 	var scene_i := int(m.get("explore_scene", -1))
-	_explore.configure(mname, seed_s, scene_i)
+	# Configure once with the persisted mission art — never re-roll on remount.
+	_explore.configure(mname, seed_s, scene_i, false)
+
+	var caption := _find_flavor_caption()
+	if caption != null and _explore.scene_index >= 0:
+		caption.text = MissionExploreStage.CAPTIONS[_explore.scene_index]
+
+
+func _find_flavor_caption() -> Label:
+	if not is_instance_valid(_ui_layer):
+		return null
+	return _ui_layer.find_child("FlavorCaption", true, false) as Label
+
+
+func _play_enter_transition() -> void:
+	if _enter_tween != null and _enter_tween.is_valid():
+		_enter_tween.kill()
+	_enter_tween = create_tween()
+	_enter_tween.set_parallel(true)
+	_enter_tween.tween_property(_explore, "modulate:a", 1.0, 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_enter_tween.tween_property(_dim, "modulate:a", 1.0, 0.4).set_trans(Tween.TRANS_SINE)
+	_enter_tween.tween_property(_ui_layer, "modulate:a", 1.0, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
 ## Mission skip preview — Fuel-based half-Nova (matches Node skipCostFor).
@@ -364,7 +418,7 @@ func _refresh_timer() -> void:
 		_claim_btn.text = "FIGHT ENCOUNTER"
 		_active_panel.add_theme_stylebox_override(
 			"panel",
-			ClientUi.painted_panel_style(Color(ClientUi.SUCCESS, 0.08), Color(ClientUi.SUCCESS, 0.5), 10, 1)
+			ClientUi.painted_panel_style(Color(0.04, 0.1, 0.07, 0.75), Color(ClientUi.SUCCESS, 0.5), 10, 1)
 		)
 		_set_status("Mission complete — fight the encounter for rewards.", false)
 	else:
@@ -375,7 +429,7 @@ func _refresh_timer() -> void:
 		_skip_btn.text = "Skip · Fight · %s 💎" % _skip_cost_now()
 		_active_panel.add_theme_stylebox_override(
 			"panel",
-			ClientUi.painted_panel_style(Color(ClientUi.CYAN, 0.06), Color(ClientUi.CYAN, 0.45), 10, 1)
+			ClientUi.painted_panel_style(Color(0.04, 0.07, 0.12, 0.72), Color(ClientUi.CYAN, 0.45), 10, 1)
 		)
 		_set_status("", false)
 
@@ -408,7 +462,6 @@ func _set_status(text: String, show: bool) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
-		# Re-apply rocket position with current progress width.
 		if is_inside_tree() and not _claimed:
 			call_deferred("_refresh_timer")
 
@@ -457,7 +510,6 @@ func _on_fight() -> void:
 		await _recall_lost_mission()
 		return
 
-	# Lock UI first so status polls cannot race combat prep.
 	_busy = true
 	_claim_btn.disabled = true
 	_skip_btn.disabled = true
@@ -540,6 +592,5 @@ func _on_skip() -> void:
 	_claim_btn.visible = true
 	_claim_btn.disabled = true
 	_timer_label.text = "DONE"
-	# Keep _busy true through combat prep so polls cannot interleave.
 	_set_status("Wait skipped — starting fight…", true)
 	await _start_mission_fight()

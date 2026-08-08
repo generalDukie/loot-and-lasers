@@ -22,6 +22,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 BackendEnvironment="*res://Autoload/BackendEnvironment.gd"
+FeatureFlags="*res://Scripts/FeatureFlags.gd"
 GameApiClient="*res://Autoload/ApiClient.gd"
 AuthManager="*res://Autoload/AuthManager.gd"
 ResolutionManager="*res://Autoload/ResolutionManager.gd"

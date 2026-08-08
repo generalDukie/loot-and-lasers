@@ -31,6 +31,8 @@ func _build() -> void:
 	add_child(margin)
 
 	var root := VBoxContainer.new()
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_theme_constant_override("separation", 10)
 	margin.add_child(root)
 
@@ -88,7 +90,9 @@ func _build() -> void:
 		_tabs.add_child(b)
 
 	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(scroll)
 	_list = GridContainer.new()
 	_list.columns = 3
@@ -141,8 +145,11 @@ func _populate() -> void:
 	_progress_bar.value = pct
 
 	match _tab:
-		"species", "badges":
+		"species":
 			_list.columns = 3
+		"badges":
+			# Few badges + wrapping labels in a 3-col grid collapsed to ~1 glyph wide.
+			_list.columns = 1 if badges <= 1 else 3
 		"gear", "achievements":
 			_list.columns = 2
 		_:
@@ -164,6 +171,7 @@ func _populate() -> void:
 		"badges":
 			_status.text = "Frontier planet badges · %s" % badges
 			if badges <= 0:
+				_list.columns = 1
 				_list.add_child(_empty("No badges — conquer spiral planets on the Galactic Frontier."))
 			else:
 				for i in badges:
@@ -251,6 +259,7 @@ func _entry(name: String, rarity: String, lore: String, owned: bool) -> PanelCon
 		tint = ClientUi.CYAN
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.custom_minimum_size.x = 220
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.05, 0.07, 0.11, 0.96) if owned else Color(0.04, 0.05, 0.07, 0.9),
 		Color(tint, 0.65) if owned else Color(0.3, 0.35, 0.45, 0.35),
@@ -258,10 +267,12 @@ func _entry(name: String, rarity: String, lore: String, owned: bool) -> PanelCon
 		1
 	))
 	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
 	var title := Label.new()
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.text = ("%s · %s" % [name, rarity]) if owned else "???"
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", tint if owned else Color(0.45, 0.5, 0.55))
@@ -269,6 +280,7 @@ func _entry(name: String, rarity: String, lore: String, owned: bool) -> PanelCon
 	col.add_child(title)
 	var body := Label.new()
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.text = lore if owned else "Not yet discovered."
 	body.add_theme_font_size_override("font_size", 13)
 	body.add_theme_color_override("font_color", ClientUi.MUTED if owned else Color(0.4, 0.45, 0.5))
@@ -277,9 +289,19 @@ func _entry(name: String, rarity: String, lore: String, owned: bool) -> PanelCon
 	return panel
 
 
-func _empty(t: String) -> Label:
+func _empty(t: String) -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.custom_minimum_size.x = 320
+	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(0.05, 0.06, 0.1, 0.9), Color(0.35, 0.4, 0.5, 0.35), 10, 1
+	))
 	var l := Label.new()
 	l.text = t
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
-	return l
+	ClientUi.apply_body_font(l)
+	panel.add_child(l)
+	return panel

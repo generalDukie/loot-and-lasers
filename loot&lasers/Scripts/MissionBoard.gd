@@ -11,6 +11,8 @@ const MISSION_XP_REBALANCE := 0.85
 const XP_PER_FUEL_LINEAR := 0.5
 const XP_PER_FUEL_POWER := 0.032
 const XP_PER_FUEL_EXP := 1.67
+## 0-based indices into the mission-explore art pool (6 images).
+const EXPLORE_SCENE_COUNT := 6
 
 ## Mirrors web `ITEM_DROP_RATES` — preview chips on the mission detail sheet.
 const ITEM_DROP_RATES := {
@@ -295,6 +297,25 @@ static func format_duration(seconds: int) -> String:
 	return "%sm %ss" % [m, r]
 
 
+## Unique explore-art indices for a board (no duplicates when count ≤ pool size).
+static func pick_explore_scenes(count: int) -> Array:
+	var pool: Array = []
+	for i in EXPLORE_SCENE_COUNT:
+		pool.append(i)
+	pool.shuffle()
+	var out: Array = []
+	for i in range(maxi(0, count)):
+		out.append(int(pool[i % pool.size()]))
+	return out
+
+
+static func explore_image_id(scene_index: int) -> String:
+	if scene_index < 0:
+		return ""
+	var n := scene_index % EXPLORE_SCENE_COUNT
+	return "mission_explore_%02d" % (n + 1)
+
+
 static func generate_daily(character: Dictionary) -> Array:
 	var level := int(character.get("level", 1))
 	var max_sector := int(character.get("highest_sector", 1)) + 1
@@ -312,12 +333,15 @@ static func generate_daily(character: Dictionary) -> Array:
 	pool.shuffle()
 	var givers := QUEST_GIVERS.duplicate()
 	givers.shuffle()
+	# Art belongs to the generated mission, not the physical quest slot.
+	var explore_indices: Array = pick_explore_scenes(3)
 	var offers: Array = []
 	for i in range(3):
 		var tpl: Dictionary = pool[i % pool.size()]
 		var duration := roll_duration(level)
 		var sd_eff := roll_efficiency(level)
 		var xp_eff := roll_efficiency(level)
+		var scene_i := int(explore_indices[i])
 		var draft := {
 			"name": tpl["name"],
 			"description": tpl["description"],
@@ -329,7 +353,8 @@ static func generate_daily(character: Dictionary) -> Array:
 			"xp_efficiency": xp_eff,
 			"patron": givers[i % givers.size()],
 			"_seed": "%s-%s" % [Time.get_unix_time_from_system(), i],
-			"explore_scene": (i % 6) + 1,
+			"explore_scene": scene_i,
+			"image_id": explore_image_id(scene_i),
 		}
 		var fuel := estimate_fuel_cost(draft, character)
 		var rarity := "common"
@@ -358,12 +383,15 @@ static func generate_low_fuel(character: Dictionary, current_fuel: float) -> Arr
 	duration = mini(duration, MISSION_MAX_DURATION_SECONDS)
 	var givers := QUEST_GIVERS.duplicate()
 	givers.shuffle()
+	var count := mini(3, LOW_FUEL_TEMPLATES.size())
+	var explore_indices: Array = pick_explore_scenes(count)
 	var offers: Array = []
-	for i in range(mini(3, LOW_FUEL_TEMPLATES.size())):
+	for i in range(count):
 		var tpl: Dictionary = LOW_FUEL_TEMPLATES[i]
 		var sd_eff := roll_efficiency(level)
 		var xp_eff := roll_efficiency(level)
 		var pinned := maxf(MISSION_MIN_FUEL, fuel)
+		var scene_i := int(explore_indices[i])
 		offers.append({
 			"name": tpl["name"],
 			"description": tpl["description"],
@@ -377,6 +405,8 @@ static func generate_low_fuel(character: Dictionary, current_fuel: float) -> Arr
 			"_lowFuel": true,
 			"patron": givers[i % givers.size()],
 			"_seed": "low-%s-%s" % [Time.get_unix_time_from_system(), i],
+			"explore_scene": scene_i,
+			"image_id": explore_image_id(scene_i),
 			"rewards": {
 				"experience": preview_xp(pinned, level, xp_eff),
 				"stardust": preview_sd(pinned, level),

@@ -72,6 +72,7 @@ const MAINTENANCE_ALLOWED_FUNCTIONS = new Set([
   "GetMyGuild",
   "GetPresenceMap",
   "GetCharactersByIds",
+  "ListPrivateConversations",
   "GetChatHistory",
   "GetRuntimeConfig",
   "GetOpsDashboard",

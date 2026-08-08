@@ -68,6 +68,29 @@ static func next_cost(character: Dictionary, stat: String) -> int:
 	return point_cost(purchase_count(character, stat) + 1)
 
 
+## Sum of the next `count` purchase costs for one stat (authoritative curve).
+static func batch_cost(character: Dictionary, stat: String, count: int) -> int:
+	var n := clampi(count, 0, 50)
+	var start := purchase_count(character, stat)
+	var total := 0
+	for i in n:
+		total += point_cost(start + i + 1)
+	return total
+
+
+static func max_affordable_purchases(character: Dictionary, stat: String, stardust: int) -> int:
+	var start := purchase_count(character, stat)
+	var left := maxi(0, stardust)
+	var n := 0
+	while n < 50:
+		var c := point_cost(start + n + 1)
+		if c <= 0 or left < c:
+			break
+		left -= c
+		n += 1
+	return n
+
+
 ## Permanent totals: base/purchased + gear (no stims). Race is flavor-only.
 static func permanent_totals(character: Dictionary, equipped: Array = []) -> Dictionary:
 	var base := raw_stats(character)

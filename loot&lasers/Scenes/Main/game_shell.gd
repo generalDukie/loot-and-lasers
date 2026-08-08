@@ -16,6 +16,7 @@ var _nova_value: Label
 var _xp_label: Label
 var _xp_bar: ProgressBar
 var _activity: Button
+var _activity_icon: TextureRect
 var _activity_label: Label
 var _clock: Label
 var _portrait_host: CenterContainer
@@ -193,7 +194,9 @@ func _build() -> void:
 	_content.name = "ContentStage"
 	_content.clip_contents = true
 	_content.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	_content.resized.connect(_fit_page_to_stage)
+	# Do NOT connect resized → _fit_page_to_stage. Re-applying full-rect anchors
+	# from resized recurses into layout and hard-crashes (Settings / Messages).
+	# Full-rect pages already track ContentStage size via anchors alone.
 	content_stage.add_child(_content)
 
 	_transition_flash = ColorRect.new()
@@ -311,29 +314,38 @@ func _make_top_chrome() -> Control:
 
 	_activity = Button.new()
 	_activity.focus_mode = Control.FOCUS_NONE
-	_activity.flat = true
+	_activity.flat = false
 	_activity.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_activity.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_activity.tooltip_text = "Open active activity"
-	_activity.add_theme_stylebox_override("normal", _nav_style(Color(0.05, 0.12, 0.1, 0.9), Color(ClientUi.SUCCESS, 0.45)))
-	_activity.add_theme_stylebox_override("hover", _nav_style(Color(0.07, 0.16, 0.13, 0.95), Color(ClientUi.SUCCESS, 0.7)))
-	_activity.add_theme_stylebox_override("pressed", _nav_style(Color(0.04, 0.1, 0.08, 0.95), Color(ClientUi.SUCCESS, 0.55)))
+	_activity.custom_minimum_size = Vector2(268, 52)
 	_activity.pressed.connect(_on_activity_pressed)
+	ClientUi.apply_interaction_motion(_activity, 1.03)
 	row.add_child(_activity)
+	var act_row := HBoxContainer.new()
+	act_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	act_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	act_row.add_theme_constant_override("separation", 8)
+	act_row.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	act_row.offset_left = 12
+	act_row.offset_right = -12
+	act_row.offset_top = 4
+	act_row.offset_bottom = -4
+	_activity.add_child(act_row)
+	_activity_icon = UiIcon.make("rocket", ClientUi.CYAN, 18.0)
+	_activity_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_activity_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	act_row.add_child(_activity_icon)
 	_activity_label = Label.new()
-	_activity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_activity_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_activity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_activity_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_activity_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_activity_label.add_theme_font_size_override("font_size", 12)
-	_activity_label.add_theme_color_override("font_color", ClientUi.SUCCESS)
+	_activity_label.add_theme_font_size_override("font_size", 13)
+	_activity_label.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(_activity_label)
-	_activity.add_child(_activity_label)
-	_activity_label.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	_activity_label.offset_left = 14
-	_activity_label.offset_right = -14
-	_activity_label.offset_top = 4
-	_activity_label.offset_bottom = -4
-	_activity.custom_minimum_size = Vector2(248, 52)
+	act_row.add_child(_activity_label)
+	_apply_activity_styles("idle", ClientUi.SUCCESS)
 
 	_clock = Label.new()
 	_clock.custom_minimum_size.x = 99
@@ -1029,8 +1041,8 @@ func show_page(path: String) -> void:
 		page_control.scale = Vector2.ONE
 		page_control.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 		page_control.modulate.a = 0.0
-		call_deferred("_fit_page_to_stage")
-		call_deferred("_animate_page_entry", page_control)
+		# Fit then enter in one deferred pass so they cannot race.
+		call_deferred("_fit_and_enter_page", page_control)
 	_update_nav_state()
 	_refresh_chrome()
 	_apply_console_portrait_mode()
@@ -1484,18 +1496,24 @@ func _sync_hud_mood(mood: String) -> void:
 	_hud_overlay.queue_redraw()
 
 
+func _fit_and_enter_page(page_control: Control) -> void:
+	_fit_page_to_stage()
+	_animate_page_entry(page_control)
+
+
 func _animate_page_entry(page_control: Control) -> void:
 	if page_control == null or not is_instance_valid(page_control):
 		return
-	# Keep anchors full-rect; only nudge offset for the slide-in so hit targets stay valid.
-	page_control.offset_left = 10.0
-	page_control.offset_right = 10.0
+	# Fade only. Sliding via offset_left/right while anchors are FULL_RECT races
+	# _fit_page_to_stage and can SIGSEGV in Godot 4.7 when pages rebuild layout
+	# (Settings, Messages Private tab).
+	page_control.offset_left = 0.0
+	page_control.offset_top = 0.0
+	page_control.offset_right = 0.0
+	page_control.offset_bottom = 0.0
 	page_control.modulate.a = 0.0
 	var tween := page_control.create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(page_control, "offset_left", 0.0, 0.12).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-	tween.tween_property(page_control, "offset_right", 0.0, 0.12).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-	tween.tween_property(page_control, "modulate:a", 1.0, 0.10).set_ease(Tween.EASE_OUT)
+	tween.tween_property(page_control, "modulate:a", 1.0, 0.12).set_ease(Tween.EASE_OUT)
 	if _transition_flash != null and is_instance_valid(_transition_flash):
 		_transition_flash.modulate.a = 0.0
 		var flash := _transition_flash.create_tween()
@@ -1507,17 +1525,30 @@ func _fit_page_to_stage() -> void:
 	if _page == null or not is_instance_valid(_page) or not (_page is Control):
 		return
 	var page_control := _page as Control
-	var available := _content.size
-	if available.x <= 1.0 or available.y <= 1.0:
+	if not is_instance_valid(_content):
 		return
 
 	# IMPORTANT: do not use Control.scale to fit pages. Scaled Controls break GUI
 	# hit-testing in Godot (buttons look clickable but never receive presses).
-	# Fill the stage at 1:1 and let each page's own layout/scroll handle overflow.
+	# IMPORTANT: do not assign Control.size with FULL_RECT anchors (Godot warns /
+	# can SIGSEGV). Anchors alone keep the page glued to ContentStage.
 	page_control.scale = Vector2.ONE
+	if (
+		is_equal_approx(page_control.anchor_left, 0.0)
+		and is_equal_approx(page_control.anchor_top, 0.0)
+		and is_equal_approx(page_control.anchor_right, 1.0)
+		and is_equal_approx(page_control.anchor_bottom, 1.0)
+		and is_equal_approx(page_control.offset_left, 0.0)
+		and is_equal_approx(page_control.offset_top, 0.0)
+		and is_equal_approx(page_control.offset_right, 0.0)
+		and is_equal_approx(page_control.offset_bottom, 0.0)
+	):
+		return
 	page_control.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	page_control.position = Vector2.ZERO
-	page_control.size = available
+	page_control.offset_left = 0.0
+	page_control.offset_top = 0.0
+	page_control.offset_right = 0.0
+	page_control.offset_bottom = 0.0
 
 
 func _update_nav_state() -> void:
@@ -1699,9 +1730,10 @@ func _activity_style_set(mode: String, tint: Color) -> Dictionary:
 	if _activity_styles.has(mode):
 		return _activity_styles[mode]
 	var styles := {
-		"normal": _nav_style(Color(tint, 0.14), Color(tint, 0.45)),
-		"hover": _nav_style(Color(tint, 0.22), Color(tint, 0.7)),
-		"pressed": _nav_style(Color(tint, 0.12), Color(tint, 0.55)),
+		"normal": ClientUi.button_style(Color(tint.r, tint.g, tint.b, 0.22), Color(tint.r, tint.g, tint.b, 0.92)),
+		"hover": ClientUi.button_style(Color(tint.r, tint.g, tint.b, 0.38), tint.lightened(0.1)),
+		"pressed": ClientUi.button_style(Color(tint.r, tint.g, tint.b, 0.16), Color(tint.r, tint.g, tint.b, 0.72)),
+		"disabled": ClientUi.button_style(Color(0.05, 0.10, 0.12, 0.5), Color(ClientUi.MUTED, 0.28)),
 	}
 	_activity_styles[mode] = styles
 	return styles
@@ -1713,15 +1745,22 @@ func _apply_activity_styles(mode: String, tint: Color) -> void:
 	_activity_mode = mode
 	var styles: Dictionary
 	if mode == "idle":
-		var idle := ClientUi.SUCCESS
-		var soft := _nav_style(Color(0.05, 0.12, 0.1, 0.55), Color(idle, 0.25))
-		styles = {"normal": soft, "hover": soft, "pressed": soft}
+		var quiet := ClientUi.button_style(Color(0.05, 0.10, 0.12, 0.5), Color(ClientUi.MUTED, 0.28))
+		styles = {"normal": quiet, "hover": quiet, "pressed": quiet, "disabled": quiet}
 		_activity_styles[mode] = styles
 	else:
 		styles = _activity_style_set(mode, tint)
 	_activity.add_theme_stylebox_override("normal", styles["normal"])
 	_activity.add_theme_stylebox_override("hover", styles["hover"])
 	_activity.add_theme_stylebox_override("pressed", styles["pressed"])
+	_activity.add_theme_stylebox_override("disabled", styles.get("disabled", styles["normal"]))
+
+
+func _set_activity_icon(icon_id: String, tint: Color) -> void:
+	if not is_instance_valid(_activity_icon):
+		return
+	_activity_icon.texture = UiIcon.texture(icon_id)
+	UiIcon.set_tint(_activity_icon, tint)
 
 
 func _refresh_chrome() -> void:
@@ -1738,8 +1777,10 @@ func _refresh_chrome() -> void:
 		if is_instance_valid(_activity_label):
 			_activity_label.add_theme_color_override("font_color", tint)
 			if done:
+				_set_activity_icon("check", tint)
 				_activity_label.text = "Mission Complete\nREADY"
 			else:
+				_set_activity_icon("rocket", tint)
 				_activity_label.text = "Mission in Progress\n%s" % MissionBoard.format_duration(remaining)
 	elif MiningManager.is_mining_busy():
 		var tint_m := Color("#F59E0B")
@@ -1747,6 +1788,7 @@ func _refresh_chrome() -> void:
 		_activity.disabled = false
 		_activity.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		_activity.tooltip_text = "Open mining"
+		_set_activity_icon("pickaxe", tint_m)
 		if is_instance_valid(_activity_label):
 			_activity_label.add_theme_color_override("font_color", tint_m)
 			_activity_label.text = "Mining in Progress\n%s" % MissionBoard.format_duration(
@@ -1757,8 +1799,9 @@ func _refresh_chrome() -> void:
 		_activity.disabled = true
 		_activity.mouse_default_cursor_shape = Control.CURSOR_ARROW
 		_activity.tooltip_text = ""
+		_set_activity_icon("ok", ClientUi.MUTED)
 		if is_instance_valid(_activity_label):
-			_activity_label.add_theme_color_override("font_color", ClientUi.SUCCESS)
+			_activity_label.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 			_activity_label.text = "Systems Nominal"
 
 	var character := GameManager.active_character

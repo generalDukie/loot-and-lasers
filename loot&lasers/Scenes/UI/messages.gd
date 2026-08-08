@@ -17,11 +17,14 @@ var _dm_friend_btn: Button
 var _send_btn: Button
 var _active_convo: Dictionary = {}
 var _recipient_id := ""
+var _recipient_name := ""
 var _busy := false
 var _picking_friend := false
 var _global_mode := true
 var _global_load_token := 0
 var _rendered_global_ids: Dictionary = {}
+var _thread_content: Control = null
+var _side_scroll: ScrollContainer = null
 
 
 func _ready() -> void:
@@ -95,8 +98,12 @@ func _boot() -> void:
 		GameManager.pending_dm_character = {}
 		await _set_tab_dm()
 		_recipient_id = str(t.get("id", ""))
+		_recipient_name = str(t.get("name", "")).strip_edges()
+		if not _recipient_name.is_empty():
+			ChatManager.remember_character_name(_recipient_id, _recipient_name)
+		_recipient_name = ChatManager.character_display_name(_recipient_id, _recipient_name)
 		_active_convo = {}
-		_meta.text = "Secure link → %s" % str(t.get("name", _recipient_id))
+		_meta.text = "Secure link → %s" % _recipient_name
 		_show_empty_thread("Type a message below to start.")
 		await _load_sidebar()
 	else:
@@ -218,13 +225,15 @@ func _build() -> void:
 	_dm_friend_btn.pressed.connect(_on_pick_friend)
 	side_col.add_child(_dm_friend_btn)
 
-	var side_scroll := ScrollContainer.new()
-	side_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side_col.add_child(side_scroll)
+	_side_scroll = ScrollContainer.new()
+	_side_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_side_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_side_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	side_col.add_child(_side_scroll)
 	_sidebar = VBoxContainer.new()
 	_sidebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sidebar.add_theme_constant_override("separation", 6)
-	side_scroll.add_child(_sidebar)
+	_side_scroll.add_child(_sidebar)
 
 	var thread_panel := PanelContainer.new()
 	thread_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -238,15 +247,21 @@ func _build() -> void:
 	thread_panel.add_child(thread_col)
 
 	_thread_scroll = ScrollContainer.new()
+	_thread_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_thread_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Disable horizontal scroll so children must use the pane width (prevents 1-glyph columns).
+	_thread_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_thread_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	thread_col.add_child(_thread_scroll)
 	var thread_pad := MarginContainer.new()
 	thread_pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	thread_pad.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	thread_pad.add_theme_constant_override("margin_left", 14)
 	thread_pad.add_theme_constant_override("margin_right", 14)
 	thread_pad.add_theme_constant_override("margin_top", 14)
 	thread_pad.add_theme_constant_override("margin_bottom", 10)
 	_thread_scroll.add_child(thread_pad)
+	_thread_content = thread_pad
 	_thread = VBoxContainer.new()
 	_thread.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_thread.add_theme_constant_override("separation", 10)
@@ -349,11 +364,20 @@ func _apply_layout_for_mode() -> void:
 		_dm_friend_btn.visible = not _global_mode
 
 
+func _message_wrap_width() -> float:
+	# Prefer live scroll width; fall back to a stable wrap so Labels do not
+	# thrash ScrollContainer min-size (that loop SIGSEGVs Godot 4.7 layout).
+	if _thread_scroll != null and is_instance_valid(_thread_scroll) and _thread_scroll.size.x > 8.0:
+		return maxf(180.0, _thread_scroll.size.x - 96.0)
+	return 420.0
+
+
 func _set_tab_global() -> void:
 	_picking_friend = false
 	_global_mode = true
 	_active_convo = {}
 	_recipient_id = ""
+	_recipient_name = ""
 	_meta.text = "Global Frequency — open channel for all operatives"
 	_compose.placeholder_text = "Broadcast to the station…"
 	_compose.max_length = 280
@@ -392,26 +416,14 @@ func _load_sidebar() -> void:
 		if SocialManager.friendships.is_empty():
 			_sidebar.add_child(_side_label("No friends yet."))
 			return
+		var friend_ids: Array = []
+		for f in SocialManager.friendships:
+			friend_ids.append(SocialManager.friend_other_id(f))
+		await ChatManager.hydrate_character_names(friend_ids)
 		for f in SocialManager.friendships:
 			var oid := SocialManager.friend_other_id(f)
-			var btn := Button.new()
-			btn.text = "DM %s" % oid
-			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			btn.custom_minimum_size = Vector2(0, 48)
-			ClientUi.apply_ghost_button(btn)
-			var capt := oid
-			btn.pressed.connect(func() -> void:
-				_picking_friend = false
-				_global_mode = false
-				_recipient_id = capt
-				_active_convo = {}
-				_compose.placeholder_text = "Whisper a private message…"
-				_meta.text = "Secure link → %s" % capt
-				_show_empty_thread("Type a message below to start.")
-				_side_lab.text = "PRIVATE LINKS"
-				_load_sidebar()
-			)
-			_sidebar.add_child(btn)
+			var fname := ChatManager.character_display_name(oid)
+			_sidebar.add_child(_make_friend_pick_row(oid, fname))
 		return
 
 	_side_lab.text = "PRIVATE LINKS"
@@ -422,29 +434,69 @@ func _load_sidebar() -> void:
 	for c in convos:
 		if typeof(c) != TYPE_DICTIONARY:
 			continue
-		var btn := Button.new()
-		var active := str(c.get("id", "")) == str(_active_convo.get("id", ""))
-		btn.text = "%s\n%s" % [
-			ChatManager.other_participant(c),
-			str(c.get("last_message_preview", "")).substr(0, 40),
-		]
-		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.custom_minimum_size = Vector2(0, 56)
-		if active:
-			ClientUi.apply_primary_button(btn)
-		else:
-			ClientUi.apply_ghost_button(btn)
-		var capt: Dictionary = c
-		btn.pressed.connect(func() -> void:
-			_picking_friend = false
-			_global_mode = false
-			_active_convo = capt
-			_recipient_id = ChatManager.other_participant(capt)
-			_compose.placeholder_text = "Whisper a private message…"
-			_load_sidebar()
-			_load_thread()
-		)
-		_sidebar.add_child(btn)
+		_sidebar.add_child(_make_conversation_row(c))
+
+
+func _make_friend_pick_row(character_id: String, display_name: String) -> Button:
+	var btn := Button.new()
+	btn.text = "DM %s" % display_name
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.custom_minimum_size = Vector2(0, 48)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.clip_text = true
+	ClientUi.apply_ghost_button(btn)
+	var capt_id := character_id
+	var capt_name := display_name
+	btn.pressed.connect(func() -> void:
+		_picking_friend = false
+		_global_mode = false
+		_recipient_id = capt_id
+		_recipient_name = capt_name
+		ChatManager.remember_character_name(capt_id, capt_name)
+		_active_convo = {}
+		_compose.placeholder_text = "Whisper a private message…"
+		_meta.text = "Secure link → %s" % capt_name
+		_show_empty_thread("Type a message below to start.")
+		_side_lab.text = "PRIVATE LINKS"
+		_load_sidebar()
+	)
+	return btn
+
+
+func _make_conversation_row(convo: Dictionary) -> Button:
+	var peer_id := ChatManager.other_participant(convo)
+	var peer_name := ChatManager.other_participant_name(convo)
+	var preview := str(convo.get("last_message_preview", "")).strip_edges()
+	if preview.length() > 42:
+		preview = preview.substr(0, 42) + "…"
+	var unread := int(convo.get("unread_count", 0))
+	var active := (
+		str(convo.get("conversation_id", convo.get("id", "")))
+		== str(_active_convo.get("conversation_id", _active_convo.get("id", "")))
+	) or (peer_id == _recipient_id and not peer_id.is_empty())
+	var btn := Button.new()
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.custom_minimum_size = Vector2(0, 64)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.clip_text = true
+	var unread_bit := (" · %d new" % unread) if unread > 0 else ""
+	btn.text = "%s%s\n%s" % [peer_name, unread_bit, preview if not preview.is_empty() else "No messages yet"]
+	if active:
+		ClientUi.apply_primary_button(btn)
+	else:
+		ClientUi.apply_ghost_button(btn)
+	var capt: Dictionary = convo.duplicate(true)
+	btn.pressed.connect(func() -> void:
+		_picking_friend = false
+		_global_mode = false
+		_active_convo = capt
+		_recipient_id = ChatManager.other_participant(capt)
+		_recipient_name = ChatManager.other_participant_name(capt)
+		_compose.placeholder_text = "Whisper a private message…"
+		_load_sidebar()
+		_load_thread()
+	)
+	return btn
 
 
 func _load_thread() -> void:
@@ -453,18 +505,21 @@ func _load_thread() -> void:
 	if _active_convo.is_empty():
 		_show_empty_thread("Type a message below to start." if not _recipient_id.is_empty() else "Select a conversation.")
 		return
-	var cid := str(_active_convo.get("id", ""))
 	_recipient_id = ChatManager.other_participant(_active_convo)
-	_meta.text = "Secure link with %s" % _recipient_id
-	await ChatManager.mark_read(cid)
-	var msgs: Array = await ChatManager.load_thread(cid)
+	_recipient_name = ChatManager.other_participant_name(_active_convo)
+	_meta.text = "Secure link with %s" % _recipient_name
+	await ChatManager.mark_read(_active_convo)
+	var msgs: Array = await ChatManager.load_thread(_active_convo)
 	if msgs.is_empty():
 		_thread.add_child(_empty_state("Secure link established — say hello."))
 		return
 	var me := ChatManager.char_id()
 	for m in msgs:
 		var mine := str(m.get("sender_id", "")) == me
-		var who := "You" if mine else str(m.get("sender_name", _recipient_id))
+		var who := "You" if mine else ChatManager.character_display_name(
+			str(m.get("sender_id", _recipient_id)),
+			str(m.get("sender_name", _recipient_name))
+		)
 		_thread.add_child(_message_row(str(m.get("content", "")), who, mine, str(m.get("sender_guild_tag", ""))))
 	_scroll_thread_bottom()
 
@@ -478,6 +533,7 @@ func _show_empty_thread(text: String) -> void:
 func _side_label(t: String) -> Label:
 	var l := Label.new()
 	l.text = t
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(l)
@@ -490,8 +546,10 @@ func _empty_state(t: String) -> Control:
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var l := Label.new()
 	l.text = t
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size.x = maxf(200.0, _message_wrap_width())
 	l.add_theme_font_size_override("font_size", 14)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(l)
@@ -500,6 +558,7 @@ func _empty_state(t: String) -> Control:
 
 
 func _message_row(content: String, who: String, mine: bool, guild_tag: String = "") -> Control:
+	var wrap_w := _message_wrap_width()
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -508,6 +567,7 @@ func _message_row(content: String, who: String, mine: bool, guild_tag: String = 
 
 	var avatar := PanelContainer.new()
 	avatar.custom_minimum_size = Vector2(36, 36)
+	avatar.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	var av_bg := Color(0.06, 0.28, 0.34, 0.9) if mine else Color(0.1, 0.12, 0.18, 0.95)
 	var av_border := Color(ClientUi.CYAN, 0.5) if mine else Color(0.35, 0.42, 0.55, 0.5)
 	avatar.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(av_bg, av_border, 10, 1))
@@ -522,12 +582,13 @@ func _message_row(content: String, who: String, mine: bool, guild_tag: String = 
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 4)
-	col.size_flags_horizontal = Control.SIZE_SHRINK_END if mine else Control.SIZE_EXPAND_FILL
-	if not mine:
-		col.size_flags_stretch_ratio = 1.0
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_stretch_ratio = 1.0
+	col.custom_minimum_size.x = minf(wrap_w, 520.0)
 
 	var name_row := HBoxContainer.new()
 	name_row.add_theme_constant_override("separation", 6)
+	name_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if mine:
 		name_row.alignment = BoxContainer.ALIGNMENT_END
 	col.add_child(name_row)
@@ -540,20 +601,35 @@ func _message_row(content: String, who: String, mine: bool, guild_tag: String = 
 		name_row.add_child(tag)
 	var name_lab := Label.new()
 	name_lab.text = who
+	name_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lab.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name_lab.clip_text = true
+	name_lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_lab.add_theme_font_size_override("font_size", 12)
 	name_lab.add_theme_color_override("font_color", Color(ClientUi.CYAN_SOFT, 0.9) if mine else ClientUi.TEXT)
 	ClientUi.apply_display_font(name_lab)
 	name_row.add_child(name_lab)
 
 	var bubble := PanelContainer.new()
-	bubble.size_flags_horizontal = Control.SIZE_SHRINK_END if mine else Control.SIZE_SHRINK_BEGIN
+	bubble.size_flags_horizontal = Control.SIZE_EXPAND_FILL if not mine else Control.SIZE_SHRINK_END
 	var bg := Color(0.05, 0.32, 0.38, 0.92) if mine else Color(0.09, 0.11, 0.16, 0.96)
 	var border := Color(ClientUi.CYAN, 0.5) if mine else Color(0.32, 0.4, 0.52, 0.45)
-	bubble.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(bg, border, 14, 1))
+	# Tight bubble chrome — avoid painted-panel margins collapsing wrap width.
+	var bub_style := StyleBoxFlat.new()
+	bub_style.bg_color = bg
+	bub_style.border_color = border
+	bub_style.set_border_width_all(1)
+	bub_style.set_corner_radius_all(12)
+	bub_style.content_margin_left = 12
+	bub_style.content_margin_right = 12
+	bub_style.content_margin_top = 8
+	bub_style.content_margin_bottom = 8
+	bubble.add_theme_stylebox_override("panel", bub_style)
 	var body := Label.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.text = content
-	body.custom_minimum_size.x = 120
+	body.custom_minimum_size.x = maxf(160.0, wrap_w * 0.55)
 	body.add_theme_font_size_override("font_size", 14)
 	body.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(body)
@@ -612,9 +688,18 @@ func _on_send() -> void:
 	_on_compose_changed("")
 	_status.text = ""
 	if typeof(res.data) == TYPE_DICTIONARY:
-		var cid := str(res.data.get("conversation_id", ""))
-		if not cid.is_empty():
-			_active_convo = {"id": cid, "participant_ids": [ChatManager.char_id(), rid]}
+		var cid := str(res.data.get("conversation_id", "")).strip_edges()
+		var rname := ChatManager.character_display_name(rid, _recipient_name)
+		_recipient_name = rname
+		ChatManager.remember_character_name(rid, rname)
+		_active_convo = {
+			"id": cid,
+			"conversation_id": cid,
+			"participant_ids": [ChatManager.char_id(), rid],
+			"other_character_id": rid,
+			"other_character_name": rname,
+			"user_id": rid,
+		}
 	await _load_sidebar()
 	await _load_thread()
 

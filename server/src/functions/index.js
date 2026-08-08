@@ -1853,6 +1853,47 @@ export async function GetCharactersByIds(user, body = {}) {
   }
 }
 
+/** Private inbox list — one response with peer display names (batched Character lookup). */
+export async function ListPrivateConversations(user, _body = {}) {
+  try {
+    const character = await myCharacter(user);
+    if (!character) return { status: 404, body: { error: "No character" } };
+    const all = entities.PrivateConversation.list("-last_message_at", 200) || [];
+    const mine = all.filter((c) => (c.participant_ids || []).includes(character.id));
+    const otherIds = mine
+      .map((c) => (c.participant_ids || []).find((id) => id && id !== character.id) || "")
+      .filter(Boolean);
+    const byId = Object.fromEntries(getCharactersByIds(otherIds).map((c) => [c.id, c]));
+    const conversations = mine.map((c) => {
+      const parts = c.participant_ids || [];
+      const otherId = parts.find((id) => id && id !== character.id) || "";
+      const other = byId[otherId];
+      const unread =
+        (
+          entities.PrivateMessage.filter(
+            { conversation_id: c.id, recipient_id: character.id, read_by_recipient: false },
+            null,
+            100,
+          ) || []
+        ).length;
+      return {
+        id: c.id,
+        conversation_id: c.id,
+        participant_ids: parts,
+        other_character_id: otherId,
+        other_character_name: other?.name || "",
+        user_id: otherId,
+        last_message_preview: c.last_message_preview || "",
+        last_message_at: c.last_message_at || null,
+        unread_count: unread,
+      };
+    });
+    return socialOk({ success: true, conversations });
+  } catch (err) {
+    return socialCatch(err);
+  }
+}
+
 export async function GetChatHistory(user, body = {}) {
   try {
     const character = await myCharacter(user);
@@ -1883,10 +1924,21 @@ export async function GetChatHistory(user, body = {}) {
       }
       const messages =
         entities.PrivateMessage.filter({ conversation_id: convId }, "-created_date", lim) || [];
+      const ordered = messages.reverse();
+      const otherId = parts.find((id) => id && id !== character.id) || recipientId || "";
+      const nameIds = [...new Set([...ordered.map((m) => m.sender_id), otherId].filter(Boolean))];
+      const nameById = Object.fromEntries(
+        getCharactersByIds(nameIds).map((c) => [c.id, c.name || ""]),
+      );
       return socialOk({
         success: true,
         conversation_id: convId,
-        messages: messages.reverse(),
+        other_character_id: otherId,
+        other_character_name: nameById[otherId] || "",
+        messages: ordered.map((m) => ({
+          ...m,
+          sender_name: nameById[m.sender_id] || m.sender_name || "",
+        })),
       });
     }
     return { status: 400, body: { error: "Unknown channel" } };
@@ -2443,6 +2495,7 @@ export const FUNCTION_HANDLERS = {
   SetPresence,
   GetPresenceMap,
   GetCharactersByIds,
+  ListPrivateConversations,
   GetChatHistory,
   MarkConversationRead,
   GetInbox,

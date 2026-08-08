@@ -1136,17 +1136,25 @@ export function generateDailyMissions(character) {
 
   // Offer 3 quests drawn from the rotating template pool. Duration is rolled
   // once from the level's discrete pool. Quest givers are unique on the board.
+  // Explore art is assigned once per mission (not per slot) and stays for the lifecycle.
   const givers = [...QUEST_GIVERS].sort(() => Math.random() - 0.5);
+  const EXPLORE_SCENE_COUNT = 6;
+  const explorePool = Array.from({ length: EXPLORE_SCENE_COUNT }, (_, i) => i).sort(
+    () => Math.random() - 0.5
+  );
   return Array.from({ length: 3 }, (_, i) => {
     const t = base[i % base.length];
     const duration = rollMissionDurationSeconds(level);
     const collectible = COLLECTIBLES[Math.floor(Math.random() * COLLECTIBLES.length)];
     const { difficulty: _d, risk: _r, rewards: _oldRewards, ...tpl } = t;
+    const exploreScene = explorePool[i % explorePool.length];
     const draft = {
       ...tpl,
       _seed: `${Date.now()}-${i}`,
       patron: givers[i % givers.length],
       duration_seconds: duration,
+      explore_scene: exploreScene,
+      image_id: `mission_explore_${String(exploreScene + 1).padStart(2, "0")}`,
       // Independent XP / Stardust variance rolls (level-banded).
       stardust_efficiency: rollMissionEfficiency(level),
       xp_efficiency: rollMissionEfficiency(level),
@@ -1202,6 +1210,7 @@ export function generateLowFuelMission(character, currentFuel, excludePatronName
   const tpl = LOW_FUEL_TEMPLATES[slot % LOW_FUEL_TEMPLATES.length];
   const sdEff = rollMissionEfficiency(level);
   const xpEff = rollMissionEfficiency(level);
+  const exploreScene = Math.floor(Math.random() * 6);
   return {
     name: tpl.name,
     description: tpl.description,
@@ -1214,6 +1223,8 @@ export function generateLowFuelMission(character, currentFuel, excludePatronName
     stardust_efficiency: sdEff,
     xp_efficiency: xpEff,
     _lowFuel: true,
+    explore_scene: exploreScene,
+    image_id: `mission_explore_${String(exploreScene + 1).padStart(2, "0")}`,
     patron: pickQuestGiver(Math.random, excludePatronNames),
     rewards: {
       experience: computeMissionXpFromFuel(pinnedFuel, level, xpEff),
@@ -1229,8 +1240,13 @@ export function generateLowFuelBoard(character, currentFuel, count = 3) {
   if (fuel < MISSION_MIN_FUEL) return [];
   const n = Math.min(count, LOW_FUEL_TEMPLATES.length);
   const used = [];
+  const explorePool = Array.from({ length: 6 }, (_, i) => i).sort(() => Math.random() - 0.5);
   return Array.from({ length: n }, (_, i) => {
     const m = generateLowFuelMission(character, fuel, used, i);
+    if (m) {
+      m.explore_scene = explorePool[i % explorePool.length];
+      m.image_id = `mission_explore_${String(m.explore_scene + 1).padStart(2, "0")}`;
+    }
     if (!m) return null;
     if (m.patron?.name) used.push(m.patron.name);
     return m;

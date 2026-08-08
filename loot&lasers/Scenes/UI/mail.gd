@@ -329,16 +329,51 @@ func _empty_list_card() -> Control:
 	return wrap
 
 
+func _is_selected_mail(mail: Dictionary) -> bool:
+	var sid := str(_selected.get("id", ""))
+	return not sid.is_empty() and str(mail.get("id", "")) == sid
+
+
+func _apply_row_style(panel: PanelContainer, mail: Dictionary, btn: Button = null) -> void:
+	var unread := not bool(mail.get("read", false)) and _folder != "deleted"
+	var has_reward := bool(mail.get("has_rewards", false)) and not bool(mail.get("claimed", false))
+	var selected := _is_selected_mail(mail)
+	var border := Color(0.95, 0.75, 0.35, 0.65) if has_reward else (Color(ClientUi.CYAN, 0.55) if unread else Color(0.35, 0.42, 0.55, 0.4))
+	var bg := Color(0.08, 0.14, 0.18, 0.95) if unread else Color(0.06, 0.07, 0.11, 0.94)
+	var border_w := 1
+	if selected:
+		bg = Color(0.05, 0.22, 0.28, 0.98)
+		border = ClientUi.CYAN
+		border_w = 2
+	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(bg, border, 12, border_w))
+	if btn != null and is_instance_valid(btn):
+		btn.add_theme_color_override(
+			"font_color",
+			ClientUi.CYAN_SOFT if selected else (ClientUi.TEXT if unread else Color(0.78, 0.84, 0.90))
+		)
+
+
+func _style_mail_rows() -> void:
+	if not is_instance_valid(_list):
+		return
+	for child in _list.get_children():
+		if not (child is PanelContainer) or not child.has_meta("mail"):
+			continue
+		var mail: Variant = child.get_meta("mail")
+		if typeof(mail) != TYPE_DICTIONARY:
+			continue
+		var btn: Button = child.get_node_or_null("MailRowButton") as Button
+		_apply_row_style(child as PanelContainer, mail, btn)
+
+
 func _make_row(mail: Dictionary) -> PanelContainer:
 	var unread := not bool(mail.get("read", false)) and _folder != "deleted"
 	var has_reward := bool(mail.get("has_rewards", false)) and not bool(mail.get("claimed", false))
 	var claimed := bool(mail.get("claimed", false))
 	var panel := PanelContainer.new()
-	var border := Color(0.95, 0.75, 0.35, 0.65) if has_reward else (Color(ClientUi.CYAN, 0.55) if unread else Color(0.35, 0.42, 0.55, 0.4))
-	var bg := Color(0.08, 0.14, 0.18, 0.95) if unread else Color(0.06, 0.07, 0.11, 0.94)
-	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(bg, border, 12, 1))
-
+	panel.set_meta("mail", mail.duplicate(true))
 	var btn := Button.new()
+	btn.name = "MailRowButton"
 	btn.flat = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.focus_mode = Control.FOCUS_NONE
@@ -358,11 +393,13 @@ func _make_row(mail: Dictionary) -> PanelContainer:
 	]
 	btn.pressed.connect(func() -> void: _open(mail))
 	panel.add_child(btn)
+	_apply_row_style(panel, mail, btn)
 	return panel
 
 
 func _open(mail: Dictionary) -> void:
 	_selected = mail
+	_style_mail_rows()
 	_status.text = "Opening transmission…"
 	var res: Dictionary = await MailManager.load_message(str(mail.get("id", "")))
 	if bool(res.get("ok", false)) and typeof(res.get("data", {})) == TYPE_DICTIONARY:

@@ -16,7 +16,8 @@ signal connection_changed(connected: bool)
 const CHAT_DEBUG := true
 
 var global_messages: Array = []
-var conversations: Dictionary = {} # user_id -> { messages: [], unread: int }
+var conversations: Dictionary = {} # peer_character_id -> { messages: [], unread: int, name: String, conversation_id: String }
+var _name_by_id: Dictionary = {} # character_id -> display name
 var _global_joined := false
 var _active_dm_user := ""
 var _busy := false
@@ -283,48 +284,140 @@ func send_dm(user_id: String, content: String) -> Dictionary:
 		return {"ok": false, "error": err}
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
 	var msg: Dictionary = data.get("message", {}) if typeof(data.get("message", {})) == TYPE_DICTIONARY else {}
+	var conv_id := str(data.get("conversation_id", "")).strip_edges()
 	if not conversations.has(user_id):
 		conversations[user_id] = {"messages": [], "unread": 0}
+	if not conv_id.is_empty():
+		conversations[user_id]["conversation_id"] = conv_id
 	if not msg.is_empty():
+		if str(msg.get("sender_name", "")).is_empty():
+			msg["sender_name"] = str(GameManager.active_character.get("name", "You"))
 		upsert_dm_message(user_id, msg, "local_send")
 		message_sent.emit(msg)
 	return {"ok": true, "error": "", "data": data}
 
 
-func load_dm_history(user_id: String, _cursor: String = "") -> Dictionary:
-	var res: Dictionary = await GameApiClient.invoke("GetChatHistory", {
-		"channel": "private",
-		"recipient_id": user_id,
-		"limit": 50,
-	})
+func remember_character_name(character_id: String, display_name: String) -> void:
+	var cid := str(character_id).strip_edges()
+	var nm := str(display_name).strip_edges()
+	if cid.is_empty() or nm.is_empty() or nm == cid:
+		return
+	_name_by_id[cid] = nm
+	if conversations.has(cid):
+		conversations[cid]["name"] = nm
+
+
+func character_display_name(character_id: String, fallback: String = "") -> String:
+	var cid := str(character_id).strip_edges()
+	if cid.is_empty():
+		return fallback
+	if _name_by_id.has(cid):
+		var cached := str(_name_by_id[cid]).strip_edges()
+		if not cached.is_empty():
+			return cached
+	if conversations.has(cid):
+		var nm := str(conversations[cid].get("name", "")).strip_edges()
+		if not nm.is_empty() and nm != cid:
+			return nm
+	var fb := str(fallback).strip_edges()
+	if not fb.is_empty() and fb != cid:
+		return fb
+	return "Unknown operative"
+
+
+func hydrate_character_names(ids: Array) -> Dictionary:
+	## Batch resolve via GetCharactersByIds — one call for many peers.
+	var uniq: Array = []
+	var seen: Dictionary = {}
+	for raw in ids:
+		var cid := str(raw).strip_edges()
+		if cid.is_empty() or seen.has(cid):
+			continue
+		seen[cid] = true
+		uniq.append(cid)
+	if uniq.is_empty():
+		return {}
+	var res: Dictionary = await GameApiClient.invoke("GetCharactersByIds", {"ids": uniq})
+	if not bool(res.get("ok", false)):
+		return {}
+	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+	var chars: Array = data.get("characters", []) if typeof(data.get("characters", [])) == TYPE_ARRAY else []
+	var out: Dictionary = {}
+	for c in chars:
+		if typeof(c) != TYPE_DICTIONARY:
+			continue
+		var cid := str(c.get("id", "")).strip_edges()
+		var nm := str(c.get("name", "")).strip_edges()
+		if cid.is_empty() or nm.is_empty():
+			continue
+		out[cid] = nm
+		remember_character_name(cid, nm)
+	return out
+
+
+func load_dm_history(peer_id: String, conversation_id: String = "") -> Dictionary:
+	var body := {"channel": "private", "limit": 50}
+	var conv := str(conversation_id).strip_edges()
+	var peer := str(peer_id).strip_edges()
+	if not conv.is_empty():
+		body["conversation_id"] = conv
+	if not peer.is_empty():
+		body["recipient_id"] = peer
+	var res: Dictionary = await GameApiClient.invoke("GetChatHistory", body)
 	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "DM history failed"))
 		chat_error.emit(err)
 		return {"ok": false, "error": err}
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
 	var msgs: Array = data.get("messages", []) if typeof(data.get("messages", [])) == TYPE_ARRAY else []
-	if not conversations.has(user_id):
-		conversations[user_id] = {"messages": [], "unread": 0}
-	conversations[user_id]["messages"] = _dedupe_messages(msgs)
-	dm_history_loaded.emit(user_id, conversations[user_id]["messages"])
+	var resolved_peer := str(data.get("other_character_id", peer)).strip_edges()
+	if resolved_peer.is_empty():
+		resolved_peer = peer
+	var resolved_name := str(data.get("other_character_name", "")).strip_edges()
+	if not resolved_name.is_empty():
+		remember_character_name(resolved_peer, resolved_name)
+	for m in msgs:
+		if typeof(m) != TYPE_DICTIONARY:
+			continue
+		remember_character_name(str(m.get("sender_id", "")), str(m.get("sender_name", "")))
+	if not resolved_peer.is_empty():
+		if not conversations.has(resolved_peer):
+			conversations[resolved_peer] = {"messages": [], "unread": 0}
+		conversations[resolved_peer]["messages"] = _dedupe_messages(msgs)
+		var cid2 := str(data.get("conversation_id", conv)).strip_edges()
+		if not cid2.is_empty():
+			conversations[resolved_peer]["conversation_id"] = cid2
+		if not resolved_name.is_empty():
+			conversations[resolved_peer]["name"] = resolved_name
+		dm_history_loaded.emit(resolved_peer, conversations[resolved_peer]["messages"])
 	return {"ok": true, "error": "", "data": data}
 
 
-func mark_conversation_read(user_id: String) -> Dictionary:
-	var conv_id := ""
-	var hist: Dictionary = await GameApiClient.invoke("GetChatHistory", {
-		"channel": "private",
-		"recipient_id": user_id,
-		"limit": 1,
-	})
-	if bool(hist.get("ok", false)) and typeof(hist.get("data", {})) == TYPE_DICTIONARY:
-		conv_id = str(hist.data.get("conversation_id", ""))
+func mark_conversation_read(peer_or_conversation_id: String) -> Dictionary:
+	var key := str(peer_or_conversation_id).strip_edges()
+	var conv_id := key
+	var peer := key
+	if conversations.has(key):
+		peer = key
+		conv_id = str(conversations[key].get("conversation_id", "")).strip_edges()
+	if conv_id.is_empty() or conv_id == peer:
+		var hist: Dictionary = await GameApiClient.invoke("GetChatHistory", {
+			"channel": "private",
+			"recipient_id": peer,
+			"limit": 1,
+		})
+		if bool(hist.get("ok", false)) and typeof(hist.get("data", {})) == TYPE_DICTIONARY:
+			conv_id = str(hist.data.get("conversation_id", "")).strip_edges()
+			var oname := str(hist.data.get("other_character_name", "")).strip_edges()
+			var oid := str(hist.data.get("other_character_id", peer)).strip_edges()
+			if not oname.is_empty():
+				remember_character_name(oid, oname)
 	if not conv_id.is_empty():
 		await GameApiClient.invoke("MarkConversationRead", {"conversation_id": conv_id})
-	if conversations.has(user_id):
-		conversations[user_id]["unread"] = 0
+	if conversations.has(peer):
+		conversations[peer]["unread"] = 0
 	unread_changed.emit(get_total_unread_count())
-	conversation_read.emit(user_id)
+	conversation_read.emit(peer)
 	return {"ok": true, "error": ""}
 
 
@@ -334,29 +427,105 @@ func char_id() -> String:
 
 
 func list_conversations() -> Array:
-	var out: Array = []
+	## Prefer server list (names + previews in one response); fall back to local cache + batch names.
+	var res: Dictionary = await GameApiClient.invoke("ListPrivateConversations", {})
+	if bool(res.get("ok", false)):
+		var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+		var rows: Array = data.get("conversations", []) if typeof(data.get("conversations", [])) == TYPE_ARRAY else []
+		var out: Array = []
+		for c in rows:
+			if typeof(c) != TYPE_DICTIONARY:
+				continue
+			var peer := str(c.get("other_character_id", c.get("user_id", ""))).strip_edges()
+			var nm := str(c.get("other_character_name", "")).strip_edges()
+			if not peer.is_empty() and not nm.is_empty():
+				remember_character_name(peer, nm)
+			if not peer.is_empty():
+				if not conversations.has(peer):
+					conversations[peer] = {"messages": [], "unread": 0}
+				conversations[peer]["name"] = nm
+				conversations[peer]["conversation_id"] = str(c.get("conversation_id", c.get("id", "")))
+				conversations[peer]["unread"] = int(c.get("unread_count", conversations[peer].get("unread", 0)))
+			out.append(c)
+		if not out.is_empty() or rows.is_empty():
+			return out
+
+	var ids: Array = []
 	for uid in conversations.keys():
-		out.append({
-			"participant_ids": [uid],
-			"user_id": uid,
-			"last_message_preview": "",
+		ids.append(str(uid))
+	await hydrate_character_names(ids)
+	var fallback: Array = []
+	for uid in conversations.keys():
+		var peer := str(uid)
+		var bucket: Dictionary = conversations[peer]
+		var preview := ""
+		var msgs: Array = bucket.get("messages", []) if typeof(bucket.get("messages", [])) == TYPE_ARRAY else []
+		if not msgs.is_empty():
+			var last: Variant = msgs[msgs.size() - 1]
+			if typeof(last) == TYPE_DICTIONARY:
+				preview = str(last.get("content", "")).substr(0, 80)
+		fallback.append({
+			"id": str(bucket.get("conversation_id", "")),
+			"conversation_id": str(bucket.get("conversation_id", "")),
+			"participant_ids": [char_id(), peer],
+			"other_character_id": peer,
+			"other_character_name": character_display_name(peer),
+			"user_id": peer,
+			"last_message_preview": preview,
+			"unread_count": int(bucket.get("unread", 0)),
 		})
-	return out
+	return fallback
 
 
 func other_participant(conversation: Dictionary) -> String:
-	return str(conversation.get("user_id", conversation.get("id", "")))
+	## Peer character id for routing — never the conversation document id.
+	var peer := str(conversation.get("other_character_id", "")).strip_edges()
+	if not peer.is_empty():
+		return peer
+	peer = str(conversation.get("user_id", "")).strip_edges()
+	if not peer.is_empty() and peer != str(conversation.get("id", "")) and peer != str(conversation.get("conversation_id", "")):
+		return peer
+	var mine := char_id()
+	var parts: Variant = conversation.get("participant_ids", [])
+	if typeof(parts) == TYPE_ARRAY:
+		for pid in parts:
+			var sid := str(pid).strip_edges()
+			if not sid.is_empty() and sid != mine:
+				return sid
+	return ""
 
 
-func load_thread(conversation_id: String) -> Array:
-	var res: Dictionary = await load_dm_history(conversation_id)
+func other_participant_name(conversation: Dictionary) -> String:
+	var peer := other_participant(conversation)
+	var nm := str(conversation.get("other_character_name", "")).strip_edges()
+	if nm.is_empty():
+		nm = str(conversation.get("name", "")).strip_edges()
+	return character_display_name(peer, nm)
+
+
+func load_thread(conversation: Dictionary) -> Array:
+	var peer := other_participant(conversation)
+	var conv_id := str(conversation.get("conversation_id", conversation.get("id", ""))).strip_edges()
+	var res: Dictionary = await load_dm_history(peer, conv_id)
 	if res.get("ok", false):
-		return get_conversation(conversation_id).get("messages", [])
+		if not peer.is_empty():
+			return get_conversation(peer).get("messages", [])
+		var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
+		return data.get("messages", []) if typeof(data.get("messages", [])) == TYPE_ARRAY else []
 	return []
 
 
-func mark_read(conversation_id: String) -> void:
-	await mark_conversation_read(conversation_id)
+func mark_read(conversation: Dictionary) -> void:
+	var peer := other_participant(conversation)
+	var conv_id := str(conversation.get("conversation_id", conversation.get("id", ""))).strip_edges()
+	if not conv_id.is_empty():
+		await GameApiClient.invoke("MarkConversationRead", {"conversation_id": conv_id})
+		if not peer.is_empty() and conversations.has(peer):
+			conversations[peer]["unread"] = 0
+			unread_changed.emit(get_total_unread_count())
+			conversation_read.emit(peer)
+		return
+	await mark_conversation_read(peer)
 
 
 func send_private(recipient_id: String, content: String) -> Dictionary:
@@ -377,6 +546,7 @@ func load_global() -> Array:
 func clear_account_chat_cache() -> void:
 	global_messages = []
 	conversations.clear()
+	_name_by_id.clear()
 	_active_dm_user = ""
 	_global_joined = false
 	unread_changed.emit(0)

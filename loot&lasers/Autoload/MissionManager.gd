@@ -20,6 +20,8 @@ signal mission_claim_failed(error: String)
 signal reward_received(reward: Dictionary)
 
 const BOARD_CFG := "user://godot_mission_board.cfg"
+## Bump when board shape changes (e.g. explore art no longer slot-tied).
+const BOARD_CACHE_VERSION := 2
 const STATUS_MIN_INTERVAL_SEC := 2.0
 ## Skip Character GET on rapid page hops when GameManager already has this character.
 const CHARACTER_REFRESH_TTL_MS := 20000
@@ -601,7 +603,8 @@ func _ui_offer_from_nakama(m: Dictionary) -> Dictionary:
 		"risk": int(m.get("risk", 0)),
 		"status": str(m.get("status", "available")),
 		"patron": patron,
-		"explore_scene": int(meta.get("explore_scene", 0)),
+		"explore_scene": int(meta.get("explore_scene", -1)),
+		"image_id": str(meta.get("image_id", "")),
 		"stardust_efficiency": float(reward_ref.get("stardust_efficiency", 1.0)),
 		"xp_efficiency": float(reward_ref.get("xp_efficiency", 1.0)),
 		"rewards": {},
@@ -693,15 +696,26 @@ func _load_board_cache(character_id: String) -> Array:
 	var cfg := ConfigFile.new()
 	if cfg.load(BOARD_CFG) != OK:
 		return []
+	if int(cfg.get_value(character_id, "board_version", 0)) != BOARD_CACHE_VERSION:
+		return []
 	var raw: Variant = cfg.get_value(character_id, "offers", [])
-	return raw if typeof(raw) == TYPE_ARRAY else []
+	if typeof(raw) != TYPE_ARRAY:
+		return []
+	# Reject legacy slot-tied boards missing per-mission art.
+	for row in raw:
+		if typeof(row) != TYPE_DICTIONARY:
+			return []
+		if not (row as Dictionary).has("explore_scene"):
+			return []
+	return raw
 
 
 func _save_board_cache(character_id: String, board: Array) -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(BOARD_CFG)
 	cfg.set_value(character_id, "offers", board)
-	cfg.set_value(character_id, "cache_source", "nakama")
+	cfg.set_value(character_id, "board_version", BOARD_CACHE_VERSION)
+	cfg.set_value(character_id, "cache_source", "local_board")
 	cfg.set_value(character_id, "cached_at", Time.get_unix_time_from_system())
 	cfg.save(BOARD_CFG)
 

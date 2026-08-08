@@ -37,15 +37,12 @@ func load_inbox() -> Array:
 	var res: Dictionary = await GameApiClient.invoke("GetNotifications", {"limit": 50})
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		var rows: Variant = res.data.get("notifications", [])
-		notifications = rows if typeof(rows) == TYPE_ARRAY else []
-		var counts: Variant = res.data.get("counts", {})
-		if typeof(counts) == TYPE_DICTIONARY and counts.has("total"):
-			unread_count = int(counts["total"])
-		else:
-			unread_count = 0
-			for n in notifications:
-				if typeof(n) == TYPE_DICTIONARY and not bool(n.get("read", false)):
-					unread_count += 1
+		var raw: Array = rows if typeof(rows) == TYPE_ARRAY else []
+		notifications = _filter_by_prefs(raw)
+		unread_count = 0
+		for n in notifications:
+			if typeof(n) == TYPE_DICTIONARY and not bool(n.get("read", false)):
+				unread_count += 1
 	else:
 		notifications = []
 		unread_count = 0
@@ -150,3 +147,15 @@ func act_on(notification: Dictionary, accept: bool) -> Dictionary:
 	await mark_read(nid)
 	_busy = false
 	return result
+
+
+func _filter_by_prefs(rows: Array) -> Array:
+	var out: Array = []
+	for row in rows:
+		if typeof(row) != TYPE_DICTIONARY:
+			continue
+		var ntype := str((row as Dictionary).get("type", ""))
+		if SettingsManager != null and not SettingsManager.allows_notification_type(ntype):
+			continue
+		out.append(row)
+	return out

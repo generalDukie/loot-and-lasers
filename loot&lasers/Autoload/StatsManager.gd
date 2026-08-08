@@ -131,20 +131,27 @@ func next_cost(character: Dictionary, stat: String) -> int:
 
 ## Affordability is previewed from the normalized wallet; the server response is
 ## the only source allowed to mutate Character stats or Stardust.
-func buy_attribute(stat: String) -> Dictionary:
+## `count` batches sequential purchases (cost curve applied per point) in one RPC.
+func buy_attribute(stat: String, count: int = 1) -> Dictionary:
 	if not stat in StatsRules.ATTR_KEYS:
 		return {"ok": false, "error": "Invalid stat", "data": {}}
-	var cost := next_cost(GameManager.active_character, stat)
-	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		return {"ok": false, "error": "Need %s stardust" % cost, "data": {}}
-	var res: Dictionary = await GameApiClient.invoke("BuyAttribute", {"stat": stat})
+	var n := clampi(count, 1, 20)
+	var ch: Dictionary = GameManager.active_character
+	var dust := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
+	n = mini(n, StatsRules.max_affordable_purchases(ch, stat, dust))
+	if n <= 0:
+		var one := next_cost(ch, stat)
+		return {"ok": false, "error": "Need %s stardust" % one, "data": {}}
+	var preview_cost := StatsRules.batch_cost(ch, stat, n)
+	var res: Dictionary = await GameApiClient.invoke("BuyAttribute", {"stat": stat, "count": n})
 	if not res.ok:
 		return res
 	_apply_payload(res)
 	if typeof(res.data) == TYPE_DICTIONARY:
 		last_buy = {
 			"stat": str(res.data.get("stat", stat)),
-			"cost": int(res.data.get("cost", cost)),
+			"cost": int(res.data.get("cost", preview_cost)),
+			"count": int(res.data.get("count", 1)),
 		}
 		var sheet: Variant = res.data.get("sheet", null)
 		if typeof(sheet) == TYPE_DICTIONARY and not (sheet as Dictionary).is_empty():

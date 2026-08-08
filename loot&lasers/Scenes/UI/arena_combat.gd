@@ -29,8 +29,8 @@ var _fx: CombatFxLayer
 var _motion: CombatFighterMotion
 var _hp: CombatHpPresenter
 
-var _player_hp: ProgressBar
-var _enemy_hp: ProgressBar
+var _player_hp: TextureProgressBar
+var _enemy_hp: TextureProgressBar
 var _player_hp_name: Label
 var _enemy_hp_name: Label
 var _player_hp_nums: Label
@@ -103,6 +103,13 @@ func _ready() -> void:
 	_motion.setup(_beats)
 	_hp.setup(_player_hp, _enemy_hp, _player_hp_nums, _enemy_hp_nums, _beats)
 	_boot()
+
+
+func _exit_tree() -> void:
+	# Don't leave Arena stuck on "battle already in progress" if the overlay
+	# is closed before FinishArenaBattle (empty/broken mount, nav away).
+	if not _is_mission() and not _is_dungeon() and not _finished:
+		ArenaManager.release_presentation_lock()
 
 
 func _build() -> void:
@@ -387,12 +394,14 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	name_lab.add_theme_color_override("font_color", Color("#FB7185") if align_right else Color("#22D3EE"))
 	ClientUi.apply_display_font(name_lab)
 	col.add_child(name_lab)
-	var bar := ProgressBar.new()
+	# TextureProgressBar so fill_mode can be fixed per side (no scaleX mirror).
+	var bar := TextureProgressBar.new()
 	bar.min_value = 0
 	bar.max_value = 100
-	bar.show_percentage = false
+	bar.value = 100
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.custom_minimum_size = Vector2(0, HP_BAR_H_BASE)
-	_apply_combat_hp_bar(bar, Color("#FB7185") if align_right else Color("#22D3EE"))
+	_apply_combat_hp_bar(bar, Color("#FB7185") if align_right else Color("#22D3EE"), align_right)
 	col.add_child(bar)
 	var nums := Label.new()
 	nums.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
@@ -414,27 +423,23 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	return col
 
 
-func _apply_combat_hp_bar(bar: ProgressBar, fill: Color) -> void:
-	## Chunky combat track — presentation only (does not change fill math).
-	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.02, 0.03, 0.055, 0.96)
-	track.border_color = Color(fill, 0.55)
-	track.set_border_width_all(2)
-	track.set_corner_radius_all(8)
-	track.content_margin_left = 2
-	track.content_margin_right = 2
-	track.content_margin_top = 2
-	track.content_margin_bottom = 2
-	var meter := StyleBoxFlat.new()
-	meter.bg_color = fill
-	meter.border_color = fill.lightened(0.28)
-	meter.border_width_top = 2
-	meter.border_width_bottom = 0
-	meter.border_width_left = 0
-	meter.border_width_right = 0
-	meter.set_corner_radius_all(6)
-	bar.add_theme_stylebox_override("background", track)
-	bar.add_theme_stylebox_override("fill", meter)
+func _apply_combat_hp_bar(bar: TextureProgressBar, fill: Color, enemy_side: bool) -> void:
+	## Permanent fill orientation per side — never scaleX / never toggled on hits.
+	bar.fill_mode = (
+		TextureProgressBar.FILL_LEFT_TO_RIGHT
+		if enemy_side
+		else TextureProgressBar.FILL_RIGHT_TO_LEFT
+	)
+	bar.nine_patch_stretch = true
+	bar.stretch_margin_left = 6
+	bar.stretch_margin_top = 6
+	bar.stretch_margin_right = 6
+	bar.stretch_margin_bottom = 6
+	bar.texture_under = CombatHpPresenter._solid_tex(Color(0.02, 0.03, 0.055, 0.96))
+	bar.texture_progress = CombatHpPresenter._solid_tex(Color.WHITE)
+	bar.tint_under = Color(0.02, 0.03, 0.055, 0.96)
+	bar.tint_progress = fill
+	bar.scale = Vector2.ONE
 
 
 func _apply_skip_cta(btn: Button) -> void:
@@ -734,13 +739,13 @@ func _layout_fighters() -> void:
 	elif not is_instance_valid(_player_card):
 		_recompute_fighter_metrics()
 	s = _combat_ui_scale()
-	var matchup_w := 268.0 * clampf(s, 0.75, 1.3)
-	var gap := maxf(108.0 * s, matchup_w + 28.0)
+	## Keep a clear corridor between fighters; matchup lives at bottom-center (not in the gap).
+	var gap := maxf(120.0 * s, 140.0)
 	var total_w := _fighter_size.x * 2.0 + gap
 	if total_w > _fighters.size.x - 24.0 and _fighters.size.x > 64.0:
 		gap = maxf(64.0, _fighters.size.x - 24.0 - _fighter_size.x * 2.0)
 	var x0 := maxf(12.0, (_fighters.size.x - (_fighter_size.x * 2.0 + gap)) * 0.5)
-	var y0 := maxf(12.0, (_fighters.size.y - _fighter_size.y) * 0.34)
+	var y0 := maxf(12.0, (_fighters.size.y - _fighter_size.y) * 0.28)
 	_player_anchor.custom_minimum_size = _fighter_size
 	_player_anchor.size = _fighter_size
 	_enemy_anchor.custom_minimum_size = _fighter_size
@@ -753,7 +758,7 @@ func _layout_fighters() -> void:
 	if is_instance_valid(_enemy_card):
 		_enemy_card.size = _fighter_size
 		_enemy_card.pivot_offset = _fighter_size * 0.5
-	_layout_matchup(x0, y0, gap, s)
+	_layout_matchup(s)
 
 
 func _clear_fighter_anchors() -> void:
@@ -780,19 +785,19 @@ func _remount_current_fighters() -> void:
 		_motion.start_idle(_enemy_card, 0.35)
 
 
-func _layout_matchup(x0: float, y0: float, gap: float, s: float) -> void:
-	if not is_instance_valid(_matchup_panel):
+func _layout_matchup(s: float) -> void:
+	if not is_instance_valid(_matchup_panel) or _fighters == null:
 		return
 	_matchup_panel.reset_size()
-	var mw := maxf(220.0, _matchup_panel.get_combined_minimum_size().x)
-	var mh := maxf(120.0, _matchup_panel.get_combined_minimum_size().y)
-	var cx := x0 + _fighter_size.x + gap * 0.5
-	# Sit in the VS corridor between portrait midlines.
-	var cy := y0 + _fighter_size.y * 0.42
-	if gap < mw + 12.0:
-		# Narrow stages: tuck under the fighters instead of overlapping art.
-		cy = y0 + _fighter_size.y + 6.0 * s
-		cx = _fighters.size.x * 0.5
+	var mw := maxf(420.0 * clampf(s, 0.75, 1.35), _matchup_panel.get_combined_minimum_size().x)
+	var mh := maxf(200.0 * clampf(s, 0.75, 1.35), _matchup_panel.get_combined_minimum_size().y)
+	mw = minf(mw, maxf(280.0, _fighters.size.x - 48.0))
+	## Bottom-center combat dashboard — clear of fighter art.
+	var cx := _fighters.size.x * 0.5
+	var bottom_pad := 18.0 * s
+	var cy := _fighters.size.y - bottom_pad - mh * 0.5
+	# Keep above the absolute floor if the stage is short.
+	cy = maxf(cy, _fighter_size.y + 24.0 * s)
 	_matchup_panel.position = Vector2(cx - mw * 0.5, cy - mh * 0.5)
 	_matchup_panel.size = Vector2(mw, mh)
 

@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { XP_STARDUST_SCALE } from "../src/shared/economyConstants.js";
-import { expForLevel, xpToNextBase, getMissionXpPerFuel } from "../src/shared/rewards.js";
+import { expForLevel, getMissionXpPerFuel } from "../src/shared/rewards.js";
 import {
   MISSION_XP_REBALANCE,
   DUNGEON_XP_BASE_FACTOR,
@@ -76,14 +76,14 @@ test("XP_STARDUST_SCALE is 10", () => {
 });
 
 test("XP formula from L1 forever — no L500 boundary", () => {
-  assert.equal(xpToNextBase(1), Math.round(1.35 * 2.106 * (1 ** 1.532) * (1 + (1 / 266) ** 3.683)));
-  assert.equal(expForLevel(1), xpToNextBase(1) * XP_STARDUST_SCALE);
-  assert.equal(expForLevel(501), xpToNextBase(501) * XP_STARDUST_SCALE);
+  // Design curve at L1 (post200Growth(1) === 1) × 10 game scale.
+  const l1Design = Math.round(1.35 * 2.106 * (1 ** 1.532) * (1 + (1 / 266) ** 3.683));
+  assert.equal(expForLevel(1), Math.max(1, l1Design) * 10);
   assert.ok(expForLevel(501) > expForLevel(500));
   assert.ok(Number.isFinite(expForLevel(10000)));
   assert.ok(expForLevel(10000) > expForLevel(1000));
-  // Scale applied exactly once
-  assert.equal(expForLevel(100) / xpToNextBase(100), XP_STARDUST_SCALE);
+  // Game scale applied as a final ×10 step (values stay multiples of 10).
+  assert.equal(expForLevel(100) % XP_STARDUST_SCALE, 0);
 });
 
 test("Mission XP uses 0.85 rebalance; XP/F scale once", () => {

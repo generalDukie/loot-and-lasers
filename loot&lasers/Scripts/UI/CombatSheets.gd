@@ -105,16 +105,27 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		var dtxt := ("+%s" % delta) if delta >= 0 else str(delta)
 		col.add_child(_reward_row("ARENA RATING", dtxt, dcol, "⚔"))
 
-	var gear: Variant = summary.get("gear_item", null)
-	if typeof(gear) == TYPE_DICTIONARY and not (gear as Dictionary).is_empty():
-		var g: Dictionary = gear
-		var tint := ClientUi.rarity_color(str(g.get("rarity", "common")))
-		col.add_child(_reward_row(
-			str(g.get("name", "Gear")),
-			str(g.get("rarity", "")).capitalize(),
-			tint,
-			"📦"
-		))
+	# Reward items (gear / stim / junk): glyph + name + rarity + type inline, full
+	# stats via the shared backpack inspect popup on hover.
+	var reward_items: Array = (
+		summary.get("reward_items", [])
+		if typeof(summary.get("reward_items", [])) == TYPE_ARRAY
+		else []
+	)
+	if reward_items.is_empty():
+		var single: Variant = summary.get("gear_item", null)
+		if typeof(single) == TYPE_DICTIONARY and not (single as Dictionary).is_empty():
+			reward_items = [single]
+	var inspect: ItemInspectPopup = null
+	if not reward_items.is_empty():
+		inspect = ItemInspectPopup.new()
+		root.add_child(inspect)
+		# Draw above the reward card and confetti.
+		inspect.z_index = 300
+	for entry in reward_items:
+		if typeof(entry) != TYPE_DICTIONARY or (entry as Dictionary).is_empty():
+			continue
+		col.add_child(_reward_item_pane(entry as Dictionary, inspect))
 
 	var note := str(summary.get("note", ""))
 	if not note.is_empty():
@@ -459,6 +470,87 @@ static func _reward_row(label: String, value: String, color: Color, icon: String
 	ClientUi.apply_display_font(val)
 	col.add_child(val)
 	return panel
+
+
+## Reward item pane: gear glyph + name + rarity + type inline; hover opens the
+## shared backpack inspect popup (read-only absolute stats).
+static func _reward_item_pane(item: Dictionary, inspect: ItemInspectPopup) -> PanelContainer:
+	var rarity := str(item.get("rarity", "common"))
+	var tint := ClientUi.rarity_color(rarity)
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(0.04, 0.05, 0.08, 0.95), Color(tint, 0.5), 10, 1)
+	)
+
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 10)
+	panel.add_child(row)
+
+	var box := 40.0
+	var icon_panel := PanelContainer.new()
+	icon_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_panel.custom_minimum_size = Vector2(box, box)
+	var icon_sb := StyleBoxFlat.new()
+	icon_sb.bg_color = Color(tint, 0.14)
+	icon_sb.border_color = Color(tint, 0.6)
+	icon_sb.set_border_width_all(1)
+	icon_sb.set_corner_radius_all(8)
+	icon_panel.add_theme_stylebox_override("panel", icon_sb)
+	var icon_center := CenterContainer.new()
+	icon_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_panel.add_child(icon_center)
+	icon_center.add_child(GearIcon.make(item, box - 8.0))
+	row.add_child(icon_panel)
+
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	col.add_theme_constant_override("separation", 1)
+	row.add_child(col)
+
+	var name_lab := Label.new()
+	name_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_lab.text = str(item.get("name", "Item"))
+	name_lab.add_theme_font_size_override("font_size", 18)
+	name_lab.add_theme_color_override("font_color", tint.lightened(0.22))
+	ClientUi.apply_display_font(name_lab)
+	col.add_child(name_lab)
+
+	var sub := Label.new()
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sub.text = "%s · %s" % [rarity.capitalize(), _reward_type_label(item)]
+	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(sub)
+	col.add_child(sub)
+
+	if inspect != null:
+		var captured := item.duplicate(true)
+		panel.mouse_entered.connect(
+			func() -> void:
+				if is_instance_valid(inspect):
+					inspect.present(panel, captured, {"equipped_preview": true})
+		)
+		panel.mouse_exited.connect(
+			func() -> void:
+				if is_instance_valid(inspect):
+					inspect.request_hide()
+		)
+	return panel
+
+
+static func _reward_type_label(item: Dictionary) -> String:
+	if InventoryRules.is_consumable(item):
+		return "Stim"
+	var t := str(item.get("type", ""))
+	if t == "junk":
+		return "Junk"
+	var lbl := str(GameData.gear_type_label(t))
+	return lbl if not lbl.is_empty() else "Item"
 
 
 ## Lightweight CPU confetti — no canvas-confetti dependency.

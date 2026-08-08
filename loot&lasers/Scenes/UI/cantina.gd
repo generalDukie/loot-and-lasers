@@ -570,11 +570,12 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	## Non-interactive hover card — web MissionCantina hover preview.
 	if _detail_open:
 		return
-	var ch := GameManager.active_character
 	var patron: Dictionary = offer.get("patron", {}) if typeof(offer.get("patron", {})) == TYPE_DICTIONARY else {}
-	var gains: Dictionary = MissionBoard.compute_gains(ch, offer, false)
-	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
-	var dur := MissionBoard.estimate_duration(offer, ch)
+	# Authoritative preview values from Node (GetMissionBoard) — never recomputed here.
+	var xp_val := int(offer.get("preview_xp", 0))
+	var sd_val := int(offer.get("preview_stardust", 0))
+	var fuel := float(offer.get("fuel_cost", 0.0))
+	var dur := int(offer.get("display_duration_seconds", offer.get("duration_seconds", 0)))
 	var fuel_tint := FUEL_COLOR
 
 	var card_style := ClientUi.painted_panel_style(
@@ -669,8 +670,8 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	rewards.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rewards.add_theme_constant_override("separation", 12)
 	_hover_body.add_child(rewards)
-	rewards.add_child(_make_reward_tile("★", str(gains.get("experience", "?")), "XP", XP_COLOR))
-	rewards.add_child(_make_reward_tile("✦", str(gains.get("stardust", "?")), "Stardust", STARDUST_COLOR))
+	rewards.add_child(_make_reward_tile("★", str(xp_val), "XP", XP_COLOR))
+	rewards.add_child(_make_reward_tile("✦", str(sd_val), "Stardust", STARDUST_COLOR))
 	rewards.add_child(_make_reward_tile("⛽", str(fuel), "Fuel", fuel_tint))
 
 	var footer := Label.new()
@@ -749,22 +750,19 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	_detail_open = true
 	_detail_offer = offer.duplicate(true)
 	_detail_tint = tint
-	var ch := GameManager.active_character
 	var patron: Dictionary = offer.get("patron", {}) if typeof(offer.get("patron", {})) == TYPE_DICTIONARY else {}
-	var gains: Dictionary = MissionBoard.compute_gains(ch, offer, false)
-	var fuel := MissionBoard.estimate_fuel_cost(offer, ch)
-	var dur := MissionBoard.estimate_duration(offer, ch)
+	# Authoritative preview values from Node (GetMissionBoard) — never recomputed here.
+	var xp_val := int(offer.get("preview_xp", 0))
+	var sd_val := int(offer.get("preview_stardust", 0))
+	var fuel := float(offer.get("fuel_cost", 0.0))
+	var dur := int(offer.get("display_duration_seconds", offer.get("duration_seconds", 0)))
 	var fuel_tint := FUEL_COLOR
-	var rewards_raw: Variant = offer.get("rewards", {})
-	var rewards: Dictionary = rewards_raw if typeof(rewards_raw) == TYPE_DICTIONARY else {}
-	var rarity_chance := str(rewards.get("item_rarity_chance", "common"))
-	var drop_rates: Dictionary = MissionBoard.ITEM_DROP_RATES.get(
-		rarity_chance, MissionBoard.ITEM_DROP_RATES["common"]
-	) as Dictionary
-	var loot_type := str(rewards.get("loot_type", ""))
+	# Authoritative gear rarity distribution (level-independent) + loot type from Node.
+	var drop_rates_raw: Variant = offer.get("rarity_weights", {})
+	var drop_rates: Dictionary = drop_rates_raw if typeof(drop_rates_raw) == TYPE_DICTIONARY else {}
+	var loot_type := str(offer.get("loot_type", ""))
 	if loot_type.is_empty():
-		var types: Array = MissionBoard.LOOT_TYPES
-		loot_type = str(types[str(offer.get("name", "")).length() % types.size()])
+		loot_type = "gear"
 
 	var card_style := ClientUi.painted_panel_style(
 		Color(0.06, 0.055, 0.09, 0.98), Color(0.35, 0.4, 0.48, 0.55), 18, 1
@@ -893,8 +891,8 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	var reward_row := HBoxContainer.new()
 	reward_row.add_theme_constant_override("separation", 10)
 	_preview_body.add_child(reward_row)
-	reward_row.add_child(_make_reward_tile("★", str(gains.get("experience", "?")), "XP", XP_COLOR))
-	reward_row.add_child(_make_reward_tile("✦", str(gains.get("stardust", "?")), "Stardust", STARDUST_COLOR))
+	reward_row.add_child(_make_reward_tile("★", str(xp_val), "XP", XP_COLOR))
+	reward_row.add_child(_make_reward_tile("✦", str(sd_val), "Stardust", STARDUST_COLOR))
 	reward_row.add_child(_make_reward_tile("⛽", str(fuel), "Fuel", fuel_tint))
 
 	# Possible loot
@@ -1099,9 +1097,13 @@ func _confirm_contract(offer: Dictionary, tint: Color) -> void:
 func _on_launch(offer: Dictionary) -> void:
 	if _busy:
 		return
+	var ch := GameManager.active_character
+	var level_req := int(offer.get("level_requirement", 1))
+	if level_req > int(ch.get("level", 1)):
+		Notify.blocked("Locked", "Reach level %s to accept this contract" % level_req)
+		return
 	if MiningManager.is_mining_busy():
-		_status.add_theme_color_override("font_color", Color(1.0, 0.7, 0.35))
-		_status.text = "Ship is mining — cancel or finish mining before launching."
+		Notify.blocked("Ship is mining", "Cancel or finish mining before launching")
 		_mining_banner.visible = true
 		return
 
@@ -1115,12 +1117,10 @@ func _on_launch(offer: Dictionary) -> void:
 		if action == "inventory":
 			return
 		if action == "cancel":
-			_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
-			_status.text = "Launch cancelled — inventory still full."
+			Notify.blocked("Bag full", "Launch cancelled — inventory still full")
 			return
 		if await InventoryManager.is_bag_full():
-			_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
-			_status.text = "Still full — free a slot, then launch again."
+			Notify.blocked("Bag full", "Free a slot, then launch again")
 			return
 
 	_busy = true
@@ -1129,16 +1129,16 @@ func _on_launch(offer: Dictionary) -> void:
 	_busy = false
 	if not res.ok:
 		var err := str(res.get("error", "Launch failed"))
-		_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
 		if err.to_lower().contains("mining"):
-			_status.text = "Mining in progress — finish or cancel mining first."
+			Notify.blocked("Mining in progress", "Finish or cancel mining first")
 			_mining_banner.visible = true
 			await MissionManager.refresh_character()
 			_render()
 		elif err.to_lower().contains("inventory"):
-			_status.text = err
+			Notify.blocked("Bag full", err)
 			await InventoryManager.prompt_bag_pressure(self, err)
-		else:
+		elif not Notify.from_result(res):
+			_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
 			_status.text = err
 		return
 	GameManager.go_mission_run()
@@ -1149,16 +1149,16 @@ func _on_buy_fuel() -> void:
 		return
 	var gate: Dictionary = ShopManager.can_buy_fuel()
 	if not bool(gate.get("ok", false)):
-		_status.add_theme_color_override("font_color", ClientUi.DANGER)
-		_status.text = str(gate.get("error", "Cannot buy fuel"))
+		Notify.blocked(str(gate.get("error", "Cannot buy fuel")))
 		return
 	_busy = true
 	_status.text = "Buying fuel…"
 	var res: Dictionary = await MissionManager.buy_fuel()
 	_busy = false
 	if not res.ok:
-		_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
-		_status.text = str(res.get("error", "Buy fuel failed"))
+		if not Notify.from_result(res):
+			_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
+			_status.text = str(res.get("error", "Buy fuel failed"))
 		return
 	await MissionManager.refresh_character()
 	_status.add_theme_color_override("font_color", Color(0.45, 0.9, 0.65))

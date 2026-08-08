@@ -153,7 +153,6 @@ async function main() {
       won: true,
       planet_id: ch.dungeon_planet || 1,
       enemy_index: ch.dungeon_enemy || 1,
-      patrol: false,
       viewing_wormhole: false,
       species_id: 1,
       max_hit: 999,

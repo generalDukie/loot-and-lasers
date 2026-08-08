@@ -117,32 +117,34 @@ test("rejects client reward/cooldown/combat tampering", () => {
 test("progress: story must match crawl node", () => {
   const live = { dungeon_planet: 2, dungeon_enemy: 3, level: 30 };
   assert.throws(
-    () => assertDungeonProgressAllowed(live, { planetId: 3, enemyIndex: 1, patrol: false }),
+    () => assertDungeonProgressAllowed(live, { planetId: 3, enemyIndex: 1 }),
     (e) => e.code === "DUNGEON_PROGRESS",
   );
   assert.throws(
-    () => assertDungeonProgressAllowed(live, { planetId: 2, enemyIndex: 1, patrol: false }),
+    () => assertDungeonProgressAllowed(live, { planetId: 2, enemyIndex: 1 }),
     (e) => e.code === "DUNGEON_PROGRESS",
   );
-  const ok = assertDungeonProgressAllowed(live, { planetId: 2, enemyIndex: 3, patrol: false });
+  const ok = assertDungeonProgressAllowed(live, { planetId: 2, enemyIndex: 3 });
   assert.equal(ok.planetId, 2);
   assert.equal(ok.enemyIndex, 3);
 });
 
-test("progress: patrol only on cleared worlds", () => {
+test("progress: cleared worlds cannot be re-fought", () => {
   const live = { dungeon_planet: 3, dungeon_enemy: 1, level: 40 };
   assert.throws(
-    () => assertDungeonProgressAllowed(live, { planetId: 3, enemyIndex: 2, patrol: true }),
+    () => assertDungeonProgressAllowed(live, { planetId: 1, enemyIndex: 5 }),
     (e) => e.code === "DUNGEON_PROGRESS",
   );
-  const ok = assertDungeonProgressAllowed(live, { planetId: 1, enemyIndex: 5, patrol: true });
-  assert.equal(ok.patrol, true);
+  assert.throws(
+    () => assertDungeonProgressAllowed(live, { planetId: 2, enemyIndex: 1 }),
+    (e) => e.code === "DUNGEON_PROGRESS",
+  );
 });
 
 test("progress: level unlock gate", () => {
   const low = { dungeon_planet: 2, dungeon_enemy: 1, level: 5 };
   assert.throws(
-    () => assertDungeonProgressAllowed(low, { planetId: 2, enemyIndex: 1, patrol: false }),
+    () => assertDungeonProgressAllowed(low, { planetId: 2, enemyIndex: 1 }),
     (e) => e.code === "DUNGEON_LOCKED",
   );
 });
@@ -169,7 +171,7 @@ await testAsync("SyncDungeonState returns dungeon status blob", async () => {
 
 await testAsync("PrepareDungeonCombat rejects locked planet skip-ahead", async () => {
   entities.Character.update(ch.id, { dungeon_planet: 1, dungeon_enemy: 1, level: 25 });
-  const res = await PrepareDungeonCombat(user, { planet_id: 2, enemy_index: 1, patrol: false });
+  const res = await PrepareDungeonCombat(user, { planet_id: 2, enemy_index: 1 });
   assert.equal(res.status, 400);
   assert.equal(res.body.code, "DUNGEON_PROGRESS");
 });
@@ -178,7 +180,6 @@ await testAsync("PrepareDungeonCombat succeeds for active node", async () => {
   const res = await PrepareDungeonCombat(user, {
     planet_id: 1,
     enemy_index: 1,
-    patrol: false,
   });
   assert.equal(res.status, 200, res.body?.error);
   assert.ok(res.body.combat_id);
@@ -193,7 +194,6 @@ await testAsync("PrepareDungeonCombat replays same pending without re-sim", asyn
   const res = await PrepareDungeonCombat(user, {
     planet_id: 1,
     enemy_index: 1,
-    patrol: false,
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.replay, true);
@@ -208,7 +208,6 @@ await testAsync("FinishDungeonBattle settles once; duplicate combat_id replays",
   const res = await FinishDungeonBattle(user, {
     planet_id: 1,
     enemy_index: 1,
-    patrol: false,
     combat_id: combatId,
   });
   assert.equal(res.status, 200, res.body?.error);
@@ -221,7 +220,6 @@ await testAsync("FinishDungeonBattle settles once; duplicate combat_id replays",
   const replay = await FinishDungeonBattle(user, {
     planet_id: 1,
     enemy_index: 1,
-    patrol: false,
     combat_id: combatId,
   });
   assert.equal(replay.status, 200);
@@ -251,7 +249,6 @@ await testAsync("Finish without pending rejects (no auto re-sim)", async () => {
   const res = await FinishDungeonBattle(user, {
     planet_id: cur.dungeon_planet,
     enemy_index: cur.dungeon_enemy,
-    patrol: false,
   });
   assert.equal(res.status, 409);
   assert.equal(res.body.code, "DUNGEON_NO_PENDING");
@@ -264,7 +261,6 @@ await testAsync("cooldown blocks Prepare", async () => {
   const res = await PrepareDungeonCombat(user, {
     planet_id: cur.dungeon_planet,
     enemy_index: cur.dungeon_enemy,
-    patrol: false,
   });
   assert.equal(res.status, 400);
   assert.equal(res.body.code, "DUNGEON_COOLDOWN");
@@ -298,7 +294,6 @@ await testAsync("death quotas no longer gate Prepare; PayDungeonContinue is depr
   const prep = await PrepareDungeonCombat(user, {
     planet_id: cur.dungeon_planet,
     enemy_index: cur.dungeon_enemy,
-    patrol: false,
   });
   assert.equal(prep.status, 200, prep.body?.error);
   assert.ok(prep.body.dungeon?.dungeon_cooldown_until);
@@ -331,16 +326,16 @@ await testAsync("client-supplied won is rejected on Finish", async () => {
 await testAsync("pendingCombatMatches requires combat_id alignment", async () => {
   const pending = {
     combat_id: "abc",
-    meta: { planet_id: 1, enemy_index: 2, patrol: false },
+    meta: { planet_id: 1, enemy_index: 2 },
   };
-  assert.equal(pendingCombatMatches(pending, { planetId: 1, enemyIndex: 2, patrol: false }), true);
-  assert.equal(pendingCombatMatches(pending, { planetId: 1, enemyIndex: 2, patrol: false, combatId: "abc" }), true);
-  assert.equal(pendingCombatMatches(pending, { planetId: 1, enemyIndex: 2, patrol: false, combatId: "zzz" }), false);
+  assert.equal(pendingCombatMatches(pending, { planetId: 1, enemyIndex: 2 }), true);
+  assert.equal(pendingCombatMatches(pending, { planetId: 1, enemyIndex: 2, combatId: "abc" }), true);
+  assert.equal(pendingCombatMatches(pending, { planetId: 1, enemyIndex: 2, combatId: "zzz" }), false);
 });
 
 await testAsync("forced pending settle grants inventory via grantItemOrPending path", async () => {
   // Clear prior pending from prepare; inject a winning combat with no gear complexity —
-  // Finish still runs grant path when won && !patrol.
+  // Finish still runs grant path when won.
   freeze(2_200_000_000_000);
   const cur = entities.Character.get(ch.id);
   entities.Character.update(ch.id, {
@@ -364,13 +359,12 @@ await testAsync("forced pending settle grants inventory via grantItemOrPending p
     enemy: { name: "Test Foe", level: 10, speciesId: "test" },
     playerMaxHp: 100,
     opponentMaxHp: 100,
-  }, { planetId: pid, enemyIndex: eidx, patrol: false });
+  }, { planetId: pid, enemyIndex: eidx });
 
   const beforeCount = entities.Item.filter({ character_id: ch.id }).length;
   const res = await FinishDungeonBattle(user, {
     planet_id: pid,
     enemy_index: eidx,
-    patrol: false,
     combat_id: combatId,
   });
   assert.equal(res.status, 200, res.body?.error);

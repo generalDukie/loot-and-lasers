@@ -477,10 +477,7 @@ func _on_start() -> void:
 	if _busy:
 		return
 	if MissionManager.has_active_mission():
-		_set_status(
-			"🚀 Ship Busy — your ship is on a mission. Finish or claim it before deploying the mining drone.",
-			ClientUi.DANGER
-		)
+		Notify.blocked("Ship busy", "Finish or claim your mission before deploying the mining drone")
 		return
 	_busy = true
 	_start_btn.disabled = true
@@ -489,7 +486,8 @@ func _on_start() -> void:
 	var res: Dictionary = await MiningManager.start(hours)
 	_busy = false
 	if not res.ok:
-		_set_status(str(res.get("error", "StartMining failed")), ClientUi.DANGER)
+		if not Notify.from_result(res):
+			_set_status(str(res.get("error", "StartMining failed")), ClientUi.DANGER)
 	else:
 		var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 		var patch: Variant = data.get("patch", {})

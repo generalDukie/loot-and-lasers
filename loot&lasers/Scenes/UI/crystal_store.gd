@@ -646,8 +646,9 @@ func _on_claim(quest_id: String) -> void:
 	var res: Dictionary = await CrystalStoreManager.claim_quest(quest_id)
 	_busy_id = ""
 	if not res.ok:
-		_status.add_theme_color_override("font_color", ClientUi.DANGER)
-		_status.text = str(res.get("error", "Could not claim"))
+		if not Notify.from_result(res):
+			_status.add_theme_color_override("font_color", ClientUi.DANGER)
+			_status.text = str(res.get("error", "Could not claim"))
 		_populate()
 		return
 	var reward := 0

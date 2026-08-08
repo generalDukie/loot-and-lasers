@@ -132,9 +132,9 @@ export function clearCooldownPatch() {
 }
 
 /**
- * Story / patrol / wormhole encounter eligibility (mirrors client intent).
+ * Story / wormhole encounter eligibility (mirrors client intent).
  */
-export function assertDungeonProgressAllowed(character, { planetId, enemyIndex, patrol, viewingWormhole }) {
+export function assertDungeonProgressAllowed(character, { planetId, enemyIndex, viewingWormhole }) {
   const pid = Math.max(1, Math.floor(Number(planetId) || 1));
   const eidx = Math.min(
     DUNGEON_ENEMIES_PER_PLANET,
@@ -144,25 +144,11 @@ export function assertDungeonProgressAllowed(character, { planetId, enemyIndex, 
   const crawlE = crawlEnemy(character);
   const wormhole = !!viewingWormhole || pid > DUNGEON_STORY_PLANETS;
 
-  if (!patrol && pid >= 1 && pid <= DUNGEON_STORY_PLANETS) {
+  if (pid >= 1 && pid <= DUNGEON_STORY_PLANETS) {
     if (!isDungeonUnlockedByLevel(pid, character.level || 1)) {
       const need = getDungeonUnlockLevel(pid);
       throw err(403, `Dungeon ${pid} unlocks at level ${need}`, "DUNGEON_LOCKED");
     }
-  }
-
-  if (patrol) {
-    if (wormhole) {
-      throw err(400, "Cannot patrol the wormhole", "DUNGEON_PROGRESS");
-    }
-    if (pid >= crawlP) {
-      throw err(400, "World not cleared for patrol", "DUNGEON_PROGRESS");
-    }
-    if (pid >= 1 && pid <= DUNGEON_STORY_PLANETS && !isDungeonUnlockedByLevel(pid, character.level || 1)) {
-      const need = getDungeonUnlockLevel(pid);
-      throw err(403, `Dungeon ${pid} unlocks at level ${need}`, "DUNGEON_LOCKED");
-    }
-    return { planetId: pid, enemyIndex: eidx, patrol: true, viewingWormhole: false };
   }
 
   // Story push / wormhole crawl — must match active node.
@@ -172,7 +158,7 @@ export function assertDungeonProgressAllowed(character, { planetId, enemyIndex, 
   if (eidx !== crawlE) {
     throw err(400, "Not your active frontier node", "DUNGEON_PROGRESS");
   }
-  return { planetId: pid, enemyIndex: eidx, patrol: false, viewingWormhole: wormhole };
+  return { planetId: pid, enemyIndex: eidx, viewingWormhole: wormhole };
 }
 
 /** @deprecated Death quotas removed — always false. */
@@ -188,12 +174,11 @@ export function consumeContinueCreditPatch(_character, _todayKey) {
   return {};
 }
 
-export function pendingCombatMatches(pending, { planetId, enemyIndex, patrol, combatId }) {
+export function pendingCombatMatches(pending, { planetId, enemyIndex, combatId }) {
   if (!pending?.combat_id) return false;
   const meta = pending.meta || {};
   if (Number(meta.planet_id) !== Number(planetId)) return false;
   if (Number(meta.enemy_index) !== Number(enemyIndex)) return false;
-  if (!!meta.patrol !== !!patrol) return false;
   if (combatId) {
     if (String(pending.combat_id) !== String(combatId)) return false;
   }
@@ -226,7 +211,6 @@ export function serializeDungeonState(character, nowMs = clock.nowMs(), _todayKe
       ? {
           planet_id: pending.meta?.planet_id ?? null,
           enemy_index: pending.meta?.enemy_index ?? null,
-          patrol: !!pending.meta?.patrol,
         }
       : null,
     server_now_ms: nowMs,

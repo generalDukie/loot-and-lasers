@@ -224,6 +224,16 @@ func _build() -> void:
 	_content.add_child(_overlay_host)
 	_build_notification_center()
 	_restack_content_layers()
+	# Center player-fault notifications over the content stage, not the whole window.
+	var notify := get_node_or_null("/root/Notify")
+	if notify != null and notify.has_method("set_content_region"):
+		notify.set_content_region(_content)
+
+
+func _exit_tree() -> void:
+	var notify := get_node_or_null("/root/Notify")
+	if notify != null and notify.has_method("clear_content_region"):
+		notify.clear_content_region(_content)
 
 
 func _make_top_chrome() -> Control:

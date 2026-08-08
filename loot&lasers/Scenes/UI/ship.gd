@@ -867,7 +867,7 @@ func _on_buy_mod(category: String, cost: int) -> void:
 	if _busy:
 		return
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		_set_status("Need %s stardust." % cost, true)
+		Notify.blocked("Not enough Stardust", "Need %s ✦" % cost)
 		return
 	_busy = true
 	_set_status("Installing mod…")
@@ -910,7 +910,10 @@ func _finish(res: Dictionary, ok_msg: String) -> void:
 		var err := str(res.get("error", "Failed"))
 		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
 			err = str(res.data["error"])
-		_set_status(err, true)
+		if Notify.is_player_fault(res):
+			Notify.blocked(err)
+		else:
+			_set_status(err, true)
 		return
 	_set_status(ok_msg)
 	_populate()

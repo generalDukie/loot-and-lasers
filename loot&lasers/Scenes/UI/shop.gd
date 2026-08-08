@@ -783,14 +783,15 @@ func _on_refresh(which: String) -> void:
 		return
 	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	if nova < ShopManager.SHOP_REFRESH_COST:
-		_set_status("Need %s 💎 to refresh." % ShopManager.SHOP_REFRESH_COST)
+		Notify.blocked("Need %s 💎 to refresh" % ShopManager.SHOP_REFRESH_COST)
 		return
 	_busy = true
 	_set_status("Refreshing %s…" % which)
 	var res: Dictionary = await ShopManager.refresh_shop(which)
 	_busy = false
 	if not res.ok:
-		_set_status(str(res.get("error", "Refresh failed")))
+		if not Notify.from_result(res):
+			_set_status(str(res.get("error", "Refresh failed")))
 		_update_meta()
 		return
 	_set_status("🔄 Black Market restocked (−%s 💎)." % ShopManager.SHOP_REFRESH_COST)
@@ -802,7 +803,7 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 		return
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		_set_status("Need %s ✦ — you have %s." % [cost, sd])
+		Notify.blocked("Not enough Stardust", "Need %s ✦ — you have %s" % [cost, sd])
 		return
 	_busy = true
 	_busy_slot = slot_id
@@ -811,7 +812,8 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 	_busy = false
 	_busy_slot = ""
 	if not res.ok:
-		_set_status(_err(res))
+		if not Notify.from_result(res):
+			_set_status(_err(res))
 		_update_meta()
 		return
 	_set_status(_purchase_msg(ShopManager.last_purchase, "🛒 Purchased!"))
@@ -826,10 +828,10 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	# Client affordability check is UX only — Node recalculates / haggles authoritatively.
 	if not haggle and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		_set_status("Need %s ✦ — you have %s." % [cost, sd])
+		Notify.blocked("Not enough Stardust", "Need %s ✦ — you have %s" % [cost, sd])
 		return
 	if nova > 0 and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, nova):
-		_set_status("Need %s 💎" % nova)
+		Notify.blocked("Not enough Nova Crystals", "Need %s 💎" % nova)
 		return
 	_busy = true
 	_busy_slot = slot_id
@@ -838,7 +840,8 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 	_busy = false
 	_busy_slot = ""
 	if not res.ok:
-		_set_status(_err(res))
+		if not Notify.from_result(res):
+			_set_status(_err(res))
 		_update_meta()
 		return
 	var purchase: Dictionary = ShopManager.last_purchase
@@ -1248,7 +1251,7 @@ func _stage_sell_item(item: Dictionary) -> void:
 			empty = i
 			break
 	if empty < 0:
-		_set_status("Sell tray full — remove an item or confirm the sale.")
+		Notify.blocked("Sell tray full", "Remove an item or confirm the sale")
 		return
 	_sell_stage[empty] = item.duplicate(true)
 	_populate()
@@ -1274,7 +1277,8 @@ func _on_confirm_sell() -> void:
 	var res: Dictionary = await ShopManager.sell_items(ids)
 	_busy = false
 	if not res.ok:
-		_set_status(str(res.get("error", "Sale failed")))
+		if not Notify.from_result(res):
+			_set_status(str(res.get("error", "Sale failed")))
 		await _load_bag_items()
 		_load_equipped()
 		_populate()

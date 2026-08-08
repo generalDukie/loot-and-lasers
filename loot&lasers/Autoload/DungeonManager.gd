@@ -5,7 +5,6 @@ signal state_changed
 
 var selected_planet_id: int = 1
 var viewing_wormhole := false
-var patrol := false
 var pending_enemy: Dictionary = {}
 var pending_battle: Dictionary = {}
 var pending_player_items: Array = []
@@ -20,7 +19,6 @@ func _ready() -> void:
 func clear_local() -> void:
 	selected_planet_id = 1
 	viewing_wormhole = false
-	patrol = false
 	pending_enemy = {}
 	pending_battle = {}
 	pending_player_items = []
@@ -79,9 +77,8 @@ func can_enter_story(planet_id: int) -> Dictionary:
 	return {"ok": true}
 
 
-func select_planet(planet_id: int, as_patrol: bool = false, wormhole: bool = false) -> void:
+func select_planet(planet_id: int, wormhole: bool = false) -> void:
 	selected_planet_id = planet_id
-	patrol = as_patrol
 	viewing_wormhole = wormhole
 	state_changed.emit()
 
@@ -93,18 +90,12 @@ func cooldown_ms() -> int:
 func prepare_fight() -> Dictionary:
 	var planet: Dictionary = DungeonRules.get_planet(selected_planet_id)
 	var enemy_idx := current_enemy_index()
-	if patrol:
-		# Cleared-world patrols mirror web behavior: random regular foe with a
-		# 10% chance to rematch that world's boss.
-		var rng := RandomNumberGenerator.new()
-		rng.randomize()
-		enemy_idx = DungeonRules.ENEMIES_PER_PLANET if rng.randf() < 0.1 else rng.randi_range(1, DungeonRules.ENEMIES_PER_PLANET - 1)
-	elif viewing_wormhole:
+	if viewing_wormhole:
 		enemy_idx = current_enemy_index()
 	elif selected_planet_id != current_planet_id():
 		return {"ok": false, "error": "Not your active frontier world"}
-	var gate := can_enter_story(selected_planet_id) if not viewing_wormhole and not patrol else {"ok": true}
-	if not bool(gate.get("ok", false)) and not patrol and not viewing_wormhole:
+	var gate := can_enter_story(selected_planet_id) if not viewing_wormhole else {"ok": true}
+	if not bool(gate.get("ok", false)) and not viewing_wormhole:
 		return gate
 	if cooldown_ms() > 0:
 		return {"ok": false, "error": "On cooldown (%s)" % DungeonRules.format_ms(cooldown_ms())}
@@ -112,7 +103,6 @@ func prepare_fight() -> Dictionary:
 	var body := {
 		"planet_id": selected_planet_id,
 		"enemy_index": enemy_idx,
-		"patrol": patrol,
 		"viewing_wormhole": viewing_wormhole,
 	}
 	var res: Dictionary = await GameApiClient.invoke("PrepareDungeonCombat", body)
@@ -161,7 +151,6 @@ func finish_battle() -> Dictionary:
 	var body := {
 		"planet_id": selected_planet_id,
 		"enemy_index": pending_enemy_index if pending_enemy_index > 0 else _enemy_index_for_finish(),
-		"patrol": patrol,
 		"viewing_wormhole": viewing_wormhole,
 	}
 	if not combat_id.is_empty():

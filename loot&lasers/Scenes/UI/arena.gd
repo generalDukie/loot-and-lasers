@@ -917,14 +917,15 @@ func _on_refresh() -> void:
 			CurrencyManager.CURRENCY_STARDUST,
 			ArenaRules.REFRESH_COST
 		):
-			_set_status("Need %s ✦ for instant refresh." % ArenaRules.REFRESH_COST)
+			Notify.blocked("Not enough Stardust", "Need %s ✦ for instant refresh" % ArenaRules.REFRESH_COST)
 			_busy = false
 			_update_lobby_chrome()
 			return
 	var res: Dictionary = await ArenaManager.refresh_opponents(charge)
 	_busy = false
 	if not res.ok:
-		_set_status(str(res.get("error", "Refresh failed")))
+		if not Notify.from_result(res):
+			_set_status(str(res.get("error", "Refresh failed")))
 		_update_lobby_chrome()
 		return
 	_populate_challengers()
@@ -939,7 +940,13 @@ func _on_challenge(opp: Dictionary) -> void:
 	var prep: Dictionary = await ArenaManager.prepare_challenge(opp, skip)
 	_busy = false
 	if not prep.ok:
-		_set_status(str(prep.get("error", "Cannot challenge")))
+		var err := str(prep.get("error", "Cannot challenge"))
+		var low := err.to_lower()
+		if low.contains("failed") or low.contains("network") or low.contains("timeout"):
+			_set_status(err)
+		else:
+			Notify.blocked(err)
+			_set_status("")
 		return
 	GameManager.go_arena_combat()
 
@@ -956,7 +963,13 @@ func _on_revenge(match: Dictionary) -> void:
 	_revenge_busy_id = ""
 	_busy = false
 	if not prep.ok:
-		_set_status(str(prep.get("error", "Cannot revenge")))
+		var err := str(prep.get("error", "Cannot revenge"))
+		var low := err.to_lower()
+		if low.contains("failed") or low.contains("network") or low.contains("timeout"):
+			_set_status(err)
+		else:
+			Notify.blocked(err)
+			_set_status("")
 		_populate_history()
 		return
 	GameManager.go_arena_combat()

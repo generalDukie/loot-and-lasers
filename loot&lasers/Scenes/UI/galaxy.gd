@@ -52,7 +52,6 @@ func _boot() -> void:
 	var in_infinite := active > 10
 	DungeonManager.selected_planet_id = active
 	DungeonManager.viewing_wormhole = in_infinite
-	DungeonManager.patrol = false
 	_populate()
 	_tick = Timer.new()
 	_tick.wait_time = 1.0
@@ -457,12 +456,12 @@ func _update_detail() -> void:
 		c.queue_free()
 
 	var pid := DungeonManager.selected_planet_id
-	var patrol := DungeonManager.patrol
 	var viewing_wh := DungeonManager.viewing_wormhole
 	var active := DungeonManager.current_planet_id()
 	var enemy_idx := DungeonManager.current_enemy_index()
-	var display_enemy := 1 if patrol else enemy_idx
-	var patrol_pct := int(round(DungeonRules.PATROL_REWARD_MULT * 100.0))
+	var display_enemy := enemy_idx
+	# Only the active frontier node (story front or current wormhole depth) can be fought.
+	var fightable := pid == active
 
 	var planet: Dictionary
 	if viewing_wh:
@@ -487,10 +486,7 @@ func _update_detail() -> void:
 	))
 	_detail_icon.text = str(planet.get("icon", "🪐"))
 
-	if patrol:
-		_detail_sector.text = "PATROL ROUTE"
-		_detail_sector.add_theme_color_override("font_color", Color("#FBBF24"))
-	elif viewing_wh:
+	if viewing_wh:
 		_detail_sector.text = "? WORMHOLE"
 		_detail_sector.add_theme_color_override("font_color", Color("#C084FC"))
 	else:
@@ -500,44 +496,32 @@ func _update_detail() -> void:
 	_detail_title.text = str(planet.get("name", "?"))
 	_detail_title.add_theme_color_override("font_color", tint)
 
-	if patrol:
-		_detail_boss.visible = false
-	else:
-		_detail_boss.visible = true
-		_detail_boss.text = "%s  %s" % [
-			str(planet.get("boss_emoji", "?")),
-			str(planet.get("boss", "")),
-		]
+	_detail_boss.visible = true
+	_detail_boss.text = "%s  %s" % [
+		str(planet.get("boss_emoji", "?")),
+		str(planet.get("boss", "")),
+	]
 
-	var cleared := 10 if patrol else maxi(0, display_enemy - 1)
-	if viewing_wh and not patrol:
+	var cleared := maxi(0, display_enemy - 1)
+	if viewing_wh:
 		cleared = maxi(0, enemy_idx - 1)
-	if not patrol and not viewing_wh:
-		if pid != active:
-			cleared = 10 if pid < active else 0
+	elif pid != active:
+		cleared = 10 if pid < active else 0
 
-	if patrol:
-		_detail_cleared_lab.text = "FARM"
-		_detail_cleared_lab.add_theme_color_override("font_color", Color("#FCD34D", 0.85))
-		_detail_cleared_val.text = "~%s%%" % patrol_pct
-		_detail_cleared_val.add_theme_color_override("font_color", Color("#FDE68A"))
-	else:
-		_detail_cleared_lab.text = "CLEARED"
-		_detail_cleared_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-		_detail_cleared_val.text = "%s/10" % cleared
-		_detail_cleared_val.add_theme_color_override("font_color", tint)
+	_detail_cleared_lab.text = "CLEARED"
+	_detail_cleared_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	_detail_cleared_val.text = "%s/10" % cleared
+	_detail_cleared_val.add_theme_color_override("font_color", tint)
 
 	_detail_progress.value = cleared
-	ClientUi.apply_hp_bar(_detail_progress, Color("#FBBF24") if patrol else tint)
+	ClientUi.apply_hp_bar(_detail_progress, tint)
 
 	_detail_desc.text = str(planet.get("desc", ""))
 
-	_mode_banner.visible = patrol
-	if patrol:
-		_mode_label.text = "📡  Cleared world — farm without advancing."
+	_mode_banner.visible = false
 
 	var ship_mod := str(planet.get("ship_mod", ""))
-	_reward_banner.visible = (not patrol) and not ship_mod.is_empty()
+	_reward_banner.visible = not ship_mod.is_empty()
 	if _reward_banner.visible:
 		_reward_banner.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 			Color(tint, 0.08), Color(tint, 0.28), 10, 1
@@ -545,17 +529,13 @@ func _update_detail() -> void:
 		_detail_reward.text = "Boss reward · %s" % ship_mod
 		_detail_reward.add_theme_color_override("font_color", Color("#FDE68A", 0.95))
 
-	# Encounter cells — for wormhole/story front use currentEnemy; patrol marks all farmable
+	# Encounter cells — active node highlights the current enemy; other worlds show cleared/locked.
 	for i in range(1, 11):
 		var is_boss := i == 10
-		var is_current := (not patrol) and i == display_enemy
-		var is_cleared := (not patrol) and i < display_enemy
-		var locked := (not patrol) and i > display_enemy
-		if patrol:
-			is_current = false
-			is_cleared = false
-			locked = false
-		elif not viewing_wh and pid != active:
+		var is_current := i == display_enemy
+		var is_cleared := i < display_enemy
+		var locked := i > display_enemy
+		if not viewing_wh and pid != active:
 			if pid < active:
 				is_cleared = true
 				is_current = false
@@ -564,39 +544,36 @@ func _update_detail() -> void:
 				locked = true
 				is_cleared = false
 				is_current = false
-		_encounter_grid.add_child(_enc_cell(i, is_boss, is_current, is_cleared, locked, patrol))
+		_encounter_grid.add_child(_enc_cell(i, is_boss, is_current, is_cleared, locked))
 
-	_update_actions(viewing_wh, patrol, display_enemy)
+	var locked_ahead := (not viewing_wh) and pid > active
+	_update_actions(fightable, locked_ahead, display_enemy)
 
 
-func _update_actions(wormhole: bool, patrol: bool, enemy_idx: int) -> void:
+func _update_actions(fightable: bool, locked_ahead: bool, enemy_idx: int) -> void:
 	var cooldown := DungeonManager.cooldown_ms()
-	var patrol_pct := int(round(DungeonRules.PATROL_REWARD_MULT * 100.0))
 
 	_cooldown_bar.visible = cooldown > 0
 	if cooldown > 0:
 		_cooldown_lab.text = "⏱  Cooldown %s" % DungeonRules.format_ms(cooldown)
 
-	_fight_btn.disabled = cooldown > 0 or _busy
+	_fight_btn.disabled = cooldown > 0 or _busy or not fightable
 
-	if patrol:
-		_fight_btn.text = "📡  Patrol · %s%%" % patrol_pct
+	if fightable:
+		_fight_btn.text = "⚔  Fight %s%s" % [
+			enemy_idx, " · BOSS" if enemy_idx == DungeonRules.ENEMIES_PER_PLANET else "",
+		]
+		ClientUi.apply_primary_button(_fight_btn)
+	elif locked_ahead:
+		_fight_btn.text = "🔒  Locked"
 		ClientUi.apply_ghost_button(_fight_btn)
-		_fight_btn.add_theme_color_override("font_color", Color("#FEF3C7"))
-	elif wormhole:
-		_fight_btn.text = "⚔  Fight %s%s" % [
-			enemy_idx, " · BOSS" if enemy_idx == DungeonRules.ENEMIES_PER_PLANET else "",
-		]
-		ClientUi.apply_primary_button(_fight_btn)
 	else:
-		_fight_btn.text = "⚔  Fight %s%s" % [
-			enemy_idx, " · BOSS" if enemy_idx == DungeonRules.ENEMIES_PER_PLANET else "",
-		]
-		ClientUi.apply_primary_button(_fight_btn)
+		_fight_btn.text = "✓  Cleared"
+		ClientUi.apply_ghost_button(_fight_btn)
 
 
 func _enc_cell(
-	idx: int, is_boss: bool, is_current: bool, is_cleared: bool, locked: bool, patrol: bool
+	idx: int, is_boss: bool, is_current: bool, is_cleared: bool, locked: bool
 ) -> PanelContainer:
 	var border := Color(0.35, 0.4, 0.5, 0.45)
 	var bg := Color(0.06, 0.07, 0.1, 0.95)
@@ -613,12 +590,6 @@ func _enc_cell(
 		icon_col = Color("#FCD34D")
 		label = "BOSS"
 		label_col = Color("#FDE68A")
-	elif patrol:
-		border = Color("#F59E0B", 0.35)
-		bg = Color(0.1, 0.07, 0.03, 0.9)
-		icon = "⚔"
-		icon_col = Color("#FCD34D")
-		label_col = Color("#FCD34D")
 	elif is_current:
 		border = Color(ClientUi.CYAN, 0.7)
 		bg = Color(0.04, 0.1, 0.12, 0.96)
@@ -648,7 +619,7 @@ func _enc_cell(
 	col.add_theme_constant_override("separation", 2)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	cell.add_child(col)
-	if is_current and not patrol:
+	if is_current:
 		var next := Label.new()
 		next.text = "NEXT"
 		next.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -686,8 +657,8 @@ func _enc_cell(
 	return cell
 
 
-func _on_planet_pressed(planet_id: int, patrol: bool) -> void:
-	DungeonManager.select_planet(planet_id, patrol, false)
+func _on_planet_pressed(planet_id: int) -> void:
+	DungeonManager.select_planet(planet_id, false)
 	_populate_meta()
 
 
@@ -702,9 +673,9 @@ func _on_zoom_changed(zooming: bool) -> void:
 func _return_to_front() -> void:
 	var active := DungeonManager.current_planet_id()
 	if active > 10:
-		DungeonManager.select_planet(active, false, true)
+		DungeonManager.select_planet(active, true)
 	else:
-		DungeonManager.select_planet(active, false, false)
+		DungeonManager.select_planet(active, false)
 	if _map_stage:
 		_map_stage.clear_zoom()
 	_populate_meta()
@@ -713,7 +684,7 @@ func _return_to_front() -> void:
 func _on_wormhole() -> void:
 	var active := DungeonManager.current_planet_id()
 	var depth := maxi(1, active - 10)
-	DungeonManager.select_planet(10 + depth, false, true)
+	DungeonManager.select_planet(10 + depth, true)
 	_populate_meta()
 
 
@@ -734,7 +705,13 @@ func _on_fight() -> void:
 	var prep: Dictionary = await DungeonManager.prepare_fight()
 	_busy = false
 	if not prep.ok:
-		_set_status(str(prep.get("error", "Cannot fight")), true)
+		var err := str(prep.get("error", "Cannot fight"))
+		var low := err.to_lower()
+		if low.contains("failed") or low.contains("network") or low.contains("timeout"):
+			_set_status(err, true)
+		else:
+			Notify.blocked(err)
+			_set_status("")
 		_populate_meta()
 		return
 	GameManager.go_galaxy_combat()
@@ -744,14 +721,20 @@ func _on_skip() -> void:
 	if _busy:
 		return
 	if DungeonManager.cooldown_ms() <= 0:
-		_set_status("No cooldown to skip.")
+		Notify.blocked("No cooldown to skip")
 		return
 	_busy = true
 	_set_status("Skipping cooldown…")
 	var res: Dictionary = await DungeonManager.skip_cooldown()
 	_busy = false
 	if not res.ok:
-		_set_status(str(res.get("error", "Skip failed")), true)
+		var err := str(res.get("error", "Skip failed"))
+		var low := err.to_lower()
+		if low.contains("failed") or low.contains("network") or low.contains("timeout"):
+			_set_status(err, true)
+		else:
+			Notify.blocked(err)
+			_set_status("")
 	else:
 		_set_status("")
 		_populate()

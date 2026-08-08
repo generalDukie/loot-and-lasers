@@ -29,15 +29,13 @@ export const DUNGEON_CONTINUE_COST = 0;
 /** @deprecated use DUNGEON_CONTINUE_COST */
 export const DUNGEON_REVIVE_COST = DUNGEON_CONTINUE_COST;
 export const DUNGEON_EXTRA_LIFE_COST = DUNGEON_CONTINUE_COST;
-/** Shared post-sim cooldown for all dungeon / patrol / wormhole fights (1 hour). */
+/** Shared post-sim cooldown for all dungeon / wormhole fights (1 hour). */
 export const DUNGEON_BATTLE_COOLDOWN_MS = 60 * 60 * 1000;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_LOSS_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 export const DUNGEON_SKIP_COST = 25; // Nova crystals to skip the cooldown
-/** Patrol (cleared-world) reward multiplier */
-export const DUNGEON_PATROL_REWARD_MULT = 0.4;
 /** Milestone chest every N node clears */
 export const DUNGEON_MILESTONE_EVERY = 5;
 
@@ -230,15 +228,13 @@ export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
 
 /**
  * Rewards for clearing (or failing) a dungeon enemy.
- * @param {{ patrol?: boolean, className?: string }} opts — patrol = cleared-world farm (reduced payout, no ship mods)
+ * @param {{ className?: string }} opts
  */
 export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts = {}) {
   const isBoss = enemyIndex === DUNGEON_ENEMIES_PER_PLANET;
-  const patrol = !!opts.patrol;
   const className = opts.className;
-  const mult = patrol ? DUNGEON_PATROL_REWARD_MULT : 1;
   const enemyLevel = getDungeonEnemyLevel(planet?.id, enemyIndex);
-  const dru = getEnemyDru(planet?.id, enemyIndex) * mult;
+  const dru = getEnemyDru(planet?.id, enemyIndex);
 
   if (!won) {
     return {
@@ -246,7 +242,6 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
       stardust: 0,
       item: null,
       isBoss,
-      patrol,
       consolation: false,
       dru: 0,
       enemyLevel,
@@ -256,11 +251,11 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
   const { experience, stardust } = druToRewards(dru, enemyLevel);
 
   let item = null;
-  if (!patrol && isBoss) {
+  if (isBoss) {
     const tier = Math.min(3, Math.floor(((planet.id || 1) - 1) / 3));
     const rarities = ["rare", "epic", "epic", "legendary"];
     item = generateItem(rollItemRarity(rarities[tier], charLevel), Math.max(1, charLevel), undefined, className);
-  } else if (Math.random() < (patrol ? 0.12 : 0.25)) {
+  } else if (Math.random() < 0.25) {
     const rarity = rollItemRarity(Math.random() < 0.12 ? "uncommon" : "common", charLevel);
     item = generateItem(rarity, Math.max(1, charLevel), undefined, className);
   }
@@ -270,7 +265,6 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
     stardust,
     item,
     isBoss,
-    patrol,
     consolation: false,
     dru: Math.round(dru * 100) / 100,
     enemyLevel,
@@ -281,7 +275,7 @@ export function dungeonCooldownMs(_won) {
   return DUNGEON_BATTLE_COOLDOWN_MS;
 }
 
-/** Milestone chest every N career node clears (story + patrol). */
+/** Milestone chest every N career node clears. */
 export function rollMilestoneChest(character, charLevel) {
   const next = (character.dungeon_nodes_cleared || 0) + 1;
   if (next % DUNGEON_MILESTONE_EVERY !== 0) return { nodesCleared: next, item: null };

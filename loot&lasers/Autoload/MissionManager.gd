@@ -19,9 +19,6 @@ signal mission_claimed(result: Dictionary)
 signal mission_claim_failed(error: String)
 signal reward_received(reward: Dictionary)
 
-const BOARD_CFG := "user://godot_mission_board.cfg"
-## Bump when board shape changes (e.g. explore art no longer slot-tied).
-const BOARD_CACHE_VERSION := 2
 const STATUS_MIN_INTERVAL_SEC := 2.0
 ## Skip Character GET on rapid page hops when GameManager already has this character.
 const CHARACTER_REFRESH_TTL_MS := 20000
@@ -132,8 +129,10 @@ func invalidate_character_cache() -> void:
 	_character_refresh_id = ""
 
 
-## The board is display-only, matching the web client. Node snapshots and validates
-## all authoritative costs/rewards when LaunchMission is called.
+## Node is the single source of truth for the board. It generates + persists the
+## offers (stable across reconnect/page hops) and returns the authoritative
+## gameplay-relevant preview values; the client only renders them and never invents
+## or recomputes mission duration / Fuel / XP / Stardust / efficiency.
 func ensure_board(force_reroll: bool = false) -> Array:
 	var character: Dictionary = GameManager.active_character
 	var cid := str(character.get("id", ""))
@@ -142,15 +141,16 @@ func ensure_board(force_reroll: bool = false) -> Array:
 		board_changed.emit(offers)
 		return offers
 
-	if not force_reroll:
-		var cached := _load_board_cache(cid)
-		if not cached.is_empty():
-			offers = cached
-			board_changed.emit(offers)
-			return offers
-
-	offers = MissionBoard.build_board(character)
-	_save_board_cache(cid, offers)
+	var res: Dictionary = await GameApiClient.invoke("GetMissionBoard", {"reroll": force_reroll})
+	if not res.ok:
+		# Never invent offers client-side — surface an error and leave the board empty.
+		mission_error.emit(str(res.get("error", "Could not load contracts")))
+		offers = []
+		board_changed.emit(offers)
+		return offers
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	var raw: Variant = data.get("offers", [])
+	offers = raw if typeof(raw) == TYPE_ARRAY else []
 	board_changed.emit(offers)
 	return offers
 
@@ -159,10 +159,16 @@ func reroll_board() -> Array:
 	return await ensure_board(true)
 
 
-## Node snapshots the mission, reward definition, loot roll, timer, and Fuel debit.
+## Launch the selected offer by its authoritative server identity. The server loads
+## the persisted offer and derives duration / Fuel / efficiency itself — the client
+## sends only the offer id, never gameplay numbers.
 func launch_offer(offer: Dictionary) -> Dictionary:
-	var template := offer.duplicate(true)
-	var res: Dictionary = await GameApiClient.invoke("LaunchMission", {"template": template})
+	var offer_id := str(offer.get("offer_id", ""))
+	if offer_id.is_empty():
+		var err := "This contract is no longer available — refresh the board."
+		mission_error.emit(err)
+		return {"ok": false, "error": err, "data": {}}
+	var res: Dictionary = await GameApiClient.invoke("LaunchMission", {"board_offer_id": offer_id})
 	if not res.ok:
 		mission_error.emit(str(res.get("error", "Launch failed")))
 		return res
@@ -171,7 +177,6 @@ func launch_offer(offer: Dictionary) -> Dictionary:
 		active_mission = res.data["mission"]
 		active_mission_missing = false
 		active_mission_changed.emit(active_mission)
-	_clear_board_cache(str(GameManager.active_character.get("id", "")))
 	offers = []
 	board_changed.emit(offers)
 	return res
@@ -691,39 +696,3 @@ func _apply_wallet_from_data(data: Variant, source: String) -> bool:
 	return false
 
 
-## Non-authoritative display cache only — never used to invent missions.
-func _load_board_cache(character_id: String) -> Array:
-	var cfg := ConfigFile.new()
-	if cfg.load(BOARD_CFG) != OK:
-		return []
-	if int(cfg.get_value(character_id, "board_version", 0)) != BOARD_CACHE_VERSION:
-		return []
-	var raw: Variant = cfg.get_value(character_id, "offers", [])
-	if typeof(raw) != TYPE_ARRAY:
-		return []
-	# Reject legacy slot-tied boards missing per-mission art.
-	for row in raw:
-		if typeof(row) != TYPE_DICTIONARY:
-			return []
-		if not (row as Dictionary).has("explore_scene"):
-			return []
-	return raw
-
-
-func _save_board_cache(character_id: String, board: Array) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(BOARD_CFG)
-	cfg.set_value(character_id, "offers", board)
-	cfg.set_value(character_id, "board_version", BOARD_CACHE_VERSION)
-	cfg.set_value(character_id, "cache_source", "local_board")
-	cfg.set_value(character_id, "cached_at", Time.get_unix_time_from_system())
-	cfg.save(BOARD_CFG)
-
-
-func _clear_board_cache(character_id: String) -> void:
-	if character_id.is_empty():
-		return
-	var cfg := ConfigFile.new()
-	cfg.load(BOARD_CFG)
-	cfg.set_value(character_id, "offers", [])
-	cfg.save(BOARD_CFG)

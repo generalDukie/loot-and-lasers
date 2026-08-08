@@ -1238,7 +1238,8 @@ func _on_use_stim(item_id: String, item_name: String) -> void:
 	var res: Dictionary = await AuthManager.use_consumable(item_id)
 	_busy = false
 	if not res.ok:
-		_set_action_status(str(res.get("error", "Use failed")), true)
+		if not Notify.from_result(res):
+			_set_action_status(str(res.get("error", "Use failed")), true)
 		return
 	_set_action_status("Used %s." % item_name)
 	AudioManager.play_ui("stim")
@@ -1300,7 +1301,7 @@ func _can_drop_on_hero_display(data: Variant) -> bool:
 
 func _drop_on_hero_display(data: Variant) -> void:
 	if not _can_drop_on_hero_display(data):
-		_set_action_status("Cannot use that item on your operative.", true)
+		Notify.blocked("Can't use that here", "That item can't go on your operative")
 		return
 	var item_id := str(data.get("item_id", ""))
 	if item_id.is_empty():
@@ -1392,7 +1393,8 @@ func _on_equip(item_id: String) -> void:
 	var res: Dictionary = await AuthManager.equip_item(item_id)
 	_busy = false
 	if not res.ok:
-		_set_action_status(str(res.get("error", "Equip failed")), true)
+		if not Notify.from_result(res):
+			_set_action_status(str(res.get("error", "Equip failed")), true)
 		return
 	_set_action_status("Equipped.")
 	AudioManager.play_ui("equip")
@@ -1410,11 +1412,13 @@ func _on_unequip(item_id: String) -> void:
 	_busy = false
 	if not res.ok:
 		var err := str(res.get("error", "Unequip failed"))
-		_set_action_status(err, true)
 		if err.to_lower().contains("inventory full"):
+			Notify.blocked("Bag full", "Free a bag slot before unequipping")
 			await InventoryManager.prompt_bag_pressure(self, "Free a bag slot before unequipping.")
 			await StatsManager.refresh()
 			_refresh_after_inventory_change(true)
+		elif not Notify.from_result(res):
+			_set_action_status(err, true)
 		return
 	_set_action_status("Unequipped.")
 	await StatsManager.refresh()
@@ -1886,7 +1890,10 @@ func _flush_hold_queue() -> void:
 		var err := str(res.get("error", "BuyAttribute failed"))
 		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
 			err = str(res.data["error"])
-		_status.text = err
+		if Notify.is_player_fault(res):
+			Notify.blocked(err)
+		else:
+			_status.text = err
 		_hold_stat = ""
 		_refresh_values()
 		return

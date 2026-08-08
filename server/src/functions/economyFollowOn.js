@@ -80,7 +80,6 @@ import {
   rollDungeonRegularRarity,
   rollDungeonBossRarity,
   DUNGEON_ENEMIES_PER_PLANET,
-  DUNGEON_PATROL_REWARD_MULT,
   DUNGEON_MILESTONE_EVERY,
   DUNGEON_STORY_PLANETS,
   getEnemyDru,
@@ -1196,7 +1195,7 @@ export const PayDungeonContinue = wrap((user, body = {}) => {
 
 /**
  * Authoritative dungeon/wormhole combat simulation (Restoration 08 + 14).
- * Idempotent for the same planet_id + enemy_index + patrol keys.
+ * Idempotent for the same planet_id + enemy_index keys.
  */
 export const PrepareDungeonCombat = wrap((user, body) => {
   assertDungeonClientSafe(body);
@@ -1214,7 +1213,6 @@ export const PrepareDungeonCombat = wrap((user, body) => {
   const encounter = assertDungeonProgressAllowed(ch, {
     planetId: body.planet_id ?? ch.dungeon_planet ?? 1,
     enemyIndex: body.enemy_index ?? ch.dungeon_enemy ?? 1,
-    patrol: !!body.patrol,
     viewingWormhole: !!body.viewing_wormhole,
   });
 
@@ -1222,7 +1220,6 @@ export const PrepareDungeonCombat = wrap((user, body) => {
   const willReplay = pendingCombatMatches(existingPending, {
     planetId: encounter.planetId,
     enemyIndex: encounter.enemyIndex,
-    patrol: encounter.patrol,
   });
   // New fights require a clear shared cooldown; replaying an unfinished pending combat does not.
   if (!willReplay) {
@@ -1232,7 +1229,6 @@ export const PrepareDungeonCombat = wrap((user, body) => {
   const prepared = prepareDungeonCombatForCharacter(ch, {
     planetId: encounter.planetId,
     enemyIndex: encounter.enemyIndex,
-    patrol: encounter.patrol,
     viewingWormhole: encounter.viewingWormhole,
     rng: secureRandom,
   });
@@ -1252,7 +1248,6 @@ export const PrepareDungeonCombat = wrap((user, body) => {
     combat_id: prepared.combat.combat_id,
     planet_id: encounter.planetId,
     enemy_index: encounter.enemyIndex,
-    patrol: encounter.patrol,
     viewing_wormhole: encounter.viewingWormhole,
     ...pub,
     enemy: pub.enemy,
@@ -1273,7 +1268,6 @@ export const FinishDungeonBattle = wrap((user, body) => {
     DUNGEON_ENEMIES_PER_PLANET,
     Math.max(1, Math.floor(Number(body.enemy_index) || ch.dungeon_enemy || 1)),
   );
-  const patrol = !!body.patrol;
   const viewingWormhole = !!body.viewing_wormhole;
   const combatIdReq = body.combat_id ? String(body.combat_id).trim() : "";
 
@@ -1298,7 +1292,6 @@ export const FinishDungeonBattle = wrap((user, body) => {
   if (!pendingCombatMatches(pending, {
     planetId,
     enemyIndex,
-    patrol,
     combatId: combatIdReq || null,
   })) {
     httpErr(409, "No matching pending dungeon combat", "DUNGEON_NO_PENDING");
@@ -1307,7 +1300,6 @@ export const FinishDungeonBattle = wrap((user, body) => {
   assertDungeonProgressAllowed(ch, {
     planetId,
     enemyIndex,
-    patrol,
     viewingWormhole,
   });
 
@@ -1330,9 +1322,8 @@ export const FinishDungeonBattle = wrap((user, body) => {
     };
   }
 
-  const mult = patrol ? DUNGEON_PATROL_REWARD_MULT : 1;
   const enemyLevel = getDungeonEnemyLevel(planetId, enemyIndex);
-  const dru = getEnemyDru(planetId, enemyIndex) * mult;
+  const dru = getEnemyDru(planetId, enemyIndex);
   const isBoss = enemyIndex === DUNGEON_ENEMIES_PER_PLANET;
   let stardust = 0;
   let experience = 0;
@@ -1354,58 +1345,53 @@ export const FinishDungeonBattle = wrap((user, body) => {
     patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + stardust;
     patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + stardust;
 
-    if (!patrol) {
-      patch.dungeon_clears = (ch.dungeon_clears || 0) + (isBoss ? 1 : 0);
-      if (isBoss) {
-        if (planetId > DUNGEON_STORY_PLANETS) {
-          patch.dungeon_planet = Math.max(ch.dungeon_planet || planetId, planetId) + 1;
-          patch.dungeon_enemy = 1;
-        } else if (planetId === DUNGEON_STORY_PLANETS) {
-          const grant = grantFrontierShipMod(ch, planetId);
-          patch.ship_mods = grant.ship_mods;
-          if (grant.ship_mod_loadouts) patch.ship_mod_loadouts = grant.ship_mod_loadouts;
-          unlockedShipMod = grant.unlockedLabel;
-          if (grant.consolationStardust) {
-            patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + grant.consolationStardust;
-            patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + grant.consolationStardust;
-          }
-          patch.dungeon_planet = DUNGEON_STORY_PLANETS + 1;
-          patch.dungeon_enemy = 1;
-          patch.highest_sector = Math.max(ch.highest_sector || 1, DUNGEON_STORY_PLANETS);
-        } else {
-          patch.dungeon_planet = planetId + 1;
-          patch.dungeon_enemy = 1;
-          patch.highest_sector = Math.max(ch.highest_sector || 1, planetId + 1);
-          const grant = grantFrontierShipMod(ch, planetId);
-          patch.ship_mods = grant.ship_mods;
-          if (grant.ship_mod_loadouts) patch.ship_mod_loadouts = grant.ship_mod_loadouts;
-          unlockedShipMod = grant.unlockedLabel;
-          if (grant.consolationStardust) {
-            patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + grant.consolationStardust;
-            patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + grant.consolationStardust;
-          }
+    patch.dungeon_clears = (ch.dungeon_clears || 0) + (isBoss ? 1 : 0);
+    if (isBoss) {
+      if (planetId > DUNGEON_STORY_PLANETS) {
+        patch.dungeon_planet = Math.max(ch.dungeon_planet || planetId, planetId) + 1;
+        patch.dungeon_enemy = 1;
+      } else if (planetId === DUNGEON_STORY_PLANETS) {
+        const grant = grantFrontierShipMod(ch, planetId);
+        patch.ship_mods = grant.ship_mods;
+        if (grant.ship_mod_loadouts) patch.ship_mod_loadouts = grant.ship_mod_loadouts;
+        unlockedShipMod = grant.unlockedLabel;
+        if (grant.consolationStardust) {
+          patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + grant.consolationStardust;
+          patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + grant.consolationStardust;
         }
+        patch.dungeon_planet = DUNGEON_STORY_PLANETS + 1;
+        patch.dungeon_enemy = 1;
+        patch.highest_sector = Math.max(ch.highest_sector || 1, DUNGEON_STORY_PLANETS);
       } else {
-        patch.dungeon_enemy = Math.min(DUNGEON_ENEMIES_PER_PLANET, enemyIndex + 1);
+        patch.dungeon_planet = planetId + 1;
+        patch.dungeon_enemy = 1;
+        patch.highest_sector = Math.max(ch.highest_sector || 1, planetId + 1);
+        const grant = grantFrontierShipMod(ch, planetId);
+        patch.ship_mods = grant.ship_mods;
+        if (grant.ship_mod_loadouts) patch.ship_mod_loadouts = grant.ship_mod_loadouts;
+        unlockedShipMod = grant.unlockedLabel;
+        if (grant.consolationStardust) {
+          patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + grant.consolationStardust;
+          patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + grant.consolationStardust;
+        }
       }
+    } else {
+      patch.dungeon_enemy = Math.min(DUNGEON_ENEMIES_PER_PLANET, enemyIndex + 1);
     }
 
-    // Gear loot — first story defeat only (patrol = already cleared, no gear).
+    // Gear loot on each node clear.
     // RNG via secureRandom (Node authority); settle-once via wallet_operations.
-    let gear = null;
-    if (!patrol) {
-      const itemLevel = Math.max(1, enemyLevel || ch.level || 1);
-      const rarity = isBoss
-        ? rollDungeonBossRarity(secureRandom)
-        : rollDungeonRegularRarity(secureRandom);
-      gear = randomItem(rarity, itemLevel, undefined, secureRandom, ch.class);
-    }
+    const itemLevel = Math.max(1, enemyLevel || ch.level || 1);
+    const gearRarity = isBoss
+      ? rollDungeonBossRarity(secureRandom)
+      : rollDungeonRegularRarity(secureRandom);
+    const gear = randomItem(gearRarity, itemLevel, undefined, secureRandom, ch.class);
     const grantCtx = { accountId: user.id, characterId: ch.id };
     if (gear) {
       collectGrant(grantOrCompensate(ch, stripShopNoise(gear), patch), itemsGranted, pendingLoot, grantCtx);
     }
 
-    if (secureRandom() < (patrol ? 0.1 : 0.2)) {
+    if (secureRandom() < 0.2) {
       const cons = stripShopNoise(randomConsumable(secureRandom));
       collectGrant(grantOrCompensate(ch, cons, patch), itemsGranted, pendingLoot, grantCtx);
     }
@@ -1491,7 +1477,6 @@ export const FinishDungeonBattle = wrap((user, body) => {
       dru: Math.round(dru * 100) / 100,
       enemyLevel,
       isBoss,
-      patrol,
     },
     items: itemsGranted,
     pending_loot: pendingLoot,
@@ -1504,7 +1489,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
   const dungeon = serializeDungeonState(character, nowMs, today);
   try {
     const pname = character.name;
-    const label = patrol ? "patrolled" : isBoss ? "conquered a boss on" : "cleared an enemy on";
+    const label = isBoss ? "conquered a boss on" : "cleared an enemy on";
     entities.GalaxyNews.create({
       message: won
         ? `⚔️ ${pname} ${label} sector ${planetId}.`

@@ -23,8 +23,9 @@ double settlement. Inventory overflow uses `pending_loot` via
 
 ### 3. Existing mission XP implementation
 
-- Primitive: `missionXpPerFuelBase` / `MissionXPPerFuel` (closed form)
-- Scaled: `getMissionXpPerFuel` = primitive × `XP_STARDUST_SCALE` (10)
+- Authoritative XP/Fuel: `getMissionXpPerFuel(level)` = `ROUND(designCurve) × 10`
+  (single function; the ×10 game scale is a final step after rounding — there is
+  no separate pre-scale `missionXpPerFuelBase`)
 - Mission: `computeMissionXpFromFuel(fuel, level, xpEfficiency)`
 - Grant: `applyXpToCharacter` inside claim `deliver`
 
@@ -36,10 +37,10 @@ Exactly once inside `computeMissionXpFromFuel`:
 
 ### 5. Global XP-scale ordering
 
-`XP_STARDUST_SCALE` is applied inside `getMissionXpPerFuel` **before**
-mission rebalance and efficiency. Not applied again in ClaimMission.
+The ×10 game scale is applied inside `getMissionXpPerFuel` (as `round(design) × 10`)
+**before** mission rebalance and efficiency. Not applied again in ClaimMission.
 
-Order: **primitive → global scale → fuel × efficiency × 0.85 → round**.
+Order: **round(design curve) → ×10 game scale → fuel × efficiency × 0.85 → round**.
 
 ### 6. Existing Stardust formula implementation
 

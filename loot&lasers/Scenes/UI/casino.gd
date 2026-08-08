@@ -1108,7 +1108,7 @@ func _play_dice() -> void:
 	if _busy:
 		return
 	if not _sd_wager_valid() or _dice_choice.is_empty():
-		_set_status("Select a valid wager and Low / Seven / High.", ClientUi.DANGER)
+		Notify.blocked("Pick a wager and a bet", "Choose a valid wager and Low / Seven / High")
 		return
 	_busy = true
 	_dice_skip_requested = false
@@ -1191,7 +1191,7 @@ func _play_wheel() -> void:
 	if _busy:
 		return
 	if not _sd_wager_valid():
-		_set_status("Select a valid stardust wager.", ClientUi.DANGER)
+		Notify.blocked("Invalid wager", "Select a valid Stardust wager")
 		return
 	_busy = true
 	_refresh_action_enabled()
@@ -1320,10 +1320,10 @@ func _refine_start() -> void:
 	if _busy:
 		return
 	if not _nova_wager_valid():
-		_set_status("Select a valid Nova wager (100–1000).", ClientUi.DANGER)
+		Notify.blocked("Invalid wager", "Select a valid Nova wager (100–1000)")
 		return
 	if not CasinoManager.active_session(GAME_REFINE).is_empty():
-		_set_status("Active refining session already exists — open Crystal Refining to continue.", ClientUi.WARNING)
+		Notify.blocked("Session already active", "Open Crystal Refining to continue")
 		_restore_refine_session()
 		return
 	_busy = true
@@ -1491,10 +1491,10 @@ func _cache_start() -> void:
 	if _busy:
 		return
 	if not _nova_wager_valid():
-		_set_status("Select a valid Nova wager (100–1000).", ClientUi.DANGER)
+		Notify.blocked("Invalid wager", "Select a valid Nova wager (100–1000)")
 		return
 	if not CasinoManager.active_session(GAME_CACHE).is_empty():
-		_set_status("Active cache session already exists — continue that round.", ClientUi.WARNING)
+		Notify.blocked("Session already active", "Continue that round")
 		_restore_cache_session()
 		return
 	_busy = true
@@ -1652,7 +1652,8 @@ func _payout_line(gross: int, net: int, currency: String) -> String:
 
 
 func _show_error(res: Dictionary) -> void:
-	_set_status(str(res.get("error", "Wager failed")), ClientUi.DANGER)
+	if not Notify.from_result(res):
+		_set_status(str(res.get("error", "Wager failed")), ClientUi.DANGER)
 	_refresh_balances()
 
 

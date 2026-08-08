@@ -80,9 +80,16 @@ export function randomItemForClass(className) {
     randomItem(rarity, level, type, typeof rng === "function" ? rng : Math.random, className);
 }
 
-/** XP to next: closed-form base × smooth Post200Growth, then × XP_STARDUST_SCALE once.
- * BaseXPToNext(L) = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
- * Post200Growth(L) = 1 + A×X^P + B×X^Q  where X = MAX(0, (L-200)/100)
+/** XP required to reach the next level, on the game's actual scale.
+ *
+ * The design curve is a rounded polynomial × a smooth Post200Growth. The final
+ * ×10 game scale is applied AFTER the integer rounding of that curve. This is
+ * deliberate: round(curve) × 10 is NOT the same as round(curve × 10), so the
+ * scale is kept as an explicit final step to preserve exact historical outputs.
+ * There is intentionally no separate pre-scale ("base") function.
+ *
+ * DesignXPToNext(L) = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
+ * Post200Growth(L)  = 1 + A×X^P + B×X^Q  where X = MAX(0, (L-200)/100)
  */
 export const XP_REQUIREMENT_MULTIPLIER = 1.35;
 export const POST_200_START_LEVEL = 200;
@@ -98,27 +105,26 @@ export function post200Growth(level) {
   return 1 + POST_200_A * X ** POST_200_P + POST_200_B * X ** POST_200_Q;
 }
 
-export function xpToNextBase(level) {
+export function expForLevel(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
-  const base = Math.max(
+  const design = Math.max(
     1,
     Math.round(XP_REQUIREMENT_MULTIPLIER * 2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683))
   );
-  return Math.max(1, Math.round(base * post200Growth(L)));
+  const units = Math.max(1, Math.round(design * post200Growth(L)));
+  return units * 10;
 }
 
-export function expForLevel(level) {
-  return xpToNextBase(level) * XP_STARDUST_SCALE;
-}
-
-/** Mission XP/Fuel design formula (pre-scale). Works for all L>=1 — no waypoints. */
+/** Mission XP per 1 Fuel, on the game's actual scale. Works for all L>=1 (no waypoints).
+ *  Rounds the design curve to an integer, then applies the ×10 game scale as a
+ *  final step (round(curve) × 10) to preserve exact historical outputs. */
 export const XP_PER_FUEL_LINEAR_COEFFICIENT = 0.5;
 export const XP_PER_FUEL_POWER_COEFFICIENT = 0.032;
 export const XP_PER_FUEL_EXPONENT = 1.67;
 
-export function missionXpPerFuelBase(level = 1) {
+export function getMissionXpPerFuel(level = 1) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
-  return Math.max(
+  const design = Math.max(
     1,
     Math.round(
       10
@@ -126,11 +132,7 @@ export function missionXpPerFuelBase(level = 1) {
       + XP_PER_FUEL_POWER_COEFFICIENT * (L ** XP_PER_FUEL_EXPONENT - 1)
     )
   );
-}
-
-/** Mission XP per 1 fuel; × XP_STARDUST_SCALE exactly once. */
-export function getMissionXpPerFuel(level = 1) {
-  return missionXpPerFuelBase(level) * XP_STARDUST_SCALE;
+  return design * 10;
 }
 
 // StardustPerFuel / getMissionStardustPerFuel — see stardustEconomy.js (re-exported above).

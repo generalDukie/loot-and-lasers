@@ -17,15 +17,19 @@ Canonical closed form in [`server/src/shared/rewards.js`](../server/src/shared/r
 (mirrored in [`src/lib/gameData.js`](../src/lib/gameData.js)):
 
 ```
-Base = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
+Base    = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
 Post200Growth = 1 + A×X^P + B×X^Q , X = MAX(0,(L-200)/100)
-xpToNextBase = ROUND(Base × Post200Growth)
-expForLevel = xpToNextBase × 10
+units   = ROUND(Base × Post200Growth)
+expForLevel = units × 10   // ×10 game scale applied AFTER rounding, as a final step
 ```
+
+`expForLevel` is a single authoritative function (there is no separate pre-scale
+`xpToNextBase`). The ×10 stays as an explicit final step because
+`round(x) × 10 ≠ round(x × 10)`; folding it into the curve would change outputs.
 
 ## 3. `XP_REQUIREMENT_MULTIPLIER`
 
-Applied **exactly once** inside `xpToNextBase` (`1.35`). Not applied again at exit.
+Applied **exactly once** inside `expForLevel` (`1.35`). Not applied again at exit.
 
 ## 4. Post-Level-200 fitted coefficients
 

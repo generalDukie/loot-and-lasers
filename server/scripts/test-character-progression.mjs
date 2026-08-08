@@ -4,7 +4,6 @@
 import assert from "node:assert/strict";
 import {
   expForLevel,
-  xpToNextBase,
   XP_REQUIREMENT_MULTIPLIER,
   POST_200_A,
   POST_200_P,
@@ -38,16 +37,16 @@ let prev = 0;
 for (const L of levels) {
   const req = expForLevel(L);
   assert.ok(Number.isInteger(req) && req >= 1, `expForLevel(${L}) integer >= 1`);
-  assert.equal(req, xpToNextBase(L) * 10, `scale applied once at L${L}`);
+  assert.equal(req % 10, 0, `game scale multiple at L${L}`);
   assert.ok(req >= prev, `monotonic at L${L}`);
   prev = req;
 }
 assert.ok(expForLevel(501) > expForLevel(500));
 assert.ok(expForLevel(1000) > expForLevel(700));
 
-// Multiplier applied once: base without post200 at L1
+// Multiplier applied once: design curve (no post200 at L1) × 10 game scale.
 const l1Base = Math.round(1.35 * 2.106 * (1 ** 1.532) * (1 + (1 / 266) ** 3.683));
-assert.equal(xpToNextBase(1), Math.max(1, l1Base));
+assert.equal(expForLevel(1), Math.max(1, l1Base) * 10);
 
 // ── Grants ───────────────────────────────────────────────────
 const starter = {

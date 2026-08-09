@@ -18,8 +18,9 @@ function pick(arr, rng = Math.random) {
 
 /**
  * Soft end-of-mission foe.
- * Power = progressingPlayerAttributes(playerLevel) × 28% (base + on-level gear
- * fill), distributed by a hidden MIGHT / REFLEX / TECH archetype.
+ * Power = expectedPlayerAttributes(playerLevel) × 35% (EPA benchmark),
+ * distributed by a hidden MIGHT / REFLEX / TECH archetype. The low-level
+ * base-damage ramp (statEngine) still wraps this foe via missionEnemy/level.
  * Presentation (name/race/art) is independent. Combat uses player formulas via
  * a class family mapping with passives suppressed.
  */

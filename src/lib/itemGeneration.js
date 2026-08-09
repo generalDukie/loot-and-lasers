@@ -93,23 +93,17 @@ export const RARITY_MIN_STAT_SHARE = {
 export const LEGENDARY_MIN_STAT_SHARE = 0.1;
 
 /**
- * Rare normal-slot base budget anchors (authoritative).
- * BaseGearStatBudget(level) — before slot/rarity multipliers.
+ * Rare normal-slot base budget — one continuous, monotonic, infinitely scaling
+ * curve (no anchors / PCHIP / Level-500 breakpoint / cap):
+ *   BaseGearStatBudget(L) = ROUND(GEAR_BUDGET_LINEAR·L + GEAR_BUDGET_CURVE·√L + GEAR_BUDGET_FLOOR)
+ * Constants fit to the intended targets (L1=12 … L500=795):
+ *   GEAR_BUDGET_LINEAR — overall scale + permanent high-level per-level slope
+ *   GEAR_BUDGET_CURVE  — early/mid front-loading (√L bend)
+ *   GEAR_BUDGET_FLOOR  — Level-1 floor offset
  */
-export const BASE_GEAR_STAT_BUDGET_ANCHORS = Object.freeze([
-  [1, 12],
-  [10, 29],
-  [25, 57],
-  [50, 98],
-  [100, 167],
-  [200, 303],
-  [300, 468],
-  [400, 632],
-  [500, 795],
-]);
-
-export const BASE_GEAR_AT_500 = 795;
-export const BASE_GEAR_POST_500_SLOPE = 1.63;
+export const GEAR_BUDGET_LINEAR = 1.4079;
+export const GEAR_BUDGET_CURVE = 2.2988;
+export const GEAR_BUDGET_FLOOR = 8.277;
 
 /**
  * Full equipped-set attribute totals (balance reference for progressing-player
@@ -130,56 +124,7 @@ export const FULL_SET_BUDGET_ANCHORS = [
 /** @deprecated full-set units; individual items use BaseGearStatBudget directly. */
 export const FULL_SET_SLOT_UNITS = 8.4;
 
-// ── Monotone cubic PCHIP (linear budget space) ───────────────
-
-function pchipSlopes(xs, ys) {
-  const n = xs.length;
-  const d = new Array(n).fill(0);
-  const delta = new Array(n - 1);
-  for (let i = 0; i < n - 1; i++) {
-    delta[i] = (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]);
-  }
-  d[0] = delta[0];
-  d[n - 1] = delta[n - 2];
-  for (let i = 1; i < n - 1; i++) {
-    if (delta[i - 1] === 0 || delta[i] === 0 || Math.sign(delta[i - 1]) !== Math.sign(delta[i])) {
-      d[i] = 0;
-    } else {
-      const w1 = 2 * (xs[i + 1] - xs[i]) + (xs[i] - xs[i - 1]);
-      const w2 = (xs[i + 1] - xs[i]) + 2 * (xs[i] - xs[i - 1]);
-      d[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i]);
-    }
-  }
-  return d;
-}
-
-function hermite(x, x0, x1, y0, y1, d0, d1) {
-  const h = x1 - x0;
-  const t = (x - x0) / h;
-  const t2 = t * t;
-  const t3 = t2 * t;
-  const h00 = 2 * t3 - 3 * t2 + 1;
-  const h10 = t3 - 2 * t2 + t;
-  const h01 = -2 * t3 + 3 * t2;
-  const h11 = t3 - t2;
-  return h00 * y0 + h10 * h * d0 + h01 * y1 + h11 * h * d1;
-}
-
-function pchipAnchors(anchors, x) {
-  const pts = anchors.map(([a, b]) => [Number(a), Number(b)]);
-  if (!pts.length) return 0;
-  const X = Math.max(pts[0][0], Number(x) || pts[0][0]);
-  for (const [ax, ay] of pts) {
-    if (X === ax) return Math.round(ay);
-  }
-  if (X < pts[0][0]) return Math.round(pts[0][1]);
-  const xs = pts.map((p) => p[0]);
-  const ys = pts.map((p) => p[1]);
-  const d = pchipSlopes(xs, ys);
-  let i = 0;
-  while (i < xs.length - 2 && X > xs[i + 1]) i += 1;
-  return Math.max(1, Math.round(hermite(X, xs[i], xs[i + 1], ys[i], ys[i + 1], d[i], d[i + 1])));
-}
+// ── Piecewise-linear waypoint helper (full-set reference only) ──
 
 function lerpWaypoints(level, points) {
   const L = Math.max(1, Number(level) || 1);
@@ -200,13 +145,15 @@ function lerpWaypoints(level, points) {
 
 /**
  * Rare normal-slot base budget at item level (before slot/rarity multipliers).
+ * One continuous formula for every level — the same expression evaluates at
+ * L50, L500, L2000, and beyond (no breakpoint, lookup table, or cap).
  */
 export function BaseGearStatBudget(itemLevel) {
   const L = Math.max(1, Math.floor(Number(itemLevel) || 1));
-  if (L > 500) {
-    return Math.round(BASE_GEAR_AT_500 + BASE_GEAR_POST_500_SLOPE * (L - 500));
-  }
-  return pchipAnchors(BASE_GEAR_STAT_BUDGET_ANCHORS, L);
+  return Math.max(
+    1,
+    Math.round(GEAR_BUDGET_LINEAR * L + GEAR_BUDGET_CURVE * Math.sqrt(L) + GEAR_BUDGET_FLOOR),
+  );
 }
 
 /** Alias — Rare normal-slot base budget. */

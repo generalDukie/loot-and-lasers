@@ -7,8 +7,8 @@ extends RefCounted
 ## `MissionManager.ensure_board()` → `GetMissionBoard`, then renders the authoritative
 ## values the server returns.
 ##
-## What remains here is either pure presentation (duration formatting, rarity display
-## colours) or non-mission helpers still used by other pages:
+## What remains here is either pure presentation (duration formatting) or
+## non-mission helpers still used by other pages:
 ##   • `xp_per_fuel`         — used by ArenaRules for an Arena XP estimate.
 ##   • `collection_percentage` — used by stats.gd for the collection bonus readout.
 ## Do not reintroduce mission gameplay formulas here; Node is authoritative.
@@ -17,16 +17,6 @@ const XP_STARDUST_SCALE := 10
 const XP_PER_FUEL_LINEAR := 0.5
 const XP_PER_FUEL_POWER := 0.032
 const XP_PER_FUEL_EXP := 1.67
-
-## Rarity display order + colours for preview chips (presentation only).
-const RARITY_ORDER := ["common", "uncommon", "rare", "epic", "legendary"]
-const RARITY_COLORS := {
-	"common": Color("#9CA3AF"),
-	"uncommon": Color("#22C55E"),
-	"rare": Color("#3B82F6"),
-	"epic": Color("#A855F7"),
-	"legendary": Color("#F59E0B"),
-}
 
 
 ## Mission XP/Fuel (game scale). Mirrors server getMissionXpPerFuel: round(design) × 10.

@@ -82,7 +82,6 @@ import {
   remainingFuelDurationSeconds,
   MISSION_MIN_FUEL,
 } from "../../../src/lib/missionDuration.js";
-import { MISSION_GEAR_RARITY_WEIGHTS } from "../../../src/lib/stardustEconomy.js";
 import {
   MISSION_TEMPLATES,
   LOW_FUEL_TEMPLATES,
@@ -205,6 +204,9 @@ function computeMissionGains(character, mission, nexusBonus) {
   const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency, level);
   const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency, level);
   const chartXp = computeMissionXpFromFuel(fuelCost, level, xpEff);
+  // chartSd is the un-varied base (efficiency ignored inside the helper). We
+  // apply the independent Stardust variance (sdEff) here so both XP and Stardust
+  // carry their own 0.90–1.10 roll. stardustBase stays un-varied for junk value.
   const chartSd = computeMissionStardustFromFuel(fuelCost, level, sdEff);
   const baseXp = Math.round(chartXp * xpMult);
   return {
@@ -212,7 +214,7 @@ function computeMissionGains(character, mission, nexusBonus) {
     fuelCost,
     efficiency: sdEff,
     xpEfficiency: xpEff,
-    stardustGain: Math.round(chartSd * bonusMult * stardustMult),
+    stardustGain: Math.round(chartSd * sdEff * bonusMult * stardustMult),
     stardustBase: chartSd,
     xpBase: chartXp,
     xpGain: applyXpBonus(baseXp, percentage),
@@ -220,11 +222,82 @@ function computeMissionGains(character, mission, nexusBonus) {
   };
 }
 
+/**
+ * Finalize an offer's rewards ONCE at board generation against the snapshot
+ * character. Bakes ship mods, Collection %, and Nexus control into integer
+ * final_xp / final_stardust, plus the effective fuel_cost and the snapshot
+ * character_level. Independent 0.90–1.10 variance already lives in the offer's
+ * stardust_efficiency / xp_efficiency rolls. These exact integers are what the
+ * player sees on the board, what LaunchMission charges/stores, and what
+ * ClaimMission grants — never recomputed or re-rolled at claim time.
+ */
+function finalizeMissionRewards(snapshotChar, offer) {
+  const nexusBonus = resolveNexusBonus(snapshotChar.id);
+  const gains = computeMissionGains(snapshotChar, offer, nexusBonus);
+  return {
+    fuel_cost: gains.fuelCost,
+    final_xp: gains.xpGain,
+    final_stardust: gains.stardustGain,
+    character_level: snapshotChar.level || 1,
+  };
+}
+
+/**
+ * Requirement 5 — no two simultaneous offers may share an identical
+ * (fuel_cost, final_xp, final_stardust) tuple. Re-roll a colliding offer's
+ * variance a bounded number of times; if it still collides, deterministically
+ * nudge Stardust (then XP) by +1. Never loops unbounded.
+ */
+function dedupeOfferRewards(snapshotChar, offers, rng) {
+  const level = snapshotChar.level || 1;
+  const keyOf = (o) => `${o.fuel_cost}|${o.final_xp}|${o.final_stardust}`;
+  const seen = new Set();
+  for (const offer of offers) {
+    let tries = 0;
+    while (seen.has(keyOf(offer)) && tries < 20) {
+      offer.stardust_efficiency = rollMissionEfficiency(level, rng);
+      offer.xp_efficiency = rollMissionEfficiency(level, rng);
+      Object.assign(offer, finalizeMissionRewards(snapshotChar, offer));
+      tries += 1;
+    }
+    let guard = 0;
+    while (seen.has(keyOf(offer)) && guard < 64) {
+      offer.final_stardust += 1;
+      if (seen.has(keyOf(offer))) offer.final_xp += 1;
+      guard += 1;
+    }
+    seen.add(keyOf(offer));
+  }
+  return offers;
+}
+
+/**
+ * Read the finalized rewards stored on a Mission at launch. These are granted
+ * verbatim on a win and halved on a loss — never recomputed or re-rolled. Older
+ * in-flight missions created before reward finalization fall back to a one-time
+ * compute against the current character.
+ */
+function resolveMissionFinals(character, mission) {
+  const snapshotLevel = Number.isFinite(mission.character_level)
+    ? mission.character_level
+    : (character.level || 1);
+  let finalXp = Number.isFinite(mission.final_xp) ? mission.final_xp : null;
+  let finalStardust = Number.isFinite(mission.final_stardust) ? mission.final_stardust : null;
+  let fuelCost = typeof mission.fuel_cost === "number" ? mission.fuel_cost : null;
+  if (finalXp == null || finalStardust == null || fuelCost == null) {
+    const gains = computeMissionGains(character, mission, resolveNexusBonus(character.id));
+    if (finalXp == null) finalXp = gains.xpGain;
+    if (finalStardust == null) finalStardust = gains.stardustGain;
+    if (fuelCost == null) fuelCost = gains.fuelCost;
+  }
+  return { finalXp, finalStardust, fuelCost, snapshotLevel };
+}
+
 // ── Mission board (server-authoritative offer generation) ────
 // Node owns all gameplay-relevant mission values. The client requests the board,
 // renders the returned offers, and launches by offer_id — it never sends duration,
 // fuel, efficiency, XP, or Stardust for the server to trust.
-const MISSION_BOARD_VERSION = 3;
+const MISSION_BOARD_VERSION = 4;
 
 function makeMissionOfferId(index) {
   const t = clock.nowMs().toString(36);
@@ -327,21 +400,24 @@ function generateMissionBoardOffers(ch, rng) {
 }
 
 /**
- * Recompute all gameplay-relevant preview values for a stored offer against the
- * CURRENT character (ship mods, collection %, gear miss streak). Preview fields are
- * derived, never persisted — the persisted offer only holds generation inputs.
+ * Serialize a persisted offer for the client. XP/Stardust/Fuel are FINALIZED at
+ * generation (level snapshot + variance + baked ship/Collection/Nexus mults) and
+ * echoed verbatim so the displayed values exactly match what a win will grant
+ * and never drift across reopens or mid-mission level-ups. Item/rarity/Nothing
+ * probabilities are intentionally NOT exposed (requirement 1). A defensive
+ * fallback finalizes on the fly only for a legacy offer missing stored values.
  */
 function serializeBoardOffer(ch, offer) {
   const raw = Math.floor(Number(offer.duration_seconds));
-  const missionLike = {
-    duration_seconds: raw,
-    fuel_cost:
-      offer.low_fuel && typeof offer.fuel_cost === "number" ? offer.fuel_cost : undefined,
-    stardust_efficiency: offer.stardust_efficiency,
-    xp_efficiency: offer.xp_efficiency,
-  };
-  const gains = computeMissionGains(ch, missionLike, false);
-  const missStreak = missionGearMissStreak(ch);
+  let fuelCost = offer.fuel_cost;
+  let previewXp = offer.final_xp;
+  let previewStardust = offer.final_stardust;
+  if (!Number.isFinite(previewXp) || !Number.isFinite(previewStardust) || !Number.isFinite(fuelCost)) {
+    const fin = finalizeMissionRewards(ch, offer);
+    fuelCost = fin.fuel_cost;
+    previewXp = fin.final_xp;
+    previewStardust = fin.final_stardust;
+  }
   return {
     offer_id: offer.offer_id,
     name: offer.name,
@@ -356,14 +432,12 @@ function serializeBoardOffer(ch, offer) {
     low_fuel: !!offer.low_fuel,
     duration_seconds: raw,
     display_duration_seconds: getEffectiveMissionDuration(ch, { duration_seconds: raw }),
-    fuel_cost: gains.fuelCost,
-    preview_xp: gains.xpGain,
-    preview_stardust: gains.stardustGain,
-    xp_efficiency: gains.xpEfficiency,
-    stardust_efficiency: gains.efficiency,
+    fuel_cost: fuelCost,
+    preview_xp: previewXp,
+    preview_stardust: previewStardust,
+    xp_efficiency: offer.xp_efficiency,
+    stardust_efficiency: offer.stardust_efficiency,
     loot_type: missionLootTypeFromName(offer.name),
-    gear_drop_chance: missionGearDropChance(missStreak),
-    rarity_weights: { ...MISSION_GEAR_RARITY_WEIGHTS },
   };
 }
 
@@ -381,6 +455,10 @@ function offerToLaunchTemplate(offer) {
     fuel_cost: typeof offer.fuel_cost === "number" ? offer.fuel_cost : undefined,
     stardust_efficiency: offer.stardust_efficiency,
     xp_efficiency: offer.xp_efficiency,
+    // Finalized-at-generation rewards carried straight onto the Mission entity.
+    final_xp: offer.final_xp,
+    final_stardust: offer.final_stardust,
+    character_level: offer.character_level,
     rewards: {},
   };
 }
@@ -398,6 +476,12 @@ function hasValidMissionBoard(character) {
 function retireAndGenerateMissionBoard(character, extraPatch = {}) {
   const preview = { ...character, ...extraPatch, active_mission_id: "", mission_end_time: "" };
   const offers = generateMissionBoardOffers(preview, secureRandom);
+  // Finalize each offer's rewards ONCE against the snapshot character, then
+  // guarantee no two offers share an identical (fuel, XP, Stardust) tuple.
+  for (const offer of offers) {
+    Object.assign(offer, finalizeMissionRewards(preview, offer));
+  }
+  dedupeOfferRewards(preview, offers, secureRandom);
   const board = {
     version: MISSION_BOARD_VERSION,
     generated_at: clock.nowIso(),
@@ -1027,7 +1111,19 @@ export async function LaunchMission(user, body) {
       };
 
       const duration = getEffectiveMissionDuration(ch, draft);
-      const fuelCost = getEffectiveFuelCost(ch, { ...draft, duration_seconds: duration });
+      // Rewards + fuel were finalized at board generation; charge and carry the
+      // exact stored values so the board display equals what is charged/granted.
+      // A defensive fallback re-finalizes only for a legacy offer missing them.
+      let finalXp = Number.isFinite(offer.final_xp) ? offer.final_xp : null;
+      let finalStardust = Number.isFinite(offer.final_stardust) ? offer.final_stardust : null;
+      let fuelCost = Number.isFinite(offer.fuel_cost) ? offer.fuel_cost : null;
+      if (finalXp == null || finalStardust == null || fuelCost == null) {
+        const fin = finalizeMissionRewards(ch, offer);
+        if (finalXp == null) finalXp = fin.final_xp;
+        if (finalStardust == null) finalStardust = fin.final_stardust;
+        if (fuelCost == null) fuelCost = fin.fuel_cost;
+      }
+      const snapshotLevel = Number.isFinite(offer.character_level) ? offer.character_level : level;
       if (currentFuel < fuelCost) httpErr(400, "Not enough fuel");
       const sdEff = template.stardust_efficiency != null
         ? normalizeMissionEfficiency(template.stardust_efficiency, level)
@@ -1080,6 +1176,11 @@ export async function LaunchMission(user, body) {
         fuel_cost: fuelCost,
         stardust_efficiency: sdEff,
         xp_efficiency: xpEff,
+        // Finalized-at-generation rewards + level snapshot (granted verbatim on
+        // win; halved on loss). ClaimMission never recomputes these.
+        final_xp: finalXp,
+        final_stardust: finalStardust,
+        character_level: snapshotLevel,
         explore_scene: exploreScene,
       }, { created_by_id: user.id, created_by: user.email });
 
@@ -1243,19 +1344,36 @@ export async function ClaimMission(user, body) {
       const won = combat.winner === "player";
 
       if (!won) {
+        // Loss resolution: grant 50% of the finalized XP/Stardust, force a
+        // Nothing item outcome (no chain), and FREEZE the gear pity streak
+        // (mission_gear_miss_streak untouched). Still resolves + rotates board.
         entities.Mission.update(mission.id, { status: "failed" });
-        const rolled = retireAndGenerateMissionBoard(ch);
+        const live = entities.Character.get(ch.id) || ch;
+        const { finalXp, finalStardust } = resolveMissionFinals(live, mission);
+        const lossXp = Math.max(0, Math.round((finalXp || 0) / 2));
+        const lossStardust = Math.max(0, Math.round((finalStardust || 0) / 2));
+        const patch = {
+          active_mission_id: "",
+          mission_end_time: "",
+          stardust: (live.stardust || 0) + lossStardust,
+          total_stardust_earned: (live.total_stardust_earned || 0) + lossStardust,
+        };
+        applyXpToCharacter(live, lossXp, patch);
+        const progression = consumeProgression(patch);
+        const rolled = retireAndGenerateMissionBoard({ ...live, ...patch }, patch);
         const { offers, ...offerPatch } = rolled;
-        const patch = { active_mission_id: "", mission_end_time: "", ...offerPatch };
-        const character = entities.Character.update(ch.id, patch);
+        Object.assign(patch, offerPatch);
+        const character = entities.Character.update(live.id, patch);
         return {
           success: true,
           won: false,
           combat_id: combat.combat_id,
           patch,
           character,
+          progression,
           items: [],
-          gains: null,
+          item_outcome: "NONE",
+          gains: { stardust: lossStardust, experience: lossXp, loss: true },
           cantina_offers: offers,
           cantina_state: "AVAILABLE_OFFERS",
         };
@@ -1281,33 +1399,39 @@ export async function ClaimMission(user, body) {
         generate: async () => {
           const live = entities.Character.get(ch.id) || ch;
           const nexusBonus = resolveNexusBonus(live.id);
-          const gains = computeMissionGains(live, mission, nexusBonus);
+          // WIN: grant the exact finalized reward stored at generation — no
+          // recompute, no re-roll. Item outcome + pity are unchanged.
+          const { finalXp, finalStardust, fuelCost, snapshotLevel } = resolveMissionFinals(live, mission);
           const rewards = mission.rewards || {};
           const missStreak = missionGearMissStreak(live);
+          // Junk trinket value uses the un-varied base Stardust at the snapshot
+          // level (item outcome system unchanged).
+          const junkBase = computeMissionStardustFromFuel(fuelCost, snapshotLevel);
           const chain = settleMissionItemChain({
             character: live,
             mission,
-            missionStardustReward: gains.stardustBase || gains.stardustGain || 0,
+            missionStardustReward: junkBase,
             missStreak,
             rng: secureRandom,
           });
           // Species discovery only from mission snapshot — never client species_id
           const speciesId = rewards.species_id || null;
           return {
-            stardust: gains.stardustGain || 0,
-            experience: gains.xpGain,
+            stardust: finalStardust || 0,
+            experience: finalXp || 0,
             itemTemplates: chain.itemTemplates,
             species_id: speciesId,
             gearDropped: chain.gearDropped,
             itemOutcome: chain.itemOutcome,
             gainsMeta: {
-              stardustBase: gains.stardustBase,
-              xpBase: gains.xpBase,
-              efficiency: gains.efficiency,
-              xpEfficiency: gains.xpEfficiency,
-              collectionPct: gains.collectionPct,
-              fuelSpent: gains.fuelCost,
+              stardustBase: junkBase,
+              xpBase: finalXp || 0,
+              efficiency: mission.stardust_efficiency,
+              xpEfficiency: mission.xp_efficiency,
+              collectionPct: getCollectionPercentage(live, 0),
+              fuelSpent: fuelCost,
               nexusBonus,
+              snapshotLevel,
               gearDropped: chain.gearDropped,
               itemOutcome: chain.itemOutcome,
               gearChance: chain.gearChance,

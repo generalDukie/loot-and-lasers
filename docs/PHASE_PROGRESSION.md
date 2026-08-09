@@ -17,15 +17,40 @@ Canonical closed form in [`server/src/shared/rewards.js`](../server/src/shared/r
 (mirrored in [`src/lib/gameData.js`](../src/lib/gameData.js)):
 
 ```
-Base    = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
+Base          = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
 Post200Growth = 1 + A×X^P + B×X^Q , X = MAX(0,(L-200)/100)
-units   = ROUND(Base × Post200Growth)
-expForLevel = units × 10   // ×10 game scale applied AFTER rounding, as a final step
+EarlyGameMod  = 1 + 0.20 × MAX(0, 1 − L/100)          // ~1.20× at L1 → 1.00× at L≥100
+units         = ROUND(Base × Post200Growth × 1.5 × EarlyGameMod)
+expForLevel   = units × 10   // ×10 game scale applied AFTER rounding, as a final step
 ```
 
 `expForLevel` is a single authoritative function (there is no separate pre-scale
 `xpToNextBase`). The ×10 stays as an explicit final step because
 `round(x) × 10 ≠ round(x × 10)`; folding it into the curve would change outputs.
+
+### Leveling-pace multipliers (requirement only — never XP earned)
+
+The pacing multipliers scale only the XP **required** for L → L+1, so every XP
+source (Missions, Dungeons, Arena, Collections) experiences the same slowdown
+without touching any reward formula.
+
+- `XP_GLOBAL_SLOWDOWN = 1.5` — flat 1.5× requirement at every level.
+- `EARLY_GAME_XP_START_BONUS = 0.20`, `EARLY_GAME_XP_TAPER_LEVEL = 100` →
+  `earlyGameXpModifier(L) = 1 + 0.20 × max(0, 1 − L/100)` (a smooth extra
+  requirement that fades to 1.0 by L100; no discontinuity there).
+
+Result: **exactly +50%** at L ≥ 100 (aside from integer rounding) and a
+tapering additional slowdown below L100 (≈ +80% near L1). Curve shape and
+Post-200 scaling are unchanged; both multipliers are applied inside the single
+final `units` round before the ×10 game scale.
+
+**Existing characters:** the `xp_requirement_slowdown_v1` migration
+(`migrateXpRequirementSlowdown`, invoked from `server/src/index.js` bootstrap)
+recomputes each stored `experience_to_next_level` for the character's current
+level under the new curve. Because the requirement only ever rises, no character
+can cross a threshold — accumulated `experience` and `level` are preserved and no
+XP is created or destroyed. Any (defensive) pending level-up is resolved through
+the authoritative `grantCharacterXp` carryover, not a bespoke path.
 
 ## 3. `XP_REQUIREMENT_MULTIPLIER`
 

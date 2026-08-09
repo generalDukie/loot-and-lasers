@@ -16,11 +16,17 @@ import {
   GenerateGearItem,
   GetGearSlotMultiplier,
   GetGearRarityStatMultiplier,
-  BASE_GEAR_STAT_BUDGET_ANCHORS,
+  GEAR_BUDGET_LINEAR,
+  GEAR_BUDGET_CURVE,
+  GEAR_BUDGET_FLOOR,
   ITEM_ATTR_KEYS,
   FAVORED_POOL_CHANCE,
   computeItemVendorValue,
 } from "../../src/lib/itemGeneration.js";
+
+/** Reference C4 curve — must mirror BaseGearStatBudget exactly. */
+const c4Budget = (L) =>
+  Math.max(1, Math.round(GEAR_BUDGET_LINEAR * L + GEAR_BUDGET_CURVE * Math.sqrt(L) + GEAR_BUDGET_FLOOR));
 import { GearSaleValue } from "../../src/lib/stardustEconomy.js";
 import { randomItem } from "../src/shared/rewards.js";
 
@@ -50,45 +56,39 @@ function seqRng(values) {
 
 console.log("\nGear stat budget / allocation tests\n");
 
-test("BaseGearStatBudget anchors exact", () => {
-  for (const [L, v] of BASE_GEAR_STAT_BUDGET_ANCHORS) {
-    assert.equal(BaseGearStatBudget(L), v, `L${L}`);
+test("BaseGearStatBudget matches C4 continuous formula", () => {
+  // Formula is authoritative — assert the function equals it exactly.
+  for (const L of [1, 5, 10, 25, 50, 100, 200, 300, 400, 500, 700, 1000, 2000]) {
+    assert.equal(BaseGearStatBudget(L), c4Budget(L), `L${L}`);
   }
+  // Near-exact reproduction of the intended targets (L1 exact; ≤7% elsewhere).
+  const targets = { 1: 12, 10: 29, 25: 57, 50: 98, 100: 167, 200: 303, 300: 468, 400: 632, 500: 795 };
   assert.equal(BaseGearStatBudget(1), 12);
-  assert.equal(BaseGearStatBudget(10), 29);
-  assert.equal(BaseGearStatBudget(25), 57);
-  assert.equal(BaseGearStatBudget(50), 98);
-  assert.equal(BaseGearStatBudget(100), 167);
-  assert.equal(BaseGearStatBudget(200), 303);
-  assert.equal(BaseGearStatBudget(300), 468);
-  assert.equal(BaseGearStatBudget(400), 632);
-  assert.equal(BaseGearStatBudget(500), 795);
+  for (const [L, t] of Object.entries(targets)) {
+    const pct = Math.abs(BaseGearStatBudget(Number(L)) - t) / t;
+    assert.ok(pct <= 0.08, `L${L} within 8% of target (got ${pct * 100}%)`);
+  }
 });
 
-test("BaseGearStatBudget monotone and in-band", () => {
+test("BaseGearStatBudget monotone, integer, infinitely scaling", () => {
   let prev = BaseGearStatBudget(1);
-  for (let L = 2; L <= 520; L++) {
+  for (let L = 2; L <= 2000; L++) {
     const v = BaseGearStatBudget(L);
     assert.equal(v, Math.round(v));
     assert.ok(v >= prev, `L${L}`);
     prev = v;
   }
-  for (let i = 0; i < BASE_GEAR_STAT_BUDGET_ANCHORS.length - 1; i++) {
-    const [x0, y0] = BASE_GEAR_STAT_BUDGET_ANCHORS[i];
-    const [x1, y1] = BASE_GEAR_STAT_BUDGET_ANCHORS[i + 1];
-    for (let L = x0 + 1; L < x1; L++) {
-      const v = BaseGearStatBudget(L);
-      assert.ok(v >= y0 && v <= y1, `L${L}=${v}`);
-    }
-  }
 });
 
-test("BaseGearStatBudget >500 linear (no hard cap)", () => {
-  assert.equal(BaseGearStatBudget(501), Math.round(795 + 1.63 * 1));
-  assert.equal(BaseGearStatBudget(600), Math.round(795 + 1.63 * 100));
-  assert.equal(BaseGearStatBudget(700), Math.round(795 + 1.63 * 200));
-  assert.equal(BaseGearStatBudget(800), Math.round(795 + 1.63 * 300));
-  assert.equal(BaseGearStatBudget(1000), Math.round(795 + 1.63 * 500));
+test("BaseGearStatBudget is continuous past 500 (no breakpoint / cap)", () => {
+  // Same single formula everywhere — no Level-500 seam, no post-500 fallback.
+  for (const L of [499, 500, 501, 600, 700, 1000, 5000]) {
+    assert.equal(BaseGearStatBudget(L), c4Budget(L), `L${L}`);
+  }
+  // Local slope stays smooth across the old 500 seam (no sudden jump).
+  const s499 = BaseGearStatBudget(500) - BaseGearStatBudget(499);
+  const s501 = BaseGearStatBudget(502) - BaseGearStatBudget(501);
+  assert.ok(Math.abs(s499 - s501) <= 1, `slope continuous across 500 (${s499} vs ${s501})`);
   assert.ok(BaseGearStatBudget(1000) > BaseGearStatBudget(500));
 });
 
@@ -101,13 +101,14 @@ test("slot multipliers (stat budget, once)", () => {
 });
 
 test("rarity total budgets at L100", () => {
-  assert.equal(BaseGearStatBudget(100), 167);
-  assert.equal(getItemStatBudget(100, "armor", "common"), Math.round(167 * 0.7));
-  assert.equal(getItemStatBudget(100, "armor", "uncommon"), Math.round(167 * 0.85));
-  assert.equal(getItemStatBudget(100, "armor", "rare"), 167);
-  assert.equal(getItemStatBudget(100, "armor", "epic"), Math.round(167 * 1.2));
-  assert.equal(getItemStatBudget(100, "armor", "legendary"), Math.round(167 * 1.35));
-  assert.equal(getItemStatBudget(100, "weapon", "legendary"), 271);
+  const b100 = BaseGearStatBudget(100); // C4: 172
+  assert.equal(b100, 172);
+  assert.equal(getItemStatBudget(100, "armor", "common"), Math.round(b100 * 0.7));
+  assert.equal(getItemStatBudget(100, "armor", "uncommon"), Math.round(b100 * 0.85));
+  assert.equal(getItemStatBudget(100, "armor", "rare"), b100);
+  assert.equal(getItemStatBudget(100, "armor", "epic"), Math.round(b100 * 1.2));
+  assert.equal(getItemStatBudget(100, "armor", "legendary"), Math.round(b100 * 1.35));
+  assert.equal(getItemStatBudget(100, "weapon", "legendary"), Math.round(b100 * 1.2 * 1.35));
   assert.equal(GetGearRarityStatMultiplier("legendary"), 1.35);
   assert.notEqual(GetGearRarityStatMultiplier("legendary"), 1.75);
 });

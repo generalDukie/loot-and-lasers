@@ -90,10 +90,22 @@ await testAsync("GetMissionBoard returns 3 authoritative offers and persists the
     assert.ok(o.preview_xp > 0, "preview_xp > 0");
     assert.ok(o.preview_stardust > 0, "preview_stardust > 0");
     assert.ok(o.xp_efficiency > 0 && o.stardust_efficiency > 0, "efficiency present");
-    assert.ok(o.rarity_weights && o.rarity_weights.legendary === 2, "authoritative rarity weights");
+    // Requirement 1: item/rarity probabilities are NOT revealed to the client.
+    assert.equal(o.rarity_weights, undefined, "rarity spread not exposed");
+    assert.equal(o.gear_drop_chance, undefined, "gear probability not exposed");
   }
+  // Requirement 5: no two simultaneous offers share an identical reward tuple.
+  const tuples = offers.map((o) => `${o.fuel_cost}|${o.preview_xp}|${o.preview_stardust}`);
+  assert.equal(new Set(tuples).size, tuples.length, "no duplicate (fuel, XP, Stardust) tuples");
   const stored = entities.Character.get(ch.id).mission_board;
   assert.ok(stored && Array.isArray(stored.offers) && stored.offers.length === 3, "board persisted");
+  // Finalized reward integers are persisted on each stored offer.
+  for (const o of stored.offers) {
+    assert.ok(Number.isFinite(o.final_xp) && o.final_xp > 0, "final_xp stored");
+    assert.ok(Number.isFinite(o.final_stardust) && o.final_stardust > 0, "final_stardust stored");
+    assert.ok(Number.isFinite(o.fuel_cost) && o.fuel_cost > 0, "fuel_cost stored");
+    assert.equal(o.character_level, stored.character_level, "level snapshot stored");
+  }
 });
 
 await testAsync("Displayed XP/Stardust equal Node's authoritative formulas (parity)", async () => {
@@ -102,8 +114,13 @@ await testAsync("Displayed XP/Stardust equal Node's authoritative formulas (pari
   const res = await GetMissionBoard(user, {});
   for (const o of res.body.offers) {
     const expectedXp = computeMissionXpFromFuel(o.fuel_cost, level, o.xp_efficiency);
-    const expectedSd = computeMissionStardustFromFuel(o.fuel_cost, level, o.stardust_efficiency);
-    // No ship mods / zero collection on a fresh character → preview equals raw formula.
+    // Stardust now carries independent variance (its efficiency roll), applied on
+    // top of the base. No ship mods / zero collection on a fresh character → the
+    // only modifiers are the variance rolls themselves.
+    const expectedSd = Math.round(
+      computeMissionStardustFromFuel(o.fuel_cost, level) *
+        normalizeMissionEfficiency(o.stardust_efficiency, level)
+    );
     assert.equal(o.preview_xp, expectedXp, "XP preview matches settlement formula");
     assert.equal(o.preview_stardust, expectedSd, "Stardust preview matches settlement formula");
     assert.equal(
@@ -185,7 +202,7 @@ await testAsync("Launch IGNORES manipulated client duration/efficiency/name", as
     normalizeMissionEfficiency(offer.stardust_efficiency, 8),
     "client efficiency ignored"
   );
-  assert.ok(mission.stardust_efficiency <= 1.25, "efficiency stays within band");
+  assert.ok(mission.stardust_efficiency <= 1.10, "efficiency stays within ±10% band");
 });
 
 await testAsync("Unknown offer_id is rejected (409)", async () => {

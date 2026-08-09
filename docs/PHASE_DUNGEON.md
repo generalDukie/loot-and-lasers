@@ -23,7 +23,7 @@ Select world / wormhole
   → PrepareDungeonCombat → shared combatService.simulateDungeonCombat
   → Persist dungeon_pending_combat on Character
   → FinishDungeonBattle → settle once (wallet_operations)
-  → XP / gear / consumable / ship mod / cooldown
+  → XP / gear / consumable / cooldown
 ```
 
 There is **no** separate dungeon-instance SQL table. The “instance” is
@@ -33,7 +33,7 @@ Handlers:
 
 | RPC | Role |
 |-----|------|
-| `SyncDungeonState` | Daily death reset + Genesis Core wormhole jump + status blob |
+| `SyncDungeonState` | Daily death reset + status blob |
 | `GetDungeonStatus` | Reconnect restore (cooldown, crawl, pending id) |
 | `SkipDungeonCooldown` | Nova skip; requires active cooldown |
 | `PayDungeonContinue` | Nova → `dungeon_continue_credit` when deaths exhausted |
@@ -45,7 +45,7 @@ Handlers:
 `DUNGEON_UNLOCK_LEVELS` / `isDungeonUnlockedByLevel` (economyFormulas +
 dungeonEngine mirror). Story planets 1–10 level-gated on Prepare/Finish via
 `assertDungeonProgressAllowed`. Wormhole (`planet > 10`) follows crawl
-position after Genesis Core / planet-10 clear.
+position after the planet-10 (World Zero) boss clear.
 
 ### 3. Cooldown implementation
 
@@ -77,12 +77,15 @@ could double-reward).
 
 | Reward | Path |
 |--------|------|
-| XP | `druToRewards` + collection XP bonus + `applyXpToCharacter` |
+| XP | `druToRewards` = `round(DRU × MissionXPPerFuel(enemyLevel) × 2.0)`, + collection XP bonus, then `applyXpToCharacter` |
 | Stardust | `druToRewards` returns 0 (preserved) |
 | Gear | dungeon rarity tables + shared `randomItem` / Gear Generator |
-| Consumable / milestone | same grant path |
+| Consumable (Stim) | same grant path |
 | Inventory | `grantItemOrPending` (Prompt 06) |
-| Ship mod | `grantFrontierShipMod` on story boss |
+
+**DRU → XP:** one authoritative balance constant,
+`DUNGEON_XP_PER_DRU_MULTIPLIER = 2.0` (1 DRU = 2 fuel-equivalents of XP at the
+enemy's level). Stardust and DRU budgets/shares are unchanged.
 
 RNG at Finish uses `secureRandom`. Settle-once via
 `wallet_operations` (`finish_dungeon`, key = `combat_id`).

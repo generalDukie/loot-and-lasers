@@ -8,9 +8,6 @@ import {
   RACES,
   generateItem,
   rollItemRarity,
-  SHIP_MODS,
-  getActiveShipId,
-  getActiveShipMods,
   getMissionXpPerFuel,
 } from "@/lib/gameData";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
@@ -36,13 +33,12 @@ export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_LOSS_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 export const DUNGEON_SKIP_COST = 25; // Nova crystals to skip the cooldown
-/** Milestone chest every N node clears */
-export const DUNGEON_MILESTONE_EVERY = 5;
 
-export const DUNGEON_XP_BASE_FACTOR = 0.87;
-export const DUNGEON_XP_REBALANCE = 2.10;
-/** @deprecated use DUNGEON_XP_BASE_FACTOR */
-export const DUNGEON_XP_DRU_MULT = DUNGEON_XP_BASE_FACTOR;
+/**
+ * Dungeon DRU → XP conversion: 1 DRU = 2 fuel-equivalents of XP at the
+ * enemy's level. Single authoritative balance constant.
+ */
+export const DUNGEON_XP_PER_DRU_MULTIPLIER = 2.0;
 
 /** Total DRU budget per story dungeon (index = planet id 1–10). */
 export const DUNGEON_TOTAL_DRU = [0, 40, 50, 60, 70, 95, 110, 125, 140, 155, 185];
@@ -153,7 +149,7 @@ export function getDungeonEnemyLevel(planetId, enemyIndex) {
 /**
  * Convert DRU at an enemy level into Stardust / XP.
  * Stardust from dungeons is always 0;
- * XP = ROUND(DRU × XP/F × DUNGEON_XP_BASE_FACTOR × DUNGEON_XP_REBALANCE).
+ * XP = round(DRU × MissionXPPerFuel(enemyLevel) × DUNGEON_XP_PER_DRU_MULTIPLIER).
  */
 export function druToRewards(dru, enemyLevel) {
   const lvl = Math.max(1, enemyLevel || 1);
@@ -162,7 +158,7 @@ export function druToRewards(dru, enemyLevel) {
     stardust: 0,
     experience: Math.max(
       units > 0 ? 1 : 0,
-      Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_BASE_FACTOR * DUNGEON_XP_REBALANCE)
+      Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_PER_DRU_MULTIPLIER)
     ),
   };
 }
@@ -275,59 +271,3 @@ export function dungeonCooldownMs(_won) {
   return DUNGEON_BATTLE_COOLDOWN_MS;
 }
 
-/** Milestone chest every N career node clears. */
-export function rollMilestoneChest(character, charLevel) {
-  const next = (character.dungeon_nodes_cleared || 0) + 1;
-  if (next % DUNGEON_MILESTONE_EVERY !== 0) return { nodesCleared: next, item: null };
-  const rarity = rollItemRarity(Math.random() < 0.35 ? "rare" : "uncommon", charLevel);
-  return {
-    nodesCleared: next,
-    item: generateItem(rarity, Math.max(1, charLevel), undefined, character?.class),
-  };
-}
-
-/**
- * Grant the next free ship-mod tier for a category onto the active ship.
- * Also records the flavor name on character.ship_mods for collection UI.
- */
-export function grantFrontierShipMod(character, planet) {
-  const catKey = planet?.shipModCat;
-  const flavor = planet?.shipMod;
-  const cat = catKey ? SHIP_MODS[catKey] : null;
-  const flavorMods = [...(character.ship_mods || [])];
-  if (flavor && !flavorMods.includes(flavor)) flavorMods.push(flavor);
-
-  if (!cat) {
-    return { ship_mods: flavorMods, ship_mod_loadouts: null, unlockedLabel: flavor || null, tier: null, maxed: true };
-  }
-
-  const shipId = getActiveShipId(character);
-  const loadouts = { ...(character.ship_mod_loadouts || {}) };
-  const installed = [...(Array.isArray(loadouts[shipId]) ? loadouts[shipId] : getActiveShipMods(character))];
-  // Keep only known tier ids so legacy flavor strings don't block progression.
-  const knownIds = new Set(Object.values(SHIP_MODS).flatMap((c) => c.tiers.map((t) => t.id)));
-  const cleaned = installed.filter((id) => knownIds.has(id));
-  const next = cat.tiers.find((t) => !cleaned.includes(t.id));
-
-  if (!next) {
-    return {
-      ship_mods: flavorMods,
-      ship_mod_loadouts: null,
-      unlockedLabel: flavor ? `${flavor} (catalogued)` : null,
-      tier: null,
-      maxed: true,
-      consolationStardust: (400 + (planet.id || 1) * 80) * 10,
-    };
-  }
-
-  cleaned.push(next.id);
-  loadouts[shipId] = cleaned;
-  return {
-    ship_mods: flavorMods,
-    ship_mod_loadouts: loadouts,
-    unlockedLabel: `${flavor || cat.name} — ${cat.name} T${cat.tiers.indexOf(next) + 1}`,
-    tier: next,
-    cat,
-    maxed: false,
-  };
-}

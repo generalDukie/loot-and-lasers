@@ -3,7 +3,6 @@ extends Control
 
 var _status: Label
 var _subtitle: Label
-var _meta_right: Label
 var _map_hint: Label
 var _detail_root: PanelContainer
 var _detail_glow: ColorRect
@@ -19,8 +18,6 @@ var _detail_desc: Label
 var _mode_banner: PanelContainer
 var _mode_label: Label
 var _return_front_btn: Button
-var _reward_banner: PanelContainer
-var _detail_reward: Label
 var _detail_progress: ProgressBar
 var _encounter_grid: GridContainer
 var _cooldown_bar: PanelContainer
@@ -105,18 +102,6 @@ func _build() -> void:
 	_subtitle.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_subtitle)
 	head_l.add_child(_subtitle)
-
-	var head_r := HBoxContainer.new()
-	head_r.alignment = BoxContainer.ALIGNMENT_END
-	head_r.add_theme_constant_override("separation", 18)
-	header.add_child(head_r)
-
-	_meta_right = Label.new()
-	_meta_right.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_meta_right.add_theme_font_size_override("font_size", 17)
-	_meta_right.add_theme_color_override("font_color", Color("#C084FC"))
-	ClientUi.apply_display_font(_meta_right)
-	head_r.add_child(_meta_right)
 
 	_status = ClientUi.make_status()
 	_status.visible = false
@@ -321,25 +306,6 @@ func _build() -> void:
 	_return_front_btn.pressed.connect(_return_to_front)
 	mode_row.add_child(_return_front_btn)
 
-	_reward_banner = PanelContainer.new()
-	_reward_banner.visible = false
-	_reward_banner.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	dcol.add_child(_reward_banner)
-	var reward_row := HBoxContainer.new()
-	reward_row.add_theme_constant_override("separation", 8)
-	_reward_banner.add_child(reward_row)
-	var gem := Label.new()
-	gem.text = "💎"
-	gem.add_theme_font_size_override("font_size", 19)
-	reward_row.add_child(gem)
-	_detail_reward = Label.new()
-	_detail_reward.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_detail_reward.clip_text = true
-	_detail_reward.add_theme_font_size_override("font_size", 16)
-	_detail_reward.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_detail_reward)
-	reward_row.add_child(_detail_reward)
-
 	# Encounter path — expands; Fight stays pinned below (outside this expand body).
 	var enc_frame := PanelContainer.new()
 	enc_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -425,21 +391,12 @@ func _build() -> void:
 
 
 func _populate_meta() -> void:
-	var c := GameManager.active_character
 	var active := DungeonManager.current_planet_id()
 	var in_infinite := active > 10
 	var depth := maxi(1, active - 10)
 	_subtitle.text = "1 hour cooldown, skip for %s💎%s" % [
 		str(DungeonRules.SKIP_COST),
 		(" · Wormhole depth %s" % depth) if in_infinite else "",
-	]
-
-	var installed_mods := ShipRules.loadout_for(c).size()
-	var relics: Variant = c.get("ship_mods", [])
-	var relic_count := (relics as Array).size() if typeof(relics) == TYPE_ARRAY else 0
-	_meta_right.text = "⚡  %s mods%s" % [
-		installed_mods,
-		(" · %s relics" % relic_count) if relic_count > 0 else "",
 	]
 
 	_update_detail()
@@ -519,15 +476,6 @@ func _update_detail() -> void:
 	_detail_desc.text = str(planet.get("desc", ""))
 
 	_mode_banner.visible = false
-
-	var ship_mod := str(planet.get("ship_mod", ""))
-	_reward_banner.visible = not ship_mod.is_empty()
-	if _reward_banner.visible:
-		_reward_banner.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-			Color(tint, 0.08), Color(tint, 0.28), 10, 1
-		))
-		_detail_reward.text = "Boss reward · %s" % ship_mod
-		_detail_reward.add_theme_color_override("font_color", Color("#FDE68A", 0.95))
 
 	# Encounter cells — active node highlights the current enemy; other worlds show cleared/locked.
 	for i in range(1, 11):

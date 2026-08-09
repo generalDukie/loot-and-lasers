@@ -7,8 +7,7 @@ import { XP_STARDUST_SCALE } from "../src/shared/economyConstants.js";
 import { expForLevel, getMissionXpPerFuel } from "../src/shared/rewards.js";
 import {
   MISSION_XP_REBALANCE,
-  DUNGEON_XP_BASE_FACTOR,
-  DUNGEON_XP_REBALANCE,
+  DUNGEON_XP_PER_DRU_MULTIPLIER,
   DUNGEON_TOTAL_DRU,
   getDungeonTotalDru,
   getEnemyDru,
@@ -76,9 +75,10 @@ test("XP_STARDUST_SCALE is 10", () => {
 });
 
 test("XP formula from L1 forever — no L500 boundary", () => {
-  // Design curve at L1 (post200Growth(1) === 1) × 10 game scale.
+  // Design curve at L1 (post200Growth(1) === 1) × pacing (1.5× × early ~1.198) × 10 game scale.
   const l1Design = Math.round(1.35 * 2.106 * (1 ** 1.532) * (1 + (1 / 266) ** 3.683));
-  assert.equal(expForLevel(1), Math.max(1, l1Design) * 10);
+  const l1Units = Math.round(Math.max(1, l1Design) * 1.5 * (1 + 0.2 * (1 - 1 / 100)));
+  assert.equal(expForLevel(1), l1Units * 10);
   assert.ok(expForLevel(501) > expForLevel(500));
   assert.ok(Number.isFinite(expForLevel(10000)));
   assert.ok(expForLevel(10000) > expForLevel(1000));
@@ -94,7 +94,7 @@ test("Mission XP uses 0.85 rebalance; XP/F scale once", () => {
   assert.equal(xp, Math.round(10 * rate * 0.85));
 });
 
-test("Dungeon DRU totals and XP 0.87×2.10", () => {
+test("Dungeon DRU totals and XP × 2.0 per DRU", () => {
   assert.deepEqual(DUNGEON_TOTAL_DRU.slice(1), [40, 50, 60, 70, 95, 110, 125, 140, 155, 185]);
   assert.equal(getDungeonTotalDru(1), 40);
   assert.equal(getDungeonTotalDru(10), 185);
@@ -104,12 +104,11 @@ test("Dungeon DRU totals and XP 0.87×2.10", () => {
   assert.equal(dru, Math.round(40 * 0.18 * 100) / 100);
   const { experience, stardust } = druToRewards(dru, 19);
   assert.equal(stardust, 0);
+  assert.equal(DUNGEON_XP_PER_DRU_MULTIPLIER, 2.0);
   assert.equal(
     experience,
-    Math.round(dru * getMissionXpPerFuel(19) * DUNGEON_XP_BASE_FACTOR * DUNGEON_XP_REBALANCE)
+    Math.round(dru * getMissionXpPerFuel(19) * DUNGEON_XP_PER_DRU_MULTIPLIER)
   );
-  assert.equal(DUNGEON_XP_BASE_FACTOR, 0.87);
-  assert.equal(DUNGEON_XP_REBALANCE, 2.1);
 });
 
 test("Arena 2.25S; junk 0.45; mission chain chances", () => {

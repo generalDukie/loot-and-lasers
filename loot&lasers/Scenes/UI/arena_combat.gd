@@ -1416,14 +1416,7 @@ func _show_dungeon_result(data: Dictionary) -> void:
 	if not won:
 		note = "No rewards on defeat."
 	elif items.size() > 1:
-		var milestone: Variant = items[items.size() - 1]
-		if typeof(milestone) == TYPE_DICTIONARY:
-			note = "Milestone chest: %s" % str(milestone.get("name", "loot"))
-		else:
-			note = "Loot: %s item(s)" % items.size()
-	var ship: Variant = data.get("ship_mod", null)
-	if ship != null and str(ship) != "":
-		note = (note + " · " if not note.is_empty() else "") + "Ship mod: %s" % str(ship)
+		note = "Loot: %s item(s)" % items.size()
 	var summary := {
 		"won": won,
 		"mode": "dungeon",

@@ -798,10 +798,21 @@ export const POST_200_P = 0.48;
 export const POST_200_B = 0.79;
 export const POST_200_Q = 0.71;
 
+// Leveling-pace multipliers on the XP requirement only (mirror of
+// server/src/shared/rewards.js). Never applied to XP earned.
+export const XP_GLOBAL_SLOWDOWN = 1.5;
+export const EARLY_GAME_XP_START_BONUS = 0.2;
+export const EARLY_GAME_XP_TAPER_LEVEL = 100;
+
 export function post200Growth(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   const X = Math.max(0, (L - POST_200_START_LEVEL) / 100);
   return 1 + POST_200_A * X ** POST_200_P + POST_200_B * X ** POST_200_Q;
+}
+
+export function earlyGameXpModifier(level) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  return 1 + EARLY_GAME_XP_START_BONUS * Math.max(0, 1 - L / EARLY_GAME_XP_TAPER_LEVEL);
 }
 
 export function xpToNextBase(level) {
@@ -810,7 +821,7 @@ export function xpToNextBase(level) {
     1,
     Math.round(XP_REQUIREMENT_MULTIPLIER * 2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683))
   );
-  return Math.max(1, Math.round(base * post200Growth(L)));
+  return Math.max(1, Math.round(base * post200Growth(L) * XP_GLOBAL_SLOWDOWN * earlyGameXpModifier(L)));
 }
 
 export function getExpForLevel(level) {
@@ -884,13 +895,13 @@ export function getArenaXpReward(level = 1) {
 }
 
 /** Mission reward variance band by player level (±fraction around 1.0). */
-export function getMissionRewardVariance(playerLevel = 1) {
-  return (Math.max(1, Number(playerLevel) || 1) <= 10) ? 0.25 : 0.10;
+export function getMissionRewardVariance(_playerLevel = 1) {
+  return 0.10;
 }
 
 /**
- * Per-mission efficiency roll — independent for XP and Stardust.
- * Levels 1–10: ±25% (0.75–1.25). Level 11+: ±10% (0.90–1.10).
+ * Per-mission variance roll — independent for XP and Stardust.
+ * Uniform ±10% (0.90–1.10) at every level.
  */
 export function rollMissionEfficiency(playerLevel = 1, rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
@@ -1081,177 +1092,10 @@ export function checkFuelReset(character) {
   return null;
 }
 
-// ═══════════════════════════════════════════
-// QUEST GIVERS — cantina patrons that rotate per mission offer
-// ═══════════════════════════════════════════
-export const QUEST_GIVERS = [
-  { emoji: "🤖", name: "CLANK", color: "#00E5FF" },
-  { emoji: "👽", name: "Zyx", color: "#9D5CFF" },
-  { emoji: "🐙", name: "Capt. Tentak", color: "#FF6B35" },
-  { emoji: "🧙", name: "Old Maru", color: "#FFD700" },
-  { emoji: "👻", name: "Wraith Vin", color: "#8BE8FF" },
-  { emoji: "🦊", name: "Rix", color: "#FF9E4F" },
-  { emoji: "🐉", name: "Drako", color: "#FF4D6D" },
-  { emoji: "🛸", name: "Skip", color: "#5CFFB0" },
-  { emoji: "🐺", name: "Grimma", color: "#A3A3A3" },
-  { emoji: "🧟", name: "Moss", color: "#84CC16" },
-  { emoji: "🦜", name: "Squawk", color: "#F472B6" },
-  { emoji: "🦎", name: "Slick", color: "#34D399" },
-];
-
-export function pickQuestGiver(rng = Math.random, excludeNames = []) {
-  const excluded = new Set(excludeNames || []);
-  const pool = QUEST_GIVERS.filter((g) => !excluded.has(g.name));
-  const list = pool.length ? pool : QUEST_GIVERS;
-  return list[Math.floor(rng() * list.length)];
-}
-
-// ═══════════════════════════════════════════
-// DAILY MISSIONS (randomized — always offers 3 quests from a larger rotating pool)
-// ═══════════════════════════════════════════
-const COLLECTIBLES = [
-  { name: "Void Geode", emoji: "🪨" },
-  { name: "Star Fragment", emoji: "⭐" },
-  { name: "Plasma Vial", emoji: "🧪" },
-  { name: "Relic Shard", emoji: "🏺" },
-  { name: "Nebula Mote", emoji: "🌌" },
-  { name: "Quantum Coin", emoji: "🪙" },
-  { name: "Memory Crystal", emoji: "💠" },
-  { name: "Stardust Cluster", emoji: "✨" },
-];
-const RISK_DIFFICULTY = { 1: "easy", 2: "medium", 3: "medium", 4: "hard", 5: "elite" };
-const RISK_RARITY = { 1: "common", 2: "uncommon", 3: "rare", 4: "epic", 5: "legendary" };
-
-// Design chart — discrete mission durations by level (fuel cost = duration in minutes).
-// Authoritative pool: getAllowedMissionDurations / rollMissionDurationSeconds in missionDuration.js
-// L21+ permanently uses 5/10/15/20 min. Hard cap 20 minutes.
-
-export function generateDailyMissions(character) {
-  const level = character.level || 1;
-  const maxSector = (character.highest_sector || 1) + 1;
-  const doable = MISSION_TEMPLATES.filter((m) => m.level_requirement <= level && m.sector <= maxSector);
-  const pool = doable.length ? doable : MISSION_TEMPLATES.filter((m) => m.level_requirement <= level);
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  const base = shuffled.length ? shuffled : MISSION_TEMPLATES;
-
-  // Offer 3 quests drawn from the rotating template pool. Duration is rolled
-  // once from the level's discrete pool. Quest givers are unique on the board.
-  // Explore art is assigned once per mission (not per slot) and stays for the lifecycle.
-  const givers = [...QUEST_GIVERS].sort(() => Math.random() - 0.5);
-  const EXPLORE_SCENE_COUNT = 6;
-  const explorePool = Array.from({ length: EXPLORE_SCENE_COUNT }, (_, i) => i).sort(
-    () => Math.random() - 0.5
-  );
-  return Array.from({ length: 3 }, (_, i) => {
-    const t = base[i % base.length];
-    const duration = rollMissionDurationSeconds(level);
-    const collectible = COLLECTIBLES[Math.floor(Math.random() * COLLECTIBLES.length)];
-    const { difficulty: _d, risk: _r, rewards: _oldRewards, ...tpl } = t;
-    const exploreScene = explorePool[i % explorePool.length];
-    const draft = {
-      ...tpl,
-      _seed: `${Date.now()}-${i}`,
-      patron: givers[i % givers.length],
-      duration_seconds: duration,
-      explore_scene: exploreScene,
-      image_id: `mission_explore_${String(exploreScene + 1).padStart(2, "0")}`,
-      // Independent XP / Stardust variance rolls (level-banded).
-      stardust_efficiency: rollMissionEfficiency(level),
-      xp_efficiency: rollMissionEfficiency(level),
-    };
-    const fuelEst = getEffectiveFuelCost(character, draft);
-    // Loot floor scales gently with level — no risk rating.
-    const rarityKey = level >= 12 ? "epic" : level >= 7 ? "rare" : level >= 3 ? "uncommon" : "common";
-    return {
-      ...draft,
-      rewards: {
-        experience: computeMissionXpFromFuel(fuelEst, level, draft.xp_efficiency),
-        stardust: computeMissionStardustFromFuel(fuelEst, level, draft.stardust_efficiency),
-        item_rarity_chance: rarityKey,
-        collectible,
-      },
-    };
-  });
-}
-
-// ═══════════════════════════════════════════
-// REMAINING-FUEL EXCEPTION — same reward systems, unusual allowed duration.
-// Used when the player cannot afford any normal-pool mission for their level.
-// Duration/Fuel exactly match remaining fuel (1 min = 1 Fuel). Not a new mission type.
-// ═══════════════════════════════════════════
-const LOW_FUEL_TEMPLATES = [
-  {
-    name: "Quick Salvage Sweep",
-    description: "A fast burn through nearby debris — light on fuel, light on glory, but better than idling.",
-    location: "Drift Sector 7",
-  },
-  {
-    name: "Scavenge the Dock Lights",
-    description: "Pop a few broken bay lamps for scrap wire. Tiny job, tiny tank — still counts.",
-    location: "Hangar Rim",
-  },
-  {
-    name: "Courier Hop: One Parcel",
-    description: "Drop a sealed envelope two decks over. The recipient tips in dust. Barely.",
-    location: "Station Corridor 3",
-  },
-];
-
-export function generateLowFuelMission(character, currentFuel, excludePatronNames = [], slot = 0) {
-  const level = character?.level || 1;
-  const fuel = Math.round(Math.max(0, currentFuel || 0) * 100) / 100;
-  const duration = remainingFuelDurationSeconds(fuel);
-  if (duration == null) {
-    // Below minimum spendable fuel — should not be offered.
-    return null;
-  }
-  // Pin cost to exact remainder so the tank can empty completely.
-  const pinnedFuel = Math.max(MISSION_MIN_FUEL, fuel);
-  const tpl = LOW_FUEL_TEMPLATES[slot % LOW_FUEL_TEMPLATES.length];
-  const sdEff = rollMissionEfficiency(level);
-  const xpEff = rollMissionEfficiency(level);
-  const exploreScene = Math.floor(Math.random() * 6);
-  return {
-    name: tpl.name,
-    description: tpl.description,
-    location: tpl.location,
-    sector: 1,
-    duration_seconds: duration,
-    level_requirement: 1,
-    // Pin cost to remainder so mounts/reductions can't push it above what you have.
-    fuel_cost: pinnedFuel,
-    stardust_efficiency: sdEff,
-    xp_efficiency: xpEff,
-    _lowFuel: true,
-    explore_scene: exploreScene,
-    image_id: `mission_explore_${String(exploreScene + 1).padStart(2, "0")}`,
-    patron: pickQuestGiver(Math.random, excludePatronNames),
-    rewards: {
-      experience: computeMissionXpFromFuel(pinnedFuel, level, xpEff),
-      stardust: computeMissionStardustFromFuel(pinnedFuel, level, sdEff),
-      item_rarity_chance: "common",
-    },
-  };
-}
-
-// Build 1–3 residual jobs that all fit in `currentFuel`, with unique patrons.
-export function generateLowFuelBoard(character, currentFuel, count = 3) {
-  const fuel = Math.round(Math.max(0, currentFuel || 0) * 100) / 100;
-  if (fuel < MISSION_MIN_FUEL) return [];
-  const n = Math.min(count, LOW_FUEL_TEMPLATES.length);
-  const used = [];
-  const explorePool = Array.from({ length: 6 }, (_, i) => i).sort(() => Math.random() - 0.5);
-  return Array.from({ length: n }, (_, i) => {
-    const m = generateLowFuelMission(character, fuel, used, i);
-    if (m) {
-      m.explore_scene = explorePool[i % explorePool.length];
-      m.image_id = `mission_explore_${String(m.explore_scene + 1).padStart(2, "0")}`;
-    }
-    if (!m) return null;
-    if (m.patron?.name) used.push(m.patron.name);
-    return m;
-  }).filter(Boolean);
-}
+// Client-side mission-offer generation (QUEST_GIVERS, pickQuestGiver,
+// generateDailyMissions, generateLowFuelMission, generateLowFuelBoard) has been
+// removed. The Node API is the sole authority for mission offers — see the
+// mission board in server/src/functions/economy.js.
 
 // ═══════════════════════════════════════════
 // CONSUMABLES — Stim qualities (Uncommon / Rare / Epic).

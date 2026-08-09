@@ -22,7 +22,9 @@ import {
   scopeReadQuery,
 } from "./entityAccess.js";
 import { assertCanUnequipToBag } from "./shared/inventoryGrant.js";
-import { db, nowIso } from "./db.js";
+import { db, nowIso, migrateXpRequirementSlowdown } from "./db.js";
+import { expForLevel } from "./shared/rewards.js";
+import { grantCharacterXp } from "./shared/characterProgression.js";
 import { applyCharacterCreationStartingGrant } from "./shared/currencyService.js";
 import { ensureCharacterPermanentStats } from "./shared/characterStatsRepair.js";
 import { ensureDefaultSchedules } from "./scheduling/bootstrap.js";
@@ -579,6 +581,12 @@ server.listen(PORT, () => {
   console.log(`Loot & Lasers API listening on http://localhost:${PORT}`);
   console.log(`WebSocket: ws://localhost:${PORT}/ws`);
   if (servingStatic) console.log(`Serving client from ${resolveStaticDir()}`);
+  try {
+    migrateXpRequirementSlowdown({ expForLevel, grantCharacterXp });
+  } catch (err) {
+    bootLog.error("xp_slowdown_migration_failed", { error: String(err?.message || err) });
+    console.error("[migrate] XP requirement slowdown failed:", err);
+  }
   try {
     ensureDefaultSchedules();
     startScheduler({ intervalMs: Number(process.env.SCHEDULE_TICK_MS) || 15_000 });

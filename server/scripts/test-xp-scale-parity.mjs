@@ -6,9 +6,11 @@
  * This test locks the exact pre-refactor outputs so the representation change can
  * never silently alter XP payouts.
  *
- * Reference implementations below reproduce the ORIGINAL two-step math exactly
- * (round(designCurve) × 10). Both must match the current exports for every
- * integer level 1..500, and final mission XP must match across Fuel/efficiency.
+ * Reference implementations below reproduce the two-step math exactly
+ * (round(designCurve × pacing) × 10, where XP-to-next pacing = global 1.5× plus
+ * the tapering early-game modifier). Both must match the current exports for
+ * every integer level 1..500, and final mission XP must match across
+ * Fuel/efficiency (mission XP has no pacing multiplier).
  *
  * Run: node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-xp-scale-parity.mjs
  */
@@ -29,13 +31,18 @@ function refPost200Growth(level) {
   const X = Math.max(0, (L - 200) / 100);
   return 1 + 0.8 * X ** 0.48 + 0.79 * X ** 0.71;
 }
+function refEarlyGameXpModifier(level) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  return 1 + 0.2 * Math.max(0, 1 - L / 100);
+}
 function refXpToNextBase(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   const base = Math.max(1, Math.round(1.35 * 2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683)));
-  return Math.max(1, Math.round(base * refPost200Growth(L)));
+  // Pacing multipliers: global 1.5× + tapering early-game modifier.
+  return Math.max(1, Math.round(base * refPost200Growth(L) * 1.5 * refEarlyGameXpModifier(L)));
 }
 function refExpForLevel(level) {
-  return refXpToNextBase(level) * SCALE; // OLD: round(base) × 10
+  return refXpToNextBase(level) * SCALE; // round(base × post200 × 1.5 × early) × 10
 }
 function refMissionXpPerFuelBase(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));

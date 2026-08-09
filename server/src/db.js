@@ -455,6 +455,89 @@ db.exec(`
   }
 })();
 
+/**
+ * Leveling slowdown (global 1.5× + tapering early-game modifier) migration.
+ * Recomputes each character's `experience_to_next_level` for their CURRENT level
+ * under the new XP-requirement curve. Because the requirement only ever rises,
+ * no character can cross a threshold, so accumulated experience and level are
+ * preserved and no XP is created or destroyed. If a character somehow already
+ * satisfies the new requirement (corrupted/admin data), it is resolved with the
+ * authoritative carryover/level-up logic (`grantCharacterXp`) — not a bespoke
+ * path — so overflow, multi-level, and +2 attribute awards behave normally.
+ *
+ * `expForLevel` and `grantCharacterXp` are injected by the caller (server
+ * bootstrap) so this module never imports the XP curve, which would create a
+ * db.js ↔ rewards.js load cycle. Returns a small summary; idempotent via app_meta.
+ */
+export function migrateXpRequirementSlowdown({ expForLevel, grantCharacterXp } = {}) {
+  const META_KEY = "xp_requirement_slowdown_v1";
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+  const existing = db.prepare("SELECT value FROM app_meta WHERE key = ?").get(META_KEY);
+  if (existing?.value === "done") return { skipped: true };
+  if (typeof expForLevel !== "function") {
+    throw new Error("migrateXpRequirementSlowdown requires expForLevel");
+  }
+
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    const rows = db.prepare("SELECT id, data FROM entities WHERE type = 'Character'").all();
+    const update = db.prepare(
+      "UPDATE entities SET data = ?, updated_date = ? WHERE id = ? AND type = 'Character'",
+    );
+    const now = new Date().toISOString();
+    let updated = 0;
+    let carriedOver = 0;
+    for (const row of rows) {
+      let data;
+      try {
+        data = JSON.parse(row.data);
+      } catch {
+        continue;
+      }
+      const level = Math.max(1, Math.floor(Number(data.level) || 1));
+      const experience = Math.max(0, Math.floor(Number(data.experience) || 0));
+      const newReq = expForLevel(level);
+
+      if (experience > 0 && experience >= newReq && typeof grantCharacterXp === "function") {
+        // Defensive (unreachable when raising a requirement): resolve any pending
+        // level-ups through the authoritative granter so no XP is lost.
+        const res = grantCharacterXp({
+          character: { ...data, level, experience: 0, experience_to_next_level: newReq },
+          xpAmount: experience,
+          source: "xp_slowdown_migration",
+        });
+        data.level = res.patch.level ?? level;
+        data.experience = res.patch.experience ?? experience;
+        data.experience_to_next_level = res.patch.experience_to_next_level ?? newReq;
+        if (res.patch.stats) data.stats = res.patch.stats;
+        carriedOver += 1;
+      } else {
+        // Normal path: raise only the requirement; experience and level untouched.
+        data.experience_to_next_level = newReq;
+      }
+      update.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
+      updated += 1;
+    }
+    db.prepare(
+      "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run(META_KEY, "done");
+    db.exec("COMMIT");
+    console.log(
+      `[migrate] XP requirement slowdown applied (${META_KEY}) updated=${updated} carried_over=${carriedOver}`,
+    );
+    return { skipped: false, updated, carriedOver };
+  } catch (err) {
+    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+    console.error("[migrate] XP requirement slowdown failed:", err);
+    throw err;
+  }
+}
+
 (function migrateAccountServerSessionsFromUsers() {
   migrateLegacyUserSessionColumns();
 })();

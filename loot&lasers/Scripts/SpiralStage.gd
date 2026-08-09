@@ -36,8 +36,6 @@ var _lore_sector: Label
 var _lore_icon: Label
 var _lore_body: Label
 var _lore_boss: Label
-var _lore_reward: Label
-
 
 func _ready() -> void:
 	clip_contents = true
@@ -151,12 +149,6 @@ func _ensure_overlays() -> void:
 	_lore_boss.add_theme_font_size_override("font_size", 15)
 	ClientUi.apply_display_font(_lore_boss)
 	lore_col.add_child(_lore_boss)
-
-	_lore_reward = Label.new()
-	_lore_reward.add_theme_font_size_override("font_size", 15)
-	_lore_reward.add_theme_color_override("font_color", Color("#FDE68A"))
-	ClientUi.apply_display_font(_lore_reward)
-	lore_col.add_child(_lore_reward)
 
 	var hint := Label.new()
 	hint.text = "Tap empty space or Esc to pull back"
@@ -399,9 +391,6 @@ func _fill_lore() -> void:
 	_lore_boss.visible = not boss.is_empty()
 	_lore_boss.text = "%s  Boss · %s" % [str(planet.get("boss_emoji", "☠")), boss]
 	_lore_boss.add_theme_color_override("font_color", tint)
-	var mod := str(planet.get("ship_mod", ""))
-	_lore_reward.visible = not mod.is_empty()
-	_lore_reward.text = "Clear reward · %s" % mod
 	_lore_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.03, 0.035, 0.07, 0.98), Color(tint, 0.7), 16, 2
 	))

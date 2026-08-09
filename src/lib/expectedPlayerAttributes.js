@@ -153,14 +153,15 @@ export function progressingPlayerAttributes(level) {
 }
 
 /**
- * Soft end-of-mission foe vs a progressing player.
- * ~28% of progressing power — nearly always loses to equipped/on-level players;
- * bare / obsolete-gear players fall behind as level rises.
+ * Soft end-of-mission foe scaled off the Expected Player Attributes benchmark.
+ * 35% of EPA at the enemy's level — a beatable foe for an on-track player;
+ * bare / obsolete-gear players fall behind as level rises. The low-level
+ * base-damage ramp (statEngine) still wraps these foes, so early fights stay fair.
  */
-export const MISSION_ENEMY_ATTR_MULT = 0.28;
+export const MISSION_ENEMY_ATTR_MULT = 0.35;
 
 export function missionEnemyAttributeBudget(level) {
-  return Math.round(progressingPlayerAttributes(level) * MISSION_ENEMY_ATTR_MULT);
+  return Math.round(expectedPlayerAttributes(level) * MISSION_ENEMY_ATTR_MULT);
 }
 
 /** Regular dungeon foes — 120% of expected player attrs at the enemy's own level. */

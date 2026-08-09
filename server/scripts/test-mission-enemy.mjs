@@ -5,7 +5,6 @@
 import assert from "node:assert/strict";
 import {
   expectedPlayerAttributes,
-  progressingPlayerAttributes,
   missionEnemyAttributeBudget,
   pickMissionEnemyArchetype,
   distributeMissionEnemyAttributes,
@@ -89,31 +88,32 @@ test("expected player attribute curve matches finalized anchors", () => {
   assert.ok(expectedPlayerAttributes(501) > expectedPlayerAttributes(500));
 });
 
-test("mission enemy budgets = ROUND(progressing × 0.28)", () => {
+test("mission enemy budgets = ROUND(EPA × 0.35)", () => {
   const samples = [
-    [1, 17],
-    [4, 33],
-    [10, 66],
-    [50, 187],
-    [100, 309],
-    [500, 1416],
+    [1, 24],
+    [10, 134],
+    [50, 447],
+    [100, 796],
+    [500, 3869],
   ];
-  for (const [level, approx] of samples) {
+  for (const [level, exact] of samples) {
     const got = missionEnemyAttributeBudget(level);
-    const fromFormula = Math.round(progressingPlayerAttributes(level) * 0.28);
+    const fromFormula = Math.round(expectedPlayerAttributes(level) * 0.35);
     assert.equal(got, fromFormula, `L${level} formula`);
-    assert.ok(Math.abs(got - approx) <= 1, `L${level}: got ${got}, approx ${approx}`);
+    assert.equal(got, exact, `L${level}: got ${got}, expected ${exact}`);
   }
-  // Soft vs progressing: enemy stays well below progressing player power.
-  for (const level of [1, 4, 10, 50, 100]) {
-    const enemy = missionEnemyAttributeBudget(level);
-    const prog = progressingPlayerAttributes(level);
-    assert.ok(enemy < prog * 0.35, `L${level} enemy ${enemy} too close to prog ${prog}`);
-    assert.ok(enemy > prog * 0.2, `L${level} enemy ${enemy} too soft vs prog ${prog}`);
+  // Formula equality + strictly increasing across a wide range.
+  let prev = 0;
+  for (let L = 1; L <= 520; L++) {
+    const got = missionEnemyAttributeBudget(L);
+    assert.equal(got, Math.round(expectedPlayerAttributes(L) * 0.35), `L${L} formula`);
+    assert.ok(got >= prev, `L${L}: ${got} < ${prev}`);
+    prev = got;
   }
-  // Bare (50 attrs) falls behind by mid levels — negligence is punishable.
-  assert.ok(missionEnemyAttributeBudget(10) > 50, "L10 enemy exceeds bare base");
-  assert.ok(missionEnemyAttributeBudget(4) < 50, "L4 enemy still below bare base (early soft)");
+  // Enemy is a soft fraction of the EPA benchmark (0.35), never exceeding it.
+  for (const level of [1, 10, 50, 100, 500]) {
+    assert.ok(missionEnemyAttributeBudget(level) < expectedPlayerAttributes(level));
+  }
 });
 
 test("archetype pick is ~equal over large sample", () => {
@@ -262,29 +262,38 @@ test("mission / arena-bot flat damage ramps; dungeon and players stay at 15", ()
   assert.equal(getDamageBaseForCombatant({ level: 1, class: "Vanguard" }), 15);
 });
 
-test("bare early player is favored vs mission enemy under ramped flat", () => {
-  const level = 10;
-  let wins = 0;
-  const N = 40;
-  for (let i = 0; i < N; i++) {
-    const player = {
-      name: "Bare",
-      level,
-      class: "Vanguard",
-      race: null,
-      stats: { ...CLASSES.Vanguard.baseStats },
-    };
-    let seed = (9000 + i * 91) >>> 0;
-    const rng = () => {
-      seed = (seed * 1664525 + 1013904223) >>> 0;
-      return seed / 0x100000000;
-    };
-    const enemy = generateMissionEncounter({ level }, null, rng);
-    const battle = simulateBattle(player, enemy, [], [], { rng });
-    if (battle.winner === "player") wins += 1;
+test("bare player favored at L1 (ramp) but falls behind by L10 (35% EPA)", () => {
+  // With enemies at 35% of EPA, a totally un-allocated (bare base-stat) build is
+  // favored at L1 (ramped base + tiny enemy budget) but is punished by L10 — the
+  // intended "negligent / obsolete-gear players fall behind" curve. The ramp
+  // itself is unchanged; this only exercises the new enemy budget.
+  function bareWinRate(level, seed0) {
+    let wins = 0;
+    const N = 40;
+    for (let i = 0; i < N; i++) {
+      const player = {
+        name: "Bare",
+        level,
+        class: "Vanguard",
+        race: null,
+        stats: { ...CLASSES.Vanguard.baseStats },
+      };
+      let seed = (seed0 + i * 91) >>> 0;
+      const rng = () => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 0x100000000;
+      };
+      const enemy = generateMissionEncounter({ level }, null, rng);
+      const battle = simulateBattle(player, enemy, [], [], { rng });
+      if (battle.winner === "player") wins += 1;
+    }
+    return wins / N;
   }
-  console.log(`    L${level} bare Vanguard: ${wins}/${N} (${((wins / N) * 100).toFixed(0)}%)`);
-  assert.ok(wins / N >= 0.85, `L${level} bare win rate too low: ${wins}/${N}`);
+  const l1 = bareWinRate(1, 1000);
+  const l10 = bareWinRate(10, 9000);
+  console.log(`    bare Vanguard: L1 ${(l1 * 100).toFixed(0)}%  L10 ${(l10 * 100).toFixed(0)}%`);
+  assert.ok(l1 >= 0.85, `L1 bare should still win easily: ${l1}`);
+  assert.ok(l10 <= 0.5, `L10 bare should be punished by 35% EPA foes: ${l10}`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

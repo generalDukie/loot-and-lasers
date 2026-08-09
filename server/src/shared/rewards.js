@@ -98,11 +98,30 @@ export const POST_200_P = 0.48;
 export const POST_200_B = 0.79;
 export const POST_200_Q = 0.71;
 
+/**
+ * Leveling-pace multipliers applied to the XP *requirement* only (never to XP
+ * earned). These scale the amount of XP needed for L → L+1; every XP source
+ * therefore experiences the same slowdown.
+ *
+ * - XP_GLOBAL_SLOWDOWN: flat 1.5× requirement at every level.
+ * - Early-game modifier: smooth extra requirement of +20% at L1 tapering to
+ *   0 by L100, so NewXpToNext(L) = round(core(L) × 1.5 × EarlyGameModifier(L)).
+ */
+export const XP_GLOBAL_SLOWDOWN = 1.5;
+export const EARLY_GAME_XP_START_BONUS = 0.2;
+export const EARLY_GAME_XP_TAPER_LEVEL = 100;
+
 /** Smooth XP-requirement multiplier; exactly 1 at L<=200, grows indefinitely after. */
 export function post200Growth(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   const X = Math.max(0, (L - POST_200_START_LEVEL) / 100);
   return 1 + POST_200_A * X ** POST_200_P + POST_200_B * X ** POST_200_Q;
+}
+
+/** Early-game slowdown: 1 + 0.20 × max(0, 1 − L/100). ~1.20× at L1 → 1.00× at L>=100. */
+export function earlyGameXpModifier(level) {
+  const L = Math.max(1, Math.floor(Number(level) || 1));
+  return 1 + EARLY_GAME_XP_START_BONUS * Math.max(0, 1 - L / EARLY_GAME_XP_TAPER_LEVEL);
 }
 
 export function expForLevel(level) {
@@ -111,7 +130,12 @@ export function expForLevel(level) {
     1,
     Math.round(XP_REQUIREMENT_MULTIPLIER * 2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683))
   );
-  const units = Math.max(1, Math.round(design * post200Growth(L)));
+  // Pacing multipliers (global 1.5× + tapering early-game) applied before the
+  // single final integer round, preserving the design + Post-200 curve shape.
+  const units = Math.max(
+    1,
+    Math.round(design * post200Growth(L) * XP_GLOBAL_SLOWDOWN * earlyGameXpModifier(L))
+  );
   return units * 10;
 }
 

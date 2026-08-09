@@ -44,9 +44,10 @@ for (const L of levels) {
 assert.ok(expForLevel(501) > expForLevel(500));
 assert.ok(expForLevel(1000) > expForLevel(700));
 
-// Multiplier applied once: design curve (no post200 at L1) × 10 game scale.
+// Design curve (no post200 at L1) × pacing (global 1.5× × early-game ~1.198) × 10 game scale.
 const l1Base = Math.round(1.35 * 2.106 * (1 ** 1.532) * (1 + (1 / 266) ** 3.683));
-assert.equal(expForLevel(1), Math.max(1, l1Base) * 10);
+const l1Units = Math.round(Math.max(1, l1Base) * 1.5 * (1 + 0.2 * (1 - 1 / 100)));
+assert.equal(expForLevel(1), l1Units * 10);
 
 // ── Grants ───────────────────────────────────────────────────
 const starter = {

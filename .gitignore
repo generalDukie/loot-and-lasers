@@ -60,6 +60,9 @@ Thumbs.db
 *.backup
 *.orig
 
+# Local-only art backups (pre-edit PNG snapshots; never commit)
+.local-art-backups/
+
 # Local database files (server/data/ already ignored above)
 *.sqlite
 *.sqlite3

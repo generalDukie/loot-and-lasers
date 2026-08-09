@@ -20,8 +20,7 @@ import {
 } from "../src/shared/rewards.js";
 import {
   MISSION_XP_REBALANCE,
-  DUNGEON_XP_BASE_FACTOR,
-  DUNGEON_XP_REBALANCE,
+  DUNGEON_XP_PER_DRU_MULTIPLIER,
   DUNGEON_TOTAL_DRU,
   getEnemyDru,
   druToRewards,
@@ -146,16 +145,15 @@ test("Mission XP uses shared XP/Fuel ×0.85; scale once", () => {
   assert.equal(MISSION_XP_REBALANCE, 0.85);
 });
 
-test("Dungeon XP unchanged factors; uses enemy level XP/Fuel", () => {
+test("Dungeon XP uses × 2.0 per DRU; uses enemy level XP/Fuel", () => {
   assert.deepEqual(DUNGEON_TOTAL_DRU.slice(1), [40, 50, 60, 70, 95, 110, 125, 140, 155, 185]);
-  assert.equal(DUNGEON_XP_BASE_FACTOR, 0.87);
-  assert.equal(DUNGEON_XP_REBALANCE, 2.1);
+  assert.equal(DUNGEON_XP_PER_DRU_MULTIPLIER, 2.0);
   const dru = getEnemyDru(1, 10);
   const { experience, stardust } = druToRewards(dru, 19);
   assert.equal(stardust, 0);
   assert.equal(
     experience,
-    Math.round(dru * getMissionXpPerFuel(19) * 0.87 * 2.1)
+    Math.round(dru * getMissionXpPerFuel(19) * DUNGEON_XP_PER_DRU_MULTIPLIER)
   );
   // Enemy level, not player level:
   const highPlayer = druToRewards(dru, 19);
@@ -169,8 +167,8 @@ test("Post200Growth = 1 at L200; continuous into L201", () => {
   assert.ok(post200Growth(201) > 1);
   assert.ok(post200Growth(201) - post200Growth(200) < 0.2);
   const base200 = Math.round(1.35 * 2.106 * 200 ** 1.532 * (1 + (200 / 266) ** 3.683));
-  // Post200Growth(200) === 1, so expForLevel(200) === design × 10 game scale.
-  assert.equal(expForLevel(200), base200 * 10);
+  // Post200Growth(200)=1 and earlyGameXpModifier(200)=1, so only global 1.5× applies.
+  assert.equal(expForLevel(200), Math.round(base200 * 1.5) * 10);
   assert.ok(expForLevel(201) >= expForLevel(200));
 });
 
@@ -197,12 +195,13 @@ test("applyXpToCharacter carries overflow XP safely", () => {
 
 test("Timing validation (300 Fuel/day, expected eff=1)", () => {
   const hit = expectedDaysTo([200, 300, 400, 500, 700]);
-  // L200: XP/Fuel formula replacement lands ~12d (prior waypoint chart ~14d).
-  assert.ok(hit[200] >= 12 && hit[200] <= 15, `L200 days ${hit[200]}`);
-  assert.ok(hit[300] >= 55 && hit[300] <= 65, `L300 days ${hit[300]}`);
-  assert.ok(hit[400] >= 165 && hit[400] <= 195, `L400 days ${hit[400]}`);
-  assert.ok(hit[500] >= 550 && hit[500] <= 625, `L500 days ${hit[500]}`);
-  assert.ok(hit[700] >= 2700 && hit[700] <= 3100, `L700 days ${hit[700]}`);
+  // Requirement pacing: global 1.5× (+ tapering early-game). ~1.5× longer than
+  // the pre-slowdown baseline; slightly more below L100.
+  assert.ok(hit[200] >= 18 && hit[200] <= 27, `L200 days ${hit[200]}`);
+  assert.ok(hit[300] >= 76 && hit[300] <= 100, `L300 days ${hit[300]}`);
+  assert.ok(hit[400] >= 260 && hit[400] <= 330, `L400 days ${hit[400]}`);
+  assert.ok(hit[500] >= 750 && hit[500] <= 920, `L500 days ${hit[500]}`);
+  assert.ok(hit[700] >= 4100 && hit[700] <= 4950, `L700 days ${hit[700]}`);
   console.log(`    timing L200=${hit[200]}d L300=${hit[300]}d L400=${hit[400]}d L500=${hit[500]}d L700=${hit[700]}d`);
 });
 

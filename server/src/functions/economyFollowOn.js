@@ -80,12 +80,10 @@ import {
   rollDungeonRegularRarity,
   rollDungeonBossRarity,
   DUNGEON_ENEMIES_PER_PLANET,
-  DUNGEON_MILESTONE_EVERY,
   DUNGEON_STORY_PLANETS,
   getEnemyDru,
   getDungeonEnemyLevel,
   druToRewards,
-  grantFrontierShipMod,
   WEEKLY_NOVA_QUESTS,
   ensureWeeklyNovaState,
   progressWeeklyNovaQuest,
@@ -1105,10 +1103,6 @@ export const SyncDungeonState = wrap((user) => {
   const today = todayET();
   const nowMs = clock.nowMs();
   const patch = {};
-  if ((ch.ship_mods || []).includes("Genesis Core") && (ch.dungeon_planet || 1) <= DUNGEON_STORY_PLANETS) {
-    patch.dungeon_planet = DUNGEON_STORY_PLANETS + 1;
-    patch.dungeon_enemy = 1;
-  }
   // Clear obsolete continue credit if still set.
   if (ch.dungeon_continue_credit) {
     patch.dungeon_continue_credit = false;
@@ -1340,25 +1334,17 @@ export const FinishDungeonBattle = wrap((user, body) => {
 
   const itemsGranted = [];
   const pendingLoot = [];
-  let unlockedShipMod = null;
   if (won) {
     patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + stardust;
     patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + stardust;
 
     patch.dungeon_clears = (ch.dungeon_clears || 0) + (isBoss ? 1 : 0);
     if (isBoss) {
+      // Boss clears advance progression only — no Ship / Ship Module interaction.
       if (planetId > DUNGEON_STORY_PLANETS) {
         patch.dungeon_planet = Math.max(ch.dungeon_planet || planetId, planetId) + 1;
         patch.dungeon_enemy = 1;
       } else if (planetId === DUNGEON_STORY_PLANETS) {
-        const grant = grantFrontierShipMod(ch, planetId);
-        patch.ship_mods = grant.ship_mods;
-        if (grant.ship_mod_loadouts) patch.ship_mod_loadouts = grant.ship_mod_loadouts;
-        unlockedShipMod = grant.unlockedLabel;
-        if (grant.consolationStardust) {
-          patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + grant.consolationStardust;
-          patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + grant.consolationStardust;
-        }
         patch.dungeon_planet = DUNGEON_STORY_PLANETS + 1;
         patch.dungeon_enemy = 1;
         patch.highest_sector = Math.max(ch.highest_sector || 1, DUNGEON_STORY_PLANETS);
@@ -1366,14 +1352,6 @@ export const FinishDungeonBattle = wrap((user, body) => {
         patch.dungeon_planet = planetId + 1;
         patch.dungeon_enemy = 1;
         patch.highest_sector = Math.max(ch.highest_sector || 1, planetId + 1);
-        const grant = grantFrontierShipMod(ch, planetId);
-        patch.ship_mods = grant.ship_mods;
-        if (grant.ship_mod_loadouts) patch.ship_mod_loadouts = grant.ship_mod_loadouts;
-        unlockedShipMod = grant.unlockedLabel;
-        if (grant.consolationStardust) {
-          patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + grant.consolationStardust;
-          patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + grant.consolationStardust;
-        }
       }
     } else {
       patch.dungeon_enemy = Math.min(DUNGEON_ENEMIES_PER_PLANET, enemyIndex + 1);
@@ -1396,13 +1374,8 @@ export const FinishDungeonBattle = wrap((user, body) => {
       collectGrant(grantOrCompensate(ch, cons, patch), itemsGranted, pendingLoot, grantCtx);
     }
 
-    const nextNodes = (ch.dungeon_nodes_cleared || 0) + 1;
-    patch.dungeon_nodes_cleared = nextNodes;
-    if (nextNodes % DUNGEON_MILESTONE_EVERY === 0) {
-      const rarity = rollDungeonRegularRarity(secureRandom);
-      const mile = randomItem(rarity, Math.max(1, enemyLevel || ch.level || 1), undefined, secureRandom, ch.class);
-      collectGrant(grantOrCompensate(ch, stripShopNoise(mile), patch), itemsGranted, pendingLoot, grantCtx);
-    }
+    // Node counter feeds the public `dungeon_nodes_cleared` statistic (not a reward).
+    patch.dungeon_nodes_cleared = (ch.dungeon_nodes_cleared || 0) + 1;
 
     const weekly = progressWeeklyNovaQuest(
       { ...ch, weekly_nova_quests: patch.weekly_nova_quests || ch.weekly_nova_quests },
@@ -1480,7 +1453,6 @@ export const FinishDungeonBattle = wrap((user, body) => {
     },
     items: itemsGranted,
     pending_loot: pendingLoot,
-    ship_mod: unlockedShipMod,
     newly_unlocked: ach.newly_unlocked,
     discoveries,
   };

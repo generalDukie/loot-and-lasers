@@ -26,11 +26,15 @@ It did **not** retune budgets, drop chances, shop pricing, or vendor formulas.
 | Named + shop/loot payload | `randomItem` in `server/src/shared/rewards.js` (now wraps `GenerateGearItem`) |
 | Node re-export | `server/src/shared/itemGeneration.js` → `src/lib` |
 
-## 2–4. Base budget / interpolation / L>500
+## 2–4. Base budget / continuous curve / infinite scaling
 
-- Direct-value monotone cubic **PCHIP** on `BASE_GEAR_STAT_BUDGET_ANCHORS`
-- Anchors: L1=12 … L500=795 (matches prompt)
-- `L > 500`: `ROUND(795 + 1.63 × (L − 500))` — no hard cap
+- Single continuous formula (no anchors, PCHIP, Level-500 breakpoint, or cap):
+  `BaseGearStatBudget(L) = ROUND(GEAR_BUDGET_LINEAR·L + GEAR_BUDGET_CURVE·√L + GEAR_BUDGET_FLOOR)`
+- Constants (fit to intended targets L1=12 … L500=795, ≤~7% off mid-curve, L1 exact):
+  `GEAR_BUDGET_LINEAR = 1.4079` (scale + permanent high-level slope),
+  `GEAR_BUDGET_CURVE = 2.2988` (early/mid √L bend),
+  `GEAR_BUDGET_FLOOR = 8.277` (Level-1 floor)
+- The same expression evaluates at L50, L500, L2000, and beyond — monotonic, smooth slope, sub-explosive (linear tail).
 
 ## 5–7. Slot / rarity / minima
 
@@ -98,8 +102,9 @@ No separate mission/dungeon/shop budget curves.
 
 ## 20–22. Tests
 
-`npm run test:gear-stats` — **14 passed** (anchors, L>500, slots, rarity, floors,
-exact sum, favored once-per-item, source-independence, randomItem parity, vendor≠stat).
+`npm run test:gear-stats` — continuous C4 curve, monotone + infinite scaling, no
+Level-500 breakpoint, slots, rarity, floors, exact sum, favored once-per-item,
+source-independence, randomItem parity, vendor≠stat.
 
 Also green: `test:inventory`, `test:shared-foundation`, `test:mission-gear-drop`.
 
@@ -138,7 +143,7 @@ sequenceDiagram
 ```mermaid
 flowchart TB
   Params[ItemLevel + Type + Rarity]
-  Base[BaseGearStatBudget PCHIP]
+  Base[BaseGearStatBudget continuous]
   Pool[ROUND Base x Slot x Rarity]
   Sel[Select unique attrs + favored once]
   Alloc[Min floors + remainder = exact sum]

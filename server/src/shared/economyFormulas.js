@@ -13,8 +13,11 @@ import { XP_STARDUST_SCALE } from "./economyConstants.js";
 
 /** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
 export const MISSION_XP_REBALANCE = 0.85;
-export const DUNGEON_XP_BASE_FACTOR = 0.87;
-export const DUNGEON_XP_REBALANCE = 2.10;
+/**
+ * Dungeon DRU → XP conversion: 1 DRU = 2 fuel-equivalents of XP at the
+ * enemy's level. Single authoritative balance constant.
+ */
+export const DUNGEON_XP_PER_DRU_MULTIPLIER = 2.0;
 import {
   computeItemVendorValue,
   ITEM_SELL_TYPE_WEIGHT,
@@ -434,13 +437,13 @@ export function getEffectiveFuelCost(character, mission) {
 
 // ── Mission XP / SD ──────────────────────────────────────────
 /** Mission reward variance band by player level (±fraction around 1.0). */
-export function getMissionRewardVariance(playerLevel = 1) {
-  return (Math.max(1, Number(playerLevel) || 1) <= 10) ? 0.25 : 0.10;
+export function getMissionRewardVariance(_playerLevel = 1) {
+  return 0.10;
 }
 
 /**
- * Per-mission efficiency roll — independent for XP and Stardust.
- * Levels 1–10: ±25% (0.75–1.25). Level 11+: ±10% (0.90–1.10).
+ * Per-mission variance roll — independent for XP and Stardust.
+ * Uniform ±10% (0.90–1.10) at every level.
  */
 export function rollMissionEfficiency(playerLevel = 1, rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
@@ -1323,9 +1326,6 @@ export const DUNGEON_BATTLE_COOLDOWN_MS = 60 * 60 * 1000;
 export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_LOSS_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
-/** @deprecated use DUNGEON_XP_BASE_FACTOR */
-export const DUNGEON_XP_DRU_MULT = DUNGEON_XP_BASE_FACTOR;
-export const DUNGEON_MILESTONE_EVERY = 5;
 export const DUNGEON_STORY_PLANETS = 10;
 
 export const DUNGEON_TOTAL_DRU = [0, 40, 50, 60, 70, 95, 110, 125, 140, 155, 185];
@@ -1369,19 +1369,6 @@ export function isDungeonUnlockedByLevel(planetId, playerLevel) {
 const D10_LEVEL_OFFSETS = [0, 3, 7, 10, 13, 17, 20, 23, 27, 30];
 
 /** Minimal planet ship-mod grant table (id → flavor + SHIP_MODS cat). */
-export const DUNGEON_PLANET_SHIP_MODS = {
-  1: { shipMod: "Plasma Drive", shipModCat: "fuel_efficiency" },
-  2: { shipMod: "Warp Coil", shipModCat: "warp_drive" },
-  3: { shipMod: "Phase Shift", shipModCat: "fuel_tank" },
-  4: { shipMod: "Singularity Engine", shipModCat: "warp_drive" },
-  5: { shipMod: "Void Sail", shipModCat: "stardust_magnet" },
-  6: { shipMod: "Cryo Thruster", shipModCat: "fuel_tank" },
-  7: { shipMod: "Solar Booster", shipModCat: "fuel_efficiency" },
-  8: { shipMod: "Quantum Anchor", shipModCat: "neural_accel" },
-  9: { shipMod: "Aether Wing", shipModCat: "cargo_hold" },
-  10: { shipMod: "Genesis Core", shipModCat: "neural_accel" },
-};
-
 export function getDungeonBand(planetId) {
   return Math.max(1, Math.floor(planetId || 1));
 }
@@ -1414,10 +1401,11 @@ export function druToRewards(dru, enemyLevel) {
   return {
     // Standard dungeon: XP only — no direct Stardust.
     // getMissionXpPerFuel already includes XP_STARDUST_SCALE once.
+    // XP = round(DRU × MissionXPPerFuel(enemyLevel) × DUNGEON_XP_PER_DRU_MULTIPLIER).
     stardust: 0,
     experience: Math.max(
       units > 0 ? 1 : 0,
-      Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_BASE_FACTOR * DUNGEON_XP_REBALANCE)
+      Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_PER_DRU_MULTIPLIER)
     ),
   };
 }
@@ -1428,46 +1416,6 @@ export function dungeonCooldownMs(_won) {
 
 export function computeMiningReward(level, hours) {
   return miningStardustFromHours(level, hours);
-}
-
-export function grantFrontierShipMod(character, planetId) {
-  const meta = DUNGEON_PLANET_SHIP_MODS[planetId] || null;
-  const catKey = meta?.shipModCat;
-  const flavor = meta?.shipMod;
-  const cat = catKey ? SHIP_MODS[catKey] : null;
-  const flavorMods = [...(character.ship_mods || [])];
-  if (flavor && !flavorMods.includes(flavor)) flavorMods.push(flavor);
-
-  if (!cat) {
-    return { ship_mods: flavorMods, ship_mod_loadouts: null, unlockedLabel: flavor || null, maxed: true };
-  }
-
-  const shipId = getActiveShipId(character);
-  const loadouts = { ...(character.ship_mod_loadouts || {}) };
-  const installed = [...(Array.isArray(loadouts[shipId]) ? loadouts[shipId] : getShipModIds(character, shipId))];
-  const knownIds = new Set(Object.values(SHIP_MODS).flatMap((c) => c.tiers.map((t) => t.id)));
-  const cleaned = installed.filter((id) => knownIds.has(id));
-  const next = cat.tiers.find((t) => !cleaned.includes(t.id));
-
-  if (!next) {
-    return {
-      ship_mods: flavorMods,
-      ship_mod_loadouts: null,
-      unlockedLabel: flavor ? `${flavor} (catalogued)` : null,
-      maxed: true,
-      // No dungeon Stardust consolation — economy awards XP + gear only.
-      consolationStardust: 0,
-    };
-  }
-
-  cleaned.push(next.id);
-  loadouts[shipId] = cleaned;
-  return {
-    ship_mods: flavorMods,
-    ship_mod_loadouts: loadouts,
-    unlockedLabel: `${flavor || cat.name} — ${cat.name} T${cat.tiers.indexOf(next) + 1}`,
-    maxed: false,
-  };
 }
 
 // ── Weekly nova quests ───────────────────────────────────────

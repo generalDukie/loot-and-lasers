@@ -319,6 +319,7 @@ func _build() -> void:
 	_list.offset_bottom = -24
 	_list.add_theme_constant_override("separation", 14)
 	_list.z_index = 30
+	TutorialManager.tag_target(_list, "cantina-patrons")
 	stage.add_child(_list)
 
 	_status = ClientUi.make_status()
@@ -547,6 +548,7 @@ func _make_patron(offer: Dictionary) -> Button:
 	button.mouse_entered.connect(func() -> void: _show_hover_preview(captured, tint, state))
 	button.mouse_exited.connect(func() -> void: _hide_hover_preview())
 	button.pressed.connect(func() -> void: _open_mission_sheet(captured, tint, state))
+	TutorialManager.tag_target(button, "cantina-patrons")
 	return button
 
 
@@ -920,6 +922,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 			_close_mission_sheet()
 			_on_launch(launch_offer)
 		)
+	TutorialManager.tag_target(start, "cantina-start")
 	_preview_body.add_child(start)
 
 	_preview_scrim.visible = true

@@ -59,6 +59,8 @@ var pending_dm_character: Dictionary = {}
 var pending_mail_character: Dictionary = {}
 ## Page scene currently requested inside the persistent in-game shell.
 var pending_page_path := ""
+## Page scene actually mounted in the shell (set after instantiate). Empty outside the shell.
+var current_page_path := ""
 
 
 func _ready() -> void:
@@ -68,18 +70,21 @@ func _ready() -> void:
 
 func go_login() -> void:
 	pending_page_path = ""
+	current_page_path = ""
 	change_state(GameState.LOGIN)
 	_change_scene(SCENE_LOGIN)
 
 
 func go_character_select() -> void:
 	pending_page_path = ""
+	current_page_path = ""
 	change_state(GameState.CHARACTER_SELECT)
 	_change_scene(SCENE_CHARACTER_SELECT)
 
 
 func go_character_create() -> void:
 	pending_page_path = ""
+	current_page_path = ""
 	change_state(GameState.CHARACTER_SELECT)
 	_change_scene(SCENE_CHARACTER_CREATE)
 
@@ -125,6 +130,7 @@ func clear_active_character(source: String = "logout") -> void:
 	pending_dm_character = {}
 	pending_mail_character = {}
 	pending_page_path = ""
+	current_page_path = ""
 	combat_overlay_kind = "arena"
 	if CurrencyManager != null:
 		CurrencyManager.clear_local()

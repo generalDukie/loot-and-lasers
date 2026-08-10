@@ -24,6 +24,7 @@ var _xp_bar: ProgressBar
 var _xp_lab: Label
 var _lore_lab: RichTextLabel
 var _stims_lab: Label
+var _stims_panel: PanelContainer
 var _effects: ActiveEffectsBar
 var _bio_field: LineEdit
 var _bio_count: Label
@@ -243,6 +244,7 @@ func _build() -> void:
 	_doll.mouse_filter = Control.MOUSE_FILTER_PASS
 	doll_wrap.add_child(_doll)
 	doll_wrap.resized.connect(_on_doll_wrap_resized)
+	TutorialManager.tag_target(doll_wrap, "hero-doll")
 
 	var identity := VBoxContainer.new()
 	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -297,16 +299,17 @@ func _build() -> void:
 	identity.add_child(_xp_bar)
 
 	# Stims / fuel mounts rail — labeled timer sections.
-	var stim_panel := PanelContainer.new()
-	stim_panel.custom_minimum_size = Vector2(176, 0)
-	stim_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stim_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+	_stims_panel = PanelContainer.new()
+	_stims_panel.custom_minimum_size = Vector2(176, 0)
+	_stims_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_stims_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.03, 0.07, 0.06, 0.95), Color(ClientUi.SUCCESS, 0.4), 10, 1
 	))
-	triad.add_child(stim_panel)
+	TutorialManager.tag_target(_stims_panel, "hero-stims")
+	triad.add_child(_stims_panel)
 	var stim_col := VBoxContainer.new()
 	stim_col.add_theme_constant_override("separation", 6)
-	stim_panel.add_child(stim_col)
+	_stims_panel.add_child(stim_col)
 	_stims_lab = Label.new()
 	_stims_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_stims_lab.add_theme_font_size_override("font_size", 15)
@@ -318,6 +321,7 @@ func _build() -> void:
 	_effects.side_sections = true
 	_effects.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_effects.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	TutorialManager.tag_target(_effects, "hero-stims")
 	stim_col.add_child(_effects)
 
 	# Editable bio bar (web CharacterHeader).
@@ -353,6 +357,7 @@ func _build() -> void:
 	_backpack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_backpack.size_flags_stretch_ratio = 1.0
 	_backpack.clip_contents = true
+	TutorialManager.tag_target(_backpack, "hero-backpack")
 	_backpack.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.06, 0.07, 0.1, 0.94), Color(0.55, 0.39, 0.2, 0.45), 12, 1
 	))
@@ -420,6 +425,7 @@ func _populate() -> void:
 	_attrs_panel = PanelContainer.new()
 	_attrs_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_attrs_panel.clip_contents = true
+	TutorialManager.tag_target(_attrs_panel, "hero-attrs")
 	_attrs_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.05, 0.06, 0.1, 0.96), Color(ClientUi.CYAN, 0.35), 14, 1
 	))
@@ -491,6 +497,7 @@ func _populate() -> void:
 
 	_vault_panel = _make_vault_teaser(c)
 	_vault_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	TutorialManager.tag_target(_vault_panel, "hero-vault")
 	_list.add_child(_vault_panel)
 
 	_sheet_ready = true
@@ -826,6 +833,7 @@ func _rebuild_doll() -> void:
 			continue
 		var worn := InventoryRules.find_equipped_of_type(items, stype)
 		var chip := _make_slot_chip(stype, str(slot.get("label", stype)), worn)
+		TutorialManager.tag_target(chip, "hero-doll")
 		_slot_panels[stype] = chip
 		_doll.add_child(chip)
 
@@ -1528,6 +1536,7 @@ func _make_vault_teaser(c: Dictionary) -> PanelContainer:
 	open.text = "Tap to view full log →"
 	ClientUi.apply_ghost_button(open)
 	open.pressed.connect(func() -> void: GameManager.go_collectibles())
+	TutorialManager.tag_target(open, "hero-vault")
 	col.add_child(open)
 	return panel
 
@@ -1600,6 +1609,7 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	buy.add_theme_font_size_override("font_size", 17)
 	buy.button_down.connect(func() -> void: _start_upgrade_hold(stat))
 	buy.button_up.connect(func() -> void: _stop_upgrade_hold(true))
+	TutorialManager.tag_target(buy, "hero-attr-buy")
 	row.add_child(buy)
 
 	_stat_rows[stat] = {"panel": panel, "value": value_lab, "bonus": bonus_lab, "buy": buy}

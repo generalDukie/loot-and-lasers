@@ -88,6 +88,14 @@ Node is their target authority:
 They should use Node `GameApiClient`. Existing Nakama calls listed later are
 legacy implementation debt, not examples to copy.
 
+### TutorialManager (Node)
+
+Onboarding is Node-authoritative (`GetTutorialState`, `AdvanceTutorial`,
+`SkipTutorial`, `CompleteTutorial`). `AdvanceTutorial` accepts
+`{ action: "next"|"back"|"set"|"gate", gate?, step_id? }`. Interactive steps
+use `gate` (`click_target`, `launch_mission`, `arena_battle`) and reject `next` until the
+player performs them. Progress lives on `Character.onboarding_tutorial`.
+
 ## Future examples by manager
 
 ### MissionManager (later)

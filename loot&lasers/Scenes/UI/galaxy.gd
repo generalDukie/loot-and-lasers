@@ -142,6 +142,7 @@ func _build() -> void:
 	_map_stage.planet_pressed.connect(_on_planet_pressed)
 	_map_stage.wormhole_pressed.connect(_on_wormhole)
 	_map_stage.zoom_changed.connect(_on_zoom_changed)
+	TutorialManager.tag_target(_map_stage, "galaxy-map")
 	map_stack.add_child(_map_stage)
 
 	_map_hint = Label.new()
@@ -340,6 +341,7 @@ func _build() -> void:
 	_encounter_grid.add_theme_constant_override("v_separation", 6)
 	_encounter_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_encounter_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	TutorialManager.tag_target(_encounter_grid, "galaxy-encounters")
 	enc_col.add_child(_encounter_grid)
 
 	# Actions pinned under the clipped body so the grid never covers Fight.
@@ -387,6 +389,7 @@ func _build() -> void:
 	ClientUi.apply_primary_button(_fight_btn)
 	_fight_btn.add_theme_font_size_override("font_size", 20)
 	_fight_btn.pressed.connect(_on_fight)
+	TutorialManager.tag_target(_fight_btn, "galaxy-fight")
 	act_col.add_child(_fight_btn)
 
 

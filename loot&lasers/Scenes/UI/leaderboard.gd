@@ -65,6 +65,7 @@ func _build() -> void:
 	_podium.alignment = BoxContainer.ALIGNMENT_CENTER
 	_podium.add_theme_constant_override("separation", 18)
 	_podium.custom_minimum_size.y = 293
+	TutorialManager.tag_target(_podium, "ranks-board")
 	root.add_child(_podium)
 
 	var scroll := ScrollContainer.new()
@@ -74,6 +75,7 @@ func _build() -> void:
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_list.add_theme_constant_override("separation", 8)
+	TutorialManager.tag_target(_list, "ranks-board")
 	scroll.add_child(_list)
 
 
@@ -196,6 +198,8 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	wrap.custom_minimum_size.x = 149
 	wrap.alignment = BoxContainer.ALIGNMENT_CENTER
 	wrap.add_theme_constant_override("separation", 4)
+	if str(c.get("id", "")) == str(GameManager.active_character.get("id", "")):
+		TutorialManager.tag_target(wrap, "ranks-you")
 
 	var medal: Color = MEDAL[medal_rank]
 	var emoji := ClassIcon.make(_class_key(c), ClassIcon.SIZE_PODIUM)
@@ -301,6 +305,8 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.05, 0.06, 0.09, 0.72), Color(0.35, 0.40, 0.48, 0.40), 12, 1
 	))
+	if is_me:
+		TutorialManager.tag_target(panel, "ranks-you")
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)

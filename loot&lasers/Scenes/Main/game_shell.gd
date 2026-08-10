@@ -331,6 +331,7 @@ func _make_top_chrome() -> Control:
 	_activity.custom_minimum_size = Vector2(268, 52)
 	_activity.pressed.connect(_on_activity_pressed)
 	ClientUi.apply_interaction_motion(_activity, 1.03)
+	TutorialManager.tag_target(_activity, "shell-activity")
 	row.add_child(_activity)
 	var act_row := HBoxContainer.new()
 	act_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -513,11 +514,22 @@ func _make_rail() -> Control:
 				tutorial_id = "nav-cantina"
 			elif path == GameManager.SCENE_GALAXY:
 				tutorial_id = "nav-frontier"
+			elif path == GameManager.SCENE_FRIENDS:
+				tutorial_id = "nav-friends"
+			elif path == GameManager.SCENE_MAIL:
+				tutorial_id = "nav-mail"
 			elif path == GameManager.SCENE_ARENA:
 				tutorial_id = "nav-arena"
+			elif path == GameManager.SCENE_LEADERBOARD:
+				tutorial_id = "nav-ranks"
+			elif path == GameManager.SCENE_SHOP:
+				tutorial_id = "nav-shop"
+			elif path == GameManager.SCENE_CASINO:
+				tutorial_id = "nav-casino"
+			elif path == GameManager.SCENE_MINING:
+				tutorial_id = "nav-mine"
 			if not tutorial_id.is_empty():
-				btn.set_meta("tutorial_id", tutorial_id)
-				btn.add_to_group("tutorial_target")
+				TutorialManager.tag_target(btn, tutorial_id)
 			group_box.add_child(btn)
 
 			var pad := MarginContainer.new()
@@ -666,7 +678,12 @@ func _make_operative_panel() -> Control:
 	_operative_name.add_theme_color_override("font_color", ClientUi.TEXT)
 	_operative_name.add_theme_color_override("font_hover_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(_operative_name)
-	_operative_name.pressed.connect(func() -> void: GameManager.go_stats())
+	_operative_name.pressed.connect(func() -> void:
+		if TutorialManager.should_show():
+			return
+		GameManager.go_stats()
+	)
+	TutorialManager.tag_target(_operative_name, "shell-operative")
 	panel.add_child(_operative_name)
 
 	_operative_meta = Label.new()
@@ -703,6 +720,8 @@ func _make_operative_panel() -> Control:
 	_stardust_value = _make_readout(wallet, "stardust", Color("#E879F9"))
 	_nova_value = _make_readout(wallet, "nova", Color("#FFD700"), true)
 
+	TutorialManager.tag_target(panel, "shell-operative")
+	TutorialManager.tag_target(portrait_area, "shell-operative")
 	return panel
 
 
@@ -942,6 +961,8 @@ func _on_nav_pressed(path: String) -> void:
 		return
 	if path == GameManager.SCENE_SHIP and FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
 		return
+	if TutorialManager.should_show() and not TutorialManager.nav_allowed(path):
+		return
 	GameManager.open_game_page(path)
 
 
@@ -1035,6 +1056,7 @@ func show_page(path: String) -> void:
 		_page.free()
 		_page = null
 		_page_path = ""
+		GameManager.current_page_path = ""
 		_page_swap_busy = false
 		_set_nav_buttons_enabled(true)
 		return
@@ -1062,13 +1084,20 @@ func show_page(path: String) -> void:
 	_set_nav_buttons_enabled(true)
 	# Badge updates from Realtime + opening the notif dock; avoid GetNotifications on every hop.
 	_update_notif_badge()
-	TutorialManager.notify_page_changed(path)
+	call_deferred("_notify_tutorial_page_ready", path)
 	if NAV_TIMING_LOG:
 		print("[nav] path=%s load_ms=%d shell_ms=%d" % [
 			path.get_file(),
 			load_ms,
 			Time.get_ticks_msec() - nav_t0,
 		])
+
+
+func _notify_tutorial_page_ready(path: String) -> void:
+	if _page_path != path or _page == null or not is_instance_valid(_page):
+		return
+	GameManager.current_page_path = path
+	TutorialManager.notify_page_changed(path)
 
 
 func _set_nav_buttons_enabled(enabled: bool) -> void:
@@ -1191,6 +1220,10 @@ func open_daily_login_modal() -> void:
 func _on_daily_login_claimed(_payload: Dictionary) -> void:
 	_refresh_chrome()
 	await _refresh_notification_center()
+
+
+func has_overlay() -> bool:
+	return _overlay_host != null and is_instance_valid(_overlay_host) and _overlay_host.get_child_count() > 0
 
 
 func clear_overlays() -> void:
@@ -1879,7 +1912,12 @@ func _refresh_chrome() -> void:
 		var class_icon := ClassIcon.make(str(character.get("class", "Vanguard")), 72.0)
 		class_icon.name = "ClassGlyph"
 		class_host.add_child(class_icon)
-		portrait_btn.pressed.connect(func() -> void: GameManager.go_stats())
+		portrait_btn.pressed.connect(func() -> void:
+			if TutorialManager.should_show():
+				return
+			GameManager.go_stats()
+		)
+		TutorialManager.tag_target(portrait_btn, "shell-operative")
 		_portrait_host.add_child(portrait_btn)
 		_console_portrait_btn = portrait_btn
 		_console_class_icon = class_host

@@ -247,6 +247,7 @@ func _build() -> void:
 	ClientUi.apply_display_font(_overlay_timer)
 	time_row.add_child(_overlay_timer)
 	_timer_label = _overlay_timer
+	TutorialManager.tag_target(_timer_label, "mission-timer")
 
 	_progress_track = Control.new()
 	_progress_track.custom_minimum_size = Vector2(0, 22)

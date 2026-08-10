@@ -39,6 +39,8 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		ClientUi.painted_panel_style(Color(0.045, 0.05, 0.085, 0.98), Color(accent, 0.65), 14, 2)
 	)
 	center.add_child(card)
+	if mode == "arena":
+		TutorialManager.tag_target(card, "arena-result")
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 12)

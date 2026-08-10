@@ -309,6 +309,7 @@ func _build() -> void:
 	_outro_btn.custom_minimum_size = Vector2(320, 64)
 	ClientUi.apply_primary_button(_outro_btn)
 	_outro_btn.pressed.connect(_on_outro_continue)
+	TutorialManager.tag_target(_outro_btn, "arena-outro")
 	outro_col.add_child(_outro_btn)
 
 	var combo_row := Control.new()
@@ -341,6 +342,7 @@ func _build() -> void:
 	_skip_btn.custom_minimum_size = Vector2(320, 58)
 	_apply_skip_cta(_skip_btn)
 	_skip_btn.pressed.connect(_on_skip)
+	TutorialManager.tag_target(_skip_btn, "arena-outro")
 	skip_row.add_child(_skip_btn)
 
 	_sheet_host = Control.new()

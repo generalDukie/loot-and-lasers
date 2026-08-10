@@ -94,6 +94,7 @@ func _build() -> void:
 	hero.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.05, 0.05, 0.08, 0.97), Color(0.35, 0.40, 0.48, 0.45), 16, 1
 	))
+	TutorialManager.tag_target(hero, "mine-hero")
 	root.add_child(hero)
 
 	var pad := MarginContainer.new()

@@ -76,6 +76,7 @@ func _build() -> void:
 
 	_tabs = HBoxContainer.new()
 	_tabs.add_theme_constant_override("separation", 6)
+	TutorialManager.tag_target(_tabs, "vault-tabs")
 	root.add_child(_tabs)
 	for i in TAB_KEYS.size():
 		var b := Button.new()

@@ -177,7 +177,9 @@ func _build() -> void:
 	center.add_child(root)
 
 	root.add_child(_build_header())
-	root.add_child(_build_nav())
+	var nav := _build_nav()
+	TutorialManager.tag_target(nav, "casino-games")
+	root.add_child(nav)
 
 	var stage := PanelContainer.new()
 	stage.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(

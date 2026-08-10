@@ -11,10 +11,12 @@ import {
   beginOrResume,
   advanceTo,
   advanceNext,
+  advanceGate,
   jumpToFinish,
   markSkipped,
   markCompleted,
   stepIndex,
+  stepById,
   ONBOARDING_STARTER_REWARD,
   ONBOARDING_STEPS,
 } from "../shared/tutorialService.js";
@@ -30,6 +32,16 @@ import { resolveSelectedCharacter } from "../gameplayContext.js";
 
 function myCharacter(user) {
   return resolveSelectedCharacter(user, { required: false });
+}
+
+function assertCharacterMatchesGate(ch, state, gate) {
+  const step = stepById(state.step_id);
+  if (step.optional) return;
+  if (gate === "launch_mission") {
+    const active = Boolean(ch?.active_mission_id);
+    const done = Number(ch?.missions_completed || 0) > 0;
+    if (!active && !done) httpErr(400, "Start a mission first", "TUTORIAL_GATE_UNMET");
+  }
 }
 
 function httpErr(status, message, code) {
@@ -94,7 +106,11 @@ export async function GetTutorialState(user, _body = {}) {
 
   let state = getOnboardingFromCharacter(character);
   let live = character;
+  const storedId = character.onboarding_tutorial?.step_id;
   if (state.status === "pending") {
+    state = beginOrResume(state);
+    live = await persistOnboarding(character.id, state);
+  } else if (state.status === "active" && storedId && state.step_id !== storedId) {
     state = beginOrResume(state);
     live = await persistOnboarding(character.id, state);
   }
@@ -112,8 +128,9 @@ export async function GetTutorialState(user, _body = {}) {
 
 /**
  * Advance tutorial progress.
- * Body: { action: "next"|"back"|"set", step_id? }
- * Visit gates: client sends next after arriving; server only enforces step order.
+ * Body: { action: "next"|"back"|"set"|"gate", step_id?, gate? }
+ * Visit/ack: client sends next after arriving or reading.
+ * Action gates: client sends { action: "gate", gate } after the required interaction.
  */
 export async function AdvanceTutorial(user, body = {}) {
   const character = await myCharacter(user);
@@ -128,7 +145,11 @@ export async function AdvanceTutorial(user, body = {}) {
       }
 
       const action = String(body.action || "next").toLowerCase();
-      if (action === "set" || body.step_id || body.stepId) {
+      if (action === "gate") {
+        const gate = String(body.gate || body.gate_id || "");
+        assertCharacterMatchesGate(ch, state, gate);
+        state = advanceGate(state, gate);
+      } else if (action === "set" || ((body.step_id || body.stepId) && action !== "next" && action !== "back")) {
         const target = String(body.step_id || body.stepId || "");
         state = advanceTo(state, target);
       } else if (action === "back") {

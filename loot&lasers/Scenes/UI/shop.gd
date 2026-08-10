@@ -336,6 +336,7 @@ func _make_market_section() -> PanelContainer:
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.size_flags_stretch_ratio = 1.0
+	TutorialManager.tag_target(panel, "shop-buy")
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.04, 0.08, 0.1, 0.96), Color(ClientUi.CYAN, 0.28), 12, 1
 	))
@@ -426,6 +427,7 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	TutorialManager.tag_target(panel, "shop-item")
 	var panel_sb: StyleBoxFlat = ClientUi.painted_panel_style(
 		Color(0.04, 0.05, 0.08, 0.96), Color(rarity_tint, 0.45), 10, 1
 	).duplicate()
@@ -555,6 +557,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	TutorialManager.tag_target(panel, "shop-item")
 	var border := Color(tint, 0.7) if is_hot else Color(tint, 0.45)
 	var panel_sb: StyleBoxFlat = ClientUi.painted_panel_style(
 		Color(0.05, 0.05, 0.08, 0.96), border, 10, 2 if is_hot else 1
@@ -889,6 +892,7 @@ func _make_sell_section() -> VBoxContainer:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	col.add_theme_constant_override("separation", SELL_SECTION_SEP)
+	TutorialManager.tag_target(col, "shop-sell-tray")
 
 	var gap := Control.new()
 	gap.custom_minimum_size.y = 6
@@ -1164,6 +1168,8 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		mark.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.75 if is_stage else 0.45))
 		root.add_child(mark)
 
+	if filled and not is_stage:
+		TutorialManager.tag_target(panel, "shop-sell-item")
 	if filled:
 		var captured := item.duplicate(true)
 		var idx := stage_index

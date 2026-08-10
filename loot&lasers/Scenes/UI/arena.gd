@@ -127,6 +127,7 @@ func _build() -> void:
 	_rating_label.add_theme_font_size_override("font_size", 37)
 	_rating_label.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(_rating_label)
+	TutorialManager.tag_target(_rating_label, "arena-rating")
 	head_r.add_child(_rating_label)
 
 	var chips := GridContainer.new()
@@ -138,6 +139,7 @@ func _build() -> void:
 	_stat_streak = _add_stat_chip(chips, "🔥", "STREAK", Color("#FB7185"))
 
 	_free_panel = _build_free_battles_panel()
+	TutorialManager.tag_target(_free_panel, "arena-free")
 	root.add_child(_free_panel)
 
 	var challengers_row := HBoxContainer.new()
@@ -197,6 +199,7 @@ func _build() -> void:
 	_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_list.add_theme_constant_override("h_separation", 10)
 	_list.add_theme_constant_override("v_separation", 10)
+	TutorialManager.tag_target(_list, "arena-contenders")
 	body.add_child(_list)
 
 	# Twin panes absorb remaining height (fills dead space under the arena board).
@@ -612,6 +615,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 		12,
 		2
 	))
+	TutorialManager.tag_target(panel, "arena-contenders")
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
@@ -793,6 +797,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 		ClientUi.apply_primary_button(fight)
 		UiIcon.apply_button_icon_colors(fight, Color.WHITE)
 	fight.pressed.connect(func() -> void: _on_challenge(opp))
+	TutorialManager.tag_target(fight, "arena-fight")
 	col.add_child(fight)
 	return panel
 

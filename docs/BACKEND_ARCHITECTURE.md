@@ -177,16 +177,23 @@ Equip, unequip, and stim use go through `AuthManager` → Node Item PATCH / `Use
 
 ## Onboarding tutorial
 
-Interactive coach-mark onboarding for **new** characters only.
+Click-locked, nav-ordered onboarding for **new** characters only.
+Starts at the Operative Panel, then follows side-nav order. The player must click
+each highlighted control; the coach never navigates for them. Page-specific copy
+only appears after that page is actually open.
 
 | Piece | Location |
 |-------|----------|
 | Step catalog + state machine | `server/src/shared/tutorialService.js` |
-| RPCs | `GetTutorialState`, `AdvanceTutorial`, `SkipTutorial`, `CompleteTutorial` |
+| RPCs | `GetTutorialState`, `AdvanceTutorial` (`next` / `back` / `set` / `gate`), `SkipTutorial`, `CompleteTutorial` |
 | Character field | `onboarding_tutorial` (server-only; set on create) |
 | Starter pack | `ClaimKeys.tutorial(characterId)` + reward source `onboarding_tutorial` (1000 Stardust / 25 Nova / 20 Fuel) |
-| Web UI | `src/lib/tutorial/*`, `TutorialCoach`, `GameLayout` |
 | Godot UI | `TutorialManager` autoload + `TutorialCoach.gd` |
+| Page targets | `TutorialManager.tag_target(node, id)` (`tutorial_target` group + `tutorial_id` meta) |
+
+Hard gates (`click_target`, `launch_mission`, `arena_battle`) advance only when
+the real action happens. Optional gates can Continue if the action is impossible
+(no free battles). Unknown/legacy step ids remap to `click_operative`.
 
 Legacy characters without `onboarding_tutorial` are treated as already completed (never forced).
 Skip finishes without the starter pack; Complete claims the pack once (idempotent).

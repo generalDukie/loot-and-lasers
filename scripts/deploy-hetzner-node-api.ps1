@@ -3,7 +3,7 @@
 #
 # Usage (from repo root, PowerShell):
 #   .\scripts\deploy-hetzner-node-api.ps1
-#   .\scripts\deploy-hetzner-node-api.ps1 -IdentityFile "$env:USERPROFILE\.ssh\id_ed25519"
+#   .\scripts\deploy-hetzner-node-api.ps1 -IdentityFile "$env:USERPROFILE\Desktop\LootLasers\SSH\Farts"
 #   .\scripts\deploy-hetzner-node-api.ps1 -Interactive
 #       # prompts for key passphrase (no ssh-agent required)
 
@@ -19,9 +19,15 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
+$DefaultHetznerIdentityFile = Join-Path $env:USERPROFILE "Desktop\LootLasers\SSH\Farts"
+
 if (-not $IdentityFile) {
-  $defaultKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
-  if (Test-Path $defaultKey) { $IdentityFile = $defaultKey }
+  if (Test-Path $DefaultHetznerIdentityFile) {
+    $IdentityFile = $DefaultHetznerIdentityFile
+  } else {
+    $fallbackKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
+    if (Test-Path $fallbackKey) { $IdentityFile = $fallbackKey }
+  }
 }
 
 $sshTarget = "${User}@${HostIp}"

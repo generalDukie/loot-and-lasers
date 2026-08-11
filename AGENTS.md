@@ -12,6 +12,7 @@ Shared deterministic game rules live in `src/lib/` (imported by the Node API). T
 - API smoke test: `npm run test:api`
 - Godot script audit: run Godot headless with `-s res://_audit_all.gd` from `loot&lasers/`
 - Windows friend installer: `.\scripts\build-windows-installer.ps1 -Version "0.1.15" -Interactive`
+- Staging deploy (Node API): `.\scripts\deploy-hetzner-node-api.ps1` — default SSH key `%USERPROFILE%\Desktop\LootLasers\SSH\Farts`
 
 ## Notes
 

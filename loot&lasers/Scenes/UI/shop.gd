@@ -363,6 +363,7 @@ func _make_market_section() -> PanelContainer:
 	restock.text = "Restock · 💎 %s" % ShopManager.SHOP_REFRESH_COST
 	_apply_restock_btn(restock, Color("#FBBF24"))
 	restock.pressed.connect(func() -> void: _on_refresh("all"))
+	TutorialManager.tag_target(restock, "shop-restock")
 	head.add_child(restock)
 
 	var grid := GridContainer.new()

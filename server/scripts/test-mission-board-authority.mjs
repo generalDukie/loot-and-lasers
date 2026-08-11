@@ -108,6 +108,24 @@ await testAsync("GetMissionBoard returns 3 authoritative offers and persists the
   }
 });
 
+await testAsync("Tutorial onboarding pins all 3 cantina offers to 30 seconds", async () => {
+  const { user } = makeCharacter({
+    level: 1,
+    missions_completed: 0,
+    onboarding_tutorial: {
+      status: "active",
+      step_id: "mission_pick",
+      first_mission_bonus_eligible: true,
+    },
+  });
+  const res = await GetMissionBoard(user, {});
+  assert.equal(res.status, 200, res.body?.error);
+  assert.equal(res.body.offers.length, 3);
+  for (const o of res.body.offers) {
+    assert.equal(o.duration_seconds, 30, `${o.name} should be 30s during tutorial`);
+  }
+});
+
 await testAsync("Displayed XP/Stardust equal Node's authoritative formulas (parity)", async () => {
   const { user, ch } = makeCharacter();
   const level = ch.level;

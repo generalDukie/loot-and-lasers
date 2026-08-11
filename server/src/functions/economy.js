@@ -116,12 +116,14 @@ import { settleMissionItemChain } from "../shared/missionRewards.js";
 import {
   shouldReserveFirstMissionBonusLaunch,
   shouldGrantFirstMissionBonusAtClaim,
+  shouldPinTutorialOnboardingMissionDurations,
   isFlaggedFirstMission,
   isTutorialActiveForBonus,
   onboardingForCharacter,
   patchLaunchFirstMissionBonus,
   patchSpendFirstMissionBonus,
   settleTutorialFirstMissionBonus,
+  TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS,
 } from "../shared/tutorialFirstMissionBonus.js";
 import { serializeShopPresentation, assertShopPurchaseClientSafe, shopMetaHasStock } from "../shared/shopService.js";
 import {
@@ -333,6 +335,9 @@ function boardCanAffordAny(ch, offers) {
 
 function generateDailyOffers(ch, rng) {
   const level = ch.level || 1;
+  const pinnedDuration = shouldPinTutorialOnboardingMissionDurations(ch)
+    ? TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS
+    : null;
   const maxSector = (ch.highest_sector || 1) + 1;
   let pool = MISSION_TEMPLATES.filter(
     (t) => (t.level_requirement || 1) <= level && (t.sector || 1) <= maxSector
@@ -355,7 +360,7 @@ function generateDailyOffers(ch, rng) {
       location: tpl.location,
       sector: tpl.sector,
       level_requirement: tpl.level_requirement,
-      duration_seconds: rollMissionDurationSeconds(level, rng()),
+      duration_seconds: pinnedDuration ?? rollMissionDurationSeconds(level, rng()),
       stardust_efficiency: rollMissionEfficiency(level, rng),
       xp_efficiency: rollMissionEfficiency(level, rng),
       patron: givers[i % givers.length],

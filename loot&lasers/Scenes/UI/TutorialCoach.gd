@@ -41,6 +41,13 @@ var _ranks_flash_tween: Tween
 var _ranks_flash_target: Control
 var _start_flash_tween: Tween
 var _start_flash_target: Control
+var _shop_refresh_flash_tween: Tween
+var _shop_refresh_flash_target: Control
+var _shop_restock_flash_tween: Tween
+var _shop_restock_flash_target: Control
+
+const SHOP_HINT_FLASH_HALF_SEC := 1.6
+const RANKS_HINT_FLASH_HALF_SEC := 1.6
 
 
 func _ready() -> void:
@@ -208,6 +215,8 @@ func _hide_coach() -> void:
 	_stop_timer_flash()
 	_stop_helmet_flash()
 	_stop_stim_flash()
+	_stop_shop_refresh_flash()
+	_stop_shop_restock_flash()
 	_stop_ranks_flash()
 	_stop_start_flash()
 	visible = false
@@ -286,9 +295,13 @@ func _resolved_spotlight_id() -> String:
 		if helmet != null and is_instance_valid(helmet) and helmet.is_visible_in_tree():
 			return "hero-bag-helmet"
 	if TutorialManager.step_id() == "shop_market" and TutorialManager.is_on_required_page():
-		var stim := _find_tutorial_target("shop-stim")
-		if stim != null and is_instance_valid(stim) and stim.is_visible_in_tree():
-			return "shop-stim"
+		var buy := _find_tutorial_target("shop-buy")
+		if buy != null and is_instance_valid(buy) and buy.is_visible_in_tree():
+			return "shop-buy"
+	if TutorialManager.step_id() == "arena_free" and TutorialManager.is_on_required_page():
+		var free_pane := _find_tutorial_target("arena-free")
+		if free_pane != null and is_instance_valid(free_pane) and free_pane.is_visible_in_tree():
+			return "arena-free"
 	var primary := TutorialManager.spotlight_id()
 	var extra := TutorialManager.extra_spotlight_id()
 	if TutorialManager.is_on_required_page():
@@ -323,15 +336,44 @@ func _layout_spotlight() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	var sid := _resolved_spotlight_id()
 	var hole := Rect2()
+	var ring_hole := Rect2()
 	var has_hole := false
 	if not sid.is_empty():
 		var target := _spotlight_target_for(sid)
 		if target != null and is_instance_valid(target) and target.is_visible_in_tree():
 			var gr: Rect2 = target.get_global_rect()
 			hole = Rect2(gr.position - Vector2(HOLE_PAD, HOLE_PAD), gr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0))
+			ring_hole = hole
 			has_hole = hole.size.x > 4.0 and hole.size.y > 4.0
 	if has_hole and TutorialManager.step_id() == "hero_equip" and TutorialManager.is_on_required_page():
 		hole = _expand_hole_with_target(hole, "hero-doll")
+		# During the post-equip flash hold, undim attributes so the primary row pulse is obvious.
+		if TutorialManager.hero_equip_flash_hold_active():
+			var class_key := str(GameManager.active_character.get("class", "Vanguard"))
+			var primary := StatsRules.primary_stat(class_key)
+			hole = _expand_hole_with_target(hole, "hero-attr-%s" % primary)
+			hole = _expand_hole_with_target(hole, "hero-attrs")
+		ring_hole = hole
+	if has_hole and TutorialManager.step_id() == "shop_market" and TutorialManager.is_on_required_page():
+		# Undim buy + sell (not only one stim), plus refresh timer and Nova restock.
+		hole = _expand_hole_with_target(hole, "shop-buy")
+		hole = _expand_hole_with_target(hole, "shop-sell-tray")
+		hole = _expand_hole_with_target(hole, "shop-refresh-timer")
+		hole = _expand_hole_with_target(hole, "shop-restock")
+		ring_hole = hole
+	if has_hole and TutorialManager.step_id() == "arena_free" and TutorialManager.is_on_required_page():
+		# Spotlight = free-battles pane; undim opponents + ranks with no extra rings.
+		hole = _expand_hole_with_target(hole, "arena-contenders")
+		hole = _expand_hole_with_target(hole, "nav-ranks")
+		# Keep the cyan ring on the free-battles pane only.
+		ring_hole = hole
+		var free_pane := _find_tutorial_target("arena-free")
+		if free_pane != null and is_instance_valid(free_pane) and free_pane.is_visible_in_tree():
+			var fgr: Rect2 = free_pane.get_global_rect()
+			ring_hole = Rect2(
+				fgr.position - Vector2(HOLE_PAD, HOLE_PAD),
+				fgr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0)
+			)
 
 	if not has_hole:
 		_dim_top.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -347,7 +389,10 @@ func _layout_spotlight() -> void:
 		else:
 			_card.visible = false
 		_layout_secondary_spotlight_ring()
+		_update_fuel_hint()
 		_update_stim_hint()
+		_update_shop_refresh_hint()
+		_update_shop_restock_hint()
 		_update_ranks_hint()
 		_update_start_hint()
 		return
@@ -373,8 +418,8 @@ func _layout_spotlight() -> void:
 
 	if _uses_spotlight_ring():
 		_ring.visible = true
-		_ring.position = hole.position
-		_ring.size = hole.size
+		_ring.position = ring_hole.position
+		_ring.size = ring_hole.size
 		_pulse_ring()
 	else:
 		_ring.visible = false
@@ -386,8 +431,9 @@ func _layout_spotlight() -> void:
 	if not TutorialManager.is_on_required_page() and not TutorialManager.page_is_pending():
 		placement = "auto"
 	if TutorialManager.coach_card_visible():
-		_place_card(hole, vp, placement)
-		_place_pointer(hole, vp)
+		var card_hole := ring_hole if TutorialManager.step_id() == "arena_free" else hole
+		_place_card(card_hole, vp, placement)
+		_place_pointer(card_hole, vp)
 	else:
 		_card.visible = false
 		if is_instance_valid(_pointer):
@@ -396,6 +442,8 @@ func _layout_spotlight() -> void:
 	_update_timer_hint()
 	_update_helmet_hint()
 	_update_stim_hint()
+	_update_shop_refresh_hint()
+	_update_shop_restock_hint()
 	_update_ranks_hint()
 	_update_start_hint()
 
@@ -499,8 +547,8 @@ func _update_fuel_hint() -> void:
 	_fuel_flash_target = target
 	target.modulate = Color.WHITE
 	_fuel_flash_tween = target.create_tween().set_loops()
-	_fuel_flash_tween.tween_property(target, "modulate", Color(1.12, 1.38, 1.08, 1.0), 0.6).set_trans(Tween.TRANS_SINE)
-	_fuel_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
+	_fuel_flash_tween.tween_property(target, "modulate", Color(1.08, 1.22, 1.06, 1.0), 0.75).set_trans(Tween.TRANS_SINE)
+	_fuel_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.75).set_trans(Tween.TRANS_SINE)
 
 
 func _stop_fuel_flash() -> void:
@@ -564,18 +612,8 @@ func _stop_helmet_flash() -> void:
 
 func _update_stim_hint() -> void:
 	_stop_stim_flash()
-	if not visible or TutorialManager.step_id() != "shop_market":
-		return
-	if not TutorialManager.is_on_required_page():
-		return
-	var target := _find_tutorial_target("shop-stim")
-	if target == null or not is_instance_valid(target):
-		return
-	_stim_flash_target = target
-	target.modulate = Color.WHITE
-	_stim_flash_tween = target.create_tween().set_loops()
-	_stim_flash_tween.tween_property(target, "modulate", Color(1.15, 1.28, 1.42, 1.0), 0.6).set_trans(Tween.TRANS_SINE)
-	_stim_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
+	# shop_market now undims buy/sell and slowly flashes refresh + restock instead.
+	return
 
 
 func _stop_stim_flash() -> void:
@@ -585,6 +623,64 @@ func _stop_stim_flash() -> void:
 	if _stim_flash_target != null and is_instance_valid(_stim_flash_target):
 		_stim_flash_target.modulate = Color.WHITE
 	_stim_flash_target = null
+
+
+func _update_shop_refresh_hint() -> void:
+	_stop_shop_refresh_flash()
+	if not visible or TutorialManager.step_id() != "shop_market":
+		return
+	if not TutorialManager.is_on_required_page():
+		return
+	var target := _find_tutorial_target("shop-refresh-timer")
+	if target == null or not is_instance_valid(target):
+		return
+	_shop_refresh_flash_target = target
+	target.modulate = Color.WHITE
+	_shop_refresh_flash_tween = target.create_tween().set_loops()
+	_shop_refresh_flash_tween.tween_property(
+		target, "modulate", Color(1.12, 1.28, 1.38, 1.0), SHOP_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
+	_shop_refresh_flash_tween.tween_property(
+		target, "modulate", Color.WHITE, SHOP_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_shop_refresh_flash() -> void:
+	if _shop_refresh_flash_tween != null and is_instance_valid(_shop_refresh_flash_tween):
+		_shop_refresh_flash_tween.kill()
+	_shop_refresh_flash_tween = null
+	if _shop_refresh_flash_target != null and is_instance_valid(_shop_refresh_flash_target):
+		_shop_refresh_flash_target.modulate = Color.WHITE
+	_shop_refresh_flash_target = null
+
+
+func _update_shop_restock_hint() -> void:
+	_stop_shop_restock_flash()
+	if not visible or TutorialManager.step_id() != "shop_market":
+		return
+	if not TutorialManager.is_on_required_page():
+		return
+	var target := _find_tutorial_target("shop-restock")
+	if target == null or not is_instance_valid(target):
+		return
+	_shop_restock_flash_target = target
+	target.modulate = Color.WHITE
+	_shop_restock_flash_tween = target.create_tween().set_loops()
+	_shop_restock_flash_tween.tween_property(
+		target, "modulate", Color(1.22, 1.18, 1.05, 1.0), SHOP_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
+	_shop_restock_flash_tween.tween_property(
+		target, "modulate", Color.WHITE, SHOP_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_shop_restock_flash() -> void:
+	if _shop_restock_flash_tween != null and is_instance_valid(_shop_restock_flash_tween):
+		_shop_restock_flash_tween.kill()
+	_shop_restock_flash_tween = null
+	if _shop_restock_flash_target != null and is_instance_valid(_shop_restock_flash_target):
+		_shop_restock_flash_target.modulate = Color.WHITE
+	_shop_restock_flash_target = null
 
 
 func _update_ranks_hint() -> void:
@@ -599,8 +695,12 @@ func _update_ranks_hint() -> void:
 	_ranks_flash_target = target
 	target.modulate = Color.WHITE
 	_ranks_flash_tween = target.create_tween().set_loops()
-	_ranks_flash_tween.tween_property(target, "modulate", Color(1.08, 1.12, 1.18, 1.0), 0.75).set_trans(Tween.TRANS_SINE)
-	_ranks_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.75).set_trans(Tween.TRANS_SINE)
+	_ranks_flash_tween.tween_property(
+		target, "modulate", Color(1.12, 1.22, 1.38, 1.0), RANKS_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
+	_ranks_flash_tween.tween_property(
+		target, "modulate", Color.WHITE, RANKS_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
 
 
 func _stop_ranks_flash() -> void:
@@ -649,6 +749,17 @@ func _auto_placement(hole: Rect2, vp: Vector2, w: float, h: float) -> String:
 	return "center"
 
 
+func _secondary_spotlight_id_for_step() -> String:
+	match TutorialManager.step_id():
+		"mission_pick":
+			return "shell-fuel"
+	return ""
+
+
+func _secondary_spotlight_subtle(step_id: String) -> bool:
+	return step_id in ["mission_pick"]
+
+
 func _layout_secondary_spotlight_ring() -> void:
 	_stop_extra_ring_pulse()
 	if not is_instance_valid(_ring_extra):
@@ -656,10 +767,7 @@ func _layout_secondary_spotlight_ring() -> void:
 	_ring_extra.visible = false
 	if not TutorialManager.is_on_required_page():
 		return
-	var sid := ""
-	match TutorialManager.step_id():
-		"shop_market", "arena_free":
-			sid = TutorialManager.extra_spotlight_id()
+	var sid := _secondary_spotlight_id_for_step()
 	if sid.is_empty():
 		return
 	var target := _find_tutorial_target(sid)
@@ -672,13 +780,15 @@ func _layout_secondary_spotlight_ring() -> void:
 	_ring_extra.visible = true
 	_ring_extra.position = hole.position
 	_ring_extra.size = hole.size
-	_pulse_extra_ring(TutorialManager.step_id() == "arena_free")
+	_pulse_extra_ring(_secondary_spotlight_subtle(TutorialManager.step_id()))
 
 
 func _uses_spotlight_ring() -> bool:
 	# mission_start already flashes the START MISSION button; the ring top border
 	# reads as a full-width cyan hairline above the wide button.
-	return TutorialManager.step_id() != "mission_start"
+	# shop_market uses a large buy/sell hole — ring would frame the whole market;
+	# refresh timer + Nova restock flash instead.
+	return TutorialManager.step_id() not in ["mission_start", "shop_market"]
 
 
 func _pulse_ring() -> void:

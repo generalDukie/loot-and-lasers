@@ -13,6 +13,15 @@ import {
 } from "./tutorialService.js";
 
 export const TUTORIAL_FIRST_MISSION_STARDUST_BONUS = 100;
+/** Cantina board during onboarding — all three offers use this duration. */
+export const TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS = 30;
+
+export function shouldPinTutorialOnboardingMissionDurations(character) {
+  const ob = onboardingForCharacter(character);
+  if (!isTutorialActiveForBonus(ob)) return false;
+  if (Number(character?.missions_completed || 0) > 0) return false;
+  return true;
+}
 
 export function isTutorialFirstMissionBonusEligible(onboarding) {
   return onboarding?.first_mission_bonus_eligible === true;

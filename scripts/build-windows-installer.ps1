@@ -19,6 +19,17 @@ $ExportDir = Join-Path $Root "dist\windows"
 $ExportExe = Join-Path $ExportDir "LootAndLasers.exe"
 $InstallerScript = Join-Path $Root "installer\LootAndLasers.iss"
 $LF = [string][char]10
+$DefaultHetznerIdentityFile = Join-Path $env:USERPROFILE "Desktop\LootLasers\SSH\Farts"
+
+function Resolve-HetznerIdentityFile {
+    param([string]$IdentityFile)
+
+    if ($IdentityFile) { return $IdentityFile }
+    if (Test-Path $DefaultHetznerIdentityFile) { return $DefaultHetznerIdentityFile }
+    $fallbackKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
+    if (Test-Path $fallbackKey) { return $fallbackKey }
+    return $DefaultHetznerIdentityFile
+}
 
 function Resolve-Executable {
     param(
@@ -74,8 +85,9 @@ function Get-HetznerStagingServerKey {
     )
 
     if (-not $IdentityFile) {
-        $defaultKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
-        if (Test-Path $defaultKey) { $IdentityFile = $defaultKey }
+        $IdentityFile = Resolve-HetznerIdentityFile ""
+    } else {
+        $IdentityFile = Resolve-HetznerIdentityFile $IdentityFile
     }
 
     $sshTarget = "${User}@${HostIp}"
@@ -135,8 +147,8 @@ function Assert-BakedStagingKeyInExe([string]$ExePath, [string]$ExpectedKey) {
 $Godot = Resolve-Executable -ExplicitPath $GodotPath -Label "Godot 4.7.1" -Candidates @(
     "godot",
     "godot4",
-    (Join-Path $env:USERPROFILE "Desktop\Stuff\Loot and lasers\Godot_v4.7.1-stable_win64_console.exe"),
-    (Join-Path $env:USERPROFILE "Desktop\Stuff\Loot and lasers\Godot_v4.7.1-stable_win64.exe"),
+    (Join-Path $env:USERPROFILE "Desktop\LootLasers\Godot_v4.7.1-stable_win64_console.exe"),
+    (Join-Path $env:USERPROFILE "Desktop\LootLasers\Godot_v4.7.1-stable_win64.exe"),
     (Join-Path $env:USERPROFILE "Downloads\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe"),
     (Join-Path $env:USERPROFILE "Downloads\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64.exe")
 )

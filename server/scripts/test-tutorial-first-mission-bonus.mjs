@@ -8,8 +8,10 @@ import {
 } from "../src/shared/tutorialService.js";
 import {
   TUTORIAL_FIRST_MISSION_STARDUST_BONUS,
+  TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS,
   shouldReserveFirstMissionBonusLaunch,
   shouldGrantFirstMissionBonusAtClaim,
+  shouldPinTutorialOnboardingMissionDurations,
   patchLaunchFirstMissionBonus,
   patchSpendFirstMissionBonus,
   generateTutorialFirstMissionHelmet,
@@ -69,6 +71,20 @@ function testFlags() {
     onboarding_tutorial: patchSpendFirstMissionBonus(launched.onboarding_tutorial),
   };
   assert(!shouldGrantFirstMissionBonusAtClaim(spent, "mission-1"), "spent blocks bonus");
+
+  assert(TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS === 30, "tutorial board duration is 30s");
+  assert(shouldPinTutorialOnboardingMissionDurations(character), "fresh operative pins board durations");
+  assert(
+    !shouldPinTutorialOnboardingMissionDurations({ ...character, missions_completed: 1 }),
+    "after first mission board is not pinned",
+  );
+  assert(
+    !shouldPinTutorialOnboardingMissionDurations({
+      ...character,
+      onboarding_tutorial: { ...fresh, status: "skipped" },
+    }),
+    "skipped tutorial does not pin board",
+  );
 }
 
 function testHelmet() {

@@ -1420,11 +1420,6 @@ func _on_equip(item_id: String) -> void:
 		TutorialManager.should_show()
 		and TutorialManager.step_id() == "hero_equip"
 	)
-	var before_totals: Dictionary = {}
-	if tutorial_equip:
-		before_totals = StatsManager.display_totals(
-			GameManager.active_character, StatsManager.equipped_items
-		)
 	print("[Hero] equip_item id=%s via=AuthManager.Node" % item_id.substr(0, mini(8, item_id.length())))
 	var res: Dictionary = await AuthManager.equip_item(item_id)
 	_busy = false
@@ -1437,11 +1432,11 @@ func _on_equip(item_id: String) -> void:
 	await StatsManager.refresh()
 	_refresh_after_inventory_change(true)
 	if tutorial_equip:
-		var after_totals := StatsManager.display_totals(
-			GameManager.active_character, StatsManager.equipped_items
-		)
-		for stat in _stats_increased_from_equip(before_totals, after_totals):
-			_flash_attribute_row(str(stat))
+		# Tutorial helmet always rolls the class primary attribute — flash that row
+		# for the full hold so the power bump is obvious before the next step.
+		var class_key := str(GameManager.active_character.get("class", "Vanguard"))
+		var primary := StatsRules.primary_stat(class_key)
+		_flash_attribute_row(primary)
 		await TutorialManager.complete_hero_equip_item()
 
 
@@ -1581,6 +1576,7 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	var accent: Color = GameData.STAT_COLORS.get(stat, ClientUi.CYAN)
 
 	var panel := PanelContainer.new()
+	TutorialManager.tag_target(panel, "hero-attr-%s" % stat)
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(accent, 0.08),
 		Color(accent, 0.55) if is_primary else Color(1, 1, 1, 0.1),
@@ -1819,14 +1815,6 @@ func _combat_labels_for_attribute(stat: String) -> Array:
 			return []
 
 
-func _stats_increased_from_equip(before: Dictionary, after: Dictionary) -> Array:
-	var out: Array = []
-	for stat in StatsRules.ATTR_KEYS:
-		if int(after.get(stat, 0)) > int(before.get(stat, 0)):
-			out.append(stat)
-	return out
-
-
 func _flash_attribute_row(stat: String) -> void:
 	if not _stat_rows.has(stat):
 		return
@@ -1844,7 +1832,8 @@ func _flash_attribute_row(stat: String) -> void:
 	var tw := panel.create_tween()
 	_attr_flash_tweens[stat] = tw
 	var half := COMBAT_STAT_FLASH_SEC * 0.5
-	tw.tween_property(panel, "modulate", Color(1.18, 1.32, 1.12, 1.0), half).set_trans(Tween.TRANS_SINE)
+	# Match combat-tile flash strength so the primary bump reads clearly.
+	tw.tween_property(panel, "modulate", Color(1.35, 1.55, 1.15, 1.0), half).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(panel, "modulate", Color.WHITE, half).set_trans(Tween.TRANS_SINE)
 
 
@@ -1879,7 +1868,8 @@ func _flash_combat_stats_for_attribute(stat: String) -> void:
 		var tw := panel.create_tween()
 		_combat_flash_tweens[key] = tw
 		var half := COMBAT_STAT_FLASH_SEC * 0.5
-		tw.tween_property(panel, "modulate", Color(1.18, 1.32, 1.12, 1.0), half).set_trans(Tween.TRANS_SINE)
+		# Stronger pulse so the affected combat tile is obvious under the coach.
+		tw.tween_property(panel, "modulate", Color(1.35, 1.55, 1.15, 1.0), half).set_trans(Tween.TRANS_SINE)
 		tw.tween_property(panel, "modulate", Color.WHITE, half).set_trans(Tween.TRANS_SINE)
 
 

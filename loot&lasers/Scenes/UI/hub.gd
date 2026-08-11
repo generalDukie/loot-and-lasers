@@ -36,7 +36,6 @@ func _boot() -> void:
 	_populate()
 	print("[nav] hub boot_ms=%d" % [Time.get_ticks_msec() - boot_t0])
 	await _maybe_daily_prompt()
-	await _maybe_codex_prompt()
 	await _maybe_legacy_prompt()
 	await _maybe_bag_pressure()
 
@@ -48,20 +47,6 @@ func _maybe_bag_pressure() -> void:
 		await InventoryManager.prompt_bag_pressure(
 			self, "Pending loot is waiting — free a bag slot to claim it."
 		)
-
-
-func _maybe_codex_prompt() -> void:
-	if not Codex.should_prompt_for_active():
-		return
-	Codex.mark_seen_for_active()
-	_show_branded_prompt(
-		"📘",
-		"Field Codex",
-		"New operative? Open the field guide for a quick tour of the station.",
-		"Open Codex",
-		"Later",
-		func() -> void: GameManager.go_codex()
-	)
 
 
 func _maybe_daily_prompt() -> void:

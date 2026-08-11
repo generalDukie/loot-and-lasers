@@ -10,8 +10,8 @@ alwaysApply: true
 When the user says **commit and push**, **commit, push, and deploy**, or equivalent, do **all** of the following:
 
 1. **Commit locally** per `git-commit-convention.mdc` (milestone commits; no secrets).
-2. **Push to GitHub** — `git push origin HEAD` (normally `main`) so the live remote matches this machine.
-3. **Deploy Hetzner Node API** — run `scripts/deploy-hetzner-node-api.ps1` from the local checkout (SSH identity typically `C:\Users\Caide\Desktop\Stuff\Loot and lasers\SSH\Farts`).
+2. **Push to GitHub** — `git -c credential.helper=manager push origin HEAD` (normally `main`) when the agent shell has no default credential helper; otherwise `git push origin HEAD`.
+3. **Deploy Hetzner Node API** — run `scripts/deploy-hetzner-node-api.ps1` from the local checkout (default SSH identity: `%USERPROFILE%\Desktop\LootLasers\SSH\Farts`).
 4. **Deploy / reload Nakama** on staging — keep modules current; recreate/reload Nakama as needed (**no game-data wipe**). See `docs/STAGING_NAKAMA.md` / host compose under `/opt/lootandlasers`.
 5. **Never** build a Windows installer / Godot export unless the user **explicitly** asks for one.
 

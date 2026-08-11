@@ -124,11 +124,17 @@ func complete_hero_equip_item() -> void:
 	if _hero_equip_advance_pending:
 		return
 	_hero_equip_advance_pending = true
+	# Reveal attribute rows under the coach so the primary-stat flash is visible.
+	tutorial_changed.emit(tutorial)
 	await get_tree().create_timer(HERO_EQUIP_FLASH_HOLD_SEC).timeout
 	_hero_equip_advance_pending = false
 	if not should_show() or step_id() != "hero_equip" or gate() != "equip_item":
 		return
 	_check_action_progress()
+
+
+func hero_equip_flash_hold_active() -> bool:
+	return _hero_equip_advance_pending and step_id() == "hero_equip"
 
 
 func locks_post_combat_report_actions() -> bool:
@@ -341,6 +347,11 @@ func _on_character_changed(character: Dictionary, source: String) -> void:
 		return
 	if _loaded_for == cid:
 		if source != "tutorial":
+			# Flash-hold steps advance from stats.gd after the pulse finishes.
+			# Authoritative character patches must not skip that wait.
+			if _defers_flash_hold_advance():
+				tutorial_changed.emit(tutorial)
+				return
 			_check_action_progress()
 		return
 	_loaded_for = cid
@@ -522,12 +533,17 @@ func _mutate(fn: String, body: Dictionary) -> void:
 	_apply_payload(data)
 
 
+func _defers_flash_hold_advance() -> bool:
+	if step_id() == "hero_upgrade" and gate() == "buy_attribute":
+		return true
+	if step_id() == "hero_equip" and gate() == "equip_item":
+		return true
+	return false
+
+
 func _on_stats_changed() -> void:
 	if gate() in ["equip_item", "buy_attribute"]:
-		if step_id() == "hero_upgrade" and gate() == "buy_attribute":
-			tutorial_changed.emit(tutorial)
-			return
-		if step_id() == "hero_equip" and gate() == "equip_item":
+		if _defers_flash_hold_advance():
 			tutorial_changed.emit(tutorial)
 			return
 		_check_action_progress()

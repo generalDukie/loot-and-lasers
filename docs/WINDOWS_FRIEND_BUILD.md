@@ -19,7 +19,8 @@ a server-side administrative secret.
 1. Godot 4.7.1 and its Windows export templates
 2. Inno Setup 6
 3. SSH access to Hetzner (`root@178.156.210.186`) — the build script pulls the live
-   `NAKAMA_SOCKET_SERVER_KEY` from `/opt/lootandlasers/.env` automatically
+   `NAKAMA_SOCKET_SERVER_KEY` from `/opt/lootandlasers/.env` automatically.
+   Default identity: `%USERPROFILE%\Desktop\LootLasers\SSH\Farts`
 
    Offline fallback (`-SkipRemoteKeySync`): local `Config/nakama_secrets.cfg` or
    env `NAKAMA_SOCKET_SERVER_KEY`. Those must still match Hetzner or friends get

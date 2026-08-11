@@ -172,11 +172,14 @@ func build_local_daily_login_state() -> Dictionary:
 
 
 ## Auto-open at most once per ET day per account (matches web loot_daily_shown_*).
+## Skipped (and not marked shown) while onboarding tutorial is pending/active.
 func should_prompt_daily() -> bool:
 	await sync_server_time()
 	await load_daily()
 	if not can_claim_daily():
 		mark_daily_prompt_shown()
+		return false
+	if TutorialManager != null and TutorialManager.blocks_daily_login_prompt():
 		return false
 	if was_daily_prompt_shown():
 		return false

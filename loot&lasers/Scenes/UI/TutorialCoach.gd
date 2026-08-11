@@ -46,8 +46,9 @@ var _shop_refresh_flash_target: Control
 var _shop_restock_flash_tween: Tween
 var _shop_restock_flash_target: Control
 
-const SHOP_HINT_FLASH_HALF_SEC := 1.6
+const SHOP_HINT_FLASH_HALF_SEC := 1.8
 const RANKS_HINT_FLASH_HALF_SEC := 1.6
+const FUEL_HINT_FLASH_HALF_SEC := 1.6
 
 
 func _ready() -> void:
@@ -328,6 +329,34 @@ func _expand_hole_with_target(hole: Rect2, tutorial_id: String) -> Rect2:
 	return hole.merge(extra_hole)
 
 
+## Combat tiles that change when `stat` is raised (mirrors stats.gd mapping).
+func _combat_labels_for_flash_stat(stat: String) -> Array:
+	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
+	var primary := StatsRules.primary_stat(class_key)
+	var arch := MissionCombat.damage_archetype(class_key)
+	match stat:
+		"luck":
+			return ["Crit Chance"]
+		"vitality":
+			return ["Max Health"]
+		"agility":
+			var out: Array = ["Dodge Chance"]
+			if primary == "agility":
+				out.append("Damage")
+			return out
+		"intellect":
+			var out: Array = ["Tech Resist"]
+			if primary == "intellect":
+				out.append("Damage")
+			return out
+		"strength":
+			if arch == "str" or primary == "strength":
+				return ["Damage"]
+			return ["Might Resistance"]
+		_:
+			return []
+
+
 func _layout_spotlight() -> void:
 	if not _sync_coach_visibility():
 		return
@@ -347,13 +376,29 @@ func _layout_spotlight() -> void:
 			has_hole = hole.size.x > 4.0 and hole.size.y > 4.0
 	if has_hole and TutorialManager.step_id() == "hero_equip" and TutorialManager.is_on_required_page():
 		hole = _expand_hole_with_target(hole, "hero-doll")
-		# During the post-equip flash hold, undim attributes so the primary row pulse is obvious.
+		# During the post-equip flash hold, undim only the affected attribute + combat tile(s).
 		if TutorialManager.hero_equip_flash_hold_active():
-			var class_key := str(GameManager.active_character.get("class", "Vanguard"))
-			var primary := StatsRules.primary_stat(class_key)
-			hole = _expand_hole_with_target(hole, "hero-attr-%s" % primary)
-			hole = _expand_hole_with_target(hole, "hero-attrs")
+			var flash_stat := TutorialManager.hero_equip_flash_stat()
+			if flash_stat.is_empty():
+				flash_stat = StatsRules.primary_stat(
+					str(GameManager.active_character.get("class", "Vanguard"))
+				)
+			hole = _expand_hole_with_target(hole, "hero-attr-%s" % flash_stat)
+			for label in _combat_labels_for_flash_stat(flash_stat):
+				hole = _expand_hole_with_target(hole, "hero-combat-%s" % label)
 		ring_hole = hole
+	if has_hole and TutorialManager.step_id() == "hero_upgrade" and TutorialManager.is_on_required_page():
+		# During the post-purchase flash hold, spotlight only the affected row + combat tile(s).
+		if TutorialManager.hero_upgrade_flash_hold_active():
+			var flash_stat := TutorialManager.hero_upgrade_flash_stat()
+			if not flash_stat.is_empty():
+				hole = Rect2()
+				has_hole = false
+				hole = _expand_hole_with_target(hole, "hero-attr-%s" % flash_stat)
+				for label in _combat_labels_for_flash_stat(flash_stat):
+					hole = _expand_hole_with_target(hole, "hero-combat-%s" % label)
+				has_hole = hole.size.x > 4.0 and hole.size.y > 4.0
+				ring_hole = hole
 	if has_hole and TutorialManager.step_id() == "shop_market" and TutorialManager.is_on_required_page():
 		# Undim buy + sell (not only one stim), plus refresh timer and Nova restock.
 		hole = _expand_hole_with_target(hole, "shop-buy")
@@ -373,6 +418,17 @@ func _layout_spotlight() -> void:
 			ring_hole = Rect2(
 				fgr.position - Vector2(HOLE_PAD, HOLE_PAD),
 				fgr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0)
+			)
+	if has_hole and TutorialManager.step_id() == "mission_pick" and TutorialManager.is_on_required_page():
+		# Undim fuel as an informational hint; keep the mission board as the ring target.
+		hole = _expand_hole_with_target(hole, "shell-fuel")
+		ring_hole = hole
+		var patrons := _find_tutorial_target("cantina-patrons")
+		if patrons != null and is_instance_valid(patrons) and patrons.is_visible_in_tree():
+			var pgr: Rect2 = patrons.get_global_rect()
+			ring_hole = Rect2(
+				pgr.position - Vector2(HOLE_PAD, HOLE_PAD),
+				pgr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0)
 			)
 
 	if not has_hole:
@@ -431,9 +487,16 @@ func _layout_spotlight() -> void:
 	if not TutorialManager.is_on_required_page() and not TutorialManager.page_is_pending():
 		placement = "auto"
 	if TutorialManager.coach_card_visible():
-		var card_hole := ring_hole if TutorialManager.step_id() == "arena_free" else hole
+		var card_hole := hole
+		if TutorialManager.step_id() in ["arena_free", "mission_pick"]:
+			card_hole = ring_hole
 		_place_card(card_hole, vp, placement)
-		_place_pointer(card_hole, vp)
+		if TutorialManager.step_id() == "shop_market":
+			# Card sits on the sell tray — no pointer into the buy stalls.
+			if is_instance_valid(_pointer):
+				_pointer.visible = false
+		else:
+			_place_pointer(card_hole, vp)
 	else:
 		_card.visible = false
 		if is_instance_valid(_pointer):
@@ -501,6 +564,8 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, _mission_timer_card_y(hole))
 	elif TutorialManager.step_id() == "mission_fight":
 		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, hole.end.y + CARD_HOLE_GAP)
+	elif TutorialManager.step_id() == "shop_market":
+		pos = _shop_market_card_pos(vp, w, h)
 	elif hole.size.x > 1.0 and hole.size.y > 1.0:
 		var chosen := placement
 		if chosen == "auto" or chosen.is_empty() or chosen == "center":
@@ -514,12 +579,15 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 				pos = Vector2(hole.position.x, hole.position.y - h - CARD_HOLE_GAP)
 			"bottom":
 				pos = Vector2(hole.position.x, hole.end.y + CARD_HOLE_GAP)
+			"bottom_right":
+				pos = Vector2(vp.x - w - CARD_PAD, vp.y - h - CARD_PAD)
 			_:
 				pos = Vector2((vp.x - w) * 0.5, (vp.y - h) * 0.5)
 	pos.x = clampf(pos.x, CARD_PAD, maxf(CARD_PAD, vp.x - w - CARD_PAD))
 	pos.y = clampf(pos.y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
 	# Never cover the spotlight hole if we can slide off it.
-	if TutorialManager.step_id() not in ["mission_timer", "mission_fight"] and hole.size.x > 1.0:
+	# shop_market intentionally sits on the sell tray (bottom-right).
+	if TutorialManager.step_id() not in ["mission_timer", "mission_fight", "shop_market"] and hole.size.x > 1.0:
 		var card_rect := Rect2(pos, Vector2(w, h))
 		if card_rect.intersects(hole):
 			if hole.end.x + CARD_HOLE_GAP + w + CARD_PAD <= vp.x:
@@ -535,6 +603,22 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	_card.position = pos
 
 
+func _shop_market_card_pos(vp: Vector2, w: float, h: float) -> Vector2:
+	## Pin the coach over the sell tray (bottom-right) so buy stalls stay readable.
+	var sell := _find_tutorial_target("shop-sell-tray")
+	if sell != null and is_instance_valid(sell) and sell.is_visible_in_tree():
+		var gr: Rect2 = sell.get_global_rect()
+		var x := gr.end.x - w
+		var y := gr.position.y
+		# Keep the card on-screen; prefer sitting on the sell block.
+		if y + h > vp.y - CARD_PAD:
+			y = vp.y - h - CARD_PAD
+		if y < CARD_PAD:
+			y = CARD_PAD
+		return Vector2(x, y)
+	return Vector2(vp.x - w - CARD_PAD, vp.y - h - CARD_PAD)
+
+
 func _update_fuel_hint() -> void:
 	_stop_fuel_flash()
 	if not visible or TutorialManager.step_id() != "mission_pick":
@@ -547,8 +631,13 @@ func _update_fuel_hint() -> void:
 	_fuel_flash_target = target
 	target.modulate = Color.WHITE
 	_fuel_flash_tween = target.create_tween().set_loops()
-	_fuel_flash_tween.tween_property(target, "modulate", Color(1.08, 1.22, 1.06, 1.0), 0.75).set_trans(Tween.TRANS_SINE)
-	_fuel_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.75).set_trans(Tween.TRANS_SINE)
+	# Slow informational pulse — fuel is shown, not a forced interaction target.
+	_fuel_flash_tween.tween_property(
+		target, "modulate", Color(1.06, 1.16, 1.08, 1.0), FUEL_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
+	_fuel_flash_tween.tween_property(
+		target, "modulate", Color.WHITE, FUEL_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
 
 
 func _stop_fuel_flash() -> void:
@@ -637,8 +726,9 @@ func _update_shop_refresh_hint() -> void:
 	_shop_refresh_flash_target = target
 	target.modulate = Color.WHITE
 	_shop_refresh_flash_tween = target.create_tween().set_loops()
+	# Subtle informational pulse on the auto-refresh countdown.
 	_shop_refresh_flash_tween.tween_property(
-		target, "modulate", Color(1.12, 1.28, 1.38, 1.0), SHOP_HINT_FLASH_HALF_SEC
+		target, "modulate", Color(1.05, 1.12, 1.18, 1.0), SHOP_HINT_FLASH_HALF_SEC
 	).set_trans(Tween.TRANS_SINE)
 	_shop_refresh_flash_tween.tween_property(
 		target, "modulate", Color.WHITE, SHOP_HINT_FLASH_HALF_SEC
@@ -666,8 +756,9 @@ func _update_shop_restock_hint() -> void:
 	_shop_restock_flash_target = target
 	target.modulate = Color.WHITE
 	_shop_restock_flash_tween = target.create_tween().set_loops()
+	# Subtle informational pulse on the Nova restock button.
 	_shop_restock_flash_tween.tween_property(
-		target, "modulate", Color(1.22, 1.18, 1.05, 1.0), SHOP_HINT_FLASH_HALF_SEC
+		target, "modulate", Color(1.08, 1.06, 1.02, 1.0), SHOP_HINT_FLASH_HALF_SEC
 	).set_trans(Tween.TRANS_SINE)
 	_shop_restock_flash_tween.tween_property(
 		target, "modulate", Color.WHITE, SHOP_HINT_FLASH_HALF_SEC
@@ -750,14 +841,11 @@ func _auto_placement(hole: Rect2, vp: Vector2, w: float, h: float) -> String:
 
 
 func _secondary_spotlight_id_for_step() -> String:
-	match TutorialManager.step_id():
-		"mission_pick":
-			return "shell-fuel"
 	return ""
 
 
 func _secondary_spotlight_subtle(step_id: String) -> bool:
-	return step_id in ["mission_pick"]
+	return false
 
 
 func _layout_secondary_spotlight_ring() -> void:

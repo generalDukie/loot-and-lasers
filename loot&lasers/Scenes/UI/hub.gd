@@ -50,6 +50,8 @@ func _maybe_bag_pressure() -> void:
 
 
 func _maybe_daily_prompt() -> void:
+	if TutorialManager.blocks_daily_login_prompt():
+		return
 	if not await ProgressManager.should_prompt_daily():
 		return
 	_show_branded_prompt(

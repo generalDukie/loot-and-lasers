@@ -30,11 +30,22 @@ func _ready() -> void:
 	_build()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
+	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_lock_changed):
+		TutorialManager.tutorial_changed.connect(_on_tutorial_lock_changed)
+	if not TutorialManager.tutorial_finished.is_connected(_on_tutorial_lock_changed):
+		TutorialManager.tutorial_finished.connect(_on_tutorial_lock_changed)
 	await _boot()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_update_lobby_chrome()
+
+
+func _on_tutorial_lock_changed(_unused = null) -> void:
+	if not is_inside_tree():
+		return
+	_populate_challengers()
+	_populate_history()
 
 
 func _boot() -> void:
@@ -803,6 +814,10 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 		UiIcon.apply_button_icon_colors(fight, Color.WHITE)
 	fight.pressed.connect(func() -> void: _on_challenge(opp))
 	TutorialManager.tag_target(fight, "arena-fight")
+	if TutorialManager.blocks_arena_combat():
+		fight.disabled = true
+		fight.focus_mode = Control.FOCUS_NONE
+		fight.tooltip_text = "Finish or skip the tutorial to fight in the Arena"
 	col.add_child(fight)
 	return panel
 
@@ -910,6 +925,9 @@ func _make_history_row(match: Dictionary) -> PanelContainer:
 	var revenge := Button.new()
 	revenge.text = "Revenge…" if _revenge_busy_id == mid else "REVENGE"
 	revenge.disabled = _busy or (not _revenge_busy_id.is_empty() and _revenge_busy_id != mid)
+	if TutorialManager.blocks_arena_combat():
+		revenge.disabled = true
+		revenge.tooltip_text = "Finish or skip the tutorial to fight in the Arena"
 	ClientUi.apply_revenge_button(revenge)
 	revenge.pressed.connect(func() -> void: _on_revenge(match))
 	row.add_child(revenge)
@@ -945,6 +963,9 @@ func _on_refresh() -> void:
 func _on_challenge(opp: Dictionary) -> void:
 	if _busy:
 		return
+	if TutorialManager.blocks_arena_combat():
+		Notify.blocked("Tutorial in progress", "Finish or skip the tutorial before fighting in the Arena.")
+		return
 	_busy = true
 	var skip := ArenaManager.cooldown_active()
 	var prep: Dictionary = await ArenaManager.prepare_challenge(opp, skip)
@@ -963,6 +984,9 @@ func _on_challenge(opp: Dictionary) -> void:
 
 func _on_revenge(match: Dictionary) -> void:
 	if _busy:
+		return
+	if TutorialManager.blocks_arena_combat():
+		Notify.blocked("Tutorial in progress", "Finish or skip the tutorial before fighting in the Arena.")
 		return
 	var mid := str(match.get("id", ""))
 	_busy = true

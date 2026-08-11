@@ -88,11 +88,33 @@ func _ready() -> void:
 		TutorialManager.tutorial_changed.connect(_on_tutorial_visibility_changed)
 	if not TutorialManager.tutorial_finished.is_connected(_on_tutorial_visibility_changed):
 		TutorialManager.tutorial_finished.connect(_on_tutorial_visibility_changed)
+	if not TutorialManager.tutorial_finished.is_connected(_on_tutorial_finished_daily_prompt):
+		TutorialManager.tutorial_finished.connect(_on_tutorial_finished_daily_prompt)
 	call_deferred("_sync_notif_for_tutorial")
 
 
 func _on_tutorial_visibility_changed(_unused = null) -> void:
 	_sync_notif_for_tutorial()
+
+
+func _on_tutorial_finished_daily_prompt() -> void:
+	call_deferred("_try_daily_prompt_after_tutorial")
+
+
+func _try_daily_prompt_after_tutorial() -> void:
+	if not is_inside_tree():
+		return
+	# Let skip/complete overlays clear before opening the rewards modal.
+	await get_tree().create_timer(0.45).timeout
+	if not is_inside_tree():
+		return
+	if TutorialManager.blocks_daily_login_prompt():
+		return
+	if has_overlay():
+		return
+	if not await ProgressManager.should_prompt_daily():
+		return
+	open_daily_login_modal()
 
 
 func _sync_notif_for_tutorial() -> void:
@@ -1225,6 +1247,8 @@ func show_overlay_scene(path: String) -> void:
 
 func open_daily_login_modal() -> void:
 	## Avoid stacking duplicate modals if the player double-clicks Claim Daily.
+	if TutorialManager.blocks_daily_login_prompt():
+		return
 	if _overlay_host != null and is_instance_valid(_overlay_host):
 		for child in _overlay_host.get_children():
 			if child.get_script() != null and str(child.get_script().resource_path).ends_with("DailyLoginModal.gd"):

@@ -442,7 +442,7 @@ static func _lock_report_action_button(btn: Button) -> void:
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.mouse_default_cursor_shape = Control.CURSOR_ARROW
 	btn.modulate = Color(0.52, 0.54, 0.58, 0.82)
-	btn.tooltip_text = "Use Operative in the side menu"
+	btn.tooltip_text = "Use Operative in the side menu to continue"
 
 
 static func _dismiss_combat_overlay() -> void:

@@ -80,7 +80,7 @@ const BAG_COLS := 5
 ## Backpack gear glyph — fraction of the middle band's shorter side (name/attrs unchanged).
 const BAG_GEAR_ICON_FILL := 0.6
 const ARMOR_STAT_LABEL := "Might Resistance"
-const COMBAT_STAT_FLASH_SEC := 1.5
+const COMBAT_STAT_FLASH_SEC := 4.0
 
 
 func _ready() -> void:
@@ -1433,11 +1433,12 @@ func _on_equip(item_id: String) -> void:
 	_refresh_after_inventory_change(true)
 	if tutorial_equip:
 		# Tutorial helmet always rolls the class primary attribute — flash that row
-		# for the full hold so the power bump is obvious before the next step.
+		# and its linked combat statistic only.
 		var class_key := str(GameManager.active_character.get("class", "Vanguard"))
 		var primary := StatsRules.primary_stat(class_key)
 		_flash_attribute_row(primary)
-		await TutorialManager.complete_hero_equip_item()
+		_flash_combat_stats_for_attribute(primary)
+		await TutorialManager.complete_hero_equip_item(primary)
 
 
 func _on_unequip(item_id: String) -> void:
@@ -1780,6 +1781,7 @@ func _combat_tile(label: String, color: Color) -> PanelContainer:
 	col.add_child(v)
 	_combat_values[label] = v
 	_combat_panels[label] = panel
+	TutorialManager.tag_target(panel, "hero-combat-%s" % label)
 	return panel
 
 
@@ -2048,8 +2050,10 @@ func _flush_hold_queue() -> void:
 	var spent := int(StatsManager.last_buy.get("cost", 0))
 	_status.text = "+%s %s  ·  −%s ✦" % [applied, label, spent]
 	if TutorialManager.should_show() and TutorialManager.step_id() == "hero_upgrade" and applied > 0:
+		# Only the purchased attribute row + its linked combat tile(s).
+		_flash_attribute_row(stat)
 		_flash_combat_stats_for_attribute(stat)
-		await TutorialManager.complete_hero_upgrade_purchase()
+		await TutorialManager.complete_hero_upgrade_purchase(stat)
 	if leftover > 0 and server_reported_count:
 		# Server bought as many as dust/cap allowed.
 		_hold.stop()

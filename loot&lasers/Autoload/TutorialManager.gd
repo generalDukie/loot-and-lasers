@@ -6,8 +6,8 @@ signal tutorial_finished()
 
 const HARD_GATES := ["click_target", "launch_mission", "arena_battle", "buy_attribute", "equip_item"]
 const CLICK_GATES := ["click_target"]
-const HERO_UPGRADE_FLASH_HOLD_SEC := 1.5
-const HERO_EQUIP_FLASH_HOLD_SEC := 1.5
+const HERO_UPGRADE_FLASH_HOLD_SEC := 4.0
+const HERO_EQUIP_FLASH_HOLD_SEC := 4.0
 
 var tutorial: Dictionary = {}
 var busy: bool = false
@@ -18,6 +18,8 @@ var _coach_suppressed := false
 var _mission_outro_ready := false
 var _hero_upgrade_advance_pending := false
 var _hero_equip_advance_pending := false
+var _hero_upgrade_flash_stat := ""
+var _hero_equip_flash_stat := ""
 
 
 func _ready() -> void:
@@ -70,6 +72,8 @@ func clear_local() -> void:
 	_mission_outro_ready = false
 	_hero_upgrade_advance_pending = false
 	_hero_equip_advance_pending = false
+	_hero_upgrade_flash_stat = ""
+	_hero_equip_flash_stat = ""
 
 
 func should_show() -> bool:
@@ -77,6 +81,22 @@ func should_show() -> bool:
 		return false
 	var status := str(tutorial.get("status", ""))
 	return bool(tutorial.get("should_show", false)) and (status == "pending" or status == "active")
+
+
+## True while onboarding is still pending/active — blocks auto daily-login popup.
+func blocks_daily_login_prompt() -> bool:
+	if should_show():
+		return true
+	var ob: Variant = GameManager.active_character.get("onboarding_tutorial", null)
+	if typeof(ob) != TYPE_DICTIONARY:
+		return false
+	var status := str((ob as Dictionary).get("status", ""))
+	return status == "pending" or status == "active"
+
+
+## Block starting Arena fights until onboarding is finished or skipped.
+func blocks_arena_combat() -> bool:
+	return should_show() or blocks_daily_login_prompt()
 
 
 func coach_visible() -> bool:
@@ -105,40 +125,63 @@ func post_combat_overlay_visible() -> bool:
 	return false
 
 
-func complete_hero_upgrade_purchase() -> void:
+func complete_hero_upgrade_purchase(stat: String = "") -> void:
 	if step_id() != "hero_upgrade" or gate() != "buy_attribute":
 		return
 	if _hero_upgrade_advance_pending:
 		return
 	_hero_upgrade_advance_pending = true
+	_hero_upgrade_flash_stat = str(stat)
+	tutorial_changed.emit(tutorial)
 	await get_tree().create_timer(HERO_UPGRADE_FLASH_HOLD_SEC).timeout
 	_hero_upgrade_advance_pending = false
+	_hero_upgrade_flash_stat = ""
 	if not should_show() or step_id() != "hero_upgrade" or gate() != "buy_attribute":
 		return
 	_check_action_progress()
 
 
-func complete_hero_equip_item() -> void:
+func complete_hero_equip_item(stat: String = "") -> void:
 	if step_id() != "hero_equip" or gate() != "equip_item":
 		return
 	if _hero_equip_advance_pending:
 		return
 	_hero_equip_advance_pending = true
-	# Reveal attribute rows under the coach so the primary-stat flash is visible.
+	_hero_equip_flash_stat = str(stat)
+	# Reveal the affected attribute row under the coach so the pulse is visible.
 	tutorial_changed.emit(tutorial)
 	await get_tree().create_timer(HERO_EQUIP_FLASH_HOLD_SEC).timeout
 	_hero_equip_advance_pending = false
+	_hero_equip_flash_stat = ""
 	if not should_show() or step_id() != "hero_equip" or gate() != "equip_item":
 		return
 	_check_action_progress()
+
+
+func hero_upgrade_flash_hold_active() -> bool:
+	return _hero_upgrade_advance_pending and step_id() == "hero_upgrade"
+
+
+func hero_upgrade_flash_stat() -> String:
+	return _hero_upgrade_flash_stat
 
 
 func hero_equip_flash_hold_active() -> bool:
 	return _hero_equip_advance_pending and step_id() == "hero_equip"
 
 
+func hero_equip_flash_stat() -> String:
+	return _hero_equip_flash_stat
+
+
 func locks_post_combat_report_actions() -> bool:
-	return should_show() and step_id() == "click_hero" and post_combat_overlay_visible()
+	## Disable combat-report Cantina / Operative buttons so the player must use
+	## the side-nav Operative control. Apply while viewing rewards OR on the
+	## Operative-nav step — the sheet is often built before click_hero lands,
+	## and post_combat_overlay is not in-tree yet when buttons are created.
+	if not should_show():
+		return false
+	return step_id() in ["mission_view_rewards", "click_hero"]
 
 
 func coach_card_visible() -> bool:

@@ -219,7 +219,7 @@ export const ONBOARDING_STEPS = Object.freeze([
     page: PAGE.shop,
     spotlight: "shop-buy",
     extra_spotlight: "shop-refresh-timer",
-    placement: "top",
+    placement: "bottom_right",
     cta: "Got it",
     nav_label: "Black Market",
   },

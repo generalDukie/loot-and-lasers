@@ -165,6 +165,8 @@ func go_arena() -> void:
 
 
 func go_arena_combat() -> void:
+	if TutorialManager.blocks_arena_combat():
+		return
 	combat_overlay_kind = "arena"
 	open_overlay(SCENE_ARENA_COMBAT)
 

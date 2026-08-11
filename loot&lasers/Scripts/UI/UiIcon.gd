@@ -164,7 +164,6 @@ const ALIAS := {
 	"users": "users",
 	"chat": "message-square",
 	"messages": "message-square",
-	"ship": "rocket",
 	"rocket": "rocket",
 	"galaxy": "orbit",
 	"void": "orbit",

@@ -6,8 +6,8 @@ signal tutorial_finished()
 
 const HARD_GATES := ["click_target", "launch_mission", "arena_battle", "buy_attribute", "equip_item"]
 const CLICK_GATES := ["click_target"]
-const HERO_UPGRADE_FLASH_HOLD_SEC := 5.0
-const HERO_EQUIP_FLASH_HOLD_SEC := 5.0
+const HERO_UPGRADE_FLASH_HOLD_SEC := 4.0
+const HERO_EQUIP_FLASH_HOLD_SEC := 4.0
 
 var tutorial: Dictionary = {}
 var busy: bool = false
@@ -366,14 +366,13 @@ func report_click(tutorial_id: String) -> void:
 		return
 	if not is_click_gate():
 		return
-	if tutorial_id != spotlight_id() and tutorial_id != extra_spotlight_id():
-		if step_id() == "mission_fight" and tutorial_id == "mission-skip":
-			tutorial_changed.emit(tutorial)
+	## Free Skip · Fight is an alternate spotlight during mission_fight — same
+	## rules as Fight Encounter: hide coach + advance gate on click; Claim Your
+	## Spoils only appears after combat outro (see suppress / mission_outro_ready).
+	var is_mission_skip := step_id() == "mission_fight" and tutorial_id == "mission-skip"
+	if tutorial_id != spotlight_id() and tutorial_id != extra_spotlight_id() and not is_mission_skip:
 		return
-	if step_id() == "mission_fight" and tutorial_id == "mission-skip":
-		tutorial_changed.emit(tutorial)
-		return
-	if step_id() == "mission_fight" and tutorial_id == "mission-fight":
+	if step_id() == "mission_fight" and (tutorial_id == "mission-fight" or is_mission_skip):
 		suppress_coach_for_combat()
 	advance_gate(gate())
 

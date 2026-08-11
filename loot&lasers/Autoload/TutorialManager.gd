@@ -6,6 +6,8 @@ signal tutorial_finished()
 
 const HARD_GATES := ["click_target", "launch_mission", "arena_battle", "buy_attribute", "equip_item"]
 const CLICK_GATES := ["click_target"]
+const HERO_UPGRADE_FLASH_HOLD_SEC := 1.5
+const HERO_EQUIP_FLASH_HOLD_SEC := 1.5
 
 var tutorial: Dictionary = {}
 var busy: bool = false
@@ -14,6 +16,8 @@ var _baseline: Dictionary = {}
 var _checking_gate := false
 var _coach_suppressed := false
 var _mission_outro_ready := false
+var _hero_upgrade_advance_pending := false
+var _hero_equip_advance_pending := false
 
 
 func _ready() -> void:
@@ -64,6 +68,8 @@ func clear_local() -> void:
 	_checking_gate = false
 	_coach_suppressed = false
 	_mission_outro_ready = false
+	_hero_upgrade_advance_pending = false
+	_hero_equip_advance_pending = false
 
 
 func should_show() -> bool:
@@ -83,10 +89,56 @@ func coach_visible() -> bool:
 	return true
 
 
+func coach_dims_screen() -> bool:
+	if step_id() == "click_hero" and post_combat_overlay_visible():
+		return false
+	return true
+
+
+func post_combat_overlay_visible() -> bool:
+	var tree := Engine.get_main_loop()
+	if tree == null or not (tree is SceneTree):
+		return false
+	for n in (tree as SceneTree).get_nodes_in_group("post_combat_overlay"):
+		if n is CanvasItem and (n as CanvasItem).is_visible_in_tree():
+			return true
+	return false
+
+
+func complete_hero_upgrade_purchase() -> void:
+	if step_id() != "hero_upgrade" or gate() != "buy_attribute":
+		return
+	if _hero_upgrade_advance_pending:
+		return
+	_hero_upgrade_advance_pending = true
+	await get_tree().create_timer(HERO_UPGRADE_FLASH_HOLD_SEC).timeout
+	_hero_upgrade_advance_pending = false
+	if not should_show() or step_id() != "hero_upgrade" or gate() != "buy_attribute":
+		return
+	_check_action_progress()
+
+
+func complete_hero_equip_item() -> void:
+	if step_id() != "hero_equip" or gate() != "equip_item":
+		return
+	if _hero_equip_advance_pending:
+		return
+	_hero_equip_advance_pending = true
+	await get_tree().create_timer(HERO_EQUIP_FLASH_HOLD_SEC).timeout
+	_hero_equip_advance_pending = false
+	if not should_show() or step_id() != "hero_equip" or gate() != "equip_item":
+		return
+	_check_action_progress()
+
+
+func locks_post_combat_report_actions() -> bool:
+	return should_show() and step_id() == "click_hero" and post_combat_overlay_visible()
+
+
 func coach_card_visible() -> bool:
 	if not coach_visible():
 		return false
-	if step_id() == "mission_start":
+	if step_id() in ["mission_start", "mission_view_rewards"]:
 		return false
 	return true
 
@@ -267,9 +319,6 @@ func report_click(tutorial_id: String) -> void:
 		return
 	if step_id() == "mission_fight" and tutorial_id == "mission-fight":
 		suppress_coach_for_combat()
-	if step_id() == "continue_travels" and tutorial_id == "nav-cantina":
-		tutorial_changed.emit(tutorial)
-		return
 	advance_gate(gate())
 
 
@@ -373,9 +422,6 @@ func _capture_baseline() -> void:
 func notify_page_changed(path: String) -> void:
 	if not should_show():
 		return
-	if step_id() == "continue_travels" and path == GameManager.SCENE_CANTINA:
-		advance_next()
-		return
 	tutorial_changed.emit(tutorial)
 	# Never auto-advance just because a page loaded. Clicks / real actions only.
 
@@ -478,6 +524,12 @@ func _mutate(fn: String, body: Dictionary) -> void:
 
 func _on_stats_changed() -> void:
 	if gate() in ["equip_item", "buy_attribute"]:
+		if step_id() == "hero_upgrade" and gate() == "buy_attribute":
+			tutorial_changed.emit(tutorial)
+			return
+		if step_id() == "hero_equip" and gate() == "equip_item":
+			tutorial_changed.emit(tutorial)
+			return
 		_check_action_progress()
 	else:
 		tutorial_changed.emit(tutorial)

@@ -15,15 +15,17 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.z_index = 120
+	root.add_to_group("post_combat_overlay")
 
 	var scrim := ColorRect.new()
 	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scrim.color = Color(0.015, 0.018, 0.04, 0.82)
 	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
-	scrim.gui_input.connect(func(ev: InputEvent) -> void:
-		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
-			on_close.call()
-	)
+	if not _tutorial_locks_report_actions():
+		scrim.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+				on_close.call()
+		)
 	root.add_child(scrim)
 
 	var center := CenterContainer.new()
@@ -159,6 +161,8 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 			else:
 				on_close.call()
 		)
+		if _tutorial_locks_report_actions():
+			_lock_report_action_button(btn)
 		actions.add_child(btn)
 
 	if actions.get_child_count() == 0:
@@ -167,6 +171,8 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		done.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ClientUi.apply_primary_button(done)
 		done.pressed.connect(on_close)
+		if _tutorial_locks_report_actions():
+			_lock_report_action_button(done)
 		actions.add_child(done)
 
 	# Entry pop — modulate only (scale breaks nested button hit-testing).
@@ -191,6 +197,7 @@ static func make_level_up_sheet(
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.z_index = 130
+	root.add_to_group("post_combat_overlay")
 
 	var scrim := ColorRect.new()
 	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -314,6 +321,8 @@ static func make_level_up_sheet(
 	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_primary_button(confirm)
 	confirm.pressed.connect(on_close)
+	if _tutorial_locks_report_actions():
+		_lock_report_action_button(confirm)
 	col.add_child(confirm)
 
 	card.modulate.a = 0.0
@@ -422,6 +431,18 @@ static func present_complete_then_level_up(
 	host.visible = true
 	host.mouse_filter = Control.MOUSE_FILTER_STOP
 	host.add_child(make_complete_sheet(sequenced, finish_sequence.bind(primary_nav)))
+
+
+static func _tutorial_locks_report_actions() -> bool:
+	return TutorialManager.locks_post_combat_report_actions()
+
+
+static func _lock_report_action_button(btn: Button) -> void:
+	btn.disabled = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.mouse_default_cursor_shape = Control.CURSOR_ARROW
+	btn.modulate = Color(0.52, 0.54, 0.58, 0.82)
+	btn.tooltip_text = "Use Operative in the side menu"
 
 
 static func _dismiss_combat_overlay() -> void:

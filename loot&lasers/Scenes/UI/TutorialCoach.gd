@@ -4,7 +4,12 @@ extends CanvasLayer
 const CARD_W := 540.0
 const CARD_PAD := 20.0
 const HOLE_PAD := 10.0
+const POINTER_INSET := 8.0
+const POINTER_SPAN := 46.0
+const POINTER_CARD_GAP := 12.0
+const CARD_HOLE_GAP := POINTER_INSET + POINTER_SPAN + POINTER_CARD_GAP
 const DIM_ALPHA := 0.58
+const DIM_OVERLAP := 1.0
 const RING_BORDER := Color(0.05, 0.85, 0.95, 0.98)
 
 var _dim_top: ColorRect
@@ -12,6 +17,7 @@ var _dim_bottom: ColorRect
 var _dim_left: ColorRect
 var _dim_right: ColorRect
 var _ring: Panel
+var _ring_extra: Panel
 var _card: PanelContainer
 var _title: Label
 var _body: RichTextLabel
@@ -21,6 +27,7 @@ var _btn_skip: Button
 var _pointer: Label
 var _measure_timer: Timer
 var _ring_pulse: Tween
+var _ring_extra_pulse: Tween
 var _skip_sheet: Control
 var _fuel_flash_tween: Tween
 var _fuel_flash_target: Control
@@ -67,6 +74,13 @@ func _build() -> void:
 	ring_sb.shadow_size = 0
 	_ring.add_theme_stylebox_override("panel", ring_sb)
 	root.add_child(_ring)
+
+	_ring_extra = Panel.new()
+	_ring_extra.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ring_extra_sb := ring_sb.duplicate() as StyleBoxFlat
+	_ring_extra.add_theme_stylebox_override("panel", ring_extra_sb)
+	root.add_child(_ring_extra)
+	_ring_extra.visible = false
 
 	_card = PanelContainer.new()
 	_card.custom_minimum_size = Vector2(CARD_W, 0)
@@ -176,27 +190,52 @@ func _make_dim(parent: Control) -> ColorRect:
 
 
 func _on_tutorial_changed(_t: Dictionary) -> void:
-	if not TutorialManager.coach_visible():
-		_stop_ring_pulse()
-		_stop_fuel_flash()
-		_stop_timer_flash()
-		_stop_helmet_flash()
-		_stop_stim_flash()
-		_stop_ranks_flash()
-		_stop_start_flash()
-		if TutorialManager.busy:
-			return
-		visible = false
+	if not TutorialManager.should_show():
+		_hide_coach()
 		_measure_timer.stop()
 		return
-	visible = true
-	var show_card := TutorialManager.coach_card_visible()
-	_card.visible = show_card
-	if show_card:
-		_refresh_copy()
-	_layout_spotlight()
+	if TutorialManager.busy:
+		return
 	if _measure_timer.is_stopped():
 		_measure_timer.start()
+	_layout_spotlight()
+
+
+func _hide_coach() -> void:
+	_stop_ring_pulse()
+	_stop_extra_ring_pulse()
+	_stop_fuel_flash()
+	_stop_timer_flash()
+	_stop_helmet_flash()
+	_stop_stim_flash()
+	_stop_ranks_flash()
+	_stop_start_flash()
+	visible = false
+	_dim_top.visible = false
+	_dim_bottom.visible = false
+	_dim_left.visible = false
+	_dim_right.visible = false
+	_ring.visible = false
+	if is_instance_valid(_ring_extra):
+		_ring_extra.visible = false
+	if is_instance_valid(_pointer):
+		_pointer.visible = false
+
+
+func _sync_coach_visibility() -> bool:
+	if not TutorialManager.should_show() or TutorialManager.busy:
+		_hide_coach()
+		return false
+	if not TutorialManager.coach_visible():
+		_hide_coach()
+		return false
+	if not visible:
+		visible = true
+		var show_card := TutorialManager.coach_card_visible()
+		_card.visible = show_card
+		if show_card:
+			_refresh_copy()
+	return true
 
 
 func _refresh_copy() -> void:
@@ -265,8 +304,19 @@ func _resolved_spotlight_id() -> String:
 	return TutorialManager.nav_spotlight_for_page(TutorialManager.required_page())
 
 
+func _expand_hole_with_target(hole: Rect2, tutorial_id: String) -> Rect2:
+	var extra := _find_tutorial_target(tutorial_id)
+	if extra == null or not is_instance_valid(extra) or not extra.is_visible_in_tree():
+		return hole
+	var gr: Rect2 = extra.get_global_rect()
+	var extra_hole := Rect2(gr.position - Vector2(HOLE_PAD, HOLE_PAD), gr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0))
+	if hole.size.x <= 4.0 or hole.size.y <= 4.0:
+		return extra_hole
+	return hole.merge(extra_hole)
+
+
 func _layout_spotlight() -> void:
-	if not visible:
+	if not _sync_coach_visibility():
 		return
 	if TutorialManager.coach_card_visible():
 		_refresh_copy()
@@ -280,6 +330,8 @@ func _layout_spotlight() -> void:
 			var gr: Rect2 = target.get_global_rect()
 			hole = Rect2(gr.position - Vector2(HOLE_PAD, HOLE_PAD), gr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0))
 			has_hole = hole.size.x > 4.0 and hole.size.y > 4.0
+	if has_hole and TutorialManager.step_id() == "hero_equip" and TutorialManager.is_on_required_page():
+		hole = _expand_hole_with_target(hole, "hero-doll")
 
 	if not has_hole:
 		_dim_top.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -294,26 +346,41 @@ func _layout_spotlight() -> void:
 			_place_card(Rect2(), vp, "center")
 		else:
 			_card.visible = false
+		_layout_secondary_spotlight_ring()
+		_update_stim_hint()
+		_update_ranks_hint()
 		_update_start_hint()
 		return
 
-	_dim_bottom.visible = true
-	_dim_left.visible = true
-	_dim_right.visible = true
-	_dim_top.visible = true
-	_dim_top.position = Vector2.ZERO
-	_dim_top.size = Vector2(vp.x, maxf(0.0, hole.position.y))
-	_dim_bottom.position = Vector2(0, hole.end.y)
-	_dim_bottom.size = Vector2(vp.x, maxf(0.0, vp.y - hole.end.y))
-	_dim_left.position = Vector2(0, hole.position.y)
-	_dim_left.size = Vector2(maxf(0.0, hole.position.x), hole.size.y)
-	_dim_right.position = Vector2(hole.end.x, hole.position.y)
-	_dim_right.size = Vector2(maxf(0.0, vp.x - hole.end.x), hole.size.y)
+	if not TutorialManager.coach_dims_screen():
+		_dim_top.visible = false
+		_dim_bottom.visible = false
+		_dim_left.visible = false
+		_dim_right.visible = false
+	else:
+		_dim_bottom.visible = true
+		_dim_left.visible = true
+		_dim_right.visible = true
+		_dim_top.visible = true
+		_dim_top.position = Vector2.ZERO
+		_dim_top.size = Vector2(vp.x, maxf(0.0, hole.position.y + DIM_OVERLAP))
+		_dim_bottom.position = Vector2(0, maxf(0.0, hole.end.y - DIM_OVERLAP))
+		_dim_bottom.size = Vector2(vp.x, maxf(0.0, vp.y - hole.end.y + DIM_OVERLAP))
+		_dim_left.position = Vector2(0, hole.position.y)
+		_dim_left.size = Vector2(maxf(0.0, hole.position.x + DIM_OVERLAP), hole.size.y)
+		_dim_right.position = Vector2(maxf(0.0, hole.end.x - DIM_OVERLAP), hole.position.y)
+		_dim_right.size = Vector2(maxf(0.0, vp.x - hole.end.x + DIM_OVERLAP), hole.size.y)
 
-	_ring.visible = true
-	_ring.position = hole.position
-	_ring.size = hole.size
-	_pulse_ring()
+	if _uses_spotlight_ring():
+		_ring.visible = true
+		_ring.position = hole.position
+		_ring.size = hole.size
+		_pulse_ring()
+	else:
+		_ring.visible = false
+		_stop_ring_pulse()
+
+	_layout_secondary_spotlight_ring()
 
 	var placement := str(TutorialManager.current_step().get("placement", "auto"))
 	if not TutorialManager.is_on_required_page() and not TutorialManager.page_is_pending():
@@ -364,6 +431,15 @@ func _min_card_height_for_step() -> float:
 			return 180.0
 
 
+func _mission_timer_card_y(hole: Rect2) -> float:
+	var activity := _find_tutorial_target("shell-activity")
+	if activity != null and is_instance_valid(activity) and activity.is_visible_in_tree():
+		return activity.get_global_rect().end.y + CARD_HOLE_GAP
+	if hole.size.y > 1.0:
+		return hole.end.y + CARD_HOLE_GAP
+	return CARD_PAD + 64.0
+
+
 func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	_card.custom_minimum_size.x = CARD_W
 	_card.reset_size()
@@ -373,37 +449,39 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	_card.size = Vector2(w, h)
 	var pos := Vector2((vp.x - w) * 0.5, (vp.y - h) * 0.5)
 	if TutorialManager.step_id() == "mission_timer":
-		# Anchor the card horizontally to the mission progress button.
-		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, CARD_PAD)
+		# Sit below the banner mission button — not on CARD_PAD, which covers shell-activity.
+		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, _mission_timer_card_y(hole))
+	elif TutorialManager.step_id() == "mission_fight":
+		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, hole.end.y + CARD_HOLE_GAP)
 	elif hole.size.x > 1.0 and hole.size.y > 1.0:
 		var chosen := placement
 		if chosen == "auto" or chosen.is_empty() or chosen == "center":
 			chosen = _auto_placement(hole, vp, w, h)
 		match chosen:
 			"right":
-				pos = Vector2(hole.end.x + 18.0, hole.position.y)
+				pos = Vector2(hole.end.x + CARD_HOLE_GAP, hole.position.y)
 			"left":
-				pos = Vector2(hole.position.x - w - 18.0, hole.position.y)
+				pos = Vector2(hole.position.x - w - CARD_HOLE_GAP, hole.position.y)
 			"top":
-				pos = Vector2(hole.position.x, hole.position.y - h - 18.0)
+				pos = Vector2(hole.position.x, hole.position.y - h - CARD_HOLE_GAP)
 			"bottom":
-				pos = Vector2(hole.position.x, hole.end.y + 18.0)
+				pos = Vector2(hole.position.x, hole.end.y + CARD_HOLE_GAP)
 			_:
 				pos = Vector2((vp.x - w) * 0.5, (vp.y - h) * 0.5)
 	pos.x = clampf(pos.x, CARD_PAD, maxf(CARD_PAD, vp.x - w - CARD_PAD))
 	pos.y = clampf(pos.y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
 	# Never cover the spotlight hole if we can slide off it.
-	if TutorialManager.step_id() != "mission_timer" and hole.size.x > 1.0:
+	if TutorialManager.step_id() not in ["mission_timer", "mission_fight"] and hole.size.x > 1.0:
 		var card_rect := Rect2(pos, Vector2(w, h))
 		if card_rect.intersects(hole):
-			if hole.end.x + 18.0 + w + CARD_PAD <= vp.x:
-				pos.x = hole.end.x + 18.0
-			elif hole.position.x - w - 18.0 >= CARD_PAD:
-				pos.x = hole.position.x - w - 18.0
-			elif hole.end.y + 18.0 + h + CARD_PAD <= vp.y:
-				pos.y = hole.end.y + 18.0
-			elif hole.position.y - h - 18.0 >= CARD_PAD:
-				pos.y = hole.position.y - h - 18.0
+			if hole.end.x + CARD_HOLE_GAP + w + CARD_PAD <= vp.x:
+				pos.x = hole.end.x + CARD_HOLE_GAP
+			elif hole.position.x - w - CARD_HOLE_GAP >= CARD_PAD:
+				pos.x = hole.position.x - w - CARD_HOLE_GAP
+			elif hole.end.y + CARD_HOLE_GAP + h + CARD_PAD <= vp.y:
+				pos.y = hole.end.y + CARD_HOLE_GAP
+			elif hole.position.y - h - CARD_HOLE_GAP >= CARD_PAD:
+				pos.y = hole.position.y - h - CARD_HOLE_GAP
 			pos.x = clampf(pos.x, CARD_PAD, maxf(CARD_PAD, vp.x - w - CARD_PAD))
 			pos.y = clampf(pos.y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
 	_card.position = pos
@@ -560,15 +638,47 @@ func _stop_start_flash() -> void:
 
 
 func _auto_placement(hole: Rect2, vp: Vector2, w: float, h: float) -> String:
-	if hole.end.x + 18.0 + w + CARD_PAD <= vp.x:
+	if hole.end.x + CARD_HOLE_GAP + w + CARD_PAD <= vp.x:
 		return "right"
-	if hole.position.x - w - 18.0 >= CARD_PAD:
+	if hole.position.x - w - CARD_HOLE_GAP >= CARD_PAD:
 		return "left"
-	if hole.end.y + 18.0 + h + CARD_PAD <= vp.y:
+	if hole.end.y + CARD_HOLE_GAP + h + CARD_PAD <= vp.y:
 		return "bottom"
-	if hole.position.y - h - 18.0 >= CARD_PAD:
+	if hole.position.y - h - CARD_HOLE_GAP >= CARD_PAD:
 		return "top"
 	return "center"
+
+
+func _layout_secondary_spotlight_ring() -> void:
+	_stop_extra_ring_pulse()
+	if not is_instance_valid(_ring_extra):
+		return
+	_ring_extra.visible = false
+	if not TutorialManager.is_on_required_page():
+		return
+	var sid := ""
+	match TutorialManager.step_id():
+		"shop_market", "arena_free":
+			sid = TutorialManager.extra_spotlight_id()
+	if sid.is_empty():
+		return
+	var target := _find_tutorial_target(sid)
+	if target == null or not is_instance_valid(target) or not target.is_visible_in_tree():
+		return
+	var gr: Rect2 = target.get_global_rect()
+	var hole := Rect2(gr.position - Vector2(HOLE_PAD, HOLE_PAD), gr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0))
+	if hole.size.x <= 4.0 or hole.size.y <= 4.0:
+		return
+	_ring_extra.visible = true
+	_ring_extra.position = hole.position
+	_ring_extra.size = hole.size
+	_pulse_extra_ring(TutorialManager.step_id() == "arena_free")
+
+
+func _uses_spotlight_ring() -> bool:
+	# mission_start already flashes the START MISSION button; the ring top border
+	# reads as a full-width cyan hairline above the wide button.
+	return TutorialManager.step_id() != "mission_start"
 
 
 func _pulse_ring() -> void:
@@ -593,6 +703,45 @@ func _stop_ring_pulse() -> void:
 		_ring_pulse.kill()
 	_ring_pulse = null
 	_reset_ring_style()
+
+
+func _pulse_extra_ring(subtle: bool = false) -> void:
+	if _ring_extra_pulse != null and is_instance_valid(_ring_extra_pulse) and _ring_extra_pulse.is_running():
+		return
+	_stop_extra_ring_pulse()
+	_reset_extra_ring_style()
+	var sb := _ring_extra.get_theme_stylebox("panel") as StyleBoxFlat
+	if sb == null:
+		return
+	sb.shadow_size = 0
+	var dim_alpha := 0.22 if subtle else 0.32
+	var bright_alpha := 0.72 if subtle else 1.0
+	var dim := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, dim_alpha)
+	var bright := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, bright_alpha)
+	sb.border_color = dim
+	var half := 0.85 if subtle else 0.55
+	_ring_extra_pulse = create_tween().set_loops()
+	_ring_extra_pulse.tween_property(sb, "border_color", bright, half).set_trans(Tween.TRANS_SINE)
+	_ring_extra_pulse.tween_property(sb, "border_color", dim, half).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_extra_ring_pulse() -> void:
+	if _ring_extra_pulse != null and is_instance_valid(_ring_extra_pulse):
+		_ring_extra_pulse.kill()
+	_ring_extra_pulse = null
+	_reset_extra_ring_style()
+
+
+func _reset_extra_ring_style() -> void:
+	if not is_instance_valid(_ring_extra):
+		return
+	_ring_extra.modulate = Color.WHITE
+	var sb := _ring_extra.get_theme_stylebox("panel") as StyleBoxFlat
+	if sb == null:
+		return
+	sb.bg_color = Color(0, 0, 0, 0)
+	sb.border_color = RING_BORDER
+	sb.shadow_size = 0
 
 
 func _reset_ring_style() -> void:
@@ -630,18 +779,18 @@ func _place_pointer(hole: Rect2, vp: Vector2) -> void:
 	var hole_center := hole.get_center()
 	if hole_center.x < card_center.x:
 		_pointer.text = "◀"
-		_pointer.position = Vector2(hole.end.x + 8.0, hole_center.y - 24.0)
+		_pointer.position = Vector2(hole.end.x + POINTER_INSET, hole_center.y - POINTER_SPAN * 0.5)
 	elif hole_center.x > card_center.x:
 		_pointer.text = "▶"
-		_pointer.position = Vector2(hole.position.x - 48.0, hole_center.y - 24.0)
+		_pointer.position = Vector2(hole.position.x - POINTER_INSET - POINTER_SPAN, hole_center.y - POINTER_SPAN * 0.5)
 	elif hole_center.y < card_center.y:
 		_pointer.text = "▲"
-		_pointer.position = Vector2(hole_center.x - 16.0, hole.end.y + 4.0)
+		_pointer.position = Vector2(hole_center.x - POINTER_SPAN * 0.35, hole.end.y + POINTER_INSET)
 	else:
 		_pointer.text = "▼"
-		_pointer.position = Vector2(hole_center.x - 16.0, hole.position.y - 44.0)
-	_pointer.position.x = clampf(_pointer.position.x, 8.0, vp.x - 48.0)
-	_pointer.position.y = clampf(_pointer.position.y, 8.0, vp.y - 48.0)
+		_pointer.position = Vector2(hole_center.x - POINTER_SPAN * 0.35, hole.position.y - POINTER_INSET - POINTER_SPAN)
+	_pointer.position.x = clampf(_pointer.position.x, 8.0, vp.x - POINTER_SPAN)
+	_pointer.position.y = clampf(_pointer.position.y, 8.0, vp.y - POINTER_SPAN)
 
 
 func _confirm_skip() -> void:

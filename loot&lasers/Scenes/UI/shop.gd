@@ -269,11 +269,13 @@ func _update_meta() -> void:
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST),
 		GameData.STARDUST_COLOR
 	))
-	_currency_row.add_child(ClientUi.make_currency_chip(
+	var refresh_chip := ClientUi.make_currency_chip(
 		"⏱",
 		GameData.format_shop_countdown(_seconds_left()),
 		ClientUi.CYAN
-	))
+	)
+	TutorialManager.tag_target(refresh_chip, "shop-refresh-timer")
+	_currency_row.add_child(refresh_chip)
 
 
 func _seconds_left() -> int:

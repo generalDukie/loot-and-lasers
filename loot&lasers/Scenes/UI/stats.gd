@@ -42,6 +42,9 @@ var _combat_via: Label
 var _combat_stim: Label
 var _stat_rows: Dictionary = {}
 var _combat_values: Dictionary = {}
+var _combat_panels: Dictionary = {}
+var _combat_flash_tweens: Dictionary = {}
+var _attr_flash_tweens: Dictionary = {}
 var _hold = HoldRepeat.new()
 var _hold_stat := ""
 var _hold_queued := 0
@@ -77,6 +80,7 @@ const BAG_COLS := 5
 ## Backpack gear glyph — fraction of the middle band's shorter side (name/attrs unchanged).
 const BAG_GEAR_ICON_FILL := 0.6
 const ARMOR_STAT_LABEL := "Might Resistance"
+const COMBAT_STAT_FLASH_SEC := 1.5
 
 
 func _ready() -> void:
@@ -107,6 +111,8 @@ func _start_boot() -> void:
 
 func _exit_tree() -> void:
 	_stop_upgrade_hold(true)
+	_stop_combat_flashes()
+	_stop_attr_flashes()
 	var win := get_window()
 	if win != null and win.focus_exited.is_connected(_on_window_focus_out):
 		win.focus_exited.disconnect(_on_window_focus_out)
@@ -416,6 +422,7 @@ func _populate() -> void:
 	_update_backpack()
 	_stat_rows.clear()
 	_combat_values.clear()
+	_combat_panels.clear()
 	_clear_container_children(_list)
 
 	var c: Dictionary = GameManager.active_character
@@ -1409,6 +1416,15 @@ func _on_equip(item_id: String) -> void:
 		return
 	_busy = true
 	_set_action_status("Equipping…")
+	var tutorial_equip := (
+		TutorialManager.should_show()
+		and TutorialManager.step_id() == "hero_equip"
+	)
+	var before_totals: Dictionary = {}
+	if tutorial_equip:
+		before_totals = StatsManager.display_totals(
+			GameManager.active_character, StatsManager.equipped_items
+		)
 	print("[Hero] equip_item id=%s via=AuthManager.Node" % item_id.substr(0, mini(8, item_id.length())))
 	var res: Dictionary = await AuthManager.equip_item(item_id)
 	_busy = false
@@ -1420,6 +1436,13 @@ func _on_equip(item_id: String) -> void:
 	AudioManager.play_ui("equip")
 	await StatsManager.refresh()
 	_refresh_after_inventory_change(true)
+	if tutorial_equip:
+		var after_totals := StatsManager.display_totals(
+			GameManager.active_character, StatsManager.equipped_items
+		)
+		for stat in _stats_increased_from_equip(before_totals, after_totals):
+			_flash_attribute_row(str(stat))
+		await TutorialManager.complete_hero_equip_item()
 
 
 func _on_unequip(item_id: String) -> void:
@@ -1760,11 +1783,116 @@ func _combat_tile(label: String, color: Color) -> PanelContainer:
 	ClientUi.apply_display_font(v)
 	col.add_child(v)
 	_combat_values[label] = v
+	_combat_panels[label] = panel
 	return panel
 
 
 func _fmt_pct(v: float) -> String:
 	return "%.1f" % v
+
+
+func _combat_labels_for_attribute(stat: String) -> Array:
+	var c: Dictionary = GameManager.active_character
+	var class_key := str(c.get("class", "Vanguard"))
+	var primary := StatsRules.primary_stat(class_key)
+	var arch := MissionCombat.damage_archetype(class_key)
+	match stat:
+		"luck":
+			return ["Crit Chance"]
+		"vitality":
+			return ["Max Health"]
+		"agility":
+			var out: Array = ["Dodge Chance"]
+			if primary == "agility":
+				out.append("Damage")
+			return out
+		"intellect":
+			var out: Array = ["Tech Resist"]
+			if primary == "intellect":
+				out.append("Damage")
+			return out
+		"strength":
+			if arch == "str" or primary == "strength":
+				return ["Damage"]
+			return [ARMOR_STAT_LABEL]
+		_:
+			return []
+
+
+func _stats_increased_from_equip(before: Dictionary, after: Dictionary) -> Array:
+	var out: Array = []
+	for stat in StatsRules.ATTR_KEYS:
+		if int(after.get(stat, 0)) > int(before.get(stat, 0)):
+			out.append(stat)
+	return out
+
+
+func _flash_attribute_row(stat: String) -> void:
+	if not _stat_rows.has(stat):
+		return
+	var row: Dictionary = _stat_rows[stat]
+	if not row.has("panel"):
+		return
+	var panel := row["panel"] as Control
+	if panel == null or not is_instance_valid(panel):
+		return
+	if _attr_flash_tweens.has(stat):
+		var old: Variant = _attr_flash_tweens[stat]
+		if old is Tween and is_instance_valid(old):
+			(old as Tween).kill()
+	panel.modulate = Color.WHITE
+	var tw := panel.create_tween()
+	_attr_flash_tweens[stat] = tw
+	var half := COMBAT_STAT_FLASH_SEC * 0.5
+	tw.tween_property(panel, "modulate", Color(1.18, 1.32, 1.12, 1.0), half).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(panel, "modulate", Color.WHITE, half).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_attr_flashes() -> void:
+	for stat in _attr_flash_tweens:
+		var tw: Variant = _attr_flash_tweens[stat]
+		if tw is Tween and is_instance_valid(tw):
+			(tw as Tween).kill()
+	_attr_flash_tweens.clear()
+	for stat in _stat_rows:
+		var row: Dictionary = _stat_rows[stat]
+		if not row.has("panel"):
+			continue
+		var panel := row["panel"] as Control
+		if panel != null and is_instance_valid(panel):
+			panel.modulate = Color.WHITE
+
+
+func _flash_combat_stats_for_attribute(stat: String) -> void:
+	for label in _combat_labels_for_attribute(stat):
+		var key := str(label)
+		if not _combat_panels.has(key):
+			continue
+		var panel := _combat_panels[key] as Control
+		if panel == null or not is_instance_valid(panel):
+			continue
+		if _combat_flash_tweens.has(key):
+			var old: Variant = _combat_flash_tweens[key]
+			if old is Tween and is_instance_valid(old):
+				(old as Tween).kill()
+		panel.modulate = Color.WHITE
+		var tw := panel.create_tween()
+		_combat_flash_tweens[key] = tw
+		var half := COMBAT_STAT_FLASH_SEC * 0.5
+		tw.tween_property(panel, "modulate", Color(1.18, 1.32, 1.12, 1.0), half).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(panel, "modulate", Color.WHITE, half).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_combat_flashes() -> void:
+	for key in _combat_flash_tweens:
+		var tw: Variant = _combat_flash_tweens[key]
+		if tw is Tween and is_instance_valid(tw):
+			(tw as Tween).kill()
+	_combat_flash_tweens.clear()
+	for key in _combat_panels:
+		var panel := _combat_panels[key] as Control
+		if panel != null and is_instance_valid(panel):
+			panel.modulate = Color.WHITE
 
 
 func _clear_container_children(host: Node) -> void:
@@ -1929,6 +2057,9 @@ func _flush_hold_queue() -> void:
 	var label := str(StatsRules.ATTR_LABELS.get(stat, stat))
 	var spent := int(StatsManager.last_buy.get("cost", 0))
 	_status.text = "+%s %s  ·  −%s ✦" % [applied, label, spent]
+	if TutorialManager.should_show() and TutorialManager.step_id() == "hero_upgrade" and applied > 0:
+		_flash_combat_stats_for_attribute(stat)
+		await TutorialManager.complete_hero_upgrade_purchase()
 	if leftover > 0 and server_reported_count:
 		# Server bought as many as dust/cap allowed.
 		_hold.stop()

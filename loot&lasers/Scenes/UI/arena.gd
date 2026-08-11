@@ -142,9 +142,26 @@ func _build() -> void:
 	TutorialManager.tag_target(_free_panel, "arena-free")
 	root.add_child(_free_panel)
 
+	_status = ClientUi.make_status()
+	_status.visible = false
+	root.add_child(_status)
+
+	# Single-viewport composition: challengers + paid note + history/news.
+	var body := VBoxContainer.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 10)
+	root.add_child(body)
+
+	var opponent_area := VBoxContainer.new()
+	opponent_area.add_theme_constant_override("separation", 8)
+	opponent_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	opponent_area.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	TutorialManager.tag_target(opponent_area, "arena-contenders")
+	body.add_child(opponent_area)
+
 	var challengers_row := HBoxContainer.new()
 	challengers_row.add_theme_constant_override("separation", 8)
-	root.add_child(challengers_row)
+	opponent_area.add_child(challengers_row)
 	var ch_lab := Label.new()
 	ch_lab.text = "CHALLENGERS"
 	ch_lab.add_theme_font_size_override("font_size", 15)
@@ -181,16 +198,6 @@ func _build() -> void:
 	_refresh_btn.pressed.connect(_on_refresh)
 	challengers_row.add_child(_refresh_btn)
 
-	_status = ClientUi.make_status()
-	_status.visible = false
-	root.add_child(_status)
-
-	# Single-viewport composition: challengers + paid note + history/news.
-	var body := VBoxContainer.new()
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 10)
-	root.add_child(body)
-
 	# Challenger cards keep natural height; leftover viewport goes to history/news
 	# so the free-battles banner sits tighter under the opponents.
 	_list = GridContainer.new()
@@ -199,8 +206,7 @@ func _build() -> void:
 	_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_list.add_theme_constant_override("h_separation", 10)
 	_list.add_theme_constant_override("v_separation", 10)
-	TutorialManager.tag_target(_list, "arena-contenders")
-	body.add_child(_list)
+	opponent_area.add_child(_list)
 
 	# Twin panes absorb remaining height (fills dead space under the arena board).
 	var bottom := HBoxContainer.new()
@@ -615,7 +621,6 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 		12,
 		2
 	))
-	TutorialManager.tag_target(panel, "arena-contenders")
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)

@@ -173,7 +173,7 @@ export const ONBOARDING_STEPS = Object.freeze([
     chapter: "Operative",
     title: "Attributes",
     body:
-      "Spend Stardust to permanently raise an attribute — each buy costs more than the last. Use the 100 Stardust from your first mission and press Upgrade now on any stat.",
+      "Spend some of that stardust you earned to upgrade an attribute!",
     gate: "buy_attribute",
     page: PAGE.hero,
     spotlight: "hero-attrs",
@@ -199,8 +199,9 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "click_shop",
     chapter: "Market",
-    title: "Open Black Market",
-    body: "Buy and sell gear here. Click Black Market.",
+    title: "Browse the Black Market",
+    body:
+      "Offload some loot and get a shiny new blaster. Everything you'll find here is registered and legal. Probably.",
     gate: "click_target",
     page: null,
     spotlight: "nav-shop",
@@ -213,10 +214,11 @@ export const ONBOARDING_STEPS = Object.freeze([
     chapter: "Market",
     title: "Black Market Basics",
     body:
-      "Stims temporarily boost an attribute in combat, then wear off — grab one from the stalls when you're ready. Got junk? The sell tray at the bottom pays Stardust for gear you don't need.",
+      "The Black Market refreshes twice daily - or whenever you grease the gears with Nova Crystals. You also get 1 free refresh every 12 hours. Buy Gear and Stims, which are temporary attribute boosts you can stack for maximum space-drug efficiency. Sell loot down below.",
     gate: "ack",
     page: PAGE.shop,
     spotlight: "shop-stim",
+    extra_spotlight: "shop-refresh-timer",
     placement: "top",
     cta: "Got it",
     nav_label: "Black Market",
@@ -224,8 +226,8 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "click_arena",
     chapter: "Arena",
-    title: "Open Arena",
-    body: "Arena is PvP. Click Arena.",
+    title: "Fight for Glory",
+    body: "Battle other players in the arena for bragging rights and some pocket change",
     gate: "click_target",
     page: null,
     spotlight: "nav-arena",
@@ -238,10 +240,10 @@ export const ONBOARDING_STEPS = Object.freeze([
     chapter: "Arena",
     title: "Free Battles",
     body:
-      "Three contenders a day — matchmaking uses your Arena rank. Win fights to climb the ladder. Ranks on the side nav shows where you stand.",
+      "Pick your battles. You get rewards for the first 10 battles won per day, but you can keep fighting forever to climb the rankings and prove your worth!",
     gate: "ack",
     page: PAGE.arena,
-    spotlight: "arena-free",
+    spotlight: "arena-contenders",
     extra_spotlight: "nav-ranks",
     placement: "top",
     cta: "Got it",
@@ -250,8 +252,8 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "click_mine",
     chapter: "Mine",
-    title: "Open Mine",
-    body: "Idle Stardust lives here. Click Mine.",
+    title: "Blast some asteroids",
+    body: "Looking for some extra dust to line your pockets? Get to work.",
     gate: "click_target",
     page: null,
     spotlight: "nav-mine",
@@ -262,8 +264,9 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "mine_explain",
     chapter: "Mine",
-    title: "Space Mining",
-    body: "Deploy your ship for a set duration. Stardust accrues while you're elsewhere. You can't run Cantina missions while a mine is active.",
+    title: "Work, work.",
+    body:
+      "Set your operative to mine asteroids for some stardust while you're away. You can't start missions while mining.",
     gate: "ack",
     page: PAGE.mine,
     spotlight: "mine-hero",
@@ -274,8 +277,8 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "continue_travels",
     chapter: "Cantina",
-    title: "Continue Your Travels",
-    body: "You're cleared for solo ops. Head back to the Cantina and line up your next mission when you're ready.",
+    title: "Continue the adventure",
+    body: "Looks like you know your way around the station. Get back out there and power up!",
     gate: "click_target",
     page: null,
     spotlight: "nav-cantina",

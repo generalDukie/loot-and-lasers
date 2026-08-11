@@ -83,6 +83,14 @@ func coach_visible() -> bool:
 	return true
 
 
+func coach_card_visible() -> bool:
+	if not coach_visible():
+		return false
+	if step_id() == "mission_start":
+		return false
+	return true
+
+
 func mission_outro_ready() -> bool:
 	return _mission_outro_ready
 

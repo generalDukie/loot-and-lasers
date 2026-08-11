@@ -5,6 +5,7 @@ const CARD_W := 540.0
 const CARD_PAD := 20.0
 const HOLE_PAD := 10.0
 const DIM_ALPHA := 0.58
+const RING_BORDER := Color(0.05, 0.85, 0.95, 0.98)
 
 var _dim_top: ColorRect
 var _dim_bottom: ColorRect
@@ -13,7 +14,6 @@ var _dim_right: ColorRect
 var _ring: Panel
 var _card: PanelContainer
 var _title: Label
-var _progress: Label
 var _body: RichTextLabel
 var _btn_back: Button
 var _btn_next: Button
@@ -32,6 +32,8 @@ var _stim_flash_tween: Tween
 var _stim_flash_target: Control
 var _ranks_flash_tween: Tween
 var _ranks_flash_target: Control
+var _start_flash_tween: Tween
+var _start_flash_target: Control
 
 
 func _ready() -> void:
@@ -62,8 +64,7 @@ func _build() -> void:
 	ring_sb.set_border_width_all(3)
 	ring_sb.border_color = Color(0.05, 0.85, 0.95, 0.98)
 	ring_sb.set_corner_radius_all(12)
-	ring_sb.shadow_color = Color(0.05, 0.85, 0.95, 0.42)
-	ring_sb.shadow_size = 18
+	ring_sb.shadow_size = 0
 	_ring.add_theme_stylebox_override("panel", ring_sb)
 	root.add_child(_ring)
 
@@ -90,19 +91,12 @@ func _build() -> void:
 
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 12)
+	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_child(head)
 
 	var head_col := VBoxContainer.new()
 	head_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head_col.add_theme_constant_override("separation", 4)
 	head.add_child(head_col)
-
-	_progress = Label.new()
-	_progress.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_progress.add_theme_font_size_override("font_size", 13)
-	_progress.add_theme_color_override("font_color", Color(0.45, 0.88, 0.98, 0.95))
-	ClientUi.apply_display_font(_progress)
-	head_col.add_child(_progress)
 
 	_title = Label.new()
 	_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -183,32 +177,31 @@ func _make_dim(parent: Control) -> ColorRect:
 
 func _on_tutorial_changed(_t: Dictionary) -> void:
 	if not TutorialManager.coach_visible():
+		_stop_ring_pulse()
 		_stop_fuel_flash()
 		_stop_timer_flash()
 		_stop_helmet_flash()
 		_stop_stim_flash()
 		_stop_ranks_flash()
+		_stop_start_flash()
 		if TutorialManager.busy:
 			return
 		visible = false
 		_measure_timer.stop()
 		return
 	visible = true
-	_card.visible = true
-	_refresh_copy()
+	var show_card := TutorialManager.coach_card_visible()
+	_card.visible = show_card
+	if show_card:
+		_refresh_copy()
 	_layout_spotlight()
 	if _measure_timer.is_stopped():
 		_measure_timer.start()
 
 
 func _refresh_copy() -> void:
-	var t := TutorialManager.tutorial
 	var step := TutorialManager.current_step()
 	var on_page := TutorialManager.is_on_required_page()
-	var chapter := str(t.get("chapter_index", 1))
-	var chapter_total := str(t.get("chapter_total", 1))
-	var label := str(t.get("progress_label", step.get("title", "Tutorial")))
-	_progress.text = "TUTORIAL · %s / %s\n%s" % [chapter, chapter_total, label]
 	if TutorialManager.page_is_pending():
 		_title.text = str(step.get("title", "Tutorial"))
 		_body.text = "Opening %s…" % str(step.get("nav_label", "the next station"))
@@ -245,6 +238,10 @@ func _resolved_spotlight_id() -> String:
 		var skip := _find_tutorial_target("mission-skip")
 		if skip != null and is_instance_valid(skip) and skip.is_visible_in_tree():
 			return "mission-skip"
+	if TutorialManager.step_id() == "mission_timer" and TutorialManager.is_on_required_page():
+		var timer := _find_tutorial_target("mission-timer")
+		if timer != null and is_instance_valid(timer) and timer.is_visible_in_tree():
+			return "mission-timer"
 	if TutorialManager.step_id() == "hero_equip" and TutorialManager.is_on_required_page():
 		var helmet := _find_tutorial_target("hero-bag-helmet")
 		if helmet != null and is_instance_valid(helmet) and helmet.is_visible_in_tree():
@@ -271,13 +268,14 @@ func _resolved_spotlight_id() -> String:
 func _layout_spotlight() -> void:
 	if not visible:
 		return
-	_refresh_copy()
+	if TutorialManager.coach_card_visible():
+		_refresh_copy()
 	var vp := get_viewport().get_visible_rect().size
 	var sid := _resolved_spotlight_id()
 	var hole := Rect2()
 	var has_hole := false
 	if not sid.is_empty():
-		var target := _find_tutorial_target(sid)
+		var target := _spotlight_target_for(sid)
 		if target != null and is_instance_valid(target) and target.is_visible_in_tree():
 			var gr: Rect2 = target.get_global_rect()
 			hole = Rect2(gr.position - Vector2(HOLE_PAD, HOLE_PAD), gr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0))
@@ -292,7 +290,11 @@ func _layout_spotlight() -> void:
 		_ring.visible = false
 		if is_instance_valid(_pointer):
 			_pointer.visible = false
-		_place_card(Rect2(), vp, "center")
+		if TutorialManager.coach_card_visible():
+			_place_card(Rect2(), vp, "center")
+		else:
+			_card.visible = false
+		_update_start_hint()
 		return
 
 	_dim_bottom.visible = true
@@ -316,24 +318,32 @@ func _layout_spotlight() -> void:
 	var placement := str(TutorialManager.current_step().get("placement", "auto"))
 	if not TutorialManager.is_on_required_page() and not TutorialManager.page_is_pending():
 		placement = "auto"
-	_place_card(hole, vp, placement)
-	_place_pointer(hole, vp)
+	if TutorialManager.coach_card_visible():
+		_place_card(hole, vp, placement)
+		_place_pointer(hole, vp)
+	else:
+		_card.visible = false
+		if is_instance_valid(_pointer):
+			_pointer.visible = false
 	_update_fuel_hint()
 	_update_timer_hint()
 	_update_helmet_hint()
 	_update_stim_hint()
 	_update_ranks_hint()
+	_update_start_hint()
 
 
 func _body_text_for_step(step: Dictionary) -> String:
 	if TutorialManager.step_id() == "hero_upgrade":
 		var class_key := str(GameManager.active_character.get("class", "Vanguard"))
-		return TutorialAttributeCopy.body_for_class(class_key)
+		return TutorialCurrencyCopy.colorize(TutorialAttributeCopy.body_for_class(class_key))
 	if TutorialManager.step_id() == "mission_fight" and TutorialManager.is_on_required_page():
 		var fight := _find_tutorial_target("mission-fight")
 		if fight == null or not fight.is_visible_in_tree():
-			return "This one's on us, but next time it'll cost ya! Tap Skip to jump the wait and fight now."
-	return str(step.get("body", ""))
+			return TutorialCurrencyCopy.colorize(
+				"This one's on us, but next time it'll cost ya! Tap Skip to jump the wait and fight now."
+			)
+	return TutorialCurrencyCopy.colorize(str(step.get("body", "")))
 
 
 func _min_card_height_for_step() -> float:
@@ -363,7 +373,8 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	_card.size = Vector2(w, h)
 	var pos := Vector2((vp.x - w) * 0.5, (vp.y - h) * 0.5)
 	if TutorialManager.step_id() == "mission_timer":
-		pos = Vector2((vp.x - w) * 0.5, CARD_PAD)
+		# Anchor the card horizontally to the mission progress button.
+		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, CARD_PAD)
 	elif hole.size.x > 1.0 and hole.size.y > 1.0:
 		var chosen := placement
 		if chosen == "auto" or chosen.is_empty() or chosen == "center":
@@ -523,6 +534,31 @@ func _stop_ranks_flash() -> void:
 	_ranks_flash_target = null
 
 
+func _update_start_hint() -> void:
+	_stop_start_flash()
+	if not visible or TutorialManager.step_id() != "mission_start":
+		return
+	if not TutorialManager.is_on_required_page():
+		return
+	var target := _find_tutorial_target("cantina-start")
+	if target == null or not is_instance_valid(target):
+		return
+	_start_flash_target = target
+	target.modulate = Color.WHITE
+	_start_flash_tween = target.create_tween().set_loops()
+	_start_flash_tween.tween_property(target, "modulate", Color(1.12, 1.38, 1.08, 1.0), 0.6).set_trans(Tween.TRANS_SINE)
+	_start_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_start_flash() -> void:
+	if _start_flash_tween != null and is_instance_valid(_start_flash_tween):
+		_start_flash_tween.kill()
+	_start_flash_tween = null
+	if _start_flash_target != null and is_instance_valid(_start_flash_target):
+		_start_flash_target.modulate = Color.WHITE
+	_start_flash_target = null
+
+
 func _auto_placement(hole: Rect2, vp: Vector2, w: float, h: float) -> String:
 	if hole.end.x + 18.0 + w + CARD_PAD <= vp.x:
 		return "right"
@@ -538,12 +574,52 @@ func _auto_placement(hole: Rect2, vp: Vector2, w: float, h: float) -> String:
 func _pulse_ring() -> void:
 	if _ring_pulse != null and is_instance_valid(_ring_pulse) and _ring_pulse.is_running():
 		return
-	if _ring_pulse != null:
+	_stop_ring_pulse()
+	_reset_ring_style()
+	var sb := _ring.get_theme_stylebox("panel") as StyleBoxFlat
+	if sb == null:
+		return
+	# Border-only pulse — no modulate/shadow glow over the spotlight target.
+	sb.shadow_size = 0
+	var dim := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, 0.32)
+	sb.border_color = dim
+	_ring_pulse = create_tween().set_loops()
+	_ring_pulse.tween_property(sb, "border_color", RING_BORDER, 0.55).set_trans(Tween.TRANS_SINE)
+	_ring_pulse.tween_property(sb, "border_color", dim, 0.55).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_ring_pulse() -> void:
+	if _ring_pulse != null and is_instance_valid(_ring_pulse):
 		_ring_pulse.kill()
+	_ring_pulse = null
+	_reset_ring_style()
+
+
+func _reset_ring_style() -> void:
+	if not is_instance_valid(_ring):
+		return
 	_ring.modulate = Color.WHITE
-	_ring_pulse = _ring.create_tween().set_loops()
-	_ring_pulse.tween_property(_ring, "modulate", Color(1.35, 1.45, 1.2, 1.0), 0.45).set_trans(Tween.TRANS_SINE)
-	_ring_pulse.tween_property(_ring, "modulate", Color.WHITE, 0.45).set_trans(Tween.TRANS_SINE)
+	var sb := _ring.get_theme_stylebox("panel") as StyleBoxFlat
+	if sb == null:
+		return
+	sb.bg_color = Color(0, 0, 0, 0)
+	sb.border_color = RING_BORDER
+	sb.shadow_size = 0
+
+
+func _spotlight_target_for(sid: String) -> Control:
+	if TutorialManager.step_id() == "click_operative" and sid == "shell-operative":
+		var tree := get_tree()
+		if tree != null:
+			for n in tree.get_nodes_in_group("tutorial_target"):
+				if not (n is Control):
+					continue
+				if str(n.name) != "OperativeConsole":
+					continue
+				var c := n as Control
+				if c.is_visible_in_tree():
+					return c
+	return _find_tutorial_target(sid)
 
 
 func _place_pointer(hole: Rect2, vp: Vector2) -> void:

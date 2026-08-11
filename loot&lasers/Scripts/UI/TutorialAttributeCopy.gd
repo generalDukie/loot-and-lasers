@@ -31,7 +31,9 @@ static func body_for_class(class_key: String) -> String:
 	var base := _colorize_stats(_plain_for_class(class_key))
 	return (
 		base
-		+ "\n\nSpend some of the [b]100 Stardust[/b] from your first mission — pick an attribute and press [b]Upgrade now[/b]."
+		+ "\n\nSpend some of the "
+		+ TutorialCurrencyCopy.tag("100 Stardust")
+		+ " from your first mission — pick an attribute and press [b]Upgrade now[/b]."
 	)
 
 

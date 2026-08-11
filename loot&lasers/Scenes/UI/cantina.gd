@@ -22,6 +22,7 @@ var _preview_body: VBoxContainer
 var _hover_scrim: ColorRect
 var _hover_card: PanelContainer
 var _hover_body: VBoxContainer
+var _hover_front_layer: CanvasLayer
 var _busy := false
 var _music_on := true
 var _detail_open := false
@@ -34,11 +35,20 @@ func _ready() -> void:
 	_build()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
+	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_changed):
+		TutorialManager.tutorial_changed.connect(_on_tutorial_changed)
 	await _boot()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_render()
+
+
+func _on_tutorial_changed(_unused = null) -> void:
+	if _hover_card == null or not _hover_card.visible:
+		_sync_hover_layer_parent()
+		return
+	call_deferred("_fit_hover_above_patrons")
 
 
 func _build() -> void:
@@ -271,6 +281,10 @@ func _build() -> void:
 	_hover_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hover_body.add_theme_constant_override("separation", 14)
 	hover_pad.add_child(_hover_body)
+
+	_hover_front_layer = CanvasLayer.new()
+	_hover_front_layer.layer = 129
+	add_child(_hover_front_layer)
 
 	# Click detail sheet — mirrors web MissionDetailSheet / provided mock.
 	# Anchored in the content stage (page area, not including side nav).
@@ -559,6 +573,47 @@ func _hide_hover_preview() -> void:
 		_hover_card.visible = false
 	if _hover_scrim:
 		_hover_scrim.visible = false
+	_sync_hover_layer_parent()
+
+
+func _hover_on_front_layer() -> bool:
+	return (
+		TutorialManager.should_show()
+		and TutorialManager.coach_visible()
+		and TutorialManager.step_id() == "mission_pick"
+	)
+
+
+func _sync_hover_layer_parent() -> void:
+	if _hover_scrim == null or _hover_card == null or _stage == null:
+		return
+	var front := _hover_on_front_layer() and _hover_card.visible
+	var target: Node = _hover_front_layer if front else _stage
+	if _hover_scrim.get_parent() == target and _hover_card.get_parent() == target:
+		return
+	if is_instance_valid(_hover_scrim.get_parent()):
+		_hover_scrim.get_parent().remove_child(_hover_scrim)
+	if is_instance_valid(_hover_card.get_parent()):
+		_hover_card.get_parent().remove_child(_hover_card)
+	target.add_child(_hover_scrim)
+	target.add_child(_hover_card)
+	if front:
+		_hover_scrim.z_index = 0
+		_hover_card.z_index = 1
+	else:
+		_restore_hover_stage_layout()
+
+
+func _restore_hover_stage_layout() -> void:
+	_hover_scrim.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_hover_scrim.z_index = 20
+	_hover_card.anchor_left = 0.5
+	_hover_card.anchor_right = 0.5
+	_hover_card.anchor_top = 0.0
+	_hover_card.anchor_bottom = 0.0
+	_hover_card.offset_left = -453
+	_hover_card.offset_right = 453
+	_hover_card.z_index = 25
 
 
 func _force_hide_hover_preview() -> void:
@@ -692,6 +747,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 
 	_hover_scrim.visible = true
 	_hover_card.visible = true
+	_sync_hover_layer_parent()
 	_set_tree_mouse_ignore(_hover_card)
 	call_deferred("_fit_hover_above_patrons")
 	_hover_card.modulate.a = 0.0
@@ -720,21 +776,33 @@ func _fit_hover_above_patrons() -> void:
 		return
 	_hover_card.reset_size()
 	var content_h := _hover_card.get_combined_minimum_size().y
-	var patrons_top := _list.get_global_rect().position.y - _stage.get_global_rect().position.y
+	var stage_gr := _stage.get_global_rect()
+	var patrons_top := _list.get_global_rect().position.y - stage_gr.position.y
 	var gap := 14.0
 	var band_top := 36.0
 	var band_bottom := patrons_top - gap
 	var band_h := maxf(100.0, band_bottom - band_top)
 	var h := minf(content_h, band_h)
 	var top := band_top + maxf(0.0, (band_h - h) * 0.5)
-	_hover_card.offset_top = top
-	_hover_card.offset_bottom = top + h
 	var stage_w := _stage.size.x
 	var card_w := clampf(680.0, 480.0, maxf(480.0, stage_w - 40.0))
-	_hover_card.offset_left = -card_w * 0.5
-	_hover_card.offset_right = card_w * 0.5
 	_hover_card.custom_minimum_size.x = card_w
 	_hover_card.pivot_offset = Vector2(card_w * 0.5, h * 0.5)
+	if _hover_on_front_layer():
+		_hover_scrim.set_anchors_and_offsets_preset(PRESET_TOP_LEFT)
+		_hover_scrim.global_position = stage_gr.position
+		_hover_scrim.size = stage_gr.size
+		_hover_card.set_anchors_and_offsets_preset(PRESET_TOP_LEFT)
+		_hover_card.global_position = Vector2(
+			stage_gr.position.x + (stage_w - card_w) * 0.5,
+			stage_gr.position.y + top
+		)
+		_hover_card.size = Vector2(card_w, h)
+	else:
+		_hover_card.offset_top = top
+		_hover_card.offset_bottom = top + h
+		_hover_card.offset_left = -card_w * 0.5
+		_hover_card.offset_right = card_w * 0.5
 
 
 func _close_mission_sheet() -> void:

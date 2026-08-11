@@ -54,6 +54,7 @@ function testService() {
   assert(normalizeOnboarding({ status: "active", step_id: "shop_sell" }).step_id === "shop_market", "removed shop sell forwards");
   assert(normalizeOnboarding({ status: "active", step_id: "arena_fight" }).step_id === "click_mine", "removed arena fight forwards");
   assert(normalizeOnboarding({ status: "active", step_id: "click_ranks" }).step_id === "click_mine", "removed click ranks forwards");
+  assert(normalizeOnboarding({ status: "active", step_id: "frontier_dungeons" }).step_id === "mission_return", "removed frontier dungeons forwards");
 
   try {
     advanceTo(beginOrResume(defaultOnboardingState()), "finish");
@@ -63,9 +64,9 @@ function testService() {
   }
 
   assert(ONBOARDING_STEPS[0].id === "click_operative", "catalog starts at operative");
-  assert(ONBOARDING_STEPS[14].id === "click_shop", "shop nav follows hero equip");
-  assert(ONBOARDING_STEPS[15].id === "shop_market", "shop market follows shop nav");
-  assert(ONBOARDING_STEPS[17].id === "arena_free", "arena free follows click arena");
+  assert(ONBOARDING_STEPS[13].id === "click_shop", "shop nav follows hero equip");
+  assert(ONBOARDING_STEPS[14].id === "shop_market", "shop market follows shop nav");
+  assert(ONBOARDING_STEPS[16].id === "arena_free", "arena free follows click arena");
   assert(ONBOARDING_STEPS[ONBOARDING_STEPS.length - 2].id === "continue_travels", "cantina return before finish");
   assert(ONBOARDING_STEPS[ONBOARDING_STEPS.length - 1].id === "finish", "catalog ends on finish");
   const ids = ONBOARDING_STEPS.map((s) => s.id);
@@ -95,6 +96,7 @@ function testService() {
     "click_friends",
     "click_mail",
     "hero_stims",
+    "frontier_dungeons",
   ]) {
     assert(!ids.includes(removed), `${removed} step removed`);
   }

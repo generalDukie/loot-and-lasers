@@ -43,8 +43,9 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "click_cantina",
     chapter: "Cantina",
-    title: "Open Cantina",
-    body: "Contracts live in the Cantina. Click Cantina.",
+    title: "Visit the Cantina",
+    body:
+      "There's all sorts of creatures in the Cantina. Most friendly... some not. A few even have some missions they need help with.",
     gate: "click_target",
     page: null,
     spotlight: "nav-cantina",
@@ -55,9 +56,9 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "mission_pick",
     chapter: "Cantina",
-    title: "Three Missions",
+    title: "Pick your Poison",
     body:
-      "Missions are the lifeblood of Loot & Lasers. Each day your fuel reserves are refilled, and you can venture out into the cosmos. Some missions are long, some are short, and some give better rewards than others. Every mission will at least provide XP and Stardust - the primary currency in this world",
+      "Missions are the lifeblood of Loot & Lasers. Each day your fuel reserves are refilled, and you can venture out into the cosmos. Some missions are long, some are short, and some give better rewards than others. Every mission will provide XP and Stardust - the primary currency in this world",
     gate: "click_target",
     page: PAGE.cantina,
     spotlight: "cantina-patrons",
@@ -83,7 +84,7 @@ export const ONBOARDING_STEPS = Object.freeze([
     chapter: "Cantina",
     title: "The Clock's Running",
     body:
-      "You aren't bound by your current adventure, feel free to click around and complete other tasks while waiting for a mission. Keep an eye on the button up here to quickly return and claim your rewards when your character has returned. You'll usually need to fight for them!",
+      "You aren't bound by your current adventure, feel free to click around and complete other tasks while waiting for a mission. Keep an eye on the button up here to quickly return and claim your rewards when your character has returned. You'll need to fight for them!",
     gate: "ack",
     page: PAGE.mission_run,
     spotlight: "shell-activity",
@@ -95,8 +96,8 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "click_frontier",
     chapter: "Frontier",
-    title: "Open Galactic Frontier",
-    body: "PvE progression — not Arena. Click Galactic Frontier.",
+    title: "Venture into the Frontier",
+    body: "You'll find plenty of planets to pillage in the Galactic Frontier.",
     gate: "click_target",
     page: null,
     spotlight: "nav-frontier",
@@ -107,8 +108,9 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "frontier_fight",
     chapter: "Frontier",
-    title: "Dungeons",
-    body: "Galactic Frontier is dungeon PvE — planets, encounters, and bosses. The first world unlocks at level 10. You can't run one yet. Come back when you're stronger.",
+    title: "Planets",
+    body:
+      "The planets you'll discover in the galactic frontier have 10 terrifying enemies scattered across them who just so happen to have awesome loot. You'll unlock the ability to venture out to the first planet at level 10.",
     gate: "ack",
     page: PAGE.frontier,
     spotlight: "galaxy-map",
@@ -118,23 +120,10 @@ export const ONBOARDING_STEPS = Object.freeze([
     nav_label: "Galactic Frontier",
   },
   {
-    id: "frontier_dungeons",
-    chapter: "Frontier",
-    title: "Later Worlds",
-    body: "Deeper planets unlock as you level. This is PvE progression. Arena is ranked PvP — a different loop.",
-    gate: "ack",
-    page: PAGE.frontier,
-    spotlight: "galaxy-map",
-    placement: "right",
-    cta: "Got it",
-    nav_label: "Galactic Frontier",
-  },
-  {
     id: "mission_return",
     chapter: "Cantina",
-    title: "Let's Check Back In",
-    body:
-      "Your operative is still out on mission. Tap Mission in Progress up here to check in and finish the job.",
+    title: "Loot?",
+    body: "Your operative is still out on their mission. Let's check back in.",
     gate: "click_target",
     page: null,
     spotlight: "shell-activity",
@@ -145,9 +134,9 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "mission_fight",
     chapter: "Cantina",
-    title: "Fight the Encounter",
+    title: "Something needs a beating",
     body:
-      "Your operative reached the objective. Tap Fight Encounter when the timer is done — you'll need to win the battle to claim rewards.",
+      "Mission complete... almost. Before a mission can end, you'll need to win the battle to claim the spoils.",
     gate: "click_target",
     page: PAGE.mission_run,
     spotlight: "mission-fight",
@@ -331,6 +320,7 @@ const REMOVED_STEP_FORWARD = Object.freeze({
   arena_fight: "click_mine",
   arena_result: "click_mine",
   click_ranks: "click_mine",
+  frontier_dungeons: "mission_return",
   arena_rank: "click_mine",
   click_casino: "click_mine",
   casino_explain: "click_mine",

@@ -263,7 +263,23 @@ func _build() -> void:
 	root.add_child(_footer)
 
 	_set_mode("login")
-	_email.grab_focus()
+	if _email.text.strip_edges().is_empty():
+		_email.grab_focus()
+	else:
+		_password.grab_focus()
+
+
+func _prefill_remembered_email() -> bool:
+	## Returns true when the email field was filled from local remember storage.
+	if not _email.text.strip_edges().is_empty():
+		return false
+	var saved := ""
+	if NakamaManager != null and NakamaManager.has_method("get_remembered_login_email"):
+		saved = str(NakamaManager.get_remembered_login_email()).strip_edges()
+	if saved.is_empty():
+		return false
+	_email.text = saved
+	return true
 
 
 func _on_field_submitted(_text: String = "") -> void:
@@ -363,6 +379,7 @@ func _set_mode(mode: String) -> void:
 			_primary_btn.text = "Log in"
 			_footer.visible = true
 			_footer.text = "Don't have an account? [url=register][color=#0DCADF][b]Create one[/b][/color][/url]"
+			_prefill_remembered_email()
 
 
 func _on_footer_meta(meta: Variant) -> void:

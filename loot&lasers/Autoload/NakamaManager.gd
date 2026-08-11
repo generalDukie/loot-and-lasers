@@ -188,6 +188,21 @@ func get_account_email() -> String:
 	return _load_account_email()
 
 
+## Last successful login/register email for the login form (survives logout).
+func get_remembered_login_email() -> String:
+	return _load_remembered_login_email()
+
+
+func set_remembered_login_email(email: String) -> void:
+	_save_remembered_login_email(email)
+
+
+func clear_remembered_login_email() -> void:
+	var path := _remembered_login_path()
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+
+
 ## Godot login / register — sole email/password path (Nakama :7350, never Node :8787).
 ## create=true → register; create=false → login existing account.
 func authenticate_email(email: String, password: String, create: bool = false, username: String = "") -> Dictionary:
@@ -233,6 +248,7 @@ func authenticate_email(email: String, password: String, create: bool = false, u
 	_set_session(result, false)
 	_save_auth_method("email")
 	_save_account_email(clean_email)
+	set_remembered_login_email(clean_email)
 	print("[NakamaManager] %s success env=%s host=%s:%s user_id=%s" % [
 		method,
 		BackendEnvironment.get_environment_id(),
@@ -935,6 +951,33 @@ func _load_account_email() -> String:
 	if not saved_env.is_empty() and saved_env != BackendEnvironment.get_environment_id():
 		return ""
 	return str(cfg.get_value("nakama", "account_email", "")).strip_edges().to_lower()
+
+
+func _remembered_login_path() -> String:
+	return "user://remembered_login_%s.cfg" % BackendEnvironment.get_environment_id()
+
+
+func _save_remembered_login_email(email: String) -> void:
+	var clean := email.strip_edges().to_lower()
+	if clean.is_empty():
+		return
+	var path := _remembered_login_path()
+	var cfg := ConfigFile.new()
+	cfg.load(path)
+	cfg.set_value("login", "email", clean)
+	cfg.set_value("login", "environment", BackendEnvironment.get_environment_id())
+	cfg.save(path)
+
+
+func _load_remembered_login_email() -> String:
+	var path := _remembered_login_path()
+	var cfg := ConfigFile.new()
+	if cfg.load(path) != OK:
+		return ""
+	var saved_env := str(cfg.get_value("login", "environment", ""))
+	if not saved_env.is_empty() and saved_env != BackendEnvironment.get_environment_id():
+		return ""
+	return str(cfg.get_value("login", "email", "")).strip_edges().to_lower()
 
 
 func _load_auth_method() -> String:

@@ -102,6 +102,8 @@ func _ready() -> void:
 	_fx.setup(_fx_layer, _fighters, _flash, _beats)
 	_motion.setup(_beats)
 	_hp.setup(_player_hp, _enemy_hp, _player_hp_nums, _enemy_hp_nums, _beats)
+	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_changed):
+		TutorialManager.tutorial_changed.connect(_on_tutorial_changed)
 	_boot()
 
 
@@ -309,7 +311,6 @@ func _build() -> void:
 	_outro_btn.custom_minimum_size = Vector2(320, 64)
 	ClientUi.apply_primary_button(_outro_btn)
 	_outro_btn.pressed.connect(_on_outro_continue)
-	TutorialManager.tag_target(_outro_btn, "arena-outro")
 	outro_col.add_child(_outro_btn)
 
 	var combo_row := Control.new()
@@ -342,8 +343,9 @@ func _build() -> void:
 	_skip_btn.custom_minimum_size = Vector2(320, 58)
 	_apply_skip_cta(_skip_btn)
 	_skip_btn.pressed.connect(_on_skip)
-	TutorialManager.tag_target(_skip_btn, "arena-outro")
 	skip_row.add_child(_skip_btn)
+
+	_apply_combat_tutorial_tags()
 
 	_sheet_host = Control.new()
 	_sheet_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -509,6 +511,32 @@ func _boot() -> void:
 		await _boot_dungeon()
 	else:
 		await _boot_arena()
+
+
+func _apply_combat_tutorial_tags() -> void:
+	if _is_mission():
+		TutorialManager.tag_target(_outro_btn, "mission-view-rewards")
+	else:
+		TutorialManager.tag_target(_outro_btn, "arena-outro")
+		TutorialManager.tag_target(_skip_btn, "arena-outro")
+
+
+func _tutorial_mission_skip_locked() -> bool:
+	return _is_mission() \
+		and TutorialManager.should_show() \
+		and TutorialManager.step_id() == "mission_view_rewards"
+
+
+func _sync_tutorial_skip_btn() -> void:
+	if not is_instance_valid(_skip_btn):
+		return
+	if _tutorial_mission_skip_locked() and _phase != "outro":
+		_skip_btn.visible = false
+		_skip_btn.disabled = true
+
+
+func _on_tutorial_changed(_t: Dictionary) -> void:
+	_sync_tutorial_skip_btn()
 
 
 func _is_mission() -> bool:
@@ -690,6 +718,7 @@ func _start_duel(
 	_motion.start_idle(_player_card, 0.0)
 	_motion.start_idle(_enemy_card, 0.35)
 	_phase = "fight"
+	_sync_tutorial_skip_btn()
 	_run_playback()
 
 
@@ -1211,6 +1240,8 @@ func _card_for(side: Variant) -> Control:
 func _on_skip() -> void:
 	## Fast-forward presentation to the authoritative final HP, then Victory/Defeat.
 	## Does not re-simulate combat — consumes playerEnd / EndHp / event log from the committed battle.
+	if _tutorial_mission_skip_locked():
+		return
 	if _busy or _finished or _phase == "outro":
 		return
 	_generation += 1
@@ -1255,6 +1286,8 @@ func _show_outro() -> void:
 	_outro_layer.modulate.a = 0.0
 	var tw := _outro_layer.create_tween()
 	tw.tween_property(_outro_layer, "modulate:a", 1.0, 0.25)
+	if _is_mission() and TutorialManager.should_show() and TutorialManager.step_id() == "mission_view_rewards":
+		TutorialManager.notify_mission_outro_ready()
 
 
 func _on_outro_continue() -> void:
@@ -1371,20 +1404,26 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 	var note := ""
 	if won and outcome == "NONE":
 		note = "No item recovered this run."
+	var xp_val := int(gains.get("experience", 0))
+	var sd_val := int(gains.get("stardust", 0))
+	var has_loss_rewards := not won and (xp_val > 0 or sd_val > 0 or not items.is_empty())
 	var summary := {
 		"won": won,
 		"mode": "mission",
 		"title": "Mission claimed!" if won else "Mission failed",
-		"subtitle": "" if won else "No stardust, XP, or loot. Fuel was already spent.",
-		"xp": int(gains.get("experience", 0)) if won else 0,
-		"stardust": int(gains.get("stardust", 0)) if won else 0,
+		"subtitle": "" if won else (
+			"Reduced rewards issued." if has_loss_rewards
+			else "No stardust, XP, or loot. Fuel was already spent."
+		),
+		"xp": xp_val,
+		"stardust": sd_val,
 		"gear_item": gear,
-		"reward_items": items if won else [],
+		"reward_items": items if (won or has_loss_rewards) else [],
 		"note": note,
 		"progression": data.get("progression", {}) if typeof(data.get("progression", {})) == TYPE_DICTIONARY else {},
 		"actions": [
 			{"label": "Cantina", "primary": true, "callback": go_cantina},
-			{"label": "Hero" if won else "Hub", "primary": false, "callback": go_secondary},
+			{"label": "Operative" if won else "Hub", "primary": false, "callback": go_secondary},
 		],
 	}
 	CombatSheets.present_complete_then_level_up(

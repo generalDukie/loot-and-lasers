@@ -402,9 +402,9 @@ func _build() -> void:
 	root.add_child(deck)
 
 	deck.add_child(_dock_split(
-		"sofa", "Hero / Ship Hangar", "#5CFFB0",
+		"sofa", "Operative / Ship Hangar", "#5CFFB0",
 		[
-			{"label": "Hero", "icon": "user", "color": "#5CFFB0", "action": func() -> void: GameManager.go_stats()},
+			{"label": "Operative", "icon": "user", "color": "#5CFFB0", "action": func() -> void: GameManager.go_stats()},
 			{"label": "Coming Soon", "icon": "rocket", "color": "#6B7280", "action": func() -> void: GameManager.go_ship()},
 		]
 	))

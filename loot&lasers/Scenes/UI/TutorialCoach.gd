@@ -26,6 +26,12 @@ var _fuel_flash_tween: Tween
 var _fuel_flash_target: Control
 var _timer_flash_tween: Tween
 var _timer_flash_target: Control
+var _helmet_flash_tween: Tween
+var _helmet_flash_target: Control
+var _stim_flash_tween: Tween
+var _stim_flash_target: Control
+var _ranks_flash_tween: Tween
+var _ranks_flash_target: Control
 
 
 func _ready() -> void:
@@ -176,9 +182,12 @@ func _make_dim(parent: Control) -> ColorRect:
 
 
 func _on_tutorial_changed(_t: Dictionary) -> void:
-	if not TutorialManager.should_show():
+	if not TutorialManager.coach_visible():
 		_stop_fuel_flash()
 		_stop_timer_flash()
+		_stop_helmet_flash()
+		_stop_stim_flash()
+		_stop_ranks_flash()
 		if TutorialManager.busy:
 			return
 		visible = false
@@ -211,6 +220,10 @@ func _refresh_copy() -> void:
 		_body.text = "Open %s. The next lesson waits until that page is actually open." % nav
 	else:
 		_title.text = str(step.get("title", "Tutorial"))
+		if TutorialManager.step_id() == "mission_fight" and TutorialManager.is_on_required_page():
+			var fight := _find_tutorial_target("mission-fight")
+			if fight == null or not fight.is_visible_in_tree():
+				_title.text = "Skip the Wait"
 		_body.text = _body_text_for_step(step)
 		if TutorialManager.step_id() == "finish":
 			_title.add_theme_font_size_override("font_size", 32)
@@ -225,7 +238,21 @@ func _refresh_copy() -> void:
 
 
 func _resolved_spotlight_id() -> String:
-	var step := TutorialManager.current_step()
+	if TutorialManager.step_id() == "mission_fight" and TutorialManager.is_on_required_page():
+		var fight := _find_tutorial_target("mission-fight")
+		if fight != null and is_instance_valid(fight) and fight.is_visible_in_tree():
+			return "mission-fight"
+		var skip := _find_tutorial_target("mission-skip")
+		if skip != null and is_instance_valid(skip) and skip.is_visible_in_tree():
+			return "mission-skip"
+	if TutorialManager.step_id() == "hero_equip" and TutorialManager.is_on_required_page():
+		var helmet := _find_tutorial_target("hero-bag-helmet")
+		if helmet != null and is_instance_valid(helmet) and helmet.is_visible_in_tree():
+			return "hero-bag-helmet"
+	if TutorialManager.step_id() == "shop_market" and TutorialManager.is_on_required_page():
+		var stim := _find_tutorial_target("shop-stim")
+		if stim != null and is_instance_valid(stim) and stim.is_visible_in_tree():
+			return "shop-stim"
 	var primary := TutorialManager.spotlight_id()
 	var extra := TutorialManager.extra_spotlight_id()
 	if TutorialManager.is_on_required_page():
@@ -293,12 +320,19 @@ func _layout_spotlight() -> void:
 	_place_pointer(hole, vp)
 	_update_fuel_hint()
 	_update_timer_hint()
+	_update_helmet_hint()
+	_update_stim_hint()
+	_update_ranks_hint()
 
 
 func _body_text_for_step(step: Dictionary) -> String:
 	if TutorialManager.step_id() == "hero_upgrade":
 		var class_key := str(GameManager.active_character.get("class", "Vanguard"))
 		return TutorialAttributeCopy.body_for_class(class_key)
+	if TutorialManager.step_id() == "mission_fight" and TutorialManager.is_on_required_page():
+		var fight := _find_tutorial_target("mission-fight")
+		if fight == null or not fight.is_visible_in_tree():
+			return "This one's on us, but next time it'll cost ya! Tap Skip to jump the wait and fight now."
 	return str(step.get("body", ""))
 
 
@@ -306,9 +340,15 @@ func _min_card_height_for_step() -> float:
 	match TutorialManager.step_id():
 		"hero_upgrade":
 			return 340.0
+		"hero_equip":
+			return 300.0
 		"mission_pick":
 			return 320.0
 		"mission_timer":
+			return 300.0
+		"hero_equip":
+			return 280.0
+		"shop_market":
 			return 300.0
 		_:
 			return 180.0
@@ -406,6 +446,81 @@ func _stop_timer_flash() -> void:
 	if _timer_flash_target != null and is_instance_valid(_timer_flash_target):
 		_timer_flash_target.modulate = Color.WHITE
 	_timer_flash_target = null
+
+
+func _update_helmet_hint() -> void:
+	_stop_helmet_flash()
+	if not visible or TutorialManager.step_id() != "hero_equip":
+		return
+	if not TutorialManager.is_on_required_page():
+		return
+	var target := _find_tutorial_target("hero-bag-helmet")
+	if target == null or not is_instance_valid(target):
+		return
+	_helmet_flash_target = target
+	target.modulate = Color.WHITE
+	_helmet_flash_tween = target.create_tween().set_loops()
+	_helmet_flash_tween.tween_property(target, "modulate", Color(1.18, 1.32, 1.08, 1.0), 0.6).set_trans(Tween.TRANS_SINE)
+	_helmet_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_helmet_flash() -> void:
+	if _helmet_flash_tween != null and is_instance_valid(_helmet_flash_tween):
+		_helmet_flash_tween.kill()
+	_helmet_flash_tween = null
+	if _helmet_flash_target != null and is_instance_valid(_helmet_flash_target):
+		_helmet_flash_target.modulate = Color.WHITE
+	_helmet_flash_target = null
+
+
+func _update_stim_hint() -> void:
+	_stop_stim_flash()
+	if not visible or TutorialManager.step_id() != "shop_market":
+		return
+	if not TutorialManager.is_on_required_page():
+		return
+	var target := _find_tutorial_target("shop-stim")
+	if target == null or not is_instance_valid(target):
+		return
+	_stim_flash_target = target
+	target.modulate = Color.WHITE
+	_stim_flash_tween = target.create_tween().set_loops()
+	_stim_flash_tween.tween_property(target, "modulate", Color(1.15, 1.28, 1.42, 1.0), 0.6).set_trans(Tween.TRANS_SINE)
+	_stim_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_stim_flash() -> void:
+	if _stim_flash_tween != null and is_instance_valid(_stim_flash_tween):
+		_stim_flash_tween.kill()
+	_stim_flash_tween = null
+	if _stim_flash_target != null and is_instance_valid(_stim_flash_target):
+		_stim_flash_target.modulate = Color.WHITE
+	_stim_flash_target = null
+
+
+func _update_ranks_hint() -> void:
+	_stop_ranks_flash()
+	if not visible or TutorialManager.step_id() != "arena_free":
+		return
+	if not TutorialManager.is_on_required_page():
+		return
+	var target := _find_tutorial_target("nav-ranks")
+	if target == null or not is_instance_valid(target):
+		return
+	_ranks_flash_target = target
+	target.modulate = Color.WHITE
+	_ranks_flash_tween = target.create_tween().set_loops()
+	_ranks_flash_tween.tween_property(target, "modulate", Color(1.08, 1.12, 1.18, 1.0), 0.75).set_trans(Tween.TRANS_SINE)
+	_ranks_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.75).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_ranks_flash() -> void:
+	if _ranks_flash_tween != null and is_instance_valid(_ranks_flash_tween):
+		_ranks_flash_tween.kill()
+	_ranks_flash_tween = null
+	if _ranks_flash_target != null and is_instance_valid(_ranks_flash_target):
+		_ranks_flash_target.modulate = Color.WHITE
+	_ranks_flash_target = null
 
 
 func _auto_placement(hole: Rect2, vp: Vector2, w: float, h: float) -> String:

@@ -117,6 +117,8 @@ import {
   shouldReserveFirstMissionBonusLaunch,
   shouldGrantFirstMissionBonusAtClaim,
   isFlaggedFirstMission,
+  isTutorialActiveForBonus,
+  onboardingForCharacter,
   patchLaunchFirstMissionBonus,
   patchSpendFirstMissionBonus,
   settleTutorialFirstMissionBonus,
@@ -1366,21 +1368,41 @@ export async function ClaimMission(user, body) {
         const live = entities.Character.get(ch.id) || ch;
         const { finalXp, finalStardust } = resolveMissionFinals(live, mission);
         const lossXp = Math.max(0, Math.round((finalXp || 0) / 2));
-        const lossStardust = Math.max(0, Math.round((finalStardust || 0) / 2));
+        let lossStardust = Math.max(0, Math.round((finalStardust || 0) / 2));
         const patch = {
           active_mission_id: "",
           mission_end_time: "",
           stardust: (live.stardust || 0) + lossStardust,
           total_stardust_earned: (live.total_stardust_earned || 0) + lossStardust,
         };
+        const items = [];
+        let itemOutcome = "NONE";
+        if (shouldGrantFirstMissionBonusAtClaim(live, missionId)) {
+          const missStreak = missionGearMissStreak(live);
+          const bonus = settleTutorialFirstMissionBonus({
+            character: live,
+            missStreak,
+            rng: secureRandom,
+          });
+          lossStardust += bonus.stardustBonus;
+          patch.stardust = (live.stardust || 0) + lossStardust;
+          patch.total_stardust_earned = (live.total_stardust_earned || 0) + lossStardust;
+          itemOutcome = bonus.itemOutcome;
+          for (const gear of bonus.itemTemplates || []) {
+            const granted = grantOrCompensate(live, gear, patch);
+            if (granted.item) {
+              items.push(granted.item);
+            }
+          }
+          patch.onboarding_tutorial = patchSpendFirstMissionBonus(live.onboarding_tutorial);
+        } else if (isFlaggedFirstMission(live, missionId)) {
+          patch.onboarding_tutorial = patchSpendFirstMissionBonus(live.onboarding_tutorial);
+        }
         applyXpToCharacter(live, lossXp, patch);
         const progression = consumeProgression(patch);
         const rolled = retireAndGenerateMissionBoard({ ...live, ...patch }, patch);
         const { offers, ...offerPatch } = rolled;
         Object.assign(patch, offerPatch);
-        if (isFlaggedFirstMission(live, missionId)) {
-          patch.onboarding_tutorial = patchSpendFirstMissionBonus(live.onboarding_tutorial);
-        }
         const character = entities.Character.update(live.id, patch);
         return {
           success: true,
@@ -1389,8 +1411,8 @@ export async function ClaimMission(user, body) {
           patch,
           character,
           progression,
-          items: [],
-          item_outcome: "NONE",
+          items,
+          item_outcome: itemOutcome,
           gains: { stardust: lossStardust, experience: lossXp, loss: true },
           cantina_offers: offers,
           cantina_state: "AVAILABLE_OFFERS",
@@ -1679,8 +1701,15 @@ export async function SkipMission(user, body) {
         httpErr(400, "Mission is not in progress");
       }
 
-      const halfCost = skipCostHalfUnits(mission);
-      const displayCost = skipCostFor(mission);
+      const onboarding = onboardingForCharacter(ch);
+      const tutorialFreeSkip =
+        isFlaggedFirstMission(ch, mission.id) && isTutorialActiveForBonus(onboarding);
+      let halfCost = skipCostHalfUnits(mission);
+      let displayCost = skipCostFor(mission);
+      if (tutorialFreeSkip) {
+        halfCost = 0;
+        displayCost = 0;
+      }
       if (halfCost > 0 && readNovaHalfUnits(ch) < halfCost) {
         httpErr(400, "Not enough Nova Crystals");
       }

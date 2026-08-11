@@ -181,6 +181,7 @@ func _build() -> void:
 	)
 	_skip_btn.pressed.connect(_on_skip)
 	active_col.add_child(_skip_btn)
+	TutorialManager.tag_target(_skip_btn, "mission-skip")
 
 	_claim_btn = Button.new()
 	_claim_btn.text = "FIGHT ENCOUNTER"
@@ -189,6 +190,7 @@ func _build() -> void:
 	ClientUi.apply_primary_button(_claim_btn)
 	_claim_btn.pressed.connect(_on_fight)
 	active_col.add_child(_claim_btn)
+	TutorialManager.tag_target(_claim_btn, "mission-fight")
 
 	# Flex spacer keeps the rocket timer pinned to the bottom of the content pane.
 	var spacer := Control.new()
@@ -362,6 +364,8 @@ func _play_enter_transition() -> void:
 ## Mission skip preview — Fuel-based half-Nova (matches Node skipCostFor).
 ## Cost = MAX(0.5, CEILING(fuel × 0.20)) half-units. Elapsed time ignored.
 func _skip_cost_now() -> float:
+	if _tutorial_free_skip():
+		return 0.0
 	var rem := MissionManager.seconds_remaining()
 	if rem <= 0:
 		return 0.0
@@ -371,6 +375,26 @@ func _skip_cost_now() -> float:
 		return 0.5
 	var half := maxi(1, int(ceil(fuel * 0.2)))
 	return float(half) / 2.0
+
+
+func _tutorial_free_skip() -> bool:
+	if not TutorialManager.should_show():
+		return false
+	if TutorialManager.step_id() != "mission_fight":
+		return false
+	var ob = GameManager.active_character.get("onboarding_tutorial", {})
+	if typeof(ob) != TYPE_DICTIONARY:
+		return false
+	var status := str(ob.get("status", ""))
+	if status != "pending" and status != "active":
+		return false
+	if bool(ob.get("first_mission_bonus_spent", false)):
+		return false
+	var flagged := str(ob.get("first_mission_bonus_mission_id", ""))
+	if flagged.is_empty():
+		return false
+	var mid := str(MissionManager.active_mission.get("id", ""))
+	return mid == flagged
 
 
 func _goofy_for_progress(progress: float) -> String:
@@ -427,7 +451,11 @@ func _refresh_timer() -> void:
 		_claim_btn.visible = false
 		_skip_btn.visible = true
 		_skip_btn.disabled = _busy
-		_skip_btn.text = "Skip · Fight · %s 💎" % _skip_cost_now()
+		var cost := _skip_cost_now()
+		if cost <= 0.0 and _tutorial_free_skip():
+			_skip_btn.text = "Skip · Fight · FREE"
+		else:
+			_skip_btn.text = "Skip · Fight · %s 💎" % cost
 		_active_panel.add_theme_stylebox_override(
 			"panel",
 			ClientUi.painted_panel_style(Color(0.04, 0.07, 0.12, 0.72), Color(ClientUi.CYAN, 0.45), 10, 1)

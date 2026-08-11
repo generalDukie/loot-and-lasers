@@ -960,6 +960,7 @@ func _update_backpack() -> void:
 	# Taller clamp so top-centered multi-line names + centered icons fit.
 	_bag_slot_min_h = clampf((avail_h - sep) / float(rows_n), 56.0, 112.0)
 	var row: HBoxContainer = null
+	var tutorial_helmet_tagged := false
 	for i in range(cap):
 		if i % BAG_COLS == 0:
 			row = HBoxContainer.new()
@@ -968,7 +969,15 @@ func _update_backpack() -> void:
 			row.add_theme_constant_override("separation", 6)
 			_bag_grid.add_child(row)
 		var item: Dictionary = bag[i] if i < bag.size() else {}
-		row.add_child(_make_bag_slot(item))
+		var tag_helmet := false
+		if (
+			not tutorial_helmet_tagged
+			and not item.is_empty()
+			and str(item.get("type", "")) == "helmet"
+		):
+			tag_helmet = true
+			tutorial_helmet_tagged = true
+		row.add_child(_make_bag_slot(item, tag_helmet))
 	if not _bag_grid.resized.is_connected(_on_bag_grid_resized):
 		_bag_grid.resized.connect(_on_bag_grid_resized)
 
@@ -991,7 +1000,7 @@ func _on_bag_grid_resized() -> void:
 
 
 ## Backpack cell: name top, gear icon centered in middle band (~60% of that band), attrs bottom.
-func _make_bag_slot(item: Dictionary) -> PanelContainer:
+func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContainer:
 	var filled := not item.is_empty()
 	var item_id := str(item.get("id", "")) if filled else ""
 	var item_type := str(item.get("type", "")) if filled else ""
@@ -1016,6 +1025,9 @@ func _make_bag_slot(item: Dictionary) -> PanelContainer:
 		)
 		panel.tooltip_text = "Empty bag slot — drop equipped gear here to unequip"
 		panel.modulate.a = 0.55
+
+	if tutorial_helmet and TutorialManager.should_show() and TutorialManager.step_id() == "hero_equip":
+		TutorialManager.tag_target(panel, "hero-bag-helmet")
 
 	var root := Control.new()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE

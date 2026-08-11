@@ -4,7 +4,7 @@ extends Node
 signal tutorial_changed(tutorial: Dictionary)
 signal tutorial_finished()
 
-const HARD_GATES := ["click_target", "launch_mission", "arena_battle"]
+const HARD_GATES := ["click_target", "launch_mission", "arena_battle", "buy_attribute", "equip_item"]
 const CLICK_GATES := ["click_target"]
 
 var tutorial: Dictionary = {}
@@ -12,6 +12,8 @@ var busy: bool = false
 var _loaded_for: String = ""
 var _baseline: Dictionary = {}
 var _checking_gate := false
+var _coach_suppressed := false
+var _mission_outro_ready := false
 
 
 func _ready() -> void:
@@ -60,6 +62,8 @@ func clear_local() -> void:
 	_loaded_for = ""
 	_baseline = {}
 	_checking_gate = false
+	_coach_suppressed = false
+	_mission_outro_ready = false
 
 
 func should_show() -> bool:
@@ -67,6 +71,31 @@ func should_show() -> bool:
 		return false
 	var status := str(tutorial.get("status", ""))
 	return bool(tutorial.get("should_show", false)) and (status == "pending" or status == "active")
+
+
+func coach_visible() -> bool:
+	if not should_show():
+		return false
+	if _coach_suppressed:
+		return false
+	if step_id() == "mission_view_rewards" and not _mission_outro_ready:
+		return false
+	return true
+
+
+func mission_outro_ready() -> bool:
+	return _mission_outro_ready
+
+
+func suppress_coach_for_combat() -> void:
+	_coach_suppressed = true
+	tutorial_changed.emit(tutorial)
+
+
+func notify_mission_outro_ready() -> void:
+	_mission_outro_ready = true
+	_coach_suppressed = false
+	tutorial_changed.emit(tutorial)
 
 
 func current_step() -> Dictionary:
@@ -130,6 +159,8 @@ func is_on_required_page() -> bool:
 	if page == GameManager.SCENE_ARENA and mounted == GameManager.SCENE_ARENA_COMBAT:
 		return true
 	if page == GameManager.SCENE_GALAXY and mounted == GameManager.SCENE_GALAXY_COMBAT:
+		return true
+	if page == GameManager.SCENE_MISSION_COMBAT and mounted == GameManager.SCENE_MISSION_COMBAT:
 		return true
 	if page == GameManager.SCENE_CANTINA and mounted == GameManager.SCENE_MISSION_RUN:
 		return gate() == "launch_mission"
@@ -220,6 +251,16 @@ func report_click(tutorial_id: String) -> void:
 	if not is_click_gate():
 		return
 	if tutorial_id != spotlight_id() and tutorial_id != extra_spotlight_id():
+		if step_id() == "mission_fight" and tutorial_id == "mission-skip":
+			tutorial_changed.emit(tutorial)
+		return
+	if step_id() == "mission_fight" and tutorial_id == "mission-skip":
+		tutorial_changed.emit(tutorial)
+		return
+	if step_id() == "mission_fight" and tutorial_id == "mission-fight":
+		suppress_coach_for_combat()
+	if step_id() == "continue_travels" and tutorial_id == "nav-cantina":
+		tutorial_changed.emit(tutorial)
 		return
 	advance_gate(gate())
 
@@ -262,6 +303,11 @@ func refresh() -> void:
 func _apply_payload(data: Dictionary) -> void:
 	var t = data.get("tutorial", {})
 	tutorial = t if typeof(t) == TYPE_DICTIONARY else {}
+	var next_step := str(tutorial.get("step", {}).get("id", "")) if typeof(tutorial.get("step", {})) == TYPE_DICTIONARY else ""
+	if next_step != "mission_view_rewards":
+		_mission_outro_ready = false
+	if next_step != "mission_fight" and next_step != "mission_view_rewards":
+		_coach_suppressed = false
 	var ch = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not ch.is_empty():
 		GameManager.apply_active_character(ch, "tutorial")
@@ -294,6 +340,10 @@ func _resume_gate_already_done() -> bool:
 			return _arena_fights(ch) > 0
 		"dungeon_fight":
 			return _dungeon_progress(ch) > 0 or not str(_dungeon_finish_key()).is_empty()
+		"buy_attribute":
+			return _attr_purchases(ch) > int(_baseline.get("purchases", 0))
+		"equip_item":
+			return _equipped_count() > int(_baseline.get("equipped", 0))
 		_:
 			return false
 
@@ -314,6 +364,9 @@ func _capture_baseline() -> void:
 
 func notify_page_changed(path: String) -> void:
 	if not should_show():
+		return
+	if step_id() == "continue_travels" and path == GameManager.SCENE_CANTINA:
+		advance_next()
 		return
 	tutorial_changed.emit(tutorial)
 	# Never auto-advance just because a page loaded. Clicks / real actions only.
@@ -354,10 +407,6 @@ func _can_perform_optional() -> bool:
 		"dungeon_fight":
 			return _frontier_fight_available()
 		"click_target":
-			if step_id() == "shop_sell":
-				return _has_sellable_item()
-			if step_id() == "shop_inspect":
-				return _has_shop_stock()
 			return true
 		_:
 			return true
@@ -420,7 +469,7 @@ func _mutate(fn: String, body: Dictionary) -> void:
 
 
 func _on_stats_changed() -> void:
-	if gate() in ["equip_item"]:
+	if gate() in ["equip_item", "buy_attribute"]:
 		_check_action_progress()
 	else:
 		tutorial_changed.emit(tutorial)
@@ -469,6 +518,8 @@ func _action_happened_this_step() -> bool:
 				or _missions_done(ch) > int(_baseline.get("missions_completed", 0))
 		"equip_item":
 			return _equipped_count() > int(_baseline.get("equipped", 0))
+		"buy_attribute":
+			return _attr_purchases(ch) > int(_baseline.get("purchases", 0))
 		"arena_battle":
 			return _arena_fights(ch) > int(_baseline.get("arena", 0))
 		"dungeon_fight":

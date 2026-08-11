@@ -153,7 +153,7 @@ func _build() -> void:
 	actions.add_child(_junk_btn)
 
 	var inv := Button.new()
-	inv.text = "Open Hero"
+	inv.text = "Open Operative"
 	inv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_primary_button(inv)
 	inv.pressed.connect(func() -> void:

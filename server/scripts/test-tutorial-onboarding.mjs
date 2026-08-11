@@ -25,12 +25,22 @@ const ACTION_GATES = new Set([
   "click_target",
   "launch_mission",
   "arena_battle",
+  "buy_attribute",
+  "equip_item",
 ]);
 
 function testService() {
   const legacy = getOnboardingFromCharacter({ id: "x" });
   assert(legacy.status === "completed", "legacy should be completed");
   assert(publicTutorialPayload(legacy).should_show === false, "legacy should not show");
+
+  const staleActive = getOnboardingFromCharacter({
+    id: "old",
+    onboarding_tutorial: { status: "active", step_id: "mission_pick" },
+  });
+  assert(staleActive.status === "completed", "pre-ship active tutorial is disabled");
+  assert(staleActive.step_id === "finish", "pre-ship forwards to finish");
+  assert(publicTutorialPayload(staleActive).should_show === false, "pre-ship does not show");
 
   let state = defaultOnboardingState();
   assert(state.status === "pending", "new pending");
@@ -40,17 +50,10 @@ function testService() {
 
   const remapped = normalizeOnboarding({ status: "active", step_id: "hero" });
   assert(remapped.step_id === "click_operative", "legacy hero restarts at click_operative");
-  assert(normalizeOnboarding({ status: "active", step_id: "mission" }).step_id === "click_operative", "legacy mission restarts");
-  assert(normalizeOnboarding({ status: "active", step_id: "arena" }).step_id === "click_operative", "legacy arena restarts");
-  assert(normalizeOnboarding({ status: "active", step_id: "welcome" }).step_id === "click_operative", "legacy welcome restarts");
-  assert(normalizeOnboarding({ status: "active", step_id: "finish" }).step_id === "finish", "finish stays finish");
-  assert(normalizeOnboarding({ status: "completed", step_id: "finish" }).status === "completed", "completed stays completed");
-  assert(normalizeOnboarding({ status: "active", step_id: "click_vault" }).step_id === "click_cantina", "removed vault click forwards to cantina");
-  assert(normalizeOnboarding({ status: "active", step_id: "vault_explain" }).step_id === "click_cantina", "removed vault explain forwards to cantina");
-  assert(normalizeOnboarding({ status: "active", step_id: "operative_identity" }).step_id === "click_hero", "removed operative readout forwards to hero");
-  assert(normalizeOnboarding({ status: "active", step_id: "hero_gear" }).step_id === "hero_stims", "removed equipped gear forwards to stims");
-  assert(normalizeOnboarding({ status: "active", step_id: "hero_backpack" }).step_id === "hero_stims", "removed backpack forwards to stims");
-  assert(normalizeOnboarding({ status: "active", step_id: "hero_equip" }).step_id === "hero_stims", "removed equipping forwards to stims");
+  assert(normalizeOnboarding({ status: "active", step_id: "shop_inspect" }).step_id === "shop_market", "removed shop inspect forwards");
+  assert(normalizeOnboarding({ status: "active", step_id: "shop_sell" }).step_id === "shop_market", "removed shop sell forwards");
+  assert(normalizeOnboarding({ status: "active", step_id: "arena_fight" }).step_id === "click_mine", "removed arena fight forwards");
+  assert(normalizeOnboarding({ status: "active", step_id: "click_ranks" }).step_id === "click_mine", "removed click ranks forwards");
 
   try {
     advanceTo(beginOrResume(defaultOnboardingState()), "finish");
@@ -60,28 +63,40 @@ function testService() {
   }
 
   assert(ONBOARDING_STEPS[0].id === "click_operative", "catalog starts at operative");
+  assert(ONBOARDING_STEPS[14].id === "click_shop", "shop nav follows hero equip");
+  assert(ONBOARDING_STEPS[15].id === "shop_market", "shop market follows shop nav");
+  assert(ONBOARDING_STEPS[17].id === "arena_free", "arena free follows click arena");
+  assert(ONBOARDING_STEPS[ONBOARDING_STEPS.length - 2].id === "continue_travels", "cantina return before finish");
   assert(ONBOARDING_STEPS[ONBOARDING_STEPS.length - 1].id === "finish", "catalog ends on finish");
   const ids = ONBOARDING_STEPS.map((s) => s.id);
   for (const required of [
     "click_operative",
     "click_hero",
     "hero_upgrade",
-    "hero_stims",
+    "hero_equip",
     "click_cantina",
-    "mission_start",
-    "mission_timer",
-    "click_frontier",
-    "click_friends",
-    "click_mail",
-    "click_arena",
-    "arena_fight",
-    "click_ranks",
+    "mission_pick",
     "click_shop",
-    "click_casino",
+    "shop_market",
+    "click_arena",
+    "arena_free",
     "click_mine",
+    "continue_travels",
     "finish",
   ]) {
     assert(ids.includes(required), `catalog includes ${required}`);
+  }
+  for (const removed of [
+    "shop_inspect",
+    "shop_sell",
+    "arena_fight",
+    "arena_result",
+    "click_ranks",
+    "click_friends",
+    "click_mail",
+    "hero_stims",
+  ]) {
+    assert(!ids.includes(removed), `${removed} step removed`);
   }
 
   const seen = new Set([state.step_id]);
@@ -109,34 +124,18 @@ function testService() {
   assert(state.step_id === "finish", "ends on finish");
   assert(seen.size === ONBOARDING_STEPS.length, `visited all steps (${seen.size}/${ONBOARDING_STEPS.length})`);
 
-  const pages = new Set(ONBOARDING_STEPS.map((s) => s.page).filter(Boolean));
-  assert(pages.has("res://Scenes/UI/stats.tscn"), "hero page");
-  assert(pages.has("res://Scenes/UI/cantina.tscn"), "cantina page");
-  assert(pages.has("res://Scenes/UI/mission_run.tscn"), "mission run page");
-  assert(pages.has("res://Scenes/UI/shop.tscn"), "shop page");
-  assert(pages.has("res://Scenes/UI/arena.tscn"), "arena page");
-  assert(pages.has("res://Scenes/UI/leaderboard.tscn"), "ranks page");
-  assert(pages.has("res://Scenes/UI/galaxy.tscn"), "frontier page");
-  assert(pages.has("res://Scenes/UI/casino.tscn"), "casino page");
-  assert(pages.has("res://Scenes/UI/mining.tscn"), "mine page");
-  assert(pages.has("res://Scenes/UI/friends.tscn") || ids.includes("click_friends"), "friends nav step");
-  assert(ids.includes("click_mail"), "mail nav step");
-
   const payload = publicTutorialPayload(beginOrResume(defaultOnboardingState()));
   assert(payload.chapter_index >= 1, "chapter index");
-  assert(payload.chapter_total >= 8, "chapter total");
   assert(String(payload.progress_label).includes("Operative"), "progress label names chapter");
 
   state = jumpToFinish(beginOrResume(defaultOnboardingState()));
   assert(state.step_id === "finish", "jump finish");
   const done = markCompleted(state, { rewardClaimed: true });
   assert(done.state.status === "completed", "completed");
-  assert(done.state.reward_claimed === true, "reward flagged");
 
   const skipped = markSkipped(beginOrResume(defaultOnboardingState()));
   assert(skipped.status === "skipped", "skipped");
   assert(publicTutorialPayload(skipped).should_show === false, "skip hides");
-  assert(!("reward" in publicTutorialPayload(beginOrResume(defaultOnboardingState()))), "no completion reward payload");
 
   console.log(`tutorialService ok — ${ONBOARDING_STEPS.length} steps`);
 }

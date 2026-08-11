@@ -68,7 +68,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("Try the [b]Arena[/b] for PvP, or brave the [b]Galaxy Dungeon[/b] for risky loot.")
 				+ _li("Dissolve unwanted gear in the [b]Void[/b] (or from your inventory) to reclaim stardust.")
 				+ "\n" + _h("Where things live")
-				+ _p("The [b]station hub[/b] on the home screen is your map — tap any glowing module to travel there. The %s gives quests, the [b]Nav Deck[/b] is the dungeon, [b]Hero / Ship Hangar[/b] is your character and vessel." % _amber("Cantina"))
+				+ _p("The [b]station hub[/b] on the home screen is your map — tap any glowing module to travel there. The %s gives quests, the [b]Nav Deck[/b] is the dungeon, [b]Operative / Ship Hangar[/b] is your character and vessel." % _amber("Cantina"))
 				+ _tip("Tip: this guide lives in [b]Settings → Codex[/b] whenever you need a refresher.")
 			)
 		"currencies":

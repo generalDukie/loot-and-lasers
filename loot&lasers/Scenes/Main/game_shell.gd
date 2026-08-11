@@ -1999,5 +1999,5 @@ func _apply_console_portrait_mode() -> void:
 		)
 	if btn is Button:
 		(btn as Button).tooltip_text = (
-			"%s — Hero sheet open" % class_key if _hero_page_open else "Open character sheet"
+			"%s — Operative sheet open" % class_key if _hero_page_open else "Open character sheet"
 		)

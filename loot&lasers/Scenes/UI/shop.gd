@@ -375,11 +375,15 @@ func _make_market_section() -> PanelContainer:
 	if stock.is_empty():
 		grid.add_child(_empty_line("No stock."))
 	else:
+		var tutorial_stim_tagged := false
 		for item in stock:
 			if typeof(item) != TYPE_DICTIONARY:
 				continue
 			if ShopManager.is_stim_slot(item):
-				grid.add_child(_make_cons_card(item))
+				var tag_stim := not tutorial_stim_tagged
+				if tag_stim:
+					tutorial_stim_tagged = true
+				grid.add_child(_make_cons_card(item, tag_stim))
 			else:
 				var rarity := str(item.get("rarity", "common"))
 				grid.add_child(_make_gear_card(item, false, ClientUi.rarity_color(rarity)))
@@ -409,7 +413,7 @@ func _empty_line(text: String) -> Label:
 
 # ─── Cards ──────────────────────────────────────────────────────────────────
 
-func _make_cons_card(item: Dictionary) -> PanelContainer:
+func _make_cons_card(item: Dictionary, tutorial_stim := false) -> PanelContainer:
 	var slot_id := str(item.get("_slotId", ""))
 	var cost := ShopManager.slot_cost_sd(item)
 	if cost <= 0:
@@ -427,7 +431,10 @@ func _make_cons_card(item: Dictionary) -> PanelContainer:
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	TutorialManager.tag_target(panel, "shop-item")
+	if tutorial_stim:
+		TutorialManager.tag_target(panel, "shop-stim")
+	else:
+		TutorialManager.tag_target(panel, "shop-item")
 	var panel_sb: StyleBoxFlat = ClientUi.painted_panel_style(
 		Color(0.04, 0.05, 0.08, 0.96), Color(rarity_tint, 0.45), 10, 1
 	).duplicate()

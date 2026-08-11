@@ -28,7 +28,11 @@ const _STRENGTH_PRIMARY := (
 
 
 static func body_for_class(class_key: String) -> String:
-	return _colorize_stats(_plain_for_class(class_key))
+	var base := _colorize_stats(_plain_for_class(class_key))
+	return (
+		base
+		+ "\n\nSpend some of the [b]100 Stardust[/b] from your first mission — pick an attribute and press [b]Upgrade now[/b]."
+	)
 
 
 static func _plain_for_class(class_key: String) -> String:

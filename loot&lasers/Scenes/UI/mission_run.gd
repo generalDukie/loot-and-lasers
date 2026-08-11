@@ -593,12 +593,19 @@ func _on_skip() -> void:
 	if _busy or _claimed:
 		return
 	var cost := _skip_cost_now()
-	if cost <= 0:
+	# Cost 0 + timer already done → go straight to fight.
+	# Tutorial free skip also reports cost 0 while the mission is still running —
+	# that must call SkipMission first, not fight.
+	if cost <= 0.0 and MissionManager.is_mission_finished():
 		await _on_fight()
 		return
-	var crystals: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
-	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, cost):
-		Notify.blocked("Not enough Nova Crystals", "Need %s 💎 (you have %s)" % [cost, crystals])
+	if cost > 0.0:
+		var crystals: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
+		if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, cost):
+			Notify.blocked("Not enough Nova Crystals", "Need %s 💎 (you have %s)" % [cost, crystals])
+			return
+	elif not _tutorial_free_skip():
+		await _on_fight()
 		return
 
 	_busy = true

@@ -167,7 +167,6 @@ func _build() -> void:
 	opponent_area.add_theme_constant_override("separation", 8)
 	opponent_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	opponent_area.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	TutorialManager.tag_target(opponent_area, "arena-contenders")
 	body.add_child(opponent_area)
 
 	var challengers_row := HBoxContainer.new()
@@ -217,6 +216,8 @@ func _build() -> void:
 	_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_list.add_theme_constant_override("h_separation", 10)
 	_list.add_theme_constant_override("v_separation", 10)
+	# Tutorial undims the three opponent cards only — not CHALLENGERS / Refresh.
+	TutorialManager.tag_target(_list, "arena-contenders")
 	opponent_area.add_child(_list)
 
 	# Twin panes absorb remaining height (fills dead space under the arena board).

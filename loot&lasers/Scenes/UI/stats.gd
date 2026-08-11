@@ -80,7 +80,10 @@ const BAG_COLS := 5
 ## Backpack gear glyph — fraction of the middle band's shorter side (name/attrs unchanged).
 const BAG_GEAR_ICON_FILL := 0.6
 const ARMOR_STAT_LABEL := "Might Resistance"
-const COMBAT_STAT_FLASH_SEC := 4.0
+## Half-period of the slow tutorial pulse (~2 full cycles over a 5s hold).
+const COMBAT_STAT_FLASH_HALF_SEC := 1.25
+const COMBAT_STAT_FLASH_PEAK := Color(1.55, 1.9, 1.2, 1.0)
+const ATTR_ROW_FLASH_PEAK := Color(1.45, 1.75, 1.95, 1.0)
 
 
 func _ready() -> void:
@@ -1439,6 +1442,8 @@ func _on_equip(item_id: String) -> void:
 		_flash_attribute_row(primary)
 		_flash_combat_stats_for_attribute(primary)
 		await TutorialManager.complete_hero_equip_item(primary)
+		_stop_attr_flashes()
+		_stop_combat_flashes()
 
 
 func _on_unequip(item_id: String) -> void:
@@ -1831,12 +1836,11 @@ func _flash_attribute_row(stat: String) -> void:
 		if old is Tween and is_instance_valid(old):
 			(old as Tween).kill()
 	panel.modulate = Color.WHITE
-	var tw := panel.create_tween()
+	var tw := panel.create_tween().set_loops()
 	_attr_flash_tweens[stat] = tw
-	var half := COMBAT_STAT_FLASH_SEC * 0.5
-	# Match combat-tile flash strength so the primary bump reads clearly.
-	tw.tween_property(panel, "modulate", Color(1.35, 1.55, 1.15, 1.0), half).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(panel, "modulate", Color.WHITE, half).set_trans(Tween.TRANS_SINE)
+	# Slow cyan-leaning pulse so the bought/geared attribute reads under the coach.
+	tw.tween_property(panel, "modulate", ATTR_ROW_FLASH_PEAK, COMBAT_STAT_FLASH_HALF_SEC).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(panel, "modulate", Color.WHITE, COMBAT_STAT_FLASH_HALF_SEC).set_trans(Tween.TRANS_SINE)
 
 
 func _stop_attr_flashes() -> void:
@@ -1867,12 +1871,11 @@ func _flash_combat_stats_for_attribute(stat: String) -> void:
 			if old is Tween and is_instance_valid(old):
 				(old as Tween).kill()
 		panel.modulate = Color.WHITE
-		var tw := panel.create_tween()
+		var tw := panel.create_tween().set_loops()
 		_combat_flash_tweens[key] = tw
-		var half := COMBAT_STAT_FLASH_SEC * 0.5
-		# Stronger pulse so the affected combat tile is obvious under the coach.
-		tw.tween_property(panel, "modulate", Color(1.35, 1.55, 1.15, 1.0), half).set_trans(Tween.TRANS_SINE)
-		tw.tween_property(panel, "modulate", Color.WHITE, half).set_trans(Tween.TRANS_SINE)
+		# Stronger slow pulse so the affected combat tile is obvious under the coach.
+		tw.tween_property(panel, "modulate", COMBAT_STAT_FLASH_PEAK, COMBAT_STAT_FLASH_HALF_SEC).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(panel, "modulate", Color.WHITE, COMBAT_STAT_FLASH_HALF_SEC).set_trans(Tween.TRANS_SINE)
 
 
 func _stop_combat_flashes() -> void:
@@ -2054,6 +2057,8 @@ func _flush_hold_queue() -> void:
 		_flash_attribute_row(stat)
 		_flash_combat_stats_for_attribute(stat)
 		await TutorialManager.complete_hero_upgrade_purchase(stat)
+		_stop_attr_flashes()
+		_stop_combat_flashes()
 	if leftover > 0 and server_reported_count:
 		# Server bought as many as dust/cap allowed.
 		_hold.stop()

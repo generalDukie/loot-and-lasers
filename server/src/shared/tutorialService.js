@@ -270,7 +270,7 @@ export const ONBOARDING_STEPS = Object.freeze([
     gate: "ack",
     page: PAGE.mine,
     spotlight: "mine-hero",
-    placement: "right",
+    placement: "center",
     cta: "Got it",
     nav_label: "Mine",
   },
@@ -295,7 +295,7 @@ export const ONBOARDING_STEPS = Object.freeze([
     page: null,
     spotlight: null,
     placement: "center",
-    cta: "Shut up already",
+    cta: "Shut up already!",
     nav_label: "",
   },
 ]);

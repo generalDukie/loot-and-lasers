@@ -104,7 +104,7 @@ func _on_tutorial_finished_daily_prompt() -> void:
 func _try_daily_prompt_after_tutorial() -> void:
 	if not is_inside_tree():
 		return
-	# Let skip/complete overlays clear before opening the rewards modal.
+	# Let skip/complete overlays clear before offering the daily choice.
 	await get_tree().create_timer(0.45).timeout
 	if not is_inside_tree():
 		return
@@ -114,7 +114,81 @@ func _try_daily_prompt_after_tutorial() -> void:
 		return
 	if not await ProgressManager.should_prompt_daily():
 		return
-	open_daily_login_modal()
+	# Same Open Rewards / Later choice as the hub prompt — do not force the calendar open.
+	_show_daily_login_choice_prompt()
+
+
+func _show_daily_login_choice_prompt() -> void:
+	var overlay := Control.new()
+	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var scrim := ColorRect.new()
+	scrim.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	scrim.color = Color(0.02, 0.025, 0.05, 0.78)
+	overlay.add_child(scrim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	overlay.add_child(center)
+
+	var sheet := PanelContainer.new()
+	sheet.custom_minimum_size = Vector2(560, 0)
+	sheet.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(0.05, 0.06, 0.1, 0.98), Color(ClientUi.CYAN, 0.55), 16, 2)
+	)
+	center.add_child(sheet)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	sheet.add_child(col)
+
+	var icon_lab := Label.new()
+	icon_lab.text = "🎁"
+	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_lab.add_theme_font_size_override("font_size", 48)
+	col.add_child(icon_lab)
+
+	var title_lab := Label.new()
+	title_lab.text = "Daily Login Rewards"
+	title_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lab.add_theme_font_size_override("font_size", 27)
+	title_lab.add_theme_color_override("font_color", ClientUi.TEXT)
+	ClientUi.apply_display_font(title_lab)
+	col.add_child(title_lab)
+
+	var body_lab := Label.new()
+	body_lab.text = "Your daily login reward is ready. Claim it now to keep the streak going."
+	body_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body_lab.add_theme_font_size_override("font_size", 17)
+	body_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(body_lab)
+	col.add_child(body_lab)
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 10)
+	col.add_child(actions)
+
+	var later := Button.new()
+	later.text = "Later"
+	later.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ClientUi.apply_ghost_button(later)
+	later.pressed.connect(func() -> void: clear_overlays())
+	actions.add_child(later)
+
+	var confirm := Button.new()
+	confirm.text = "Open Rewards"
+	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ClientUi.apply_primary_button(confirm)
+	confirm.pressed.connect(func() -> void:
+		clear_overlays()
+		open_daily_login_modal()
+	)
+	actions.add_child(confirm)
+
+	show_overlay(overlay)
 
 
 func _sync_notif_for_tutorial() -> void:

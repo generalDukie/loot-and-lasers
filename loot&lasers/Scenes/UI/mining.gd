@@ -210,6 +210,7 @@ func _build() -> void:
 	chip_style.content_margin_top = 12
 	chip_style.content_margin_bottom = 12
 	chip.add_theme_stylebox_override("panel", chip_style)
+	TutorialManager.tag_target(chip, "mine-stardust")
 	preview_row.add_child(chip)
 
 	var chip_row := HBoxContainer.new()

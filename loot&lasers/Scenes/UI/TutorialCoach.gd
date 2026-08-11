@@ -11,11 +11,15 @@ const CARD_HOLE_GAP := POINTER_INSET + POINTER_SPAN + POINTER_CARD_GAP
 const DIM_ALPHA := 0.58
 const DIM_OVERLAP := 1.0
 const RING_BORDER := Color(0.05, 0.85, 0.95, 0.98)
+## Slow cyan ring pulse during hero attribute / equip flash holds.
+const HERO_FLASH_RING_HALF_SEC := 1.25
 
 var _dim_top: ColorRect
 var _dim_bottom: ColorRect
 var _dim_left: ColorRect
 var _dim_right: ColorRect
+var _dim_root: Control
+var _dim_pieces: Array = [] # Extra ColorRects for multi-hole dimming
 var _ring: Panel
 var _ring_extra: Panel
 var _card: PanelContainer
@@ -28,6 +32,8 @@ var _pointer: Label
 var _measure_timer: Timer
 var _ring_pulse: Tween
 var _ring_extra_pulse: Tween
+var _ring_pulse_slow := false
+var _ring_extra_pulse_slow := false
 var _skip_sheet: Control
 var _fuel_flash_tween: Tween
 var _fuel_flash_target: Control
@@ -49,6 +55,7 @@ var _shop_restock_flash_target: Control
 const SHOP_HINT_FLASH_HALF_SEC := 1.8
 const RANKS_HINT_FLASH_HALF_SEC := 1.6
 const FUEL_HINT_FLASH_HALF_SEC := 1.6
+const START_HINT_FLASH_HALF_SEC := 1.6
 
 
 func _ready() -> void:
@@ -67,6 +74,7 @@ func _build() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
+	_dim_root = root
 	_dim_top = _make_dim(root)
 	_dim_bottom = _make_dim(root)
 	_dim_left = _make_dim(root)
@@ -197,6 +205,76 @@ func _make_dim(parent: Control) -> ColorRect:
 	return r
 
 
+func _clear_dim_pieces() -> void:
+	for piece in _dim_pieces:
+		if piece is Node and is_instance_valid(piece):
+			(piece as Node).queue_free()
+	_dim_pieces.clear()
+
+
+## Dim the full viewport except one or more axis-aligned holes (disconnected OK).
+func _layout_multi_hole_dim(vp: Vector2, holes: Array) -> void:
+	_clear_dim_pieces()
+	_dim_top.visible = false
+	_dim_bottom.visible = false
+	_dim_left.visible = false
+	_dim_right.visible = false
+	if _dim_root == null or not is_instance_valid(_dim_root):
+		return
+	var xs: Array = [0.0, vp.x]
+	var ys: Array = [0.0, vp.y]
+	var valid_holes: Array = []
+	for h in holes:
+		if typeof(h) != TYPE_RECT2:
+			continue
+		var r: Rect2 = h
+		if r.size.x <= 1.0 or r.size.y <= 1.0:
+			continue
+		r = r.intersection(Rect2(Vector2.ZERO, vp))
+		if r.size.x <= 1.0 or r.size.y <= 1.0:
+			continue
+		valid_holes.append(r)
+		xs.append(r.position.x)
+		xs.append(r.end.x)
+		ys.append(r.position.y)
+		ys.append(r.end.y)
+	xs.sort()
+	ys.sort()
+	xs = _unique_sorted_floats(xs)
+	ys = _unique_sorted_floats(ys)
+	for i in range(xs.size() - 1):
+		for j in range(ys.size() - 1):
+			var cell := Rect2(
+				Vector2(xs[i], ys[j]),
+				Vector2(xs[i + 1] - xs[i], ys[j + 1] - ys[j])
+			)
+			if cell.size.x < 0.5 or cell.size.y < 0.5:
+				continue
+			var center := cell.get_center()
+			var inside := false
+			for hole in valid_holes:
+				if (hole as Rect2).has_point(center):
+					inside = true
+					break
+			if inside:
+				continue
+			var piece := _make_dim(_dim_root)
+			piece.position = cell.position
+			piece.size = cell.size
+			# Keep dim pieces under ring/card (created later in tree order).
+			_dim_root.move_child(piece, 0)
+			_dim_pieces.append(piece)
+
+
+func _unique_sorted_floats(values: Array) -> Array:
+	var out: Array = []
+	for v in values:
+		var f := float(v)
+		if out.is_empty() or absf(f - float(out[out.size() - 1])) > 0.25:
+			out.append(f)
+	return out
+
+
 func _on_tutorial_changed(_t: Dictionary) -> void:
 	if not TutorialManager.should_show():
 		_hide_coach()
@@ -221,6 +299,7 @@ func _hide_coach() -> void:
 	_stop_ranks_flash()
 	_stop_start_flash()
 	visible = false
+	_clear_dim_pieces()
 	_dim_top.visible = false
 	_dim_bottom.visible = false
 	_dim_left.visible = false
@@ -357,6 +436,52 @@ func _combat_labels_for_flash_stat(stat: String) -> Array:
 			return []
 
 
+func _hero_flash_hold_stat() -> String:
+	if TutorialManager.hero_upgrade_flash_hold_active():
+		return TutorialManager.hero_upgrade_flash_stat()
+	if TutorialManager.hero_equip_flash_hold_active():
+		var flash_stat := TutorialManager.hero_equip_flash_stat()
+		if flash_stat.is_empty():
+			return StatsRules.primary_stat(
+				str(GameManager.active_character.get("class", "Vanguard"))
+			)
+		return flash_stat
+	return ""
+
+
+func _hero_flash_hold_active() -> bool:
+	return (
+		TutorialManager.hero_upgrade_flash_hold_active()
+		or TutorialManager.hero_equip_flash_hold_active()
+	)
+
+
+func _hole_for_tutorial_id(tid: String) -> Rect2:
+	var target := _find_tutorial_target(tid)
+	if target == null or not is_instance_valid(target) or not target.is_visible_in_tree():
+		return Rect2()
+	var gr: Rect2 = target.get_global_rect()
+	var hole := Rect2(gr.position - Vector2(HOLE_PAD, HOLE_PAD), gr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0))
+	if hole.size.x <= 4.0 or hole.size.y <= 4.0:
+		return Rect2()
+	return hole
+
+
+## Discrete holes for attribute row + linked combat tiles (no merged undim between them).
+func _hero_flash_hold_holes(stat: String) -> Array:
+	var holes: Array = []
+	if stat.is_empty():
+		return holes
+	var attr_hole := _hole_for_tutorial_id("hero-attr-%s" % stat)
+	if attr_hole.size.x > 4.0:
+		holes.append(attr_hole)
+	for label in _combat_labels_for_flash_stat(stat):
+		var combat_hole := _hole_for_tutorial_id("hero-combat-%s" % str(label))
+		if combat_hole.size.x > 4.0:
+			holes.append(combat_hole)
+	return holes
+
+
 func _layout_spotlight() -> void:
 	if not _sync_coach_visibility():
 		return
@@ -367,6 +492,8 @@ func _layout_spotlight() -> void:
 	var hole := Rect2()
 	var ring_hole := Rect2()
 	var has_hole := false
+	var flash_holes: Array = []
+	var using_flash_hold := false
 	if not sid.is_empty():
 		var target := _spotlight_target_for(sid)
 		if target != null and is_instance_valid(target) and target.is_visible_in_tree():
@@ -374,31 +501,25 @@ func _layout_spotlight() -> void:
 			hole = Rect2(gr.position - Vector2(HOLE_PAD, HOLE_PAD), gr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0))
 			ring_hole = hole
 			has_hole = hole.size.x > 4.0 and hole.size.y > 4.0
-	if has_hole and TutorialManager.step_id() == "hero_equip" and TutorialManager.is_on_required_page():
+	# After buy/equip: spotlight only the affected attribute + combat tile(s).
+	if (
+		has_hole
+		and TutorialManager.is_on_required_page()
+		and TutorialManager.step_id() in ["hero_upgrade", "hero_equip"]
+		and _hero_flash_hold_active()
+	):
+		var flash_stat := _hero_flash_hold_stat()
+		flash_holes = _hero_flash_hold_holes(flash_stat)
+		if not flash_holes.is_empty():
+			using_flash_hold = true
+			hole = flash_holes[0]
+			for i in range(1, flash_holes.size()):
+				hole = hole.merge(flash_holes[i])
+			ring_hole = flash_holes[0]
+			has_hole = true
+	elif has_hole and TutorialManager.step_id() == "hero_equip" and TutorialManager.is_on_required_page():
 		hole = _expand_hole_with_target(hole, "hero-doll")
-		# During the post-equip flash hold, undim only the affected attribute + combat tile(s).
-		if TutorialManager.hero_equip_flash_hold_active():
-			var flash_stat := TutorialManager.hero_equip_flash_stat()
-			if flash_stat.is_empty():
-				flash_stat = StatsRules.primary_stat(
-					str(GameManager.active_character.get("class", "Vanguard"))
-				)
-			hole = _expand_hole_with_target(hole, "hero-attr-%s" % flash_stat)
-			for label in _combat_labels_for_flash_stat(flash_stat):
-				hole = _expand_hole_with_target(hole, "hero-combat-%s" % label)
 		ring_hole = hole
-	if has_hole and TutorialManager.step_id() == "hero_upgrade" and TutorialManager.is_on_required_page():
-		# During the post-purchase flash hold, spotlight only the affected row + combat tile(s).
-		if TutorialManager.hero_upgrade_flash_hold_active():
-			var flash_stat := TutorialManager.hero_upgrade_flash_stat()
-			if not flash_stat.is_empty():
-				hole = Rect2()
-				has_hole = false
-				hole = _expand_hole_with_target(hole, "hero-attr-%s" % flash_stat)
-				for label in _combat_labels_for_flash_stat(flash_stat):
-					hole = _expand_hole_with_target(hole, "hero-combat-%s" % label)
-				has_hole = hole.size.x > 4.0 and hole.size.y > 4.0
-				ring_hole = hole
 	if has_hole and TutorialManager.step_id() == "shop_market" and TutorialManager.is_on_required_page():
 		# Undim buy + sell (not only one stim), plus refresh timer and Nova restock.
 		hole = _expand_hole_with_target(hole, "shop-buy")
@@ -407,31 +528,36 @@ func _layout_spotlight() -> void:
 		hole = _expand_hole_with_target(hole, "shop-restock")
 		ring_hole = hole
 	if has_hole and TutorialManager.step_id() == "arena_free" and TutorialManager.is_on_required_page():
-		# Spotlight = free-battles pane; undim opponents + ranks with no extra rings.
-		hole = _expand_hole_with_target(hole, "arena-contenders")
-		hole = _expand_hole_with_target(hole, "nav-ranks")
-		# Keep the cyan ring on the free-battles pane only.
+		# Free-battles pane is the primary hole / cyan ring.
+		# Contenders + Ranks are SEPARATE holes (multi-hole dim below) —
+		# merging them with nav would undim the whole arena strip.
 		ring_hole = hole
 		var free_pane := _find_tutorial_target("arena-free")
 		if free_pane != null and is_instance_valid(free_pane) and free_pane.is_visible_in_tree():
 			var fgr: Rect2 = free_pane.get_global_rect()
-			ring_hole = Rect2(
+			hole = Rect2(
 				fgr.position - Vector2(HOLE_PAD, HOLE_PAD),
 				fgr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0)
 			)
+			ring_hole = hole
+			has_hole = hole.size.x > 4.0 and hole.size.y > 4.0
 	if has_hole and TutorialManager.step_id() == "mission_pick" and TutorialManager.is_on_required_page():
-		# Undim fuel as an informational hint; keep the mission board as the ring target.
-		hole = _expand_hole_with_target(hole, "shell-fuel")
+		# Keep the mission board as the only primary hole / ring.
+		# Fuel is a SECOND disconnected hole (multi-hole dim) — do not merge rects
+		# or the whole screen between console and missions gets undimmed.
 		ring_hole = hole
 		var patrons := _find_tutorial_target("cantina-patrons")
 		if patrons != null and is_instance_valid(patrons) and patrons.is_visible_in_tree():
 			var pgr: Rect2 = patrons.get_global_rect()
-			ring_hole = Rect2(
+			hole = Rect2(
 				pgr.position - Vector2(HOLE_PAD, HOLE_PAD),
 				pgr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0)
 			)
+			ring_hole = hole
+			has_hole = hole.size.x > 4.0 and hole.size.y > 4.0
 
 	if not has_hole:
+		_clear_dim_pieces()
 		_dim_top.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		_dim_top.visible = true
 		_dim_bottom.visible = false
@@ -454,11 +580,36 @@ func _layout_spotlight() -> void:
 		return
 
 	if not TutorialManager.coach_dims_screen():
+		_clear_dim_pieces()
 		_dim_top.visible = false
 		_dim_bottom.visible = false
 		_dim_left.visible = false
 		_dim_right.visible = false
+	elif using_flash_hold and flash_holes.size() > 0:
+		_layout_multi_hole_dim(vp, flash_holes)
+	elif TutorialManager.step_id() == "arena_free" and TutorialManager.is_on_required_page():
+		var holes: Array = [hole]
+		var contenders_hole := _hole_for_tutorial_id("arena-contenders")
+		if contenders_hole.size.x > 4.0:
+			holes.append(contenders_hole)
+		var ranks_hole := _hole_for_tutorial_id("nav-ranks")
+		if ranks_hole.size.x > 4.0:
+			holes.append(ranks_hole)
+		_layout_multi_hole_dim(vp, holes)
+	elif TutorialManager.step_id() == "mission_pick" and TutorialManager.is_on_required_page():
+		var holes: Array = [hole]
+		var fuel := _find_tutorial_target("shell-fuel")
+		if fuel != null and is_instance_valid(fuel) and fuel.is_visible_in_tree():
+			var fgr: Rect2 = fuel.get_global_rect()
+			var fuel_hole := Rect2(
+				fgr.position - Vector2(HOLE_PAD, HOLE_PAD),
+				fgr.size + Vector2(HOLE_PAD * 2.0, HOLE_PAD * 2.0)
+			)
+			if fuel_hole.size.x > 4.0 and fuel_hole.size.y > 4.0:
+				holes.append(fuel_hole)
+		_layout_multi_hole_dim(vp, holes)
 	else:
+		_clear_dim_pieces()
 		_dim_bottom.visible = true
 		_dim_left.visible = true
 		_dim_right.visible = true
@@ -476,12 +627,19 @@ func _layout_spotlight() -> void:
 		_ring.visible = true
 		_ring.position = ring_hole.position
 		_ring.size = ring_hole.size
-		_pulse_ring()
+		_pulse_ring(using_flash_hold)
 	else:
 		_ring.visible = false
 		_stop_ring_pulse()
 
-	_layout_secondary_spotlight_ring()
+	if using_flash_hold and flash_holes.size() > 1 and is_instance_valid(_ring_extra):
+		# Slow secondary ring on the first combat tile while the attribute flashes.
+		_ring_extra.visible = true
+		_ring_extra.position = flash_holes[1].position
+		_ring_extra.size = flash_holes[1].size
+		_pulse_extra_ring(true)
+	else:
+		_layout_secondary_spotlight_ring()
 
 	var placement := str(TutorialManager.current_step().get("placement", "auto"))
 	if not TutorialManager.is_on_required_page() and not TutorialManager.page_is_pending():
@@ -490,6 +648,10 @@ func _layout_spotlight() -> void:
 		var card_hole := hole
 		if TutorialManager.step_id() in ["arena_free", "mission_pick"]:
 			card_hole = ring_hole
+		elif TutorialManager.step_id() == "mine_explain":
+			var stardust_hole := _hole_for_tutorial_id("mine-stardust")
+			if stardust_hole.size.x > 4.0:
+				card_hole = stardust_hole
 		_place_card(card_hole, vp, placement)
 		if TutorialManager.step_id() == "shop_market":
 			# Card sits on the sell tray — no pointer into the buy stalls.
@@ -564,6 +726,10 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, _mission_timer_card_y(hole))
 	elif TutorialManager.step_id() == "mission_fight":
 		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, hole.end.y + CARD_HOLE_GAP)
+	elif TutorialManager.step_id() == "mine_explain":
+		pos = _mine_explain_card_pos(hole, vp, w, h)
+	elif TutorialManager.step_id() == "finish":
+		pos = _finish_card_pos(vp, w, h)
 	elif TutorialManager.step_id() == "shop_market":
 		pos = _shop_market_card_pos(vp, w, h)
 	elif hole.size.x > 1.0 and hole.size.y > 1.0:
@@ -587,7 +753,9 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	pos.y = clampf(pos.y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
 	# Never cover the spotlight hole if we can slide off it.
 	# shop_market intentionally sits on the sell tray (bottom-right).
-	if TutorialManager.step_id() not in ["mission_timer", "mission_fight", "shop_market"] and hole.size.x > 1.0:
+	# mine_explain is pinned under the stardust preview (centered).
+	# finish is centered in the content stage.
+	if TutorialManager.step_id() not in ["mission_timer", "mission_fight", "shop_market", "mine_explain", "finish"] and hole.size.x > 1.0:
 		var card_rect := Rect2(pos, Vector2(w, h))
 		if card_rect.intersects(hole):
 			if hole.end.x + CARD_HOLE_GAP + w + CARD_PAD <= vp.x:
@@ -601,6 +769,43 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 			pos.x = clampf(pos.x, CARD_PAD, maxf(CARD_PAD, vp.x - w - CARD_PAD))
 			pos.y = clampf(pos.y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
 	_card.position = pos
+
+
+func _mine_explain_card_pos(hole: Rect2, vp: Vector2, w: float, h: float) -> Vector2:
+	## Center under the stardust-gained preview chip (fallback: hole / screen center).
+	var x := (vp.x - w) * 0.5
+	var y := (vp.y - h) * 0.5
+	var anchor := hole
+	if anchor.size.x <= 4.0:
+		anchor = _hole_for_tutorial_id("mine-stardust")
+	if anchor.size.x > 4.0:
+		x = anchor.position.x + anchor.size.x * 0.5 - w * 0.5
+		y = anchor.end.y + CARD_HOLE_GAP
+	return Vector2(x, y)
+
+
+func _finish_card_pos(vp: Vector2, w: float, h: float) -> Vector2:
+	## Center in the content page (right of the side rail), not the full window.
+	var region := _content_stage_rect()
+	if region.size.x > 4.0 and region.size.y > 4.0:
+		return Vector2(
+			region.position.x + (region.size.x - w) * 0.5,
+			region.position.y + (region.size.y - h) * 0.5
+		)
+	return Vector2((vp.x - w) * 0.5, (vp.y - h) * 0.5)
+
+
+func _content_stage_rect() -> Rect2:
+	var tree := get_tree()
+	if tree == null:
+		return Rect2()
+	var shell := tree.get_first_node_in_group("game_shell")
+	if shell == null or not is_instance_valid(shell):
+		return Rect2()
+	var stage := shell.find_child("ContentStage", true, false)
+	if stage is Control and is_instance_valid(stage) and (stage as Control).is_visible_in_tree():
+		return (stage as Control).get_global_rect()
+	return Rect2()
 
 
 func _shop_market_card_pos(vp: Vector2, w: float, h: float) -> Vector2:
@@ -815,8 +1020,12 @@ func _update_start_hint() -> void:
 	_start_flash_target = target
 	target.modulate = Color.WHITE
 	_start_flash_tween = target.create_tween().set_loops()
-	_start_flash_tween.tween_property(target, "modulate", Color(1.12, 1.38, 1.08, 1.0), 0.6).set_trans(Tween.TRANS_SINE)
-	_start_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
+	_start_flash_tween.tween_property(
+		target, "modulate", Color(1.10, 1.28, 1.08, 1.0), START_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
+	_start_flash_tween.tween_property(
+		target, "modulate", Color.WHITE, START_HINT_FLASH_HALF_SEC
+	).set_trans(Tween.TRANS_SINE)
 
 
 func _stop_start_flash() -> void:
@@ -879,8 +1088,13 @@ func _uses_spotlight_ring() -> bool:
 	return TutorialManager.step_id() not in ["mission_start", "shop_market"]
 
 
-func _pulse_ring() -> void:
-	if _ring_pulse != null and is_instance_valid(_ring_pulse) and _ring_pulse.is_running():
+func _pulse_ring(slow: bool = false) -> void:
+	if (
+		_ring_pulse != null
+		and is_instance_valid(_ring_pulse)
+		and _ring_pulse.is_running()
+		and _ring_pulse_slow == slow
+	):
 		return
 	_stop_ring_pulse()
 	_reset_ring_style()
@@ -889,22 +1103,34 @@ func _pulse_ring() -> void:
 		return
 	# Border-only pulse — no modulate/shadow glow over the spotlight target.
 	sb.shadow_size = 0
-	var dim := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, 0.32)
+	var dim_alpha := 0.22 if slow else 0.32
+	var bright_alpha := 0.85 if slow else 1.0
+	var dim := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, dim_alpha)
+	var bright := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, bright_alpha)
 	sb.border_color = dim
+	_ring_pulse_slow = slow
+	var half := HERO_FLASH_RING_HALF_SEC if slow else 0.55
 	_ring_pulse = create_tween().set_loops()
-	_ring_pulse.tween_property(sb, "border_color", RING_BORDER, 0.55).set_trans(Tween.TRANS_SINE)
-	_ring_pulse.tween_property(sb, "border_color", dim, 0.55).set_trans(Tween.TRANS_SINE)
+	_ring_pulse.tween_property(sb, "border_color", bright, half).set_trans(Tween.TRANS_SINE)
+	_ring_pulse.tween_property(sb, "border_color", dim, half).set_trans(Tween.TRANS_SINE)
 
 
 func _stop_ring_pulse() -> void:
 	if _ring_pulse != null and is_instance_valid(_ring_pulse):
 		_ring_pulse.kill()
 	_ring_pulse = null
+	_ring_pulse_slow = false
 	_reset_ring_style()
 
 
 func _pulse_extra_ring(subtle: bool = false) -> void:
-	if _ring_extra_pulse != null and is_instance_valid(_ring_extra_pulse) and _ring_extra_pulse.is_running():
+	# subtle == slow hero-flash pace (HERO_FLASH_RING_HALF_SEC)
+	if (
+		_ring_extra_pulse != null
+		and is_instance_valid(_ring_extra_pulse)
+		and _ring_extra_pulse.is_running()
+		and _ring_extra_pulse_slow == subtle
+	):
 		return
 	_stop_extra_ring_pulse()
 	_reset_extra_ring_style()
@@ -913,11 +1139,12 @@ func _pulse_extra_ring(subtle: bool = false) -> void:
 		return
 	sb.shadow_size = 0
 	var dim_alpha := 0.22 if subtle else 0.32
-	var bright_alpha := 0.72 if subtle else 1.0
+	var bright_alpha := 0.85 if subtle else 1.0
 	var dim := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, dim_alpha)
 	var bright := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, bright_alpha)
 	sb.border_color = dim
-	var half := 0.85 if subtle else 0.55
+	_ring_extra_pulse_slow = subtle
+	var half := HERO_FLASH_RING_HALF_SEC if subtle else 0.55
 	_ring_extra_pulse = create_tween().set_loops()
 	_ring_extra_pulse.tween_property(sb, "border_color", bright, half).set_trans(Tween.TRANS_SINE)
 	_ring_extra_pulse.tween_property(sb, "border_color", dim, half).set_trans(Tween.TRANS_SINE)
@@ -927,6 +1154,7 @@ func _stop_extra_ring_pulse() -> void:
 	if _ring_extra_pulse != null and is_instance_valid(_ring_extra_pulse):
 		_ring_extra_pulse.kill()
 	_ring_extra_pulse = null
+	_ring_extra_pulse_slow = false
 	_reset_extra_ring_style()
 
 

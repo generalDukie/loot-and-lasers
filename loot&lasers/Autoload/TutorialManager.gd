@@ -6,8 +6,8 @@ signal tutorial_finished()
 
 const HARD_GATES := ["click_target", "launch_mission", "arena_battle", "buy_attribute", "equip_item"]
 const CLICK_GATES := ["click_target"]
-const HERO_UPGRADE_FLASH_HOLD_SEC := 4.0
-const HERO_EQUIP_FLASH_HOLD_SEC := 4.0
+const HERO_UPGRADE_FLASH_HOLD_SEC := 5.0
+const HERO_EQUIP_FLASH_HOLD_SEC := 5.0
 
 var tutorial: Dictionary = {}
 var busy: bool = false
@@ -481,6 +481,8 @@ func notify_page_changed(path: String) -> void:
 
 
 func primary_label() -> String:
+	if step_id() == "finish":
+		return "Shut up already!"
 	return str(current_step().get("cta", "Continue"))
 
 

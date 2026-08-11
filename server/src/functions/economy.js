@@ -113,6 +113,14 @@ import {
 } from "../shared/characterAttributes.js";
 import { ensureCharacterPermanentStats } from "../shared/characterStatsRepair.js";
 import { settleMissionItemChain } from "../shared/missionRewards.js";
+import {
+  shouldReserveFirstMissionBonusLaunch,
+  shouldGrantFirstMissionBonusAtClaim,
+  isFlaggedFirstMission,
+  patchLaunchFirstMissionBonus,
+  patchSpendFirstMissionBonus,
+  settleTutorialFirstMissionBonus,
+} from "../shared/tutorialFirstMissionBonus.js";
 import { serializeShopPresentation, assertShopPurchaseClientSafe, shopMetaHasStock } from "../shared/shopService.js";
 import {
   prepareMissionCombatForCharacter,
@@ -1192,6 +1200,9 @@ export async function LaunchMission(user, body) {
         fuel: Math.round((currentFuel - fuelCost) * 100) / 100,
         fuel_updated_at: startNow.toISOString(),
       };
+      if (shouldReserveFirstMissionBonusLaunch(ch)) {
+        patch.onboarding_tutorial = patchLaunchFirstMissionBonus(ch.onboarding_tutorial, mission.id);
+      }
       const character = entities.Character.update(ch.id, patch);
       return { success: true, mission, patch, character };
     });
@@ -1204,10 +1215,14 @@ export async function LaunchMission(user, body) {
 
 // ── PrepareMissionCombat / ClaimMission / FailMission ────────
 /** Clear a character's pointer to a mission row that no longer exists. */
-function releaseDanglingMission(ch) {
+function releaseDanglingMission(ch, missionId = "") {
   const rolled = retireAndGenerateMissionBoard(ch);
   const { offers, ...offerPatch } = rolled;
   const patch = { active_mission_id: "", mission_end_time: "", ...offerPatch };
+  const resolvedId = missionId || ch.active_mission_id || "";
+  if (resolvedId && isFlaggedFirstMission(ch, resolvedId)) {
+    patch.onboarding_tutorial = patchSpendFirstMissionBonus(ch.onboarding_tutorial);
+  }
   const character = entities.Character.update(ch.id, patch);
   return {
     success: true,
@@ -1302,7 +1317,7 @@ export async function ClaimMission(user, body) {
         // No mission row, but the character is still flagged as flying it: release
         // the ship (no rewards) instead of leaving the slot locked forever.
         if (ch.active_mission_id && ch.active_mission_id === missionId) {
-          return releaseDanglingMission(ch);
+          return releaseDanglingMission(ch, missionId);
         }
         httpErr(404, "Mission not found");
       }
@@ -1312,7 +1327,7 @@ export async function ClaimMission(user, body) {
         // replay, so the pointer is stale — free the slot instead of 409-locking
         // the character out of every future launch.
         if (ch.active_mission_id && ch.active_mission_id === missionId) {
-          return releaseDanglingMission(ch);
+          return releaseDanglingMission(ch, missionId);
         }
         httpErr(409, "Mission already resolved", RewardErrors.REWARD_ALREADY_CLAIMED);
       }
@@ -1363,6 +1378,9 @@ export async function ClaimMission(user, body) {
         const rolled = retireAndGenerateMissionBoard({ ...live, ...patch }, patch);
         const { offers, ...offerPatch } = rolled;
         Object.assign(patch, offerPatch);
+        if (isFlaggedFirstMission(live, missionId)) {
+          patch.onboarding_tutorial = patchSpendFirstMissionBonus(live.onboarding_tutorial);
+        }
         const character = entities.Character.update(live.id, patch);
         return {
           success: true,
@@ -1407,17 +1425,35 @@ export async function ClaimMission(user, body) {
           // Junk trinket value uses the un-varied base Stardust at the snapshot
           // level (item outcome system unchanged).
           const junkBase = computeMissionStardustFromFuel(fuelCost, snapshotLevel);
-          const chain = settleMissionItemChain({
+          let chain = settleMissionItemChain({
             character: live,
             mission,
             missionStardustReward: junkBase,
             missStreak,
             rng: secureRandom,
           });
+          let bonusStardust = 0;
+          if (shouldGrantFirstMissionBonusAtClaim(live, missionId)) {
+            const bonus = settleTutorialFirstMissionBonus({
+              character: live,
+              missStreak,
+              rng: secureRandom,
+            });
+            bonusStardust = bonus.stardustBonus;
+            chain = {
+              itemOutcome: bonus.itemOutcome,
+              gearDropped: bonus.gearDropped,
+              stimDropped: false,
+              junkDropped: false,
+              itemTemplates: bonus.itemTemplates,
+              gearChance: bonus.gearChance,
+              pityBefore: bonus.pityBefore,
+            };
+          }
           // Species discovery only from mission snapshot — never client species_id
           const speciesId = rewards.species_id || null;
           return {
-            stardust: finalStardust || 0,
+            stardust: (finalStardust || 0) + bonusStardust,
             experience: finalXp || 0,
             itemTemplates: chain.itemTemplates,
             species_id: speciesId,
@@ -1463,6 +1499,10 @@ export async function ClaimMission(user, body) {
 
           const weekly = progressWeeklyNovaQuest(live, "missions", 1);
           if (weekly) patch.weekly_nova_quests = weekly;
+
+          if (isFlaggedFirstMission(live, missionId)) {
+            patch.onboarding_tutorial = patchSpendFirstMissionBonus(live.onboarding_tutorial);
+          }
 
           const items = [];
           const pendingLoot = [];
@@ -1624,7 +1664,7 @@ export async function SkipMission(user, body) {
       const mission = entities.Mission.get(missionId);
       if (!mission) {
         if (ch.active_mission_id && ch.active_mission_id === missionId) {
-          return { ...releaseDanglingMission(ch), skip_cost: 0, mission: null };
+          return { ...releaseDanglingMission(ch, missionId), skip_cost: 0, mission: null };
         }
         httpErr(404, "Mission not found");
       }
@@ -1634,7 +1674,7 @@ export async function SkipMission(user, body) {
           (mission.status === "claimed" || mission.status === "failed") &&
           ch.active_mission_id === missionId
         ) {
-          return { ...releaseDanglingMission(ch), skip_cost: 0, mission: null };
+          return { ...releaseDanglingMission(ch, missionId), skip_cost: 0, mission: null };
         }
         httpErr(400, "Mission is not in progress");
       }

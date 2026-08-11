@@ -31,32 +31,20 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "click_operative",
     chapter: "Operative",
-    title: "This Is You",
-    body: "Your Operative Panel shows your character, level, class, and progression. Click it to continue.",
+    title: "Here's Your Operative",
+    body: "The Operative Panel shows your unreasonably magnificent character, your level, class, and wallet. In Loot&Lasers you'll use Fuel, and find Stardust and Nova Crystals. Click your Operative to continue.",
     gate: "click_target",
     page: null,
     spotlight: "shell-operative",
     placement: "right",
-    cta: "Click your Operative Panel",
-    nav_label: "Operative Panel",
-  },
-  {
-    id: "operative_identity",
-    chapter: "Operative",
-    title: "Operative Readout",
-    body: "Name, level, class, XP, and currencies live here. You'll glance at this more than anywhere else.",
-    gate: "ack",
-    page: null,
-    spotlight: "shell-operative",
-    placement: "right",
-    cta: "Got it",
+    cta: "Click your Operative to continue",
     nav_label: "Operative Panel",
   },
   {
     id: "click_hero",
     chapter: "Hero",
-    title: "Open Hero",
-    body: "Hero is your full sheet — attributes, gear, backpack, and stims. Click Hero.",
+    title: "Operative Screen",
+    body: "This screen is where you'll upgrade your character. Any gear you find or purchase on your journey will show up here, where you can equip it.",
     gate: "click_target",
     page: null,
     spotlight: "nav-hero",
@@ -78,42 +66,6 @@ export const ONBOARDING_STEPS = Object.freeze([
     nav_label: "Hero",
   },
   {
-    id: "hero_gear",
-    chapter: "Hero",
-    title: "Equipped Gear",
-    body: "Slots around your portrait hold equipped gear. They add attributes and most of your power. Hover a piece later to see rarity and bonuses.",
-    gate: "ack",
-    page: PAGE.hero,
-    spotlight: "hero-doll",
-    placement: "right",
-    cta: "Got it",
-    nav_label: "Hero",
-  },
-  {
-    id: "hero_backpack",
-    chapter: "Hero",
-    title: "Backpack",
-    body: "The Backpack is your inventory. Unequipped gear lives here. New operatives start empty — loot from missions and shops shows up later.",
-    gate: "ack",
-    page: PAGE.hero,
-    spotlight: "hero-backpack",
-    placement: "right",
-    cta: "Got it",
-    nav_label: "Hero",
-  },
-  {
-    id: "hero_equip",
-    chapter: "Hero",
-    title: "Equipping",
-    body: "When you have an item, select it in the Backpack to equip it onto a slot. No gear yet is normal.",
-    gate: "ack",
-    page: PAGE.hero,
-    spotlight: "hero-backpack",
-    placement: "right",
-    cta: "Got it",
-    nav_label: "Hero",
-  },
-  {
     id: "hero_stims",
     chapter: "Hero",
     title: "Stims",
@@ -124,30 +76,6 @@ export const ONBOARDING_STEPS = Object.freeze([
     placement: "right",
     cta: "Got it",
     nav_label: "Hero",
-  },
-  {
-    id: "click_vault",
-    chapter: "Hero",
-    title: "Cosmic Vault",
-    body: "The Vault logs discoveries — species, relics, gear, badges. Open Cosmic Vault.",
-    gate: "click_target",
-    page: PAGE.hero,
-    spotlight: "hero-vault",
-    placement: "left",
-    cta: "Open Cosmic Vault",
-    nav_label: "Cosmic Vault",
-  },
-  {
-    id: "vault_explain",
-    chapter: "Hero",
-    title: "Collection Log",
-    body: "Tabs show what you've found. Collection bonus feeds XP. Nothing here gets consumed.",
-    gate: "ack",
-    page: PAGE.vault,
-    spotlight: "vault-tabs",
-    placement: "top",
-    cta: "Got it",
-    nav_label: "Cosmic Vault",
   },
   {
     id: "click_cantina",
@@ -164,8 +92,9 @@ export const ONBOARDING_STEPS = Object.freeze([
   {
     id: "mission_pick",
     chapter: "Cantina",
-    title: "Three Contracts",
-    body: "You'll always see three offers. Times and payouts differ, and they stay until you accept one. Click a mission.",
+    title: "Three Missions",
+    body:
+      "Missions are the lifeblood of Loot & Lasers. Each day your fuel reserves are refilled, and you can venture out into the cosmos. Some missions are long, some are short, and some give better rewards than others. Every mission will at least provide XP and Stardust - the primary currency in this world",
     gate: "click_target",
     page: PAGE.cantina,
     spotlight: "cantina-patrons",
@@ -190,12 +119,13 @@ export const ONBOARDING_STEPS = Object.freeze([
     id: "mission_timer",
     chapter: "Cantina",
     title: "The Clock's Running",
-    body: "Missions tick in the background. Use the rest of the game, then tap Mission in Progress in the top banner to return and claim. You don't wait here.",
+    body:
+      "You aren't bound by your current adventure, feel free to click around and complete other tasks while waiting for a mission. Keep an eye on the button up here to quickly return and claim your rewards when your character has returned. You'll usually need to fight for them!",
     gate: "ack",
     page: PAGE.mission_run,
-    spotlight: "mission-timer",
-    extra_spotlight: "shell-activity",
-    placement: "bottom",
+    spotlight: "shell-activity",
+    extra_spotlight: "mission-timer",
+    placement: "top",
     cta: "Got it",
     nav_label: "Mission",
   },
@@ -437,12 +367,22 @@ export const ONBOARDING_STEPS = Object.freeze([
 ]);
 
 export const ONBOARDING_STARTER_REWARD = Object.freeze({
-  stardust: 1000,
-  nova_crystals: 25,
-  fuel: 20,
+  stardust: 0,
+  nova_crystals: 0,
+  fuel: 0,
 });
 
 const STEP_IDS = ONBOARDING_STEPS.map((s) => s.id);
+
+/** Removed steps — forward saved progress to the next live step. */
+const REMOVED_STEP_FORWARD = Object.freeze({
+  click_vault: "click_cantina",
+  vault_explain: "click_cantina",
+  operative_identity: "click_hero",
+  hero_gear: "hero_stims",
+  hero_backpack: "hero_stims",
+  hero_equip: "hero_stims",
+});
 
 const ACTION_GATES = new Set([
   "click_target",
@@ -459,11 +399,15 @@ export function defaultOnboardingState() {
     started_at: null,
     completed_at: null,
     updated_at: null,
+    first_mission_bonus_eligible: true,
+    first_mission_bonus_mission_id: null,
+    first_mission_bonus_spent: false,
   };
 }
 
 function remapStepId(rawId) {
   const id = String(rawId || "click_operative");
+  if (REMOVED_STEP_FORWARD[id]) return REMOVED_STEP_FORWARD[id];
   if (STEP_IDS.includes(id)) return id;
   return "click_operative";
 }
@@ -485,6 +429,9 @@ export function normalizeOnboarding(raw) {
     started_at: raw.started_at || null,
     completed_at: raw.completed_at || null,
     updated_at: raw.updated_at || null,
+    first_mission_bonus_eligible: raw.first_mission_bonus_eligible === true,
+    first_mission_bonus_mission_id: raw.first_mission_bonus_mission_id || null,
+    first_mission_bonus_spent: !!raw.first_mission_bonus_spent,
   };
 }
 
@@ -544,7 +491,6 @@ export function publicTutorialPayload(state) {
       nav_label,
       chapter: ch,
     })),
-    reward: ONBOARDING_STARTER_REWARD,
     should_show: s.status === "pending" || s.status === "active",
   };
 }

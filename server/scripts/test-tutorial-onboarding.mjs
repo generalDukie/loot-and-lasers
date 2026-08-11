@@ -45,6 +45,12 @@ function testService() {
   assert(normalizeOnboarding({ status: "active", step_id: "welcome" }).step_id === "click_operative", "legacy welcome restarts");
   assert(normalizeOnboarding({ status: "active", step_id: "finish" }).step_id === "finish", "finish stays finish");
   assert(normalizeOnboarding({ status: "completed", step_id: "finish" }).status === "completed", "completed stays completed");
+  assert(normalizeOnboarding({ status: "active", step_id: "click_vault" }).step_id === "click_cantina", "removed vault click forwards to cantina");
+  assert(normalizeOnboarding({ status: "active", step_id: "vault_explain" }).step_id === "click_cantina", "removed vault explain forwards to cantina");
+  assert(normalizeOnboarding({ status: "active", step_id: "operative_identity" }).step_id === "click_hero", "removed operative readout forwards to hero");
+  assert(normalizeOnboarding({ status: "active", step_id: "hero_gear" }).step_id === "hero_stims", "removed equipped gear forwards to stims");
+  assert(normalizeOnboarding({ status: "active", step_id: "hero_backpack" }).step_id === "hero_stims", "removed backpack forwards to stims");
+  assert(normalizeOnboarding({ status: "active", step_id: "hero_equip" }).step_id === "hero_stims", "removed equipping forwards to stims");
 
   try {
     advanceTo(beginOrResume(defaultOnboardingState()), "finish");
@@ -60,9 +66,6 @@ function testService() {
     "click_operative",
     "click_hero",
     "hero_upgrade",
-    "hero_gear",
-    "hero_backpack",
-    "hero_equip",
     "hero_stims",
     "click_cantina",
     "mission_start",
@@ -114,7 +117,6 @@ function testService() {
   assert(pages.has("res://Scenes/UI/arena.tscn"), "arena page");
   assert(pages.has("res://Scenes/UI/leaderboard.tscn"), "ranks page");
   assert(pages.has("res://Scenes/UI/galaxy.tscn"), "frontier page");
-  assert(pages.has("res://Scenes/UI/collectibles.tscn"), "vault page");
   assert(pages.has("res://Scenes/UI/casino.tscn"), "casino page");
   assert(pages.has("res://Scenes/UI/mining.tscn"), "mine page");
   assert(pages.has("res://Scenes/UI/friends.tscn") || ids.includes("click_friends"), "friends nav step");
@@ -134,6 +136,7 @@ function testService() {
   const skipped = markSkipped(beginOrResume(defaultOnboardingState()));
   assert(skipped.status === "skipped", "skipped");
   assert(publicTutorialPayload(skipped).should_show === false, "skip hides");
+  assert(!("reward" in publicTutorialPayload(beginOrResume(defaultOnboardingState()))), "no completion reward payload");
 
   console.log(`tutorialService ok — ${ONBOARDING_STEPS.length} steps`);
 }

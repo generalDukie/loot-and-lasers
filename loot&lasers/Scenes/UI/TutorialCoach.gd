@@ -14,7 +14,7 @@ var _ring: Panel
 var _card: PanelContainer
 var _title: Label
 var _progress: Label
-var _body: Label
+var _body: RichTextLabel
 var _btn_back: Button
 var _btn_next: Button
 var _btn_skip: Button
@@ -22,6 +22,10 @@ var _pointer: Label
 var _measure_timer: Timer
 var _ring_pulse: Tween
 var _skip_sheet: Control
+var _fuel_flash_tween: Tween
+var _fuel_flash_target: Control
+var _timer_flash_tween: Tween
+var _timer_flash_target: Control
 
 
 func _ready() -> void:
@@ -110,10 +114,14 @@ func _build() -> void:
 	_btn_skip.pressed.connect(_confirm_skip)
 	head.add_child(_btn_skip)
 
-	_body = Label.new()
+	_body = RichTextLabel.new()
+	_body.bbcode_enabled = true
+	_body.fit_content = true
+	_body.scroll_active = false
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_body.add_theme_font_size_override("font_size", 18)
-	_body.add_theme_color_override("font_color", Color(0.78, 0.84, 0.90))
+	_body.custom_minimum_size.x = CARD_W - 56.0
+	_body.add_theme_font_size_override("normal_font_size", 18)
+	_body.add_theme_color_override("default_color", Color(0.78, 0.84, 0.90))
 	ClientUi.apply_body_font(_body)
 	v.add_child(_body)
 
@@ -169,6 +177,8 @@ func _make_dim(parent: Control) -> ColorRect:
 
 func _on_tutorial_changed(_t: Dictionary) -> void:
 	if not TutorialManager.should_show():
+		_stop_fuel_flash()
+		_stop_timer_flash()
 		if TutorialManager.busy:
 			return
 		visible = false
@@ -201,7 +211,7 @@ func _refresh_copy() -> void:
 		_body.text = "Open %s. The next lesson waits until that page is actually open." % nav
 	else:
 		_title.text = str(step.get("title", "Tutorial"))
-		_body.text = str(step.get("body", ""))
+		_body.text = _body_text_for_step(step)
 		if TutorialManager.step_id() == "finish":
 			_title.add_theme_font_size_override("font_size", 32)
 		else:
@@ -281,6 +291,27 @@ func _layout_spotlight() -> void:
 		placement = "auto"
 	_place_card(hole, vp, placement)
 	_place_pointer(hole, vp)
+	_update_fuel_hint()
+	_update_timer_hint()
+
+
+func _body_text_for_step(step: Dictionary) -> String:
+	if TutorialManager.step_id() == "hero_upgrade":
+		var class_key := str(GameManager.active_character.get("class", "Vanguard"))
+		return TutorialAttributeCopy.body_for_class(class_key)
+	return str(step.get("body", ""))
+
+
+func _min_card_height_for_step() -> float:
+	match TutorialManager.step_id():
+		"hero_upgrade":
+			return 340.0
+		"mission_pick":
+			return 320.0
+		"mission_timer":
+			return 300.0
+		_:
+			return 180.0
 
 
 func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
@@ -288,10 +319,12 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	_card.reset_size()
 	var card_size := _card.get_combined_minimum_size()
 	var w := maxf(CARD_W, card_size.x)
-	var h := maxf(card_size.y, 180.0)
+	var h := maxf(card_size.y, _min_card_height_for_step())
 	_card.size = Vector2(w, h)
 	var pos := Vector2((vp.x - w) * 0.5, (vp.y - h) * 0.5)
-	if hole.size.x > 1.0 and hole.size.y > 1.0:
+	if TutorialManager.step_id() == "mission_timer":
+		pos = Vector2((vp.x - w) * 0.5, CARD_PAD)
+	elif hole.size.x > 1.0 and hole.size.y > 1.0:
 		var chosen := placement
 		if chosen == "auto" or chosen.is_empty() or chosen == "center":
 			chosen = _auto_placement(hole, vp, w, h)
@@ -309,7 +342,7 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	pos.x = clampf(pos.x, CARD_PAD, maxf(CARD_PAD, vp.x - w - CARD_PAD))
 	pos.y = clampf(pos.y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
 	# Never cover the spotlight hole if we can slide off it.
-	if hole.size.x > 1.0:
+	if TutorialManager.step_id() != "mission_timer" and hole.size.x > 1.0:
 		var card_rect := Rect2(pos, Vector2(w, h))
 		if card_rect.intersects(hole):
 			if hole.end.x + 18.0 + w + CARD_PAD <= vp.x:
@@ -323,6 +356,56 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 			pos.x = clampf(pos.x, CARD_PAD, maxf(CARD_PAD, vp.x - w - CARD_PAD))
 			pos.y = clampf(pos.y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
 	_card.position = pos
+
+
+func _update_fuel_hint() -> void:
+	_stop_fuel_flash()
+	if not visible or TutorialManager.step_id() != "mission_pick":
+		return
+	if not TutorialManager.is_on_required_page():
+		return
+	var target := _find_tutorial_target("shell-fuel")
+	if target == null or not is_instance_valid(target):
+		return
+	_fuel_flash_target = target
+	target.modulate = Color.WHITE
+	_fuel_flash_tween = target.create_tween().set_loops()
+	_fuel_flash_tween.tween_property(target, "modulate", Color(1.12, 1.38, 1.08, 1.0), 0.6).set_trans(Tween.TRANS_SINE)
+	_fuel_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_fuel_flash() -> void:
+	if _fuel_flash_tween != null and is_instance_valid(_fuel_flash_tween):
+		_fuel_flash_tween.kill()
+	_fuel_flash_tween = null
+	if _fuel_flash_target != null and is_instance_valid(_fuel_flash_target):
+		_fuel_flash_target.modulate = Color.WHITE
+	_fuel_flash_target = null
+
+
+func _update_timer_hint() -> void:
+	_stop_timer_flash()
+	if not visible or TutorialManager.step_id() != "mission_timer":
+		return
+	if not TutorialManager.is_on_required_page():
+		return
+	var target := _find_tutorial_target("mission-timer")
+	if target == null or not is_instance_valid(target):
+		return
+	_timer_flash_target = target
+	target.modulate = Color.WHITE
+	_timer_flash_tween = target.create_tween().set_loops()
+	_timer_flash_tween.tween_property(target, "modulate", Color(1.15, 1.35, 1.45, 1.0), 0.6).set_trans(Tween.TRANS_SINE)
+	_timer_flash_tween.tween_property(target, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_timer_flash() -> void:
+	if _timer_flash_tween != null and is_instance_valid(_timer_flash_tween):
+		_timer_flash_tween.kill()
+	_timer_flash_tween = null
+	if _timer_flash_target != null and is_instance_valid(_timer_flash_target):
+		_timer_flash_target.modulate = Color.WHITE
+	_timer_flash_target = null
 
 
 func _auto_placement(hole: Rect2, vp: Vector2, w: float, h: float) -> String:

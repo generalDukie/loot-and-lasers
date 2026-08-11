@@ -1,6 +1,6 @@
 /**
  * Interactive onboarding tutorial RPCs.
- * Progress + starter pack are server-owned and resume-safe.
+ * Progress is server-owned and resume-safe.
  */
 import { entities } from "../entities.js";
 import { withTransactionAsync } from "../db.js";
@@ -17,17 +17,8 @@ import {
   markCompleted,
   stepIndex,
   stepById,
-  ONBOARDING_STARTER_REWARD,
   ONBOARDING_STEPS,
 } from "../shared/tutorialService.js";
-import {
-  ClaimKeys,
-  executeRewardClaim,
-  deliverViaApplyCharacterRewards,
-  detectSuspiciousRewardFields,
-  getClaimByKey,
-  RewardSources,
-} from "../rewards/index.js";
 import { resolveSelectedCharacter } from "../gameplayContext.js";
 
 function myCharacter(user) {
@@ -53,50 +44,6 @@ function httpErr(status, message, code) {
 
 async function persistOnboarding(characterId, state) {
   return entities.Character.update(characterId, { onboarding_tutorial: state });
-}
-
-async function grantStarterPack(user, character, body) {
-  const claimKey = ClaimKeys.tutorial(character.id);
-  const prior = getClaimByKey(claimKey);
-  if (prior?.status === "completed" && prior.deliveredPayload) {
-    return {
-      reward: prior.deliveredPayload,
-      idempotentReplay: true,
-      already_claimed: true,
-    };
-  }
-
-  const claimOut = await executeRewardClaim({
-    claimKey,
-    idempotencyKey: body?.idempotencyKey || body?.idempotency_key || `tutorial:${character.id}`,
-    accountId: user.id,
-    characterId: character.id,
-    rewardSource: RewardSources.ONBOARDING_TUTORIAL,
-    sourceReferenceType: "onboarding_tutorial",
-    sourceReferenceId: character.id,
-    definitionKey: "onboarding_tutorial",
-    clientBody: body,
-    suspiciousFields: detectSuspiciousRewardFields(body),
-    generate: async () => ({ ...ONBOARDING_STARTER_REWARD }),
-    deliver: async (payload, claim) => {
-      return deliverViaApplyCharacterRewards({
-        user,
-        characterId: character.id,
-        payload: {
-          stardust: payload.stardust,
-          nova_crystals: payload.nova_crystals,
-          fuel: payload.fuel,
-        },
-        claim,
-      });
-    },
-  });
-
-  return {
-    reward: claimOut.result || claimOut.claim?.deliveredPayload || ONBOARDING_STARTER_REWARD,
-    idempotentReplay: !!claimOut.idempotentReplay,
-    already_claimed: !!claimOut.idempotentReplay,
-  };
 }
 
 /** Read / soft-start tutorial state for the selected character. */
@@ -175,7 +122,7 @@ export async function AdvanceTutorial(user, body = {}) {
   }
 }
 
-/** Skip tutorial permanently (no starter pack). */
+/** Skip tutorial permanently. */
 export async function SkipTutorial(user, body = {}) {
   const character = await myCharacter(user);
   if (!character) return { status: 404, body: { error: "No character", success: false } };
@@ -213,11 +160,9 @@ export async function SkipTutorial(user, body = {}) {
   }
 }
 
-/**
- * Complete tutorial + claim one-time starter pack.
- * Idempotent: reward claim ledger + reward_claimed flag.
- */
+/** Complete tutorial (no separate completion reward — first-mission claim handles onboarding loot). */
 export async function CompleteTutorial(user, body = {}) {
+  void body;
   const character = await myCharacter(user);
   if (!character) return { status: 404, body: { error: "No character", success: false } };
 
@@ -231,19 +176,14 @@ export async function CompleteTutorial(user, body = {}) {
       }
 
       if (state.status === "completed") {
-        const grant = await grantStarterPack(user, ch, body);
         const live = entities.Character.get(ch.id) || ch;
         return {
           success: true,
           completed: true,
           already_completed: true,
-          reward: grant.reward,
-          reward_replay: grant.idempotentReplay,
-          already_claimed: true,
           tutorial: publicTutorialPayload(state),
           character: live,
           balances: getBalances(live),
-          patch: grant.reward?.applied || {},
         };
       }
 
@@ -251,9 +191,7 @@ export async function CompleteTutorial(user, body = {}) {
         state = jumpToFinish(beginOrResume(state));
       }
 
-      const grant = await grantStarterPack(user, ch, body);
-      const { state: nextState, already } = markCompleted(state, { rewardClaimed: true });
-      nextState.reward_claimed = true;
+      const { state: nextState, already } = markCompleted(state, { rewardClaimed: false });
       const live = await persistOnboarding(ch.id, nextState);
       const fresh = entities.Character.get(ch.id) || live;
 
@@ -261,13 +199,9 @@ export async function CompleteTutorial(user, body = {}) {
         success: true,
         completed: true,
         already_completed: already,
-        reward: grant.reward,
-        reward_replay: grant.idempotentReplay,
-        already_claimed: grant.already_claimed,
         tutorial: publicTutorialPayload(nextState),
         character: fresh,
         balances: getBalances(fresh),
-        patch: grant.reward?.applied || {},
       };
     });
     return { status: 200, body: result };

@@ -24,6 +24,7 @@ var _console_class_icon: Control
 var _console_portrait_btn: Button
 var _hero_page_open := false
 var _notif_btn: Button
+var _notif_fab_wrap: Control
 var _notif_badge: Label
 var _notif_dock: Control
 var _notif_panel: PanelContainer
@@ -83,6 +84,24 @@ func _ready() -> void:
 		target = GameManager.SCENE_HUB
 	show_page(target)
 	_ensure_tutorial_coach()
+	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_visibility_changed):
+		TutorialManager.tutorial_changed.connect(_on_tutorial_visibility_changed)
+	if not TutorialManager.tutorial_finished.is_connected(_on_tutorial_visibility_changed):
+		TutorialManager.tutorial_finished.connect(_on_tutorial_visibility_changed)
+	call_deferred("_sync_notif_for_tutorial")
+
+
+func _on_tutorial_visibility_changed(_unused = null) -> void:
+	_sync_notif_for_tutorial()
+
+
+func _sync_notif_for_tutorial() -> void:
+	if _notif_fab_wrap == null or not is_instance_valid(_notif_fab_wrap):
+		return
+	var hide_fab := TutorialManager.should_show()
+	if hide_fab and _notif_open:
+		_set_notification_open(false)
+	_notif_fab_wrap.visible = not hide_fab
 
 
 func _ensure_tutorial_coach() -> void:
@@ -717,6 +736,9 @@ func _make_operative_panel() -> Control:
 	wallet.add_theme_constant_override("separation", 4)
 	panel.add_child(wallet)
 	_fuel_value = _make_readout(wallet, "fuel", Color("#39FF14"))
+	var fuel_pane := _fuel_value.get_parent().get_parent() as Control
+	if fuel_pane != null:
+		TutorialManager.tag_target(fuel_pane, "shell-fuel")
 	_stardust_value = _make_readout(wallet, "stardust", Color("#E879F9"))
 	_nova_value = _make_readout(wallet, "nova", Color("#FFD700"), true)
 
@@ -929,7 +951,7 @@ func _nav_groups() -> Array:
 	## Colors stay as existing rail tints; NavIcon modulates white SVGs to them.
 	return [
 		{"name": "Explore", "items": [
-			{"path": GameManager.SCENE_STATS, "label": "Hero", "icon": "user", "color": "#00E5FF"},
+			{"path": GameManager.SCENE_STATS, "label": "Operative", "icon": "user", "color": "#00E5FF"},
 			{"path": GameManager.SCENE_CANTINA, "label": "Cantina", "icon": "beer", "color": "#FF8C00"},
 			{"path": GameManager.SCENE_GALAXY, "label": "Galactic Frontier", "icon": "orbit", "color": "#BA55D3"},
 			{"path": GameManager.SCENE_SHIP, "label": "Coming Soon", "icon": "rocket", "color": "#2DD4BF", "feature_id": FeatureFlags.FEATURE_SHIP_HANGAR},
@@ -1329,6 +1351,7 @@ func _build_notification_center() -> void:
 	fab_wrap.size_flags_horizontal = Control.SIZE_SHRINK_END
 	fab_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stack.add_child(fab_wrap)
+	_notif_fab_wrap = fab_wrap
 
 	_notif_btn = Button.new()
 	_notif_btn.text = ""

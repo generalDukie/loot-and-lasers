@@ -28,7 +28,7 @@ var _body: RichTextLabel
 var _btn_back: Button
 var _btn_next: Button
 var _btn_skip: Button
-var _pointer: Label
+var _pointer: TextureRect
 var _measure_timer: Timer
 var _ring_pulse: Tween
 var _ring_extra_pulse: Tween
@@ -51,11 +51,16 @@ var _shop_refresh_flash_tween: Tween
 var _shop_refresh_flash_target: Control
 var _shop_restock_flash_tween: Tween
 var _shop_restock_flash_target: Control
+var _reward_stardust_flash_tween: Tween
+var _reward_stardust_flash_target: Control
+var _reward_helmet_flash_tween: Tween
+var _reward_helmet_flash_target: Control
 
 const SHOP_HINT_FLASH_HALF_SEC := 1.8
 const RANKS_HINT_FLASH_HALF_SEC := 1.6
 const FUEL_HINT_FLASH_HALF_SEC := 1.6
 const START_HINT_FLASH_HALF_SEC := 1.6
+const REWARD_HINT_FLASH_HALF_SEC := 1.6
 
 
 func _ready() -> void:
@@ -181,14 +186,9 @@ func _build() -> void:
 	_btn_next.pressed.connect(func () -> void: TutorialManager.go_next())
 	actions.add_child(_btn_next)
 
-	_pointer = Label.new()
+	_pointer = UiIcon.make("triangle", Color(0.05, 0.9, 0.98, 0.95), 36.0)
 	_pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pointer.add_theme_font_size_override("font_size", 42)
-	_pointer.add_theme_color_override("font_color", Color(0.05, 0.9, 0.98, 0.95))
-	_pointer.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
-	_pointer.add_theme_constant_override("shadow_offset_x", 2)
-	_pointer.add_theme_constant_override("shadow_offset_y", 2)
-	ClientUi.apply_display_font(_pointer)
+	_pointer.pivot_offset = Vector2(18, 18)
 	root.add_child(_pointer)
 
 	_measure_timer = Timer.new()
@@ -298,6 +298,7 @@ func _hide_coach() -> void:
 	_stop_shop_restock_flash()
 	_stop_ranks_flash()
 	_stop_start_flash()
+	_stop_reward_flashes()
 	visible = false
 	_clear_dim_pieces()
 	_dim_top.visible = false
@@ -577,6 +578,7 @@ func _layout_spotlight() -> void:
 		_update_shop_restock_hint()
 		_update_ranks_hint()
 		_update_start_hint()
+		_update_reward_hints()
 		return
 
 	if not TutorialManager.coach_dims_screen():
@@ -653,8 +655,8 @@ func _layout_spotlight() -> void:
 			if stardust_hole.size.x > 4.0:
 				card_hole = stardust_hole
 		_place_card(card_hole, vp, placement)
-		if TutorialManager.step_id() == "shop_market":
-			# Card sits on the sell tray — no pointer into the buy stalls.
+		if TutorialManager.step_id() in ["shop_market", "frontier_fight"]:
+			# No pointer — card is pinned; pointing into the map/detail is noise.
 			if is_instance_valid(_pointer):
 				_pointer.visible = false
 		else:
@@ -671,6 +673,7 @@ func _layout_spotlight() -> void:
 	_update_shop_restock_hint()
 	_update_ranks_hint()
 	_update_start_hint()
+	_update_reward_hints()
 
 
 func _body_text_for_step(step: Dictionary) -> String:
@@ -728,6 +731,8 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, hole.end.y + CARD_HOLE_GAP)
 	elif TutorialManager.step_id() == "mine_explain":
 		pos = _mine_explain_card_pos(hole, vp, w, h)
+	elif TutorialManager.step_id() == "frontier_fight":
+		pos = _frontier_fight_card_pos(vp, w, h)
 	elif TutorialManager.step_id() == "finish":
 		pos = _finish_card_pos(vp, w, h)
 	elif TutorialManager.step_id() == "shop_market":
@@ -755,7 +760,8 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	# shop_market intentionally sits on the sell tray (bottom-right).
 	# mine_explain is pinned under the stardust preview (centered).
 	# finish is centered in the content stage.
-	if TutorialManager.step_id() not in ["mission_timer", "mission_fight", "shop_market", "mine_explain", "finish"] and hole.size.x > 1.0:
+	# frontier_fight sits on empty starfield at the map's top-left.
+	if TutorialManager.step_id() not in ["mission_timer", "mission_fight", "shop_market", "mine_explain", "finish", "frontier_fight"] and hole.size.x > 1.0:
 		var card_rect := Rect2(pos, Vector2(w, h))
 		if card_rect.intersects(hole):
 			if hole.end.x + CARD_HOLE_GAP + w + CARD_PAD <= vp.x:
@@ -782,6 +788,18 @@ func _mine_explain_card_pos(hole: Rect2, vp: Vector2, w: float, h: float) -> Vec
 		x = anchor.position.x + anchor.size.x * 0.5 - w * 0.5
 		y = anchor.end.y + CARD_HOLE_GAP
 	return Vector2(x, y)
+
+
+func _frontier_fight_card_pos(vp: Vector2, w: float, h: float) -> Vector2:
+	## Top-left of the galactic frontier map window — sits on empty starfield,
+	## leaving planet detail / encounters / fight controls free.
+	var map := _hole_for_tutorial_id("galaxy-map")
+	if map.size.x > 4.0 and map.size.y > 4.0:
+		return Vector2(map.position.x + CARD_PAD, map.position.y + CARD_PAD)
+	var region := _content_stage_rect()
+	if region.size.x > 4.0 and region.size.y > 4.0:
+		return Vector2(region.position.x + CARD_PAD, region.position.y + CARD_PAD)
+	return Vector2(CARD_PAD, CARD_PAD)
 
 
 func _finish_card_pos(vp: Vector2, w: float, h: float) -> Vector2:
@@ -1037,6 +1055,49 @@ func _stop_start_flash() -> void:
 	_start_flash_target = null
 
 
+func _update_reward_hints() -> void:
+	_stop_reward_flashes()
+	if not visible or TutorialManager.step_id() != "click_hero":
+		return
+	if not TutorialManager.post_combat_overlay_visible():
+		return
+	_start_reward_flash("combat-reward-stardust", true)
+	_start_reward_flash("combat-reward-helmet", false)
+
+
+func _start_reward_flash(tutorial_id: String, is_stardust: bool) -> void:
+	var target := _find_tutorial_target(tutorial_id)
+	if target == null or not is_instance_valid(target):
+		return
+	target.modulate = Color.WHITE
+	var tw := target.create_tween().set_loops()
+	# Slow subtle pulse — draw the eye to loot they'll spend/equip next.
+	var peak := Color(1.10, 1.18, 1.05, 1.0) if is_stardust else Color(1.08, 1.14, 1.20, 1.0)
+	tw.tween_property(target, "modulate", peak, REWARD_HINT_FLASH_HALF_SEC).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(target, "modulate", Color.WHITE, REWARD_HINT_FLASH_HALF_SEC).set_trans(Tween.TRANS_SINE)
+	if is_stardust:
+		_reward_stardust_flash_tween = tw
+		_reward_stardust_flash_target = target
+	else:
+		_reward_helmet_flash_tween = tw
+		_reward_helmet_flash_target = target
+
+
+func _stop_reward_flashes() -> void:
+	if _reward_stardust_flash_tween != null and is_instance_valid(_reward_stardust_flash_tween):
+		_reward_stardust_flash_tween.kill()
+	_reward_stardust_flash_tween = null
+	if _reward_stardust_flash_target != null and is_instance_valid(_reward_stardust_flash_target):
+		_reward_stardust_flash_target.modulate = Color.WHITE
+	_reward_stardust_flash_target = null
+	if _reward_helmet_flash_tween != null and is_instance_valid(_reward_helmet_flash_tween):
+		_reward_helmet_flash_tween.kill()
+	_reward_helmet_flash_tween = null
+	if _reward_helmet_flash_target != null and is_instance_valid(_reward_helmet_flash_target):
+		_reward_helmet_flash_target.modulate = Color.WHITE
+	_reward_helmet_flash_target = null
+
+
 func _auto_placement(hole: Rect2, vp: Vector2, w: float, h: float) -> String:
 	if hole.end.x + CARD_HOLE_GAP + w + CARD_PAD <= vp.x:
 		return "right"
@@ -1201,19 +1262,24 @@ func _place_pointer(hole: Rect2, vp: Vector2) -> void:
 	if not is_instance_valid(_pointer):
 		return
 	_pointer.visible = true
+	_pointer.texture = UiIcon.texture("triangle")
 	var card_center := _card.position + _card.size * 0.5
 	var hole_center := hole.get_center()
 	if hole_center.x < card_center.x:
-		_pointer.text = "◀"
+		# Point left (toward hole on the left of the card).
+		_pointer.rotation_degrees = 270
 		_pointer.position = Vector2(hole.end.x + POINTER_INSET, hole_center.y - POINTER_SPAN * 0.5)
 	elif hole_center.x > card_center.x:
-		_pointer.text = "▶"
+		# Point right.
+		_pointer.rotation_degrees = 90
 		_pointer.position = Vector2(hole.position.x - POINTER_INSET - POINTER_SPAN, hole_center.y - POINTER_SPAN * 0.5)
 	elif hole_center.y < card_center.y:
-		_pointer.text = "▲"
+		# Point up.
+		_pointer.rotation_degrees = 0
 		_pointer.position = Vector2(hole_center.x - POINTER_SPAN * 0.35, hole.end.y + POINTER_INSET)
 	else:
-		_pointer.text = "▼"
+		# Point down.
+		_pointer.rotation_degrees = 180
 		_pointer.position = Vector2(hole_center.x - POINTER_SPAN * 0.35, hole.position.y - POINTER_INSET - POINTER_SPAN)
 	_pointer.position.x = clampf(_pointer.position.x, 8.0, vp.x - POINTER_SPAN)
 	_pointer.position.y = clampf(_pointer.position.y, 8.0, vp.y - POINTER_SPAN)

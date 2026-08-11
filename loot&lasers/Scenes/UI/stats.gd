@@ -19,7 +19,9 @@ const HoldRepeat := preload("res://Scripts/UI/HoldRepeatController.gd")
 var _status: Label
 var _list: VBoxContainer
 var _hero_name: Label
-var _hero_meta: Label
+var _hero_meta: HBoxContainer
+var _hero_meta_lab: Label
+var _hero_meta_icon: TextureRect
 var _xp_bar: ProgressBar
 var _xp_lab: Label
 var _lore_lab: RichTextLabel
@@ -39,7 +41,7 @@ var _attrs_col: VBoxContainer
 var _vault_panel: PanelContainer
 var _backpack: PanelContainer
 var _combat_via: Label
-var _combat_stim: Label
+var _combat_stim: HBoxContainer
 var _stat_rows: Dictionary = {}
 var _combat_values: Dictionary = {}
 var _combat_panels: Dictionary = {}
@@ -284,13 +286,20 @@ func _build() -> void:
 	_title_lab.visible = false
 	identity.add_child(_title_lab)
 
-	_hero_meta = Label.new()
-	_hero_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hero_meta.add_theme_font_size_override("font_size", 12)
-	_hero_meta.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_hero_meta)
+	_hero_meta = HBoxContainer.new()
+	_hero_meta.alignment = BoxContainer.ALIGNMENT_CENTER
+	_hero_meta.add_theme_constant_override("separation", 4)
 	identity.add_child(_hero_meta)
+	_hero_meta_icon = UiIcon.make("users", ClientUi.VIOLET.lightened(0.2), 12.0)
+	_hero_meta_icon.visible = false
+	_hero_meta.add_child(_hero_meta_icon)
+	_hero_meta_lab = Label.new()
+	_hero_meta_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hero_meta_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hero_meta_lab.add_theme_font_size_override("font_size", 12)
+	_hero_meta_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_hero_meta_lab)
+	_hero_meta.add_child(_hero_meta_lab)
 
 	_xp_lab = Label.new()
 	_xp_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -615,11 +624,13 @@ func _update_hero() -> void:
 			guild_tag = str(SocialManager.my_guild.get("tag", ""))
 		if guild_name.is_empty():
 			guild_name = str(SocialManager.my_guild.get("name", ""))
-		_hero_meta.text = "👥  [%s] %s" % [guild_tag, guild_name]
-		_hero_meta.add_theme_color_override("font_color", ClientUi.VIOLET.lightened(0.2))
+		_hero_meta_icon.visible = true
+		_hero_meta_lab.text = "[%s] %s" % [guild_tag, guild_name]
+		_hero_meta_lab.add_theme_color_override("font_color", ClientUi.VIOLET.lightened(0.2))
 	else:
-		_hero_meta.text = "No guild"
-		_hero_meta.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
+		_hero_meta_icon.visible = false
+		_hero_meta_lab.text = "No guild"
+		_hero_meta_lab.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
 
 	var xp := int(c.get("experience", 0))
 	var xp_next := maxi(1, int(c.get("experience_to_next_level", 1)))
@@ -1294,13 +1305,41 @@ func _make_item_drag(host: Control, item: Dictionary, from: String) -> Variant:
 	var item_id := str(item.get("id", ""))
 	if item_id.is_empty():
 		return null
-	host.set_drag_preview(GearIcon.make(item, 40.0))
+	# Full-size clone of the bag/equip pane so the glyph doesn't shrink mid-drag.
+	host.set_drag_preview(_clone_as_drag_preview(host))
 	return {
 		"item_id": item_id,
 		"from": from,
 		"type": str(item.get("type", "")),
 		"consumable": InventoryRules.is_consumable(item),
 	}
+
+
+func _clone_as_drag_preview(host: Control) -> Control:
+	var sz := host.size
+	if sz.x < 8.0 or sz.y < 8.0:
+		sz = host.get_combined_minimum_size()
+	var clone := host.duplicate() as Control
+	if clone == null:
+		return Control.new()
+	clone.custom_minimum_size = sz
+	clone.size = sz
+	clone.modulate = Color(1, 1, 1, 0.95)
+	_neutralize_drag_preview_tree(clone)
+	return clone
+
+
+func _neutralize_drag_preview_tree(node: Node) -> void:
+	if node is Control:
+		var c := node as Control
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		c.tooltip_text = ""
+		c.set_drag_forwarding(Callable(), Callable(), Callable())
+		# Drop interaction polish that can scale the preview while dragging.
+		c.pivot_offset = Vector2.ZERO
+		c.scale = Vector2.ONE
+	for child in node.get_children():
+		_neutralize_drag_preview_tree(child)
 
 
 func _doll_drag_get(_at: Vector2) -> Variant:
@@ -1663,20 +1702,26 @@ func _make_combat_card() -> VBoxContainer:
 
 	var head := HBoxContainer.new()
 	head.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	head.add_theme_constant_override("separation", 6)
 	root.add_child(head)
+	head.add_child(UiIcon.make("swords", ClientUi.MUTED, 14.0))
 	var h2 := Label.new()
-	h2.text = "⚔  COMBAT"
+	h2.text = "COMBAT"
 	h2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h2.add_theme_font_size_override("font_size", 15)
 	h2.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(h2)
 	head.add_child(h2)
-	_combat_stim = Label.new()
-	_combat_stim.text = "⚗ Stim"
+	_combat_stim = HBoxContainer.new()
 	_combat_stim.visible = false
-	_combat_stim.add_theme_font_size_override("font_size", 12)
-	_combat_stim.add_theme_color_override("font_color", ClientUi.VIOLET)
-	ClientUi.apply_display_font(_combat_stim)
+	_combat_stim.add_theme_constant_override("separation", 3)
+	_combat_stim.add_child(UiIcon.make("syringe", ClientUi.VIOLET, 12.0))
+	var stim_lab := Label.new()
+	stim_lab.text = "Stim"
+	stim_lab.add_theme_font_size_override("font_size", 12)
+	stim_lab.add_theme_color_override("font_color", ClientUi.VIOLET)
+	ClientUi.apply_display_font(stim_lab)
+	_combat_stim.add_child(stim_lab)
 	head.add_child(_combat_stim)
 	_combat_via = Label.new()
 	_combat_via.add_theme_font_size_override("font_size", 12)

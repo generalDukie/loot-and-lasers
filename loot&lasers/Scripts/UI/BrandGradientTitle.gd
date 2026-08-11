@@ -8,12 +8,29 @@ const COLOR_PURPLE := ClientUi.BRAND_GRAD_PURPLE
 
 var title_text := "LOOT & LASERS"
 var font_size := 22
+var h_align := HORIZONTAL_ALIGNMENT_LEFT
 var _brighten := 1.0
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_remeasure()
+
+
+static func make(text: String, size_px: int = 22, center: bool = false) -> BrandGradientTitle:
+	var node := BrandGradientTitle.new()
+	node.title_text = text
+	node.font_size = size_px
+	node.h_align = HORIZONTAL_ALIGNMENT_CENTER if center else HORIZONTAL_ALIGNMENT_LEFT
+	if center:
+		node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return node
+
+
+func set_title(text: String) -> void:
+	title_text = text
+	_remeasure()
+	queue_redraw()
 
 
 func set_brighten(amount: float) -> void:
@@ -72,10 +89,15 @@ func _draw() -> void:
 	var ascent := font.get_ascent(font_size)
 	var y := ascent * 0.92
 	var x := 0.0
+	if h_align == HORIZONTAL_ALIGNMENT_CENTER:
+		x = (size.x - total) * 0.5
+	elif h_align == HORIZONTAL_ALIGNMENT_RIGHT:
+		x = size.x - total
+	var run := 0.0
 	for i in title_text.length():
 		var ch := title_text.substr(i, 1)
 		var cw := font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-		var mid_t := (x + cw * 0.5) / total
+		var mid_t := (run + cw * 0.5) / total
 		var col := _gradient_at(mid_t)
 		font.draw_string(
 			get_canvas_item(),
@@ -96,3 +118,4 @@ func _draw() -> void:
 			col
 		)
 		x += cw
+		run += cw

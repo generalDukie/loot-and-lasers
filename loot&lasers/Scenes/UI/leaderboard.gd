@@ -385,20 +385,30 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	ClientUi.apply_body_font(detail)
 	mid.add_child(detail)
 
-	var rating := Label.new()
+	var rating := HBoxContainer.new()
 	rating.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rating.text = "🏆  %s" % str(c.get("arena_rating", 1000))
-	rating.add_theme_font_size_override("font_size", 16)
-	rating.add_theme_color_override("font_color", ClientUi.CYAN)
-	ClientUi.apply_display_font(rating)
+	rating.add_theme_constant_override("separation", 4)
+	rating.add_child(UiIcon.make("trophy", ClientUi.CYAN, 16.0))
+	var rating_lab := Label.new()
+	rating_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rating_lab.text = str(c.get("arena_rating", 1000))
+	rating_lab.add_theme_font_size_override("font_size", 16)
+	rating_lab.add_theme_color_override("font_color", ClientUi.CYAN)
+	ClientUi.apply_display_font(rating_lab)
+	rating.add_child(rating_lab)
 	id_row.add_child(rating)
 
-	var wins := Label.new()
+	var wins := HBoxContainer.new()
 	wins.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wins.text = "⚔  %s" % str(c.get("arena_wins", 0))
-	wins.add_theme_font_size_override("font_size", 16)
-	wins.add_theme_color_override("font_color", ClientUi.VIOLET)
-	ClientUi.apply_display_font(wins)
+	wins.add_theme_constant_override("separation", 4)
+	wins.add_child(UiIcon.make("swords", ClientUi.VIOLET, 16.0))
+	var wins_lab := Label.new()
+	wins_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wins_lab.text = str(c.get("arena_wins", 0))
+	wins_lab.add_theme_font_size_override("font_size", 16)
+	wins_lab.add_theme_color_override("font_color", ClientUi.VIOLET)
+	ClientUi.apply_display_font(wins_lab)
+	wins.add_child(wins_lab)
 	id_row.add_child(wins)
 
 	if not is_me:
@@ -503,7 +513,7 @@ func _on_challenge(c: Dictionary, btn: Button = null, detail: Label = null) -> v
 	var warn := str(preview.get("warningCode", ""))
 	if warn == "OPPONENT_TOO_LOW_FOR_RATING_GAIN":
 		if detail != null and is_instance_valid(detail):
-			detail.text = "%s · %s  ⚠ no rating on win" % [
+			detail.text = "%s · %s  · no rating on win" % [
 				str(c.get("race", "?")), str(c.get("class", "?"))
 			]
 			detail.add_theme_color_override("font_color", Color("#FBBF24"))

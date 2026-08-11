@@ -106,9 +106,9 @@ test("rejects client timer/reward/stardust tampering", () => {
   assert.doesNotThrow(() => assertMiningClientSafe({ hours: 4 }));
 });
 
-test("clampMiningHours bounds 1–24", () => {
+test("clampMiningHours bounds 1–12", () => {
   assert.equal(clampMiningHours(0), 1);
-  assert.equal(clampMiningHours(99), 24);
+  assert.equal(clampMiningHours(99), 12);
   assert.equal(clampMiningHours(4.9), 4);
 });
 

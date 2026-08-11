@@ -166,23 +166,25 @@ func _build() -> void:
 	dur_row.add_child(dur_lab)
 	_hours_lab = Label.new()
 	_hours_lab.add_theme_font_size_override("font_size", 21)
-	_hours_lab.add_theme_color_override("font_color", ClientUi.CYAN)
+	_hours_lab.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(_hours_lab)
 	dur_row.add_child(_hours_lab)
 
 	_hours = HSlider.new()
 	_hours.min_value = 1
-	_hours.max_value = 24
+	_hours.max_value = 12
 	_hours.step = 1
-	_hours.value = 4
-	_hours.custom_minimum_size.y = 24
+	_hours.value = 1
+	_hours.custom_minimum_size.y = 48
+	_hours.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_apply_mining_hours_slider_style(_hours)
 	_hours.value_changed.connect(func(_v: float) -> void: _refresh_idle_preview())
 	_idle_box.add_child(_hours)
 
 	var tick_row := HBoxContainer.new()
 	_idle_box.add_child(tick_row)
 	for i in 3:
-		var t: String = ["1h", "12h", "24h"][i]
+		var t: String = ["1h", "6h", "12h"][i]
 		var tl := Label.new()
 		tl.text = t
 		tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -307,7 +309,53 @@ func _build() -> void:
 	root.add_child(footer)
 	_stat_level = _footer_tile(footer, "YOUR LEVEL", ClientUi.CYAN)
 	_stat_rate = _footer_tile(footer, "BASE RATE", Color("#FCD34D"))
-	_stat_max = _footer_tile(footer, "MAX (24h)", GameData.STARDUST_COLOR)
+	_stat_max = _footer_tile(footer, "MAX (12h)", GameData.STARDUST_COLOR)
+
+
+func _apply_mining_hours_slider_style(slider: HSlider) -> void:
+	var dust := GameData.STARDUST_COLOR
+	# Thin track; grabber is drawn larger so the control reads as a slider.
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(dust, 0.22)
+	track.set_corner_radius_all(6)
+	track.set_content_margin_all(0)
+	track.content_margin_top = 14
+	track.content_margin_bottom = 14
+	slider.add_theme_stylebox_override("slider", track)
+
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(dust, 0.72)
+	fill.set_corner_radius_all(6)
+	fill.set_content_margin_all(0)
+	fill.content_margin_top = 14
+	fill.content_margin_bottom = 14
+	slider.add_theme_stylebox_override("grabber_area", fill)
+	var fill_hi := fill.duplicate() as StyleBoxFlat
+	fill_hi.bg_color = Color(dust.lightened(0.12), 0.88)
+	slider.add_theme_stylebox_override("grabber_area_highlight", fill_hi)
+
+	var grabber := _make_mining_slider_grabber_tex(40, dust)
+	var grabber_hi := _make_mining_slider_grabber_tex(40, dust.lightened(0.18))
+	slider.add_theme_icon_override("grabber", grabber)
+	slider.add_theme_icon_override("grabber_highlight", grabber_hi)
+	slider.add_theme_icon_override("grabber_disabled", grabber)
+
+
+func _make_mining_slider_grabber_tex(diameter: int, color: Color) -> Texture2D:
+	var img := Image.create(diameter, diameter, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var r := float(diameter) * 0.5
+	var center := Vector2(r, r)
+	var inner := r - 2.5
+	var rim := r - 0.5
+	for y in diameter:
+		for x in diameter:
+			var d := Vector2(float(x) + 0.5, float(y) + 0.5).distance_to(center)
+			if d <= inner:
+				img.set_pixel(x, y, color)
+			elif d <= rim:
+				img.set_pixel(x, y, Color(1, 1, 1, 0.9))
+	return ImageTexture.create_from_image(img)
 
 
 func _footer_tile(parent: HBoxContainer, label: String, color: Color) -> Label:
@@ -353,7 +401,7 @@ func _populate() -> void:
 	)
 	_stat_level.text = str(level)
 	_stat_rate.text = "%s/h" % rate_per_hour
-	_stat_max.text = str(MiningManager.preview_reward(24))
+	_stat_max.text = str(MiningManager.preview_reward(12))
 	_refresh_idle_preview()
 
 	var mining := MiningManager.is_mining()
@@ -407,9 +455,9 @@ func _populate() -> void:
 		_restart_emoji_motion(phase)
 
 	if MissionManager.has_active_mission() and not mining:
-		if _status.text.is_empty() or _status.text.begins_with("🚀") or _status.text.begins_with("Cantina"):
-			_set_status("🚀 Ship Busy — finish or claim your Cantina mission before deploying the mining drone.", ClientUi.DANGER)
-	elif _status.text.begins_with("🚀") or _status.text.begins_with("Cantina"):
+		if _status.text.is_empty() or _status.text.begins_with("Ship Busy") or _status.text.begins_with("Cantina"):
+			_set_status("Ship Busy — finish or claim your Cantina mission before deploying the mining drone.", ClientUi.DANGER)
+	elif _status.text.begins_with("Ship Busy") or _status.text.begins_with("Cantina"):
 		_set_status("", ClientUi.MUTED)
 
 

@@ -194,11 +194,10 @@ func _populate() -> void:
 	showcase_head.add_child(showcase_title)
 
 	if not owned:
-		var unclaimed := Label.new()
-		unclaimed.text = "⛩️"
-		unclaimed.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		unclaimed.add_theme_font_size_override("font_size", 48)
-		_owner_col.add_child(unclaimed)
+		var unclaimed_host := CenterContainer.new()
+		unclaimed_host.custom_minimum_size = Vector2(64, 64)
+		_owner_col.add_child(unclaimed_host)
+		unclaimed_host.add_child(UiIcon.make("torus", ClientUi.MUTED, 48.0))
 		var unclaimed_title := Label.new()
 		unclaimed_title.text = "UNCLAIMED — VULNERABLE"
 		unclaimed_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -226,13 +225,9 @@ func _populate() -> void:
 			Color(0.04, 0.05, 0.08, 0.85), Color(banner, 0.75), 10, 2
 		))
 		owner_row.add_child(flag)
-		var flag_l := Label.new()
-		flag_l.text = "⚑"
-		flag_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		flag_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		flag_l.add_theme_font_size_override("font_size", 29)
-		flag_l.add_theme_color_override("font_color", Color(banner))
-		flag.add_child(flag_l)
+		var flag_host := CenterContainer.new()
+		flag.add_child(flag_host)
+		flag_host.add_child(UiIcon.make("flag", Color(banner), 29.0))
 
 		var owner_info := VBoxContainer.new()
 		owner_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -287,12 +282,17 @@ func _populate() -> void:
 			12, 1
 		))
 		status_row.add_child(pill)
+		var pill_row := HBoxContainer.new()
+		pill_row.add_theme_constant_override("separation", 4)
+		pill.add_child(pill_row)
+		var pill_tint := ClientUi.DANGER if vuln else ClientUi.SUCCESS
+		pill_row.add_child(UiIcon.make("triangle-alert" if vuln else "shield", pill_tint, 14.0))
 		var pill_l := Label.new()
-		pill_l.text = "⚠ VULNERABLE" if vuln else "🛡 FORTIFIED"
+		pill_l.text = "VULNERABLE" if vuln else "FORTIFIED"
 		pill_l.add_theme_font_size_override("font_size", 15)
-		pill_l.add_theme_color_override("font_color", ClientUi.DANGER if vuln else ClientUi.SUCCESS)
+		pill_l.add_theme_color_override("font_color", pill_tint)
 		ClientUi.apply_display_font(pill_l)
-		pill.add_child(pill_l)
+		pill_row.add_child(pill_l)
 		var status_hint := Label.new()
 		status_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		status_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -462,7 +462,7 @@ func _hof_row(rank: int, r: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(name)
 	row.add_child(name)
 	var meta := Label.new()
-	meta.text = "%sd · %s🛡" % [str(r.get("reign_days", 0)), str(r.get("defenses", 0))]
+	meta.text = "%sd · %s def" % [str(r.get("reign_days", 0)), str(r.get("defenses", 0))]
 	meta.add_theme_font_size_override("font_size", 15)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)

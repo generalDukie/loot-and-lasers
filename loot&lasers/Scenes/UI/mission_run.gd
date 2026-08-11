@@ -2,7 +2,7 @@ extends Control
 ## Active mission — full-bleed explore art with overlaid status UI (Cantina in-progress).
 
 const GOOFY_STATUS := [
-	{"at": 0.0, "msg": "🚀 Igniting thrusters..."},
+	{"at": 0.0, "msg": "Igniting thrusters..."},
 	{"at": 0.15, "msg": "Spilled space coffee..."},
 	{"at": 0.3, "msg": "Dodging a space raccoon..."},
 	{"at": 0.45, "msg": "Which button is go again..."},
@@ -10,7 +10,7 @@ const GOOFY_STATUS := [
 	{"at": 0.75, "msg": "Arguing with the GPS..."},
 	{"at": 0.9, "msg": "Almost there. Probably."},
 	{"at": 0.97, "msg": "Parking the ship..."},
-	{"at": 1.0, "msg": "🎉 Arrived!"},
+	{"at": 1.0, "msg": "Arrived!"},
 ]
 
 var _title: Label
@@ -19,6 +19,8 @@ var _timer_label: Label
 var _status: Label
 var _claim_btn: Button
 var _skip_btn: Button
+var _view_rewards_btn: Button
+var _reward_sheet_host: Control
 var _active_panel: PanelContainer
 var _explore: MissionExploreStage
 var _ui_layer: Control
@@ -41,11 +43,18 @@ func _ready() -> void:
 	_build()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
+	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
+		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
 	await _boot()
+	_sync_view_rewards_cta()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_refresh_timer()
+
+
+func _on_combat_return_changed() -> void:
+	_sync_view_rewards_cta()
 
 
 func _build() -> void:
@@ -103,17 +112,21 @@ func _build() -> void:
 	page_title.add_theme_constant_override("shadow_offset_y", 2)
 	ClientUi.apply_display_font(page_title)
 	head.add_child(page_title)
+	var on_mission_pill := HBoxContainer.new()
+	on_mission_pill.add_theme_constant_override("separation", 4)
+	on_mission_pill.add_child(UiIcon.make("rocket", ClientUi.CYAN, 14.0))
 	var on_mission := Label.new()
-	on_mission.text = "  🚀 On Mission  "
+	on_mission.text = "On Mission"
 	on_mission.add_theme_font_size_override("font_size", 15)
 	on_mission.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(on_mission)
+	on_mission_pill.add_child(on_mission)
 	var pill := PanelContainer.new()
 	pill.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.04, 0.08, 0.12, 0.78), Color(ClientUi.CYAN, 0.45), 14, 1)
 	)
-	pill.add_child(on_mission)
+	pill.add_child(on_mission_pill)
 	head.add_child(pill)
 	var head_spacer := Control.new()
 	head_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -161,7 +174,8 @@ func _build() -> void:
 	active_col.add_child(_goofy)
 
 	_skip_btn = Button.new()
-	_skip_btn.text = "Skip · Fight · 1 💎"
+	_skip_btn.text = "Skip · Fight · 1"
+	CurrencyIcon.apply_button_cost(_skip_btn, 16.0)
 	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	ClientUi.apply_display_font(_skip_btn)
 	_skip_btn.add_theme_font_size_override("font_size", 16)
@@ -191,6 +205,14 @@ func _build() -> void:
 	_claim_btn.pressed.connect(_on_fight)
 	active_col.add_child(_claim_btn)
 	TutorialManager.tag_target(_claim_btn, "mission-fight")
+
+	_view_rewards_btn = Button.new()
+	_view_rewards_btn.text = "VIEW REWARDS"
+	_view_rewards_btn.visible = false
+	_view_rewards_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	ClientUi.apply_primary_button(_view_rewards_btn)
+	_view_rewards_btn.pressed.connect(_on_view_rewards)
+	active_col.add_child(_view_rewards_btn)
 
 	# Flex spacer keeps the rocket timer pinned to the bottom of the content pane.
 	var spacer := Control.new()
@@ -313,11 +335,27 @@ func _build() -> void:
 	_status_poll.timeout.connect(_poll_status)
 	add_child(_status_poll)
 
+	_reward_sheet_host = Control.new()
+	_reward_sheet_host.visible = false
+	_reward_sheet_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_reward_sheet_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reward_sheet_host.z_index = 80
+	add_child(_reward_sheet_host)
+
 
 func _boot() -> void:
 	_set_status("Restoring mission…", true)
 	await MissionManager.refresh_character()
 	if not MissionManager.has_active_mission():
+		if CombatReturnManager.is_for_kind("mission"):
+			_title.text = "Combat complete"
+			_goofy.text = "Rewards are ready."
+			_skip_btn.visible = false
+			_claim_btn.visible = false
+			_set_status("Claim your combat rewards to continue.", true)
+			_sync_view_rewards_cta()
+			_play_enter_transition()
+			return
 		_set_status("No active mission.", true)
 		await get_tree().create_timer(0.5).timeout
 		GameManager.go_cantina()
@@ -329,6 +367,32 @@ func _boot() -> void:
 	_play_enter_transition()
 	_tick.start()
 	_status_poll.start()
+	_sync_view_rewards_cta()
+
+
+func _sync_view_rewards_cta() -> void:
+	if not is_instance_valid(_view_rewards_btn):
+		return
+	var show := CombatReturnManager.is_for_kind("mission")
+	_view_rewards_btn.visible = show
+	if show:
+		var settling := CombatReturnManager.state == CombatReturnManager.STATE_SETTLING
+		_view_rewards_btn.disabled = settling or _busy
+		_view_rewards_btn.text = "SETTLING…" if settling else "VIEW REWARDS"
+		_claim_btn.visible = false
+		_skip_btn.visible = false
+
+
+func _on_view_rewards() -> void:
+	if _busy:
+		return
+	_busy = true
+	_view_rewards_btn.disabled = true
+	await CombatReturnManager.present_rewards(_reward_sheet_host)
+	_busy = false
+	_sync_view_rewards_cta()
+	if not MissionManager.has_active_mission() and not CombatReturnManager.is_for_kind("mission"):
+		GameManager.go_cantina()
 
 
 func _populate() -> void:
@@ -454,13 +518,16 @@ func _refresh_timer() -> void:
 		var cost := _skip_cost_now()
 		if cost <= 0.0 and _tutorial_free_skip():
 			_skip_btn.text = "Skip · Fight · FREE"
+			_skip_btn.icon = null
 		else:
-			_skip_btn.text = "Skip · Fight · %s 💎" % cost
+			_skip_btn.text = "Skip · Fight · %s" % cost
+			CurrencyIcon.apply_button_cost(_skip_btn, 16.0)
 		_active_panel.add_theme_stylebox_override(
 			"panel",
 			ClientUi.painted_panel_style(Color(0.04, 0.07, 0.12, 0.72), Color(ClientUi.CYAN, 0.45), 10, 1)
 		)
 		_set_status("", false)
+	_sync_view_rewards_cta()
 
 
 func _set_progress(progress: float, done: bool) -> void:
@@ -474,7 +541,7 @@ func _set_progress(progress: float, done: bool) -> void:
 	_rocket.set_anchors_and_offsets_preset(PRESET_TOP_LEFT)
 	_rocket.position = Vector2(clampf(w * progress - 10.0, 0.0, maxf(w - 20.0, 0.0)), (h - 20.0) * 0.5)
 	if done:
-		_rocket.texture = UiIcon.texture("sparkles")
+		_rocket.texture = UiIcon.texture("party-popper")
 		UiIcon.set_tint(_rocket, ClientUi.SUCCESS)
 	else:
 		_rocket.texture = UiIcon.texture("rocket")
@@ -602,7 +669,7 @@ func _on_skip() -> void:
 	if cost > 0.0:
 		var crystals: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 		if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, cost):
-			Notify.blocked("Not enough Nova Crystals", "Need %s 💎 (you have %s)" % [cost, crystals])
+			Notify.blocked("Not enough Nova Crystals", "Need %s Nova (you have %s)" % [cost, crystals])
 			return
 	elif not _tutorial_free_skip():
 		await _on_fight()

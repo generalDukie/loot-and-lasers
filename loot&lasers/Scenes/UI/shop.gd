@@ -260,9 +260,9 @@ func _update_meta() -> void:
 		child.queue_free()
 	# Web header chips: Nova (amber) · Stardust · shop-window clock
 	_currency_row.add_child(ClientUi.make_currency_chip(
-		"💎",
+		"nova",
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA),
-		Color("#FCD34D")
+		Color("#FFD700")
 	))
 	_currency_row.add_child(ClientUi.make_currency_chip(
 		"✦",
@@ -360,8 +360,9 @@ func _make_market_section() -> PanelContainer:
 	head_col.add_child(h)
 
 	var restock := Button.new()
-	restock.text = "Restock · 💎 %s" % ShopManager.SHOP_REFRESH_COST
-	_apply_restock_btn(restock, Color("#FBBF24"))
+	restock.text = "Restock · %s" % ShopManager.SHOP_REFRESH_COST
+	CurrencyIcon.apply_button_cost(restock, 16.0)
+	_apply_restock_btn(restock, Color("#FFD700"))
 	restock.pressed.connect(func() -> void: _on_refresh("all"))
 	TutorialManager.tag_target(restock, "shop-restock")
 	head.add_child(restock)
@@ -749,12 +750,9 @@ func _gear_actions(
 	ClientUi.apply_display_font(price)
 	price_col.add_child(price)
 	if nova > 0:
-		var np := Label.new()
-		np.text = "💎 %s" % nova
-		np.add_theme_font_size_override("font_size", nova_fs)
-		np.add_theme_color_override("font_color", Color("#FCD34D"))
-		ClientUi.apply_display_font(np)
-		price_col.add_child(np)
+		price_col.add_child(CurrencyIcon.make_amount_row(
+			nova, 14.0, CurrencyIcon.NOVA_GOLD, nova_fs
+		))
 
 	if not is_bundle:
 		var hag := Button.new()
@@ -796,7 +794,7 @@ func _on_refresh(which: String) -> void:
 		return
 	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	if nova < ShopManager.SHOP_REFRESH_COST:
-		Notify.blocked("Need %s 💎 to refresh" % ShopManager.SHOP_REFRESH_COST)
+		Notify.blocked("Need %s Nova Crystals to refresh" % ShopManager.SHOP_REFRESH_COST)
 		return
 	_busy = true
 	_set_status("Refreshing %s…" % which)
@@ -807,7 +805,7 @@ func _on_refresh(which: String) -> void:
 			_set_status(str(res.get("error", "Refresh failed")))
 		_update_meta()
 		return
-	_set_status("🔄 Black Market restocked (−%s 💎)." % ShopManager.SHOP_REFRESH_COST)
+	_set_status("Black Market restocked (−%s Nova Crystals)." % ShopManager.SHOP_REFRESH_COST)
 	_populate()
 
 
@@ -829,7 +827,7 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 			_set_status(_err(res))
 		_update_meta()
 		return
-	_set_status(_purchase_msg(ShopManager.last_purchase, "🛒 Purchased!"))
+	_set_status(_purchase_msg(ShopManager.last_purchase, "Purchased!"))
 	await _load_bag_items()
 	_load_equipped()
 	_populate()
@@ -844,7 +842,7 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 		Notify.blocked("Not enough Stardust", "Need %s ✦ — you have %s" % [cost, sd])
 		return
 	if nova > 0 and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, nova):
-		Notify.blocked("Not enough Nova Crystals", "Need %s 💎" % nova)
+		Notify.blocked("Not enough Nova Crystals", "Need %s Nova" % nova)
 		return
 	_busy = true
 	_busy_slot = slot_id
@@ -880,7 +878,7 @@ func _purchase_msg(purchase: Dictionary, fallback: String) -> String:
 	if cost > 0:
 		parts.append("−%s ✦" % cost)
 	if nova_cost > 0:
-		parts.append("−%s 💎" % nova_cost)
+		parts.append("−%s Nova" % nova_cost)
 	if typeof(pending) == TYPE_ARRAY and (pending as Array).size() > 0:
 		parts.append("bag full — item held as pending loot")
 	elif typeof(items) == TYPE_ARRAY and (items as Array).size() > 0:

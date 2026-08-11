@@ -3,12 +3,13 @@ extends Control
 
 ## Web USES strip (CrystalStorePage.jsx) — cosmetics / convenience / pets.
 const USES := [
-	{"icon": "🎨", "title": "Cosmetics", "desc": "Ship skins, avatar auras & taunts"},
-	{"icon": "⚡", "title": "Convenience", "desc": "Fuel refills, instant mission completes"},
-	{"icon": "🐾", "title": "Cosmic Pets", "desc": "Companions with passive bonuses"},
+	{"icon": "palette", "title": "Cosmetics", "desc": "Ship skins, avatar auras & taunts"},
+	{"icon": "zap", "title": "Convenience", "desc": "Fuel refills, instant mission completes"},
+	{"icon": "paw-print", "title": "Cosmic Pets", "desc": "Companions with passive bonuses"},
 ]
 
 var _balance: PanelContainer
+var _balance_row: HBoxContainer
 var _balance_lab: Label
 var _status: Label
 var _list: VBoxContainer
@@ -66,14 +67,25 @@ func _build() -> void:
 
 	_balance = PanelContainer.new()
 	_balance.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.96, 0.62, 0.04, 0.10), Color(0.96, 0.62, 0.04, 0.30), 999, 1
+		Color(CurrencyIcon.NOVA_GOLD, 0.10), Color(CurrencyIcon.NOVA_GOLD, 0.35), 999, 1
 	))
 	header.add_child(_balance)
+	var bal_pad := MarginContainer.new()
+	bal_pad.add_theme_constant_override("margin_left", 10)
+	bal_pad.add_theme_constant_override("margin_right", 12)
+	bal_pad.add_theme_constant_override("margin_top", 6)
+	bal_pad.add_theme_constant_override("margin_bottom", 6)
+	_balance.add_child(bal_pad)
+	_balance_row = HBoxContainer.new()
+	_balance_row.add_theme_constant_override("separation", 6)
+	_balance_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	bal_pad.add_child(_balance_row)
+	_balance_row.add_child(CurrencyIcon.make("nova", 18.0))
 	_balance_lab = Label.new()
 	_balance_lab.add_theme_font_size_override("font_size", 17)
-	_balance_lab.add_theme_color_override("font_color", Color("#FCD34D"))
+	_balance_lab.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD.lightened(0.12))
 	ClientUi.apply_display_font(_balance_lab)
-	_balance.add_child(_balance_lab)
+	_balance_row.add_child(_balance_lab)
 
 	_status = ClientUi.make_status()
 	_status.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -101,7 +113,7 @@ func _populate() -> void:
 		c.queue_free()
 
 	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
-	_balance_lab.text = "💎  %s  Nova Crystals" % _fmt_int(nova)
+	_balance_lab.text = "%s  Nova Crystals" % _fmt_int(nova)
 
 	_list.add_child(_make_quests_panel())
 	_list.add_child(_make_featured_section())
@@ -160,7 +172,7 @@ func _make_quests_panel() -> PanelContainer:
 
 func _quest_subline() -> String:
 	var left := CrystalStoreManager.weekly_seconds_left()
-	return "Play to earn up to %s 💎 this week · resets in %s" % [
+	return "Play to earn up to %s Nova this week · resets in %s" % [
 		CrystalStoreManager.total_weekly_reward(),
 		CrystalStoreManager.format_week_left(left),
 	]
@@ -187,11 +199,16 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 
-	var emoji := Label.new()
-	emoji.text = str(q.get("emoji", "◆"))
-	emoji.add_theme_font_size_override("font_size", 24)
-	emoji.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(emoji)
+	var emoji_host := CenterContainer.new()
+	emoji_host.custom_minimum_size = Vector2(28, 28)
+	emoji_host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(emoji_host)
+	CurrencyIcon.fill_glyph_host(
+		emoji_host,
+		str(q.get("emoji", "sparkles")),
+		24.0,
+		Color("#FCD34D")
+	)
 
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -211,11 +228,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(title)
 	title_row.add_child(title)
 
-	var reward := Label.new()
-	reward.text = "+%s 💎" % str(q["reward"])
-	reward.add_theme_font_size_override("font_size", 13)
-	reward.add_theme_color_override("font_color", Color("#FCD34D"))
-	ClientUi.apply_display_font(reward)
+	var reward := CurrencyIcon.make_amount_row("+%s" % str(q["reward"]), 13.0, CurrencyIcon.NOVA_GOLD, 13)
 	title_row.add_child(reward)
 
 	var desc := Label.new()
@@ -531,7 +544,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	bpanel.add_child(b)
 
 	var rate := Label.new()
-	rate.text = "~%s 💎 / $" % per_dollar
+	rate.text = "~%s Nova / $" % per_dollar
 	rate.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rate.add_theme_font_size_override("font_size", 12)
 	rate.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
@@ -602,10 +615,10 @@ func _make_uses_section() -> VBoxContainer:
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 2)
 		panel.add_child(col)
-		var icon := Label.new()
-		icon.text = str(u["icon"])
-		icon.add_theme_font_size_override("font_size", 29)
-		col.add_child(icon)
+		var icon_host := CenterContainer.new()
+		icon_host.custom_minimum_size = Vector2(32, 32)
+		col.add_child(icon_host)
+		CurrencyIcon.fill_glyph_host(icon_host, str(u["icon"]), 29.0, ClientUi.CYAN)
 		var t := Label.new()
 		t.text = str(u["title"])
 		t.add_theme_font_size_override("font_size", 17)
@@ -631,7 +644,7 @@ func _on_buy(pack_id: String) -> void:
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		return
 	_status.add_theme_color_override("font_color", Color("#FCD34D"))
-	_status.text = "Checkout coming soon — %s (%s 💎). Stripe payment is being connected." % [
+	_status.text = "Checkout coming soon — %s (%s Nova). Stripe payment is being connected." % [
 		str(p.get("name", pack_id)),
 		_fmt_int(int(p.get("crystals", 0))),
 	]

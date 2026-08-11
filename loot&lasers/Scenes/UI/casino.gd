@@ -1,7 +1,7 @@
 extends Control
 ## Nebula Casino — casino_v2: Galactic Dice, Stardust Wheel, Crystal Refining, Smuggler's Cache.
 
-const DICE_FACES := ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
+const DICE_FACES := ["dice-1", "dice-2", "dice-3", "dice-4", "dice-5", "dice-6"]
 const DICE_TUMBLE_S := 1.5
 const WHEEL_SPIN_S := 2.0
 const WHEEL_EXTRA_TURNS := 4
@@ -54,8 +54,8 @@ var _nova_edit_ok := true
 var _dice_choice := ""
 var _dice_choice_btns: Dictionary = {}
 var _dice_roll_btn: Button
-var _dice_face_a: Label
-var _dice_face_b: Label
+var _dice_face_a: TextureRect
+var _dice_face_b: TextureRect
 var _dice_total_lab: Label
 var _dice_outcome: Label
 var _dice_tray: PanelContainer
@@ -374,8 +374,8 @@ func _build_dice_panel() -> VBoxContainer:
 	faces.add_theme_constant_override("separation", 24)
 	faces.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	die_col.add_child(faces)
-	_dice_face_a = _make_die_face("⚄")
-	_dice_face_b = _make_die_face("⚄")
+	_dice_face_a = _make_die_face("dice-5")
+	_dice_face_b = _make_die_face("dice-5")
 	faces.add_child(_dice_face_a)
 	faces.add_child(_dice_face_b)
 
@@ -439,12 +439,9 @@ func _build_wheel_panel() -> VBoxContainer:
 	stage.add_theme_constant_override("separation", 4)
 	col.add_child(stage)
 
-	var pointer := Label.new()
-	pointer.text = "▼"
-	pointer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pointer.add_theme_font_size_override("font_size", 19)
-	pointer.add_theme_color_override("font_color", Color("#FBBF24"))
-	ClientUi.apply_display_font(pointer)
+	var pointer := UiIcon.make("triangle", Color("#FBBF24"), 19.0)
+	pointer.pivot_offset = Vector2(9.5, 9.5)
+	pointer.rotation_degrees = 180
 	stage.add_child(pointer)
 
 	var disc_wrap := CenterContainer.new()
@@ -743,15 +740,17 @@ func _section_title(title: String, rules: String, tint: Color) -> VBoxContainer:
 	return col
 
 
-func _make_die_face(glyph: String) -> Label:
-	var lab := Label.new()
-	lab.text = glyph
-	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 96)
-	lab.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98, 0.92))
-	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return lab
+func _make_die_face(glyph: String) -> TextureRect:
+	var face := UiIcon.make(glyph, Color(0.92, 0.94, 0.98, 0.92), 96.0)
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return face
+
+
+func _set_die_face(face: TextureRect, glyph: String, tint: Color = Color(0.92, 0.94, 0.98, 0.92)) -> void:
+	if face == null or not is_instance_valid(face):
+		return
+	face.texture = UiIcon.texture(glyph)
+	UiIcon.set_tint(face, tint)
 
 
 # ── Navigation / populate ─────────────────────────────────────
@@ -1159,13 +1158,13 @@ func _reveal_dice_result(res: Dictionary) -> void:
 	var seven_win := str(data.get("outcome", "")) == "seven_win" or (won and _dice_choice == "seven")
 	var gross := int(data.get("gross_payout", 0))
 	var net := int(data.get("net_result", 0))
-	_dice_face_a.text = DICE_FACES[d1 - 1]
-	_dice_face_b.text = DICE_FACES[d2 - 1]
+	_set_die_face(_dice_face_a, DICE_FACES[d1 - 1])
+	_set_die_face(_dice_face_b, DICE_FACES[d2 - 1])
 	var tint := ClientUi.SUCCESS if won else ClientUi.DANGER
 	if seven_win:
 		tint = Color("#FBBF24")
-	_dice_face_a.add_theme_color_override("font_color", tint)
-	_dice_face_b.add_theme_color_override("font_color", tint)
+	UiIcon.set_tint(_dice_face_a, tint)
+	UiIcon.set_tint(_dice_face_b, tint)
 	_set_dice_ambiance(tint, 0.40 if seven_win else (0.32 if won else 0.16))
 	_dice_total_lab.text = "Total %d" % total
 	_dice_total_lab.add_theme_color_override("font_color", tint)
@@ -1181,9 +1180,9 @@ func _reveal_dice_result(res: Dictionary) -> void:
 	_set_status("", ClientUi.MUTED)
 	await get_tree().create_timer(0.45).timeout
 	if is_instance_valid(_dice_face_a):
-		_dice_face_a.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98, 0.92))
+		UiIcon.set_tint(_dice_face_a, Color(0.92, 0.94, 0.98, 0.92))
 	if is_instance_valid(_dice_face_b):
-		_dice_face_b.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98, 0.92))
+		UiIcon.set_tint(_dice_face_b, Color(0.92, 0.94, 0.98, 0.92))
 	_set_dice_ambiance(GameData.STARDUST_COLOR, 0.18)
 
 
@@ -1278,19 +1277,30 @@ func _rebuild_refine_ladder() -> void:
 		c.queue_free()
 	var stage_now := int(_refine_state.get("stage", 0))
 	for row in REFINING_LADDER:
-		var lab := Label.new()
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 4)
 		var st: int = int(row.stage)
-		var mark := "▸" if st == stage_now else "·"
-		lab.text = "%s Stage %d · reach %s%% · %sx payout" % [
-			mark, st, str(row.cumulative_pct), _fmt_mult(float(row.mult))
-		]
-		lab.add_theme_font_size_override("font_size", 14)
 		var col := Color("#FDE68A") if st == stage_now else ClientUi.MUTED
 		if st < stage_now:
 			col = ClientUi.SUCCESS
+		if st == stage_now:
+			line.add_child(UiIcon.make("play", col, 12.0))
+		else:
+			var mark := Label.new()
+			mark.text = "·"
+			mark.add_theme_font_size_override("font_size", 14)
+			mark.add_theme_color_override("font_color", col)
+			ClientUi.apply_body_font(mark)
+			line.add_child(mark)
+		var lab := Label.new()
+		lab.text = "Stage %d · reach %s%% · %sx payout" % [
+			st, str(row.cumulative_pct), _fmt_mult(float(row.mult))
+		]
+		lab.add_theme_font_size_override("font_size", 14)
 		lab.add_theme_color_override("font_color", col)
 		ClientUi.apply_body_font(lab)
-		_refine_ladder_box.add_child(lab)
+		line.add_child(lab)
+		_refine_ladder_box.add_child(line)
 
 
 func _restore_refine_session() -> void:
@@ -1710,9 +1720,9 @@ func _start_dice_roll_loop() -> void:
 
 func _cycle_dice_faces() -> void:
 	if is_instance_valid(_dice_face_a):
-		_dice_face_a.text = DICE_FACES[randi() % DICE_FACES.size()]
+		_set_die_face(_dice_face_a, DICE_FACES[randi() % DICE_FACES.size()])
 	if is_instance_valid(_dice_face_b):
-		_dice_face_b.text = DICE_FACES[randi() % DICE_FACES.size()]
+		_set_die_face(_dice_face_b, DICE_FACES[randi() % DICE_FACES.size()])
 
 
 func _stop_dice_roll_loop() -> void:

@@ -50,7 +50,8 @@ static func _plain_for_class(class_key: String) -> String:
 		"Vanguard":
 			return _STRENGTH_PRIMARY % "Vanguard"
 		"Astral Warden":
-			return _STRENGTH_PRIMARY % "Astral Warden"
+			# "an" before vowel sound — Astral Warden.
+			return _STRENGTH_PRIMARY.replace("As a %s,", "As an %s,") % "Astral Warden"
 		_:
 			return _STRENGTH_PRIMARY % "Vanguard"
 

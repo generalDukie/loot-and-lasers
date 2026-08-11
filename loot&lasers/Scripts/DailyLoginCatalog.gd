@@ -68,7 +68,7 @@ static func reward_icon_id(rewards: Dictionary) -> String:
 			return "shield"
 		return "package"
 	if int(rewards.get("nova_crystals", 0)) > 0:
-		return "sparkles"
+		return "nova"
 	if int(rewards.get("experience", 0)) > 0:
 		return "star"
 	if int(rewards.get("fuel", 0)) > 0:
@@ -80,11 +80,13 @@ static func reward_icon_id(rewards: Dictionary) -> String:
 
 static func reward_accent(rewards: Dictionary) -> Color:
 	if int(rewards.get("nova_crystals", 0)) > 0:
-		return ClientUi.VIOLET
+		return CurrencyIcon.NOVA_GOLD
 	if rewards.has("item_rarity"):
 		return ClientUi.GOLD
 	if int(rewards.get("experience", 0)) > 0:
-		return ClientUi.CYAN
+		return ClientUi.BRAND_GRAD_CYAN
+	if int(rewards.get("stardust", 0)) > 0:
+		return GameData.STARDUST_COLOR
 	if int(rewards.get("fuel", 0)) > 0:
 		return ClientUi.WARNING
 	return ClientUi.CYAN_SOFT

@@ -144,11 +144,10 @@ func _show_daily_login_choice_prompt() -> void:
 	col.add_theme_constant_override("separation", 12)
 	sheet.add_child(col)
 
-	var icon_lab := Label.new()
-	icon_lab.text = "🎁"
-	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lab.add_theme_font_size_override("font_size", 48)
-	col.add_child(icon_lab)
+	var icon_host := CenterContainer.new()
+	icon_host.custom_minimum_size = Vector2(56, 56)
+	col.add_child(icon_host)
+	CurrencyIcon.fill_glyph_host(icon_host, "gift", 48.0, ClientUi.CYAN)
 
 	var title_lab := Label.new()
 	title_lab.text = "Daily Login Rewards"
@@ -566,9 +565,9 @@ func _make_rail() -> Control:
 	console_label.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.82))
 	ClientUi.apply_display_font(console_label)
 	console_header.add_child(console_label)
-	var online := Label.new()
-	online.text = "●"
-	online.add_theme_color_override("font_color", ClientUi.CYAN)
+	var online := CenterContainer.new()
+	online.custom_minimum_size = Vector2(14, 14)
+	online.add_child(UiIcon.make("circle", ClientUi.CYAN, 10.0))
 	console_header.add_child(online)
 
 	col.add_child(_make_operative_panel())
@@ -1088,6 +1087,9 @@ func _on_nav_pressed(path: String) -> void:
 func try_begin_page_nav(path: String) -> bool:
 	if path.is_empty():
 		return false
+	if TutorialManager.locks_combat_navigation() and has_combat_replay_overlay():
+		Notify.blocked("Finish the tutorial fight first")
+		return false
 	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID) and path == GameManager.SCENE_VOID:
 		return false
 	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR) and path == GameManager.SCENE_SHIP:
@@ -1138,6 +1140,11 @@ func show_page(path: String) -> void:
 		GameManager.SCENE_MISSION_COMBAT,
 		GameManager.SCENE_GALAXY_COMBAT,
 	]:
+		if TutorialManager.locks_combat_navigation() and has_combat_replay_overlay():
+			Notify.blocked("Finish the tutorial fight first")
+			_page_swap_busy = false
+			_page_nav_pending = false
+			return
 		clear_overlays()
 	_page_path = path
 	GameManager.pending_page_path = path
@@ -1346,10 +1353,24 @@ func has_overlay() -> bool:
 	return _overlay_host != null and is_instance_valid(_overlay_host) and _overlay_host.get_child_count() > 0
 
 
+func has_combat_replay_overlay() -> bool:
+	if _overlay_host == null or not is_instance_valid(_overlay_host):
+		return false
+	for child in _overlay_host.get_children():
+		if child.has_method("handle_external_dismiss"):
+			return true
+	return false
+
+
 func clear_overlays() -> void:
 	if _overlay_host == null or not is_instance_valid(_overlay_host):
 		return
+	if TutorialManager.locks_combat_navigation() and has_combat_replay_overlay():
+		Notify.blocked("Finish the tutorial fight first")
+		return
 	for child in _overlay_host.get_children():
+		if child.has_method("handle_external_dismiss"):
+			child.handle_external_dismiss()
 		child.queue_free()
 	_overlay_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 

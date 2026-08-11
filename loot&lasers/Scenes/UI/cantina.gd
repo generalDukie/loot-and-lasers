@@ -3,7 +3,6 @@ extends Control
 ## Active missions route to mission_run (Godot split; web stays on same page).
 
 const FUEL_COLOR := Color("#39FF14")
-const XP_COLOR := Color("#00E5FF")
 const STARDUST_COLOR := Color("#E879F9")
 
 var _list: HBoxContainer
@@ -28,6 +27,8 @@ var _music_on := true
 var _detail_open := false
 var _detail_offer: Dictionary = {}
 var _detail_tint := Color("#FF9E4F")
+var _view_rewards_btn: Button
+var _reward_sheet_host: Control
 
 
 func _ready() -> void:
@@ -37,11 +38,18 @@ func _ready() -> void:
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_changed):
 		TutorialManager.tutorial_changed.connect(_on_tutorial_changed)
+	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
+		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
 	await _boot()
+	_sync_view_rewards_cta()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_render()
+
+
+func _on_combat_return_changed() -> void:
+	_sync_view_rewards_cta()
 
 
 func _on_tutorial_changed(_unused = null) -> void:
@@ -105,16 +113,29 @@ func _build() -> void:
 	fuel_sb.content_margin_top = 4
 	fuel_sb.content_margin_bottom = 4
 	fuel_panel.add_theme_stylebox_override("panel", fuel_sb)
-	fuel_panel.add_child(_fuel_chip)
+	var fuel_row := HBoxContainer.new()
+	fuel_row.add_theme_constant_override("separation", 6)
+	fuel_panel.add_child(fuel_row)
+	fuel_row.add_child(UiIcon.make("fuel", FUEL_COLOR, 15.0))
+	fuel_row.add_child(_fuel_chip)
 	controls.add_child(fuel_panel)
 
 	_buy_fuel_btn = Button.new()
-	_buy_fuel_btn.text = "+20 · 10💎"
+	_buy_fuel_btn.text = "+20 · 10"
+	CurrencyIcon.apply_button_cost(_buy_fuel_btn, 15.0)
 	ClientUi.apply_ghost_button(_buy_fuel_btn)
 	_buy_fuel_btn.add_theme_font_size_override("font_size", 15)
 	_buy_fuel_btn.add_theme_color_override("font_color", ClientUi.CYAN)
 	_buy_fuel_btn.pressed.connect(_on_buy_fuel)
 	controls.add_child(_buy_fuel_btn)
+
+	_view_rewards_btn = Button.new()
+	_view_rewards_btn.text = "VIEW REWARDS"
+	_view_rewards_btn.visible = false
+	ClientUi.apply_primary_button(_view_rewards_btn)
+	_view_rewards_btn.add_theme_font_size_override("font_size", 15)
+	_view_rewards_btn.pressed.connect(_on_view_rewards)
+	controls.add_child(_view_rewards_btn)
 
 	# Mining banner — web copy
 	_mining_banner = PanelContainer.new()
@@ -339,6 +360,13 @@ func _build() -> void:
 	_status = ClientUi.make_status()
 	root.add_child(_status)
 
+	_reward_sheet_host = Control.new()
+	_reward_sheet_host.visible = false
+	_reward_sheet_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_reward_sheet_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reward_sheet_host.z_index = 90
+	add_child(_reward_sheet_host)
+
 
 func _boot() -> void:
 	_busy = true
@@ -387,24 +415,26 @@ func _update_music_btn() -> void:
 
 
 func _render() -> void:
+	_sync_view_rewards_cta()
 	for c in _list.get_children():
 		c.queue_free()
 	var ch: Dictionary = GameManager.active_character
 	var max_fuel := ShipRules.effective_max_fuel(ch)
 	if max_fuel <= 0:
 		max_fuel = ShipRules.FUEL_MAX_BASE
-	_fuel_chip.text = "⛽  %s/%s" % [
+	_fuel_chip.text = "%s/%s" % [
 		CurrencyManager.format_balance(CurrencyManager.CURRENCY_FUEL),
 		max_fuel,
 	]
 
 	var purchases := int(ch.get("fuel_purchases", 0))
 	var left := maxi(0, ShopManager.FUEL_PURCHASE_MAX - purchases)
-	_buy_fuel_btn.text = "+%s · %s💎 (%s)" % [
+	_buy_fuel_btn.text = "+%s · %s (%s)" % [
 		ShopManager.FUEL_PURCHASE_AMOUNT,
 		ShopManager.FUEL_PURCHASE_COST,
 		left,
 	]
+	CurrencyIcon.apply_button_cost(_buy_fuel_btn, 15.0)
 	var gate: Dictionary = ShopManager.can_buy_fuel()
 	var can_pay := CurrencyManager.can_afford(
 		CurrencyManager.CURRENCY_NOVA,
@@ -419,7 +449,7 @@ func _render() -> void:
 
 	_mining_banner.visible = MiningManager.is_mining_busy()
 	if MiningManager.is_mining_busy():
-		_stage_hint.text = "⛏ Mining in progress"
+		_stage_hint.text = "Mining in progress"
 	else:
 		_stage_hint.text = "Hover a patron for the full job · click to accept"
 
@@ -524,15 +554,12 @@ func _make_patron(offer: Dictionary) -> Button:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.add_child(col)
 
-	var emoji := Label.new()
-	emoji.text = str(patron.get("emoji", "🧑‍🚀"))
-	emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emoji.add_theme_font_size_override("font_size", 28)
-	emoji.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
-	emoji.add_theme_constant_override("shadow_offset_x", 1)
-	emoji.add_theme_constant_override("shadow_offset_y", 1)
-	emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(emoji)
+	var glyph_host := CenterContainer.new()
+	glyph_host.custom_minimum_size = Vector2(36, 36)
+	glyph_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(glyph_host)
+	var patron_glyph := str(patron.get("emoji", "user-round"))
+	CurrencyIcon.fill_glyph_host(glyph_host, patron_glyph, 28.0, Color.WHITE)
 
 	var name_l := Label.new()
 	name_l.text = str(patron.get("name", "Patron"))
@@ -631,7 +658,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	# Authoritative preview values from Node (GetMissionBoard) — never recomputed here.
 	var xp_val := int(offer.get("preview_xp", 0))
 	var sd_val := int(offer.get("preview_stardust", 0))
-	var dur := int(offer.get("display_duration_seconds", offer.get("duration_seconds", 0)))
+	var fuel_txt := _fmt_offer_fuel(offer)
 
 	var card_style := ClientUi.painted_panel_style(
 		Color(0.05, 0.045, 0.08, 0.97), Color(tint, 0.55), 18, 2
@@ -675,42 +702,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	ClientUi.apply_display_font(name_l)
 	titles.add_child(name_l)
 
-	var loc := Label.new()
-	loc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	loc.text = "📍  %s" % str(offer.get("location", "?"))
-	loc.add_theme_font_size_override("font_size", 21)
-	loc.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(loc)
-	titles.add_child(loc)
-
-	var dur_row := PanelContainer.new()
-	dur_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dur_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var dur_style := ClientUi.painted_panel_style(
-		Color(0.1, 0.11, 0.14, 0.85), Color(0.35, 0.4, 0.48, 0.4), 12, 1
-	)
-	dur_style.content_margin_left = 14
-	dur_style.content_margin_right = 14
-	dur_style.content_margin_top = 10
-	dur_style.content_margin_bottom = 10
-	dur_row.add_theme_stylebox_override("panel", dur_style)
-	_hover_body.add_child(dur_row)
-	var dur_inner := HBoxContainer.new()
-	dur_inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dur_inner.add_theme_constant_override("separation", 10)
-	dur_row.add_child(dur_inner)
-	var clock := Label.new()
-	clock.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	clock.text = "⏱"
-	clock.add_theme_font_size_override("font_size", 24)
-	dur_inner.add_child(clock)
-	var dur_lab := Label.new()
-	dur_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dur_lab.text = MissionBoard.format_duration(dur)
-	dur_lab.add_theme_font_size_override("font_size", 24)
-	dur_lab.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(dur_lab)
-	dur_inner.add_child(dur_lab)
+	titles.add_child(_make_location_row(str(offer.get("location", "?")), 21))
 
 	var desc := Label.new()
 	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -725,9 +717,9 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	rewards.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rewards.add_theme_constant_override("separation", 12)
 	_hover_body.add_child(rewards)
-	rewards.add_child(_make_reward_tile("★", str(xp_val), "XP", XP_COLOR))
-	rewards.add_child(_make_reward_tile("✦", str(sd_val), "Stardust", STARDUST_COLOR))
-	rewards.add_child(_make_reward_tile("🎁", "Chance", "Variety of items", ClientUi.GOLD))
+	rewards.add_child(_make_reward_tile("", fuel_txt, "Fuel", FUEL_COLOR, false, "fuel"))
+	rewards.add_child(_make_reward_tile("star", str(xp_val), "XP", Color.WHITE, true))
+	rewards.add_child(_make_reward_tile("sparkle", str(sd_val), "Stardust", STARDUST_COLOR))
 
 	var footer := Label.new()
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -822,7 +814,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	# Authoritative preview values from Node (GetMissionBoard) — never recomputed here.
 	var xp_val := int(offer.get("preview_xp", 0))
 	var sd_val := int(offer.get("preview_stardust", 0))
-	var dur := int(offer.get("display_duration_seconds", offer.get("duration_seconds", 0)))
+	var fuel_txt := _fmt_offer_fuel(offer)
 
 	var card_style := ClientUi.painted_panel_style(
 		Color(0.06, 0.055, 0.09, 0.98), Color(0.35, 0.4, 0.48, 0.55), 18, 1
@@ -863,21 +855,14 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	ClientUi.apply_display_font(name_l)
 	titles.add_child(name_l)
 
-	var loc := Label.new()
-	loc.text = "📍  %s" % str(offer.get("location", "?"))
-	loc.add_theme_font_size_override("font_size", 19)
-	loc.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(loc)
-	titles.add_child(loc)
+	titles.add_child(_make_location_row(str(offer.get("location", "?")), 19))
 
 	var close_btn := Button.new()
-	close_btn.text = "✕"
+	close_btn.text = ""
 	close_btn.flat = true
 	close_btn.focus_mode = Control.FOCUS_NONE
 	close_btn.custom_minimum_size = Vector2(48, 48)
-	close_btn.add_theme_font_size_override("font_size", 24)
-	close_btn.add_theme_color_override("font_color", ClientUi.MUTED)
-	close_btn.add_theme_color_override("font_hover_color", ClientUi.TEXT)
+	UiIcon.set_button_icon(close_btn, "x", ClientUi.MUTED, 22.0)
 	close_btn.pressed.connect(_close_mission_sheet)
 	head.add_child(close_btn)
 
@@ -906,32 +891,6 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 		art_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		art_host.add_child(art_tex)
 
-	# Full-width duration bar
-	var dur_row := PanelContainer.new()
-	dur_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var dur_style := ClientUi.painted_panel_style(
-		Color(0.1, 0.11, 0.14, 0.9), Color(0.35, 0.4, 0.48, 0.4), 12, 1
-	)
-	dur_style.content_margin_left = 14
-	dur_style.content_margin_right = 14
-	dur_style.content_margin_top = 10
-	dur_style.content_margin_bottom = 10
-	dur_row.add_theme_stylebox_override("panel", dur_style)
-	_preview_body.add_child(dur_row)
-	var dur_inner := HBoxContainer.new()
-	dur_inner.add_theme_constant_override("separation", 10)
-	dur_row.add_child(dur_inner)
-	var clock := Label.new()
-	clock.text = "⏱"
-	clock.add_theme_font_size_override("font_size", 21)
-	dur_inner.add_child(clock)
-	var dur_lab := Label.new()
-	dur_lab.text = MissionBoard.format_duration(dur)
-	dur_lab.add_theme_font_size_override("font_size", 21)
-	dur_lab.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(dur_lab)
-	dur_inner.add_child(dur_lab)
-
 	# Description
 	var desc := Label.new()
 	desc.text = str(offer.get("description", ""))
@@ -951,9 +910,9 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	var reward_row := HBoxContainer.new()
 	reward_row.add_theme_constant_override("separation", 10)
 	_preview_body.add_child(reward_row)
-	reward_row.add_child(_make_reward_tile("★", str(xp_val), "XP", XP_COLOR))
-	reward_row.add_child(_make_reward_tile("✦", str(sd_val), "Stardust", STARDUST_COLOR))
-	reward_row.add_child(_make_reward_tile("🎁", "Chance", "Variety of items", ClientUi.GOLD))
+	reward_row.add_child(_make_reward_tile("", fuel_txt, "Fuel", FUEL_COLOR, false, "fuel"))
+	reward_row.add_child(_make_reward_tile("star", str(xp_val), "XP", Color.WHITE, true))
+	reward_row.add_child(_make_reward_tile("sparkle", str(sd_val), "Stardust", STARDUST_COLOR))
 
 	# Status + Start Mission — fuel does not gate launch (Nakama start has no debit).
 	var disabled := state == "Locked" or state == "Busy"
@@ -1045,20 +1004,63 @@ func _make_sheet_quest_icon(patron: Dictionary, tint: Color) -> PanelContainer:
 	wrap_style.content_margin_top = 6
 	wrap_style.content_margin_bottom = 6
 	wrap.add_theme_stylebox_override("panel", wrap_style)
-	var emoji := Label.new()
-	emoji.text = str(patron.get("emoji", "🤖"))
-	emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emoji.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	emoji.add_theme_font_size_override("font_size", 45)
-	wrap.add_child(emoji)
+	var glyph_host := CenterContainer.new()
+	glyph_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	wrap.add_child(glyph_host)
+	CurrencyIcon.fill_glyph_host(
+		glyph_host,
+		str(patron.get("emoji", "bot")),
+		45.0,
+		tint.lightened(0.15)
+	)
 	return wrap
 
 
-func _make_reward_tile(icon: String, value: String, label: String, color: Color) -> PanelContainer:
+func _make_location_row(location: String, font_size: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 6)
+	row.add_child(UiIcon.make("map-pin", ClientUi.MUTED, float(font_size) * 0.9))
+	var loc := Label.new()
+	loc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	loc.text = location
+	loc.add_theme_font_size_override("font_size", font_size)
+	loc.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(loc)
+	row.add_child(loc)
+	return row
+
+
+func _offer_fuel_cost(offer: Dictionary) -> float:
+	## Display cost: minutes from mission length, nearest 0.25 (30s→0.5, 2m30s→2.5, 10m→10).
+	var secs := int(offer.get("display_duration_seconds", offer.get("duration_seconds", 0)))
+	if offer.has("fuel_cost") and typeof(offer["fuel_cost"]) in [TYPE_FLOAT, TYPE_INT]:
+		return maxf(0.0, snappedf(float(offer["fuel_cost"]), 0.25))
+	return maxf(0.0, snappedf(float(secs) / 60.0, 0.25))
+
+
+func _fmt_offer_fuel(offer: Dictionary) -> String:
+	var v := _offer_fuel_cost(offer)
+	if is_equal_approx(v, roundf(v)):
+		return str(int(round(v)))
+	return ("%0.2f" % v).rstrip("0").rstrip(".")
+
+
+func _make_reward_tile(
+	icon: String,
+	value: String,
+	label: String,
+	color: Color,
+	xp_gradient := false,
+	currency_icon := ""
+) -> PanelContainer:
 	var tile := PanelContainer.new()
 	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var border := Color(ClientUi.BRAND_GRAD_CYAN, 0.45) if xp_gradient else Color(color, 0.45)
+	if not xp_gradient:
+		border = Color(0.32, 0.36, 0.42, 0.4) if color == ClientUi.GOLD else Color(color, 0.4)
 	var tile_style := ClientUi.painted_panel_style(
-		Color(0.09, 0.1, 0.13, 0.9), Color(0.32, 0.36, 0.42, 0.4), 12, 1
+		Color(0.09, 0.1, 0.13, 0.9), border, 12, 1
 	)
 	tile_style.content_margin_left = 10
 	tile_style.content_margin_right = 10
@@ -1069,26 +1071,49 @@ func _make_reward_tile(icon: String, value: String, label: String, color: Color)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_theme_constant_override("separation", 4)
 	tile.add_child(col)
-	var ic := Label.new()
-	ic.text = icon
-	ic.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ic.add_theme_font_size_override("font_size", 24)
-	ic.add_theme_color_override("font_color", color)
-	col.add_child(ic)
-	var val := Label.new()
-	val.text = value
-	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	val.add_theme_font_size_override("font_size", 29)
-	val.add_theme_color_override("font_color", color)
-	ClientUi.apply_display_font(val)
-	col.add_child(val)
-	var lab := Label.new()
-	lab.text = label
-	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 16)
-	lab.add_theme_color_override("font_color", color)
-	ClientUi.apply_display_font(lab)
-	col.add_child(lab)
+	if xp_gradient:
+		var star_host := CenterContainer.new()
+		star_host.custom_minimum_size = Vector2(28, 28)
+		star_host.add_child(UiIcon.make(
+			icon if CurrencyIcon.is_asset_glyph(icon) else "star",
+			ClientUi.BRAND_GRAD_CYAN,
+			24.0
+		))
+		col.add_child(star_host)
+		col.add_child(BrandGradientTitle.make(value, 29, true))
+		col.add_child(BrandGradientTitle.make(label, 16, true))
+	else:
+		if not currency_icon.is_empty():
+			var icon_host := CenterContainer.new()
+			icon_host.custom_minimum_size = Vector2(28, 28)
+			icon_host.add_child(CurrencyIcon.make(currency_icon, 24.0))
+			col.add_child(icon_host)
+		elif CurrencyIcon.is_asset_glyph(icon):
+			var lucide_host := CenterContainer.new()
+			lucide_host.custom_minimum_size = Vector2(28, 28)
+			lucide_host.add_child(UiIcon.make(icon, color, 24.0))
+			col.add_child(lucide_host)
+		else:
+			var ic := Label.new()
+			ic.text = icon
+			ic.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			ic.add_theme_font_size_override("font_size", 24)
+			ic.add_theme_color_override("font_color", color)
+			col.add_child(ic)
+		var val := Label.new()
+		val.text = value
+		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		val.add_theme_font_size_override("font_size", 29)
+		val.add_theme_color_override("font_color", color)
+		ClientUi.apply_display_font(val)
+		col.add_child(val)
+		var lab := Label.new()
+		lab.text = label
+		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lab.add_theme_font_size_override("font_size", 16)
+		lab.add_theme_color_override("font_color", color)
+		ClientUi.apply_display_font(lab)
+		col.add_child(lab)
 	return tile
 
 
@@ -1140,6 +1165,27 @@ func _on_launch(offer: Dictionary) -> void:
 			_status.text = err
 		return
 	GameManager.go_mission_run()
+
+
+func _sync_view_rewards_cta() -> void:
+	if not is_instance_valid(_view_rewards_btn):
+		return
+	var show := CombatReturnManager.is_for_kind("mission")
+	_view_rewards_btn.visible = show
+	if show:
+		var settling := CombatReturnManager.state == CombatReturnManager.STATE_SETTLING
+		_view_rewards_btn.disabled = settling or _busy
+		_view_rewards_btn.text = "SETTLING…" if settling else "VIEW REWARDS"
+
+
+func _on_view_rewards() -> void:
+	if _busy:
+		return
+	_busy = true
+	_view_rewards_btn.disabled = true
+	await CombatReturnManager.present_rewards(_reward_sheet_host)
+	_busy = false
+	_sync_view_rewards_cta()
 
 
 func _on_buy_fuel() -> void:

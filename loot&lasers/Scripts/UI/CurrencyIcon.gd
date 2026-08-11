@@ -11,6 +11,10 @@ const SVG_VIEWBOX := 24.0
 static var _cache: Dictionary = {}
 
 
+## Wallet / Crystal Store gold for Nova Crystals.
+const NOVA_GOLD := Color("#FFD700")
+
+
 static func make(icon_id: String, size: float = DEFAULT_SIZE) -> TextureRect:
 	var tr := TextureRect.new()
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -21,8 +25,122 @@ static func make(icon_id: String, size: float = DEFAULT_SIZE) -> TextureRect:
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	tr.texture_repeat = CanvasItem.TEXTURE_REPEAT_DISABLED
-	tr.texture = _texture(icon_id, size)
+	tr.texture = texture(icon_id, size)
 	return tr
+
+
+static func texture(icon_id: String, size: float = DEFAULT_SIZE) -> Texture2D:
+	return _texture(icon_id, size)
+
+
+## Prefix a cost button with the Nova glyph (set `btn.text` without emoji first).
+static func apply_button_cost(btn: Button, size: float = 16.0) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	btn.icon = texture("nova", size)
+	btn.expand_icon = true
+	btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+	btn.add_theme_constant_override("icon_max_width", int(round(size)))
+
+
+## Icon + amount row for price chips / balance labels.
+static func make_amount_row(
+	amount: Variant,
+	size: float = 16.0,
+	tint: Color = NOVA_GOLD,
+	font_size: int = 15
+) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(make("nova", size))
+	var lab := Label.new()
+	lab.text = str(amount)
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", font_size)
+	lab.add_theme_color_override("font_color", tint.lightened(0.12))
+	row.add_child(lab)
+	return row
+
+
+## True for Lucide/nav asset ids and the Nova currency glyph key.
+static func is_asset_glyph(glyph: String) -> bool:
+	var g := glyph.strip_edges().to_lower()
+	if g.is_empty():
+		return false
+	if g == "nova":
+		return true
+	for i in g.length():
+		var ch := g[i]
+		var ok := (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9") or ch == "-"
+		if not ok:
+			return false
+	return true
+
+
+## Fill a CenterContainer (or any Control) with Nova / Lucide / emoji glyph.
+static func fill_glyph_host(
+	host: Control,
+	glyph: String,
+	size: float = 32.0,
+	tint: Color = Color.WHITE
+) -> void:
+	if host == null or not is_instance_valid(host):
+		return
+	while host.get_child_count() > 0:
+		var c := host.get_child(0)
+		host.remove_child(c)
+		c.free()
+	var g := glyph.strip_edges()
+	if g.is_empty():
+		g = "orbit"
+	if g.to_lower() == "nova":
+		host.add_child(make("nova", size))
+		return
+	if is_asset_glyph(g):
+		host.add_child(UiIcon.make(g, tint, size))
+		return
+	var lab := Label.new()
+	lab.text = g
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", int(round(size * 0.9)))
+	host.add_child(lab)
+
+
+static func planet_uses_nova_glyph(planet: Dictionary) -> bool:
+	var g := str(planet.get("icon", "")).strip_edges()
+	return g.to_lower() == "nova"
+
+
+## Apply planet chart glyph onto a world button (Nova / Lucide / emoji).
+static func apply_planet_button_glyph(btn: Button, planet: Dictionary, font_size: int = 23) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	var g := str(planet.get("icon", "orbit")).strip_edges()
+	var tint: Color = planet.get("color", ClientUi.CYAN) if planet.get("color", null) is Color else ClientUi.CYAN
+	if g.to_lower() == "nova":
+		btn.text = ""
+		btn.icon = texture("nova", float(font_size))
+		btn.expand_icon = true
+		btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+		btn.add_theme_constant_override("icon_max_width", font_size)
+		return
+	if is_asset_glyph(g):
+		btn.text = ""
+		btn.icon = UiIcon.texture(g)
+		btn.expand_icon = true
+		btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+		btn.add_theme_constant_override("icon_max_width", font_size)
+		UiIcon.apply_button_icon_colors(btn, tint)
+		return
+	btn.icon = null
+	btn.text = g if not g.is_empty() else "orbit"
+	btn.add_theme_font_size_override("font_size", font_size)
 
 
 static func _display_scale() -> float:

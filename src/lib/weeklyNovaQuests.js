@@ -11,7 +11,7 @@ export const WEEKLY_NOVA_QUESTS = [
     desc: "Win 5 Arena battles",
     goal: 5,
     reward: 8,
-    emoji: "⚔️",
+    emoji: "swords",
   },
   {
     id: "dungeon",
@@ -20,7 +20,7 @@ export const WEEKLY_NOVA_QUESTS = [
     desc: "Win 3 dungeon fights",
     goal: 3,
     reward: 7,
-    emoji: "🧭",
+    emoji: "compass",
   },
   {
     id: "missions",
@@ -29,7 +29,7 @@ export const WEEKLY_NOVA_QUESTS = [
     desc: "Complete 5 missions",
     goal: 5,
     reward: 5,
-    emoji: "🍺",
+    emoji: "beer",
   },
 ];
 

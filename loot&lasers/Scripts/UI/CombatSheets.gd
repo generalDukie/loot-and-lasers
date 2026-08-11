@@ -56,13 +56,14 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	ClientUi.apply_display_font(eyebrow)
 	col.add_child(eyebrow)
 
-	var icon := Label.new()
-	icon.text = "◆" if won else "◇"
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.add_theme_font_size_override("font_size", 37)
-	icon.add_theme_color_override("font_color", accent)
-	ClientUi.apply_display_font(icon)
-	col.add_child(icon)
+	var icon_host := CenterContainer.new()
+	icon_host.custom_minimum_size = Vector2(40, 40)
+	col.add_child(icon_host)
+	icon_host.add_child(UiIcon.make(
+		"diamond-fill" if won else "diamond",
+		accent,
+		37.0
+	))
 
 	var heading := Label.new()
 	if mode == "dungeon":
@@ -100,14 +101,14 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	var xp := int(summary.get("xp", 0))
 	var stardust := int(summary.get("stardust", 0))
 	if xp > 0 or summary.has("xp"):
-		col.add_child(_reward_row("EXPERIENCE", "+%s" % xp, ClientUi.CYAN, "⚡"))
+		col.add_child(_reward_row_xp("+%s" % xp))
 	if stardust > 0 or summary.has("stardust"):
-		col.add_child(_reward_row("STARDUST", "+%s" % stardust, ClientUi.GOLD, "✦"))
+		col.add_child(_reward_row_stardust("+%s" % stardust))
 	if summary.has("rating_delta"):
 		var delta := int(summary.get("rating_delta", 0))
 		var dcol := Color("#FBBF24") if delta >= 0 else Color("#FB7185")
 		var dtxt := ("+%s" % delta) if delta >= 0 else str(delta)
-		col.add_child(_reward_row("ARENA RATING", dtxt, dcol, "⚔"))
+		col.add_child(_reward_row("ARENA RATING", dtxt, dcol, "trophy"))
 
 	# Reward items (gear / stim / junk): glyph + name + rarity + type inline, full
 	# stats via the shared backpack inspect popup on hover.
@@ -472,10 +473,14 @@ static func _reward_row(label: String, value: String, color: Color, icon: String
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
-	var ic := Label.new()
-	ic.text = icon
-	ic.add_theme_font_size_override("font_size", 24)
-	row.add_child(ic)
+	if CurrencyIcon.is_asset_glyph(icon):
+		row.add_child(UiIcon.make(icon, color, 24.0))
+	else:
+		var ic := Label.new()
+		ic.text = icon
+		ic.add_theme_font_size_override("font_size", 24)
+		ic.add_theme_color_override("font_color", color)
+		row.add_child(ic)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 0)
@@ -495,6 +500,61 @@ static func _reward_row(label: String, value: String, color: Color, icon: String
 	return panel
 
 
+static func _reward_row_stardust(value: String) -> PanelContainer:
+	var color := GameData.STARDUST_COLOR
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(0.04, 0.05, 0.08, 0.95), Color(color, 0.45), 10, 1)
+	)
+	TutorialManager.tag_target(panel, "combat-reward-stardust")
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	panel.add_child(row)
+	var ic := Label.new()
+	ic.text = "✦"
+	ic.add_theme_font_size_override("font_size", 24)
+	ic.add_theme_color_override("font_color", color)
+	row.add_child(ic)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 0)
+	row.add_child(col)
+	var lab := Label.new()
+	lab.text = "STARDUST"
+	lab.add_theme_font_size_override("font_size", 13)
+	lab.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(lab)
+	col.add_child(lab)
+	var val := Label.new()
+	val.text = value
+	val.add_theme_font_size_override("font_size", 21)
+	val.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(val)
+	col.add_child(val)
+	return panel
+
+
+static func _reward_row_xp(value: String) -> PanelContainer:
+	var border := ClientUi.BRAND_GRAD_CYAN
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override(
+		"panel",
+		ClientUi.painted_panel_style(Color(0.04, 0.05, 0.08, 0.95), Color(border, 0.5), 10, 1)
+	)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	panel.add_child(row)
+	row.add_child(BrandGradientTitle.make("⚡", 24, false))
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 2)
+	row.add_child(col)
+	col.add_child(BrandGradientTitle.make("EXPERIENCE", 13, false))
+	col.add_child(BrandGradientTitle.make(value, 21, false))
+	return panel
+
+
 ## Reward item pane: gear glyph + name + rarity + type inline; hover opens the
 ## shared backpack inspect popup (read-only absolute stats).
 static func _reward_item_pane(item: Dictionary, inspect: ItemInspectPopup) -> PanelContainer:
@@ -506,6 +566,8 @@ static func _reward_item_pane(item: Dictionary, inspect: ItemInspectPopup) -> Pa
 		"panel",
 		ClientUi.painted_panel_style(Color(0.04, 0.05, 0.08, 0.95), Color(tint, 0.5), 10, 1)
 	)
+	if str(item.get("type", "")) == "helmet":
+		TutorialManager.tag_target(panel, "combat-reward-helmet")
 
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE

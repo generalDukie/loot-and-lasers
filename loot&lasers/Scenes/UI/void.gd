@@ -73,13 +73,9 @@ func _build() -> void:
 	header.add_theme_constant_override("separation", 12)
 	root.add_child(header)
 
-	var title := Label.new()
-	title.text = "◉  Void"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 27)
-	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	ClientUi.apply_display_font(title)
-	header.add_child(title)
+	var title_row := UiIcon.make_title_row("circle-dot", "Void", ClientUi.TEXT, 27, 28.0)
+	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title_row)
 
 	var bal := PanelContainer.new()
 	bal.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
@@ -102,10 +98,7 @@ func _build() -> void:
 	var prow := HBoxContainer.new()
 	prow.add_theme_constant_override("separation", 10)
 	_pending_banner.add_child(prow)
-	var picon := Label.new()
-	picon.text = "📦"
-	picon.add_theme_font_size_override("font_size", 27)
-	prow.add_child(picon)
+	prow.add_child(UiIcon.make("package", ClientUi.CYAN, 27.0))
 	_pending_lab = Label.new()
 	_pending_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_pending_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -595,7 +588,7 @@ func _spawn_burst() -> void:
 		Color(0.75, 0.55, 1.0, 1.0),
 		Color(0.55, 0.85, 1.0, 1.0),
 	]
-	var glyphs := ["✦", "✧", "⋆", "·", "✶", "⁕"]
+	var glyphs := ["sparkle", "sparkles", "asterisk"]
 
 	# Soft circular bloom (not a square ColorRect).
 	var bloom := PanelContainer.new()
@@ -620,13 +613,11 @@ func _spawn_burst() -> void:
 
 	# Dense sparkle spray.
 	for i in 36:
-		var spark := Label.new()
-		spark.text = glyphs[i % glyphs.size()]
-		spark.add_theme_font_size_override("font_size", 9 + (i % 5) * 3)
-		spark.add_theme_color_override("font_color", spark_colors[i % spark_colors.size()])
+		var spark_size := 9.0 + float(i % 5) * 3.0
+		var spark := UiIcon.make(glyphs[i % glyphs.size()], spark_colors[i % spark_colors.size()], spark_size)
 		spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		spark.position = origin
-		spark.pivot_offset = Vector2(6, 8)
+		spark.pivot_offset = Vector2(spark_size * 0.5, spark_size * 0.5)
 		spark.scale = Vector2(0.2, 0.2)
 		_burst_layer.add_child(spark)
 		var angle := (float(i) / 36.0) * TAU + randf() * 0.55

@@ -60,27 +60,27 @@ const RACE_ACCENT := {
 
 const RACE_CATALOG := {
 	"Zyrathi": {
-		"emoji": "🐉",
+		"emoji": "alien",
 		"tagline": "Scaled hotheads from the Ember Nebula",
 		"lore": "Dragonfolk with armor for skin and a temper for fuel. They punch first, negotiate later, and insist the smoking crater was 'defensive.' Great at war. Terrible at dinner parties.",
 	},
 	"Cognati": {
-		"emoji": "🤖",
+		"emoji": "bot",
 		"tagline": "Walking spreadsheets with laser opinions",
 		"lore": "Half chrome, half attitude, fully convinced they already simulated this conversation. They run the numbers, win the argument, then blue-screen when someone asks how their day was.",
 	},
 	"Luminae": {
-		"emoji": "🌟",
+		"emoji": "sparkles",
 		"tagline": "Living disco balls with a hero complex",
 		"lore": "Starlight given legs and an ego. They light up corridors, blind friends by accident, and somehow always land on their feet. Bring sunglasses. And maybe a mirror.",
 	},
 	"Grothak": {
-		"emoji": "💪",
+		"emoji": "biceps-flexed",
 		"tagline": "High-gravity tanks who treat walls as suggestions",
 		"lore": "Grew up where the air weighs more than your regrets. Slow to start, impossible to stop, and vaguely offended by doors. If it needs smashing, hire a Grothak. If it needs subtlety… also hire a Grothak, then apologize.",
 	},
 	"Synthara": {
-		"emoji": "🎭",
+		"emoji": "drama",
 		"tagline": "Face-swappers from the Shadow Reach",
 		"lore": "Professional strangers. They borrow faces, walk into restricted zones, and leave with the goods plus your dignity. Trust them? Sure. Just count the spoons afterward.",
 	},
@@ -109,7 +109,6 @@ const STAT_COLORS := {
 ## Web ClassCard / CharacterCreation catalog (src/lib/gameData.js CLASSES).
 const CLASS_CATALOG := {
 	"Vanguard": {
-		"emoji": "⚔",
 		"tagline": "Heavy hitter with reliable Strength damage",
 		"description": "Slow, heavy-hitting powerhouse. Vanguards wade into the thick of it with massive weapons — Strength fuels their damage, not armor.",
 		"primaryStat": "strength",
@@ -121,7 +120,6 @@ const CLASS_CATALOG := {
 		},
 	},
 	"Shadow Operative": {
-		"emoji": "🗡",
 		"tagline": "Dodges attacks and lands devastating critical hits",
 		"description": "Operating from the shadows, these elite agents weave between blows and answer every dodge with a killing strike.",
 		"primaryStat": "agility",
@@ -133,7 +131,6 @@ const CLASS_CATALOG := {
 		},
 	},
 	"Technomancer": {
-		"emoji": "⚡",
 		"tagline": "High burst Tech damage that partially pierces resists",
 		"description": "Blending psionic arts with overclocked tech, Technomancers unleash explosive Tech bursts. Intellect fuels damage — not Tech Resistance.",
 		"primaryStat": "intellect",
@@ -145,7 +142,6 @@ const CLASS_CATALOG := {
 		},
 	},
 	"Astral Warden": {
-		"emoji": "🛡",
 		"tagline": "Strength-fueled survivor with shields and regeneration",
 		"description": "Not a healer — a survivor. Astral Wardens smash through fights with raw strength while layering shields and regeneration to simply refuse to die.",
 		"primaryStat": "strength",
@@ -157,7 +153,6 @@ const CLASS_CATALOG := {
 		},
 	},
 	"Void Runner": {
-		"emoji": "☄",
 		"tagline": "Blazing agility — strikes come in pairs",
 		"description": "Born in the slipstreams between stars, Void Runners fight at a tempo others can't match. They weave, feint, and land a twin strike before the enemy finishes blinking.",
 		"primaryStat": "agility",
@@ -169,7 +164,6 @@ const CLASS_CATALOG := {
 		},
 	},
 	"Cosmic Engineer": {
-		"emoji": "🔧",
 		"tagline": "Gadgets, drones, and status effects win over time",
 		"description": "If it can be built, hacked, or jury-rigged, a Cosmic Engineer is already deploying it. Drones, poisons, burns, and EMPs turn the fight into a war of attrition they always win.",
 		"primaryStat": "intellect",

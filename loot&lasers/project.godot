@@ -62,6 +62,7 @@ CurrencyManager="*res://Autoload/CurrencyManager.gd"
 EquipmentManager="*res://Autoload/EquipmentManager.gd"
 RemoteConfigManager="*res://Autoload/RemoteConfigManager.gd"
 TutorialManager="*res://Autoload/TutorialManager.gd"
+CombatReturnManager="*res://Autoload/CombatReturnManager.gd"
 
 [display]
 

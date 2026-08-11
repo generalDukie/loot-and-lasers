@@ -55,7 +55,7 @@ func _maybe_daily_prompt() -> void:
 	if not await ProgressManager.should_prompt_daily():
 		return
 	_show_branded_prompt(
-		"🎁",
+		"gift",
 		"Daily Login Rewards",
 		"Your daily login reward is ready. Claim it now to keep the streak going.",
 		"Open Rewards",
@@ -111,11 +111,17 @@ func _show_branded_prompt(
 	col.add_theme_constant_override("separation", 12)
 	sheet.add_child(col)
 
-	var icon_lab := Label.new()
-	icon_lab.text = icon
-	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lab.add_theme_font_size_override("font_size", 48)
-	col.add_child(icon_lab)
+	var icon_host := CenterContainer.new()
+	icon_host.custom_minimum_size = Vector2(56, 56)
+	col.add_child(icon_host)
+	if CurrencyIcon.is_asset_glyph(icon):
+		CurrencyIcon.fill_glyph_host(icon_host, icon, 48.0, ClientUi.CYAN)
+	else:
+		var icon_lab := Label.new()
+		icon_lab.text = icon
+		icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		icon_lab.add_theme_font_size_override("font_size", 48)
+		icon_host.add_child(icon_lab)
 
 	var title_lab := Label.new()
 	title_lab.text = title
@@ -285,11 +291,13 @@ func _show_legacy_modal() -> void:
 				err.text = "Names cannot contain numbers"
 				return
 		submit.disabled = true
-		submit.text = "⟳  Saving…"
+		submit.text = "Saving…"
+		UiIcon.apply_leading_icon(submit, "loader-circle", ClientUi.MUTED, 16.0)
 		var res: Dictionary = await AccountManager.set_legacy_name(trimmed)
 		if not res.ok:
 			submit.disabled = false
 			submit.text = "Lock In Legacy Name"
+			submit.icon = null
 			err.text = str(res.get("error", "Try again."))
 			return
 		await AuthManager.fetch_me()

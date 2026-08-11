@@ -3,7 +3,7 @@ extends Control
 
 const FUEL_COLOR := Color("#39FF14")
 const STARDUST_COLOR := Color("#E879F9")
-const NOVA_COLOR := Color("#FBBF24")
+const NOVA_COLOR := Color("#FFD700")
 
 const HULL_THEME := {
 	"scout": {"accent": Color("#38BDF8"), "bay": Color(0.043, 0.071, 0.125), "glow": Color(0.22, 0.74, 0.97, 0.45)},
@@ -38,7 +38,7 @@ func _boot() -> void:
 	await ShipManager.refresh()
 	var mil: Dictionary = await ShipManager.claim_scout_milestone()
 	if mil.ok:
-		_status.text = "🛠️ Scout bay tuned — free Reinforced Fuel Tank T1 installed."
+		_status.text = "Scout bay tuned — free Reinforced Fuel Tank T1 installed."
 	else:
 		_status.text = ""
 		_status.visible = false
@@ -135,7 +135,7 @@ func _populate() -> void:
 		STARDUST_COLOR
 	))
 	_currency_row.add_child(ClientUi.make_currency_chip(
-		"💎",
+		"nova",
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA),
 		NOVA_COLOR
 	))
@@ -218,11 +218,7 @@ func _make_edit_chip(ship_id: String, active_id: String) -> Button:
 	var btn := Button.new()
 	var parts := str(info.get("name", ship_id)).split(" ")
 	var short := parts[parts.size() - 1] if parts.size() > 0 else ship_id
-	btn.text = "%s %s%s" % [
-		str(info.get("emoji", "🚀")),
-		short,
-		" · fly" if ship_id == active_id else "",
-	]
+	btn.text = "%s%s" % [short, " · fly" if ship_id == active_id else ""]
 	btn.add_theme_font_size_override("font_size", 13)
 	ClientUi.apply_display_font(btn)
 	if selected:
@@ -232,6 +228,12 @@ func _make_edit_chip(ship_id: String, active_id: String) -> Button:
 		btn.add_theme_color_override("font_color", accent)
 	else:
 		ClientUi.apply_ghost_button(btn)
+	UiIcon.apply_leading_icon(
+		btn,
+		str(info.get("emoji", "rocket")),
+		accent if selected else ClientUi.MUTED,
+		14
+	)
 	btn.pressed.connect(func() -> void:
 		_edit_ship = ship_id
 		_populate()
@@ -558,7 +560,8 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		pass
 	else:
 		var buy := Button.new()
-		buy.text = "Buy · %s 💎" % str(info.get("cost", 0))
+		buy.text = "Buy · %s" % str(info.get("cost", 0))
+		CurrencyIcon.apply_button_cost(buy, 16.0)
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ClientUi.apply_primary_button(buy)
 		buy.disabled = not CurrencyManager.can_afford(
@@ -595,12 +598,10 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 		Color(accent, 0.12), Color(accent, 0.3), 10, 1
 	))
 	top.add_child(icon_wrap)
-	var icon := Label.new()
-	icon.text = str(cat.get("emoji", "🛠️"))
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon.add_theme_font_size_override("font_size", 27)
-	icon_wrap.add_child(icon)
+	var icon_host := CenterContainer.new()
+	icon_host.custom_minimum_size = Vector2(59, 59)
+	icon_wrap.add_child(icon_host)
+	CurrencyIcon.fill_glyph_host(icon_host, str(cat.get("emoji", "wrench")), 27, accent)
 	var title_col := VBoxContainer.new()
 	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(title_col)
@@ -820,7 +821,7 @@ func _make_mount_card(mount: Dictionary) -> PanelContainer:
 	var detail := Label.new()
 	var price := "%s ✦" % str(mount.get("stardust", 0))
 	if int(mount.get("crystals", 0)) > 0:
-		price += " + %s 💎" % str(mount.get("crystals", 0))
+		price += " + %s Nova" % str(mount.get("crystals", 0))
 	detail.text = "+%s%% speed · %sh · %s" % [
 		str(int(round(float(mount.get("speed", 0)) * 100.0))),
 		str(mount.get("duration_hours", 1)),
@@ -848,7 +849,7 @@ func _on_buy_ship(ship_id: String) -> void:
 	_busy = false
 	if res.ok:
 		_edit_ship = ship_id
-	_finish(res, "🛸 Hull acquired — outfit below, then Activate when ready.")
+	_finish(res, "Hull acquired — outfit below, then Activate when ready.")
 
 
 func _on_activate(ship_id: String) -> void:
@@ -860,7 +861,7 @@ func _on_activate(ship_id: String) -> void:
 	_busy = false
 	if res.ok:
 		_edit_ship = ship_id
-	_finish(res, "🚀 Hull activated.")
+	_finish(res, "Hull activated.")
 
 
 func _on_buy_mod(category: String, cost: int) -> void:
@@ -873,7 +874,7 @@ func _on_buy_mod(category: String, cost: int) -> void:
 	_set_status("Installing mod…")
 	var res: Dictionary = await ShipManager.buy_ship_mod(category, _edit_ship)
 	_busy = false
-	_finish(res, "🛠️ Mod installed.")
+	_finish(res, "Mod installed.")
 
 
 func _on_buy_mount(mount_id: int) -> void:

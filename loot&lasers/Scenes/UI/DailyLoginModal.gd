@@ -266,16 +266,26 @@ func _make_day_card(row: Dictionary) -> Control:
 	day_lbl.add_theme_color_override("font_color", ClientUi.MUTED)
 	vb.add_child(day_lbl)
 
-	vb.add_child(UiIcon.make(DailyLoginCatalog.reward_icon_id(rewards), accent, 20.0))
+	var icon_id := DailyLoginCatalog.reward_icon_id(rewards)
+	if icon_id == "nova":
+		vb.add_child(CurrencyIcon.make("nova", 20.0))
+	else:
+		vb.add_child(UiIcon.make(icon_id, accent, 20.0))
 
-	var amt := Label.new()
-	amt.text = label
-	amt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	amt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ClientUi.apply_body_font(amt)
-	amt.add_theme_font_size_override("font_size", 8)
-	amt.add_theme_color_override("font_color", ClientUi.MUTED)
-	vb.add_child(amt)
+	if int(rewards.get("experience", 0)) > 0 and status != "locked":
+		vb.add_child(BrandGradientTitle.make(label, 8, true))
+	else:
+		var amt := Label.new()
+		amt.text = label
+		amt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		amt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ClientUi.apply_body_font(amt)
+		amt.add_theme_font_size_override("font_size", 8)
+		amt.add_theme_color_override(
+			"font_color",
+			GameData.STARDUST_COLOR if int(rewards.get("stardust", 0)) > 0 and status != "locked" else ClientUi.MUTED
+		)
+		vb.add_child(amt)
 
 	if status == "claimed":
 		var check := Label.new()

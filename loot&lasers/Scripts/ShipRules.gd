@@ -17,24 +17,24 @@ const SHIP_UPGRADE_STEP := 1.08
 
 const SHIP_TYPES := {
 	"scout": {
-		"name": "Recon Scout", "emoji": "🛩️", "cost": 0, "unlock_level": 1,
+		"name": "Recon Scout", "emoji": "satellite", "cost": 0, "unlock_level": 1,
 		"desc": "Standard-issue exploration vessel. Reliable, if unremarkable.",
 		"cost_mult": 1.0, "upgrade_mult": 1.0, "inherent": {},
 	},
 	"frigate": {
-		"name": "Storm Frigate", "emoji": "🚀", "cost": 50000, "unlock_level": 50,
+		"name": "Storm Frigate", "emoji": "rocket", "cost": 50000, "unlock_level": 50,
 		"desc": "Military-grade frigate with reinforced hull plating and salvage magnets.",
 		"cost_mult": 1.10, "upgrade_mult": SHIP_UPGRADE_STEP,
 		"inherent": {"mission_stardust_mult": 0.05},
 	},
 	"cruiser": {
-		"name": "Galaxy Cruiser", "emoji": "🛳️", "cost": 150000, "unlock_level": 100,
+		"name": "Galaxy Cruiser", "emoji": "ship", "cost": 150000, "unlock_level": 100,
 		"desc": "Long-range endurance cruiser with an overcharged AI core.",
 		"cost_mult": 1.21, "upgrade_mult": SHIP_UPGRADE_STEP * SHIP_UPGRADE_STEP,
 		"inherent": {"mission_xp_mult": 0.05, "mission_duration_reduction": 0.03},
 	},
 	"dreadnought": {
-		"name": "Void Dreadnought", "emoji": "🛸", "cost": 400000, "unlock_level": 200,
+		"name": "Void Dreadnought", "emoji": "ship", "cost": 400000, "unlock_level": 200,
 		"desc": "Capital-class warship. The ultimate command vessel.",
 		"cost_mult": 1.331, "upgrade_mult": SHIP_UPGRADE_STEP * SHIP_UPGRADE_STEP * SHIP_UPGRADE_STEP,
 		"inherent": {"mission_stardust_mult": 0.10, "mission_xp_mult": 0.10, "fuel_cost_reduction": 1},
@@ -55,7 +55,7 @@ const SHIP_ORDER: PackedStringArray = ["scout", "frigate", "cruiser", "dreadnoug
 
 const SHIP_MODS := {
 	"fuel_tank": {
-		"name": "Reinforced Fuel Tank", "emoji": "⛽", "category": "Propulsion",
+		"name": "Reinforced Fuel Tank", "emoji": "fuel", "category": "Propulsion",
 		"desc": "Expands your fuel reserves for longer expeditions before refuelling.",
 		"effect_key": "max_fuel_bonus",
 		"tiers": [
@@ -67,7 +67,7 @@ const SHIP_MODS := {
 		],
 	},
 	"fuel_efficiency": {
-		"name": "Fuel Injector Tune", "emoji": "🔧", "category": "Propulsion",
+		"name": "Fuel Injector Tune", "emoji": "wrench", "category": "Propulsion",
 		"desc": "Optimises combustion so every launch burns less fuel.",
 		"effect_key": "fuel_cost_reduction",
 		"tiers": [
@@ -79,7 +79,7 @@ const SHIP_MODS := {
 		],
 	},
 	"warp_drive": {
-		"name": "Warp Drive", "emoji": "🌀", "category": "Propulsion",
+		"name": "Warp Drive", "emoji": "tornado", "category": "Propulsion",
 		"desc": "Folds space to shorten every mission's travel time.",
 		"effect_key": "mission_duration_reduction",
 		"tiers": [
@@ -91,7 +91,7 @@ const SHIP_MODS := {
 		],
 	},
 	"stardust_magnet": {
-		"name": "Stardust Magnet", "emoji": "🧲", "category": "Harvesting",
+		"name": "Stardust Magnet", "emoji": "magnet", "category": "Harvesting",
 		"desc": "Magnetic hull plating draws extra stardust from mission rewards.",
 		"effect_key": "mission_stardust_mult",
 		"tiers": [
@@ -103,7 +103,7 @@ const SHIP_MODS := {
 		],
 	},
 	"neural_accel": {
-		"name": "Neural Accelerator", "emoji": "🧠", "category": "Computing",
+		"name": "Neural Accelerator", "emoji": "brain", "category": "Computing",
 		"desc": "Boosts your shipboard AI for faster combat learning and XP gain.",
 		"effect_key": "mission_xp_mult",
 		"tiers": [
@@ -115,7 +115,7 @@ const SHIP_MODS := {
 		],
 	},
 	"cargo_hold": {
-		"name": "Cargo Hold", "emoji": "📦", "category": "Storage",
+		"name": "Cargo Hold", "emoji": "package", "category": "Storage",
 		"desc": "Expands your cargo bay so you can carry more gear before your inventory fills.",
 		"effect_key": "inventory_cap_bonus",
 		"tiers": [

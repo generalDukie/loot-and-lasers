@@ -779,6 +779,26 @@ static func make_currency_chip(symbol: String, value: Variant, tint: Color = CYA
 		"panel",
 		painted_panel_style(Color(0.04, 0.055, 0.09, 0.95), Color(tint, 0.55), 8, 1)
 	)
+	var key := symbol.strip_edges().to_lower()
+	if key == "nova":
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		var pad := MarginContainer.new()
+		pad.add_theme_constant_override("margin_left", 8)
+		pad.add_theme_constant_override("margin_right", 8)
+		pad.add_theme_constant_override("margin_top", 4)
+		pad.add_theme_constant_override("margin_bottom", 4)
+		pad.add_child(row)
+		chip.add_child(pad)
+		row.add_child(CurrencyIcon.make("nova", 16.0))
+		var amount := Label.new()
+		amount.text = str(value)
+		amount.add_theme_font_size_override("font_size", 15)
+		amount.add_theme_color_override("font_color", tint.lightened(0.18))
+		apply_display_font(amount)
+		row.add_child(amount)
+		return chip
 	var label := Label.new()
 	label.text = "%s  %s" % [symbol, str(value)]
 	label.add_theme_font_size_override("font_size", 15)

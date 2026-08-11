@@ -69,11 +69,7 @@ func _build() -> void:
 	head_row.add_theme_constant_override("separation", 8)
 	header.add_child(head_row)
 
-	var book := Label.new()
-	book.text = "📘"
-	book.add_theme_font_size_override("font_size", 24)
-	book.add_theme_color_override("font_color", ClientUi.CYAN)
-	head_row.add_child(book)
+	head_row.add_child(UiIcon.make("book-open", ClientUi.CYAN, 24.0))
 
 	var title := Label.new()
 	title.text = "Codex & Guide"
@@ -84,12 +80,10 @@ func _build() -> void:
 	head_row.add_child(title)
 
 	var close := Button.new()
-	close.text = "✕"
+	close.text = ""
 	close.flat = true
 	close.custom_minimum_size = Vector2(43, 37)
-	close.add_theme_font_size_override("font_size", 19)
-	close.add_theme_color_override("font_color", ClientUi.MUTED)
-	close.add_theme_color_override("font_hover_color", ClientUi.TEXT)
+	UiIcon.set_button_icon(close, "x", ClientUi.MUTED, 18.0)
 	close.pressed.connect(func() -> void: GameManager.close_overlay())
 	head_row.add_child(close)
 
@@ -137,11 +131,12 @@ func _build() -> void:
 		var sid := str(s.get("id", "start"))
 		var tint := Color(str(s.get("color", "#22D3EE")))
 		var b := Button.new()
-		b.text = "%s  %s" % [str(s.get("icon", "•")), str(s.get("label", "?"))]
+		b.text = str(s.get("label", "?"))
 		b.focus_mode = Control.FOCUS_NONE
 		b.custom_minimum_size = Vector2(0, 37)
 		b.add_theme_font_size_override("font_size", 15)
 		ClientUi.apply_display_font(b)
+		UiIcon.apply_leading_icon(b, str(s.get("icon", "book-open")), tint, 16.0)
 		b.set_meta("section_id", sid)
 		b.set_meta("tint", tint)
 		b.pressed.connect(_show_section.bind(sid))
@@ -222,12 +217,14 @@ func _style_tabs() -> void:
 			b.add_theme_stylebox_override("pressed", _flat(Color(tint, 0.12), Color(tint, 0.6), 8))
 			b.add_theme_color_override("font_color", tint.lightened(0.15))
 			b.add_theme_color_override("font_hover_color", tint.lightened(0.28))
+			UiIcon.apply_button_icon_colors(b, tint.lightened(0.15))
 		else:
 			b.add_theme_stylebox_override("normal", _flat(Color(0.06, 0.08, 0.12, 0.35), Color(0.4, 0.45, 0.55, 0.35), 8))
 			b.add_theme_stylebox_override("hover", _flat(Color(0.1, 0.12, 0.16, 0.7), Color(0.5, 0.55, 0.65, 0.5), 8))
 			b.add_theme_stylebox_override("pressed", _flat(Color(0.08, 0.1, 0.14, 0.6), Color(0.45, 0.5, 0.6, 0.45), 8))
 			b.add_theme_color_override("font_color", ClientUi.MUTED)
 			b.add_theme_color_override("font_hover_color", ClientUi.TEXT)
+			UiIcon.apply_button_icon_colors(b, ClientUi.MUTED)
 		b.modulate = Color.WHITE
 
 

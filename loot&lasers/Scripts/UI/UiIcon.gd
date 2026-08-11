@@ -32,6 +32,7 @@ const ALIAS := {
 	"arena": "zap",
 	"gift": "gift",
 	"book": "book-open",
+	"book-open": "book-open",
 	"codex": "book-open",
 	"volume": "volume-2",
 	"sfx": "volume-2",
@@ -50,7 +51,7 @@ const ALIAS := {
 	"sparkles": "sparkles",
 	"stardust": "sparkles",
 	"clock": "clock",
-	"timer": "clock",
+	"timer": "timer",
 	"map": "map",
 	"scroll": "scroll-text",
 	"antenna": "antenna",
@@ -70,6 +71,60 @@ const ALIAS := {
 	"ok": "circle-check",
 	"fail": "circle-x",
 	"loader": "loader",
+	"loader-circle": "loader-circle",
+	"busy": "loader-circle",
+	"log-in": "log-in",
+	"login": "log-in",
+	"fuel": "fuel",
+	"map-pin": "map-pin",
+	"location": "map-pin",
+	"user-round": "user-round",
+	"alien": "alien",
+	"ghost": "ghost",
+	"hard-hat": "hard-hat",
+	"venetian-mask": "venetian-mask",
+	"bird": "bird",
+	"cat": "cat",
+	"dog": "dog",
+	"rabbit": "rabbit",
+	"rat": "rat",
+	"squirrel": "squirrel",
+	"snail": "snail",
+	"worm": "worm",
+	"fish": "fish",
+	"shell": "shell",
+	"origami": "origami",
+	"bone": "bone",
+	"sparkle": "sparkle",
+	"diamond": "diamond",
+	"diamond-fill": "diamond-fill",
+	"badge-alert": "badge-alert",
+	"list-checks": "list-checks",
+	"asterisk": "asterisk",
+	"ship": "ship",
+	"magnet": "magnet",
+	"compass": "compass",
+	"palette": "palette",
+	"paw-print": "paw-print",
+	"paw": "paw-print",
+	"coins": "coins",
+	"biceps-flexed": "biceps-flexed",
+	"biceps": "biceps-flexed",
+	"syringe": "syringe",
+	"party-popper": "party-popper",
+	"shopping-cart": "shopping-cart",
+	"circle-dot": "circle-dot",
+	"chart-no-axes-combined": "chart-no-axes-combined",
+	"chart": "chart-no-axes-combined",
+	"torus": "torus",
+	"flag": "flag",
+	"dice-1": "dice-1",
+	"dice-2": "dice-2",
+	"dice-3": "dice-3",
+	"dice-4": "dice-4",
+	"dice-5": "dice-5",
+	"dice-6": "dice-6",
+	"triangle": "triangle",
 	"sword": "sword",
 	"axe": "axe",
 	"hammer": "hammer",
@@ -85,6 +140,16 @@ const ALIAS := {
 	"video": "eye",
 	"display": "eye",
 	"earth": "earth",
+	"house": "house",
+	"home": "house",
+	"tornado": "tornado",
+	"circle-dot-dashed": "circle-dot-dashed",
+	"snowflake": "snowflake",
+	"cuboid": "cuboid",
+	"mountain": "mountain",
+	"circle": "circle",
+	"bug": "bug",
+	"infinity": "infinity",
 	"building": "building-2",
 	"hourglass": "hourglass",
 	"plus": "plus",
@@ -199,6 +264,19 @@ static func set_button_icon(btn: Button, icon_id: String, tint: Color, size: flo
 		flat.content_margin_top = 0
 		flat.content_margin_bottom = 0
 		btn.add_theme_stylebox_override(state, flat)
+	apply_button_icon_colors(btn, tint)
+	btn.set_meta("ui_icon_id", resolve_id(icon_id))
+
+
+## Leading Lucide icon beside existing button text (Fight / Skip / etc.).
+static func apply_leading_icon(btn: Button, icon_id: String, tint: Color, size: float = 20.0) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	btn.icon = texture(icon_id)
+	btn.expand_icon = true
+	btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+	btn.add_theme_constant_override("icon_max_width", int(round(size)))
 	apply_button_icon_colors(btn, tint)
 	btn.set_meta("ui_icon_id", resolve_id(icon_id))
 

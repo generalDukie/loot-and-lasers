@@ -2,7 +2,7 @@
  * Space Mining — Node-authoritative AFK stardust sessions.
  *
  * Recovered product model (not location unlock trees):
- *   character picks duration 1–24h → reward snapshotted at start →
+ *   character picks duration 1–12h → reward snapshotted at start →
  *   timer advances on server clock → collect grants committed stardust once.
  *
  * Clients display countdown / preview only. Never trust client clocks or rewards.
@@ -13,7 +13,7 @@ import { computeMiningReward } from "./economyFormulas.js";
 export const MINING_NODE_ID = "stardust_afk";
 export const MINING_NODE_NAME = "Stardust Node";
 export const MINING_HOURS_MIN = 1;
-export const MINING_HOURS_MAX = 24;
+export const MINING_HOURS_MAX = 12;
 
 export const MiningStates = Object.freeze({
   IDLE: "idle",

@@ -23,6 +23,8 @@ var _busy := false
 var _was_on_cooldown := false
 var _tick: Timer
 var _revenge_busy_id := ""
+var _view_rewards_btn: Button
+var _reward_sheet_host: Control
 
 
 func _ready() -> void:
@@ -34,11 +36,18 @@ func _ready() -> void:
 		TutorialManager.tutorial_changed.connect(_on_tutorial_lock_changed)
 	if not TutorialManager.tutorial_finished.is_connected(_on_tutorial_lock_changed):
 		TutorialManager.tutorial_finished.connect(_on_tutorial_lock_changed)
+	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
+		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
 	await _boot()
+	_sync_view_rewards_cta()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_update_lobby_chrome()
+
+
+func _on_combat_return_changed() -> void:
+	_sync_view_rewards_cta()
 
 
 func _on_tutorial_lock_changed(_unused = null) -> void:
@@ -146,8 +155,8 @@ func _build() -> void:
 	chips.add_theme_constant_override("h_separation", 8)
 	chips.add_theme_constant_override("v_separation", 6)
 	stats_col.add_child(chips)
-	_stat_wl = _add_stat_chip(chips, "⚔", "W / L", Color("#60A5FA"))
-	_stat_streak = _add_stat_chip(chips, "🔥", "STREAK", Color("#FB7185"))
+	_stat_wl = _add_stat_chip(chips, "swords", "W / L", Color("#60A5FA"))
+	_stat_streak = _add_stat_chip(chips, "flame", "STREAK", Color("#FB7185"))
 
 	_free_panel = _build_free_battles_panel()
 	TutorialManager.tag_target(_free_panel, "arena-free")
@@ -156,6 +165,14 @@ func _build() -> void:
 	_status = ClientUi.make_status()
 	_status.visible = false
 	root.add_child(_status)
+
+	_view_rewards_btn = Button.new()
+	_view_rewards_btn.text = "VIEW REWARDS"
+	_view_rewards_btn.visible = false
+	_view_rewards_btn.custom_minimum_size.y = 52
+	ClientUi.apply_primary_button(_view_rewards_btn)
+	_view_rewards_btn.pressed.connect(_on_view_rewards)
+	root.add_child(_view_rewards_btn)
 
 	# Single-viewport composition: challengers + paid note + history/news.
 	var body := VBoxContainer.new()
@@ -192,11 +209,15 @@ func _build() -> void:
 	cd_pad.add_theme_constant_override("margin_top", 2)
 	cd_pad.add_theme_constant_override("margin_bottom", 2)
 	_cooldown_panel.add_child(cd_pad)
+	var cd_row := HBoxContainer.new()
+	cd_row.add_theme_constant_override("separation", 6)
+	cd_pad.add_child(cd_row)
+	cd_row.add_child(UiIcon.make("timer", Color(1.0, 0.88, 0.55), 14.0))
 	_cooldown_banner = Label.new()
 	_cooldown_banner.add_theme_font_size_override("font_size", 13)
 	_cooldown_banner.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55))
 	ClientUi.apply_display_font(_cooldown_banner)
-	cd_pad.add_child(_cooldown_banner)
+	cd_row.add_child(_cooldown_banner)
 
 	var cd_spacer := Control.new()
 	cd_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -300,6 +321,34 @@ func _build() -> void:
 	add_child(_tick)
 	_tick.start()
 
+	_reward_sheet_host = Control.new()
+	_reward_sheet_host.visible = false
+	_reward_sheet_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_reward_sheet_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reward_sheet_host.z_index = 80
+	add_child(_reward_sheet_host)
+
+
+func _sync_view_rewards_cta() -> void:
+	if not is_instance_valid(_view_rewards_btn):
+		return
+	var show := CombatReturnManager.is_for_kind("arena")
+	_view_rewards_btn.visible = show
+	if show:
+		var settling := CombatReturnManager.state == CombatReturnManager.STATE_SETTLING
+		_view_rewards_btn.disabled = settling or _busy
+		_view_rewards_btn.text = "SETTLING…" if settling else "VIEW REWARDS"
+
+
+func _on_view_rewards() -> void:
+	if _busy:
+		return
+	_busy = true
+	_view_rewards_btn.disabled = true
+	await CombatReturnManager.present_rewards(_reward_sheet_host)
+	_busy = false
+	_sync_view_rewards_cta()
+
 
 func _apply_refresh_button(btn: Button) -> void:
 	## Web: bg-accent/15 text-accent border border-accent/30 (violet, not cyan).
@@ -356,13 +405,10 @@ func _build_free_battles_panel() -> PanelContainer:
 		Color("#FBBF24", 0.16), Color("#FBBF24", 0.45), 8, 1
 	))
 	head.add_child(icon_box)
-	var icon_lab := Label.new()
-	icon_lab.text = "⚔"
-	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon_lab.add_theme_font_size_override("font_size", 22)
-	icon_lab.add_theme_color_override("font_color", Color("#FBBF24"))
-	icon_box.add_child(icon_lab)
+	var icon_wrap := CenterContainer.new()
+	icon_wrap.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	icon_box.add_child(icon_wrap)
+	icon_wrap.add_child(UiIcon.make("swords", Color("#FBBF24"), 22.0))
 
 	var head_l := VBoxContainer.new()
 	head_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -424,13 +470,19 @@ func _add_stat_chip_wrap(parent: GridContainer, icon: String, label: String, col
 		Color(color.r, color.g, color.b, 0.13), Color(color.r, color.g, color.b, 0.35), 6, 1
 	))
 	row.add_child(icon_box)
-	var icon_lab := Label.new()
-	icon_lab.text = icon
-	icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon_lab.add_theme_font_size_override("font_size", 16)
-	icon_lab.add_theme_color_override("font_color", color)
-	icon_box.add_child(icon_lab)
+	var icon_wrap := CenterContainer.new()
+	icon_wrap.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	icon_box.add_child(icon_wrap)
+	if CurrencyIcon.is_asset_glyph(icon):
+		icon_wrap.add_child(UiIcon.make(icon, color, 16.0))
+	else:
+		var icon_lab := Label.new()
+		icon_lab.text = icon
+		icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		icon_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		icon_lab.add_theme_font_size_override("font_size", 16)
+		icon_lab.add_theme_color_override("font_color", color)
+		icon_wrap.add_child(icon_lab)
 
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -565,7 +617,7 @@ func _update_lobby_chrome() -> void:
 
 	if ArenaManager.cooldown_active():
 		_cooldown_panel.visible = true
-		_cooldown_banner.text = "⏱ %s · skip %s💎" % [
+		_cooldown_banner.text = "Cooldown %s · skip %s Nova" % [
 			ArenaRules.format_ms(ArenaManager.cooldown_remaining_ms()),
 			str(ArenaRules.SKIP_COST),
 		]
@@ -600,7 +652,7 @@ func _refresh_free_battles_panel(free_left: int, daily_max: int, reset_eta: Stri
 	if depleted:
 		_free_count.text = "FREE BATTLES USED FOR TODAY"
 		_free_count.add_theme_font_size_override("font_size", 20)
-		_free_support.text = "Daily free quota spent (%s/%s). Keep climbing with paid battles for %s 💎 each — rating only." % [
+		_free_support.text = "Daily free quota spent (%s/%s). Keep climbing with paid battles for %s Nova each — rating only." % [
 			str(daily_max), str(daily_max), str(ArenaRules.PAID_BATTLE_COST),
 		]
 	elif final_one:
@@ -721,8 +773,8 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	stats.add_theme_constant_override("h_separation", 6)
 	stats.add_theme_constant_override("v_separation", 4)
 	col.add_child(stats)
-	stats.add_child(_mini_stat("🏆", "RATING", str(opp.get("arena_rating", 1000)), Color("#FBBF24")))
-	stats.add_child(_mini_stat("🔥", win_rate_txt, "%s/%s" % [str(wins), str(losses)], Color("#FB7185"), true))
+	stats.add_child(_mini_stat("trophy", "RATING", str(opp.get("arena_rating", 1000)), Color("#FBBF24")))
+	stats.add_child(_mini_stat("flame", win_rate_txt, "%s/%s" % [str(wins), str(losses)], Color("#FB7185"), true))
 
 	var is_free := ArenaManager.free_battles_left > 0
 	var preview := ArenaRules.preview_arena_match(GameManager.active_character, opp, is_free)
@@ -804,7 +856,8 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	fight.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if ArenaManager.cooldown_active():
 		# Web only: amber while skipping cooldown. Normal challenges are cyan painted-btn.
-		fight.text = "SKIP & FIGHT · %s 💎" % ArenaRules.SKIP_COST
+		fight.text = "SKIP & FIGHT · %s" % ArenaRules.SKIP_COST
+		CurrencyIcon.apply_button_cost(fight, 16.0)
 		_apply_skip_fight_button(fight)
 	else:
 		fight.text = "CHALLENGE"
@@ -832,12 +885,18 @@ func _mini_stat(icon: String, label: String, value: String, color: Color, split_
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 0)
 	panel.add_child(col)
-	var ic := Label.new()
-	ic.text = icon
-	ic.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ic.add_theme_font_size_override("font_size", 13)
-	ic.add_theme_color_override("font_color", color)
-	col.add_child(ic)
+	var ic_wrap := CenterContainer.new()
+	ic_wrap.custom_minimum_size = Vector2(16, 16)
+	col.add_child(ic_wrap)
+	if CurrencyIcon.is_asset_glyph(icon):
+		ic_wrap.add_child(UiIcon.make(icon, color, 13.0))
+	else:
+		var ic := Label.new()
+		ic.text = icon
+		ic.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ic.add_theme_font_size_override("font_size", 13)
+		ic.add_theme_color_override("font_color", color)
+		ic_wrap.add_child(ic)
 	if split_wl and "/" in value:
 		var parts := value.split("/")
 		var wl_row := HBoxContainer.new()

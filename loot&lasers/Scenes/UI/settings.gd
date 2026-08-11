@@ -256,7 +256,7 @@ func _build_account_body() -> VBoxContainer:
 	pw_btn.pressed.connect(_on_change_password)
 	col.add_child(pw_btn)
 
-	col.add_child(_field_label("Character Name · 500 💎"))
+	col.add_child(_field_label("Character Name · 500 Nova Crystals"))
 	_rename = _make_field("New operative name")
 	_rename.text_submitted.connect(func(_t: String) -> void: _on_rename())
 	col.add_child(_rename)

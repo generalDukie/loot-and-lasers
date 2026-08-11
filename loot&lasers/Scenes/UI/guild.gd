@@ -310,8 +310,8 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 	var pills := HBoxContainer.new()
 	pills.add_theme_constant_override("separation", 8)
 	left.add_child(pills)
-	pills.add_child(_header_pill("🛡  LVL %s" % ClientUi.format_level(g.get("level", 1)), ClientUi.CYAN))
-	pills.add_child(_header_pill("👥  %s  MEMBERS" % str(SocialManager.guild_members.size()), ClientUi.VIOLET))
+	pills.add_child(_header_pill("LVL %s" % ClientUi.format_level(g.get("level", 1)), ClientUi.CYAN, "shield"))
+	pills.add_child(_header_pill("%s  MEMBERS" % str(SocialManager.guild_members.size()), ClientUi.VIOLET, "users"))
 	var led := Label.new()
 	led.text = "Led by %s" % str(g.get("leader_name", "?"))
 	led.add_theme_font_size_override("font_size", 15)
@@ -367,17 +367,22 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 	return panel
 
 
-func _header_pill(text: String, color: Color) -> PanelContainer:
+func _header_pill(text: String, color: Color, icon_id: String = "") -> PanelContainer:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(color.r, color.g, color.b, 0.12), Color(color.r, color.g, color.b, 0.35), 12, 1
 	))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	p.add_child(row)
+	if not icon_id.is_empty():
+		row.add_child(UiIcon.make(icon_id, color, 14.0))
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", 15)
 	l.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(l)
-	p.add_child(l)
+	row.add_child(l)
 	return p
 
 
@@ -513,10 +518,10 @@ func _make_stat_strip() -> GridContainer:
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
-	grid.add_child(_stat_tile("🎯", "MISSIONS RUN", str(total_missions), ClientUi.CYAN))
-	grid.add_child(_stat_tile("✦", "STARDUST EARNED", str(total_sd), Color("#C084FC")))
-	grid.add_child(_stat_tile("📈", "AVG LEVEL", str(avg), ClientUi.VIOLET))
-	grid.add_child(_stat_tile("👥", "MEMBERS", str(members.size()), ClientUi.SUCCESS))
+	grid.add_child(_stat_tile("target", "MISSIONS RUN", str(total_missions), ClientUi.CYAN))
+	grid.add_child(_stat_tile("sparkle", "STARDUST EARNED", str(total_sd), Color("#C084FC")))
+	grid.add_child(_stat_tile("chart-no-axes-combined", "AVG LEVEL", str(avg), ClientUi.VIOLET))
+	grid.add_child(_stat_tile("users", "MEMBERS", str(members.size()), ClientUi.SUCCESS))
 	return grid
 
 
@@ -529,12 +534,10 @@ func _stat_tile(icon: String, label: String, value: String, color: Color) -> Pan
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 2)
 	panel.add_child(col)
-	var ic := Label.new()
-	ic.text = icon
-	ic.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ic.add_theme_font_size_override("font_size", 19)
-	ic.add_theme_color_override("font_color", color)
-	col.add_child(ic)
+	var ic_host := CenterContainer.new()
+	ic_host.custom_minimum_size = Vector2(24, 24)
+	col.add_child(ic_host)
+	CurrencyIcon.fill_glyph_host(ic_host, icon, 19.0, color)
 	var v := Label.new()
 	v.text = value
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -874,7 +877,7 @@ func _make_member_row(m: Dictionary, my_id: String) -> PanelContainer:
 	ClientUi.apply_display_font(role_lab)
 	name_row.add_child(role_lab)
 	var detail := Label.new()
-	detail.text = "Lvl %s · 🎯 %s · ✦ %s" % [
+	detail.text = "Lvl %s · %s · ✦ %s" % [
 		ClientUi.format_level(m.get("character_level", 1)),
 		str(m.get("contributed_missions", 0)),
 		str(m.get("contributed_stardust", 0)),
@@ -895,12 +898,16 @@ func _make_log_panel() -> PanelContainer:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
+	var t_row := HBoxContainer.new()
+	t_row.add_theme_constant_override("separation", 6)
+	col.add_child(t_row)
+	t_row.add_child(UiIcon.make("scroll-text", ClientUi.MUTED, 16.0))
 	var t := Label.new()
-	t.text = "📜  SHARED MISSION LOG"
+	t.text = "SHARED MISSION LOG"
 	t.add_theme_font_size_override("font_size", 16)
 	t.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(t)
-	col.add_child(t)
+	t_row.add_child(t)
 	if SocialManager.guild_log.is_empty():
 		col.add_child(_empty("No activity yet. Complete missions to populate the log."))
 	else:

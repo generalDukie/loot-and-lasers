@@ -94,6 +94,13 @@ func blocks_daily_login_prompt() -> bool:
 	return status == "pending" or status == "active"
 
 
+## Block side-nav / page hops that would dismiss combat during tutorial fight steps.
+func locks_combat_navigation() -> bool:
+	if not should_show():
+		return false
+	return step_id() in ["mission_fight", "mission_view_rewards"]
+
+
 ## Block starting Arena fights until onboarding is finished or skipped.
 func blocks_arena_combat() -> bool:
 	return should_show() or blocks_daily_login_prompt()

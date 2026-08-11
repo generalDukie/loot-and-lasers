@@ -99,13 +99,10 @@ func _build() -> void:
 	var load_title := ClientUi.make_title("LOOT & LASERS", 32)
 	load_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_loading_host.add_child(load_title)
-	var spinner := Label.new()
-	spinner.text = "⟳"
-	spinner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	spinner.add_theme_font_size_override("font_size", 40)
-	spinner.add_theme_color_override("font_color", ClientUi.CYAN)
-	ClientUi.apply_display_font(spinner)
-	_loading_host.add_child(spinner)
+	var spinner_host := CenterContainer.new()
+	spinner_host.custom_minimum_size = Vector2(48, 48)
+	_loading_host.add_child(spinner_host)
+	spinner_host.add_child(UiIcon.make("loader-circle", ClientUi.CYAN, 40.0))
 
 	_main_host = VBoxContainer.new()
 	_main_host.visible = false
@@ -157,16 +154,18 @@ func _build() -> void:
 	row.add_child(spacer)
 
 	_unlock_btn = Button.new()
-	_unlock_btn.text = "Unlock Slot · %s 💎" % AccountManager.SLOT_NOVA_COST
+	_unlock_btn.text = "Unlock Slot · %s" % AccountManager.SLOT_NOVA_COST
+	CurrencyIcon.apply_button_cost(_unlock_btn, 16.0)
 	_unlock_btn.custom_minimum_size = Vector2(220, 52)
 	_apply_accent_button(_unlock_btn)
 	_unlock_btn.pressed.connect(_on_unlock_slot)
 	row.add_child(_unlock_btn)
 
 	_create_btn = Button.new()
-	_create_btn.text = "＋  CREATE NEW OPERATIVE"
+	_create_btn.text = "CREATE NEW OPERATIVE"
 	_create_btn.custom_minimum_size = Vector2(280, 52)
 	_apply_accent_button(_create_btn)
+	UiIcon.apply_leading_icon(_create_btn, "plus", ClientUi.VIOLET.lightened(0.35), 18.0)
 	_create_btn.pressed.connect(_on_create_pressed)
 	row.add_child(_create_btn)
 
@@ -308,7 +307,7 @@ func _update_slot_actions() -> void:
 	if can_create:
 		_status.text = "%s / %s operative slots" % [_characters.size(), total_slots]
 	elif can_purchase:
-		_status.text = "%s / %s slots · unlock another for %s 💎 (max %s)" % [
+		_status.text = "%s / %s slots · unlock another for %s Nova (max %s)" % [
 			_characters.size(), total_slots, AccountManager.SLOT_NOVA_COST, MAX_SLOTS,
 		]
 	else:
@@ -683,7 +682,7 @@ func _on_unlock_slot() -> void:
 		AccountManager.SLOT_NOVA_COST
 	):
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
-		_status.text = "Need %s 💎 to unlock a slot — you have %s." % [
+		_status.text = "Need %s Nova Crystals to unlock a slot — you have %s." % [
 			AccountManager.SLOT_NOVA_COST, nova,
 		]
 		return
@@ -709,7 +708,7 @@ func _on_unlock_slot() -> void:
 		_status.text = str(res.get("error", "Could not unlock slot"))
 		return
 	_status.add_theme_color_override("font_color", ClientUi.SUCCESS)
-	_status.text = "Slot unlocked (−%s 💎). Create your next operative." % AccountManager.SLOT_NOVA_COST
+	_status.text = "Slot unlocked (−%s Nova). Create your next operative." % AccountManager.SLOT_NOVA_COST
 	await _refresh()
 	GameManager.go_character_create()
 

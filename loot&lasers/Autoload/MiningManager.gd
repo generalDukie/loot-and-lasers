@@ -54,7 +54,7 @@ func committed_reward() -> int:
 
 func preview_reward(hours: int) -> int:
 	var level := maxi(1, int(GameManager.active_character.get("level", 1)))
-	var h := clampi(hours, 1, 24)
+	var h := clampi(hours, 1, 12)
 	return StardustEconomy.compute_mining_reward(level, float(h))
 
 
@@ -65,7 +65,7 @@ func refresh_status() -> Dictionary:
 
 
 func start(hours: int) -> Dictionary:
-	var res: Dictionary = await GameApiClient.invoke("StartMining", {"hours": clampi(hours, 1, 24)})
+	var res: Dictionary = await GameApiClient.invoke("StartMining", {"hours": clampi(hours, 1, 12)})
 	_apply(res)
 	return res
 

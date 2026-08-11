@@ -176,19 +176,38 @@ static func _make_row(
 	mid_lab.tooltip_text = "%s\n%s" % [str(ATTR_LABELS.get(key, key)), tip]
 	mid.add_child(mid_lab)
 
-	var adv := Label.new()
+	var adv := HBoxContainer.new()
+	adv.alignment = BoxContainer.ALIGNMENT_CENTER
+	adv.add_theme_constant_override("separation", 3)
 	if p_adv:
-		adv.text = "◀ ADV"
-		adv.add_theme_color_override("font_color", Color("#22D3EE", 0.95))
+		var tri := UiIcon.make("triangle", Color("#22D3EE", 0.95), float(maxi(10, int(11 * s))))
+		tri.pivot_offset = tri.custom_minimum_size * 0.5
+		tri.rotation_degrees = 270
+		adv.add_child(tri)
+		var adv_lab := Label.new()
+		adv_lab.text = "ADV"
+		adv_lab.add_theme_color_override("font_color", Color("#22D3EE", 0.95))
+		adv_lab.add_theme_font_size_override("font_size", maxi(10, int(11 * s)))
+		ClientUi.apply_display_font(adv_lab)
+		adv.add_child(adv_lab)
 	elif e_adv:
-		adv.text = "ADV ▶"
-		adv.add_theme_color_override("font_color", Color("#FB7185", 0.95))
+		var adv_lab := Label.new()
+		adv_lab.text = "ADV"
+		adv_lab.add_theme_color_override("font_color", Color("#FB7185", 0.95))
+		adv_lab.add_theme_font_size_override("font_size", maxi(10, int(11 * s)))
+		ClientUi.apply_display_font(adv_lab)
+		adv.add_child(adv_lab)
+		var tri := UiIcon.make("triangle", Color("#FB7185", 0.95), float(maxi(10, int(11 * s))))
+		tri.pivot_offset = tri.custom_minimum_size * 0.5
+		tri.rotation_degrees = 90
+		adv.add_child(tri)
 	else:
-		adv.text = "EVEN"
-		adv.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
-	adv.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	adv.add_theme_font_size_override("font_size", maxi(10, int(11 * s)))
-	ClientUi.apply_display_font(adv)
+		var adv_lab := Label.new()
+		adv_lab.text = "EVEN"
+		adv_lab.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
+		adv_lab.add_theme_font_size_override("font_size", maxi(10, int(11 * s)))
+		ClientUi.apply_display_font(adv_lab)
+		adv.add_child(adv_lab)
 	mid.add_child(adv)
 
 	# Enemy meter + value (fill grows toward center / left).

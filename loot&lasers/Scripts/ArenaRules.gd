@@ -209,7 +209,6 @@ static func snapshot_opponent(opp: Dictionary) -> Dictionary:
 				"stats": it.get("stats", {}),
 				"level_requirement": it.get("level_requirement", null),
 				"base_name": it.get("base_name", null),
-				"emoji": it.get("emoji", null),
 			})
 	var equipped_ids: Array = []
 	var raw_ids: Variant = opp.get("equippedItemIds", [])

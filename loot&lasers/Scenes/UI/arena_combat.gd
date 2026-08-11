@@ -8,6 +8,9 @@ const FIGHTER_H_BASE := 360.0
 const PORTRAIT_BASE := 280.0
 const HP_BAR_H_BASE := 38.0
 const CLASS_ICON_BASE := 36.0
+## Temporary: hide GearIcon weapon glyphs in all duel UIs (mission/arena/frontier).
+## Bump/lunge + attack SFX stay. Flip back on when better glyphs land.
+const SHOW_WEAPON_GLYPHS := false
 
 const STAT_COLORS := {
 	"strength": Color("#F87171"),
@@ -35,8 +38,8 @@ var _player_hp_name: Label
 var _enemy_hp_name: Label
 var _player_hp_nums: Label
 var _enemy_hp_nums: Label
-var _player_status: Label
-var _enemy_status: Label
+var _player_status: Control
+var _enemy_status: Control
 var _combat_log: RichTextLabel
 var _dev_diag: Label
 var _skip_btn: Button
@@ -77,7 +80,9 @@ var _sheet_host: Control
 var _prev_level := 1
 var _generation := 0
 var _ability_tween: Tween
-var _theme_chip: Label
+var _theme_chip: HBoxContainer
+var _theme_chip_icon: CenterContainer
+var _theme_chip_lab: Label
 var _dungeon_ctx: Dictionary = {}
 var _fighter_size: Vector2 = Vector2(FIGHTER_W_BASE, FIGHTER_H_BASE)
 var _portrait_px: float = PORTRAIT_BASE
@@ -87,6 +92,7 @@ var _event_i := 0
 var _phase := "intro"
 var _playing := false
 var _finished := false
+var _dismiss_handled := false
 var _busy := false
 var _combo := 0
 
@@ -108,10 +114,29 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	# Don't leave Arena stuck on "battle already in progress" if the overlay
-	# is closed before FinishArenaBattle (empty/broken mount, nav away).
-	if not _is_mission() and not _is_dungeon() and not _finished:
-		ArenaManager.release_presentation_lock()
+	handle_external_dismiss()
+
+
+## Called when the shell clears the combat overlay (nav away / close).
+## Mid-replay → background settle + View Rewards CTA. Outro → pending until return.
+func handle_external_dismiss() -> void:
+	if _dismiss_handled:
+		return
+	_dismiss_handled = true
+	if _finished:
+		return
+	_generation += 1
+	_playing = false
+	var combat_kind := "arena"
+	if _is_mission():
+		combat_kind = "mission"
+	elif _is_dungeon():
+		combat_kind = "dungeon"
+	if _phase == "outro":
+		CombatReturnManager.note_outro_pending(combat_kind, _prev_level, _dungeon_ctx)
+		return
+	# Mid-intro / mid-fight: settle rewards now so return doesn't replay.
+	CombatReturnManager.begin_settle_from_replay(combat_kind, _prev_level, _dungeon_ctx)
 
 
 func _build() -> void:
@@ -122,9 +147,10 @@ func _build() -> void:
 	# Soft live stage — redraws every frame at Engine.max_fps (120).
 	_backdrop.set_live(true)
 
-	_theme_chip = Label.new()
+	_theme_chip = HBoxContainer.new()
 	_theme_chip.visible = false
-	_theme_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_theme_chip.alignment = BoxContainer.ALIGNMENT_CENTER
+	_theme_chip.add_theme_constant_override("separation", 6)
 	_theme_chip.set_anchors_preset(PRESET_CENTER_TOP)
 	_theme_chip.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_theme_chip.offset_top = 10
@@ -133,9 +159,15 @@ func _build() -> void:
 	_theme_chip.offset_bottom = 36
 	_theme_chip.z_index = 35
 	_theme_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_theme_chip.add_theme_font_size_override("font_size", 13)
-	ClientUi.apply_display_font(_theme_chip)
 	add_child(_theme_chip)
+	_theme_chip_icon = CenterContainer.new()
+	_theme_chip_icon.custom_minimum_size = Vector2(16, 16)
+	_theme_chip.add_child(_theme_chip_icon)
+	_theme_chip_lab = Label.new()
+	_theme_chip_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_theme_chip_lab.add_theme_font_size_override("font_size", 13)
+	ClientUi.apply_display_font(_theme_chip_lab)
+	_theme_chip.add_child(_theme_chip_lab)
 
 	var root := VBoxContainer.new()
 	root.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -413,17 +445,19 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	nums.add_theme_color_override("font_color", Color("#E2E8F0"))
 	ClientUi.apply_display_font(nums)
 	col.add_child(nums)
-	var status := Label.new()
-	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if align_right else HORIZONTAL_ALIGNMENT_LEFT
-	status.add_theme_font_size_override("font_size", 15)
-	status.add_theme_color_override("font_color", Color("#A5B4FC", 0.95))
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ClientUi.apply_display_font(status)
+	var status := HBoxContainer.new()
+	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status.custom_minimum_size.y = 18
+	status.add_theme_constant_override("separation", 8)
+	status.alignment = (
+		BoxContainer.ALIGNMENT_END if align_right else BoxContainer.ALIGNMENT_BEGIN
+	)
 	col.add_child(status)
 	col.set_meta("name_lab", name_lab)
 	col.set_meta("bar", bar)
 	col.set_meta("nums", nums)
 	col.set_meta("status", status)
+	col.set_meta("status_align_right", align_right)
 	return col
 
 
@@ -505,12 +539,28 @@ func _add_corner(color: Color, left: bool, top: bool) -> void:
 
 
 func _boot() -> void:
+	var combat_kind := "arena"
+	if _is_mission():
+		combat_kind = "mission"
+	elif _is_dungeon():
+		combat_kind = "dungeon"
+	# Settled / outro-pending rewards are claimed via the source-page CTA — never replay.
+	if CombatReturnManager.is_for_kind(combat_kind):
+		_dismiss_handled = true
+		_finished = true
+		call_deferred("_abort_remount")
+		return
 	if _is_mission():
 		await _boot_mission()
 	elif _is_dungeon():
 		await _boot_dungeon()
 	else:
 		await _boot_arena()
+
+
+func _abort_remount() -> void:
+	if is_instance_valid(self):
+		GameManager.close_overlay()
 
 
 func _apply_combat_tutorial_tags() -> void:
@@ -634,11 +684,13 @@ func _boot_dungeon() -> void:
 	if typeof(raw_accent) == TYPE_COLOR:
 		accent = raw_accent as Color
 	_backdrop.set_accent(accent)
-	_theme_chip.text = "%s %s" % [
-		_dungeon_ctx.get("planet_icon", ""),
-		_dungeon_ctx.get("planet_name", "Frontier"),
-	]
-	_theme_chip.add_theme_color_override("font_color", accent.lightened(0.25))
+	var picon := str(_dungeon_ctx.get("planet_icon", "orbit"))
+	var pname := str(_dungeon_ctx.get("planet_name", "Frontier"))
+	if picon.strip_edges().is_empty():
+		picon = "orbit"
+	CurrencyIcon.fill_glyph_host(_theme_chip_icon, picon, 14.0, accent.lightened(0.25))
+	_theme_chip_lab.text = pname
+	_theme_chip_lab.add_theme_color_override("font_color", accent.lightened(0.25))
 	_theme_chip.visible = true
 	_start_duel(
 		GameManager.active_character,
@@ -907,33 +959,38 @@ func _portrait_card(character: Dictionary, tint: Color, weapon: Dictionary, is_p
 		portrait.pivot_offset = Vector2(portrait_sz * 0.5, portrait_sz * 0.5)
 	center.add_child(portrait)
 
-	var wlab := Control.new()
-	wlab.name = "PlayerAttackOrigin" if is_player else "EnemyAttackOrigin"
-	wlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var wicon := 48.0 * s
-	wlab.custom_minimum_size = Vector2(wicon + 8.0, wicon + 8.0)
-	wlab.set_anchors_preset(PRESET_CENTER_RIGHT if is_player else PRESET_CENTER_LEFT)
-	if is_player:
-		wlab.offset_left = -(wicon + 12.0)
-		wlab.offset_right = 0
+	if SHOW_WEAPON_GLYPHS:
+		var wlab := Control.new()
+		wlab.name = "PlayerAttackOrigin" if is_player else "EnemyAttackOrigin"
+		wlab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var wicon := 48.0 * s
+		wlab.custom_minimum_size = Vector2(wicon + 8.0, wicon + 8.0)
+		wlab.set_anchors_preset(PRESET_CENTER_RIGHT if is_player else PRESET_CENTER_LEFT)
+		if is_player:
+			wlab.offset_left = -(wicon + 12.0)
+			wlab.offset_right = 0
+		else:
+			wlab.offset_left = 0
+			wlab.offset_right = wicon + 12.0
+		wlab.offset_top = -wicon * 0.5
+		wlab.offset_bottom = wicon * 0.5
+		wlab.pivot_offset = Vector2(wicon * 0.5, wicon * 0.5)
+		var witem := {
+			"name": str(weapon.get("name", "")),
+			"base_name": str(weapon.get("base_name", "")),
+			"type": "weapon",
+			"rarity": str(weapon.get("rarity", "common")),
+		}
+		wlab.add_child(GearIcon.make(witem, wicon))
+		portrait_wrap.add_child(wlab)
+		if is_player:
+			_player_weapon_label = wlab
+		else:
+			_enemy_weapon_label = wlab
+	elif is_player:
+		_player_weapon_label = null
 	else:
-		wlab.offset_left = 0
-		wlab.offset_right = wicon + 12.0
-	wlab.offset_top = -wicon * 0.5
-	wlab.offset_bottom = wicon * 0.5
-	wlab.pivot_offset = Vector2(wicon * 0.5, wicon * 0.5)
-	var witem := {
-		"name": str(weapon.get("name", "")),
-		"base_name": str(weapon.get("base_name", "")),
-		"type": "weapon",
-		"rarity": str(weapon.get("rarity", "common")),
-	}
-	wlab.add_child(GearIcon.make(witem, wicon))
-	portrait_wrap.add_child(wlab)
-	if is_player:
-		_player_weapon_label = wlab
-	else:
-		_enemy_weapon_label = wlab
+		_enemy_weapon_label = null
 
 	return frame
 
@@ -1043,9 +1100,10 @@ func _begin_event_fx(ev: Dictionary) -> void:
 		_motion.slip(defender, str(ev.get("defender", "player")))
 		return
 	if t in ["attack", "drone", "ability", "secondary"] or int(ev.get("damage", 0)) > 0:
-		var weapon: Dictionary = _player_weapon if side == "player" else _enemy_weapon
-		var wlab := _player_weapon_label if side == "player" else _enemy_weapon_label
-		_motion.swing_weapon(wlab, side, str(weapon.get("style", "swing")))
+		if SHOW_WEAPON_GLYPHS:
+			var weapon: Dictionary = _player_weapon if side == "player" else _enemy_weapon
+			var wlab := _player_weapon_label if side == "player" else _enemy_weapon_label
+			_motion.swing_weapon(wlab, side, str(weapon.get("style", "swing")))
 		_motion.lunge(attacker, side)
 
 
@@ -1071,7 +1129,8 @@ func _land_event(ev: Dictionary) -> void:
 				str(floater.get("label", "")),
 				floater_color,
 				int(floater.get("font_size", CombatPresentation.FLOAT_FONT_OTHER)),
-				bool(floater.get("bold", false))
+				bool(floater.get("bold", false)),
+				str(floater.get("icon", ""))
 			)
 
 	if int(ev.get("heal", 0)) > 0:
@@ -1145,9 +1204,9 @@ func _refresh_status_presentation() -> void:
 	var player_side: Dictionary = status.get("player", {}) as Dictionary
 	var opponent_side: Dictionary = status.get("opponent", {}) as Dictionary
 	if _player_status:
-		_player_status.text = CombatPresentation.status_chip_text(player_side)
+		CombatPresentation.fill_status_chip(_player_status, player_side, false)
 	if _enemy_status:
-		_enemy_status.text = CombatPresentation.status_chip_text(opponent_side)
+		CombatPresentation.fill_status_chip(_enemy_status, opponent_side, true)
 	if _dev_diag and _dev_diag.visible:
 		var ev: Dictionary = {}
 		if _event_i >= 0 and _event_i < _events.size() and typeof(_events[_event_i]) == TYPE_DICTIONARY:

@@ -7,7 +7,7 @@ var _confirm: LineEdit
 var _otp: LineEdit
 var _status_banner: PanelContainer
 var _status: Label
-var _icon_lab: Label
+var _icon_host: CenterContainer
 var _title: Label
 var _subtitle: Label
 var _password_row: HBoxContainer
@@ -77,14 +77,10 @@ func _build() -> void:
 	icon_sb.set_corner_radius_all(14)
 	icon_panel.add_theme_stylebox_override("panel", icon_sb)
 	icon_wrap.add_child(icon_panel)
-	_icon_lab = Label.new()
-	_icon_lab.text = "↪"
-	_icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_icon_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_icon_lab.add_theme_font_size_override("font_size", 32)
-	_icon_lab.add_theme_color_override("font_color", ClientUi.VOID)
-	ClientUi.apply_display_font(_icon_lab)
-	icon_panel.add_child(_icon_lab)
+	_icon_host = CenterContainer.new()
+	_icon_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	icon_panel.add_child(_icon_host)
+	_set_header_icon("log-in")
 
 	_title = Label.new()
 	_title.text = "Welcome back"
@@ -317,6 +313,10 @@ func _show_error(msg: String, danger := true) -> void:
 		sb.bg_color = Color(ClientUi.DANGER if danger else ClientUi.SUCCESS, 0.12)
 
 
+func _set_header_icon(icon_id: String) -> void:
+	CurrencyIcon.fill_glyph_host(_icon_host, icon_id, 32.0, ClientUi.VOID)
+
+
 func _set_mode(mode: String) -> void:
 	_mode = mode
 	_forgot_sent_flag = false
@@ -327,7 +327,7 @@ func _set_mode(mode: String) -> void:
 
 	match mode:
 		"register":
-			_icon_lab.text = "＋"
+			_set_header_icon("plus")
 			_title.text = "Create your account"
 			_subtitle.text = "Sign up to get started"
 			_password_row.visible = true
@@ -338,10 +338,11 @@ func _set_mode(mode: String) -> void:
 			_email.visible = true
 			_primary_btn.visible = true
 			_primary_btn.text = "Create account"
+			_primary_btn.icon = null
 			_footer.visible = true
 			_footer.text = "Already have an account? [url=login][color=#0DCADF][b]Log in[/b][/color][/url]"
 		"otp":
-			_icon_lab.text = "✉"
+			_set_header_icon("mail")
 			_title.text = "Verify your email"
 			_subtitle.text = "We sent a code to %s" % _email.text.strip_edges()
 			_password_row.visible = false
@@ -351,9 +352,10 @@ func _set_mode(mode: String) -> void:
 			_email.visible = false
 			_primary_btn.visible = true
 			_primary_btn.text = "Verify"
+			_primary_btn.icon = null
 			_footer.visible = false
 		"forgot":
-			_icon_lab.text = "✉"
+			_set_header_icon("mail")
 			_title.text = "Reset password"
 			_subtitle.text = "We'll send you a link to reset it"
 			_password_row.visible = false
@@ -363,10 +365,11 @@ func _set_mode(mode: String) -> void:
 			_email.visible = true
 			_primary_btn.visible = true
 			_primary_btn.text = "Send reset link"
+			_primary_btn.icon = null
 			_footer.visible = true
 			_footer.text = "[url=login][color=#0DCADF][b]‹ Back to log in[/b][/color][/url]"
 		_:
-			_icon_lab.text = "↪"
+			_set_header_icon("log-in")
 			_title.text = "Welcome back"
 			_subtitle.text = "Log in to your account"
 			_password_row.visible = true
@@ -377,6 +380,7 @@ func _set_mode(mode: String) -> void:
 			_email.visible = true
 			_primary_btn.visible = true
 			_primary_btn.text = "Log in"
+			_primary_btn.icon = null
 			_footer.visible = true
 			_footer.text = "Don't have an account? [url=register][color=#0DCADF][b]Create one[/b][/color][/url]"
 			_prefill_remembered_email()
@@ -409,11 +413,13 @@ func _do_login() -> void:
 		_show_error("Invalid email or password")
 		return
 	_set_busy(true)
-	_primary_btn.text = "⟳  Logging in..."
+	_primary_btn.text = "Logging in..."
+	UiIcon.apply_leading_icon(_primary_btn, "loader-circle", Color(0.05, 0.05, 0.08), 16.0)
 	_show_error("")
 	var res: Dictionary = await AuthManager.login(_email.text.strip_edges(), _password.text)
 	_set_busy(false)
 	_primary_btn.text = "Log in"
+	_primary_btn.icon = null
 	if not res.ok:
 		_show_error(_friendly_auth_error(str(res.get("error", "Invalid email or password"))))
 		return
@@ -428,11 +434,13 @@ func _do_register() -> void:
 		_show_error("Password must be at least 8 characters.")
 		return
 	_set_busy(true)
-	_primary_btn.text = "⟳  Creating account..."
+	_primary_btn.text = "Creating account..."
+	UiIcon.apply_leading_icon(_primary_btn, "loader-circle", Color(0.05, 0.05, 0.08), 16.0)
 	_show_error("")
 	var res: Dictionary = await AuthManager.register(_email.text.strip_edges(), _password.text)
 	_set_busy(false)
 	_primary_btn.text = "Create account"
+	_primary_btn.icon = null
 	if not res.ok:
 		_show_error(_friendly_auth_error(str(res.get("error", "Registration failed"))))
 		return
@@ -469,10 +477,12 @@ func _on_forgot() -> void:
 		_show_error("Enter your email address.")
 		return
 	_set_busy(true)
-	_primary_btn.text = "⟳  Sending..."
+	_primary_btn.text = "Sending..."
+	UiIcon.apply_leading_icon(_primary_btn, "loader-circle", Color(0.05, 0.05, 0.08), 16.0)
 	var res: Dictionary = await AuthManager.request_password_reset(_email.text.strip_edges())
 	_set_busy(false)
 	_primary_btn.text = "Send reset link"
+	_primary_btn.icon = null
 	_forgot_sent_flag = true
 	_email.visible = false
 	_primary_btn.visible = false

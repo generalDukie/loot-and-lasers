@@ -2,7 +2,7 @@ class_name SpiralStage
 extends Control
 ## Animated holographic spiral map matching web DungeonMap behavior.
 ## Zoom mirrors web: scale toward focus + lore panel. Focused planet is drawn larger
-## and with more surface detail than the chart-node emoji.
+## and with more surface detail than the chart-node glyph.
 
 signal planet_pressed(planet_id: int)
 signal wormhole_pressed
@@ -33,9 +33,12 @@ var _dim: ColorRect
 var _lore_panel: PanelContainer
 var _lore_title: Label
 var _lore_sector: Label
-var _lore_icon: Label
+var _lore_icon_panel: PanelContainer
+var _lore_icon: CenterContainer
 var _lore_body: Label
-var _lore_boss: Label
+var _lore_boss: HBoxContainer
+var _lore_boss_icon: CenterContainer
+var _lore_boss_lab: Label
 
 func _ready() -> void:
 	clip_contents = true
@@ -110,20 +113,20 @@ func _ensure_overlays() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	close_row.add_child(spacer)
 	var close_btn := Button.new()
-	close_btn.text = "✕"
+	close_btn.text = ""
 	ClientUi.apply_ghost_button(close_btn)
+	UiIcon.set_button_icon(close_btn, "x", ClientUi.MUTED, 18.0)
 	close_btn.pressed.connect(clear_zoom)
 	close_row.add_child(close_btn)
 
 	var hero := HBoxContainer.new()
 	hero.add_theme_constant_override("separation", 12)
 	lore_col.add_child(hero)
-	_lore_icon = Label.new()
-	_lore_icon.custom_minimum_size = Vector2(85, 85)
-	_lore_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lore_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_lore_icon.add_theme_font_size_override("font_size", 48)
-	hero.add_child(_lore_icon)
+	_lore_icon_panel = PanelContainer.new()
+	_lore_icon_panel.custom_minimum_size = Vector2(85, 85)
+	_lore_icon = CenterContainer.new()
+	_lore_icon_panel.add_child(_lore_icon)
+	hero.add_child(_lore_icon_panel)
 	var title_col := VBoxContainer.new()
 	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hero.add_child(title_col)
@@ -145,10 +148,17 @@ func _ensure_overlays() -> void:
 	ClientUi.apply_body_font(_lore_body)
 	lore_col.add_child(_lore_body)
 
-	_lore_boss = Label.new()
-	_lore_boss.add_theme_font_size_override("font_size", 15)
-	ClientUi.apply_display_font(_lore_boss)
+	_lore_boss = HBoxContainer.new()
+	_lore_boss.add_theme_constant_override("separation", 6)
 	lore_col.add_child(_lore_boss)
+	_lore_boss_icon = CenterContainer.new()
+	_lore_boss_icon.custom_minimum_size = Vector2(18, 18)
+	_lore_boss.add_child(_lore_boss_icon)
+	_lore_boss_lab = Label.new()
+	_lore_boss_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lore_boss_lab.add_theme_font_size_override("font_size", 15)
+	ClientUi.apply_display_font(_lore_boss_lab)
+	_lore_boss.add_child(_lore_boss_lab)
 
 	var hint := Label.new()
 	hint.text = "Tap empty space or Esc to pull back"
@@ -213,14 +223,14 @@ func _rebuild_buttons() -> void:
 			btn.text = ""
 			btn.icon = null
 		elif not locked:
-			btn.icon = null
-			btn.text = "✓" if cleared else str(planet.get("icon", "🪐"))
-			btn.add_theme_font_size_override("font_size", 23)
+			if cleared:
+				btn.text = ""
+				btn.icon = null
+			else:
+				CurrencyIcon.apply_planet_button_glyph(btn, planet, 23)
 		else:
 			# Story-locked but level-eligible — keep world icon, no padlock.
-			btn.icon = null
-			btn.text = str(planet.get("icon", "🪐"))
-			btn.add_theme_font_size_override("font_size", 23)
+			CurrencyIcon.apply_planet_button_glyph(btn, planet, 23)
 		btn.disabled = locked
 		btn.mouse_default_cursor_shape = (
 			Control.CURSOR_FORBIDDEN if locked else Control.CURSOR_POINTING_HAND
@@ -247,19 +257,16 @@ func _rebuild_buttons() -> void:
 		_style_planet_button(btn, tint, locked, current, false, cleared)
 		if level_locked:
 			_apply_level_lock_icon(btn)
+		elif not locked and cleared:
+			UiIcon.set_button_icon(btn, "check", ClientUi.SUCCESS, 23.0)
 
 	_wormhole_button = Button.new()
 	_wormhole_button.name = "Wormhole"
 	_wormhole_button.focus_mode = Control.FOCUS_NONE
 	_wormhole_button.custom_minimum_size = Vector2(101, 101)
 	_wormhole_button.z_index = 12
-	if in_infinite:
-		_wormhole_button.icon = null
-		_wormhole_button.text = "∞"
-		_wormhole_button.add_theme_font_size_override("font_size", 33)
-	else:
-		_wormhole_button.text = ""
-		_wormhole_button.icon = null
+	_wormhole_button.text = ""
+	_wormhole_button.icon = null
 	_wormhole_button.disabled = not in_infinite
 	_wormhole_button.tooltip_text = (
 		"Inspect Wormhole · Depth %s" % maxi(1, active - 10)
@@ -270,7 +277,9 @@ func _rebuild_buttons() -> void:
 	add_child(_wormhole_button)
 	move_child(_wormhole_button, 0)
 	_style_wormhole_button(in_infinite, false)
-	if not in_infinite:
+	if in_infinite:
+		UiIcon.set_button_icon(_wormhole_button, "infinity", WORMHOLE_CYAN, 33.0)
+	else:
 		_apply_level_lock_icon(_wormhole_button)
 
 	# Overlays always on top
@@ -381,16 +390,18 @@ func _fill_lore() -> void:
 	_lore_sector.add_theme_color_override("font_color", tint)
 	_lore_title.text = str(planet.get("name", "?"))
 	_lore_title.add_theme_color_override("font_color", tint)
-	_lore_icon.text = str(planet.get("icon", "🪐"))
-	_lore_icon.add_theme_stylebox_override(
-		"normal",
+	CurrencyIcon.fill_glyph_host(_lore_icon, str(planet.get("icon", "orbit")), 48.0, tint)
+	_lore_icon_panel.add_theme_stylebox_override(
+		"panel",
 		ClientUi.painted_panel_style(Color(tint, 0.28), Color(tint, 0.95), 32, 3)
 	)
 	_lore_body.text = str(planet.get("lore", planet.get("desc", "")))
 	var boss := str(planet.get("boss", ""))
 	_lore_boss.visible = not boss.is_empty()
-	_lore_boss.text = "%s  Boss · %s" % [str(planet.get("boss_emoji", "☠")), boss]
-	_lore_boss.add_theme_color_override("font_color", tint)
+	var boss_glyph := str(planet.get("boss_emoji", "skull"))
+	CurrencyIcon.fill_glyph_host(_lore_boss_icon, boss_glyph, 16.0, tint)
+	_lore_boss_lab.text = "Boss · %s" % boss
+	_lore_boss_lab.add_theme_color_override("font_color", tint)
 	_lore_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.03, 0.035, 0.07, 0.98), Color(tint, 0.7), 16, 2
 	))
@@ -518,29 +529,25 @@ func _refresh_button_looks() -> void:
 			btn.text = ""
 			btn.icon = null
 		elif cleared and _zoom_id != pid:
+			btn.text = ""
 			btn.icon = null
-			btn.text = "✓"
-			btn.add_theme_font_size_override("font_size", 23)
 		else:
-			btn.icon = null
-			btn.text = str(planet.get("icon", "🪐"))
-			btn.add_theme_font_size_override("font_size", 23)
+			CurrencyIcon.apply_planet_button_glyph(btn, planet, 23)
 		_style_planet_button(btn, tint, locked, current, is_selected, cleared)
 		if level_locked:
 			_apply_level_lock_icon(btn)
+		elif cleared and _zoom_id != pid:
+			UiIcon.set_button_icon(btn, "check", ClientUi.SUCCESS, 23.0)
 	if is_instance_valid(_wormhole_button):
-		if active > 10:
-			_wormhole_button.icon = null
-			_wormhole_button.text = "∞"
-			_wormhole_button.add_theme_font_size_override("font_size", 33)
-		else:
-			_wormhole_button.text = ""
-			_wormhole_button.icon = null
+		_wormhole_button.text = ""
+		_wormhole_button.icon = null
 		_style_wormhole_button(
 			active > 10,
 			DungeonManager.viewing_wormhole or _zoom_id == ZOOM_WORMHOLE
 		)
-		if active <= 10:
+		if active > 10:
+			UiIcon.set_button_icon(_wormhole_button, "infinity", WORMHOLE_CYAN, 33.0)
+		else:
 			_apply_level_lock_icon(_wormhole_button)
 
 
@@ -888,7 +895,7 @@ func _draw_wormhole(side: float, offset: Vector2) -> void:
 				Color(0.9, 0.85, 1.0)
 			)
 	if _zoom_id == ZOOM_NONE:
-		var label := "∞ WORMHOLE · DEPTH %s" % maxi(1, active - 10) if unlocked else "∞ WORMHOLE SEALED"
+		var label := "WORMHOLE · DEPTH %s" % maxi(1, active - 10) if unlocked else "WORMHOLE SEALED"
 		draw_string(
 			ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font,
 			center + Vector2(-72, 58),

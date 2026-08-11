@@ -323,6 +323,14 @@ func open_game_page(path: String) -> void:
 	change_state(GameState.IN_GAME)
 	var current := get_tree().current_scene
 	if current != null and current.is_in_group("game_shell") and current.has_method("show_page"):
+		# Tutorial combat: never dismiss the duel via side-nav / page hops.
+		if TutorialManager.locks_combat_navigation() \
+			and current.has_method("has_overlay") \
+			and bool(current.call("has_overlay")) \
+			and current.has_method("has_combat_replay_overlay") \
+			and bool(current.call("has_combat_replay_overlay")):
+			Notify.blocked("Finish the tutorial fight first")
+			return
 		# Always dismiss combat overlays first. Returning to the same underlying
 		# page (e.g. Arena after arena combat) used to early-out in
 		# try_begin_page_nav before close_overlay — leaving a dead combat screen.

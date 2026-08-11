@@ -170,29 +170,95 @@ static func floater_label(ev: Dictionary) -> Dictionary:
 			"damage_type": dtype,
 		}
 	if str(ev.get("type", "")) == "passive":
-		return _other_floater("✧", Color("#C084FC"))
+		var passive := _other_floater("", Color("#C084FC"))
+		passive["icon"] = "sparkles"
+		return passive
 	return {}
 
 
-static func status_chip_text(side: Dictionary) -> String:
-	var parts: PackedStringArray = []
+## Status chip parts for combat HP chrome: [{ "icon", "text", "color" }, ...]
+static func status_chip_parts(side: Dictionary) -> Array:
+	var parts: Array = []
+	var muted := Color("#A5B4FC", 0.95)
 	if int(side.get("barrier", 0)) > 0:
-		parts.append("🛡 %s" % int(side.get("barrier", 0)))
+		parts.append({"icon": "shield", "text": str(int(side.get("barrier", 0))), "color": muted})
 	if int(side.get("phantom_charges", 0)) > 0:
-		parts.append("👻 ×%s" % int(side.get("phantom_charges", 0)))
+		parts.append({"icon": "ghost", "text": "×%s" % int(side.get("phantom_charges", 0)), "color": muted})
 	if int(side.get("overclock_stacks", 0)) > 0:
-		parts.append("⚡ OC %s" % int(side.get("overclock_stacks", 0)))
+		parts.append({"icon": "zap", "text": "OC %s" % int(side.get("overclock_stacks", 0)), "color": muted})
 	var kt := str(side.get("kinetic_tantrum", ""))
 	if kt == "strong":
-		parts.append("💥 2.0×")
+		parts.append({"icon": "badge-alert", "text": "2.0×", "color": muted})
 	elif kt == "normal":
-		parts.append("💥 1.5×")
+		parts.append({"icon": "badge-alert", "text": "1.5×", "color": muted})
 	var trick := str(side.get("dirty_trick", ""))
 	if not trick.is_empty():
-		parts.append("🃏 %s" % trick.replace("_", " "))
+		parts.append({
+			"icon": "list-checks",
+			"text": trick.replace("_", " "),
+			"color": muted,
+		})
 	if bool(side.get("drone_ready", false)):
-		parts.append("🛸")
-	return " · ".join(parts)
+		parts.append({"icon": "bot", "text": "", "color": muted})
+	return parts
+
+
+static func fill_status_chip(host: Control, side: Dictionary, align_right: bool = false) -> void:
+	if host == null or not is_instance_valid(host):
+		return
+	while host.get_child_count() > 0:
+		var c := host.get_child(0)
+		host.remove_child(c)
+		c.free()
+	var row: HBoxContainer
+	if host is HBoxContainer:
+		row = host as HBoxContainer
+	else:
+		row = HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		host.add_child(row)
+	row.add_theme_constant_override("separation", 8)
+	row.alignment = (
+		BoxContainer.ALIGNMENT_END if align_right else BoxContainer.ALIGNMENT_BEGIN
+	)
+	for raw in status_chip_parts(side):
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var part: Dictionary = raw
+		var chip := HBoxContainer.new()
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.add_theme_constant_override("separation", 3)
+		row.add_child(chip)
+		var icon_id := str(part.get("icon", ""))
+		var tint: Color = part.get("color", Color("#A5B4FC", 0.95))
+		if CurrencyIcon.is_asset_glyph(icon_id):
+			chip.add_child(UiIcon.make(icon_id, tint, 14.0))
+		var txt := str(part.get("text", "")).strip_edges()
+		if not txt.is_empty():
+			var lab := Label.new()
+			lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			lab.text = txt
+			lab.add_theme_font_size_override("font_size", 15)
+			lab.add_theme_color_override("font_color", tint)
+			ClientUi.apply_display_font(lab)
+			chip.add_child(lab)
+
+
+static func status_chip_text(side: Dictionary) -> String:
+	## Plain-text fallback (logs / diagnostics).
+	var bits: PackedStringArray = []
+	for raw in status_chip_parts(side):
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var part: Dictionary = raw
+		var t := str(part.get("text", "")).strip_edges()
+		var id := str(part.get("icon", ""))
+		if t.is_empty():
+			bits.append(id.to_upper())
+		else:
+			bits.append(t)
+	return " · ".join(bits)
 
 
 ## Authoritative end HP for skip / settle presentation.

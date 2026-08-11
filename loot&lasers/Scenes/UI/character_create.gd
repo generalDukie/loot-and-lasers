@@ -397,8 +397,7 @@ func _build() -> void:
 	if not _race_name.is_empty() and _pages.size() > 1:
 		var hint := _pages[1].get_meta("race_hint") as Label
 		if hint:
-			var info := GameData.race_info(_race_name)
-			hint.text = "For %s %s" % [str(info.get("emoji", "")), _race_name]
+			hint.text = "For %s" % _race_name
 	_building = false
 
 
@@ -525,11 +524,16 @@ func _make_race_card(race_name: String) -> Button:
 	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_row.add_theme_constant_override("separation", _si(4))
 	copy.add_child(name_row)
-	var emoji := Label.new()
-	emoji.text = str(info.get("emoji", ""))
-	emoji.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emoji.add_theme_font_size_override("font_size", _fs(19))
-	name_row.add_child(emoji)
+	var emoji_host := CenterContainer.new()
+	emoji_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	emoji_host.custom_minimum_size = Vector2(_fs(19), _fs(19))
+	name_row.add_child(emoji_host)
+	CurrencyIcon.fill_glyph_host(
+		emoji_host,
+		str(info.get("emoji", "user")),
+		float(_fs(19)),
+		ClientUi.TEXT
+	)
 	var nm := Label.new()
 	nm.text = race_name
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -692,8 +696,9 @@ func _build_looks_page() -> Control:
 	head.add_child(_looks_class_chip)
 
 	var rand_btn := Button.new()
-	rand_btn.text = "⚄  Randomize"
+	rand_btn.text = "Randomize"
 	_apply_scaled_ghost(rand_btn)
+	UiIcon.apply_leading_icon(rand_btn, "dices", ClientUi.MUTED, float(_fs(16)))
 	rand_btn.pressed.connect(_randomize_looks)
 	head.add_child(rand_btn)
 
@@ -1098,8 +1103,7 @@ func _select_race(race_name: String) -> void:
 	if _pages.size() > 1:
 		var hint := _pages[1].get_meta("race_hint") as Label
 		if hint:
-			var info := GameData.race_info(race_name)
-			hint.text = "For %s %s" % [str(info.get("emoji", "")), race_name]
+			hint.text = "For %s" % race_name
 
 
 func _select_class(cls_name: String) -> void:
@@ -1210,12 +1214,23 @@ func _refresh_lore() -> void:
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	copy.add_theme_constant_override("separation", _si(4))
 	row.add_child(copy)
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", _si(6))
+	copy.add_child(title_row)
+	var glyph := str(info.get("emoji", "user"))
+	if CurrencyIcon.is_asset_glyph(glyph):
+		title_row.add_child(UiIcon.make(glyph, ClientUi.TEXT, float(_fs(16))))
+	elif not glyph.is_empty():
+		var glyph_lab := Label.new()
+		glyph_lab.text = glyph
+		glyph_lab.add_theme_font_size_override("font_size", _fs(16))
+		title_row.add_child(glyph_lab)
 	var title := Label.new()
-	title.text = "%s %s" % [str(info.get("emoji", "")), _race_name]
+	title.text = _race_name
 	title.add_theme_font_size_override("font_size", _fs(16))
 	ClientUi.apply_display_font(title)
 	title.add_theme_color_override("font_color", ClientUi.TEXT)
-	copy.add_child(title)
+	title_row.add_child(title)
 	var lore := Label.new()
 	lore.text = str(info.get("lore", ""))
 	lore.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

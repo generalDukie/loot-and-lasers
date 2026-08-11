@@ -8,10 +8,12 @@ var _detail_root: PanelContainer
 var _detail_glow: ColorRect
 var _detail_hair: ColorRect
 var _detail_icon_wrap: PanelContainer
-var _detail_icon: Label
+var _detail_icon: CenterContainer
 var _detail_sector: Label
 var _detail_title: Label
-var _detail_boss: Label
+var _detail_boss: HBoxContainer
+var _detail_boss_icon: CenterContainer
+var _detail_boss_lab: Label
 var _detail_cleared_lab: Label
 var _detail_cleared_val: Label
 var _detail_desc: Label
@@ -21,9 +23,12 @@ var _return_front_btn: Button
 var _detail_progress: ProgressBar
 var _encounter_grid: GridContainer
 var _cooldown_bar: PanelContainer
+var _cooldown_icon: CenterContainer
 var _cooldown_lab: Label
 var _skip_btn: Button
 var _fight_btn: Button
+var _view_rewards_btn: Button
+var _reward_sheet_host: Control
 var _map_stage: SpiralStage
 var _busy := false
 var _tick: Timer
@@ -34,7 +39,14 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_layout = SpiralMap.build()
 	_build()
+	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
+		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
 	await _boot()
+	_sync_view_rewards_cta()
+
+
+func _on_combat_return_changed() -> void:
+	_sync_view_rewards_cta()
 
 
 func _boot() -> void:
@@ -55,6 +67,13 @@ func _boot() -> void:
 	_tick.timeout.connect(_populate_meta)
 	add_child(_tick)
 	_tick.start()
+
+	_reward_sheet_host = Control.new()
+	_reward_sheet_host.visible = false
+	_reward_sheet_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_reward_sheet_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reward_sheet_host.z_index = 80
+	add_child(_reward_sheet_host)
 
 
 func _build() -> void:
@@ -83,20 +102,8 @@ func _build() -> void:
 	head_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head_l.add_theme_constant_override("separation", 2)
 	header.add_child(head_l)
-	var title_row := HBoxContainer.new()
-	title_row.add_theme_constant_override("separation", 10)
+	var title_row := UiIcon.make_title_row("satellite", "Galactic Frontier", ClientUi.CYAN, 32, 29.0)
 	head_l.add_child(title_row)
-	var sat := Label.new()
-	sat.text = "🛰"
-	sat.add_theme_font_size_override("font_size", 29)
-	sat.add_theme_color_override("font_color", ClientUi.CYAN)
-	title_row.add_child(sat)
-	var title := Label.new()
-	title.text = "Galactic Frontier"
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", ClientUi.CYAN)
-	ClientUi.apply_display_font(title)
-	title_row.add_child(title)
 	_subtitle = Label.new()
 	_subtitle.add_theme_font_size_override("font_size", 15)
 	_subtitle.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -220,10 +227,8 @@ func _build() -> void:
 	_detail_icon_wrap = PanelContainer.new()
 	_detail_icon_wrap.custom_minimum_size = Vector2(64, 64)
 	head_row.add_child(_detail_icon_wrap)
-	_detail_icon = Label.new()
-	_detail_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_detail_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_detail_icon.add_theme_font_size_override("font_size", 32)
+	_detail_icon = CenterContainer.new()
+	_detail_icon.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_detail_icon_wrap.add_child(_detail_icon)
 
 	var head_col := VBoxContainer.new()
@@ -243,12 +248,19 @@ func _build() -> void:
 	ClientUi.apply_display_font(_detail_title)
 	head_col.add_child(_detail_title)
 
-	_detail_boss = Label.new()
-	_detail_boss.clip_text = true
-	_detail_boss.add_theme_font_size_override("font_size", 16)
-	_detail_boss.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_detail_boss)
+	_detail_boss = HBoxContainer.new()
+	_detail_boss.add_theme_constant_override("separation", 6)
 	head_col.add_child(_detail_boss)
+	_detail_boss_icon = CenterContainer.new()
+	_detail_boss_icon.custom_minimum_size = Vector2(18, 18)
+	_detail_boss.add_child(_detail_boss_icon)
+	_detail_boss_lab = Label.new()
+	_detail_boss_lab.clip_text = true
+	_detail_boss_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_detail_boss_lab.add_theme_font_size_override("font_size", 16)
+	_detail_boss_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_detail_boss_lab)
+	_detail_boss.add_child(_detail_boss_lab)
 
 	var cleared_col := VBoxContainer.new()
 	cleared_col.add_theme_constant_override("separation", 0)
@@ -368,6 +380,9 @@ func _build() -> void:
 	var cd_row := HBoxContainer.new()
 	cd_row.add_theme_constant_override("separation", 8)
 	_cooldown_bar.add_child(cd_row)
+	_cooldown_icon = CenterContainer.new()
+	_cooldown_icon.custom_minimum_size = Vector2(18, 18)
+	cd_row.add_child(_cooldown_icon)
 	_cooldown_lab = Label.new()
 	_cooldown_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_cooldown_lab.add_theme_font_size_override("font_size", 16)
@@ -375,29 +390,42 @@ func _build() -> void:
 	ClientUi.apply_display_font(_cooldown_lab)
 	cd_row.add_child(_cooldown_lab)
 	_skip_btn = Button.new()
-	_skip_btn.text = "⚡ Skip · %s💎" % DungeonRules.SKIP_COST
+	_skip_btn.text = "Skip · %s" % DungeonRules.SKIP_COST
 	ClientUi.apply_ghost_button(_skip_btn)
+	UiIcon.apply_leading_icon(_skip_btn, "zap", Color("#FDE68A"), 16.0)
 	_skip_btn.add_theme_font_size_override("font_size", 15)
 	_skip_btn.add_theme_color_override("font_color", Color("#FDE68A"))
 	_skip_btn.pressed.connect(_on_skip)
 	cd_row.add_child(_skip_btn)
 
 	_fight_btn = Button.new()
-	_fight_btn.text = "⚔  Fight 1"
+	_fight_btn.text = "Fight 1"
 	_fight_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fight_btn.custom_minimum_size.y = 61
 	ClientUi.apply_primary_button(_fight_btn)
+	UiIcon.apply_leading_icon(_fight_btn, "swords", Color(0.05, 0.05, 0.08), 20.0)
 	_fight_btn.add_theme_font_size_override("font_size", 20)
 	_fight_btn.pressed.connect(_on_fight)
 	TutorialManager.tag_target(_fight_btn, "galaxy-fight")
 	act_col.add_child(_fight_btn)
 
+	_view_rewards_btn = Button.new()
+	_view_rewards_btn.text = "VIEW REWARDS"
+	_view_rewards_btn.visible = false
+	_view_rewards_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_view_rewards_btn.custom_minimum_size.y = 61
+	ClientUi.apply_primary_button(_view_rewards_btn)
+	_view_rewards_btn.add_theme_font_size_override("font_size", 20)
+	_view_rewards_btn.pressed.connect(_on_view_rewards)
+	act_col.add_child(_view_rewards_btn)
+
 
 func _populate_meta() -> void:
+	_sync_view_rewards_cta()
 	var active := DungeonManager.current_planet_id()
 	var in_infinite := active > 10
 	var depth := maxi(1, active - 10)
-	_subtitle.text = "1 hour cooldown, skip for %s💎%s" % [
+	_subtitle.text = "1 hour cooldown, skip for %s Nova%s" % [
 		str(DungeonRules.SKIP_COST),
 		(" · Wormhole depth %s" % depth) if in_infinite else "",
 	]
@@ -444,7 +472,7 @@ func _update_detail() -> void:
 	_detail_icon_wrap.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(tint, 0.22), Color(tint, 0.55), 12, 1
 	))
-	_detail_icon.text = str(planet.get("icon", "🪐"))
+	CurrencyIcon.fill_glyph_host(_detail_icon, str(planet.get("icon", "orbit")), 36.0, tint)
 
 	if viewing_wh:
 		_detail_sector.text = "? WORMHOLE"
@@ -457,10 +485,10 @@ func _update_detail() -> void:
 	_detail_title.add_theme_color_override("font_color", tint)
 
 	_detail_boss.visible = true
-	_detail_boss.text = "%s  %s" % [
-		str(planet.get("boss_emoji", "?")),
-		str(planet.get("boss", "")),
-	]
+	var boss_glyph := str(planet.get("boss_emoji", "skull"))
+	CurrencyIcon.fill_glyph_host(_detail_boss_icon, boss_glyph, 16.0, tint)
+	_detail_boss_lab.text = str(planet.get("boss", ""))
+	_detail_boss_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 
 	var cleared := maxi(0, display_enemy - 1)
 	if viewing_wh:
@@ -506,21 +534,25 @@ func _update_actions(fightable: bool, locked_ahead: bool, enemy_idx: int) -> voi
 
 	_cooldown_bar.visible = cooldown > 0
 	if cooldown > 0:
-		_cooldown_lab.text = "⏱  Cooldown %s" % DungeonRules.format_ms(cooldown)
+		CurrencyIcon.fill_glyph_host(_cooldown_icon, "timer", 16.0, Color("#FDE68A"))
+		_cooldown_lab.text = "Cooldown %s" % DungeonRules.format_ms(cooldown)
 
 	_fight_btn.disabled = cooldown > 0 or _busy or not fightable
 
 	if fightable:
-		_fight_btn.text = "⚔  Fight %s%s" % [
+		_fight_btn.text = "Fight %s%s" % [
 			enemy_idx, " · BOSS" if enemy_idx == DungeonRules.ENEMIES_PER_PLANET else "",
 		]
 		ClientUi.apply_primary_button(_fight_btn)
+		UiIcon.apply_leading_icon(_fight_btn, "swords", Color(0.05, 0.05, 0.08), 20.0)
 	elif locked_ahead:
-		_fight_btn.text = "🔒  Locked"
+		_fight_btn.text = "Locked"
 		ClientUi.apply_ghost_button(_fight_btn)
+		UiIcon.apply_leading_icon(_fight_btn, "lock", ClientUi.MUTED, 18.0)
 	else:
-		_fight_btn.text = "✓  Cleared"
+		_fight_btn.text = "Cleared"
 		ClientUi.apply_ghost_button(_fight_btn)
+		UiIcon.apply_leading_icon(_fight_btn, "check", ClientUi.SUCCESS, 18.0)
 
 
 func _enc_cell(
@@ -528,35 +560,33 @@ func _enc_cell(
 ) -> PanelContainer:
 	var border := Color(0.35, 0.4, 0.5, 0.45)
 	var bg := Color(0.06, 0.07, 0.1, 0.95)
-	var icon := "⚔"
+	var icon_id := "swords"
 	var icon_col := ClientUi.CYAN
 	var label := str(idx)
 	var label_col := ClientUi.TEXT
-	var use_lock_icon := false
 
 	if is_boss:
 		border = Color("#FBBF24", 0.55)
 		bg = Color(0.12, 0.08, 0.03, 0.95)
-		icon = "👑"
+		icon_id = "crown"
 		icon_col = Color("#FCD34D")
 		label = "BOSS"
 		label_col = Color("#FDE68A")
 	elif is_current:
 		border = Color(ClientUi.CYAN, 0.7)
 		bg = Color(0.04, 0.1, 0.12, 0.96)
-		icon = "⚔"
+		icon_id = "swords"
 		icon_col = ClientUi.CYAN
 	elif is_cleared:
 		border = Color(ClientUi.SUCCESS, 0.4)
 		bg = Color(0.04, 0.1, 0.07, 0.9)
-		icon = "✓"
+		icon_id = "check"
 		icon_col = ClientUi.SUCCESS
 		label_col = Color(ClientUi.SUCCESS, 0.9)
 	elif locked:
 		border = Color(0.3, 0.32, 0.38, 0.35)
 		bg = Color(0.05, 0.05, 0.07, 0.55)
-		icon = ""
-		use_lock_icon = true
+		icon_id = "lock"
 		icon_col = Color(ClientUi.MUTED, 0.85)
 		label_col = Color(ClientUi.MUTED, 0.6)
 
@@ -586,18 +616,10 @@ func _enc_cell(
 		next_bg.add_theme_stylebox_override("panel", next_style)
 		next_bg.add_child(next)
 		col.add_child(next_bg)
-	if use_lock_icon:
-		var lock_wrap := CenterContainer.new()
-		lock_wrap.custom_minimum_size = Vector2(24, 24)
-		lock_wrap.add_child(UiIcon.make("lock", icon_col, 18.0))
-		col.add_child(lock_wrap)
-	else:
-		var icon_lab := Label.new()
-		icon_lab.text = icon
-		icon_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		icon_lab.add_theme_font_size_override("font_size", 19)
-		icon_lab.add_theme_color_override("font_color", icon_col)
-		col.add_child(icon_lab)
+	var icon_wrap := CenterContainer.new()
+	icon_wrap.custom_minimum_size = Vector2(24, 24)
+	icon_wrap.add_child(UiIcon.make(icon_id, icon_col, 18.0))
+	col.add_child(icon_wrap)
 	var lab := Label.new()
 	lab.text = label
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -646,6 +668,28 @@ func _set_status(msg: String, danger := false) -> void:
 		"font_color",
 		Color(1.0, 0.55, 0.45) if danger else ClientUi.MUTED
 	)
+
+
+func _on_view_rewards() -> void:
+	if _busy:
+		return
+	_busy = true
+	if is_instance_valid(_view_rewards_btn):
+		_view_rewards_btn.disabled = true
+	await CombatReturnManager.present_rewards(_reward_sheet_host)
+	_busy = false
+	_sync_view_rewards_cta()
+
+
+func _sync_view_rewards_cta() -> void:
+	if not is_instance_valid(_view_rewards_btn):
+		return
+	var show := CombatReturnManager.is_for_kind("dungeon")
+	_view_rewards_btn.visible = show
+	if show:
+		var settling := CombatReturnManager.state == CombatReturnManager.STATE_SETTLING
+		_view_rewards_btn.disabled = settling or _busy
+		_view_rewards_btn.text = "SETTLING…" if settling else "VIEW REWARDS"
 
 
 func _on_fight() -> void:

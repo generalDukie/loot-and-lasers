@@ -10,16 +10,16 @@ const MUTED := "#8CA4B7"
 const FG := "#C8D6E0"
 
 const SECTIONS: Array = [
-	{"id": "start", "label": "Getting Started", "icon": "📘", "color": "#22D3EE"},
-	{"id": "currencies", "label": "Currencies", "icon": "🪙", "color": "#FFD700"},
-	{"id": "missions", "label": "Missions & Fuel", "icon": "🚀", "color": "#FF9E4F"},
-	{"id": "combat", "label": "Combat & Arena", "icon": "⚔", "color": "#FF4D6D"},
-	{"id": "galaxy", "label": "Galaxy Dungeon", "icon": "🗺", "color": "#00E5FF"},
-	{"id": "market", "label": "Black Market", "icon": "🛍", "color": "#4ADE80"},
-	{"id": "blackhole", "label": "Void", "icon": "🌀", "color": "#9D6BFF"},
-	{"id": "ship", "label": "Ship Hangar", "icon": "🚀", "color": "#FFD700"},
-	{"id": "guilds", "label": "Guilds & Nexus", "icon": "👑", "color": "#A855F7"},
-	{"id": "social", "label": "Social & Mail", "icon": "👥", "color": "#34D399"},
+	{"id": "start", "label": "Getting Started", "icon": "book-open", "color": "#22D3EE"},
+	{"id": "currencies", "label": "Currencies", "icon": "coins", "color": "#FFD700"},
+	{"id": "missions", "label": "Missions & Fuel", "icon": "rocket", "color": "#FF9E4F"},
+	{"id": "combat", "label": "Combat & Arena", "icon": "swords", "color": "#FF4D6D"},
+	{"id": "galaxy", "label": "Galaxy Dungeon", "icon": "map", "color": "#00E5FF"},
+	{"id": "market", "label": "Black Market", "icon": "shopping-bag", "color": "#4ADE80"},
+	{"id": "blackhole", "label": "Void", "icon": "tornado", "color": "#9D6BFF"},
+	{"id": "ship", "label": "Ship Hangar", "icon": "rocket", "color": "#FFD700"},
+	{"id": "guilds", "label": "Guilds & Nexus", "icon": "crown", "color": "#A855F7"},
+	{"id": "social", "label": "Social & Mail", "icon": "users", "color": "#34D399"},
 ]
 
 
@@ -75,8 +75,8 @@ static func body_bbcode(section_id: String) -> String:
 			return (
 				_stardust_h()
 				+ _p("The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, attribute buys, and arena challenger refreshes.")
-				+ _h("💎 Nova Crystals")
-				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas (%s💎 per arena battle after free fights). Frontier cooldown skip costs %s💎." % [
+				+ _h("Nova Crystals")
+				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas (%s Nova Crystals per arena battle after free fights). Frontier cooldown skip costs %s Nova Crystals." % [
 					str(ArenaRules.PAID_BATTLE_COST), str(DungeonRules.SKIP_COST)
 				])
 				+ "[font_size=11]%s[/font_size]\n" % _fuel("FUEL")
@@ -93,7 +93,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("Each quest shows its [b]duration[/b] and [b]fuel cost[/b]. Longer jobs pay more.")
 				+ _li("Launch it — fuel is consumed and a timer starts. You can keep playing while it runs.")
 				+ _li("When the timer ends, the mission is ready to [b]claim[/b]. Claiming grants XP, stardust, and (about 20% of the time) gear — with pity bumps after misses. Stims drop on their own chance.")
-				+ _li("Impatient? Spend [b]Nova Crystals[/b] to skip — cost scales with time left (5 💎 per remaining minute).")
+				+ _li("Impatient? Spend [b]Nova Crystals[/b] to skip — cost scales with time left (5 Nova Crystals per remaining minute).")
 				+ "\n" + _h("Fuel & reset")
 				+ _p("Your fuel pool refills to full every [b]24 hours[/b]. You can spend [b]%s Nova Crystals[/b] to buy +%s fuel, up to [b]%s times[/b] per cycle. Upgrade your [b]Reinforced Fuel Tank[/b] for more capacity and [b]Fuel Injector Tune[/b] to cut per-mission costs." % [
 					str(ShopManager.FUEL_PURCHASE_COST),
@@ -184,7 +184,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("[b]Mail[/b] — receive system mail and rewards. Some mail carries claimable rewards.")
 				+ _li("[b]Global Chat[/b] — talk to everyone online. Mind the rules; report abuse if needed.")
 				+ _li("[b]Daily Login[/b] — a 30-day reward calendar. Log in each day to claim; rewards escalate.")
-				+ _tip("✉ Tip: check Mail and the notification bell regularly — rewards expire!")
+				+ _tip("Tip: check Mail and the notification bell regularly — rewards expire!")
 			)
 		_:
 			return "[color=%s]Section unavailable.[/color]" % MUTED

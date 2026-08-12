@@ -31,13 +31,13 @@ a server-side administrative secret.
 From the repository root:
 
 ```powershell
-.\scripts\build-windows-installer.ps1 -Version "0.1.15"
+.\scripts\build-windows-installer.ps1 -Version "0.1.19"
 ```
 
 If your SSH key is passphrase-protected (common), use:
 
 ```powershell
-.\scripts\build-windows-installer.ps1 -Version "0.1.15" -Interactive
+.\scripts\build-windows-installer.ps1 -Version "0.1.19" -Interactive
 ```
 
 The script:
@@ -48,7 +48,7 @@ The script:
 4. exports the `Windows Staging` Godot preset (custom feature `staging_client`);
 5. **verifies** the exported exe embeds that exact key (fails the build on mismatch/missing bake);
 6. deletes the temporary configuration in a `finally` block;
-7. compiles `dist\LootAndLasers-Setup-0.1.15.exe`.
+7. compiles `dist\LootAndLasers-Setup-0.1.19.exe`.
 
 You no longer need to hand-copy the key before each installer build. Use `-SkipRemoteKeySync` only for offline/emergency local bakes.
 

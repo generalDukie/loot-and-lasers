@@ -13,7 +13,7 @@ export const ACHIEVEMENT_DEFINITIONS = Object.freeze([
   { id: "centurion", name: "Centurion", desc: "Win 100 Arena battles", icon: "🏅", category: "Combat", title: "the Champion", source: "arena_wins", op: "gte", target: 100 },
   { id: "hot_streak", name: "Hot Streak", desc: "Reach a 5-win Arena streak", icon: "🔥", category: "Combat", title: "On Fire", source: "arena_max_streak", op: "gte", target: 5 },
   { id: "unstoppable", name: "Unstoppable", desc: "Reach a 10-win Arena streak", icon: "⚡", category: "Combat", title: "Unstoppable", source: "arena_max_streak", op: "gte", target: 10 },
-  { id: "rising_star", name: "Rising Star", desc: "Reach 1500 Arena rating", icon: "✨", category: "Combat", title: "Rising Star", source: "arena_rating", op: "gte", target: 1500 },
+  { id: "rising_star", name: "Rising Star", desc: "Reach 1500 Arena rating", icon: "stardust", category: "Combat", title: "Rising Star", source: "arena_rating", op: "gte", target: 1500 },
   { id: "living_legend", name: "Living Legend", desc: "Reach 2000 Arena rating", icon: "👑", category: "Combat", title: "Living Legend", source: "arena_rating", op: "gte", target: 2000 },
   { id: "brawler", name: "Brawler", desc: "Fight 25 Arena battles", icon: "🥊", category: "Combat", title: "the Brawler", source: "arena_battles", op: "gte", target: 25 },
   { id: "initiate", name: "Initiate", desc: "Reach level 10", icon: "🌱", category: "Progression", title: "Initiate", source: "level", op: "gte", target: 10 },

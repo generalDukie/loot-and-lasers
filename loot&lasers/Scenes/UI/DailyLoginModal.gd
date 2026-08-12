@@ -267,8 +267,8 @@ func _make_day_card(row: Dictionary) -> Control:
 	vb.add_child(day_lbl)
 
 	var icon_id := DailyLoginCatalog.reward_icon_id(rewards)
-	if icon_id == "nova":
-		vb.add_child(CurrencyIcon.make("nova", 20.0))
+	if icon_id == "nova" or icon_id == "stardust" or icon_id == "fuel":
+		vb.add_child(CurrencyIcon.make(icon_id, 20.0))
 	else:
 		vb.add_child(UiIcon.make(icon_id, accent, 20.0))
 

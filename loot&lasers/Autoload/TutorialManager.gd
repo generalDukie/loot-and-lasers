@@ -20,6 +20,8 @@ var _hero_upgrade_advance_pending := false
 var _hero_equip_advance_pending := false
 var _hero_upgrade_flash_stat := ""
 var _hero_equip_flash_stat := ""
+## Locked Black Market stim slot for shop_market (stable across restocks until step ends).
+var _shop_tutorial_stim_slot := ""
 
 
 func _ready() -> void:
@@ -74,6 +76,7 @@ func clear_local() -> void:
 	_hero_equip_advance_pending = false
 	_hero_upgrade_flash_stat = ""
 	_hero_equip_flash_stat = ""
+	_shop_tutorial_stim_slot = ""
 
 
 func should_show() -> bool:
@@ -98,7 +101,13 @@ func blocks_daily_login_prompt() -> bool:
 func locks_combat_navigation() -> bool:
 	if not should_show():
 		return false
-	return step_id() in ["mission_fight", "mission_view_rewards"]
+	if step_id() == "mission_fight":
+		return true
+	## Fight click already advanced to Operative nav; keep the duel mounted
+	## until the combat report is up (coach un-suppresses then).
+	if step_id() == "click_hero" and _coach_suppressed:
+		return true
+	return false
 
 
 ## Block starting Arena fights until onboarding is finished or skipped.
@@ -110,8 +119,6 @@ func coach_visible() -> bool:
 	if not should_show():
 		return false
 	if _coach_suppressed:
-		return false
-	if step_id() == "mission_view_rewards" and not _mission_outro_ready:
 		return false
 	return true
 
@@ -183,18 +190,17 @@ func hero_equip_flash_stat() -> String:
 
 func locks_post_combat_report_actions() -> bool:
 	## Disable combat-report Cantina / Operative buttons so the player must use
-	## the side-nav Operative control. Apply while viewing rewards OR on the
-	## Operative-nav step — the sheet is often built before click_hero lands,
-	## and post_combat_overlay is not in-tree yet when buttons are created.
+	## the side-nav Operative control. The sheet is often built before click_hero
+	## lands, and post_combat_overlay is not in-tree yet when buttons are created.
 	if not should_show():
 		return false
-	return step_id() in ["mission_view_rewards", "click_hero"]
+	return step_id() == "click_hero"
 
 
 func coach_card_visible() -> bool:
 	if not coach_visible():
 		return false
-	if step_id() in ["mission_start", "mission_view_rewards"]:
+	if step_id() == "mission_start":
 		return false
 	return true
 
@@ -210,7 +216,10 @@ func suppress_coach_for_combat() -> void:
 
 func notify_mission_outro_ready() -> void:
 	_mission_outro_ready = true
-	_coach_suppressed = false
+	## Report can land before AdvanceTutorial returns click_hero — keep the
+	## fight coach hidden until that step is active.
+	if step_id() == "click_hero":
+		_coach_suppressed = false
 	tutorial_changed.emit(tutorial)
 
 
@@ -367,8 +376,8 @@ func report_click(tutorial_id: String) -> void:
 	if not is_click_gate():
 		return
 	## Free Skip · Fight is an alternate spotlight during mission_fight — same
-	## rules as Fight Encounter: hide coach + advance gate on click; Claim Your
-	## Spoils only appears after combat outro (see suppress / mission_outro_ready).
+	## rules as Fight Encounter: hide coach + advance gate on click. Operative
+	## nav (click_hero) waits until the combat report un-suppresses the coach.
 	var is_mission_skip := step_id() == "mission_fight" and tutorial_id == "mission-skip"
 	if tutorial_id != spotlight_id() and tutorial_id != extra_spotlight_id() and not is_mission_skip:
 		return
@@ -421,9 +430,13 @@ func _apply_payload(data: Dictionary) -> void:
 	var t = data.get("tutorial", {})
 	tutorial = t if typeof(t) == TYPE_DICTIONARY else {}
 	var next_step := str(tutorial.get("step", {}).get("id", "")) if typeof(tutorial.get("step", {})) == TYPE_DICTIONARY else ""
-	if next_step != "mission_view_rewards":
+	if next_step != "shop_market":
+		_shop_tutorial_stim_slot = ""
+	if next_step != "click_hero":
 		_mission_outro_ready = false
-	if next_step != "mission_fight" and next_step != "mission_view_rewards":
+	if next_step == "click_hero" and _mission_outro_ready:
+		_coach_suppressed = false
+	elif next_step != "mission_fight" and not (next_step == "click_hero" and _coach_suppressed):
 		_coach_suppressed = false
 	var ch = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not ch.is_empty():
@@ -434,6 +447,27 @@ func _apply_payload(data: Dictionary) -> void:
 		tutorial_finished.emit()
 		return
 	call_deferred("_resume_satisfied_gates")
+
+
+## Pick / keep one stim slot for Black Market Basics. Re-picks only if the locked
+## slot vanished from stock (e.g. after restock).
+func lock_shop_tutorial_stim(slot_ids: Array) -> String:
+	var available: Array = []
+	for sid in slot_ids:
+		var s := str(sid).strip_edges()
+		if not s.is_empty():
+			available.append(s)
+	if available.is_empty():
+		_shop_tutorial_stim_slot = ""
+		return ""
+	if not _shop_tutorial_stim_slot.is_empty() and available.has(_shop_tutorial_stim_slot):
+		return _shop_tutorial_stim_slot
+	_shop_tutorial_stim_slot = str(available[randi() % available.size()])
+	return _shop_tutorial_stim_slot
+
+
+func shop_tutorial_stim_slot() -> String:
+	return _shop_tutorial_stim_slot
 
 
 func _resume_satisfied_gates() -> void:

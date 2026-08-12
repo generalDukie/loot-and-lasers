@@ -89,7 +89,7 @@ func _build() -> void:
 	_saved_toast.text = "Settings Saved"
 	_saved_toast.visible = false
 	_saved_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_saved_toast.add_theme_font_size_override("font_size", 16)
+	_saved_toast.add_theme_font_size_override("font_size", 19)
 	_saved_toast.add_theme_color_override("font_color", ClientUi.SUCCESS)
 	ClientUi.apply_display_font(_saved_toast)
 	root.add_child(_saved_toast)
@@ -220,7 +220,7 @@ func _card(icon_id: String, title: String, subtitle: String, body: Control) -> P
 
 	var s := Label.new()
 	s.text = subtitle
-	s.add_theme_font_size_override("font_size", 14)
+	s.add_theme_font_size_override("font_size", 18)
 	s.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(s)
 	titles.add_child(s)
@@ -364,7 +364,7 @@ func _build_character_body() -> VBoxContainer:
 		ClientUi.format_level(ch.get("level", 1)),
 		str(ch.get("class", "Operative")),
 	]
-	meta.add_theme_font_size_override("font_size", 16)
+	meta.add_theme_font_size_override("font_size", 19)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	info.add_child(meta)
@@ -379,7 +379,7 @@ func _build_character_body() -> VBoxContainer:
 
 	var hint := Label.new()
 	hint.text = "Select another operative from your roster."
-	hint.add_theme_font_size_override("font_size", 13)
+	hint.add_theme_font_size_override("font_size", 17)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	col.add_child(hint)
@@ -452,7 +452,7 @@ func _build_video_body() -> VBoxContainer:
 
 	var tip := Label.new()
 	tip.text = "F11 toggles fullscreen anytime."
-	tip.add_theme_font_size_override("font_size", 13)
+	tip.add_theme_font_size_override("font_size", 17)
 	tip.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tip)
 	col.add_child(tip)
@@ -543,7 +543,7 @@ func _build_danger_zone() -> PanelContainer:
 
 	var sub := Label.new()
 	sub.text = "Irreversible account actions."
-	sub.add_theme_font_size_override("font_size", 14)
+	sub.add_theme_font_size_override("font_size", 18)
 	sub.add_theme_color_override("font_color", Color(ClientUi.DANGER, 0.7))
 	ClientUi.apply_body_font(sub)
 	col.add_child(sub)
@@ -664,7 +664,7 @@ func _coming_soon(label: String) -> Control:
 	row.add_child(l)
 	var tag := Label.new()
 	tag.text = "Coming soon"
-	tag.add_theme_font_size_override("font_size", 12)
+	tag.add_theme_font_size_override("font_size", 16)
 	tag.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.65))
 	ClientUi.apply_display_font(tag)
 	row.add_child(tag)
@@ -700,7 +700,7 @@ func _premium_slider(
 	pct.text = "%d%%" % int(round(value * 100.0))
 	pct.custom_minimum_size.x = 56
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	pct.add_theme_font_size_override("font_size", 15)
+	pct.add_theme_font_size_override("font_size", 18)
 	pct.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(pct)
 	head.add_child(pct)

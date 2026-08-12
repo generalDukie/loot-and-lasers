@@ -57,7 +57,7 @@ func _build() -> void:
 
 	_meta = Label.new()
 	_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_meta.add_theme_font_size_override("font_size", 16)
+	_meta.add_theme_font_size_override("font_size", 19)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_meta)
 	root.add_child(_meta)
@@ -218,7 +218,7 @@ func _make_achievement_row(entry: Dictionary, ch: Dictionary) -> PanelContainer:
 	var desc := Label.new()
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.text = str(entry.get("desc", ""))
-	desc.add_theme_font_size_override("font_size", 15)
+	desc.add_theme_font_size_override("font_size", 19)
 	desc.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(desc)
 	var p := AchievementsCatalog.progress(entry, ch)

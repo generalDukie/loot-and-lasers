@@ -207,7 +207,7 @@ func _build_card(message: String, hint: String) -> PanelContainer:
 		sub.text = hint
 		sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		sub.custom_minimum_size.x = 180.0
-		sub.add_theme_font_size_override("font_size", 14)
+		sub.add_theme_font_size_override("font_size", ClientUi.BODY_FS)
 		sub.add_theme_color_override("font_color", Color(0.86, 0.78, 0.62))
 		ClientUi.apply_body_font(sub)
 		col.add_child(sub)

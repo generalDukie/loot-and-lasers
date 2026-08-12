@@ -1,7 +1,7 @@
 extends Control
 ## Guild wars — declare, ready, resolve (web GuildWars chrome).
 
-var _meta: Label
+var _meta: HBoxContainer
 var _status: Label
 var _list: VBoxContainer
 var _busy := false
@@ -55,11 +55,9 @@ func _build() -> void:
 	ClientUi.apply_display_font(eye)
 	head_l.add_child(eye)
 	head_l.add_child(UiIcon.make_title_row("swords", "Guild Wars", ClientUi.TEXT, 29, 28.0))
-	_meta = Label.new()
-	_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_meta.add_theme_font_size_override("font_size", 15)
-	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_meta)
+	_meta = HBoxContainer.new()
+	_meta.add_theme_constant_override("separation", 4)
+	_meta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head_l.add_child(_meta)
 
 	var refresh := Button.new()
@@ -93,14 +91,14 @@ func _populate() -> void:
 	var guild: Dictionary = SocialManager.my_guild
 	var role := str(SocialManager.my_membership.get("role", ""))
 	if guild.is_empty():
-		_meta.text = "Join a guild first."
+		_set_meta_text("Join a guild first.")
 		_list.add_child(_empty("You need a guild before declaring war."))
 		return
-	_meta.text = "[%s] %s · %s · ✨ %s SD · declare costs %s" % [
-		str(guild.get("tag", "")), str(guild.get("name", "")), role,
+	_rebuild_meta(
+		"[%s] %s · %s ·" % [str(guild.get("tag", "")), str(guild.get("name", "")), role],
 		str(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)),
-		GuildWarManager.DECLARE_COST,
-	]
+		"SD · declare costs %s" % GuildWarManager.DECLARE_COST
+	)
 
 	_list.add_child(ClientUi.make_section_header("DECLARE", "Choose a Target", "Leaders & officers only · %s SD." % GuildWarManager.DECLARE_COST))
 	var can_declare := role == "leader" or role == "officer"
@@ -172,7 +170,7 @@ func _add_war_card(w: Dictionary) -> void:
 
 	var status_l := Label.new()
 	status_l.text = status.to_upper()
-	status_l.add_theme_font_size_override("font_size", 13)
+	status_l.add_theme_font_size_override("font_size", 17)
 	status_l.add_theme_color_override("font_color", border)
 	ClientUi.apply_display_font(status_l)
 	col.add_child(status_l)
@@ -257,6 +255,43 @@ func _on_declare(gid: String) -> void:
 		return
 	_status.text = "War declared (−%s SD)." % GuildWarManager.DECLARE_COST
 	await _boot()
+
+
+func _set_meta_text(msg: String) -> void:
+	if not is_instance_valid(_meta):
+		return
+	for c in _meta.get_children():
+		c.queue_free()
+	var lab := Label.new()
+	lab.text = msg
+	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lab.add_theme_font_size_override("font_size", 19)
+	lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(lab)
+	_meta.add_child(lab)
+
+
+func _rebuild_meta(prefix: String, sd_amount: String, suffix: String) -> void:
+	if not is_instance_valid(_meta):
+		return
+	for c in _meta.get_children():
+		c.queue_free()
+	var pre := Label.new()
+	pre.text = prefix
+	pre.add_theme_font_size_override("font_size", 19)
+	pre.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(pre)
+	_meta.add_child(pre)
+	_meta.add_child(CurrencyIcon.make("stardust", 16.0))
+	var mid := Label.new()
+	mid.text = "%s %s" % [sd_amount, suffix]
+	mid.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_font_size_override("font_size", 19)
+	mid.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(mid)
+	_meta.add_child(mid)
 
 
 func _on_ready(war: Dictionary) -> void:

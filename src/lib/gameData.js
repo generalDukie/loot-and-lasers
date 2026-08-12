@@ -275,7 +275,7 @@ export const CLASS_WEAPONS = {
   Vanguard:           { name: "Vanguard Assault Rifle", emoji: "🔫", style: "shoot", flavor: "A rugged battle rifle that punches through armor with relentless fire." },
   "Shadow Operative": { name: "Shadowstrike Silencer",  emoji: "🗡️", style: "stab",  flavor: "A suppressed blade that finds the gaps in any defense." },
   Technomancer:       { name: "Arcane Pulse Caster",     emoji: "🔮", style: "shoot", flavor: "Channels raw psionic energy into devastating energy bolts." },
-  "Astral Warden":    { name: "Cosmic Aegis Blaster",   emoji: "✨", style: "shoot", flavor: "Radiates protective starlight with every shot." },
+  "Astral Warden":    { name: "Cosmic Aegis Blaster",   emoji: "stardust", style: "shoot", flavor: "Radiates protective starlight with every shot." },
   "Void Runner":      { name: "Slipstream Needles",    emoji: "☄️", style: "stab",  flavor: "Twin monofilament blades that strike before the echo arrives." },
   "Cosmic Engineer":  { name: "Plasma Multi-Cannon",    emoji: "💥", style: "shoot", flavor: "Jury-rigged to fire everything from drones to EMPs." },
 };
@@ -312,7 +312,7 @@ export function weaponEmojiFor(name, baseName) {
     if (/axe|hammer|mace|maul/.test(n)) return "🪓";
     if (/cannon|shotgun|launcher/.test(n)) return "💥";
     if (/sniper/.test(n)) return "🎯";
-    if (/blaster|aegis/.test(n)) return "✨";
+    if (/blaster|aegis/.test(n)) return "stardust";
     if (/rifle|pistol|gun|repeater/.test(n)) return "🔫";
   }
   return "⚔️";

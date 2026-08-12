@@ -93,7 +93,7 @@ func _build() -> void:
 	head.add_child(title_row)
 	var meta := Label.new()
 	meta.name = "FriendsMeta"
-	meta.add_theme_font_size_override("font_size", 15)
+	meta.add_theme_font_size_override("font_size", 19)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	head.add_child(meta)
@@ -254,7 +254,7 @@ func _section(t: String) -> Control:
 func _empty(t: String) -> Label:
 	var l := Label.new()
 	l.text = t
-	l.add_theme_font_size_override("font_size", 16)
+	l.add_theme_font_size_override("font_size", 19)
 	l.add_theme_color_override("font_color", Color(0.55, 0.6, 0.7))
 	return l
 

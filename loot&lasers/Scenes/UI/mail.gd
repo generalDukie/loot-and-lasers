@@ -88,7 +88,7 @@ func _build() -> void:
 	title_col.add_child(title)
 	_meta = Label.new()
 	_meta.text = "Interstellar mail network · transmissions & packages"
-	_meta.add_theme_font_size_override("font_size", 13)
+	_meta.add_theme_font_size_override("font_size", 17)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_meta)
 	title_col.add_child(_meta)
@@ -435,7 +435,7 @@ func _show_detail(mail: Dictionary) -> void:
 		str(mail.get("mail_type", "")).replace("_", " "),
 		str(mail.get("created_date", "")).substr(0, 16),
 	]
-	meta.add_theme_font_size_override("font_size", 13)
+	meta.add_theme_font_size_override("font_size", 17)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	_detail.add_child(meta)
@@ -448,7 +448,7 @@ func _show_detail(mail: Dictionary) -> void:
 	var body := Label.new()
 	body.text = str(mail.get("body", ""))
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", 16)
+	body.add_theme_font_size_override("font_size", 19)
 	ClientUi.apply_body_font(body)
 	body_panel.add_child(body)
 
@@ -469,7 +469,7 @@ func _show_detail(mail: Dictionary) -> void:
 		reward_panel.add_child(rcol)
 		var rlab := Label.new()
 		rlab.text = "Package Claimed" if claimed else "Attached Transmission Package"
-		rlab.add_theme_font_size_override("font_size", 15)
+		rlab.add_theme_font_size_override("font_size", 18)
 		ClientUi.apply_display_font(rlab)
 		rcol.add_child(rlab)
 		var summary := Label.new()

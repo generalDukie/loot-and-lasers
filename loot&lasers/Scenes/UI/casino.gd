@@ -217,7 +217,7 @@ func _build() -> void:
 	disclaimer.text = "Play responsibly. Gross payout includes your wager; net is profit or loss."
 	disclaimer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	disclaimer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	disclaimer.add_theme_font_size_override("font_size", 13)
+	disclaimer.add_theme_font_size_override("font_size", 17)
 	disclaimer.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.70))
 	ClientUi.apply_body_font(disclaimer)
 	root.add_child(disclaimer)
@@ -234,7 +234,7 @@ func _build_header() -> VBoxContainer:
 	var tag := Label.new()
 	tag.text = "Four tables. One house. Outcomes are Node-authoritative."
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tag.add_theme_font_size_override("font_size", 15)
+	tag.add_theme_font_size_override("font_size", 16)
 	tag.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tag)
 	head.add_child(tag)
@@ -275,7 +275,7 @@ func _build_header() -> VBoxContainer:
 	nova_row.add_child(_balance_nova)
 
 	_limits_lab = Label.new()
-	_limits_lab.add_theme_font_size_override("font_size", 13)
+	_limits_lab.add_theme_font_size_override("font_size", 14)
 	_limits_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_limits_lab)
 	chips.add_child(_limits_lab)
@@ -502,7 +502,7 @@ func _build_refine_panel() -> VBoxContainer:
 	_refine_status = Label.new()
 	_refine_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_refine_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_refine_status.add_theme_font_size_override("font_size", 15)
+	_refine_status.add_theme_font_size_override("font_size", 19)
 	_refine_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_refine_status)
 	col.add_child(_refine_status)
@@ -575,7 +575,7 @@ func _build_cache_panel() -> VBoxContainer:
 	_cache_status = Label.new()
 	_cache_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cache_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_cache_status.add_theme_font_size_override("font_size", 15)
+	_cache_status.add_theme_font_size_override("font_size", 19)
 	_cache_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_cache_status)
 	col.add_child(_cache_status)
@@ -701,7 +701,7 @@ func _make_wager_edit(tint: Color) -> LineEdit:
 	edit.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	edit.context_menu_enabled = false
 	ClientUi.apply_body_font(edit)
-	edit.add_theme_font_size_override("font_size", 14)
+	edit.add_theme_font_size_override("font_size", 17)
 	edit.add_theme_stylebox_override(
 		"normal",
 		ClientUi.painted_panel_style(Color(0.05, 0.06, 0.09, 0.72), Color(tint, 0.35), 8, 1)
@@ -733,7 +733,7 @@ func _section_title(title: String, rules: String, tint: Color) -> VBoxContainer:
 	var r := Label.new()
 	r.text = rules
 	r.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	r.add_theme_font_size_override("font_size", 14)
+	r.add_theme_font_size_override("font_size", 18)
 	r.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(r)
 	col.add_child(r)
@@ -1296,7 +1296,7 @@ func _rebuild_refine_ladder() -> void:
 		lab.text = "Stage %d · reach %s%% · %sx payout" % [
 			st, str(row.cumulative_pct), _fmt_mult(float(row.mult))
 		]
-		lab.add_theme_font_size_override("font_size", 14)
+		lab.add_theme_font_size_override("font_size", 17)
 		lab.add_theme_color_override("font_color", col)
 		ClientUi.apply_body_font(lab)
 		line.add_child(lab)

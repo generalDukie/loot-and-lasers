@@ -139,7 +139,7 @@ func _build() -> void:
 
 	var active_eye := Label.new()
 	active_eye.text = "ACTIVE MISSION"
-	active_eye.add_theme_font_size_override("font_size", 13)
+	active_eye.add_theme_font_size_override("font_size", 17)
 	active_eye.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.95))
 	active_eye.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
 	active_eye.add_theme_constant_override("shadow_offset_x", 1)
@@ -167,7 +167,7 @@ func _build() -> void:
 	active_col.add_child(_title)
 
 	_goofy = Label.new()
-	_goofy.add_theme_font_size_override("font_size", 15)
+	_goofy.add_theme_font_size_override("font_size", 19)
 	_goofy.add_theme_color_override("font_color", ClientUi.MUTED)
 	_goofy.clip_text = true
 	ClientUi.apply_body_font(_goofy)
@@ -178,7 +178,7 @@ func _build() -> void:
 	CurrencyIcon.apply_button_cost(_skip_btn, 16.0)
 	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	ClientUi.apply_display_font(_skip_btn)
-	_skip_btn.add_theme_font_size_override("font_size", 16)
+	_skip_btn.add_theme_font_size_override("font_size", 19)
 	_skip_btn.add_theme_color_override("font_color", Color("#FCD34D"))
 	_skip_btn.add_theme_color_override("font_hover_color", Color("#FEF3C7"))
 	_skip_btn.add_theme_stylebox_override(

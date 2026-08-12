@@ -72,7 +72,7 @@ static func reward_icon_id(rewards: Dictionary) -> String:
 	if int(rewards.get("experience", 0)) > 0:
 		return "star"
 	if int(rewards.get("fuel", 0)) > 0:
-		return "zap"
+		return "fuel"
 	if int(rewards.get("stardust", 0)) > 0:
 		return "sparkles"
 	return "gift"
@@ -88,5 +88,5 @@ static func reward_accent(rewards: Dictionary) -> Color:
 	if int(rewards.get("stardust", 0)) > 0:
 		return GameData.STARDUST_COLOR
 	if int(rewards.get("fuel", 0)) > 0:
-		return ClientUi.WARNING
+		return CurrencyIcon.FUEL_GREEN
 	return ClientUi.CYAN_SOFT

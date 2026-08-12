@@ -73,7 +73,7 @@ func _build() -> void:
 	_chatter = Label.new()
 	_chatter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_chatter.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_chatter.add_theme_font_size_override("font_size", 16)
+	_chatter.add_theme_font_size_override("font_size", 19)
 	_chatter.add_theme_color_override("font_color", Color(ClientUi.TEXT, 0.8))
 	ClientUi.apply_body_font(_chatter)
 	chatter_row.add_child(_chatter)
@@ -146,7 +146,7 @@ func _build() -> void:
 	_log = Label.new()
 	_log.visible = false
 	_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_log.add_theme_font_size_override("font_size", 16)
+	_log.add_theme_font_size_override("font_size", 19)
 	_log.add_theme_color_override("font_color", ClientUi.MUTED)
 	right.add_child(_log)
 
@@ -209,7 +209,7 @@ func _populate() -> void:
 		unclaimed_hint.text = "No guild holds the Nexus. Any eligible guild may strike to claim dominion over the galaxy."
 		unclaimed_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		unclaimed_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		unclaimed_hint.add_theme_font_size_override("font_size", 15)
+		unclaimed_hint.add_theme_font_size_override("font_size", 19)
 		unclaimed_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(unclaimed_hint)
 		_owner_col.add_child(unclaimed_hint)
@@ -241,7 +241,7 @@ func _populate() -> void:
 		owner_info.add_child(owner_title)
 		var leader := Label.new()
 		leader.text = "Led by %s" % str(n.get("owner_leader", n.get("owner_guild_leader", "?")))
-		leader.add_theme_font_size_override("font_size", 15)
+		leader.add_theme_font_size_override("font_size", 18)
 		leader.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(leader)
 		owner_info.add_child(leader)
@@ -289,7 +289,7 @@ func _populate() -> void:
 		pill_row.add_child(UiIcon.make("triangle-alert" if vuln else "shield", pill_tint, 14.0))
 		var pill_l := Label.new()
 		pill_l.text = "VULNERABLE" if vuln else "FORTIFIED"
-		pill_l.add_theme_font_size_override("font_size", 15)
+		pill_l.add_theme_font_size_override("font_size", 18)
 		pill_l.add_theme_color_override("font_color", pill_tint)
 		ClientUi.apply_display_font(pill_l)
 		pill_row.add_child(pill_l)
@@ -301,7 +301,7 @@ func _populate() -> void:
 			if vuln
 			else "Defenses hold — becomes vulnerable after 24h."
 		)
-		status_hint.add_theme_font_size_override("font_size", 15)
+		status_hint.add_theme_font_size_override("font_size", 19)
 		status_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(status_hint)
 		status_row.add_child(status_hint)
@@ -317,7 +317,7 @@ func _populate() -> void:
 		var join := Label.new()
 		join.text = "Join or create a guild to contest the Nexus."
 		join.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		join.add_theme_font_size_override("font_size", 15)
+		join.add_theme_font_size_override("font_size", 16)
 		join.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(join)
 		join_panel.add_child(join)
@@ -333,7 +333,7 @@ func _populate() -> void:
 			DungeonRules.format_ms(NexusManager.assault_cooldown_ms()) if NexusManager.assault_cooldown_ms() > 0 else "ready",
 			str(power),
 		]
-		reqs.add_theme_font_size_override("font_size", 16)
+		reqs.add_theme_font_size_override("font_size", 19)
 		reqs.add_theme_color_override("font_color", ClientUi.MUTED)
 		_declare_col.add_child(reqs)
 
@@ -463,7 +463,7 @@ func _hof_row(rank: int, r: Dictionary) -> PanelContainer:
 	row.add_child(name)
 	var meta := Label.new()
 	meta.text = "%sd · %s def" % [str(r.get("reign_days", 0)), str(r.get("defenses", 0))]
-	meta.add_theme_font_size_override("font_size", 15)
+	meta.add_theme_font_size_override("font_size", 19)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	row.add_child(meta)

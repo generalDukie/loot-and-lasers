@@ -130,7 +130,7 @@ func _make_creation_flow() -> VBoxContainer:
 	var sub := Label.new()
 	sub.text = "Band together to share progression and mission glory."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_font_size_override("font_size", 17)
+	sub.add_theme_font_size_override("font_size", 19)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head.add_child(sub)
@@ -177,7 +177,8 @@ func _make_creation_flow() -> VBoxContainer:
 	ClientUi.apply_body_font(_desc_edit)
 	_create_block.add_child(_desc_edit)
 	_create_submit_btn = Button.new()
-	_create_submit_btn.text = "FOUND GUILD · ✦ %s" % CREATE_COST
+	_create_submit_btn.text = "FOUND GUILD · %s" % CREATE_COST
+	CurrencyIcon.apply_stardust_button_cost(_create_submit_btn, 16.0)
 	ClientUi.apply_primary_button(_create_submit_btn)
 	_create_submit_btn.disabled = not CurrencyManager.can_afford(
 		CurrencyManager.CURRENCY_STARDUST,
@@ -206,7 +207,7 @@ func _make_creation_flow() -> VBoxContainer:
 
 	var by_name := Label.new()
 	by_name.text = "Or join by name"
-	by_name.add_theme_font_size_override("font_size", 16)
+	by_name.add_theme_font_size_override("font_size", 19)
 	by_name.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(by_name)
 	_join_block.add_child(by_name)
@@ -302,7 +303,7 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 		var desc_lab := Label.new()
 		desc_lab.text = desc
 		desc_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc_lab.add_theme_font_size_override("font_size", 16)
+		desc_lab.add_theme_font_size_override("font_size", 19)
 		desc_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(desc_lab)
 		left.add_child(desc_lab)
@@ -379,7 +380,7 @@ func _header_pill(text: String, color: Color, icon_id: String = "") -> PanelCont
 		row.add_child(UiIcon.make(icon_id, color, 14.0))
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 15)
+	l.add_theme_font_size_override("font_size", 18)
 	l.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(l)
 	row.add_child(l)
@@ -436,7 +437,7 @@ func _make_challenge_panel(chg: Dictionary, g: Dictionary) -> PanelContainer:
 	else:
 		badge.text = "⏱  %s" % _challenge_time_left(chg)
 		badge.add_theme_color_override("font_color", ClientUi.MUTED)
-	badge.add_theme_font_size_override("font_size", 15)
+	badge.add_theme_font_size_override("font_size", 18)
 	ClientUi.apply_display_font(badge)
 	head.add_child(badge)
 
@@ -461,7 +462,7 @@ func _make_challenge_panel(chg: Dictionary, g: Dictionary) -> PanelContainer:
 
 	var hint := Label.new()
 	hint.text = "Complete missions and win Arena duels to fill the bar."
-	hint.add_theme_font_size_override("font_size", 15)
+	hint.add_theme_font_size_override("font_size", 19)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	col.add_child(hint)
@@ -469,7 +470,7 @@ func _make_challenge_panel(chg: Dictionary, g: Dictionary) -> PanelContainer:
 	var rewards := HBoxContainer.new()
 	rewards.add_theme_constant_override("separation", 8)
 	col.add_child(rewards)
-	rewards.add_child(ClientUi.make_currency_chip("✦", chg.get("reward_stardust", 0), Color("#E879F9")))
+	rewards.add_child(ClientUi.make_currency_chip("stardust", chg.get("reward_stardust", 0), Color("#E879F9")))
 	rewards.add_child(ClientUi.make_currency_chip("gXP", chg.get("reward_guild_xp", 0), ClientUi.CYAN))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -593,7 +594,7 @@ func _make_wars_panel(guild: Dictionary, wars: Array) -> PanelContainer:
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.text = "Declare war on any guild. Both sides have 24h to ready up — only readied members fight in the gauntlet, ranked by level."
-	hint.add_theme_font_size_override("font_size", 15)
+	hint.add_theme_font_size_override("font_size", 19)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	col.add_child(hint)
@@ -618,7 +619,8 @@ func _make_wars_panel(guild: Dictionary, wars: Array) -> PanelContainer:
 
 	if can_declare:
 		var declare := Button.new()
-		declare.text = "Declare War · %s ✦" % GuildWarManager.DECLARE_COST
+		declare.text = "Declare War · %s" % GuildWarManager.DECLARE_COST
+		CurrencyIcon.apply_stardust_button_cost(declare, 16.0)
 		ClientUi.apply_primary_button(declare)
 		declare.pressed.connect(func() -> void:
 			_show_war_picker = not _show_war_picker
@@ -685,13 +687,13 @@ func _make_battle_history(wars: Array, guild_id: String) -> PanelContainer:
 		var info := Label.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.text = "vs %s" % opponent
-		info.add_theme_font_size_override("font_size", 16)
+		info.add_theme_font_size_override("font_size", 19)
 		info.add_theme_color_override("font_color", ClientUi.TEXT)
 		ClientUi.apply_body_font(info)
 		row.add_child(info)
 		var badge := Label.new()
 		badge.text = "WIN" if won else "LOSS"
-		badge.add_theme_font_size_override("font_size", 13)
+		badge.add_theme_font_size_override("font_size", 17)
 		badge.add_theme_color_override("font_color", ClientUi.SUCCESS if won else ClientUi.DANGER)
 		ClientUi.apply_display_font(badge)
 		row.add_child(badge)
@@ -731,7 +733,7 @@ func _make_war_card(w: Dictionary) -> PanelContainer:
 
 	var status_l := Label.new()
 	status_l.text = status.to_upper()
-	status_l.add_theme_font_size_override("font_size", 13)
+	status_l.add_theme_font_size_override("font_size", 17)
 	status_l.add_theme_color_override("font_color", border)
 	ClientUi.apply_display_font(status_l)
 	col.add_child(status_l)
@@ -750,7 +752,7 @@ func _make_war_card(w: Dictionary) -> PanelContainer:
 		var readies: Array = await GuildWarManager.list_readies(str(w.get("id", "")))
 		var ready_lab := Label.new()
 		ready_lab.text = "Ready: %s fighters" % readies.size()
-		ready_lab.add_theme_font_size_override("font_size", 15)
+		ready_lab.add_theme_font_size_override("font_size", 18)
 		ready_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(ready_lab)
 		col.add_child(ready_lab)
@@ -877,12 +879,12 @@ func _make_member_row(m: Dictionary, my_id: String) -> PanelContainer:
 	ClientUi.apply_display_font(role_lab)
 	name_row.add_child(role_lab)
 	var detail := Label.new()
-	detail.text = "Lvl %s · %s · ✦ %s" % [
+	detail.text = "Lvl %s · %s · %s Stardust" % [
 		ClientUi.format_level(m.get("character_level", 1)),
 		str(m.get("contributed_missions", 0)),
 		str(m.get("contributed_stardust", 0)),
 	]
-	detail.add_theme_font_size_override("font_size", 15)
+	detail.add_theme_font_size_override("font_size", 19)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(detail)
 	col.add_child(detail)
@@ -921,13 +923,13 @@ func _make_log_panel() -> PanelContainer:
 			var elab := Label.new()
 			elab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			elab.text = "%s %s" % [str(entry.get("character_name", "")), str(entry.get("message", ""))]
-			elab.add_theme_font_size_override("font_size", 16)
+			elab.add_theme_font_size_override("font_size", 19)
 			elab.add_theme_color_override("font_color", ClientUi.TEXT)
 			ClientUi.apply_body_font(elab)
 			row.add_child(elab)
 			var ago := Label.new()
 			ago.text = _time_ago(str(entry.get("created_date", "")))
-			ago.add_theme_font_size_override("font_size", 13)
+			ago.add_theme_font_size_override("font_size", 17)
 			ago.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.7))
 			row.add_child(ago)
 			shown += 1
@@ -960,7 +962,7 @@ func _empty(t: String) -> Label:
 	l.text = t
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 16)
+	l.add_theme_font_size_override("font_size", 19)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(l)
 	return l
@@ -989,7 +991,7 @@ func _make_browse_row(g: Dictionary) -> PanelContainer:
 		str(g.get("member_count", 0)), ClientUi.format_level(g.get("level", 1)), str(g.get("leader_name", "?")),
 		"invite-only" if invite_only else "open",
 	]
-	detail.add_theme_font_size_override("font_size", 15)
+	detail.add_theme_font_size_override("font_size", 19)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(detail)
 	var join := Button.new()
@@ -1017,7 +1019,7 @@ func _on_declare_war(gid: String) -> void:
 	if not res.ok:
 		_set_status(_err(res))
 		return
-	_set_status("War declared (−%s ✦)." % GuildWarManager.DECLARE_COST)
+	_set_status("War declared (−%s Stardust)." % GuildWarManager.DECLARE_COST)
 	await SocialManager.load_my_guild()
 	await SocialManager.browse_guilds()
 	await _populate()
@@ -1120,7 +1122,7 @@ func _on_create() -> void:
 		_set_status(NAME_NO_DIGITS_MSG)
 		return
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, CREATE_COST):
-		_set_status("You need %s ✦ to found a guild." % CREATE_COST)
+		_set_status("You need %s Stardust to found a guild." % CREATE_COST)
 		return
 	_busy = true
 	_set_status("Creating…")

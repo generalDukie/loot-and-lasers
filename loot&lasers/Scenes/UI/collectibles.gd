@@ -116,7 +116,7 @@ func _populate() -> void:
 	_style_tabs()
 
 	var ch: Dictionary = GameManager.active_character
-	_career_lab.text = "CAREER  ·  Missions %s  ·  Arena %s-%s  ·  Dungeon clears %s  ·  Peak hit %s  ·  Lifetime ✦ %s" % [
+	_career_lab.text = "CAREER  ·  Missions %s  ·  Arena %s-%s  ·  Dungeon clears %s  ·  Peak hit %s  ·  Lifetime Stardust %s" % [
 		str(ch.get("missions_completed", 0)),
 		str(ch.get("arena_wins", 0)),
 		str(ch.get("arena_losses", 0)),
@@ -283,7 +283,7 @@ func _entry(name: String, rarity: String, lore: String, owned: bool) -> PanelCon
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.text = lore if owned else "Not yet discovered."
-	body.add_theme_font_size_override("font_size", 13)
+	body.add_theme_font_size_override("font_size", 17)
 	body.add_theme_color_override("font_color", ClientUi.MUTED if owned else Color(0.4, 0.45, 0.5))
 	ClientUi.apply_body_font(body)
 	col.add_child(body)

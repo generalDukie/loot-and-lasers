@@ -1,16 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-  <!-- Nova crystal — neon yellow line diamond, wallet gold #FFD700 -->
-  <!-- Flat crown, girdle, pavilion tip; two crown facet lines + center pavilion line -->
-  <path
-    d="M8 3.2 H16 L20.8 10.6 L12 21.2 L3.2 10.6 Z"
-    stroke="#FFD700"
-    stroke-width="1.65"
-    stroke-linejoin="round"
-    stroke-linecap="round"
-    fill="none"
-  />
-  <path d="M3.2 10.6 H20.8" stroke="#FFD700" stroke-width="1.5" stroke-linecap="round"/>
-  <path d="M10 3.2 V10.6" stroke="#FFD700" stroke-width="1.35" stroke-linecap="round"/>
-  <path d="M14 3.2 V10.6" stroke="#FFD700" stroke-width="1.35" stroke-linecap="round"/>
-  <path d="M12 10.6 V21.2" stroke="#FFD700" stroke-width="1.35" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="24"
+     height="24"
+     viewBox="0 0 1024 1024"
+     fill="none"
+     shape-rendering="geometricPrecision">
+  <!-- Loot & Lasers Nova Crystal — user path geometry, wallet gold #FFD700 -->
+  <title>Loot &amp; Lasers Nova Crystal</title>
+
+  <g stroke="#FFD700"
+     stroke-width="48"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     fill="none">
+
+    <!-- Outer crystal -->
+    <path d="M258 170 H766 L888 365 L512 854 L136 365 Z"/>
+
+    <!-- Upper facets -->
+    <path d="M258 170 L360 365"/>
+    <path d="M766 170 L664 365"/>
+    <path d="M360 365 L512 170 L664 365"/>
+
+    <!-- Horizontal shoulder -->
+    <path d="M136 365 H888"/>
+
+    <!-- Lower facets -->
+    <path d="M360 365 L512 854"/>
+    <path d="M664 365 L512 854"/>
+
+  </g>
 </svg>

@@ -124,36 +124,22 @@ export const LOW_FUEL_TEMPLATES = [
 ];
 
 export const MISSION_PATRONS = [
-  // Lucide / Lucide-lab icon ids (mirrored by Godot UiIcon + cantina UI).
-  { emoji: "user-round", name: "Operative Jax", color: "#60A5FA" },
-  { emoji: "bot", name: "CLANK", color: "#00E5FF" },
-  { emoji: "alien", name: "Zyx", color: "#9D5CFF" },
-  { emoji: "ghost", name: "Wraith Vin", color: "#8BE8FF" },
-  { emoji: "hard-hat", name: "Foreman Kel", color: "#F59E0B" },
-  { emoji: "skull", name: "Ossian", color: "#94A3B8" },
-  { emoji: "bug", name: "Skitter", color: "#84CC16" },
-  { emoji: "brain", name: "Old Maru", color: "#FFD700" },
-  { emoji: "venetian-mask", name: "Maskara", color: "#E879F9" },
-  { emoji: "crown", name: "Regent Vale", color: "#FBBF24" },
-  { emoji: "bird", name: "Drako", color: "#FF4D6D" },
-  { emoji: "cat", name: "Rix", color: "#FF9E4F" },
-  { emoji: "dog", name: "Barko", color: "#F97316" },
-  { emoji: "rabbit", name: "Hopps", color: "#F472B6" },
-  { emoji: "rat", name: "Nibble", color: "#A78BFA" },
-  { emoji: "squirrel", name: "Cache", color: "#D97706" },
-  { emoji: "snail", name: "Slowtide", color: "#2DD4BF" },
-  { emoji: "worm", name: "Burrow", color: "#78350F" },
-  { emoji: "fish", name: "Glimmer", color: "#0EA5E9" },
-  { emoji: "shell", name: "Capt. Tentak", color: "#FF6B35" },
-  { emoji: "origami", name: "Skip", color: "#5CFFB0" },
-  { emoji: "bone", name: "Marrow", color: "#CBD5E1" },
+  { emoji: "👽", name: "Zyx", color: "#9D5CFF" },
+  { emoji: "🤖", name: "CLANK", color: "#00E5FF" },
+  { emoji: "👺", name: "Grimjaw", color: "#FF4D6D" },
+  { emoji: "🥸", name: "Maskara", color: "#E879F9" },
+  { emoji: "🤠", name: "Deputy Jax", color: "#F59E0B" },
+  { emoji: "🐵", name: "Noko", color: "#D97706" },
+  { emoji: "🐸", name: "Boggs", color: "#22C55E" },
+  { emoji: "🦊", name: "Vix", color: "#FF9E4F" },
+  { emoji: "👹", name: "Karn", color: "#EF4444" },
 ];
 
 export const MISSION_COLLECTIBLES = [
   { name: "Void Geode", emoji: "🪨" },
   { name: "Star Fragment", emoji: "⭐" },
   { name: "Memory Crystal", emoji: "💠" },
-  { name: "Stardust Cluster", emoji: "✨" },
+  { name: "Stardust Cluster", emoji: "stardust" },
 ];
 
 export function exploreImageId(sceneIndex) {

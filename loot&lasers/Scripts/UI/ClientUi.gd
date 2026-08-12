@@ -56,6 +56,19 @@ static func format_level(value, fallback: Variant = 1) -> String:
 const DISPLAY_FONT_PATH := "res://Assets/Fonts/Exo2-VariableFont_wght.ttf"
 const BODY_FONT_PATH := "res://Assets/Fonts/Inter-VariableFont_opsz_wght.ttf"
 
+## Shared type scale (design 1440p literals). Aggressive readability pass #2 —
+## body/descriptor/hint use available pane space; titles / eyebrows / button px() unchanged.
+const EYEBROW_FS := 13
+const META_FS := 18
+const HINT_FS := 19
+const BODY_FS := 19
+const SUBTITLE_FS := 18
+const SECTION_TITLE_FS := 20
+const CONFIRM_EYEBROW_FS := 12
+const CONFIRM_TITLE_FS := 27
+const TOAST_TITLE_FS := 20
+const TOAST_BODY_FS := 19
+
 static var _display_font: Font
 static var _body_font: Font
 static var _bold_display_font: Font
@@ -405,7 +418,7 @@ static func make_section_header(eyebrow: String, title: String, hint: String = "
 	if not eyebrow.is_empty():
 		var eye := Label.new()
 		eye.text = eyebrow.to_upper()
-		eye.add_theme_font_size_override("font_size", 13)
+		eye.add_theme_font_size_override("font_size", EYEBROW_FS)
 		eye.add_theme_color_override("font_color", Color(CYAN, 0.72))
 		apply_display_font(eye)
 		wrap.add_child(eye)
@@ -418,7 +431,7 @@ static func make_section_header(eyebrow: String, title: String, hint: String = "
 	title_row.add_child(tick)
 	var t := Label.new()
 	t.text = title
-	t.add_theme_font_size_override("font_size", 20)
+	t.add_theme_font_size_override("font_size", SECTION_TITLE_FS)
 	t.add_theme_color_override("font_color", TEXT)
 	t.add_theme_color_override("font_shadow_color", Color(CYAN, 0.16))
 	t.add_theme_constant_override("shadow_offset_x", 1)
@@ -435,7 +448,7 @@ static func make_section_header(eyebrow: String, title: String, hint: String = "
 		var h := Label.new()
 		h.text = hint
 		h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		h.add_theme_font_size_override("font_size", 15)
+		h.add_theme_font_size_override("font_size", HINT_FS)
 		h.add_theme_color_override("font_color", MUTED)
 		apply_body_font(h)
 		wrap.add_child(h)
@@ -587,10 +600,11 @@ static func make_content_wash(mood: String = "hub") -> Control:
 	return screen
 
 
-static func make_screen(mood: String = "hub") -> Control:
+static func make_screen(mood: String = "hub", starfield: bool = false) -> Control:
 	var screen := Control.new()
 	screen.name = "AtmosphereScreen"
 	screen.set_meta("atmosphere_mood", mood)
+	screen.set_meta("atmosphere_starfield", starfield)
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	screen.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	screen.grow_vertical = Control.GROW_DIRECTION_BOTH
@@ -601,12 +615,23 @@ static func make_screen(mood: String = "hub") -> Control:
 	screen.add_child(_gradient_layer(PackedColorArray([
 		Color(palette[3], 0.28), Color(palette[3], 0.0)
 	]), true, 0.75))
-	var space := _space_material_layer(mood, 0.72, 1.0)
-	space.name = "SpaceMaterial"
-	screen.add_child(space)
-	# GPU stars already live in the shader — keep only shooting streaks as motion.
-	screen.add_child(_make_shooting_stars(0.9))
+	if starfield:
+		var space := _space_material_layer(mood, 0.72, 1.0)
+		space.name = "SpaceMaterial"
+		screen.add_child(space)
+		screen.add_child(_make_shooting_stars(0.9))
 	screen.add_child(_make_ambient_hud(palette[3], 1.0))
+	return screen
+
+
+## Boot splash atmosphere — same void space + shooting stars as login, no Ambient HUD.
+static func make_space_splash_bg(mood: String = "void") -> Control:
+	var screen := make_screen(mood, true)
+	screen.name = "SplashAtmosphere"
+	for child in screen.get_children():
+		if child.has_meta("ambient_hud"):
+			screen.remove_child(child)
+			child.free()
 	return screen
 
 
@@ -666,7 +691,10 @@ static func _make_shooting_stars(intensity: float) -> Control:
 	var layer := script.new() as Control
 	layer.set("intensity", intensity)
 	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	layer.grow_vertical = Control.GROW_DIRECTION_BOTH
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.z_index = 4
 	return layer
 
 
@@ -683,7 +711,7 @@ static func make_subtitle(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_font_size_override("font_size", SUBTITLE_FS)
 	label.add_theme_color_override("font_color", MUTED)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	apply_body_font(label)
@@ -767,7 +795,7 @@ static func make_status() -> Label:
 	var label := Label.new()
 	label.text = ""
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_font_size_override("font_size", BODY_FS)
 	label.add_theme_color_override("font_color", DANGER)
 	apply_body_font(label)
 	return label
@@ -780,7 +808,12 @@ static func make_currency_chip(symbol: String, value: Variant, tint: Color = CYA
 		painted_panel_style(Color(0.04, 0.055, 0.09, 0.95), Color(tint, 0.55), 8, 1)
 	)
 	var key := symbol.strip_edges().to_lower()
-	if key == "nova":
+	if key == "nova" or key == "stardust" or key == "fuel" or key == "✦" or key == "✨" or key == "⛽":
+		var currency_id := "nova"
+		if key == "stardust" or key == "✦" or key == "✨":
+			currency_id = "stardust"
+		elif key == "fuel" or key == "⛽":
+			currency_id = "fuel"
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -791,7 +824,7 @@ static func make_currency_chip(symbol: String, value: Variant, tint: Color = CYA
 		pad.add_theme_constant_override("margin_bottom", 4)
 		pad.add_child(row)
 		chip.add_child(pad)
-		row.add_child(CurrencyIcon.make("nova", 16.0))
+		row.add_child(CurrencyIcon.make(currency_id, 16.0))
 		var amount := Label.new()
 		amount.text = str(value)
 		amount.add_theme_font_size_override("font_size", 15)
@@ -943,7 +976,7 @@ static func make_confirm_sheet(
 		var eye := Label.new()
 		eye.text = eyebrow
 		eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		eye.add_theme_font_size_override("font_size", 12)
+		eye.add_theme_font_size_override("font_size", CONFIRM_EYEBROW_FS)
 		eye.add_theme_color_override("font_color", Color(accent, 0.75))
 		apply_display_font(eye)
 		col.add_child(eye)
@@ -951,7 +984,7 @@ static func make_confirm_sheet(
 	var title := Label.new()
 	title.text = heading
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 27)
+	title.add_theme_font_size_override("font_size", CONFIRM_TITLE_FS)
 	title.add_theme_color_override("font_color", accent)
 	apply_display_font(title)
 	col.add_child(title)
@@ -961,7 +994,7 @@ static func make_confirm_sheet(
 		body_lab.text = body
 		body_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		body_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		body_lab.add_theme_font_size_override("font_size", 15)
+		body_lab.add_theme_font_size_override("font_size", BODY_FS)
 		body_lab.add_theme_color_override("font_color", MUTED)
 		apply_body_font(body_lab)
 		col.add_child(body_lab)
@@ -1027,7 +1060,7 @@ static func show_toast(host: Node, title: String, body: String = "", duration: f
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	t.text = title
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	t.add_theme_font_size_override("font_size", 20)
+	t.add_theme_font_size_override("font_size", TOAST_TITLE_FS)
 	t.add_theme_color_override("font_color", Color(0.85, 1.0, 0.9))
 	col.add_child(t)
 	if not body.is_empty():
@@ -1036,7 +1069,7 @@ static func show_toast(host: Node, title: String, body: String = "", duration: f
 		b.text = body
 		b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.add_theme_font_size_override("font_size", 16)
+		b.add_theme_font_size_override("font_size", TOAST_BODY_FS)
 		b.add_theme_color_override("font_color", Color(0.75, 0.88, 0.82))
 		col.add_child(b)
 	panel.modulate.a = 0.0

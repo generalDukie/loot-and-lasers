@@ -51,7 +51,7 @@ func _build() -> void:
 	var sub := Label.new()
 	sub.text = "Ranked by arena rating · Challenge any eligible rival"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_font_size_override("font_size", 15)
+	sub.add_theme_font_size_override("font_size", 19)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head.add_child(sub)
@@ -223,7 +223,7 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	if not gtag.is_empty():
 		var g := Label.new()
 		g.text = "[%s]" % gtag
-		g.add_theme_font_size_override("font_size", 12)
+		g.add_theme_font_size_override("font_size", 16)
 		g.add_theme_color_override("font_color", Color(ClientUi.VIOLET, 0.85))
 		ClientUi.apply_display_font(g)
 		name_row.add_child(g)
@@ -231,7 +231,7 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	var meta := Label.new()
 	meta.text = "%s · %sW" % [str(c.get("arena_rating", 1000)), str(c.get("arena_wins", 0))]
 	meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	meta.add_theme_font_size_override("font_size", 13)
+	meta.add_theme_font_size_override("font_size", 17)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	wrap.add_child(meta)
@@ -332,7 +332,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	rank_lab.text = str(rank)
 	rank_lab.custom_minimum_size.x = 37
 	rank_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rank_lab.add_theme_font_size_override("font_size", 17)
+	rank_lab.add_theme_font_size_override("font_size", 19)
 	rank_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(rank_lab)
 	id_row.add_child(rank_lab)
@@ -380,7 +380,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	detail.name = "Detail"
 	detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	detail.text = "%s · %s" % [str(c.get("race", "?")), str(c.get("class", "?"))]
-	detail.add_theme_font_size_override("font_size", 13)
+	detail.add_theme_font_size_override("font_size", 17)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(detail)
 	mid.add_child(detail)

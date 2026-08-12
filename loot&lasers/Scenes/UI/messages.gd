@@ -153,7 +153,7 @@ func _build() -> void:
 	title_col.add_child(title)
 	var subtitle := Label.new()
 	subtitle.text = "Station frequencies · encrypted private links"
-	subtitle.add_theme_font_size_override("font_size", 13)
+	subtitle.add_theme_font_size_override("font_size", 17)
 	subtitle.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(subtitle)
 	title_col.add_child(subtitle)
@@ -186,7 +186,7 @@ func _build() -> void:
 	tabs.add_child(_tab_dm)
 
 	_meta = Label.new()
-	_meta.add_theme_font_size_override("font_size", 14)
+	_meta.add_theme_font_size_override("font_size", 18)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_meta)
 	root.add_child(_meta)
@@ -550,7 +550,7 @@ func _empty_state(t: String) -> Control:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size.x = maxf(200.0, _message_wrap_width())
-	l.add_theme_font_size_override("font_size", 14)
+	l.add_theme_font_size_override("font_size", 17)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(l)
 	wrap.add_child(l)
@@ -575,7 +575,7 @@ func _message_row(content: String, who: String, mine: bool, guild_tag: String = 
 	avatar.add_child(av_center)
 	var av_lab := Label.new()
 	av_lab.text = who.substr(0, 1).to_upper() if not who.is_empty() else "?"
-	av_lab.add_theme_font_size_override("font_size", 14)
+	av_lab.add_theme_font_size_override("font_size", 17)
 	av_lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(av_lab)
 	av_center.add_child(av_lab)
@@ -630,7 +630,7 @@ func _message_row(content: String, who: String, mine: bool, guild_tag: String = 
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.text = content
 	body.custom_minimum_size.x = maxf(160.0, wrap_w * 0.55)
-	body.add_theme_font_size_override("font_size", 14)
+	body.add_theme_font_size_override("font_size", 18)
 	body.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(body)
 	bubble.add_child(body)

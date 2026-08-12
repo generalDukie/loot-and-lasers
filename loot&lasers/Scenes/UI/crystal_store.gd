@@ -60,7 +60,7 @@ func _build() -> void:
 	title_col.add_child(UiIcon.make_title_row("sparkles", "Crystal Store", ClientUi.TEXT, 27, 28.0))
 	var sub := Label.new()
 	sub.text = "Under-table Nova drops · six sealed crates · pay what the fence quotes"
-	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_font_size_override("font_size", 17)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	title_col.add_child(sub)
@@ -126,12 +126,12 @@ func _populate() -> void:
 	_list.add_child(foot)
 	var check := Label.new()
 	check.text = "✓"
-	check.add_theme_font_size_override("font_size", 15)
+	check.add_theme_font_size_override("font_size", 18)
 	check.add_theme_color_override("font_color", Color("#4ADE80"))
 	foot.add_child(check)
 	var foot_lab := Label.new()
 	foot_lab.text = "Real purchases activate once Stripe checkout is connected."
-	foot_lab.add_theme_font_size_override("font_size", 15)
+	foot_lab.add_theme_font_size_override("font_size", 18)
 	foot_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(foot_lab)
 	foot.add_child(foot_lab)
@@ -160,7 +160,7 @@ func _make_quests_panel() -> PanelContainer:
 	var sub := Label.new()
 	sub.name = "QuestCountdown"
 	sub.text = _quest_subline()
-	sub.add_theme_font_size_override("font_size", 15)
+	sub.add_theme_font_size_override("font_size", 18)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head_l.add_child(sub)
@@ -233,7 +233,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 
 	var desc := Label.new()
 	desc.text = str(q.get("desc", ""))
-	desc.add_theme_font_size_override("font_size", 13)
+	desc.add_theme_font_size_override("font_size", 17)
 	desc.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(desc)
 	mid.add_child(desc)
@@ -261,7 +261,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 		))
 		var done_lab := Label.new()
 		done_lab.text = "✓  Done"
-		done_lab.add_theme_font_size_override("font_size", 13)
+		done_lab.add_theme_font_size_override("font_size", 17)
 		done_lab.add_theme_color_override("font_color", Color("#34D399"))
 		ClientUi.apply_display_font(done_lab)
 		done.add_child(done_lab)
@@ -413,7 +413,7 @@ func _make_featured_card(p: Dictionary) -> PanelContainer:
 	var blurb := Label.new()
 	blurb.text = str(p.get("blurb", ""))
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	blurb.add_theme_font_size_override("font_size", 13)
+	blurb.add_theme_font_size_override("font_size", 17)
 	blurb.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(blurb)
 	col.add_child(blurb)
@@ -504,7 +504,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	blurb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	blurb.custom_minimum_size.y = 34
-	blurb.add_theme_font_size_override("font_size", 12)
+	blurb.add_theme_font_size_override("font_size", 17)
 	blurb.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(blurb)
 	col.add_child(blurb)
@@ -520,7 +520,7 @@ func _make_pack_card(p: Dictionary) -> PanelContainer:
 	var amt_sub := Label.new()
 	amt_sub.text = "Nova Crystals"
 	amt_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	amt_sub.add_theme_font_size_override("font_size", 12)
+	amt_sub.add_theme_font_size_override("font_size", 17)
 	amt_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(amt_sub)
 	col.add_child(amt_sub)
@@ -590,12 +590,16 @@ func _make_uses_section() -> VBoxContainer:
 	var wrap := VBoxContainer.new()
 	wrap.add_theme_constant_override("separation", 8)
 
+	var head_row := HBoxContainer.new()
+	head_row.add_theme_constant_override("separation", 8)
+	wrap.add_child(head_row)
+	head_row.add_child(CurrencyIcon.make("stardust", 15.0))
 	var head := Label.new()
-	head.text = "✨  WHAT NOVA CRYSTALS UNLOCK"
+	head.text = "WHAT NOVA CRYSTALS UNLOCK"
 	head.add_theme_font_size_override("font_size", 15)
 	head.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(head)
-	wrap.add_child(head)
+	head_row.add_child(head)
 
 	var grid := GridContainer.new()
 	# Web: lg:grid-cols-4 with 3 cards — same grid, fourth cell empty.
@@ -628,7 +632,7 @@ func _make_uses_section() -> VBoxContainer:
 		var d := Label.new()
 		d.text = str(u["desc"])
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		d.add_theme_font_size_override("font_size", 15)
+		d.add_theme_font_size_override("font_size", 18)
 		d.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(d)
 		col.add_child(d)

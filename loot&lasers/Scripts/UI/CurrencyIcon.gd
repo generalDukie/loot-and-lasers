@@ -13,6 +13,10 @@ static var _cache: Dictionary = {}
 
 ## Wallet / Crystal Store gold for Nova Crystals.
 const NOVA_GOLD := Color("#FFD700")
+## Wallet stardust fuchsia (matches GameData.STARDUST_COLOR).
+const STARDUST_FUCHSIA := Color("#E879F9")
+## Wallet fuel neon green.
+const FUEL_GREEN := Color("#39FF14")
 
 
 static func make(icon_id: String, size: float = DEFAULT_SIZE) -> TextureRect:
@@ -33,15 +37,22 @@ static func texture(icon_id: String, size: float = DEFAULT_SIZE) -> Texture2D:
 	return _texture(icon_id, size)
 
 
-## Prefix a cost button with the Nova glyph (set `btn.text` without emoji first).
-static func apply_button_cost(btn: Button, size: float = 16.0) -> void:
+## Prefix a cost button with a currency glyph (set `btn.text` without emoji first).
+static func apply_button_cost(btn: Button, size: float = 16.0, icon_id: String = "nova") -> void:
 	if btn == null or not is_instance_valid(btn):
 		return
-	btn.icon = texture("nova", size)
+	btn.icon = texture(icon_id, size)
 	btn.expand_icon = true
 	btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	btn.add_theme_constant_override("icon_max_width", int(round(size)))
+	# Glyph SVGs are already tinted; force every Button icon state to white or the
+	# crystal only appears while pressed (theme icon_normal_color is black/empty).
+	UiIcon.apply_button_icon_colors(btn, Color.WHITE)
+
+
+static func apply_stardust_button_cost(btn: Button, size: float = 16.0) -> void:
+	apply_button_cost(btn, size, "stardust")
 
 
 ## Icon + amount row for price chips / balance labels.
@@ -49,13 +60,14 @@ static func make_amount_row(
 	amount: Variant,
 	size: float = 16.0,
 	tint: Color = NOVA_GOLD,
-	font_size: int = 15
+	font_size: int = 15,
+	icon_id: String = "nova"
 ) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(make("nova", size))
+	row.add_child(make(icon_id, size))
 	var lab := Label.new()
 	lab.text = str(amount)
 	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -65,12 +77,20 @@ static func make_amount_row(
 	return row
 
 
-## True for Lucide/nav asset ids and the Nova currency glyph key.
+static func make_stardust_amount_row(
+	amount: Variant,
+	size: float = 16.0,
+	font_size: int = 15
+) -> HBoxContainer:
+	return make_amount_row(amount, size, STARDUST_FUCHSIA, font_size, "stardust")
+
+
+## True for Lucide/nav asset ids and currency glyph keys.
 static func is_asset_glyph(glyph: String) -> bool:
 	var g := glyph.strip_edges().to_lower()
 	if g.is_empty():
 		return false
-	if g == "nova":
+	if g == "nova" or g == "stardust" or g == "fuel":
 		return true
 	for i in g.length():
 		var ch := g[i]
@@ -80,7 +100,7 @@ static func is_asset_glyph(glyph: String) -> bool:
 	return true
 
 
-## Fill a CenterContainer (or any Control) with Nova / Lucide / emoji glyph.
+## Fill a CenterContainer (or any Control) with currency / Lucide / emoji glyph.
 static func fill_glyph_host(
 	host: Control,
 	glyph: String,
@@ -96,8 +116,10 @@ static func fill_glyph_host(
 	var g := glyph.strip_edges()
 	if g.is_empty():
 		g = "orbit"
-	if g.to_lower() == "nova":
-		host.add_child(make("nova", size))
+	var key := g.to_lower()
+	if key == "nova" or key == "stardust" or key == "fuel" or g == "✦" or g == "✨":
+		var currency_id := "stardust" if (g == "✦" or g == "✨" or key == "stardust") else key
+		host.add_child(make(currency_id, size))
 		return
 	if is_asset_glyph(g):
 		host.add_child(UiIcon.make(g, tint, size))

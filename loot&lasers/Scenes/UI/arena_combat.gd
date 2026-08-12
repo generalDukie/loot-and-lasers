@@ -95,6 +95,11 @@ var _finished := false
 var _dismiss_handled := false
 var _busy := false
 var _combo := 0
+## Snapshot of the committed fight for Replay after settle clears pending_battle.
+var _presentation_battle: Dictionary = {}
+var _cached_summary: Dictionary = {}
+var _rewards_settled := false
+var _watch_only := false
 
 
 func _ready() -> void:
@@ -108,8 +113,6 @@ func _ready() -> void:
 	_fx.setup(_fx_layer, _fighters, _flash, _beats)
 	_motion.setup(_beats)
 	_hp.setup(_player_hp, _enemy_hp, _player_hp_nums, _enemy_hp_nums, _beats)
-	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_changed):
-		TutorialManager.tutorial_changed.connect(_on_tutorial_changed)
 	_boot()
 
 
@@ -118,12 +121,12 @@ func _exit_tree() -> void:
 
 
 ## Called when the shell clears the combat overlay (nav away / close).
-## Mid-replay → background settle + View Rewards CTA. Outro → pending until return.
+## Mid-replay → background settle + View Rewards CTA. Concluded/settled → no-op.
 func handle_external_dismiss() -> void:
 	if _dismiss_handled:
 		return
 	_dismiss_handled = true
-	if _finished:
+	if _finished or _rewards_settled or _watch_only:
 		return
 	_generation += 1
 	_playing = false
@@ -133,9 +136,11 @@ func handle_external_dismiss() -> void:
 	elif _is_dungeon():
 		combat_kind = "dungeon"
 	if _phase == "outro":
+		CombatReturnManager.capture_presentation_from_managers(combat_kind, _prev_level, _dungeon_ctx)
 		CombatReturnManager.note_outro_pending(combat_kind, _prev_level, _dungeon_ctx)
 		return
 	# Mid-intro / mid-fight: settle rewards now so return doesn't replay.
+	CombatReturnManager.capture_presentation_from_managers(combat_kind, _prev_level, _dungeon_ctx)
 	CombatReturnManager.begin_settle_from_replay(combat_kind, _prev_level, _dungeon_ctx)
 
 
@@ -371,7 +376,8 @@ func _build() -> void:
 	skip_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	skip_pad.add_child(skip_row)
 	_skip_btn = Button.new()
-	_skip_btn.text = "⚡  SKIP TO RESULTS"
+	_skip_btn.text = "SKIP TO RESULTS"
+	_skip_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_skip_btn.custom_minimum_size = Vector2(320, 58)
 	_apply_skip_cta(_skip_btn)
 	_skip_btn.pressed.connect(_on_skip)
@@ -482,7 +488,8 @@ func _apply_combat_hp_bar(bar: TextureProgressBar, fill: Color, enemy_side: bool
 
 func _apply_skip_cta(btn: Button) -> void:
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 19)
+	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	btn.add_theme_font_size_override("font_size", 23)
 	btn.add_theme_stylebox_override("normal", ClientUi.button_style(Color("#F59E0B"), Color("#FCD34D")))
 	btn.add_theme_stylebox_override("hover", ClientUi.button_style(Color("#FBBF24"), Color("#FDE68A")))
 	btn.add_theme_stylebox_override("pressed", ClientUi.button_style(Color("#D97706"), Color("#F59E0B")))
@@ -539,17 +546,29 @@ func _add_corner(color: Color, left: bool, top: bool) -> void:
 
 
 func _boot() -> void:
+	_watch_only = bool(GameManager.combat_watch_only)
+	GameManager.combat_watch_only = false
 	var combat_kind := "arena"
 	if _is_mission():
 		combat_kind = "mission"
 	elif _is_dungeon():
 		combat_kind = "dungeon"
-	# Settled / outro-pending rewards are claimed via the source-page CTA — never replay.
-	if CombatReturnManager.is_for_kind(combat_kind):
+	# Settled / outro-pending rewards are claimed via the source-page CTA — never remount fight.
+	if not _watch_only and CombatReturnManager.is_for_kind(combat_kind):
 		_dismiss_handled = true
 		_finished = true
 		call_deferred("_abort_remount")
 		return
+	if _watch_only:
+		CombatReturnManager.restore_presentation_to_managers()
+		_cached_summary = CombatReturnManager.last_watch.get("summary", {}).duplicate(true) \
+			if typeof(CombatReturnManager.last_watch.get("summary", null)) == TYPE_DICTIONARY \
+			else {}
+		_rewards_settled = true
+		_prev_level = int(CombatReturnManager.last_watch.get("prev_level", _prev_level))
+		_dungeon_ctx = CombatReturnManager.last_watch.get("dungeon_ctx", {}).duplicate(true) \
+			if typeof(CombatReturnManager.last_watch.get("dungeon_ctx", null)) == TYPE_DICTIONARY \
+			else {}
 	if _is_mission():
 		await _boot_mission()
 	elif _is_dungeon():
@@ -565,28 +584,9 @@ func _abort_remount() -> void:
 
 func _apply_combat_tutorial_tags() -> void:
 	if _is_mission():
-		TutorialManager.tag_target(_outro_btn, "mission-view-rewards")
-	else:
-		TutorialManager.tag_target(_outro_btn, "arena-outro")
-		TutorialManager.tag_target(_skip_btn, "arena-outro")
-
-
-func _tutorial_mission_skip_locked() -> bool:
-	return _is_mission() \
-		and TutorialManager.should_show() \
-		and TutorialManager.step_id() == "mission_view_rewards"
-
-
-func _sync_tutorial_skip_btn() -> void:
-	if not is_instance_valid(_skip_btn):
 		return
-	if _tutorial_mission_skip_locked() and _phase != "outro":
-		_skip_btn.visible = false
-		_skip_btn.disabled = true
-
-
-func _on_tutorial_changed(_t: Dictionary) -> void:
-	_sync_tutorial_skip_btn()
+	TutorialManager.tag_target(_outro_btn, "arena-outro")
+	TutorialManager.tag_target(_skip_btn, "arena-outro")
 
 
 func _is_mission() -> bool:
@@ -637,13 +637,18 @@ func _boot_arena() -> void:
 
 
 func _boot_mission() -> void:
-	if not MissionManager.has_active_mission():
+	if not _watch_only and not MissionManager.has_active_mission():
 		await get_tree().create_timer(0.35).timeout
 		GameManager.close_overlay()
 		GameManager.go_cantina()
 		return
 	# Mission run may have already prepared the duel (Skip / Fight) — don't double-fetch.
 	if MissionManager.pending_battle.is_empty():
+		if _watch_only:
+			await get_tree().create_timer(0.2).timeout
+			GameManager.close_overlay()
+			GameManager.go_cantina()
+			return
 		var prep: Dictionary = await MissionManager.prepare_combat()
 		if not prep.get("ok", false) or MissionManager.pending_battle.is_empty():
 			await get_tree().create_timer(0.5).timeout
@@ -668,17 +673,21 @@ func _boot_dungeon() -> void:
 		GameManager.close_overlay()
 		GameManager.go_galaxy()
 		return
-	var planet: Dictionary = DungeonRules.get_planet(DungeonManager.selected_planet_id)
 	var enemy: Dictionary = DungeonManager.pending_enemy
-	var is_boss := bool(enemy.get("isBoss", false))
-	_dungeon_ctx = {
-		"planet_name": str(planet.get("name", "Frontier")),
-		"planet_icon": str(planet.get("icon", "")),
-		"planet_color": planet.get("color", Color("#34D399")),
-		"is_boss": is_boss,
-		"enemy_name": str(enemy.get("name", "Foe")),
-		"enemy_index": _dungeon_enemy_index(enemy),
-	}
+	if _watch_only and not _dungeon_ctx.is_empty():
+		# Prefer the snapshot captured at settle time.
+		pass
+	else:
+		var planet: Dictionary = DungeonRules.get_planet(DungeonManager.selected_planet_id)
+		var is_boss := bool(enemy.get("isBoss", false))
+		_dungeon_ctx = {
+			"planet_name": str(planet.get("name", "Frontier")),
+			"planet_icon": str(planet.get("icon", "")),
+			"planet_color": planet.get("color", Color("#34D399")),
+			"is_boss": is_boss,
+			"enemy_name": str(enemy.get("name", "Foe")),
+			"enemy_index": _dungeon_enemy_index(enemy),
+		}
 	var accent := Color("#34D399")
 	var raw_accent: Variant = _dungeon_ctx.get("planet_color", accent)
 	if typeof(raw_accent) == TYPE_COLOR:
@@ -748,6 +757,7 @@ func _start_duel(
 	_event_i = 0
 	_phase = "intro"
 	_playing = true
+	_presentation_battle = battle.duplicate(true)
 
 	var vs_row: Label = _intro_layer.find_child("VsRow", true, false) as Label
 	if vs_row:
@@ -758,7 +768,7 @@ func _start_duel(
 	var intro_tw := _intro_layer.create_tween()
 	intro_tw.tween_property(_intro_layer, "modulate:a", 1.0, 0.22)
 	await get_tree().create_timer(_beats.intro_duration()).timeout
-	# Skip during intro cancels playback — leave Victory/Defeat + final HP on screen.
+	# Skip during intro cancels playback — leave concluded path + final HP on screen.
 	if not is_instance_valid(self) or _finished or not _playing or _phase == "outro":
 		return
 	var fade := _intro_layer.create_tween()
@@ -770,7 +780,6 @@ func _start_duel(
 	_motion.start_idle(_player_card, 0.0)
 	_motion.start_idle(_enemy_card, 0.35)
 	_phase = "fight"
-	_sync_tutorial_skip_btn()
 	_run_playback()
 
 
@@ -1055,7 +1064,7 @@ func _run_playback() -> void:
 			break
 	if gen != _generation or _finished:
 		return
-	_show_outro()
+	_conclude_fight()
 
 
 func _update_combo(_attacker: String) -> void:
@@ -1296,11 +1305,15 @@ func _card_for(side: Variant) -> Control:
 	return _player_card if str(side) == "player" else _enemy_card
 
 
+func _battle_for_presentation() -> Dictionary:
+	if not _presentation_battle.is_empty():
+		return _presentation_battle
+	return _battle()
+
+
 func _on_skip() -> void:
-	## Fast-forward presentation to the authoritative final HP, then Victory/Defeat.
+	## Fast-forward presentation to the authoritative final HP, then combat report.
 	## Does not re-simulate combat — consumes playerEnd / EndHp / event log from the committed battle.
-	if _tutorial_mission_skip_locked():
-		return
 	if _busy or _finished or _phase == "outro":
 		return
 	_generation += 1
@@ -1308,48 +1321,40 @@ func _on_skip() -> void:
 	_hide_ability_banner()
 	if is_instance_valid(_intro_layer):
 		_intro_layer.visible = false
-	var end_hp := CombatPresentation.resolve_end_hp(_battle(), _hp.player_hp, _hp.enemy_hp)
+	var end_hp := CombatPresentation.resolve_end_hp(_battle_for_presentation(), _hp.player_hp, _hp.enemy_hp)
 	_hp.snap(end_hp.x, end_hp.y)
 	_event_i = _events.size()
-	_show_outro()
+	_conclude_fight()
 
 
-func _show_outro() -> void:
-	if _finished:
+func _conclude_fight() -> void:
+	## Skip Victory/Defeat overlay — settle once (if needed) and open the combat report.
+	if _busy:
+		return
+	if _finished and not _rewards_settled:
 		return
 	_playing = false
 	_phase = "outro"
 	_skip_btn.visible = false
 	_combo_wrap.visible = false
 	_hide_ability_banner()
-	var won := str(_battle().get("winner", "opponent")) == "player"
-	_outro_title.text = "VICTORY" if won else "DEFEAT"
-	_outro_title.add_theme_color_override("font_color", Color("#FBBF24") if won else Color("#FB7185"))
-	if _is_mission():
-		_outro_sub.text = "The path home is clear." if won else "The encounter overwhelms you…"
-		_outro_btn.text = "VIEW REWARDS" if won else "VIEW RESULTS"
-	elif _is_dungeon():
-		_outro_sub.text = "The frontier yields." if won else "The world claims another operative…"
-		_outro_btn.text = "VIEW REWARDS" if won else "VIEW RESULTS"
-	else:
-		_outro_sub.text = "Glory to the galaxy." if won else "You fall... but you'll rise again."
-		_outro_btn.text = "VIEW REWARDS" if won else "VIEW RESULTS"
-	if won:
-		ClientUi.apply_primary_button(_outro_btn)
-	else:
-		ClientUi.apply_danger_button(_outro_btn)
+	var battle := _battle_for_presentation()
+	if _presentation_battle.is_empty() and not battle.is_empty():
+		_presentation_battle = battle.duplicate(true)
+	var won := str(battle.get("winner", "opponent")) == "player"
 	_motion.stop_all_idle()
 	_motion.settle(_player_card if won else _enemy_card, true)
 	_motion.settle(_enemy_card if won else _player_card, false)
-	_outro_layer.visible = true
-	_outro_layer.modulate.a = 0.0
-	var tw := _outro_layer.create_tween()
-	tw.tween_property(_outro_layer, "modulate:a", 1.0, 0.25)
-	if _is_mission() and TutorialManager.should_show() and TutorialManager.step_id() == "mission_view_rewards":
-		TutorialManager.notify_mission_outro_ready()
+	if _rewards_settled:
+		if is_instance_valid(_sheet_host) and _sheet_host.visible and _sheet_host.get_child_count() > 0:
+			return
+		_remount_cached_report()
+		return
+	_settle_and_show_rewards()
 
 
 func _on_outro_continue() -> void:
+	## Settle-failure recovery still uses the outro CTA.
 	if _busy:
 		return
 	_outro_btn.disabled = true
@@ -1359,18 +1364,31 @@ func _on_outro_continue() -> void:
 func _settle_and_show_rewards() -> void:
 	if _busy:
 		return
+	if _watch_only or _rewards_settled:
+		_remount_cached_report()
+		return
 	_busy = true
 	_finished = true
 	_playing = false
 	_skip_btn.disabled = true
 	_skip_btn.visible = false
 	_outro_layer.visible = false
+	if _presentation_battle.is_empty():
+		var live := _battle()
+		if not live.is_empty():
+			_presentation_battle = live.duplicate(true)
+	var combat_kind := "arena"
+	if _is_mission():
+		combat_kind = "mission"
+	elif _is_dungeon():
+		combat_kind = "dungeon"
+	CombatReturnManager.capture_presentation_from_managers(combat_kind, _prev_level, _dungeon_ctx)
 	var mission_won := false
 	var dungeon_won := false
 	if _is_mission():
-		mission_won = str(_battle().get("winner", "opponent")) == "player"
+		mission_won = str(_presentation_battle.get("winner", "opponent")) == "player"
 	elif _is_dungeon():
-		dungeon_won = str(_battle().get("winner", "opponent")) == "player"
+		dungeon_won = str(_presentation_battle.get("winner", "opponent")) == "player"
 	var res: Dictionary
 	if _is_mission():
 		res = await MissionManager.resolve_combat_outcome()
@@ -1381,12 +1399,16 @@ func _settle_and_show_rewards() -> void:
 	_busy = false
 	if not res.ok:
 		_outro_layer.visible = true
+		_outro_title.text = "SETTLE FAILED"
 		_outro_sub.text = str(res.get("error", "Settle failed"))
+		_outro_btn.text = "RETRY"
 		_outro_btn.disabled = false
+		ClientUi.apply_danger_button(_outro_btn)
 		_skip_btn.disabled = false
 		_skip_btn.visible = true
 		_finished = false
 		return
+	_rewards_settled = true
 	if _is_mission():
 		if mission_won:
 			AudioManager.play_ui("claim")
@@ -1430,6 +1452,131 @@ func _settle_and_show_rewards() -> void:
 	await _show_result(result)
 
 
+func _replay_action() -> Dictionary:
+	return {
+		"label": "Replay",
+		"primary": false,
+		"replay": true,
+		"callback": func() -> void: _start_combat_rewatch(),
+	}
+
+
+func _start_combat_rewatch() -> void:
+	if _busy or _presentation_battle.is_empty():
+		return
+	_generation += 1
+	_finished = false
+	_busy = false
+	_playing = true
+	_phase = "intro"
+	_event_i = 0
+	_combo = 0
+	_combo_wrap.visible = false
+	_hide_ability_banner()
+	_outro_layer.visible = false
+	if is_instance_valid(_combat_log):
+		_combat_log.clear()
+	var battle := _presentation_battle
+	_events = battle.get("events", []) if typeof(battle.get("events", [])) == TYPE_ARRAY else []
+	var p_max := maxi(1, int(battle.get("playerMaxHp", 1)))
+	var e_max := maxi(1, int(battle.get("opponentMaxHp", 1)))
+	_hp.reset(p_max, p_max, e_max, e_max)
+	_skip_btn.disabled = false
+	_skip_btn.visible = true
+	_motion.stop_all_idle()
+	if is_instance_valid(_player_card):
+		_player_card.modulate = Color.WHITE
+		_player_card.rotation = 0.0
+		_player_card.position = Vector2.ZERO
+	if is_instance_valid(_enemy_card):
+		_enemy_card.modulate = Color.WHITE
+		_enemy_card.rotation = 0.0
+		_enemy_card.position = Vector2.ZERO
+	var player_name := str(_duel_player.get("name", "You"))
+	var opp_name := str(_duel_enemy.get("name", "Rival"))
+	var vs_row: Label = _intro_layer.find_child("VsRow", true, false) as Label
+	if vs_row:
+		vs_row.text = "%s   VS   %s" % [player_name, opp_name]
+	_intro_layer.visible = true
+	_intro_layer.modulate.a = 0.0
+	var intro_tw := _intro_layer.create_tween()
+	intro_tw.tween_property(_intro_layer, "modulate:a", 1.0, 0.22)
+	await get_tree().create_timer(_beats.intro_duration()).timeout
+	if not is_instance_valid(self) or _finished or not _playing or _phase == "outro":
+		return
+	var fade := _intro_layer.create_tween()
+	fade.tween_property(_intro_layer, "modulate:a", 0.0, 0.18)
+	await fade.finished
+	if not is_instance_valid(self) or _finished or not _playing or _phase == "outro":
+		return
+	_intro_layer.visible = false
+	_motion.start_idle(_player_card, 0.0)
+	_motion.start_idle(_enemy_card, 0.35)
+	_phase = "fight"
+	_run_playback()
+
+
+func _remount_cached_report() -> void:
+	if _cached_summary.is_empty() and _presentation_battle.is_empty():
+		return
+	_finished = true
+	_playing = false
+	_skip_btn.visible = false
+	_outro_layer.visible = false
+	if _is_mission() and TutorialManager.should_show():
+		TutorialManager.notify_mission_outro_ready()
+	var summary := _rebuild_summary_actions(_cached_summary)
+	CombatSheets.present_complete_then_level_up(
+		_sheet_host, summary, _prev_level, GameManager.active_character, true, false
+	)
+
+
+func _rebuild_summary_actions(base: Dictionary) -> Dictionary:
+	## Fresh Callables after rewatch — deep-duplicated summaries drop/break callbacks.
+	var summary := base.duplicate(true)
+	var won := bool(summary.get("won", false))
+	var mode := str(summary.get("mode", "arena"))
+	match mode:
+		"mission":
+			summary["actions"] = [
+				{"label": "Cantina", "primary": true, "callback": func() -> void: GameManager.go_cantina()},
+				{
+					"label": "Operative" if won else "Hub",
+					"primary": false,
+					"callback": (func() -> void: GameManager.go_stats()) if won else (func() -> void: GameManager.go_hub()),
+				},
+				_replay_action(),
+			]
+		"dungeon":
+			summary["actions"] = [
+				{"label": "Back to Frontier", "primary": true, "callback": func() -> void: GameManager.go_galaxy()},
+				{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
+				_replay_action(),
+			]
+		_:
+			summary["actions"] = [
+				{"label": "Back to Arena", "primary": true, "callback": func() -> void: GameManager.go_arena()},
+				{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
+				_replay_action(),
+			]
+	return summary
+
+
+func _cache_and_present_summary(summary: Dictionary, require_win_for_levelup: bool) -> void:
+	_cached_summary = summary.duplicate(true)
+	CombatReturnManager.remember_watch_summary(summary, _presentation_battle, _prev_level, _dungeon_ctx)
+	if _is_mission() and TutorialManager.should_show():
+		TutorialManager.notify_mission_outro_ready()
+	CombatSheets.present_complete_then_level_up(
+		_sheet_host,
+		summary,
+		_prev_level,
+		GameManager.active_character,
+		require_win_for_levelup,
+		not _watch_only
+	)
+
+
 func _show_mission_result(won: bool, data: Dictionary) -> void:
 	_motion.stop_all_idle()
 
@@ -1469,7 +1616,7 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 	var summary := {
 		"won": won,
 		"mode": "mission",
-		"title": "Mission claimed!" if won else "Mission failed",
+		"title": "Victory" if won else "Defeat",
 		"subtitle": "" if won else (
 			"Reduced rewards issued." if has_loss_rewards
 			else "No stardust, XP, or loot. Fuel was already spent."
@@ -1483,11 +1630,10 @@ func _show_mission_result(won: bool, data: Dictionary) -> void:
 		"actions": [
 			{"label": "Cantina", "primary": true, "callback": go_cantina},
 			{"label": "Operative" if won else "Hub", "primary": false, "callback": go_secondary},
+			_replay_action(),
 		],
 	}
-	CombatSheets.present_complete_then_level_up(
-		_sheet_host, summary, _prev_level, GameManager.active_character, true
-	)
+	_cache_and_present_summary(summary, true)
 
 
 func _show_dungeon_result(data: Dictionary) -> void:
@@ -1501,17 +1647,13 @@ func _show_dungeon_result(data: Dictionary) -> void:
 	var planet_name := str(_dungeon_ctx.get("planet_name", "Frontier"))
 	var is_boss := bool(_dungeon_ctx.get("is_boss", false))
 	var enemy_index := int(_dungeon_ctx.get("enemy_index", 1))
-	var title := ""
-	if won:
-		if is_boss:
-			title = "Defeated %s" % enemy_name
-		else:
-			title = "Cleared enemy %s" % enemy_index
-	else:
-		title = "Fell to %s" % enemy_name
-	var subtitle := planet_name
+	var context := planet_name
 	if is_boss:
-		subtitle += " · Boss"
+		context += " · Boss · %s" % enemy_name
+	elif won:
+		context += " · Enemy %s" % enemy_index
+	else:
+		context += " · Fell to %s" % enemy_name
 	var note := ""
 	if not won:
 		note = "No rewards on defeat."
@@ -1520,8 +1662,8 @@ func _show_dungeon_result(data: Dictionary) -> void:
 	var summary := {
 		"won": won,
 		"mode": "dungeon",
-		"title": title,
-		"subtitle": subtitle,
+		"title": "Victory" if won else "Defeat",
+		"subtitle": context,
 		"xp": int(rewards.get("experience", 0)) if won else 0,
 		"stardust": int(rewards.get("stardust", 0)) if won else 0,
 		"gear_item": gear,
@@ -1531,11 +1673,10 @@ func _show_dungeon_result(data: Dictionary) -> void:
 		"actions": [
 			{"label": "Back to Frontier", "primary": true, "callback": func() -> void: GameManager.go_galaxy()},
 			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
+			_replay_action(),
 		],
 	}
-	CombatSheets.present_complete_then_level_up(
-		_sheet_host, summary, _prev_level, GameManager.active_character, true
-	)
+	_cache_and_present_summary(summary, true)
 
 
 func _show_result(result: Dictionary) -> void:
@@ -1554,12 +1695,15 @@ func _show_result(result: Dictionary) -> void:
 		note = "Free battle rewards applied."
 	if nova_spent > 0:
 		note += " Nova spent: %s." % nova_spent
-
+	var opp_name := str(opp.get("name", "rival"))
 	var summary := {
 		"won": won,
 		"mode": "arena",
-		"title": ("Defeated %s" if won else "Defeated by %s") % str(opp.get("name", "rival")),
-		"subtitle": "Rating now %s" % str(GameManager.active_character.get("arena_rating", "?")),
+		"title": "Victory" if won else "Defeat",
+		"subtitle": "%s · Rating now %s" % [
+			opp_name,
+			str(GameManager.active_character.get("arena_rating", "?")),
+		],
 		"xp": int(rewards.get("experience", 0)),
 		"stardust": int(rewards.get("stardust", 0)),
 		"rating_delta": delta,
@@ -1568,9 +1712,8 @@ func _show_result(result: Dictionary) -> void:
 		"actions": [
 			{"label": "Back to Arena", "primary": true, "callback": func() -> void: GameManager.go_arena()},
 			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
+			_replay_action(),
 		],
 	}
 	# Arena can award XP on either outcome; still sequence level-up after complete.
-	CombatSheets.present_complete_then_level_up(
-		_sheet_host, summary, _prev_level, GameManager.active_character, false
-	)
+	_cache_and_present_summary(summary, false)

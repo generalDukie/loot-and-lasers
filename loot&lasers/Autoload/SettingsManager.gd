@@ -83,14 +83,20 @@ var privacy_show_online: bool = true
 func _ready() -> void:
 	ClientUi.apply_root_theme(get_window())
 	load_settings()
+	# Always boot maximized windowed (title bar + OS chrome; F11 still toggles fullscreen).
+	if not OS.has_feature("web"):
+		window_mode = "maximized"
+		fullscreen = false
 	apply_settings()
 	var win := get_window()
 	if win != null and not win.size_changed.is_connected(_on_window_size_changed):
 		win.size_changed.connect(_on_window_size_changed)
 	if not OS.has_feature("web"):
+		# Editor / Windows often need a few passes before maximize sticks.
 		call_deferred("_ensure_visible_window")
 		get_tree().process_frame.connect(_ensure_visible_window, CONNECT_ONE_SHOT)
 		get_tree().create_timer(0.15).timeout.connect(_ensure_visible_window)
+		get_tree().create_timer(0.4).timeout.connect(_ensure_visible_window)
 	print("[SettingsManager] ready v%s design=%sx%s" % [SETTINGS_VERSION, DESIGN_SIZE.x, DESIGN_SIZE.y])
 
 
@@ -286,9 +292,25 @@ func _apply_window_mode() -> void:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 			call_deferred("_ensure_visible_window")
 		_:
-			# maximized (default desktop comfort)
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			# maximized windowed — fills the screen with normal OS window chrome
+			_force_maximized_window()
 			call_deferred("_ensure_visible_window")
+
+
+func _force_maximized_window() -> void:
+	## Prefer Window.mode; on Windows/editor a single DisplayServer call can no-op at boot.
+	_enforcing_size = true
+	var win := get_window()
+	if win != null:
+		if win.mode != Window.MODE_MAXIMIZED:
+			win.mode = Window.MODE_MAXIMIZED
+		# Still stuck windowed (common on first editor frames) — re-issue maximize.
+		if win.mode != Window.MODE_MAXIMIZED:
+			win.mode = Window.MODE_WINDOWED
+			win.mode = Window.MODE_MAXIMIZED
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED)
+	_enforcing_size = false
 
 
 ## Volume only — never touch window mode (sliders used to call apply_settings and break).
@@ -447,18 +469,24 @@ func _ensure_visible_window() -> void:
 		return
 	if fullscreen or window_mode == "fullscreen" or window_mode == "exclusive":
 		return
+
+	# Maximized must never be demoted by the windowed fit logic below.
+	# On Windows, maximized frames often report slightly outside the usable rect.
+	if window_mode == "maximized":
+		var max_mode := DisplayServer.window_get_mode()
+		if max_mode != DisplayServer.WINDOW_MODE_MAXIMIZED:
+			_force_maximized_window()
+		_apply_content_scale()
+		return
+
 	var mode := DisplayServer.window_get_mode()
 	if mode == DisplayServer.WINDOW_MODE_FULLSCREEN \
-			or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+			or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN \
+			or mode == DisplayServer.WINDOW_MODE_MAXIMIZED:
 		return
 
 	var screen := DisplayServer.window_get_current_screen()
 	var usable := DisplayServer.screen_get_usable_rect(screen)
-
-	if window_mode == "maximized" and mode != DisplayServer.WINDOW_MODE_MAXIMIZED:
-		_enforcing_size = true
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED)
-		_enforcing_size = false
 
 	mode = DisplayServer.window_get_mode()
 	if usable.size.x > 1 and usable.size.y > 1:

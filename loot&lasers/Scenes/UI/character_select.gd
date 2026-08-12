@@ -440,7 +440,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	title_l.custom_minimum_size.y = 18
 	var title := str(character.get("active_title", "")).strip_edges()
 	title_l.text = title if not title.is_empty() and title != "<null>" else " "
-	title_l.add_theme_font_size_override("font_size", 14)
+	title_l.add_theme_font_size_override("font_size", 17)
 	title_l.add_theme_color_override("font_color", Color(ClientUi.GOLD, 0.92))
 	ClientUi.apply_display_font(title_l)
 	col.add_child(title_l)
@@ -457,7 +457,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	var class_l := Label.new()
 	class_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	class_l.text = class_key
-	class_l.add_theme_font_size_override("font_size", 16)
+	class_l.add_theme_font_size_override("font_size", 19)
 	class_l.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(class_l)
 	meta_row.add_child(class_l)
@@ -466,7 +466,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	race_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	race_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	race_l.text = str(character.get("race", "")).strip_edges()
-	race_l.add_theme_font_size_override("font_size", 15)
+	race_l.add_theme_font_size_override("font_size", 18)
 	race_l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(race_l)
 	col.add_child(race_l)
@@ -475,7 +475,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	summary.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	summary.text = _summary_line(character)
-	summary.add_theme_font_size_override("font_size", 13)
+	summary.add_theme_font_size_override("font_size", 17)
 	summary.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_body_font(summary)
 	col.add_child(summary)
@@ -598,7 +598,7 @@ func _make_create_card() -> Button:
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.text = "Open a new slot on your roster"
-	hint.add_theme_font_size_override("font_size", 14)
+	hint.add_theme_font_size_override("font_size", 18)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	col.add_child(hint)

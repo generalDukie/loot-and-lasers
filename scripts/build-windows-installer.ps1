@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.1.15",
+    [string]$Version = "0.1.19",
     [string]$GodotPath = "",
     [string]$InnoCompilerPath = "",
     # Pull live NAKAMA_SOCKET_SERVER_KEY from Hetzner before baking (default on).

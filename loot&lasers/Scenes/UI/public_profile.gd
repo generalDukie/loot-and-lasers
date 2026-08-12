@@ -119,7 +119,7 @@ func _populate(data: Dictionary) -> void:
 	if not operative_line.is_empty():
 		var op_lab := Label.new()
 		op_lab.text = operative_line
-		op_lab.add_theme_font_size_override("font_size", 15)
+		op_lab.add_theme_font_size_override("font_size", 18)
 		op_lab.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
 		ClientUi.apply_body_font(op_lab)
 		info.add_child(op_lab)

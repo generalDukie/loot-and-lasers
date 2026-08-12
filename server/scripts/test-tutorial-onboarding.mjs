@@ -64,9 +64,10 @@ function testService() {
   }
 
   assert(ONBOARDING_STEPS[0].id === "click_operative", "catalog starts at operative");
-  assert(ONBOARDING_STEPS[13].id === "click_shop", "shop nav follows hero equip");
-  assert(ONBOARDING_STEPS[14].id === "shop_market", "shop market follows shop nav");
-  assert(ONBOARDING_STEPS[16].id === "arena_free", "arena free follows click arena");
+  assert(ONBOARDING_STEPS[12].id === "click_shop", "shop nav follows hero equip");
+  assert(ONBOARDING_STEPS[13].id === "shop_market", "shop market follows shop nav");
+  assert(ONBOARDING_STEPS[15].id === "arena_free", "arena free follows click arena");
+  assert(normalizeOnboarding({ status: "active", step_id: "mission_view_rewards" }).step_id === "click_hero", "removed view-rewards forwards to operative nav");
   assert(ONBOARDING_STEPS[ONBOARDING_STEPS.length - 2].id === "continue_travels", "cantina return before finish");
   assert(ONBOARDING_STEPS[ONBOARDING_STEPS.length - 1].id === "finish", "catalog ends on finish");
   const ids = ONBOARDING_STEPS.map((s) => s.id);
@@ -97,6 +98,7 @@ function testService() {
     "click_mail",
     "hero_stims",
     "frontier_dungeons",
+    "mission_view_rewards",
   ]) {
     assert(!ids.includes(removed), `${removed} step removed`);
   }

@@ -51,6 +51,8 @@ var active_character: Dictionary = {}
 var recent_loot_ids: PackedStringArray = []
 ## Active duel overlay source: "arena" | "mission" (web reuses one ArenaBattleOverlay).
 var combat_overlay_kind := "arena"
+## When true, next combat overlay remounts a settled fight for watch-only Replay.
+var combat_watch_only := false
 ## Character dict for Public Profile scene.
 var pending_profile: Dictionary = {}
 ## Optional character to open a DM with from Messages.
@@ -165,7 +167,7 @@ func go_arena() -> void:
 
 
 func go_arena_combat() -> void:
-	if TutorialManager.blocks_arena_combat():
+	if TutorialManager.blocks_arena_combat() and not combat_watch_only:
 		return
 	combat_overlay_kind = "arena"
 	open_overlay(SCENE_ARENA_COMBAT)

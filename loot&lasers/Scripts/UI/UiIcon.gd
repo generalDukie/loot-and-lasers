@@ -49,7 +49,6 @@ const ALIAS := {
 	"package": "package",
 	"loot": "package",
 	"sparkles": "sparkles",
-	"stardust": "sparkles",
 	"clock": "clock",
 	"timer": "timer",
 	"map": "map",
@@ -198,10 +197,24 @@ static func resolve_id(icon_id: String) -> String:
 
 
 static func texture(icon_id: String) -> Texture2D:
+	var key := icon_id.strip_edges().to_lower()
+	if key == "stardust":
+		return CurrencyIcon.texture("stardust")
+	if key == "fuel":
+		return CurrencyIcon.texture("fuel")
+	if key == "nova":
+		return CurrencyIcon.texture("nova")
 	return NavIcon.texture_for(resolve_id(icon_id))
 
 
 static func make(icon_id: String, tint: Color = Color(ClientUi.CYAN), size: float = DEFAULT_SIZE) -> TextureRect:
+	var key := icon_id.strip_edges().to_lower()
+	if key == "stardust":
+		return CurrencyIcon.make("stardust", size)
+	if key == "fuel":
+		return CurrencyIcon.make("fuel", size)
+	if key == "nova":
+		return CurrencyIcon.make("nova", size)
 	return NavIcon.make(resolve_id(icon_id), tint, size)
 
 
@@ -215,6 +228,8 @@ static func apply_button_icon_colors(btn: Button, tint: Color) -> void:
 	btn.add_theme_color_override("icon_normal_color", tint)
 	btn.add_theme_color_override("icon_hover_color", tint.lightened(0.12))
 	btn.add_theme_color_override("icon_pressed_color", tint.darkened(0.08))
+	btn.add_theme_color_override("icon_hover_pressed_color", tint.darkened(0.08))
+	btn.add_theme_color_override("icon_focus_color", tint)
 	btn.add_theme_color_override("icon_disabled_color", Color(tint.r, tint.g, tint.b, 0.35))
 
 
@@ -241,6 +256,7 @@ static func set_button_icon(btn: Button, icon_id: String, tint: Color, size: flo
 	if btn == null or not is_instance_valid(btn):
 		return
 	btn.text = ""
+	var key := icon_id.strip_edges().to_lower()
 	btn.icon = texture(icon_id)
 	btn.expand_icon = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -263,21 +279,25 @@ static func set_button_icon(btn: Button, icon_id: String, tint: Color, size: flo
 		flat.content_margin_top = 0
 		flat.content_margin_bottom = 0
 		btn.add_theme_stylebox_override(state, flat)
-	apply_button_icon_colors(btn, tint)
-	btn.set_meta("ui_icon_id", resolve_id(icon_id))
+	# Currency glyphs are baked colors — don't multiply with chrome tint.
+	var baked := key == "stardust" or key == "fuel" or key == "nova"
+	apply_button_icon_colors(btn, Color.WHITE if baked else tint)
+	btn.set_meta("ui_icon_id", key if baked else resolve_id(icon_id))
 
 
 ## Leading Lucide icon beside existing button text (Fight / Skip / etc.).
 static func apply_leading_icon(btn: Button, icon_id: String, tint: Color, size: float = 20.0) -> void:
 	if btn == null or not is_instance_valid(btn):
 		return
+	var key := icon_id.strip_edges().to_lower()
 	btn.icon = texture(icon_id)
 	btn.expand_icon = true
 	btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	btn.add_theme_constant_override("icon_max_width", int(round(size)))
-	apply_button_icon_colors(btn, tint)
-	btn.set_meta("ui_icon_id", resolve_id(icon_id))
+	var baked := key == "stardust" or key == "fuel" or key == "nova"
+	apply_button_icon_colors(btn, Color.WHITE if baked else tint)
+	btn.set_meta("ui_icon_id", key if baked else resolve_id(icon_id))
 
 
 ## Title row: neon icon + text label (replaces "🔔 Notifications" patterns).

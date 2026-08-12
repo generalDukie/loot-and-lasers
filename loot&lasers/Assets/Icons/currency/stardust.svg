@@ -1,19 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-  <!-- Stardust sparkle — fuchsia #E879F9 -->
-  <path
-    d="M12 2.2 L13.35 9.15 L20.2 10.5 L13.35 11.85 L12 18.8 L10.65 11.85 L3.8 10.5 L10.65 9.15 Z"
-    fill="#E879F9"
-    fill-opacity="0.22"
-    stroke="#E879F9"
-    stroke-width="1.6"
-    stroke-linejoin="round"
-  />
-  <path
-    d="M17.6 4.2 L18.15 6.2 L20.15 6.75 L18.15 7.3 L17.6 9.3 L17.05 7.3 L15.05 6.75 L17.05 6.2 Z"
-    fill="#E879F9"
-    stroke="#E879F9"
-    stroke-width="1"
-    stroke-linejoin="round"
-  />
-  <circle cx="6.4" cy="16.6" r="1.15" fill="#E879F9"/>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="24"
+     height="24"
+     viewBox="0 0 1024 1024"
+     fill="none"
+     shape-rendering="geometricPrecision">
+  <!-- Loot & Lasers Stardust — visually balanced paths, outline-only wallet fuchsia #E879F9 -->
+  <title>Loot &amp; Lasers Stardust Icon — Visually Balanced</title>
+
+  <g fill="none"
+     stroke="#E879F9"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+    <!-- Primary sparkle — centered exactly at (512, 512) -->
+    <path
+      d="
+        M 512 222
+        C 500 389, 429 486, 214 512
+        C 429 538, 500 635, 512 802
+        C 524 635, 595 538, 810 512
+        C 595 486, 524 389, 512 222
+        Z"
+      stroke-width="34"/>
+
+    <!-- Upper-right sparkle -->
+    <path
+      d="
+        M 748 112
+        C 741 195, 710 237, 630 252
+        C 710 267, 741 309, 748 392
+        C 755 309, 786 267, 866 252
+        C 786 237, 755 195, 748 112
+        Z"
+      stroke-width="30"/>
+
+    <!-- Lower-left sparkle -->
+    <path
+      d="
+        M 276 676
+        C 271 730, 251 759, 197 772
+        C 251 785, 271 814, 276 868
+        C 281 814, 301 785, 355 772
+        C 301 759, 281 730, 276 676
+        Z"
+      stroke-width="26"/>
+
+  </g>
 </svg>

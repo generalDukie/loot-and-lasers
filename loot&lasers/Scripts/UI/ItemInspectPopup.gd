@@ -6,16 +6,18 @@ extends PanelContainer
 signal action_pressed(action_id: String, item: Dictionary)
 signal closed
 
-const HIDE_DELAY_S := 0.16
+## One-frame bridge so the cursor can leave the item and enter the popup.
+## Must not be reset every frame (see request_hide) or the card never closes.
+const HIDE_DELAY_S := 0.02
 const MAX_W := 640.0
 const PAD_X := 10
 const PAD_Y := 8
 const ICON_SZ := 42.0
 const TITLE_FS := 19
-const META_FS := 14
-const BODY_FS := 15
-const VAL_FS := 17
-const DELTA_FS := 15
+const META_FS := 18
+const BODY_FS := 19
+const VAL_FS := 19
+const DELTA_FS := 17
 const STAT_ICON := 22.0
 const ACTION_H := 32.0
 
@@ -33,6 +35,7 @@ var _section_actions: HBoxContainer
 var _anchor: Control = null
 var _item: Dictionary = {}
 var _hide_token := 0
+var _hide_scheduled := false
 var _open := false
 var _tween: Tween
 
@@ -147,12 +150,24 @@ func _set_wrap_labels(n: Node, wrap: bool, inner_w: float) -> void:
 
 
 func request_hide() -> void:
-	## Short delay so the cursor can cross the gap between item and popup.
+	## Close as soon as the pointer is off both the item and this card.
+	## Do not re-arm every frame — that was resetting the timer forever.
+	if not _open or not visible:
+		return
+	if _hide_scheduled:
+		return
+	_hide_scheduled = true
 	_hide_token += 1
 	var token := _hide_token
-	get_tree().create_timer(HIDE_DELAY_S).timeout.connect(func() -> void:
+	var tree := get_tree()
+	if tree == null:
+		_hide_scheduled = false
+		force_hide()
+		return
+	tree.create_timer(HIDE_DELAY_S).timeout.connect(func() -> void:
 		if token != _hide_token:
 			return
+		_hide_scheduled = false
 		if _pointer_over_zone():
 			return
 		force_hide()
@@ -161,6 +176,7 @@ func request_hide() -> void:
 
 func force_hide() -> void:
 	_cancel_hide()
+	_hide_scheduled = false
 	_open = false
 	_anchor = null
 	_item = {}
@@ -183,6 +199,7 @@ func current_item() -> Dictionary:
 
 func _cancel_hide() -> void:
 	_hide_token += 1
+	_hide_scheduled = false
 
 
 func _on_popup_mouse_entered() -> void:
@@ -195,10 +212,11 @@ func _on_popup_mouse_exited() -> void:
 
 func is_pointer_over_zone() -> bool:
 	var mouse := get_viewport().get_mouse_position()
-	if visible and get_global_rect().grow(4.0).has_point(mouse):
+	# Tight hit tests — no large grow pad that keeps the card "hovered" when off it.
+	if visible and get_global_rect().has_point(mouse):
 		return true
 	if _anchor != null and is_instance_valid(_anchor):
-		if _anchor.get_global_rect().grow(4.0).has_point(mouse):
+		if _anchor.get_global_rect().has_point(mouse):
 			return true
 	return false
 
@@ -365,13 +383,18 @@ func _rebuild(options: Dictionary) -> void:
 
 	# —— Extras (sell value now; set bonuses / flavor later) ——
 	if show_sell and not InventoryRules.is_consumable(item):
+		var sell_row := HBoxContainer.new()
+		sell_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sell_row.add_theme_constant_override("separation", 4)
+		sell_row.add_child(CurrencyIcon.make("stardust", 14.0))
 		var sell := Label.new()
 		sell.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		sell.text = "Sell value · ✦ %s" % InventoryRules.estimate_sell_value(item)
+		sell.text = "Sell value · %s" % InventoryRules.estimate_sell_value(item)
 		sell.add_theme_font_size_override("font_size", META_FS)
 		sell.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 		ClientUi.apply_display_font(sell)
-		_section_extras.add_child(sell)
+		sell_row.add_child(sell)
+		_section_extras.add_child(sell_row)
 
 	var flavor := str(item.get("flavor", item.get("description", ""))).strip_edges()
 	if not flavor.is_empty():

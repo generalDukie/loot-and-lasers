@@ -39,7 +39,7 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 func _refresh_balance() -> void:
 	if _balance_lab == null or not is_instance_valid(_balance_lab):
 		return
-	_balance_lab.text = "✦  %s  stardust" % str(
+	_balance_lab.text = "%s  stardust" % str(
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
 	)
 
@@ -82,11 +82,22 @@ func _build() -> void:
 		Color(GameData.STARDUST_COLOR, 0.10), Color(GameData.STARDUST_COLOR, 0.30), 999, 1
 	))
 	header.add_child(bal)
+	var bal_inner := HBoxContainer.new()
+	bal_inner.add_theme_constant_override("separation", 6)
+	bal_inner.alignment = BoxContainer.ALIGNMENT_CENTER
+	var bal_pad := MarginContainer.new()
+	bal_pad.add_theme_constant_override("margin_left", 10)
+	bal_pad.add_theme_constant_override("margin_right", 10)
+	bal_pad.add_theme_constant_override("margin_top", 4)
+	bal_pad.add_theme_constant_override("margin_bottom", 4)
+	bal_pad.add_child(bal_inner)
+	bal.add_child(bal_pad)
+	bal_inner.add_child(CurrencyIcon.make("stardust", 16.0))
 	_balance_lab = Label.new()
 	_balance_lab.add_theme_font_size_override("font_size", 17)
 	_balance_lab.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(_balance_lab)
-	bal.add_child(_balance_lab)
+	bal_inner.add_child(_balance_lab)
 
 	# Pending banner — web primary tint, no claim button (auto after dissolve)
 	_pending_banner = PanelContainer.new()
@@ -158,7 +169,7 @@ func _build() -> void:
 	_hole_hint.set_anchors_and_offsets_preset(PRESET_BOTTOM_WIDE)
 	_hole_hint.offset_top = -48
 	_hole_hint.offset_bottom = -16
-	_hole_hint.add_theme_font_size_override("font_size", 15)
+	_hole_hint.add_theme_font_size_override("font_size", 19)
 	_hole_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_hole_hint)
 	_hole_stage.add_child(_hole_hint)
@@ -200,7 +211,7 @@ func _build() -> void:
 	var empty_a := Label.new()
 	empty_a.text = "No spare gear to dissolve."
 	empty_a.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	empty_a.add_theme_font_size_override("font_size", 17)
+	empty_a.add_theme_font_size_override("font_size", 19)
 	empty_a.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(empty_a)
 	empty_col.add_child(empty_a)
@@ -208,7 +219,7 @@ func _build() -> void:
 	empty_b.text = "Complete missions or buy from the Black Market to find items."
 	empty_b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	empty_b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	empty_b.add_theme_font_size_override("font_size", 15)
+	empty_b.add_theme_font_size_override("font_size", 19)
 	empty_b.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.65))
 	ClientUi.apply_body_font(empty_b)
 	empty_col.add_child(empty_b)
@@ -390,18 +401,14 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 	var meta := Label.new()
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meta.text = "%s · %s" % [rarity, str(it.get("type", "?"))]
-	meta.add_theme_font_size_override("font_size", 15)
+	meta.add_theme_font_size_override("font_size", 19)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	col.add_child(meta)
 
-	var val := Label.new()
-	val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	val.text = "✦  %s" % InventoryRules.estimate_sell_value(it)
-	val.add_theme_font_size_override("font_size", 15)
-	val.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
-	ClientUi.apply_body_font(val)
-	col.add_child(val)
+	col.add_child(CurrencyIcon.make_stardust_amount_row(
+		InventoryRules.estimate_sell_value(it), 14.0, 15
+	))
 
 	var btn := Button.new()
 	btn.text = "Dissolve"
@@ -487,7 +494,7 @@ func _on_dissolve(item_id: String) -> void:
 	_sucking_ids.erase(item_id)
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	var gained := int(data.get("stardust_gained", preview))
-	_set_status("✦ Dissolved into stardust! +%s from %s" % [gained, name], GameData.STARDUST_COLOR)
+	_set_status("Dissolved into stardust! +%s from %s" % [gained, name], GameData.STARDUST_COLOR)
 	_refresh_balance()
 	await _reload()
 
@@ -533,7 +540,7 @@ func _on_junk() -> void:
 	var n: int = ids.size()
 	if typeof(dissolved) == TYPE_ARRAY:
 		n = (dissolved as Array).size()
-	_set_status("✦ Junk dissolved! %s items → +%s stardust" % [n, gained], GameData.STARDUST_COLOR)
+	_set_status("Junk dissolved! %s items → +%s stardust" % [n, gained], GameData.STARDUST_COLOR)
 	_refresh_balance()
 	await _reload()
 

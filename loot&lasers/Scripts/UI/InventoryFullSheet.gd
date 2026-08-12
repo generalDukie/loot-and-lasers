@@ -83,14 +83,14 @@ func _build() -> void:
 	_sub_lab.text = _reason
 	_sub_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_sub_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sub_lab.add_theme_font_size_override("font_size", 16)
+	_sub_lab.add_theme_font_size_override("font_size", ClientUi.BODY_FS)
 	_sub_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_sub_lab)
 	col.add_child(_sub_lab)
 
 	_bag_lab = Label.new()
 	_bag_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_bag_lab.add_theme_font_size_override("font_size", 15)
+	_bag_lab.add_theme_font_size_override("font_size", ClientUi.BODY_FS)
 	_bag_lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(_bag_lab)
 	col.add_child(_bag_lab)
@@ -98,7 +98,7 @@ func _build() -> void:
 	_claim_hint = Label.new()
 	_claim_hint.visible = false
 	_claim_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_claim_hint.add_theme_font_size_override("font_size", 15)
+	_claim_hint.add_theme_font_size_override("font_size", ClientUi.HINT_FS)
 	_claim_hint.add_theme_color_override("font_color", ClientUi.GOLD)
 	ClientUi.apply_display_font(_claim_hint)
 	col.add_child(_claim_hint)
@@ -109,7 +109,7 @@ func _build() -> void:
 
 	var spare_head := Label.new()
 	spare_head.text = "DISSOLVE FROM BAG"
-	spare_head.add_theme_font_size_override("font_size", 13)
+	spare_head.add_theme_font_size_override("font_size", 17)
 	spare_head.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(spare_head)
 	col.add_child(spare_head)
@@ -129,7 +129,7 @@ func _build() -> void:
 	_empty_lab.text = "No dissolvable bag items. Dissolve the new find above, or unlock a locked item."
 	_empty_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_empty_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_empty_lab.add_theme_font_size_override("font_size", 15)
+	_empty_lab.add_theme_font_size_override("font_size", ClientUi.BODY_FS)
 	_empty_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	_empty_lab.visible = false
 	col.add_child(_empty_lab)
@@ -244,7 +244,7 @@ func _rebuild_rows() -> void:
 func _make_section_label(text: String) -> Label:
 	var lab := Label.new()
 	lab.text = text
-	lab.add_theme_font_size_override("font_size", 13)
+	lab.add_theme_font_size_override("font_size", 17)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(lab)
 	return lab
@@ -271,26 +271,24 @@ func _make_item_row(item: Dictionary, is_pending: bool, pending_id: String) -> P
 	var name_lab := Label.new()
 	name_lab.text = str(item.get("name", "Item"))
 	name_lab.clip_text = true
-	name_lab.add_theme_font_size_override("font_size", 17)
+	name_lab.add_theme_font_size_override("font_size", 19)
 	name_lab.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(name_lab)
 	meta.add_child(name_lab)
 
 	var detail := Label.new()
 	var stardust := InventoryRules.estimate_sell_value(item)
-	detail.text = "%s · %s · ✦ %s" % [
+	detail.text = "%s · %s · %s Stardust" % [
 		rarity.capitalize(),
 		str(item.get("type", "")).replace("_", " "),
 		stardust,
 	]
-	detail.add_theme_font_size_override("font_size", 13)
-	detail.add_theme_color_override("font_color", ClientUi.MUTED)
-	meta.add_child(detail)
+	detail.add_theme_font_size_override("font_size", ClientUi.META_FS)
 
 	if is_pending:
 		var badge := Label.new()
 		badge.text = "NEW"
-		badge.add_theme_font_size_override("font_size", 12)
+		badge.add_theme_font_size_override("font_size", 16)
 		badge.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 		ClientUi.apply_display_font(badge)
 		h.add_child(badge)

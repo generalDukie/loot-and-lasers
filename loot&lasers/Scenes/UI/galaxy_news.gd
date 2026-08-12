@@ -122,7 +122,7 @@ func _row(n: Dictionary) -> PanelContainer:
 
 	var when := Label.new()
 	when.text = _event_time(str(n.get("created_date", "")))
-	when.add_theme_font_size_override("font_size", 13)
+	when.add_theme_font_size_override("font_size", 17)
 	when.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(when)
 	col.add_child(when)
@@ -130,7 +130,7 @@ func _row(n: Dictionary) -> PanelContainer:
 	var lab := Label.new()
 	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lab.text = str(n.get("message", ""))
-	lab.add_theme_font_size_override("font_size", 15)
+	lab.add_theme_font_size_override("font_size", 19)
 	lab.add_theme_color_override("font_color", Color(ClientUi.TEXT, 0.85))
 	ClientUi.apply_body_font(lab)
 	col.add_child(lab)
@@ -141,7 +141,7 @@ func _empty(t: String) -> Label:
 	var l := Label.new()
 	l.text = t
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_size_override("font_size", 15)
+	l.add_theme_font_size_override("font_size", 19)
 	l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(l)
 	return l

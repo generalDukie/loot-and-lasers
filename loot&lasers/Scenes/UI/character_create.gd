@@ -72,9 +72,9 @@ var _class_detail_host: Control
 var _looks_race_chip: Label
 var _looks_class_chip: Label
 var _skin_swatch: ColorRect
-var _looks_preview_host: CenterContainer
+var _looks_preview_host: Control
 var _looks_preview_frame: PanelContainer
-var _launch_preview_host: CenterContainer
+var _launch_preview_host: Control
 var _launch_name: Label
 var _launch_meta: Label
 var _launch_stats_host: VBoxContainer
@@ -411,7 +411,7 @@ func _build_race_page() -> Control:
 
 	var h2 := Label.new()
 	h2.text = "Pick Your Race"
-	h2.add_theme_font_size_override("font_size", _fs(21))
+	h2.add_theme_font_size_override("font_size", _fs(32))
 	ClientUi.apply_display_font(h2)
 	h2.add_theme_color_override("font_color", ClientUi.TEXT)
 	page.add_child(h2)
@@ -459,7 +459,7 @@ func _build_race_page() -> Control:
 	# Always reserve lore-band height so cards stay at compact size before/after pick.
 	_lore_host = VBoxContainer.new()
 	_lore_host.visible = true
-	_lore_host.custom_minimum_size.y = _si(148)
+	_lore_host.custom_minimum_size.y = _si(200)
 	_lore_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lore_host.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	page.add_child(_lore_host)
@@ -470,7 +470,7 @@ func _make_race_card(race_name: String) -> Button:
 	var info := GameData.race_info(race_name)
 	var accent: Color = GameData.RACE_ACCENT.get(race_name, ClientUi.CYAN)
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(0, _si(144))
+	btn.custom_minimum_size = Vector2(0, _si(168))
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn.clip_contents = true
@@ -484,22 +484,29 @@ func _make_race_card(race_name: String) -> Button:
 	row.offset_top = float(_si(13))
 	row.offset_right = -float(_si(13))
 	row.offset_bottom = -float(_si(13))
-	row.add_theme_constant_override("separation", _si(10))
+	row.add_theme_constant_override("separation", _si(12))
 	btn.add_child(row)
+
+	var av_aspect := AspectRatioContainer.new()
+	av_aspect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	av_aspect.ratio = 1.0
+	av_aspect.stretch_mode = AspectRatioContainer.STRETCH_HEIGHT_CONTROLS_WIDTH
+	av_aspect.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	av_aspect.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	av_aspect.custom_minimum_size = _sv(Vector2(110, 110))
+	row.add_child(av_aspect)
 
 	var av_wrap := PanelContainer.new()
 	av_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	av_wrap.custom_minimum_size = _sv(Vector2(91, 91))
+	av_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	av_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var av_sb := StyleBoxFlat.new()
 	av_sb.bg_color = Color(accent, 0.12)
 	av_sb.set_border_width_all(maxi(1, _si(1)))
 	av_sb.border_color = Color(accent, 0.45)
 	av_sb.set_corner_radius_all(_si(10))
 	av_wrap.add_theme_stylebox_override("panel", av_sb)
-	row.add_child(av_wrap)
-	var av_center := CenterContainer.new()
-	av_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	av_wrap.add_child(av_center)
+	av_aspect.add_child(av_wrap)
 	var fake := {
 		"race": race_name,
 		"appearance": {
@@ -512,32 +519,37 @@ func _make_race_card(race_name: String) -> Button:
 			"marking": GameData.MARKINGS[0],
 		},
 	}
-	av_center.add_child(AvatarRenderer.make_portrait(fake, _s(60.0)))
+	var portrait := AvatarRenderer.make_portrait(fake, _s(96.0))
+	portrait.custom_minimum_size = Vector2(_s(72.0), _s(72.0))
+	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	av_wrap.add_child(portrait)
 
 	var copy := VBoxContainer.new()
 	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	copy.add_theme_constant_override("separation", _si(3))
+	copy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	copy.add_theme_constant_override("separation", _si(6))
 	row.add_child(copy)
 
 	var name_row := HBoxContainer.new()
 	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_row.add_theme_constant_override("separation", _si(4))
+	name_row.add_theme_constant_override("separation", _si(6))
 	copy.add_child(name_row)
 	var emoji_host := CenterContainer.new()
 	emoji_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emoji_host.custom_minimum_size = Vector2(_fs(19), _fs(19))
+	emoji_host.custom_minimum_size = Vector2(_fs(28), _fs(28))
 	name_row.add_child(emoji_host)
 	CurrencyIcon.fill_glyph_host(
 		emoji_host,
 		str(info.get("emoji", "user")),
-		float(_fs(19)),
+		float(_fs(28)),
 		ClientUi.TEXT
 	)
 	var nm := Label.new()
 	nm.text = race_name
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	nm.add_theme_font_size_override("font_size", _fs(17))
+	nm.add_theme_font_size_override("font_size", _fs(26))
 	ClientUi.apply_display_font(nm)
 	nm.add_theme_color_override("font_color", ClientUi.TEXT)
 	name_row.add_child(nm)
@@ -546,7 +558,7 @@ func _make_race_card(race_name: String) -> Button:
 	tag.text = str(info.get("tagline", ""))
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tag.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tag.add_theme_font_size_override("font_size", _fs(13))
+	tag.add_theme_font_size_override("font_size", _fs(20))
 	tag.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tag)
 	copy.add_child(tag)
@@ -637,7 +649,7 @@ func _make_class_card(cls_name: String) -> Button:
 	var nm := Label.new()
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	nm.text = cls_name
-	nm.add_theme_font_size_override("font_size", _fs(16))
+	nm.add_theme_font_size_override("font_size", _fs(20))
 	ClientUi.apply_display_font(nm)
 	nm.add_theme_color_override("font_color", ClientUi.TEXT)
 	copy.add_child(nm)
@@ -646,7 +658,7 @@ func _make_class_card(cls_name: String) -> Button:
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tag.text = str(info.get("tagline", ""))
 	tag.clip_text = true
-	tag.add_theme_font_size_override("font_size", _fs(12))
+	tag.add_theme_font_size_override("font_size", _fs(15))
 	tag.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tag)
 	copy.add_child(tag)
@@ -655,7 +667,14 @@ func _make_class_card(cls_name: String) -> Button:
 	chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chips.add_theme_constant_override("separation", _si(4))
 	copy.add_child(chips)
-	var pri := StatIcon.make_labeled(primary, primary, _s(24.0), _fs(12), ClientUi.VIOLET, _si(4))
+	var pri := StatIcon.make_labeled(
+		primary,
+		str(STAT_LABELS.get(primary, primary.capitalize())),
+		_s(24.0),
+		_fs(15),
+		accent,
+		_si(4)
+	)
 	chips.add_child(pri)
 	var special: Dictionary = info.get("special", {})
 	if not special.is_empty():
@@ -704,21 +723,29 @@ func _build_looks_page() -> Control:
 
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_theme_constant_override("separation", _si(20))
+	split.add_theme_constant_override("separation", _si(14))
 	page.add_child(split)
 
 	var preview_col := VBoxContainer.new()
-	preview_col.custom_minimum_size.x = _si(240)
-	preview_col.add_theme_constant_override("separation", _si(8))
+	preview_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	preview_col.size_flags_stretch_ratio = 0.4
+	preview_col.add_theme_constant_override("separation", _si(6))
 	split.add_child(preview_col)
 	_looks_preview_frame = PanelContainer.new()
-	_looks_preview_frame.custom_minimum_size = _sv(Vector2(229, 229))
+	_looks_preview_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_looks_preview_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_looks_preview_frame.custom_minimum_size = _sv(Vector2(200, 200))
 	_looks_preview_frame.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.04, 0.06, 0.1, 0.9), Color(1, 1, 1, 0.14), _si(12), maxi(1, _si(1)))
 	)
 	preview_col.add_child(_looks_preview_frame)
-	_looks_preview_host = CenterContainer.new()
+	_looks_preview_host = Control.new()
+	_looks_preview_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_looks_preview_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_looks_preview_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_looks_preview_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_looks_preview_frame.add_child(_looks_preview_host)
 	var preview_cap := Label.new()
 	preview_cap.text = "PREVIEW"
@@ -731,7 +758,8 @@ func _build_looks_page() -> Control:
 	var form_col := VBoxContainer.new()
 	form_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	form_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	form_col.add_theme_constant_override("separation", _si(10))
+	form_col.size_flags_stretch_ratio = 0.6
+	form_col.add_theme_constant_override("separation", _si(6))
 	split.add_child(form_col)
 
 	var name_lab := Label.new()
@@ -746,7 +774,7 @@ func _build_looks_page() -> Control:
 	form_col.add_child(name_row)
 	_name = ClientUi.make_field("Something cool. Or stupid. Your call.")
 	_name.max_length = 24
-	_name.custom_minimum_size.y = _si(51)
+	_name.custom_minimum_size.y = _si(40)
 	_name.add_theme_font_size_override("font_size", _fs(16))
 	_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_name.text_changed.connect(_on_name_changed)
@@ -772,11 +800,11 @@ func _build_looks_page() -> Control:
 	# Skin tone arrow row
 	var skin_row := _make_arrow_shell("Skin Tone")
 	form_col.add_child(skin_row)
-	var skin_mid := skin_row.get_node("Mid") as HBoxContainer
-	var skin_prev := skin_row.get_node("Prev") as Button
-	var skin_next := skin_row.get_node("Next") as Button
+	var skin_mid := skin_row.find_child("Mid", true, false) as HBoxContainer
+	var skin_prev := skin_row.find_child("Prev", true, false) as Button
+	var skin_next := skin_row.find_child("Next", true, false) as Button
 	_skin_swatch = ColorRect.new()
-	_skin_swatch.custom_minimum_size = _sv(Vector2(48, 48))
+	_skin_swatch.custom_minimum_size = _sv(Vector2(32, 32))
 	_skin_swatch.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	skin_mid.add_child(_skin_swatch)
 	skin_prev.pressed.connect(func() -> void: _cycle_skin(-1))
@@ -814,15 +842,20 @@ func _build_launch_page() -> Control:
 
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_theme_constant_override("separation", _si(18))
+	split.add_theme_constant_override("separation", _si(14))
 	card.add_child(split)
 
 	var left := VBoxContainer.new()
-	left.custom_minimum_size.x = _si(240)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.size_flags_stretch_ratio = 0.4
 	left.add_theme_constant_override("separation", _si(8))
 	split.add_child(left)
-	_launch_preview_host = CenterContainer.new()
-	_launch_preview_host.custom_minimum_size = _sv(Vector2(213, 213))
+	_launch_preview_host = Control.new()
+	_launch_preview_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_launch_preview_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_launch_preview_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_launch_preview_host.custom_minimum_size = _sv(Vector2(200, 200))
 	left.add_child(_launch_preview_host)
 	_launch_name = Label.new()
 	_launch_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -840,7 +873,8 @@ func _build_launch_page() -> Control:
 	_launch_stats_host = VBoxContainer.new()
 	_launch_stats_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_launch_stats_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_launch_stats_host.add_theme_constant_override("separation", _si(10))
+	_launch_stats_host.size_flags_stretch_ratio = 0.6
+	_launch_stats_host.add_theme_constant_override("separation", _si(6))
 	split.add_child(_launch_stats_host)
 
 	page.add_child(_build_legacy_block())
@@ -970,47 +1004,53 @@ func _chip_label(text: String) -> Label:
 
 func _make_arrow_shell(label_text: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", _si(8))
+	row.add_theme_constant_override("separation", _si(6))
 
 	var lab := Label.new()
 	lab.text = label_text
-	lab.custom_minimum_size.x = _si(96)
+	lab.custom_minimum_size.x = _si(72)
 	lab.add_theme_font_size_override("font_size", _fs(15))
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(lab)
 	row.add_child(lab)
 
+	var controls := HBoxContainer.new()
+	controls.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	controls.add_theme_constant_override("separation", _si(2))
+	row.add_child(controls)
+
 	var prev := Button.new()
 	prev.name = "Prev"
 	prev.text = "‹"
-	prev.custom_minimum_size = _sv(Vector2(37, 37))
+	prev.custom_minimum_size = _sv(Vector2(28, 28))
 	_apply_scaled_ghost(prev)
-	row.add_child(prev)
+	controls.add_child(prev)
 
 	var mid := HBoxContainer.new()
 	mid.name = "Mid"
-	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	mid.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_child(mid)
+	controls.add_child(mid)
 
 	var next := Button.new()
 	next.name = "Next"
 	next.text = "›"
-	next.custom_minimum_size = _sv(Vector2(37, 37))
+	next.custom_minimum_size = _sv(Vector2(28, 28))
 	_apply_scaled_ghost(next)
-	row.add_child(next)
+	controls.add_child(next)
 	return row
 
 
 func _make_arrow_selector(label_text: String, field: String, options: PackedStringArray) -> HBoxContainer:
 	var row := _make_arrow_shell(label_text)
-	var mid := row.get_node("Mid") as HBoxContainer
-	var prev := row.get_node("Prev") as Button
-	var next := row.get_node("Next") as Button
+	var mid := row.find_child("Mid", true, false) as HBoxContainer
+	var prev := row.find_child("Prev", true, false) as Button
+	var next := row.find_child("Next", true, false) as Button
 	var val := Label.new()
 	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	val.add_theme_font_size_override("font_size", _fs(16))
+	val.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	val.custom_minimum_size.x = _si(108)
+	val.add_theme_font_size_override("font_size", _fs(15))
 	val.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(val)
 	mid.add_child(val)
@@ -1182,7 +1222,7 @@ func _refresh_lore() -> void:
 		c.queue_free()
 	# Keep reserved lore-band height even with no selection (avoids card resize snap).
 	_lore_host.visible = true
-	_lore_host.custom_minimum_size.y = _si(148)
+	_lore_host.custom_minimum_size.y = _si(200)
 	if _race_name.is_empty():
 		return
 	var info := GameData.race_info(_race_name)
@@ -1205,10 +1245,17 @@ func _refresh_lore() -> void:
 	row.add_theme_constant_override("separation", _si(12))
 	panel.add_child(row)
 
-	var av := CenterContainer.new()
-	av.custom_minimum_size = _sv(Vector2(123, 123))
+	var av := AspectRatioContainer.new()
+	av.ratio = 1.0
+	av.stretch_mode = AspectRatioContainer.STRETCH_HEIGHT_CONTROLS_WIDTH
+	av.custom_minimum_size = _sv(Vector2(168, 168))
+	av.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_child(av)
-	av.add_child(AvatarRenderer.make_portrait(_fake_character(), _s(84.0)))
+	var lore_portrait := AvatarRenderer.make_portrait(_fake_character(), _s(150.0))
+	lore_portrait.custom_minimum_size = Vector2(_s(120.0), _s(120.0))
+	lore_portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lore_portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	av.add_child(lore_portrait)
 
 	var copy := VBoxContainer.new()
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1234,7 +1281,7 @@ func _refresh_lore() -> void:
 	var lore := Label.new()
 	lore.text = str(info.get("lore", ""))
 	lore.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lore.add_theme_font_size_override("font_size", _fs(15))
+	lore.add_theme_font_size_override("font_size", _fs(23))
 	lore.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(lore)
 	copy.add_child(lore)
@@ -1403,7 +1450,7 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 	head.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	host.add_child(head)
 	var h := Label.new()
-	h.text = "STARTING STATS"
+	h.text = "Base Attributes"
 	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_theme_font_size_override("font_size", _fs(18 if launch_fill else (15 if fill_space else 13)))
 	ClientUi.apply_display_font(h)
@@ -1427,16 +1474,15 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 	var corner: int
 	if launch_fill:
 		icon_sz = _s(34.0)
-		name_fs = _fs(18)
-		num_fs = _fs(26)
-		# Keep prior Launch bar width (75); grow height with the taller rows.
-		bar_size = _sv(Vector2(75, 18))
-		row_pad_y = _si(14)
-		row_pad_x = _si(12)
-		row_sep = _si(12)
-		corner = _si(10)
+		name_fs = _fs(15)
+		num_fs = _fs(20)
+		bar_size = _sv(Vector2(88, 10))
+		row_pad_y = _si(6)
+		row_pad_x = _si(8)
+		row_sep = _si(6)
+		corner = _si(8)
 	elif fill_space:
-		icon_sz = _s(22.0)
+		icon_sz = _s(27.5)
 		name_fs = _fs(14)
 		num_fs = _fs(20)
 		bar_size = _sv(Vector2(120, 12))
@@ -1463,7 +1509,7 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var rsb := StyleBoxFlat.new()
 		rsb.bg_color = Color(color, 0.12)
-		rsb.set_border_width_all(maxi(1, _si(1 if not launch_fill else 2)))
+		rsb.set_border_width_all(maxi(1, _si(1)))
 		if stat == primary:
 			rsb.border_color = Color(color, 0.55)
 		else:
@@ -1484,13 +1530,20 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 		var icon := StatIcon.make(stat, icon_sz)
 		inner.add_child(icon)
 		var nm := Label.new()
-		var suffix := " Primary" if stat == primary else ""
-		nm.text = "%s%s" % [str(STAT_LABELS.get(stat, stat)), suffix]
-		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nm.text = str(STAT_LABELS.get(stat, stat))
+		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL if stat != primary else Control.SIZE_SHRINK_BEGIN
 		nm.add_theme_font_size_override("font_size", name_fs)
 		ClientUi.apply_display_font(nm)
 		nm.add_theme_color_override("font_color", color.lightened(0.25))
 		inner.add_child(nm)
+		if stat == primary:
+			var pri_lab := Label.new()
+			pri_lab.text = "Primary"
+			pri_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			pri_lab.add_theme_font_size_override("font_size", name_fs)
+			ClientUi.apply_display_font(pri_lab)
+			pri_lab.add_theme_color_override("font_color", Color.WHITE)
+			inner.add_child(pri_lab)
 		var num := Label.new()
 		num.text = str(val)
 		num.add_theme_font_size_override("font_size", num_fs)
@@ -1565,7 +1618,12 @@ func _refresh_preview() -> void:
 		c.queue_free()
 	if _race_name.is_empty():
 		return
-	_looks_preview_host.add_child(AvatarRenderer.make_portrait(_fake_character(), _s(148.0)))
+	var portrait := AvatarRenderer.make_portrait(_fake_character(), _s(220.0))
+	portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	portrait.custom_minimum_size = Vector2.ZERO
+	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_looks_preview_host.add_child(portrait)
 
 
 func _refresh_launch() -> void:
@@ -1573,7 +1631,12 @@ func _refresh_launch() -> void:
 		return
 	for c in _launch_preview_host.get_children():
 		c.queue_free()
-	_launch_preview_host.add_child(AvatarRenderer.make_portrait(_fake_character(), _s(132.0)))
+	var portrait := AvatarRenderer.make_portrait(_fake_character(), _s(220.0))
+	portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	portrait.custom_minimum_size = Vector2.ZERO
+	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_launch_preview_host.add_child(portrait)
 	if _legacy_block != null:
 		_legacy_block.visible = _legacy_required()
 		_refresh_legacy_meta()

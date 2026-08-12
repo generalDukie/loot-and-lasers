@@ -33,9 +33,14 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(center)
 
+	var action_n := 0
+	for action in summary.get("actions", []):
+		if typeof(action) == TYPE_DICTIONARY:
+			action_n += 1
 	var card := PanelContainer.new()
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.custom_minimum_size = Vector2(587, 0)
+	# Slightly wider when three equal footer actions (Cantina / Operative / Replay).
+	card.custom_minimum_size = Vector2(640 if action_n >= 3 else 587, 0)
 	card.add_theme_stylebox_override(
 		"panel",
 		ClientUi.painted_panel_style(Color(0.045, 0.05, 0.085, 0.98), Color(accent, 0.65), 14, 2)
@@ -94,7 +99,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		slab.text = subtitle
 		slab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		slab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		slab.add_theme_font_size_override("font_size", 15)
+		slab.add_theme_font_size_override("font_size", 18)
 		slab.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(slab)
 
@@ -137,23 +142,26 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		var nlab := Label.new()
 		nlab.text = note
 		nlab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		nlab.add_theme_font_size_override("font_size", 15)
+		nlab.add_theme_font_size_override("font_size", 18)
 		nlab.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(nlab)
 
 	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 10)
+	actions.add_theme_constant_override("separation", 8 if action_n >= 3 else 10)
 	col.add_child(actions)
 	for action in summary.get("actions", []):
 		if typeof(action) != TYPE_DICTIONARY:
 			continue
 		var btn := Button.new()
 		btn.text = str(action.get("label", "Continue"))
+		btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if bool(action.get("primary", true)):
 			ClientUi.apply_primary_button(btn)
 		else:
 			ClientUi.apply_ghost_button(btn)
+		if action_n >= 3:
+			btn.add_theme_font_size_override("font_size", 15)
 		var cb_var: Variant = action.get("callback", on_close)
 		var cb: Callable = cb_var if cb_var is Callable else on_close
 		btn.pressed.connect(func() -> void:
@@ -226,7 +234,7 @@ static func make_level_up_sheet(
 	var spark := Label.new()
 	spark.text = "LEVEL UP"
 	spark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	spark.add_theme_font_size_override("font_size", 16)
+	spark.add_theme_font_size_override("font_size", 18)
 	spark.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(spark)
 	col.add_child(spark)
@@ -242,7 +250,7 @@ static func make_level_up_sheet(
 	var name := Label.new()
 	name.text = str(character.get("name", "Operative"))
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.add_theme_font_size_override("font_size", 17)
+	name.add_theme_font_size_override("font_size", 34)
 	name.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(name)
 	col.add_child(name)
@@ -251,7 +259,7 @@ static func make_level_up_sheet(
 		var awards_title := Label.new()
 		awards_title.text = "Permanent attributes awarded"
 		awards_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		awards_title.add_theme_font_size_override("font_size", 12)
+		awards_title.add_theme_font_size_override("font_size", 32)
 		awards_title.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_display_font(awards_title)
 		col.add_child(awards_title)
@@ -259,63 +267,34 @@ static func make_level_up_sheet(
 		for entry in attribute_awards:
 			if typeof(entry) != TYPE_DICTIONARY:
 				continue
-			var stat := str(entry.get("stat", "")).strip_edges()
+			var stat := str(entry.get("stat", "")).strip_edges().to_lower()
 			if stat.is_empty():
 				continue
 			tallies[stat] = int(tallies.get(stat, 0)) + 1
-		var award_line := Label.new()
-		var parts: PackedStringArray = []
+		var awards_col := VBoxContainer.new()
+		awards_col.add_theme_constant_override("separation", 6)
+		col.add_child(awards_col)
+		var any_award := false
 		for stat_key in ["strength", "agility", "intellect", "vitality", "luck"]:
-			if tallies.has(stat_key):
-				parts.append("+%s %s" % [tallies[stat_key], stat_key.capitalize()])
-		award_line.text = ", ".join(parts) if not parts.is_empty() else "%s permanent attributes" % attribute_awards.size()
-		award_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		award_line.add_theme_font_size_override("font_size", 14)
-		award_line.add_theme_color_override("font_color", Color("#FBBF24"))
-		ClientUi.apply_display_font(award_line)
-		col.add_child(award_line)
-
-	# Derived combat deltas at the new level vs old.
-	var totals := StatsRules.display_totals(character, [])
-	var before_char := character.duplicate(true)
-	before_char["level"] = from_level
-	var after_char := character.duplicate(true)
-	after_char["level"] = to_level
-	var before := StatsRules.derived(before_char, totals)
-	var after := StatsRules.derived(after_char, totals)
-	var grid := VBoxContainer.new()
-	grid.add_theme_constant_override("separation", 4)
-	col.add_child(grid)
-	for row in [
-		{"key": "damage", "label": "Damage", "fmt": "int"},
-		{"key": "health", "label": "Max Health", "fmt": "int"},
-		{"key": "critChance", "label": "Crit Chance", "fmt": "pct"},
-		{"key": "dodgeChance", "label": "Dodge Chance", "fmt": "pct"},
-		{"key": "armor", "label": "Might Resistance", "fmt": "pct"},
-		{"key": "techResist", "label": "Tech Resist", "fmt": "pct"},
-	]:
-		var a := float(before.get(row["key"], 0))
-		var b := float(after.get(row["key"], 0))
-		var delta := b - a
-		if absf(delta) < 0.05:
-			continue
-		var line := HBoxContainer.new()
-		var lab := Label.new()
-		lab.text = str(row["label"])
-		lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lab.add_theme_font_size_override("font_size", 16)
-		lab.add_theme_color_override("font_color", ClientUi.MUTED)
-		line.add_child(lab)
-		var val := Label.new()
-		if str(row["fmt"]) == "pct":
-			val.text = "%.1f%%  (%s%.1f%%)" % [b, "+" if delta >= 0 else "", delta]
-		else:
-			val.text = "%s  (%s%s)" % [int(round(b)), "+" if delta >= 0 else "", int(round(delta))]
-		val.add_theme_font_size_override("font_size", 16)
-		val.add_theme_color_override("font_color", ClientUi.SUCCESS if delta >= 0 else ClientUi.DANGER)
-		ClientUi.apply_display_font(val)
-		line.add_child(val)
-		grid.add_child(line)
+			if not tallies.has(stat_key):
+				continue
+			any_award = true
+			var award_line := Label.new()
+			var label := str(StatsRules.ATTR_LABELS.get(stat_key, stat_key.capitalize()))
+			award_line.text = "+%s %s" % [tallies[stat_key], label]
+			award_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			award_line.add_theme_font_size_override("font_size", 36)
+			award_line.add_theme_color_override("font_color", GameData.stat_color(stat_key))
+			ClientUi.apply_display_font(award_line)
+			awards_col.add_child(award_line)
+		if not any_award:
+			var fallback := Label.new()
+			fallback.text = "%s permanent attributes" % attribute_awards.size()
+			fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			fallback.add_theme_font_size_override("font_size", 36)
+			fallback.add_theme_color_override("font_color", Color("#FBBF24"))
+			ClientUi.apply_display_font(fallback)
+			awards_col.add_child(fallback)
 
 	var confirm := Button.new()
 	confirm.text = "Continue"
@@ -358,12 +337,15 @@ static func pending_level_up(
 
 ## Show combat-complete first; only after it closes, show level-up (never both).
 ## Navigation callbacks run after the full sequence (complete → optional level-up → done).
+## Replay actions (`replay: true`) clear the sheet and call their callback without dismissing
+## the combat overlay or re-running level-up.
 static func present_complete_then_level_up(
 	host: Control,
 	summary: Dictionary,
 	from_level: int,
 	character: Dictionary,
-	require_win_for_levelup: bool = true
+	require_win_for_levelup: bool = true,
+	allow_levelup: bool = true
 ) -> void:
 	if host == null or not is_instance_valid(host):
 		return
@@ -379,19 +361,25 @@ static func present_complete_then_level_up(
 			awards = raw_awards
 	elif typeof(summary.get("attribute_awards", null)) == TYPE_ARRAY:
 		awards = summary.get("attribute_awards", [])
-	var show_levelup := to_level > from_level and (won or not require_win_for_levelup)
+	var show_levelup := allow_levelup and to_level > from_level and (won or not require_win_for_levelup)
 	var finished := {"done": false}
 
 	var primary_nav := Callable()
 	for action in summary.get("actions", []):
 		if typeof(action) != TYPE_DICTIONARY:
 			continue
+		if bool(action.get("replay", false)):
+			continue
 		if bool(action.get("primary", true)) and action.get("callback") is Callable:
 			primary_nav = action["callback"]
 			break
 	if not primary_nav.is_valid():
 		for action in summary.get("actions", []):
-			if typeof(action) == TYPE_DICTIONARY and action.get("callback") is Callable:
+			if typeof(action) != TYPE_DICTIONARY:
+				continue
+			if bool(action.get("replay", false)):
+				continue
+			if action.get("callback") is Callable:
 				primary_nav = action["callback"]
 				break
 
@@ -423,8 +411,15 @@ static func present_complete_then_level_up(
 			continue
 		var a: Dictionary = (action as Dictionary).duplicate()
 		var orig: Callable = a["callback"] if a.get("callback") is Callable else Callable()
-		# Bind so each button keeps its own nav target (GDScript loop capture).
-		a["callback"] = finish_sequence.bind(orig)
+		if bool(a.get("replay", false)):
+			# Clear report only — stay on combat overlay for a re-watch.
+			a["callback"] = func() -> void:
+				_clear_sheet_host(host)
+				if orig.is_valid():
+					orig.call()
+		else:
+			# Bind so each button keeps its own nav target (GDScript loop capture).
+			a["callback"] = finish_sequence.bind(orig)
 		wrapped_actions.append(a)
 	sequenced["actions"] = wrapped_actions
 
@@ -487,7 +482,7 @@ static func _reward_row(label: String, value: String, color: Color, icon: String
 	row.add_child(col)
 	var lab := Label.new()
 	lab.text = label
-	lab.add_theme_font_size_override("font_size", 13)
+	lab.add_theme_font_size_override("font_size", 17)
 	lab.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
@@ -511,10 +506,8 @@ static func _reward_row_stardust(value: String) -> PanelContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
-	var ic := Label.new()
-	ic.text = "✦"
-	ic.add_theme_font_size_override("font_size", 24)
-	ic.add_theme_color_override("font_color", color)
+	var ic := CurrencyIcon.make("stardust", 24.0)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(ic)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -522,7 +515,7 @@ static func _reward_row_stardust(value: String) -> PanelContainer:
 	row.add_child(col)
 	var lab := Label.new()
 	lab.text = "STARDUST"
-	lab.add_theme_font_size_override("font_size", 13)
+	lab.add_theme_font_size_override("font_size", 17)
 	lab.add_theme_color_override("font_color", color)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
@@ -545,7 +538,7 @@ static func _reward_row_xp(value: String) -> PanelContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
-	row.add_child(BrandGradientTitle.make("⚡", 24, false))
+	row.add_child(BrandGradientTitle.make("XP", 24, false, true))
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 2)
@@ -608,7 +601,7 @@ static func _reward_item_pane(item: Dictionary, inspect: ItemInspectPopup) -> Pa
 	var sub := Label.new()
 	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sub.text = "%s · %s" % [rarity.capitalize(), _reward_type_label(item)]
-	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_font_size_override("font_size", 19)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	col.add_child(sub)

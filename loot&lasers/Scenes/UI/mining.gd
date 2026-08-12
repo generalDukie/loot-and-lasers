@@ -81,11 +81,16 @@ func _build() -> void:
 	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title_row)
 
+	var bal_row := HBoxContainer.new()
+	bal_row.add_theme_constant_override("separation", 6)
+	bal_row.alignment = BoxContainer.ALIGNMENT_END
+	header.add_child(bal_row)
+	bal_row.add_child(CurrencyIcon.make("stardust", 18.0))
 	_balance_lab = Label.new()
 	_balance_lab.add_theme_font_size_override("font_size", 16)
 	_balance_lab.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 	ClientUi.apply_display_font(_balance_lab)
-	header.add_child(_balance_lab)
+	bal_row.add_child(_balance_lab)
 
 	# Hero painted panel (web motion.div painted-panel p-6 text-center)
 	var hero := PanelContainer.new()
@@ -144,7 +149,7 @@ func _build() -> void:
 	_hero_sub = Label.new()
 	_hero_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hero_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hero_sub.add_theme_font_size_override("font_size", 15)
+	_hero_sub.add_theme_font_size_override("font_size", 19)
 	_hero_sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_hero_sub)
 	hcol.add_child(_hero_sub)
@@ -233,13 +238,31 @@ func _build() -> void:
 	idle_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_idle_box.add_child(idle_spacer)
 
+	var start_row := HBoxContainer.new()
+	start_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_row.size_flags_vertical = Control.SIZE_SHRINK_END
+	start_row.add_theme_constant_override("separation", 0)
+	_idle_box.add_child(start_row)
+	var start_pad_l := Control.new()
+	start_pad_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_pad_l.size_flags_stretch_ratio = 1.5
+	start_pad_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	start_row.add_child(start_pad_l)
 	_start_btn = Button.new()
-	_start_btn.text = "⚡  Start Mining"
+	_start_btn.text = "Start Mining"
 	_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_start_btn.size_flags_stretch_ratio = 1.0
 	_start_btn.size_flags_vertical = Control.SIZE_SHRINK_END
+	_start_btn.custom_minimum_size.y = 80
 	ClientUi.apply_primary_button(_start_btn)
+	_start_btn.add_theme_font_size_override("font_size", 28)
 	_start_btn.pressed.connect(_on_start)
-	_idle_box.add_child(_start_btn)
+	start_row.add_child(_start_btn)
+	var start_pad_r := Control.new()
+	start_pad_r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	start_pad_r.size_flags_stretch_ratio = 1.5
+	start_pad_r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	start_row.add_child(start_pad_r)
 
 	# ── Busy: in progress ──
 	_busy_box = VBoxContainer.new()
@@ -292,9 +315,10 @@ func _build() -> void:
 	_ready_box.add_child(_ready_reward)
 
 	_collect_btn = Button.new()
-	_collect_btn.text = "✦  Collect Stardust"
+	_collect_btn.text = "Collect Stardust"
 	_collect_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_primary_button(_collect_btn)
+	CurrencyIcon.apply_stardust_button_cost(_collect_btn, 18.0)
 	_collect_btn.pressed.connect(_on_collect)
 	_ready_box.add_child(_collect_btn)
 
@@ -396,7 +420,7 @@ func _populate() -> void:
 	var level := maxi(1, int(c.get("level", 1)))
 	var spf := StardustEconomy.stardust_per_fuel(level)
 	var rate_per_hour := int(round(float(spf) * StardustEconomy.MINING_EFFICIENCY * 60.0))
-	_balance_lab.text = "✦  %s" % str(
+	_balance_lab.text = str(
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
 	)
 	_stat_level.text = str(level)
@@ -433,7 +457,7 @@ func _populate() -> void:
 		_hero_title.text = "NODE READY!"
 		_hero_title.add_theme_color_override("font_color", Color("#4ADE80"))
 		_hero_sub.text = "Your drone finished mining a stardust node."
-		_ready_reward.text = "+%s ✦" % reward
+		_ready_reward.text = "+%s" % reward
 		_set_glow(Color(0.13, 0.77, 0.37, 0.35), true)
 	else:
 		_set_hero_icon("pickaxe", Color("#F59E0B"))
@@ -441,7 +465,7 @@ func _populate() -> void:
 		_hero_title.add_theme_color_override("font_color", ClientUi.TEXT)
 		_hero_sub.text = "Your drone is harvesting a stardust node..."
 		_remain_lab.text = "⏱  %s" % _format_remaining(rem)
-		_reward_lab.text = "%s ✦" % reward
+		_reward_lab.text = str(reward)
 		# Derive duration from reward ≈ StardustPerFuel × 0.03 × minutes.
 		var rate := float(spf) * StardustEconomy.MINING_EFFICIENCY * 60.0
 		var total_h := float(reward) / maxf(1.0, rate)
@@ -546,7 +570,7 @@ func _on_start() -> void:
 			gained = int(patch.get("mining_reward", 0))
 		if gained <= 0:
 			gained = MiningManager.preview_reward(hours)
-		_set_status("Mining started! Collect %s ✦ in %sh." % [gained, hours], GameData.STARDUST_COLOR)
+		_set_status("Mining started! Collect %s Stardust in %sh." % [gained, hours], GameData.STARDUST_COLOR)
 	_populate()
 
 
@@ -563,7 +587,7 @@ func _on_collect() -> void:
 	else:
 		var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 		_set_status(
-			"Node collected! +%s ✦ stardust harvested." % str(data.get("stardust_gained", 0)),
+			"Node collected! +%s Stardust harvested." % str(data.get("stardust_gained", 0)),
 			Color("#4ADE80")
 		)
 	_populate()

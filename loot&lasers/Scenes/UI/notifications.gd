@@ -81,7 +81,7 @@ func _build() -> void:
 	head_l.add_child(eye)
 	head_l.add_child(UiIcon.make_title_row("bell", "Notifications", ClientUi.TEXT, 24, 24.0))
 	_meta = Label.new()
-	_meta.add_theme_font_size_override("font_size", 15)
+	_meta.add_theme_font_size_override("font_size", 19)
 	_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_meta)
 	head_l.add_child(_meta)
@@ -227,7 +227,7 @@ func _make_row(n: Dictionary) -> PanelContainer:
 
 	var type_l := Label.new()
 	type_l.text = str(meta.get("label", ntype))
-	type_l.add_theme_font_size_override("font_size", 13)
+	type_l.add_theme_font_size_override("font_size", 17)
 	type_l.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(type_l)
 	col.add_child(type_l)
@@ -242,7 +242,7 @@ func _make_row(n: Dictionary) -> PanelContainer:
 
 	var meta_l := Label.new()
 	meta_l.text = _time_ago(str(n.get("created_date", "")))
-	meta_l.add_theme_font_size_override("font_size", 15)
+	meta_l.add_theme_font_size_override("font_size", 19)
 	meta_l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta_l)
 	col.add_child(meta_l)

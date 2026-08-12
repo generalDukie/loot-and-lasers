@@ -13,6 +13,9 @@ const DIM_OVERLAP := 1.0
 const RING_BORDER := Color(0.05, 0.85, 0.95, 0.98)
 ## Slow cyan ring pulse during hero attribute / equip flash holds.
 const HERO_FLASH_RING_HALF_SEC := 1.25
+## Black Market Basics outline rings — ~5s full pulse (border alpha only).
+const SHOP_OUTLINE_RING_HALF_SEC := 2.5
+const SHOP_OUTLINE_RING_COUNT := 3
 
 var _dim_top: ColorRect
 var _dim_bottom: ColorRect
@@ -51,6 +54,9 @@ var _shop_refresh_flash_tween: Tween
 var _shop_refresh_flash_target: Control
 var _shop_restock_flash_tween: Tween
 var _shop_restock_flash_target: Control
+var _shop_outline_rings: Array = [] ## Panel
+var _shop_outline_pulses: Array = [] ## Tween
+var _shop_outline_pulse_running := false
 var _reward_stardust_flash_tween: Tween
 var _reward_stardust_flash_target: Control
 var _reward_helmet_flash_tween: Tween
@@ -102,6 +108,16 @@ func _build() -> void:
 	_ring_extra.add_theme_stylebox_override("panel", ring_extra_sb)
 	root.add_child(_ring_extra)
 	_ring_extra.visible = false
+
+	_shop_outline_rings.clear()
+	for _i in SHOP_OUTLINE_RING_COUNT:
+		var shop_ring := Panel.new()
+		shop_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		shop_ring.visible = false
+		var shop_sb := ring_sb.duplicate() as StyleBoxFlat
+		shop_ring.add_theme_stylebox_override("panel", shop_sb)
+		root.add_child(shop_ring)
+		_shop_outline_rings.append(shop_ring)
 
 	_card = PanelContainer.new()
 	_card.custom_minimum_size = Vector2(CARD_W, 0)
@@ -290,6 +306,7 @@ func _on_tutorial_changed(_t: Dictionary) -> void:
 func _hide_coach() -> void:
 	_stop_ring_pulse()
 	_stop_extra_ring_pulse()
+	_stop_shop_outline_rings()
 	_stop_fuel_flash()
 	_stop_timer_flash()
 	_stop_helmet_flash()
@@ -576,6 +593,7 @@ func _layout_spotlight() -> void:
 		_update_stim_hint()
 		_update_shop_refresh_hint()
 		_update_shop_restock_hint()
+		_layout_shop_outline_rings()
 		_update_ranks_hint()
 		_update_start_hint()
 		_update_reward_hints()
@@ -654,6 +672,10 @@ func _layout_spotlight() -> void:
 			var stardust_hole := _hole_for_tutorial_id("mine-stardust")
 			if stardust_hole.size.x > 4.0:
 				card_hole = stardust_hole
+		elif TutorialManager.step_id() == "mission_timer":
+			var timer_hole := _hole_for_tutorial_id("mission-timer")
+			if timer_hole.size.x > 4.0:
+				card_hole = timer_hole
 		_place_card(card_hole, vp, placement)
 		if TutorialManager.step_id() in ["shop_market", "frontier_fight"]:
 			# No pointer — card is pinned; pointing into the map/detail is noise.
@@ -671,6 +693,7 @@ func _layout_spotlight() -> void:
 	_update_stim_hint()
 	_update_shop_refresh_hint()
 	_update_shop_restock_hint()
+	_layout_shop_outline_rings()
 	_update_ranks_hint()
 	_update_start_hint()
 	_update_reward_hints()
@@ -707,13 +730,28 @@ func _min_card_height_for_step() -> float:
 			return 180.0
 
 
-func _mission_timer_card_y(hole: Rect2) -> float:
-	var activity := _find_tutorial_target("shell-activity")
-	if activity != null and is_instance_valid(activity) and activity.is_visible_in_tree():
-		return activity.get_global_rect().end.y + CARD_HOLE_GAP
-	if hole.size.y > 1.0:
-		return hole.end.y + CARD_HOLE_GAP
-	return CARD_PAD + 64.0
+func _mission_timer_bar_rect() -> Rect2:
+	var timer := _find_tutorial_target("mission-timer")
+	if timer == null or not is_instance_valid(timer) or not timer.is_visible_in_tree():
+		return Rect2()
+	var n: Node = timer
+	while n != null:
+		if n is PanelContainer:
+			return (n as Control).get_global_rect()
+		n = n.get_parent()
+	return timer.get_global_rect()
+
+
+func _mission_timer_card_pos(hole: Rect2, vp: Vector2, w: float, h: float) -> Vector2:
+	## Sit just above the mission timer / progress bar — not under the top activity chip.
+	var bar := _mission_timer_bar_rect()
+	var anchor := bar if bar.size.x > 4.0 else hole
+	var x := (vp.x - w) * 0.5
+	var y := maxf(CARD_PAD, vp.y - h - CARD_PAD)
+	if anchor.size.x > 4.0:
+		x = anchor.position.x + anchor.size.x * 0.5 - w * 0.5
+		y = anchor.position.y - h - CARD_HOLE_GAP
+	return Vector2(x, y)
 
 
 func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
@@ -725,13 +763,12 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	_card.size = Vector2(w, h)
 	var pos := Vector2((vp.x - w) * 0.5, (vp.y - h) * 0.5)
 	if TutorialManager.step_id() == "mission_timer":
-		# Sit below the banner mission button — not on CARD_PAD, which covers shell-activity.
-		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, _mission_timer_card_y(hole))
+		pos = _mission_timer_card_pos(hole, vp, w, h)
 	elif TutorialManager.step_id() == "mission_fight":
 		pos = Vector2(hole.position.x + hole.size.x * 0.5 - w * 0.5, hole.end.y + CARD_HOLE_GAP)
 	elif TutorialManager.step_id() == "mine_explain":
 		pos = _mine_explain_card_pos(hole, vp, w, h)
-	elif TutorialManager.step_id() == "frontier_fight":
+	elif TutorialManager.step_id() in ["frontier_fight", "mission_return"]:
 		pos = _frontier_fight_card_pos(vp, w, h)
 	elif TutorialManager.step_id() == "finish":
 		pos = _finish_card_pos(vp, w, h)
@@ -761,7 +798,7 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 	# mine_explain is pinned under the stardust preview (centered).
 	# finish is centered in the content stage.
 	# frontier_fight sits on empty starfield at the map's top-left.
-	if TutorialManager.step_id() not in ["mission_timer", "mission_fight", "shop_market", "mine_explain", "finish", "frontier_fight"] and hole.size.x > 1.0:
+	if TutorialManager.step_id() not in ["mission_timer", "mission_fight", "shop_market", "mine_explain", "finish", "frontier_fight", "mission_return"] and hole.size.x > 1.0:
 		var card_rect := Rect2(pos, Vector2(w, h))
 		if card_rect.intersects(hole):
 			if hole.end.x + CARD_HOLE_GAP + w + CARD_PAD <= vp.x:
@@ -924,7 +961,7 @@ func _stop_helmet_flash() -> void:
 
 func _update_stim_hint() -> void:
 	_stop_stim_flash()
-	# shop_market now undims buy/sell and slowly flashes refresh + restock instead.
+	# shop_market uses coach-layer outline rings (see _layout_shop_outline_rings).
 	return
 
 
@@ -939,23 +976,9 @@ func _stop_stim_flash() -> void:
 
 func _update_shop_refresh_hint() -> void:
 	_stop_shop_refresh_flash()
-	if not visible or TutorialManager.step_id() != "shop_market":
-		return
-	if not TutorialManager.is_on_required_page():
-		return
-	var target := _find_tutorial_target("shop-refresh-timer")
-	if target == null or not is_instance_valid(target):
-		return
-	_shop_refresh_flash_target = target
-	target.modulate = Color.WHITE
-	_shop_refresh_flash_tween = target.create_tween().set_loops()
-	# Subtle informational pulse on the auto-refresh countdown.
-	_shop_refresh_flash_tween.tween_property(
-		target, "modulate", Color(1.05, 1.12, 1.18, 1.0), SHOP_HINT_FLASH_HALF_SEC
-	).set_trans(Tween.TRANS_SINE)
-	_shop_refresh_flash_tween.tween_property(
-		target, "modulate", Color.WHITE, SHOP_HINT_FLASH_HALF_SEC
-	).set_trans(Tween.TRANS_SINE)
+	# Replaced by outline rings — modulate flashes were restarted every 0.2s by
+	# _layout_spotlight and never completed a visible pulse.
+	return
 
 
 func _stop_shop_refresh_flash() -> void:
@@ -969,23 +992,8 @@ func _stop_shop_refresh_flash() -> void:
 
 func _update_shop_restock_hint() -> void:
 	_stop_shop_restock_flash()
-	if not visible or TutorialManager.step_id() != "shop_market":
-		return
-	if not TutorialManager.is_on_required_page():
-		return
-	var target := _find_tutorial_target("shop-restock")
-	if target == null or not is_instance_valid(target):
-		return
-	_shop_restock_flash_target = target
-	target.modulate = Color.WHITE
-	_shop_restock_flash_tween = target.create_tween().set_loops()
-	# Subtle informational pulse on the Nova restock button.
-	_shop_restock_flash_tween.tween_property(
-		target, "modulate", Color(1.08, 1.06, 1.02, 1.0), SHOP_HINT_FLASH_HALF_SEC
-	).set_trans(Tween.TRANS_SINE)
-	_shop_restock_flash_tween.tween_property(
-		target, "modulate", Color.WHITE, SHOP_HINT_FLASH_HALF_SEC
-	).set_trans(Tween.TRANS_SINE)
+	# Replaced by outline rings (same restart bug as refresh flash).
+	return
 
 
 func _stop_shop_restock_flash() -> void:
@@ -995,6 +1003,83 @@ func _stop_shop_restock_flash() -> void:
 	if _shop_restock_flash_target != null and is_instance_valid(_shop_restock_flash_target):
 		_shop_restock_flash_target.modulate = Color.WHITE
 	_shop_restock_flash_target = null
+
+
+func _shop_outline_target_ids() -> Array:
+	return ["shop-stim", "shop-restock", "shop-refresh-timer"]
+
+
+func _layout_shop_outline_rings() -> void:
+	if (
+		not visible
+		or TutorialManager.step_id() != "shop_market"
+		or not TutorialManager.is_on_required_page()
+	):
+		_stop_shop_outline_rings()
+		return
+	var holes: Array = []
+	for tid in _shop_outline_target_ids():
+		var hole := _hole_for_tutorial_id(str(tid))
+		if hole.size.x > 4.0 and hole.size.y > 4.0:
+			holes.append(hole)
+	if holes.is_empty():
+		_stop_shop_outline_rings()
+		return
+	for i in _shop_outline_rings.size():
+		var ring: Panel = _shop_outline_rings[i]
+		if not is_instance_valid(ring):
+			continue
+		if i < holes.size():
+			var hole: Rect2 = holes[i]
+			ring.visible = true
+			ring.position = hole.position
+			ring.size = hole.size
+		else:
+			ring.visible = false
+	_pulse_shop_outline_rings()
+
+
+func _pulse_shop_outline_rings() -> void:
+	## Border-only pulse on coach rings (not button modulate). Do not restart
+	## every layout tick — that was why shop flashes looked absent in-game.
+	if _shop_outline_pulse_running:
+		return
+	_shop_outline_pulse_running = true
+	_shop_outline_pulses.clear()
+	var dim := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, 0.18)
+	var bright := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, 0.92)
+	for ring_v in _shop_outline_rings:
+		var ring: Panel = ring_v
+		if not is_instance_valid(ring):
+			continue
+		var sb := ring.get_theme_stylebox("panel") as StyleBoxFlat
+		if sb == null:
+			continue
+		sb.shadow_size = 0
+		sb.bg_color = Color(0, 0, 0, 0)
+		sb.border_color = dim
+		var tw := create_tween().set_loops()
+		tw.tween_property(sb, "border_color", bright, SHOP_OUTLINE_RING_HALF_SEC).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(sb, "border_color", dim, SHOP_OUTLINE_RING_HALF_SEC).set_trans(Tween.TRANS_SINE)
+		_shop_outline_pulses.append(tw)
+
+
+func _stop_shop_outline_rings() -> void:
+	for tw_v in _shop_outline_pulses:
+		if tw_v != null and is_instance_valid(tw_v):
+			(tw_v as Tween).kill()
+	_shop_outline_pulses.clear()
+	_shop_outline_pulse_running = false
+	for ring_v in _shop_outline_rings:
+		var ring: Panel = ring_v
+		if not is_instance_valid(ring):
+			continue
+		ring.visible = false
+		var sb := ring.get_theme_stylebox("panel") as StyleBoxFlat
+		if sb != null:
+			sb.border_color = RING_BORDER
+			sb.shadow_size = 0
+			sb.bg_color = Color(0, 0, 0, 0)
 
 
 func _update_ranks_hint() -> void:
@@ -1144,8 +1229,7 @@ func _layout_secondary_spotlight_ring() -> void:
 func _uses_spotlight_ring() -> bool:
 	# mission_start already flashes the START MISSION button; the ring top border
 	# reads as a full-width cyan hairline above the wide button.
-	# shop_market uses a large buy/sell hole — ring would frame the whole market;
-	# refresh timer + Nova restock flash instead.
+	# shop_market uses dedicated outline rings on stim / restock / refresh timer.
 	return TutorialManager.step_id() not in ["mission_start", "shop_market"]
 
 
@@ -1263,6 +1347,9 @@ func _place_pointer(hole: Rect2, vp: Vector2) -> void:
 		return
 	_pointer.visible = true
 	_pointer.texture = UiIcon.texture("triangle")
+	if TutorialManager.step_id() == "mission_timer":
+		_place_mission_timer_pointer(hole, vp)
+		return
 	var card_center := _card.position + _card.size * 0.5
 	var hole_center := hole.get_center()
 	if hole_center.x < card_center.x:
@@ -1281,6 +1368,24 @@ func _place_pointer(hole: Rect2, vp: Vector2) -> void:
 		# Point down.
 		_pointer.rotation_degrees = 180
 		_pointer.position = Vector2(hole_center.x - POINTER_SPAN * 0.35, hole.position.y - POINTER_INSET - POINTER_SPAN)
+	_pointer.position.x = clampf(_pointer.position.x, 8.0, vp.x - POINTER_SPAN)
+	_pointer.position.y = clampf(_pointer.position.y, 8.0, vp.y - POINTER_SPAN)
+
+
+func _place_mission_timer_pointer(hole: Rect2, vp: Vector2) -> void:
+	## Card sits above the bar; keep the chevron in that gap, aimed at the timer.
+	_pointer.rotation_degrees = 180
+	var target := hole
+	if target.size.x <= 4.0:
+		target = _hole_for_tutorial_id("mission-timer")
+	var tip_x := target.get_center().x - POINTER_SPAN * 0.35
+	if target.size.x <= 4.0:
+		tip_x = _card.position.x + _card.size.x * 0.5 - POINTER_SPAN * 0.35
+	var card_bottom := _card.position.y + _card.size.y
+	var y := card_bottom + POINTER_INSET
+	if target.size.y > 1.0:
+		y = minf(y, target.position.y - POINTER_INSET - POINTER_SPAN)
+	_pointer.position = Vector2(tip_x, y)
 	_pointer.position.x = clampf(_pointer.position.x, 8.0, vp.x - POINTER_SPAN)
 	_pointer.position.y = clampf(_pointer.position.y, 8.0, vp.y - POINTER_SPAN)
 

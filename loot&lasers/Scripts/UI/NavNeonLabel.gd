@@ -5,7 +5,7 @@ class_name NavNeonLabel
 const SWEEP_SECONDS := 1.6
 
 var label_text := ""
-var font_size := 20
+var font_size := 22
 var idle_color := Color(0.62, 0.7, 0.78)
 var neon_tint := Color("#00E5FF")
 var neon_on := false
@@ -20,7 +20,7 @@ func _ready() -> void:
 	_remeasure()
 
 
-func configure(text: String, tint: Color, size: int = 20) -> void:
+func configure(text: String, tint: Color, size: int = 22) -> void:
 	label_text = text
 	neon_tint = tint
 	font_size = size

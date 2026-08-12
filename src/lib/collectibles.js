@@ -56,7 +56,7 @@ export const ARTIFACTS = Array.from({ length: 100 }, (_, i) => {
 // ── Relics (500) — procedurally named, stable ids (20 adjectives × 25 nouns) ──
 const REL_ADJ = ["Cracked", "Glowing", "Ancient", "Rusted", "Shimmering", "Frozen", "Burned", "Whispering", "Pulsing", "Fractured", "Dusty", "Polished", "Cursed", "Blessed", "Singing", "Molten", "Petrified", "Translucent", "Tarnished", "Humming"];
 const REL_NOUN = ["Idol", "Amulet", "Coin", "Charm", "Totem", "Sigil", "Tablet", "Fragment", "Token", "Talisman", "Reliquary", "Shard", "Mote", "Wisp", "Vessel", "Censer", "Pendant", "Rune", "Glyph", "Mark", "Seal", "Brand", "Figurine", "Locket", "Crest"];
-const REL_EMOJI = ["🗿", "📿", "🪙", "🔮", "🦴", "🔰", "🪶", "🏺", "🧿", "🔱", "⚱️", "💠", "✨", "🌫️", "🪔", "🪔", "📿", "🔠", "💠", "🔖", "🔖", "🏷️", "🧸", "💌", "🎖️"];
+const REL_EMOJI = ["🗿", "📿", "🪙", "🔮", "🦴", "🔰", "🪶", "🏺", "🧿", "🔱", "⚱️", "💠", "stardust", "🌫️", "🪔", "🪔", "📿", "🔠", "💠", "🔖", "🔖", "🏷️", "🧸", "💌", "🎖️"];
 
 export const RELICS = Array.from({ length: 500 }, (_, i) => {
   const rarity = i < 15 ? "legendary" : i < 50 ? "epic" : i < 160 ? "rare" : i < 320 ? "uncommon" : "common";

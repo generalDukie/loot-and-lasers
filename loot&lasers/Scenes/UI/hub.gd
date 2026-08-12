@@ -18,6 +18,11 @@ func _ready() -> void:
 	await _boot()
 
 
+func on_shell_reshow() -> void:
+	AudioManager.start_hub_bed()
+	_populate()
+
+
 func _boot() -> void:
 	var boot_t0 := Time.get_ticks_msec()
 	await MissionManager.refresh_character()
@@ -35,6 +40,8 @@ func _boot() -> void:
 	AudioManager.start_hub_bed()
 	_populate()
 	print("[nav] hub boot_ms=%d" % [Time.get_ticks_msec() - boot_t0])
+	if not is_inside_tree() or not visible:
+		return
 	await _maybe_daily_prompt()
 	await _maybe_legacy_prompt()
 	await _maybe_bag_pressure()
@@ -135,7 +142,7 @@ func _show_branded_prompt(
 	body_lab.text = body
 	body_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	body_lab.add_theme_font_size_override("font_size", 17)
+	body_lab.add_theme_font_size_override("font_size", 19)
 	body_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(body_lab)
 	col.add_child(body_lab)
@@ -214,7 +221,7 @@ func _show_legacy_modal() -> void:
 	head_copy.add_child(title)
 	var sub := Label.new()
 	sub.text = "One-time · permanent"
-	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_font_size_override("font_size", 17)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head_copy.add_child(sub)
@@ -222,7 +229,7 @@ func _show_legacy_modal() -> void:
 	var body := Label.new()
 	body.text = "This is your account's surname — a permanent last name shared by every character you create. It lets other players recognize all your operatives as the same person. It can never be changed."
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", 16)
+	body.add_theme_font_size_override("font_size", 19)
 	body.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(body)
 	col.add_child(body)
@@ -236,19 +243,19 @@ func _show_legacy_modal() -> void:
 	var count := Label.new()
 	count.text = "0/20"
 	count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	count.add_theme_font_size_override("font_size", 13)
+	count.add_theme_font_size_override("font_size", 17)
 	count.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(count)
 	meta_row.add_child(count)
 	var preview := Label.new()
 	preview.text = "Displayed as: —"
-	preview.add_theme_font_size_override("font_size", 13)
+	preview.add_theme_font_size_override("font_size", 17)
 	preview.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(preview)
 	meta_row.add_child(preview)
 
 	var err := Label.new()
-	err.add_theme_font_size_override("font_size", 15)
+	err.add_theme_font_size_override("font_size", 18)
 	err.add_theme_color_override("font_color", ClientUi.DANGER)
 	ClientUi.apply_body_font(err)
 	col.add_child(err)
@@ -499,14 +506,14 @@ func _build() -> void:
 	var nexus_eye := Label.new()
 	nexus_eye.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	nexus_eye.text = "GALACTIC COMMAND NEXUS"
-	nexus_eye.add_theme_font_size_override("font_size", 12)
+	nexus_eye.add_theme_font_size_override("font_size", 16)
 	nexus_eye.add_theme_color_override("font_color", Color("#FCD34D", 0.8))
 	ClientUi.apply_display_font(nexus_eye)
 	sc_copy.add_child(nexus_eye)
 	_nexus_owner = Label.new()
 	_nexus_owner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_nexus_owner.clip_text = true
-	_nexus_owner.add_theme_font_size_override("font_size", 16)
+	_nexus_owner.add_theme_font_size_override("font_size", 19)
 	_nexus_owner.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(_nexus_owner)
 	sc_copy.add_child(_nexus_owner)
@@ -541,7 +548,7 @@ func _build() -> void:
 	_nexus_chatter = Label.new()
 	_nexus_chatter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_nexus_chatter.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_nexus_chatter.add_theme_font_size_override("font_size", 15)
+	_nexus_chatter.add_theme_font_size_override("font_size", 19)
 	_nexus_chatter.add_theme_color_override("font_color", Color(ClientUi.TEXT, 0.82))
 	ClientUi.apply_body_font(_nexus_chatter)
 	chatter_row.add_child(_nexus_chatter)

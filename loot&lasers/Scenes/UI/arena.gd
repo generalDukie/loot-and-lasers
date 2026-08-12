@@ -38,7 +38,15 @@ func _ready() -> void:
 		TutorialManager.tutorial_finished.connect(_on_tutorial_lock_changed)
 	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
 		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
+	if not ArenaManager.opponents.is_empty():
+		_populate()
 	await _boot()
+	_sync_view_rewards_cta()
+
+
+func on_shell_reshow() -> void:
+	_update_lobby_chrome()
+	_populate()
 	_sync_view_rewards_cta()
 
 
@@ -63,6 +71,8 @@ func _boot() -> void:
 	await ArenaManager.refresh_character()
 	await ArenaManager.load_equipped()
 	var raids: Dictionary = await ArenaManager.process_bot_raids(2)
+	if not is_inside_tree() or not visible:
+		return
 	if raids.ok:
 		for raid in raids.get("raids", []):
 			if typeof(raid) != TYPE_DICTIONARY:
@@ -80,6 +90,8 @@ func _boot() -> void:
 		if ArenaManager.refresh_at_unix_ms <= 0:
 			ArenaManager.mark_refresh_used()
 	await ArenaManager.load_history()
+	if not is_inside_tree() or not visible:
+		return
 	_was_on_cooldown = ArenaManager.cooldown_active()
 	_set_status("")
 	_populate()
@@ -191,7 +203,7 @@ func _build() -> void:
 	opponent_area.add_child(challengers_row)
 	var ch_lab := Label.new()
 	ch_lab.text = "CHALLENGERS"
-	ch_lab.add_theme_font_size_override("font_size", 15)
+	ch_lab.add_theme_font_size_override("font_size", 18)
 	ch_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(ch_lab)
 	challengers_row.add_child(ch_lab)
@@ -271,7 +283,7 @@ func _build() -> void:
 
 	_history_status = Label.new()
 	_history_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_history_status.add_theme_font_size_override("font_size", 15)
+	_history_status.add_theme_font_size_override("font_size", 19)
 	_history_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	hist_col.add_child(_history_status)
 
@@ -303,7 +315,7 @@ func _build() -> void:
 	ClientUi.apply_display_font(news_header)
 	news_col.add_child(news_header)
 	_news_status = Label.new()
-	_news_status.add_theme_font_size_override("font_size", 15)
+	_news_status.add_theme_font_size_override("font_size", 19)
 	_news_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	news_col.add_child(_news_status)
 	var news_scroll := ScrollContainer.new()
@@ -428,7 +440,7 @@ func _build_free_battles_panel() -> PanelContainer:
 
 	_free_hint = Label.new()
 	_free_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_free_hint.add_theme_font_size_override("font_size", 12)
+	_free_hint.add_theme_font_size_override("font_size", 17)
 	_free_hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_free_hint)
 	head.add_child(_free_hint)
@@ -445,7 +457,7 @@ func _build_free_battles_panel() -> PanelContainer:
 
 	_free_support = Label.new()
 	_free_support.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_free_support.add_theme_font_size_override("font_size", 13)
+	_free_support.add_theme_font_size_override("font_size", 17)
 	_free_support.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_free_support)
 	col.add_child(_free_support)
@@ -500,7 +512,7 @@ func _add_stat_chip_wrap(parent: GridContainer, icon: String, label: String, col
 	ClientUi.apply_display_font(val)
 	col.add_child(val)
 	var hint := Label.new()
-	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_font_size_override("font_size", 16)
 	hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85))
 	hint.visible = false
 	col.add_child(hint)
@@ -555,7 +567,7 @@ func _populate_news() -> void:
 		var lab := Label.new()
 		lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lab.text = str(n.get("message", ""))
-		lab.add_theme_font_size_override("font_size", 16)
+		lab.add_theme_font_size_override("font_size", 19)
 		lab.add_theme_color_override("font_color", ClientUi.TEXT)
 		ClientUi.apply_body_font(lab)
 		row.add_child(lab)
@@ -626,11 +638,13 @@ func _update_lobby_chrome() -> void:
 
 	if ArenaManager.can_free_refresh():
 		_refresh_btn.text = "Refresh"
+		_refresh_btn.icon = null
 	else:
-		_refresh_btn.text = "Refresh · %s ✦  %s" % [
+		_refresh_btn.text = "Refresh · %s  %s" % [
 			str(ArenaRules.REFRESH_COST),
 			ArenaRules.format_ms(ArenaManager.refresh_remaining_ms()),
 		]
+		CurrencyIcon.apply_stardust_button_cost(_refresh_btn, 15.0)
 
 
 func _refresh_free_battles_panel(free_left: int, daily_max: int, reset_eta: String) -> void:
@@ -744,7 +758,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var detail := Label.new()
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.text = "%s · %s" % [str(opp.get("race", "?")), str(opp.get("class", "?"))]
-	detail.add_theme_font_size_override("font_size", 15)
+	detail.add_theme_font_size_override("font_size", 19)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(detail)
 
@@ -752,7 +766,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	var guild_lab := Label.new()
 	guild_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	guild_lab.custom_minimum_size.y = 19
-	guild_lab.add_theme_font_size_override("font_size", 13)
+	guild_lab.add_theme_font_size_override("font_size", 17)
 	guild_lab.add_theme_color_override("font_color", ClientUi.GOLD)
 	ClientUi.apply_display_font(guild_lab)
 	var guild_raw = opp.get("guild", null)
@@ -820,7 +834,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	win_col.add_child(win_val)
 	var win_loot := Label.new()
 	if is_free:
-		win_loot.text = "%s XP · %s ✦" % [str(on_win.get("experience", 0)), str(on_win.get("stardust", 0))]
+		win_loot.text = "%s XP · %s Stardust" % [str(on_win.get("experience", 0)), str(on_win.get("stardust", 0))]
 	else:
 		win_loot.text = "rating"
 	win_loot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -978,7 +992,7 @@ func _make_history_row(match: Dictionary) -> PanelContainer:
 	var guild_bit := (" · %s" % guild) if not guild.is_empty() and guild != "<null>" else ""
 	var detail := Label.new()
 	detail.text = "%s · Lv %s%s · %s" % [outcome, ClientUi.format_level(match.get("opponent_level", 1)), guild_bit, delta_txt]
-	detail.add_theme_font_size_override("font_size", 15)
+	detail.add_theme_font_size_override("font_size", 19)
 	detail.add_theme_color_override("font_color", ClientUi.SUCCESS if delta >= 0 else ClientUi.DANGER)
 	col.add_child(detail)
 
@@ -1005,7 +1019,7 @@ func _on_refresh() -> void:
 			CurrencyManager.CURRENCY_STARDUST,
 			ArenaRules.REFRESH_COST
 		):
-			Notify.blocked("Not enough Stardust", "Need %s ✦ for instant refresh" % ArenaRules.REFRESH_COST)
+			Notify.blocked("Not enough Stardust", "Need %s Stardust for instant refresh" % ArenaRules.REFRESH_COST)
 			_busy = false
 			_update_lobby_chrome()
 			return

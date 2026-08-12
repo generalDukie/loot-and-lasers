@@ -8,7 +8,7 @@ export const ACHIEVEMENTS = [
   { id: "centurion", name: "Centurion", desc: "Win 100 Arena battles", icon: "🏅", category: "Combat", title: "the Champion", check: (c) => (c.arena_wins || 0) >= 100 },
   { id: "hot_streak", name: "Hot Streak", desc: "Reach a 5-win Arena streak", icon: "🔥", category: "Combat", title: "On Fire", check: (c) => (c.arena_max_streak || 0) >= 5 },
   { id: "unstoppable", name: "Unstoppable", desc: "Reach a 10-win Arena streak", icon: "⚡", category: "Combat", title: "Unstoppable", check: (c) => (c.arena_max_streak || 0) >= 10 },
-  { id: "rising_star", name: "Rising Star", desc: "Reach 1500 Arena rating", icon: "✨", category: "Combat", title: "Rising Star", check: (c) => (c.arena_rating || 0) >= 1500 },
+  { id: "rising_star", name: "Rising Star", desc: "Reach 1500 Arena rating", icon: "stardust", category: "Combat", title: "Rising Star", check: (c) => (c.arena_rating || 0) >= 1500 },
   { id: "living_legend", name: "Living Legend", desc: "Reach 2000 Arena rating", icon: "👑", category: "Combat", title: "Living Legend", check: (c) => (c.arena_rating || 0) >= 2000 },
   { id: "brawler", name: "Brawler", desc: "Fight 25 Arena battles", icon: "🥊", category: "Combat", title: "the Brawler", check: (c) => (c.arena_battles || 0) >= 25 },
 

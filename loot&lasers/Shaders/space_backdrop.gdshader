@@ -36,6 +36,27 @@ float fbm(vec2 p) {
 	return value;
 }
 
+float star_twinkle(vec2 id, float time_shift) {
+	// Existence seed is ~0.95–1.0 for visible stars, so it cannot drive twinkle
+	// or the whole field locks in phase. Hash the cell instead, then split into
+	// four equal groups with very different rates and independent phases.
+	float group_u = hash21(id + vec2(41.7, 3.1) + time_shift);
+	float phase = hash21(id + vec2(91.3, 12.8) + time_shift) * 6.2831853;
+	float jitter = hash21(id + vec2(5.5, 77.0) + time_shift);
+	float group = floor(group_u * 4.0);
+	float rate;
+	if (group < 0.5) {
+		rate = 0.22 + jitter * 0.10; // ~25–29s
+	} else if (group < 1.5) {
+		rate = 0.85 + jitter * 0.28; // ~5.5–7.4s
+	} else if (group < 2.5) {
+		rate = 2.4 + jitter * 0.70; // ~2.0–2.6s
+	} else {
+		rate = 7.6 + jitter * 2.2; // ~0.64–0.85s
+	}
+	return 0.52 + 0.48 * sin(TIME * rate + phase);
+}
+
 float star_layer(vec2 uv, float cells, float threshold, float time_shift) {
 	vec2 grid = uv * cells;
 	vec2 id = floor(grid);
@@ -45,8 +66,7 @@ float star_layer(vec2 uv, float cells, float threshold, float time_shift) {
 	float distance_to_star = length(local - jitter * 0.55);
 	float core = smoothstep(0.075, 0.0, distance_to_star);
 	float exists = smoothstep(threshold, 1.0, seed);
-	float twinkle = 0.52 + 0.48 * sin(TIME * (1.4 + seed * 3.2) + seed * 18.0);
-	return core * exists * twinkle;
+	return core * exists * star_twinkle(id, time_shift);
 }
 
 float dust_layer(vec2 uv, float cells, float time_shift) {

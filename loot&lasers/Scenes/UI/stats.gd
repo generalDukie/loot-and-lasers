@@ -35,7 +35,7 @@ var _doll: GridContainer
 var _bag_grid: VBoxContainer
 var _bag_count: Label
 var _stardust_lab: Label
-var _stardust_need: Label
+var _stardust_icon: TextureRect
 var _attrs_panel: PanelContainer
 var _attrs_col: VBoxContainer
 var _vault_panel: PanelContainer
@@ -101,6 +101,12 @@ func _ready() -> void:
 		win.focus_exited.connect(_on_window_focus_out)
 	# Defer network boot so shell show_page can finish mounting/animating
 	# without waiting on guild/stats requests (those used to freeze the rail).
+	_populate()
+	call_deferred("_start_boot")
+
+
+func on_shell_reshow() -> void:
+	_populate()
 	call_deferred("_start_boot")
 
 
@@ -135,6 +141,8 @@ func _boot() -> void:
 		return
 	if not res.ok:
 		_status.text = str(res.get("error", "Failed to load character"))
+		return
+	if not visible:
 		return
 	_populate()
 
@@ -200,7 +208,7 @@ func _build() -> void:
 	triad.add_theme_constant_override("separation", 12)
 	hcol.add_child(triad)
 
-	# Lore rail — fill available triad height; scroll only when lore is genuinely long.
+	# Lore rail — fill available triad height; keep readable without introducing scroll.
 	var lore_panel := PanelContainer.new()
 	lore_panel.custom_minimum_size = Vector2(293, 0)
 	lore_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -223,12 +231,12 @@ func _build() -> void:
 	_lore_lab = RichTextLabel.new()
 	_lore_lab.bbcode_enabled = true
 	_lore_lab.fit_content = false
-	_lore_lab.scroll_active = true
+	_lore_lab.scroll_active = false
 	_lore_lab.scroll_following = false
 	_lore_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_lore_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lore_lab.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_lore_lab.add_theme_font_size_override("normal_font_size", 16)
+	_lore_lab.add_theme_font_size_override("normal_font_size", 17)
 	_lore_lab.add_theme_font_size_override("bold_font_size", 17)
 	_lore_lab.add_theme_color_override("default_color", Color(0.86, 0.91, 0.96))
 	ClientUi.apply_body_font(_lore_lab)
@@ -280,7 +288,7 @@ func _build() -> void:
 
 	_title_lab = Label.new()
 	_title_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_lab.add_theme_font_size_override("font_size", 12)
+	_title_lab.add_theme_font_size_override("font_size", 16)
 	_title_lab.add_theme_color_override("font_color", Color("#FBBF24", 0.9))
 	ClientUi.apply_display_font(_title_lab)
 	_title_lab.visible = false
@@ -295,15 +303,17 @@ func _build() -> void:
 	_hero_meta.add_child(_hero_meta_icon)
 	_hero_meta_lab = Label.new()
 	_hero_meta_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_meta_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hero_meta_lab.add_theme_font_size_override("font_size", 12)
+	_hero_meta_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hero_meta_lab.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_hero_meta_lab.clip_text = true
+	_hero_meta_lab.add_theme_font_size_override("font_size", 16)
 	_hero_meta_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_hero_meta_lab)
 	_hero_meta.add_child(_hero_meta_lab)
 
 	_xp_lab = Label.new()
 	_xp_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_xp_lab.add_theme_font_size_override("font_size", 12)
+	_xp_lab.add_theme_font_size_override("font_size", 16)
 	_xp_lab.add_theme_color_override("font_color", ClientUi.BRAND_GRAD_NEAR_WHITE)
 	ClientUi.apply_display_font(_xp_lab)
 	identity.add_child(_xp_lab)
@@ -391,12 +401,12 @@ func _build() -> void:
 	var bag_label := Label.new()
 	bag_label.text = "BACKPACK"
 	bag_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bag_label.add_theme_font_size_override("font_size", 13)
+	bag_label.add_theme_font_size_override("font_size", 17)
 	bag_label.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(bag_label)
 	bag_row.add_child(bag_label)
 	_bag_count = Label.new()
-	_bag_count.add_theme_font_size_override("font_size", 13)
+	_bag_count.add_theme_font_size_override("font_size", 17)
 	_bag_count.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_bag_count)
 	bag_row.add_child(_bag_count)
@@ -463,15 +473,15 @@ func _populate() -> void:
 	head_copy.add_theme_constant_override("separation", 2)
 	head.add_child(head_copy)
 	var h2 := Label.new()
-	h2.text = "✨  ATTRIBUTE UPGRADES"
-	h2.add_theme_font_size_override("font_size", 19)
+	h2.text = "ATTRIBUTE UPGRADES"
+	h2.add_theme_font_size_override("font_size", 26)
 	h2.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(h2)
 	head_copy.add_child(h2)
 	var sub := Label.new()
 	sub.text = "Spend stardust to permanently raise an attribute. Hold to keep buying."
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sub.add_theme_font_size_override("font_size", 14)
+	sub.add_theme_font_size_override("font_size", 17)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head_copy.add_child(sub)
@@ -482,22 +492,22 @@ func _populate() -> void:
 	var sd_eye := Label.new()
 	sd_eye.text = "YOUR STARDUST"
 	sd_eye.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	sd_eye.add_theme_font_size_override("font_size", 12)
+	sd_eye.add_theme_font_size_override("font_size", 16)
 	sd_eye.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(sd_eye)
 	sd_col.add_child(sd_eye)
+	var sd_row := HBoxContainer.new()
+	sd_row.alignment = BoxContainer.ALIGNMENT_END
+	sd_row.add_theme_constant_override("separation", 8)
+	sd_col.add_child(sd_row)
+	_stardust_icon = CurrencyIcon.make("stardust", 28.0)
+	sd_row.add_child(_stardust_icon)
 	_stardust_lab = Label.new()
 	_stardust_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_stardust_lab.add_theme_font_size_override("font_size", 21)
+	_stardust_lab.add_theme_font_size_override("font_size", 32)
 	_stardust_lab.add_theme_color_override("font_color", Color("#E879F9"))
 	ClientUi.apply_display_font(_stardust_lab)
-	sd_col.add_child(_stardust_lab)
-	_stardust_need = Label.new()
-	_stardust_need.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_stardust_need.add_theme_font_size_override("font_size", 12)
-	_stardust_need.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(_stardust_need)
-	sd_col.add_child(_stardust_need)
+	sd_row.add_child(_stardust_lab)
 
 	for stat in StatsRules.ATTR_KEYS:
 		var row := _make_stat_row(stat, primary)
@@ -546,19 +556,13 @@ func _refresh_values() -> void:
 	var shown_dust := maxi(0, stardust - hold_cost)
 
 	if is_instance_valid(_stardust_lab):
-		_stardust_lab.text = "✦  %s" % _fmt_int(shown_dust)
+		_stardust_lab.text = _fmt_int(shown_dust)
 
-	var cheapest := 999999999
 	var can_buy_any := false
 	for stat in StatsRules.ATTR_KEYS:
 		var cost_i := StatsManager.next_cost(c, str(stat))
-		cheapest = mini(cheapest, cost_i)
 		if CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost_i):
 			can_buy_any = true
-
-	if is_instance_valid(_stardust_need):
-		_stardust_need.visible = not can_buy_any
-		_stardust_need.text = "Need ✦%s+" % _fmt_int(cheapest)
 
 	if is_instance_valid(_attrs_panel):
 		_attrs_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
@@ -591,14 +595,34 @@ func _refresh_values() -> void:
 
 		var buy := row["buy"] as Button
 		if buy != null and is_instance_valid(buy):
-			buy.text = "Upgrade\n✦ %s" % _fmt_int(cost)
-			buy.disabled = not affordable and not (str(stat) == _hold_stat and _hold.is_active())
-			buy.modulate = Color(1.08, 1.12, 1.06) if str(stat) == _hold_stat and _hold.is_active() else Color.WHITE
-			buy.add_theme_font_size_override("font_size", 17)
+			var holding := str(stat) == _hold_stat and _hold.is_active()
+			buy.disabled = not affordable and not holding
+			_apply_attr_buy_style(buy, affordable or holding)
+			_tighten_attr_buy_margins(buy)
+			# Don't fight ClientUi hover motion with a forced disabled modulate — that
+			# left buttons stuck bright after mouse-exit while disabled.
+			if holding:
+				buy.modulate = Color(1.08, 1.12, 1.06)
+			elif buy.disabled or not bool(buy.get_meta("client_ui_hovered", false)):
+				buy.modulate = Color.WHITE
 			buy.tooltip_text = (
-				"Spend %s ✦ · hold to keep buying" % cost if affordable or (str(stat) == _hold_stat and _hold.is_active())
-				else "Need %s ✦ for the next point" % cost
+				"Spend %s Stardust · hold to keep buying" % cost if affordable or holding
+				else "Need %s Stardust for the next point" % cost
 			)
+			var cost_lab := row.get("buy_cost", null) as Label
+			if cost_lab != null and is_instance_valid(cost_lab):
+				cost_lab.text = _fmt_int(cost)
+			var title_lab := row.get("buy_title", null) as Label
+			if title_lab != null and is_instance_valid(title_lab):
+				title_lab.add_theme_color_override(
+					"font_color",
+					ClientUi.CYAN_SOFT if affordable or holding else Color(ClientUi.MUTED, 0.75)
+				)
+			if cost_lab != null and is_instance_valid(cost_lab):
+				cost_lab.add_theme_color_override(
+					"font_color",
+					ClientUi.TEXT if affordable or holding else Color(ClientUi.MUTED, 0.8)
+				)
 		if row.has("panel") and is_instance_valid(row["panel"]):
 			(row["panel"] as Control).tooltip_text = StatsRules.attribute_tooltip(str(stat), c, eq)
 
@@ -1576,11 +1600,11 @@ func _make_vault_teaser(c: Dictionary) -> PanelContainer:
 	bar.custom_minimum_size.y = 8
 	ClientUi.apply_hp_bar(bar, ClientUi.CYAN)
 	total_col.add_child(bar)
-	var xp_bonus := Label.new()
-	xp_bonus.text = "✨ XP Bonus: +%s%% from all sources" % int(round(pct))
-	xp_bonus.add_theme_font_size_override("font_size", 13)
-	xp_bonus.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(xp_bonus)
+	var xp_bonus := BrandGradientTitle.make(
+		"XP Bonus: +%s%% from all sources" % int(round(pct)),
+		13,
+		false
+	)
 	total_col.add_child(xp_bonus)
 
 	var chips := HFlowContainer.new()
@@ -1658,7 +1682,7 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	if is_primary:
 		var badge := Label.new()
 		badge.text = "Primary"
-		badge.add_theme_font_size_override("font_size", 12)
+		badge.add_theme_font_size_override("font_size", 16)
 		badge.add_theme_color_override("font_color", Color("#FDE68A"))
 		ClientUi.apply_display_font(badge)
 		title_row.add_child(badge)
@@ -1680,15 +1704,64 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	val_row.add_child(bonus_lab)
 
 	var buy := Button.new()
-	buy.custom_minimum_size = Vector2(117, 53)
-	ClientUi.apply_primary_button(buy)
-	buy.add_theme_font_size_override("font_size", 17)
+	buy.custom_minimum_size = Vector2(128, 70)
+	buy.text = ""
+	buy.focus_mode = Control.FOCUS_NONE
+	buy.clip_contents = true
+	_apply_attr_buy_style(buy, true)
+	_tighten_attr_buy_margins(buy)
+	_bind_attr_buy_hover_reset(buy)
 	buy.button_down.connect(func() -> void: _start_upgrade_hold(stat))
 	buy.button_up.connect(func() -> void: _stop_upgrade_hold(true))
 	TutorialManager.tag_target(buy, "hero-attr-buy")
 	row.add_child(buy)
 
-	_stat_rows[stat] = {"panel": panel, "value": value_lab, "bonus": bonus_lab, "buy": buy}
+	var buy_pad := MarginContainer.new()
+	buy_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	buy_pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	buy_pad.add_theme_constant_override("margin_left", 4)
+	buy_pad.add_theme_constant_override("margin_right", 4)
+	buy_pad.add_theme_constant_override("margin_top", 3)
+	buy_pad.add_theme_constant_override("margin_bottom", 3)
+	buy.add_child(buy_pad)
+	var buy_col := VBoxContainer.new()
+	buy_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	buy_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	buy_col.add_theme_constant_override("separation", 2)
+	buy_pad.add_child(buy_col)
+	var buy_title := Label.new()
+	buy_title.text = "Upgrade"
+	buy_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	buy_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	buy_title.add_theme_font_size_override("font_size", 17)
+	buy_title.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
+	ClientUi.apply_display_font(buy_title)
+	buy_col.add_child(buy_title)
+	var cost_row := HBoxContainer.new()
+	cost_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	cost_row.add_theme_constant_override("separation", 4)
+	buy_col.add_child(cost_row)
+	var buy_icon := CurrencyIcon.make("stardust", 36.0)
+	buy_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_row.add_child(buy_icon)
+	var buy_cost := Label.new()
+	buy_cost.text = "0"
+	buy_cost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	buy_cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	buy_cost.add_theme_font_size_override("font_size", 19)
+	buy_cost.add_theme_color_override("font_color", ClientUi.TEXT)
+	ClientUi.apply_display_font(buy_cost)
+	cost_row.add_child(buy_cost)
+
+	_stat_rows[stat] = {
+		"panel": panel,
+		"value": value_lab,
+		"bonus": bonus_lab,
+		"buy": buy,
+		"buy_cost": buy_cost,
+		"buy_title": buy_title,
+	}
 	return panel
 
 
@@ -1732,7 +1805,7 @@ func _make_combat_card() -> VBoxContainer:
 	var off_lab := Label.new()
 	off_lab.text = "OFFENSIVE"
 	off_lab.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	off_lab.add_theme_font_size_override("font_size", 13)
+	off_lab.add_theme_font_size_override("font_size", 17)
 	off_lab.add_theme_color_override("font_color", Color("#F59E0B"))
 	ClientUi.apply_display_font(off_lab)
 	root.add_child(off_lab)
@@ -1958,6 +2031,89 @@ func _refresh_after_inventory_change(rebuild_loadout: bool) -> void:
 	call_deferred("_sync_doll_scale")
 
 
+func _kill_attr_buy_motion_tween(btn: Button) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	if not btn.has_meta("client_ui_motion_tween"):
+		return
+	var previous: Variant = btn.get_meta("client_ui_motion_tween")
+	if previous is Tween and (previous as Tween).is_valid():
+		(previous as Tween).kill()
+
+
+func _bind_attr_buy_hover_reset(btn: Button) -> void:
+	## Interaction motion still runs on disabled buttons; force idle modulate on
+	## enter-when-disabled and every mouse exit so highlight never sticks.
+	if btn == null or not is_instance_valid(btn) or btn.has_meta("attr_buy_hover_bound"):
+		return
+	btn.set_meta("attr_buy_hover_bound", true)
+	btn.mouse_entered.connect(func() -> void:
+		if not is_instance_valid(btn):
+			return
+		if btn.disabled:
+			_kill_attr_buy_motion_tween(btn)
+			btn.set_meta("client_ui_hovered", false)
+			btn.modulate = Color.WHITE
+	)
+	btn.mouse_exited.connect(func() -> void:
+		if not is_instance_valid(btn):
+			return
+		_kill_attr_buy_motion_tween(btn)
+		btn.set_meta("client_ui_hovered", false)
+		btn.modulate = Color.WHITE
+	)
+
+
+func _apply_attr_buy_style(btn: Button, affordable: bool) -> void:
+	## Dark face + cyan outline when affordable so the stardust glyph stays readable.
+	if btn == null or not is_instance_valid(btn):
+		return
+	ClientUi.apply_display_font(btn)
+	var dark := Color(0.04, 0.055, 0.08, 0.98)
+	var dark_hover := Color(0.06, 0.085, 0.12, 0.98)
+	var dark_pressed := Color(0.03, 0.045, 0.07, 0.98)
+	var cyan := ClientUi.CYAN
+	var cyan_soft := ClientUi.CYAN_SOFT
+	var muted_border := Color(0.28, 0.34, 0.42, 0.55)
+	if affordable:
+		btn.add_theme_stylebox_override("normal", ClientUi.button_style(dark, cyan))
+		btn.add_theme_stylebox_override("hover", ClientUi.button_style(dark_hover, cyan_soft))
+		btn.add_theme_stylebox_override("pressed", ClientUi.button_style(dark_pressed, cyan))
+		btn.add_theme_stylebox_override("disabled", ClientUi.button_style(dark, muted_border))
+	else:
+		btn.add_theme_stylebox_override("normal", ClientUi.button_style(dark, muted_border))
+		btn.add_theme_stylebox_override("hover", ClientUi.button_style(dark, muted_border))
+		btn.add_theme_stylebox_override("pressed", ClientUi.button_style(dark, muted_border))
+		btn.add_theme_stylebox_override("disabled", ClientUi.button_style(dark, muted_border))
+	btn.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
+	btn.add_theme_color_override("font_hover_color", ClientUi.CYAN_SOFT)
+	btn.add_theme_color_override("font_pressed_color", ClientUi.TEXT)
+	btn.add_theme_color_override("font_disabled_color", Color(ClientUi.MUTED, 0.7))
+	btn.set_meta("ui_sfx_kind", "confirm")
+	if not btn.has_meta("client_ui_motion"):
+		ClientUi.apply_interaction_motion(btn)
+
+
+func _tighten_attr_buy_margins(btn: Button) -> void:
+	## Use more of the painted button face for Upgrade + glyph + cost.
+	if btn == null or not is_instance_valid(btn):
+		return
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var sb := btn.get_theme_stylebox(state)
+		if sb == null:
+			continue
+		var flat: StyleBoxFlat
+		if sb is StyleBoxFlat:
+			flat = (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		else:
+			continue
+		flat.content_margin_left = 4
+		flat.content_margin_right = 4
+		flat.content_margin_top = 3
+		flat.content_margin_bottom = 3
+		btn.add_theme_stylebox_override(state, flat)
+
+
 func _fmt_int(n: int) -> String:
 	var s := str(n)
 	var out := ""
@@ -1980,6 +2136,7 @@ func _on_window_focus_out() -> void:
 
 
 func _process(_delta: float) -> void:
+	# Arm a single hide when the pointer leaves item + popup (does not re-arm each frame).
 	if _inspect != null and is_instance_valid(_inspect) and _inspect.visible \
 			and not _inspect.is_pointer_over_zone():
 		_inspect.request_hide()
@@ -2096,7 +2253,7 @@ func _flush_hold_queue() -> void:
 	var leftover := n - applied
 	var label := str(StatsRules.ATTR_LABELS.get(stat, stat))
 	var spent := int(StatsManager.last_buy.get("cost", 0))
-	_status.text = "+%s %s  ·  −%s ✦" % [applied, label, spent]
+	_status.text = "+%s %s  ·  −%s Stardust" % [applied, label, spent]
 	if TutorialManager.should_show() and TutorialManager.step_id() == "hero_upgrade" and applied > 0:
 		# Only the purchased attribute row + its linked combat tile(s).
 		_flash_attribute_row(stat)

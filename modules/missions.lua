@@ -178,14 +178,15 @@ local TEMPLATES = {
 }
 
 local QUEST_GIVERS = {
-  { emoji = "🤖", name = "CLANK", color = "#00E5FF" },
   { emoji = "👽", name = "Zyx", color = "#9D5CFF" },
-  { emoji = "🐙", name = "Capt. Tentak", color = "#FF6B35" },
-  { emoji = "🧙", name = "Old Maru", color = "#FFD700" },
-  { emoji = "👻", name = "Wraith Vin", color = "#8BE8FF" },
-  { emoji = "🦊", name = "Rix", color = "#FF9E4F" },
-  { emoji = "🐉", name = "Drako", color = "#FF4D6D" },
-  { emoji = "🛸", name = "Skip", color = "#5CFFB0" },
+  { emoji = "🤖", name = "CLANK", color = "#00E5FF" },
+  { emoji = "👺", name = "Grimjaw", color = "#FF4D6D" },
+  { emoji = "🥸", name = "Maskara", color = "#E879F9" },
+  { emoji = "🤠", name = "Deputy Jax", color = "#F59E0B" },
+  { emoji = "🐵", name = "Noko", color = "#D97706" },
+  { emoji = "🐸", name = "Boggs", color = "#22C55E" },
+  { emoji = "🦊", name = "Vix", color = "#FF9E4F" },
+  { emoji = "👹", name = "Karn", color = "#EF4444" },
 }
 
 local function now_unix()

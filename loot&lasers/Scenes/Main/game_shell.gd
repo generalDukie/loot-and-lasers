@@ -45,6 +45,13 @@ var _activity_styles: Dictionary = {}
 var _page_swap_busy := false
 var _page_nav_pending := false
 var _page_swap_token := 0
+## Compiled PackedScenes — first `load()` compiles GDScript and is the hitch.
+var _packed_cache: Dictionary = {}
+## Live page instances kept across hops so revisits skip _build().
+var _page_instances: Dictionary = {}
+var _warm_queue: Array = []
+var _warmup_paused := false
+var _cached_character_id := ""
 
 const _WALLET_PANE_HEIGHT := 48.0
 const _WALLET_ICON_INSET := 3.0
@@ -83,6 +90,8 @@ func _ready() -> void:
 	if target.is_empty():
 		target = GameManager.SCENE_HUB
 	show_page(target)
+	_cached_character_id = str(GameManager.active_character.get("id", ""))
+	call_deferred("_begin_nav_warmup")
 	_ensure_tutorial_coach()
 	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_visibility_changed):
 		TutorialManager.tutorial_changed.connect(_on_tutorial_visibility_changed)
@@ -215,8 +224,17 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_refresh_chrome()
 
 
-func _on_active_character_changed(_character: Dictionary, _source: String) -> void:
+func _on_active_character_changed(character: Dictionary, _source: String) -> void:
 	_refresh_chrome()
+	var cid := str(character.get("id", ""))
+	if cid.is_empty() or cid == _cached_character_id:
+		return
+	var prev := _cached_character_id
+	_cached_character_id = cid
+	if not prev.is_empty():
+		_purge_parked_pages()
+		if _page != null and is_instance_valid(_page):
+			_refresh_kept_page(_page)
 
 
 func _notification(what: int) -> void:
@@ -413,7 +431,7 @@ func _make_top_chrome() -> Control:
 	var hub_sub := Label.new()
 	hub_sub.text = "Station Hub"
 	hub_sub.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	hub_sub.add_theme_font_size_override("font_size", 12)
+	hub_sub.add_theme_font_size_override("font_size", 16)
 	hub_sub.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.78))
 	hub_sub.add_theme_constant_override("line_spacing", -2)
 	ClientUi.apply_display_font(hub_sub)
@@ -466,7 +484,7 @@ func _make_top_chrome() -> Control:
 	_activity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_activity_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_activity_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_activity_label.add_theme_font_size_override("font_size", 13)
+	_activity_label.add_theme_font_size_override("font_size", 16)
 	_activity_label.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(_activity_label)
 	act_row.add_child(_activity_label)
@@ -668,7 +686,7 @@ func _make_rail() -> Control:
 			var name_lab := NavNeonLabel.new()
 			name_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			name_lab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			name_lab.configure(str(item.get("label", "")), tint, 20)
+			name_lab.configure(str(item.get("label", "")), tint, 22)
 			row.add_child(name_lab)
 
 			var entry := {
@@ -802,13 +820,13 @@ func _make_operative_panel() -> Control:
 
 	_operative_meta = Label.new()
 	_operative_meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_operative_meta.add_theme_font_size_override("font_size", 13)
+	_operative_meta.add_theme_font_size_override("font_size", 15)
 	_operative_meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	panel.add_child(_operative_meta)
 
 	_xp_label = Label.new()
 	_xp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_xp_label.add_theme_font_size_override("font_size", 12)
+	_xp_label.add_theme_font_size_override("font_size", 14)
 	_xp_label.add_theme_color_override("font_color", ClientUi.BRAND_GRAD_NEAR_WHITE)
 	panel.add_child(_xp_label)
 	_xp_bar = ProgressBar.new()
@@ -819,7 +837,7 @@ func _make_operative_panel() -> Control:
 
 	_operative_title = Label.new()
 	_operative_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_operative_title.add_theme_font_size_override("font_size", 12)
+	_operative_title.add_theme_font_size_override("font_size", 14)
 	_operative_title.add_theme_color_override("font_color", ClientUi.GOLD)
 	ClientUi.apply_display_font(_operative_title)
 	panel.add_child(_operative_title)
@@ -1121,6 +1139,7 @@ func show_page(path: String) -> void:
 		return
 
 	var nav_t0 := Time.get_ticks_msec()
+	_pause_nav_warmup()
 	_page_swap_busy = true
 	# Failsafe — never leave the shell permanently locked if a page script errors mid-mount.
 	_page_swap_token += 1
@@ -1146,50 +1165,60 @@ func show_page(path: String) -> void:
 			_page_nav_pending = false
 			return
 		clear_overlays()
+	var outgoing_path := _page_path
 	_page_path = path
 	GameManager.pending_page_path = path
 	ClientUi.apply_atmosphere_mood(_atmosphere, _mood_for_page(path))
 	_sync_hud_mood(_mood_for_page(path))
-	var outgoing_page: Node = null
 	if _page != null and is_instance_valid(_page):
 		var outgoing := _page
-		outgoing_page = outgoing
-		# Instant free — exit tweens stacked with page boots and made every hop feel sluggish.
-		outgoing.queue_free()
 		_page = null
-	var load_t0 := Time.get_ticks_msec()
-	var packed := load(path) as PackedScene
-	var load_ms := Time.get_ticks_msec() - load_t0
-	if packed == null:
-		push_error("Could not load shell page: %s" % path)
-		_page_swap_busy = false
-		return
-	_page = packed.instantiate()
-	# If the page script failed to compile, Godot still returns a bare Control.
-	# Leaving it full-rect + alpha 0 + MOUSE_FILTER_STOP freezes the whole shell.
-	var script_ok := true
-	if path == GameManager.SCENE_STATS:
-		script_ok = _page.has_method("_populate")
-	elif path == GameManager.SCENE_HUB:
-		script_ok = _page.has_method("_populate") and _page.has_method("_build")
-	elif path == GameManager.SCENE_CANTINA:
-		script_ok = _page.has_method("_render") and _page.has_method("_build")
-	elif path == GameManager.SCENE_SHOP:
-		script_ok = _page.has_method("_populate") and _page.has_method("_build")
-	if not script_ok:
-		push_error("Shell page script failed to load (%s) — refusing blank input blocker" % path)
-		_page.free()
-		_page = null
-		_page_path = ""
-		GameManager.current_page_path = ""
-		_page_swap_busy = false
-		_set_nav_buttons_enabled(true)
-		return
-	_content.add_child(_page)
-	# Park the fading page under the incoming one, then restack so the live page
-	# sits above flash/HUD for picking and under OverlayHost for battle sheets.
-	if outgoing_page != null and is_instance_valid(outgoing_page):
-		_content.move_child(outgoing_page, 0)
+		if _keeps_page(outgoing_path):
+			_park_page(outgoing)
+			_page_instances[outgoing_path] = outgoing
+		else:
+			_page_instances.erase(outgoing_path)
+			outgoing.queue_free()
+	var load_ms := 0
+	var restored := false
+	if _page_instances.has(path) and is_instance_valid(_page_instances[path]):
+		_page = _page_instances[path]
+		_unpark_page(_page)
+		restored = true
+	else:
+		var load_t0 := Time.get_ticks_msec()
+		var packed := _load_packed(path)
+		load_ms = Time.get_ticks_msec() - load_t0
+		if packed == null:
+			push_error("Could not load shell page: %s" % path)
+			_page_swap_busy = false
+			_schedule_nav_warmup_resume()
+			return
+		_page = packed.instantiate()
+		# If the page script failed to compile, Godot still returns a bare Control.
+		# Leaving it full-rect + alpha 0 + MOUSE_FILTER_STOP freezes the whole shell.
+		var script_ok := true
+		if path == GameManager.SCENE_STATS:
+			script_ok = _page.has_method("_populate")
+		elif path == GameManager.SCENE_HUB:
+			script_ok = _page.has_method("_populate") and _page.has_method("_build")
+		elif path == GameManager.SCENE_CANTINA:
+			script_ok = _page.has_method("_render") and _page.has_method("_build")
+		elif path == GameManager.SCENE_SHOP:
+			script_ok = _page.has_method("_populate") and _page.has_method("_build")
+		if not script_ok:
+			push_error("Shell page script failed to load (%s) — refusing blank input blocker" % path)
+			_page.free()
+			_page = null
+			_page_path = ""
+			GameManager.current_page_path = ""
+			_page_swap_busy = false
+			_set_nav_buttons_enabled(true)
+			_schedule_nav_warmup_resume()
+			return
+		_content.add_child(_page)
+		if _keeps_page(path):
+			_page_instances[path] = _page
 	_restack_content_layers()
 	_hero_page_open = path == GameManager.SCENE_STATS
 	if _page is Control:
@@ -1197,9 +1226,14 @@ func show_page(path: String) -> void:
 		page_control.mouse_filter = Control.MOUSE_FILTER_STOP
 		page_control.scale = Vector2.ONE
 		page_control.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-		page_control.modulate.a = 0.0
-		# Fit then enter in one deferred pass so they cannot race.
-		call_deferred("_fit_and_enter_page", page_control)
+		if restored:
+			page_control.modulate.a = 1.0
+			call_deferred("_fit_page_to_stage")
+			call_deferred("_refresh_kept_page", _page)
+		else:
+			page_control.modulate.a = 0.0
+			# Fit then enter in one deferred pass so they cannot race.
+			call_deferred("_fit_and_enter_page", page_control)
 	_update_nav_state()
 	_refresh_chrome()
 	_apply_console_portrait_mode()
@@ -1207,14 +1241,16 @@ func show_page(path: String) -> void:
 	# (Hero sheet boots with awaits; a hung refresh used to freeze the whole shell).
 	_page_swap_busy = false
 	_set_nav_buttons_enabled(true)
+	_schedule_nav_warmup_resume()
 	# Badge updates from Realtime + opening the notif dock; avoid GetNotifications on every hop.
 	_update_notif_badge()
 	call_deferred("_notify_tutorial_page_ready", path)
 	if NAV_TIMING_LOG:
-		print("[nav] path=%s load_ms=%d shell_ms=%d" % [
+		print("[nav] path=%s load_ms=%d shell_ms=%d cached=%s" % [
 			path.get_file(),
 			load_ms,
 			Time.get_ticks_msec() - nav_t0,
+			"1" if restored else "0",
 		])
 
 
@@ -1223,6 +1259,168 @@ func _notify_tutorial_page_ready(path: String) -> void:
 		return
 	GameManager.current_page_path = path
 	TutorialManager.notify_page_changed(path)
+
+
+func _keeps_page(path: String) -> bool:
+	if path.is_empty():
+		return false
+	return path not in [
+		GameManager.SCENE_MISSION_RUN,
+		GameManager.SCENE_MISSION_COMBAT,
+		GameManager.SCENE_ARENA_COMBAT,
+		GameManager.SCENE_GALAXY_COMBAT,
+	]
+
+
+func _load_packed(path: String) -> PackedScene:
+	if _packed_cache.has(path):
+		var hit: Variant = _packed_cache[path]
+		if hit is PackedScene:
+			return hit
+	var packed := load(path) as PackedScene
+	if packed != null:
+		_packed_cache[path] = packed
+	return packed
+
+
+func _park_page(page: Node) -> void:
+	if page == null or not is_instance_valid(page):
+		return
+	_stop_page_audio(page)
+	page.process_mode = Node.PROCESS_MODE_DISABLED
+	if page is Control:
+		var control := page as Control
+		control.visible = false
+		control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		control.modulate.a = 1.0
+
+
+func _unpark_page(page: Node) -> void:
+	if page == null or not is_instance_valid(page):
+		return
+	page.process_mode = Node.PROCESS_MODE_INHERIT
+	if page is Control:
+		var control := page as Control
+		control.visible = true
+		control.mouse_filter = Control.MOUSE_FILTER_STOP
+		control.modulate.a = 1.0
+		control.scale = Vector2.ONE
+		control.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+
+
+func _stop_page_audio(root: Node) -> void:
+	if root is AudioStreamPlayer:
+		(root as AudioStreamPlayer).stop()
+	elif root is AudioStreamPlayer2D:
+		(root as AudioStreamPlayer2D).stop()
+	for child in root.get_children():
+		_stop_page_audio(child)
+
+
+func _refresh_kept_page(page: Node) -> void:
+	if page == null or not is_instance_valid(page) or page != _page:
+		return
+	if page.has_method("on_shell_reshow"):
+		page.call("on_shell_reshow")
+		return
+	if page.has_method("_populate"):
+		page.call("_populate")
+	elif page.has_method("_render"):
+		page.call("_render")
+
+
+func _purge_parked_pages() -> void:
+	var live: Node = _page
+	for path in _page_instances.keys():
+		var parked: Variant = _page_instances[path]
+		if parked == live or not (parked is Node):
+			continue
+		var node := parked as Node
+		if is_instance_valid(node):
+			node.queue_free()
+	_page_instances.clear()
+	if live != null and is_instance_valid(live) and not _page_path.is_empty():
+		_page_instances[_page_path] = live
+
+
+func _begin_nav_warmup() -> void:
+	_warm_queue.clear()
+	var seen: Dictionary = {}
+	# Heavy first-open pages first so lingering on the hub precompiles them
+	# without blocking a click that already started.
+	var priority: Array = [
+		GameManager.SCENE_SHOP,
+		GameManager.SCENE_STATS,
+		GameManager.SCENE_CANTINA,
+		GameManager.SCENE_ARENA,
+	]
+	for path in priority:
+		var p := str(path)
+		if p.is_empty() or seen.has(p) or _is_ephemeral_or_missing(p):
+			continue
+		seen[p] = true
+		_warm_queue.append(p)
+	for group in _nav_groups():
+		if typeof(group) != TYPE_DICTIONARY:
+			continue
+		for item in group.get("items", []):
+			if typeof(item) != TYPE_DICTIONARY:
+				continue
+			var path := str(item.get("path", ""))
+			if path.is_empty() or seen.has(path) or _is_ephemeral_or_missing(path):
+				continue
+			seen[path] = true
+			_warm_queue.append(path)
+	for extra in [
+		GameManager.SCENE_HUB,
+		GameManager.SCENE_SETTINGS,
+		GameManager.SCENE_CRYSTAL_STORE,
+		GameManager.SCENE_COLLECTIBLES,
+		GameManager.SCENE_PROGRESS,
+		GameManager.SCENE_CODEX,
+		GameManager.SCENE_NOTIFICATIONS,
+	]:
+		if seen.has(extra) or _is_ephemeral_or_missing(extra):
+			continue
+		seen[extra] = true
+		_warm_queue.append(extra)
+	_warmup_paused = false
+	call_deferred("_warm_next_scene")
+
+
+func _is_ephemeral_or_missing(path: String) -> bool:
+	return path.is_empty() or not _keeps_page(path) or not ResourceLoader.exists(path)
+
+
+func _pause_nav_warmup() -> void:
+	_warmup_paused = true
+
+
+func _schedule_nav_warmup_resume() -> void:
+	_warmup_paused = false
+	if _warm_queue.is_empty() or not is_inside_tree():
+		return
+	var tree := get_tree()
+	if tree == null:
+		return
+	tree.create_timer(0.45).timeout.connect(_warm_next_scene, CONNECT_ONE_SHOT)
+
+
+func _warm_next_scene() -> void:
+	if not is_inside_tree() or _warmup_paused or _page_swap_busy:
+		return
+	while not _warm_queue.is_empty():
+		var path := str(_warm_queue.pop_front())
+		if path.is_empty() or _packed_cache.has(path):
+			continue
+		if not ResourceLoader.exists(path):
+			continue
+		var packed := load(path) as PackedScene
+		if packed != null:
+			_packed_cache[path] = packed
+		break
+	if not _warm_queue.is_empty() and not _warmup_paused and not _page_swap_busy:
+		call_deferred("_warm_next_scene")
 
 
 func _set_nav_buttons_enabled(enabled: bool) -> void:
@@ -1388,6 +1586,10 @@ func _restack_content_layers() -> void:
 		_content.move_child(_notif_dock, -1)
 	if _overlay_host != null and is_instance_valid(_overlay_host):
 		_content.move_child(_overlay_host, -1)
+	for path in _page_instances:
+		var parked: Variant = _page_instances[path]
+		if parked is Node and parked != _page and is_instance_valid(parked) and parked.get_parent() == _content:
+			_content.move_child(parked as Node, 0)
 
 
 func _build_notification_center() -> void:
@@ -1987,7 +2189,7 @@ func _refresh_chrome() -> void:
 		_set_activity_icon("ok", ClientUi.MUTED)
 		if is_instance_valid(_activity_label):
 			_activity_label.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
-			_activity_label.text = "Systems Nominal"
+			_activity_label.text = "Systems Normal"
 
 	var character := GameManager.active_character
 	if character.is_empty():
@@ -2051,7 +2253,7 @@ func _refresh_chrome() -> void:
 		class_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		class_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		portrait_btn.add_child(class_host)
-		var class_icon := ClassIcon.make(str(character.get("class", "Vanguard")), 72.0)
+		var class_icon := ClassIcon.make(str(character.get("class", "Vanguard")), 144.0)
 		class_icon.name = "ClassGlyph"
 		class_host.add_child(class_icon)
 		portrait_btn.pressed.connect(func() -> void:
@@ -2105,7 +2307,7 @@ func _apply_console_portrait_mode() -> void:
 		if glyph != null:
 			glyph.texture = ClassIcon.texture(class_key)
 			glyph.modulate = Color.WHITE
-			glyph.custom_minimum_size = Vector2(72, 72)
+			glyph.custom_minimum_size = Vector2(144, 144)
 	if portrait != null:
 		portrait.visible = not _hero_page_open
 		if portrait.has_method("set_active"):

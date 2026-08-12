@@ -166,7 +166,7 @@ func _build() -> void:
 	_body.scroll_active = false
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_body.add_theme_font_size_override("normal_font_size", 13)
+	_body.add_theme_font_size_override("normal_font_size", 19)
 	_body.add_theme_color_override("default_color", Color(CodexCatalog.FG))
 	ClientUi.apply_body_font(_body)
 	var display := ClientUi.display_font()

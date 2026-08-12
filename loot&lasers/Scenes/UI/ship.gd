@@ -130,7 +130,7 @@ func _populate() -> void:
 	for child in _currency_row.get_children():
 		child.queue_free()
 	_currency_row.add_child(ClientUi.make_currency_chip(
-		"✦",
+		"stardust",
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST),
 		STARDUST_COLOR
 	))
@@ -304,7 +304,7 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 		var inh := Label.new()
 		inh.text = inherent
 		inh.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		inh.add_theme_font_size_override("font_size", 15)
+		inh.add_theme_font_size_override("font_size", 18)
 		inh.add_theme_color_override("font_color", accent)
 		ClientUi.apply_body_font(inh)
 		col.add_child(inh)
@@ -314,7 +314,7 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 		mods_n += ShipRules.installed_tier_count(ch, cat, active)
 	var meta := Label.new()
 	meta.text = "%s mod%s installed on this hull" % [str(mods_n), "" if mods_n == 1 else "s"]
-	meta.add_theme_font_size_override("font_size", 16)
+	meta.add_theme_font_size_override("font_size", 19)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)
 	col.add_child(meta)
@@ -333,8 +333,9 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 	fuel_bar.custom_minimum_size = Vector2(0, 11)
 	ClientUi.apply_hp_bar(fuel_bar, FUEL_COLOR)
 	fuel_row.add_child(fuel_bar)
+	fuel_row.add_child(CurrencyIcon.make("fuel", 14.0))
 	var fuel_lab := Label.new()
-	fuel_lab.text = "%s/%s ⛽" % [str(fuel), str(max_fuel)]
+	fuel_lab.text = "%s/%s" % [str(fuel), str(max_fuel)]
 	fuel_lab.add_theme_font_size_override("font_size", 13)
 	fuel_lab.add_theme_color_override("font_color", FUEL_COLOR)
 	ClientUi.apply_display_font(fuel_lab)
@@ -457,7 +458,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		var inh := Label.new()
 		inh.text = ("Teaser · %s" % inherent) if locked else inherent
 		inh.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		inh.add_theme_font_size_override("font_size", 13)
+		inh.add_theme_font_size_override("font_size", 17)
 		inh.add_theme_color_override("font_color", Color(accent, 0.7) if locked else accent)
 		ClientUi.apply_body_font(inh)
 		title_col.add_child(inh)
@@ -465,7 +466,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	if ship_id == "scout":
 		var mile: Dictionary = ShipRules.scout_milestone_status(ch)
 		var mile_lab := Label.new()
-		mile_lab.add_theme_font_size_override("font_size", 12)
+		mile_lab.add_theme_font_size_override("font_size", 16)
 		ClientUi.apply_body_font(mile_lab)
 		if bool(mile.get("claimed", false)):
 			mile_lab.text = "Bay tuned · free Fuel Tank T1"
@@ -484,7 +485,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	if active:
 		var badge := Label.new()
 		badge.text = "ACTIVE"
-		badge.add_theme_font_size_override("font_size", 13)
+		badge.add_theme_font_size_override("font_size", 17)
 		badge.add_theme_color_override("font_color", ClientUi.CYAN)
 		ClientUi.apply_display_font(badge)
 		top.add_child(badge)
@@ -505,7 +506,7 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 	var desc := Label.new()
 	desc.text = str(info.get("desc", ""))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.add_theme_font_size_override("font_size", 16)
+	desc.add_theme_font_size_override("font_size", 19)
 	desc.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.85) if locked else ClientUi.MUTED)
 	ClientUi.apply_body_font(desc)
 	col.add_child(desc)
@@ -516,13 +517,13 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		var left := Label.new()
 		left.text = "Bay reserved"
 		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		left.add_theme_font_size_override("font_size", 12)
+		left.add_theme_font_size_override("font_size", 16)
 		left.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(left)
 		prog_row.add_child(left)
 		var right := Label.new()
 		right.text = "%s / %s · %s lvl left" % [level, unlock, maxi(0, unlock - level)]
-		right.add_theme_font_size_override("font_size", 12)
+		right.add_theme_font_size_override("font_size", 16)
 		right.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(right)
 		prog_row.add_child(right)
@@ -627,7 +628,7 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 	var desc := Label.new()
 	desc.text = str(cat.get("desc", ""))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.add_theme_font_size_override("font_size", 15)
+	desc.add_theme_font_size_override("font_size", 19)
 	desc.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(desc)
 	col.add_child(desc)
@@ -672,7 +673,7 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 		var next_lab := Label.new()
 		next_lab.text = ShipRules.tier_effect_label(next, _edit_ship)
 		next_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		next_lab.add_theme_font_size_override("font_size", 15)
+		next_lab.add_theme_font_size_override("font_size", 18)
 		next_lab.add_theme_color_override("font_color", ClientUi.TEXT)
 		ClientUi.apply_body_font(next_lab)
 		next_col.add_child(next_lab)
@@ -681,7 +682,7 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 		var buy := Button.new()
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-			buy.text = "  %s ✦" % cost
+			buy.text = "  %s" % cost
 			buy.icon = UiIcon.texture("lock")
 			buy.expand_icon = true
 			buy.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -692,8 +693,9 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 			UiIcon.apply_button_icon_colors(buy, Color(ClientUi.MUTED))
 			buy.disabled = true
 		else:
-			buy.text = "Install · %s ✦" % cost
+			buy.text = "Install · %s" % cost
 			ClientUi.apply_primary_button(buy)
+			CurrencyIcon.apply_stardust_button_cost(buy, 16.0)
 		buy.pressed.connect(func() -> void: _on_buy_mod(category, cost))
 		col.add_child(buy)
 	return panel
@@ -715,9 +717,10 @@ func _make_fuel_section(ch: Dictionary) -> PanelContainer:
 	var toggle := Button.new()
 	toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var active_badge := " · active" if mounts_active else ""
-	toggle.text = "⛽  Fuel Mounts%s\nTemporary mission speed — optional" % active_badge
+	toggle.text = " Fuel Mounts%s\nTemporary mission speed — optional" % active_badge
 	ClientUi.apply_ghost_button(toggle)
 	toggle.add_theme_font_size_override("font_size", 16)
+	CurrencyIcon.apply_button_cost(toggle, 16.0, "fuel")
 	toggle.pressed.connect(func() -> void:
 		_fuel_open = not _fuel_open
 		_populate()
@@ -730,7 +733,7 @@ func _make_fuel_section(ch: Dictionary) -> PanelContainer:
 	var tip := Label.new()
 	tip.text = "Temporary only — extends the timer (up to %s×). Speed does not stack; strongest mount wins." % ShipRules.MAX_FUEL_STACK
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tip.add_theme_font_size_override("font_size", 13)
+	tip.add_theme_font_size_override("font_size", 17)
 	tip.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tip)
 	col.add_child(tip)
@@ -774,7 +777,7 @@ func _make_active_mount_row(mount: Dictionary) -> PanelContainer:
 	var detail := Label.new()
 	var rem_s := _mount_remaining_seconds(str(mount.get("expires_at", "")))
 	detail.text = "Expires in %s" % MissionBoard.format_duration(rem_s)
-	detail.add_theme_font_size_override("font_size", 15)
+	detail.add_theme_font_size_override("font_size", 19)
 	detail.add_theme_color_override("font_color", Color(0.75, 0.8, 0.7))
 	col.add_child(detail)
 	var dismiss := Button.new()
@@ -806,10 +809,7 @@ func _make_mount_card(mount: Dictionary) -> PanelContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	panel.add_child(row)
-	var icon := Label.new()
-	icon.text = "⛽"
-	icon.add_theme_font_size_override("font_size", 24)
-	row.add_child(icon)
+	row.add_child(CurrencyIcon.make("fuel", 24.0))
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(col)
@@ -819,7 +819,7 @@ func _make_mount_card(mount: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
 	var detail := Label.new()
-	var price := "%s ✦" % str(mount.get("stardust", 0))
+	var price := "%s Stardust" % str(mount.get("stardust", 0))
 	if int(mount.get("crystals", 0)) > 0:
 		price += " + %s Nova" % str(mount.get("crystals", 0))
 	detail.text = "+%s%% speed · %sh · %s" % [
@@ -827,7 +827,7 @@ func _make_mount_card(mount: Dictionary) -> PanelContainer:
 		str(mount.get("duration_hours", 1)),
 		price,
 	]
-	detail.add_theme_font_size_override("font_size", 13)
+	detail.add_theme_font_size_override("font_size", 17)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(detail)
 	col.add_child(detail)
@@ -868,7 +868,7 @@ func _on_buy_mod(category: String, cost: int) -> void:
 	if _busy:
 		return
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		Notify.blocked("Not enough Stardust", "Need %s ✦" % cost)
+		Notify.blocked("Not enough Stardust", "Need %s Stardust" % cost)
 		return
 	_busy = true
 	_set_status("Installing mod…")

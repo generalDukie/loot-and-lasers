@@ -24,7 +24,7 @@ const SECTIONS: Array = [
 
 
 static func _h(text: String) -> String:
-	return "[font_size=11][color=%s][b]%s[/b][/color][/font_size]\n" % [MUTED, text.to_upper()]
+	return "[font_size=14][color=%s][b]%s[/b][/color][/font_size]\n" % [MUTED, text.to_upper()]
 
 
 static func _p(text: String) -> String:
@@ -36,7 +36,7 @@ static func _li(text: String) -> String:
 
 
 static func _tip(text: String) -> String:
-	return "\n[font_size=11][i][color=%s]%s[/color][/i][/font_size]" % [MUTED, text]
+	return "\n[font_size=14][i][color=%s]%s[/color][/i][/font_size]" % [MUTED, text]
 
 
 static func _brand(text: String) -> String:
@@ -48,11 +48,11 @@ static func _amber(text: String) -> String:
 
 
 static func _fuel(text: String = "fuel") -> String:
-	return "[color=%s]⛽ %s[/color]" % [FUEL, text]
+	return "[color=%s][b]%s[/b][/color]" % [FUEL, text]
 
 
 static func _stardust_h() -> String:
-	return "[font_size=11][color=%s][b]✦ STARDUST[/b][/color][/font_size]\n" % STARDUST
+	return "[font_size=14][color=%s][b]STARDUST[/b][/color][/font_size]\n" % STARDUST
 
 
 static func body_bbcode(section_id: String) -> String:
@@ -79,7 +79,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas (%s Nova Crystals per arena battle after free fights). Frontier cooldown skip costs %s Nova Crystals." % [
 					str(ArenaRules.PAID_BATTLE_COST), str(DungeonRules.SKIP_COST)
 				])
-				+ "[font_size=11]%s[/font_size]\n" % _fuel("FUEL")
+				+ "[font_size=14]%s[/font_size]\n" % _fuel("FUEL")
 				+ _p("Your mission energy. Each mission costs fuel based on its length. You get a pool of 100 that [b]resets to full every 24 hours[/b]. Need more sooner? Spend [b]%s Nova Crystals[/b] to buy +%s fuel, up to [b]%s times[/b] per cycle." % [
 					str(ShopManager.FUEL_PURCHASE_COST),
 					str(ShopManager.FUEL_PURCHASE_AMOUNT),
@@ -137,7 +137,7 @@ static func body_bbcode(section_id: String) -> String:
 			)
 		"market":
 			return (
-				_p("The [b]Black Market[/b] sells rotating gear and stims for ✦ stardust. Stock usually includes a class signature weapon.")
+				_p("The [b]Black Market[/b] sells rotating gear and stims for stardust. Stock usually includes a class signature weapon.")
 				+ _h("Stalls")
 				+ _li("Stock refreshes on a timed window. Spend [b]%s Nova Crystals[/b] to restock early." % str(ShopManager.SHOP_REFRESH_COST))
 				+ _li("Compare listed gear to what you have equipped before buying.")
@@ -148,7 +148,7 @@ static func body_bbcode(section_id: String) -> String:
 			)
 		"blackhole":
 			return (
-				_p("The [b]Void[/b] recycles gear you no longer need. Dissolve an item and it turns into ✦ stardust — same payout whether you do it here or from your inventory.")
+				_p("The [b]Void[/b] recycles gear you no longer need. Dissolve an item and it turns into stardust — same payout whether you do it here or from your inventory.")
 				+ _li("Only [b]unequipped[/b] items can be dissolved.")
 				+ _li("Yield scales with the item's [b]rarity[/b], [b]stats[/b], and [b]level requirement[/b], plus a per-type weight (weapons & ship modules dissolve for more).")
 				+ _li("It's the smart move for gear that's weaker than what you've equipped.")

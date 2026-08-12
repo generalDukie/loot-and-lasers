@@ -41,8 +41,16 @@ func _ready() -> void:
 	_build()
 	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
 		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
+	_populate()
 	await _boot()
 	_sync_view_rewards_cta()
+
+
+func on_shell_reshow() -> void:
+	_populate()
+	_sync_view_rewards_cta()
+	if _tick == null or not is_instance_valid(_tick):
+		call_deferred("_boot")
 
 
 func _on_combat_return_changed() -> void:
@@ -53,6 +61,8 @@ func _boot() -> void:
 	_status.text = "Syncing frontier…"
 	await MissionManager.refresh_character()
 	var res: Dictionary = await DungeonManager.sync_state()
+	if not is_inside_tree() or not visible:
+		return
 	if not res.ok:
 		_status.text = str(res.get("error", "SyncDungeonState failed"))
 	else:
@@ -62,6 +72,8 @@ func _boot() -> void:
 	DungeonManager.selected_planet_id = active
 	DungeonManager.viewing_wormhole = in_infinite
 	_populate()
+	if _tick != null and is_instance_valid(_tick):
+		return
 	_tick = Timer.new()
 	_tick.wait_time = 1.0
 	_tick.timeout.connect(_populate_meta)
@@ -105,7 +117,7 @@ func _build() -> void:
 	var title_row := UiIcon.make_title_row("satellite", "Galactic Frontier", ClientUi.CYAN, 32, 29.0)
 	head_l.add_child(title_row)
 	_subtitle = Label.new()
-	_subtitle.add_theme_font_size_override("font_size", 15)
+	_subtitle.add_theme_font_size_override("font_size", 19)
 	_subtitle.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_subtitle)
 	head_l.add_child(_subtitle)
@@ -162,7 +174,7 @@ func _build() -> void:
 	_map_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_map_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_map_hint.z_index = 5
-	_map_hint.add_theme_font_size_override("font_size", 15)
+	_map_hint.add_theme_font_size_override("font_size", 19)
 	_map_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_body_font(_map_hint)
 	_map_hint.text = "Worlds 1–10 spiral into the Wormhole. Tap your current world to inspect its lore."
@@ -237,7 +249,7 @@ func _build() -> void:
 	head_row.add_child(head_col)
 
 	_detail_sector = Label.new()
-	_detail_sector.add_theme_font_size_override("font_size", 13)
+	_detail_sector.add_theme_font_size_override("font_size", 17)
 	_detail_sector.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(_detail_sector)
 	head_col.add_child(_detail_sector)
@@ -257,7 +269,7 @@ func _build() -> void:
 	_detail_boss_lab = Label.new()
 	_detail_boss_lab.clip_text = true
 	_detail_boss_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_detail_boss_lab.add_theme_font_size_override("font_size", 16)
+	_detail_boss_lab.add_theme_font_size_override("font_size", 19)
 	_detail_boss_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(_detail_boss_lab)
 	_detail_boss.add_child(_detail_boss_lab)
@@ -267,7 +279,7 @@ func _build() -> void:
 	head_row.add_child(cleared_col)
 	_detail_cleared_lab = Label.new()
 	_detail_cleared_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_detail_cleared_lab.add_theme_font_size_override("font_size", 13)
+	_detail_cleared_lab.add_theme_font_size_override("font_size", 17)
 	_detail_cleared_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(_detail_cleared_lab)
 	cleared_col.add_child(_detail_cleared_lab)
@@ -289,7 +301,7 @@ func _build() -> void:
 	_detail_desc.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_detail_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail_desc.max_lines_visible = 2
-	_detail_desc.add_theme_font_size_override("font_size", 17)
+	_detail_desc.add_theme_font_size_override("font_size", 19)
 	_detail_desc.add_theme_color_override("font_color", Color(0.82, 0.86, 0.92, 0.95))
 	ClientUi.apply_body_font(_detail_desc)
 	dcol.add_child(_detail_desc)
@@ -307,7 +319,7 @@ func _build() -> void:
 	_mode_label = Label.new()
 	_mode_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_mode_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_mode_label.add_theme_font_size_override("font_size", 15)
+	_mode_label.add_theme_font_size_override("font_size", 19)
 	_mode_label.add_theme_color_override("font_color", Color("#FEF3C7", 0.92))
 	ClientUi.apply_body_font(_mode_label)
 	mode_row.add_child(_mode_label)

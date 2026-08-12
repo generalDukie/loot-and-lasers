@@ -19,10 +19,19 @@ var _elapsed := 0.0
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	grow_horizontal = Control.GROW_DIRECTION_BOTH
+	grow_vertical = Control.GROW_DIRECTION_BOTH
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	clip_contents = true
+	clip_contents = false
+	z_as_relative = false
 	set_process(true)
 	resized.connect(queue_redraw)
+	call_deferred("_ensure_full_rect")
+
+
+func _ensure_full_rect() -> void:
+	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	queue_redraw()
 
 
 func set_active(on: bool) -> void:

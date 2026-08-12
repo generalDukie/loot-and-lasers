@@ -131,7 +131,7 @@ func _ensure_overlays() -> void:
 	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hero.add_child(title_col)
 	_lore_sector = Label.new()
-	_lore_sector.add_theme_font_size_override("font_size", 13)
+	_lore_sector.add_theme_font_size_override("font_size", 17)
 	ClientUi.apply_display_font(_lore_sector)
 	title_col.add_child(_lore_sector)
 	_lore_title = Label.new()
@@ -143,7 +143,7 @@ func _ensure_overlays() -> void:
 	_lore_body = Label.new()
 	_lore_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_lore_body.max_lines_visible = 5
-	_lore_body.add_theme_font_size_override("font_size", 17)
+	_lore_body.add_theme_font_size_override("font_size", 19)
 	_lore_body.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(_lore_body)
 	lore_col.add_child(_lore_body)
@@ -156,13 +156,13 @@ func _ensure_overlays() -> void:
 	_lore_boss.add_child(_lore_boss_icon)
 	_lore_boss_lab = Label.new()
 	_lore_boss_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_lore_boss_lab.add_theme_font_size_override("font_size", 15)
+	_lore_boss_lab.add_theme_font_size_override("font_size", 18)
 	ClientUi.apply_display_font(_lore_boss_lab)
 	_lore_boss.add_child(_lore_boss_lab)
 
 	var hint := Label.new()
 	hint.text = "Tap empty space or Esc to pull back"
-	hint.add_theme_font_size_override("font_size", 13)
+	hint.add_theme_font_size_override("font_size", 17)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(hint)
 	lore_col.add_child(hint)
@@ -795,23 +795,26 @@ func _draw_planet_fx(side: float, offset: Vector2) -> void:
 		elif pid == story_front:
 			state = "HERE · TAP"
 		var title := "%s. %s" % [pid, str(planet.get("name", ""))]
+		var font: Font = ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font
+		var title_w := maxf(104.0, font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x)
 		draw_string(
-			ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font,
-			label_pos + Vector2(-34, 2),
+			font,
+			label_pos + Vector2(-title_w * 0.5, 2),
 			title,
 			HORIZONTAL_ALIGNMENT_CENTER,
-			68,
-			9,
+			title_w,
+			14,
 			Color(tint, 0.95) if not locked else Color(0.46, 0.47, 0.52, 0.75)
 		)
 		if not state.is_empty():
+			var state_w := maxf(88.0, font.get_string_size(state, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x)
 			draw_string(
-				ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font,
-				label_pos + Vector2(-30, 13),
+				font,
+				label_pos + Vector2(-state_w * 0.5, 18),
 				state,
 				HORIZONTAL_ALIGNMENT_CENTER,
-				60,
-				7,
+				state_w,
+				11,
 				(Color(ClientUi.SUCCESS, 0.85) if state == "CLEARED" else Color(ClientUi.CYAN_SOFT, 0.7))
 				if not locked else Color(ClientUi.MUTED, 0.55)
 			)
@@ -895,34 +898,38 @@ func _draw_wormhole(side: float, offset: Vector2) -> void:
 				Color(0.9, 0.85, 1.0)
 			)
 	if _zoom_id == ZOOM_NONE:
+		var font: Font = ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font
 		var label := "WORMHOLE · DEPTH %s" % maxi(1, active - 10) if unlocked else "WORMHOLE SEALED"
+		var label_w := maxf(200.0, font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x)
 		draw_string(
-			ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font,
-			center + Vector2(-72, 58),
+			font,
+			center + Vector2(-label_w * 0.5, 60),
 			label,
 			HORIZONTAL_ALIGNMENT_CENTER,
-			144,
-			10,
+			label_w,
+			14,
 			Color(base, 0.95 if unlocked else 0.55)
 		)
 		if unlocked and DungeonManager.viewing_wormhole:
+			var enter_w := maxf(72.0, font.get_string_size("ENTER", HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x)
 			draw_string(
-				ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font,
-				center + Vector2(-24, 72),
+				font,
+				center + Vector2(-enter_w * 0.5, 78),
 				"ENTER",
 				HORIZONTAL_ALIGNMENT_CENTER,
-				48,
-				9,
+				enter_w,
+				12,
 				WORMHOLE_CYAN
 			)
 		elif not unlocked:
+			var sealed_w := maxf(140.0, font.get_string_size("Clear World Zero", HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x)
 			draw_string(
-				ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font,
-				center + Vector2(-48, 72),
+				font,
+				center + Vector2(-sealed_w * 0.5, 78),
 				"Clear World Zero",
 				HORIZONTAL_ALIGNMENT_CENTER,
-				96,
-				8,
+				sealed_w,
+				11,
 				Color(ClientUi.MUTED, 0.7)
 			)
 

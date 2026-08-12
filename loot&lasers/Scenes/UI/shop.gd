@@ -37,6 +37,7 @@ var _bag_items: Array = []
 var _sell_stage: Array = []
 var _sell_btn: Button
 var _busy := false
+var _booting := false
 var _busy_slot := ""
 var _tick: Timer
 var _win_idx := -1
@@ -52,6 +53,28 @@ func _ready() -> void:
 	_build()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
+	if not ShopManager.shop_window.is_empty():
+		_win_idx = int(_shop_window().get("idx", 0))
+		_populate()
+	else:
+		_set_status("Opening Black Market…")
+	call_deferred("_start_boot")
+
+
+func on_shell_reshow() -> void:
+	_update_meta()
+	if not ShopManager.shop_window.is_empty():
+		_populate()
+	elif not _booting:
+		_set_status("Opening Black Market…")
+	if _busy or _booting:
+		return
+	call_deferred("_start_boot")
+
+
+func _start_boot() -> void:
+	if not is_inside_tree() or not is_instance_valid(self):
+		return
 	await _boot()
 
 
@@ -60,13 +83,25 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 
 
 func _boot() -> void:
+	if _booting:
+		return
+	_booting = true
 	_set_status("Opening Black Market…")
-	await MissionManager.refresh_character()
-	await _load_bag_items()
-	await _load_equipped()
 	var res: Dictionary = await ShopManager.ensure_shop()
+	if not is_inside_tree() or not is_instance_valid(self):
+		_booting = false
+		return
 	if not res.ok:
 		_set_status(str(res.get("error", "EnsureShop failed")))
+	else:
+		_win_idx = int(_shop_window().get("idx", 0))
+		_populate()
+	await MissionManager.refresh_character()
+	await _load_bag_items()
+	_load_equipped()
+	_booting = false
+	if not is_inside_tree() or not visible:
+		return
 	_win_idx = int(_shop_window().get("idx", 0))
 	_populate()
 
@@ -233,7 +268,7 @@ func _offline_panel() -> VBoxContainer:
 	sub.text = "Could not load bazaar stock. Restart the game API and retry."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sub.add_theme_font_size_override("font_size", 16)
+	sub.add_theme_font_size_override("font_size", 19)
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(sub)
 	var retry := Button.new()
@@ -256,6 +291,20 @@ func _update_meta() -> void:
 	var seed := int(win.get("idx", 0)) * 17 + day.length() * 3
 	_vendor.text = "“%s”" % GameData.get_vendor_line(seed)
 
+	var countdown := GameData.format_shop_countdown(_seconds_left())
+	# Prefer in-place updates so the tutorial-tagged refresh chip isn't destroyed
+	# every tick (which used to kill coach highlight tweens).
+	if _currency_row.get_child_count() >= 3:
+		var nova_chip := _currency_row.get_child(0)
+		var sd_chip := _currency_row.get_child(1)
+		var refresh_chip := _currency_row.get_child(2)
+		_set_currency_chip_amount(nova_chip, str(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)))
+		_set_currency_chip_amount(sd_chip, str(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)))
+		_set_currency_chip_amount(refresh_chip, "⏱  %s" % countdown)
+		if refresh_chip is Control:
+			TutorialManager.tag_target(refresh_chip as Control, "shop-refresh-timer")
+		return
+
 	for child in _currency_row.get_children():
 		child.queue_free()
 	# Web header chips: Nova (amber) · Stardust · shop-window clock
@@ -265,17 +314,38 @@ func _update_meta() -> void:
 		Color("#FFD700")
 	))
 	_currency_row.add_child(ClientUi.make_currency_chip(
-		"✦",
+		"stardust",
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST),
 		GameData.STARDUST_COLOR
 	))
 	var refresh_chip := ClientUi.make_currency_chip(
 		"⏱",
-		GameData.format_shop_countdown(_seconds_left()),
+		countdown,
 		ClientUi.CYAN
 	)
 	TutorialManager.tag_target(refresh_chip, "shop-refresh-timer")
 	_currency_row.add_child(refresh_chip)
+
+
+func _set_currency_chip_amount(chip: Node, text: String) -> void:
+	if chip == null or not is_instance_valid(chip) or not (chip is Control):
+		return
+	var amount := _find_chip_amount_label(chip as Control)
+	if amount != null:
+		amount.text = text
+
+
+func _find_chip_amount_label(root: Control) -> Label:
+	if root is Label:
+		return root as Label
+	for c in root.get_children():
+		if c is Label:
+			return c as Label
+		if c is Control:
+			var nested := _find_chip_amount_label(c as Control)
+			if nested != null:
+				return nested
+	return null
 
 
 func _seconds_left() -> int:
@@ -322,7 +392,7 @@ func _make_hot_banner(item: Dictionary) -> PanelContainer:
 		var overlay := Label.new()
 		overlay.text = "YANKED TODAY" if yanked else "CLAIMED TODAY"
 		overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		overlay.add_theme_font_size_override("font_size", 16)
+		overlay.add_theme_font_size_override("font_size", 19)
 		overlay.add_theme_color_override("font_color", ClientUi.MUTED)
 		ClientUi.apply_display_font(overlay)
 		col.add_child(overlay)
@@ -360,9 +430,37 @@ func _make_market_section() -> PanelContainer:
 	head_col.add_child(h)
 
 	var restock := Button.new()
-	restock.text = "Restock · %s" % ShopManager.SHOP_REFRESH_COST
-	CurrencyIcon.apply_button_cost(restock, 16.0)
+	restock.text = ""
+	restock.icon = null
+	restock.clip_contents = true
+	restock.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_apply_restock_btn(restock, Color("#FFD700"))
+	var restock_pad := MarginContainer.new()
+	restock_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	restock_pad.add_theme_constant_override("margin_left", 12)
+	restock_pad.add_theme_constant_override("margin_right", 12)
+	restock_pad.add_theme_constant_override("margin_top", 6)
+	restock_pad.add_theme_constant_override("margin_bottom", 6)
+	restock.add_child(restock_pad)
+	var restock_row := HBoxContainer.new()
+	restock_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	restock_row.add_theme_constant_override("separation", 6)
+	restock_pad.add_child(restock_row)
+	var restock_lab := Label.new()
+	restock_lab.text = "Restock · %s" % ShopManager.SHOP_REFRESH_COST
+	restock_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	restock_lab.add_theme_font_size_override("font_size", 13)
+	restock_lab.add_theme_color_override("font_color", Color("#FFD700"))
+	ClientUi.apply_display_font(restock_lab)
+	restock_row.add_child(restock_lab)
+	var restock_nova := CurrencyIcon.make("nova", 16.0)
+	restock_nova.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_row.add_child(restock_nova)
+	var restock_min := restock_row.get_combined_minimum_size() + Vector2(24.0, 12.0)
+	restock.custom_minimum_size = Vector2(ceili(restock_min.x), ceili(maxi(restock_min.y, 32.0)))
 	restock.pressed.connect(func() -> void: _on_refresh("all"))
 	TutorialManager.tag_target(restock, "shop-restock")
 	head.add_child(restock)
@@ -379,14 +477,23 @@ func _make_market_section() -> PanelContainer:
 	if stock.is_empty():
 		grid.add_child(_empty_line("No stock."))
 	else:
-		var tutorial_stim_tagged := false
+		var stim_slot_ids: Array = []
 		for item in stock:
 			if typeof(item) != TYPE_DICTIONARY:
 				continue
 			if ShopManager.is_stim_slot(item):
-				var tag_stim := not tutorial_stim_tagged
-				if tag_stim:
-					tutorial_stim_tagged = true
+				var sid := str(item.get("_slotId", "")).strip_edges()
+				if not sid.is_empty():
+					stim_slot_ids.append(sid)
+		var locked_stim := ""
+		if TutorialManager.should_show() and TutorialManager.step_id() == "shop_market":
+			locked_stim = TutorialManager.lock_shop_tutorial_stim(stim_slot_ids)
+		for item in stock:
+			if typeof(item) != TYPE_DICTIONARY:
+				continue
+			if ShopManager.is_stim_slot(item):
+				var sid := str(item.get("_slotId", "")).strip_edges()
+				var tag_stim := not locked_stim.is_empty() and sid == locked_stim
 				grid.add_child(_make_cons_card(item, tag_stim))
 			else:
 				var rarity := str(item.get("rarity", "common"))
@@ -397,20 +504,31 @@ func _make_market_section() -> PanelContainer:
 func _apply_restock_btn(btn: Button, accent: Color) -> void:
 	ClientUi.apply_display_font(btn)
 	btn.add_theme_font_size_override("font_size", 13)
-	btn.add_theme_stylebox_override("normal", ClientUi.button_style(
+	var idle := ClientUi.button_style(
 		Color(accent.r, accent.g, accent.b, 0.15), Color(accent.r, accent.g, accent.b, 0.35)
-	))
-	btn.add_theme_stylebox_override("hover", ClientUi.button_style(
+	)
+	var hover := ClientUi.button_style(
 		Color(accent.r, accent.g, accent.b, 0.25), Color(accent.r, accent.g, accent.b, 0.5)
-	))
+	)
+	var pressed := ClientUi.button_style(
+		Color(accent.r, accent.g, accent.b, 0.32), Color(accent.r, accent.g, accent.b, 0.65)
+	)
+	btn.add_theme_stylebox_override("normal", idle)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", hover)
+	btn.add_theme_stylebox_override("disabled", idle)
 	btn.add_theme_color_override("font_color", accent)
+	btn.add_theme_color_override("font_hover_color", accent)
+	btn.add_theme_color_override("font_pressed_color", accent)
+	btn.add_theme_color_override("font_focus_color", accent)
 	ClientUi.apply_interaction_motion(btn)
 
 
 func _empty_line(text: String) -> Label:
 	var lab := Label.new()
 	lab.text = text
-	lab.add_theme_font_size_override("font_size", 16)
+	lab.add_theme_font_size_override("font_size", 19)
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	return lab
 
@@ -521,12 +639,8 @@ func _make_cons_card(item: Dictionary, tutorial_stim := false) -> PanelContainer
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
 		col.add_child(row)
-		var price := Label.new()
-		price.text = "✦ %s" % cost
+		var price := CurrencyIcon.make_stardust_amount_row(cost, 16.0, STALL_PRICE_FS)
 		price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		price.add_theme_font_size_override("font_size", STALL_PRICE_FS)
-		price.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
-		ClientUi.apply_display_font(price)
 		row.add_child(price)
 		var buy := Button.new()
 		buy.text = "Open" if is_trio else "Buy"
@@ -558,9 +672,9 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 
 	var item_type := str(item.get("type", ""))
 	var stall := not is_hot
-	var title_fs := STALL_TITLE_FS if stall else 16
-	var sub_fs := STALL_SUB_FS if stall else 12
-	var body_fs := STALL_BODY_FS if stall else 15
+	var title_fs := STALL_TITLE_FS if stall else 18
+	var sub_fs := STALL_SUB_FS if stall else 16
+	var body_fs := STALL_BODY_FS if stall else 18
 	var sep := STALL_SEP if stall else 4
 	var top_sep := STALL_TOP_SEP if stall else 8
 	var gear_icon := STALL_GEAR_ICON if stall else 36.0
@@ -614,7 +728,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		var flavor := Label.new()
 		flavor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		flavor.text = str(item.get("flavor_text", "Crate"))
-		flavor.add_theme_font_size_override("font_size", STALL_SUB_FS if stall else 13)
+		flavor.add_theme_font_size_override("font_size", STALL_SUB_FS if stall else 17)
 		flavor.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(flavor)
 	else:
@@ -743,12 +857,7 @@ func _gear_actions(
 	var price_fs := STALL_PRICE_FS if stall else 16
 	var nova_fs := STALL_BODY_FS if stall else 15
 	var btn_fs := STALL_BTN_FS if stall else 15
-	var price := Label.new()
-	price.text = "✦ %s" % cost
-	price.add_theme_font_size_override("font_size", price_fs)
-	price.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
-	ClientUi.apply_display_font(price)
-	price_col.add_child(price)
+	price_col.add_child(CurrencyIcon.make_stardust_amount_row(cost, 16.0, price_fs))
 	if nova > 0:
 		price_col.add_child(CurrencyIcon.make_amount_row(
 			nova, 14.0, CurrencyIcon.NOVA_GOLD, nova_fs
@@ -814,7 +923,7 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 		return
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		Notify.blocked("Not enough Stardust", "Need %s ✦ — you have %s" % [cost, sd])
+		Notify.blocked("Not enough Stardust", "Need %s — you have %s" % [cost, sd])
 		return
 	_busy = true
 	_busy_slot = slot_id
@@ -839,7 +948,7 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	# Client affordability check is UX only — Node recalculates / haggles authoritatively.
 	if not haggle and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		Notify.blocked("Not enough Stardust", "Need %s ✦ — you have %s" % [cost, sd])
+		Notify.blocked("Not enough Stardust", "Need %s — you have %s" % [cost, sd])
 		return
 	if nova > 0 and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, nova):
 		Notify.blocked("Not enough Nova Crystals", "Need %s Nova" % nova)
@@ -876,7 +985,7 @@ func _purchase_msg(purchase: Dictionary, fallback: String) -> String:
 	var nova_cost := int(purchase.get("nova_cost", 0))
 	var parts: PackedStringArray = [fallback]
 	if cost > 0:
-		parts.append("−%s ✦" % cost)
+		parts.append("−%s Stardust" % cost)
 	if nova_cost > 0:
 		parts.append("−%s Nova" % nova_cost)
 	if typeof(pending) == TYPE_ARRAY and (pending as Array).size() > 0:
@@ -919,7 +1028,7 @@ func _make_sell_section() -> VBoxContainer:
 
 	var bag_hint := Label.new()
 	bag_hint.text = "Bag — click or drag gear into the tray"
-	bag_hint.add_theme_font_size_override("font_size", 12)
+	bag_hint.add_theme_font_size_override("font_size", 17)
 	bag_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_body_font(bag_hint)
 	col.add_child(bag_hint)
@@ -947,7 +1056,7 @@ func _make_sell_section() -> VBoxContainer:
 
 	var tray_hint := Label.new()
 	tray_hint.text = "Sell tray — up to %s items" % SELL_SLOT_COUNT
-	tray_hint.add_theme_font_size_override("font_size", 12)
+	tray_hint.add_theme_font_size_override("font_size", 17)
 	tray_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_body_font(tray_hint)
 	col.add_child(tray_hint)
@@ -1086,8 +1195,10 @@ func _refresh_sell_button() -> void:
 	_sell_btn.disabled = ids.is_empty() or _busy
 	if ids.is_empty():
 		_sell_btn.text = "SELL ITEMS — SELECT GEAR"
+		_sell_btn.icon = null
 	else:
-		_sell_btn.text = "SELL ITEMS — ✦ %s" % _format_sell_amount(total)
+		_sell_btn.text = "SELL ITEMS — %s" % _format_sell_amount(total)
+		CurrencyIcon.apply_stardust_button_cost(_sell_btn, 16.0)
 
 
 func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1) -> PanelContainer:
@@ -1102,7 +1213,7 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 	if filled:
 		var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
 		panel.add_theme_stylebox_override("panel", _sell_slot_style(Color(tint, 0.14), Color(tint, 0.55)))
-		panel.tooltip_text = "%s — ✦ %s · click to %s" % [
+		panel.tooltip_text = "%s — %s Stardust · click to %s" % [
 			str(item.get("name", "Item")),
 			_format_sell_amount(InventoryRules.estimate_sell_value(item)),
 			"remove" if is_stage else "stage for sale",
@@ -1151,18 +1262,16 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		gear.custom_minimum_size = Vector2(SELL_ICON_SZ, SELL_ICON_SZ)
 		icon_wrap.add_child(gear)
 
-		var val := Label.new()
-		val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		val.autowrap_mode = TextServer.AUTOWRAP_OFF
-		val.clip_text = true
-		val.custom_minimum_size.y = 16
-		val.text = "✦ %s" % _format_sell_amount(InventoryRules.estimate_sell_value(item))
-		val.add_theme_font_size_override("font_size", SELL_VAL_FS)
-		val.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
-		ClientUi.apply_display_font(val)
-		root.add_child(val)
+		var val_host := CenterContainer.new()
+		val_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		val_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		val_host.custom_minimum_size.y = 16
+		root.add_child(val_host)
+		val_host.add_child(CurrencyIcon.make_stardust_amount_row(
+			_format_sell_amount(InventoryRules.estimate_sell_value(item)),
+			12.0,
+			SELL_VAL_FS
+		))
 	else:
 		var mark := Label.new()
 		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1307,5 +1416,5 @@ func _on_confirm_sell() -> void:
 		_sell_stage[i] = {}
 	await _load_bag_items()
 	_load_equipped()
-	_set_status("Sold %s item(s) for ✦ %s" % [dissolved_n, gained])
+	_set_status("Sold %s item(s) for %s Stardust" % [dissolved_n, gained])
 	_populate()

@@ -3,6 +3,7 @@ extends Node
 ## background and let the source page offer a "View Rewards" button.
 ## If the player already reached Victory/Defeat (outro) and leaves, keep the
 ## battle pending until they return and press View Rewards.
+## `last_watch` survives clear() so Replay can remount the same fight presentation.
 
 signal state_changed
 
@@ -18,6 +19,8 @@ var dungeon_ctx: Dictionary = {}
 var settle_payload: Dictionary = {}
 var settle_error := ""
 var _settle_token := 0
+## Survives clear() — battle + summary for watch-only Replay from source-page sheets.
+var last_watch: Dictionary = {}
 
 
 func clear() -> void:
@@ -72,6 +75,135 @@ func begin_settle_from_replay(combat_kind: String, level_before: int, ctx: Dicti
 	settle_payload = res
 	state = STATE_SETTLED
 	state_changed.emit()
+
+
+func capture_presentation_from_managers(
+	combat_kind: String,
+	level_before: int,
+	ctx: Dictionary = {}
+) -> void:
+	## Snapshot pending duel data before settle clears manager pending_* fields.
+	var battle: Dictionary = {}
+	var enemy: Dictionary = {}
+	var player_items: Array = []
+	var enemy_items: Array = []
+	match combat_kind:
+		"mission":
+			battle = MissionManager.pending_battle.duplicate(true) \
+				if typeof(MissionManager.pending_battle) == TYPE_DICTIONARY else {}
+			enemy = MissionManager.pending_enemy.duplicate(true) \
+				if typeof(MissionManager.pending_enemy) == TYPE_DICTIONARY else {}
+			player_items = MissionManager.pending_player_items.duplicate(true) \
+				if typeof(MissionManager.pending_player_items) == TYPE_ARRAY else []
+		"dungeon":
+			battle = DungeonManager.pending_battle.duplicate(true) \
+				if typeof(DungeonManager.pending_battle) == TYPE_DICTIONARY else {}
+			enemy = DungeonManager.pending_enemy.duplicate(true) \
+				if typeof(DungeonManager.pending_enemy) == TYPE_DICTIONARY else {}
+			player_items = DungeonManager.pending_player_items.duplicate(true) \
+				if typeof(DungeonManager.pending_player_items) == TYPE_ARRAY else []
+		_:
+			battle = ArenaManager.pending_battle.duplicate(true) \
+				if typeof(ArenaManager.pending_battle) == TYPE_DICTIONARY else {}
+			enemy = ArenaManager.pending_opp.duplicate(true) \
+				if typeof(ArenaManager.pending_opp) == TYPE_DICTIONARY else {}
+			player_items = ArenaManager.equipped_items.duplicate(true) \
+				if typeof(ArenaManager.equipped_items) == TYPE_ARRAY else []
+			enemy_items = ArenaRules.resolve_opp_items(enemy) if not enemy.is_empty() else []
+	if battle.is_empty() and typeof(last_watch.get("battle", null)) == TYPE_DICTIONARY:
+		return
+	last_watch = {
+		"kind": combat_kind,
+		"prev_level": level_before,
+		"dungeon_ctx": ctx.duplicate(true) if not ctx.is_empty() else {},
+		"battle": battle,
+		"enemy": enemy,
+		"player": GameManager.active_character.duplicate(true),
+		"player_items": player_items,
+		"enemy_items": enemy_items,
+		"summary": last_watch.get("summary", {}),
+	}
+
+
+func remember_watch_summary(
+	summary: Dictionary,
+	battle: Dictionary = {},
+	level_before: int = -1,
+	ctx: Dictionary = {}
+) -> void:
+	## Attach the built combat report (without Callables) for later remount / CRM Replay.
+	var slim := summary.duplicate(true)
+	slim.erase("actions")
+	if last_watch.is_empty():
+		last_watch = {
+			"kind": str(summary.get("mode", "arena")),
+			"prev_level": level_before if level_before >= 0 else prev_level,
+			"dungeon_ctx": ctx.duplicate(true) if not ctx.is_empty() else dungeon_ctx.duplicate(true),
+			"battle": battle.duplicate(true) if not battle.is_empty() else {},
+			"enemy": {},
+			"player": GameManager.active_character.duplicate(true),
+			"player_items": [],
+			"enemy_items": [],
+		}
+	if not battle.is_empty():
+		last_watch["battle"] = battle.duplicate(true)
+	if level_before >= 0:
+		last_watch["prev_level"] = level_before
+	if not ctx.is_empty():
+		last_watch["dungeon_ctx"] = ctx.duplicate(true)
+	last_watch["summary"] = slim
+	last_watch["won"] = bool(summary.get("won", false))
+
+
+func restore_presentation_to_managers() -> void:
+	if last_watch.is_empty():
+		return
+	var combat_kind := str(last_watch.get("kind", "arena"))
+	var battle: Dictionary = last_watch.get("battle", {}) if typeof(last_watch.get("battle", null)) == TYPE_DICTIONARY else {}
+	var enemy: Dictionary = last_watch.get("enemy", {}) if typeof(last_watch.get("enemy", null)) == TYPE_DICTIONARY else {}
+	var player_items: Array = last_watch.get("player_items", []) if typeof(last_watch.get("player_items", null)) == TYPE_ARRAY else []
+	match combat_kind:
+		"mission":
+			MissionManager.pending_battle = battle.duplicate(true)
+			MissionManager.pending_enemy = enemy.duplicate(true)
+			MissionManager.pending_player_items = player_items.duplicate(true)
+		"dungeon":
+			DungeonManager.pending_battle = battle.duplicate(true)
+			DungeonManager.pending_enemy = enemy.duplicate(true)
+			DungeonManager.pending_player_items = player_items.duplicate(true)
+		_:
+			ArenaManager.pending_battle = battle.duplicate(true)
+			ArenaManager.pending_opp = enemy.duplicate(true)
+			ArenaManager.equipped_items = player_items.duplicate(true)
+
+
+func start_watch_replay() -> void:
+	## From a source-page reward sheet: remount combat overlay in watch-only mode.
+	if last_watch.is_empty() or typeof(last_watch.get("battle", null)) != TYPE_DICTIONARY:
+		Notify.blocked("Combat replay unavailable")
+		return
+	if (last_watch.get("battle", {}) as Dictionary).is_empty():
+		Notify.blocked("Combat replay unavailable")
+		return
+	restore_presentation_to_managers()
+	GameManager.combat_watch_only = true
+	var combat_kind := str(last_watch.get("kind", "arena"))
+	match combat_kind:
+		"mission":
+			GameManager.go_mission_combat()
+		"dungeon":
+			GameManager.go_galaxy_combat()
+		_:
+			GameManager.go_arena_combat()
+
+
+func _replay_action() -> Dictionary:
+	return {
+		"label": "Replay",
+		"primary": false,
+		"replay": true,
+		"callback": func() -> void: start_watch_replay(),
+	}
 
 
 func _run_settle() -> Dictionary:
@@ -153,12 +285,14 @@ func _mount_sheet(
 		"mission":
 			ProgressManager.toast_newly_unlocked(host, data)
 			var summary := _mission_summary(won, data)
+			remember_watch_summary(summary, {}, level_before, ctx)
 			CombatSheets.present_complete_then_level_up(
 				host, summary, level_before, GameManager.active_character, true
 			)
 		"dungeon":
 			ProgressManager.toast_newly_unlocked(host, data)
 			var summary := _dungeon_summary(data, ctx)
+			remember_watch_summary(summary, {}, level_before, ctx)
 			CombatSheets.present_complete_then_level_up(
 				host, summary, level_before, GameManager.active_character, true
 			)
@@ -167,6 +301,7 @@ func _mount_sheet(
 				host, data.get("data", {}) if typeof(data.get("data", null)) == TYPE_DICTIONARY else data
 			)
 			var summary := _arena_summary(data)
+			remember_watch_summary(summary, {}, level_before, ctx)
 			CombatSheets.present_complete_then_level_up(
 				host, summary, level_before, GameManager.active_character, false
 			)
@@ -197,7 +332,7 @@ func _mission_summary(won: bool, data: Dictionary) -> Dictionary:
 	return {
 		"won": won,
 		"mode": "mission",
-		"title": "Mission claimed!" if won else "Mission failed",
+		"title": "Victory" if won else "Defeat",
 		"subtitle": "" if won else (
 			"Reduced rewards issued." if has_loss_rewards
 			else "No stardust, XP, or loot. Fuel was already spent."
@@ -215,6 +350,7 @@ func _mission_summary(won: bool, data: Dictionary) -> Dictionary:
 				"primary": false,
 				"callback": (func() -> void: GameManager.go_stats()) if won else (func() -> void: GameManager.go_hub()),
 			},
+			_replay_action(),
 		],
 	}
 
@@ -228,14 +364,13 @@ func _dungeon_summary(data: Dictionary, ctx: Dictionary) -> Dictionary:
 	var planet_name := str(ctx.get("planet_name", "Frontier"))
 	var is_boss := bool(ctx.get("is_boss", false))
 	var enemy_index := int(ctx.get("enemy_index", 1))
-	var title := ""
-	if won:
-		title = ("Defeated %s" % enemy_name) if is_boss else ("Cleared enemy %s" % enemy_index)
-	else:
-		title = "Fell to %s" % enemy_name
-	var subtitle := planet_name
+	var context := planet_name
 	if is_boss:
-		subtitle += " · Boss"
+		context += " · Boss · %s" % enemy_name
+	elif won:
+		context += " · Enemy %s" % enemy_index
+	else:
+		context += " · Fell to %s" % enemy_name
 	var note := ""
 	if not won:
 		note = "No rewards on defeat."
@@ -244,8 +379,8 @@ func _dungeon_summary(data: Dictionary, ctx: Dictionary) -> Dictionary:
 	return {
 		"won": won,
 		"mode": "dungeon",
-		"title": title,
-		"subtitle": subtitle,
+		"title": "Victory" if won else "Defeat",
+		"subtitle": context,
 		"xp": int(rewards.get("experience", 0)) if won else 0,
 		"stardust": int(rewards.get("stardust", 0)) if won else 0,
 		"gear_item": gear,
@@ -255,6 +390,7 @@ func _dungeon_summary(data: Dictionary, ctx: Dictionary) -> Dictionary:
 		"actions": [
 			{"label": "Back to Frontier", "primary": true, "callback": func() -> void: GameManager.go_galaxy()},
 			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
+			_replay_action(),
 		],
 	}
 
@@ -275,11 +411,15 @@ func _arena_summary(result: Dictionary) -> Dictionary:
 		note = "Free battle rewards applied."
 	if nova_spent > 0:
 		note += " Nova spent: %s." % nova_spent
+	var opp_name := str(opp.get("name", "rival"))
 	return {
 		"won": won,
 		"mode": "arena",
-		"title": ("Defeated %s" if won else "Defeated by %s") % str(opp.get("name", "rival")),
-		"subtitle": "Rating now %s" % str(GameManager.active_character.get("arena_rating", "?")),
+		"title": "Victory" if won else "Defeat",
+		"subtitle": "%s · Rating now %s" % [
+			opp_name,
+			str(GameManager.active_character.get("arena_rating", "?")),
+		],
 		"xp": int(rewards.get("experience", 0)),
 		"stardust": int(rewards.get("stardust", 0)),
 		"rating_delta": delta,
@@ -288,5 +428,6 @@ func _arena_summary(result: Dictionary) -> Dictionary:
 		"actions": [
 			{"label": "Back to Arena", "primary": true, "callback": func() -> void: GameManager.go_arena()},
 			{"label": "Hub", "primary": false, "callback": func() -> void: GameManager.go_hub()},
+			_replay_action(),
 		],
 	}

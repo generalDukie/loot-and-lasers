@@ -1,18 +1,55 @@
-<!-- @license lucide-static v0.469.0 - ISC -->
-<svg
-  class="lucide lucide-fuel"
-  xmlns="http://www.w3.org/2000/svg"
-  width="24"
-  height="24"
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="#ffffff"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
->
-  <line x1="3" x2="15" y1="22" y2="22" />
-  <line x1="4" x2="14" y1="9" y2="9" />
-  <path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18" />
-  <path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5" />
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="24"
+     height="24"
+     viewBox="0 0 1024 1024"
+     fill="none"
+     shape-rendering="geometricPrecision">
+  <!-- Same geometry as currency/fuel.svg — baked wallet green (no white tint twin). -->
+  <title>Loot &amp; Lasers Fuel Pump Icon</title>
+
+  <g fill="none"
+     stroke="#39FF14"
+     stroke-width="44"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+    <path d="
+      M270 180
+      Q270 140 310 140
+      H575
+      Q615 140 615 180
+      V760
+      Q615 800 575 800
+      H310
+      Q270 800 270 760
+      Z"/>
+
+    <rect x="335"
+          y="220"
+          width="215"
+          height="150"
+          rx="18"/>
+
+    <path d="M235 820 H650"/>
+
+    <path d="
+      M615 510
+      C690 510 725 550 725 620
+      V730
+      C725 795 760 830 810 830
+      C860 830 885 795 885 740
+      V545"/>
+
+    <path d="
+      M885 545
+      L870 440
+      L790 375"/>
+
+    <path d="
+      M870 440
+      L815 455
+      L825 535
+      L885 545"/>
+
+  </g>
 </svg>

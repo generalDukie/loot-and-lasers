@@ -1,0 +1,19 @@
+---
+description: Avatar portrait Base state restore reference (pre-redesign snapshot)
+globs: loot&lasers/Scripts/AvatarPortrait.gd,loot&lasers/Scripts/AvatarRenderer.gd
+alwaysApply: false
+---
+
+# Avatar portrait Base state
+
+When the user asks to return avatar portraits to **Base state**, restore from:
+
+- `loot&lasers/Scripts/_avatar_portrait_base_state/AvatarPortrait.gd.bak`
+- `loot&lasers/Scripts/_avatar_portrait_base_state/AvatarRenderer.gd.bak`
+
+Copy those over the live scripts (rename to `.gd`):
+
+- `loot&lasers/Scripts/AvatarPortrait.gd`
+- `loot&lasers/Scripts/AvatarRenderer.gd`
+
+Base state was locked **2026-08-12** as the geometric procedural look before the smoothing / anti-overlap redesign. `.bak` files are ignored by Godot so they do not register duplicate `class_name`s.

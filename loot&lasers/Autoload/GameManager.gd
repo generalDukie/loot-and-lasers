@@ -156,11 +156,6 @@ func go_mission_combat() -> void:
 	open_overlay(SCENE_MISSION_COMBAT)
 
 
-func go_inventory() -> void:
-	## Legacy alias — paper-doll inventory page removed; Hero hosts the backpack.
-	go_stats()
-
-
 func go_arena() -> void:
 	change_state(GameState.IN_GAME)
 	open_game_page(SCENE_ARENA)

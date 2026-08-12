@@ -61,8 +61,6 @@ const _WALLET_VALUE_GAP := 8.0
 const _WALLET_TRAILING_SIZE := 29.0
 var _last_nav_ms := 0
 const NAV_COOLDOWN_MS := 200
-## Temporary nav profiler — remove after perf pass is validated in play.
-const NAV_TIMING_LOG := true
 
 
 func _ready() -> void:
@@ -72,6 +70,15 @@ func _ready() -> void:
 	DevEnvironmentBadge.attach_to(self)
 	# Never let chrome/rail minimum sizes push past the window edge.
 	clip_contents = true
+	# Splash → shell: show void veil immediately; finish mount on next idle (no await in _ready).
+	var boot_veil := _make_boot_veil()
+	add_child(boot_veil)
+	call_deferred("_complete_shell_boot", boot_veil)
+
+
+func _complete_shell_boot(boot_veil: Control) -> void:
+	if not is_instance_valid(self):
+		return
 	_build()
 	_refresh_chrome()
 	_set_decor_active(true)
@@ -100,6 +107,51 @@ func _ready() -> void:
 	if not TutorialManager.tutorial_finished.is_connected(_on_tutorial_finished_daily_prompt):
 		TutorialManager.tutorial_finished.connect(_on_tutorial_finished_daily_prompt)
 	call_deferred("_sync_notif_for_tutorial")
+	call_deferred("_dismiss_boot_veil", boot_veil)
+
+
+func _make_boot_veil() -> Control:
+	var veil := Control.new()
+	veil.name = "BootVeil"
+	veil.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	veil.z_index = 200
+	var bg := ClientUi.make_space_splash_bg("void")
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	veil.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	veil.add_child(center)
+	var status := Label.new()
+	status.text = "Entering station..."
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status.add_theme_font_size_override("font_size", 23)
+	status.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(status)
+	center.add_child(status)
+	var failsafe := Timer.new()
+	failsafe.one_shot = true
+	failsafe.wait_time = 4.0
+	failsafe.timeout.connect(func() -> void:
+		if is_instance_valid(veil):
+			veil.queue_free()
+	)
+	veil.add_child(failsafe)
+	failsafe.start()
+	return veil
+
+
+func _dismiss_boot_veil(veil: Control) -> void:
+	if veil == null or not is_instance_valid(veil):
+		return
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tw := veil.create_tween()
+	if tw == null:
+		veil.queue_free()
+		return
+	tw.tween_property(veil, "modulate:a", 0.0, 0.28).set_ease(Tween.EASE_OUT)
+	tw.tween_callback(veil.queue_free)
 
 
 func _on_tutorial_visibility_changed(_unused = null) -> void:
@@ -1072,11 +1124,11 @@ func _nav_groups() -> Array:
 		{"name": "Social", "items": [
 			{"path": GameManager.SCENE_FRIENDS, "label": "Friends", "icon": "users", "color": "#A855F7"},
 			{"path": GameManager.SCENE_MESSAGES, "label": "Chat", "icon": "message-square", "color": "#38BDF8"},
-			{"path": GameManager.SCENE_MAIL, "label": "Mail", "icon": "mail", "color": "#F59E0B"},
+			{"path": GameManager.SCENE_MAIL, "label": "Mail", "icon": "mail", "color": "#16A34A"},
 			{"path": GameManager.SCENE_GUILD, "label": "Guild", "icon": "users", "color": "#F43F5E"},
 		]},
 		{"name": "Battle", "items": [
-			{"path": GameManager.SCENE_ARENA, "label": "Arena", "icon": "zap", "color": "#FB7185"},
+			{"path": GameManager.SCENE_ARENA, "label": "Arena", "icon": "swords", "color": "#FB7185"},
 			{"path": GameManager.SCENE_LEADERBOARD, "label": "Ranks", "icon": "trophy", "color": "#34D399"},
 			{"path": GameManager.SCENE_NEXUS, "label": "Nexus", "icon": "crown", "color": "#60A5FA"},
 		]},
@@ -1138,7 +1190,6 @@ func show_page(path: String) -> void:
 	if path == _page_path and _page != null and is_instance_valid(_page):
 		return
 
-	var nav_t0 := Time.get_ticks_msec()
 	_pause_nav_warmup()
 	_page_swap_busy = true
 	# Failsafe — never leave the shell permanently locked if a page script errors mid-mount.
@@ -1179,16 +1230,13 @@ func show_page(path: String) -> void:
 		else:
 			_page_instances.erase(outgoing_path)
 			outgoing.queue_free()
-	var load_ms := 0
 	var restored := false
 	if _page_instances.has(path) and is_instance_valid(_page_instances[path]):
 		_page = _page_instances[path]
 		_unpark_page(_page)
 		restored = true
 	else:
-		var load_t0 := Time.get_ticks_msec()
 		var packed := _load_packed(path)
-		load_ms = Time.get_ticks_msec() - load_t0
 		if packed == null:
 			push_error("Could not load shell page: %s" % path)
 			_page_swap_busy = false
@@ -1245,13 +1293,6 @@ func show_page(path: String) -> void:
 	# Badge updates from Realtime + opening the notif dock; avoid GetNotifications on every hop.
 	_update_notif_badge()
 	call_deferred("_notify_tutorial_page_ready", path)
-	if NAV_TIMING_LOG:
-		print("[nav] path=%s load_ms=%d shell_ms=%d cached=%s" % [
-			path.get_file(),
-			load_ms,
-			Time.get_ticks_msec() - nav_t0,
-			"1" if restored else "0",
-		])
 
 
 func _notify_tutorial_page_ready(path: String) -> void:

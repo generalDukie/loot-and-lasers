@@ -430,13 +430,13 @@ func _normalize_battle_result(data: Dictionary) -> Dictionary:
 		winner = str(pending_battle.get("winner", "opponent"))
 	var player_won := false
 	if data.has("won"):
-		player_won = bool(data.get("won"))
+		player_won = data.get("won") == true
 	elif data.has("player_won"):
-		player_won = bool(data.get("player_won"))
+		player_won = data.get("player_won") == true
 	elif battle.has("playerWon"):
-		player_won = bool(battle.get("playerWon"))
+		player_won = battle.get("playerWon") == true
 	elif rewards.has("won"):
-		player_won = bool(rewards.get("won"))
+		player_won = rewards.get("won") == true
 	else:
 		player_won = winner == "player"
 	var outcome := str(data.get("outcome", battle.get("outcome", "")))
@@ -509,27 +509,8 @@ func recover_match(combat_id: String = "") -> Dictionary:
 	return {"ok": true, "data": data}
 
 
-func record_match(_opp: Dictionary, _won: bool, _rating_delta: int, _rating_after = null, _is_defense: bool = false) -> Dictionary:
-	return {"ok": true, "error": "", "legacy": "disabled"}
-
-
 func process_bot_raids(_limit: int = 2) -> Dictionary:
 	return {"ok": true, "raids": []}
-
-
-func list_ladder_bots() -> Array:
-	return []
-
-
-func list_rated_characters() -> Array:
-	var res: Dictionary = await load_rankings()
-	if res.get("ok", false):
-		return res.get("data", {}).get("rankings", [])
-	return []
-
-
-func fetch_equipped_for(_character_id: String) -> Array:
-	return []
 
 
 func resolve_revenge_opponent(match: Dictionary) -> Dictionary:

@@ -4,7 +4,7 @@ extends Control
 const TYPE_META := {
 	"friend_request": {"label": "Friend Request", "color": Color("#A855F7")},
 	"private_message": {"label": "Message", "color": Color("#22D3EE")},
-	"mail": {"label": "Mail", "color": Color("#F59E0B")},
+	"mail": {"label": "Mail", "color": Color("#16A34A")},
 	"chat_mention": {"label": "Mention", "color": Color("#34D399")},
 	"daily": {"label": "Daily Reward", "color": Color("#FFD700")},
 	"system": {"label": "System", "color": Color("#FB7185")},

@@ -240,6 +240,7 @@ func _build() -> void:
 		ClientUi.painted_panel_style(Color(0.03, 0.04, 0.08, 0.55), Color(0.35, 0.4, 0.55, 0.35), 12, 1)
 	)
 	root.add_child(overlay)
+	TutorialManager.tag_target(overlay, "mission-timer")
 
 	var overlay_pad := MarginContainer.new()
 	overlay_pad.add_theme_constant_override("margin_left", 14)
@@ -271,7 +272,7 @@ func _build() -> void:
 	ClientUi.apply_display_font(_overlay_timer)
 	time_row.add_child(_overlay_timer)
 	_timer_label = _overlay_timer
-	TutorialManager.tag_target(_timer_label, "mission-timer")
+	TutorialManager.tag_target(_timer_label, "mission-timer-countdown")
 
 	_progress_track = Control.new()
 	_progress_track.custom_minimum_size = Vector2(0, 22)

@@ -106,6 +106,8 @@ func _leave_to_character_select() -> void:
 
 func _leave_to_hub(character: Dictionary) -> void:
 	await _hold_splash()
+	_set_status("Entering station...")
+	await get_tree().process_frame
 	GameManager.go_hub(character)
 
 

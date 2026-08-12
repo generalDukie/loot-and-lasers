@@ -20,9 +20,15 @@ const REF_W := 1008.0
 const REF_H := 920.0
 const SCALE_MIN := 0.85
 const SCALE_MAX := 2.15
-## Soft viewport fill target; height-safe fit wins if 80% would overflow.
+## Soft viewport fill target; height-safe fit wins if fill would overflow.
+## Keep Y under ~0.9 so Back/Next stay fully visible with a small bottom margin.
 const VIEWPORT_FILL_X := 0.80
-const VIEWPORT_FILL_Y := 0.94
+const VIEWPORT_FILL_Y := 0.86
+## Equal inset around race portraits inside their accent frames (cards + lore).
+const RACE_PORTRAIT_PAD := 12.0
+## Outer card → accent-frame gap (matches lore preview bar).
+const RACE_BAR_INSET_X := 12.0
+const RACE_BAR_INSET_Y := 10.0
 
 var _ui_s := 1.0
 var _col_w := 960
@@ -128,8 +134,8 @@ func _compute_column_height(avail: Vector2, scale: float = -1.0) -> int:
 	# Fill most of the available height so the main panel can expand (CenterContainer
 	# only respects minimum size — without this the shell stays short).
 	var target := inner * VIEWPORT_FILL_Y
-	var scaled_base := REF_H * s * 0.92
-	return int(round(clampf(maxi(scaled_base, target), scaled_base, inner * 0.98)))
+	var scaled_base := REF_H * s * 0.90
+	return int(round(clampf(maxi(scaled_base, target), scaled_base, inner * 0.96)))
 
 
 func _apply_scaled_primary(btn: Button) -> void:
@@ -140,6 +146,36 @@ func _apply_scaled_primary(btn: Button) -> void:
 func _apply_scaled_ghost(btn: Button) -> void:
 	ClientUi.apply_ghost_button(btn)
 	btn.add_theme_font_size_override("font_size", _fs(15))
+
+
+func _enlarge_nav_styleboxes(btn: Button) -> void:
+	## Double content padding on every stylebox so chrome hits ~2× size.
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var base: StyleBox = btn.get_theme_stylebox(state)
+		if base == null or not (base is StyleBoxFlat):
+			continue
+		var sb := (base as StyleBoxFlat).duplicate() as StyleBoxFlat
+		sb.content_margin_left *= 2.0
+		sb.content_margin_right *= 2.0
+		sb.content_margin_top *= 2.0
+		sb.content_margin_bottom *= 2.0
+		btn.add_theme_stylebox_override(state, sb)
+
+
+func _apply_nav_primary(btn: Button) -> void:
+	## Footer Next / LAUNCH — ~2× the default creator chrome.
+	ClientUi.apply_primary_button(btn)
+	btn.add_theme_font_size_override("font_size", _fs(34))
+	btn.custom_minimum_size.y = _si(64)
+	_enlarge_nav_styleboxes(btn)
+
+
+func _apply_nav_ghost(btn: Button) -> void:
+	## Footer Back — ~2× the default creator chrome.
+	ClientUi.apply_ghost_button(btn)
+	btn.add_theme_font_size_override("font_size", _fs(30))
+	btn.custom_minimum_size.y = _si(64)
+	_enlarge_nav_styleboxes(btn)
 
 
 func _ready() -> void:
@@ -233,7 +269,7 @@ func _build() -> void:
 	margin.add_theme_constant_override("margin_left", _si(24))
 	margin.add_theme_constant_override("margin_right", _si(24))
 	margin.add_theme_constant_override("margin_top", _si(16))
-	margin.add_theme_constant_override("margin_bottom", _si(16))
+	margin.add_theme_constant_override("margin_bottom", _si(22))
 	add_child(margin)
 
 	var root := CenterContainer.new()
@@ -358,7 +394,7 @@ func _build() -> void:
 
 	_prev_btn = Button.new()
 	_prev_btn.text = "‹  Back"
-	_apply_scaled_ghost(_prev_btn)
+	_apply_nav_ghost(_prev_btn)
 	_prev_btn.pressed.connect(func() -> void: _set_step(_step - 1))
 	nav.add_child(_prev_btn)
 
@@ -374,14 +410,14 @@ func _build() -> void:
 
 	_next_btn = Button.new()
 	_next_btn.text = "Next  ›"
-	_apply_scaled_primary(_next_btn)
+	_apply_nav_primary(_next_btn)
 	_next_btn.pressed.connect(func() -> void: _set_step(_step + 1))
 	nav.add_child(_next_btn)
 
 	_create_btn = Button.new()
 	_create_btn.text = "LAUNCH"
 	_create_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_apply_scaled_primary(_create_btn)
+	_apply_nav_primary(_create_btn)
 	_create_btn.pressed.connect(_on_create)
 	nav.add_child(_create_btn)
 
@@ -459,53 +495,90 @@ func _build_race_page() -> Control:
 	# Always reserve lore-band height so cards stay at compact size before/after pick.
 	_lore_host = VBoxContainer.new()
 	_lore_host.visible = true
-	_lore_host.custom_minimum_size.y = _si(200)
+	_lore_host.custom_minimum_size.y = _si(180)
 	_lore_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lore_host.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	page.add_child(_lore_host)
 	return page
 
 
+func _make_race_portrait_frame(accent: Color) -> PanelContainer:
+	## Accent box with equal padding on every side so the portrait sits centered.
+	var frame := PanelContainer.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.clip_contents = true
+	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var pad := _si(RACE_PORTRAIT_PAD)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(accent, 0.12)
+	sb.set_border_width_all(maxi(1, _si(1)))
+	sb.border_color = Color(accent, 0.45)
+	sb.set_corner_radius_all(_si(10))
+	sb.content_margin_left = pad
+	sb.content_margin_right = pad
+	sb.content_margin_top = pad
+	sb.content_margin_bottom = pad
+	frame.add_theme_stylebox_override("panel", sb)
+	return frame
+
+
 func _make_race_card(race_name: String) -> Button:
 	var info := GameData.race_info(race_name)
 	var accent: Color = GameData.RACE_ACCENT.get(race_name, ClientUi.CYAN)
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(0, _si(168))
+	btn.custom_minimum_size = Vector2(0, _si(156))
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn.clip_contents = true
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.pressed.connect(func() -> void: _select_race(race_name))
 
+	# MarginContainer respects equal insets; Button stylebox margins do not for Control kids.
+	var pad := MarginContainer.new()
+	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pad.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	pad.add_theme_constant_override("margin_left", _si(RACE_BAR_INSET_X))
+	pad.add_theme_constant_override("margin_right", _si(RACE_BAR_INSET_X))
+	pad.add_theme_constant_override("margin_top", _si(RACE_BAR_INSET_Y))
+	pad.add_theme_constant_override("margin_bottom", _si(RACE_BAR_INSET_Y))
+	btn.add_child(pad)
+
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	row.offset_left = float(_si(13))
-	row.offset_top = float(_si(13))
-	row.offset_right = -float(_si(13))
-	row.offset_bottom = -float(_si(13))
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", _si(12))
-	btn.add_child(row)
+	pad.add_child(row)
+
+	# Square host: width tracks height so the accent frame stays large without
+	# stealing a wide expand column (which pushed name/tagline too far right).
+	var av_host := Control.new()
+	av_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	av_host.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	av_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	av_host.custom_minimum_size = _sv(Vector2(110, 110))
+	av_host.resized.connect(func() -> void:
+		if not is_instance_valid(av_host):
+			return
+		var side := av_host.size.y
+		if side < 1.0:
+			return
+		if absf(av_host.custom_minimum_size.x - side) > 0.5:
+			av_host.custom_minimum_size = Vector2(side, av_host.custom_minimum_size.y)
+	)
+	row.add_child(av_host)
 
 	var av_aspect := AspectRatioContainer.new()
 	av_aspect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	av_aspect.ratio = 1.0
-	av_aspect.stretch_mode = AspectRatioContainer.STRETCH_HEIGHT_CONTROLS_WIDTH
-	av_aspect.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	av_aspect.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	av_aspect.custom_minimum_size = _sv(Vector2(110, 110))
-	row.add_child(av_aspect)
+	av_aspect.stretch_mode = AspectRatioContainer.STRETCH_FIT
+	av_aspect.alignment_horizontal = AspectRatioContainer.ALIGNMENT_CENTER
+	av_aspect.alignment_vertical = AspectRatioContainer.ALIGNMENT_CENTER
+	av_aspect.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	av_host.add_child(av_aspect)
 
-	var av_wrap := PanelContainer.new()
-	av_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	av_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	av_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var av_sb := StyleBoxFlat.new()
-	av_sb.bg_color = Color(accent, 0.12)
-	av_sb.set_border_width_all(maxi(1, _si(1)))
-	av_sb.border_color = Color(accent, 0.45)
-	av_sb.set_corner_radius_all(_si(10))
-	av_wrap.add_theme_stylebox_override("panel", av_sb)
+	var av_wrap := _make_race_portrait_frame(accent)
 	av_aspect.add_child(av_wrap)
 	var fake := {
 		"race": race_name,
@@ -520,7 +593,7 @@ func _make_race_card(race_name: String) -> Button:
 		},
 	}
 	var portrait := AvatarRenderer.make_portrait(fake, _s(96.0))
-	portrait.custom_minimum_size = Vector2(_s(72.0), _s(72.0))
+	portrait.custom_minimum_size = Vector2.ZERO
 	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	av_wrap.add_child(portrait)
@@ -658,7 +731,8 @@ func _make_class_card(cls_name: String) -> Button:
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tag.text = str(info.get("tagline", ""))
 	tag.clip_text = true
-	tag.add_theme_font_size_override("font_size", _fs(15))
+	# Vanguard's longer line — drop 1px (theme sizes are integer).
+	tag.add_theme_font_size_override("font_size", _fs(14) if cls_name == "Vanguard" else _fs(15))
 	tag.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(tag)
 	copy.add_child(tag)
@@ -1222,7 +1296,7 @@ func _refresh_lore() -> void:
 		c.queue_free()
 	# Keep reserved lore-band height even with no selection (avoids card resize snap).
 	_lore_host.visible = true
-	_lore_host.custom_minimum_size.y = _si(200)
+	_lore_host.custom_minimum_size.y = _si(180)
 	if _race_name.is_empty():
 		return
 	var info := GameData.race_info(_race_name)
@@ -1234,10 +1308,10 @@ func _refresh_lore() -> void:
 	sb.set_border_width_all(maxi(1, _si(1)))
 	sb.border_color = Color(accent, 0.35)
 	sb.set_corner_radius_all(_si(12))
-	sb.content_margin_left = _si(12)
-	sb.content_margin_right = _si(12)
-	sb.content_margin_top = _si(10)
-	sb.content_margin_bottom = _si(10)
+	sb.content_margin_left = _si(RACE_BAR_INSET_X)
+	sb.content_margin_right = _si(RACE_BAR_INSET_X)
+	sb.content_margin_top = _si(RACE_BAR_INSET_Y)
+	sb.content_margin_bottom = _si(RACE_BAR_INSET_Y)
 	panel.add_theme_stylebox_override("panel", sb)
 	_lore_host.add_child(panel)
 
@@ -1251,11 +1325,13 @@ func _refresh_lore() -> void:
 	av.custom_minimum_size = _sv(Vector2(168, 168))
 	av.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_child(av)
+	var frame := _make_race_portrait_frame(accent)
+	av.add_child(frame)
 	var lore_portrait := AvatarRenderer.make_portrait(_fake_character(), _s(150.0))
-	lore_portrait.custom_minimum_size = Vector2(_s(120.0), _s(120.0))
+	lore_portrait.custom_minimum_size = Vector2.ZERO
 	lore_portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lore_portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	av.add_child(lore_portrait)
+	frame.add_child(lore_portrait)
 
 	var copy := VBoxContainer.new()
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1393,20 +1469,17 @@ func _refresh_class_detail() -> void:
 		ClientUi.apply_display_font(sp_name)
 		sp_name.add_theme_color_override("font_color", ClientUi.CYAN)
 		copy.add_child(sp_name)
-		var sp_fx := Label.new()
-		sp_fx.text = str(special.get("effect", ""))
+		var sp_fx := RichTextLabel.new()
+		sp_fx.bbcode_enabled = true
+		sp_fx.fit_content = true
+		sp_fx.scroll_active = false
 		sp_fx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sp_fx.add_theme_font_size_override("font_size", _fs(15))
-		sp_fx.add_theme_color_override("font_color", ClientUi.MUTED)
+		sp_fx.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sp_fx.add_theme_font_size_override("normal_font_size", _fs(15))
+		sp_fx.add_theme_color_override("default_color", ClientUi.MUTED)
 		ClientUi.apply_body_font(sp_fx)
+		sp_fx.text = str(special.get("effect", ""))
 		copy.add_child(sp_fx)
-		var sp_id := Label.new()
-		sp_id.text = str(special.get("identity", ""))
-		sp_id.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sp_id.add_theme_font_size_override("font_size", _fs(14))
-		sp_id.add_theme_color_override("font_color", Color(ClientUi.GOLD, 0.85))
-		ClientUi.apply_body_font(sp_id)
-		copy.add_child(sp_id)
 
 	var stats_panel := PanelContainer.new()
 	stats_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL

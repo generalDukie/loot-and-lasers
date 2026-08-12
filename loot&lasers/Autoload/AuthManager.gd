@@ -340,24 +340,6 @@ func _merge_profile_into_user() -> void:
 		user["nakama_account_id"] = account_id
 
 
-## OTP is legacy Node-only — disabled for Godot Nakama auth.
-func verify_otp(_email: String, _otp_code: String) -> Dictionary:
-	return {
-		"ok": false,
-		"error": "Email OTP is not used — Godot accounts authenticate with Nakama email/password.",
-		"data": {},
-		"status": 410,
-	}
-
-
-func resend_otp(_email: String) -> Dictionary:
-	return {
-		"ok": false,
-		"error": "Email OTP is not used — Godot accounts authenticate with Nakama email/password.",
-		"data": {},
-		"status": 410,
-	}
-
 
 func fetch_me() -> Dictionary:
 	if not is_nakama_authenticated():

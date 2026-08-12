@@ -403,43 +403,44 @@ func _build() -> void:
 	deck.add_theme_constant_override("separation", 8)
 	root.add_child(deck)
 
+	## Dock face/option tints match side-nav rail colors in game_shell._nav_groups().
 	deck.add_child(_dock_split(
-		"sofa", "Operative / Ship Hangar", "#5CFFB0",
+		"user", "Operative", "#00E5FF",
 		[
-			{"label": "Operative", "icon": "user", "color": "#5CFFB0", "action": func() -> void: GameManager.go_stats()},
-			{"label": "Coming Soon", "icon": "rocket", "color": "#6B7280", "action": func() -> void: GameManager.go_ship()},
+			{"label": "Operative", "icon": "user", "color": "#00E5FF", "action": func() -> void: GameManager.go_stats()},
+			{"label": "Coming Soon", "icon": "rocket", "color": "#2DD4BF", "action": func() -> void: GameManager.go_ship()},
 		]
 	))
-	deck.add_child(_dock_tile("orbit", "Galactic Frontier", "#00E5FF", func() -> void: GameManager.go_galaxy()))
+	deck.add_child(_dock_tile("orbit", "Galactic Frontier", "#BA55D3", func() -> void: GameManager.go_galaxy()))
 	deck.add_child(_dock_split(
-		"swords", "Arena", "#FF4D6D",
+		"swords", "Arena", "#FB7185",
 		[
-			{"label": "Arena", "icon": "zap", "color": "#FF4D6D", "action": func() -> void: GameManager.go_arena()},
-			{"label": "Leaderboard", "icon": "trophy", "color": "#FBBF24", "action": func() -> void: GameManager.go_leaderboard()},
-		]
-	))
-	deck.add_child(_dock_split(
-		"beer", "Cantina", "#FF9E4F",
-		[
-			{"label": "Missions", "icon": "beer", "color": "#FF9E4F", "action": _on_missions},
-			{"label": "Casino", "icon": "dice-5", "color": "#F59E0B", "action": func() -> void: GameManager.go_casino()},
+			{"label": "Arena", "icon": "zap", "color": "#FB7185", "action": func() -> void: GameManager.go_arena()},
+			{"label": "Leaderboard", "icon": "trophy", "color": "#34D399", "action": func() -> void: GameManager.go_leaderboard()},
 		]
 	))
 	deck.add_child(_dock_split(
-		"shopping-bag", "Bazaar", "#9D6BFF",
+		"beer", "Cantina", "#FF8C00",
 		[
-			{"label": "Black Market", "icon": "shopping-bag", "color": "#4ADE80", "action": func() -> void: GameManager.go_shop()},
-			{"label": "Mining", "icon": "pickaxe", "color": "#60A5FA", "action": func() -> void: GameManager.go_mining()},
+			{"label": "Missions", "icon": "beer", "color": "#FF8C00", "action": _on_missions},
+			{"label": "Casino", "icon": "dice-5", "color": "#FBBF24", "action": func() -> void: GameManager.go_casino()},
+		]
+	))
+	deck.add_child(_dock_split(
+		"shopping-bag", "Black Market", "#9D6BFF",
+		[
+			{"label": "Black Market", "icon": "shopping-bag", "color": "#9D6BFF", "action": func() -> void: GameManager.go_shop()},
+			{"label": "Mining", "icon": "pickaxe", "color": "#EC4899", "action": func() -> void: GameManager.go_mining()},
 			{"label": "Crystals", "icon": "sparkles", "color": "#FFD700", "action": func() -> void: GameManager.go_crystal_store()},
-			{"label": "Coming Soon", "icon": "orbit", "color": "#6B7280", "action": func() -> void: GameManager.go_void()},
+			{"label": "Coming Soon", "icon": "orbit", "color": "#14B8A6", "action": func() -> void: GameManager.go_void()},
 		]
 	))
 	deck.add_child(_dock_split(
-		"message-square", "Social", "#FFD700",
+		"message-square", "Social", "#16A34A",
 		[
-			{"label": "Mail", "icon": "mail", "color": "#F87171", "action": func() -> void: GameManager.go_mail()},
-			{"label": "Friends", "icon": "users", "color": "#34D399", "action": func() -> void: GameManager.go_friends()},
-			{"label": "Guild", "icon": "landmark", "color": "#9D5CFF", "action": func() -> void: GameManager.go_guild()},
+			{"label": "Mail", "icon": "mail", "color": "#16A34A", "action": func() -> void: GameManager.go_mail()},
+			{"label": "Friends", "icon": "users", "color": "#A855F7", "action": func() -> void: GameManager.go_friends()},
+			{"label": "Guild", "icon": "landmark", "color": "#F43F5E", "action": func() -> void: GameManager.go_guild()},
 			{"label": "Messages", "icon": "send", "color": "#38BDF8", "action": func() -> void: GameManager.go_messages()},
 		]
 	))
@@ -636,7 +637,7 @@ func _dock_tile(icon_id: String, label: String, tint_hex: String, action: Callab
 	col.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_theme_constant_override("separation", 6)
-	var icon := UiIcon.make(icon_id, tint, 34.0)
+	var icon := UiIcon.make(icon_id, tint, 42.5)
 	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(icon)
 	var lab := Label.new()
@@ -648,7 +649,7 @@ func _dock_tile(icon_id: String, label: String, tint_hex: String, action: Callab
 	lab.clip_text = true
 	lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lab.add_theme_font_size_override("font_size", 14)
+	lab.add_theme_font_size_override("font_size", 20)
 	lab.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
@@ -675,7 +676,7 @@ func _dock_split(icon_id: String, label: String, tint_hex: String, options: Arra
 	face.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	face.alignment = BoxContainer.ALIGNMENT_CENTER
 	face.add_theme_constant_override("separation", 6)
-	var face_icon := UiIcon.make(icon_id, tint, 34.0)
+	var face_icon := UiIcon.make(icon_id, tint, 42.5)
 	face_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	face.add_child(face_icon)
 	var face_lab := Label.new()
@@ -687,7 +688,7 @@ func _dock_split(icon_id: String, label: String, tint_hex: String, options: Arra
 	face_lab.clip_text = true
 	face_lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	face_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	face_lab.add_theme_font_size_override("font_size", 14)
+	face_lab.add_theme_font_size_override("font_size", 20)
 	face_lab.add_theme_color_override("font_color", tint)
 	ClientUi.apply_display_font(face_lab)
 	face.add_child(face_lab)

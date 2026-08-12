@@ -12,9 +12,6 @@ signal unread_changed(total: int)
 signal chat_error(error: String)
 signal connection_changed(connected: bool)
 
-## Temporary diagnostics — remove after chat dupes are validated in play.
-const CHAT_DEBUG := true
-
 var global_messages: Array = []
 var conversations: Dictionary = {} # peer_character_id -> { messages: [], unread: int, name: String, conversation_id: String }
 var _name_by_id: Dictionary = {} # character_id -> display name
@@ -39,25 +36,6 @@ func _ensure_node_chat_binds() -> void:
 	if not RealtimeManager.chat_event.is_connected(_on_node_chat_event):
 		RealtimeManager.chat_event.connect(_on_node_chat_event)
 	_chat_event_bound = true
-	_debug_subs("bind_node_chat")
-
-
-func _debug_subs(reason: String) -> void:
-	if not CHAT_DEBUG:
-		return
-	var node_ws := 1 if RealtimeManager.has_node_ws() else 0
-	var nakama_ws := 1 if RealtimeManager.is_nakama_connected() else 0
-	var chat_listeners := RealtimeManager.chat_event_listener_count()
-	var channel_listeners := RealtimeManager.nakama_channel_listener_count()
-	print("[chat-diag] %s node_ws=%d nakama_ws=%d chat_event_listeners=%d nakama_channel_listeners=%d global_joined=%s channel=%s" % [
-		reason,
-		node_ws,
-		nakama_ws,
-		chat_listeners,
-		channel_listeners,
-		_global_joined,
-		RealtimeManager.global_channel_id(),
-	])
 
 
 ## Avoid naming this is_connected() — that overrides Object.is_connected (signals).
@@ -94,7 +72,6 @@ func message_id_of(message: Dictionary) -> String:
 
 func _on_rt_connection(connected: bool) -> void:
 	connection_changed.emit(connected)
-	_debug_subs("nakama_connection_%s" % connected)
 
 
 func _on_node_chat_event(entity: String, data: Variant) -> void:
@@ -141,8 +118,6 @@ func upsert_global_message(message: Dictionary, source: String) -> bool:
 	var sender := str(message.get("sender_id", message.get("sender_name", "")))
 	if mid.is_empty():
 		# No server id — refuse to invent duplicates from content alone.
-		if CHAT_DEBUG:
-			print("[chat] skip insert (missing id) source=%s sender=%s" % [source, sender])
 		return false
 	for i in range(global_messages.size()):
 		var existing: Variant = global_messages[i]
@@ -150,12 +125,8 @@ func upsert_global_message(message: Dictionary, source: String) -> bool:
 			continue
 		if message_id_of(existing) == mid:
 			global_messages[i] = message
-			if CHAT_DEBUG:
-				print("[chat] ignore duplicate id=%s source=%s sender=%s" % [mid, source, sender])
 			return false
 	global_messages.append(message)
-	if CHAT_DEBUG:
-		print("[chat] insert id=%s source=%s sender=%s" % [mid, source, sender])
 	return true
 
 
@@ -167,8 +138,6 @@ func upsert_dm_message(user_id: String, message: Dictionary, source: String) -> 
 	var msgs: Array = conversations[user_id]["messages"]
 	var mid := message_id_of(message)
 	if mid.is_empty():
-		if CHAT_DEBUG:
-			print("[chat] skip dm insert (missing id) source=%s user=%s" % [source, user_id])
 		return false
 	for i in range(msgs.size()):
 		var existing: Variant = msgs[i]
@@ -176,31 +145,24 @@ func upsert_dm_message(user_id: String, message: Dictionary, source: String) -> 
 			continue
 		if message_id_of(existing) == mid:
 			msgs[i] = message
-			if CHAT_DEBUG:
-				print("[chat] ignore dm duplicate id=%s source=%s" % [mid, source])
 			return false
 	msgs.append(message)
 	conversations[user_id]["messages"] = msgs
-	if CHAT_DEBUG:
-		print("[chat] insert dm id=%s source=%s user=%s" % [mid, source, user_id])
 	return true
 
 
 func join_global_chat() -> Dictionary:
 	# Idempotent: one Nakama room join per session.
 	if _global_joined and not RealtimeManager.global_channel_id().is_empty():
-		_debug_subs("join_global_already")
 		return {"ok": true, "channel_id": RealtimeManager.global_channel_id(), "cached": true}
 	var res: Dictionary = await RealtimeManager.join_global_chat()
 	_global_joined = bool(res.get("ok", false))
-	_debug_subs("join_global")
 	return res
 
 
 func leave_global_chat() -> void:
 	await RealtimeManager.leave_global_chat()
 	_global_joined = false
-	_debug_subs("leave_global")
 
 
 func send_global_message(content: String) -> Dictionary:
@@ -238,10 +200,6 @@ func load_global_history(_cursor: String = "") -> Dictionary:
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}
 	var msgs: Array = data.get("messages", []) if typeof(data.get("messages", [])) == TYPE_ARRAY else []
 	global_messages = _dedupe_messages(msgs)
-	if CHAT_DEBUG:
-		print("[chat] history loaded count=%d (deduped from %d) source=cached_history" % [
-			global_messages.size(), msgs.size()
-		])
 	global_history_loaded.emit(global_messages)
 	return {"ok": true, "error": "", "data": data}
 

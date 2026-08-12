@@ -49,6 +49,8 @@ const ALIAS := {
 	"package": "package",
 	"loot": "package",
 	"sparkles": "sparkles",
+	"rainbow": "rainbow",
+	"luminae": "rainbow",
 	"clock": "clock",
 	"timer": "timer",
 	"map": "map",

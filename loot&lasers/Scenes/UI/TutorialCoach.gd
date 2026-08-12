@@ -8,6 +8,8 @@ const POINTER_INSET := 8.0
 const POINTER_SPAN := 46.0
 const POINTER_CARD_GAP := 12.0
 const CARD_HOLE_GAP := POINTER_INSET + POINTER_SPAN + POINTER_CARD_GAP
+## Tight stack for mission_timer: card → gap → arrow → gap → timer.
+const MISSION_TIMER_STACK_GAP := 8.0
 const DIM_ALPHA := 0.58
 const DIM_OVERLAP := 1.0
 const RING_BORDER := Color(0.05, 0.85, 0.95, 0.98)
@@ -734,23 +736,39 @@ func _mission_timer_bar_rect() -> Rect2:
 	var timer := _find_tutorial_target("mission-timer")
 	if timer == null or not is_instance_valid(timer) or not timer.is_visible_in_tree():
 		return Rect2()
-	var n: Node = timer
-	while n != null:
-		if n is PanelContainer:
-			return (n as Control).get_global_rect()
-		n = n.get_parent()
 	return timer.get_global_rect()
 
 
+func _mission_timer_tip_anchor() -> Vector2:
+	## Point at the countdown text (right side); fall back to top-right of the timer chrome.
+	var countdown := _find_tutorial_target("mission-timer-countdown")
+	if countdown != null and is_instance_valid(countdown) and countdown.is_visible_in_tree():
+		return countdown.get_global_rect().get_center()
+	var bar := _mission_timer_bar_rect()
+	if bar.size.x > 4.0:
+		return Vector2(bar.end.x - mini(56.0, bar.size.x * 0.2), bar.position.y + mini(18.0, bar.size.y * 0.35))
+	return Vector2.ZERO
+
+
 func _mission_timer_card_pos(hole: Rect2, vp: Vector2, w: float, h: float) -> Vector2:
-	## Sit just above the mission timer / progress bar — not under the top activity chip.
+	## Card sits directly above the timer; bottom-right of card lines up over the countdown
+	## so the triangle can sit in the gap between them.
 	var bar := _mission_timer_bar_rect()
 	var anchor := bar if bar.size.x > 4.0 else hole
+	var tip := _mission_timer_tip_anchor()
+	if tip == Vector2.ZERO and anchor.size.x > 4.0:
+		tip = Vector2(anchor.end.x - 40.0, anchor.position.y)
+	var gap := MISSION_TIMER_STACK_GAP
+	var stack := gap + POINTER_SPAN + gap
 	var x := (vp.x - w) * 0.5
 	var y := maxf(CARD_PAD, vp.y - h - CARD_PAD)
-	if anchor.size.x > 4.0:
-		x = anchor.position.x + anchor.size.x * 0.5 - w * 0.5
-		y = anchor.position.y - h - CARD_HOLE_GAP
+	if tip != Vector2.ZERO:
+		# Bottom-right of card near tip so the arrow sits just off that corner.
+		x = tip.x - w + POINTER_SPAN * 0.55
+		y = tip.y - stack - h
+	elif anchor.size.x > 4.0:
+		x = anchor.end.x - w
+		y = anchor.position.y - stack - h
 	return Vector2(x, y)
 
 
@@ -793,6 +811,19 @@ func _place_card(hole: Rect2, vp: Vector2, placement: String) -> void:
 				pos = Vector2((vp.x - w) * 0.5, (vp.y - h) * 0.5)
 	pos.x = clampf(pos.x, CARD_PAD, maxf(CARD_PAD, vp.x - w - CARD_PAD))
 	pos.y = clampf(pos.y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
+	if TutorialManager.step_id() == "mission_timer":
+		# Prefer keeping the bottom-right stacked over the countdown after clamp.
+		var tip := _mission_timer_tip_anchor()
+		var bar := _mission_timer_bar_rect()
+		if tip != Vector2.ZERO:
+			pos.x = clampf(
+				tip.x - w + POINTER_SPAN * 0.55,
+				CARD_PAD,
+				maxf(CARD_PAD, vp.x - w - CARD_PAD)
+			)
+		if bar.size.y > 1.0:
+			var stacked_y := bar.position.y - (MISSION_TIMER_STACK_GAP + POINTER_SPAN + MISSION_TIMER_STACK_GAP) - h
+			pos.y = clampf(stacked_y, CARD_PAD, maxf(CARD_PAD, vp.y - h - CARD_PAD))
 	# Never cover the spotlight hole if we can slide off it.
 	# shop_market intentionally sits on the sell tray (bottom-right).
 	# mine_explain is pinned under the stardust preview (centered).
@@ -1373,19 +1404,22 @@ func _place_pointer(hole: Rect2, vp: Vector2) -> void:
 
 
 func _place_mission_timer_pointer(hole: Rect2, vp: Vector2) -> void:
-	## Card sits above the bar; keep the chevron in that gap, aimed at the timer.
+	## Triangle in the small gap under the card's bottom-right, aimed at the countdown.
 	_pointer.rotation_degrees = 180
-	var target := hole
-	if target.size.x <= 4.0:
-		target = _hole_for_tutorial_id("mission-timer")
-	var tip_x := target.get_center().x - POINTER_SPAN * 0.35
-	if target.size.x <= 4.0:
-		tip_x = _card.position.x + _card.size.x * 0.5 - POINTER_SPAN * 0.35
-	var card_bottom := _card.position.y + _card.size.y
-	var y := card_bottom + POINTER_INSET
-	if target.size.y > 1.0:
-		y = minf(y, target.position.y - POINTER_INSET - POINTER_SPAN)
-	_pointer.position = Vector2(tip_x, y)
+	var tip := _mission_timer_tip_anchor()
+	var gap := MISSION_TIMER_STACK_GAP
+	var card_br := _card.position + Vector2(_card.size.x, _card.size.y)
+	var px := card_br.x - POINTER_SPAN - 2.0
+	var py := _card.position.y + _card.size.y + gap
+	if tip != Vector2.ZERO:
+		# Keep the chevron nearly above the countdown while staying off the card BR.
+		px = clampf(tip.x - POINTER_SPAN * 0.35, card_br.x - POINTER_SPAN - 10.0, card_br.x - POINTER_SPAN * 0.25)
+		var bar := _mission_timer_bar_rect()
+		if bar.size.y > 1.0:
+			py = minf(py, bar.position.y - gap - POINTER_SPAN)
+	elif hole.size.y > 1.0:
+		py = minf(py, hole.position.y - gap - POINTER_SPAN)
+	_pointer.position = Vector2(px, py)
 	_pointer.position.x = clampf(_pointer.position.x, 8.0, vp.x - POINTER_SPAN)
 	_pointer.position.y = clampf(_pointer.position.y, 8.0, vp.y - POINTER_SPAN)
 

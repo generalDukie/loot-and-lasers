@@ -35,7 +35,6 @@ func _ready() -> void:
 		ChatManager.global_message_received.connect(_on_global_message)
 	if not ChatManager.message_sent.is_connected(_on_message_sent):
 		ChatManager.message_sent.connect(_on_message_sent)
-	ChatManager._debug_subs("messages_page_ready")
 	await _boot()
 
 
@@ -68,8 +67,6 @@ func _append_global_row(message: Dictionary, source: String) -> void:
 	if mid.is_empty():
 		return
 	if _rendered_global_ids.has(mid):
-		if ChatManager.CHAT_DEBUG:
-			print("[chat-ui] skip row id=%s source=%s (already rendered)" % [mid, source])
 		return
 	_rendered_global_ids[mid] = true
 	# Drop empty-state placeholder if present.
@@ -86,8 +83,6 @@ func _append_global_row(message: Dictionary, source: String) -> void:
 		mine,
 		str(message.get("sender_guild_tag", ""))
 	))
-	if ChatManager.CHAT_DEBUG:
-		print("[chat-ui] render row id=%s source=%s sender=%s" % [mid, source, who])
 	_scroll_thread_bottom()
 
 
@@ -722,8 +717,6 @@ func _load_global_thread() -> void:
 	_rendered_global_ids.clear()
 	var msgs: Array = await ChatManager.load_global()
 	if token != _global_load_token:
-		if ChatManager.CHAT_DEBUG:
-			print("[chat-ui] stale history render ignored token=%d" % token)
 		return
 	if not is_inside_tree() or _thread == null or not is_instance_valid(_thread):
 		return
@@ -747,6 +740,4 @@ func _load_global_thread() -> void:
 			mine,
 			str(m.get("sender_guild_tag", ""))
 		))
-	if ChatManager.CHAT_DEBUG:
-		print("[chat-ui] history rendered count=%d source=cached_history" % _rendered_global_ids.size())
 	_scroll_thread_bottom()

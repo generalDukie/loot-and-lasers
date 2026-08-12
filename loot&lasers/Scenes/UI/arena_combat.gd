@@ -589,6 +589,19 @@ func _apply_combat_tutorial_tags() -> void:
 	TutorialManager.tag_target(_skip_btn, "arena-outro")
 
 
+func _tutorial_mission_skip_locked() -> bool:
+	## Guided first mission duel — player must watch the playback (rewatch may skip).
+	return _is_mission() and not _watch_only and TutorialManager.blocks_combat_skip_to_results()
+
+
+func _sync_tutorial_skip_lock() -> void:
+	if not is_instance_valid(_skip_btn):
+		return
+	if _tutorial_mission_skip_locked():
+		_skip_btn.visible = false
+		_skip_btn.disabled = true
+
+
 func _is_mission() -> bool:
 	return str(GameManager.combat_overlay_kind) == "mission"
 
@@ -758,6 +771,7 @@ func _start_duel(
 	_phase = "intro"
 	_playing = true
 	_presentation_battle = battle.duplicate(true)
+	_sync_tutorial_skip_lock()
 
 	var vs_row: Label = _intro_layer.find_child("VsRow", true, false) as Label
 	if vs_row:
@@ -1314,6 +1328,8 @@ func _battle_for_presentation() -> Dictionary:
 func _on_skip() -> void:
 	## Fast-forward presentation to the authoritative final HP, then combat report.
 	## Does not re-simulate combat — consumes playerEnd / EndHp / event log from the committed battle.
+	if _tutorial_mission_skip_locked():
+		return
 	if _busy or _finished or _phase == "outro":
 		return
 	_generation += 1
@@ -1406,6 +1422,7 @@ func _settle_and_show_rewards() -> void:
 		ClientUi.apply_danger_button(_outro_btn)
 		_skip_btn.disabled = false
 		_skip_btn.visible = true
+		_sync_tutorial_skip_lock()
 		_finished = false
 		return
 	_rewards_settled = true
@@ -1483,6 +1500,7 @@ func _start_combat_rewatch() -> void:
 	_hp.reset(p_max, p_max, e_max, e_max)
 	_skip_btn.disabled = false
 	_skip_btn.visible = true
+	_sync_tutorial_skip_lock()
 	_motion.stop_all_idle()
 	if is_instance_valid(_player_card):
 		_player_card.modulate = Color.WHITE

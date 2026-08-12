@@ -115,6 +115,18 @@ func blocks_arena_combat() -> bool:
 	return should_show() or blocks_daily_login_prompt()
 
 
+## First tutorial mission fight must be watched — no SKIP TO RESULTS.
+func blocks_combat_skip_to_results() -> bool:
+	if not should_show():
+		return false
+	if step_id() == "mission_fight":
+		return true
+	## Fight click advances toward Operative while the duel still plays.
+	if step_id() == "click_hero" and _coach_suppressed:
+		return true
+	return false
+
+
 func coach_visible() -> bool:
 	if not should_show():
 		return false

@@ -460,22 +460,6 @@ func has_active_mission() -> bool:
 	return not str(GameManager.active_character.get("active_mission_id", "")).is_empty()
 
 
-# ---------------------------------------------------------------------------
-# Legacy Nakama mission RPCs — hard-disabled (Node LaunchMission/ClaimMission)
-# ---------------------------------------------------------------------------
-
-func load_missions(_character_id: String = "") -> Dictionary:
-	return _fail_nakama("Nakama missions_get disabled — use Node Cantina / LaunchMission", 410)
-
-
-func refresh_missions(_character_id: String = "") -> Dictionary:
-	return _fail_nakama("Nakama missions_refresh disabled — use Node mission offers", 410)
-
-
-func start_mission(_mission_id: String, _character_id: String = "") -> Dictionary:
-	return _fail_nakama("Nakama mission_start disabled — use MissionManager.launch_offer", 410)
-
-
 func get_active_mission(character_id: String = "") -> Dictionary:
 	return await refresh_mission_status(character_id)
 
@@ -531,13 +515,6 @@ func _ensure_profile_character(character_id: String) -> Dictionary:
 		"success": false,
 		"error": "Selected character sync failed — %s" % str(res.get("error", "unknown")),
 	}
-
-
-func _nakama_board_rpc(rpc_id: String, _character_id: String, _is_refresh: bool) -> Dictionary:
-	return _fail_nakama(
-		"Nakama %s disabled — Node owns mission board/lifecycle" % rpc_id,
-		410
-	)
 
 
 func _nakama_character_payload(character_id: String = "") -> Dictionary:
@@ -653,17 +630,6 @@ func _set_loading(value: bool) -> void:
 		return
 	loading = value
 	loading_changed.emit(loading)
-
-
-func _fail_nakama(error: String, status_code: int = 0) -> Dictionary:
-	mission_error.emit(error)
-	return {
-		"ok": false,
-		"success": false,
-		"error": error,
-		"data": {},
-		"status_code": status_code,
-	}
 
 
 func _apply_character_payload(res: Dictionary) -> void:

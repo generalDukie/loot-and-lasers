@@ -74,7 +74,7 @@ func _build() -> void:
 	header.add_child(badge)
 	var badge_c := CenterContainer.new()
 	badge.add_child(badge_c)
-	badge_c.add_child(UiIcon.make("mail", Color(0.98, 0.82, 0.4), 22.0))
+	badge_c.add_child(UiIcon.make("mail", Color("#16A34A"), 22.0))
 
 	var title_col := VBoxContainer.new()
 	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -37,11 +37,6 @@ func stardust_max() -> int:
 	return maxi(1, StardustEconomy.stardust_per_fuel(level) * 50)
 
 
-## @deprecated Prefer stardust_max()
-func max_bet() -> int:
-	return stardust_max()
-
-
 func nova_min() -> int:
 	var lim: Variant = casino_state.get("nova_limits", {})
 	if typeof(lim) == TYPE_DICTIONARY and lim.has("min"):

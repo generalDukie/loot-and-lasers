@@ -560,7 +560,12 @@ func _on_challenge(c: Dictionary, btn: Button = null, detail: Label = null) -> v
 	_busy = false
 	_challenging_id = ""
 	if not res.get("ok", false):
-		_set_status(str(res.get("error", "Challenge unavailable")), ClientUi.DANGER)
+		var code := str(res.get("code", ""))
+		var err := str(res.get("error", "Challenge unavailable"))
+		if code == "ARENA_BOARD_REFRESHED":
+			_set_status("Challengers updated — pick again from Arena.", ClientUi.MUTED)
+		else:
+			_set_status(err, ClientUi.DANGER)
 		if btn != null and is_instance_valid(btn):
 			btn.text = "Challenge"
 			btn.disabled = false

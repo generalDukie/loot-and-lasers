@@ -1,6 +1,9 @@
 extends Control
 ## Nebula Casino — casino_v2: Galactic Dice, Stardust Wheel, Crystal Refining, Smuggler's Cache.
 
+## Uniform page scale — fills content width; chrome designed at 1.0 then blown up.
+const UI_SCALE := 1.5
+
 const DICE_FACES := ["dice-1", "dice-2", "dice-3", "dice-4", "dice-5", "dice-6"]
 const DICE_TUMBLE_S := 1.5
 const WHEEL_SPIN_S := 2.0
@@ -24,6 +27,10 @@ const GAME_DICE := "galactic_dice"
 const GAME_WHEEL := "stardust_wheel"
 const GAME_REFINE := "crystal_refining"
 const GAME_CACHE := "smugglers_cache"
+
+var _scale_host: Control
+var _scale_root: VBoxContainer
+var _scale_syncing := false
 
 var _balance_sd: Label
 var _balance_nova: Label
@@ -165,27 +172,27 @@ func _build() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	margin.add_child(scroll)
 
-	var center := CenterContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(center)
+	# Host reports scaled min size to ScrollContainer; root draws at UI_SCALE.
+	_scale_host = Control.new()
+	_scale_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scale_host.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	scroll.add_child(_scale_host)
 
-	var root := VBoxContainer.new()
-	root.custom_minimum_size.x = 980
-	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.add_theme_constant_override("separation", 14)
-	center.add_child(root)
+	_scale_root = VBoxContainer.new()
+	_scale_root.add_theme_constant_override("separation", 14)
+	_scale_root.scale = Vector2(UI_SCALE, UI_SCALE)
+	_scale_host.add_child(_scale_root)
 
-	root.add_child(_build_header())
+	_scale_root.add_child(_build_header())
 	var nav := _build_nav()
 	TutorialManager.tag_target(nav, "casino-games")
-	root.add_child(nav)
+	_scale_root.add_child(nav)
 
 	var stage := PanelContainer.new()
 	stage.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.05, 0.05, 0.09, 0.94), Color(0.35, 0.40, 0.48, 0.35), 14, 1
 	))
-	root.add_child(stage)
+	_scale_root.add_child(stage)
 	var stage_inner := MarginContainer.new()
 	stage_inner.add_theme_constant_override("margin_left", 14)
 	stage_inner.add_theme_constant_override("margin_right", 14)
@@ -211,7 +218,7 @@ func _build() -> void:
 
 	_status = ClientUi.make_status()
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(_status)
+	_scale_root.add_child(_status)
 
 	var disclaimer := Label.new()
 	disclaimer.text = "Play responsibly. Gross payout includes your wager; net is profit or loss."
@@ -220,7 +227,36 @@ func _build() -> void:
 	disclaimer.add_theme_font_size_override("font_size", 17)
 	disclaimer.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.70))
 	ClientUi.apply_body_font(disclaimer)
-	root.add_child(disclaimer)
+	_scale_root.add_child(disclaimer)
+
+	if not _scale_host.resized.is_connected(_sync_casino_scale):
+		_scale_host.resized.connect(_sync_casino_scale)
+	call_deferred("_sync_casino_scale")
+
+
+## Keep the scaled casino column full-bleed in the scroll area.
+func _sync_casino_scale() -> void:
+	if _scale_syncing:
+		return
+	if not is_instance_valid(_scale_host) or not is_instance_valid(_scale_root):
+		return
+	_scale_syncing = true
+	var avail_w := _scale_host.size.x
+	if avail_w < 32.0:
+		var p := _scale_host.get_parent()
+		if p is Control:
+			avail_w = (p as Control).size.x
+	if avail_w < 32.0:
+		_scale_syncing = false
+		return
+	var logical_w := avail_w / UI_SCALE
+	_scale_root.position = Vector2.ZERO
+	_scale_root.custom_minimum_size = Vector2(logical_w, 0)
+	_scale_root.size = Vector2(logical_w, 0)
+	var logical_h := _scale_root.get_combined_minimum_size().y
+	_scale_root.size = Vector2(logical_w, logical_h)
+	_scale_host.custom_minimum_size = Vector2(0, ceili(logical_h * UI_SCALE))
+	_scale_syncing = false
 
 
 func _build_header() -> VBoxContainer:
@@ -774,6 +810,7 @@ func _select_game(game_id: String) -> void:
 		_restore_cache_session()
 	_refresh_wager_controls()
 	_refresh_action_enabled()
+	call_deferred("_sync_casino_scale")
 
 
 func _init_default_wagers() -> void:
@@ -1301,6 +1338,7 @@ func _rebuild_refine_ladder() -> void:
 		ClientUi.apply_body_font(lab)
 		line.add_child(lab)
 		_refine_ladder_box.add_child(line)
+	call_deferred("_sync_casino_scale")
 
 
 func _restore_refine_session() -> void:

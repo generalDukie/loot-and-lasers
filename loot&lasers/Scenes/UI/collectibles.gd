@@ -213,7 +213,7 @@ func _populate() -> void:
 				var has_it: bool = gear_owned.has(eid)
 				_list.add_child(_entry(
 					str(e.get("name", "?")),
-					str(e.get("type", "")),
+					GameData.gear_type_label(str(e.get("type", ""))),
 					"Discovered base type." if has_it else "Not yet discovered.",
 					has_it
 				))

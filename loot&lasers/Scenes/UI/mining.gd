@@ -436,7 +436,11 @@ func _populate() -> void:
 	_idle_box.visible = not mining
 	_busy_box.visible = mining and not ready
 	_ready_box.visible = ready
-	_start_btn.disabled = _busy
+	_start_btn.disabled = _busy or TutorialManager.blocks_mining_start()
+	if TutorialManager.blocks_mining_start():
+		_start_btn.tooltip_text = "Finish or skip the tutorial before deploying the mining drone"
+	else:
+		_start_btn.tooltip_text = ""
 	_abort_btn.disabled = _busy
 	_collect_btn.disabled = _busy
 
@@ -478,10 +482,13 @@ func _populate() -> void:
 		_last_phase = phase
 		_restart_emoji_motion(phase)
 
-	if MissionManager.has_active_mission() and not mining:
-		if _status.text.is_empty() or _status.text.begins_with("Ship Busy") or _status.text.begins_with("Cantina"):
+	if TutorialManager.blocks_mining_start() and not mining:
+		if _status.text.is_empty() or _status.text.begins_with("Ship Busy") or _status.text.begins_with("Cantina") or _status.text.begins_with("Tutorial"):
+			_set_status("Tutorial — finish or skip onboarding before deploying the mining drone.", ClientUi.MUTED)
+	elif MissionManager.has_active_mission() and not mining:
+		if _status.text.is_empty() or _status.text.begins_with("Ship Busy") or _status.text.begins_with("Cantina") or _status.text.begins_with("Tutorial"):
 			_set_status("Ship Busy — finish or claim your Cantina mission before deploying the mining drone.", ClientUi.DANGER)
-	elif _status.text.begins_with("Ship Busy") or _status.text.begins_with("Cantina"):
+	elif _status.text.begins_with("Ship Busy") or _status.text.begins_with("Cantina") or _status.text.begins_with("Tutorial"):
 		_set_status("", ClientUi.MUTED)
 
 
@@ -549,6 +556,9 @@ func _format_remaining(ms: int) -> String:
 
 func _on_start() -> void:
 	if _busy:
+		return
+	if TutorialManager.blocks_mining_start():
+		Notify.blocked("Finish or skip the tutorial before deploying the mining drone")
 		return
 	if MissionManager.has_active_mission():
 		Notify.blocked("Ship busy", "Finish or claim your mission before deploying the mining drone")

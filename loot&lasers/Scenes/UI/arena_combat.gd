@@ -396,20 +396,23 @@ func _build() -> void:
 
 	_combat_log = RichTextLabel.new()
 	_combat_log.bbcode_enabled = true
-	_combat_log.fit_content = true
+	# Fixed panel size — grow-to-fit overflows the BR box and hides new lines.
+	_combat_log.fit_content = false
 	_combat_log.scroll_active = true
+	_combat_log.scroll_following = true
+	_combat_log.clip_contents = true
 	_combat_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_combat_log.set_anchors_preset(PRESET_BOTTOM_RIGHT)
 	_combat_log.anchor_left = 1.0
 	_combat_log.anchor_top = 1.0
 	_combat_log.anchor_right = 1.0
 	_combat_log.anchor_bottom = 1.0
-	_combat_log.offset_left = -300
-	_combat_log.offset_top = -150
+	_combat_log.offset_left = -340
+	_combat_log.offset_top = -180
 	_combat_log.offset_right = -12
 	_combat_log.offset_bottom = -72
-	_combat_log.add_theme_font_size_override("normal_font_size", 14)
-	_combat_log.add_theme_color_override("default_color", Color(1, 1, 1, 0.72))
+	_combat_log.add_theme_font_size_override("normal_font_size", 15)
+	_combat_log.add_theme_color_override("default_color", Color(1, 1, 1, 0.78))
 	_combat_log.z_index = 25
 	add_child(_combat_log)
 
@@ -453,7 +456,7 @@ func _make_hp_side(align_right: bool) -> VBoxContainer:
 	col.add_child(nums)
 	var status := HBoxContainer.new()
 	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	status.custom_minimum_size.y = 18
+	status.custom_minimum_size.y = 22
 	status.add_theme_constant_override("separation", 8)
 	status.alignment = (
 		BoxContainer.ALIGNMENT_END if align_right else BoxContainer.ALIGNMENT_BEGIN
@@ -731,6 +734,129 @@ func _dungeon_enemy_index(enemy: Dictionary) -> int:
 	return DungeonManager.current_enemy_index()
 
 
+## Prefer server display_stats (EPA / gear+Stim finals).
+## Never route PvE/bot foes through StatsRules.raw_stats — that collapses missing
+## or sub-50 EPA budgets into class base (looks like "only base stats").
+static func _attr_map_sum(totals: Dictionary) -> int:
+	var s := 0
+	for k in StatsRules.ATTR_KEYS:
+		s += int(totals.get(k, 0))
+	return s
+
+
+static func _normalize_attr_map(raw: Variant) -> Dictionary:
+	var out := {
+		"strength": 0, "agility": 0, "intellect": 0, "vitality": 0, "luck": 0,
+	}
+	if typeof(raw) != TYPE_DICTIONARY:
+		return out
+	for k in out.keys():
+		out[k] = int((raw as Dictionary).get(k, 0))
+	return out
+
+
+static func _is_class_base_only(character: Dictionary, totals: Dictionary) -> bool:
+	var class_key := str(character.get("class", "Vanguard"))
+	var base: Dictionary = StatsRules.CLASS_BASE_STATS.get(class_key, StatsRules.CLASS_BASE_STATS["Vanguard"])
+	for k in StatsRules.ATTR_KEYS:
+		if int(totals.get(k, 0)) != int(base.get(k, 0)):
+			return false
+	return _attr_map_sum(totals) > 0
+
+
+static func _is_generated_foe(character: Dictionary) -> bool:
+	# Never treat the local operative as a generated foe — overlay kind alone
+	# used to mark *both* sides as foes in mission/dungeon/arena.
+	if GameManager != null:
+		var active_id := str(GameManager.active_character.get("id", "")).strip_edges()
+		var cid := str(character.get("id", character.get("character_id", ""))).strip_edges()
+		if not active_id.is_empty() and cid == active_id:
+			return false
+	if bool(character.get("missionEnemy", false)) \
+			or bool(character.get("mission_enemy", false)) \
+			or bool(character.get("dungeonEnemy", false)) \
+			or bool(character.get("dungeon_enemy", false)) \
+			or bool(character.get("isBot", false)) \
+			or bool(character.get("is_bot", false)):
+		return true
+	# Stripped public summaries omit flags — use combat overlay kind for foes only.
+	if GameManager == null:
+		return false
+	var kind := str(GameManager.combat_overlay_kind)
+	if kind == "mission" or kind == "dungeon":
+		# Player already excluded above; remaining combatants in these modes are PvE.
+		return true
+	if kind == "arena":
+		var real_id := str(character.get("realCharacterId", character.get("character_id", "")))
+		return real_id.is_empty() and str(character.get("id", "")).is_empty()
+	return false
+
+
+static func _infer_mission_archetype(character: Dictionary) -> String:
+	var arch := str(character.get("missionEnemyArchetype", character.get("dungeonEnemyArchetype", "")))
+	if not arch.is_empty():
+		return arch
+	var ck := str(character.get("class", "Vanguard"))
+	if ck in ["Shadow Operative", "Void Runner"]:
+		return "REFLEX"
+	if ck in ["Technomancer", "Cosmic Engineer"]:
+		return "TECH"
+	return "MIGHT"
+
+
+static func _epa_enemy_totals(opp: Dictionary) -> Dictionary:
+	var level := maxi(1, int(opp.get("level", 1)))
+	var epa := float(ExpectedPlayerAttributes.at(level))
+	var kind := str(GameManager.combat_overlay_kind) if GameManager != null else ""
+	var as_mission := bool(opp.get("missionEnemy", false)) or bool(opp.get("mission_enemy", false)) \
+		or kind == "mission"
+	var as_dungeon := bool(opp.get("dungeonEnemy", false)) or bool(opp.get("dungeon_enemy", false)) \
+		or bool(opp.get("isBoss", false)) or bool(opp.get("boss", false)) \
+		or kind == "dungeon"
+	if as_mission and kind != "dungeon" and not bool(opp.get("dungeonEnemy", false)):
+		var budget := int(round(epa * 0.35))
+		return MissionCombat.distribute_attrs(budget, _infer_mission_archetype(opp))
+	if as_dungeon:
+		var boss := bool(opp.get("isBoss", false)) or bool(opp.get("boss", false))
+		var budget2 := int(round(epa * (1.30 if boss else 1.20)))
+		return MissionCombat.distribute_attrs(budget2, _infer_mission_archetype(opp))
+	if bool(opp.get("isBot", false)) or bool(opp.get("is_bot", false)) or kind == "arena":
+		var class_key := ArenaRules.normalize_class(str(opp.get("class", "Vanguard")))
+		var shares: Dictionary = ArenaRules.BALANCED_SHARES.get(class_key, ArenaRules.BALANCED_SHARES["Vanguard"])
+		var primary: String = ArenaRules.PRIMARY_STAT.get(class_key, "strength")
+		return ArenaRules.allocate_attrs(int(round(epa)), shares, primary)
+	return {}
+
+
+## Prefer server display_stats (EPA / gear+Stim finals).
+## Real operatives: never trust bare character.stats (missing gear/stims) — use
+## display_totals when server finals are absent.
+## PvE/bots: never route through raw_stats / class base as if those were EPA.
+static func _matchup_totals(
+	character: Dictionary,
+	items: Array,
+	server_totals: Variant = null,
+	is_player: bool = false
+) -> Dictionary:
+	var mapped := _normalize_attr_map(server_totals)
+	if _attr_map_sum(mapped) <= 0:
+		mapped = _normalize_attr_map(character.get("display_stats", null))
+
+	var generated := (not is_player) and _is_generated_foe(character)
+
+	# Usable server/local display map: non-zero, and not a class-base placeholder on foes.
+	if _attr_map_sum(mapped) > 0 and not (generated and _is_class_base_only(character, mapped)):
+		return mapped
+
+	if generated:
+		var epa_totals := _epa_enemy_totals(character)
+		if _attr_map_sum(epa_totals) > 0:
+			return epa_totals
+
+	# Player / real operative fallback: permanent + gear + active Stims.
+	return StatsRules.display_totals(character, items)
+
+
 func _start_duel(
 	player: Dictionary,
 	opp: Dictionary,
@@ -747,8 +873,23 @@ func _start_duel(
 	_duel_enemy = opp
 	_duel_player_items = player_items
 	_duel_enemy_items = opp_items
-	_player_totals = StatsRules.display_totals(player, player_items)
-	_enemy_totals = StatsRules.display_totals(opp, opp_items)
+	var server_player: Variant = battle.get("player_display_stats", null)
+	# Prefer explicit display_stats; only fall back to stats when display_stats key is absent.
+	var server_enemy: Variant = null
+	if opp.has("display_stats") and typeof(opp.get("display_stats")) == TYPE_DICTIONARY:
+		server_enemy = opp.get("display_stats")
+	elif opp.has("stats") and typeof(opp.get("stats")) == TYPE_DICTIONARY:
+		server_enemy = opp.get("stats")
+	_player_totals = _matchup_totals(player, player_items, server_player, true)
+	_enemy_totals = _matchup_totals(opp, opp_items, server_enemy, false)
+	# Keep matchup source on the foe for rebuilds / return-to-combat.
+	if _attr_map_sum(_enemy_totals) > 0:
+		_duel_enemy["display_stats"] = _enemy_totals.duplicate()
+		opp["display_stats"] = _enemy_totals.duplicate()
+	# Mirror finalized player totals so rebuilds don't fall back to naked stats.
+	if _attr_map_sum(_player_totals) > 0:
+		_duel_player["display_stats"] = _player_totals.duplicate()
+		player["display_stats"] = _player_totals.duplicate()
 
 	_player_hp_name.text = player_name
 	_enemy_hp_name.text = opp_name
@@ -972,11 +1113,14 @@ func _portrait_card(character: Dictionary, tint: Color, weapon: Dictionary, is_p
 	portrait_wrap.name = "PlayerHitPoint" if is_player else "EnemyHitPoint"
 	portrait_wrap.custom_minimum_size = Vector2(portrait_sz, portrait_sz)
 	portrait_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	portrait_wrap.clip_contents = false
 	col.add_child(portrait_wrap)
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	center.clip_contents = false
 	portrait_wrap.add_child(center)
 	var portrait := AvatarRenderer.make_portrait(character, portrait_sz)
+	portrait.clip_contents = false
 	if not is_player:
 		portrait.scale = Vector2(-1, 1)
 		portrait.pivot_offset = Vector2(portrait_sz * 0.5, portrait_sz * 0.5)
@@ -1090,7 +1234,7 @@ func _update_combo(_attacker: String) -> void:
 
 
 func _play_one_event(ev: Dictionary, gen: int) -> void:
-	_hide_ability_banner()
+	# Ability banners linger on their own timer; only replace when a new one fires.
 	var land_at := _beats.land_delay(ev)
 	_maybe_ability_banner(ev)
 	_begin_event_fx(ev)
@@ -1219,6 +1363,10 @@ func _maybe_ability_banner(ev: Dictionary) -> void:
 	)
 	if banner.is_empty():
 		return
+	# Player class callouts always; opponent only for real PvP (not bots / mission / dungeon).
+	var side := str(banner.get("side", "player"))
+	if side == "opponent" and _is_generated_foe(_opp()):
+		return
 	_show_ability_banner(banner)
 
 
@@ -1249,16 +1397,28 @@ func _append_combat_log(ev: Dictionary) -> void:
 	if _combat_log == null:
 		return
 	var line := CombatPresentation.format_log_line(ev, _event_i)
-	_combat_log.append_text(line + "\n")
-	# Keep last ~10 lines readable without a huge panel.
+	if CombatPresentation.is_ability_log_event(ev):
+		_combat_log.append_text("[color=#E9D5FF]%s[/color]\n" % line)
+	else:
+		_combat_log.append_text(line + "\n")
+	# Keep last ~12 lines readable without a huge panel.
 	var txt := _combat_log.get_parsed_text()
 	var lines := txt.split("\n")
-	if lines.size() > 12:
+	if lines.size() > 14:
 		var keep := PackedStringArray()
-		for i in range(maxi(0, lines.size() - 10), lines.size()):
+		for i in range(maxi(0, lines.size() - 12), lines.size()):
 			keep.append(lines[i])
 		_combat_log.clear()
 		_combat_log.append_text("\n".join(keep))
+	# Layout needs a tick before scroll_to_line sees the new height.
+	call_deferred("_scroll_combat_log_to_end")
+
+
+func _scroll_combat_log_to_end() -> void:
+	if _combat_log == null or not is_instance_valid(_combat_log):
+		return
+	var last := maxi(0, _combat_log.get_line_count() - 1)
+	_combat_log.scroll_to_line(last)
 
 
 func _hide_ability_banner() -> void:
@@ -1303,10 +1463,13 @@ func _show_ability_banner(banner: Dictionary) -> void:
 	_ability_banner.scale = Vector2(0.85, 0.85)
 	var hold := _beats.scaled(_beats.banner_hold_s)
 	_ability_tween = _ability_banner.create_tween()
+	# Open (parallel), then hold, then fade — callback must not run in parallel with the hold.
 	_ability_tween.set_parallel(true)
 	_ability_tween.tween_property(_ability_banner, "modulate:a", 1.0, 0.12)
 	_ability_tween.tween_property(_ability_banner, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_ability_tween.chain().tween_property(_ability_banner, "modulate:a", 0.0, 0.14).set_delay(hold)
+	_ability_tween.chain().set_parallel(false)
+	_ability_tween.tween_interval(hold)
+	_ability_tween.tween_property(_ability_banner, "modulate:a", 0.0, 0.14)
 	_ability_tween.tween_callback(func() -> void:
 		if is_instance_valid(_ability_banner):
 			_ability_banner.visible = false

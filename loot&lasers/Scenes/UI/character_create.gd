@@ -46,6 +46,7 @@ var _create_request_id := ""
 var _race_name := ""
 var _class_name := ""
 var _skin_color := ""
+var _accent_color := ""
 var _eye_style := ""
 var _ears := ""
 var _mouth := ""
@@ -78,8 +79,10 @@ var _class_detail_host: Control
 var _looks_race_chip: Label
 var _looks_class_chip: Label
 var _skin_swatch: ColorRect
+var _accent_swatch: ColorRect
 var _looks_preview_host: Control
 var _looks_preview_frame: PanelContainer
+var _ears_row: Control
 var _launch_preview_host: Control
 var _launch_name: Label
 var _launch_meta: Label
@@ -88,6 +91,7 @@ var _legacy_block: PanelContainer
 var _legacy_field: LineEdit
 var _legacy_meta: Label
 var _arrow_value_labs: Dictionary = {} # key -> Label
+var _arrow_option_rows: Dictionary = {} # field -> Control
 
 
 func _s(v: float) -> float:
@@ -582,21 +586,20 @@ func _make_race_card(race_name: String) -> Button:
 	av_aspect.add_child(av_wrap)
 	var fake := {
 		"race": race_name,
-		"appearance": {
-			"skin_color": str((info.get("skinColors", ["#888"]) as Array)[0]),
-			"eye_style": GameData.EYE_STYLES[0],
-			"ears": GameData.EAR_STYLES[0],
-			"mouth": GameData.MOUTH_STYLES[0],
-			"nose": GameData.NOSE_STYLES[0],
-			"eyebrows": GameData.BROW_STYLES[0],
-			"marking": GameData.MARKINGS[0],
-		},
+		"class": "Vanguard",
+		"appearance": GameData.random_appearance_for_race(race_name),
 	}
 	var portrait := AvatarRenderer.make_portrait(fake, _s(96.0))
+	portrait.name = "RacePortrait"
 	portrait.custom_minimum_size = Vector2.ZERO
 	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Frame clips at the accent border; portrait must not clip early at the padded inset.
+	portrait.clip_contents = false
+	if portrait is AvatarPortrait:
+		(portrait as AvatarPortrait).set_active(true)
 	av_wrap.add_child(portrait)
+	btn.set_meta("portrait_host", av_wrap)
 
 	var copy := VBoxContainer.new()
 	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -803,17 +806,23 @@ func _build_looks_page() -> Control:
 	var preview_col := VBoxContainer.new()
 	preview_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	preview_col.size_flags_stretch_ratio = 0.4
+	preview_col.size_flags_stretch_ratio = 0.36
 	preview_col.add_theme_constant_override("separation", _si(6))
 	split.add_child(preview_col)
 	_looks_preview_frame = PanelContainer.new()
 	_looks_preview_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_looks_preview_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_looks_preview_frame.custom_minimum_size = _sv(Vector2(200, 200))
-	_looks_preview_frame.add_theme_stylebox_override(
-		"panel",
-		ClientUi.painted_panel_style(Color(0.04, 0.06, 0.1, 0.9), Color(1, 1, 1, 0.14), _si(12), maxi(1, _si(1)))
-	)
+	_looks_preview_frame.clip_contents = true
+	var preview_sb := ClientUi.painted_panel_style(
+		Color(0.04, 0.06, 0.1, 0.9), Color(1, 1, 1, 0.14), _si(12), maxi(1, _si(1))
+	).duplicate() as StyleBoxFlat
+	# No content inset — aura / portrait fill to the pane edge (frame clips overflow).
+	preview_sb.content_margin_left = 0
+	preview_sb.content_margin_right = 0
+	preview_sb.content_margin_top = 0
+	preview_sb.content_margin_bottom = 0
+	_looks_preview_frame.add_theme_stylebox_override("panel", preview_sb)
 	preview_col.add_child(_looks_preview_frame)
 	_looks_preview_host = Control.new()
 	_looks_preview_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -832,13 +841,13 @@ func _build_looks_page() -> Control:
 	var form_col := VBoxContainer.new()
 	form_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	form_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	form_col.size_flags_stretch_ratio = 0.6
-	form_col.add_theme_constant_override("separation", _si(6))
+	form_col.size_flags_stretch_ratio = 0.64
+	form_col.add_theme_constant_override("separation", _si(8))
 	split.add_child(form_col)
 
 	var name_lab := Label.new()
 	name_lab.text = "Operative Name"
-	name_lab.add_theme_font_size_override("font_size", _fs(15))
+	name_lab.add_theme_font_size_override("font_size", _fs(16))
 	name_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(name_lab)
 	form_col.add_child(name_lab)
@@ -848,8 +857,8 @@ func _build_looks_page() -> Control:
 	form_col.add_child(name_row)
 	_name = ClientUi.make_field("Something cool. Or stupid. Your call.")
 	_name.max_length = 24
-	_name.custom_minimum_size.y = _si(40)
-	_name.add_theme_font_size_override("font_size", _fs(16))
+	_name.custom_minimum_size.y = _si(44)
+	_name.add_theme_font_size_override("font_size", _fs(17))
 	_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_name.text_changed.connect(_on_name_changed)
 	name_row.add_child(_name)
@@ -871,25 +880,56 @@ func _build_looks_page() -> Control:
 	ClientUi.apply_body_font(letters_only)
 	form_col.add_child(letters_only)
 
-	# Skin tone arrow row
-	var skin_row := _make_arrow_shell("Skin Tone")
-	form_col.add_child(skin_row)
+	# Face options fill leftover height/width beside the preview.
+	var opts := VBoxContainer.new()
+	opts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	opts.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	opts.add_theme_constant_override("separation", _si(10))
+	form_col.add_child(opts)
+
+	# Skin + Accent tone side by side — clear gap so they read as two controls.
+	var tone_row := HBoxContainer.new()
+	tone_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tone_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tone_row.add_theme_constant_override("separation", _si(28))
+	opts.add_child(tone_row)
+
+	var skin_row := _make_arrow_shell("Skin Tone", true)
+	tone_row.add_child(skin_row)
 	var skin_mid := skin_row.find_child("Mid", true, false) as HBoxContainer
 	var skin_prev := skin_row.find_child("Prev", true, false) as Button
 	var skin_next := skin_row.find_child("Next", true, false) as Button
 	_skin_swatch = ColorRect.new()
-	_skin_swatch.custom_minimum_size = _sv(Vector2(32, 32))
+	_skin_swatch.custom_minimum_size = _sv(Vector2(48, 48))
 	_skin_swatch.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	skin_mid.add_child(_skin_swatch)
 	skin_prev.pressed.connect(func() -> void: _cycle_skin(-1))
 	skin_next.pressed.connect(func() -> void: _cycle_skin(1))
 
-	form_col.add_child(_make_arrow_selector("Eyes", "eye_style", GameData.EYE_STYLES))
-	form_col.add_child(_make_arrow_selector("Brows", "eyebrows", GameData.BROW_STYLES))
-	form_col.add_child(_make_arrow_selector("Nose", "nose", GameData.NOSE_STYLES))
-	form_col.add_child(_make_arrow_selector("Mouth", "mouth", GameData.MOUTH_STYLES))
-	form_col.add_child(_make_arrow_selector("Ears", "ears", GameData.EAR_STYLES))
-	form_col.add_child(_make_arrow_selector("Marks", "marking", GameData.MARKINGS))
+	var tone_gap := Control.new()
+	tone_gap.custom_minimum_size.x = _si(12)
+	tone_gap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tone_row.add_child(tone_gap)
+
+	var accent_row := _make_arrow_shell("Accent Tone", true)
+	tone_row.add_child(accent_row)
+	var accent_mid := accent_row.find_child("Mid", true, false) as HBoxContainer
+	var accent_prev := accent_row.find_child("Prev", true, false) as Button
+	var accent_next := accent_row.find_child("Next", true, false) as Button
+	_accent_swatch = ColorRect.new()
+	_accent_swatch.custom_minimum_size = _sv(Vector2(48, 48))
+	_accent_swatch.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	accent_mid.add_child(_accent_swatch)
+	accent_prev.pressed.connect(func() -> void: _cycle_accent(-1))
+	accent_next.pressed.connect(func() -> void: _cycle_accent(1))
+
+	opts.add_child(_make_arrow_selector("Eyes", "eye_style", true))
+	opts.add_child(_make_arrow_selector("Brows", "eyebrows", true))
+	opts.add_child(_make_arrow_selector("Nose", "nose", true))
+	opts.add_child(_make_arrow_selector("Mouth", "mouth", true))
+	_ears_row = _make_arrow_selector("Ears", "ears", true)
+	opts.add_child(_ears_row)
+	opts.add_child(_make_arrow_selector("Marks", "marking", true))
 	return page
 
 
@@ -1076,66 +1116,90 @@ func _chip_label(text: String) -> Label:
 	return lab
 
 
-func _make_arrow_shell(label_text: String) -> HBoxContainer:
+func _make_arrow_shell(label_text: String, fill_row: bool = false) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", _si(6))
+	row.add_theme_constant_override("separation", _si(14 if fill_row else 6))
+	if fill_row:
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
 
 	var lab := Label.new()
 	lab.text = label_text
-	lab.custom_minimum_size.x = _si(72)
-	lab.add_theme_font_size_override("font_size", _fs(15))
+	# Looks fill rows: ~1.5× prior label/control scale.
+	lab.custom_minimum_size.x = _si(168 if fill_row else 72)
+	lab.add_theme_font_size_override("font_size", _fs(25.5 if fill_row else 15))
 	lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(lab)
+	if fill_row:
+		lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(lab)
 
 	var controls := HBoxContainer.new()
-	controls.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	controls.add_theme_constant_override("separation", _si(2))
+	controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL if fill_row else Control.SIZE_SHRINK_BEGIN
+	controls.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	controls.add_theme_constant_override("separation", _si(4 if fill_row else 2))
+	if fill_row:
+		controls.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(controls)
 
 	var prev := Button.new()
 	prev.name = "Prev"
 	prev.text = "‹"
-	prev.custom_minimum_size = _sv(Vector2(28, 28))
+	prev.custom_minimum_size = _sv(Vector2(51, 51) if fill_row else Vector2(28, 28))
 	_apply_scaled_ghost(prev)
+	if fill_row:
+		prev.add_theme_font_size_override("font_size", _fs(22.5))
 	controls.add_child(prev)
 
 	var mid := HBoxContainer.new()
 	mid.name = "Mid"
-	mid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL if fill_row else Control.SIZE_SHRINK_CENTER
 	mid.alignment = BoxContainer.ALIGNMENT_CENTER
 	controls.add_child(mid)
 
 	var next := Button.new()
 	next.name = "Next"
 	next.text = "›"
-	next.custom_minimum_size = _sv(Vector2(28, 28))
+	next.custom_minimum_size = _sv(Vector2(51, 51) if fill_row else Vector2(28, 28))
 	_apply_scaled_ghost(next)
+	if fill_row:
+		next.add_theme_font_size_override("font_size", _fs(22.5))
 	controls.add_child(next)
 	return row
 
 
-func _make_arrow_selector(label_text: String, field: String, options: PackedStringArray) -> HBoxContainer:
-	var row := _make_arrow_shell(label_text)
+func _make_arrow_selector(label_text: String, field: String, fill_row: bool = false) -> HBoxContainer:
+	var row := _make_arrow_shell(label_text, fill_row)
 	var mid := row.find_child("Mid", true, false) as HBoxContainer
 	var prev := row.find_child("Prev", true, false) as Button
 	var next := row.find_child("Next", true, false) as Button
 	var val := Label.new()
 	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	val.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	val.custom_minimum_size.x = _si(108)
-	val.add_theme_font_size_override("font_size", _fs(15))
+	val.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	val.size_flags_horizontal = Control.SIZE_EXPAND_FILL if fill_row else Control.SIZE_SHRINK_CENTER
+	val.custom_minimum_size.x = _si(210 if fill_row else 108)
+	val.add_theme_font_size_override("font_size", _fs(25.5 if fill_row else 15))
 	val.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_body_font(val)
 	mid.add_child(val)
 	_arrow_value_labs[field] = val
-	prev.pressed.connect(func() -> void: _cycle_field(field, options, -1))
-	next.pressed.connect(func() -> void: _cycle_field(field, options, 1))
+	_arrow_option_rows[field] = row
+	prev.pressed.connect(func() -> void: _cycle_field(field, -1))
+	next.pressed.connect(func() -> void: _cycle_field(field, 1))
 	return row
 
 
-func _cycle_field(field: String, options: PackedStringArray, delta: int) -> void:
+func _options_for_field(field: String) -> PackedStringArray:
+	return GameData.appearance_options_for(_race_name, field)
+
+
+func _cycle_field(field: String, delta: int) -> void:
+	var options := _options_for_field(field)
 	if options.is_empty():
+		return
+	# Locked single-option fields (race-default ears) are not player-cycled.
+	if options.size() <= 1:
 		return
 	var cur := _get_field(field)
 	var idx := options.find(cur)
@@ -1147,6 +1211,73 @@ func _cycle_field(field: String, options: PackedStringArray, delta: int) -> void
 	_refresh_preview()
 	if _step == 3:
 		_refresh_launch()
+
+
+func _refresh_race_portraits() -> void:
+	for key in _race_cards:
+		var btn := _race_cards[key] as Button
+		if btn == null or not btn.has_meta("portrait_host"):
+			continue
+		var host := btn.get_meta("portrait_host") as Control
+		if host == null:
+			continue
+		for c in host.get_children():
+			c.queue_free()
+		var fake := {
+			"race": str(key),
+			"class": "Vanguard",
+			"appearance": GameData.random_appearance_for_race(str(key)),
+		}
+		var portrait := AvatarRenderer.make_portrait(fake, _s(96.0))
+		portrait.name = "RacePortrait"
+		portrait.custom_minimum_size = Vector2.ZERO
+		portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		portrait.clip_contents = false
+		if portrait is AvatarPortrait:
+			(portrait as AvatarPortrait).set_active(true)
+		host.add_child(portrait)
+
+
+func _clamp_looks_to_race() -> void:
+	var clamped := GameData.clamp_appearance_to_race(_race_name, _appearance_raw())
+	_eye_style = str(clamped.get("eye_style", _eye_style))
+	_ears = str(clamped.get("ears", _ears))
+	_mouth = str(clamped.get("mouth", _mouth))
+	_nose = str(clamped.get("nose", _nose))
+	_eyebrows = str(clamped.get("eyebrows", _eyebrows))
+	_marking = str(clamped.get("marking", _marking))
+	_accent_color = str(clamped.get("accent_color", _accent_color))
+	_refresh_ears_row_visibility()
+
+
+func _appearance_raw() -> Dictionary:
+	return {
+		"skin_color": _skin_color,
+		"accent_color": _accent_color,
+		"eye_style": _eye_style,
+		"ears": _ears,
+		"mouth": _mouth,
+		"nose": _nose,
+		"eyebrows": _eyebrows,
+		"marking": _marking,
+	}
+
+
+func _refresh_ears_row_visibility() -> void:
+	if _ears_row == null:
+		return
+	var locked := GameData.locked_ears_for_race(_race_name)
+	_ears_row.visible = locked.is_empty()
+	var marks_row := _arrow_option_rows.get("marking") as Control
+	if marks_row != null:
+		# Hidden when race has no player marking choices (e.g. Cognati).
+		marks_row.visible = GameData.appearance_options_for(_race_name, "marking").size() > 1
+	var brows_row := _arrow_option_rows.get("eyebrows") as Control
+	if brows_row != null:
+		brows_row.visible = GameData.appearance_options_for(_race_name, "eyebrows").size() > 1
+	if not locked.is_empty():
+		_ears = locked
 
 
 func _get_field(field: String) -> String:
@@ -1198,19 +1329,41 @@ func _cycle_skin(delta: int) -> void:
 	_refresh_preview()
 
 
+func _cycle_accent(delta: int) -> void:
+	if _race_name.is_empty():
+		return
+	var accents: Array = GameData.accent_tones_for_race(_race_name)
+	if accents.is_empty():
+		return
+	var idx := accents.find(_accent_color)
+	if idx < 0:
+		idx = 0
+	idx = (idx + delta + accents.size()) % accents.size()
+	_accent_color = str(accents[idx])
+	_refresh_accent_swatch()
+	_refresh_preview()
+
+
 # ─── Selection / refresh ─────────────────────────────────────────────────────
 
 func _select_race(race_name: String) -> void:
 	var skins: Array = GameData.RACE_SKINS.get(race_name, ["#2D5A3D"])
+	var accents: Array = GameData.accent_tones_for_race(race_name)
 	var keep_skin := skins.has(_skin_color)
+	var keep_accent := accents.has(_accent_color)
 	_race_name = race_name
 	if not keep_skin:
 		_skin_color = str(skins[0]) if not skins.is_empty() else "#2D5A3D"
+	if not keep_accent:
+		_accent_color = str(accents[0]) if not accents.is_empty() else "#B794F6"
 	_ensure_look_defaults()
+	_clamp_looks_to_race()
 	_refresh_race_cards()
 	_refresh_lore()
 	_refresh_looks_chips()
 	_refresh_skin_swatch()
+	_refresh_accent_swatch()
+	_refresh_arrow_labels()
 	_refresh_preview()
 	_refresh_class_detail()
 	_refresh_nav_gates()
@@ -1231,21 +1384,28 @@ func _select_class(cls_name: String) -> void:
 
 
 func _ensure_look_defaults() -> void:
-	if _eye_style.is_empty():
-		_eye_style = GameData.EYE_STYLES[0]
-	if _ears.is_empty():
-		_ears = GameData.EAR_STYLES[0]
-	if _mouth.is_empty():
-		_mouth = GameData.MOUTH_STYLES[0]
-	if _nose.is_empty():
-		_nose = GameData.NOSE_STYLES[0]
-	if _eyebrows.is_empty():
-		_eyebrows = GameData.BROW_STYLES[0]
-	if _marking.is_empty():
-		_marking = GameData.MARKINGS[0]
+	_eye_style = _default_or_keep(_eye_style, "eye_style")
+	_ears = _default_or_keep(_ears, "ears")
+	_mouth = _default_or_keep(_mouth, "mouth")
+	_nose = _default_or_keep(_nose, "nose")
+	_eyebrows = _default_or_keep(_eyebrows, "eyebrows")
+	_marking = _default_or_keep(_marking, "marking")
 	if _skin_color.is_empty() and not _race_name.is_empty():
 		var skins: Array = GameData.RACE_SKINS.get(_race_name, ["#2D5A3D"])
 		_skin_color = str(skins[0]) if not skins.is_empty() else "#2D5A3D"
+	if _accent_color.is_empty() and not _race_name.is_empty():
+		var accents: Array = GameData.accent_tones_for_race(_race_name)
+		_accent_color = str(accents[0]) if not accents.is_empty() else "#B794F6"
+	_refresh_ears_row_visibility()
+
+
+func _default_or_keep(cur: String, field: String) -> String:
+	if not cur.is_empty():
+		return cur
+	var opts := GameData.appearance_options_for(_race_name, field)
+	if not opts.is_empty():
+		return opts[0]
+	return cur
 
 
 func _refresh_race_cards() -> void:
@@ -1331,6 +1491,9 @@ func _refresh_lore() -> void:
 	lore_portrait.custom_minimum_size = Vector2.ZERO
 	lore_portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lore_portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lore_portrait.clip_contents = false
+	if lore_portrait is AvatarPortrait:
+		(lore_portrait as AvatarPortrait).set_active(true)
 	frame.add_child(lore_portrait)
 
 	var copy := VBoxContainer.new()
@@ -1657,6 +1820,12 @@ func _refresh_skin_swatch() -> void:
 	_skin_swatch.color = Color(_skin_color) if not _skin_color.is_empty() else Color("#888888")
 
 
+func _refresh_accent_swatch() -> void:
+	if _accent_swatch == null:
+		return
+	_accent_swatch.color = Color(_accent_color) if not _accent_color.is_empty() else Color("#B794F6")
+
+
 func _refresh_arrow_labels() -> void:
 	for field in _arrow_value_labs:
 		var lab := _arrow_value_labs[field] as Label
@@ -1673,8 +1842,10 @@ func _fake_character() -> Dictionary:
 
 func _appearance() -> Dictionary:
 	_ensure_look_defaults()
+	_clamp_looks_to_race()
 	return {
 		"skin_color": _skin_color if not _skin_color.is_empty() else "#2D5A3D",
+		"accent_color": _accent_color if not _accent_color.is_empty() else "#B794F6",
 		"eye_style": _eye_style,
 		"ears": _ears,
 		"mouth": _mouth,
@@ -1696,6 +1867,10 @@ func _refresh_preview() -> void:
 	portrait.custom_minimum_size = Vector2.ZERO
 	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# Pane clips at the frame; portrait must not clip early inside it.
+	portrait.clip_contents = false
+	if portrait is AvatarPortrait:
+		(portrait as AvatarPortrait).set_active(true)
 	_looks_preview_host.add_child(portrait)
 
 
@@ -1709,6 +1884,9 @@ func _refresh_launch() -> void:
 	portrait.custom_minimum_size = Vector2.ZERO
 	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	portrait.clip_contents = false
+	if portrait is AvatarPortrait:
+		(portrait as AvatarPortrait).set_active(true)
 	_launch_preview_host.add_child(portrait)
 	if _legacy_block != null:
 		_legacy_block.visible = _legacy_required()
@@ -1743,13 +1921,34 @@ func _randomize_looks() -> void:
 	rng.randomize()
 	var skins: Array = GameData.RACE_SKINS.get(_race_name, ["#2D5A3D"])
 	_skin_color = str(skins[rng.randi_range(0, skins.size() - 1)])
-	_eye_style = GameData.EYE_STYLES[rng.randi_range(0, GameData.EYE_STYLES.size() - 1)]
-	_ears = GameData.EAR_STYLES[rng.randi_range(0, GameData.EAR_STYLES.size() - 1)]
-	_mouth = GameData.MOUTH_STYLES[rng.randi_range(0, GameData.MOUTH_STYLES.size() - 1)]
-	_nose = GameData.NOSE_STYLES[rng.randi_range(0, GameData.NOSE_STYLES.size() - 1)]
-	_eyebrows = GameData.BROW_STYLES[rng.randi_range(0, GameData.BROW_STYLES.size() - 1)]
-	_marking = GameData.MARKINGS[rng.randi_range(0, GameData.MARKINGS.size() - 1)]
+	var accents: Array = GameData.accent_tones_for_race(_race_name)
+	if not accents.is_empty():
+		_accent_color = str(accents[rng.randi_range(0, accents.size() - 1)])
+	var eyes := GameData.appearance_options_for(_race_name, "eye_style")
+	var mouths := GameData.appearance_options_for(_race_name, "mouth")
+	var noses := GameData.appearance_options_for(_race_name, "nose")
+	var brows := GameData.appearance_options_for(_race_name, "eyebrows")
+	var marks := GameData.appearance_options_for(_race_name, "marking")
+	if not eyes.is_empty():
+		_eye_style = eyes[rng.randi_range(0, eyes.size() - 1)]
+	if not mouths.is_empty():
+		_mouth = mouths[rng.randi_range(0, mouths.size() - 1)]
+	if not noses.is_empty():
+		_nose = noses[rng.randi_range(0, noses.size() - 1)]
+	if not brows.is_empty():
+		_eyebrows = brows[rng.randi_range(0, brows.size() - 1)]
+	if not marks.is_empty():
+		_marking = marks[rng.randi_range(0, marks.size() - 1)]
+	var locked := GameData.locked_ears_for_race(_race_name)
+	if not locked.is_empty():
+		_ears = locked
+	else:
+		var ears := GameData.appearance_options_for(_race_name, "ears")
+		if not ears.is_empty():
+			_ears = ears[rng.randi_range(0, ears.size() - 1)]
+	_refresh_ears_row_visibility()
 	_refresh_skin_swatch()
+	_refresh_accent_swatch()
 	_refresh_arrow_labels()
 	_refresh_preview()
 
@@ -1769,6 +1968,8 @@ func _set_step(next_step: int) -> void:
 	_prev_btn.disabled = _step == 0
 	_next_btn.visible = _step < 3
 	_create_btn.visible = _step == 3
+	if _step == 0:
+		_refresh_race_portraits()
 	if _step == 2:
 		_schedule_name_check()
 	if _step == 3:

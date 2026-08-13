@@ -52,6 +52,7 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 		"astral_barrier_created": true,
 		"astral_barrier_restored": true,
 		"phantom_signal_armed": true,
+		"phantom_signal": true,
 		"phantom_signal_miss": true,
 		"overclock_stack_gained": true,
 		"overclock_stacks_removed": true,
@@ -79,6 +80,10 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 			detail = str(ev.get("dirtyTrick", "")).replace("_", " ").capitalize()
 		"orbital_assistant_activated":
 			detail = str(ev.get("effect", "")).replace("_", " ").capitalize()
+		"fire_support":
+			detail = "Fire Support"
+		"fire_support_dodged":
+			detail = "Fire Support · Dodged"
 		"kinetic_tantrum_strong":
 			detail = "Strong"
 		"kinetic_tantrum_normal":
@@ -89,7 +94,7 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 			detail = "Restored"
 		"phantom_signal_armed":
 			detail = "%s charges" % str(ev.get("charges", 2))
-		"phantom_signal_miss":
+		"phantom_signal", "phantom_signal_miss":
 			detail = "Miss · %s left" % str(ev.get("chargesRemaining", 0))
 		"overclock_stack_gained":
 			detail = "Stack %s" % str(ev.get("stacks", 0))

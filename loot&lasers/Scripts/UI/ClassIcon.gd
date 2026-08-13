@@ -37,8 +37,10 @@ static func make(class_key: String, size_px: float = DEFAULT_SIZE) -> TextureRec
 	tr.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	# Pixel-art emblems — nearest keeps bevel/edges crisp when scaled.
+	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	tr.texture_repeat = CanvasItem.TEXTURE_REPEAT_DISABLED
+	tr.clip_contents = false
 	tr.texture = texture(class_key)
 	tr.modulate = Color.WHITE
 	return tr

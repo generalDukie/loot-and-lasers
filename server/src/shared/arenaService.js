@@ -34,6 +34,12 @@ import {
 } from "../arena/bots.js";
 import { generateArenaBot } from "../../../src/lib/arenaBotGenerator.js";
 
+/** Challenger board lifetime (offer snapshots). */
+export const ARENA_OFFER_TTL_MS = 2 * 60 * 60 * 1000;
+
+/** @deprecated Manual refresh removed — alias kept for older imports. */
+export const ARENA_REFRESH_MS = ARENA_OFFER_TTL_MS;
+
 /** Finalized: 10-minute normal Arena cooldown. */
 export const ARENA_BATTLE_COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -138,6 +144,56 @@ export function readArenaOffers(character) {
   return o;
 }
 
+/**
+ * True when the challenger board should be reminted:
+ * missing/empty, past TTL, player leveled, or a real foe on the board leveled.
+ */
+export function arenaOffersNeedRemint(character, nowMs = clock.nowMs()) {
+  const bag = readArenaOffers(character);
+  if (!bag || !Array.isArray(bag.offers) || bag.offers.length === 0) return true;
+  if (bag.expires_at) {
+    const exp = new Date(bag.expires_at).getTime();
+    if (Number.isFinite(exp) && nowMs >= exp) return true;
+  } else {
+    return true;
+  }
+  const boardPlayerLevel = Number(bag.player_level);
+  const livePlayerLevel = Number(character?.level) || 1;
+  if (Number.isFinite(boardPlayerLevel) && boardPlayerLevel !== livePlayerLevel) {
+    return true;
+  }
+  // Legacy bags without player_level: remint once so snapshots stay honest.
+  if (!Number.isFinite(boardPlayerLevel)) return true;
+
+  for (const offer of bag.offers) {
+    const opp = offer?.opponent || {};
+    const realId = String(opp.realCharacterId || opp.character_id || "").trim();
+    if (!realId) continue; // bots don't level up
+    const live = entities.Character.get(realId);
+    if (!live) continue;
+    const snapLevel = Number(
+      opp.level
+      ?? opp._combatant?.level
+      ?? NaN,
+    );
+    const liveLevel = Number(live.level) || 1;
+    if (Number.isFinite(snapLevel) && snapLevel !== liveLevel) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Remint board quietly and return public offers (for prepare / open). */
+export function remintArenaOffersPreferringPrevious(character) {
+  const bag = readArenaOffers(character);
+  const previousIds = (bag?.offers || []).flatMap(arenaOpponentIdentityIds);
+  return generateAndStoreArenaOffers(character, {
+    force: true,
+    preferExcludeIds: previousIds,
+  });
+}
+
 /** How many recently shown/fought opponent ids to remember for deprioritization. */
 export const ARENA_RECENT_OPPONENT_HISTORY = 10;
 
@@ -233,6 +289,10 @@ export function findArenaOffer(character, offerId) {
 export function publicOpponentOffer(offer) {
   if (!offer) return null;
   const opp = offer.opponent || {};
+  const stats =
+    (opp.display_stats && typeof opp.display_stats === "object" && opp.display_stats)
+    || (opp.stats && typeof opp.stats === "object" && opp.stats)
+    || null;
   return {
     offer_id: offer.offer_id,
     id: opp.id || offer.offer_id,
@@ -254,6 +314,9 @@ export function publicOpponentOffer(offer) {
     character_id: opp.realCharacterId || null,
     lastOnlineMins: opp.lastOnlineMins,
     matchup: offer.matchup || (opp.isBot ? "Bot" : "Operative"),
+    stats: stats || undefined,
+    display_stats: stats || undefined,
+    equippedItems: Array.isArray(opp.equippedItems) ? opp.equippedItems : undefined,
   };
 }
 
@@ -371,24 +434,21 @@ export function generateAndStoreArenaOffers(character, {
 } = {}) {
   const existing = readArenaOffers(character);
   const previousBoardIds = (existing?.offers || []).flatMap(arenaOpponentIdentityIds);
-  if (!force && existing?.offers?.length && existing.expires_at) {
-    const exp = new Date(existing.expires_at).getTime();
-    if (Number.isFinite(exp) && clock.nowMs() < exp) {
-      console.log("[ArenaOffers]", JSON.stringify({
-        mode: "replay_cache",
-        previousContenderIds: previousBoardIds,
-        opponentFought: excludeIds,
-        eligiblePoolSize: null,
-        excludedIds: excludeIds,
-        newlySelectedContenderIds: previousBoardIds,
-      }));
-      return {
-        character,
-        offers: existing.offers.map(publicOpponentOffer),
-        replay: true,
-        expires_at: existing.expires_at,
-      };
-    }
+  if (!force && !arenaOffersNeedRemint(character)) {
+    console.log("[ArenaOffers]", JSON.stringify({
+      mode: "replay_cache",
+      previousContenderIds: previousBoardIds,
+      opponentFought: excludeIds,
+      eligiblePoolSize: null,
+      excludedIds: excludeIds,
+      newlySelectedContenderIds: previousBoardIds,
+    }));
+    return {
+      character,
+      offers: existing.offers.map(publicOpponentOffer),
+      replay: true,
+      expires_at: existing.expires_at,
+    };
   }
 
   const myId = character.id;
@@ -516,10 +576,11 @@ export function generateAndStoreArenaOffers(character, {
   const offers = [...realOffers, ...botOffers].slice(0, ARENA_CHALLENGER_SLOTS);
   const newlySelected = offers.flatMap(arenaOpponentIdentityIds);
   const nowIso = clock.nowIso();
-  const expiresAt = new Date(clock.nowMs() + 5 * 60 * 1000).toISOString();
+  const expiresAt = new Date(clock.nowMs() + ARENA_OFFER_TTL_MS).toISOString();
   const bag = {
     generated_at: nowIso,
     expires_at: expiresAt,
+    player_level: Math.max(1, Number(character.level) || 1),
     offers,
   };
   const nextRecent = mergeRecentOpponentIds(recent, [
@@ -573,22 +634,23 @@ export function refreshArenaOffersAfterBattle(character, foughtOpponentId = "") 
 
 /**
  * Resolve combatant from a stored offer. Rejects client-supplied stats.
+ * Remints quietly when the board is stale / offer missing, then signals the client
+ * to pick again (no harsh "expired" dead-end).
  */
 export function resolveOfferCombatant(character, offerId) {
+  if (arenaOffersNeedRemint(character) || !findArenaOffer(character, offerId)) {
+    const reminted = remintArenaOffersPreferringPrevious(character);
+    const e = new Error("Challengers updated — pick again");
+    e.status = 409;
+    e.code = "ARENA_BOARD_REFRESHED";
+    e.character = reminted.character;
+    e.opponents = reminted.offers;
+    e.expires_at = reminted.expires_at;
+    throw e;
+  }
   const offer = findArenaOffer(character, offerId);
-  if (!offer) {
-    const e = new Error("Opponent offer expired or invalid");
-    e.status = 409;
-    e.code = "ARENA_OFFER_INVALID";
-    throw e;
-  }
   const bag = readArenaOffers(character);
-  if (bag?.expires_at && new Date(bag.expires_at).getTime() < clock.nowMs()) {
-    const e = new Error("Opponent offer expired");
-    e.status = 409;
-    e.code = "ARENA_OFFER_EXPIRED";
-    throw e;
-  }
+  void bag;
   const opp = offer.opponent || {};
   let combatant = opp._combatant;
   let items = opp._combatItems || [];

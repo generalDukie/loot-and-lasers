@@ -1,11 +1,11 @@
 extends Control
-## Boot router: splash → restore Nakama email session → login / character / hub.
+## Boot router: splash → restore session → login or character select (never skip to hub).
 ## Godot authentication uses Nakama :7350 only (never Node :8787).
 
 const LOGO_WIDTH_FRAC := 0.75
 const STATUS_GAP_PX := 16.0
 const STATUS_FONT_PX := 23
-const MIN_SPLASH_SEC := 6.0
+const MIN_SPLASH_SEC := 5.0
 
 var _status: Label
 var _brand: BrandGradientTitle
@@ -155,17 +155,7 @@ func _boot() -> void:
 		await _leave_to_login()
 		return
 
-	var active_id := str(AuthManager.user.get("active_character_id", ""))
-	if active_id.is_empty():
-		await _leave_to_character_select()
-		return
-
-	_set_status("Loading operative...")
-	var char_res: Dictionary = await AuthManager.get_selected_character()
-	if char_res.ok and typeof(char_res.data) == TYPE_DICTIONARY:
-		GameManager.apply_active_character(char_res.data, "boot_character")
-		await _leave_to_hub(char_res.data)
-	else:
-		# Authentication is valid, but gameplay cannot proceed without a
-		# Node-owned selected Character.
-		await _leave_to_character_select()
+	# Always land on character select after a restored session so the player
+	# confirms who deploys. active_character_id is kept so the roster pre-selects
+	# the last operative; Enter still loads that character into the hub.
+	await _leave_to_character_select()

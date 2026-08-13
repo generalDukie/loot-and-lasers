@@ -16,7 +16,7 @@ Character-owned Arena state. Session `user_id` only; `character_id` must match `
 |-----|---------|
 | `arena_get_state` | Ensure/load Arena state (default rating once) |
 | `arena_get_opponents` | Up to 3 nearby opponents by rating |
-| `arena_refresh_opponents` | Cooldown-gated rematchmaking (`request_id`) |
+| `arena_refresh_opponents` | Removed — boards remint on fight / 2h TTL / level-up |
 | `arena_get_rankings` | Bounded paginated rankings |
 | `arena_challenge` | Direct/matchmaking challenge → combat + rating |
 | `arena_get_history` | Paginated battle history |

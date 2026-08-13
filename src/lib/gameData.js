@@ -80,7 +80,7 @@ export const RACES = {
     emoji: "🐉",
     tagline: "Scaled hotheads from the Ember Nebula",
     lore: "Dragonfolk with armor for skin and a temper for fuel. They punch first, negotiate later, and insist the smoking crater was 'defensive.' Great at war. Terrible at dinner parties.",
-    skinColors: ["#2D5A3D", "#8B4513", "#4A0E4E", "#1C3D5A"],
+    skinColors: ["#9B2D2D", "#8B4513", "#4A0E4E", "#1C3D5A"],
     eyeStyles: ["Slit Ember", "Twin Flame", "Void Gaze"],
     markings: ["Tribal Scars", "Heat Lines", "Scale Crown", "None"],
   },
@@ -1153,19 +1153,21 @@ export function randomConsumable(rng = Math.random) {
 
 export function getActiveBuffs(character, nowMs = Date.now()) {
   const now = Number(nowMs) || Date.now();
-  return (character?.active_buffs || []).filter((b) => new Date(b.expires_at).getTime() > now);
+  return (character?.active_buffs || []).filter((b) => {
+    if (!b || !(new Date(b.expires_at).getTime() > now)) return false;
+    const stat = String(b.stat || "").toLowerCase();
+    // Single-attribute stims only — legacy "all" buffs are ignored.
+    return CONSUMABLE_STATS.includes(stat);
+  });
 }
 
 /** Apply Stim multipliers to already-complete pre-stim attribute totals. */
 export function applyBuffs(stats, buffs) {
   const out = { ...(stats || {}) };
-  const allStats = ["strength", "agility", "intellect", "vitality", "luck"];
   for (const b of buffs || []) {
-    if (b.stat === "all") {
-      for (const k of allStats) out[k] = Math.round((out[k] || 0) * (1 + (b.mult || 0)));
-    } else if (b.stat) {
-      out[b.stat] = Math.round((out[b.stat] || 0) * (1 + (b.mult || 0)));
-    }
+    const stat = String(b?.stat || "").toLowerCase();
+    if (!CONSUMABLE_STATS.includes(stat)) continue;
+    out[stat] = Math.round((out[stat] || 0) * (1 + (b.mult || 0)));
   }
   return out;
 }
@@ -1220,8 +1222,9 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
   if (!character || item?.type !== "consumable" || !item.consumable) {
     return { ok: false, reason: "Not a stim." };
   }
+  // Stim Trio bundles are retired.
   if (item._bundle === "stim_trio" || item.consumable?.tier === "bundle") {
-    return { ok: false, reason: "Open the Stim Trio bundle first." };
+    return { ok: false, reason: "Stim Trios are no longer available." };
   }
 
   const now = Number(nowMs) || Date.now();

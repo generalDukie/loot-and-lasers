@@ -25,7 +25,7 @@ Recovered and preserved:
 - Rating bands: tight ±120, wide ±280; level band ±8
 - `rankArenaCandidates` → `pickRankedCandidates` (weighted top-of-list)
 - Same-account excluded; self-match blocked
-- **Stable offers**: `arena_opponent_offers` on Character with `offer_id` (5 min TTL)
+- **Stable offers**: `arena_opponent_offers` on Character with `offer_id` (**2 hour TTL**; remint on fight, player/foe level-up, or expiry — no manual refresh)
 - Bots fill remaining slots via persistent `arena_bots` ladder (+ ephemeral EPA bots if empty)
 
 ### 5–6. Cooldown & paid attempt

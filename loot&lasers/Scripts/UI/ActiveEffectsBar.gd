@@ -10,7 +10,6 @@ const STAT_COLORS := {
 	"intellect": Color("#60A5FA"),
 	"vitality": Color("#FB7185"),
 	"luck": Color("#C084FC"),
-	"all": Color("#FBBF24"),
 }
 
 ## When true (Hero loadout rail), show STIMS / MOUNTS section labels + compact timers.
@@ -237,8 +236,8 @@ static func format_remaining_compact(expires_at: String) -> String:
 
 ## Operative-console bubble: colored pill by the portrait (+% / timer only).
 func _buff_bubble(buff: Dictionary) -> PanelContainer:
-	var stat := str(buff.get("stat", "all"))
-	var color: Color = STAT_COLORS.get(stat, STAT_COLORS["all"])
+	var stat := str(buff.get("stat", "strength")).strip_edges().to_lower()
+	var color: Color = STAT_COLORS.get(stat, ClientUi.CYAN)
 	var pct := int(round(float(buff.get("mult", 0)) * 100.0))
 	var remain_full := format_remaining(str(buff.get("expires_at", "")))
 	var remain := format_remaining_compact(str(buff.get("expires_at", "")))
@@ -265,9 +264,8 @@ func _buff_bubble(buff: Dictionary) -> PanelContainer:
 	timer.add_theme_color_override("font_color", Color(color, 0.92))
 	ClientUi.apply_display_font(timer)
 	col.add_child(timer)
-	var label := "ALL" if stat == "all" else str(stat)
 	panel.tooltip_text = "%s · +%s%% %s · expires in %s\nRight-click to remove" % [
-		str(buff.get("name", "Stim")), pct, label, remain_full,
+		str(buff.get("name", "Stim")), pct, stat, remain_full,
 	]
 	panel.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -321,8 +319,8 @@ func _mount_bubble(mount: Dictionary) -> PanelContainer:
 
 ## Compact Hero-rail chip: "+15% · 04:32" (+ remove). Full detail in tooltip.
 func _buff_chip_compact(buff: Dictionary) -> PanelContainer:
-	var stat := str(buff.get("stat", "all"))
-	var color: Color = STAT_COLORS.get(stat, STAT_COLORS["all"])
+	var stat := str(buff.get("stat", "strength")).strip_edges().to_lower()
+	var color: Color = STAT_COLORS.get(stat, ClientUi.CYAN)
 	var pct := int(round(float(buff.get("mult", 0)) * 100.0))
 	var remain_full := format_remaining(str(buff.get("expires_at", "")))
 	var remain := format_remaining_compact(str(buff.get("expires_at", "")))
@@ -351,9 +349,8 @@ func _buff_chip_compact(buff: Dictionary) -> PanelContainer:
 	remove_btn.custom_minimum_size = Vector2(24, 24)
 	remove_btn.pressed.connect(func() -> void: _request_remove_stim(buff))
 	row.add_child(remove_btn)
-	var label := "ALL" if stat == "all" else str(stat)
 	panel.tooltip_text = "%s · +%s%% %s · expires in %s" % [
-		str(buff.get("name", "Stim")), pct, label, remain_full,
+		str(buff.get("name", "Stim")), pct, stat, remain_full,
 	]
 	panel.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -389,8 +386,8 @@ func _mount_chip_compact(mount: Dictionary) -> PanelContainer:
 
 
 func _buff_chip(buff: Dictionary) -> PanelContainer:
-	var stat := str(buff.get("stat", "all"))
-	var color: Color = STAT_COLORS.get(stat, STAT_COLORS["all"])
+	var stat := str(buff.get("stat", "strength")).strip_edges().to_lower()
+	var color: Color = STAT_COLORS.get(stat, ClientUi.CYAN)
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override(
@@ -405,16 +402,13 @@ func _buff_chip(buff: Dictionary) -> PanelContainer:
 	col.add_child(head_row)
 	if StatIcon.has(stat):
 		head_row.add_child(StatIcon.make(stat, 16.0))
-	elif stat == "all":
-		head_row.add_child(UiIcon.make("sparkles", color, 16.0))
 	var head := Label.new()
-	var label := "ALL" if stat == "all" else str(stat)
 	var rarity := str(buff.get("rarity", "")).capitalize()
 	var pct := int(round(float(buff.get("mult", 0)) * 100.0))
 	if rarity.is_empty():
-		head.text = "+%s%% %s" % [pct, label]
+		head.text = "+%s%% %s" % [pct, stat]
 	else:
-		head.text = "%s +%s%% %s" % [rarity, pct, label]
+		head.text = "%s +%s%% %s" % [rarity, pct, stat]
 	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	head.add_theme_font_size_override("font_size", 15)

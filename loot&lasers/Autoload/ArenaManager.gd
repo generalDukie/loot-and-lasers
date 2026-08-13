@@ -102,15 +102,27 @@ func release_presentation_lock() -> void:
 		_set_battling(false)
 
 
-func _fail(msg: String) -> Dictionary:
+func _fail(msg: String, code: String = "", data: Dictionary = {}) -> Dictionary:
 	arena_error.emit(msg)
-	return {"ok": false, "error": msg, "data": {}}
+	return {"ok": false, "error": msg, "code": code, "data": data}
 
 
 func _payload(res: Dictionary) -> Dictionary:
 	if typeof(res.get("data", null)) == TYPE_DICTIONARY:
 		return res.data
 	return res
+
+
+func _apply_board_from_payload(data: Dictionary) -> void:
+	if typeof(data.get("opponents", null)) != TYPE_ARRAY:
+		return
+	_apply_character(data)
+	_apply_arena_state(data)
+	opponents = _map_opponent_cards(data.get("opponents", []))
+	var expires := str(data.get("expires_at", ""))
+	if not expires.is_empty():
+		refresh_at_unix_ms = _parse_iso_unix(expires) * 1000
+	opponents_loaded.emit(opponents)
 
 
 func _apply_character(data: Dictionary) -> void:
@@ -188,63 +200,38 @@ func load_equipped() -> Array:
 	return equipped_items
 
 
-func load_opponents(_character_id: String = "", force: bool = false, exclude_ids: Array = []) -> Dictionary:
+func load_opponents(_character_id: String = "", _force: bool = false, exclude_ids: Array = []) -> Dictionary:
+	## `_force` ignored — server remints only on fight / 2h TTL / level mismatch.
 	if _busy:
 		return _fail("Arena request already in progress")
 	_busy = true
 	_set_loading(true)
 	var body := {}
-	if force:
-		body["force"] = true
-		body["refresh"] = true
 	if exclude_ids.size() > 0:
 		body["exclude_ids"] = exclude_ids
 	var res: Dictionary = await GameApiClient.invoke("GetArenaOpponents", body)
 	_busy = false
 	_set_loading(false)
 	if not bool(res.get("ok", false)):
-		return _fail(str(res.get("error", "GetArenaOpponents failed")))
+		return _fail(str(res.get("error", "GetArenaOpponents failed")), str(res.get("code", "")))
 	var data := _payload(res)
-	_apply_character(data)
-	_apply_arena_state(data)
-	opponents = _map_opponent_cards(data.get("opponents", []))
+	_apply_board_from_payload(data)
 	var debug_offers: Variant = data.get("debug_offers", null)
 	if typeof(debug_offers) == TYPE_DICTIONARY:
 		print("[ArenaOffers] %s" % JSON.stringify(debug_offers))
-	var expires := str(data.get("expires_at", ""))
-	if not expires.is_empty():
-		refresh_at_unix_ms = _parse_iso_unix(expires) * 1000
-	opponents_loaded.emit(opponents)
 	return {"ok": true, "error": "", "data": data, "opponents": opponents}
 
 
-func build_opponent_pool(force: bool = false, exclude_ids: Array = []) -> Array:
-	var res: Dictionary = await load_opponents("", force, exclude_ids)
+func build_opponent_pool(_force: bool = false, exclude_ids: Array = []) -> Array:
+	var res: Dictionary = await load_opponents("", false, exclude_ids)
 	if not res.get("ok", false):
 		opponents = []
 	return opponents
 
 
-func refresh_opponents(charge: bool = false) -> Dictionary:
-	if _busy:
-		return _fail("Arena request already in progress")
-	_busy = true
-	_set_loading(true)
-	var res: Dictionary = await GameApiClient.invoke("RefreshArenaOpponents", {"charge": charge})
-	_busy = false
-	_set_loading(false)
-	if not bool(res.get("ok", false)):
-		return _fail(str(res.get("error", "RefreshArenaOpponents failed")))
-	var data := _payload(res)
-	_apply_character(data)
-	_apply_arena_state(data)
-	opponents = _map_opponent_cards(data.get("opponents", []))
-	var debug_offers: Variant = data.get("debug_offers", null)
-	if typeof(debug_offers) == TYPE_DICTIONARY:
-		print("[ArenaOffers] %s" % JSON.stringify(debug_offers))
-	mark_refresh_used()
-	opponents_loaded.emit(opponents)
-	return {"ok": true, "error": "", "opponents": opponents}
+## Manual refresh removed — kept as soft no-op for any leftover callers.
+func refresh_opponents(_charge: bool = false) -> Dictionary:
+	return await load_opponents()
 
 
 func load_rankings(_character_id: String = "", _cursor: String = "", limit: int = 100, offset: int = 0) -> Dictionary:
@@ -318,7 +305,16 @@ func prepare_challenge(opp: Dictionary, skip_cooldown: bool = false) -> Dictiona
 	var res: Dictionary = await GameApiClient.invoke("PrepareArenaCombat", payload)
 	if not bool(res.get("ok", false)):
 		_set_battling(false)
-		return _fail(str(res.get("error", "PrepareArenaCombat failed")))
+		var code := str(res.get("code", ""))
+		var err_data := _payload(res)
+		if code == "ARENA_BOARD_REFRESHED":
+			_apply_board_from_payload(err_data)
+			return _fail(
+				str(res.get("error", "Challengers updated — pick again")),
+				code,
+				err_data
+			)
+		return _fail(str(res.get("error", "PrepareArenaCombat failed")), code, err_data)
 
 	var data := _payload(res)
 	_apply_character(data)
@@ -341,7 +337,7 @@ func start_direct_challenge(opponent_character_id: String) -> Dictionary:
 		var oid := str(o.get("character_id", o.get("realCharacterId", "")))
 		if oid == opponent_character_id and str(o.get("offer_id", "")) != "":
 			return await prepare_challenge(o, false)
-	return _fail("Opponent offer not found — refresh Arena")
+	return _fail("Opponent not on your current challenger board")
 
 
 func prepare_revenge(match: Dictionary) -> Dictionary:
@@ -404,18 +400,8 @@ func finish_battle() -> Dictionary:
 			refresh_at_unix_ms = _parse_iso_unix(expires) * 1000
 		opponents_loaded.emit(opponents)
 	else:
-		var exclude: Array = []
-		for o in opponents:
-			if typeof(o) != TYPE_DICTIONARY:
-				continue
-			for key in ["realCharacterId", "character_id", "arena_bot_id", "id"]:
-				var v := str((o as Dictionary).get(key, ""))
-				if not v.is_empty() and not exclude.has(v):
-					exclude.append(v)
-		var fought := str(last_result.get("opponentId", ""))
-		if not fought.is_empty() and not exclude.has(fought):
-			exclude.append(fought)
-		await load_opponents("", true, exclude)
+		# Finish should have reminted; reload current board (server ignores force).
+		await load_opponents()
 	return last_result
 
 
@@ -527,16 +513,27 @@ func resolve_revenge_opponent(match: Dictionary) -> Dictionary:
 	}
 
 
-func can_free_refresh() -> bool:
-	return _now_unix_ms() >= refresh_at_unix_ms
+## Board expiry helpers (TTL from server `expires_at`; not a manual refresh gate).
+func board_expired() -> bool:
+	return refresh_at_unix_ms > 0 and _now_unix_ms() >= refresh_at_unix_ms
 
 
-func refresh_remaining_ms() -> int:
+func board_remaining_ms() -> int:
 	return maxi(0, refresh_at_unix_ms - _now_unix_ms())
 
 
+## @deprecated Manual refresh removed — alias kept for older UI callers.
+func can_free_refresh() -> bool:
+	return board_expired()
+
+
+func refresh_remaining_ms() -> int:
+	return board_remaining_ms()
+
+
 func mark_refresh_used() -> void:
-	refresh_at_unix_ms = _now_unix_ms() + ArenaRules.REFRESH_MS
+	## No-op: expiry comes from server `expires_at` on GetArenaOpponents.
+	pass
 
 
 func cooldown_ends_unix_ms() -> int:
@@ -577,8 +574,16 @@ func _ingest_prepare_result(opp: Dictionary, data: Dictionary) -> void:
 	pending_combat_id = str(combat.get("combat_id", ""))
 	_ingest_combat_payload(combat)
 	pending_opp = opp.duplicate(true)
-	if typeof(data.get("opponent", {})) == TYPE_DICTIONARY:
+	if typeof(data.get("opponent", null)) == TYPE_DICTIONARY and not (data.get("opponent") as Dictionary).is_empty():
 		pending_opp.merge(data["opponent"], true)
+	# Authoritative EPA / effective matchup attrs from committed combat.
+	if typeof(combat.get("enemy", null)) == TYPE_DICTIONARY:
+		pending_opp.merge(combat["enemy"], true)
+	var player_disp: Variant = combat.get("player_display_stats", null)
+	if typeof(player_disp) != TYPE_DICTIONARY and typeof(data.get("player_display_stats", null)) == TYPE_DICTIONARY:
+		player_disp = data.get("player_display_stats")
+	if typeof(player_disp) == TYPE_DICTIONARY:
+		pending_battle["player_display_stats"] = (player_disp as Dictionary).duplicate(true)
 	pending_rewards = {
 		"arena_rating_delta": 0,
 		"xp": 0,
@@ -607,6 +612,9 @@ func _ingest_combat_payload(combat: Dictionary) -> void:
 		"opponentMaxHp": int(battle.get("opponentMaxHp", combat.get("opponentMaxHp", 0))),
 		"initiativeFirstSide": str(battle.get("initiativeFirstSide", combat.get("opening_side", ""))),
 	}
+	var pds: Variant = combat.get("player_display_stats", battle.get("player_display_stats", null))
+	if typeof(pds) == TYPE_DICTIONARY:
+		pending_battle["player_display_stats"] = (pds as Dictionary).duplicate(true)
 
 
 func _map_opponent_cards(raw: Variant) -> Array:

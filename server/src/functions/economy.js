@@ -1863,6 +1863,31 @@ function replaceArmoryListing(meta, win, ch, slotId, isHot, outcome = "purchased
   return nextMeta;
 }
 
+/** Persist a successful haggle discount onto the listing without purchasing. */
+function applyHaggleDiscount(meta, slotId, isHot, pct, newCost, baseCost) {
+  const nextMeta = { ...meta };
+  const patchSlot = (slot) => {
+    if (!slot || typeof slot !== "object") return slot;
+    return {
+      ...slot,
+      cost: newCost,
+      haggle_base_cost: Math.max(1, Math.round(Number(slot.haggle_base_cost || baseCost || slot.cost) || 1)),
+      haggle_discount_pct: pct,
+    };
+  };
+  if (isHot) {
+    nextMeta.hot_deal = patchSlot(meta.hot_deal);
+    return nextMeta;
+  }
+  const patchStock = (arr) => {
+    if (!Array.isArray(arr)) return arr;
+    return arr.map((s) => (s && s._slotId === slotId ? patchSlot(s) : s));
+  };
+  if (Array.isArray(meta.shop_stock)) nextMeta.shop_stock = patchStock(meta.shop_stock);
+  if (Array.isArray(meta.gear_stock)) nextMeta.gear_stock = patchStock(meta.gear_stock);
+  return nextMeta;
+}
+
 // ── BuyShopGear ──────────────────────────────────────────────
 export async function BuyShopGear(user, body) {
   try {
@@ -1937,6 +1962,9 @@ export async function BuyShopGear(user, body) {
       let haggleNote = null;
       if (haggle) {
         if (slot._bundle) httpErr(400, "Can't haggle bundles");
+        if (Number(slot.haggle_discount_pct) > 0) {
+          httpErr(400, "Already haggled this listing", "SHOP_ALREADY_HAGGLED");
+        }
         const outcome = rollHaggle();
         haggleNote = outcome.label;
         if (!outcome.ok) {
@@ -1950,6 +1978,7 @@ export async function BuyShopGear(user, body) {
             is_hot: isHot,
             haggle: true,
             haggle_failed: true,
+            haggle_success: false,
             haggle_note: haggleNote,
             cost: 0,
             nova_cost: 0,
@@ -1967,7 +1996,36 @@ export async function BuyShopGear(user, body) {
             ...serializeShopPresentation(nextMeta, win),
           };
         }
-        stardustCost = Math.max(1, Math.round(stardustCost * outcome.mult));
+        const pct = Math.max(1, Math.round(Number(outcome.pct) || Math.round((1 - outcome.mult) * 100)));
+        const discounted = Math.max(1, Math.round(stardustCost * outcome.mult));
+        const nextMeta = applyHaggleDiscount(meta, slotId, isHot, pct, discounted, stardustCost);
+        const patch = { shop_meta: nextMeta };
+        const character = entities.Character.update(ch.id, patch);
+        const receipt = {
+          request_id: requestId || null,
+          transaction_id: requestId || newCorrelationId(),
+          slot_id: slotId,
+          is_hot: isHot,
+          haggle: true,
+          haggle_failed: false,
+          haggle_success: true,
+          haggle_note: haggleNote,
+          haggle_discount_pct: pct,
+          cost: discounted,
+          nova_cost: 0,
+          items: [],
+          pending_loot: [],
+          refresh_id: nextMeta.window_idx,
+          vendor: "gear",
+        };
+        if (requestId) saveWalletOperation(user.id, "buy_shop_gear", requestId, receipt);
+        return {
+          success: true,
+          ...receipt,
+          patch,
+          character,
+          ...serializeShopPresentation(nextMeta, win),
+        };
       }
       const novaCost = Number(slot.nova_cost || 0);
       if ((ch.stardust || 0) < stardustCost) httpErr(400, "Not enough stardust");
@@ -2023,6 +2081,7 @@ export async function BuyShopGear(user, body) {
         is_hot: isHot,
         haggle: !!haggle,
         haggle_failed: false,
+        haggle_success: false,
         haggle_note: haggleNote,
         cost: stardustCost,
         nova_cost: novaCost,
@@ -2120,6 +2179,9 @@ export async function BuyShopConsumable(user, body) {
       }
       if (!slot || idx < 0) httpErr(404, "Consumable slot not found");
       if (slot.type !== "consumable") httpErr(400, "Not a stim offer");
+      if (slot._bundle === "stim_trio" || slot.consumable?.tier === "bundle") {
+        httpErr(400, "Stim Trios are no longer available");
+      }
 
       // Persisted listing cost only — never trust client; fallback is server formula.
       const cost = Number(slot.cost ?? slot._cost ?? stimShopPurchasePrice(slot.rarity, ch.level || 1));
@@ -2127,9 +2189,7 @@ export async function BuyShopConsumable(user, body) {
 
       const beforeStardust = ch.stardust || 0;
       const patch = { stardust: beforeStardust - cost };
-      const payloads = slot._bundle === "stim_trio" && Array.isArray(slot.bundle_items)
-        ? slot.bundle_items.map(({ _cost, _slotId, ...rest }) => rest)
-        : [stripShopFields(slot)];
+      const payloads = [stripShopFields(slot)];
 
       const items = [];
       const pendingLoot = [];

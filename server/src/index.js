@@ -515,8 +515,14 @@ app.post("/api/functions/:name", requireAuth, async (req, res) => {
   try {
     const handler = FUNCTION_HANDLERS[req.params.name];
     if (!handler) {
-      incCounter("rpc_unknown_total", { operation: "unknown" });
-      return res.status(404).json({ error: "Unknown function", code: "NOT_FOUND" });
+      const missing = String(req.params.name || "").slice(0, 64) || "unknown";
+      incCounter("rpc_unknown_total", { operation: missing });
+      fnLog.error("rpc_unknown", {
+        request_id: req.requestId,
+        operation: missing,
+        status: 404,
+      });
+      return res.status(404).json({ error: "Unknown function", code: "NOT_FOUND", function: missing });
     }
     const maintenance = getMaintenanceState();
     if (maintenance.enabled && !MAINTENANCE_ALLOWED_FUNCTIONS.has(req.params.name)) {

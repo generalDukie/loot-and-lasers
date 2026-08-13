@@ -11,7 +11,7 @@ signal settings_changed
 signal account_preferences_changed(preferences: Dictionary)
 
 const SETTINGS_PATH := "user://settings.cfg"
-const SETTINGS_VERSION := 3
+const SETTINGS_VERSION := 4
 const DESIGN_SIZE := ResolutionRules.DESIGN_SIZE
 const MIN_WINDOW := Vector2i(960, 540)
 
@@ -129,7 +129,7 @@ func load_settings() -> void:
 	if window_mode.is_empty():
 		window_mode = "fullscreen" if fullscreen else str(DEFAULTS["window_mode"])
 	vsync = bool(_config.get_value("display", "vsync", DEFAULTS["vsync"]))
-	combat_anim_speed = clampf(float(_config.get_value("accessibility", "combat_anim_speed", DEFAULTS["combat_anim_speed"])), 0.35, 2.0)
+	combat_anim_speed = float(_config.get_value("accessibility", "combat_anim_speed", DEFAULTS["combat_anim_speed"]))
 	screen_shake_scale = clampf(float(_config.get_value("accessibility", "screen_shake_scale", DEFAULTS["screen_shake_scale"])), 0.0, 1.0)
 	notif_mission_complete = bool(_config.get_value("notifications", "mission_complete", DEFAULTS["notif_mission_complete"]))
 	notif_arena_ready = bool(_config.get_value("notifications", "arena_ready", DEFAULTS["notif_arena_ready"]))
@@ -140,6 +140,7 @@ func load_settings() -> void:
 	privacy_guild_invites = bool(_config.get_value("privacy", "guild_invites", DEFAULTS["privacy_guild_invites"]))
 	privacy_show_online = bool(_config.get_value("privacy", "show_online", DEFAULTS["privacy_show_online"]))
 	_migrate_settings_file_if_needed()
+	combat_anim_speed = clampf(combat_anim_speed, 0.5, 2.0)
 
 
 func save_settings() -> Error:
@@ -363,7 +364,7 @@ func set_play_music_when_unfocused(on: bool, persist: bool = true) -> void:
 
 
 func set_combat_anim_speed(v: float, persist: bool = true) -> void:
-	combat_anim_speed = clampf(v, 0.35, 2.0)
+	combat_anim_speed = clampf(v, 0.5, 2.0)
 	if persist:
 		save_settings()
 
@@ -431,8 +432,13 @@ func _migrate_settings_file_if_needed() -> void:
 	# v1 → v2: derive window_mode from fullscreen bool.
 	if window_mode.is_empty():
 		window_mode = "fullscreen" if fullscreen else "maximized"
+	# v3 → v4: combat_anim_speed was a duration scale (higher = slower).
+	# Now it is a playback rate (higher = faster). Invert prior saves.
+	if ver < 4 and combat_anim_speed > 0.01:
+		combat_anim_speed = clampf(1.0 / combat_anim_speed, 0.5, 2.0)
 	_config.set_value("meta", "version", SETTINGS_VERSION)
 	_config.set_value("display", "window_mode", window_mode)
+	_config.set_value("accessibility", "combat_anim_speed", combat_anim_speed)
 	_config.save(SETTINGS_PATH)
 
 

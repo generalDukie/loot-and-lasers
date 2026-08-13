@@ -314,7 +314,7 @@ func _equip_chip(it: Dictionary) -> PanelContainer:
 	col.add_theme_constant_override("separation", 2)
 	panel.add_child(col)
 	var t := Label.new()
-	t.text = str(it.get("type", "?")).to_upper()
+	t.text = GameData.gear_type_label(str(it.get("type", ""))).to_upper()
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.add_theme_font_size_override("font_size", 11)
 	t.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -368,7 +368,11 @@ func _on_challenge(c: Dictionary) -> void:
 	var res: Dictionary = await ArenaManager.start_direct_challenge(str(c.get("id", "")))
 	_busy = false
 	if not res.ok:
-		_status.text = _err(res)
+		var code := str(res.get("code", ""))
+		if code == "ARENA_BOARD_REFRESHED":
+			_status.text = "Challengers updated — pick again from Arena."
+		else:
+			_status.text = _err(res)
 		return
 	GameManager.go_arena_combat()
 

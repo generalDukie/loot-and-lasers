@@ -35,8 +35,34 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Source: "..\dist\windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure DeleteDesktopShortcutIfExists(const FileName: String);
+begin
+  if FileExists(FileName) then
+    DeleteFile(FileName);
+end;
+
+{ When the player opts into a desktop shortcut, remove any existing / legacy
+  Loot & Lasers desktop .lnk first so the new install's icon replaces it
+  (same name, or older installer naming) instead of leaving a stale target. }
+procedure RemoveStaleDesktopShortcuts;
+var
+  DesktopDir: String;
+begin
+  DesktopDir := ExpandConstant('{autodesktop}');
+  DeleteDesktopShortcutIfExists(DesktopDir + '\{#MyAppName}.lnk');
+  DeleteDesktopShortcutIfExists(DesktopDir + '\LootAndLasers.lnk');
+  DeleteDesktopShortcutIfExists(DesktopDir + '\Loot and Lasers.lnk');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if (CurStep = ssInstall) and WizardIsTaskSelected('desktopicon') then
+    RemoveStaleDesktopShortcuts;
+end;

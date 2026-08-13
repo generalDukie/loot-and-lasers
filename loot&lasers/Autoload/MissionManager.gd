@@ -416,6 +416,14 @@ func prepare_combat(_refresh: bool = true) -> Dictionary:
 
 	var payload: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	pending_enemy = payload.get("enemy", {}) if typeof(payload.get("enemy", {})) == TYPE_DICTIONARY else {}
+	var combat_wrap: Variant = payload.get("combat", null)
+	if typeof(combat_wrap) == TYPE_DICTIONARY:
+		var c_enemy: Variant = (combat_wrap as Dictionary).get("enemy", null)
+		if typeof(c_enemy) == TYPE_DICTIONARY and not (c_enemy as Dictionary).is_empty():
+			if pending_enemy.is_empty():
+				pending_enemy = (c_enemy as Dictionary).duplicate(true)
+			else:
+				pending_enemy.merge(c_enemy, true)
 	var battle: Dictionary = payload.get("battle", {}) if typeof(payload.get("battle", {})) == TYPE_DICTIONARY else {}
 	if battle.is_empty() and typeof(payload.get("events", null)) == TYPE_ARRAY:
 		battle = {
@@ -428,7 +436,15 @@ func prepare_combat(_refresh: bool = true) -> Dictionary:
 			"opponentEnd": payload.get("opponentEnd", {}),
 		}
 	pending_battle = battle
-	pending_player_items = []
+	var pds: Variant = payload.get("player_display_stats", battle.get("player_display_stats", null))
+	if typeof(pds) != TYPE_DICTIONARY and typeof(combat_wrap) == TYPE_DICTIONARY:
+		pds = (combat_wrap as Dictionary).get("player_display_stats", null)
+	if typeof(pds) == TYPE_DICTIONARY:
+		pending_battle["player_display_stats"] = (pds as Dictionary).duplicate(true)
+	# Prefer live sheet cache; fall back to a fresh equip fetch for matchup + weapon art.
+	pending_player_items = StatsManager.equipped_items.duplicate(true) \
+		if typeof(StatsManager.equipped_items) == TYPE_ARRAY and not StatsManager.equipped_items.is_empty() \
+		else await _load_equipped_items()
 	return {
 		"ok": true,
 		"error": "",

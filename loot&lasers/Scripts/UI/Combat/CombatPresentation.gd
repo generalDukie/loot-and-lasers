@@ -117,9 +117,19 @@ static func _apply(state: Dictionary, ev: Dictionary) -> void:
 		if not slot.is_empty():
 			slot["kinetic_tantrum"] = ""
 		return
-	if str(ev.get("passive", "")).begins_with("Orbital") or kind.contains("drone") or kind.contains("fire_support") or kind.contains("acquire_target") or kind.contains("defensive_protocol"):
-		if not slot.is_empty():
-			slot["drone_ready"] = true
+	if str(ev.get("passive", "")).begins_with("Orbital") or kind.contains("drone") \
+			or kind.contains("fire_support") or kind.contains("acquire_target") \
+			or kind.contains("defensive_protocol"):
+		# Cosmic Engineer owns the drone. Prefer explicit side, then attacker —
+		# never defender (Fire Support hits tag the foe as defender and used to
+		# paint the bot chip under the wrong HP bar).
+		var eng_side := str(ev.get("side", ""))
+		if eng_side != "player" and eng_side != "opponent":
+			eng_side = str(ev.get("attacker", ""))
+		var eng_slot: Dictionary = _slot(state, eng_side)
+		if not eng_slot.is_empty():
+			eng_slot["drone_ready"] = true
+		return
 
 
 static func _other_floater(label: String, color: Color) -> Dictionary:
@@ -170,36 +180,76 @@ static func floater_label(ev: Dictionary) -> Dictionary:
 			"damage_type": dtype,
 		}
 	if str(ev.get("type", "")) == "passive":
-		var passive := _other_floater("", Color("#C084FC"))
-		passive["icon"] = "sparkles"
-		return passive
+		var pname := str(ev.get("passive", "")).strip_edges()
+		var kind := str(ev.get("kind", "")).strip_edges()
+		var label := pname if not pname.is_empty() else kind.replace("_", " ").capitalize()
+		if label.is_empty():
+			label = "ABILITY"
+		return _other_floater(label.to_upper(), Color("#C084FC"))
 	return {}
 
 
-## Status chip parts for combat HP chrome: [{ "icon", "text", "color" }, ...]
+## Status chip parts for combat HP chrome: [{ "icon", "text", "color", "tip" }, ...]
 static func status_chip_parts(side: Dictionary) -> Array:
 	var parts: Array = []
-	var muted := Color("#A5B4FC", 0.95)
+	var barrier_c := Color("#C084FC", 0.98)
+	var phantom_c := Color("#94A3B8", 0.98)
+	var overclock_c := Color("#38BDF8", 0.98)
+	var tantrum_c := Color("#F97316", 0.98)
+	var trick_c := Color("#34D399", 0.98)
+	var drone_c := Color("#FBBF24", 0.98)
 	if int(side.get("barrier", 0)) > 0:
-		parts.append({"icon": "shield", "text": str(int(side.get("barrier", 0))), "color": muted})
+		parts.append({
+			"icon": "shield",
+			"text": "Barrier %s" % int(side.get("barrier", 0)),
+			"color": barrier_c,
+			"tip": "Astral Barrier",
+		})
 	if int(side.get("phantom_charges", 0)) > 0:
-		parts.append({"icon": "ghost", "text": "×%s" % int(side.get("phantom_charges", 0)), "color": muted})
+		parts.append({
+			"icon": "ghost",
+			"text": "Phantom ×%s" % int(side.get("phantom_charges", 0)),
+			"color": phantom_c,
+			"tip": "Phantom Signal charges",
+		})
 	if int(side.get("overclock_stacks", 0)) > 0:
-		parts.append({"icon": "zap", "text": "OC %s" % int(side.get("overclock_stacks", 0)), "color": muted})
+		parts.append({
+			"icon": "zap",
+			"text": "OC %s" % int(side.get("overclock_stacks", 0)),
+			"color": overclock_c,
+			"tip": "Overclock stacks",
+		})
 	var kt := str(side.get("kinetic_tantrum", ""))
 	if kt == "strong":
-		parts.append({"icon": "badge-alert", "text": "2.0×", "color": muted})
+		parts.append({
+			"icon": "badge-alert",
+			"text": "Tantrum 2.0×",
+			"color": tantrum_c,
+			"tip": "Kinetic Tantrum · Strong",
+		})
 	elif kt == "normal":
-		parts.append({"icon": "badge-alert", "text": "1.5×", "color": muted})
+		parts.append({
+			"icon": "badge-alert",
+			"text": "Tantrum 1.5×",
+			"color": tantrum_c,
+			"tip": "Kinetic Tantrum · Normal",
+		})
 	var trick := str(side.get("dirty_trick", ""))
 	if not trick.is_empty():
+		var trick_lab := trick.replace("_", " ").capitalize()
 		parts.append({
 			"icon": "list-checks",
-			"text": trick.replace("_", " "),
-			"color": muted,
+			"text": trick_lab,
+			"color": trick_c,
+			"tip": "Dirty Trick · %s" % trick_lab,
 		})
 	if bool(side.get("drone_ready", false)):
-		parts.append({"icon": "bot", "text": "", "color": muted})
+		parts.append({
+			"icon": "bot",
+			"text": "Drone",
+			"color": drone_c,
+			"tip": "Orbital Assistant ready",
+		})
 	return parts
 
 
@@ -229,17 +279,20 @@ static func fill_status_chip(host: Control, side: Dictionary, align_right: bool 
 		var chip := HBoxContainer.new()
 		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		chip.add_theme_constant_override("separation", 3)
+		var tip := str(part.get("tip", "")).strip_edges()
+		if not tip.is_empty():
+			chip.tooltip_text = tip
 		row.add_child(chip)
 		var icon_id := str(part.get("icon", ""))
 		var tint: Color = part.get("color", Color("#A5B4FC", 0.95))
 		if CurrencyIcon.is_asset_glyph(icon_id):
-			chip.add_child(UiIcon.make(icon_id, tint, 14.0))
+			chip.add_child(UiIcon.make(icon_id, tint, 16.0))
 		var txt := str(part.get("text", "")).strip_edges()
 		if not txt.is_empty():
 			var lab := Label.new()
 			lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			lab.text = txt
-			lab.add_theme_font_size_override("font_size", 15)
+			lab.add_theme_font_size_override("font_size", 16)
 			lab.add_theme_color_override("font_color", tint)
 			ClientUi.apply_display_font(lab)
 			chip.add_child(lab)
@@ -311,6 +364,9 @@ static func resolve_end_hp(battle: Dictionary, fallback_player: int = -1, fallba
 static func format_log_line(ev: Dictionary, i: int) -> String:
 	if str(ev.get("text", "")) != "":
 		return "#%s %s" % [i + 1, str(ev.get("text", ""))]
+	var ability_bit := _format_ability_log_bit(ev)
+	if not ability_bit.is_empty():
+		return "#%s %s" % [i + 1, ability_bit]
 	if int(ev.get("heal", 0)) > 0:
 		return "#%s heal +%s" % [i + 1, int(ev.get("heal", 0))]
 	if bool(ev.get("dodged", false)) or str(ev.get("type", "")) == "dodge":
@@ -327,6 +383,65 @@ static func format_log_line(ev: Dictionary, i: int) -> String:
 			" CRIT" if bool(ev.get("crit", false)) else "",
 		]
 	return "#%s %s" % [i + 1, str(ev.get("type", "event"))]
+
+
+## Compact class-ability / passive line for the corner combat log.
+static func _format_ability_log_bit(ev: Dictionary) -> String:
+	var t := str(ev.get("type", ""))
+	var ability := str(ev.get("ability", "")).strip_edges()
+	if (t == "ability" or t == "drone") and not ability.is_empty():
+		return "%s · %s" % [str(ev.get("attacker", "?")), ability]
+	var kind := str(ev.get("kind", ev.get("missKind", ev.get("secondaryKind", ""))))
+	var passive := str(ev.get("passive", "")).strip_edges()
+	var is_passiveish := t == "passive" \
+			or (t == "miss" and str(ev.get("missKind", "")) == "phantom_signal") \
+			or (t == "secondary" and not passive.is_empty()) \
+			or (t == "dodge" and kind == "fire_support_dodged")
+	if not is_passiveish:
+		return ""
+	var detail := ""
+	match kind:
+		"dirty_trick_selected":
+			detail = str(ev.get("dirtyTrick", "")).replace("_", " ").capitalize()
+		"orbital_assistant_activated":
+			detail = str(ev.get("effect", "")).replace("_", " ").capitalize()
+		"fire_support":
+			detail = "Fire Support"
+		"fire_support_dodged":
+			detail = "Fire Support · Dodged"
+		"kinetic_tantrum_strong":
+			detail = "Strong"
+		"kinetic_tantrum_normal":
+			detail = "Normal"
+		"astral_barrier_created":
+			detail = "Raised"
+		"astral_barrier_restored":
+			detail = "Restored"
+		"phantom_signal_armed":
+			detail = "%s charges" % str(ev.get("charges", 2))
+		"phantom_signal", "phantom_signal_miss":
+			detail = "Miss · %s left" % str(ev.get("chargesRemaining", 0))
+		"overclock_stack_gained":
+			detail = "Stack %s" % str(ev.get("stacks", 0))
+		"overclock_stacks_removed":
+			detail = "−%s → %s" % [str(ev.get("removed", 0)), str(ev.get("stacks", 0))]
+		"overclock_ready":
+			detail = "Armed"
+		"defensive_protocol_applied":
+			detail = "Defensive Protocol"
+		"acquire_target_applied":
+			detail = "Acquire Target"
+		_:
+			if passive.is_empty() and kind.is_empty():
+				return ""
+	var name := passive if not passive.is_empty() else kind.replace("_", " ").capitalize()
+	if detail.is_empty():
+		return name
+	return "%s · %s" % [name, detail]
+
+
+static func is_ability_log_event(ev: Dictionary) -> bool:
+	return not _format_ability_log_bit(ev).is_empty()
 
 
 static func is_dev_diagnostics_enabled() -> bool:

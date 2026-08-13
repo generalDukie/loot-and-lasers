@@ -56,7 +56,7 @@ func _draw_icon(cx: float, cy: float) -> void:
 	var rarity := str(item.get("rarity", "common"))
 	var tint := ClientUi.rarity_color(rarity)
 	var itype := str(item.get("type", "weapon"))
-	# Plate.
+	# Plate — rarity border / glow for all types (incl. stims).
 	draw_rect(Rect2(Vector2.ZERO, Vector2(REF_SIZE, REF_SIZE)), Color(0.04, 0.05, 0.08, 0.95), true)
 	draw_rect(Rect2(1, 1, REF_SIZE - 2, REF_SIZE - 2), Color(tint, 0.22), false, 1.5)
 	draw_circle(Vector2(cx, cy), REF_SIZE * 0.38, Color(tint, 0.12))
@@ -78,9 +78,17 @@ func _draw_icon(cx: float, cy: float) -> void:
 		"ship_module":
 			_draw_module(cx, cy, tint)
 		"consumable":
-			_draw_flask(cx, cy, tint)
+			_draw_flask(cx, cy, _stim_attr_color())
 		_:
 			_draw_gem(cx, cy, tint)
+
+
+func _stim_attr_color() -> Color:
+	var cons: Variant = item.get("consumable", {})
+	var stat := ""
+	if typeof(cons) == TYPE_DICTIONARY:
+		stat = str(cons.get("stat", "")).strip_edges().to_lower()
+	return GameData.stat_color(stat) if not stat.is_empty() else ClientUi.rarity_color(str(item.get("rarity", "common")))
 
 
 func _draw_weapon(cx: float, cy: float, tint: Color) -> void:
@@ -160,13 +168,14 @@ func _draw_module(cx: float, cy: float, tint: Color) -> void:
 	draw_line(Vector2(cx + 10, cy), Vector2(cx + 14, cy), Color(tint, 0.7), 1.5)
 
 
-func _draw_flask(cx: float, cy: float, tint: Color) -> void:
-	draw_rect(Rect2(cx - 4, cy - 12, 8, 5), Color(tint.darkened(0.2), 0.95))
+## Stim flask: liquid / body / cork use attribute color; plate border+glow stay rarity.
+func _draw_flask(cx: float, cy: float, attr: Color) -> void:
+	draw_rect(Rect2(cx - 4, cy - 12, 8, 5), Color(attr.darkened(0.15), 0.95))
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(cx - 3, cy - 7), Vector2(cx + 3, cy - 7),
 		Vector2(cx + 8, cy + 10), Vector2(cx - 8, cy + 10),
-	]), Color(tint, 0.75))
-	draw_circle(Vector2(cx, cy + 4), 3.0, Color(1, 1, 1, 0.35))
+	]), Color(attr, 0.88))
+	draw_circle(Vector2(cx, cy + 4), 3.0, Color(attr.lightened(0.45), 0.45))
 
 
 func _draw_gem(cx: float, cy: float, tint: Color) -> void:

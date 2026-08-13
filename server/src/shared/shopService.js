@@ -103,6 +103,7 @@ export function serializeShopOffer(slot, meta = {}, { isHot = false } = {}) {
     : !!(meta.purchased?.[shopItemId] || meta.yanked?.[shopItemId]);
   const yanked = isHot ? !!meta.hot_yanked : !!meta.yanked?.[shopItemId];
 
+  const hagglePct = Math.max(0, Math.round(Number(slot.haggle_discount_pct) || 0));
   return {
     shop_item_id: shopItemId,
     generated_item_id: slot.instance_id || slot.id || null,
@@ -114,7 +115,8 @@ export function serializeShopOffer(slot, meta = {}, { isHot = false } = {}) {
     yanked,
     purchased: isHot ? !!meta.hot_purchased : !!meta.purchased?.[shopItemId],
     refresh_id: meta.window_idx ?? null,
-    haggle_eligible: !stim && !slot._bundle,
+    haggle_discount_pct: hagglePct,
+    haggle_eligible: !stim && !slot._bundle && hagglePct <= 0,
     offer_kind: stim ? "stim" : "gear",
     // Keep authoritative listing payload for clients that already read cost/_slotId.
     item: slot,
@@ -196,7 +198,7 @@ export function serializeShopPresentation(meta, win = getShopWindow()) {
       success_chance: HAGGLE_SUCCESS_CHANCE,
       discount_min_pct: HAGGLE_DISCOUNT_MIN_PCT,
       discount_max_pct: HAGGLE_DISCOUNT_MAX_PCT,
-      note: "Rolled at purchase; failure yanks listing; does not regenerate stock",
+      note: "Success discounts listing price (buy separately); failure yanks listing; does not regenerate stock",
     },
     rarity: {
       gear: { ...SHOP_GEAR_RARITY_WEIGHTS },

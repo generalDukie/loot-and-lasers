@@ -1,7 +1,7 @@
 class_name CombatAttributeMatchup
 extends RefCounted
-## Presentation-only raw attribute comparison for duel overlays.
-## Values come from StatsRules.display_totals — never recalculates combat math.
+## Presentation-only attribute comparison for duel overlays.
+## Prefer server display_stats / player_display_stats (EPA or gear+Stim finals).
 
 const ATTR_KEYS: PackedStringArray = ["strength", "agility", "intellect", "vitality", "luck"]
 const ATTR_LABELS := {

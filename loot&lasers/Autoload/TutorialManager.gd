@@ -115,6 +115,18 @@ func blocks_arena_combat() -> bool:
 	return should_show() or blocks_daily_login_prompt()
 
 
+## Block Black Market buys / paid restock until onboarding is finished or skipped.
+## Sell tray stays available — shop_market is explain-only (ack), not a purchase gate.
+func blocks_black_market_commerce() -> bool:
+	return should_show() or blocks_daily_login_prompt()
+
+
+## Block starting a mining run until onboarding is finished or skipped.
+## mine_explain is explain-only (ack); collect/cancel stay available if already mining.
+func blocks_mining_start() -> bool:
+	return should_show() or blocks_daily_login_prompt()
+
+
 ## First tutorial mission fight must be watched — no SKIP TO RESULTS.
 func blocks_combat_skip_to_results() -> bool:
 	if not should_show():

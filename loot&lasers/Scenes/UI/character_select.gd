@@ -6,6 +6,9 @@ const MAX_SLOTS := 3
 var _list: HBoxContainer
 var _status: Label
 var _loading_host: Control
+var _loading_status: Label
+var _loading_spinner: Control
+var _loading_spinning := false
 var _main_host: Control
 var _welcome: Label
 var _busy := false
@@ -22,6 +25,8 @@ var _card_buttons: Dictionary = {} # id -> Button
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
+	# Clear any leftover station overlay from a prior session / failed enter.
+	StationLoadingOverlay.hide_loading()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	await _refresh()
@@ -100,9 +105,18 @@ func _build() -> void:
 	load_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_loading_host.add_child(load_title)
 	var spinner_host := CenterContainer.new()
-	spinner_host.custom_minimum_size = Vector2(48, 48)
+	spinner_host.custom_minimum_size = Vector2(56, 56)
 	_loading_host.add_child(spinner_host)
-	spinner_host.add_child(UiIcon.make("loader-circle", ClientUi.CYAN, 40.0))
+	_loading_spinner = UiIcon.make("loader-circle", ClientUi.CYAN, 40.0)
+	_loading_spinner.pivot_offset = Vector2(20, 20)
+	spinner_host.add_child(_loading_spinner)
+	_loading_status = Label.new()
+	_loading_status.text = "Loading roster…"
+	_loading_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_loading_status.add_theme_font_size_override("font_size", 18)
+	_loading_status.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(_loading_status)
+	_loading_host.add_child(_loading_status)
 
 	_main_host = VBoxContainer.new()
 	_main_host.visible = false
@@ -219,16 +233,14 @@ func _refresh() -> void:
 	if _busy:
 		return
 	_busy = true
-	_loading_host.visible = true
-	_main_host.visible = false
+	_show_loading_screen("Loading roster…")
 	_status.text = ""
 	_clear_roster()
 
 	var me: Dictionary = await AuthManager.fetch_me()
 	if not me.ok:
 		_busy = false
-		_loading_host.visible = false
-		_main_host.visible = true
+		_hide_loading_screen()
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = str(me.get("error", "Could not load profile"))
 		return
@@ -236,8 +248,7 @@ func _refresh() -> void:
 	var res: Dictionary = await AuthManager.list_characters()
 	_busy = false
 	if not res.ok:
-		_loading_host.visible = false
-		_main_host.visible = true
+		_hide_loading_screen()
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = str(res.get("error", "Could not list characters"))
 		return
@@ -247,8 +258,7 @@ func _refresh() -> void:
 		if AuthManager.has_node_gameplay_session():
 			GameManager.go_character_create()
 			return
-		_loading_host.visible = false
-		_main_host.visible = true
+		_hide_loading_screen()
 		_welcome.text = "Welcome, %s" % _welcome_name()
 		_status.add_theme_color_override("font_color", ClientUi.MUTED)
 		_status.text = "No operatives yet. Re-login if Character APIs failed to bridge."
@@ -258,8 +268,7 @@ func _refresh() -> void:
 		_rebuild_roster()
 		return
 
-	_loading_host.visible = false
-	_main_host.visible = true
+	_hide_loading_screen()
 	_welcome.text = "Welcome back, %s — choose who deploys." % _welcome_name()
 
 	_active_id = str(AuthManager.user.get("active_character_id", ""))
@@ -367,7 +376,8 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 		if ev is InputEventMouseButton:
 			var mb := ev as InputEventMouseButton
 			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and mb.double_click:
-				_select_card(cid)
+				# Enter without a selection rebuild — keeps roster layout stable.
+				_selected_id = cid
 				_enter(character)
 				get_viewport().set_input_as_handled()
 	)
@@ -387,26 +397,62 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 14)
 	pad.add_child(col)
 
 	var badge_row := HBoxContainer.new()
 	badge_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	badge_row.custom_minimum_size.y = 28
 	col.add_child(badge_row)
 	if is_active:
 		badge_row.add_child(_status_chip("ACTIVE OPERATIVE", ClientUi.CYAN if is_selected else ClientUi.SUCCESS))
 	elif is_selected:
 		badge_row.add_child(_status_chip("SELECTED", ClientUi.CYAN))
 
+	# Portrait band: emblem is vertically centered in the gap above the head.
+	var art_band := VBoxContainer.new()
+	art_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art_band.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	art_band.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	art_band.add_theme_constant_override("separation", 8)
+	col.add_child(art_band)
+
+	var class_key := str(character.get("class", "?"))
+	var emblem_zone := VBoxContainer.new()
+	emblem_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	emblem_zone.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	emblem_zone.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	emblem_zone.size_flags_stretch_ratio = 1.0
+	emblem_zone.add_theme_constant_override("separation", 0)
+	art_band.add_child(emblem_zone)
+	var emblem_pad_top := Control.new()
+	emblem_pad_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	emblem_pad_top.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	emblem_zone.add_child(emblem_pad_top)
+	var emblem_wrap := CenterContainer.new()
+	emblem_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	emblem_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	emblem_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	emblem_wrap.clip_contents = false
+	emblem_zone.add_child(emblem_wrap)
+	if ClassIcon.has(class_key):
+		var emblem := ClassIcon.make(class_key, 144.0)
+		emblem.clip_contents = false
+		emblem_wrap.add_child(emblem)
+	var emblem_pad_bot := Control.new()
+	emblem_pad_bot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	emblem_pad_bot.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	emblem_zone.add_child(emblem_pad_bot)
+
 	var art_host := CenterContainer.new()
 	art_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	art_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(art_host)
+	art_host.size_flags_stretch_ratio = 2.4
+	art_band.add_child(art_host)
 	var frame := PanelContainer.new()
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.clip_contents = true
 	frame.add_theme_stylebox_override("panel", _inset_style(
 		Color(0.03, 0.05, 0.09, 0.98),
 		Color(ClientUi.CYAN, 0.7) if is_selected else Color(0.35, 0.45, 0.55, 0.45),
@@ -429,7 +475,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	name_l.text = LegacyName.full_name(character)
 	name_l.clip_text = true
 	name_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name_l.add_theme_font_size_override("font_size", 28)
+	name_l.add_theme_font_size_override("font_size", 56)
 	name_l.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(name_l)
 	col.add_child(name_l)
@@ -437,10 +483,10 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	var title_l := Label.new()
 	title_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_l.custom_minimum_size.y = 18
+	title_l.custom_minimum_size.y = 36
 	var title := str(character.get("active_title", "")).strip_edges()
 	title_l.text = title if not title.is_empty() and title != "<null>" else " "
-	title_l.add_theme_font_size_override("font_size", 17)
+	title_l.add_theme_font_size_override("font_size", 34)
 	title_l.add_theme_color_override("font_color", Color(ClientUi.GOLD, 0.92))
 	ClientUi.apply_display_font(title_l)
 	col.add_child(title_l)
@@ -448,16 +494,13 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	var meta_row := HBoxContainer.new()
 	meta_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meta_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	meta_row.add_theme_constant_override("separation", 10)
+	meta_row.add_theme_constant_override("separation", 14)
 	col.add_child(meta_row)
 	meta_row.add_child(_status_chip("LV %s" % ClientUi.format_level(character.get("level", 1)), ClientUi.CYAN_SOFT))
-	var class_key := str(character.get("class", "?"))
-	if ClassIcon.has(class_key):
-		meta_row.add_child(ClassIcon.make(class_key, 30.0))
 	var class_l := Label.new()
 	class_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	class_l.text = class_key
-	class_l.add_theme_font_size_override("font_size", 19)
+	class_l.add_theme_font_size_override("font_size", 38)
 	class_l.add_theme_color_override("font_color", ClientUi.TEXT)
 	ClientUi.apply_display_font(class_l)
 	meta_row.add_child(class_l)
@@ -466,7 +509,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	race_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	race_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	race_l.text = str(character.get("race", "")).strip_edges()
-	race_l.add_theme_font_size_override("font_size", 18)
+	race_l.add_theme_font_size_override("font_size", 36)
 	race_l.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(race_l)
 	col.add_child(race_l)
@@ -475,7 +518,7 @@ func _make_card(character: Dictionary, is_active: bool, is_selected: bool) -> Bu
 	summary.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	summary.text = _summary_line(character)
-	summary.add_theme_font_size_override("font_size", 17)
+	summary.add_theme_font_size_override("font_size", 34)
 	summary.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_body_font(summary)
 	col.add_child(summary)
@@ -522,13 +565,18 @@ func _inset_style(bg: Color, border: Color, radius: int, width: int, glow: Color
 func _status_chip(text: String, tint: Color) -> PanelContainer:
 	var chip := PanelContainer.new()
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	chip.add_theme_stylebox_override("panel", _inset_style(
-		Color(tint, 0.16), Color(tint, 0.72), 8, 1, Color(tint, 0.18), 6
-	))
+	var sb := _inset_style(
+		Color(tint, 0.16), Color(tint, 0.72), 12, 2, Color(tint, 0.18), 8
+	)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 8
+	chip.add_theme_stylebox_override("panel", sb)
 	var l := Label.new()
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.text = text
-	l.add_theme_font_size_override("font_size", 13)
+	l.add_theme_font_size_override("font_size", 26)
 	l.add_theme_color_override("font_color", tint.lightened(0.12))
 	ClientUi.apply_display_font(l)
 	chip.add_child(l)
@@ -566,7 +614,7 @@ func _make_create_card() -> Button:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	col.add_theme_constant_override("separation", 16)
+	col.add_theme_constant_override("separation", 24)
 	btn.add_child(col)
 
 	var icon_wrap := CenterContainer.new()
@@ -574,22 +622,22 @@ func _make_create_card() -> Button:
 	col.add_child(icon_wrap)
 	var plus_panel := PanelContainer.new()
 	plus_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	plus_panel.custom_minimum_size = Vector2(96, 96)
+	plus_panel.custom_minimum_size = Vector2(192, 192)
 	plus_panel.add_theme_stylebox_override("panel", _inset_style(
-		Color(ClientUi.VIOLET, 0.14), Color(ClientUi.VIOLET, 0.6), 48, 2,
-		Color(ClientUi.VIOLET, 0.22), 10
+		Color(ClientUi.VIOLET, 0.14), Color(ClientUi.VIOLET, 0.6), 96, 3,
+		Color(ClientUi.VIOLET, 0.22), 14
 	))
 	icon_wrap.add_child(plus_panel)
 	var plus_c := CenterContainer.new()
 	plus_c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plus_panel.add_child(plus_c)
-	plus_c.add_child(UiIcon.make("plus", ClientUi.VIOLET.lightened(0.2), 42.0))
+	plus_c.add_child(UiIcon.make("plus", ClientUi.VIOLET.lightened(0.2), 84.0))
 
 	var lab := Label.new()
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lab.text = "CREATE NEW\nOPERATIVE"
-	lab.add_theme_font_size_override("font_size", 22)
+	lab.add_theme_font_size_override("font_size", 44)
 	lab.add_theme_color_override("font_color", ClientUi.VIOLET.lightened(0.25))
 	ClientUi.apply_display_font(lab)
 	col.add_child(lab)
@@ -598,7 +646,7 @@ func _make_create_card() -> Button:
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.text = "Open a new slot on your roster"
-	hint.add_theme_font_size_override("font_size", 18)
+	hint.add_theme_font_size_override("font_size", 36)
 	hint.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(hint)
 	col.add_child(hint)
@@ -716,6 +764,8 @@ func _on_unlock_slot() -> void:
 func _select_card(character_id: String) -> void:
 	if _busy or _switching or character_id.is_empty():
 		return
+	if _selected_id == character_id:
+		return
 	_selected_id = character_id
 	_rebuild_roster()
 
@@ -741,30 +791,86 @@ func _enter(character: Dictionary) -> void:
 	_enter_btn.text = "LOADING…"
 	_create_btn.disabled = true
 	_unlock_btn.disabled = true
-	_rebuild_roster()
-	_status.add_theme_color_override("font_color", ClientUi.MUTED)
-	_status.text = "Selecting…"
 	var cid := str(character.get("id", ""))
+	var op_name := LegacyName.full_name(character).strip_edges()
+	if op_name.is_empty():
+		op_name = "operative"
+	# Root overlay keeps the wheel spinning across the game-shell scene change.
+	_main_host.visible = false
+	_loading_host.visible = false
+	StationLoadingOverlay.show_loading("Deploying %s…" % op_name)
+	await get_tree().process_frame
+	await get_tree().process_frame
 	var res: Dictionary = await AuthManager.select_character(cid)
 	if not res.ok:
 		_switching = false
 		_enter_btn.text = "PLAY"
+		StationLoadingOverlay.hide_loading()
+		_main_host.visible = true
 		_update_slot_actions()
 		_rebuild_roster()
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = str(res.get("error", "Could not select character"))
 		return
-	_status.text = "Loading operative…"
+	StationLoadingOverlay.set_message("Loading operative…")
 	var loaded: Dictionary = await AuthManager.get_selected_character()
 	if not loaded.ok or typeof(loaded.get("data", null)) != TYPE_DICTIONARY:
 		_switching = false
 		_enter_btn.text = "PLAY"
+		StationLoadingOverlay.hide_loading()
+		_main_host.visible = true
 		_update_slot_actions()
 		_rebuild_roster()
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = str(loaded.get("error", "Could not load selected character"))
 		return
+	StationLoadingOverlay.set_message("Entering station…")
+	await get_tree().process_frame
 	GameManager.go_hub(loaded.data)
+
+
+func _show_loading_screen(message: String) -> void:
+	_set_loading_message(message)
+	_loading_host.visible = true
+	_main_host.visible = false
+	_start_loading_spinner()
+
+
+func _hide_loading_screen() -> void:
+	_stop_loading_spinner()
+	_loading_host.visible = false
+	_main_host.visible = true
+
+
+func _set_loading_message(message: String) -> void:
+	if is_instance_valid(_loading_status):
+		_loading_status.text = message
+
+
+func _process(delta: float) -> void:
+	# Drive the wheel in _process so it keeps spinning across awaits / long network waits.
+	if not _loading_spinning or not is_instance_valid(_loading_spinner):
+		return
+	var sz := _loading_spinner.size
+	if sz.x > 1.0 and sz.y > 1.0:
+		_loading_spinner.pivot_offset = sz * 0.5
+	_loading_spinner.rotation += delta * (TAU / 0.9)
+
+
+func _start_loading_spinner() -> void:
+	if not is_instance_valid(_loading_spinner):
+		return
+	_loading_spinner.rotation = 0.0
+	_loading_spinner.pivot_offset = _loading_spinner.custom_minimum_size * 0.5
+	_loading_spinning = true
+	set_process(true)
+
+
+func _stop_loading_spinner() -> void:
+	_loading_spinning = false
+	set_process(false)
+	if is_instance_valid(_loading_spinner):
+		_loading_spinner.rotation = 0.0
 
 
 func _on_logout() -> void:

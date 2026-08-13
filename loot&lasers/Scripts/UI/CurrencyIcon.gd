@@ -37,22 +37,28 @@ static func texture(icon_id: String, size: float = DEFAULT_SIZE) -> Texture2D:
 	return _texture(icon_id, size)
 
 
-## Prefix a cost button with a currency glyph (set `btn.text` without emoji first).
-static func apply_button_cost(btn: Button, size: float = 16.0, icon_id: String = "nova") -> void:
+## Prefix (or suffix) a cost button with a currency glyph (set `btn.text` without emoji first).
+static func apply_button_cost(
+	btn: Button,
+	size: float = 16.0,
+	icon_id: String = "nova",
+	trailing: bool = false
+) -> void:
 	if btn == null or not is_instance_valid(btn):
 		return
 	btn.icon = texture(icon_id, size)
 	btn.expand_icon = true
-	btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.icon_alignment = HORIZONTAL_ALIGNMENT_RIGHT if trailing else HORIZONTAL_ALIGNMENT_LEFT
 	btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	btn.add_theme_constant_override("icon_max_width", int(round(size)))
+	btn.add_theme_constant_override("h_separation", 4)
 	# Glyph SVGs are already tinted; force every Button icon state to white or the
 	# crystal only appears while pressed (theme icon_normal_color is black/empty).
 	UiIcon.apply_button_icon_colors(btn, Color.WHITE)
 
 
-static func apply_stardust_button_cost(btn: Button, size: float = 16.0) -> void:
-	apply_button_cost(btn, size, "stardust")
+static func apply_stardust_button_cost(btn: Button, size: float = 16.0, trailing: bool = false) -> void:
+	apply_button_cost(btn, size, "stardust", trailing)
 
 
 ## Icon + amount row for price chips / balance labels.

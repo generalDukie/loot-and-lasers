@@ -400,7 +400,7 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 
 	var meta := Label.new()
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	meta.text = "%s · %s" % [rarity, str(it.get("type", "?"))]
+	meta.text = "%s · %s" % [rarity, GameData.gear_type_label(str(it.get("type", "")))]
 	meta.add_theme_font_size_override("font_size", 19)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)

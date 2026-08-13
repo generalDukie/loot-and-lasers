@@ -444,7 +444,9 @@ func _combat_labels_for_flash_stat(stat: String) -> Array:
 				out.append("Damage")
 			return out
 		"intellect":
-			var out: Array = ["Tech Resist"]
+			var out: Array = []
+			if arch != "int":
+				out.append("Tech Resist")
 			if primary == "intellect":
 				out.append("Damage")
 			return out

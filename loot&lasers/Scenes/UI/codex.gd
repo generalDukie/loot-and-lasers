@@ -4,9 +4,15 @@ class_name Codex
 
 var _tabs: HBoxContainer
 var _body: RichTextLabel
+var _body_scroll: ScrollContainer
 var _section := "start"
 var _tab_buttons: Array[Button] = []
 var _sheet: PanelContainer
+
+const _SHEET_W := 896.0
+const _SHEET_H := 747.0
+const _BODY_MARGIN_X := 32.0 ## left+right body margins
+const _BODY_WRAP_CAP := _SHEET_W - _BODY_MARGIN_X
 
 
 func _ready() -> void:
@@ -44,9 +50,10 @@ func _build() -> void:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
 
-	# Web: max-w-2xl ≈ 672px, max-h ~84%.
+	# Web: max-w-2xl ≈ 672px, max-h ~84%. Fixed sheet size — never grow with body.
 	_sheet = PanelContainer.new()
-	_sheet.custom_minimum_size = Vector2(896, 747)
+	_sheet.custom_minimum_size = Vector2(_SHEET_W, _SHEET_H)
+	_sheet.clip_contents = true
 	_sheet.mouse_filter = Control.MOUSE_FILTER_STOP
 	_sheet.add_theme_stylebox_override(
 		"panel",
@@ -154,11 +161,12 @@ func _build() -> void:
 	body_margin.add_theme_constant_override("margin_bottom", 14)
 	root.add_child(body_margin)
 
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	body_margin.add_child(scroll)
+	_body_scroll = ScrollContainer.new()
+	_body_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_body_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_body_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	body_margin.add_child(_body_scroll)
 
 	_body = RichTextLabel.new()
 	_body.bbcode_enabled = true
@@ -166,17 +174,17 @@ func _build() -> void:
 	_body.scroll_active = false
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# Cap wrap width up front so taller sections (Combat) can't feedback-loop
+	# ScrollContainer width into the hundreds of thousands of pixels (hard crash).
+	_body.custom_minimum_size.x = _BODY_WRAP_CAP
 	_body.add_theme_font_size_override("normal_font_size", 19)
 	_body.add_theme_color_override("default_color", Color(CodexCatalog.FG))
 	ClientUi.apply_body_font(_body)
 	var display := ClientUi.display_font()
 	if display != null:
 		_body.add_theme_font_override("bold_font", display)
-	scroll.add_child(_body)
-	scroll.resized.connect(func() -> void:
-		if is_instance_valid(_body) and scroll.size.x > 1.0:
-			_body.custom_minimum_size.x = scroll.size.x
-	)
+	_body_scroll.add_child(_body)
+	_body_scroll.resized.connect(_sync_body_wrap_width)
 
 
 func _hairline(color: Color) -> ColorRect:
@@ -202,8 +210,26 @@ func _flat(bg: Color, border: Color, radius: int) -> StyleBoxFlat:
 
 func _show_section(id: String) -> void:
 	_section = id
+	if not is_instance_valid(_body):
+		return
+	# Reset wrap width before swapping BBCode — breaks any prior runaway min size.
+	_body.custom_minimum_size.x = _BODY_WRAP_CAP
 	_body.text = CodexCatalog.body_bbcode(id)
 	_style_tabs()
+	call_deferred("_sync_body_wrap_width")
+
+
+func _sync_body_wrap_width() -> void:
+	if not is_instance_valid(_body) or not is_instance_valid(_body_scroll):
+		return
+	var w := _body_scroll.size.x
+	if w < 2.0:
+		w = _BODY_WRAP_CAP
+	# Never follow an already-blown scroll width; hard-cap to sheet design.
+	w = minf(w, _BODY_WRAP_CAP)
+	if absf(_body.custom_minimum_size.x - w) < 0.5:
+		return
+	_body.custom_minimum_size.x = w
 
 
 func _style_tabs() -> void:

@@ -465,11 +465,13 @@ func _build_gameplay_body() -> VBoxContainer:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 14)
 
-	var speed_norm := clampf((SettingsManager.combat_anim_speed - 0.35) / 1.65, 0.0, 1.0)
+	var speed_norm := _combat_speed_to_slider(SettingsManager.combat_anim_speed)
 	col.add_child(_premium_slider("Combat Animation Speed", "clock", speed_norm, func(v: float) -> void:
-		SettingsManager.set_combat_anim_speed(0.35 + clampf(v, 0.0, 1.0) * 1.65, false)
+		SettingsManager.set_combat_anim_speed(_slider_to_combat_speed(v), false)
 		_mark_dirty()
-	, "combat_speed"))
+	, "combat_speed", false, func(t: float) -> String:
+		return "%.1f×" % _slider_to_combat_speed(t)
+	))
 
 	col.add_child(_premium_slider("Screen Shake", "vibrate", SettingsManager.screen_shake_scale, func(v: float) -> void:
 		SettingsManager.set_screen_shake_scale(v, false)
@@ -671,13 +673,29 @@ func _coming_soon(label: String) -> Control:
 	return row
 
 
+func _combat_speed_to_slider(speed: float) -> float:
+	## Map 0.5–1.0–2.0 playback rate onto a 0–1 slider with 1.0× at center.
+	var s := clampf(speed, 0.5, 2.0)
+	if s <= 1.0:
+		return inverse_lerp(0.5, 1.0, s) * 0.5
+	return 0.5 + inverse_lerp(1.0, 2.0, s) * 0.5
+
+
+func _slider_to_combat_speed(t: float) -> float:
+	var n := clampf(t, 0.0, 1.0)
+	if n <= 0.5:
+		return lerpf(0.5, 1.0, n / 0.5)
+	return lerpf(1.0, 2.0, (n - 0.5) / 0.5)
+
+
 func _premium_slider(
 	label: String,
 	icon_id: String,
 	value: float,
 	on_change: Callable,
 	key: String,
-	preview_sfx: bool = false
+	preview_sfx: bool = false,
+	format_label: Callable = Callable()
 ) -> VBoxContainer:
 	var wrap := VBoxContainer.new()
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -697,13 +715,19 @@ func _premium_slider(
 	head.add_child(lab)
 
 	var pct := Label.new()
-	pct.text = "%d%%" % int(round(value * 100.0))
-	pct.custom_minimum_size.x = 56
+	pct.custom_minimum_size.x = 64
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	pct.add_theme_font_size_override("font_size", 18)
 	pct.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(pct)
 	head.add_child(pct)
+
+	var format_value := func(v: float) -> String:
+		if format_label.is_valid():
+			return str(format_label.call(v))
+		return "%d%%" % int(round(v * 100.0))
+
+	pct.text = format_value.call(clampf(value, 0.0, 1.0))
 
 	var s := HSlider.new()
 	s.min_value = 0.0
@@ -715,7 +739,7 @@ func _premium_slider(
 	s.focus_mode = Control.FOCUS_ALL
 	_style_slider(s)
 	s.value_changed.connect(func(v: float) -> void:
-		pct.text = "%d%%" % int(round(v * 100.0))
+		pct.text = format_value.call(v)
 		if _building:
 			return
 		if on_change.is_valid():

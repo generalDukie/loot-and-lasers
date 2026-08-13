@@ -9,6 +9,15 @@ const PRIMARY := "#22D3EE"
 const MUTED := "#8CA4B7"
 const FG := "#C8D6E0"
 
+## Display mirrors (avoid class_name/Autoload chains — they break Codex compile).
+const FUEL_PURCHASE_COST := 20
+const FUEL_PURCHASE_AMOUNT := 20
+const FUEL_PURCHASE_MAX := 10
+const SHOP_REFRESH_COST := 20
+const ARENA_FREE_BATTLES := 10
+const ARENA_PAID_BATTLE_COST := 15
+const DUNGEON_SKIP_COST := 25
+
 const SECTIONS: Array = [
 	{"id": "start", "label": "Getting Started", "icon": "book-open", "color": "#22D3EE"},
 	{"id": "currencies", "label": "Currencies", "icon": "coins", "color": "#FFD700"},
@@ -16,8 +25,6 @@ const SECTIONS: Array = [
 	{"id": "combat", "label": "Combat & Arena", "icon": "swords", "color": "#FF4D6D"},
 	{"id": "galaxy", "label": "Galaxy Dungeon", "icon": "map", "color": "#00E5FF"},
 	{"id": "market", "label": "Black Market", "icon": "shopping-bag", "color": "#4ADE80"},
-	{"id": "blackhole", "label": "Void", "icon": "tornado", "color": "#9D6BFF"},
-	{"id": "ship", "label": "Ship Hangar", "icon": "rocket", "color": "#FFD700"},
 	{"id": "guilds", "label": "Guilds & Nexus", "icon": "crown", "color": "#A855F7"},
 	{"id": "social", "label": "Social & Mail", "icon": "users", "color": "#34D399"},
 ]
@@ -28,32 +35,32 @@ static func _h(text: String) -> String:
 
 
 static func _p(text: String) -> String:
-	return "[color=%s]%s[/color]\n\n" % [FG, text]
+	## Concatenate so guide copy can contain literal %% without format errors.
+	return "[color=" + FG + "]" + text + "[/color]\n\n"
 
 
 static func _li(text: String) -> String:
-	return "[color=%s]• %s[/color]\n" % [FG, text]
+	return "[color=" + FG + "]• " + text + "[/color]\n"
 
 
 static func _tip(text: String) -> String:
-	return "\n[font_size=14][i][color=%s]%s[/color][/i][/font_size]" % [MUTED, text]
+	return "\n[font_size=14][i][color=" + MUTED + "]" + text + "[/color][/i][/font_size]"
 
 
 static func _brand(text: String) -> String:
-	return "[color=%s][b]%s[/b][/color]" % [PRIMARY, text]
+	return "[color=" + PRIMARY + "][b]" + text + "[/b][/color]"
 
 
 static func _amber(text: String) -> String:
-	return "[color=%s]%s[/color]" % [AMBER, text]
+	return "[color=" + AMBER + "]" + text + "[/color]"
 
 
 static func _fuel(text: String = "fuel") -> String:
-	return "[color=%s][b]%s[/b][/color]" % [FUEL, text]
+	return "[color=" + FUEL + "][b]" + text + "[/b][/color]"
 
 
 static func _stardust_h() -> String:
-	return "[font_size=14][color=%s][b]STARDUST[/b][/color][/font_size]\n" % STARDUST
-
+	return "[font_size=14][color=" + STARDUST + "][b]STARDUST[/b][/color][/font_size]\n"
 
 static func body_bbcode(section_id: String) -> String:
 	match section_id:
@@ -74,16 +81,16 @@ static func body_bbcode(section_id: String) -> String:
 		"currencies":
 			return (
 				_stardust_h()
-				+ _p("The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, attribute buys, and arena challenger refreshes.")
+				+ _p("The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, and attribute buys.")
 				+ _h("Nova Crystals")
 				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas (%s Nova Crystals per arena battle after free fights). Frontier cooldown skip costs %s Nova Crystals." % [
-					str(ArenaRules.PAID_BATTLE_COST), str(DungeonRules.SKIP_COST)
+					str(ARENA_PAID_BATTLE_COST), str(DUNGEON_SKIP_COST)
 				])
 				+ "[font_size=14]%s[/font_size]\n" % _fuel("FUEL")
 				+ _p("Your mission energy. Each mission costs fuel based on its length. You get a pool of 100 that [b]resets to full every 24 hours[/b]. Need more sooner? Spend [b]%s Nova Crystals[/b] to buy +%s fuel, up to [b]%s times[/b] per cycle." % [
-					str(ShopManager.FUEL_PURCHASE_COST),
-					str(ShopManager.FUEL_PURCHASE_AMOUNT),
-					str(ShopManager.FUEL_PURCHASE_MAX),
+					str(FUEL_PURCHASE_COST),
+					str(FUEL_PURCHASE_AMOUNT),
+					str(FUEL_PURCHASE_MAX),
 				])
 			)
 		"missions":
@@ -96,9 +103,9 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("Impatient? Spend [b]Nova Crystals[/b] to skip — cost scales with time left (5 Nova Crystals per remaining minute).")
 				+ "\n" + _h("Fuel & reset")
 				+ _p("Your fuel pool refills to full every [b]24 hours[/b]. You can spend [b]%s Nova Crystals[/b] to buy +%s fuel, up to [b]%s times[/b] per cycle. Upgrade your [b]Reinforced Fuel Tank[/b] for more capacity and [b]Fuel Injector Tune[/b] to cut per-mission costs." % [
-					str(ShopManager.FUEL_PURCHASE_COST),
-					str(ShopManager.FUEL_PURCHASE_AMOUNT),
-					str(ShopManager.FUEL_PURCHASE_MAX),
+					str(FUEL_PURCHASE_COST),
+					str(FUEL_PURCHASE_AMOUNT),
+					str(FUEL_PURCHASE_MAX),
 				])
 				+ _h("Ship bonuses")
 				+ _p("Your active ship and its mods apply at launch (fuel/time reduction) and at claim (stardust/XP boosts). Check the Ship Hangar.")
@@ -106,8 +113,11 @@ static func body_bbcode(section_id: String) -> String:
 		"combat":
 			return (
 				_p("The [b]Arena[/b] is automated PvP — your stats and gear fight an opponent in a simulated battle. You get [b]%s free battles per day[/b] (resets at midnight Eastern). After that, each fight costs [b]%s Nova Crystals[/b] and awards rating only." % [
-					str(ArenaRules.DAILY_FREE_BATTLES), str(ArenaRules.PAID_BATTLE_COST)
+					str(ARENA_FREE_BATTLES), str(ARENA_PAID_BATTLE_COST)
 				])
+				+ _h("Challengers")
+				+ _li("You see [b]three[/b] challengers at a time. The board lasts [b]2 hours[/b], remints after you fight one, or when you (or a real foe on the board) level up.")
+				+ _li("Rankings remain the path to pick a specific rival when they appear on your board.")
 				+ _h("Rating")
 				+ _li("Winning raises your [b]rating[/b]; losing lowers it. Climb the leaderboard by rating alone.")
 				+ _li("Beating higher-rated opponents gives bonus rating.")
@@ -120,13 +130,13 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("[b]Strength[/b] — Strength damage for STR classes; Armor vs Strength damage for AGI/INT (STR classes get 0% Armor from Strength).")
 				+ _li("[b]Agility[/b] — Dodge for all; Agility damage for AGI classes (bypasses Armor & Tech Resist).")
 				+ _li("[b]Intellect[/b] — Tech damage for INT classes; Tech Resist for STR/AGI (INT classes get 0% Tech Resist from Intellect).")
-				+ _li("[b]Vitality[/b] — Max HP for all: round(50 + 2.5×VIT + 0.008×VIT²).")
-				+ _li("[b]Luck[/b] — Crit Chance for all (cap 30%, soft-capped before Lv100, 1.5× crit damage).")
+				+ _li("[b]Vitality[/b] — Max HP for all: round(50 + 2.5x VIT + 0.008x VIT^2).")
+				+ _li("[b]Luck[/b] — Crit Chance for all (cap 30%, soft-capped before Lv100, 1.5x crit damage).")
 			)
 		"galaxy":
 			return (
 				_p("The [b]Galaxy Map[/b] (Nav Deck) is a turn-based dungeon crawl across planets. Each planet has enemies to clear and a boss to defeat. After every fight (win or loss) you wait a [b]1 hour cooldown[/b] shared across all worlds; skip it for [b]%s Nova Crystals[/b]." % [
-					str(DungeonRules.SKIP_COST)
+					str(DUNGEON_SKIP_COST)
 				])
 				+ _li("Fight enemies in sequence — battles are auto-simulated like the arena.")
 				+ _li("Defeating the [b]boss[/b] clears the planet and advances you to the next.")
@@ -139,33 +149,12 @@ static func body_bbcode(section_id: String) -> String:
 			return (
 				_p("The [b]Black Market[/b] sells rotating gear and stims for stardust. Stock usually includes a class signature weapon.")
 				+ _h("Stalls")
-				+ _li("Stock refreshes on a timed window. Spend [b]%s Nova Crystals[/b] to restock early." % str(ShopManager.SHOP_REFRESH_COST))
+				+ _li("Stock refreshes on a timed window. Spend [b]%s Nova Crystals[/b] to restock early." % str(SHOP_REFRESH_COST))
 				+ _li("Compare listed gear to what you have equipped before buying.")
-				+ _li("[b]Haggle[/b] on gear — about 40% of the time you get 15–20% off; if it fails, they yank the listing (no purchase).")
-				+ _li("Rare [b]Scrap Crates[/b] (2 commons) and [b]Stim Trios[/b] show up as bundle deals.")
-				+ "\n" + _h("Hot Deal")
+				+ _li("[b]Haggle[/b] on gear — about 40% of the time you get 15–20% off the listing; Buy separately at the new price. If haggle fails, they yank the listing (no purchase).")
+				+ _li("Rare [b]Scrap Crates[/b] (2 commons) show up as bundle deals.")
+				+ "\n" + _h("Contraband Item")
 				+ _p("One spotlight piece per day (midnight Eastern). It does [b]not[/b] change when you restock the Black Market — buy it or wait for tomorrow.")
-			)
-		"blackhole":
-			return (
-				_p("The [b]Void[/b] recycles gear you no longer need. Dissolve an item and it turns into stardust — same payout whether you do it here or from your inventory.")
-				+ _li("Only [b]unequipped[/b] items can be dissolved.")
-				+ _li("Yield scales with the item's [b]rarity[/b], [b]stats[/b], and [b]level requirement[/b], plus a per-type weight (weapons & ship modules dissolve for more).")
-				+ _li("It's the smart move for gear that's weaker than what you've equipped.")
-			)
-		"ship":
-			return (
-				_p("Your [b]ship[/b] passively boosts missions. Visit the Ship Hangar to buy permanent [b]mods[/b] with stardust.")
-				+ _h("Upgrade categories")
-				+ _li("[b]Reinforced Fuel Tank[/b] — more max fuel.")
-				+ _li("[b]Fuel Injector Tune[/b] — less fuel per mission.")
-				+ _li("[b]Warp Drive[/b] — shorter mission times.")
-				+ _li("[b]Stardust Magnet[/b] — more stardust from missions.")
-				+ _li("[b]Neural Accelerator[/b] — more XP from missions.")
-				+ "\n" + _h("Ships")
-				+ _p("Each ship keeps its own mod loadout — buy a new hull and keep flying your old one while you outfit the bay. Higher hulls cost a bit more to upgrade, but each mod tier runs [b]~8% stronger[/b] than the same tier on the previous hull. Locked hulls show a bay preview and level progress. At [b]Lv 20[/b] your Scout gets a free Fuel Tank tune. Full hulls unlock at 50 / 100 / 200.")
-				+ _h("Fuel mounts")
-				+ _p("Temporary mission-speed boosts bought from the hangar’s Fuel Mounts drawer. They do not replace permanent hull upgrades.")
 			)
 		"guilds":
 			return (

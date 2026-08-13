@@ -115,6 +115,10 @@ static func active_buffs(character: Dictionary) -> Array:
 	for b in raw:
 		if typeof(b) != TYPE_DICTIONARY:
 			continue
+		var key := str(b.get("stat", "")).strip_edges().to_lower()
+		# Single-attribute stims only — legacy "all" buffs are ignored.
+		if not (key in ATTR_KEYS):
+			continue
 		var exp_iso := str(b.get("expires_at", ""))
 		if exp_iso.is_empty():
 			continue
@@ -206,11 +210,8 @@ static func _apply_buffs(stats: Dictionary, buffs: Array) -> Dictionary:
 		if typeof(b) != TYPE_DICTIONARY:
 			continue
 		var mult := float(b.get("mult", 0))
-		var key := str(b.get("stat", ""))
-		if key == "all":
-			for k in ATTR_KEYS:
-				out[k] = int(round(float(out.get(k, 0)) * (1.0 + mult)))
-		elif out.has(key):
+		var key := str(b.get("stat", "")).strip_edges().to_lower()
+		if out.has(key):
 			out[key] = int(round(float(out.get(key, 0)) * (1.0 + mult)))
 	return out
 

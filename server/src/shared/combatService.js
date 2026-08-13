@@ -8,6 +8,8 @@ import { entities } from "../entities.js";
 import { secureRandom } from "../rewards/rng.js";
 import { simulateBattle } from "./combatEngine.js";
 import { loadEquippedItemsForCharacter } from "./characterAttributes.js";
+import { computeTotalStats } from "./statEngine.js";
+import { ATTR_KEYS } from "./expectedPlayerAttributes.js";
 import { generateMissionEncounter } from "../../../src/lib/missionCombat.js";
 import { generateDungeonEnemy } from "../../../src/lib/dungeonEngine.js";
 import { DUNGEON_PLANETS, getDungeonPlanetById } from "../../../src/lib/dungeonData.js";
@@ -25,9 +27,38 @@ function publicEndState(end) {
   return { hp: end.hp, barrier: end.barrier ?? 0 };
 }
 
+/** Integer ATTR_KEYS map for matchup UI (EPA / effective totals). */
+export function normalizeDisplayStats(stats) {
+  const out = {};
+  for (const k of ATTR_KEYS) {
+    out[k] = Math.max(0, Math.round(Number(stats?.[k]) || 0));
+  }
+  return out;
+}
+
+/**
+ * Final combat attributes shown in ATTRIBUTE MATCHUP.
+ * PvE foes: EPA-distributed flat stats (already Stim-benchmarked in budget).
+ * Arena: permanent + gear, then active Stims.
+ */
+export function computeCombatDisplayStats(combatant, equippedItems = []) {
+  if (!combatant || typeof combatant !== "object") {
+    return normalizeDisplayStats({});
+  }
+  return normalizeDisplayStats(computeTotalStats(combatant, equippedItems || []));
+}
+
 /** Safe enemy display fields (no client-trustable combat math overrides). */
-export function publicEnemySummary(enemy) {
+export function publicEnemySummary(enemy, extras = {}) {
   if (!enemy || typeof enemy !== "object") return null;
+  const rawStats =
+    (enemy.stats && typeof enemy.stats === "object" ? enemy.stats : null)
+    || (extras.displayStats && typeof extras.displayStats === "object" ? extras.displayStats : null)
+    || {};
+  const displayStats =
+    (extras.displayStats && typeof extras.displayStats === "object" ? extras.displayStats : null)
+    || (enemy.display_stats && typeof enemy.display_stats === "object" ? enemy.display_stats : null)
+    || rawStats;
   return {
     id: enemy.id,
     name: enemy.name,
@@ -42,6 +73,13 @@ export function publicEnemySummary(enemy) {
     isBoss: !!(enemy.boss || enemy.isBoss),
     appearance: enemy.appearance || null,
     avatar_config: enemy.avatar_config || enemy.avatarConfig || null,
+    /** Hidden combat archetype — used for EPA display fallback / family rules. */
+    missionEnemyArchetype: enemy.missionEnemyArchetype || null,
+    dungeonEnemyArchetype: enemy.dungeonEnemyArchetype || null,
+    /** Permanent / EPA-allocated attrs used in the sim. */
+    stats: normalizeDisplayStats(rawStats),
+    /** Final matchup totals (gear + Stims when applicable). */
+    display_stats: normalizeDisplayStats(displayStats),
   };
 }
 
@@ -54,9 +92,16 @@ export function buildCombatResult(battle, {
   encounterId = "",
   enemy = null,
   characterId = "",
+  player = null,
+  playerItems = [],
+  opponentItems = [],
 } = {}) {
   const combatId = nanoid(16);
   const events = Array.isArray(battle.events) ? battle.events : [];
+  const enemyDisplay = computeCombatDisplayStats(enemy, opponentItems);
+  const playerDisplay = player
+    ? computeCombatDisplayStats(player, playerItems)
+    : null;
   return {
     combat_id: combatId,
     mode: mode || "combat",
@@ -72,7 +117,8 @@ export function buildCombatResult(battle, {
     opponentMaxHp: battle.opponentMaxHp,
     playerEnd: publicEndState(battle.playerEnd),
     opponentEnd: publicEndState(battle.opponentEnd),
-    enemy: publicEnemySummary(enemy) || enemy || null,
+    player_display_stats: playerDisplay,
+    enemy: publicEnemySummary(enemy, { displayStats: enemyDisplay }) || enemy || null,
     /** Full enemy snapshot kept server-side for settlement (species, etc.). */
     _enemy_full: enemy || null,
     committed_at: new Date().toISOString(),
@@ -83,10 +129,20 @@ export function buildCombatResult(battle, {
 export function publicCombatResult(combat) {
   if (!combat || typeof combat !== "object") return null;
   const { _enemy_full, ...rest } = combat;
+  const fullEnemy = combat._enemy_full || combat.enemy || null;
+  const enemyDisplay =
+    (combat.enemy && typeof combat.enemy.display_stats === "object" && combat.enemy.display_stats)
+    || (fullEnemy && typeof fullEnemy.display_stats === "object" && fullEnemy.display_stats)
+    || (fullEnemy ? computeCombatDisplayStats(fullEnemy, []) : null);
+  const playerDisplay =
+    (combat.player_display_stats && typeof combat.player_display_stats === "object"
+      ? normalizeDisplayStats(combat.player_display_stats)
+      : null);
   void _enemy_full;
   return {
     ...rest,
-    enemy: publicEnemySummary(combat.enemy || combat._enemy_full) || combat.enemy || null,
+    player_display_stats: playerDisplay,
+    enemy: publicEnemySummary(fullEnemy, { displayStats: enemyDisplay }) || combat.enemy || null,
     battle: {
       winner: combat.winner,
       events: combat.events || [],
@@ -95,6 +151,7 @@ export function publicCombatResult(combat) {
       initiativeFirstSide: combat.opening_side,
       playerEnd: combat.playerEnd,
       opponentEnd: combat.opponentEnd,
+      player_display_stats: playerDisplay,
     },
   };
 }
@@ -125,6 +182,9 @@ export function SimulateCombat({
     encounterId,
     enemy: opponent,
     characterId: player.id || "",
+    player,
+    playerItems,
+    opponentItems,
   });
 }
 

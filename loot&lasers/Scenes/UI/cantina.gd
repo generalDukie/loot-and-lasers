@@ -28,6 +28,9 @@ var _buy_fuel_row: HBoxContainer
 var _buy_fuel_title: Label
 var _buy_fuel_word_lab: Label
 var _buy_fuel_cost_lab: Label
+var _buy_fuel_divider: Control
+var _buy_fuel_reserve_panel: PanelContainer
+var _buy_fuel_reserve_row: HBoxContainer
 var _buy_fuel_reserve_lab: Label
 var _buy_fuel_reserve_count_lab: Label
 var _buy_fuel_fuel_icon: TextureRect
@@ -45,6 +48,7 @@ var _hover_card: PanelContainer
 var _hover_body: VBoxContainer
 var _hover_front_layer: CanvasLayer
 var _busy := false
+var _boot_gen := 0
 var _detail_open := false
 var _detail_offer: Dictionary = {}
 var _detail_tint := Color("#FF9E4F")
@@ -72,8 +76,9 @@ func on_shell_reshow() -> void:
 	if not MissionManager.offers.is_empty():
 		_render()
 	_sync_view_rewards_cta()
-	if _busy:
-		return
+	# Invalidate any in-flight boot (e.g. redirected to mission-run with `_busy` stuck).
+	_boot_gen += 1
+	_busy = false
 	call_deferred("_boot")
 
 
@@ -141,6 +146,7 @@ func _build() -> void:
 	_buy_fuel_btn.focus_mode = Control.FOCUS_NONE
 	_buy_fuel_btn.clip_contents = false
 	_buy_fuel_btn.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_buy_fuel_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_buy_fuel_btn.pressed.connect(_on_buy_fuel)
 	_apply_buy_fuel_style(_buy_fuel_btn, true)
 	controls.add_child(_buy_fuel_btn)
@@ -172,6 +178,13 @@ func _build() -> void:
 	_buy_fuel_word_lab = _make_fuel_btn_label("%s Fuel" % ShopManager.FUEL_PURCHASE_AMOUNT, FUEL_COLOR)
 	title_wrap.add_child(_buy_fuel_word_lab)
 
+	# Wallet-style 1px divider between Fuel and Cost (nova tint @ 45% alpha).
+	_buy_fuel_divider = _make_fuel_btn_divider(
+		Color(CurrencyIcon.NOVA_GOLD, 0.45),
+		maxi(FUEL_BTN_FS, int(FUEL_BTN_ICON))
+	)
+	_buy_fuel_row.add_child(_buy_fuel_divider)
+
 	var cost_wrap := HBoxContainer.new()
 	cost_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cost_wrap.add_theme_constant_override("separation", 7)
@@ -181,16 +194,38 @@ func _build() -> void:
 	_buy_fuel_nova_icon = CurrencyIcon.make("nova", FUEL_BTN_ICON)
 	_buy_fuel_nova_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cost_wrap.add_child(_buy_fuel_nova_icon)
-
-	var reserve_wrap := HBoxContainer.new()
-	reserve_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	reserve_wrap.add_theme_constant_override("separation", 6)
-	_buy_fuel_row.add_child(reserve_wrap)
-	_buy_fuel_reserve_lab = _make_fuel_btn_label("Remaining fuel reserve", Color.WHITE)
-	reserve_wrap.add_child(_buy_fuel_reserve_lab)
-	_buy_fuel_reserve_count_lab = _make_fuel_btn_label("(0)", CurrencyIcon.NOVA_GOLD)
-	reserve_wrap.add_child(_buy_fuel_reserve_count_lab)
 	_fit_buy_fuel_button()
+	call_deferred("_fit_buy_fuel_button")
+
+	# Informative only — button chrome, not clickable. Purchase CTA is the Button above.
+	_buy_fuel_reserve_panel = PanelContainer.new()
+	_buy_fuel_reserve_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_buy_fuel_reserve_panel.focus_mode = Control.FOCUS_NONE
+	_buy_fuel_reserve_panel.mouse_default_cursor_shape = Control.CURSOR_ARROW
+	_buy_fuel_reserve_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_buy_fuel_reserve_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_apply_fuel_reserve_style(_buy_fuel_reserve_panel)
+	controls.add_child(_buy_fuel_reserve_panel)
+
+	var reserve_pad := MarginContainer.new()
+	reserve_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	reserve_pad.add_theme_constant_override("margin_left", 16)
+	reserve_pad.add_theme_constant_override("margin_right", 16)
+	reserve_pad.add_theme_constant_override("margin_top", 6)
+	reserve_pad.add_theme_constant_override("margin_bottom", 6)
+	_buy_fuel_reserve_panel.add_child(reserve_pad)
+
+	_buy_fuel_reserve_row = HBoxContainer.new()
+	_buy_fuel_reserve_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_buy_fuel_reserve_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_buy_fuel_reserve_row.add_theme_constant_override("separation", 6)
+	reserve_pad.add_child(_buy_fuel_reserve_row)
+	_buy_fuel_reserve_lab = _make_fuel_btn_label("Remaining fuel reserve", Color.WHITE)
+	_buy_fuel_reserve_row.add_child(_buy_fuel_reserve_lab)
+	_buy_fuel_reserve_count_lab = _make_fuel_btn_label("(0)", FUEL_COLOR)
+	_buy_fuel_reserve_row.add_child(_buy_fuel_reserve_count_lab)
+	_fit_fuel_reserve_bubble()
+	call_deferred("_fit_fuel_reserve_bubble")
 
 	_view_rewards_btn = Button.new()
 	_view_rewards_btn.text = "VIEW REWARDS"
@@ -424,23 +459,39 @@ func _build() -> void:
 
 
 func _boot() -> void:
+	if _busy:
+		return
 	_busy = true
+	var boot_gen := _boot_gen
 	var boot_t0 := Time.get_ticks_msec()
+	_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	_status.text = "Syncing fuel…"
 	AudioManager.start_cantina_bed()
 	if not MissionManager.mission_error.is_connected(_on_mission_error):
 		MissionManager.mission_error.connect(_on_mission_error)
-	await MissionManager.sync_fuel()
+	var fuel_res: Dictionary = await MissionManager.sync_fuel()
+	if boot_gen != _boot_gen:
+		return
 	# sync_fuel already rehydrates character + wallet; skip a second Character GET.
 	if not is_inside_tree() or not visible:
 		_busy = false
 		return
 	if MissionManager.has_active_mission():
+		_busy = false
 		GameManager.go_mission_run()
 		return
-	_status.text = "Loading contracts…"
+	if not bool(fuel_res.get("ok", false)):
+		_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
+		_status.text = str(fuel_res.get("error", "Fuel sync failed — loading contracts anyway…"))
+	else:
+		_status.add_theme_color_override("font_color", ClientUi.MUTED)
+		_status.text = "Loading contracts…"
 	await MissionManager.ensure_board(false)
+	if boot_gen != _boot_gen:
+		return
 	await InventoryManager.list_pending_loot()
+	if boot_gen != _boot_gen:
+		return
 	_busy = false
 	if not is_inside_tree() or not visible:
 		return
@@ -504,6 +555,16 @@ func _sync_buy_fuel_button(left: int, sold_out: bool) -> void:
 	if not is_instance_valid(_buy_fuel_btn) or not is_instance_valid(_buy_fuel_title):
 		return
 	var title_wrap: Control = _buy_fuel_title.get_parent() as Control
+	var reserve_fuel := left * ShopManager.FUEL_PURCHASE_AMOUNT
+	if is_instance_valid(_buy_fuel_reserve_lab):
+		_buy_fuel_reserve_lab.text = "Remaining fuel reserve"
+		_buy_fuel_reserve_lab.add_theme_color_override("font_color", Color.WHITE)
+	if is_instance_valid(_buy_fuel_reserve_count_lab):
+		_buy_fuel_reserve_count_lab.text = "(%s)" % reserve_fuel
+		_buy_fuel_reserve_count_lab.add_theme_color_override("font_color", FUEL_COLOR)
+	if is_instance_valid(_buy_fuel_reserve_panel):
+		_buy_fuel_reserve_panel.visible = true
+	_fit_fuel_reserve_bubble()
 	if sold_out:
 		_buy_fuel_title.text = "SOLD OUT"
 		_buy_fuel_title.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
@@ -515,8 +576,8 @@ func _sync_buy_fuel_button(left: int, sold_out: bool) -> void:
 					child.visible = false
 		if is_instance_valid(_buy_fuel_cost_lab) and _buy_fuel_cost_lab.get_parent() != null:
 			_buy_fuel_cost_lab.get_parent().visible = false
-		if is_instance_valid(_buy_fuel_reserve_lab) and _buy_fuel_reserve_lab.get_parent() != null:
-			_buy_fuel_reserve_lab.get_parent().visible = false
+		if is_instance_valid(_buy_fuel_divider):
+			_buy_fuel_divider.visible = false
 		_fit_buy_fuel_button()
 		return
 	_buy_fuel_title.text = "Purchase Additional"
@@ -528,19 +589,13 @@ func _sync_buy_fuel_button(left: int, sold_out: bool) -> void:
 		_buy_fuel_word_lab.visible = true
 		_buy_fuel_word_lab.text = "%s Fuel" % ShopManager.FUEL_PURCHASE_AMOUNT
 		_buy_fuel_word_lab.add_theme_color_override("font_color", FUEL_COLOR)
+	if is_instance_valid(_buy_fuel_divider):
+		_buy_fuel_divider.visible = true
 	if is_instance_valid(_buy_fuel_cost_lab) and _buy_fuel_cost_lab.get_parent() != null:
 		_buy_fuel_cost_lab.get_parent().visible = true
 	if is_instance_valid(_buy_fuel_cost_lab):
 		_buy_fuel_cost_lab.text = "Cost %s" % ShopManager.FUEL_PURCHASE_COST
 		_buy_fuel_cost_lab.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD)
-	if is_instance_valid(_buy_fuel_reserve_lab) and _buy_fuel_reserve_lab.get_parent() != null:
-		_buy_fuel_reserve_lab.get_parent().visible = true
-	if is_instance_valid(_buy_fuel_reserve_lab):
-		_buy_fuel_reserve_lab.text = "Remaining fuel reserve"
-		_buy_fuel_reserve_lab.add_theme_color_override("font_color", Color.WHITE)
-	if is_instance_valid(_buy_fuel_reserve_count_lab):
-		_buy_fuel_reserve_count_lab.text = "(%s)" % left
-		_buy_fuel_reserve_count_lab.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD)
 	_fit_buy_fuel_button()
 
 
@@ -557,8 +612,22 @@ func _make_fuel_btn_label(text: String, color: Color) -> Label:
 	return lab
 
 
+func _make_fuel_btn_divider(color: Color, height: float) -> Control:
+	## Same construction as game_shell wallet readout dividers.
+	var host := Control.new()
+	host.custom_minimum_size = Vector2(1, height)
+	host.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var line := ColorRect.new()
+	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	line.color = color
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(line)
+	return host
+
+
 func _fit_buy_fuel_button() -> void:
-	## Width hugs the single text row (plus pad); header spacer pins it to the right.
+	## Width hugs purchase copy only (reserve is a sibling chip).
 	if not is_instance_valid(_buy_fuel_btn) or not is_instance_valid(_buy_fuel_row):
 		return
 	var content := _buy_fuel_row.get_combined_minimum_size()
@@ -569,6 +638,37 @@ func _fit_buy_fuel_button() -> void:
 		ceili(content.y + pad_y)
 	)
 	_buy_fuel_btn.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_buy_fuel_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+
+
+func _fit_fuel_reserve_bubble() -> void:
+	if not is_instance_valid(_buy_fuel_reserve_panel) or not is_instance_valid(_buy_fuel_reserve_row):
+		return
+	var content := _buy_fuel_reserve_row.get_combined_minimum_size()
+	var pad_x := 16.0 + 16.0 + 10.0 + 10.0
+	var pad_y := 6.0 + 6.0 + 4.0 + 4.0
+	_buy_fuel_reserve_panel.custom_minimum_size = Vector2(
+		ceili(content.x + pad_x),
+		ceili(content.y + pad_y)
+	)
+
+
+func _apply_fuel_reserve_style(panel: PanelContainer) -> void:
+	if panel == null or not is_instance_valid(panel):
+		return
+	var dark := Color(0.04, 0.055, 0.08, 0.98)
+	# Match purchase CTA disabled / unaffordable outline (muted, not fuel green).
+	var muted_border := Color(0.28, 0.34, 0.42, 0.55)
+	var sb := ClientUi.button_style(dark, muted_border)
+	if sb is StyleBoxFlat:
+		var flat := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		flat.content_margin_left = 10
+		flat.content_margin_right = 10
+		flat.content_margin_top = 4
+		flat.content_margin_bottom = 4
+		panel.add_theme_stylebox_override("panel", flat)
+	else:
+		panel.add_theme_stylebox_override("panel", sb)
 
 
 func _apply_buy_fuel_style(btn: Button, active: bool) -> void:

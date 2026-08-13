@@ -16,7 +16,8 @@ var _phase := 0.0
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	clip_contents = true
-	set_process(false)
+	# Preserve neon if configure/set_neon ran before enter-tree.
+	set_process(neon_on)
 	_remeasure()
 
 
@@ -29,8 +30,6 @@ func configure(text: String, tint: Color, size: int = 22) -> void:
 
 
 func set_neon(enabled: bool) -> void:
-	if neon_on == enabled:
-		return
 	neon_on = enabled
 	set_process(enabled)
 	if not enabled:
@@ -40,6 +39,7 @@ func set_neon(enabled: bool) -> void:
 
 func _process(delta: float) -> void:
 	if not neon_on:
+		set_process(false)
 		return
 	_phase = fposmod(_phase + delta / SWEEP_SECONDS, 1.0)
 	queue_redraw()
@@ -49,6 +49,10 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED or what == NOTIFICATION_THEME_CHANGED:
 		_remeasure()
 		queue_redraw()
+	elif what == NOTIFICATION_VISIBILITY_CHANGED:
+		# Re-arm sweep when a rebuilt shop page becomes visible again.
+		if visible and neon_on:
+			set_process(true)
 
 
 func _font() -> Font:
@@ -61,7 +65,8 @@ func _remeasure() -> void:
 		custom_minimum_size = Vector2(40, font_size + 4)
 		return
 	var sz := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-	custom_minimum_size = Vector2(ceili(sz.x), maxi(ceili(sz.y), font_size + 2))
+	# Slight pad so neon halo isn't clipped when clip_contents is on (nav).
+	custom_minimum_size = Vector2(ceili(sz.x) + 2, maxi(ceili(sz.y), font_size + 2) + 2)
 
 
 func _soft() -> Color:

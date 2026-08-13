@@ -73,7 +73,6 @@ import {
   computeMaxFuelForLoadout,
   ARENA_DAILY_FREE_BATTLES,
   ARENA_PAID_BATTLE_COST,
-  ARENA_REFRESH_COST,
   ARENA_SKIP_COST,
   computeArenaRewards,
   getArenaRewardedWinsState,
@@ -146,8 +145,6 @@ import {
   serializeArenaState,
   generateAndStoreArenaOffers,
   refreshArenaOffersAfterBattle,
-  readArenaOffers,
-  arenaOpponentIdentityIds,
   resolveOfferCombatant,
   listArenaLeaderboard,
   isArenaCooldownActive,
@@ -260,7 +257,15 @@ function wrap(fn) {
       const result = await withTransactionAsync(async () => fn(user, body || {}));
       return { status: 200, body: result };
     } catch (err) {
-      if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
+      if (err.status) {
+        const bodyOut = { error: err.message, code: err.code };
+        if (err.code === "ARENA_BOARD_REFRESHED") {
+          if (Array.isArray(err.opponents)) bodyOut.opponents = err.opponents;
+          if (err.expires_at) bodyOut.expires_at = err.expires_at;
+          if (err.character) bodyOut.character = err.character;
+        }
+        return { status: err.status, body: bodyOut };
+      }
       if (err.code && String(err.code).startsWith("ENTITLEMENT_")) {
         return { status: 400, body: { error: err.message, code: err.code } };
       }
@@ -317,7 +322,7 @@ export const GetArenaStatus = wrap((user, body = {}) => {
 export const GetArenaOpponents = wrap((user, body = {}) => {
   assertArenaClientSafe(body);
   let ch = requireMyChar(user);
-  const force = !!body.refresh || !!body.force;
+  // Client may not force-refresh — boards rotate on fight, 2h TTL, or level-up.
   const excludeIds = []
     .concat(body.exclude_ids || [])
     .concat(body.excludeIds || [])
@@ -329,7 +334,7 @@ export const GetArenaOpponents = wrap((user, body = {}) => {
     .map((x) => String(x || ""))
     .filter(Boolean);
   const result = generateAndStoreArenaOffers(ch, {
-    force,
+    force: false,
     excludeIds,
     preferExcludeIds,
   });
@@ -414,31 +419,12 @@ export const GetPublicProfileStatistics = wrap((user, body = {}) => {
 
 export const RefreshArenaOpponents = wrap((user, body = {}) => {
   assertArenaClientSafe(body);
-  let ch = requireMyChar(user);
-  const charge = !!body.charge;
-  if (charge) {
-    if ((ch.stardust || 0) < ARENA_REFRESH_COST) httpErr(400, "Not enough stardust");
-    ch = entities.Character.update(ch.id, {
-      stardust: (ch.stardust || 0) - ARENA_REFRESH_COST,
-    });
-  }
-  const bag = readArenaOffers(ch);
-  const previousIds = (bag?.offers || []).flatMap(arenaOpponentIdentityIds);
-  const result = generateAndStoreArenaOffers(ch, {
-    force: true,
-    preferExcludeIds: previousIds,
-  });
-  return {
-    success: true,
-    charged: charge,
-    cost: charge ? ARENA_REFRESH_COST : 0,
-    opponents: result.offers,
-    expires_at: result.expires_at,
-    debug_offers: result.debug || null,
-    arena: serializeArenaState(result.character, clock.nowMs(), todayET()),
-    character: result.character,
-    balances: getBalances(result.character),
-  };
+  requireMyChar(user);
+  httpErr(
+    400,
+    "Manual challenger refresh is no longer available. Fight a challenger, or wait for the board to rotate.",
+    "ARENA_REFRESH_REMOVED",
+  );
 });
 
 export const SkipArenaCooldown = wrap((user, body = {}) => {
@@ -518,10 +504,14 @@ export const PrepareArenaCombat = wrap((user, body = {}) => {
     existing.winner &&
     Array.isArray(existing.events)
   ) {
+    const pubExisting = publicCombatResult(existing);
     return {
       success: true,
-      combat: publicCombatResult(existing),
-      opponent: resolved.publicOpponent,
+      combat: pubExisting,
+      opponent: {
+        ...(resolved.publicOpponent || {}),
+        ...(pubExisting?.enemy || {}),
+      },
       offer_id: offerId,
       arena: serializeArenaState(ch, clock.nowMs(), today),
       character: ch,
@@ -547,10 +537,15 @@ export const PrepareArenaCombat = wrap((user, body = {}) => {
 
   // Persist entitlement intent on pending meta only — Nova charged on Finish so
   // failed prepare never spends. (Combat already committed.)
+  const pub = publicCombatResult(prepared.combat);
+  const opponent = {
+    ...(resolved.publicOpponent || {}),
+    ...(pub?.enemy || {}),
+  };
   return {
     success: true,
-    combat: publicCombatResult(prepared.combat),
-    opponent: resolved.publicOpponent,
+    combat: pub,
+    opponent,
     offer_id: offerId,
     arena: serializeArenaState(ch, clock.nowMs(), today),
     character: ch,

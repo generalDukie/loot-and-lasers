@@ -26,12 +26,18 @@ var _hero_page_open := false
 var _notif_btn: Button
 var _notif_fab_wrap: Control
 var _notif_badge: Label
+var _notif_badge_chip: Control
 var _notif_dock: Control
 var _notif_panel: PanelContainer
 var _notif_list: VBoxContainer
 var _notif_meta: Label
 var _notif_open := false
+var _notif_hovering := false
 var _notif_auto_close: SceneTreeTimer
+var _notif_badge_blink: Tween
+const NOTIF_TAB_W := 32.0
+const NOTIF_TAB_H := 64.0
+const NOTIF_HOVER_CLOSE_SEC := 1.0
 var _transition_flash: ColorRect
 var _atmosphere: Control
 var _hud_overlay: Control
@@ -70,16 +76,22 @@ func _ready() -> void:
 	DevEnvironmentBadge.attach_to(self)
 	# Never let chrome/rail minimum sizes push past the window edge.
 	clip_contents = true
-	# Splash → shell: show void veil immediately; finish mount on next idle (no await in _ready).
-	var boot_veil := _make_boot_veil()
-	add_child(boot_veil)
-	call_deferred("_complete_shell_boot", boot_veil)
+	# Keep station overlay spinning while shell mounts (covers scene-change freeze).
+	var overlay := StationLoadingOverlay.instance()
+	if overlay == null or not overlay.visible:
+		StationLoadingOverlay.show_loading("Entering station…")
+	else:
+		StationLoadingOverlay.set_message("Entering station…")
+	call_deferred("_complete_shell_boot")
 
 
-func _complete_shell_boot(boot_veil: Control) -> void:
+func _complete_shell_boot() -> void:
 	if not is_instance_valid(self):
 		return
+	# Yield so the overlay spinner can paint between heavy sync chunks.
+	await get_tree().process_frame
 	_build()
+	await get_tree().process_frame
 	_refresh_chrome()
 	_set_decor_active(true)
 	AudioManager.start_station_ambient()
@@ -96,6 +108,7 @@ func _complete_shell_boot(boot_veil: Control) -> void:
 	var target := GameManager.pending_page_path
 	if target.is_empty():
 		target = GameManager.SCENE_HUB
+	await get_tree().process_frame
 	show_page(target)
 	_cached_character_id = str(GameManager.active_character.get("id", ""))
 	call_deferred("_begin_nav_warmup")
@@ -107,51 +120,9 @@ func _complete_shell_boot(boot_veil: Control) -> void:
 	if not TutorialManager.tutorial_finished.is_connected(_on_tutorial_finished_daily_prompt):
 		TutorialManager.tutorial_finished.connect(_on_tutorial_finished_daily_prompt)
 	call_deferred("_sync_notif_for_tutorial")
-	call_deferred("_dismiss_boot_veil", boot_veil)
-
-
-func _make_boot_veil() -> Control:
-	var veil := Control.new()
-	veil.name = "BootVeil"
-	veil.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	veil.mouse_filter = Control.MOUSE_FILTER_STOP
-	veil.z_index = 200
-	var bg := ClientUi.make_space_splash_bg("void")
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	veil.add_child(bg)
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	veil.add_child(center)
-	var status := Label.new()
-	status.text = "Entering station..."
-	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status.add_theme_font_size_override("font_size", 23)
-	status.add_theme_color_override("font_color", ClientUi.MUTED)
-	ClientUi.apply_body_font(status)
-	center.add_child(status)
-	var failsafe := Timer.new()
-	failsafe.one_shot = true
-	failsafe.wait_time = 4.0
-	failsafe.timeout.connect(func() -> void:
-		if is_instance_valid(veil):
-			veil.queue_free()
-	)
-	veil.add_child(failsafe)
-	failsafe.start()
-	return veil
-
-
-func _dismiss_boot_veil(veil: Control) -> void:
-	if veil == null or not is_instance_valid(veil):
-		return
-	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var tw := veil.create_tween()
-	if tw == null:
-		veil.queue_free()
-		return
-	tw.tween_property(veil, "modulate:a", 0.0, 0.28).set_ease(Tween.EASE_OUT)
-	tw.tween_callback(veil.queue_free)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	StationLoadingOverlay.hide_loading()
 
 
 func _on_tutorial_visibility_changed(_unused = null) -> void:
@@ -257,7 +228,8 @@ func _sync_notif_for_tutorial() -> void:
 	var hide_fab := TutorialManager.should_show()
 	if hide_fab and _notif_open:
 		_set_notification_open(false)
-	_notif_fab_wrap.visible = not hide_fab
+	# Tab stays hidden while the panel is open, or during tutorial.
+	_notif_fab_wrap.visible = (not hide_fab) and (not _notif_open)
 
 
 func _ensure_tutorial_coach() -> void:
@@ -831,11 +803,14 @@ func _make_operative_panel() -> Control:
 	portrait_area.custom_minimum_size.y = 283
 	portrait_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	portrait_area.mouse_filter = Control.MOUSE_FILTER_PASS
+	# Portrait draws auras inside its own square; no need to clip the band itself.
+	portrait_area.clip_contents = false
 	panel.add_child(portrait_area)
 
 	_portrait_host = CenterContainer.new()
 	_portrait_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_portrait_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_portrait_host.clip_contents = false
 	portrait_area.add_child(_portrait_host)
 
 	_effects = ActiveEffectsBar.make()
@@ -1125,7 +1100,7 @@ func _nav_groups() -> Array:
 			{"path": GameManager.SCENE_FRIENDS, "label": "Friends", "icon": "users", "color": "#A855F7"},
 			{"path": GameManager.SCENE_MESSAGES, "label": "Chat", "icon": "message-square", "color": "#38BDF8"},
 			{"path": GameManager.SCENE_MAIL, "label": "Mail", "icon": "mail", "color": "#16A34A"},
-			{"path": GameManager.SCENE_GUILD, "label": "Guild", "icon": "users", "color": "#F43F5E"},
+			{"path": GameManager.SCENE_GUILD, "label": "Guild", "icon": "users", "color": "#B45309"},
 		]},
 		{"name": "Battle", "items": [
 			{"path": GameManager.SCENE_ARENA, "label": "Arena", "icon": "swords", "color": "#FB7185"},
@@ -1487,28 +1462,22 @@ func toggle_notifications() -> void:
 
 func _set_notification_open(open: bool) -> void:
 	_notif_open = open
-	_notif_auto_close = null
+	_cancel_notif_hover_close()
+	_notif_hovering = false
 	_sync_notif_fab()
 	if _notif_panel == null or not is_instance_valid(_notif_panel):
 		return
 	if open:
-		# Expand dock stack so the sheet has room above the FAB.
+		# Expand dock stack so the sheet has room above the bottom edge.
 		var stack := _notif_panel.get_parent() as Control
 		if stack != null:
-			stack.offset_top = -587
+			stack.offset_top = -520
 		_notif_panel.visible = true
 		_notif_panel.modulate.a = 0.0
 		_notif_panel.scale = Vector2(0.88, 0.88)
 		call_deferred("_play_notif_open_anim")
-		var tree := get_tree()
-		if tree != null:
-			_notif_auto_close = tree.create_timer(30.0)
-			var token := _notif_auto_close
-			token.timeout.connect(func() -> void:
-				if _notif_auto_close != token or not _notif_open:
-					return
-				_set_notification_open(false)
-			)
+		# Click opened from the tucked tab — treat as off-menu until the pointer enters.
+		_arm_notif_hover_close()
 	else:
 		var tween := _notif_panel.create_tween()
 		tween.set_parallel(true)
@@ -1520,19 +1489,66 @@ func _set_notification_open(open: bool) -> void:
 				_notif_panel.scale = Vector2.ONE
 				var stack := _notif_panel.get_parent() as Control
 				if stack != null:
-					stack.offset_top = -107
+					stack.offset_top = -16
 		)
 
 
 func _play_notif_open_anim() -> void:
 	if not _notif_open or _notif_panel == null or not is_instance_valid(_notif_panel):
 		return
-	# Pivot from the FAB corner so the sheet blooms upward/left.
+	# Pivot from the bottom-right so the sheet blooms upward/left into the stage.
 	_notif_panel.pivot_offset = Vector2(_notif_panel.size.x, _notif_panel.size.y)
 	var tween := _notif_panel.create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(_notif_panel, "modulate:a", 1.0, 0.16)
 	tween.tween_property(_notif_panel, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _arm_notif_hover_close() -> void:
+	_cancel_notif_hover_close()
+	if not _notif_open:
+		return
+	var tree := get_tree()
+	if tree == null:
+		return
+	_notif_auto_close = tree.create_timer(NOTIF_HOVER_CLOSE_SEC)
+	var token := _notif_auto_close
+	token.timeout.connect(func() -> void:
+		if _notif_auto_close != token or not _notif_open:
+			return
+		# Re-check pointer — child hops can spuriously fire mouse_exited.
+		if _notif_panel_contains_mouse():
+			_notif_hovering = true
+			return
+		_set_notification_open(false)
+	)
+
+
+func _cancel_notif_hover_close() -> void:
+	_notif_auto_close = null
+
+
+func _notif_panel_contains_mouse() -> bool:
+	if _notif_panel == null or not is_instance_valid(_notif_panel) or not _notif_panel.visible:
+		return false
+	return _notif_panel.get_global_rect().has_point(_notif_panel.get_global_mouse_position())
+
+
+func _on_notif_panel_mouse_entered() -> void:
+	_notif_hovering = true
+	_cancel_notif_hover_close()
+
+
+func _on_notif_panel_mouse_exited() -> void:
+	# Defer one frame so moving onto a child inside the panel doesn't count as leave.
+	await get_tree().process_frame
+	if not _notif_open:
+		return
+	if _notif_panel_contains_mouse():
+		_notif_hovering = true
+		return
+	_notif_hovering = false
+	_arm_notif_hover_close()
 
 
 func show_overlay(node: Control) -> void:
@@ -1634,7 +1650,7 @@ func _restack_content_layers() -> void:
 
 
 func _build_notification_center() -> void:
-	## Web NotificationCenter: floating BR round FAB + popover panel.
+	## Slim BR edge tab + popover panel (tucks tab while open; hover-off closes).
 	_notif_dock = Control.new()
 	_notif_dock.name = "NotificationDock"
 	_notif_dock.z_index = 90
@@ -1642,10 +1658,8 @@ func _build_notification_center() -> void:
 	_notif_dock.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_content.add_child(_notif_dock)
 
-	var stack := VBoxContainer.new()
+	var stack := Control.new()
 	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stack.alignment = BoxContainer.ALIGNMENT_END
-	stack.add_theme_constant_override("separation", 10)
 	stack.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	stack.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	stack.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -1653,22 +1667,25 @@ func _build_notification_center() -> void:
 	stack.anchor_top = 1.0
 	stack.anchor_right = 1.0
 	stack.anchor_bottom = 1.0
-	stack.offset_left = -491
-	stack.offset_top = -107
-	stack.offset_right = -19
-	stack.offset_bottom = -19
+	stack.offset_left = -472
+	stack.offset_top = -16
+	stack.offset_right = -16
+	stack.offset_bottom = -16
 	_notif_dock.add_child(stack)
 
 	_notif_panel = PanelContainer.new()
 	_notif_panel.visible = false
 	_notif_panel.custom_minimum_size = Vector2(453, 480)
-	_notif_panel.size_flags_vertical = Control.SIZE_SHRINK_END
-	_notif_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_notif_panel.set_anchors_and_offsets_preset(PRESET_BOTTOM_RIGHT)
+	_notif_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_notif_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_notif_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_notif_panel.add_theme_stylebox_override(
 		"panel",
 		_shell_panel_style(Color(0.04, 0.05, 0.09, 0.97), Color(0.28, 0.38, 0.48, 0.7), 16, 10, 10, 1)
 	)
+	_notif_panel.mouse_entered.connect(_on_notif_panel_mouse_entered)
+	_notif_panel.mouse_exited.connect(_on_notif_panel_mouse_exited)
 	stack.add_child(_notif_panel)
 
 	var col := VBoxContainer.new()
@@ -1707,41 +1724,52 @@ func _build_notification_center() -> void:
 	_notif_list.add_theme_constant_override("separation", 6)
 	scroll.add_child(_notif_list)
 
-	# Round FAB — mirrors web `w-12 h-12 rounded-full`.
-	var fab_wrap := Control.new()
-	fab_wrap.custom_minimum_size = Vector2(64, 64)
-	fab_wrap.size_flags_horizontal = Control.SIZE_SHRINK_END
-	fab_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stack.add_child(fab_wrap)
-	_notif_fab_wrap = fab_wrap
+	# Slim vertical edge tab — flush right, bottom-aligned, height matches old FAB.
+	var tab_wrap := Control.new()
+	tab_wrap.custom_minimum_size = Vector2(NOTIF_TAB_W, NOTIF_TAB_H)
+	tab_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tab_wrap.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	tab_wrap.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	tab_wrap.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	tab_wrap.anchor_left = 1.0
+	tab_wrap.anchor_top = 1.0
+	tab_wrap.anchor_right = 1.0
+	tab_wrap.anchor_bottom = 1.0
+	tab_wrap.offset_left = -NOTIF_TAB_W
+	tab_wrap.offset_top = -NOTIF_TAB_H
+	tab_wrap.offset_right = 0.0
+	tab_wrap.offset_bottom = 0.0
+	_notif_dock.add_child(tab_wrap)
+	_notif_fab_wrap = tab_wrap
 
 	_notif_btn = Button.new()
 	_notif_btn.text = ""
 	_notif_btn.tooltip_text = "Open notifications"
 	_notif_btn.focus_mode = Control.FOCUS_NONE
-	_notif_btn.custom_minimum_size = Vector2(64, 64)
+	_notif_btn.custom_minimum_size = Vector2(NOTIF_TAB_W, NOTIF_TAB_H)
 	_notif_btn.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_notif_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	# Prefer a centered child icon over Button.icon — Godot FABs left-bias expand_icon.
+	_notif_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_notif_btn.icon = null
 	_style_notif_fab(false)
 	_notif_btn.pressed.connect(toggle_notifications)
-	ClientUi.apply_interaction_motion(_notif_btn, 1.06)
-	fab_wrap.add_child(_notif_btn)
+	ClientUi.apply_interaction_motion(_notif_btn, 1.03)
+	tab_wrap.add_child(_notif_btn)
 	_set_notif_fab_glyph("bell")
 
 	var badge_chip := PanelContainer.new()
 	badge_chip.visible = false
 	badge_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge_chip.z_index = 2
-	badge_chip.anchor_left = 1.0
+	# Sit on the inward (left) face of the tab so the count stays readable.
+	badge_chip.anchor_left = 0.0
 	badge_chip.anchor_top = 0.0
-	badge_chip.anchor_right = 1.0
+	badge_chip.anchor_right = 0.0
 	badge_chip.anchor_bottom = 0.0
-	badge_chip.offset_left = -11.0
-	badge_chip.offset_top = -8.0
-	badge_chip.offset_right = 16.0
-	badge_chip.offset_bottom = 16.0
+	badge_chip.offset_left = -10.0
+	badge_chip.offset_top = 6.0
+	badge_chip.offset_right = 12.0
+	badge_chip.offset_bottom = 24.0
 	var badge_bg := StyleBoxFlat.new()
 	badge_bg.bg_color = ClientUi.DANGER
 	badge_bg.set_corner_radius_all(9)
@@ -1750,37 +1778,44 @@ func _build_notification_center() -> void:
 	badge_bg.content_margin_top = 1
 	badge_bg.content_margin_bottom = 1
 	badge_chip.add_theme_stylebox_override("panel", badge_bg)
-	fab_wrap.add_child(badge_chip)
+	tab_wrap.add_child(badge_chip)
+	_notif_badge_chip = badge_chip
 
 	_notif_badge = Label.new()
 	_notif_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_notif_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_notif_badge.add_theme_font_size_override("font_size", 13)
+	_notif_badge.add_theme_font_size_override("font_size", 12)
 	_notif_badge.add_theme_color_override("font_color", Color.WHITE)
 	ClientUi.apply_display_font(_notif_badge)
 	_notif_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge_chip.add_child(_notif_badge)
-	# Keep a handle to the chip so badge visibility toggles the whole pill.
 	_notif_badge.set_meta("chip", badge_chip)
 
 
-func _style_notif_fab(open: bool) -> void:
+func _style_notif_fab(_open: bool) -> void:
 	if _notif_btn == null or not is_instance_valid(_notif_btn):
 		return
-	var fill := Color(ClientUi.CYAN, 0.22 if open else 0.15)
-	var border := Color(ClientUi.CYAN, 0.55 if open else 0.4)
+	var fill := Color(0.05, 0.08, 0.12, 0.94)
+	var border := Color(ClientUi.CYAN, 0.45)
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill
 	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(24)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_bottom = 1
+	style.border_width_right = 0
+	style.corner_radius_top_left = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_top_right = 0
+	style.corner_radius_bottom_right = 0
 	style.content_margin_left = 0
 	style.content_margin_right = 0
 	style.content_margin_top = 0
 	style.content_margin_bottom = 0
 	_notif_btn.add_theme_stylebox_override("normal", style)
 	var hover := style.duplicate() as StyleBoxFlat
-	hover.bg_color = Color(ClientUi.CYAN, 0.28)
+	hover.bg_color = Color(0.07, 0.12, 0.18, 0.98)
+	hover.border_color = Color(ClientUi.CYAN, 0.7)
 	_notif_btn.add_theme_stylebox_override("hover", hover)
 	_notif_btn.add_theme_stylebox_override("pressed", hover)
 	_notif_btn.add_theme_stylebox_override("focus", style)
@@ -1800,7 +1835,7 @@ func _set_notif_fab_glyph(icon_id: String) -> void:
 		_notif_btn.add_child(host)
 	for child in host.get_children():
 		child.queue_free()
-	var glyph := UiIcon.make(icon_id, ClientUi.CYAN, 28.0)
+	var glyph := UiIcon.make(icon_id, ClientUi.CYAN, 18.0)
 	glyph.name = "FabIcon"
 	host.add_child(glyph)
 
@@ -1808,16 +1843,22 @@ func _set_notif_fab_glyph(icon_id: String) -> void:
 func _sync_notif_fab() -> void:
 	if _notif_btn == null or not is_instance_valid(_notif_btn):
 		return
-	_set_notif_fab_glyph("x" if _notif_open else "bell")
-	_notif_btn.tooltip_text = "Minimize notifications" if _notif_open else "Open notifications"
-	_style_notif_fab(_notif_open)
+	# Tuck the edge tab while the panel is open; restore when closed.
+	if _notif_fab_wrap != null and is_instance_valid(_notif_fab_wrap):
+		var hide_for_tutorial := TutorialManager.should_show()
+		_notif_fab_wrap.visible = (not _notif_open) and (not hide_for_tutorial)
+	_set_notif_fab_glyph("bell")
+	_notif_btn.tooltip_text = "Open notifications"
+	_style_notif_fab(false)
 	_update_notif_badge()
 
 
 func _update_notif_badge(unread_override: int = -1) -> void:
 	if _notif_badge == null or not is_instance_valid(_notif_badge):
 		return
-	var chip: Control = _notif_badge.get_meta("chip") if _notif_badge.has_meta("chip") else null
+	var chip: Control = _notif_badge_chip
+	if chip == null or not is_instance_valid(chip):
+		chip = _notif_badge.get_meta("chip") if _notif_badge.has_meta("chip") else null
 	var unread := unread_override if unread_override >= 0 else NotificationManager.unread_count
 	var total := unread + (1 if ProgressManager.can_claim_daily() else 0)
 	var show := not _notif_open and total > 0
@@ -1827,6 +1868,28 @@ func _update_notif_badge(unread_override: int = -1) -> void:
 		_notif_badge.visible = show
 	if show:
 		_notif_badge.text = "9+" if total > 9 else str(total)
+	_sync_notif_badge_blink(show)
+
+
+func _sync_notif_badge_blink(active: bool) -> void:
+	if _notif_badge_blink != null and is_instance_valid(_notif_badge_blink):
+		_notif_badge_blink.kill()
+	_notif_badge_blink = null
+	var chip := _notif_badge_chip
+	if chip == null or not is_instance_valid(chip):
+		return
+	chip.modulate = Color(1, 1, 1, 1)
+	if not active:
+		return
+	var tween := create_tween()
+	tween.set_loops()
+	# Two quick attention blinks, then a pause.
+	tween.tween_property(chip, "modulate:a", 0.28, 0.16)
+	tween.tween_property(chip, "modulate:a", 1.0, 0.16)
+	tween.tween_property(chip, "modulate:a", 0.28, 0.16)
+	tween.tween_property(chip, "modulate:a", 1.0, 0.16)
+	tween.tween_interval(1.35)
+	_notif_badge_blink = tween
 
 
 func _refresh_notification_center() -> void:
@@ -2268,6 +2331,7 @@ func _refresh_chrome() -> void:
 		portrait_btn.tooltip_text = "Open character sheet"
 		portrait_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		portrait_btn.custom_minimum_size = Vector2(208, 208)
+		portrait_btn.clip_contents = false
 		portrait_btn.add_theme_stylebox_override(
 			"normal",
 			_shell_panel_style(Color(0.035, 0.05, 0.08, 0.98), Color(ClientUi.CYAN, 0.65), 10, 4, 4)
@@ -2285,6 +2349,8 @@ func _refresh_chrome() -> void:
 		var portrait := AvatarRenderer.make_portrait(character, 200.0)
 		portrait.name = "ConsolePortrait"
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Full aura bleed in the existing console band (do not grow console).
+		portrait.clip_contents = false
 		portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		portrait_btn.add_child(portrait)
 		# Full-rect host so the class glyph is truly centered in the portrait button.
@@ -2292,9 +2358,11 @@ func _refresh_chrome() -> void:
 		class_host.name = "ConsoleClassIcon"
 		class_host.visible = false
 		class_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		class_host.clip_contents = false
 		class_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		portrait_btn.add_child(class_host)
-		var class_icon := ClassIcon.make(str(character.get("class", "Vanguard")), 144.0)
+		# Fill most of the 208px portrait frame.
+		var class_icon := ClassIcon.make(str(character.get("class", "Vanguard")), 192.0)
 		class_icon.name = "ClassGlyph"
 		class_host.add_child(class_icon)
 		portrait_btn.pressed.connect(func() -> void:
@@ -2348,9 +2416,10 @@ func _apply_console_portrait_mode() -> void:
 		if glyph != null:
 			glyph.texture = ClassIcon.texture(class_key)
 			glyph.modulate = Color.WHITE
-			glyph.custom_minimum_size = Vector2(144, 144)
+			glyph.custom_minimum_size = Vector2(192, 192)
 	if portrait != null:
 		portrait.visible = not _hero_page_open
+		portrait.clip_contents = false
 		if portrait.has_method("set_active"):
 			portrait.call("set_active", not _hero_page_open and visible)
 	if is_instance_valid(_effects):

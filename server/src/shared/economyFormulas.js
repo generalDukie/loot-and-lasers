@@ -597,7 +597,7 @@ export function getShopGameDayKey(nowMs = clock.nowMs()) {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-/** Haggle: ~40% buy at 15–20% off; otherwise listing is yanked (no purchase). */
+/** Haggle: ~40% apply 15–20% off to listing; otherwise listing is yanked (no purchase). */
 export function rollHaggle(rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
   if (r() < 0.4) {
@@ -914,6 +914,7 @@ export function getActiveStims(character, nowMs = clock.nowMs()) {
   const source = character?.active_buffs || [];
   return (source || [])
     .filter((b) => b && new Date(b.expires_at).getTime() > now)
+    .filter((b) => CONSUMABLE_STATS.includes(String(b.stat || "").toLowerCase()))
     .map((b) => serializeActiveStim(b, now))
     .filter(Boolean);
 }
@@ -1040,9 +1041,9 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = clo
   if (!character || item?.type !== "consumable" || !item.consumable) {
     return { ok: false, reason: "Not a stim." };
   }
-  // Stim Trio shop bundles are not directly injectable.
+  // Stim Trio bundles are retired.
   if (item._bundle === "stim_trio" || item.consumable?.tier === "bundle") {
-    return { ok: false, reason: "Open the Stim Trio bundle first." };
+    return { ok: false, reason: "Stim Trios are no longer available." };
   }
 
   const now = Number(nowMs) || clock.nowMs();

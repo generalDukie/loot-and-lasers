@@ -5,9 +5,10 @@ const SELL_SLOT_COUNT := 5
 ## Fixed inventory-cell metrics — never scale with leftover page height.
 const SELL_SLOT_H := 104.0
 const SELL_SLOT_MIN_W := 108.0
-const SELL_ICON_SZ := 40.0
-const SELL_TITLE_FS := 11
-const SELL_VAL_FS := 12
+## Glyph on the right of each sell pane (was 40, centered stack).
+const SELL_ICON_SZ := 72.0
+## Name chrome — matches stall titles. Sale price uses STALL_PRICE_* (buy parity).
+const SELL_TITLE_FS := 24
 const SELL_SOURCE_ROWS := 2
 const SELL_GRID_H_SEP := 8
 const SELL_GRID_V_SEP := 8
@@ -17,19 +18,34 @@ const SELL_BTN_MIN_W := 420.0
 ## Stall card scale (Hot Deal / Sell left alone). Vertical ~+15%; icons/fonts/chips more.
 const STALL_SEP := 6
 const STALL_TOP_SEP := 10
-const STALL_GEAR_ICON := 46.0
-const STALL_BUNDLE_ICON := 36.0
-const STALL_TITLE_FS := 20
-const STALL_SUB_FS := 15
+## Match sell-pane gear glyph size; title/descriptor sit top-right of the pane.
+const STALL_GEAR_ICON := SELL_ICON_SZ
+const STALL_BUNDLE_ICON := SELL_ICON_SZ
+## Match sell-pane name size; descriptor stays ~75% of title (was 15/20).
+const STALL_TITLE_FS := SELL_TITLE_FS
+const STALL_SUB_FS := 18
 const STALL_BODY_FS := 18
-const STALL_PRICE_FS := 20
+## Stall price chrome — 2× prior icon (16→32), 1.5× prior font (20→30).
+const STALL_PRICE_ICON := 32.0
+const STALL_PRICE_FS := 30
 const STALL_BTN_FS := 17
-const STALL_CHIP_ICON := 28.0
-const STALL_CHIP_FS := 26
+const STALL_CHIP_ICON := 35.0 ## was 28 × 1.25
+const STALL_CHIP_FS := 33 ## was 26 × 1.25
 const STALL_CHIP_SEP := 6
+## Contraband spotlight shares stall card metrics; amber wrapper is separate.
+## Shop-window countdown chip — 2× prior currency-chip chrome (font 15→30, icon ~16→32).
+const REFRESH_TIMER_FS := 30
+const REFRESH_TIMER_ICON := 32.0
+const REFRESH_TIMER_PAD_H := 16
+const REFRESH_TIMER_PAD_V := 8
+## Widest countdown the meta chips must reserve (`format_shop_countdown`).
+const META_TIMER_WIDTH_SAMPLE := "99h 59m 59s"
+## Page brand — matches side-nav Black Market tint + neon sweep.
+const MARKET_BRAND_TINT := Color("#9D6BFF")
+const MARKET_BRAND_FS := 69 ## was 46 × 1.5
+const MARKET_TAGLINE_FS := 19 ## was 15 × 1.25
 var _status: Label
-var _currency_row: HBoxContainer
-var _vendor: Label
+var _refresh_timer: Control
 var _list: VBoxContainer
 var _equipped: Array = []
 var _bag_items: Array = []
@@ -163,38 +179,16 @@ func _build() -> void:
 	root.add_theme_constant_override("separation", 10)
 	margin.add_child(root)
 
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
-	root.add_child(header)
-
-	var head_l := VBoxContainer.new()
-	head_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head_l.add_theme_constant_override("separation", 2)
-	header.add_child(head_l)
-
-	var eye := Label.new()
-	eye.text = "UNDER THE TABLE"
-	eye.add_theme_font_size_override("font_size", 13)
-	eye.add_theme_color_override("font_color", Color("#E879F9", 0.85))
-	ClientUi.apply_display_font(eye)
-	head_l.add_child(eye)
-
-	head_l.add_child(UiIcon.make_title_row("shopping-bag", "Black Market", ClientUi.TEXT, 29, 28.0))
-
-	_vendor = Label.new()
-	_vendor.add_theme_font_size_override("font_size", 15)
-	_vendor.add_theme_color_override("font_color", Color("#F5D0FE", 0.85))
-	ClientUi.apply_body_font(_vendor)
-	head_l.add_child(_vendor)
-
-	_currency_row = HBoxContainer.new()
-	_currency_row.add_theme_constant_override("separation", 8)
-	_currency_row.size_flags_vertical = Control.SIZE_SHRINK_END
-	header.add_child(_currency_row)
-
+	# Status lives in the sell footer (re-parented on each populate) — never in the top flow.
 	_status = ClientUi.make_status()
 	_status.visible = false
-	root.add_child(_status)
+	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_status.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status.clip_text = true
+	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -213,8 +207,18 @@ func _build() -> void:
 
 
 func _set_status(text: String) -> void:
+	if not is_instance_valid(_status):
+		return
 	_status.text = text
 	_status.visible = not text.is_empty()
+
+
+func _detach_status() -> void:
+	if not is_instance_valid(_status):
+		return
+	var parent := _status.get_parent()
+	if parent != null:
+		parent.remove_child(_status)
 
 
 func _on_tick() -> void:
@@ -235,21 +239,27 @@ func _refresh_window() -> void:
 
 func _populate() -> void:
 	_hide_gear_inspect()
+	_refresh_timer = null
+	_detach_status()
 	for c in _list.get_children():
 		c.queue_free()
-	_update_meta()
 
 	if ShopManager.gear_stock().is_empty():
 		_list.add_child(_offline_panel())
 		_list.add_child(_make_sell_section())
+		_update_meta()
 		return
 
+	# Contraband sits at the top of content; timer + restock stack in that same right rail.
 	var hot: Dictionary = ShopManager.hot_deal()
-	if not hot.is_empty():
+	var has_hot := not hot.is_empty()
+	if has_hot:
 		_list.add_child(_make_hot_banner(hot))
-
+	else:
+		_list.add_child(_make_controls_rail_row())
 	_list.add_child(_make_market_section())
 	_list.add_child(_make_sell_section())
+	_update_meta()
 
 	if _status.text.begins_with("Opening"):
 		_set_status("")
@@ -261,9 +271,14 @@ func _offline_panel() -> VBoxContainer:
 	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.size_flags_stretch_ratio = 1.0
 	col.add_theme_constant_override("separation", 8)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	col.add_child(top)
 	var t_center := CenterContainer.new()
+	t_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t_center.add_child(UiIcon.make_title_row("shopping-bag", "Black Market is offline", ClientUi.TEXT, 21, 24.0))
-	col.add_child(t_center)
+	top.add_child(t_center)
+	top.add_child(_make_timer_restock_stack())
 	var sub := Label.new()
 	sub.text = "Could not load bazaar stock. Restart the game API and retry."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -286,45 +301,192 @@ func _offline_panel() -> VBoxContainer:
 
 
 func _update_meta() -> void:
-	var win: Dictionary = _shop_window()
-	var day := ProgressManager.today_et()
-	var seed := int(win.get("idx", 0)) * 17 + day.length() * 3
-	_vendor.text = "“%s”" % GameData.get_vendor_line(seed)
-
-	var countdown := GameData.format_shop_countdown(_seconds_left())
-	# Prefer in-place updates so the tutorial-tagged refresh chip isn't destroyed
-	# every tick (which used to kill coach highlight tweens).
-	if _currency_row.get_child_count() >= 3:
-		var nova_chip := _currency_row.get_child(0)
-		var sd_chip := _currency_row.get_child(1)
-		var refresh_chip := _currency_row.get_child(2)
-		_set_currency_chip_amount(nova_chip, str(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)))
-		_set_currency_chip_amount(sd_chip, str(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)))
-		_set_currency_chip_amount(refresh_chip, "⏱  %s" % countdown)
-		if refresh_chip is Control:
-			TutorialManager.tag_target(refresh_chip as Control, "shop-refresh-timer")
+	if _refresh_timer == null or not is_instance_valid(_refresh_timer):
 		return
+	_set_currency_chip_amount(_refresh_timer, GameData.format_shop_countdown(_seconds_left()))
+	TutorialManager.tag_target(_refresh_timer, "shop-refresh-timer")
 
-	for child in _currency_row.get_children():
-		child.queue_free()
-	# Web header chips: Nova (amber) · Stardust · shop-window clock
-	_currency_row.add_child(ClientUi.make_currency_chip(
-		"nova",
-		CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA),
-		Color("#FFD700")
-	))
-	_currency_row.add_child(ClientUi.make_currency_chip(
-		"stardust",
-		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST),
-		GameData.STARDUST_COLOR
-	))
-	var refresh_chip := ClientUi.make_currency_chip(
-		"⏱",
-		countdown,
-		ClientUi.CYAN
+
+func _make_attached_refresh_timer() -> Control:
+	var chip := _make_refresh_timer_chip(GameData.format_shop_countdown(_seconds_left()))
+	_refresh_timer = chip
+	TutorialManager.tag_target(chip, "shop-refresh-timer")
+	return chip
+
+
+## Timer on top, Restock under it — shared chrome scale + locked width.
+func _make_timer_restock_stack() -> VBoxContainer:
+	var stack := VBoxContainer.new()
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.size_flags_horizontal = Control.SIZE_SHRINK_END
+	stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	stack.add_theme_constant_override("separation", 8)
+	var chip_sz := _meta_chip_fixed_size()
+	var timer := _make_attached_refresh_timer()
+	timer.custom_minimum_size = chip_sz
+	timer.size_flags_horizontal = Control.SIZE_SHRINK_END
+	stack.add_child(timer)
+	var restock := _make_restock_button()
+	restock.custom_minimum_size = chip_sz
+	restock.size_flags_horizontal = Control.SIZE_SHRINK_END
+	stack.add_child(restock)
+	return stack
+
+
+## Right-aligned timer+restock when there is no contraband row to share.
+func _make_controls_rail_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 12)
+	row.add_child(_make_market_brand())
+	var right := HBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.alignment = BoxContainer.ALIGNMENT_END
+	right.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	right.add_child(_make_timer_restock_stack())
+	row.add_child(right)
+	return row
+
+
+## Logo-like Black Market wordmark (nav neon) + quiet tagline — top-left of content.
+func _make_market_brand() -> Control:
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	col.add_theme_constant_override("separation", 8)
+	var title := NavNeonLabel.new()
+	title.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	title.configure("Black Market", MARKET_BRAND_TINT, MARKET_BRAND_FS)
+	col.add_child(title)
+	# Logo wordmark — don't clip the neon halo; keep always-on sweep (nav is hover/active only).
+	title.clip_contents = false
+	title.set_neon(true)
+	title.call_deferred("set_neon", true)
+	var tag := Label.new()
+	tag.text = "All items are sourced ethically and legally. For the most part."
+	tag.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tag.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tag.add_theme_font_size_override("font_size", MARKET_TAGLINE_FS)
+	tag.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.92))
+	ClientUi.apply_body_font(tag)
+	col.add_child(tag)
+	return col
+
+
+## Widest countdown text width for a stable timer label.
+func _meta_countdown_text_width() -> float:
+	var font := ClientUi.display_font()
+	if font == null:
+		return 160.0
+	return font.get_string_size(
+		META_TIMER_WIDTH_SAMPLE, HORIZONTAL_ALIGNMENT_LEFT, -1, REFRESH_TIMER_FS
+	).x
+
+
+func _meta_chip_fixed_size() -> Vector2:
+	var font := ClientUi.display_font()
+	var timer_text_w := _meta_countdown_text_width()
+	var restock_text := "Restock · %s" % ShopManager.SHOP_REFRESH_COST
+	var restock_text_w := 120.0
+	if font != null:
+		restock_text_w = font.get_string_size(
+			restock_text, HORIZONTAL_ALIGNMENT_LEFT, -1, REFRESH_TIMER_FS
+		).x
+	var timer_inner := REFRESH_TIMER_ICON + 10.0 + timer_text_w
+	var restock_inner := restock_text_w + 10.0 + REFRESH_TIMER_ICON
+	var inner_w := maxf(timer_inner, restock_inner)
+	var inner_h := maxf(REFRESH_TIMER_ICON, float(REFRESH_TIMER_FS) * 1.15)
+	return Vector2(
+		ceili(inner_w + float(REFRESH_TIMER_PAD_H) * 2.0),
+		ceili(inner_h + float(REFRESH_TIMER_PAD_V) * 2.0)
 	)
-	TutorialManager.tag_target(refresh_chip, "shop-refresh-timer")
-	_currency_row.add_child(refresh_chip)
+
+
+func _make_refresh_timer_chip(countdown: String) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	chip.custom_minimum_size = _meta_chip_fixed_size()
+	chip.add_theme_stylebox_override("panel", _market_meta_chip_style(Color(ClientUi.CYAN, 0.55)))
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_left", REFRESH_TIMER_PAD_H)
+	pad.add_theme_constant_override("margin_right", REFRESH_TIMER_PAD_H)
+	pad.add_theme_constant_override("margin_top", REFRESH_TIMER_PAD_V)
+	pad.add_theme_constant_override("margin_bottom", REFRESH_TIMER_PAD_V)
+	chip.add_child(pad)
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 10)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	pad.add_child(row)
+	# Lucide `timer` is the closest stopwatch match in our icon set.
+	row.add_child(UiIcon.make("timer", ClientUi.CYAN, REFRESH_TIMER_ICON))
+	var amount := Label.new()
+	amount.text = countdown
+	amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	amount.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# Lock label width to the widest countdown so digit changes don't reflow the chip.
+	amount.custom_minimum_size.x = ceili(_meta_countdown_text_width())
+	amount.add_theme_font_size_override("font_size", REFRESH_TIMER_FS)
+	amount.add_theme_color_override("font_color", ClientUi.CYAN.lightened(0.18))
+	ClientUi.apply_display_font(amount)
+	row.add_child(amount)
+	return chip
+
+
+## Shared dark fill + outline chrome for timer / restock meta chips.
+func _market_meta_chip_style(border: Color) -> StyleBoxFlat:
+	return ClientUi.painted_panel_style(
+		Color(0.04, 0.055, 0.09, 0.95), border, 8, 1
+	)
+
+
+func _make_restock_button() -> Button:
+	var accent := Color("#FFD700")
+	var restock := Button.new()
+	restock.text = ""
+	restock.icon = null
+	# Content is drawn via child controls — don't clip them to the empty-text min size.
+	restock.clip_contents = false
+	restock.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	restock.custom_minimum_size = _meta_chip_fixed_size()
+	_apply_restock_btn(restock, accent)
+	var restock_pad := MarginContainer.new()
+	restock_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	restock_pad.add_theme_constant_override("margin_left", REFRESH_TIMER_PAD_H)
+	restock_pad.add_theme_constant_override("margin_right", REFRESH_TIMER_PAD_H)
+	restock_pad.add_theme_constant_override("margin_top", REFRESH_TIMER_PAD_V)
+	restock_pad.add_theme_constant_override("margin_bottom", REFRESH_TIMER_PAD_V)
+	restock.add_child(restock_pad)
+	var restock_row := HBoxContainer.new()
+	restock_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	restock_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	restock_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	restock_row.add_theme_constant_override("separation", 10)
+	restock_pad.add_child(restock_row)
+	var restock_lab := Label.new()
+	restock_lab.text = "Restock · %s" % ShopManager.SHOP_REFRESH_COST
+	restock_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	restock_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	restock_lab.add_theme_font_size_override("font_size", REFRESH_TIMER_FS)
+	restock_lab.add_theme_color_override("font_color", accent.lightened(0.12))
+	ClientUi.apply_display_font(restock_lab)
+	restock_row.add_child(restock_lab)
+	var restock_nova := CurrencyIcon.make("nova", REFRESH_TIMER_ICON)
+	restock_nova.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_row.add_child(restock_nova)
+	restock.pressed.connect(func() -> void: _on_refresh("all"))
+	TutorialManager.tag_target(restock, "shop-restock")
+	if TutorialManager.blocks_black_market_commerce():
+		restock.disabled = true
+		restock.focus_mode = Control.FOCUS_NONE
+		restock.mouse_default_cursor_shape = Control.CURSOR_ARROW
+		restock.tooltip_text = "Finish or skip the tutorial before restocking"
+	return restock
 
 
 func _set_currency_chip_amount(chip: Node, text: String) -> void:
@@ -356,49 +518,76 @@ func _seconds_left() -> int:
 	return int(win.get("secondsLeft", 0))
 
 
-# ─── Hot Deal ───────────────────────────────────────────────────────────────
+# ─── Contraband spotlight ───────────────────────────────────────────────────
 
-func _make_hot_banner(item: Dictionary) -> PanelContainer:
-	var sold := ShopManager.is_hot_purchased()
-	var yanked := ShopManager.is_hot_yanked()
-	var hot_eta := ArenaRules.format_eta_short(ArenaRules.ms_until_et_midnight())
+func _make_hot_banner(item: Dictionary) -> Control:
 	var rarity := str(item.get("rarity", "common"))
 	var tint := ClientUi.rarity_color(rarity)
+	var hot_eta := ArenaRules.format_eta_short(ArenaRules.ms_until_et_midnight())
+	## Match painted-panel bottom inset so L/R hug the card the same as the bottom gap.
+	var edge := ClientUi.px(11)
+
+	# Full-width row: brand left · contraband center · timer/restock right.
+	var outer := HBoxContainer.new()
+	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer.add_theme_constant_override("separation", 12)
+	outer.add_child(_make_market_brand())
 
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var sb: StyleBoxFlat = ClientUi.painted_panel_style(
 		Color(0.14, 0.07, 0.04, 0.97), Color("#FB923C", 0.7), 14, 2
-	))
+	).duplicate()
+	sb.content_margin_left = edge
+	sb.content_margin_right = edge
+	sb.content_margin_top = edge
+	sb.content_margin_bottom = edge
+	panel.add_theme_stylebox_override("panel", sb)
+
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	panel.add_child(col)
 
 	var badge_row := HBoxContainer.new()
 	badge_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	badge_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	badge_row.add_theme_constant_override("separation", 6)
 	col.add_child(badge_row)
 	badge_row.add_child(UiIcon.make("flame", Color("#FED7AA"), 18.0))
 	var badge := Label.new()
-	badge.text = "HOT DEAL · resets %s" % hot_eta
+	badge.text = "CONTRABAND ITEM · resets %s" % hot_eta
+	badge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.clip_text = true
+	badge.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	badge.add_theme_font_size_override("font_size", 15)
 	badge.add_theme_color_override("font_color", Color("#FED7AA"))
 	ClientUi.apply_display_font(badge)
 	badge_row.add_child(badge)
 
 	var card := _make_gear_card(item, true, tint)
-	if sold or yanked:
-		card.modulate = Color(1, 1, 1, 0.72)
-		col.add_child(card)
-		var overlay := Label.new()
-		overlay.text = "YANKED TODAY" if yanked else "CLAIMED TODAY"
-		overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		overlay.add_theme_font_size_override("font_size", 19)
-		overlay.add_theme_color_override("font_color", ClientUi.MUTED)
-		ClientUi.apply_display_font(overlay)
-		col.add_child(overlay)
-	else:
-		col.add_child(card)
-	return panel
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(card)
+	outer.add_child(panel)
+
+	var right_host := HBoxContainer.new()
+	right_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	right_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_host.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	right_host.alignment = BoxContainer.ALIGNMENT_END
+	right_host.add_child(_make_timer_restock_stack())
+	outer.add_child(right_host)
+
+	# Stall-width card (~1/4 of shop content); amber shrink-wraps to the card + equal edge.
+	var sync_width := func() -> void:
+		var w := outer.size.x
+		if w < 64.0:
+			return
+		card.custom_minimum_size.x = maxf(160.0, (w - 24.0) / 4.0)
+	outer.resized.connect(sync_width)
+	outer.ready.connect(func() -> void: sync_width.call_deferred())
+
+	return outer
 
 
 # ─── Black Market stalls ────────────────────────────────────────────────────
@@ -413,57 +602,10 @@ func _make_market_section() -> PanelContainer:
 		Color(0.04, 0.08, 0.1, 0.96), Color(ClientUi.CYAN, 0.28), 12, 1
 	))
 	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 8)
 	panel.add_child(col)
-
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 8)
-	col.add_child(head)
-	var head_col := VBoxContainer.new()
-	head_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(head_col)
-	head_col.add_child(UiIcon.make_title_row("shopping-bag", "Black Market", ClientUi.TEXT, 20, 24.0))
-	var h := Label.new()
-	h.text = "8 stalls · gear & stims mixed · haggle gear"
-	h.add_theme_font_size_override("font_size", 13)
-	h.add_theme_color_override("font_color", ClientUi.MUTED)
-	head_col.add_child(h)
-
-	var restock := Button.new()
-	restock.text = ""
-	restock.icon = null
-	restock.clip_contents = true
-	restock.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_apply_restock_btn(restock, Color("#FFD700"))
-	var restock_pad := MarginContainer.new()
-	restock_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	restock_pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	restock_pad.add_theme_constant_override("margin_left", 12)
-	restock_pad.add_theme_constant_override("margin_right", 12)
-	restock_pad.add_theme_constant_override("margin_top", 6)
-	restock_pad.add_theme_constant_override("margin_bottom", 6)
-	restock.add_child(restock_pad)
-	var restock_row := HBoxContainer.new()
-	restock_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	restock_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	restock_row.add_theme_constant_override("separation", 6)
-	restock_pad.add_child(restock_row)
-	var restock_lab := Label.new()
-	restock_lab.text = "Restock · %s" % ShopManager.SHOP_REFRESH_COST
-	restock_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	restock_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	restock_lab.add_theme_font_size_override("font_size", 13)
-	restock_lab.add_theme_color_override("font_color", Color("#FFD700"))
-	ClientUi.apply_display_font(restock_lab)
-	restock_row.add_child(restock_lab)
-	var restock_nova := CurrencyIcon.make("nova", 16.0)
-	restock_nova.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	restock_row.add_child(restock_nova)
-	var restock_min := restock_row.get_combined_minimum_size() + Vector2(24.0, 12.0)
-	restock.custom_minimum_size = Vector2(ceili(restock_min.x), ceili(maxi(restock_min.y, 32.0)))
-	restock.pressed.connect(func() -> void: _on_refresh("all"))
-	TutorialManager.tag_target(restock, "shop-restock")
-	head.add_child(restock)
 
 	var grid := GridContainer.new()
 	grid.columns = 4
@@ -482,6 +624,8 @@ func _make_market_section() -> PanelContainer:
 			if typeof(item) != TYPE_DICTIONARY:
 				continue
 			if ShopManager.is_stim_slot(item):
+				if str(item.get("_bundle", "")) == "stim_trio":
+					continue
 				var sid := str(item.get("_slotId", "")).strip_edges()
 				if not sid.is_empty():
 					stim_slot_ids.append(sid)
@@ -492,6 +636,8 @@ func _make_market_section() -> PanelContainer:
 			if typeof(item) != TYPE_DICTIONARY:
 				continue
 			if ShopManager.is_stim_slot(item):
+				if str(item.get("_bundle", "")) == "stim_trio":
+					continue
 				var sid := str(item.get("_slotId", "")).strip_edges()
 				var tag_stim := not locked_stim.is_empty() and sid == locked_stim
 				grid.add_child(_make_cons_card(item, tag_stim))
@@ -503,21 +649,22 @@ func _make_market_section() -> PanelContainer:
 
 func _apply_restock_btn(btn: Button, accent: Color) -> void:
 	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 13)
-	var idle := ClientUi.button_style(
-		Color(accent.r, accent.g, accent.b, 0.15), Color(accent.r, accent.g, accent.b, 0.35)
-	)
-	var hover := ClientUi.button_style(
-		Color(accent.r, accent.g, accent.b, 0.25), Color(accent.r, accent.g, accent.b, 0.5)
-	)
-	var pressed := ClientUi.button_style(
-		Color(accent.r, accent.g, accent.b, 0.32), Color(accent.r, accent.g, accent.b, 0.65)
-	)
+	btn.add_theme_font_size_override("font_size", REFRESH_TIMER_FS)
+	# Dark fill + yellow/crystal outline (hover / press brighten border only).
+	var idle := _market_meta_chip_style(Color(accent, 0.65))
+	var hover := _market_meta_chip_style(Color(accent, 0.9))
+	var pressed := _market_meta_chip_style(accent)
+	var disabled := _market_meta_chip_style(Color(accent, 0.3))
+	for sb: StyleBoxFlat in [idle, hover, pressed, disabled]:
+		sb.content_margin_left = 0
+		sb.content_margin_right = 0
+		sb.content_margin_top = 0
+		sb.content_margin_bottom = 0
 	btn.add_theme_stylebox_override("normal", idle)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
 	btn.add_theme_stylebox_override("focus", hover)
-	btn.add_theme_stylebox_override("disabled", idle)
+	btn.add_theme_stylebox_override("disabled", disabled)
 	btn.add_theme_color_override("font_color", accent)
 	btn.add_theme_color_override("font_hover_color", accent)
 	btn.add_theme_color_override("font_pressed_color", accent)
@@ -535,24 +682,68 @@ func _empty_line(text: String) -> Label:
 
 # ─── Cards ──────────────────────────────────────────────────────────────────
 
+## Glyph left (sell-pane size); name + descriptor hug the top-right.
+func _make_stall_title_row(
+	glyph: Control,
+	title_text: String,
+	sub_text: String,
+	title_color: Color
+) -> HBoxContainer:
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", STALL_TOP_SEP)
+	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.alignment = BoxContainer.ALIGNMENT_BEGIN
+	glyph.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	glyph.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	top.add_child(glyph)
+
+	var title_col := VBoxContainer.new()
+	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	title_col.add_theme_constant_override("separation", 2)
+	top.add_child(title_col)
+
+	var title := Label.new()
+	title.text = title_text
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.clip_text = true
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title.add_theme_font_size_override("font_size", STALL_TITLE_FS)
+	title.add_theme_color_override("font_color", title_color)
+	ClientUi.apply_display_font(title)
+	title_col.add_child(title)
+
+	var sub := Label.new()
+	sub.text = sub_text
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sub.autowrap_mode = TextServer.AUTOWRAP_OFF
+	sub.clip_text = true
+	sub.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	sub.add_theme_font_size_override("font_size", STALL_SUB_FS)
+	sub.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(sub)
+	title_col.add_child(sub)
+	return top
+
+
 func _make_cons_card(item: Dictionary, tutorial_stim := false) -> PanelContainer:
 	var slot_id := str(item.get("_slotId", ""))
 	var cost := ShopManager.slot_cost_sd(item)
 	if cost <= 0:
 		cost = int(item.get("sell_value", 250))
 	var rarity := str(item.get("rarity", "common"))
-	var is_trio := str(item.get("_bundle", "")) == "stim_trio"
 	var cons: Variant = item.get("consumable", {})
-	var stat := "all"
+	var stat := "strength"
 	if typeof(cons) == TYPE_DICTIONARY:
-		stat = str(cons.get("stat", "all"))
-	var tint := Color("#FBBF24") if is_trio else GameData.stat_color(stat)
+		stat = str(cons.get("stat", "strength")).strip_edges().to_lower()
 	var rarity_tint := ClientUi.rarity_color(rarity)
 	var yanked := ShopManager.is_slot_yanked(slot_id)
 	var owned := ShopManager.is_slot_purchased(slot_id) or yanked
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	if tutorial_stim:
 		TutorialManager.tag_target(panel, "shop-stim")
 	else:
@@ -566,66 +757,38 @@ func _make_cons_card(item: Dictionary, tutorial_stim := false) -> PanelContainer
 	if owned:
 		panel.modulate = Color(1, 1, 1, 0.72)
 	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", STALL_SEP)
 	panel.add_child(col)
 
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", STALL_TOP_SEP)
-	col.add_child(top)
-	var icon_box := PanelContainer.new()
-	icon_box.custom_minimum_size = Vector2(56, 56)
-	icon_box.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(tint, 0.12), Color(tint, 0.4), 8, 1
+	var glyph := GearIcon.make(item, STALL_GEAR_ICON)
+	glyph.custom_minimum_size = Vector2(STALL_GEAR_ICON, STALL_GEAR_ICON)
+	col.add_child(_make_stall_title_row(
+		glyph,
+		str(item.get("name", "?")),
+		"%s · Stim" % rarity.capitalize(),
+		rarity_tint
 	))
-	top.add_child(icon_box)
-	var icon_center := CenterContainer.new()
-	icon_box.add_child(icon_center)
-	if is_trio:
-		icon_center.add_child(UiIcon.make("package", tint, 28.0))
-	elif stat == "all":
-		icon_center.add_child(UiIcon.make("sparkles", tint, 28.0))
-	else:
-		icon_center.add_child(StatIcon.make(stat, 28.0))
 
-	var title_col := VBoxContainer.new()
-	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(title_col)
-	var title := Label.new()
-	title.text = str(item.get("name", "?"))
-	title.add_theme_font_size_override("font_size", STALL_TITLE_FS)
-	title.add_theme_color_override("font_color", rarity_tint)
-	ClientUi.apply_display_font(title)
-	title_col.add_child(title)
-	var sub := Label.new()
-	sub.text = "bundle · 3 stims" if is_trio else ("%s · stim" % rarity)
-	sub.add_theme_font_size_override("font_size", STALL_SUB_FS)
-	sub.add_theme_color_override("font_color", ClientUi.MUTED)
-	title_col.add_child(sub)
-
-	var detail := Label.new()
-	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	if is_trio:
-		var names: PackedStringArray = []
-		var bundle: Variant = item.get("bundle_items", [])
-		if typeof(bundle) == TYPE_ARRAY:
-			for b in bundle:
-				if typeof(b) == TYPE_DICTIONARY:
-					names.append(str(b.get("name", "")).replace(" Stim", ""))
-		detail.text = " · ".join(names) if names.size() > 0 else str(item.get("flavor_text", "Stim Trio"))
-		detail.add_theme_color_override("font_color", Color("#FDE68A", 0.9))
-	elif typeof(cons) == TYPE_DICTIONARY:
-		detail.text = "+%s%% %s · %sh" % [
-			str(int(round(float(cons.get("mult", 0)) * 100.0))),
-			"ALL" if stat == "all" else stat,
-			str(cons.get("duration_hours", "?")),
-		]
-		detail.add_theme_color_override("font_color", tint)
+	# Face: attribute glyph + % only. Duration lives on hover inspect.
+	if typeof(cons) == TYPE_DICTIONARY and StatIcon.has(stat):
+		var pct := int(round(float(cons.get("mult", 0)) * 100.0))
+		if pct > 0:
+			col.add_child(_make_gear_attr_band([{"k": stat, "v": pct, "pct": true}], true))
+		var captured := item.duplicate(true)
+		panel.mouse_entered.connect(func() -> void:
+			_show_gear_inspect(panel, captured)
+		)
+		panel.mouse_exited.connect(_hide_gear_inspect)
 	else:
-		detail.text = str(item.get("flavor_text", "Stim"))
-		detail.add_theme_color_override("font_color", ClientUi.MUTED)
-	detail.add_theme_font_size_override("font_size", STALL_BODY_FS)
-	ClientUi.apply_body_font(detail)
-	col.add_child(detail)
+		var detail2 := Label.new()
+		detail2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		detail2.text = str(item.get("flavor_text", "Stim"))
+		detail2.add_theme_color_override("font_color", ClientUi.MUTED)
+		detail2.add_theme_font_size_override("font_size", STALL_BODY_FS)
+		ClientUi.apply_body_font(detail2)
+		col.add_child(detail2)
 
 	if owned:
 		var gone := Label.new()
@@ -636,19 +799,31 @@ func _make_cons_card(item: Dictionary, tutorial_stim := false) -> PanelContainer
 		ClientUi.apply_display_font(gone)
 		col.add_child(gone)
 	else:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		col.add_child(row)
-		var price := CurrencyIcon.make_stardust_amount_row(cost, 16.0, STALL_PRICE_FS)
-		price.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(price)
+		var foot_spacer := Control.new()
+		foot_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		foot_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(foot_spacer)
+		var foot := HBoxContainer.new()
+		foot.add_theme_constant_override("separation", 8)
+		foot.size_flags_vertical = Control.SIZE_SHRINK_END
+		col.add_child(foot)
+		var price := CurrencyIcon.make_stardust_amount_row(cost, STALL_PRICE_ICON, STALL_PRICE_FS)
+		price.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		price.size_flags_vertical = Control.SIZE_SHRINK_END
+		foot.add_child(price)
+		var foot_mid := Control.new()
+		foot_mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		foot_mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		foot.add_child(foot_mid)
 		var buy := Button.new()
-		buy.text = "Open" if is_trio else "Buy"
+		buy.text = "Buy"
 		ClientUi.apply_primary_button(buy)
 		buy.add_theme_font_size_override("font_size", STALL_BTN_FS)
 		var capt_cost := cost
 		buy.pressed.connect(func() -> void: _on_buy_cons(slot_id, capt_cost))
-		row.add_child(buy)
+		if TutorialManager.blocks_black_market_commerce():
+			_lock_commerce_button(buy, "Finish or skip the tutorial before buying")
+		foot.add_child(buy)
 	return panel
 
 
@@ -670,65 +845,50 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		yanked = ShopManager.is_slot_yanked(slot_id)
 		owned = ShopManager.is_slot_purchased(slot_id) or yanked
 
+	# Contraband / Hot Deal uses the same pane chrome as every other Buy stall.
 	var item_type := str(item.get("type", ""))
-	var stall := not is_hot
-	var title_fs := STALL_TITLE_FS if stall else 18
-	var sub_fs := STALL_SUB_FS if stall else 16
-	var body_fs := STALL_BODY_FS if stall else 18
-	var sep := STALL_SEP if stall else 4
-	var top_sep := STALL_TOP_SEP if stall else 8
-	var gear_icon := STALL_GEAR_ICON if stall else 36.0
-	var bundle_icon := STALL_BUNDLE_ICON if stall else 29.0
+	var rarity := str(item.get("rarity", ""))
+	var body_fs := STALL_BODY_FS
+	var sep := STALL_SEP
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if not is_hot:
+		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	TutorialManager.tag_target(panel, "shop-item")
-	var border := Color(tint, 0.7) if is_hot else Color(tint, 0.45)
 	var panel_sb: StyleBoxFlat = ClientUi.painted_panel_style(
-		Color(0.05, 0.05, 0.08, 0.96), border, 10, 2 if is_hot else 1
+		Color(0.05, 0.05, 0.08, 0.96), Color(tint, 0.45), 10, 1
 	).duplicate()
-	if stall:
-		panel_sb.content_margin_top = int(round(float(panel_sb.content_margin_top) * 1.15))
-		panel_sb.content_margin_bottom = int(round(float(panel_sb.content_margin_bottom) * 1.15))
+	panel_sb.content_margin_top = int(round(float(panel_sb.content_margin_top) * 1.15))
+	panel_sb.content_margin_bottom = int(round(float(panel_sb.content_margin_bottom) * 1.15))
 	panel.add_theme_stylebox_override("panel", panel_sb)
 	if owned:
 		panel.modulate = Color(1, 1, 1, 0.72)
 
 	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", sep)
 	panel.add_child(col)
 
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", top_sep)
-	col.add_child(top)
+	var glyph: Control
 	if is_bundle:
-		top.add_child(UiIcon.make("package", tint, bundle_icon))
+		glyph = UiIcon.make("package", tint, STALL_BUNDLE_ICON)
+		glyph.custom_minimum_size = Vector2(STALL_BUNDLE_ICON, STALL_BUNDLE_ICON)
 	else:
-		top.add_child(GearIcon.make(item, gear_icon))
-
-	var title_col := VBoxContainer.new()
-	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(title_col)
-	var title := Label.new()
-	title.text = str(item.get("name", "?"))
-	title.add_theme_font_size_override("font_size", title_fs)
-	title.add_theme_color_override("font_color", tint)
-	ClientUi.apply_display_font(title)
-	title_col.add_child(title)
-	var sub := Label.new()
-	if is_bundle:
-		sub.text = "bundle · 2 commons"
-	else:
-		sub.text = "%s · %s" % [str(item.get("rarity", "")), GameData.gear_type_label(item_type)]
-	sub.add_theme_font_size_override("font_size", sub_fs)
-	sub.add_theme_color_override("font_color", ClientUi.MUTED)
-	title_col.add_child(sub)
+		glyph = GearIcon.make(item, STALL_GEAR_ICON)
+		glyph.custom_minimum_size = Vector2(STALL_GEAR_ICON, STALL_GEAR_ICON)
+	var sub_text := "Bundle · 2 Commons" if is_bundle else "%s · %s" % [
+		rarity.capitalize(),
+		GameData.gear_type_label(item_type),
+	]
+	col.add_child(_make_stall_title_row(glyph, str(item.get("name", "?")), sub_text, tint))
 
 	if is_bundle:
 		var flavor := Label.new()
 		flavor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		flavor.text = str(item.get("flavor_text", "Crate"))
-		flavor.add_theme_font_size_override("font_size", STALL_SUB_FS if stall else 17)
+		flavor.add_theme_font_size_override("font_size", STALL_SUB_FS)
 		flavor.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(flavor)
 	else:
@@ -737,12 +897,12 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		if typeof(stats_raw) == TYPE_DICTIONARY:
 			var entries := _gear_attr_entries(stats_raw as Dictionary)
 			if not entries.is_empty():
-				col.add_child(_make_gear_attr_band(entries, stall))
+				col.add_child(_make_gear_attr_band(entries, true))
 		var captured := item.duplicate(true)
 		panel.mouse_entered.connect(func() -> void:
 			_show_gear_inspect(panel, captured)
 		)
-		panel.mouse_exited.connect(_request_hide_gear_inspect)
+		panel.mouse_exited.connect(_hide_gear_inspect)
 
 	if owned:
 		var gone := Label.new()
@@ -753,7 +913,11 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		ClientUi.apply_display_font(gone)
 		col.add_child(gone)
 	else:
-		col.add_child(_gear_actions(item, is_hot, is_bundle, cost, nova, slot_id, stall))
+		var foot_spacer := Control.new()
+		foot_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		foot_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(foot_spacer)
+		col.add_child(_gear_actions(item, is_hot, is_bundle, cost, nova, slot_id))
 	return panel
 
 
@@ -770,7 +934,7 @@ func _gear_attr_entries(stats_raw: Dictionary) -> Array:
 
 
 func _make_gear_attr_band(entries: Array, stall: bool = false) -> Control:
-	# Stall cards: one left-anchored row. Hot Deal keeps centered multi-row bag layout.
+	# Stall cards always use a single attribute row (including legendaries).
 	if stall:
 		return _make_gear_attr_row(entries, true)
 
@@ -806,9 +970,10 @@ func _make_gear_attr_row(entries: Array, stall: bool = false) -> HBoxContainer:
 	for e in entries:
 		var k := str(e.get("k", ""))
 		var v := int(e.get("v", 0))
+		var label := "+%s%%" % v if bool(e.get("pct", false)) else str(v)
 		row.add_child(StatIcon.make_labeled(
 			k,
-			str(v),
+			label,
 			icon_sz,
 			font_sz,
 			GameData.stat_color(k),
@@ -838,6 +1003,7 @@ func _show_gear_inspect(anchor: Control, item: Dictionary) -> void:
 		"compare_with": worn,
 		"show_sell_value": false,
 		"actions": [],
+		"instant_dismiss": true,
 	})
 
 func _gear_actions(
@@ -846,30 +1012,57 @@ func _gear_actions(
 	is_bundle: bool,
 	cost: int,
 	nova: int,
-	slot_id: String,
-	stall: bool = false
+	slot_id: String
 ) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
+	row.size_flags_vertical = Control.SIZE_SHRINK_END
+	# Stardust (and optional Nova) hug the bottom-left; buy/haggle stay right.
 	var price_col := VBoxContainer.new()
-	price_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	price_col.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	price_col.size_flags_vertical = Control.SIZE_SHRINK_END
+	price_col.add_theme_constant_override("separation", 2)
 	row.add_child(price_col)
-	var price_fs := STALL_PRICE_FS if stall else 16
-	var nova_fs := STALL_BODY_FS if stall else 15
-	var btn_fs := STALL_BTN_FS if stall else 15
-	price_col.add_child(CurrencyIcon.make_stardust_amount_row(cost, 16.0, price_fs))
+	var price_icon := STALL_PRICE_ICON
+	var price_fs := STALL_PRICE_FS
+	var nova_icon := 28.0
+	var nova_fs := int(round(float(STALL_BODY_FS) * 1.5))
+	var btn_fs := STALL_BTN_FS
+	var discount_pct := int(item.get("haggle_discount_pct", 0))
+	var sd_wrap := HBoxContainer.new()
+	sd_wrap.add_theme_constant_override("separation", 4)
+	sd_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sd_wrap.add_child(CurrencyIcon.make_stardust_amount_row(cost, price_icon, price_fs))
+	if discount_pct > 0:
+		var disc := Label.new()
+		disc.text = "(-%s%%)" % discount_pct
+		disc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		disc.add_theme_font_size_override("font_size", maxi(11, int(round(float(price_fs) * 0.55))))
+		disc.add_theme_color_override("font_color", Color("#86EFAC"))
+		ClientUi.apply_display_font(disc)
+		sd_wrap.add_child(disc)
+	price_col.add_child(sd_wrap)
 	if nova > 0:
 		price_col.add_child(CurrencyIcon.make_amount_row(
-			nova, 14.0, CurrencyIcon.NOVA_GOLD, nova_fs
+			nova, nova_icon, CurrencyIcon.NOVA_GOLD, nova_fs
 		))
 
-	if not is_bundle:
+	var mid := Control.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(mid)
+
+	var can_haggle := not is_bundle and discount_pct <= 0
+	if item.has("haggle_eligible"):
+		can_haggle = can_haggle and bool(item.get("haggle_eligible", false))
+	if can_haggle:
 		var hag := Button.new()
 		hag.text = "Haggle"
 		_apply_haggle_btn(hag)
-		if stall:
-			hag.add_theme_font_size_override("font_size", STALL_SUB_FS)
+		hag.add_theme_font_size_override("font_size", STALL_SUB_FS)
 		hag.pressed.connect(func() -> void: _on_buy_gear(slot_id, is_hot, true, cost, nova))
+		if TutorialManager.blocks_black_market_commerce():
+			_lock_commerce_button(hag, "Finish or skip the tutorial before buying")
 		row.add_child(hag)
 
 	var buy := Button.new()
@@ -877,8 +1070,17 @@ func _gear_actions(
 	ClientUi.apply_primary_button(buy)
 	buy.add_theme_font_size_override("font_size", btn_fs)
 	buy.pressed.connect(func() -> void: _on_buy_gear(slot_id, is_hot, false, cost, nova))
+	if TutorialManager.blocks_black_market_commerce():
+		_lock_commerce_button(buy, "Finish or skip the tutorial before buying")
 	row.add_child(buy)
 	return row
+
+
+func _lock_commerce_button(btn: Button, tip: String) -> void:
+	btn.disabled = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.mouse_default_cursor_shape = Control.CURSOR_ARROW
+	btn.tooltip_text = tip
 
 
 func _apply_haggle_btn(btn: Button) -> void:
@@ -901,6 +1103,9 @@ func _apply_haggle_btn(btn: Button) -> void:
 func _on_refresh(which: String) -> void:
 	if _busy:
 		return
+	if TutorialManager.blocks_black_market_commerce():
+		Notify.blocked("Finish or skip the tutorial before restocking the Black Market")
+		return
 	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	if nova < ShopManager.SHOP_REFRESH_COST:
 		Notify.blocked("Need %s Nova Crystals to refresh" % ShopManager.SHOP_REFRESH_COST)
@@ -920,6 +1125,9 @@ func _on_refresh(which: String) -> void:
 
 func _on_buy_cons(slot_id: String, cost: int) -> void:
 	if _busy:
+		return
+	if TutorialManager.blocks_black_market_commerce():
+		Notify.blocked("Finish or skip the tutorial before buying from the Black Market")
 		return
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
@@ -945,6 +1153,9 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: int) -> void:
 	if _busy:
 		return
+	if TutorialManager.blocks_black_market_commerce():
+		Notify.blocked("Finish or skip the tutorial before buying from the Black Market")
+		return
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	# Client affordability check is UX only — Node recalculates / haggles authoritatively.
 	if not haggle and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
@@ -967,6 +1178,15 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 	var purchase: Dictionary = ShopManager.last_purchase
 	if bool(purchase.get("haggle_failed", false)):
 		_set_status(str(purchase.get("haggle_note", "Deal soured — listing yanked")))
+		_populate()
+		return
+	if bool(purchase.get("haggle_success", false)):
+		var note := str(purchase.get("haggle_note", "They blinked"))
+		var pct := int(purchase.get("haggle_discount_pct", 0))
+		if pct > 0:
+			_set_status("%s · new price %s Stardust (-%s%%)" % [note, int(purchase.get("cost", 0)), pct])
+		else:
+			_set_status("%s · new price %s Stardust" % [note, int(purchase.get("cost", 0))])
 		_populate()
 		return
 	var msg := _purchase_msg(purchase, "Purchased!")
@@ -1068,17 +1288,37 @@ func _make_sell_section() -> VBoxContainer:
 		var staged: Dictionary = _sell_stage[i] if typeof(_sell_stage[i]) == TYPE_DICTIONARY else {}
 		stage_grid.add_child(_make_sell_bag_slot(staged, true, i))
 
-	var btn_wrap := CenterContainer.new()
-	btn_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn_wrap.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	col.add_child(btn_wrap)
+	var footer := HBoxContainer.new()
+	footer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	footer.add_theme_constant_override("separation", 12)
+	col.add_child(footer)
+
+	# Left rail keeps equal expand space (even when status is hidden) so SELL stays centered.
+	var left := HBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	left.alignment = BoxContainer.ALIGNMENT_BEGIN
+	footer.add_child(left)
+	_detach_status()
+	left.add_child(_status)
 
 	_sell_btn = Button.new()
 	_sell_btn.custom_minimum_size = Vector2(SELL_BTN_MIN_W, SELL_BTN_MIN_H)
 	_sell_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_sell_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_sell_btn.clip_contents = false
+	_sell_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_apply_sell_action_button(_sell_btn)
+	_build_sell_btn_content(_sell_btn)
 	_sell_btn.pressed.connect(_on_confirm_sell)
-	btn_wrap.add_child(_sell_btn)
+	footer.add_child(_sell_btn)
+
+	var trail := Control.new()
+	trail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(trail)
+
 	_refresh_sell_button()
 	return col
 
@@ -1094,34 +1334,32 @@ func _make_sell_grid() -> GridContainer:
 
 
 func _apply_sell_action_button(btn: Button) -> void:
-	## Primary fence CTA — larger painted cyan with soft glow; disabled stays muted.
+	## Dark fill + cyan outline; label/value colors live on child content.
 	ClientUi.apply_display_font(btn)
 	btn.add_theme_font_size_override("font_size", 18)
-	var top := Color(0.14, 0.88, 0.96)
-	var bottom := Color(0.05, 0.68, 0.82)
-	var border := Color(0.08, 0.78, 0.90)
-	var ink := Color(0.03, 0.05, 0.08)
-	var normal := _sell_btn_style(top, bottom, border, 0.55)
-	var hover := _sell_btn_style(Color(0.22, 0.94, 1.0), Color(0.10, 0.78, 0.90), Color(0.45, 0.95, 1.0), 0.85)
-	var pressed := _sell_btn_style(Color(0.06, 0.58, 0.72), Color(0.03, 0.42, 0.54), border, 0.35)
-	var disabled := _sell_btn_style(
-		Color(0.12, 0.14, 0.18), Color(0.08, 0.10, 0.13), Color(0.28, 0.32, 0.38, 0.7), 0.0
-	)
+	btn.text = ""
+	btn.icon = null
+	var border := ClientUi.CYAN
+	var normal := _sell_btn_style(Color(border, 0.7), 0.35)
+	var hover := _sell_btn_style(Color(border, 0.95), 0.55)
+	var pressed := _sell_btn_style(border, 0.25)
+	var disabled := _sell_btn_style(Color(border, 0.28), 0.0)
 	btn.add_theme_stylebox_override("normal", normal)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", hover)
 	btn.add_theme_stylebox_override("disabled", disabled)
-	btn.add_theme_color_override("font_color", ink)
-	btn.add_theme_color_override("font_hover_color", ink)
-	btn.add_theme_color_override("font_pressed_color", ink)
-	btn.add_theme_color_override("font_disabled_color", Color(0.45, 0.50, 0.55))
+	btn.add_theme_color_override("font_color", border)
+	btn.add_theme_color_override("font_hover_color", border)
+	btn.add_theme_color_override("font_pressed_color", border)
+	btn.add_theme_color_override("font_disabled_color", Color(border, 0.45))
 	btn.set_meta("ui_sfx_kind", "confirm")
 	ClientUi.apply_interaction_motion(btn, 1.03)
 
 
-func _sell_btn_style(top: Color, bottom: Color, border: Color, glow: float) -> StyleBoxFlat:
+func _sell_btn_style(border: Color, glow: float) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
-	s.bg_color = top.lerp(bottom, 0.42)
+	s.bg_color = Color(0.04, 0.055, 0.09, 0.95)
 	s.border_color = border
 	s.set_border_width_all(2)
 	s.corner_radius_top_left = 12
@@ -1132,10 +1370,41 @@ func _sell_btn_style(top: Color, bottom: Color, border: Color, glow: float) -> S
 	s.content_margin_right = 28
 	s.content_margin_top = 14
 	s.content_margin_bottom = 14
-	s.shadow_color = Color(border.r, border.g, border.b, clampf(glow, 0.0, 1.0) * 0.55)
+	s.shadow_color = Color(border.r, border.g, border.b, clampf(glow, 0.0, 1.0) * 0.45)
 	s.shadow_size = 10 if glow > 0.01 else 0
 	s.shadow_offset = Vector2(0, 3)
 	return s
+
+
+func _build_sell_btn_content(btn: Button) -> void:
+	var pad := MarginContainer.new()
+	pad.name = "ContentPad"
+	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pad.add_theme_constant_override("margin_left", 8)
+	pad.add_theme_constant_override("margin_right", 8)
+	btn.add_child(pad)
+	var row := HBoxContainer.new()
+	row.name = "Row"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	pad.add_child(row)
+
+
+func _sell_btn_content_row() -> HBoxContainer:
+	if _sell_btn == null or not is_instance_valid(_sell_btn):
+		return null
+	return _sell_btn.get_node_or_null("ContentPad/Row") as HBoxContainer
+
+
+func _clear_sell_btn_row(row: HBoxContainer) -> void:
+	while row.get_child_count() > 0:
+		var child := row.get_child(0)
+		row.remove_child(child)
+		child.free()
 
 
 func _format_sell_amount(n: int) -> String:
@@ -1193,12 +1462,44 @@ func _refresh_sell_button() -> void:
 	var ids := _sell_staged_ids()
 	var total := _sell_preview_total()
 	_sell_btn.disabled = ids.is_empty() or _busy
+	_sell_btn.text = ""
+	_sell_btn.icon = null
+	var row := _sell_btn_content_row()
+	if row == null:
+		_build_sell_btn_content(_sell_btn)
+		row = _sell_btn_content_row()
+	if row == null:
+		return
+	_clear_sell_btn_row(row)
+	var blue := ClientUi.CYAN
+	var muted_blue := Color(blue, 0.45) if _sell_btn.disabled else blue
+	var prefix := Label.new()
+	prefix.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prefix.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	prefix.add_theme_font_size_override("font_size", 18)
+	prefix.add_theme_color_override("font_color", muted_blue)
+	ClientUi.apply_display_font(prefix)
+	row.add_child(prefix)
 	if ids.is_empty():
-		_sell_btn.text = "SELL ITEMS — SELECT GEAR"
-		_sell_btn.icon = null
-	else:
-		_sell_btn.text = "SELL ITEMS — %s" % _format_sell_amount(total)
-		CurrencyIcon.apply_stardust_button_cost(_sell_btn, 16.0)
+		prefix.text = "SELL ITEMS — SELECT GEAR"
+		return
+	prefix.text = "SELL ITEMS —"
+	# Icon immediately before the amount; 2× prior button glyph (16 → 32).
+	var glyph := CurrencyIcon.make("stardust", 32.0)
+	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(glyph)
+	var amount := Label.new()
+	amount.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	amount.text = _format_sell_amount(total)
+	amount.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	amount.add_theme_font_size_override("font_size", 18)
+	var fuchsia := CurrencyIcon.STARDUST_FUCHSIA
+	amount.add_theme_color_override(
+		"font_color",
+		Color(fuchsia, 0.5) if _sell_btn.disabled else fuchsia
+	)
+	ClientUi.apply_display_font(amount)
+	row.add_child(amount)
 
 
 func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1) -> PanelContainer:
@@ -1213,48 +1514,27 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 	if filled:
 		var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
 		panel.add_theme_stylebox_override("panel", _sell_slot_style(Color(tint, 0.14), Color(tint, 0.55)))
-		panel.tooltip_text = "%s — %s Stardust · click to %s" % [
-			str(item.get("name", "Item")),
-			_format_sell_amount(InventoryRules.estimate_sell_value(item)),
-			"remove" if is_stage else "stage for sale",
-		]
+		panel.tooltip_text = ""
 	else:
 		panel.add_theme_stylebox_override(
 			"panel",
 			_sell_slot_style(Color(0.04, 0.05, 0.08, 0.78), Color(0.28, 0.34, 0.42, 0.42))
 		)
-		panel.tooltip_text = "Empty sell slot" if is_stage else ""
+		panel.tooltip_text = ""
 		panel.modulate.a = 0.72 if is_stage else 0.45
 
-	var root := VBoxContainer.new()
+	var root := HBoxContainer.new()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_theme_constant_override("separation", 3)
+	root.add_theme_constant_override("separation", 6)
 	panel.add_child(root)
 
 	if filled:
-		var title := Label.new()
-		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.autowrap_mode = TextServer.AUTOWRAP_OFF
-		title.clip_text = true
-		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		title.custom_minimum_size.y = 16
-		title.text = str(item.get("name", "Item"))
-		title.add_theme_font_size_override("font_size", SELL_TITLE_FS)
-		title.add_theme_color_override(
-			"font_color",
-			ClientUi.rarity_color(str(item.get("rarity", ""))).lightened(0.2)
-		)
-		ClientUi.apply_display_font(title)
-		root.add_child(title)
-
 		var icon_wrap := CenterContainer.new()
 		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		icon_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		icon_wrap.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		icon_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		icon_wrap.custom_minimum_size = Vector2(SELL_ICON_SZ, SELL_ICON_SZ)
 		root.add_child(icon_wrap)
@@ -1262,15 +1542,38 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		gear.custom_minimum_size = Vector2(SELL_ICON_SZ, SELL_ICON_SZ)
 		icon_wrap.add_child(gear)
 
-		var val_host := CenterContainer.new()
-		val_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		val_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		val_host.custom_minimum_size.y = 16
-		root.add_child(val_host)
-		val_host.add_child(CurrencyIcon.make_stardust_amount_row(
+		var text_col := VBoxContainer.new()
+		text_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		text_col.add_theme_constant_override("separation", 4)
+		root.add_child(text_col)
+
+		var title := Label.new()
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		title.autowrap_mode = TextServer.AUTOWRAP_OFF
+		title.clip_text = true
+		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		title.text = str(item.get("name", "Item"))
+		title.add_theme_font_size_override("font_size", SELL_TITLE_FS)
+		title.add_theme_color_override(
+			"font_color",
+			ClientUi.rarity_color(str(item.get("rarity", ""))).lightened(0.2)
+		)
+		ClientUi.apply_display_font(title)
+		text_col.add_child(title)
+
+		var price_row := HBoxContainer.new()
+		price_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		price_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		price_row.alignment = BoxContainer.ALIGNMENT_END
+		text_col.add_child(price_row)
+		price_row.add_child(CurrencyIcon.make_stardust_amount_row(
 			_format_sell_amount(InventoryRules.estimate_sell_value(item)),
-			12.0,
-			SELL_VAL_FS
+			STALL_PRICE_ICON,
+			STALL_PRICE_FS
 		))
 	else:
 		var mark := Label.new()
@@ -1290,8 +1593,13 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 	if filled:
 		var captured := item.duplicate(true)
 		var idx := stage_index
+		panel.mouse_entered.connect(func() -> void:
+			_show_gear_inspect(panel, captured)
+		)
+		panel.mouse_exited.connect(_hide_gear_inspect)
 		panel.gui_input.connect(func(ev: InputEvent) -> void:
 			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				_hide_gear_inspect()
 				if is_stage:
 					_unstage_sell_slot(idx)
 				else:
@@ -1300,6 +1608,7 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		)
 		panel.set_drag_forwarding(
 			func(_at: Vector2) -> Variant:
+				_hide_gear_inspect()
 				return {
 					"kind": "bm_sell",
 					"item": captured.duplicate(true),

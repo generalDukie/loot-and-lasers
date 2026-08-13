@@ -110,6 +110,14 @@ func prepare_fight() -> Dictionary:
 		return {"ok": false, "error": str(res.get("error", "PrepareDungeonCombat failed"))}
 	var payload: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	pending_enemy = payload.get("enemy", {}) if typeof(payload.get("enemy", {})) == TYPE_DICTIONARY else {}
+	var combat_wrap: Variant = payload.get("combat", null)
+	if typeof(combat_wrap) == TYPE_DICTIONARY:
+		var c_enemy: Variant = (combat_wrap as Dictionary).get("enemy", null)
+		if typeof(c_enemy) == TYPE_DICTIONARY and not (c_enemy as Dictionary).is_empty():
+			if pending_enemy.is_empty():
+				pending_enemy = (c_enemy as Dictionary).duplicate(true)
+			else:
+				pending_enemy.merge(c_enemy, true)
 	# Fallback display name if summary is thin.
 	if pending_enemy.is_empty() and not planet.is_empty():
 		pending_enemy = {"name": "Frontier Foe", "level": 1}
@@ -125,7 +133,14 @@ func prepare_fight() -> Dictionary:
 			"opponentEnd": payload.get("opponentEnd", {}),
 		}
 	pending_battle = _normalize_battle_for_ui(battle)
-	pending_player_items = []
+	var pds: Variant = payload.get("player_display_stats", battle.get("player_display_stats", null))
+	if typeof(pds) != TYPE_DICTIONARY and typeof(combat_wrap) == TYPE_DICTIONARY:
+		pds = (combat_wrap as Dictionary).get("player_display_stats", null)
+	if typeof(pds) == TYPE_DICTIONARY:
+		pending_battle["player_display_stats"] = (pds as Dictionary).duplicate(true)
+	pending_player_items = StatsManager.equipped_items.duplicate(true) \
+		if typeof(StatsManager.equipped_items) == TYPE_ARRAY and not StatsManager.equipped_items.is_empty() \
+		else await _load_equipped()
 	pending_enemy_index = int(payload.get("enemy_index", enemy_idx))
 	var cid := str(payload.get("combat_id", ""))
 	if not cid.is_empty():

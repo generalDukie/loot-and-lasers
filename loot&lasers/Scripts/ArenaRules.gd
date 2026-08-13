@@ -4,7 +4,10 @@ extends RefCounted
 
 const DAILY_FREE_BATTLES := 10
 const PAID_BATTLE_COST := 15
-const REFRESH_MS := 5 * 60 * 1000
+## Challenger board lifetime (server remints on fight / level-up / expiry).
+const BOARD_TTL_MS := 2 * 60 * 60 * 1000
+## @deprecated Manual refresh removed.
+const REFRESH_MS := BOARD_TTL_MS
 const REFRESH_COST := 500
 const BATTLE_COOLDOWN_MS := 10 * 60 * 1000
 const SKIP_COST := 1
@@ -423,8 +426,13 @@ static func format_eta_short(ms: int) -> String:
 
 static func ms_until_et_midnight() -> int:
 	## Prefer ProgressManager server sync; local fallback only when unsynced.
-	if ProgressManager != null and not ProgressManager.last_time_payload.is_empty():
-		return ProgressManager.ms_until_daily_reset_display()
+	## Resolve via /root so this class_name script does not hard-depend on Autoload
+	## globals (that chain breaks CodexCatalog compilation).
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree != null and tree.root != null:
+		var pm := tree.root.get_node_or_null("/root/ProgressManager")
+		if pm != null and not pm.last_time_payload.is_empty():
+			return int(pm.ms_until_daily_reset_display())
 	return ms_until_et_midnight_local_fallback()
 
 

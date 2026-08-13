@@ -94,6 +94,8 @@ func buy_fuel() -> Dictionary:
 
 
 func buy_consumable(slot_id: String) -> Dictionary:
+	if TutorialManager != null and TutorialManager.blocks_black_market_commerce():
+		return _fail("Finish or skip the tutorial before buying from the Black Market")
 	if slot_id.is_empty():
 		return _fail("Missing slot_id")
 	if _busy:
@@ -152,6 +154,8 @@ func buy_consumable(slot_id: String) -> Dictionary:
 
 
 func buy_gear(slot_id: String, is_hot: bool = false, haggle: bool = false) -> Dictionary:
+	if TutorialManager != null and TutorialManager.blocks_black_market_commerce():
+		return _fail("Finish or skip the tutorial before buying from the Black Market")
 	if slot_id.is_empty():
 		return _fail("Missing slot_id")
 	if _busy:
@@ -204,13 +208,17 @@ func buy_gear(slot_id: String, is_hot: bool = false, haggle: bool = false) -> Di
 		"items": data.get("items", []),
 		"pending_loot": data.get("pending_loot", []),
 		"haggle_failed": bool(data.get("haggle_failed", false)),
+		"haggle_success": bool(data.get("haggle_success", false)),
+		"haggle_discount_pct": int(data.get("haggle_discount_pct", 0)),
 		"haggle_note": str(data.get("haggle_note", "")),
 		"transaction_id": str(data.get("transaction_id", "")),
 		"idempotent_replay": bool(data.get("idempotent_replay", false)),
 	}
-	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
+	var haggle_only := bool(last_purchase.get("haggle_success", false)) or bool(last_purchase.get("haggle_failed", false))
+	if not haggle_only and InventoryManager != null and InventoryManager.has_method("load_inventory"):
 		await InventoryManager.load_inventory(str(GameManager.active_character.get("id", "")))
-	item_purchased.emit(data)
+	if not haggle_only:
+		item_purchased.emit(data)
 	shop_changed.emit(shop_meta)
 	return {"ok": true, "error": "", "data": data}
 
@@ -251,6 +259,8 @@ func refresh_shop(_which: String = "all") -> Dictionary:
 
 
 func refresh_shop_for(_character_id: String = "", _shop_id: String = DEFAULT_SHOP_ID) -> Dictionary:
+	if TutorialManager != null and TutorialManager.blocks_black_market_commerce():
+		return _fail("Finish or skip the tutorial before restocking the Black Market")
 	if _busy:
 		return _fail("Shop request already in progress")
 	_busy = true

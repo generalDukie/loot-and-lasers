@@ -5,7 +5,7 @@ import { api } from "@/api/gameClient";
 // Diversified across stardust, XP, fuel, gear crates, nova crystals,
 // and consumable stims.
 export const DAILY_REWARDS = [
-  { day: 1,  rewards: { stardust: 500 } },
+  { day: 1,  rewards: { stardust: 100 } },
   { day: 2,  rewards: { experience: 800 } },
   { day: 3,  rewards: { stardust: 600 } },
   { day: 4,  rewards: { fuel: 25 } },

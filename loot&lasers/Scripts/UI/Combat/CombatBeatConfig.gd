@@ -7,7 +7,7 @@ extends RefCounted
 ## land roughly mid-swing so anticipation → impact → recovery stay readable.
 ## Absolute times target ~5–15s fights without feeling cinematic.
 
-## Global scale (1.0 = designed desktop pace). Lower = faster; keeps ratios.
+## Global playback rate (1.0 = designed desktop pace). Higher = faster; keeps ratios.
 @export var speed: float = 1.0
 
 @export var intro_s: float = 0.85
@@ -38,7 +38,8 @@ extends RefCounted
 @export var flash_peak: float = 0.26
 @export var flash_fade_s: float = 0.22
 @export var hp_tween_s: float = 0.28
-@export var banner_hold_s: float = 0.55
+## Ability callout readable hold at speed 1.0; scales via `scaled()` (higher speed = shorter hold).
+@export var banner_hold_s: float = 2.0
 @export var idle_bob_px: float = 5.0
 @export var idle_bob_s: float = 1.15
 @export var hit_pause_crit_s: float = 0.06 ## Tiny freeze on crit land (snappy, not cinematic)
@@ -55,7 +56,8 @@ static func make_default() -> CombatBeatConfig:
 
 
 func scaled(seconds: float) -> float:
-	return maxf(0.04, seconds * maxf(0.35, speed))
+	## Playback rate: 2.0× → half duration; 0.5× → double duration.
+	return maxf(0.04, seconds / maxf(0.5, speed))
 
 
 func intro_duration() -> float:

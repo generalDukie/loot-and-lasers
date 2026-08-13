@@ -75,6 +75,7 @@
     "test:restoration28": "node scripts/run_restoration28_regression.mjs",
     "verify:nakama-gameplay-blocked": "node scripts/verify_nakama_gameplay_blocked.mjs"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  }
 }

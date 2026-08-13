@@ -195,9 +195,18 @@ function applyEventToStatus(state, ev) {
     return;
   }
   if (ev.passive === "Orbital Assistant" || kind?.includes?.("orbital") || kind?.includes?.("drone") || kind?.includes?.("fire_support") || kind?.includes?.("defensive_protocol") || kind?.includes?.("acquire_target")) {
-    if (slot) {
-      slot.droneReady = true;
-      slot.lastPassive = "Orbital Assistant";
+    // Engineer owns the drone — prefer side, then attacker (never defender).
+    // Fire Support events set defender=foe and used to paint the bot chip on the wrong HP bar.
+    const engSide =
+      ev.side === "player" || ev.side === "opponent"
+        ? ev.side
+        : ev.attacker === "player" || ev.attacker === "opponent"
+          ? ev.attacker
+          : null;
+    const engSlot = engSide ? state[engSide] : null;
+    if (engSlot) {
+      engSlot.droneReady = true;
+      engSlot.lastPassive = "Orbital Assistant";
     }
   }
 }

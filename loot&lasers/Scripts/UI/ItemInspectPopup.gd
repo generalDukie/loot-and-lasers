@@ -38,6 +38,9 @@ var _hide_token := 0
 var _hide_scheduled := false
 var _open := false
 var _tween: Tween
+## Shop / read-only: close the moment the pointer leaves the stall card (no
+## Equip bridge). Backpack keeps the default bridge so action buttons stay usable.
+var _instant_dismiss := false
 
 
 func _ready() -> void:
@@ -98,16 +101,34 @@ func _make_section(sep: int) -> VBoxContainer:
 func present(anchor: Control, item: Dictionary, options: Dictionary = {}) -> void:
 	if anchor == null or not is_instance_valid(anchor) or item.is_empty():
 		return
+	# Never open (or stay open) while an item drag is in progress.
+	var vp := get_viewport()
+	if vp != null and vp.gui_is_dragging():
+		force_hide()
+		return
 	_cancel_hide()
 	_anchor = anchor
 	_item = item.duplicate(true)
+	_instant_dismiss = bool(options.get("instant_dismiss", false))
+	# Instant mode: ignore hover on the card so leaving the stall dismisses immediately.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE if _instant_dismiss else Control.MOUSE_FILTER_STOP
 	_rebuild(options)
 	_apply_frame_style(ClientUi.rarity_color(str(item.get("rarity", ""))))
 	visible = true
 	_open = true
+	set_process(true)
 	_fit_to_content()
 	_position_near(anchor)
 	_play_open_anim()
+
+
+func _process(_delta: float) -> void:
+	if not _open:
+		set_process(false)
+		return
+	var vp := get_viewport()
+	if vp != null and vp.gui_is_dragging():
+		force_hide()
 
 
 func _fit_to_content() -> void:
@@ -178,6 +199,9 @@ func force_hide() -> void:
 	_cancel_hide()
 	_hide_scheduled = false
 	_open = false
+	_instant_dismiss = false
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	set_process(false)
 	_anchor = null
 	_item = {}
 	if _tween != null and is_instance_valid(_tween):
@@ -203,17 +227,22 @@ func _cancel_hide() -> void:
 
 
 func _on_popup_mouse_entered() -> void:
+	if _instant_dismiss:
+		return
 	_cancel_hide()
 
 
 func _on_popup_mouse_exited() -> void:
+	if _instant_dismiss:
+		force_hide()
+		return
 	request_hide()
 
 
 func is_pointer_over_zone() -> bool:
 	var mouse := get_viewport().get_mouse_position()
-	# Tight hit tests — no large grow pad that keeps the card "hovered" when off it.
-	if visible and get_global_rect().has_point(mouse):
+	# Instant dismiss: only the stall/item counts — not the floating card.
+	if not _instant_dismiss and visible and get_global_rect().has_point(mouse):
 		return true
 	if _anchor != null and is_instance_valid(_anchor):
 		if _anchor.get_global_rect().has_point(mouse):
@@ -365,17 +394,37 @@ func _rebuild(options: Dictionary) -> void:
 	# —— Stats / stims ——
 	if InventoryRules.is_consumable(item):
 		var cons: Dictionary = item.get("consumable", {}) if typeof(item.get("consumable", {})) == TYPE_DICTIONARY else {}
-		var stim := Label.new()
-		stim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		stim.text = "Stim · %s +%s%% · %sh" % [
-			str(cons.get("stat", "?")).capitalize(),
-			str(int(round(float(cons.get("mult", 0)) * 100.0))),
-			str(cons.get("duration_hours", "?")),
-		]
-		stim.add_theme_font_size_override("font_size", BODY_FS)
-		stim.add_theme_color_override("font_color", ClientUi.CYAN)
-		ClientUi.apply_body_font(stim)
-		_section_stats.add_child(stim)
+		var stim_stat := str(cons.get("stat", "")).strip_edges().to_lower()
+		var stim_pct := int(round(float(cons.get("mult", 0)) * 100.0))
+		var stim_hours := str(cons.get("duration_hours", "?"))
+		var stim_row := HBoxContainer.new()
+		stim_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stim_row.add_theme_constant_override("separation", 6)
+		if StatIcon.has(stim_stat):
+			stim_row.add_child(StatIcon.make_labeled(
+				stim_stat,
+				"+%s%%" % stim_pct,
+				STAT_ICON,
+				BODY_FS,
+				GameData.stat_color(stim_stat),
+				4
+			))
+		else:
+			var stim := Label.new()
+			stim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			stim.text = "+%s%% %s" % [stim_pct, stim_stat.capitalize() if not stim_stat.is_empty() else "?"]
+			stim.add_theme_font_size_override("font_size", BODY_FS)
+			stim.add_theme_color_override("font_color", ClientUi.CYAN)
+			ClientUi.apply_body_font(stim)
+			stim_row.add_child(stim)
+		var dur := Label.new()
+		dur.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dur.text = "· %sh" % stim_hours
+		dur.add_theme_font_size_override("font_size", BODY_FS)
+		dur.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_body_font(dur)
+		stim_row.add_child(dur)
+		_section_stats.add_child(stim_row)
 	elif equipped_preview:
 		_fill_absolute_stats(item)
 	else:

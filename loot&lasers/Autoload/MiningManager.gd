@@ -65,6 +65,13 @@ func refresh_status() -> Dictionary:
 
 
 func start(hours: int) -> Dictionary:
+	if TutorialManager != null and TutorialManager.blocks_mining_start():
+		return {
+			"ok": false,
+			"error": "Finish or skip the tutorial before deploying the mining drone",
+			"data": {},
+			"status": 0,
+		}
 	var res: Dictionary = await GameApiClient.invoke("StartMining", {"hours": clampi(hours, 1, 12)})
 	_apply(res)
 	return res

@@ -13,7 +13,6 @@ var _free_support: Label
 var _free_segments: HBoxContainer
 var _cooldown_banner: Label
 var _cooldown_panel: PanelContainer
-var _refresh_btn: Button
 var _list: GridContainer
 var _history_list: VBoxContainer
 var _news_list: VBoxContainer
@@ -87,8 +86,6 @@ func _boot() -> void:
 			)
 	if ArenaManager.opponents.is_empty():
 		await ArenaManager.build_opponent_pool()
-		if ArenaManager.refresh_at_unix_ms <= 0:
-			ArenaManager.mark_refresh_used()
 	await ArenaManager.load_history()
 	if not is_inside_tree() or not visible:
 		return
@@ -235,12 +232,6 @@ func _build() -> void:
 	cd_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	challengers_row.add_child(cd_spacer)
 
-	_refresh_btn = Button.new()
-	_refresh_btn.text = "Refresh"
-	_apply_refresh_button(_refresh_btn)
-	_refresh_btn.pressed.connect(_on_refresh)
-	challengers_row.add_child(_refresh_btn)
-
 	# Challenger cards keep natural height; leftover viewport goes to history/news
 	# so the free-battles banner sits tighter under the opponents.
 	_list = GridContainer.new()
@@ -249,7 +240,7 @@ func _build() -> void:
 	_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_list.add_theme_constant_override("h_separation", 10)
 	_list.add_theme_constant_override("v_separation", 10)
-	# Tutorial undims the three opponent cards only — not CHALLENGERS / Refresh.
+	# Tutorial undims the three opponent cards only — not CHALLENGERS chrome.
 	TutorialManager.tag_target(_list, "arena-contenders")
 	opponent_area.add_child(_list)
 
@@ -360,11 +351,6 @@ func _on_view_rewards() -> void:
 	await CombatReturnManager.present_rewards(_reward_sheet_host)
 	_busy = false
 	_sync_view_rewards_cta()
-
-
-func _apply_refresh_button(btn: Button) -> void:
-	## Web: bg-accent/15 text-accent border border-accent/30 (violet, not cyan).
-	ClientUi.apply_accent_chip_button(btn)
 
 
 func _apply_skip_fight_button(btn: Button) -> void:
@@ -525,6 +511,15 @@ func _on_tick() -> void:
 	if on_cd != _was_on_cooldown:
 		_was_on_cooldown = on_cd
 		_populate_challengers()
+	if not _busy and ArenaManager.board_expired():
+		_busy = true
+		await ArenaManager.load_opponents()
+		_busy = false
+		if not is_inside_tree() or not visible:
+			return
+		_populate_challengers()
+		_update_lobby_chrome()
+		_set_status("Challengers updated — pick again.")
 
 
 func _populate() -> void:
@@ -587,7 +582,7 @@ func _populate_challengers() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	if ArenaManager.opponents.is_empty():
-		_set_status("No challengers found — try refresh.")
+		_set_status("No challengers available right now.")
 		return
 	_set_status("")
 	for opp in ArenaManager.opponents:
@@ -635,16 +630,6 @@ func _update_lobby_chrome() -> void:
 		]
 	else:
 		_cooldown_panel.visible = false
-
-	if ArenaManager.can_free_refresh():
-		_refresh_btn.text = "Refresh"
-		_refresh_btn.icon = null
-	else:
-		_refresh_btn.text = "Refresh · %s  %s" % [
-			str(ArenaRules.REFRESH_COST),
-			ArenaRules.format_ms(ArenaManager.refresh_remaining_ms()),
-		]
-		CurrencyIcon.apply_stardust_button_cost(_refresh_btn, 15.0)
 
 
 func _refresh_free_battles_panel(free_left: int, daily_max: int, reset_eta: String) -> void:
@@ -712,6 +697,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	portrait_wrap.add_child(stack)
 	var pframe := PanelContainer.new()
 	pframe.position = Vector2(4, 0)
+	pframe.clip_contents = true
 	pframe.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 		Color(0.03, 0.04, 0.07, 0.98),
 		Color(0.13, 0.83, 0.93, 0.5) if is_bot else Color(0.2, 0.83, 0.6, 0.55),
@@ -871,7 +857,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	if ArenaManager.cooldown_active():
 		# Web only: amber while skipping cooldown. Normal challenges are cyan painted-btn.
 		fight.text = "SKIP & FIGHT · %s" % ArenaRules.SKIP_COST
-		CurrencyIcon.apply_button_cost(fight, 16.0)
+		CurrencyIcon.apply_button_cost(fight, 16.0, "nova", true)
 		_apply_skip_fight_button(fight)
 	else:
 		fight.text = "CHALLENGE"
@@ -1008,32 +994,6 @@ func _make_history_row(match: Dictionary) -> PanelContainer:
 	return panel
 
 
-func _on_refresh() -> void:
-	if _busy:
-		return
-	_busy = true
-	_set_status("Refreshing…")
-	var charge := not ArenaManager.can_free_refresh()
-	if charge:
-		if not CurrencyManager.can_afford(
-			CurrencyManager.CURRENCY_STARDUST,
-			ArenaRules.REFRESH_COST
-		):
-			Notify.blocked("Not enough Stardust", "Need %s Stardust for instant refresh" % ArenaRules.REFRESH_COST)
-			_busy = false
-			_update_lobby_chrome()
-			return
-	var res: Dictionary = await ArenaManager.refresh_opponents(charge)
-	_busy = false
-	if not res.ok:
-		if not Notify.from_result(res):
-			_set_status(str(res.get("error", "Refresh failed")))
-		_update_lobby_chrome()
-		return
-	_populate_challengers()
-	_update_lobby_chrome()
-
-
 func _on_challenge(opp: Dictionary) -> void:
 	if _busy:
 		return
@@ -1045,13 +1005,7 @@ func _on_challenge(opp: Dictionary) -> void:
 	var prep: Dictionary = await ArenaManager.prepare_challenge(opp, skip)
 	_busy = false
 	if not prep.ok:
-		var err := str(prep.get("error", "Cannot challenge"))
-		var low := err.to_lower()
-		if low.contains("failed") or low.contains("network") or low.contains("timeout"):
-			_set_status(err)
-		else:
-			Notify.blocked(err)
-			_set_status("")
+		_handle_prepare_fail(prep, "Cannot challenge")
 		return
 	GameManager.go_arena_combat()
 
@@ -1071,13 +1025,24 @@ func _on_revenge(match: Dictionary) -> void:
 	_revenge_busy_id = ""
 	_busy = false
 	if not prep.ok:
-		var err := str(prep.get("error", "Cannot revenge"))
-		var low := err.to_lower()
-		if low.contains("failed") or low.contains("network") or low.contains("timeout"):
-			_set_status(err)
-		else:
-			Notify.blocked(err)
-			_set_status("")
+		_handle_prepare_fail(prep, "Cannot revenge")
 		_populate_history()
 		return
 	GameManager.go_arena_combat()
+
+
+func _handle_prepare_fail(prep: Dictionary, fallback: String) -> void:
+	var code := str(prep.get("code", ""))
+	var err := str(prep.get("error", fallback))
+	if code == "ARENA_BOARD_REFRESHED" or err.to_lower().contains("pick again"):
+		_populate_challengers()
+		_update_lobby_chrome()
+		_set_status("Challengers updated — pick again.")
+		return
+	var low := err.to_lower()
+	if low.contains("failed") or low.contains("network") or low.contains("timeout"):
+		_set_status(err)
+	else:
+		Notify.blocked(err)
+		_set_status("")
+	_update_lobby_chrome()

@@ -14,11 +14,20 @@ const CLASSES: PackedStringArray = [
 ]
 
 const RACE_SKINS := {
-	"Zyrathi": ["#2D5A3D", "#8B4513", "#4A0E4E", "#1C3D5A"],
-	"Cognati": ["#C0C0C0", "#1a1a2e", "#0D2137", "#3D3D3D"],
-	"Luminae": ["#E8D5B7", "#C9B8FF", "#B8E6FF", "#FFE4B5"],
+	"Zyrathi": ["#9B2D2D", "#8B4513", "#4A0E4E", "#1C3D5A"],
+	"Cognati": ["#B4B8BC", "#8C9098", "#5C6068", "#3E4248"],
+	"Luminae": ["#E8D5B7", "#C9B8FF", "#B8E6FF", "#F0D090"],
 	"Grothak": ["#696969", "#8B7355", "#4A4A4A", "#5C4033"],
 	"Synthara": ["#2E1A47", "#1A3C34", "#3D1F1F", "#1A1A3C"],
+}
+
+## Player-picked feature glow colors (eyes, marks, ports, etc.) — brighter than skins.
+const RACE_ACCENT_TONES := {
+	"Zyrathi": ["#FF6B1A", "#34D399", "#FBBF24", "#FB7185"],
+	"Cognati": ["#00E5FF", "#60A5FA", "#A78BFA", "#F59E0B"],
+	"Luminae": ["#F6C84C", "#C9B8FF", "#7DD3FC", "#F2A0C0"],
+	"Grothak": ["#FF8C42", "#FBBF24", "#F87171", "#A3E635"],
+	"Synthara": ["#B794F6", "#34D399", "#FB7185", "#38BDF8"],
 }
 
 const DEFAULT_APPEARANCE := {
@@ -43,11 +52,84 @@ const NOSE_STYLES: PackedStringArray = [
 	"Button", "Slits", "Trunk", "None", "Ridge", "Spike",
 ]
 const BROW_STYLES: PackedStringArray = [
-	"Standard", "Tactical", "Heavy", "None", "Scarred", "Relaxed",
+	"Standard", "Tactical", "Heavy", "None", "Scarred", "Relaxed", "Angry",
 ]
 const MARKINGS: PackedStringArray = [
 	"None", "Battle Scar", "Plasma Burns", "War Paint", "Speckled", "Fractured",
 ]
+
+## Race-gated Looks options. Missing races fall back to the global lists above.
+## Single-entry ears = race-default (locked in the creator).
+const RACE_APPEARANCE := {
+	"Zyrathi": {
+		"eye_style": [
+			"Standard Optics", "Ember Gaze", "Prism Optics",
+		],
+		"ears": ["None"],
+		"mouth": [
+			"Tusked", "Set Jaw", "Grim Line", "Wide Grin", "Mandible", "Closed",
+		],
+		"nose": ["Ridge", "Slits", "Spike", "Button", "None"],
+		"eyebrows": ["Heavy", "Standard", "Tactical", "Angry", "Scarred", "None"],
+		"marking": [
+			"None", "Battle Scar", "War Paint", "Speckled", "Plasma Burns",
+		],
+	},
+	"Synthara": {
+		"eye_style": [
+			"Combat Slits", "Target Visor", "Wide Scan", "Dead Gaze", "Prism Optics",
+		],
+		"ears": ["Chassis Ports"],
+		"mouth": [
+			"Set Jaw", "Closed", "Grim Line", "Mandible", "Proboscis", "Tusked",
+		],
+		"nose": ["Slits", "Ridge", "None", "Spike", "Button"],
+		"eyebrows": ["Standard", "Tactical", "Heavy", "Angry", "None", "Scarred"],
+		"marking": [
+			"None", "Fractured", "Plasma Burns", "Battle Scar", "Speckled",
+		],
+	},
+	"Grothak": {
+		"eye_style": [
+			"Standard Optics", "Wide Scan", "Heavy Lids", "Prism Optics",
+		],
+		"ears": ["None"],
+		"mouth": [
+			"Tusked", "Set Jaw", "Grim Line", "Closed", "Wide Grin", "Mandible",
+		],
+		"nose": ["Button", "Ridge", "Slits", "Spike", "None"],
+		"eyebrows": ["Heavy", "Standard", "Tactical", "Angry", "Scarred", "None"],
+		"marking": [
+			"None", "Battle Scar", "War Paint", "Speckled", "Plasma Burns",
+		],
+	},
+	"Cognati": {
+		"eye_style": [
+			"Standard Optics", "Target Visor", "Combat Slits", "Prism Optics",
+		],
+		"ears": ["None"],
+		"mouth": [
+			"Set Jaw", "Grim Line", "Mandible", "Proboscis",
+		],
+		"nose": ["Slits", "Ridge", "None", "Button", "Spike"],
+		"eyebrows": [],
+		"marking": [],
+	},
+	"Luminae": {
+		"eye_style": [
+			"Standard Optics", "Wide Scan", "Cyclops", "Prism Optics",
+		],
+		"ears": ["None"],
+		"mouth": [
+			"Set Jaw", "Closed", "Grim Line", "Wide Grin",
+		],
+		"nose": ["Button", "Slits", "Ridge", "None"],
+		"eyebrows": ["Relaxed", "Standard", "None", "Tactical", "Heavy", "Angry"],
+		"marking": [
+			"None", "Speckled", "War Paint", "Fractured", "Plasma Burns",
+		],
+	},
+}
 
 ## Web RaceCard / CharacterCreation catalog (src/lib/gameData.js RACES).
 const RACE_ACCENT := {
@@ -284,12 +366,105 @@ static func weapon_from_items(items: Array) -> Dictionary:
 	}
 
 
+static func appearance_options_for(race: String, field: String) -> PackedStringArray:
+	var gated: Variant = RACE_APPEARANCE.get(race, {})
+	if typeof(gated) == TYPE_DICTIONARY and (gated as Dictionary).has(field):
+		var raw: Variant = (gated as Dictionary)[field]
+		if typeof(raw) == TYPE_ARRAY or typeof(raw) == TYPE_PACKED_STRING_ARRAY:
+			return PackedStringArray(raw)
+	match field:
+		"eye_style":
+			return EYE_STYLES
+		"ears":
+			return EAR_STYLES
+		"mouth":
+			return MOUTH_STYLES
+		"nose":
+			return NOSE_STYLES
+		"eyebrows":
+			return BROW_STYLES
+		"marking":
+			return MARKINGS
+		_:
+			return PackedStringArray()
+
+
+## Empty string = player picks ears. Non-empty = race signature, always on.
+static func locked_ears_for_race(race: String) -> String:
+	var opts := appearance_options_for(race, "ears")
+	if opts.size() == 1:
+		return str(opts[0])
+	return ""
+
+
+static func accent_tones_for_race(race: String) -> Array:
+	return RACE_ACCENT_TONES.get(race, ["#B794F6"]) as Array
+
+
 static func default_appearance_for_race(race: String) -> Dictionary:
 	var skins: Array = RACE_SKINS.get(race, ["#2D5A3D"])
+	var accents: Array = accent_tones_for_race(race)
 	var appearance := DEFAULT_APPEARANCE.duplicate()
 	appearance["skin_color"] = skins[0]
+	appearance["accent_color"] = str(accents[0]) if not accents.is_empty() else "#B794F6"
+	for field in ["eye_style", "ears", "mouth", "nose", "eyebrows", "marking"]:
+		var opts := appearance_options_for(race, field)
+		if not opts.is_empty():
+			appearance[field] = opts[0]
 	return appearance
 
+
+static func random_appearance_for_race(race: String, rng: RandomNumberGenerator = null) -> Dictionary:
+	var r := rng
+	if r == null:
+		r = RandomNumberGenerator.new()
+		r.randomize()
+	var appearance := default_appearance_for_race(race)
+	var skins: Array = RACE_SKINS.get(race, ["#2D5A3D"])
+	if not skins.is_empty():
+		appearance["skin_color"] = str(skins[r.randi_range(0, skins.size() - 1)])
+	var accents: Array = accent_tones_for_race(race)
+	if not accents.is_empty():
+		appearance["accent_color"] = str(accents[r.randi_range(0, accents.size() - 1)])
+	for field in ["eye_style", "mouth", "nose", "eyebrows", "marking"]:
+		var opts := appearance_options_for(race, field)
+		if not opts.is_empty():
+			appearance[field] = opts[r.randi_range(0, opts.size() - 1)]
+	var locked := locked_ears_for_race(race)
+	if not locked.is_empty():
+		appearance["ears"] = locked
+	else:
+		var ears := appearance_options_for(race, "ears")
+		if not ears.is_empty():
+			appearance["ears"] = ears[r.randi_range(0, ears.size() - 1)]
+	return appearance
+
+
+static func clamp_appearance_to_race(race: String, appearance: Dictionary) -> Dictionary:
+	var out := appearance.duplicate()
+	# Synthara renamed Ember Gaze → Dead Gaze.
+	if race == "Synthara" and str(out.get("eye_style", "")) == "Ember Gaze":
+		out["eye_style"] = "Dead Gaze"
+	for field in ["eye_style", "ears", "mouth", "nose", "eyebrows", "marking"]:
+		var opts := appearance_options_for(race, field)
+		if opts.is_empty():
+			# Race opted out of this slot (e.g. Cognati brows / markings).
+			if field == "marking" or field == "eyebrows":
+				out[field] = "None"
+			continue
+		var cur := str(out.get(field, ""))
+		if opts.find(cur) < 0:
+			out[field] = opts[0]
+	var locked := locked_ears_for_race(race)
+	if not locked.is_empty():
+		out["ears"] = locked
+	var accents := accent_tones_for_race(race)
+	var accent_cur := str(out.get("accent_color", ""))
+	if accents.is_empty():
+		pass
+	elif accents.find(accent_cur) < 0:
+		out["accent_color"] = str(accents[0])
+	return out
 
 static func build_create_payload(
 	char_name: String,
@@ -301,6 +476,8 @@ static func build_create_payload(
 	var looks := appearance if not appearance.is_empty() else default_appearance_for_race(race)
 	if not looks.has("skin_color"):
 		looks["skin_color"] = default_appearance_for_race(race).get("skin_color", "#2D5A3D")
+	if not looks.has("accent_color"):
+		looks["accent_color"] = default_appearance_for_race(race).get("accent_color", "#B794F6")
 	# Legacy identity is account-owned; Node re-stamps it from the user row on create.
 	var legacy_name := ""
 	var legacy_display := "surname"
@@ -371,7 +548,8 @@ static func gear_type_label(type_key: String) -> String:
 		return ""
 	if type_key == "accessory":
 		return "Ring"
-	return type_key.substr(0, 1).to_upper() + type_key.substr(1)
+	# Title-case snake_case keys ("ship_module" → "Ship Module"), never keep underscores.
+	return type_key.capitalize()
 
 
 static func stat_color(stat: String) -> Color:

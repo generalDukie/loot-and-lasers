@@ -38,8 +38,8 @@ import { generateArenaBot, ARENA_BOT_CLASSES } from "@/lib/arenaBotGenerator";
 // crystals and yields rating only, but can be fought indefinitely to climb.
 export const ARENA_DAILY_FREE_BATTLES = 10;
 export const ARENA_PAID_BATTLE_COST = 15; // nova crystals per battle after the free quota
-export const ARENA_REFRESH_MS = 5 * 60 * 1000;
-export const ARENA_REFRESH_COST = 500; // stardust (10× scale)
+export const ARENA_REFRESH_MS = 2 * 60 * 60 * 1000; // board TTL (manual refresh removed)
+export const ARENA_REFRESH_COST = 500; // stardust (10× scale) — unused; kept for catalog compatibility
 export const ARENA_BATTLE_COOLDOWN_MS = 10 * 60 * 1000; // 10-minute cooldown between battles
 export const ARENA_SKIP_COST = 1; // nova crystals to skip the cooldown
 export const ARENA_CHALLENGER_SLOTS = 3;

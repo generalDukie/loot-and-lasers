@@ -4,7 +4,7 @@ extends RefCounted
 ## Claim eligibility and grants are always server-authoritative.
 
 const ENTRIES: Array = [
-	{"day": 1, "rewards": {"stardust": 500}},
+	{"day": 1, "rewards": {"stardust": 100}},
 	{"day": 2, "rewards": {"experience": 800}},
 	{"day": 3, "rewards": {"stardust": 600}},
 	{"day": 4, "rewards": {"fuel": 25}},

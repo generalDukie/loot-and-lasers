@@ -280,7 +280,7 @@ func _make_item_row(item: Dictionary, is_pending: bool, pending_id: String) -> P
 	var stardust := InventoryRules.estimate_sell_value(item)
 	detail.text = "%s · %s · %s Stardust" % [
 		rarity.capitalize(),
-		str(item.get("type", "")).replace("_", " "),
+		GameData.gear_type_label(str(item.get("type", ""))),
 		stardust,
 	]
 	detail.add_theme_font_size_override("font_size", ClientUi.META_FS)

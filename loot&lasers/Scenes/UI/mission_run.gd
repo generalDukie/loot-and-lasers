@@ -174,9 +174,12 @@ func _build() -> void:
 	active_col.add_child(_goofy)
 
 	_skip_btn = Button.new()
-	_skip_btn.text = "Skip · Fight · 1"
-	CurrencyIcon.apply_button_cost(_skip_btn, 16.0)
+	_skip_btn.text = ""
+	_skip_btn.icon = null
+	_skip_btn.clip_contents = false
+	_skip_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_skip_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	ClientUi.apply_display_font(_skip_btn)
 	_skip_btn.add_theme_font_size_override("font_size", 19)
 	_skip_btn.add_theme_color_override("font_color", Color("#FCD34D"))
@@ -193,6 +196,7 @@ func _build() -> void:
 		"pressed",
 		ClientUi.painted_panel_style(Color(0.1, 0.07, 0.02, 0.96), Color("#D97706", 0.7), 8, 1)
 	)
+	_build_skip_btn_content(_skip_btn)
 	_skip_btn.pressed.connect(_on_skip)
 	active_col.add_child(_skip_btn)
 	TutorialManager.tag_target(_skip_btn, "mission-skip")
@@ -442,6 +446,71 @@ func _skip_cost_now() -> float:
 	return float(half) / 2.0
 
 
+func _build_skip_btn_content(btn: Button) -> void:
+	var pad := MarginContainer.new()
+	pad.name = "ContentPad"
+	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pad.add_theme_constant_override("margin_left", 10)
+	pad.add_theme_constant_override("margin_right", 10)
+	btn.add_child(pad)
+	var row := HBoxContainer.new()
+	row.name = "Row"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	pad.add_child(row)
+
+
+func _skip_btn_content_row() -> HBoxContainer:
+	if _skip_btn == null or not is_instance_valid(_skip_btn):
+		return null
+	return _skip_btn.get_node_or_null("ContentPad/Row") as HBoxContainer
+
+
+func _refresh_skip_btn_label(prefix: String, cost: float) -> void:
+	if _skip_btn == null or not is_instance_valid(_skip_btn):
+		return
+	_skip_btn.text = ""
+	_skip_btn.icon = null
+	var row := _skip_btn_content_row()
+	if row == null:
+		_build_skip_btn_content(_skip_btn)
+		row = _skip_btn_content_row()
+	if row == null:
+		return
+	while row.get_child_count() > 0:
+		var child := row.get_child(0)
+		row.remove_child(child)
+		child.free()
+	var tint := Color("#FEF3C7") if not _skip_btn.disabled else Color("#FCD34D", 0.55)
+	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", 19)
+	lab.add_theme_color_override("font_color", tint)
+	ClientUi.apply_display_font(lab)
+	row.add_child(lab)
+	if cost < 0.0:
+		# FREE / no glyph.
+		lab.text = prefix
+		return
+	lab.text = prefix
+	var glyph := CurrencyIcon.make("nova", 18.0)
+	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(glyph)
+	var amount := Label.new()
+	amount.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	amount.text = str(cost)
+	amount.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	amount.add_theme_font_size_override("font_size", 19)
+	amount.add_theme_color_override("font_color", tint)
+	ClientUi.apply_display_font(amount)
+	row.add_child(amount)
+
+
 func _tutorial_free_skip() -> bool:
 	if not TutorialManager.should_show():
 		return false
@@ -518,11 +587,9 @@ func _refresh_timer() -> void:
 		_skip_btn.disabled = _busy
 		var cost := _skip_cost_now()
 		if cost <= 0.0 and _tutorial_free_skip():
-			_skip_btn.text = "Skip · Fight · FREE"
-			_skip_btn.icon = null
+			_refresh_skip_btn_label("Skip · Fight · FREE", -1.0)
 		else:
-			_skip_btn.text = "Skip · Fight · %s" % cost
-			CurrencyIcon.apply_button_cost(_skip_btn, 16.0)
+			_refresh_skip_btn_label("Skip · Fight ·", cost)
 		_active_panel.add_theme_stylebox_override(
 			"panel",
 			ClientUi.painted_panel_style(Color(0.04, 0.07, 0.12, 0.72), Color(ClientUi.CYAN, 0.45), 10, 1)

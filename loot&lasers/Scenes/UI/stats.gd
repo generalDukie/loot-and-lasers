@@ -7,7 +7,7 @@ const FRAME_SLOTS: Array = [
 	{"type": "neck", "label": "Neck"},
 	{"type": "armor", "label": "Armor"},
 	{"type": "_portrait", "label": ""},
-	{"type": "ship_module", "label": "Ship"},
+	{"type": "ship_module", "label": "Ship Module"},
 	{"type": "boots", "label": "Boots"},
 	{"type": "legs", "label": "Legs"},
 	{"type": "accessory", "label": "Ring"},
@@ -80,7 +80,14 @@ const EQUIP_GRID_INSET := 8.0
 const EQUIP_GRID_SEP := 8
 const BAG_COLS := 5
 ## Backpack gear glyph — fraction of the middle band's shorter side (name/attrs unchanged).
-const BAG_GEAR_ICON_FILL := 0.6
+const BAG_GEAR_ICON_FILL := 0.82
+## Fixed bottom reserve so 0–5 attr chips don't resize the middle glyph band.
+## Fits two bag-attr rows (23px icons/fonts) + row separation.
+const BAG_ATTR_BAND_H := 60.0
+const BAG_ATTR_ICON_PX := 26.0
+const BAG_ATTR_FONT_PX := 26
+## Lift attr chips off the pane bottom edge.
+const BAG_ATTR_BOTTOM_PAD := 6.0
 const ARMOR_STAT_LABEL := "Might Resistance"
 ## Half-period of the slow tutorial pulse (~2 full cycles over a 5s hold).
 const COMBAT_STAT_FLASH_HALF_SEC := 1.25
@@ -1044,7 +1051,7 @@ func _on_bag_grid_resized() -> void:
 					(slot as Control).custom_minimum_size.y = _bag_slot_min_h
 
 
-## Backpack cell: name top, gear icon centered in middle band (~60% of that band), attrs bottom.
+## Backpack cell: name top, gear icon centered in middle band, fixed attr strip bottom.
 func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContainer:
 	var filled := not item.is_empty()
 	var item_id := str(item.get("id", "")) if filled else ""
@@ -1124,11 +1131,19 @@ func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContaine
 		icon_wrap.add_child(gear)
 		_bind_bag_gear_icon_size(icon_wrap, gear)
 
-		var stats_raw: Variant = item.get("stats", {})
-		if typeof(stats_raw) == TYPE_DICTIONARY:
-			var entries := _bag_attr_entries(stats_raw as Dictionary)
-			if not entries.is_empty():
-				col.add_child(_make_bag_attr_band(entries))
+		# Always reserve the same bottom band height so attr count can't shrink glyphs.
+		# Stims: single attribute glyph + %. Junk: Stardust glyph + sell price.
+		# Gear: attribute chips. Duration for stims stays on hover inspect only.
+		var entries: Array = []
+		if InventoryRules.is_consumable(item):
+			entries = _bag_stim_attr_entries(item)
+		elif _bag_is_junk_trinket(item):
+			entries = _bag_junk_sell_entries(item)
+		else:
+			var stats_raw: Variant = item.get("stats", {})
+			if typeof(stats_raw) == TYPE_DICTIONARY:
+				entries = _bag_attr_entries(stats_raw as Dictionary)
+		col.add_child(_make_bag_attr_slot(entries))
 
 	else:
 		var mark := Label.new()
@@ -1181,6 +1196,8 @@ func _bind_bag_gear_icon_size(wrap: Control, icon: Control) -> void:
 func _sync_bag_gear_icon_size(wrap: Control, icon: Control) -> void:
 	if not is_instance_valid(wrap) or not is_instance_valid(icon):
 		return
+	# Size from the middle band only — band height is stable across items because the
+	# attr strip is a fixed reserve (BAG_ATTR_BAND_H), not content-sized.
 	var side := minf(wrap.size.x, wrap.size.y) * BAG_GEAR_ICON_FILL
 	if side < 4.0:
 		return
@@ -1200,12 +1217,57 @@ func _bag_attr_entries(stats_raw: Dictionary) -> Array:
 	return entries
 
 
-## Bottom-anchored attr stack: 1–2 single row; else top = n - ceil(n/2), bottom = ceil(n/2).
+## Single-attribute stim chip for backpack panes (legacy "all" stims ignored).
+func _bag_stim_attr_entries(item: Dictionary) -> Array:
+	var cons: Variant = item.get("consumable", {})
+	if typeof(cons) != TYPE_DICTIONARY:
+		return []
+	var stat := str(cons.get("stat", "")).strip_edges().to_lower()
+	if not StatIcon.has(stat):
+		return []
+	var pct := int(round(float(cons.get("mult", 0)) * 100.0))
+	if pct <= 0:
+		return []
+	return [{"k": stat, "v": pct, "pct": true}]
+
+
+## Mission salvage / junk trinkets (no gear stats — sell value is the face chrome).
+func _bag_is_junk_trinket(item: Dictionary) -> bool:
+	if item.is_empty() or InventoryRules.is_consumable(item):
+		return false
+	var itype := str(item.get("type", "")).strip_edges().to_lower()
+	return itype == "material" or itype == "junk"
+
+
+func _bag_junk_sell_entries(item: Dictionary) -> Array:
+	var price := InventoryRules.estimate_sell_value(item)
+	if price <= 0:
+		return []
+	return [{"currency": "stardust", "v": price}]
+
+
+## Fixed-height bottom strip so backpack glyphs stay uniform.
+func _make_bag_attr_slot(entries: Array) -> Control:
+	var host := Control.new()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.custom_minimum_size = Vector2(0, BAG_ATTR_BAND_H)
+	host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	host.size_flags_vertical = Control.SIZE_SHRINK_END
+	if entries.is_empty():
+		return host
+	var band := _make_bag_attr_band(entries)
+	band.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	band.offset_bottom = -BAG_ATTR_BOTTOM_PAD
+	host.add_child(band)
+	return host
+
+
+## Attr stack inside the fixed band: 1–2 single row; else top = n - ceil(n/2), bottom = ceil(n/2).
 func _make_bag_attr_band(entries: Array) -> Control:
 	var band := VBoxContainer.new()
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	band.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	band.size_flags_vertical = Control.SIZE_SHRINK_END
+	band.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	band.alignment = BoxContainer.ALIGNMENT_CENTER
 	band.add_theme_constant_override("separation", 2)
 	var n := entries.size()
@@ -1227,17 +1289,41 @@ func _make_bag_attr_row(entries: Array) -> HBoxContainer:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 4)
 	for e in entries:
+		var currency := str(e.get("currency", "")).strip_edges().to_lower()
+		if currency == "stardust" or currency == "nova":
+			row.add_child(_make_bag_currency_chip(currency, int(e.get("v", 0))))
+			continue
 		var k := str(e.get("k", ""))
 		var v := int(e.get("v", 0))
+		var label := "+%s%%" % v if bool(e.get("pct", false)) else str(v)
 		row.add_child(StatIcon.make_labeled(
 			k,
-			str(v),
-			StatIcon.SIZE_ITEM_PANE,
-			20,
+			label,
+			BAG_ATTR_ICON_PX,
+			BAG_ATTR_FONT_PX,
 			GameData.stat_color(k),
 			4
 		))
 	return row
+
+
+func _make_bag_currency_chip(currency_id: String, amount: int) -> HBoxContainer:
+	var chip := HBoxContainer.new()
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.alignment = BoxContainer.ALIGNMENT_CENTER
+	chip.add_theme_constant_override("separation", 4)
+	chip.add_child(CurrencyIcon.make(currency_id, BAG_ATTR_ICON_PX))
+	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.text = str(amount)
+	lab.add_theme_font_size_override("font_size", BAG_ATTR_FONT_PX)
+	lab.add_theme_color_override(
+		"font_color",
+		CurrencyIcon.STARDUST_FUCHSIA if currency_id == "stardust" else CurrencyIcon.NOVA_GOLD
+	)
+	ClientUi.apply_body_font(lab)
+	chip.add_child(lab)
+	return chip
 
 
 func _bag_slot_style(bg: Color, border: Color) -> StyleBoxFlat:
@@ -1249,7 +1335,7 @@ func _bag_slot_style(bg: Color, border: Color) -> StyleBoxFlat:
 	sb.content_margin_left = 4
 	sb.content_margin_right = 4
 	sb.content_margin_top = 3
-	sb.content_margin_bottom = 3
+	sb.content_margin_bottom = 8
 	return sb
 
 
@@ -1265,6 +1351,9 @@ func _hide_bag_inspect() -> void:
 
 func _show_bag_inspect(anchor: Control, item: Dictionary, equipped_preview := false) -> void:
 	if _inspect == null or not is_instance_valid(_inspect):
+		return
+	var vp := get_viewport()
+	if vp != null and vp.gui_is_dragging():
 		return
 	var item_type := str(item.get("type", ""))
 	var item_id := str(item.get("id", ""))
@@ -1282,6 +1371,9 @@ func _show_bag_inspect(anchor: Control, item: Dictionary, equipped_preview := fa
 		"compare_with": worn,
 		"show_sell_value": not equipped_preview and not InventoryRules.is_consumable(item),
 		"actions": actions,
+		# Equipped doll: dismiss as soon as the pointer leaves the slot (don't keep
+		# the card open while crossing into the popup). Bag keeps the bridge for actions.
+		"instant_dismiss": equipped_preview,
 	})
 
 
@@ -1329,6 +1421,7 @@ func _make_item_drag(host: Control, item: Dictionary, from: String) -> Variant:
 	var item_id := str(item.get("id", ""))
 	if item_id.is_empty():
 		return null
+	_hide_bag_inspect()
 	# Full-size clone of the bag/equip pane so the glyph doesn't shrink mid-drag.
 	host.set_drag_preview(_clone_as_drag_preview(host))
 	return {
@@ -1802,6 +1895,8 @@ func _make_combat_card() -> VBoxContainer:
 	ClientUi.apply_body_font(_combat_via)
 	head.add_child(_combat_via)
 
+	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
+
 	var off_lab := Label.new()
 	off_lab.text = "OFFENSIVE"
 	off_lab.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -1814,8 +1909,8 @@ func _make_combat_card() -> VBoxContainer:
 	off_row.size_flags_stretch_ratio = 1.0
 	off_row.add_theme_constant_override("separation", 6)
 	root.add_child(off_row)
-	off_row.add_child(_combat_tile("Damage", Color("#F59E0B")))
-	off_row.add_child(_combat_tile("Crit Chance", Color("#FBBF24")))
+	off_row.add_child(_combat_tile("Damage", GameData.stat_color(StatsRules.primary_stat(class_key))))
+	off_row.add_child(_combat_tile("Crit Chance", GameData.stat_color("luck")))
 
 	var def_lab := Label.new()
 	def_lab.text = "DEFENSIVE"
@@ -1835,14 +1930,19 @@ func _make_combat_card() -> VBoxContainer:
 	def_row_a.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	def_row_a.add_theme_constant_override("separation", 6)
 	def_col.add_child(def_row_a)
-	def_row_a.add_child(_combat_tile("Max Health", Color("#FB7185")))
-	def_row_a.add_child(_combat_tile("Dodge Chance", Color("#34D399")))
+	def_row_a.add_child(_combat_tile("Max Health", GameData.stat_color("vitality")))
+	def_row_a.add_child(_combat_tile("Dodge Chance", GameData.stat_color("agility")))
 	var def_row_b := HBoxContainer.new()
 	def_row_b.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	def_row_b.add_theme_constant_override("separation", 6)
 	def_col.add_child(def_row_b)
-	def_row_b.add_child(_combat_tile(ARMOR_STAT_LABEL, Color("#A78BFA")))
-	def_row_b.add_child(_combat_tile("Tech Resist", Color("#38BDF8")))
+	# STR classes never gain Might Resistance; INT never gain Tech Resist.
+	# AGI keeps both. Remaining single resist stretches full row width.
+	var arch := MissionCombat.damage_archetype(class_key)
+	if arch != "str":
+		def_row_b.add_child(_combat_tile(ARMOR_STAT_LABEL, GameData.stat_color("strength")))
+	if arch != "int":
+		def_row_b.add_child(_combat_tile("Tech Resist", GameData.stat_color("intellect")))
 	return root
 
 
@@ -1928,7 +2028,9 @@ func _combat_labels_for_attribute(stat: String) -> Array:
 				out.append("Damage")
 			return out
 		"intellect":
-			var out: Array = ["Tech Resist"]
+			var out: Array = []
+			if arch != "int":
+				out.append("Tech Resist")
 			if primary == "intellect":
 				out.append("Damage")
 			return out

@@ -263,6 +263,7 @@ function wrap(fn) {
           if (Array.isArray(err.opponents)) bodyOut.opponents = err.opponents;
           if (err.expires_at) bodyOut.expires_at = err.expires_at;
           if (err.character) bodyOut.character = err.character;
+          if (err.arena) bodyOut.arena = err.arena;
         }
         return { status: err.status, body: bodyOut };
       }
@@ -551,6 +552,7 @@ export const PrepareArenaCombat = wrap((user, body = {}) => {
     character: ch,
     replay: prepared.replay,
     is_free: useFree,
+    skip_cooldown: skipCooldown,
     estimated_nova_cost: novaCost,
   };
 });

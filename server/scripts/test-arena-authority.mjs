@@ -20,6 +20,7 @@ const {
   serializeArenaState,
   generateAndStoreArenaOffers,
   assertArenaClientSafe,
+  arenaOffersNeedRemint,
 } = await import("../src/shared/arenaService.js");
 const {
   PrepareArenaCombat,
@@ -502,6 +503,102 @@ await testAsync("direct challenge loss outcome agrees with ranking/rewards", asy
   assert.equal(lossFinish.battle_result.playerWon, false);
   assert.equal(lossFinish.rewards.experience, 0);
   assert.equal(lossFinish.rewards.stardust, 0);
+});
+
+await testAsync("consecutive skip battles charge nova and re-apply cooldown", async () => {
+  const u = insertUser("u-arena-skip-loop", "skip-loop@test.local");
+  const ch = makeChar(u.id, {
+    name: "Skipper",
+    level: 25,
+    rating: 1000,
+    nova: 40,
+    attempts: 10,
+  });
+  const user = { id: u.id, active_character_id: ch.id, role: "user" };
+  let prevNova = entities.Character.get(ch.id).nova_crystals;
+  for (let i = 0; i < 4; i++) {
+    const offersRes = unwrap(await GetArenaOpponents(user, {}));
+    const offerId = offersRes.opponents[0].offer_id;
+    const live = entities.Character.get(ch.id);
+    const onCd = isArenaCooldownActive(live);
+    const prep = unwrap(
+      await PrepareArenaCombat(user, {
+        offer_id: offerId,
+        is_free: true,
+        skip_cooldown: onCd,
+      }),
+    );
+    assert.equal(!!prep.skip_cooldown, onCd);
+    const finish = unwrap(
+      await FinishArenaBattle(user, {
+        combat_id: prep.combat.combat_id,
+        offer_id: offerId,
+      }),
+    );
+    assert.ok(finish.character.arena_cooldown_at);
+    assert.equal(isArenaCooldownActive(finish.character), true);
+    if (onCd) {
+      assert.ok(finish.nova_spent >= 1, `battle ${i + 1} should spend skip nova`);
+      assert.ok(
+        entities.Character.get(ch.id).nova_crystals < prevNova,
+        `battle ${i + 1} nova should decrease`,
+      );
+    }
+    prevNova = entities.Character.get(ch.id).nova_crystals;
+  }
+});
+
+await testAsync("prepare honors existing offer_id even when board remint is due", async () => {
+  const u = insertUser("u-arena-honor-offer", "honor-offer@test.local");
+  const ch = makeChar(u.id, {
+    name: "Honorer",
+    level: 20,
+    rating: 1000,
+    nova: 20,
+    attempts: 10,
+  });
+  const user = { id: u.id, active_character_id: ch.id, role: "user" };
+  const minted = unwrap(await GetArenaOpponents(user, {}));
+  const offerId = minted.opponents[0].offer_id;
+  // Soft-stale the bag (level mismatch) without removing the offer.
+  const live = entities.Character.get(ch.id);
+  entities.Character.update(ch.id, {
+    arena_opponent_offers: {
+      ...live.arena_opponent_offers,
+      player_level: Math.max(1, (live.level || 1) - 1),
+    },
+  });
+  assert.equal(arenaOffersNeedRemint(entities.Character.get(ch.id)), true);
+  const prep = unwrap(
+    await PrepareArenaCombat(user, { offer_id: offerId, is_free: true, skip_cooldown: false }),
+  );
+  assert.ok(prep.combat?.combat_id, "prepare should honor the still-present offer");
+  assert.notEqual(prep.code, "ARENA_BOARD_REFRESHED");
+});
+
+await testAsync("stale offer_id returns current board without reminting", async () => {
+  const u = insertUser("u-arena-stale-offer", "stale-offer@test.local");
+  const ch = makeChar(u.id, {
+    name: "Stale",
+    level: 20,
+    rating: 1000,
+    nova: 20,
+    attempts: 10,
+  });
+  const user = { id: u.id, active_character_id: ch.id, role: "user" };
+  const minted = unwrap(await GetArenaOpponents(user, {}));
+  const liveIds = minted.opponents.map((o) => o.offer_id).sort().join(",");
+  assert.equal(arenaOffersNeedRemint(entities.Character.get(ch.id)), false);
+  let status = 200;
+  let body = null;
+  const r = await PrepareArenaCombat(user, { offer_id: "not-a-real-offer", is_free: true });
+  status = r.status || 200;
+  body = r.body || r;
+  assert.equal(status, 409);
+  assert.equal(body.code, "ARENA_BOARD_REFRESHED");
+  const afterIds = (body.opponents || []).map((o) => o.offer_id).sort().join(",");
+  assert.equal(afterIds, liveIds, "must not remint when board is still valid");
+  assert.equal(arenaOffersNeedRemint(entities.Character.get(ch.id)), false);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

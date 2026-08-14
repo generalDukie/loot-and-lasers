@@ -634,21 +634,37 @@ export function refreshArenaOffersAfterBattle(character, foughtOpponentId = "") 
 
 /**
  * Resolve combatant from a stored offer. Rejects client-supplied stats.
- * Remints quietly when the board is stale / offer missing, then signals the client
- * to pick again (no harsh "expired" dead-end).
+ *
+ * - Offer present → honor it (TTL / level remints belong on GetArenaOpponents / post-fight).
+ * - Offer missing + board due for remint → remint, then ask client to pick again.
+ * - Offer missing + board still valid → return current board without reminting
+ *   (stale client / race). Reminting here was wiping the live board and soft-excluding
+ *   the foe the player just clicked.
  */
 export function resolveOfferCombatant(character, offerId) {
-  if (arenaOffersNeedRemint(character) || !findArenaOffer(character, offerId)) {
-    const reminted = remintArenaOffersPreferringPrevious(character);
+  const offer = findArenaOffer(character, offerId);
+  if (!offer) {
+    if (arenaOffersNeedRemint(character)) {
+      const reminted = remintArenaOffersPreferringPrevious(character);
+      const e = new Error("Challengers updated — pick again");
+      e.status = 409;
+      e.code = "ARENA_BOARD_REFRESHED";
+      e.character = reminted.character;
+      e.opponents = reminted.offers;
+      e.expires_at = reminted.expires_at;
+      e.arena = serializeArenaState(reminted.character, clock.nowMs());
+      throw e;
+    }
+    const bag = readArenaOffers(character);
     const e = new Error("Challengers updated — pick again");
     e.status = 409;
     e.code = "ARENA_BOARD_REFRESHED";
-    e.character = reminted.character;
-    e.opponents = reminted.offers;
-    e.expires_at = reminted.expires_at;
+    e.character = character;
+    e.opponents = Array.isArray(bag?.offers) ? bag.offers.map(publicOpponentOffer) : [];
+    e.expires_at = bag?.expires_at || null;
+    e.arena = serializeArenaState(character, clock.nowMs());
     throw e;
   }
-  const offer = findArenaOffer(character, offerId);
   const bag = readArenaOffers(character);
   void bag;
   const opp = offer.opponent || {};

@@ -45,8 +45,14 @@ func _ready() -> void:
 
 func on_shell_reshow() -> void:
 	_update_lobby_chrome()
-	_populate()
 	_sync_view_rewards_cta()
+	# Drop stale challenger cards immediately — closures can still hold offer_ids from
+	# the pre-fight board after Finish remints, which triggers "pick again" on skip.
+	for c in _list.get_children():
+		c.queue_free()
+	_set_status("Syncing challengers…")
+	_busy = false
+	call_deferred("_resync_board")
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
@@ -84,14 +90,26 @@ func _boot() -> void:
 				"Arena raid" if held else "Arena raid lost",
 				"%s · rating %s%s" % [bot_name, "+" if delta >= 0 else "", delta]
 			)
-	if ArenaManager.opponents.is_empty():
-		await ArenaManager.build_opponent_pool()
+	# Always pull the board — never reuse a stale in-memory offer set across visits.
+	await ArenaManager.load_opponents()
 	await ArenaManager.load_history()
 	if not is_inside_tree() or not visible:
 		return
 	_was_on_cooldown = ArenaManager.cooldown_active()
 	_set_status("")
 	_populate()
+
+
+func _resync_board() -> void:
+	if _busy:
+		return
+	_busy = true
+	await ArenaManager.load_opponents()
+	_busy = false
+	if not is_inside_tree() or not visible:
+		return
+	_populate()
+	_update_lobby_chrome()
 
 
 func _build() -> void:
@@ -510,16 +528,33 @@ func _on_tick() -> void:
 	var on_cd := ArenaManager.cooldown_active()
 	if on_cd != _was_on_cooldown:
 		_was_on_cooldown = on_cd
-		_populate_challengers()
-	if not _busy and ArenaManager.board_expired():
+		# Rebuild costs / skip labels only — not while a challenge prepare is in flight.
+		if not _busy and not ArenaManager.is_battling():
+			_populate_challengers()
+	if _busy or ArenaManager.is_battling():
+		return
+	if ArenaManager.board_expired():
 		_busy = true
+		var before_ids: PackedStringArray = []
+		for o in ArenaManager.opponents:
+			if typeof(o) == TYPE_DICTIONARY:
+				before_ids.append(str(o.get("offer_id", "")))
 		await ArenaManager.load_opponents()
 		_busy = false
 		if not is_inside_tree() or not visible:
 			return
 		_populate_challengers()
 		_update_lobby_chrome()
-		_set_status("Challengers updated — pick again.")
+		var changed := before_ids.size() != ArenaManager.opponents.size()
+		if not changed:
+			for o2 in ArenaManager.opponents:
+				if typeof(o2) != TYPE_DICTIONARY:
+					continue
+				if not before_ids.has(str(o2.get("offer_id", ""))):
+					changed = true
+					break
+		if changed:
+			_set_status("Challengers updated — pick again.")
 
 
 func _populate() -> void:
@@ -1001,6 +1036,8 @@ func _on_challenge(opp: Dictionary) -> void:
 		Notify.blocked("Tutorial in progress", "Finish or skip the tutorial before fighting in the Arena.")
 		return
 	_busy = true
+	# Lock skip intent from the button label state at press time so a mid-flight
+	# board sync cannot drop us onto a bare CHALLENGE path.
 	var skip := ArenaManager.cooldown_active()
 	var prep: Dictionary = await ArenaManager.prepare_challenge(opp, skip)
 	_busy = false

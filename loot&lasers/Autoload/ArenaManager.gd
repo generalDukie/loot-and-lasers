@@ -117,9 +117,13 @@ func _apply_board_from_payload(data: Dictionary) -> void:
 	if typeof(data.get("opponents", null)) != TYPE_ARRAY:
 		return
 	_apply_character(data)
-	_apply_arena_state(data)
+	# Only hydrate arena from an explicit `arena` object — never the whole payload.
+	# ARENA_BOARD_REFRESHED errors used to fall through as arena_state and wipe
+	# arena_cooldown_at, which turned SKIP & FIGHT into CHALLENGE after one press.
+	if typeof(data.get("arena", null)) == TYPE_DICTIONARY:
+		_apply_arena_state(data)
 	opponents = _map_opponent_cards(data.get("opponents", []))
-	var expires := str(data.get("expires_at", ""))
+	var expires := _iso_field(data.get("expires_at", null))
 	if not expires.is_empty():
 		refresh_at_unix_ms = _parse_iso_unix(expires) * 1000
 	opponents_loaded.emit(opponents)
@@ -132,8 +136,13 @@ func _apply_character(data: Dictionary) -> void:
 
 
 func _apply_arena_state(data: Dictionary) -> void:
-	var a: Variant = data.get("arena", data)
+	var a: Variant = data.get("arena", null)
+	# Back-compat: GetArenaStatus-shaped payloads are the arena object itself.
+	if typeof(a) != TYPE_DICTIONARY and _looks_like_arena_state(data):
+		a = data
 	if typeof(a) != TYPE_DICTIONARY:
+		return
+	if not _looks_like_arena_state(a):
 		return
 	arena_state = (a as Dictionary).duplicate(true)
 	if arena_state.has("attempts_remaining"):
@@ -146,7 +155,19 @@ func _apply_arena_state(data: Dictionary) -> void:
 		GameManager.active_character["arena_losses"] = int(arena_state.get("losses", 0))
 		GameManager.active_character["arena_streak"] = int(arena_state.get("win_streak", 0))
 		GameManager.active_character["arena_attempts_left"] = free_battles_left
-		GameManager.active_character["arena_cooldown_at"] = str(arena_state.get("arena_cooldown_at", ""))
+		# Never write str(null) → "<null>" — that breaks cooldown math fallbacks.
+		GameManager.active_character["arena_cooldown_at"] = _iso_field(arena_state.get("arena_cooldown_at", null))
+
+
+func _looks_like_arena_state(d: Dictionary) -> bool:
+	return (
+		d.has("cooldown_active")
+		or d.has("attempts_remaining")
+		or d.has("arena_attempts_left")
+		or d.has("next_battle_at")
+		or d.has("available_at")
+		or (d.has("rating") and d.has("wins"))
+	)
 
 
 func load_arena_state(_character_id: String = "") -> Dictionary:
@@ -285,11 +306,18 @@ func challenge_opponent(_character_id: String, opponent_character_id: String) ->
 	return await start_direct_challenge(opponent_character_id)
 
 
-func prepare_challenge(opp: Dictionary, skip_cooldown: bool = false) -> Dictionary:
+func prepare_challenge(
+	opp: Dictionary,
+	skip_cooldown: bool = false,
+	_cooldown_retry: bool = false,
+	_board_retry: bool = false
+) -> Dictionary:
 	if _busy or battling:
 		return _fail("Arena battle already in progress")
-	if cooldown_active() and not skip_cooldown:
-		return _fail("Battle cooldown active")
+	# Paying the skip is opt-in via the lobby button, but if our clock/state
+	# already knows a cooldown is active, always send skip so the server charge path runs.
+	if cooldown_active():
+		skip_cooldown = true
 
 	var offer_id := str(opp.get("offer_id", ""))
 	if offer_id.is_empty():
@@ -309,17 +337,26 @@ func prepare_challenge(opp: Dictionary, skip_cooldown: bool = false) -> Dictiona
 		var err_data := _payload(res)
 		if code == "ARENA_BOARD_REFRESHED":
 			_apply_board_from_payload(err_data)
+			# Board synced — retry once if the same foe (or offer) is still listed.
+			if not _board_retry:
+				var again := _match_offer_on_board(opp)
+				if not again.is_empty():
+					return await prepare_challenge(again, skip_cooldown, _cooldown_retry, true)
 			return _fail(
 				str(res.get("error", "Challengers updated — pick again")),
 				code,
 				err_data
 			)
+		# Client thought CD was clear but server still has one — resync and retry once with skip.
+		if code == "ARENA_COOLDOWN" and not _cooldown_retry:
+			await load_arena_state()
+			return await prepare_challenge(opp, true, true, _board_retry)
 		return _fail(str(res.get("error", "PrepareArenaCombat failed")), code, err_data)
 
 	var data := _payload(res)
 	_apply_character(data)
 	_apply_arena_state(data)
-	_ingest_prepare_result(opp, data)
+	_ingest_prepare_result(opp, data, skip_cooldown)
 	return {
 		"ok": true,
 		"opp": pending_opp,
@@ -328,6 +365,39 @@ func prepare_challenge(opp: Dictionary, skip_cooldown: bool = false) -> Dictiona
 		"is_free": pending_is_free,
 		"skipped": pending_skipped,
 	}
+
+
+func _match_offer_on_board(desired: Dictionary) -> Dictionary:
+	var want_offer := str(desired.get("offer_id", "")).strip_edges()
+	var want_real := str(desired.get("realCharacterId", desired.get("character_id", ""))).strip_edges()
+	var want_bot := str(desired.get("arena_bot_id", "")).strip_edges()
+	var want_name := str(desired.get("name", desired.get("display_name", ""))).strip_edges().to_lower()
+	for row in opponents:
+		if typeof(row) != TYPE_DICTIONARY:
+			continue
+		var o: Dictionary = row
+		var oid := str(o.get("offer_id", "")).strip_edges()
+		if not want_offer.is_empty() and oid == want_offer:
+			return o
+	for row in opponents:
+		if typeof(row) != TYPE_DICTIONARY:
+			continue
+		var o2: Dictionary = row
+		var real := str(o2.get("realCharacterId", o2.get("character_id", ""))).strip_edges()
+		var bot := str(o2.get("arena_bot_id", "")).strip_edges()
+		if not want_real.is_empty() and real == want_real:
+			return o2
+		if not want_bot.is_empty() and bot == want_bot:
+			return o2
+	if not want_name.is_empty():
+		for row in opponents:
+			if typeof(row) != TYPE_DICTIONARY:
+				continue
+			var o3: Dictionary = row
+			var nm := str(o3.get("name", o3.get("display_name", ""))).strip_edges().to_lower()
+			if nm == want_name:
+				return o3
+	return {}
 
 
 func start_direct_challenge(opponent_character_id: String) -> Dictionary:
@@ -537,24 +607,43 @@ func mark_refresh_used() -> void:
 
 
 func cooldown_ends_unix_ms() -> int:
-	var raw := str(arena_state.get("next_battle_at", arena_state.get("available_at", "")))
-	if raw.is_empty():
-		var start := str(GameManager.active_character.get("arena_cooldown_at", ""))
-		if start.is_empty():
-			return 0
-		return _parse_iso_unix(start) * 1000 + ArenaRules.BATTLE_COOLDOWN_MS
-	return _parse_iso_unix(raw) * 1000
+	var end_iso := _iso_field(arena_state.get("next_battle_at", null))
+	if end_iso.is_empty():
+		end_iso = _iso_field(arena_state.get("available_at", null))
+	if not end_iso.is_empty():
+		var end_unix := _parse_iso_unix(end_iso)
+		if end_unix > 0:
+			return end_unix * 1000
+	var start := _iso_field(GameManager.active_character.get("arena_cooldown_at", null))
+	if start.is_empty():
+		start = _iso_field(arena_state.get("arena_cooldown_at", null))
+	if start.is_empty():
+		return 0
+	var start_unix := _parse_iso_unix(start)
+	if start_unix <= 0:
+		return 0
+	return start_unix * 1000 + ArenaRules.BATTLE_COOLDOWN_MS
 
 
 func cooldown_active() -> bool:
 	var ends := cooldown_ends_unix_ms()
-	if ends <= 0:
-		return false
-	return _now_unix_ms() < ends
+	if ends > 0:
+		return _now_unix_ms() < ends
+	# No usable end timestamp — trust server availability flags.
+	if arena_state.has("cooldown_active"):
+		return bool(arena_state.get("cooldown_active", false))
+	if arena_state.has("available"):
+		return arena_state.get("available") == false
+	return false
 
 
 func cooldown_remaining_ms() -> int:
-	return maxi(0, cooldown_ends_unix_ms() - _now_unix_ms())
+	var ends := cooldown_ends_unix_ms()
+	if ends > 0:
+		return maxi(0, ends - _now_unix_ms())
+	if cooldown_active():
+		return ArenaRules.BATTLE_COOLDOWN_MS
+	return 0
 
 
 func opponent_mix_label(opp: Dictionary) -> String:
@@ -565,10 +654,11 @@ static func defense_snapshot_to_opponent(snap: Dictionary) -> Dictionary:
 	return snap.duplicate(true)
 
 
-func _ingest_prepare_result(opp: Dictionary, data: Dictionary) -> void:
+func _ingest_prepare_result(opp: Dictionary, data: Dictionary, requested_skip: bool = false) -> void:
 	pending_offer_id = str(data.get("offer_id", opp.get("offer_id", "")))
 	pending_is_free = bool(data.get("is_free", free_battles_left > 0))
-	pending_skipped = bool(data.get("skip_cooldown", false))
+	# Prepare responses historically omitted skip_cooldown — keep the request bit.
+	pending_skipped = bool(data.get("skip_cooldown", requested_skip))
 	pending_challenge_id = ""
 	var combat: Dictionary = data.get("combat", {}) if typeof(data.get("combat", {})) == TYPE_DICTIONARY else {}
 	pending_combat_id = str(combat.get("combat_id", ""))
@@ -651,23 +741,36 @@ func _now_unix_ms() -> int:
 	return int(Time.get_unix_time_from_system() * 1000.0)
 
 
+func _iso_field(value: Variant) -> String:
+	if value == null:
+		return ""
+	var s := str(value).strip_edges()
+	if s.is_empty() or s == "<null>" or s.to_lower() == "null":
+		return ""
+	return s
+
+
 func _parse_iso_unix(iso: String) -> int:
-	var s := iso.strip_edges()
-	if s.ends_with("Z"):
+	## Server emits UTC ISO (`Date.toISOString`, usually `…Z`). Parsing those
+	## components via `get_unix_time_from_datetime_dict` treats them as *local*
+	## wall-clock and shifts board TTL by the machine offset (e.g. +4h on ET),
+	## so the lobby keeps showing offer_ids the server has already retired.
+	var s := _iso_field(iso)
+	if s.is_empty():
+		return 0
+	if s.ends_with("Z") or s.ends_with("z"):
 		s = s.substr(0, s.length() - 1)
-	var parts := s.split("T")
-	if parts.size() < 2:
-		return 0
-	var d := parts[0].split("-")
-	var t := parts[1].split(":")
-	if d.size() < 3 or t.size() < 3:
-		return 0
-	var dict := {
-		"year": int(d[0]),
-		"month": int(d[1]),
-		"day": int(d[2]),
-		"hour": int(t[0]),
-		"minute": int(t[1]),
-		"second": int(float(t[2])),
-	}
-	return int(Time.get_unix_time_from_datetime_dict(dict))
+	if "T" in s:
+		var parts := s.split("T")
+		if parts.size() >= 2:
+			var time_part := parts[1]
+			# Drop fractional seconds / any trailing offset we will replace.
+			if "+" in time_part:
+				time_part = time_part.split("+")[0]
+			elif time_part.rfind("-") > 0:
+				time_part = time_part.substr(0, time_part.rfind("-"))
+			if "." in time_part:
+				time_part = time_part.split(".")[0]
+			s = "%sT%s+00:00" % [parts[0], time_part]
+	var unix := int(Time.get_unix_time_from_datetime_string(s))
+	return maxi(0, unix)

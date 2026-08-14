@@ -570,10 +570,33 @@ func _style_focus_hit(btn: Button, tint: Color) -> void:
 	var clear := Color(0, 0, 0, 0)
 	var ring := Color.WHITE
 	var r := int(_focus_node_size() * 0.5)
-	btn.add_theme_stylebox_override("normal", ClientUi.painted_panel_style(clear, Color(ring, 0.95), r, 3))
-	btn.add_theme_stylebox_override("hover", ClientUi.painted_panel_style(Color(tint, 0.08), ring, r, 3))
-	btn.add_theme_stylebox_override("pressed", ClientUi.painted_panel_style(Color(tint, 0.12), ring, r, 3))
-	btn.add_theme_stylebox_override("disabled", ClientUi.painted_panel_style(clear, Color(0.4, 0.4, 0.45, 0.5), r, 2))
+	btn.add_theme_stylebox_override("normal", _orb_style(clear, Color(ring, 0.95), r, 3))
+	btn.add_theme_stylebox_override("hover", _orb_style(Color(tint, 0.08), ring, r, 3))
+	btn.add_theme_stylebox_override("pressed", _orb_style(Color(tint, 0.12), ring, r, 3))
+	btn.add_theme_stylebox_override("disabled", _orb_style(clear, Color(0.4, 0.4, 0.45, 0.5), r, 2))
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+
+func _orb_style(bg: Color, border: Color, radius: int, border_width: int) -> StyleBoxFlat:
+	## Chart orbs must not reuse painted_panel_style: its drop shadow + thicker
+	## bottom border read as grey bars hanging off each circular planet.
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border.lightened(0.06)
+	s.set_border_width_all(border_width)
+	s.set_corner_radius_all(radius)
+	s.corner_detail = 12
+	s.anti_aliasing = true
+	s.anti_aliasing_size = 1.0
+	s.border_blend = false
+	s.content_margin_left = 0
+	s.content_margin_right = 0
+	s.content_margin_top = 0
+	s.content_margin_bottom = 0
+	s.shadow_size = 0
+	s.shadow_offset = Vector2.ZERO
+	s.shadow_color = Color(0, 0, 0, 0)
+	return s
 
 
 func _style_planet_button(
@@ -592,19 +615,20 @@ func _style_planet_button(
 		bg = Color(tint, 0.28)
 	elif cleared:
 		bg = Color(ClientUi.SUCCESS, 0.11)
-	btn.add_theme_stylebox_override("normal", ClientUi.painted_panel_style(bg, Color(border, 0.9), 24, 2))
+	btn.add_theme_stylebox_override("normal", _orb_style(bg, Color(border, 0.9), 24, 2))
 	btn.add_theme_stylebox_override(
 		"hover",
-		ClientUi.painted_panel_style(Color(tint, 0.3), tint.lightened(0.3), 24, 2)
+		_orb_style(Color(tint, 0.3), tint.lightened(0.3), 24, 2)
 	)
 	btn.add_theme_stylebox_override(
 		"pressed",
-		ClientUi.painted_panel_style(Color(tint, 0.2), Color.WHITE, 24, 2)
+		_orb_style(Color(tint, 0.2), Color.WHITE, 24, 2)
 	)
 	btn.add_theme_stylebox_override(
 		"disabled",
-		ClientUi.painted_panel_style(Color(0.035, 0.04, 0.065, 0.84), Color(0.25, 0.27, 0.34, 0.5), 24, 1)
+		_orb_style(Color(0.035, 0.04, 0.065, 0.84), Color(0.25, 0.27, 0.34, 0.5), 24, 1)
 	)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	btn.add_theme_color_override("font_color", tint.lightened(0.2))
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
 	btn.add_theme_color_override("font_disabled_color", Color(0.42, 0.44, 0.5))
@@ -617,14 +641,15 @@ func _style_wormhole_button(unlocked: bool, selected: bool) -> void:
 	var border := Color.WHITE if selected else (WORMHOLE_COLOR if unlocked else Color(0.3, 0.3, 0.36))
 	var bg := Color(0.08, 0.015, 0.14, 0.98) if unlocked else Color(0.035, 0.035, 0.06, 0.9)
 	_wormhole_button.add_theme_stylebox_override(
-		"normal", ClientUi.painted_panel_style(bg, Color(border, 0.9), 38, 2)
+		"normal", _orb_style(bg, Color(border, 0.9), 38, 2)
 	)
 	_wormhole_button.add_theme_stylebox_override(
-		"hover", ClientUi.painted_panel_style(Color(WORMHOLE_COLOR, 0.3), WORMHOLE_CYAN, 38, 3)
+		"hover", _orb_style(Color(WORMHOLE_COLOR, 0.3), WORMHOLE_CYAN, 38, 3)
 	)
 	_wormhole_button.add_theme_stylebox_override(
-		"disabled", ClientUi.painted_panel_style(bg, Color(border, 0.45), 38, 1)
+		"disabled", _orb_style(bg, Color(border, 0.45), 38, 1)
 	)
+	_wormhole_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	_wormhole_button.add_theme_color_override("font_color", WORMHOLE_CYAN)
 	_wormhole_button.add_theme_color_override("font_disabled_color", Color(0.42, 0.42, 0.5))
 	if unlocked:

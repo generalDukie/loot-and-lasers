@@ -12,6 +12,10 @@ signal unread_changed(total: int)
 signal chat_error(error: String)
 signal connection_changed(connected: bool)
 
+const CHAT_HISTORY_LIMIT := 50
+const CONVERSATION_LOOKUP_LIMIT := 1
+const MESSAGE_PREVIEW_LENGTH := 80
+
 var global_messages: Array = []
 var conversations: Dictionary = {} # peer_character_id -> { messages: [], unread: int, name: String, conversation_id: String }
 var _name_by_id: Dictionary = {} # character_id -> display name
@@ -192,7 +196,10 @@ func send_global_message(content: String) -> Dictionary:
 
 
 func load_global_history(_cursor: String = "") -> Dictionary:
-	var res: Dictionary = await GameApiClient.invoke("GetChatHistory", {"channel": "global", "limit": 50})
+	var res: Dictionary = await GameApiClient.invoke(
+		"GetChatHistory",
+		{"channel": "global", "limit": CHAT_HISTORY_LIMIT},
+	)
 	if not bool(res.get("ok", false)):
 		var err := str(res.get("error", "history failed"))
 		chat_error.emit(err)
@@ -314,7 +321,7 @@ func hydrate_character_names(ids: Array) -> Dictionary:
 
 
 func load_dm_history(peer_id: String, conversation_id: String = "") -> Dictionary:
-	var body := {"channel": "private", "limit": 50}
+	var body := {"channel": "private", "limit": CHAT_HISTORY_LIMIT}
 	var conv := str(conversation_id).strip_edges()
 	var peer := str(peer_id).strip_edges()
 	if not conv.is_empty():
@@ -362,7 +369,7 @@ func mark_conversation_read(peer_or_conversation_id: String) -> Dictionary:
 		var hist: Dictionary = await GameApiClient.invoke("GetChatHistory", {
 			"channel": "private",
 			"recipient_id": peer,
-			"limit": 1,
+			"limit": CONVERSATION_LOOKUP_LIMIT,
 		})
 		if bool(hist.get("ok", false)) and typeof(hist.get("data", {})) == TYPE_DICTIONARY:
 			conv_id = str(hist.data.get("conversation_id", "")).strip_edges()
@@ -421,7 +428,7 @@ func list_conversations() -> Array:
 		if not msgs.is_empty():
 			var last: Variant = msgs[msgs.size() - 1]
 			if typeof(last) == TYPE_DICTIONARY:
-				preview = str(last.get("content", "")).substr(0, 80)
+				preview = str(last.get("content", "")).substr(0, MESSAGE_PREVIEW_LENGTH)
 		fallback.append({
 			"id": str(bucket.get("conversation_id", "")),
 			"conversation_id": str(bucket.get("conversation_id", "")),

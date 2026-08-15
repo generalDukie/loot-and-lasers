@@ -27,6 +27,7 @@ const GAME_DICE := "galactic_dice"
 const GAME_WHEEL := "stardust_wheel"
 const GAME_REFINE := "crystal_refining"
 const GAME_CACHE := "smugglers_cache"
+const CASINO_STATE_RESULT_INDEX: int = 1
 
 var _scale_host: Control
 var _scale_root: VBoxContainer
@@ -127,8 +128,11 @@ func _on_casino_state(_casino: Dictionary) -> void:
 
 func _boot() -> void:
 	_set_status("Loading casino…", ClientUi.MUTED)
-	await MissionManager.refresh_character()
-	var res: Dictionary = await CasinoManager.load_state()
+	var requests := AsyncGroup.new()
+	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(CasinoManager.load_state)
+	var results := await requests.wait()
+	var res: Dictionary = results[CASINO_STATE_RESULT_INDEX]
 	if not res.ok:
 		_set_status(str(res.get("error", "Failed to load casino")), ClientUi.DANGER)
 	# Ambiguous in-flight wager from a prior crash/timeout.

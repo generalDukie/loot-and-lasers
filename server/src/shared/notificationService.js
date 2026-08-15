@@ -41,6 +41,10 @@ export const CLIENT_CREATABLE_TYPES = Object.freeze([
 
 const TITLE_MAX = 120;
 const BODY_MAX = 500;
+const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+const DEFAULT_NOTIFICATION_LIMIT = 50;
+const MAX_NOTIFICATION_LIMIT = 100;
+const NOTIFICATION_QUERY_OVERFETCH_MULTIPLIER = 2;
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -113,7 +117,9 @@ export function createNotification({
   const ttl = String(title || "").trim().slice(0, TITLE_MAX);
   if (!ttl) httpErr(400, "title required", "NOTIFICATION_TITLE_REQUIRED");
   const bdy = String(body || "").trim().slice(0, BODY_MAX);
-  const key = idempotency_key ? String(idempotency_key).slice(0, 128) : null;
+  const key = idempotency_key
+    ? String(idempotency_key).slice(0, IDEMPOTENCY_KEY_MAX_LENGTH)
+    : null;
 
   if (key) {
     const existing = entities.AppNotification.filter({
@@ -173,15 +179,22 @@ export function notifyAchievementsUnlocked(characterId, newlyUnlocked = []) {
 
 export function listNotifications(ownerId, {
   unreadOnly = false,
-  limit = 50,
+  limit = DEFAULT_NOTIFICATION_LIMIT,
   includeExpired = false,
 } = {}) {
   const owner = String(ownerId || "").trim();
   if (!owner) return [];
-  const lim = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
+  const lim = Math.min(
+    MAX_NOTIFICATION_LIMIT,
+    Math.max(1, Math.floor(Number(limit) || DEFAULT_NOTIFICATION_LIMIT)),
+  );
   const query = { owner_id: owner };
   if (unreadOnly) query.read = false;
-  let rows = entities.AppNotification.filter(query, "-created_date", lim * 2) || [];
+  let rows = entities.AppNotification.filter(
+    query,
+    "-created_date",
+    lim * NOTIFICATION_QUERY_OVERFETCH_MULTIPLIER,
+  ) || [];
   if (!Array.isArray(rows)) rows = [];
   const out = [];
   for (const doc of rows) {
@@ -195,7 +208,10 @@ export function listNotifications(ownerId, {
 }
 
 export function getUnreadCounts(ownerId) {
-  const rows = listNotifications(ownerId, { unreadOnly: true, limit: 100 });
+  const rows = listNotifications(ownerId, {
+    unreadOnly: true,
+    limit: MAX_NOTIFICATION_LIMIT,
+  });
   const counts = { total: rows.length };
   for (const t of NOTIFICATION_TYPES) counts[t] = 0;
   for (const n of rows) {

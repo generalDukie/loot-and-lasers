@@ -1,7 +1,10 @@
 import { api } from "@/api/gameClient";
 import { listNotifications, markRead } from "@/lib/notificationEngine";
 
-const GLOBAL_LIMIT = 50;
+const GLOBAL_MESSAGE_LIMIT = 50;
+const PRIVATE_MESSAGE_LIMIT = 50;
+const CONVERSATION_LIST_LIMIT = 200;
+const UNREAD_NOTIFICATION_LIMIT = 100;
 
 function unwrap(res) {
   return res?.data && typeof res.data === "object" ? { ...res, ...res.data } : res || {};
@@ -10,7 +13,10 @@ function unwrap(res) {
 // ── Global Chat ──
 
 export async function loadGlobal() {
-  const res = unwrap(await api.functions.invoke("GetChatHistory", { channel: "global", limit: GLOBAL_LIMIT }));
+  const res = unwrap(await api.functions.invoke("GetChatHistory", {
+    channel: "global",
+    limit: GLOBAL_MESSAGE_LIMIT,
+  }));
   return Array.isArray(res.messages) ? res.messages : [];
 }
 
@@ -28,7 +34,7 @@ export async function sendGlobal(content) {
 // ── Private Chat ──
 
 export async function getConversations(characterId) {
-  const all = await api.entities.PrivateConversation.list("-last_message_at", 200);
+  const all = await api.entities.PrivateConversation.list("-last_message_at", CONVERSATION_LIST_LIMIT);
   return all.filter((c) => (c.participant_ids || []).includes(characterId));
 }
 
@@ -37,7 +43,7 @@ export async function getMessages(conversationId) {
     await api.functions.invoke("GetChatHistory", {
       channel: "private",
       conversation_id: conversationId,
-      limit: 50,
+      limit: PRIVATE_MESSAGE_LIMIT,
     }),
   );
   return Array.isArray(res.messages) ? res.messages : [];
@@ -62,7 +68,10 @@ export async function sendPrivate(recipientId, content) {
 export async function markConversationRead(conversationId, myCharId) {
   void myCharId;
   await api.functions.invoke("MarkConversationRead", { conversation_id: conversationId });
-  const notifs = (await listNotifications({ unreadOnly: true, limit: 100 })).filter(
+  const notifs = (await listNotifications({
+    unreadOnly: true,
+    limit: UNREAD_NOTIFICATION_LIMIT,
+  })).filter(
     (n) => n.type === "private_message" && n.related_id === conversationId,
   );
   await Promise.all(notifs.map((n) => markRead(n.id).catch(() => {})));

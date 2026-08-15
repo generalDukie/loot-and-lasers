@@ -4,6 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { migrateLegacyUserSessionColumns } from "./accountServerSession.js";
 
+const NOVA_HALF_UNIT_STORAGE_SCALE = 2;
+const CLASS_BASE_ATTRIBUTE_TOTAL = 50;
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, "../data");
 fs.mkdirSync(dataDir, { recursive: true });
@@ -296,14 +299,14 @@ db.exec(`
       } catch {
         continue;
       }
-      if (Number(data.economy_nova_scale) === 2) {
+       if (Number(data.economy_nova_scale) === NOVA_HALF_UNIT_STORAGE_SCALE) {
         update.run(JSON.stringify(data), now, row.id);
         continue;
       }
       const raw = Number(data.nova_crystals) || 0;
-      const half = Math.max(0, Math.floor(raw * 2));
+       const half = Math.max(0, Math.floor(raw * NOVA_HALF_UNIT_STORAGE_SCALE));
       data.nova_crystals = half;
-      data.economy_nova_scale = 2;
+       data.economy_nova_scale = NOVA_HALF_UNIT_STORAGE_SCALE;
       update.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
     }
     db.prepare(
@@ -358,7 +361,8 @@ db.exec(`
           try { tx = JSON.parse(op.result_json || "{}"); } catch { continue; }
           if (tx.category !== "nova_pack_grant") continue;
           if (tx.related_entity_id !== row.id && tx.character_id !== row.id) continue;
-          const half = Number(tx.amount_half_units) || Math.round((Number(tx.amount) || 0) * 2);
+           const half = Number(tx.amount_half_units)
+             || Math.round((Number(tx.amount) || 0) * NOVA_HALF_UNIT_STORAGE_SCALE);
           if (half > 0) evidencedWagerable += half;
         }
       } catch { /* ignore */ }
@@ -372,7 +376,7 @@ db.exec(`
       data.nova_wagerable_half = wagerable;
       data.nova_promotional_half = promotional;
       data.nova_crystals = total;
-      data.economy_nova_scale = 2;
+       data.economy_nova_scale = NOVA_HALF_UNIT_STORAGE_SCALE;
       data.nova_dual_balance_v1 = true;
       data.nova_migration_classification = classification;
       update.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
@@ -415,7 +419,9 @@ db.exec(`
     for (const k of ATTR_KEYS) {
       current[k] = Math.max(0, Math.round(Number(character?.stats?.[k]) || 0));
     }
-    if (sumStats(current) >= 50) return { stats: current, repaired: false };
+    if (sumStats(current) >= CLASS_BASE_ATTRIBUTE_TOTAL) {
+      return { stats: current, repaired: false };
+    }
     const repaired = {};
     for (const k of ATTR_KEYS) {
       repaired[k] = (base[k] || 0) + (current[k] || 0);

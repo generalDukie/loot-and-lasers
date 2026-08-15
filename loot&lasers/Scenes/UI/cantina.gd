@@ -66,8 +66,6 @@ func _ready() -> void:
 		TutorialManager.tutorial_changed.connect(_on_tutorial_changed)
 	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
 		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
-	if not MissionManager.offers.is_empty():
-		_render()
 	await _boot()
 	_sync_view_rewards_cta()
 
@@ -489,10 +487,10 @@ func _boot() -> void:
 	else:
 		_status.add_theme_color_override("font_color", ClientUi.MUTED)
 		_status.text = "Loading contracts…"
-	await MissionManager.ensure_board(false)
-	if boot_gen != _boot_gen:
-		return
-	await InventoryManager.list_pending_loot()
+	var requests := AsyncGroup.new()
+	requests.add(MissionManager.ensure_board.bind(false))
+	requests.add(InventoryManager.list_pending_loot)
+	await requests.wait()
 	if boot_gen != _boot_gen:
 		return
 	_busy = false

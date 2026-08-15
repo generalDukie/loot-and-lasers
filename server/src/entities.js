@@ -26,7 +26,11 @@ function normalizeEntity(type, entity) {
   return entity;
 }
 
-function persist(type, entity, { emit = true, eventType = "update" } = {}) {
+function persist(type, entity, {
+  emit = true,
+  eventType = "update",
+  previousEntity = null,
+} = {}) {
   const {
     id,
     created_by = null,
@@ -64,7 +68,60 @@ function persist(type, entity, { emit = true, eventType = "update" } = {}) {
   );
 
   if (emit) broadcastEntity(type, eventType, payload);
+  if (
+    type === "Character" &&
+    eventType === "update" &&
+    guildMemberSnapshotChanged(previousEntity, payload)
+  ) {
+    syncGuildMemberSnapshot(payload);
+  }
   return payload;
+}
+
+function guildMemberSnapshotChanged(previous, current) {
+  if (!previous) return true;
+  const previousLevel = Math.max(1, Number(previous.level) || 1);
+  const currentLevel = Math.max(1, Number(current.level) || 1);
+  return (
+    previousLevel !== currentLevel ||
+    String(previous.name || "") !== String(current.name || "")
+  );
+}
+
+function syncGuildMemberSnapshot(character) {
+  if (!character?.id) return;
+  const rows = db.prepare("SELECT * FROM entities WHERE type = 'GuildMember'").all();
+  for (const row of rows) {
+    let data;
+    try {
+      data = JSON.parse(row.data);
+    } catch {
+      continue;
+    }
+    if (String(data.character_id || "") !== String(character.id)) continue;
+    const nextLevel = Math.max(1, Number(character.level) || 1);
+    const nextName = character.name || data.character_name;
+    if (
+      Number(data.character_level || 0) === nextLevel &&
+      String(data.character_name || "") === String(nextName || "")
+    ) {
+      continue;
+    }
+    persist(
+      "GuildMember",
+      {
+        ...data,
+        id: row.id,
+        created_by: row.created_by,
+        created_by_id: row.created_by_id,
+        created_date: row.created_date,
+        character_level: nextLevel,
+        character_name: nextName,
+        updated_date: nowIso(),
+      },
+      { eventType: "update" },
+    );
+  }
 }
 
 export function createEntityStore(type) {
@@ -117,7 +174,7 @@ export function createEntityStore(type) {
       merged.created_by = existing.created_by;
       merged.created_by_id = existing.created_by_id;
       merged.updated_date = nowIso();
-      return persist(type, merged, { eventType: "update" });
+      return persist(type, merged, { eventType: "update", previousEntity: existing });
     },
 
     delete(id) {

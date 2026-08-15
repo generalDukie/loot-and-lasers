@@ -163,7 +163,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("[b]Weekly challenges[/b] reward coordinated activity — missions, arena wins, and more.")
 				+ _li("Guilds can war with each other for glory and rewards.")
 				+ "\n" + _h("The Nexus")
-				+ _p("The [b]Nexus[/b] is a capturable central stronghold. The guild holding it gains a [b]+5% mission stardust[/b] perk for all members. Other guilds can assault it to seize control.")
+				+ _p("The [b]Nexus[/b] is a capturable central stronghold. The guild holding it gains a [b]+5% mission stardust[/b] perk for all members. Any guild with enough power can assault it at any time to seize control.")
 			)
 		"social":
 			return (

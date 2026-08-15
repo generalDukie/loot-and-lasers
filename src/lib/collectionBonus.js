@@ -8,6 +8,10 @@ import { ALIEN_SPECIES, ARTIFACTS, RELICS } from "@/lib/collectibles";
 import { DUNGEON_PLANETS } from "@/lib/dungeonData";
 import { GEAR_CATALOG_TOTAL } from "@/lib/gameData";
 
+const PERCENT_SCALE = 100;
+const PERCENT_DECIMAL_SCALE = 10;
+const PERCENT_ROUNDING_SCALE = PERCENT_SCALE * PERCENT_DECIMAL_SCALE;
+
 // Fixed totals for non-gear categories (gear uses the static catalog size).
 export const COLLECTION_BASE_TOTAL =
   ALIEN_SPECIES.length + ARTIFACTS.length + RELICS.length + DUNGEON_PLANETS.length;
@@ -22,12 +26,14 @@ export function getCollectionStats(character, gearTotal = GEAR_CATALOG_TOTAL) {
 
   const discovered = species + artifacts + relics + gear + badges;
   const total = COLLECTION_BASE_TOTAL + gearTotal;
-  const percentage = total > 0 ? Math.round((discovered / total) * 1000) / 10 : 0;
+  const percentage = total > 0
+    ? Math.round((discovered / total) * PERCENT_ROUNDING_SCALE) / PERCENT_DECIMAL_SCALE
+    : 0;
 
   return { discovered, total, percentage };
 }
 
 // Applies the collection XP bonus to a base XP value.
 export function applyXpBonus(baseXp, percentage) {
-  return Math.round(baseXp * (1 + (percentage || 0) / 100));
+  return Math.round(baseXp * (1 + (percentage || 0) / PERCENT_SCALE));
 }

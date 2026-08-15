@@ -3,9 +3,13 @@ extends Node
 
 const HOLD_HOURS := 24
 const ASSAULT_COOLDOWN_MS := 30 * 60 * 1000
-const MIN_GUILD_LEVEL := 3
-const MIN_MEMBERS := 5
 const MIN_POWER := 500
+const MEMBER_LEVEL_POWER := 12
+const GUILD_LEVEL_POWER := 80
+const MILLISECONDS_PER_SECOND := 1_000.0
+const MILLISECONDS_PER_MINUTE := 60_000.0
+const MILLISECONDS_PER_HOUR := 3_600_000.0
+const MILLISECONDS_PER_DAY := 86_400_000.0
 
 var nexus: Dictionary = {}
 var last_assault: Dictionary = {}
@@ -31,50 +35,32 @@ func guild_power(guild: Dictionary, members: Array) -> int:
 	for m in members:
 		if typeof(m) != TYPE_DICTIONARY:
 			continue
-		member_power += int(m.get("character_level", 1)) * 12
-	return member_power + int(guild.get("level", 1)) * 80
+		member_power += int(m.get("character_level", 1)) * MEMBER_LEVEL_POWER
+	return member_power + int(guild.get("level", 1)) * GUILD_LEVEL_POWER
 
 
-func is_vulnerable(n: Dictionary = {}) -> bool:
-	var nx: Dictionary = n if not n.is_empty() else nexus
-	if nx.is_empty() or str(nx.get("owner_guild_id", "")).is_empty():
-		return true
-	if str(nx.get("status", "")) == "vulnerable":
-		return true
-	var captured := str(nx.get("captured_at", ""))
-	if captured.is_empty():
-		return true
-	var held_ms := _age_ms(captured)
-	return held_ms >= HOLD_HOURS * 3600 * 1000
+func is_vulnerable(_n: Dictionary = {}) -> bool:
+	return true
 
 
-func hours_until_vulnerable(n: Dictionary = {}) -> int:
-	var nx: Dictionary = n if not n.is_empty() else nexus
-	if nx.is_empty() or str(nx.get("owner_guild_id", "")).is_empty():
-		return 0
-	var held_ms := _age_ms(str(nx.get("captured_at", "")))
-	var remaining := HOLD_HOURS * 3600 * 1000 - held_ms
-	return maxi(0, int(ceil(float(remaining) / 3600000.0)))
+func hours_until_vulnerable(_n: Dictionary = {}) -> int:
+	return 0
 
 
 func format_reign(n: Dictionary = {}) -> String:
 	var nx: Dictionary = n if not n.is_empty() else nexus
 	var ms := _age_ms(str(nx.get("captured_at", "")))
-	var days := int(ms / 86400000.0)
-	var hours := int((int(ms) % 86400000) / 3600000.0)
+	var days := int(ms / MILLISECONDS_PER_DAY)
+	var hours := int((int(ms) % int(MILLISECONDS_PER_DAY)) / MILLISECONDS_PER_HOUR)
 	if days > 0:
 		return "%sd %sh" % [days, hours]
-	var mins := int((int(ms) % 3600000) / 60000.0)
+	var mins := int((int(ms) % int(MILLISECONDS_PER_HOUR)) / MILLISECONDS_PER_MINUTE)
 	return "%sh %sm" % [hours, mins]
 
 
 func eligibility(guild: Dictionary, members: Array) -> Dictionary:
 	if guild.is_empty():
 		return {"ok": false, "error": "You are not in a guild."}
-	if int(guild.get("level", 1)) < MIN_GUILD_LEVEL:
-		return {"ok": false, "error": "Guild level %s required." % MIN_GUILD_LEVEL}
-	if members.size() < MIN_MEMBERS:
-		return {"ok": false, "error": "%s active members required." % MIN_MEMBERS}
 	var power := guild_power(guild, members)
 	if power < MIN_POWER:
 		return {"ok": false, "error": "Guild power %s required (have %s)." % [MIN_POWER, power]}
@@ -118,5 +104,8 @@ func _age_ms(iso: String) -> float:
 	var dict := Time.get_datetime_dict_from_datetime_string(cleaned, false)
 	if dict.is_empty():
 		return 0.0
-	var then_ms := float(Time.get_unix_time_from_datetime_dict(dict)) * 1000.0
-	return maxf(0.0, Time.get_unix_time_from_system() * 1000.0 - then_ms)
+	var then_ms := float(Time.get_unix_time_from_datetime_dict(dict)) * MILLISECONDS_PER_SECOND
+	return maxf(
+		0.0,
+		Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND - then_ms,
+	)

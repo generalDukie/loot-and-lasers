@@ -1,6 +1,8 @@
 extends Control
 ## Galactic Frontier — mirrors web GalaxyMapPage (header · DungeonMap | DungeonPlanetView).
 
+const DUNGEON_SYNC_RESULT_INDEX: int = 1
+
 var _status: Label
 var _subtitle: Label
 var _map_hint: Label
@@ -22,10 +24,9 @@ var _mode_label: Label
 var _return_front_btn: Button
 var _detail_progress: ProgressBar
 var _encounter_grid: GridContainer
-var _cooldown_bar: PanelContainer
+var _cooldown_bar: Button
 var _cooldown_icon: CenterContainer
 var _cooldown_lab: Label
-var _skip_btn: Button
 var _fight_btn: Button
 var _view_rewards_btn: Button
 var _reward_sheet_host: Control
@@ -41,7 +42,6 @@ func _ready() -> void:
 	_build()
 	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
 		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
-	_populate()
 	await _boot()
 	_sync_view_rewards_cta()
 
@@ -59,8 +59,11 @@ func _on_combat_return_changed() -> void:
 
 func _boot() -> void:
 	_status.text = "Syncing frontier…"
-	await MissionManager.refresh_character()
-	var res: Dictionary = await DungeonManager.sync_state()
+	var requests := AsyncGroup.new()
+	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(DungeonManager.sync_state)
+	var results := await requests.wait()
+	var res: Dictionary = results[DUNGEON_SYNC_RESULT_INDEX]
 	if not is_inside_tree() or not visible:
 		return
 	if not res.ok:
@@ -383,30 +386,73 @@ func _build() -> void:
 	act_col.add_theme_constant_override("separation", 8)
 	act_pad.add_child(act_col)
 
-	_cooldown_bar = PanelContainer.new()
+	_cooldown_bar = Button.new()
 	_cooldown_bar.visible = false
-	_cooldown_bar.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.96, 0.62, 0.04, 0.08), Color("#F59E0B", 0.32), 10, 1
-	))
+	_cooldown_bar.text = ""
+	_cooldown_bar.icon = null
+	_cooldown_bar.clip_contents = false
+	_cooldown_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cooldown_bar.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	ClientUi.apply_dark_outline_button(_cooldown_bar, CurrencyIcon.NOVA_GOLD, 44)
+	_cooldown_bar.pressed.connect(_on_skip)
 	act_col.add_child(_cooldown_bar)
-	var cd_row := HBoxContainer.new()
-	cd_row.add_theme_constant_override("separation", 8)
-	_cooldown_bar.add_child(cd_row)
+	var cd_pad := MarginContainer.new()
+	cd_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cd_pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cd_pad.add_theme_constant_override("margin_left", 12)
+	cd_pad.add_theme_constant_override("margin_right", 12)
+	_cooldown_bar.add_child(cd_pad)
+	var skip_center := CenterContainer.new()
+	skip_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skip_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skip_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cd_pad.add_child(skip_center)
+	var skip_cluster := HBoxContainer.new()
+	skip_cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skip_cluster.alignment = BoxContainer.ALIGNMENT_CENTER
+	skip_cluster.add_theme_constant_override("separation", 8)
+	skip_center.add_child(skip_cluster)
+	var skip_lab := Label.new()
+	skip_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skip_lab.text = "Skip"
+	skip_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	skip_lab.add_theme_font_size_override("font_size", 16)
+	skip_lab.add_theme_color_override("font_color", Color.WHITE)
+	ClientUi.apply_bold_display_font(skip_lab)
+	skip_cluster.add_child(skip_lab)
+	var cost_cluster := HBoxContainer.new()
+	cost_cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_cluster.alignment = BoxContainer.ALIGNMENT_CENTER
+	cost_cluster.add_theme_constant_override("separation", 2)
+	skip_cluster.add_child(cost_cluster)
+	var nova_glyph := CurrencyIcon.make("nova", 16.0)
+	nova_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_cluster.add_child(nova_glyph)
+	var cost_lab := Label.new()
+	cost_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_lab.text = str(DungeonRules.SKIP_COST)
+	cost_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cost_lab.add_theme_font_size_override("font_size", 16)
+	cost_lab.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD)
+	ClientUi.apply_bold_display_font(cost_lab)
+	cost_cluster.add_child(cost_lab)
+	var cd_left := HBoxContainer.new()
+	cd_left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cd_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cd_left.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cd_left.add_theme_constant_override("separation", 6)
+	cd_pad.add_child(cd_left)
 	_cooldown_icon = CenterContainer.new()
+	_cooldown_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cooldown_icon.custom_minimum_size = Vector2(18, 18)
-	cd_row.add_child(_cooldown_icon)
+	cd_left.add_child(_cooldown_icon)
 	_cooldown_lab = Label.new()
-	_cooldown_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cooldown_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cooldown_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_cooldown_lab.add_theme_font_size_override("font_size", 16)
 	_cooldown_lab.add_theme_color_override("font_color", Color("#FDE68A"))
 	ClientUi.apply_display_font(_cooldown_lab)
-	cd_row.add_child(_cooldown_lab)
-	_skip_btn = Button.new()
-	ClientUi.fill_priced_action_button(
-		_skip_btn, "Skip", "nova", DungeonRules.SKIP_COST, Color.WHITE, 15, 16.0, 0
-	)
-	_skip_btn.pressed.connect(_on_skip)
-	cd_row.add_child(_skip_btn)
+	cd_left.add_child(_cooldown_lab)
 
 	_fight_btn = Button.new()
 	_fight_btn.text = "Fight 1"
@@ -543,6 +589,7 @@ func _update_actions(fightable: bool, locked_ahead: bool, enemy_idx: int) -> voi
 	var cooldown := DungeonManager.cooldown_ms()
 
 	_cooldown_bar.visible = cooldown > 0
+	_cooldown_bar.disabled = cooldown <= 0 or _busy
 	if cooldown > 0:
 		CurrencyIcon.fill_glyph_host(_cooldown_icon, "timer", 16.0, Color("#FDE68A"))
 		_cooldown_lab.text = "Cooldown %s" % DungeonRules.format_ms(cooldown)

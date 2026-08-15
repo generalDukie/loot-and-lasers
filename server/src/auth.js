@@ -19,15 +19,39 @@ import {
 
 const JWT_SECRET = process.env.JWT_SECRET || "lootandlasers-dev-secret-change-me";
 const TOKEN_TTL = process.env.JWT_TTL || "30d";
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const GAMEPLAY_JWT_MIN_TTL_SECONDS = SECONDS_PER_MINUTE;
+const GAMEPLAY_JWT_MAX_TTL_MINUTES = 15;
+const GAMEPLAY_JWT_DEFAULT_TTL_MINUTES = 12;
 const GAMEPLAY_JWT_TTL_SEC = Math.max(
-  60,
-  Math.min(15 * 60, Number(process.env.GAMEPLAY_JWT_TTL_SEC) || 12 * 60),
+  GAMEPLAY_JWT_MIN_TTL_SECONDS,
+  Math.min(
+    GAMEPLAY_JWT_MAX_TTL_MINUTES * SECONDS_PER_MINUTE,
+    Number(process.env.GAMEPLAY_JWT_TTL_SEC)
+      || GAMEPLAY_JWT_DEFAULT_TTL_MINUTES * SECONDS_PER_MINUTE,
+  ),
 );
 const GAMEPLAY_JWT_ISSUER = process.env.GAMEPLAY_JWT_ISSUER || "lootandlasers-node";
 const GAMEPLAY_JWT_AUDIENCE = process.env.GAMEPLAY_JWT_AUDIENCE || "lootandlasers-gameplay";
 const APP_ID = process.env.APP_ID || "lootandlasers-local";
 const IS_PROD = process.env.NODE_ENV === "production";
 const EMAIL_SENDING_ENABLED = isEmailSendingEnabled();
+const NAKAMA_SESSION_HASH_LENGTH = 32;
+const AUTH_BEARER_PREFIX = "Bearer ";
+const OTP_MIN_VALUE = 100_000;
+const OTP_VALUE_COUNT = 900_000;
+const NAKAMA_ERROR_PREVIEW_MAX_LENGTH = 200;
+const BRIDGE_PASSWORD_TOKEN_LENGTH = 48;
+const PASSWORD_HASH_ROUNDS = 10;
+const MIN_PASSWORD_LENGTH = 6;
+const OTP_EXPIRY_MINUTES = 15;
+const LEGACY_NAME_MIN_LENGTH = 2;
+const LEGACY_NAME_MAX_LENGTH = 20;
+const PASSWORD_RESET_TOKEN_LENGTH = 32;
+const PASSWORD_RESET_EXPIRY_HOURS = 1;
+const DEFAULT_EMAIL_LOG_LIMIT = 50;
 
 function devOnlyExtras(payload) {
   // Never expose OTP / reset tokens to clients in production — even if SMTP is off.
@@ -64,7 +88,7 @@ function nakamaTokenExpiry(sessionToken) {
 }
 
 export function signGameplayToken(nakamaUserId, nakamaExpiresAt, { sessionVersion = 1, serverId = getServerId() } = {}) {
-  const now = Math.floor(Date.now() / 1000);
+  const now = Math.floor(Date.now() / MILLISECONDS_PER_SECOND);
   const remaining = Number(nakamaExpiresAt) - now;
   if (!nakamaUserId || !Number.isFinite(remaining) || remaining <= 0) {
     const err = new Error("Nakama session is expired or missing expiry");
@@ -107,7 +131,10 @@ export function nakamaSessionKey(sessionToken) {
   const decoded = jwt.decode(sessionToken);
   if (decoded?.jti) return String(decoded.jti);
   if (decoded?.sid) return String(decoded.sid);
-  return createHash("sha256").update(String(sessionToken || "")).digest("hex").slice(0, 32);
+  return createHash("sha256")
+    .update(String(sessionToken || ""))
+    .digest("hex")
+    .slice(0, NAKAMA_SESSION_HASH_LENGTH);
 }
 
 export function gameplaySessionFromPayload(payload) {
@@ -207,7 +234,9 @@ export function stampCharacterLegacy(userId, patch = {}) {
 
 export function authMiddleware(req, res, next) {
   const header = req.headers.authorization || "";
-  const bearer = header.startsWith("Bearer ") ? header.slice(7) : null;
+  const bearer = header.startsWith(AUTH_BEARER_PREFIX)
+    ? header.slice(AUTH_BEARER_PREFIX.length)
+    : null;
   const token = bearer || req.headers["x-access-token"] || null;
   req.token = token || null;
   req.user = null;
@@ -249,7 +278,7 @@ export function requireAuth(req, res, next) {
 }
 
 function otpCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(Math.floor(OTP_MIN_VALUE + Math.random() * OTP_VALUE_COUNT));
 }
 
 export function getUserByNakamaId(nakamaUserId) {
@@ -292,7 +321,7 @@ async function fetchNakamaAccountFromBase(base, sessionToken) {
   try {
     body = text ? JSON.parse(text) : {};
   } catch {
-    body = { raw: text.slice(0, 200) };
+    body = { raw: text.slice(0, NAKAMA_ERROR_PREVIEW_MAX_LENGTH) };
   }
   if (!res.ok) {
     const msg = body.message || body.error || `Nakama account lookup failed (${res.status})`;
@@ -382,7 +411,10 @@ export function createAuthRouter(express) {
         return res.status(401).json({ error: "Nakama account missing user id" });
       }
       const nakamaExpiresAt = nakamaTokenExpiry(nakamaToken);
-      if (!nakamaExpiresAt || nakamaExpiresAt <= Math.floor(Date.now() / 1000)) {
+      if (
+        !nakamaExpiresAt
+        || nakamaExpiresAt <= Math.floor(Date.now() / MILLISECONDS_PER_SECOND)
+      ) {
         return res.status(401).json({ error: "Nakama session is expired or missing expiry" });
       }
       if (!email) {
@@ -399,7 +431,10 @@ export function createAuthRouter(express) {
         const id = nanoid();
         // Bridge-only account: random, unknown Node password. Godot never sends
         // or synchronizes its Nakama credential to the gameplay backend.
-        const hash = await bcrypt.hash(nanoid(48), 10);
+        const hash = await bcrypt.hash(
+          nanoid(BRIDGE_PASSWORD_TOKEN_LENGTH),
+          PASSWORD_HASH_ROUNDS,
+        );
         try {
           db.prepare(`
             INSERT INTO users (
@@ -483,7 +518,7 @@ export function createAuthRouter(express) {
         session_version: bridgeSession.sessionVersion,
         expires_at: Math.min(
           nakamaExpiresAt,
-          Math.floor(Date.now() / 1000) + GAMEPLAY_JWT_TTL_SEC,
+          Math.floor(Date.now() / MILLISECONDS_PER_SECOND) + GAMEPLAY_JWT_TTL_SEC,
         ),
         bridge: true,
       });
@@ -498,14 +533,20 @@ export function createAuthRouter(express) {
       const email = String(req.body?.email || "").trim().toLowerCase();
       const password = String(req.body?.password || "");
       if (!email || !password) return res.status(400).json({ error: "Email and password required" });
-      if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({
+          error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+        });
+      }
       if (getUserByEmail(email)) return res.status(409).json({ error: "Email already registered" });
 
       const ts = nowIso();
       const id = nanoid();
       const code = otpCode();
-      const hash = await bcrypt.hash(password, 10);
-      const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      const hash = await bcrypt.hash(password, PASSWORD_HASH_ROUNDS);
+      const expires = new Date(
+        Date.now() + OTP_EXPIRY_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND,
+      ).toISOString();
 
       db.prepare(`
         INSERT INTO users (id, email, password_hash, role, email_verified, otp_code, otp_expires_at, created_date, updated_date)
@@ -517,7 +558,7 @@ export function createAuthRouter(express) {
           type: "otp",
           to: email,
           subject: "Loot & Lasers verification code",
-          text: `Your verification code is: ${code}\n\nThis code expires in 15 minutes.\n\nIf you did not request this, you can ignore this message.`,
+          text: `Your verification code is: ${code}\n\nThis code expires in ${OTP_EXPIRY_MINUTES} minutes.\n\nIf you did not request this, you can ignore this message.`,
         });
         return res.json({ success: true, email, otp_required: true });
       }
@@ -581,7 +622,9 @@ export function createAuthRouter(express) {
     if (!row) return res.status(404).json({ error: "User not found" });
     if (row.email_verified) return res.json({ success: true });
     const code = otpCode();
-    const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const expires = new Date(
+      Date.now() + OTP_EXPIRY_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND,
+    ).toISOString();
     db.prepare("UPDATE users SET otp_code = ?, otp_expires_at = ?, updated_date = ? WHERE id = ?")
       .run(code, expires, nowIso(), row.id);
 
@@ -591,7 +634,7 @@ export function createAuthRouter(express) {
           type: "otp",
           to: email,
           subject: "Loot & Lasers verification code",
-          text: `Your verification code is: ${code}\n\nThis code expires in 15 minutes.\n\nIf you did not request this, you can ignore this message.`,
+          text: `Your verification code is: ${code}\n\nThis code expires in ${OTP_EXPIRY_MINUTES} minutes.\n\nIf you did not request this, you can ignore this message.`,
         });
       } catch (e) {
         return res.status(500).json({ error: "Failed to send verification code" });
@@ -668,8 +711,10 @@ export function createAuthRouter(express) {
         const existing = getUserRowById(req.user.id);
         if (existing?.legacy_name) continue;
         const legacy = String(req.body.legacy_name || "").trim();
-        if (legacy.length < 2 || legacy.length > 20) {
-          return res.status(400).json({ error: "Legacy name must be 2–20 characters" });
+        if (legacy.length < LEGACY_NAME_MIN_LENGTH || legacy.length > LEGACY_NAME_MAX_LENGTH) {
+          return res.status(400).json({
+            error: `Legacy name must be ${LEGACY_NAME_MIN_LENGTH}–${LEGACY_NAME_MAX_LENGTH} characters`,
+          });
         }
         if (/\d/.test(legacy)) {
           return res.status(400).json({ error: NAME_NO_DIGITS_MSG });
@@ -717,8 +762,14 @@ export function createAuthRouter(express) {
     const ip = req.ip || req.headers["x-forwarded-for"] || null;
     // Always succeed to avoid email enumeration
     if (row) {
-      const token = nanoid(32);
-      const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const token = nanoid(PASSWORD_RESET_TOKEN_LENGTH);
+      const expires = new Date(
+        Date.now()
+          + PASSWORD_RESET_EXPIRY_HOURS
+            * MINUTES_PER_HOUR
+            * SECONDS_PER_MINUTE
+            * MILLISECONDS_PER_SECOND,
+      ).toISOString();
       db.prepare("UPDATE users SET reset_token = ?, reset_expires_at = ?, updated_date = ? WHERE id = ?")
         .run(token, expires, nowIso(), row.id);
 
@@ -768,7 +819,7 @@ export function createAuthRouter(express) {
       if (row.reset_expires_at && new Date(row.reset_expires_at) < new Date()) {
         return res.status(400).json({ error: "Reset token expired" });
       }
-      const hash = await bcrypt.hash(newPassword, 10);
+      const hash = await bcrypt.hash(newPassword, PASSWORD_HASH_ROUNDS);
       db.prepare(`
         UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires_at = NULL, updated_date = ?
         WHERE id = ?
@@ -795,7 +846,7 @@ export function createAuthRouter(express) {
       const row = getUserRowById(req.user.id);
       const ok = await bcrypt.compare(currentPassword, row.password_hash);
       if (!ok) return res.status(400).json({ error: "Current password is incorrect" });
-      const hash = await bcrypt.hash(newPassword, 10);
+      const hash = await bcrypt.hash(newPassword, PASSWORD_HASH_ROUNDS);
       db.prepare("UPDATE users SET password_hash = ?, updated_date = ? WHERE id = ?")
         .run(hash, nowIso(), row.id);
       auditAuthEvent({
@@ -831,7 +882,7 @@ export function createAuthRouter(express) {
   }
 
   router.get("/admin/email-log", requireAuth, requireAdmin, (req, res) => {
-    const limit = Number(req.query.limit) || 50;
+    const limit = Number(req.query.limit) || DEFAULT_EMAIL_LOG_LIMIT;
     res.json({
       config: getEmailConfigSummary(),
       events: getEmailLog(limit),

@@ -33,7 +33,10 @@ export { NovaBalanceTypes, floorNovaPayout, floorNovaToHalf, normalizeNovaBalanc
 
 /** 1 display Nova = 2 half-units. */
 export const NOVA_HALF_UNITS_PER_NOVA = 2;
-export const ECONOMY_NOVA_SCALE = 2;
+export const ECONOMY_NOVA_SCALE = NOVA_HALF_UNITS_PER_NOVA;
+const NOVA_PRECISION_EPSILON = 1e-9;
+const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+const MISSION_SKIP_HALF_UNITS_PER_FUEL = 0.2;
 
 /** Starting Nova for every new character (display). Per-character, not account-wide. */
 export const STARTING_NOVA_DISPLAY = 500;
@@ -120,7 +123,7 @@ export function toNovaHalfUnits(displayNova) {
   }
   // Accept .0 / .5 only
   const half = Math.round(n * NOVA_HALF_UNITS_PER_NOVA);
-  if (Math.abs(n * NOVA_HALF_UNITS_PER_NOVA - half) > 1e-9) {
+  if (Math.abs(n * NOVA_HALF_UNITS_PER_NOVA - half) > NOVA_PRECISION_EPSILON) {
     const e = new Error("Nova amount must end in .0 or .5");
     e.status = 400;
     e.code = "INVALID_NOVA_PRECISION";
@@ -225,7 +228,7 @@ export function serializeEconomyState(character) {
 function normalizeIdempotencyKey(value) {
   const key = String(value || "").trim();
   if (!key) return "";
-  if (key.length > 128 || !/^[A-Za-z0-9:_-]+$/.test(key)) {
+  if (key.length > IDEMPOTENCY_KEY_MAX_LENGTH || !/^[A-Za-z0-9:_-]+$/.test(key)) {
     const e = new Error("Invalid idempotency key");
     e.status = 400;
     e.code = "INVALID_IDEMPOTENCY_KEY";
@@ -549,7 +552,7 @@ function mutateCurrency({
  */
 export function missionSkipCostHalfUnits(fuelCost) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
-  return Math.max(1, Math.ceil(fuel * 0.2));
+  return Math.max(1, Math.ceil(fuel * MISSION_SKIP_HALF_UNITS_PER_FUEL));
 }
 
 export function missionSkipCostDisplay(fuelCost) {

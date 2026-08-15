@@ -37,6 +37,14 @@ const DAMAGE_BASE_RAMP_FLOOR := 5.0
 const DAMAGE_BASE_RAMP_FULL_LEVEL := 25
 const DAMAGE_COEFF := 0.0032
 const DAMAGE_EXP := 1.727
+const SOFT_CAP_ATTRIBUTE_REFERENCE := 700.0
+const SOFT_CAP_LEVEL_REFERENCE := 100.0
+const SOFT_CAP_LEVEL_SCALING_EXPONENT := 0.95
+const SOFT_CAP_ATTRIBUTE_EXPONENT := 1.20
+const SOFT_CAP_PRE_LEVEL_REFERENCE_EXPONENT := 0.65
+const BASE_HEALTH := 50.0
+const HEALTH_PER_VITALITY := 2.5
+const HEALTH_QUADRATIC_COEFFICIENT := 0.008
 
 
 ## Linear flat ramp: 5 at L1 → 15 at L25+. Mission soft foes + arena bots only.
@@ -94,17 +102,32 @@ static func distribute_attrs(total: int, archetype: String) -> Dictionary:
 static func soft_cap_percent(level: int, total_attr: float, max_percent: float) -> float:
 	var L := float(maxi(1, level))
 	var attr := maxf(0.0, total_attr)
-	var for_max := 700.0 * pow(L / 100.0, 0.95)
+	var for_max := SOFT_CAP_ATTRIBUTE_REFERENCE * pow(
+		L / SOFT_CAP_LEVEL_REFERENCE,
+		SOFT_CAP_LEVEL_SCALING_EXPONENT,
+	)
 	var from_attr := 0.0
 	if for_max > 0.0:
-		from_attr = max_percent * minf(1.0, pow(attr / for_max, 1.20))
-	var pre100 := max_percent * minf(1.0, pow(L / 100.0, 0.65))
+		from_attr = max_percent * minf(
+			1.0,
+			pow(attr / for_max, SOFT_CAP_ATTRIBUTE_EXPONENT),
+		)
+	var pre100 := max_percent * minf(
+		1.0,
+		pow(L / SOFT_CAP_LEVEL_REFERENCE, SOFT_CAP_PRE_LEVEL_REFERENCE_EXPONENT),
+	)
 	return minf(minf(from_attr, pre100), max_percent)
 
 
 static func max_hp(vitality: float) -> int:
 	var v := maxf(0.0, vitality)
-	return int(round(50.0 + 2.5 * v + 0.008 * pow(v, 2.0)))
+	return int(
+		round(
+			BASE_HEALTH
+			+ HEALTH_PER_VITALITY * v
+			+ HEALTH_QUADRATIC_COEFFICIENT * pow(v, 2.0)
+		)
+	)
 
 
 static func base_damage(primary: float, damage_base: float = DAMAGE_BASE) -> float:

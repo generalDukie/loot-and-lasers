@@ -4,6 +4,11 @@ extends Node
 
 signal state_changed(casino: Dictionary)
 
+const STARDUST_MAX_WAGER_FUEL_MULTIPLIER := 50
+const FALLBACK_NOVA_MIN_WAGER := 100
+const FALLBACK_NOVA_MAX_WAGER := 1_000
+const REQUEST_ID_RANDOM_RANGE := 100_000
+
 var casino_state: Dictionary = {}
 var _pending_request_id := ""
 
@@ -34,21 +39,24 @@ func stardust_max() -> int:
 	if typeof(lim) == TYPE_DICTIONARY and lim.has("max"):
 		return maxi(1, int(lim["max"]))
 	var level := maxi(1, int(GameManager.active_character.get("level", 1)))
-	return maxi(1, StardustEconomy.stardust_per_fuel(level) * 50)
+	return maxi(
+		1,
+		StardustEconomy.stardust_per_fuel(level) * STARDUST_MAX_WAGER_FUEL_MULTIPLIER,
+	)
 
 
 func nova_min() -> int:
 	var lim: Variant = casino_state.get("nova_limits", {})
 	if typeof(lim) == TYPE_DICTIONARY and lim.has("min"):
 		return maxi(1, int(lim["min"]))
-	return 100
+	return FALLBACK_NOVA_MIN_WAGER
 
 
 func nova_max() -> int:
 	var lim: Variant = casino_state.get("nova_limits", {})
 	if typeof(lim) == TYPE_DICTIONARY and lim.has("max"):
 		return maxi(1, int(lim["max"]))
-	return 1000
+	return FALLBACK_NOVA_MAX_WAGER
 
 
 ## Purchased / wagerable Nova available for Casino (display).
@@ -172,7 +180,11 @@ func _finish_request(res: Dictionary, key: String) -> void:
 
 
 func _new_request_id(prefix: String) -> String:
-	return "%s-%d-%d" % [prefix, int(Time.get_unix_time_from_system()), randi() % 100000]
+	return "%s-%d-%d" % [
+		prefix,
+		int(Time.get_unix_time_from_system()),
+		randi() % REQUEST_ID_RANDOM_RANGE,
+	]
 
 
 func _apply(res: Dictionary) -> void:

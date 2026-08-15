@@ -9,6 +9,16 @@ import { DEFAULT_GAME_ZONE, getZonedParts, zonedDateKey, assertTimeZone } from "
 import { toIsoUtc } from "./instant.js";
 
 const WEEKDAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const DAYS_PER_WEEK = 7;
+const LOCAL_TIME_CONVERGENCE_ATTEMPTS = 4;
+const NONEXISTENT_TIME_SEARCH_HOURS = 4;
+const MIDNIGHT_SEARCH_HOURS = 28;
+const MIDNIGHT_SEARCH_PRECISION_MS = 250;
+const ISO_WEEK_REFERENCE_WEEKDAY = 3;
 
 /**
  * Convert a wall-clock local time in `timeZoneId` to a UTC Date.
@@ -24,7 +34,7 @@ export function zonedLocalToUtc(
 
   // Initial guess: treat components as UTC then converge via zone format.
   let guess = Date.UTC(year, month - 1, day, hour, minute, second);
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < LOCAL_TIME_CONVERGENCE_ATTEMPTS; i++) {
     const parts = getZonedParts(new Date(guess), timeZoneId);
     const asIfUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
     const want = Date.UTC(year, month - 1, day, hour, minute, second);
@@ -49,7 +59,9 @@ export function zonedLocalToUtc(
       throw err;
     }
     let probe = guess;
-    for (let step = 0; step < 4 * 3600 * 1000; step += 60 * 1000) {
+    const searchWindowMs = NONEXISTENT_TIME_SEARCH_HOURS * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+    const searchStepMs = SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+    for (let step = 0; step < searchWindowMs; step += searchStepMs) {
       probe = guess + step;
       const p = getZonedParts(new Date(probe), timeZoneId);
       if (p.year === year && p.month === month && p.day === day && p.hour >= hour) {
@@ -64,8 +76,9 @@ export function zonedLocalToUtc(
   }
 
   // Ambiguity (fall back): probe ±1h for a second UTC that formats to same local.
-  const earlier = new Date(guess - 60 * 60 * 1000);
-  const later = new Date(guess + 60 * 60 * 1000);
+  const oneHourMs = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+  const earlier = new Date(guess - oneHourMs);
+  const later = new Date(guess + oneHourMs);
   const earlierParts = getZonedParts(earlier, timeZoneId);
   const laterParts = getZonedParts(later, timeZoneId);
   const sameLocal = (p) =>
@@ -98,8 +111,8 @@ export function nextZonedMidnight(from = clock.now(), timeZoneId = DEFAULT_GAME_
   const startKey = zonedDateKey(start, timeZoneId);
   // Binary search similar to legacy msUntilNextETMidnight
   let lo = start.getTime();
-  let hi = lo + 28 * 60 * 60 * 1000;
-  while (hi - lo > 250) {
+  let hi = lo + MIDNIGHT_SEARCH_HOURS * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+  while (hi - lo > MIDNIGHT_SEARCH_PRECISION_MS) {
     const mid = Math.floor((lo + hi) / 2);
     const day = zonedDateKey(new Date(mid), timeZoneId);
     if (day === startKey) lo = mid;
@@ -169,7 +182,8 @@ export function weekMondayDateKey(now = clock.now(), timeZoneId = DEFAULT_GAME_Z
     { year: p.year, month: p.month, day: p.day, hour: 12, minute: 0, second: 0 },
     timeZoneId
   ).utc.getTime();
-  t -= sinceMon * 86400000;
+  const oneDayMs = HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+  t -= sinceMon * oneDayMs;
   return zonedDateKey(new Date(t), timeZoneId);
 }
 
@@ -190,12 +204,16 @@ export function getWeekKey(now = clock.now(), timeZoneId = DEFAULT_GAME_ZONE) {
   // ISO week number of that Monday
   const date = new Date(Date.UTC(y, m - 1, d));
   const dayNum = (date.getUTCDay() + 6) % 7;
-  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  date.setUTCDate(date.getUTCDate() - dayNum + ISO_WEEK_REFERENCE_WEEKDAY);
   const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
   const week =
     1 +
     Math.round(
-      ((date - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7
+      ((date - firstThursday) /
+          (HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND) -
+        ISO_WEEK_REFERENCE_WEEKDAY +
+        ((firstThursday.getUTCDay() + 6) % DAYS_PER_WEEK)) /
+        DAYS_PER_WEEK
     );
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
@@ -205,7 +223,7 @@ export function weekEndUtc(now = clock.now(), timeZoneId = DEFAULT_GAME_ZONE) {
   const mondayKey = weekMondayDateKey(now, timeZoneId);
   const [y, m, d] = mondayKey.split("-").map(Number);
   // Calendar +7 days (not fixed 7*86400000) so DST transitions stay correct.
-  const next = new Date(Date.UTC(y, m - 1, d + 7));
+  const next = new Date(Date.UTC(y, m - 1, d + DAYS_PER_WEEK));
   return zonedLocalToUtc(
     {
       year: next.getUTCFullYear(),
@@ -220,9 +238,10 @@ export function weekEndUtc(now = clock.now(), timeZoneId = DEFAULT_GAME_ZONE) {
 }
 
 export function formatEtaShort(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
+  const s = Math.max(0, Math.floor(ms / MILLISECONDS_PER_SECOND));
+  const secondsPerHour = SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+  const h = Math.floor(s / secondsPerHour);
+  const m = Math.floor((s % secondsPerHour) / SECONDS_PER_MINUTE);
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m`;
   return "<1m";

@@ -5,8 +5,11 @@
 import { entities } from "../entities.js";
 import { getUserById } from "../auth.js";
 import { ArenaError, ArenaErrors } from "./errors.js";
+import { ARENA_DEFAULT_RATING } from "./config.js";
 
 const TEST_EMAIL_RE = /@(test|example|localhost)\./i;
+const MODERATION_HISTORY_LIMIT = 5;
+const DEFENSE_EQUIPMENT_LIMIT = 20;
 
 export function isExcludedTestAccount(user) {
   if (!user) return true;
@@ -16,7 +19,11 @@ export function isExcludedTestAccount(user) {
 }
 
 export function isArenaBanned(characterId) {
-  const list = entities.PlayerModeration.filter({ character_id: characterId }, "-created_date", 5);
+  const list = entities.PlayerModeration.filter(
+    { character_id: characterId },
+    "-created_date",
+    MODERATION_HISTORY_LIMIT,
+  );
   for (const m of list || []) {
     if (m.arena_banned || m.arena_suspended) return true;
     if (m.suspended_until && new Date(m.suspended_until).getTime() > Date.now()) return true;
@@ -29,7 +36,7 @@ export function buildDefenseSnapshot(opponentChar) {
   const equipped = entities.Item.filter(
     { character_id: opponentChar.id, is_equipped: true },
     "-created_date",
-    20
+    DEFENSE_EQUIPMENT_LIMIT,
   );
   return {
     characterId: opponentChar.id,
@@ -37,7 +44,7 @@ export function buildDefenseSnapshot(opponentChar) {
     race: opponentChar.race,
     class: opponentChar.class,
     level: opponentChar.level || 1,
-    arena_rating: opponentChar.arena_rating || 1000,
+    arena_rating: opponentChar.arena_rating || ARENA_DEFAULT_RATING,
     arena_wins: opponentChar.arena_wins || 0,
     arena_losses: opponentChar.arena_losses || 0,
     stats: opponentChar.stats || {},
@@ -145,7 +152,7 @@ export function resolveEligibleOpponent({
     opponentAccountId: oppAccountId,
     opponentUser: oppUser,
     defenseSnapshot: defense,
-    opponentRating: opponent.arena_rating || 1000,
+    opponentRating: opponent.arena_rating || ARENA_DEFAULT_RATING,
   };
 }
 
@@ -170,7 +177,7 @@ export function publicArenaCard(char, extras = {}) {
     race: char.race,
     class: char.class,
     level: char.level || 1,
-    arenaRating: char.arena_rating || 1000,
+    arenaRating: char.arena_rating || ARENA_DEFAULT_RATING,
     arenaWins: char.arena_wins || 0,
     arenaLosses: char.arena_losses || 0,
     activeTitle: char.active_title || null,

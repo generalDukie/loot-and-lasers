@@ -6,7 +6,12 @@
  */
 import { db } from "../db.js";
 import { entities } from "../entities.js";
-import { CLASS_BASE_STATS, getActiveStims, STARDUST_MAX } from "./economyFormulas.js";
+import {
+  CLASS_BASE_STATS,
+  getActiveStims,
+  MAX_ACTIVE_STAT_TYPES,
+  STARDUST_MAX,
+} from "./economyFormulas.js";
 import { ATTR_KEYS, readPermanentAttributes } from "./characterAttributes.js";
 import { EQUIPMENT_SLOTS, listOwnedItems } from "./inventoryEquipment.js";
 import { readNovaHalfUnits } from "./currencyService.js";
@@ -18,6 +23,7 @@ import {
   ensureIntegritySchema,
 } from "./integrityStore.js";
 import { clock } from "./time/clock.js";
+import { ARENA_DEFAULT_RATING } from "../arena/config.js";
 
 export const INTEGRITY_VALIDATOR_VERSION = "integrity_v1";
 
@@ -30,6 +36,15 @@ export const IntegritySeverity = Object.freeze({
 
 const VALID_CLASSES = new Set(Object.keys(CLASS_BASE_STATS));
 const EQUIP_SLOT_SET = new Set(EQUIPMENT_SLOTS);
+const ACCOUNT_CHARACTER_QUERY_LIMIT = 50;
+const CHARACTER_ITEM_AUDIT_LIMIT = 1_000;
+const CHARACTER_ITEM_REPAIR_LIMIT = 500;
+const CHARACTER_MISSION_AUDIT_LIMIT = 100;
+const ARENA_HISTORY_AUDIT_LIMIT = 50;
+const SCHEDULE_AUDIT_LIMIT = 200;
+const DEFAULT_ORPHAN_SCAN_LIMIT = 200;
+const MAX_ORPHAN_SCAN_LIMIT = 1_000;
+const QUARANTINE_SAMPLE_LIMIT = 10;
 
 function finding(severity, code, message, meta = {}) {
   return {
@@ -119,7 +134,11 @@ export function ValidateAccountIntegrity(accountId) {
     }
   }
 
-  const characters = entities.Character.filter({ created_by_id: accountId }, "-created_date", 50) || [];
+  const characters = entities.Character.filter(
+    { created_by_id: accountId },
+    "-created_date",
+    ACCOUNT_CHARACTER_QUERY_LIMIT,
+  ) || [];
   report.records_scanned += characters.length;
 
   if (user.active_character_id) {
@@ -256,12 +275,17 @@ export function ValidateCharacterIntegrity(characterId) {
   // Stim bonuses must not be confused with permanent attrs — flag if active_buffs
   // contain permanent-looking fields written onto stats (heuristic: never auto-subtract).
   const active = getActiveStims(ch);
-  if (active.length > 3) {
+  if (active.length > MAX_ACTIVE_STAT_TYPES) {
     report.findings.push(
-      finding(IntegritySeverity.HIGH, "STIM_TOO_MANY_ACTIVE", "More than 3 active stims", {
+      finding(
+        IntegritySeverity.HIGH,
+        "STIM_TOO_MANY_ACTIVE",
+        `More than ${MAX_ACTIVE_STAT_TYPES} active stims`,
+        {
         character_id: characterId,
         count: active.length,
-      }),
+        },
+      ),
     );
   }
   const byStat = new Map();
@@ -298,7 +322,7 @@ export function ValidateInventoryIntegrity(characterId) {
     return finalize(report);
   }
 
-  const items = listOwnedItems(characterId, 1000);
+  const items = listOwnedItems(characterId, CHARACTER_ITEM_AUDIT_LIMIT);
   report.records_scanned += items.length;
   const seenIds = new Set();
 
@@ -446,7 +470,7 @@ export function ValidateEquipmentIntegrity(characterId) {
   }
 
   // Items marked equipped but not in map
-  const owned = listOwnedItems(characterId, 500);
+  const owned = listOwnedItems(characterId, CHARACTER_ITEM_REPAIR_LIMIT);
   report.records_scanned += owned.length;
   const mappedIds = new Set(Object.values(eq).filter(Boolean).map(String));
   for (const item of owned) {
@@ -676,10 +700,18 @@ export function ValidateTransactionIntegrity({ claimKey = null, accountId = null
 export function ValidateMissionIntegrity(characterId) {
   const report = emptyReport({ type: "mission", character_id: characterId });
   const missions =
-    entities.Mission.filter({ character_id: characterId }, "-created_date", 100) || [];
+    entities.Mission.filter(
+      { character_id: characterId },
+      "-created_date",
+      CHARACTER_MISSION_AUDIT_LIMIT,
+    ) || [];
   // Also match created_by / owner patterns used historically
   const alt =
-    entities.Mission.filter({ created_by_id: characterId }, "-created_date", 100) || [];
+    entities.Mission.filter(
+      { created_by_id: characterId },
+      "-created_date",
+      CHARACTER_MISSION_AUDIT_LIMIT,
+    ) || [];
   const byId = new Map();
   for (const m of [...missions, ...alt]) byId.set(m.id, m);
   const list = [...byId.values()];
@@ -804,7 +836,7 @@ export function ValidateArenaIntegrity(characterId) {
     );
     return finalize(report);
   }
-  const rating = Number(ch.arena_rating ?? 1000);
+  const rating = Number(ch.arena_rating ?? ARENA_DEFAULT_RATING);
   if (!Number.isFinite(rating) || rating < 0) {
     report.findings.push(
       finding(IntegritySeverity.HIGH, "INVALID_ARENA_RATING", "Arena rating invalid", {
@@ -819,7 +851,7 @@ export function ValidateArenaIntegrity(characterId) {
       .prepare(
         `SELECT id, status FROM arena_challenges
          WHERE challenger_character_id = ? OR opponent_character_id = ?
-         LIMIT 50`,
+         LIMIT ${ARENA_HISTORY_AUDIT_LIMIT}`,
       )
       .all(characterId, characterId);
     report.records_scanned += challenges.length;
@@ -852,12 +884,17 @@ export function ValidateStimIntegrity(characterId) {
 
   const active = getActiveStims(ch);
   report.records_scanned += active.length;
-  if (active.length > 3) {
+  if (active.length > MAX_ACTIVE_STAT_TYPES) {
     report.findings.push(
-      finding(IntegritySeverity.HIGH, "STIM_TOO_MANY_ACTIVE", "More than 3 active stims", {
+      finding(
+        IntegritySeverity.HIGH,
+        "STIM_TOO_MANY_ACTIVE",
+        `More than ${MAX_ACTIVE_STAT_TYPES} active stims`,
+        {
         character_id: characterId,
         count: active.length,
-      }),
+        },
+      ),
     );
   }
   const byStat = new Map();
@@ -934,7 +971,9 @@ export function ReconcileAchievements(characterId) {
 export function ValidateSchedulerIntegrity() {
   const report = emptyReport({ type: "scheduler" });
   try {
-    const schedules = db.prepare("SELECT id, status, last_run_at FROM schedules LIMIT 200").all();
+    const schedules = db.prepare(
+      `SELECT id, status, last_run_at FROM schedules LIMIT ${SCHEDULE_AUDIT_LIMIT}`,
+    ).all();
     report.records_scanned = schedules.length;
   } catch (err) {
     report.errors.push(String(err.message || err));
@@ -943,9 +982,12 @@ export function ValidateSchedulerIntegrity() {
 }
 
 /** Scan orphan items globally (optional heavy check). */
-export function detectOrphanItems({ limit = 200 } = {}) {
+export function detectOrphanItems({ limit = DEFAULT_ORPHAN_SCAN_LIMIT } = {}) {
   const findings = [];
-  const items = entities.Item.list("-created_date", Math.min(1000, limit)) || [];
+  const items = entities.Item.list(
+    "-created_date",
+    Math.min(MAX_ORPHAN_SCAN_LIMIT, limit),
+  ) || [];
   for (const item of items) {
     if (!item.character_id) {
       findings.push(
@@ -1118,7 +1160,9 @@ export function RunIntegrityAudit(opts = {}) {
   }
 
   if (opts.includeOrphans) {
-    const orphans = detectOrphanItems({ limit: opts.orphanLimit || 200 });
+    const orphans = detectOrphanItems({
+      limit: opts.orphanLimit || DEFAULT_ORPHAN_SCAN_LIMIT,
+    });
     sections.orphans = { findings: orphans, records_scanned: orphans.length };
     allFindings.push(...orphans);
   }
@@ -1154,7 +1198,7 @@ export function RunIntegrityAudit(opts = {}) {
     findings: allFindings,
     by_severity,
     quarantined,
-    open_quarantine_sample: listOpenQuarantine({ limit: 10 }),
+    open_quarantine_sample: listOpenQuarantine({ limit: QUARANTINE_SAMPLE_LIMIT }),
     ok: by_severity.critical === 0 && by_severity.high === 0,
   };
 }

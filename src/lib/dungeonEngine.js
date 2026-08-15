@@ -19,6 +19,7 @@ import {
 } from "@/lib/expectedPlayerAttributes";
 
 export const DUNGEON_ENEMIES_PER_PLANET = 10;
+export const STORY_DUNGEON_COUNT = 10;
 /** @deprecated Death quotas removed — infinite retries with shared cooldown. */
 export const DUNGEON_DEATHS_PER_DAY = 0;
 /** @deprecated Continue fee removed with death quotas. */
@@ -27,7 +28,12 @@ export const DUNGEON_CONTINUE_COST = 0;
 export const DUNGEON_REVIVE_COST = DUNGEON_CONTINUE_COST;
 export const DUNGEON_EXTRA_LIFE_COST = DUNGEON_CONTINUE_COST;
 /** Shared post-sim cooldown for all dungeon / wormhole fights (1 hour). */
-export const DUNGEON_BATTLE_COOLDOWN_MS = 60 * 60 * 1000;
+export const DUNGEON_BATTLE_COOLDOWN_HOURS = 1;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+export const DUNGEON_BATTLE_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_HOURS * MILLISECONDS_PER_HOUR;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
@@ -79,7 +85,7 @@ export const DUNGEON_UNLOCK_LEVELS = Object.freeze([
 /** Player-level gate for story dungeon 1–10. Wormhole has no separate level gate. */
 export function getDungeonUnlockLevel(planetId) {
   const id = Math.floor(Number(planetId) || 0);
-  if (id >= 1 && id <= 10) return DUNGEON_UNLOCK_LEVELS[id];
+  if (id >= 1 && id <= STORY_DUNGEON_COUNT) return DUNGEON_UNLOCK_LEVELS[id];
   return null;
 }
 
@@ -92,6 +98,28 @@ export function isDungeonUnlockedByLevel(planetId, playerLevel) {
 
 /** Relative offsets used to extend the L170–200 band into wormhole depths. */
 const D10_LEVEL_OFFSETS = [0, 3, 7, 10, 13, 17, 20, 23, 27, 30];
+
+const WORMHOLE_BASE_TOTAL_DRU = 185;
+const WORMHOLE_DRU_PER_DEPTH = 25;
+const WORMHOLE_BASE_ENEMY_LEVEL = 200;
+const WORMHOLE_LEVELS_PER_DEPTH = 35;
+const WORMHOLE_FIRST_ENEMY_LEVEL_OFFSET = 3;
+const DRU_DECIMAL_SCALE = 100;
+const DUNGEON_ENEMY_SEED_PLANET_MULTIPLIER = 1_000;
+const DUNGEON_ENEMY_SEED_INDEX_MULTIPLIER = 37;
+const DUNGEON_ENEMY_SEED_OFFSET = 7;
+const DUNGEON_ENEMY_POWER_PER_LEVEL = 10;
+const DUNGEON_ENEMY_POWER_PER_ATTRIBUTE = 3;
+const DUNGEON_ENEMY_BASE_ARENA_RATING = 1_000;
+const DUNGEON_ENEMY_ARENA_RATING_PER_LEVEL = 10;
+const AVATAR_SPECIES_COUNT = 30;
+const AVATAR_SPECIES_PLANET_MULTIPLIER = 13;
+const AVATAR_SPECIES_ENCOUNTER_MULTIPLIER = 7;
+const BOSS_RARITY_TIER_SIZE = 3;
+const BOSS_MAX_RARITY_TIER_INDEX = 3;
+const BOSS_RARITIES = ["rare", "epic", "epic", "legendary"];
+const REGULAR_ENEMY_ITEM_DROP_CHANCE = 0.25;
+const REGULAR_ENEMY_UNCOMMON_BASE_CHANCE = 0.12;
 
 const FALLBACK_NAMES = [
   "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
@@ -124,25 +152,27 @@ export function getDungeonBand(planetId) {
 /** Total DRU for a dungeon band (wormhole grows past D10). */
 export function getDungeonTotalDru(planetId) {
   const band = getDungeonBand(planetId);
-  if (band <= 10) return DUNGEON_TOTAL_DRU[band];
-  const depth = band - 10;
-  return Math.round(185 + depth * 25);
+  if (band <= STORY_DUNGEON_COUNT) return DUNGEON_TOTAL_DRU[band];
+  const depth = band - STORY_DUNGEON_COUNT;
+  return Math.round(WORMHOLE_BASE_TOTAL_DRU + depth * WORMHOLE_DRU_PER_DEPTH);
 }
 
 /** DRU awarded for defeating enemyIndex (1–10) on this planet. */
 export function getEnemyDru(planetId, enemyIndex) {
   const idx = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, enemyIndex || 1));
   const share = DUNGEON_ENEMY_DRU_SHARE[idx];
-  return Math.round(getDungeonTotalDru(planetId) * share * 100) / 100;
+  return Math.round(getDungeonTotalDru(planetId) * share * DRU_DECIMAL_SCALE) / DRU_DECIMAL_SCALE;
 }
 
 /** Combat / reward level for enemyIndex (1–10) on this planet. */
 export function getDungeonEnemyLevel(planetId, enemyIndex) {
   const idx = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, enemyIndex || 1));
   const band = getDungeonBand(planetId);
-  if (band <= 10) return DUNGEON_ENEMY_LEVELS[band][idx - 1];
-  const depth = band - 10;
-  const start = 200 + (depth - 1) * 35 + 3; // first enemy after D10 boss @ 200
+  if (band <= STORY_DUNGEON_COUNT) return DUNGEON_ENEMY_LEVELS[band][idx - 1];
+  const depth = band - STORY_DUNGEON_COUNT;
+  const start = WORMHOLE_BASE_ENEMY_LEVEL
+    + (depth - 1) * WORMHOLE_LEVELS_PER_DEPTH
+    + WORMHOLE_FIRST_ENEMY_LEVEL_OFFSET;
   return start + D10_LEVEL_OFFSETS[idx - 1];
 }
 
@@ -170,7 +200,9 @@ export function druToRewards(dru, enemyLevel) {
  * Hidden MIGHT/REFLEX/TECH archetype drives combat family; artwork/name stay planet-flavored.
  */
 export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
-  const seed = planet.id * 1000 + enemyIndex * 37 + 7;
+  const seed = planet.id * DUNGEON_ENEMY_SEED_PLANET_MULTIPLIER
+    + enemyIndex * DUNGEON_ENEMY_SEED_INDEX_MULTIPLIER
+    + DUNGEON_ENEMY_SEED_OFFSET;
   const rng = mulberry32(seed);
   const isBoss = enemyIndex === DUNGEON_ENEMIES_PER_PLANET;
 
@@ -184,7 +216,10 @@ export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
   const raceKey = pickRace(planet, isBoss, rng);
   const race = RACES[raceKey];
 
-  const power = Math.round(level * 10 + sumStats(stats) * 3);
+  const power = Math.round(
+    level * DUNGEON_ENEMY_POWER_PER_LEVEL
+    + sumStats(stats) * DUNGEON_ENEMY_POWER_PER_ATTRIBUTE,
+  );
   const namePool = planet.enemyNames?.length ? planet.enemyNames : FALLBACK_NAMES;
   const name = isBoss ? planet.bossName : pick(namePool, rng);
 
@@ -201,7 +236,7 @@ export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
     level,
     stats,
     power,
-    arena_rating: 1000 + level * 10,
+    arena_rating: DUNGEON_ENEMY_BASE_ARENA_RATING + level * DUNGEON_ENEMY_ARENA_RATING_PER_LEVEL,
     arena_wins: 0,
     arena_losses: 0,
     guild: null,
@@ -218,7 +253,11 @@ export function generateDungeonEnemy(planet, enemyIndex, _charLevel) {
     },
     isBot: true,
     isBoss,
-    speciesId: ((planet.id * 13 + enemyIndex * 7) % 30) + 1,
+    speciesId: (
+      (planet.id * AVATAR_SPECIES_PLANET_MULTIPLIER
+        + enemyIndex * AVATAR_SPECIES_ENCOUNTER_MULTIPLIER)
+      % AVATAR_SPECIES_COUNT
+    ) + 1,
   };
 }
 
@@ -248,11 +287,21 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
 
   let item = null;
   if (isBoss) {
-    const tier = Math.min(3, Math.floor(((planet.id || 1) - 1) / 3));
-    const rarities = ["rare", "epic", "epic", "legendary"];
-    item = generateItem(rollItemRarity(rarities[tier], charLevel), Math.max(1, charLevel), undefined, className);
-  } else if (Math.random() < 0.25) {
-    const rarity = rollItemRarity(Math.random() < 0.12 ? "uncommon" : "common", charLevel);
+    const tier = Math.min(
+      BOSS_MAX_RARITY_TIER_INDEX,
+      Math.floor(((planet.id || 1) - 1) / BOSS_RARITY_TIER_SIZE),
+    );
+    item = generateItem(
+      rollItemRarity(BOSS_RARITIES[tier], charLevel),
+      Math.max(1, charLevel),
+      undefined,
+      className,
+    );
+  } else if (Math.random() < REGULAR_ENEMY_ITEM_DROP_CHANCE) {
+    const rarity = rollItemRarity(
+      Math.random() < REGULAR_ENEMY_UNCOMMON_BASE_CHANCE ? "uncommon" : "common",
+      charLevel,
+    );
     item = generateItem(rarity, Math.max(1, charLevel), undefined, className);
   }
 
@@ -262,7 +311,7 @@ export function computeDungeonRewards(planet, enemyIndex, charLevel, won, opts =
     item,
     isBoss,
     consolation: false,
-    dru: Math.round(dru * 100) / 100,
+    dru: Math.round(dru * DRU_DECIMAL_SCALE) / DRU_DECIMAL_SCALE,
     enemyLevel,
   };
 }

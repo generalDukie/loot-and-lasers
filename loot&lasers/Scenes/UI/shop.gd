@@ -32,6 +32,7 @@ const STALL_BTN_FS := 17
 const STALL_CHIP_ICON := 35.0 ## was 28 × 1.25
 const STALL_CHIP_FS := 33 ## was 26 × 1.25
 const STALL_CHIP_SEP := 6
+const MILLISECONDS_PER_SECOND := 1_000.0
 ## Contraband spotlight shares stall card metrics; amber wrapper is separate.
 ## Shop-window countdown chip — 2× prior currency-chip chrome (font 15→30, icon ~16→32).
 const REFRESH_TIMER_FS := 30
@@ -44,6 +45,7 @@ const META_TIMER_WIDTH_SAMPLE := "99h 59m 59s"
 const MARKET_BRAND_TINT := Color("#9D6BFF")
 const MARKET_BRAND_FS := 69 ## was 46 × 1.5
 const MARKET_TAGLINE_FS := 19 ## was 15 × 1.25
+const SHOP_WINDOW_RESULT_INDEX: int = 0
 var _status: Label
 var _refresh_timer: Control
 var _list: VBoxContainer
@@ -69,11 +71,7 @@ func _ready() -> void:
 	_build()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
-	if not ShopManager.shop_window.is_empty():
-		_win_idx = int(_shop_window().get("idx", 0))
-		_populate()
-	else:
-		_set_status("Opening Black Market…")
+	_set_status("Opening Black Market…")
 	call_deferred("_start_boot")
 
 
@@ -103,17 +101,16 @@ func _boot() -> void:
 		return
 	_booting = true
 	_set_status("Opening Black Market…")
-	var res: Dictionary = await ShopManager.ensure_shop()
+	var requests := AsyncGroup.new()
+	requests.add(ShopManager.ensure_shop)
+	requests.add(_load_bag_items)
+	var results := await requests.wait()
+	var res: Dictionary = results[SHOP_WINDOW_RESULT_INDEX]
 	if not is_inside_tree() or not is_instance_valid(self):
 		_booting = false
 		return
 	if not res.ok:
 		_set_status(str(res.get("error", "EnsureShop failed")))
-	else:
-		_win_idx = int(_shop_window().get("idx", 0))
-		_populate()
-	await MissionManager.refresh_character()
-	await _load_bag_items()
 	_load_equipped()
 	_booting = false
 	if not is_inside_tree() or not visible:
@@ -526,8 +523,11 @@ func _find_chip_amount_label(root: Control) -> Label:
 func _seconds_left() -> int:
 	var win := _shop_window()
 	if win.has("endsAt"):
-		var now_ms := int(Time.get_unix_time_from_system() * 1000.0)
-		return maxi(0, int((int(win.get("endsAt", 0)) - now_ms) / 1000))
+		var now_ms := int(Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND)
+		return maxi(
+			0,
+			int((int(win.get("endsAt", 0)) - now_ms) / MILLISECONDS_PER_SECOND),
+		)
 	return int(win.get("secondsLeft", 0))
 
 

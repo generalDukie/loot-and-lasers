@@ -12,6 +12,11 @@ const ENCOUNTER_NAMES = [
   "Space Mite", "Corridor Thug", "Loot Tick", "Derelict Guard", "Petty Corsair",
 ];
 
+const MISSION_ENEMY_POWER_PER_LEVEL = 6;
+const MISSION_ENEMY_POWER_PER_ATTRIBUTE = 2;
+const MISSION_ENEMY_BASE_ARENA_RATING = 800;
+const MISSION_ENEMY_ARENA_RATING_PER_LEVEL = 5;
+
 function pick(arr, rng = Math.random) {
   return arr[Math.floor(rng() * arr.length)];
 }
@@ -52,8 +57,11 @@ export function generateMissionEncounter(character, mission, rng = Math.random) 
     race: null,
     level,
     stats,
-    power: Math.round(level * 6 + Object.values(stats).reduce((a, b) => a + b, 0) * 2),
-    arena_rating: 800 + level * 5,
+    power: Math.round(
+      level * MISSION_ENEMY_POWER_PER_LEVEL
+      + Object.values(stats).reduce((a, b) => a + b, 0) * MISSION_ENEMY_POWER_PER_ATTRIBUTE,
+    ),
+    arena_rating: MISSION_ENEMY_BASE_ARENA_RATING + level * MISSION_ENEMY_ARENA_RATING_PER_LEVEL,
     arena_wins: 0,
     arena_losses: 0,
     guild: null,

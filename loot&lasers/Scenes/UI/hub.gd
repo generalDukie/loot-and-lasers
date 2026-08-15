@@ -13,8 +13,6 @@ var _chatter_timer: Timer
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
-	# Paint from cached GameManager state immediately; refresh in background.
-	_populate()
 	await _boot()
 
 
@@ -25,13 +23,15 @@ func on_shell_reshow() -> void:
 
 func _boot() -> void:
 	var boot_t0 := Time.get_ticks_msec()
-	await MissionManager.refresh_character()
-	await SocialManager.load_my_guild()
-	await SocialManager.refresh_unread()
+	var requests := AsyncGroup.new()
+	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(SocialManager.load_my_guild)
+	requests.add(SocialManager.refresh_unread)
 	# Unread badge TTL-cached; Realtime also pushes updates.
-	await NotificationManager.refresh_unread()
-	await NexusManager.load_nexus()
-	await InventoryManager.list_pending_loot()
+	requests.add(NotificationManager.refresh_unread)
+	requests.add(NexusManager.load_nexus)
+	requests.add(InventoryManager.list_pending_loot)
+	await requests.wait()
 	if not InventoryManager.pending_loot.is_empty():
 		await InventoryManager.try_claim_pending()
 	RealtimeManager.start("ChatMessage")

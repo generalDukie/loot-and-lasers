@@ -1,8 +1,15 @@
 import { api } from "@/api/gameClient";
 
+const UNREAD_NOTIFICATION_LIMIT = 100;
+const DEFAULT_NOTIFICATION_LIMIT = 50;
+const LEGACY_STAT_NOTIFICATION_CLEANUP_LIMIT = 80;
+
 /** Unread badge counts — Node GetNotifications. */
 export async function getUnreadCounts(_characterId) {
-  const res = await api.functions.invoke("GetNotifications", { unread_only: true, limit: 100 });
+  const res = await api.functions.invoke("GetNotifications", {
+    unread_only: true,
+    limit: UNREAD_NOTIFICATION_LIMIT,
+  });
   return res?.counts || { total: 0 };
 }
 
@@ -26,7 +33,7 @@ export function subscribeNotifications(characterId, callback) {
   });
 }
 
-export async function listNotifications({ unreadOnly = false, limit = 50 } = {}) {
+export async function listNotifications({ unreadOnly = false, limit = DEFAULT_NOTIFICATION_LIMIT } = {}) {
   const res = await api.functions.invoke("GetNotifications", {
     unread_only: unreadOnly,
     limit,
@@ -72,7 +79,7 @@ export function dismissNotification(id) {
 export async function syncStatPointsNotification(character) {
   if (!character?.id) return;
   try {
-    const list = await listNotifications({ limit: 80 });
+    const list = await listNotifications({ limit: LEGACY_STAT_NOTIFICATION_CLEANUP_LIMIT });
     await Promise.all(
       list
         .filter((n) => n.type === "stat_points" && !n.read)

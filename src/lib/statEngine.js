@@ -93,6 +93,20 @@ export const AGI_VARIANCE_MAX = 1.05;
 export const UNIVERSAL_VARIANCE_MIN = 0.90;
 export const UNIVERSAL_VARIANCE_MAX = 1.10;
 
+const DEFAULT_CLASS_STAT_WEIGHT = 0.1;
+const SOFT_CAP_REFERENCE_LEVEL = 100;
+const SOFT_CAP_REFERENCE_ATTRIBUTE = 700;
+const SOFT_CAP_REFERENCE_GROWTH_EXPONENT = 0.95;
+const SOFT_CAP_ATTRIBUTE_EXPONENT = 1.20;
+const SOFT_CAP_LEVEL_EXPONENT = 0.65;
+const HEALTH_BASE = 50;
+const HEALTH_PER_VITALITY = 2.5;
+const HEALTH_VITALITY_SQUARED_COEFFICIENT = 0.008;
+const PERCENT_SCALE = 100;
+const AGILITY_AVERAGE_VARIANCE = (AGI_VARIANCE_MIN + AGI_VARIANCE_MAX) / 2;
+const COMBAT_POWER_PER_LEVEL = 50;
+const COMBAT_POWER_PER_WEIGHTED_ATTRIBUTE = 10;
+
 /** Inclusive float roll in [min, max]. */
 export function randomBetween(min, max, rng = Math.random) {
   return min + (max - min) * rng();
@@ -102,17 +116,27 @@ export function randomBetween(min, max, rng = Math.random) {
 export function softCapPercent(level, totalAttr, maxPercent) {
   const L = Math.max(1, level || 1);
   const attr = Math.max(0, totalAttr || 0);
-  const forMax = 700 * Math.pow(L / 100, 0.95);
+  const forMax = SOFT_CAP_REFERENCE_ATTRIBUTE * Math.pow(
+    L / SOFT_CAP_REFERENCE_LEVEL,
+    SOFT_CAP_REFERENCE_GROWTH_EXPONENT,
+  );
   const fromAttr = forMax > 0
-    ? maxPercent * Math.min(1, Math.pow(attr / forMax, 1.20))
+    ? maxPercent * Math.min(1, Math.pow(attr / forMax, SOFT_CAP_ATTRIBUTE_EXPONENT))
     : 0;
-  const pre100Cap = maxPercent * Math.min(1, Math.pow(L / 100, 0.65));
+  const pre100Cap = maxPercent * Math.min(
+    1,
+    Math.pow(L / SOFT_CAP_REFERENCE_LEVEL, SOFT_CAP_LEVEL_EXPONENT),
+  );
   return Math.min(fromAttr, pre100Cap, maxPercent);
 }
 
 export function getMaxHP(totalVitality) {
   const v = Math.max(0, totalVitality || 0);
-  return Math.round(50 + 2.5 * v + 0.008 * Math.pow(v, 2));
+  return Math.round(
+    HEALTH_BASE
+    + HEALTH_PER_VITALITY * v
+    + HEALTH_VITALITY_SQUARED_COEFFICIENT * Math.pow(v, 2),
+  );
 }
 
 export function getCritChance(level, totalLuck, maxPercent = CRIT_CAP) {
@@ -195,8 +219,8 @@ export function rollBasicAttackDamage(archetype, primaryValue, rng = Math.random
  * Agility damage ignores Armor and Tech Resistance.
  */
 export function mitigationForDamageType(damageType, armorPercent, techResistPercent) {
-  if (damageType === "strength") return Math.max(0, (armorPercent || 0) / 100);
-  if (damageType === "tech") return Math.max(0, (techResistPercent || 0) / 100);
+  if (damageType === "strength") return Math.max(0, (armorPercent || 0) / PERCENT_SCALE);
+  if (damageType === "tech") return Math.max(0, (techResistPercent || 0) / PERCENT_SCALE);
   return 0;
 }
 
@@ -247,7 +271,7 @@ export function computeDerivedStats(totalStats, character) {
   // Mission / arena-bot combatants use the early flat ramp; dungeon + players stay at 15.
   const damageBase = getDamageBaseForCombatant(character);
   const rawBase = getBaseDamageFromPrimary(primaryValue, damageBase);
-  const damage = Math.round(archetype === "agi" ? rawBase * 0.925 : rawBase);
+  const damage = Math.round(archetype === "agi" ? rawBase * AGILITY_AVERAGE_VARIANCE : rawBase);
 
   const dungeonCaps = !!(character?.dungeonEnemy);
   const critCap = dungeonCaps ? DUNGEON_CRIT_CAP : CRIT_CAP;
@@ -282,10 +306,13 @@ export function computeCombatPower(character, equippedItems = []) {
   const w = getClassWeights(character?.class);
   const total = computePermanentTotalStats(character, equippedItems);
   const weighted = PRIMARY_STATS.reduce(
-    (sum, k) => sum + (total[k] || 0) * (w[k] ?? 0.1),
+    (sum, k) => sum + (total[k] || 0) * (w[k] ?? DEFAULT_CLASS_STAT_WEIGHT),
     0
   );
-  return Math.round((character.level || 1) * 50 + weighted * 10);
+  return Math.round(
+    (character.level || 1) * COMBAT_POWER_PER_LEVEL
+    + weighted * COMBAT_POWER_PER_WEIGHTED_ATTRIBUTE,
+  );
 }
 
 export {

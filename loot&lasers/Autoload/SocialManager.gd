@@ -5,6 +5,7 @@ extends Node
 signal mail_changed
 signal friends_changed
 signal guild_changed
+signal guild_rankings_loaded(rankings: Array)
 signal social_state_loaded(state: Dictionary)
 signal friend_request_received
 signal friend_request_sent
@@ -17,6 +18,21 @@ signal presence_changed(user_id: String, status: Dictionary)
 signal social_error(error: String)
 signal loading_changed(loading: bool)
 signal mutation_state_changed(mutating: bool)
+
+const MIN_CHARACTER_SEARCH_LENGTH := 2
+const CHARACTER_SEARCH_LIMIT := 20
+const GUILD_MEMBER_LIMIT := 50
+const GUILD_BROWSE_LIMIT := 100
+const DEFAULT_GUILD_LOG_LIMIT := 30
+const DEFAULT_GUILD_RANKING_LIMIT := 50
+const MAX_GUILD_RANKING_LIMIT := 100
+const GUILD_NEARBY_RANKING_RADIUS := 5
+const ET_STANDARD_OFFSET_HOURS := 5
+const SECONDS_PER_HOUR := 3_600
+const SECONDS_PER_DAY := 86_400
+const DAYS_PER_WEEK := 7
+const ISO_WEEK_THURSDAY_OFFSET_DAYS := 3
+const MAX_ISO_WEEK := 53
 
 var inbox: Array = []
 var mail_folder: String = "inbox"
@@ -178,7 +194,7 @@ func handle_guild_mail(mail: Dictionary, accept: bool) -> Dictionary:
 				"mail_type": "guild_request",
 				"from_id": requester_id,
 				"folder": "inbox",
-			}, "limit": 50}, true
+			}, "limit": GUILD_MEMBER_LIMIT}, true
 		)
 		if siblings.ok and typeof(siblings.data) == TYPE_ARRAY:
 			for row in siblings.data:
@@ -247,9 +263,12 @@ func load_friends() -> Dictionary:
 
 func search_characters(query: String) -> Array:
 	var q := query.strip_edges()
-	if q.length() < 2:
+	if q.length() < MIN_CHARACTER_SEARCH_LENGTH:
 		return []
-	var res: Dictionary = await GameApiClient.invoke("SearchCharacters", {"query": q, "limit": 20})
+	var res: Dictionary = await GameApiClient.invoke(
+		"SearchCharacters",
+		{"query": q, "limit": CHARACTER_SEARCH_LIMIT},
+	)
 	if not bool(res.get("ok", false)):
 		return []
 	var data := _node_data(res)
@@ -448,7 +467,9 @@ func clear_account_social_cache() -> void:
 
 func _week_key() -> String:
 	## Approximate America/New_York Monday ISO week (matches web getWeekKey closely).
-	var unix: int = int(Time.get_unix_time_from_system()) - 5 * 3600
+	var unix: int = (
+		int(Time.get_unix_time_from_system()) - ET_STANDARD_OFFSET_HOURS * SECONDS_PER_HOUR
+	)
 	var dict := Time.get_datetime_dict_from_unix_time(unix)
 	var y: int = int(dict.get("year", 2026))
 	var m: int = int(dict.get("month", 1))
@@ -457,16 +478,22 @@ func _week_key() -> String:
 	var t := [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
 	var yy: int = y - (1 if m < 3 else 0)
 	var wd: int = (yy + int(yy / 4) - int(yy / 100) + int(yy / 400) + int(t[m - 1]) + d) % 7
-	var since_mon: int = (wd + 6) % 7
-	var mon_unix: int = unix - since_mon * 86400
-	var thu_unix: int = mon_unix + 3 * 86400
+	var since_mon: int = (wd + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK
+	var mon_unix: int = unix - since_mon * SECONDS_PER_DAY
+	var thu_unix: int = mon_unix + ISO_WEEK_THURSDAY_OFFSET_DAYS * SECONDS_PER_DAY
 	var thu := Time.get_datetime_dict_from_unix_time(thu_unix)
 	var my: int = int(thu.get("year", y))
 	var jan4: int = int(Time.get_unix_time_from_datetime_dict({
 		"year": my, "month": 1, "day": 4, "hour": 12, "minute": 0, "second": 0,
 	}))
-	var week: int = 1 + int(round((float(thu_unix) - float(jan4)) / 86400.0 / 7.0))
-	week = clampi(week, 1, 53)
+	var week: int = 1 + int(
+		round(
+			(float(thu_unix) - float(jan4))
+			/ float(SECONDS_PER_DAY)
+			/ float(DAYS_PER_WEEK)
+		)
+	)
+	week = clampi(week, 1, MAX_ISO_WEEK)
 	return "%s-W%02d" % [my, week]
 
 
@@ -552,7 +579,7 @@ func contribute_arena_win() -> void:
 		await load_my_guild()
 
 
-func load_guild_log(limit: int = 30) -> Array:
+func load_guild_log(limit: int = DEFAULT_GUILD_LOG_LIMIT) -> Array:
 	guild_log = []
 	if my_guild.is_empty():
 		return guild_log
@@ -610,7 +637,7 @@ func request_to_join_guild(guild: Dictionary) -> Dictionary:
 	var gid := str(guild.get("id", ""))
 	if cid.is_empty() or gid.is_empty():
 		return {"ok": false, "error": "Missing guild or character"}
-	if int(guild.get("member_count", 0)) >= 50:
+	if int(guild.get("member_count", 0)) >= GUILD_MEMBER_LIMIT:
 		return {"ok": false, "error": "That guild is full."}
 	var existing: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildMember/filter",
@@ -626,7 +653,7 @@ func request_to_join_guild(guild: Dictionary) -> Dictionary:
 		return {"ok": false, "error": "You already have a pending guild request."}
 	var members: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildMember/filter",
-		{"query": {"guild_id": gid}, "limit": 50}, true
+		{"query": {"guild_id": gid}, "limit": GUILD_MEMBER_LIMIT}, true
 	)
 	var recipients: Array = []
 	if members.ok and typeof(members.data) == TYPE_ARRAY:
@@ -703,6 +730,22 @@ func load_my_guild() -> Dictionary:
 	guild_members = []
 	if cid.is_empty():
 		return {"ok": false, "error": "No character"}
+	var res: Dictionary = await GameApiClient.invoke("GetMyGuild", {})
+	if bool(res.get("ok", false)) and typeof(res.get("data", null)) == TYPE_DICTIONARY:
+		var data: Dictionary = res.data
+		var membership: Variant = data.get("membership", null)
+		if membership == null or (typeof(membership) == TYPE_DICTIONARY and (membership as Dictionary).is_empty()):
+			guild_changed.emit()
+			return {"ok": true, "membership": null}
+		if typeof(membership) == TYPE_DICTIONARY:
+			my_membership = membership
+		var guild: Variant = data.get("guild", null)
+		if typeof(guild) == TYPE_DICTIONARY:
+			my_guild = guild
+		var members: Variant = data.get("members", [])
+		guild_members = members if typeof(members) == TYPE_ARRAY else []
+		guild_changed.emit()
+		return {"ok": true, "guild": my_guild, "membership": my_membership}
 	var mem: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildMember/filter",
 		{"query": {"character_id": cid}, "sort": "-created_date", "limit": 1}, true
@@ -717,18 +760,37 @@ func load_my_guild() -> Dictionary:
 	)
 	if gres.ok and typeof(gres.data) == TYPE_DICTIONARY:
 		my_guild = gres.data
-	var members: Dictionary = await GameApiClient.request(
+	var members_res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildMember/filter",
-		{"query": {"guild_id": gid}, "sort": "-created_date", "limit": 50}, true
+		{
+			"query": {"guild_id": gid},
+			"sort": "-created_date",
+			"limit": GUILD_MEMBER_LIMIT,
+		}, true
 	)
-	guild_members = members.data if members.ok and typeof(members.data) == TYPE_ARRAY else []
+	guild_members = members_res.data if members_res.ok and typeof(members_res.data) == TYPE_ARRAY else []
 	guild_changed.emit()
 	return {"ok": true, "guild": my_guild, "membership": my_membership}
 
 
+func load_guild_rankings(limit: int = DEFAULT_GUILD_RANKING_LIMIT, offset: int = 0, nearby: bool = true) -> Dictionary:
+	var res: Dictionary = await GameApiClient.invoke("GetGuildLeaderboard", {
+		"limit": clampi(limit, 1, MAX_GUILD_RANKING_LIMIT),
+		"offset": maxi(0, offset),
+		"nearby": nearby,
+		"nearby_radius": GUILD_NEARBY_RANKING_RADIUS,
+	})
+	if not bool(res.get("ok", false)):
+		return {"ok": false, "error": str(res.get("error", "GetGuildLeaderboard failed")), "data": {}}
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	var rows: Array = data.get("rankings", []) if typeof(data.get("rankings", [])) == TYPE_ARRAY else []
+	guild_rankings_loaded.emit(rows)
+	return {"ok": true, "error": "", "data": data}
+
+
 func browse_guilds() -> Array:
 	var res: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/Guild?sort=-created_date&limit=100", null, true
+		"GET", "/api/entities/Guild?sort=-created_date&limit=%s" % GUILD_BROWSE_LIMIT, null, true
 	)
 	guild_browse = []
 	if res.ok and typeof(res.data) == TYPE_ARRAY:

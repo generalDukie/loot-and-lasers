@@ -12,6 +12,12 @@ import { assertNameHasNoDigits, assertNameHasNoSpaces, NAME_NO_DIGITS_MSG, NAME_
 import { assertCanCreateCharacter, EntitlementError } from "./entitlements/index.js";
 import { defaultOnboardingState } from "./shared/tutorialService.js";
 
+const OWNED_CHARACTER_QUERY_LIMIT = 50;
+const CHARACTER_NAME_MIN_LENGTH = 2;
+const CHARACTER_NAME_MAX_LENGTH = 24;
+const NOVA_STORAGE_SCALE = 2;
+const GUILD_MEMBERSHIP_CLEANUP_LIMIT = 100;
+
 export function isAdmin(user) {
   return user?.role === "admin";
 }
@@ -112,7 +118,11 @@ export const ITEM_ALLOWED_UPDATE_FIELDS = new Set(["locked"]);
 /** Character ids belonging to this auth user. */
 export function characterIdsForUser(userId) {
   if (!userId) return [];
-  return entities.Character.filter({ created_by_id: userId }, "-created_date", 50).map((c) => c.id);
+  return entities.Character.filter(
+    { created_by_id: userId },
+    "-created_date",
+    OWNED_CHARACTER_QUERY_LIMIT,
+  ).map((c) => c.id);
 }
 
 export function ownsCharacter(user, characterId) {
@@ -376,8 +386,10 @@ export function sanitizeCreatePayload(user, type, data = {}) {
     out.created_by_id = user.id;
 
     const name = String(out.name || "").trim();
-    if (name.length < 2 || name.length > 24) {
-      const err = new Error("Name must be 2–24 characters");
+    if (name.length < CHARACTER_NAME_MIN_LENGTH || name.length > CHARACTER_NAME_MAX_LENGTH) {
+      const err = new Error(
+        `Name must be ${CHARACTER_NAME_MIN_LENGTH}–${CHARACTER_NAME_MAX_LENGTH} characters`,
+      );
       err.status = 400;
       throw err;
     }
@@ -410,7 +422,11 @@ export function sanitizeCreatePayload(user, type, data = {}) {
     out.fuel_updated_at = now;
 
     if (!isAdmin(user)) {
-      const existingCount = entities.Character.filter({ created_by_id: user.id }, null, 50).length;
+      const existingCount = entities.Character.filter(
+        { created_by_id: user.id },
+        null,
+        OWNED_CHARACTER_QUERY_LIMIT,
+      ).length;
       try {
         assertCanCreateCharacter(user.id, existingCount);
       } catch (err) {
@@ -451,7 +467,7 @@ export function sanitizeCreatePayload(user, type, data = {}) {
       out.stardust = 0;
       out.total_stardust_earned = 0;
       out.nova_crystals = 0;
-      out.economy_nova_scale = 2;
+      out.economy_nova_scale = NOVA_STORAGE_SCALE;
 
       // Strip other locked progression fields if client forged them.
       for (const key of CHARACTER_ECONOMY_FIELDS) {
@@ -529,8 +545,13 @@ export function sanitizeUpdatePayload(user, type, data = {}) {
     }
     if (out.name != null) {
       out.name = String(out.name).trim();
-      if (out.name.length < 2 || out.name.length > 24) {
-        const err = new Error("Name must be 2–24 characters");
+      if (
+        out.name.length < CHARACTER_NAME_MIN_LENGTH
+        || out.name.length > CHARACTER_NAME_MAX_LENGTH
+      ) {
+        const err = new Error(
+          `Name must be ${CHARACTER_NAME_MIN_LENGTH}–${CHARACTER_NAME_MAX_LENGTH} characters`,
+        );
         err.status = 400;
         throw err;
       }
@@ -702,7 +723,11 @@ export function scopeReadQuery(user, type, query = {}) {
     const ids = characterIdsForUser(user.id);
     const guildIds = [];
     for (const id of ids) {
-      for (const membership of entities.GuildMember.filter({ character_id: id }, null, 100)) {
+      for (const membership of entities.GuildMember.filter(
+        { character_id: id },
+        null,
+        GUILD_MEMBERSHIP_CLEANUP_LIMIT,
+      )) {
         if (membership.guild_id && !guildIds.includes(membership.guild_id)) {
           guildIds.push(membership.guild_id);
         }

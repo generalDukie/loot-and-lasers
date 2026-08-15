@@ -42,12 +42,28 @@ const ART_PREFIX = ["Codex", "Shard", "Heart", "Eye", "Crown", "Key", "Core", "S
 const ART_SUFFIX = ["of the Void", "of Eternity", "of the Nebula", "of the Abyss", "of First Light", "of the Singularity", "of the Ancients", "of the Endless", "of the Forgotten", "of Genesis", "of the Rift", "of the Cosmos", "of the Pale Star", "of the Deep", "of the Last Dawn"];
 const ART_EMOJI = ["📜", "💎", "👁️", "👑", "🔑", "🔆", "🔮", "🪬", "📕", "🗡️", "🔮", "🦯", "🧭", "🎭", "📯"];
 
-export const ARTIFACTS = Array.from({ length: 100 }, (_, i) => {
-  const rarity = i < 8 ? "legendary" : i < 24 ? "epic" : i < 55 ? "rare" : i < 80 ? "uncommon" : "common";
+const ARTIFACT_CATALOG_SIZE = 100;
+const ARTIFACT_RARITY_CUTOFFS = Object.freeze({
+  legendary: 8,
+  epic: 24,
+  rare: 55,
+  uncommon: 80,
+});
+
+export const ARTIFACTS = Array.from({ length: ARTIFACT_CATALOG_SIZE }, (_, i) => {
+  const rarity = i < ARTIFACT_RARITY_CUTOFFS.legendary
+    ? "legendary"
+    : i < ARTIFACT_RARITY_CUTOFFS.epic
+      ? "epic"
+      : i < ARTIFACT_RARITY_CUTOFFS.rare
+        ? "rare"
+        : i < ARTIFACT_RARITY_CUTOFFS.uncommon
+          ? "uncommon"
+          : "common";
   return {
     id: i + 1,
-    name: `${ART_PREFIX[i % 15]} ${ART_SUFFIX[Math.floor(i / 15) % 15]}`,
-    emoji: ART_EMOJI[i % 15],
+    name: `${ART_PREFIX[i % ART_PREFIX.length]} ${ART_SUFFIX[Math.floor(i / ART_PREFIX.length) % ART_SUFFIX.length]}`,
+    emoji: ART_EMOJI[i % ART_EMOJI.length],
     rarity,
     lore: `Recovered relic #${i + 1}. Its origin predates recorded galactic history.`,
   };
@@ -58,12 +74,28 @@ const REL_ADJ = ["Cracked", "Glowing", "Ancient", "Rusted", "Shimmering", "Froze
 const REL_NOUN = ["Idol", "Amulet", "Coin", "Charm", "Totem", "Sigil", "Tablet", "Fragment", "Token", "Talisman", "Reliquary", "Shard", "Mote", "Wisp", "Vessel", "Censer", "Pendant", "Rune", "Glyph", "Mark", "Seal", "Brand", "Figurine", "Locket", "Crest"];
 const REL_EMOJI = ["🗿", "📿", "🪙", "🔮", "🦴", "🔰", "🪶", "🏺", "🧿", "🔱", "⚱️", "💠", "stardust", "🌫️", "🪔", "🪔", "📿", "🔠", "💠", "🔖", "🔖", "🏷️", "🧸", "💌", "🎖️"];
 
-export const RELICS = Array.from({ length: 500 }, (_, i) => {
-  const rarity = i < 15 ? "legendary" : i < 50 ? "epic" : i < 160 ? "rare" : i < 320 ? "uncommon" : "common";
+const RELIC_CATALOG_SIZE = 500;
+const RELIC_RARITY_CUTOFFS = Object.freeze({
+  legendary: 15,
+  epic: 50,
+  rare: 160,
+  uncommon: 320,
+});
+
+export const RELICS = Array.from({ length: RELIC_CATALOG_SIZE }, (_, i) => {
+  const rarity = i < RELIC_RARITY_CUTOFFS.legendary
+    ? "legendary"
+    : i < RELIC_RARITY_CUTOFFS.epic
+      ? "epic"
+      : i < RELIC_RARITY_CUTOFFS.rare
+        ? "rare"
+        : i < RELIC_RARITY_CUTOFFS.uncommon
+          ? "uncommon"
+          : "common";
   return {
     id: i + 1,
-    name: `${REL_ADJ[i % 20]} ${REL_NOUN[Math.floor(i / 20) % 25]}`,
-    emoji: REL_EMOJI[i % 25],
+    name: `${REL_ADJ[i % REL_ADJ.length]} ${REL_NOUN[Math.floor(i / REL_ADJ.length) % REL_NOUN.length]}`,
+    emoji: REL_EMOJI[i % REL_EMOJI.length],
     rarity,
     lore: `A minor relic of a forgotten people.`,
   };

@@ -9,8 +9,8 @@ func _hangar_offline() -> Dictionary:
 	return {"ok": false, "error": "Ship Hangar is Coming Soon", "code": "ship_hangar_offline"}
 
 
-func refresh() -> Dictionary:
-	return await MissionManager.refresh_character()
+func refresh(force_character: bool = false) -> Dictionary:
+	return await MissionManager.refresh_character(force_character)
 
 
 func buy_fuel_mount(mount_id: int) -> Dictionary:

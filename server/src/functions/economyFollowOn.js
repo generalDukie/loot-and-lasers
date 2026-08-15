@@ -39,6 +39,7 @@ import {
   novaDebitPatch,
   novaCreditPatch,
   recoverTransaction,
+  NOVA_HALF_UNITS_PER_NOVA,
 } from "../shared/currencyService.js";
 import { randomItem } from "../shared/rewards.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
@@ -101,6 +102,7 @@ import {
   SCOUT_MILESTONE_MOD_ID,
   NAME_CHANGE_COST,
   GUILD_WAR_SIM_COST,
+  XP_STARDUST_SCALE,
   dismissActiveBuff,
   isShipHangarEnabled,
 } from "../shared/economyFormulas.js";
@@ -183,12 +185,40 @@ import {
   serializeCharacterStatistics,
   serializePublicProfileStatistics,
   serializeLeaderboardPage,
+  serializeGuildLeaderboardPage,
   getNearbyArenaEntries,
   STATISTIC_DEFINITIONS,
   LEADERBOARD_DEFINITIONS,
 } from "../shared/statisticsService.js";
+import {
+  getMyGuildState,
+  getNearbyGuildEntries,
+  computeGuildRank,
+  publicGuildRankRow,
+} from "../shared/guildSocialService.js";
 import { secureRandom, secureRandomInt } from "../rewards/rng.js";
 import { isAdmin } from "../entityAccess.js";
+import { ARENA_DEFAULT_RATING } from "../arena/config.js";
+
+const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+const DEFAULT_NEARBY_RANK_RADIUS = 5;
+const DIRECT_CHALLENGE_REDUCED_REWARD_MULTIPLIER = 0.25;
+const ARENA_STREAK_NEWS_MILESTONES = Object.freeze([5, 10, 15, 20]);
+const ARENA_STREAK_NEWS_MINIMUM = ARENA_STREAK_NEWS_MILESTONES[0];
+const DUNGEON_CONSUMABLE_DROP_CHANCE = 0.2;
+const DRU_PRECISION_SCALE = 100;
+const GUILD_TAG_MAX_LENGTH = 5;
+const GUILD_MEMBERSHIP_QUERY_LIMIT = 5;
+const GUILD_STARTING_XP_REQUIREMENT = 1_000;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND
+  * SECONDS_PER_MINUTE
+  * MINUTES_PER_HOUR;
+const NAME_DUPLICATE_QUERY_LIMIT = 5;
+const GUILD_WAR_SIM_WIN_REWARD_UNSCALED = 2_500;
+const GUILD_WAR_SIM_LOSS_REWARD_UNSCALED = 500;
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -200,7 +230,7 @@ function httpErr(status, message, code) {
 function normalizeOperationKey(value) {
   const key = String(value || "").trim();
   if (!key) return "";
-  if (key.length > 128 || !/^[A-Za-z0-9:_-]+$/.test(key)) {
+  if (key.length > IDEMPOTENCY_KEY_MAX_LENGTH || !/^[A-Za-z0-9:_-]+$/.test(key)) {
     httpErr(400, "Invalid request_id");
   }
   return key;
@@ -373,7 +403,51 @@ export const GetArenaLeaderboard = wrap((user, body = {}) => {
   };
   if (body.nearby) {
     out.nearby = getNearbyArenaEntries(ch.id, {
-      radius: body.nearby_radius ?? body.radius ?? 5,
+      radius: body.nearby_radius ?? body.radius ?? DEFAULT_NEARBY_RANK_RADIUS,
+    });
+  }
+  return out;
+});
+
+export const GetGuildLeaderboard = wrap((user, body = {}) => {
+  const ch = requireMyChar(user);
+  if (body && typeof body === "object") {
+    for (const k of ["rank", "guild_level", "level", "experience", "guild_xp", "player_guild_rank"]) {
+      if (Object.prototype.hasOwnProperty.call(body, k)) delete body[k];
+    }
+  }
+  const page = serializeGuildLeaderboardPage({
+    limit: body.limit,
+    offset: body.offset,
+  });
+  const mine = getMyGuildState(ch.id);
+  const guildId = mine.guild?.id || mine.membership?.guild_id || null;
+  const player_guild_rank = guildId ? computeGuildRank(guildId) : 0;
+  const selfId = guildId || "";
+  const rankings = (page.rankings || []).map((row) => ({
+    ...row,
+    is_self: selfId !== "" && row.guild_id === selfId,
+  }));
+  const your_guild = guildId
+    ? publicGuildRankRow(mine.guild || entities.Guild.get(guildId), player_guild_rank, {
+        is_self: true,
+      })
+    : null;
+  const out = {
+    success: true,
+    leaderboard_id: page.leaderboard_id,
+    rankings,
+    total: page.total,
+    limit: page.limit,
+    offset: page.offset,
+    has_more: page.has_more,
+    player_guild_rank,
+    your_guild,
+    in_guild: Boolean(guildId),
+  };
+  if (body.nearby) {
+    out.nearby = getNearbyGuildEntries(guildId, {
+      radius: body.nearby_radius ?? body.radius ?? DEFAULT_NEARBY_RANK_RADIUS,
     });
   }
   return out;
@@ -530,7 +604,7 @@ export const PrepareArenaCombat = wrap((user, body = {}) => {
     arenaBotId: resolved.arena_bot_id,
     realCharacterId: resolved.realCharacterId,
     isBot: resolved.isBot,
-    opponentRating: resolved.combatant.arena_rating || 1000,
+    opponentRating: resolved.combatant.arena_rating || ARENA_DEFAULT_RATING,
     skipCooldown,
     isFree: useFree,
     rng: secureRandom,
@@ -644,11 +718,15 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     if (novaCost > 0 && !hasNova(ch, novaCost)) httpErr(400, "Not enough Nova Crystals");
 
     const ratingEligible = (dc.ratingDelta || 0) > 0 || !actuallyWon;
-    const rewardMult = !actuallyWon ? 0 : ratingEligible ? 1 : 0.25;
+    const rewardMult = !actuallyWon
+      ? 0
+      : ratingEligible
+        ? 1
+        : DIRECT_CHALLENGE_REDUCED_REWARD_MULTIPLIER;
     const rewardedState = getArenaRewardedWinsState(ch, today);
     const baseRewards = computeArenaRewards(
       ch,
-      { arena_rating: dc.challenge?.opponentRatingAtStart || 1000 },
+      { arena_rating: dc.challenge?.opponentRatingAtStart || ARENA_DEFAULT_RATING },
       actuallyWon,
       { free: useFree, rewardedWinsToday: rewardedState.wins },
     );
@@ -678,7 +756,7 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     Object.assign(patch, ach.patch);
     const progression = consumeProgression(patch);
     patch.arena_pending_combat = null;
-    const character = entities.Character.update(ch.id, patch);
+    let character = entities.Character.update(ch.id, patch);
     if (ach.newly_unlocked?.length) {
       notifyAchievementsUnlocked(character.id, ach.newly_unlocked);
     }
@@ -840,7 +918,7 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     httpErr(400, "Not enough Nova Crystals", "INSUFFICIENT_NOVA");
   }
 
-  const oppRating = meta.opponent_rating || 1000;
+  const oppRating = meta.opponent_rating || ARENA_DEFAULT_RATING;
   const rewardedState = getArenaRewardedWinsState(ch, today);
   const rewards = computeArenaRewards(
     ch,
@@ -867,7 +945,7 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     patch.arena_rewarded_wins_date = rewardedState.date;
   }
 
-  const prevRating = ch.arena_rating || 1000;
+  const prevRating = ch.arena_rating || ARENA_DEFAULT_RATING;
   const newRating = Math.max(0, prevRating + rewards.arena_rating_delta);
   const prevStreak = ch.arena_streak || 0;
   const newStreak = won ? prevStreak + 1 : 0;
@@ -1035,7 +1113,7 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
       character_name: pname,
       character_id: character.id,
     });
-    if (won && [5, 10, 15, 20].includes(newStreak)) {
+    if (won && ARENA_STREAK_NEWS_MILESTONES.includes(newStreak)) {
       entities.GalaxyNews.create({
         message: `🔥 ${pname} is on a ${newStreak}-match win streak!`,
         entry_type: "streak",
@@ -1043,7 +1121,7 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
         character_id: character.id,
       });
     }
-    if (!won && prevStreak >= 5) {
+    if (!won && prevStreak >= ARENA_STREAK_NEWS_MINIMUM) {
       entities.GalaxyNews.create({
         message: `💀 ${pname}'s ${prevStreak}-match win streak has ended.`,
         entry_type: "streak",
@@ -1367,7 +1445,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
       collectGrant(grantOrCompensate(ch, stripShopNoise(gear), patch), itemsGranted, pendingLoot, grantCtx);
     }
 
-    if (secureRandom() < 0.2) {
+    if (secureRandom() < DUNGEON_CONSUMABLE_DROP_CHANCE) {
       const cons = stripShopNoise(randomConsumable(secureRandom));
       collectGrant(grantOrCompensate(ch, cons, patch), itemsGranted, pendingLoot, grantCtx);
     }
@@ -1445,7 +1523,7 @@ export const FinishDungeonBattle = wrap((user, body) => {
       stardust,
       experience: boostedXp,
       base_experience: experience,
-      dru: Math.round(dru * 100) / 100,
+      dru: Math.round(dru * DRU_PRECISION_SCALE) / DRU_PRECISION_SCALE,
       enemyLevel,
       isBoss,
     },
@@ -2079,7 +2157,7 @@ export const CasinoSessionStart = wrap((user, body = {}) => {
       session_id: sessionId,
       event: "round_started",
       session: publicSessionState(session),
-      crate_count: 6,
+      crate_count: board.length,
     };
   }
 
@@ -2172,7 +2250,7 @@ export const CasinoSessionAction = wrap((user, body = {}) => {
     }
     const st = { ...session.state };
     if (action === "refine" || action === "refine_again") {
-      if (!st.can_refine || st.stage < 1 || st.stage >= 5) {
+      if (!st.can_refine || st.stage < 1 || st.stage >= REFINING_LADDER.length) {
         httpErr(400, "Cannot refine at this stage");
       }
       const nextIdx = st.stage; // 0-based attempt index for next = current stage
@@ -2196,8 +2274,10 @@ export const CasinoSessionAction = wrap((user, body = {}) => {
         const newStage = st.stage + 1;
         st.stage = newStage;
         st.collectible_mult = refiningMultForStage(newStage);
-        st.last_event = newStage >= 5 ? "final_refinement_completed" : "refinement_succeeded";
-        if (newStage >= 5) {
+        st.last_event = newStage >= REFINING_LADDER.length
+          ? "final_refinement_completed"
+          : "refinement_succeeded";
+        if (newStage >= REFINING_LADDER.length) {
           const gross = floorNovaCasinoPayout(session.wager, st.collectible_mult);
           const cre = creditNova({
             user,
@@ -2213,7 +2293,9 @@ export const CasinoSessionAction = wrap((user, body = {}) => {
           st.can_collect = false;
           st.can_refine = false;
           st.gross_payout = gross;
-          st.net_result = Math.round((gross - session.wager) * 2) / 2;
+          st.net_result = Math.round(
+            (gross - session.wager) * NOVA_HALF_UNITS_PER_NOVA,
+          ) / NOVA_HALF_UNITS_PER_NOVA;
           updateCasinoSession(sessionId, { status: "completed", state: st, last_action_request_id: actionKey });
           response = {
             event: "final_refinement_completed",
@@ -2232,7 +2314,11 @@ export const CasinoSessionAction = wrap((user, body = {}) => {
         }
       }
     } else if (action === "collect") {
-      if (!st.can_collect || st.stage < 1 || st.stage > 4) {
+      if (
+        !st.can_collect
+        || st.stage < 1
+        || st.stage >= REFINING_LADDER.length
+      ) {
         httpErr(400, "Collect is only available after stages 1–4");
       }
       const gross = floorNovaCasinoPayout(session.wager, st.collectible_mult);
@@ -2250,7 +2336,9 @@ export const CasinoSessionAction = wrap((user, body = {}) => {
       st.can_collect = false;
       st.can_refine = false;
       st.gross_payout = gross;
-      st.net_result = Math.round((gross - session.wager) * 2) / 2;
+      st.net_result = Math.round(
+        (gross - session.wager) * NOVA_HALF_UNITS_PER_NOVA,
+      ) / NOVA_HALF_UNITS_PER_NOVA;
       st.last_event = "payout_collected";
       updateCasinoSession(sessionId, { status: "completed", state: st, last_action_request_id: actionKey });
       response = {
@@ -2501,10 +2589,17 @@ export const CreateGuild = wrap((user, body) => {
   const name = String(body.name || "").trim();
   if (!name) httpErr(400, "Guild needs a name");
   assertNameHasNoDigits(name, "Guild name");
-  const tag = String(body.tag || "").trim().toUpperCase().slice(0, 5);
+  const tag = String(body.tag || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, GUILD_TAG_MAX_LENGTH);
   const description = String(body.description || "").trim();
   if ((ch.stardust || 0) < GUILD_CREATE_COST) httpErr(400, "Not enough stardust");
-  const existing = entities.GuildMember.filter({ character_id: ch.id }, null, 5);
+  const existing = entities.GuildMember.filter(
+    { character_id: ch.id },
+    null,
+    GUILD_MEMBERSHIP_QUERY_LIMIT,
+  );
   if (existing.length) httpErr(400, "Already in a guild");
   const nameTaken = entities.Guild.filter({ name }, null, 1);
   if (nameTaken.length) httpErr(400, "Name taken");
@@ -2519,7 +2614,7 @@ export const CreateGuild = wrap((user, body) => {
     leader_name: ch.name,
     level: 1,
     experience: 0,
-    experience_to_next: 1000,
+    experience_to_next: GUILD_STARTING_XP_REQUIREMENT,
     total_missions: 0,
     total_stardust: 0,
     member_count: 1,
@@ -2550,7 +2645,11 @@ export const DeclareGuildWar = wrap((user, body) => {
   if (!defenderId) httpErr(400, "Missing defender_guild_id");
   if ((ch.stardust || 0) < GUILD_WAR_DECLARE_COST) httpErr(400, "Not enough stardust");
 
-  const membership = entities.GuildMember.filter({ character_id: ch.id }, null, 5)[0];
+  const membership = entities.GuildMember.filter(
+    { character_id: ch.id },
+    null,
+    GUILD_MEMBERSHIP_QUERY_LIMIT,
+  )[0];
   if (!membership) httpErr(400, "Not in a guild");
   if (!["leader", "officer"].includes(membership.role)) httpErr(403, "Officers only");
 
@@ -2562,7 +2661,7 @@ export const DeclareGuildWar = wrap((user, body) => {
   const patch = { stardust: (ch.stardust || 0) - GUILD_WAR_DECLARE_COST };
   const character = entities.Character.update(ch.id, patch);
   const now = new Date();
-  const deadline = new Date(now.getTime() + GUILD_WAR_READY_HOURS * 3600 * 1000);
+  const deadline = new Date(now.getTime() + GUILD_WAR_READY_HOURS * MILLISECONDS_PER_HOUR);
   const war = entities.GuildWar.create({
     attacker_guild_id: attackerGuild.id,
     attacker_guild_name: attackerGuild.name,
@@ -2641,7 +2740,11 @@ export const RenameCharacter = wrap(async (user, body) => {
   if (!name || name.length < 2 || name.length > 24) httpErr(400, "Name must be 2–24 characters");
   assertNameHasNoDigits(name);
   assertNameHasNoSpaces(name);
-  const taken = entities.Character.filter({ name }, null, 5).filter((c) => c.id !== ch.id);
+  const taken = entities.Character.filter(
+    { name },
+    null,
+    NAME_DUPLICATE_QUERY_LIMIT,
+  ).filter((c) => c.id !== ch.id);
   if (taken.length) httpErr(409, "Name taken");
 
   const tokens = resolveQuantity({ entitlementKey: "account.rename_token", accountId: user.id });
@@ -2696,7 +2799,9 @@ export const ApplyGuildWarResult = wrap((user, body) => {
   const ch = requireMyChar(user);
   const won = !!body.won;
   // Server-authoritative reward (scaled units). Client amounts are ignored.
-  const capped = won ? 2500 * 10 : 500 * 10;
+  const capped = (
+    won ? GUILD_WAR_SIM_WIN_REWARD_UNSCALED : GUILD_WAR_SIM_LOSS_REWARD_UNSCALED
+  ) * XP_STARDUST_SCALE;
   const delta = -GUILD_WAR_SIM_COST + capped;
   const next = (ch.stardust || 0) + delta;
   if (next < 0) httpErr(400, "Not enough stardust for war chest");
@@ -2713,6 +2818,7 @@ export const ECONOMY_FOLLOW_ON_HANDLERS = {
   GetArenaStatus,
   GetArenaOpponents,
   GetArenaLeaderboard,
+  GetGuildLeaderboard,
   GetCharacterStatistics,
   GetPublicProfileStatistics,
   RefreshArenaOpponents,

@@ -1,10 +1,13 @@
 import { api } from "@/api/gameClient";
 import {
   ARENA_HISTORY_LIMIT,
+  DEFAULT_ARENA_RATING,
   snapshotOpponent,
   characterToOpponent,
 } from "@/lib/arenaEngine";
 import { getGuildMembership } from "@/lib/guildUtils";
+
+const ARENA_HISTORY_PRUNE_BUFFER = 20;
 
 export async function loadArenaHistory(characterId) {
   if (!characterId) return [];
@@ -28,7 +31,7 @@ export async function recordArenaMatch({ characterId, opp, won, ratingDelta, rat
       opponent_name: opp.name,
       opponent_is_bot: !!opp.isBot,
       opponent_level: opp.level || 1,
-      opponent_rating: opp.arena_rating || 1000,
+      opponent_rating: opp.arena_rating || DEFAULT_ARENA_RATING,
       opponent_power: opp.power || 0,
       opponent_class: opp.class,
       opponent_race: opp.race,
@@ -44,7 +47,7 @@ export async function recordArenaMatch({ characterId, opp, won, ratingDelta, rat
     const all = await api.entities.ArenaMatch.filter(
       { character_id: characterId },
       "-created_date",
-      ARENA_HISTORY_LIMIT + 20,
+      ARENA_HISTORY_LIMIT + ARENA_HISTORY_PRUNE_BUFFER,
     );
     const excess = (all || []).slice(ARENA_HISTORY_LIMIT);
     await Promise.all(excess.map((old) => api.entities.ArenaMatch.delete(old.id).catch(() => null)));

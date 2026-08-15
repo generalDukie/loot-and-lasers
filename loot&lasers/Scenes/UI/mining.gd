@@ -1,6 +1,11 @@
 extends Control
 ## Space Mining — mirrors web SpaceMiningPage (hero node · duration · progress · stats).
 
+const MINUTES_PER_HOUR := 60.0
+const SECONDS_PER_MINUTE := 60
+const MINUTES_PER_HOUR_INT := 60
+const MILLISECONDS_PER_SECOND := 1_000.0
+
 var _balance_lab: Label
 var _status: Label
 var _hero_wrap: Control
@@ -60,9 +65,10 @@ func _on_mining_phase_changed(_phase: String) -> void:
 
 func _boot() -> void:
 	_busy = true
-	_populate()
-	await MissionManager.refresh_character()
-	await MiningManager.refresh_status()
+	var requests := AsyncGroup.new()
+	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(MiningManager.refresh_status)
+	await requests.wait()
 	_busy = false
 	_populate()
 	_tick = Timer.new()
@@ -435,7 +441,9 @@ func _populate() -> void:
 	var c := GameManager.active_character
 	var level := maxi(1, int(c.get("level", 1)))
 	var spf := StardustEconomy.stardust_per_fuel(level)
-	var rate_per_hour := int(round(float(spf) * StardustEconomy.MINING_EFFICIENCY * 60.0))
+	var rate_per_hour := int(
+		round(float(spf) * StardustEconomy.MINING_EFFICIENCY * MINUTES_PER_HOUR)
+	)
 	_balance_lab.text = str(
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
 	)
@@ -559,9 +567,10 @@ func _format_remaining(ms: int) -> String:
 	## Mirrors web formatRemaining.
 	if ms <= 0:
 		return "Ready to collect!"
-	var total := int(ceil(float(ms) / 1000.0))
-	var h := int(total / 3600)
-	var m := int((total % 3600) / 60)
+	var total := int(ceil(float(ms) / MILLISECONDS_PER_SECOND))
+	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR_INT
+	var h := int(total / seconds_per_hour)
+	var m := int((total % seconds_per_hour) / SECONDS_PER_MINUTE)
 	var s := total % 60
 	if h > 0:
 		return "%sh %sm %ss" % [h, m, s]

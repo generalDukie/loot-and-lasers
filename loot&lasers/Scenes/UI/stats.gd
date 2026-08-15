@@ -106,9 +106,8 @@ func _ready() -> void:
 	var win := get_window()
 	if win != null and not win.focus_exited.is_connected(_on_window_focus_out):
 		win.focus_exited.connect(_on_window_focus_out)
-	# Defer network boot so shell show_page can finish mounting/animating
-	# without waiting on guild/stats requests (those used to freeze the rail).
-	_populate()
+	# Defer the live boot so shell show_page can finish mounting without
+	# presenting the previous character-sheet snapshot.
 	call_deferred("_start_boot")
 
 
@@ -143,7 +142,7 @@ func _boot() -> void:
 	await SocialManager.load_my_guild()
 	if not is_inside_tree() or not is_instance_valid(self):
 		return
-	var res: Dictionary = await StatsManager.refresh()
+	var res: Dictionary = await StatsManager.refresh(true)
 	if not is_inside_tree() or not is_instance_valid(self):
 		return
 	if not res.ok:

@@ -51,6 +51,54 @@ import {
   GearSaleValue,
   StardustPerFuel,
 } from "./stardustEconomy.js";
+import { ARENA_DEFAULT_RATING, ARENA_ELO_RATING_SCALE } from "../arena/config.js";
+
+const PERCENT_SCALE = 100;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND
+  * SECONDS_PER_MINUTE
+  * MINUTES_PER_HOUR;
+
+const NOVA_ITEM_LEVEL_MULTIPLIER = 0.1;
+const BASE_INVENTORY_CAP = 10;
+const MISSION_DURATION_STEP_SECONDS = 15;
+const MISSION_REWARD_VARIANCE = 0.10;
+const FUEL_COST_PRECISION_SCALE = 100;
+const MISSION_EFFICIENCY_PRECISION_SCALE = 100;
+const SKIP_NOVA_HALF_UNITS_PER_FUEL = 0.2;
+const NOVA_HALF_UNIT_SCALE = 2;
+
+const SHOP_MORNING_START_HOUR = 2;
+const SHOP_AFTERNOON_START_HOUR = 14;
+const SHOP_WINDOW_DURATION_HOURS = 12;
+const DATE_PART_PAD_WIDTH = 2;
+const HAGGLE_SUCCESS_CHANCE = 0.4;
+const HAGGLE_MIN_DISCOUNT_PERCENT = 15;
+const HAGGLE_DISCOUNT_OUTCOME_COUNT = 6;
+const SHOP_GEAR_MANUAL_REFRESH_SEED_STEP = 17;
+const SHOP_CONSUMABLE_MANUAL_REFRESH_SEED_STEP = 19;
+const SHOP_STOCK_SEED_MULTIPLIER = 7_919;
+const SHOP_STOCK_SEED_OFFSET = 13;
+const CONSUMABLE_STOCK_SEED_MULTIPLIER = 4_099;
+const CONSUMABLE_STOCK_SEED_OFFSET = 7;
+const HOT_DEAL_SEED_MULTIPLIER = 104_729;
+const HOT_DEAL_SEED_OFFSET = 77;
+const LEGACY_CONSUMABLE_STOCK_COUNT = 2;
+const STIM_RARE_ROLL_THRESHOLD = 0.4;
+const STIM_EPIC_ROLL_THRESHOLD = 0.8;
+const STIM_REFRESH_BASE_DURATION_DIVISOR = 2;
+
+const ARENA_XP_FUEL_EQUIVALENT_NUMERATOR = 5;
+const ARENA_XP_FUEL_EQUIVALENT_DENOMINATOR = 7;
+const WORMHOLE_BASE_TOTAL_DRU = 185;
+const WORMHOLE_DRU_PER_DEPTH = 25;
+const WORMHOLE_BASE_ENEMY_LEVEL = 200;
+const WORMHOLE_LEVELS_PER_DEPTH = 35;
+const WORMHOLE_FIRST_ENEMY_OFFSET = 3;
+const DRU_PRECISION_SCALE = 100;
 
 export { XP_STARDUST_SCALE };
 
@@ -189,7 +237,7 @@ export const NOVA_CRYSTAL_PER_RARITY = { common: 0, uncommon: 0, rare: 0, epic: 
 export function computeNovaCrystalCost(item) {
   const base = NOVA_CRYSTAL_PER_RARITY[item.rarity] ?? 0;
   if (!base) return 0;
-  const levelMult = 1 + (item.level_requirement || 1) * 0.1;
+  const levelMult = 1 + (item.level_requirement || 1) * NOVA_ITEM_LEVEL_MULTIPLIER;
   return Math.max(1, Math.round(base * levelMult));
 }
 
@@ -203,12 +251,12 @@ export function clampStardust(amount) {
   if (!Number.isFinite(n)) return 0;
   return Math.min(STARDUST_MAX, Math.max(0, Math.floor(n)));
 }
-export const FUEL_CYCLE_MS = 24 * 60 * 60 * 1000;
+export const FUEL_CYCLE_MS = HOURS_PER_DAY * MILLISECONDS_PER_HOUR;
 export const FUEL_PURCHASE_AMOUNT = 20;
 /** Finalized: 20 Fuel costs 20 Nova (flat). */
 export const FUEL_PURCHASE_COST = 20;
 export const FUEL_PURCHASE_MAX = 10;
-export const MISSION_MIN_FUEL = 0.25;
+export const MISSION_MIN_FUEL = MISSION_DURATION_STEP_SECONDS / SECONDS_PER_MINUTE;
 
 export function checkFuelReset(character, nowMs = clock.nowMs()) {
   const storedMax = character.max_fuel || FUEL_MAX;
@@ -396,7 +444,7 @@ export function getModEffectTotal(character, effectKey) {
 }
 
 export function getInventoryCap(character) {
-  const base = 10;
+  const base = BASE_INVENTORY_CAP;
   const modBonus = Math.round(getModEffectTotal(character, "inventory_cap_bonus") || 0);
   let entBonus = 0;
   const accountId = character?.created_by_id;
@@ -423,22 +471,33 @@ export function getEffectiveMissionDuration(character, mission) {
   const fuelSpeed = getFuelSpeedTotal(character);
   const totalReduction = Math.min(REDUCTION_CAP, warpReduction + fuelSpeed);
   const raw = Math.max(1, Math.floor((mission?.duration_seconds || 0) * (1 - totalReduction)));
-  return Math.max(15, Math.round(raw / 15) * 15);
+  return Math.max(
+    MISSION_DURATION_STEP_SECONDS,
+    Math.round(raw / MISSION_DURATION_STEP_SECONDS) * MISSION_DURATION_STEP_SECONDS,
+  );
 }
 
 export function getEffectiveFuelCost(character, mission) {
   if (typeof mission?.fuel_cost === "number") {
-    return Math.max(MISSION_MIN_FUEL, Math.round(mission.fuel_cost * 100) / 100);
+    return Math.max(
+      MISSION_MIN_FUEL,
+      Math.round(mission.fuel_cost * FUEL_COST_PRECISION_SCALE)
+        / FUEL_COST_PRECISION_SCALE,
+    );
   }
   const effectiveSeconds = getEffectiveMissionDuration(character, mission);
-  const raw = effectiveSeconds / 60 - getModEffectTotal(character, "fuel_cost_reduction");
-  return Math.max(MISSION_MIN_FUEL, Math.round(raw * 100) / 100);
+  const raw = effectiveSeconds / SECONDS_PER_MINUTE
+    - getModEffectTotal(character, "fuel_cost_reduction");
+  return Math.max(
+    MISSION_MIN_FUEL,
+    Math.round(raw * FUEL_COST_PRECISION_SCALE) / FUEL_COST_PRECISION_SCALE,
+  );
 }
 
 // ── Mission XP / SD ──────────────────────────────────────────
 /** Mission reward variance band by player level (±fraction around 1.0). */
 export function getMissionRewardVariance(_playerLevel = 1) {
-  return 0.10;
+  return MISSION_REWARD_VARIANCE;
 }
 
 /**
@@ -449,7 +508,8 @@ export function rollMissionEfficiency(playerLevel = 1, rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
   const v = getMissionRewardVariance(playerLevel);
   const raw = (1 - v) + r() * (2 * v);
-  return Math.round(raw * 100) / 100;
+  return Math.round(raw * MISSION_EFFICIENCY_PRECISION_SCALE)
+    / MISSION_EFFICIENCY_PRECISION_SCALE;
 }
 
 /** Clamp / default efficiency for the player's variance band. */
@@ -457,7 +517,14 @@ export function normalizeMissionEfficiency(value, playerLevel = 1) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 1;
   const v = getMissionRewardVariance(playerLevel);
-  return Math.min(1 + v, Math.max(1 - v, Math.round(n * 100) / 100));
+  return Math.min(
+    1 + v,
+    Math.max(
+      1 - v,
+      Math.round(n * MISSION_EFFICIENCY_PRECISION_SCALE)
+        / MISSION_EFFICIENCY_PRECISION_SCALE,
+    ),
+  );
 }
 
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
@@ -503,13 +570,16 @@ export function skipCostFor(mission, _nowMs = clock.nowMs()) {
         ? mission.original_fuel_cost
         : 0;
   // Lazy import avoided — inline half-unit formula (same as currencyService).
-  const half = Math.max(1, Math.ceil(Math.max(0, Number(fuel) || 0) * 0.2));
-  return half / 2; // display Nova (.0 or .5)
+  const half = Math.max(
+    1,
+    Math.ceil(Math.max(0, Number(fuel) || 0) * SKIP_NOVA_HALF_UNITS_PER_FUEL),
+  );
+  return half / NOVA_HALF_UNIT_SCALE; // display Nova (.0 or .5)
 }
 
 /** Skip cost in integer half-Nova units. */
 export function skipCostHalfUnits(mission, nowMs = clock.nowMs()) {
-  return Math.round(skipCostFor(mission, nowMs) * 2);
+  return Math.round(skipCostFor(mission, nowMs) * NOVA_HALF_UNIT_SCALE);
 }
 
 // ── Shop ─────────────────────────────────────────────────────
@@ -558,26 +628,27 @@ export function getShopWindow(nowMs = clock.nowMs()) {
   const parts = getZonedParts(new Date(nowMs), DEFAULT_GAME_ZONE);
   let startHour;
   let anchorMs = nowMs;
-  if (parts.hour >= 14) {
-    startHour = 14;
-  } else if (parts.hour >= 2) {
-    startHour = 2;
+  if (parts.hour >= SHOP_AFTERNOON_START_HOUR) {
+    startHour = SHOP_AFTERNOON_START_HOUR;
+  } else if (parts.hour >= SHOP_MORNING_START_HOUR) {
+    startHour = SHOP_MORNING_START_HOUR;
   } else {
-    startHour = 14;
-    anchorMs = nowMs - 12 * 3600 * 1000;
+    startHour = SHOP_AFTERNOON_START_HOUR;
+    anchorMs = nowMs - SHOP_WINDOW_DURATION_HOURS * MILLISECONDS_PER_HOUR;
   }
   const anchor = getZonedParts(new Date(anchorMs), DEFAULT_GAME_ZONE);
   const startUtc = zonedLocalToUtc(
     { year: anchor.year, month: anchor.month, day: anchor.day, hour: startHour, minute: 0, second: 0 },
     DEFAULT_GAME_ZONE
   ).utc.getTime();
-  const endsAt = startUtc + 12 * 60 * 60 * 1000;
-  const idx = Math.floor(startUtc / (12 * 60 * 60 * 1000));
+  const shopWindowDurationMs = SHOP_WINDOW_DURATION_HOURS * MILLISECONDS_PER_HOUR;
+  const endsAt = startUtc + shopWindowDurationMs;
+  const idx = Math.floor(startUtc / shopWindowDurationMs);
   return {
     idx,
     startsAt: startUtc,
     endsAt,
-    secondsLeft: Math.max(0, Math.floor((endsAt - nowMs) / 1000)),
+    secondsLeft: Math.max(0, Math.floor((endsAt - nowMs) / MILLISECONDS_PER_SECOND)),
     rotationPeriodId: `shop-rotation:global:${idx}`,
   };
 }
@@ -588,21 +659,25 @@ export function getShopGameDayKey(nowMs = clock.nowMs()) {
   let y = parts.year;
   let m = parts.month;
   let d = parts.day;
-  if (parts.hour < 14) {
-    const back = getZonedParts(new Date(nowMs - 14 * 3600 * 1000), DEFAULT_GAME_ZONE);
+  if (parts.hour < SHOP_AFTERNOON_START_HOUR) {
+    const back = getZonedParts(
+      new Date(nowMs - SHOP_AFTERNOON_START_HOUR * MILLISECONDS_PER_HOUR),
+      DEFAULT_GAME_ZONE,
+    );
     y = back.year;
     m = back.month;
     d = back.day;
   }
-  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return `${y}-${String(m).padStart(DATE_PART_PAD_WIDTH, "0")}-${String(d).padStart(DATE_PART_PAD_WIDTH, "0")}`;
 }
 
 /** Haggle: ~40% apply 15–20% off to listing; otherwise listing is yanked (no purchase). */
 export function rollHaggle(rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
-  if (r() < 0.4) {
-    const pct = 15 + Math.floor(r() * 6); // 15–20 inclusive
-    const mult = 1 - pct / 100;
+  if (r() < HAGGLE_SUCCESS_CHANCE) {
+    const pct = HAGGLE_MIN_DISCOUNT_PERCENT
+      + Math.floor(r() * HAGGLE_DISCOUNT_OUTCOME_COUNT);
+    const mult = 1 - pct / PERCENT_SCALE;
     return { ok: true, mult, key: "deal", pct, label: `They blinked — ${pct}% off` };
   }
   return {
@@ -655,11 +730,15 @@ export function normalizeShopMeta(character, win = getShopWindow(), day = getSho
 }
 
 export function shopGearSeed(meta, win = getShopWindow()) {
-  return (win?.idx || 0) + (meta?.gear_refresh || 0) + (meta?.manual_refresh_count || 0) * 17;
+  return (win?.idx || 0)
+    + (meta?.gear_refresh || 0)
+    + (meta?.manual_refresh_count || 0) * SHOP_GEAR_MANUAL_REFRESH_SEED_STEP;
 }
 
 export function shopConsSeed(meta, win = getShopWindow()) {
-  return (win?.idx || 0) + (meta?.cons_refresh || 0) + (meta?.manual_refresh_count || 0) * 19;
+  return (win?.idx || 0)
+    + (meta?.cons_refresh || 0)
+    + (meta?.manual_refresh_count || 0) * SHOP_CONSUMABLE_MANUAL_REFRESH_SEED_STEP;
 }
 
 function mulberry32(a) {
@@ -697,21 +776,25 @@ function pickWeighted(weights, rng) {
   return entries[entries.length - 1]?.[0];
 }
 
+const SHOP_MAX_ITEM_LEVEL_GAP_BRACKETS = Object.freeze([
+  [5, 0],
+  [10, 1],
+  [15, 2],
+  [21, 3],
+  [23, 4],
+  [25, 5],
+  [27, 6],
+  [29, 7],
+  [31, 8],
+  [33, 9],
+]);
+const SHOP_MAX_ITEM_LEVEL_GAP = 10;
+
 /** Max item-level gap below player level for normal shop gear. */
 export function shopItemLevelMaxGap(playerLevel) {
   const L = Math.max(1, Math.floor(Number(playerLevel) || 1));
-  if (L <= 5) return 0;
-  if (L <= 10) return 1;
-  if (L <= 15) return 2;
-  if (L <= 20) return 3;
-  if (L <= 21) return 3;
-  if (L <= 23) return 4;
-  if (L <= 25) return 5;
-  if (L <= 27) return 6;
-  if (L <= 29) return 7;
-  if (L <= 31) return 8;
-  if (L <= 33) return 9;
-  return 10;
+  const bracket = SHOP_MAX_ITEM_LEVEL_GAP_BRACKETS.find(([maxLevel]) => L <= maxLevel);
+  return bracket?.[1] ?? SHOP_MAX_ITEM_LEVEL_GAP;
 }
 
 const SHOP_LEVEL_WEIGHTS = Object.freeze([
@@ -747,7 +830,7 @@ export function rollHotDealItemLevel(playerLevel, rng = Math.random) {
 
 export function gearShopPurchasePrice(item, rng = Math.random) {
   const sale = GearSaleValue(item);
-  const markup = SHOP_RARITY_MARKUP[item?.rarity] ?? 3.5;
+  const markup = SHOP_RARITY_MARKUP[item?.rarity] ?? SHOP_RARITY_MARKUP.rare;
   const r = typeof rng === "function" ? rng : Math.random;
   const variance =
     GEAR_SHOP_PRICE_VARIANCE_MIN +
@@ -757,13 +840,13 @@ export function gearShopPurchasePrice(item, rng = Math.random) {
 
 export function stimShopPurchasePrice(rarity, playerLevel = 1) {
   const S = StardustPerFuel(Math.max(1, playerLevel));
-  const mult = STIM_SHOP_FUEL_EQUIV[rarity] ?? 2;
+  const mult = STIM_SHOP_FUEL_EQUIV[rarity] ?? STIM_SHOP_FUEL_EQUIV.uncommon;
   return Math.max(1, Math.round(S * mult));
 }
 
 export function stimShopSellValue(rarity, playerLevel = 1) {
   const S = StardustPerFuel(Math.max(1, playerLevel));
-  const mult = STIM_SELL_FUEL_EQUIV[rarity] ?? 1;
+  const mult = STIM_SELL_FUEL_EQUIV[rarity] ?? STIM_SELL_FUEL_EQUIV.uncommon;
   return Math.max(1, Math.round(S * mult));
 }
 
@@ -824,7 +907,7 @@ function generateShopStimSlot(playerLevel, slotId, rng) {
  * Also mirrors into gear_stock / cons_stock for legacy UI paths.
  */
 export function generateSimpleShopStock(seed, playerLevel, randomItemFn) {
-  const rng = mulberry32(seed * 7919 + 13);
+  const rng = mulberry32(seed * SHOP_STOCK_SEED_MULTIPLIER + SHOP_STOCK_SEED_OFFSET);
   const slots = [];
   for (let i = 0; i < SHOP_SLOT_COUNT; i++) {
     const isStim = rng() < SHOP_STIM_CHANCE;
@@ -850,6 +933,8 @@ export function generateSimpleGearStock(seed, playerLevel, randomItemFn) {
  * Stim qualities (authoritative). No Common or Legendary Stims.
  * Shop/sell prices are level-scaled via StardustPerFuel (2S / 4S / 10S buy; 50% sell).
  */
+export const MAX_BUFF_STACKS = 3;
+export const MAX_ACTIVE_STAT_TYPES = 3;
 export const CONSUMABLE_TIERS = {
   uncommon: { mult: 0.05, duration_hours: 6,  label: "Uncommon", rarity: "uncommon" },
   rare:     { mult: 0.10, duration_hours: 12, label: "Rare",     rarity: "rare" },
@@ -876,10 +961,10 @@ export function getStimDefinition(rarityOrSource) {
   return {
     rarity,
     mult: tier.mult,
-    bonus_percent: Math.round(tier.mult * 100),
+    bonus_percent: Math.round(tier.mult * PERCENT_SCALE),
     duration_hours: tier.duration_hours,
     max_duration_hours: tier.duration_hours * MAX_BUFF_STACKS,
-    base_duration_ms: tier.duration_hours * MS_PER_HOUR,
+    base_duration_ms: tier.duration_hours * MILLISECONDS_PER_HOUR,
     max_duration_ms: stimMaxDurationMs(tier.duration_hours),
     label: tier.label,
   };
@@ -895,13 +980,13 @@ export function serializeActiveStim(buff, nowMs = clock.nowMs()) {
     attribute: buff.stat,
     stat: buff.stat,
     rarity,
-    bonus_percent: Math.round(Number(buff.mult || def?.mult || 0) * 100),
+    bonus_percent: Math.round(Number(buff.mult || def?.mult || 0) * PERCENT_SCALE),
     mult: Number(buff.mult || def?.mult || 0),
     name: buff.name || null,
     activated_at: buff.activated_at || null,
     expires_at: buff.expires_at,
     remaining_ms: remaining,
-    remaining_hours: remaining / MS_PER_HOUR,
+    remaining_hours: remaining / MILLISECONDS_PER_HOUR,
     max_duration_hours: def?.max_duration_hours ?? null,
     duration_hours: buff.duration_hours ?? def?.duration_hours ?? null,
     stacks: buff.stacks ?? 1,
@@ -928,7 +1013,7 @@ export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, t
     stats: {},
     consumable: { stat, mult: tier.mult, duration_hours: tier.duration_hours, tier: tierKey },
     sell_value: 0,
-    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * 100)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.duration_hours * 3}h).`,
+    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * PERCENT_SCALE)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.duration_hours * MAX_BUFF_STACKS}h).`,
     is_equipped: false,
   }))
 );
@@ -937,8 +1022,8 @@ export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, t
 export function randomConsumable(rng = Math.random) {
   const roll = typeof rng === "function" ? rng() : Math.random();
   let rarity = "uncommon";
-  if (roll >= 0.8) rarity = "epic";
-  else if (roll >= 0.4) rarity = "rare";
+  if (roll >= STIM_EPIC_ROLL_THRESHOLD) rarity = "epic";
+  else if (roll >= STIM_RARE_ROLL_THRESHOLD) rarity = "rare";
   const pool = CONSUMABLES.filter((c) => c.rarity === rarity);
   const pickRng = typeof rng === "function" ? rng() : Math.random();
   return pool[Math.floor(pickRng * pool.length)] || CONSUMABLES[0];
@@ -946,9 +1031,11 @@ export function randomConsumable(rng = Math.random) {
 
 /** @deprecated separate cons stall removed — stims live in unified shop_stock. */
 export function generateSimpleConsStock(seed, playerLevel = 1) {
-  const rng = mulberry32(seed * 4099 + 7);
+  const rng = mulberry32(
+    seed * CONSUMABLE_STOCK_SEED_MULTIPLIER + CONSUMABLE_STOCK_SEED_OFFSET,
+  );
   const slots = [];
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < LEGACY_CONSUMABLE_STOCK_COUNT; i++) {
     slots.push(generateShopStimSlot(playerLevel, `cons-${seed}-${i}`, rng));
   }
   return slots;
@@ -956,7 +1043,7 @@ export function generateSimpleConsStock(seed, playerLevel = 1) {
 
 export function generateSimpleHotDeal(dayKey, playerLevel, randomItemFn) {
   const dayNum = String(dayKey || getShopGameDayKey()).split("-").reduce((a, p) => a + Number(p || 0), 0);
-  const rng = mulberry32(dayNum * 104729 + 77);
+  const rng = mulberry32(dayNum * HOT_DEAL_SEED_MULTIPLIER + HOT_DEAL_SEED_OFFSET);
   const type = SHOP_GEAR_TYPES[Math.floor(rng() * SHOP_GEAR_TYPES.length)];
   const rarity = rollHotDealRarity(playerLevel, rng);
   const itemLevel = rollHotDealItemLevel(playerLevel, rng);
@@ -975,11 +1062,7 @@ export function generateSimpleHotDeal(dayKey, playerLevel, randomItemFn) {
 }
 
 // ── Consumable / Stim buffs ──────────────────────────────────
-export const MAX_BUFF_STACKS = 3;
-export const MAX_ACTIVE_STAT_TYPES = 3;
 export const STIM_YEARN_MESSAGE = "Your character doesn't yearn for more yet.";
-
-const MS_PER_HOUR = 3600 * 1000;
 
 /** Infer rarity for legacy buffs/items that lack an explicit rarity field. */
 export function resolveStimRarity(source) {
@@ -992,8 +1075,8 @@ export function resolveStimRarity(source) {
   if (raw === "common" || raw === "minor") return "uncommon";
   if (raw === "legendary" || raw === "mythic" || raw === "prime") return "epic";
   const mult = Number(source?.mult ?? source?.consumable?.mult ?? 0);
-  if (mult >= 0.2) return "epic";
-  if (mult >= 0.1) return "rare";
+  if (mult >= CONSUMABLE_TIERS.epic.mult) return "epic";
+  if (mult >= CONSUMABLE_TIERS.rare.mult) return "rare";
   if (mult > 0) return "uncommon";
   return "uncommon";
 }
@@ -1003,13 +1086,15 @@ export function stimRarityRank(rarity) {
 }
 
 export function stimMaxDurationMs(durationHours) {
-  return Math.max(0, Number(durationHours) || 0) * MS_PER_HOUR * MAX_BUFF_STACKS;
+  return Math.max(0, Number(durationHours) || 0)
+    * MILLISECONDS_PER_HOUR
+    * MAX_BUFF_STACKS;
 }
 
 /** Remaining ms at/below which a max-stacked stim may be refreshed to max. */
 export function stimRefreshRemainingMs(durationHours) {
-  const base = Math.max(0, Number(durationHours) || 0) * MS_PER_HOUR;
-  return stimMaxDurationMs(durationHours) - base / 2;
+  const base = Math.max(0, Number(durationHours) || 0) * MILLISECONDS_PER_HOUR;
+  return stimMaxDurationMs(durationHours) - base / STIM_REFRESH_BASE_DURATION_DIVISOR;
 }
 
 function inferStimStacks(remainingMs, baseMs) {
@@ -1060,9 +1145,9 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = clo
   // Authoritative mechanics — never trust item.consumable.mult / duration_hours.
   const durationHours = tier.duration_hours;
   const mult = tier.mult;
-  const baseMs = durationHours * MS_PER_HOUR;
+  const baseMs = durationHours * MILLISECONDS_PER_HOUR;
   const maxMs = baseMs * MAX_BUFF_STACKS;
-  const refreshAt = maxMs - baseMs / 2;
+  const refreshAt = maxMs - baseMs / STIM_REFRESH_BASE_DURATION_DIVISOR;
 
   const source = sourceBuffs ?? character.active_buffs ?? [];
   const active = (source || []).filter((b) => new Date(b.expires_at).getTime() > now);
@@ -1206,7 +1291,7 @@ export const ITEM_DROP_RATES = {
 };
 
 function rollFromTable(rates) {
-  const roll = Math.random() * 100;
+  const roll = Math.random() * PERCENT_SCALE;
   let cumulative = 0;
   for (const rarity of RARITY_ORDER) {
     cumulative += rates[rarity] || 0;
@@ -1267,11 +1352,21 @@ export function getArenaStardustReward(level = 1) {
 }
 
 export function getArenaXpReward(level = 1) {
-  return Math.round(getMissionXpPerFuel(level) * 5 / 7);
+  return Math.round(
+    getMissionXpPerFuel(level)
+      * ARENA_XP_FUEL_EQUIVALENT_NUMERATOR
+      / ARENA_XP_FUEL_EQUIVALENT_DENOMINATOR,
+  );
 }
 
 export function eloExpectedScore(playerRating, oppRating) {
-  return 1 / (1 + 10 ** (((oppRating || 1000) - (playerRating || 1000)) / 400));
+  return 1 / (
+    1
+    + 10 ** (
+      ((oppRating || ARENA_DEFAULT_RATING) - (playerRating || ARENA_DEFAULT_RATING))
+        / ARENA_ELO_RATING_SCALE
+    )
+  );
 }
 
 export function eloRatingDelta(playerRating, oppRating, won, k = ARENA_ELO_K) {
@@ -1300,7 +1395,11 @@ export function computeArenaRewards(player, opp, won, freeOrOpts = true) {
   } else {
     free = !!freeOrOpts;
   }
-  const ratingDelta = eloRatingDelta(player.arena_rating || 1000, opp?.arena_rating || 1000, won);
+  const ratingDelta = eloRatingDelta(
+    player.arena_rating || ARENA_DEFAULT_RATING,
+    opp?.arena_rating || ARENA_DEFAULT_RATING,
+    won,
+  );
   const grantSd = won && arenaWinGrantsStardust(rewardedWinsToday);
   const grantXp = free && won;
   return {
@@ -1322,7 +1421,9 @@ export const DUNGEON_CONTINUE_COST = 0;
 /** Finalized: dungeon cooldown skip (Nova crystals). */
 export const DUNGEON_SKIP_COST = 25;
 /** Shared post-sim cooldown for all dungeon / wormhole fights. */
-export const DUNGEON_BATTLE_COOLDOWN_MS = 60 * 60 * 1000;
+export const DUNGEON_BATTLE_COOLDOWN_HOURS = 1;
+export const DUNGEON_BATTLE_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_HOURS
+  * MILLISECONDS_PER_HOUR;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
@@ -1357,7 +1458,7 @@ export const DUNGEON_UNLOCK_LEVELS = Object.freeze([
 
 export function getDungeonUnlockLevel(planetId) {
   const id = Math.floor(Number(planetId) || 0);
-  if (id >= 1 && id <= 10) return DUNGEON_UNLOCK_LEVELS[id];
+  if (id >= 1 && id <= DUNGEON_STORY_PLANETS) return DUNGEON_UNLOCK_LEVELS[id];
   return null;
 }
 
@@ -1376,23 +1477,26 @@ export function getDungeonBand(planetId) {
 
 export function getDungeonTotalDru(planetId) {
   const band = getDungeonBand(planetId);
-  if (band <= 10) return DUNGEON_TOTAL_DRU[band];
-  const depth = band - 10;
-  return Math.round(185 + depth * 25);
+  if (band <= DUNGEON_STORY_PLANETS) return DUNGEON_TOTAL_DRU[band];
+  const depth = band - DUNGEON_STORY_PLANETS;
+  return Math.round(WORMHOLE_BASE_TOTAL_DRU + depth * WORMHOLE_DRU_PER_DEPTH);
 }
 
 export function getEnemyDru(planetId, enemyIndex) {
   const idx = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, enemyIndex || 1));
   const share = DUNGEON_ENEMY_DRU_SHARE[idx];
-  return Math.round(getDungeonTotalDru(planetId) * share * 100) / 100;
+  return Math.round(getDungeonTotalDru(planetId) * share * DRU_PRECISION_SCALE)
+    / DRU_PRECISION_SCALE;
 }
 
 export function getDungeonEnemyLevel(planetId, enemyIndex) {
   const idx = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, enemyIndex || 1));
   const band = getDungeonBand(planetId);
-  if (band <= 10) return DUNGEON_ENEMY_LEVELS[band][idx - 1];
-  const depth = band - 10;
-  const start = 200 + (depth - 1) * 35 + 3;
+  if (band <= DUNGEON_STORY_PLANETS) return DUNGEON_ENEMY_LEVELS[band][idx - 1];
+  const depth = band - DUNGEON_STORY_PLANETS;
+  const start = WORMHOLE_BASE_ENEMY_LEVEL
+    + (depth - 1) * WORMHOLE_LEVELS_PER_DEPTH
+    + WORMHOLE_FIRST_ENEMY_OFFSET;
   return start + D10_LEVEL_OFFSETS[idx - 1];
 }
 

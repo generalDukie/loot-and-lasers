@@ -1,0 +1,26 @@
+---
+description: Project-wide numeric constants and integer-value conventions
+alwaysApply: true
+---
+
+# Numeric Constants and Integer Values
+
+- Do not introduce unexplained numeric literals for gameplay rules, economy values, limits, pagination, retries, timing, or layout behavior.
+- Give every domain-significant value a descriptive named constant at the authoritative layer.
+- Store counts, currency, levels, ranks, durations, percentages, and other deterministic values as integers.
+- Express durations as integer milliseconds. Convert to floating-point seconds only at an API boundary that requires seconds.
+- Express fractional authoritative rates with an integer fixed-point unit such as basis points, and centralize the conversion.
+- Keep authoritative constants in `src/lib/` or `server/`; mirror them in Godot only when presentation requires it.
+- Structural literals such as `0`, `1`, and `-1` are allowed only when their meaning is obvious from the operation.
+
+```gdscript
+const PAGE_SWAP_TIMEOUT_MS: int = 2000
+const MILLISECONDS_PER_SECOND: int = 1000
+
+var timeout_seconds := float(PAGE_SWAP_TIMEOUT_MS) / MILLISECONDS_PER_SECOND
+```
+
+```js
+const MAX_GUILD_PAGE_SIZE = 100;
+const DEFAULT_GUILD_PAGE_SIZE = 50;
+```

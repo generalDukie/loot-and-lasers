@@ -4,6 +4,12 @@
  */
 
 export const ARENA_RATING_POLICY_VERSION = 1;
+export const ARENA_DEFAULT_RATING = 1_000;
+export const ARENA_ELO_RATING_SCALE = 400;
+
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const CHALLENGE_TTL_MINUTES = 30;
 
 /** Elo K-factor for direct challenges (matchmaking may use shared formula defaults). */
 export const ARENA_DIRECT_ELO_K = Number(process.env.ARENA_DIRECT_ELO_K || 28);
@@ -41,7 +47,10 @@ export const CHALLENGE_LIMITS = {
   /** Max direct ranked challenges created per hour. */
   maxPerHour: Number(process.env.ARENA_CHALLENGE_MAX_PER_HOUR || 20),
   /** Challenge expires if not completed. */
-  ttlMs: Number(process.env.ARENA_CHALLENGE_TTL_MS || 30 * 60 * 1000),
+  ttlMs: Number(
+    process.env.ARENA_CHALLENGE_TTL_MS
+      || CHALLENGE_TTL_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND,
+  ),
   /** Attacker-only rating (defender unchanged). */
   attackerOnlyRating: true,
 };

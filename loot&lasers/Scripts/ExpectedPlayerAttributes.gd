@@ -15,12 +15,13 @@ const ANCHORS: Array = [
 
 const AT_500 := 11054.0
 const POST_500_SLOPE := 23.9
+const FINAL_ANCHOR_LEVEL := 500
 
 
 static func at(level: int) -> int:
 	var L := maxi(1, level)
-	if L > 500:
-		return int(round(AT_500 + POST_500_SLOPE * float(L - 500)))
+	if L > FINAL_ANCHOR_LEVEL:
+		return int(round(AT_500 + POST_500_SLOPE * float(L - FINAL_ANCHOR_LEVEL)))
 	return _pchip(L)
 
 

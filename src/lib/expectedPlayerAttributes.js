@@ -62,6 +62,7 @@ export const EXPECTED_PLAYER_ATTRIBUTE_ANCHORS = Object.freeze([
 /** Linear late-game slope for level > 500 (Stim-adjusted). */
 export const EXPECTED_PLAYER_POST_500_SLOPE = 23.9;
 export const EXPECTED_PLAYER_AT_500 = 11054;
+export const EXPECTED_PLAYER_LAST_ANCHOR_LEVEL = 500;
 
 // ── Monotone cubic PCHIP (linear attribute space — not log) ──
 
@@ -132,8 +133,11 @@ function pchipAnchors(anchors, x) {
  */
 export function expectedPlayerAttributes(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
-  if (L > 500) {
-    return Math.round(EXPECTED_PLAYER_AT_500 + EXPECTED_PLAYER_POST_500_SLOPE * (L - 500));
+  if (L > EXPECTED_PLAYER_LAST_ANCHOR_LEVEL) {
+    return Math.round(
+      EXPECTED_PLAYER_AT_500
+      + EXPECTED_PLAYER_POST_500_SLOPE * (L - EXPECTED_PLAYER_LAST_ANCHOR_LEVEL),
+    );
   }
   return pchipAnchors(EXPECTED_PLAYER_ATTRIBUTE_ANCHORS, L);
 }

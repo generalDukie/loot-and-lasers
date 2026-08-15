@@ -124,6 +124,9 @@ export const FULL_SET_BUDGET_ANCHORS = [
 /** @deprecated full-set units; individual items use BaseGearStatBudget directly. */
 export const FULL_SET_SLOT_UNITS = 8.4;
 
+const MIN_RANDOM_ALLOCATION_WEIGHT = 1e-9;
+const VALIDATION_HTTP_STATUS = 400;
+
 // ── Piecewise-linear waypoint helper (full-set reference only) ──
 
 function lerpWaypoints(level, points) {
@@ -275,8 +278,8 @@ export function allocateStatBudget(attrs, budget, rng = Math.random, rarity = nu
   const n = keys.length;
   let rarityKey = rarity;
   if (!rarityKey) {
-    if (n >= 5) rarityKey = "legendary";
-    else if (n === 2) rarityKey = "uncommon";
+    if (n >= RARITY_ATTR_COUNT.legendary) rarityKey = "legendary";
+    else if (n === RARITY_ATTR_COUNT.uncommon) rarityKey = "uncommon";
     else rarityKey = "rare";
   }
   let minRatio = getRarityMinStatShare(rarityKey);
@@ -289,7 +292,7 @@ export function allocateStatBudget(attrs, budget, rng = Math.random, rarity = nu
   const extras = new Array(n).fill(0);
   if (leftover > 0) {
     // Free-form weights — allow near-zero extras so one stat can spike.
-    const raw = keys.map(() => Math.max(1e-9, rng()));
+    const raw = keys.map(() => Math.max(MIN_RANDOM_ALLOCATION_WEIGHT, rng()));
     const wSum = raw.reduce((a, b) => a + b, 0) || 1;
     const exact = raw.map((w) => leftover * (w / wSum));
     const floors = exact.map((x) => Math.floor(x));
@@ -401,21 +404,21 @@ export function GenerateGearItem({
   const L = Math.max(1, Math.floor(Number(itemLevel) || 1));
   if (!Number.isFinite(L) || L < 1) {
     const err = new Error("Invalid item level");
-    err.status = 400;
+    err.status = VALIDATION_HTTP_STATUS;
     err.code = "VALIDATION_ERROR";
     throw err;
   }
   const type = EQUIPMENT_SLOTS.includes(itemType) ? itemType : null;
   if (!type) {
     const err = new Error("Invalid gear item type");
-    err.status = 400;
+    err.status = VALIDATION_HTTP_STATUS;
     err.code = "VALIDATION_ERROR";
     throw err;
   }
   const r = String(rarity || "").toLowerCase();
   if (!RARITY_ATTR_COUNT[r]) {
     const err = new Error("Invalid gear rarity");
-    err.status = 400;
+    err.status = VALIDATION_HTTP_STATUS;
     err.code = "VALIDATION_ERROR";
     throw err;
   }

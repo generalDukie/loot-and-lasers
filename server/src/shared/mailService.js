@@ -10,10 +10,17 @@ import { tryCreateNotification } from "./notificationService.js";
 
 const SPAM_WINDOW_MS = 10_000;
 const SPAM_THRESHOLD = 5;
-const SPAM_MUTE_MS = 3 * 60 * 1000;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const SPAM_MUTE_MINUTES = 3;
+const SPAM_MUTE_MS = SPAM_MUTE_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 const MAIL_COOLDOWN_MS = 2_000;
 const SUBJECT_MAX = 120;
 const BODY_MAX = 4000;
+const SPAM_ACTIVITY_QUERY_LIMIT = 10;
+const DEFAULT_MAIL_LIMIT = 100;
+const MAX_MAIL_LIMIT = 200;
+const MAIL_COUNT_QUERY_LIMIT = 500;
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -32,12 +39,20 @@ function assertNotMuted(characterId) {
 
 function assertSpam(characterId) {
   const sinceMs = clock.nowMs() - SPAM_WINDOW_MS;
-  const recentChats = entities.ChatMessage.filter({ sender_id: characterId }, "-created_date", 10);
-  const recentPrivs = entities.PrivateMessage.filter({ sender_id: characterId }, "-created_date", 10);
+  const recentChats = entities.ChatMessage.filter(
+    { sender_id: characterId },
+    "-created_date",
+    SPAM_ACTIVITY_QUERY_LIMIT,
+  );
+  const recentPrivs = entities.PrivateMessage.filter(
+    { sender_id: characterId },
+    "-created_date",
+    SPAM_ACTIVITY_QUERY_LIMIT,
+  );
   const recentMails = entities.Mail.filter(
     { from_id: characterId, mail_type: "player" },
     "-created_date",
-    10,
+    SPAM_ACTIVITY_QUERY_LIMIT,
   );
   const countSince = (list) =>
     (list || []).filter((m) => new Date(m.created_date).getTime() > sinceMs).length;
@@ -81,8 +96,11 @@ export function serializeMail(doc) {
   };
 }
 
-export function listMail(ownerId, { folder = "inbox", limit = 100 } = {}) {
-  const lim = Math.max(1, Math.min(200, Number(limit) || 100));
+export function listMail(ownerId, { folder = "inbox", limit = DEFAULT_MAIL_LIMIT } = {}) {
+  const lim = Math.max(
+    1,
+    Math.min(MAX_MAIL_LIMIT, Number(limit) || DEFAULT_MAIL_LIMIT),
+  );
   let rows;
   if (folder === "deleted") {
     rows = entities.Mail.filter({ owner_id: ownerId, folder: "deleted" }, "-created_date", lim) || [];
@@ -95,7 +113,11 @@ export function listMail(ownerId, { folder = "inbox", limit = 100 } = {}) {
 
 export function getUnreadMailCount(ownerId) {
   const rows =
-    entities.Mail.filter({ owner_id: ownerId, read: false, folder: "inbox" }, null, 500) || [];
+    entities.Mail.filter(
+      { owner_id: ownerId, read: false, folder: "inbox" },
+      null,
+      MAIL_COUNT_QUERY_LIMIT,
+    ) || [];
   const now = clock.nowMs();
   return rows.filter((m) => !isExpired(m, now)).length;
 }
@@ -105,7 +127,7 @@ export function getUnclaimedMailCount(ownerId) {
     entities.Mail.filter(
       { owner_id: ownerId, has_rewards: true, claimed: false },
       null,
-      500,
+      MAIL_COUNT_QUERY_LIMIT,
     ) || [];
   const now = clock.nowMs();
   return rows.filter((m) => m.folder !== "deleted" && !isExpired(m, now)).length;

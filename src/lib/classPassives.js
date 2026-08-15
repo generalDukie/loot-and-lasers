@@ -120,7 +120,7 @@ export function resolveAbilityBanner(ev, player, opponent) {
   } else if (kind === "astral_barrier_restored") {
     detail = "Restored";
   } else if (kind === "phantom_signal_armed") {
-    detail = `${ev.charges ?? 2} charges`;
+    detail = `${ev.charges ?? PHANTOM_SIGNAL_CHARGES} charges`;
   } else if (kind === "phantom_signal_miss") {
     detail = `Miss · ${ev.chargesRemaining ?? 0} left`;
   } else if (kind === "overclock_stack_gained") {
@@ -154,6 +154,7 @@ export const FIRE_SUPPORT_FRAC = 0.6;
 export const DEFENSIVE_PROTOCOL_REDUCTION = 0.25;
 export const ACQUIRE_TARGET_CRIT_BONUS = 0.4;
 export const STRONG_TANTRUM_CRIT_MULT = 2.0;
+export const ORBITAL_ASSISTANT_TRIGGER_INTERVAL = 2;
 
 /** Fresh per-fighter combat state (cleared between combats via new fighter build). */
 export function createPassiveState() {
@@ -491,7 +492,7 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
   if (engineer.className !== "Cosmic Engineer") return;
   const ps = engineer.passiveState;
   ps.engineerTurns += 1;
-  if (ps.engineerTurns % 2 !== 0) return;
+  if (ps.engineerTurns % ORBITAL_ASSISTANT_TRIGGER_INTERVAL !== 0) return;
 
   const effect = ORBITAL_EFFECTS[Math.floor(rng() * ORBITAL_EFFECTS.length)];
   events.push({

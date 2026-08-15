@@ -39,6 +39,7 @@ const {
   inviteToGuild,
   acceptGuildInvite,
   kickGuildMember,
+  getMyGuildState,
   ensureWeeklyChallenge,
   contributeGuildMission,
   contributeGuildArenaWin,
@@ -152,6 +153,26 @@ test("public profile hides currency and includes arena fields", () => {
   assert.ok(profile.statistics);
   assert.equal(profile.statistics.stardust, undefined);
   assert.equal(profile.stardust, undefined);
+});
+
+test("character name and level changes refresh guild member snapshots", () => {
+  const u = insertUser("u-snapshot", "snapshot@t.test");
+  const ch = makeChar(u.id, { name: "SnapshotHero", level: 10 });
+  const member = entities.GuildMember.create({
+    guild_id: "snapshot-guild",
+    character_id: ch.id,
+    character_name: ch.name,
+    character_level: ch.level,
+    role: "member",
+  });
+
+  entities.Character.update(ch.id, { stardust: 25 });
+  assert.equal(entities.GuildMember.get(member.id).character_name, "SnapshotHero");
+  assert.equal(entities.GuildMember.get(member.id).character_level, 10);
+
+  entities.Character.update(ch.id, { name: "SnapshotAce", level: 11 });
+  assert.equal(entities.GuildMember.get(member.id).character_name, "SnapshotAce");
+  assert.equal(entities.GuildMember.get(member.id).character_level, 11);
 });
 
 test("search characters by name", () => {
@@ -280,6 +301,34 @@ test("guild join leave invite kick", () => {
   joinGuild(member, guild.id);
   leaveGuild(member);
   assert.equal(entities.GuildMember.filter({ character_id: member.id }).length, 0);
+});
+
+test("guild roster levels follow live character level", () => {
+  const u = insertUser("u-glvl", "glvl@t.test");
+  const ch = makeChar(u.id, { name: "Gay", level: 49 });
+  const guild = entities.Guild.create({
+    name: "The Founders",
+    tag: "FND",
+    leader_id: ch.id,
+    leader_name: ch.name,
+    member_count: 1,
+    level: 1,
+  });
+  entities.GuildMember.create({
+    guild_id: guild.id,
+    character_id: ch.id,
+    character_name: ch.name,
+    character_level: 48,
+    role: "leader",
+    joined_date: new Date().toISOString(),
+  });
+  const state = getMyGuildState(ch.id);
+  assert.equal(state.members[0].character_level, 49);
+  const stored = entities.GuildMember.filter({ character_id: ch.id })[0];
+  assert.equal(stored.character_level, 49);
+  entities.Character.update(ch.id, { level: 50 });
+  const after = entities.GuildMember.filter({ character_id: ch.id })[0];
+  assert.equal(after.character_level, 50);
 });
 
 await testAsync("RPC profile search friend chat mail guild", async () => {

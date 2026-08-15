@@ -12,6 +12,9 @@ const CONFIG_PATH := "user://godot_client.cfg"
 const BRIDGE_FLAG_KEY := "nakama_node_bridge_v1"
 const NODE_REFRESH_SKEW_SEC := 90
 const CODE_AUTH_SESSION_INVALID := "AUTH_SESSION_INVALID"
+const CHARACTER_LIST_LIMIT := 10
+const DEFAULT_ITEM_LIST_LIMIT := 200
+const LOG_ID_PREVIEW_LENGTH := 8
 
 var access_token: String = ""
 var user: Dictionary = {}
@@ -449,7 +452,11 @@ func list_characters() -> Dictionary:
 	return await GameApiClient.request(
 		"POST",
 		"/api/entities/Character/filter",
-		{"query": {"created_by_id": uid}, "sort": "-created_date", "limit": 10},
+		{
+			"query": {"created_by_id": uid},
+			"sort": "-created_date",
+			"limit": CHARACTER_LIST_LIMIT,
+		},
 		true
 	)
 
@@ -490,7 +497,7 @@ func get_selected_character() -> Dictionary:
 	return await GameApiClient.request("GET", "/api/auth/selected-character", null, true)
 
 
-func list_items(character_id: String = "", limit: int = 200) -> Dictionary:
+func list_items(character_id: String = "", limit: int = DEFAULT_ITEM_LIST_LIMIT) -> Dictionary:
 	var cid := character_id if not character_id.is_empty() else str(GameManager.active_character.get("id", ""))
 	if cid.is_empty():
 		return {"ok": false, "status": 0, "error": "No character id", "data": []}
@@ -532,7 +539,10 @@ func equip_item(item_id: String) -> Dictionary:
 	GameApiClient.apply_authoritative_response(data, "auth_equip_item")
 	if StatsManager != null and StatsManager.has_method("apply_inventory_snapshot"):
 		StatsManager.apply_inventory_snapshot(data)
-	print("[AuthManager] equip_item ok id=%s via=EquipItem" % item_id.substr(0, mini(8, item_id.length())))
+	print(
+		"[AuthManager] equip_item ok id=%s via=EquipItem"
+		% item_id.substr(0, mini(LOG_ID_PREVIEW_LENGTH, item_id.length()))
+	)
 	return {"ok": true, "error": "", "data": data, "status": 200}
 
 
@@ -556,7 +566,10 @@ func unequip_item(item_id: String) -> Dictionary:
 	GameApiClient.apply_authoritative_response(data, "auth_unequip_item")
 	if StatsManager != null and StatsManager.has_method("apply_inventory_snapshot"):
 		StatsManager.apply_inventory_snapshot(data)
-	print("[AuthManager] unequip_item ok id=%s via=UnequipItem" % item_id.substr(0, mini(8, item_id.length())))
+	print(
+		"[AuthManager] unequip_item ok id=%s via=UnequipItem"
+		% item_id.substr(0, mini(LOG_ID_PREVIEW_LENGTH, item_id.length()))
+	)
 	return {"ok": true, "error": "", "data": data, "status": 200}
 
 

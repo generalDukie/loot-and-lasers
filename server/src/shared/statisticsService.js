@@ -6,6 +6,12 @@
 import { entities } from "../entities.js";
 import { computeArenaRank, listArenaLeaderboard } from "./arenaService.js";
 import { getArenaRewardedWinsState, todayET } from "./economyFormulas.js";
+import {
+  computeGuildRank,
+  getNearbyGuildEntries,
+  listGuildLeaderboard,
+  sortedGuilds,
+} from "./guildSocialService.js";
 
 /** Registry of recovered Character-scoped statistics (presentation + docs). */
 export const STATISTIC_DEFINITIONS = Object.freeze([
@@ -34,6 +40,18 @@ export const LEADERBOARD_DEFINITIONS = Object.freeze([
     tie_breakers: ["arena_wins_desc", "character_id_asc"],
     rank_style: "ordinal", // 1,2,3,… by sort position (competition ties share order via wins then id)
     eligibility: "all_characters",
+    nakama_mirror: false,
+    bots_included: false,
+    page_size_max: 100,
+  },
+  {
+    id: "guild_level",
+    display_name: "Guild Rankings",
+    score_source: "guild.level",
+    sort: "desc",
+    tie_breakers: ["experience_desc", "member_count_desc", "created_date_asc", "guild_id_asc"],
+    rank_style: "ordinal",
+    eligibility: "all_guilds",
     nakama_mirror: false,
     bots_included: false,
     page_size_max: 100,
@@ -179,7 +197,27 @@ export function serializeLeaderboardPage({ limit = 50, offset = 0 } = {}) {
   };
 }
 
+export function serializeGuildLeaderboardPage({ limit = 50, offset = 0 } = {}) {
+  const lim = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
+  const off = Math.max(0, Math.floor(Number(offset) || 0));
+  const all = sortedGuilds();
+  const rankings = listGuildLeaderboard({ limit: lim, offset: off });
+  return {
+    leaderboard_id: "guild_level",
+    definition: LEADERBOARD_DEFINITIONS.find((d) => d.id === "guild_level") || null,
+    rankings,
+    total: all.length,
+    limit: lim,
+    offset: off,
+    has_more: off + lim < all.length,
+  };
+}
+
 export {
   listArenaLeaderboard,
   computeArenaRank,
+  listGuildLeaderboard,
+  computeGuildRank,
+  getNearbyGuildEntries,
+  sortedGuilds,
 };

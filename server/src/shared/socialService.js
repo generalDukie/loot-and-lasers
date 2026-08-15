@@ -8,10 +8,20 @@ import { clock } from "./time/clock.js";
 import { serializePublicProfileStatistics } from "./statisticsService.js";
 import { tryCreateNotification } from "./notificationService.js";
 import { computeArenaRank } from "./arenaService.js";
+import { ARENA_DEFAULT_RATING } from "../arena/config.js";
 
 const PRESENCE_OFFLINE_MS = 90_000;
 const PRESENCE_STATUSES = new Set(["online", "away", "busy", "offline", "in_mission"]);
 const SEARCH_LIMIT = 20;
+const MAX_SEARCH_LIMIT = 50;
+const SOCIAL_DIRECTORY_QUERY_LIMIT = 500;
+const FRIENDSHIP_QUERY_LIMIT = 500;
+const PENDING_PAIR_QUERY_LIMIT = 5;
+const FRIEND_REQUEST_LIST_LIMIT = 100;
+const BLOCK_LIST_LIMIT = 200;
+const BLOCK_PENDING_CLEANUP_LIMIT = 10;
+const BLOCK_MATCH_QUERY_LIMIT = 5;
+const PUBLIC_ACHIEVEMENT_LIMIT = 24;
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -61,7 +71,11 @@ export function isBlockedEitherWay(a, b) {
 }
 
 function friendshipBetween(a, b) {
-  const rows = entities.Friendship.filter({ participant_ids: a }, null, 500) || [];
+  const rows = entities.Friendship.filter(
+    { participant_ids: a },
+    null,
+    FRIENDSHIP_QUERY_LIMIT,
+  ) || [];
   return rows.find((f) => (f.participant_ids || []).includes(b)) || null;
 }
 
@@ -69,12 +83,12 @@ function pendingBetween(a, b) {
   const out = entities.FriendRequest.filter(
     { from_character_id: a, to_character_id: b, status: "pending" },
     null,
-    5,
+    PENDING_PAIR_QUERY_LIMIT,
   );
   const inn = entities.FriendRequest.filter(
     { from_character_id: b, to_character_id: a, status: "pending" },
     null,
-    5,
+    PENDING_PAIR_QUERY_LIMIT,
   );
   return out[0] || inn[0] || null;
 }
@@ -168,13 +182,13 @@ export function serializePublicProfile(characterId) {
     level: ch.level || 1,
     avatar_url: ch.avatar_url || "",
     active_title: ch.active_title || null,
-    arena_rating: ch.arena_rating || 1000,
+    arena_rating: ch.arena_rating || ARENA_DEFAULT_RATING,
     arena_rank: computeArenaRank(ch.id),
     arena_wins: ch.arena_wins || 0,
     arena_losses: ch.arena_losses || 0,
     guild,
     presence: serializePresence(presenceDoc),
-    public_achievements: achievements.slice(0, 24),
+    public_achievements: achievements.slice(0, PUBLIC_ACHIEVEMENT_LIMIT),
     achievement_count: achievements.length,
     statistics,
   };
@@ -183,8 +197,8 @@ export function serializePublicProfile(characterId) {
 export function searchCharacters(query, { excludeId = null, limit = SEARCH_LIMIT } = {}) {
   const q = normalizeForSearch(query);
   if (!q) return [];
-  const lim = Math.max(1, Math.min(50, Number(limit) || SEARCH_LIMIT));
-  const all = entities.Character.list("-created_date", 500) || [];
+  const lim = Math.max(1, Math.min(MAX_SEARCH_LIMIT, Number(limit) || SEARCH_LIMIT));
+  const all = entities.Character.list("-created_date", SOCIAL_DIRECTORY_QUERY_LIMIT) || [];
   const legacyCache = new Map();
   const hits = [];
   for (const c of all) {
@@ -198,7 +212,7 @@ export function searchCharacters(query, { excludeId = null, limit = SEARCH_LIMIT
       class: c.class || null,
       race: c.race || null,
       avatar_url: c.avatar_url || "",
-      arena_rating: c.arena_rating || 1000,
+      arena_rating: c.arena_rating || ARENA_DEFAULT_RATING,
     });
     if (hits.length >= lim) break;
   }
@@ -206,9 +220,13 @@ export function searchCharacters(query, { excludeId = null, limit = SEARCH_LIMIT
 }
 
 export function getFriends(characterId) {
-  return (entities.Friendship.filter({ participant_ids: characterId }, null, 500) || []).map(
-    serializeFriendship,
-  );
+  return (
+    entities.Friendship.filter(
+      { participant_ids: characterId },
+      null,
+      FRIENDSHIP_QUERY_LIMIT,
+    ) || []
+  ).map(serializeFriendship);
 }
 
 export function getIncomingRequests(characterId) {
@@ -216,7 +234,7 @@ export function getIncomingRequests(characterId) {
     entities.FriendRequest.filter(
       { to_character_id: characterId, status: "pending" },
       "-created_date",
-      100,
+      FRIEND_REQUEST_LIST_LIMIT,
     ) || []
   ).map(serializeFriendRequest);
 }
@@ -226,13 +244,15 @@ export function getOutgoingRequests(characterId) {
     entities.FriendRequest.filter(
       { from_character_id: characterId, status: "pending" },
       "-created_date",
-      100,
+      FRIEND_REQUEST_LIST_LIMIT,
     ) || []
   ).map(serializeFriendRequest);
 }
 
 export function getBlocks(characterId) {
-  return (entities.Block.filter({ blocker_id: characterId }, null, 200) || []).map(serializeBlock);
+  return (
+    entities.Block.filter({ blocker_id: characterId }, null, BLOCK_LIST_LIMIT) || []
+  ).map(serializeBlock);
 }
 
 export function getSocialState(characterId) {
@@ -344,13 +364,13 @@ export function blockPlayer(myChar, blockedId) {
   const pend = entities.FriendRequest.filter(
     { from_character_id: bid, to_character_id: myChar.id, status: "pending" },
     null,
-    10,
+    BLOCK_PENDING_CLEANUP_LIMIT,
   );
   for (const r of pend) entities.FriendRequest.update(r.id, { status: "declined" });
   const out = entities.FriendRequest.filter(
     { from_character_id: myChar.id, to_character_id: bid, status: "pending" },
     null,
-    10,
+    BLOCK_PENDING_CLEANUP_LIMIT,
   );
   for (const r of out) entities.FriendRequest.update(r.id, { status: "declined" });
 
@@ -368,7 +388,11 @@ export function blockPlayer(myChar, blockedId) {
 export function unblockPlayer(myChar, blockedId) {
   const bid = String(blockedId || "").trim();
   if (!bid) httpErr(400, "Missing target");
-  const list = entities.Block.filter({ blocker_id: myChar.id, blocked_id: bid }, null, 5);
+  const list = entities.Block.filter(
+    { blocker_id: myChar.id, blocked_id: bid },
+    null,
+    BLOCK_MATCH_QUERY_LIMIT,
+  );
   for (const b of list) entities.Block.delete(b.id);
   return { success: true, state: getSocialState(myChar.id) };
 }
@@ -425,7 +449,7 @@ export function getCharactersByIds(ids = []) {
       class: c.class || null,
       race: c.race || null,
       avatar_url: c.avatar_url || "",
-      arena_rating: c.arena_rating || 1000,
+      arena_rating: c.arena_rating || ARENA_DEFAULT_RATING,
       active_title: c.active_title || null,
     }));
 }

@@ -5,12 +5,13 @@ import { api } from "@/api/gameClient";
 // bursts trip the platform rate limit. A short per-character cache collapses
 // near-simultaneous calls, and a single backoff retry recovers transient 429s.
 const _membershipCache = new Map();
-const MEMBERSHIP_TTL = 2000;
+const MEMBERSHIP_CACHE_TTL_MS = 2_000;
+const MEMBERSHIP_RATE_LIMIT_RETRY_DELAY_MS = 700;
 
 export async function getGuildMembership(characterId, { force = false } = {}) {
   const now = Date.now();
   const cached = _membershipCache.get(characterId);
-  if (!force && cached && now - cached.at < MEMBERSHIP_TTL) return cached.value;
+  if (!force && cached && now - cached.at < MEMBERSHIP_CACHE_TTL_MS) return cached.value;
   const fetchOne = async () => {
     const members = await api.entities.GuildMember.filter({ character_id: characterId });
     return members[0] || null;
@@ -21,7 +22,7 @@ export async function getGuildMembership(characterId, { force = false } = {}) {
     return value;
   } catch (err) {
     if (/rate limit/i.test(err?.message || String(err))) {
-      await new Promise((r) => setTimeout(r, 700));
+      await new Promise((r) => setTimeout(r, MEMBERSHIP_RATE_LIMIT_RETRY_DELAY_MS));
       const value = await fetchOne();
       _membershipCache.set(characterId, { value, at: Date.now() });
       return value;

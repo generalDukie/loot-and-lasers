@@ -10,6 +10,10 @@ const PHASE_STARTING := "starting"
 const PHASE_MINING := "mining"
 const PHASE_ABORTING := "aborting"
 const PHASE_COLLECTING := "collecting"
+const MIN_MINING_HOURS := 1
+const MAX_MINING_HOURS := 12
+const SECONDS_PER_HOUR := 3_600
+const MILLISECONDS_PER_SECOND := 1_000.0
 
 var _collect_request_id := ""
 var _phase := PHASE_IDLE
@@ -51,7 +55,13 @@ func is_mining_busy() -> bool:
 func remaining_ms() -> int:
 	_sync_character_binding()
 	if _end_unix > 0:
-		return maxi(0, int((float(_end_unix) - Time.get_unix_time_from_system()) * 1000.0))
+		return maxi(
+			0,
+			int(
+				(float(_end_unix) - Time.get_unix_time_from_system())
+				* MILLISECONDS_PER_SECOND
+			),
+		)
 	if _rem_snap_ms >= 0:
 		var elapsed := Time.get_ticks_msec() - _rem_snap_at_msec
 		return maxi(0, _rem_snap_ms - elapsed)
@@ -61,12 +71,12 @@ func remaining_ms() -> int:
 func job_duration_ms() -> int:
 	_sync_character_binding()
 	if _start_unix > 0 and _end_unix > 0 and _end_unix > _start_unix:
-		return (_end_unix - _start_unix) * 1000
+		return int((_end_unix - _start_unix) * MILLISECONDS_PER_SECOND)
 	if _job_hours > 0:
-		return _job_hours * 3600 * 1000
+		return int(_job_hours * SECONDS_PER_HOUR * MILLISECONDS_PER_SECOND)
 	var hours := maxi(0, _as_int(GameManager.active_character.get("mining_hours", 0)))
 	if hours > 0:
-		return hours * 3600 * 1000
+		return int(hours * SECONDS_PER_HOUR * MILLISECONDS_PER_SECOND)
 	return 0
 
 
@@ -87,7 +97,7 @@ func committed_reward() -> int:
 
 func preview_reward(hours: int) -> int:
 	var level := maxi(1, _as_int(GameManager.active_character.get("level", 1), 1))
-	var h := clampi(hours, 1, 12)
+	var h := clampi(hours, MIN_MINING_HOURS, MAX_MINING_HOURS)
 	return StardustEconomy.compute_mining_reward(level, float(h))
 
 
@@ -115,9 +125,10 @@ func start(hours: int) -> Dictionary:
 	if is_mining_busy():
 		return await refresh_status()
 	_set_phase(PHASE_STARTING)
-	var res: Dictionary = await GameApiClient.invoke("StartMining", {"hours": clampi(hours, 1, 12)})
+	var bounded_hours := clampi(hours, MIN_MINING_HOURS, MAX_MINING_HOURS)
+	var res: Dictionary = await GameApiClient.invoke("StartMining", {"hours": bounded_hours})
 	res = await _retry_if_node_session_gap(res, func() -> Dictionary:
-		return await GameApiClient.invoke("StartMining", {"hours": clampi(hours, 1, 12)})
+		return await GameApiClient.invoke("StartMining", {"hours": bounded_hours})
 	)
 	await _finish_mutation(res)
 	return res

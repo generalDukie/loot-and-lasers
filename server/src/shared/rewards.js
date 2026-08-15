@@ -11,12 +11,23 @@ export { XP_STARDUST_SCALE };
 export { StardustPerFuel, StardustPerFuel as getMissionStardustPerFuel } from "./stardustEconomy.js";
 export { GenerateGearItem } from "./itemGeneration.js";
 
+const DEFAULT_INVENTORY_CAP = 10;
+const XP_DESIGN_LEVEL_COEFFICIENT = 2.106;
+const XP_DESIGN_LEVEL_EXPONENT = 1.532;
+const XP_DESIGN_HIGH_LEVEL_REFERENCE = 266;
+const XP_DESIGN_HIGH_LEVEL_EXPONENT = 3.683;
+const POST_200_LEVEL_INTERVAL = 100;
+const BASE_MISSION_XP_PER_FUEL = 10;
+const DEFAULT_MAX_FUEL = 100;
+const REWARD_COLLECTION_QUERY_LIMIT = 500;
+const LEGACY_COLLECTIBLE_SELL_VALUE = 25 * XP_STARDUST_SCALE;
+
 /** Prefer live getInventoryCap from economyFormulas (wired below / via hooks). */
 function getInventoryCap(ch) {
   if (typeof globalThis.__llGetInventoryCap === "function") {
     return globalThis.__llGetInventoryCap(ch);
   }
-  return 10;
+  return DEFAULT_INVENTORY_CAP;
 }
 
 /** Keep in sync with src/lib/gameData.js ITEM_NAMES (Cosmic Vault keys). */
@@ -114,7 +125,7 @@ export const EARLY_GAME_XP_TAPER_LEVEL = 100;
 /** Smooth XP-requirement multiplier; exactly 1 at L<=200, grows indefinitely after. */
 export function post200Growth(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
-  const X = Math.max(0, (L - POST_200_START_LEVEL) / 100);
+  const X = Math.max(0, (L - POST_200_START_LEVEL) / POST_200_LEVEL_INTERVAL);
   return 1 + POST_200_A * X ** POST_200_P + POST_200_B * X ** POST_200_Q;
 }
 
@@ -128,7 +139,15 @@ export function expForLevel(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   const design = Math.max(
     1,
-    Math.round(XP_REQUIREMENT_MULTIPLIER * 2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683))
+    Math.round(
+      XP_REQUIREMENT_MULTIPLIER
+        * XP_DESIGN_LEVEL_COEFFICIENT
+        * (L ** XP_DESIGN_LEVEL_EXPONENT)
+        * (
+          1
+          + (L / XP_DESIGN_HIGH_LEVEL_REFERENCE) ** XP_DESIGN_HIGH_LEVEL_EXPONENT
+        ),
+    ),
   );
   // Pacing multipliers (global 1.5× + tapering early-game) applied before the
   // single final integer round, preserving the design + Post-200 curve shape.
@@ -136,7 +155,7 @@ export function expForLevel(level) {
     1,
     Math.round(design * post200Growth(L) * XP_GLOBAL_SLOWDOWN * earlyGameXpModifier(L))
   );
-  return units * 10;
+  return units * XP_STARDUST_SCALE;
 }
 
 /** Mission XP per 1 Fuel, on the game's actual scale. Works for all L>=1 (no waypoints).
@@ -151,12 +170,12 @@ export function getMissionXpPerFuel(level = 1) {
   const design = Math.max(
     1,
     Math.round(
-      10
+      BASE_MISSION_XP_PER_FUEL
       + XP_PER_FUEL_LINEAR_COEFFICIENT * (L - 1)
       + XP_PER_FUEL_POWER_COEFFICIENT * (L ** XP_PER_FUEL_EXPONENT - 1)
     )
   );
-  return design * 10;
+  return design * XP_STARDUST_SCALE;
 }
 
 // StardustPerFuel / getMissionStardustPerFuel — see stardustEconomy.js (re-exported above).
@@ -178,6 +197,7 @@ import { grantCharacterXp } from "./characterProgression.js";
 import { createPendingLoot } from "../rewards/store.js";
 import {
   creditNova,
+  NOVA_HALF_UNITS_PER_NOVA,
   NovaBalanceTypes,
   toNovaHalfUnits,
 } from "./currencyService.js";
@@ -202,7 +222,8 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
       } catch {
         // Daily rewards historically used whole crystals; coerce to .0
       }
-      const display = Math.floor(amount * 2) / 2;
+      const display = Math.floor(amount * NOVA_HALF_UNITS_PER_NOVA)
+        / NOVA_HALF_UNITS_PER_NOVA;
       const mut = creditNova({
         user: { id: ch.created_by_id },
         character: live,
@@ -220,9 +241,15 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
       Object.assign(patch, mut.patch);
     }
   }
-  if (rewards.fuel) patch.fuel = Math.min(ch.max_fuel || 100, (ch.fuel || 0) + rewards.fuel);
+  if (rewards.fuel) {
+    patch.fuel = Math.min(ch.max_fuel || DEFAULT_MAX_FUEL, (ch.fuel || 0) + rewards.fuel);
+  }
   if (rewards.experience) {
-    const allItems = await gameService.asServiceRole.entities.Item.filter({}, null, 500);
+    const allItems = await gameService.asServiceRole.entities.Item.filter(
+      {},
+      null,
+      REWARD_COLLECTION_QUERY_LIMIT,
+    );
     const collectPct = getCollectionPercentage(ch, allItems.length);
     const scaled = scaleXpReward(rewards.experience, ch.level || 1);
     const boostedXp = applyXpBonus(scaled, collectPct);
@@ -268,7 +295,7 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
         stats: {},
         consumable: c.consumable,
         flavor_text: c.flavor_text || "Granted via promo code.",
-        sell_value: c.sell_value || (25 * XP_STARDUST_SCALE),
+        sell_value: c.sell_value || LEGACY_COLLECTIBLE_SELL_VALUE,
         is_equipped: false,
         owner_id: ch.created_by_id,
         character_id: ch.id,

@@ -14,6 +14,21 @@ const WIN_COOLDOWN_MS := BATTLE_COOLDOWN_MS
 ## @deprecated use BATTLE_COOLDOWN_MS
 const LOSS_COOLDOWN_MS := BATTLE_COOLDOWN_MS
 const WORMHOLE_ID := "wormhole"
+const STATIC_PLANET_COUNT := 10
+const WORMHOLE_BASE_LEVEL := 200
+const WORMHOLE_LEVELS_PER_DEPTH := 35
+const WORMHOLE_FIRST_LEVEL_OFFSET := 3
+const REGULAR_ENEMY_ATTRIBUTE_MULTIPLIER := 1.20
+const BOSS_ATTRIBUTE_MULTIPLIER := 1.30
+const ENEMY_SEED_PLANET_MULTIPLIER := 1_000
+const ENEMY_SEED_INDEX_MULTIPLIER := 37
+const ENEMY_SEED_OFFSET := 7
+const SPECIES_PLANET_MULTIPLIER := 13
+const SPECIES_INDEX_MULTIPLIER := 7
+const SPECIES_COUNT := 30
+const MILLISECONDS_PER_SECOND := 1_000.0
+const SECONDS_PER_MINUTE := 60
+const UNLIMITED_LIVES_SENTINEL := 999
 
 const UNLOCK_LEVELS := [0, 10, 20, 30, 40, 50, 60, 70, 90, 120, 140]
 
@@ -78,7 +93,7 @@ const PLANETS := [
 
 
 static func unlock_level(planet_id: int) -> int:
-	if planet_id >= 1 and planet_id <= 10:
+	if planet_id >= 1 and planet_id <= STATIC_PLANET_COUNT:
 		return int(UNLOCK_LEVELS[planet_id])
 	return 0
 
@@ -91,10 +106,10 @@ static func is_unlocked(planet_id: int, player_level: int) -> bool:
 
 
 static func get_planet(planet_id: int) -> Dictionary:
-	if planet_id >= 1 and planet_id <= 10:
+	if planet_id >= 1 and planet_id <= STATIC_PLANET_COUNT:
 		return PLANETS[planet_id - 1].duplicate(true)
 	# Wormhole / infinite depths
-	var depth := maxi(1, planet_id - 10)
+	var depth := maxi(1, planet_id - STATIC_PLANET_COUNT)
 	var themes := [
 		{"name": "Shattered", "icon": "orbit", "boss_emoji": "orbit", "boss": "The Fracture", "names": ["Shard Echo", "Broken Twin", "Fold Wraith", "Fractling"]},
 		{"name": "Abyssal", "icon": "heart", "boss_emoji": "heart", "boss": "The Hollow", "names": ["Hollow Bite", "Deep Shade", "Null Maw", "Abyss Tick"]},
@@ -120,10 +135,14 @@ static func get_planet(planet_id: int) -> Dictionary:
 static func enemy_level(planet_id: int, enemy_index: int) -> int:
 	var idx := clampi(enemy_index, 1, ENEMIES_PER_PLANET)
 	var band := maxi(1, planet_id)
-	if band <= 10:
+	if band <= STATIC_PLANET_COUNT:
 		return int(ENEMY_LEVELS[band][idx - 1])
-	var depth := band - 10
-	var start := 200 + (depth - 1) * 35 + 3
+	var depth := band - STATIC_PLANET_COUNT
+	var start := (
+		WORMHOLE_BASE_LEVEL
+		+ (depth - 1) * WORMHOLE_LEVELS_PER_DEPTH
+		+ WORMHOLE_FIRST_LEVEL_OFFSET
+	)
 	return start + int(LEVEL_OFFSETS[idx - 1])
 
 
@@ -132,7 +151,7 @@ static func expected_player_attrs(level: int) -> int:
 
 
 static func enemy_budget(level: int, is_boss: bool) -> int:
-	var mult := 1.30 if is_boss else 1.20
+	var mult := BOSS_ATTRIBUTE_MULTIPLIER if is_boss else REGULAR_ENEMY_ATTRIBUTE_MULTIPLIER
 	return int(round(float(expected_player_attrs(level)) * mult))
 
 
@@ -141,7 +160,11 @@ static func generate_enemy(planet: Dictionary, enemy_index: int) -> Dictionary:
 	var idx := clampi(enemy_index, 1, ENEMIES_PER_PLANET)
 	var is_boss := idx == ENEMIES_PER_PLANET
 	var rng := RandomNumberGenerator.new()
-	rng.seed = pid * 1000 + idx * 37 + 7
+	rng.seed = (
+		pid * ENEMY_SEED_PLANET_MULTIPLIER
+		+ idx * ENEMY_SEED_INDEX_MULTIPLIER
+		+ ENEMY_SEED_OFFSET
+	)
 	var level := enemy_level(pid, idx)
 	var budget := enemy_budget(level, is_boss)
 	var archetypes := ["MIGHT", "REFLEX", "TECH"]
@@ -163,14 +186,17 @@ static func generate_enemy(planet: Dictionary, enemy_index: int) -> Dictionary:
 		"level": level,
 		"stats": stats,
 		"isBoss": is_boss,
-		"speciesId": ((pid * 13 + idx * 7) % 30) + 1,
+		"speciesId": (
+			(pid * SPECIES_PLANET_MULTIPLIER + idx * SPECIES_INDEX_MULTIPLIER)
+			% SPECIES_COUNT
+		) + 1,
 	}
 
 
 static func format_ms(ms: int) -> String:
-	var sec := maxi(0, int(ceil(float(ms) / 1000.0)))
-	var m := sec / 60
-	var s := sec % 60
+	var sec := maxi(0, int(ceil(float(ms) / MILLISECONDS_PER_SECOND)))
+	var m := sec / SECONDS_PER_MINUTE
+	var s := sec % SECONDS_PER_MINUTE
 	return "%d:%02d" % [m, s]
 
 
@@ -184,11 +210,17 @@ static func cooldown_remaining_ms(character: Dictionary) -> int:
 		var start_ms := _parse_iso_ms(at)
 		if start_ms <= 0:
 			return 0
-		return maxi(0, int(start_ms + ms - Time.get_unix_time_from_system() * 1000.0))
+		return maxi(
+			0,
+			int(start_ms + ms - Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND),
+		)
 	var end_ms := _parse_iso_ms(until)
 	if end_ms <= 0:
 		return 0
-	return maxi(0, int(end_ms - Time.get_unix_time_from_system() * 1000.0))
+	return maxi(
+		0,
+		int(end_ms - Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND),
+	)
 
 
 static func _as_int(value: Variant) -> int:
@@ -218,9 +250,9 @@ static func _parse_iso_ms(iso: String) -> float:
 	var dict := Time.get_datetime_dict_from_datetime_string(cleaned, false)
 	if dict.is_empty():
 		return 0.0
-	return float(Time.get_unix_time_from_datetime_dict(dict)) * 1000.0
+	return float(Time.get_unix_time_from_datetime_dict(dict)) * MILLISECONDS_PER_SECOND
 
 
 ## @deprecated Death quotas removed — always returns a sentinel so continue fees never gate.
 static func free_lives_left(_character: Dictionary) -> int:
-	return 999
+	return UNLIMITED_LIVES_SENTINEL

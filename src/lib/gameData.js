@@ -22,6 +22,8 @@ import {
   isLaunchableMissionDuration,
   MISSION_MIN_DURATION_SECONDS,
   MISSION_MAX_DURATION_SECONDS,
+  MISSION_SECONDS_PER_FUEL,
+  MISSION_MIN_FUEL as MISSION_DURATION_MIN_FUEL,
 } from "@/lib/missionDuration";
 import {
   StardustPerFuel,
@@ -64,12 +66,23 @@ export {
   isLaunchableMissionDuration,
   MISSION_MIN_DURATION_SECONDS,
   MISSION_MAX_DURATION_SECONDS,
+  MISSION_SECONDS_PER_FUEL,
 };
 /**
  * Global XP & Stardust numerical resolution (unit size ×10).
  * Apply once at formula exits / configured amounts — not Nova or Fuel.
  */
 export const XP_STARDUST_SCALE = 10;
+
+const PERCENT_SCALE = 100;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+const FUEL_PRECISION_SCALE = 100;
+const NOVA_HALF_UNIT_SCALE = 2;
+const PERCENT_DISPLAY_DECIMAL_PLACES = 1;
 
 // ═══════════════════════════════════════════
 // RACES
@@ -487,6 +500,8 @@ export function generateClassWeapon(className, rarity, playerLevel, rng = Math.r
   return item;
 }
 
+const CLASS_SIGNATURE_WEAPON_CHANCE = 0.20;
+
 /**
  * @param {string} [playerClass] Player class for Common–Epic 60/40 favored pools.
  *   When omitted, generation stays class-neutral (Total pool only).
@@ -495,7 +510,7 @@ export function generateItem(rarity, playerLevel, type, playerClass) {
   // 20% chance for a class-signature weapon skin when rolling a weapon.
   // Skin class may be cosmetic-random; stat pool uses playerClass when provided.
   const rollingWeapon = !type || type === "weapon";
-  if (rollingWeapon && Math.random() < 0.20) {
+  if (rollingWeapon && Math.random() < CLASS_SIGNATURE_WEAPON_CHANCE) {
     const classKeys = Object.keys(CLASS_WEAPONS);
     const skinClass = playerClass && CLASS_WEAPONS[playerClass]
       ? playerClass
@@ -767,8 +782,10 @@ export const ITEM_DROP_RATES = {
   legendary: { common: 0,  uncommon: 10, rare: 30, epic: 35, legendary: 25 },
 };
 
+const DROP_RATE_PERCENT_TOTAL = 100;
+
 function _rollFromTable(rates) {
-  const roll = Math.random() * 100;
+  const roll = Math.random() * DROP_RATE_PERCENT_TOTAL;
   let cumulative = 0;
   for (const rarity of RARITY_ORDER) {
     cumulative += rates[rarity] || 0;
@@ -804,9 +821,16 @@ export const XP_GLOBAL_SLOWDOWN = 1.5;
 export const EARLY_GAME_XP_START_BONUS = 0.2;
 export const EARLY_GAME_XP_TAPER_LEVEL = 100;
 
+const POST_200_LEVEL_INTERVAL = 100;
+const XP_BASE_COEFFICIENT = 2.106;
+const XP_BASE_LEVEL_EXPONENT = 1.532;
+const XP_HIGH_LEVEL_REFERENCE = 266;
+const XP_HIGH_LEVEL_EXPONENT = 3.683;
+const MISSION_XP_PER_FUEL_BASE = 10;
+
 export function post200Growth(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
-  const X = Math.max(0, (L - POST_200_START_LEVEL) / 100);
+  const X = Math.max(0, (L - POST_200_START_LEVEL) / POST_200_LEVEL_INTERVAL);
   return 1 + POST_200_A * X ** POST_200_P + POST_200_B * X ** POST_200_Q;
 }
 
@@ -819,7 +843,12 @@ export function xpToNextBase(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   const base = Math.max(
     1,
-    Math.round(XP_REQUIREMENT_MULTIPLIER * 2.106 * (L ** 1.532) * (1 + (L / 266) ** 3.683))
+    Math.round(
+      XP_REQUIREMENT_MULTIPLIER
+      * XP_BASE_COEFFICIENT
+      * (L ** XP_BASE_LEVEL_EXPONENT)
+      * (1 + (L / XP_HIGH_LEVEL_REFERENCE) ** XP_HIGH_LEVEL_EXPONENT),
+    ),
   );
   return Math.max(1, Math.round(base * post200Growth(L) * XP_GLOBAL_SLOWDOWN * earlyGameXpModifier(L)));
 }
@@ -841,7 +870,7 @@ export function missionXpPerFuelBase(level = 1) {
   return Math.max(
     1,
     Math.round(
-      10
+      MISSION_XP_PER_FUEL_BASE
       + XP_PER_FUEL_LINEAR_COEFFICIENT * (L - 1)
       + XP_PER_FUEL_POWER_COEFFICIENT * (L ** XP_PER_FUEL_EXPONENT - 1)
     )
@@ -889,14 +918,35 @@ export function getArenaStardustReward(level = 1) {
   return ArenaWinStardust(level);
 }
 
+const ARENA_XP_REWARD_NUMERATOR = 5;
+const ARENA_XP_REWARD_DENOMINATOR = 7;
+const MISSION_REWARD_VARIANCE = 0.10;
+const MISSION_EFFICIENCY_PRECISION_SCALE = 100;
+const COMBAT_XP_RELATIVE_MIN = 0.5;
+const COMBAT_XP_RELATIVE_MAX = 1.65;
+const COMBAT_XP_RELATIVE_BASE = 0.55;
+const COMBAT_XP_LEVEL_RATIO_WEIGHT = 0.45;
+const COMBAT_XP_BASE_UNITS = 10;
+const EARLY_FUEL_DISCOUNT_BRACKETS = Object.freeze([
+  Object.freeze({ maxLevel: 2, discount: 3 }),
+  Object.freeze({ maxLevel: 4, discount: 2 }),
+  Object.freeze({ maxLevel: 7, discount: 1 }),
+]);
+
 /** Arena win XP = XP/F(playerLevel) × 5/7 (≈0.714). */
 export function getArenaXpReward(level = 1) {
-  return Math.max(1, Math.round((getMissionXpPerFuel(level) * 5) / 7));
+  return Math.max(
+    1,
+    Math.round(
+      (getMissionXpPerFuel(level) * ARENA_XP_REWARD_NUMERATOR)
+      / ARENA_XP_REWARD_DENOMINATOR,
+    ),
+  );
 }
 
 /** Mission reward variance band by player level (±fraction around 1.0). */
 export function getMissionRewardVariance(_playerLevel = 1) {
-  return 0.10;
+  return MISSION_REWARD_VARIANCE;
 }
 
 /**
@@ -907,7 +957,8 @@ export function rollMissionEfficiency(playerLevel = 1, rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
   const v = getMissionRewardVariance(playerLevel);
   const raw = (1 - v) + r() * (2 * v);
-  return Math.round(raw * 100) / 100;
+  return Math.round(raw * MISSION_EFFICIENCY_PRECISION_SCALE)
+    / MISSION_EFFICIENCY_PRECISION_SCALE;
 }
 
 /** Clamp / default efficiency for the player's variance band. */
@@ -915,12 +966,16 @@ export function normalizeMissionEfficiency(value, playerLevel = 1) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 1;
   const v = getMissionRewardVariance(playerLevel);
-  return Math.min(1 + v, Math.max(1 - v, Math.round(n * 100) / 100));
+  const rounded = Math.round(n * MISSION_EFFICIENCY_PRECISION_SCALE)
+    / MISSION_EFFICIENCY_PRECISION_SCALE;
+  return Math.min(1 + v, Math.max(1 - v, rounded));
 }
 
 /** Display helper: 1.09 → "+9%", 0.93 → "-7%". */
 export function formatEfficiencyPct(efficiency, playerLevel = 1) {
-  const pct = Math.round((normalizeMissionEfficiency(efficiency, playerLevel) - 1) * 100);
+  const pct = Math.round(
+    (normalizeMissionEfficiency(efficiency, playerLevel) - 1) * PERCENT_SCALE,
+  );
   if (pct === 0) return "±0%";
   return pct > 0 ? `+${pct}%` : `${pct}%`;
 }
@@ -973,8 +1028,14 @@ export function scaleXpReward(baseXp, level = 1) {
 export function scaleCombatXp(baseXp, playerLevel = 1, contentLevel = 1) {
   const pl = Math.max(1, playerLevel || 1);
   const cl = Math.max(1, contentLevel || 1);
-  const relative = Math.max(0.5, Math.min(1.65, 0.55 + 0.45 * (pl / cl)));
-  const fuelEquiv = (Number(baseXp) || 0) / 10;
+  const relative = Math.max(
+    COMBAT_XP_RELATIVE_MIN,
+    Math.min(
+      COMBAT_XP_RELATIVE_MAX,
+      COMBAT_XP_RELATIVE_BASE + COMBAT_XP_LEVEL_RATIO_WEIGHT * (pl / cl),
+    ),
+  );
+  const fuelEquiv = (Number(baseXp) || 0) / COMBAT_XP_BASE_UNITS;
   return Math.max(1, Math.round(fuelEquiv * getMissionXpPerFuel(pl) * relative));
 }
 
@@ -985,9 +1046,8 @@ export function getEarlyXpMultiplier(_level = 1) {
 
 export function getEarlyFuelDiscount(level = 1) {
   const l = Math.max(1, level || 1);
-  if (l <= 2) return 3;
-  if (l <= 4) return 2;
-  if (l <= 7) return 1;
+  const bracket = EARLY_FUEL_DISCOUNT_BRACKETS.find(({ maxLevel }) => l <= maxLevel);
+  if (bracket) return bracket.discount;
   return 0;
 }
 
@@ -1007,16 +1067,16 @@ export const XP_COLOR = "#00E5FF";
 // ═══════════════════════════════════════════
 export const FUEL_MAX = 100;
 // Fuel is a flat pool that refills to full every 24h (no per-minute regen).
-export const FUEL_CYCLE_MS = 24 * 60 * 60 * 1000;
+export const FUEL_CYCLE_MS = HOURS_PER_DAY * MILLISECONDS_PER_HOUR;
 export const FUEL_PURCHASE_AMOUNT = 20;
 export const FUEL_PURCHASE_COST = 20; // nova crystals (display)
 export const FUEL_PURCHASE_MAX = 10; // per 24h cycle (200 fuel total)
 /** Smallest chargeable fuel unit (L1 short jobs = 15s = 0.25 fuel). */
-export const MISSION_MIN_FUEL = 0.25;
+export const MISSION_MIN_FUEL = MISSION_DURATION_MIN_FUEL;
 
 /** Canonical 2-decimal fuel value for comparisons and display. */
 export function normalizeFuelAmount(n) {
-  return Math.round((Number(n) || 0) * 100) / 100;
+  return Math.round((Number(n) || 0) * FUEL_PRECISION_SCALE) / FUEL_PRECISION_SCALE;
 }
 
 /** Display fuel with up to 2 decimals — matches cantina / mission UI. */
@@ -1029,7 +1089,7 @@ export function formatFuelAmount(n) {
 export function snapNovaDisplay(n) {
   const v = Number(n);
   if (!Number.isFinite(v) || v <= 0) return 0;
-  return Math.round(v * 2) / 2;
+  return Math.round(v * NOVA_HALF_UNIT_SCALE) / NOVA_HALF_UNIT_SCALE;
 }
 
 /**
@@ -1047,8 +1107,8 @@ export function novaDisplayFromCharacter(character) {
     );
   }
   const raw = Number(character.nova_crystals) || 0;
-  if (Number(character.economy_nova_scale) === 2) {
-    return snapNovaDisplay(raw / 2);
+  if (Number(character.economy_nova_scale) === NOVA_HALF_UNIT_SCALE) {
+    return snapNovaDisplay(raw / NOVA_HALF_UNIT_SCALE);
   }
   return snapNovaDisplay(raw);
 }
@@ -1060,8 +1120,10 @@ export function formatNovaAmount(n) {
 
 export function computeFuelCost(template) {
   // 1 fuel = 1 minute of mission time (15s = 0.25, 30s = 0.5, 60s = 1, etc.)
-  const durationSeconds = Math.floor(template.duration_seconds || 60);
-  return Math.round((durationSeconds / 60) * 100) / 100;
+  const durationSeconds = Math.floor(template.duration_seconds || MISSION_SECONDS_PER_FUEL);
+  return Math.round(
+    (durationSeconds / MISSION_SECONDS_PER_FUEL) * FUEL_PRECISION_SCALE,
+  ) / FUEL_PRECISION_SCALE;
 }
 
 // The actual fuel that will be deducted at launch — applies ship-mod reductions,
@@ -1070,13 +1132,20 @@ export function computeFuelCost(template) {
 export function getEffectiveFuelCost(character, mission) {
   // Residual / explicit fuel missions pin their cost so low-fuel offers stay runnable.
   if (typeof mission?.fuel_cost === "number") {
-    return Math.max(MISSION_MIN_FUEL, Math.round(mission.fuel_cost * 100) / 100);
+    return Math.max(
+      MISSION_MIN_FUEL,
+      Math.round(mission.fuel_cost * FUEL_PRECISION_SCALE) / FUEL_PRECISION_SCALE,
+    );
   }
   // Fuel is charged per minute of the ACTUAL (effective) mission time, so it
   // matches the duration shown after warp/fuel-mount reductions.
   const effectiveSeconds = getEffectiveMissionDuration(character, mission);
-  const raw = effectiveSeconds / 60 - getModEffectTotal(character, "fuel_cost_reduction");
-  return Math.max(MISSION_MIN_FUEL, Math.round(raw * 100) / 100);
+  const raw = effectiveSeconds / MISSION_SECONDS_PER_FUEL
+    - getModEffectTotal(character, "fuel_cost_reduction");
+  return Math.max(
+    MISSION_MIN_FUEL,
+    Math.round(raw * FUEL_PRECISION_SCALE) / FUEL_PRECISION_SCALE,
+  );
 }
 
 // Returns a patch refilling fuel to max once the 24h cycle elapses, else null.
@@ -1118,7 +1187,9 @@ export const MAX_ACTIVE_STAT_TYPES = 3;
 export const STIM_YEARN_MESSAGE = "Your character doesn't yearn for more yet.";
 
 const CONSUMABLE_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
-const MS_PER_HOUR = 3600 * 1000;
+const EPIC_STIM_ROLL_THRESHOLD = 0.85;
+const RARE_STIM_ROLL_THRESHOLD = 0.55;
+const STIM_REFRESH_BASE_DURATION_SHARE = 0.5;
 
 export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, tier]) =>
   CONSUMABLE_STATS.map((stat) => ({
@@ -1129,7 +1200,7 @@ export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, t
     stats: {},
     consumable: { stat, mult: tier.mult, duration_hours: tier.duration_hours, tier: tierKey },
     sell_value: tier.sell_value,
-    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * 100)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.duration_hours * 3}h).`,
+    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * PERCENT_SCALE)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.duration_hours * MAX_BUFF_STACKS}h).`,
     is_equipped: false,
     _cost: tier.cost,
   }))
@@ -1144,8 +1215,8 @@ export function consumableItem(def) {
 export function randomConsumable(rng = Math.random) {
   const roll = typeof rng === "function" ? rng() : Math.random();
   let rarity = "uncommon";
-  if (roll >= 0.85) rarity = "epic";
-  else if (roll >= 0.55) rarity = "rare";
+  if (roll >= EPIC_STIM_ROLL_THRESHOLD) rarity = "epic";
+  else if (roll >= RARE_STIM_ROLL_THRESHOLD) rarity = "rare";
   const pool = CONSUMABLES.filter((c) => c.rarity === rarity);
   const pickRng = typeof rng === "function" ? rng() : Math.random();
   return pool[Math.floor(pickRng * pool.length)] || CONSUMABLES[0];
@@ -1178,8 +1249,8 @@ export function resolveStimRarity(source) {
   if (raw === "common" || raw === "minor") return "uncommon";
   if (raw === "legendary" || raw === "mythic" || raw === "prime") return "epic";
   const mult = Number(source?.mult ?? source?.consumable?.mult ?? 0);
-  if (mult >= 0.2) return "epic";
-  if (mult >= 0.1) return "rare";
+  if (mult >= CONSUMABLE_TIERS.epic.mult) return "epic";
+  if (mult >= CONSUMABLE_TIERS.rare.mult) return "rare";
   if (mult > 0) return "uncommon";
   return "uncommon";
 }
@@ -1189,12 +1260,12 @@ export function stimRarityRank(rarity) {
 }
 
 export function stimMaxDurationMs(durationHours) {
-  return Math.max(0, Number(durationHours) || 0) * MS_PER_HOUR * MAX_BUFF_STACKS;
+  return Math.max(0, Number(durationHours) || 0) * MILLISECONDS_PER_HOUR * MAX_BUFF_STACKS;
 }
 
 export function stimRefreshRemainingMs(durationHours) {
-  const base = Math.max(0, Number(durationHours) || 0) * MS_PER_HOUR;
-  return stimMaxDurationMs(durationHours) - base / 2;
+  const base = Math.max(0, Number(durationHours) || 0) * MILLISECONDS_PER_HOUR;
+  return stimMaxDurationMs(durationHours) - base * STIM_REFRESH_BASE_DURATION_SHARE;
 }
 
 function inferStimStacks(remainingMs, baseMs) {
@@ -1242,9 +1313,9 @@ export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Dat
   // Authoritative mechanics — never trust item.consumable.mult / duration_hours.
   const durationHours = tier.duration_hours;
   const mult = tier.mult;
-  const baseMs = durationHours * MS_PER_HOUR;
+  const baseMs = durationHours * MILLISECONDS_PER_HOUR;
   const maxMs = baseMs * MAX_BUFF_STACKS;
-  const refreshAt = maxMs - baseMs / 2;
+  const refreshAt = maxMs - baseMs * STIM_REFRESH_BASE_DURATION_SHARE;
 
   const source = sourceBuffs ?? character.active_buffs ?? [];
   const active = (source || []).filter((b) => new Date(b.expires_at).getTime() > now);
@@ -1681,12 +1752,12 @@ export function getShipInherentLabel(ship) {
   if (!ship?.inherent && !(ship?.upgrade_mult > 1)) return "";
   const inh = ship.inherent || {};
   const parts = [];
-  if (inh.mission_stardust_mult) parts.push(`+${Math.round(inh.mission_stardust_mult * 100)}% Stardust`);
-  if (inh.mission_xp_mult) parts.push(`+${Math.round(inh.mission_xp_mult * 100)}% XP`);
-  if (inh.mission_duration_reduction) parts.push(`-${Math.round(inh.mission_duration_reduction * 100)}% Time`);
+  if (inh.mission_stardust_mult) parts.push(`+${Math.round(inh.mission_stardust_mult * PERCENT_SCALE)}% Stardust`);
+  if (inh.mission_xp_mult) parts.push(`+${Math.round(inh.mission_xp_mult * PERCENT_SCALE)}% XP`);
+  if (inh.mission_duration_reduction) parts.push(`-${Math.round(inh.mission_duration_reduction * PERCENT_SCALE)}% Time`);
   if (inh.fuel_cost_reduction) parts.push(`-${inh.fuel_cost_reduction} Fuel`);
   const mult = ship?.upgrade_mult;
-  if (mult && mult > 1) parts.push(`+${Math.round((mult - 1) * 100)}% Upgrade Power`);
+  if (mult && mult > 1) parts.push(`+${Math.round((mult - 1) * PERCENT_SCALE)}% Upgrade Power`);
   return parts.join(" · ");
 }
 
@@ -1727,7 +1798,9 @@ export function buildScoutMilestonePatch(character) {
 export function getTierEffectLabel(tier, shipId) {
   if (!tier) return "";
   const mult = getShipUpgradeMult(shipId);
-  const fmtPct = (v) => (v * 100).toFixed(1).replace(/\.0$/, "");
+  const fmtPct = (v) => (v * PERCENT_SCALE)
+    .toFixed(PERCENT_DISPLAY_DECIMAL_PLACES)
+    .replace(/\.0$/, "");
   const parts = [];
   if (tier.max_fuel_bonus) parts.push(`+${Math.round(tier.max_fuel_bonus * mult)} Max Fuel`);
   if (tier.mission_stardust_mult) parts.push(`+${fmtPct(tier.mission_stardust_mult * mult)}% Mission Stardust`);
@@ -1750,7 +1823,9 @@ export function getMaxTierTotal(mod, shipId) {
       sums[k] = (sums[k] || 0) + t[k];
     });
   });
-  const fmtPct = (v) => (v * 100).toFixed(1).replace(/\.0$/, "");
+  const fmtPct = (v) => (v * PERCENT_SCALE)
+    .toFixed(PERCENT_DISPLAY_DECIMAL_PLACES)
+    .replace(/\.0$/, "");
   const parts = [];
   if (sums.max_fuel_bonus) parts.push(`+${Math.round(sums.max_fuel_bonus * mult)} Max Fuel`);
   if (sums.mission_stardust_mult) parts.push(`+${fmtPct(sums.mission_stardust_mult * mult)}% Stardust`);

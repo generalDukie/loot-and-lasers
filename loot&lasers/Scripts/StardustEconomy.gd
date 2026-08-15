@@ -31,6 +31,13 @@ const SHIP_MODULE_VENDOR_MULT := 1.2
 const ARENA_REWARDED_WINS_PER_DAY := 10
 const ARENA_WIN_FUEL_EQUIVALENT := 2.25
 const MINING_EFFICIENCY := 0.03
+const MINUTES_PER_HOUR := 60.0
+const STARDUST_PER_FUEL_BASE := 50.0
+const STARDUST_PER_FUEL_GROWTH_COEFFICIENT := 1.009
+const STARDUST_PER_FUEL_LEVEL_EXPONENT := 1.625
+const STARDUST_PER_FUEL_ACCELERATION_LEVEL := 166.66
+const STARDUST_PER_FUEL_ACCELERATION_EXPONENT := 3.055
+const DROP_CHANCE_PRECISION := 0.0001
 
 ## @deprecated Historical PCHIP waypoints — not production authority (Restoration 11).
 ## AttributePurchaseCost still uses PCHIP; StardustPerFuel uses the closed form below.
@@ -151,9 +158,19 @@ static func log_pchip_anchors(anchors: Array, x: float) -> int:
 static func stardust_per_fuel(level: int = 1) -> int:
 	var L := maxi(1, level)
 	if L <= 1:
-		return 50
-	var growth := 1.009 * pow(float(L - 1), 1.625) * (1.0 + pow(float(L) / 166.66, 3.055))
-	return maxi(1, int(round(50.0 + growth)))
+		return int(STARDUST_PER_FUEL_BASE)
+	var growth := (
+		STARDUST_PER_FUEL_GROWTH_COEFFICIENT
+		* pow(float(L - 1), STARDUST_PER_FUEL_LEVEL_EXPONENT)
+		* (
+			1.0
+			+ pow(
+				float(L) / STARDUST_PER_FUEL_ACCELERATION_LEVEL,
+				STARDUST_PER_FUEL_ACCELERATION_EXPONENT,
+			)
+		)
+	)
+	return maxi(1, int(round(STARDUST_PER_FUEL_BASE + growth)))
 
 
 static func attribute_purchase_cost(purchase_number: int = 1) -> int:
@@ -179,7 +196,7 @@ static func mining_stardust(level: int, minutes: float) -> int:
 
 
 static func compute_mining_reward(level: int, hours: float) -> int:
-	return mining_stardust(level, hours * 60.0)
+	return mining_stardust(level, hours * MINUTES_PER_HOUR)
 
 
 ## Snapshot junk vendor value. Optional unit_roll in [0,1] picks Uniform(0.60, 1.40).
@@ -225,4 +242,4 @@ static func gear_sale_value(item: Dictionary) -> int:
 static func mission_gear_drop_chance(miss_streak: int = 0) -> float:
 	var streak := maxi(0, miss_streak)
 	var raw := MISSION_GEAR_BASE_CHANCE + float(streak) * MISSION_GEAR_PITY_INCREMENT
-	return minf(MISSION_GEAR_DROP_CAP, snappedf(raw, 0.0001))
+	return minf(MISSION_GEAR_DROP_CAP, snappedf(raw, DROP_CHANCE_PRECISION))

@@ -11,6 +11,8 @@ export const DESIGN_WIDTH = 1920;
 export const DESIGN_HEIGHT = 1080;
 export const DESIGN_ASPECT = DESIGN_WIDTH / DESIGN_HEIGHT;
 
+const VIEWPORT_SUBPIXEL_PRECISION_SCALE = 1_000;
+
 /**
  * Largest 16:9 rectangle that fits inside availableWidth × availableHeight.
  * @param {number} availableWidth
@@ -33,8 +35,8 @@ export function calculateGameViewport(availableWidth, availableHeight) {
     height = width / DESIGN_ASPECT;
   }
   return {
-    width: Math.round(width * 1000) / 1000,
-    height: Math.round(height * 1000) / 1000,
+    width: Math.round(width * VIEWPORT_SUBPIXEL_PRECISION_SCALE) / VIEWPORT_SUBPIXEL_PRECISION_SCALE,
+    height: Math.round(height * VIEWPORT_SUBPIXEL_PRECISION_SCALE) / VIEWPORT_SUBPIXEL_PRECISION_SCALE,
   };
 }
 
@@ -59,8 +61,8 @@ export function placeGameViewport(availableWidth, availableHeight, size, anchor 
   return {
     width,
     height,
-    left: Math.round(left * 1000) / 1000,
-    top: Math.round(top * 1000) / 1000,
+    left: Math.round(left * VIEWPORT_SUBPIXEL_PRECISION_SCALE) / VIEWPORT_SUBPIXEL_PRECISION_SCALE,
+    top: Math.round(top * VIEWPORT_SUBPIXEL_PRECISION_SCALE) / VIEWPORT_SUBPIXEL_PRECISION_SCALE,
   };
 }
 

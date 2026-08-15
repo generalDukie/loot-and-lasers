@@ -16,6 +16,7 @@ import {
 } from "../shared/economyFormulas.js";
 import { generateArenaBot } from "../../../src/lib/arenaBotGenerator.js";
 import { tryCreateNotification } from "../shared/notificationService.js";
+import { ARENA_DEFAULT_RATING } from "./config.js";
 // Attribute budgets: ExpectedPlayerAttributes (shared re-export of src/lib).
 
 const BOT_NAMES = [
@@ -31,10 +32,33 @@ const BOT_GUILDS = [
 const RACES = ["Zyrathi", "Cognati", "Keldris", "Luminae", "Cethylli", "Myrrkin"];
 
 /** How often incoming bot raids may process when the player opens Arena. */
-export const BOT_RAID_COOLDOWN_MS = 12 * 60 * 1000;
+export const BOT_RAID_COOLDOWN_MINUTES = 12;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+export const BOT_RAID_COOLDOWN_MS = BOT_RAID_COOLDOWN_MINUTES
+  * SECONDS_PER_MINUTE
+  * MILLISECONDS_PER_SECOND;
 export const BOT_RAIDS_PER_PULSE = 2;
 /** Target bots near a player's rating for the ladder. */
 export const BOT_POOL_TARGET = 14;
+
+const ARENA_BOT_DEFAULT_LIST_LIMIT = 8;
+const BOT_QUERY_LIMIT_MULTIPLIER = 3;
+const BOT_QUERY_MINIMUM_LIMIT = 24;
+const BOT_RATING_VARIANCE = 60;
+const BOT_GUILD_MEMBERSHIP_CHANCE = 0.55;
+const BOT_WIN_RATING_DIVISOR = 4;
+const BOT_RANDOM_WIN_BONUS_LIMIT = 15;
+const BOT_LOSS_RATIO_MIN = 0.4;
+const BOT_LOSS_RATIO_RANGE = 0.55;
+const AVATAR_SPECIES_COUNT = 30;
+const BOT_POOL_NEAR_MINIMUM = 6;
+const BOT_POOL_TOP_UP_COUNT = 4;
+const BOT_RAID_CANDIDATE_MULTIPLIER = 3;
+const BOT_RAID_CANDIDATE_MINIMUM = 6;
+const RANDOM_SORT_CENTER = 0.5;
+const ISO_HOUR_PREFIX_LENGTH = 13;
+const BOT_LAST_ONLINE_MAX_MINUTES = 180;
 
 let schemaReady = false;
 
@@ -47,7 +71,7 @@ function ensureSchema() {
       race TEXT,
       class TEXT,
       level INTEGER NOT NULL DEFAULT 1,
-      arena_rating INTEGER NOT NULL DEFAULT 1000,
+      arena_rating INTEGER NOT NULL DEFAULT ${ARENA_DEFAULT_RATING},
       arena_wins INTEGER NOT NULL DEFAULT 0,
       arena_losses INTEGER NOT NULL DEFAULT 0,
       guild TEXT,
@@ -77,7 +101,7 @@ function rowToBot(row) {
     race: row.race,
     class: row.class,
     level: row.level || 1,
-    arena_rating: row.arena_rating || 1000,
+    arena_rating: row.arena_rating || ARENA_DEFAULT_RATING,
     arena_wins: row.arena_wins || 0,
     arena_losses: row.arena_losses || 0,
     guild: row.guild || null,
@@ -85,7 +109,7 @@ function rowToBot(row) {
     stats,
     isBot: true,
     arena_bot_id: row.id,
-    speciesId: ((String(row.name).charCodeAt(0) || 1) % 30) + 1,
+    speciesId: ((String(row.name).charCodeAt(0) || 1) % AVATAR_SPECIES_COUNT) + 1,
   };
 }
 
@@ -95,16 +119,19 @@ export function getArenaBot(id) {
   return rowToBot(db.prepare("SELECT * FROM arena_bots WHERE id = ?").get(id));
 }
 
-export function listBotsNearRating(rating = 1000, { limit = 8, excludeIds = [] } = {}) {
+export function listBotsNearRating(
+  rating = ARENA_DEFAULT_RATING,
+  { limit = ARENA_BOT_DEFAULT_LIST_LIMIT, excludeIds = [] } = {},
+) {
   ensureSchema();
-  const r = Math.max(0, Math.floor(Number(rating) || 1000));
+  const r = Math.max(0, Math.floor(Number(rating) || ARENA_DEFAULT_RATING));
   const rows = db
     .prepare(
       `SELECT * FROM arena_bots
        ORDER BY ABS(arena_rating - ?) ASC, updated_at DESC
        LIMIT ?`
     )
-    .all(r, Math.max(limit * 3, 24));
+    .all(r, Math.max(limit * BOT_QUERY_LIMIT_MULTIPLIER, BOT_QUERY_MINIMUM_LIMIT));
   const exclude = new Set(excludeIds.filter(Boolean));
   return rows
     .map(rowToBot)
@@ -120,13 +147,22 @@ function createBotNear(anchorLevel, anchorRating) {
   const className = snap.class;
   const race = pick(RACES);
   const level = snap.level;
-  const rating = Math.max(0, (anchorRating || 1000) + Math.floor(Math.random() * 120) - 60);
+  const rating = Math.max(
+    0,
+    (anchorRating || ARENA_DEFAULT_RATING)
+      + Math.floor(Math.random() * BOT_RATING_VARIANCE * 2)
+      - BOT_RATING_VARIANCE,
+  );
   const name = `${pick(BOT_NAMES)}`;
   const stats = snap.stats;
   const appearance = { skinColor: "#4A5568", eyeStyle: "Standard" };
-  const guild = Math.random() < 0.55 ? pick(BOT_GUILDS) : null;
-  const wins = Math.max(0, Math.floor(rating / 4) + Math.floor(Math.random() * 15));
-  const losses = Math.floor(wins * (0.4 + Math.random() * 0.55));
+  const guild = Math.random() < BOT_GUILD_MEMBERSHIP_CHANCE ? pick(BOT_GUILDS) : null;
+  const wins = Math.max(
+    0,
+    Math.floor(rating / BOT_WIN_RATING_DIVISOR)
+      + Math.floor(Math.random() * BOT_RANDOM_WIN_BONUS_LIMIT),
+  );
+  const losses = Math.floor(wins * (BOT_LOSS_RATIO_MIN + Math.random() * BOT_LOSS_RATIO_RANGE));
   db.prepare(
     `INSERT INTO arena_bots
      (id, name, race, class, level, arena_rating, arena_wins, arena_losses, guild, appearance_json, stats_json, created_at, updated_at)
@@ -152,15 +188,15 @@ function createBotNear(anchorLevel, anchorRating) {
 /** Ensure a band of bots exists around this player's rating/level. */
 export function ensureBotPoolForPlayer(character, target = BOT_POOL_TARGET) {
   ensureSchema();
-  const rating = character?.arena_rating || 1000;
+  const rating = character?.arena_rating || ARENA_DEFAULT_RATING;
   const level = character?.level || 1;
   const count = db.prepare("SELECT COUNT(*) AS n FROM arena_bots").get()?.n || 0;
   const need = Math.max(0, target - count);
   for (let i = 0; i < need; i++) createBotNear(level, rating);
   // Top up near-band if the global pool drifted away.
   const near = listBotsNearRating(rating, { limit: Math.ceil(target / 2) });
-  if (near.length < Math.min(6, target)) {
-    for (let i = 0; i < 4; i++) createBotNear(level, rating);
+  if (near.length < Math.min(BOT_POOL_NEAR_MINIMUM, target)) {
+    for (let i = 0; i < BOT_POOL_TOP_UP_COUNT; i++) createBotNear(level, rating);
   }
   return listBotsNearRating(rating, { limit: target });
 }
@@ -169,7 +205,10 @@ export function applyBotRatingDelta(botId, { won, ratingDelta }) {
   ensureSchema();
   const bot = getArenaBot(botId);
   if (!bot) return null;
-  const nextRating = Math.max(0, (bot.arena_rating || 1000) + (ratingDelta || 0));
+  const nextRating = Math.max(
+    0,
+    (bot.arena_rating || ARENA_DEFAULT_RATING) + (ratingDelta || 0),
+  );
   const now = clock.nowIso();
   db.prepare(
     `UPDATE arena_bots SET
@@ -201,8 +240,8 @@ export function settleBotAsOpponent(botId, { playerWon, playerRatingDelta }) {
  * Returns rating deltas from the PLAYER's perspective (defense).
  */
 export function simulateBotRaid(character, bot) {
-  const playerRating = character.arena_rating || 1000;
-  const botRating = bot.arena_rating || 1000;
+  const playerRating = character.arena_rating || ARENA_DEFAULT_RATING;
+  const botRating = bot.arena_rating || ARENA_DEFAULT_RATING;
   // Bot's chance to beat the player.
   const botWinChance = eloExpectedScore(botRating, playerRating);
   const botWon = Math.random() < botWinChance;
@@ -243,15 +282,20 @@ export function processIncomingBotRaids(character, { maxRaids = BOT_RAIDS_PER_PU
   }
 
   ensureBotPoolForPlayer(character);
-  const bots = listBotsNearRating(character.arena_rating || 1000, {
-    limit: Math.max(maxRaids * 3, 6),
+  const bots = listBotsNearRating(character.arena_rating || ARENA_DEFAULT_RATING, {
+    limit: Math.max(
+      maxRaids * BOT_RAID_CANDIDATE_MULTIPLIER,
+      BOT_RAID_CANDIDATE_MINIMUM,
+    ),
   });
   if (!bots.length) {
     return { raids: [], character, patch: null };
   }
 
   // Prefer bots slightly above/below so raids feel varied.
-  const shuffled = [...bots].sort(() => Math.random() - 0.5).slice(0, maxRaids);
+  const shuffled = [...bots]
+    .sort(() => Math.random() - RANDOM_SORT_CENTER)
+    .slice(0, maxRaids);
   const raids = [];
   let live = { ...character };
   const patch = {};
@@ -260,7 +304,7 @@ export function processIncomingBotRaids(character, { maxRaids = BOT_RAIDS_PER_PU
     const freshBot = getArenaBot(bot.id) || bot;
     const result = simulateBotRaid(live, freshBot);
 
-    const prevRating = live.arena_rating || 1000;
+    const prevRating = live.arena_rating || ARENA_DEFAULT_RATING;
     const nextRating = Math.max(0, prevRating + result.playerRatingDelta);
     const prevStreak = live.arena_streak || 0;
     const newStreak = result.playerWon ? prevStreak + 1 : 0;
@@ -319,7 +363,7 @@ export function processIncomingBotRaids(character, { maxRaids = BOT_RAIDS_PER_PU
           : `Lost ${Math.abs(result.playerRatingDelta)} rating. ${freshBot.name} climbs to ${updatedBot?.arena_rating ?? "?"}.`,
         related_id: freshBot.id,
         priority: "high",
-        idempotency_key: `arena_defense:${live.id}:${freshBot.id}:${clock.nowIso().slice(0, 13)}`,
+        idempotency_key: `arena_defense:${live.id}:${freshBot.id}:${clock.nowIso().slice(0, ISO_HOUR_PREFIX_LENGTH)}`,
       });
     } catch (err) {
       console.error("[arena bots] notify failed", err?.message || err);
@@ -373,6 +417,6 @@ export function botToPublicOpponent(bot) {
     stats: bot.stats || {},
     isBot: true,
     speciesId: bot.speciesId,
-    lastOnlineMins: Math.floor(Math.random() * 180),
+    lastOnlineMins: Math.floor(Math.random() * BOT_LAST_ONLINE_MAX_MINUTES),
   };
 }

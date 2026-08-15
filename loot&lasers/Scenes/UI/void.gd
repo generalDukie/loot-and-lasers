@@ -46,9 +46,11 @@ func _refresh_balance() -> void:
 
 func _boot() -> void:
 	_set_status("Loading bag…", ClientUi.MUTED)
-	await MissionManager.refresh_character()
-	await InventoryManager.list_pending_loot()
-	await _load_items()
+	var requests := AsyncGroup.new()
+	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(InventoryManager.list_pending_loot)
+	requests.add(_load_items)
+	await requests.wait()
 	_populate()
 	_set_status("", ClientUi.MUTED)
 

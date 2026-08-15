@@ -26,6 +26,22 @@ export const RETIRED_GAME_IDS = Object.freeze([
 
 export const NOVA_MIN_WAGER = 100;
 export const NOVA_MAX_WAGER = 1000;
+const NOVA_HALF_UNIT_SCALE = 2;
+const NOVA_PRECISION_EPSILON = 1e-9;
+const WHEEL_PROBABILITY_EPSILON = 1e-12;
+const STARDUST_MAX_WAGER_FUEL_MULTIPLIER = 50;
+
+const GALACTIC_DICE_RULES = Object.freeze({
+  dieMinimum: 1,
+  dieMaximum: 6,
+  naturalSeven: 7,
+  lowTotalMinimum: 2,
+  lowTotalMaximum: 6,
+  highTotalMinimum: 8,
+  highTotalMaximum: 12,
+  lowHighPayoutMultiplier: 2,
+  sevenPayoutMultiplier: 5,
+});
 
 export const WHEEL_TIERS = Object.freeze([
   { id: "lose", label: "Lose", p: 0.6, mult: 0 },
@@ -53,6 +69,8 @@ export const CACHE_CARGO = Object.freeze({
   DAMAGED_SHIPMENT: { id: "damaged_shipment", label: "Damaged Shipment", mult: 0.5, count: 1 },
   ALLURING_CONTRABAND: { id: "alluring_contraband", label: "Alluring Contraband", mult: 2.5, count: 1 },
 });
+export const SMUGGLERS_CACHE_CRATE_COUNT = Object.values(CACHE_CARGO)
+  .reduce((sum, cargo) => sum + cargo.count, 0);
 
 /** Integer (Stardust) gross payout = FLOOR(wager × mult). */
 export function floorPayout(wager, mult) {
@@ -67,7 +85,7 @@ export function floorNovaCasinoPayout(wager, mult) {
   const w = Number(wager);
   const m = Number(mult) || 0;
   if (!Number.isFinite(w) || w <= 0 || m <= 0) return 0;
-  return Math.floor(w * m * 2) / 2;
+  return Math.floor(w * m * NOVA_HALF_UNIT_SCALE) / NOVA_HALF_UNIT_SCALE;
 }
 
 export function netFromGross(wager, grossPayout) {
@@ -88,16 +106,16 @@ export function validateNovaPrecisionWager(bet) {
   if (!Number.isFinite(n) || n <= 0) {
     return { ok: false, reason: "Wager must be a positive amount" };
   }
-  const half = Math.round(n * 2);
-  if (Math.abs(n * 2 - half) > 1e-9) {
+  const half = Math.round(n * NOVA_HALF_UNIT_SCALE);
+  if (Math.abs(n * NOVA_HALF_UNIT_SCALE - half) > NOVA_PRECISION_EPSILON) {
     return { ok: false, reason: "Nova wagers must end in .0 or .5" };
   }
-  return { ok: true, bet: half / 2 };
+  return { ok: true, bet: half / NOVA_HALF_UNIT_SCALE };
 }
 
 export function stardustWagerLimits(stardustPerFuel) {
   const sdf = Math.max(1, Math.round(Number(stardustPerFuel) || 1));
-  return { min: sdf, max: sdf * 50, sdf };
+  return { min: sdf, max: sdf * STARDUST_MAX_WAGER_FUEL_MULTIPLIER, sdf };
 }
 
 export function validateStardustWager(bet, levelSdf, balance) {
@@ -130,7 +148,7 @@ export function validateNovaWager(bet, availableBalanceDisplay, opts = {}) {
     return { ok: false, reason: `Maximum wager is ${NOVA_MAX_WAGER} Nova Crystals` };
   }
   const available = Number(availableBalanceDisplay) || 0;
-  if (check.bet > available + 1e-9) {
+  if (check.bet > available + NOVA_PRECISION_EPSILON) {
     if (opts.allowAnyNova) {
       return {
         ok: false,
@@ -155,22 +173,30 @@ export function resolveGalacticDice({ bet, choice, randomInt = secureRandomInt }
     e.code = "INVALID_CASINO_CHOICE";
     throw e;
   }
-  const d1 = randomInt(1, 6);
-  const d2 = randomInt(1, 6);
+  const d1 = randomInt(GALACTIC_DICE_RULES.dieMinimum, GALACTIC_DICE_RULES.dieMaximum);
+  const d2 = randomInt(GALACTIC_DICE_RULES.dieMinimum, GALACTIC_DICE_RULES.dieMaximum);
   const total = d1 + d2;
   const doubles = d1 === d2;
-  const naturalSeven = total === 7;
+  const naturalSeven = total === GALACTIC_DICE_RULES.naturalSeven;
   let won = false;
   let mult = 0;
-  if (c === "low" && total >= 2 && total <= 6) {
+  if (
+    c === "low"
+    && total >= GALACTIC_DICE_RULES.lowTotalMinimum
+    && total <= GALACTIC_DICE_RULES.lowTotalMaximum
+  ) {
     won = true;
-    mult = 2;
-  } else if (c === "seven" && total === 7) {
+    mult = GALACTIC_DICE_RULES.lowHighPayoutMultiplier;
+  } else if (c === "seven" && total === GALACTIC_DICE_RULES.naturalSeven) {
     won = true;
-    mult = 5;
-  } else if (c === "high" && total >= 8 && total <= 12) {
+    mult = GALACTIC_DICE_RULES.sevenPayoutMultiplier;
+  } else if (
+    c === "high"
+    && total >= GALACTIC_DICE_RULES.highTotalMinimum
+    && total <= GALACTIC_DICE_RULES.highTotalMaximum
+  ) {
     won = true;
-    mult = 2;
+    mult = GALACTIC_DICE_RULES.lowHighPayoutMultiplier;
   }
   const gross = floorPayout(bet, mult);
   return {
@@ -195,7 +221,7 @@ export function rollWheelTier(rng = secureRandom) {
   let r = rng();
   for (const tier of WHEEL_TIERS) {
     r -= tier.p;
-    if (r <= 1e-12) return { ...tier };
+    if (r <= WHEEL_PROBABILITY_EPSILON) return { ...tier };
   }
   return { ...WHEEL_TIERS[WHEEL_TIERS.length - 1] };
 }
@@ -283,8 +309,8 @@ export function buildSmugglersBoard(rng = secureRandom) {
 
 export function resolveSmugglersSelection({ bet, board, index } = {}) {
   const i = Math.floor(Number(index));
-  if (!Number.isInteger(i) || i < 0 || i > 5) {
-    const e = new Error("Select a crate (0–5)");
+  if (!Number.isInteger(i) || i < 0 || i >= SMUGGLERS_CACHE_CRATE_COUNT) {
+    const e = new Error(`Select a crate (0–${SMUGGLERS_CACHE_CRATE_COUNT - 1})`);
     e.status = 400;
     e.code = "INVALID_CRATE_SELECTION";
     throw e;
@@ -305,7 +331,7 @@ export function resolveSmugglersSelection({ bet, board, index } = {}) {
     payout_mult: cell.mult,
     wager: bet,
     gross_payout: gross,
-    net_result: Math.round((gross - bet) * 2) / 2,
+    net_result: Math.round((gross - bet) * NOVA_HALF_UNIT_SCALE) / NOVA_HALF_UNIT_SCALE,
     board,
     won: cell.mult > 1,
     shove: cell.mult === 1,

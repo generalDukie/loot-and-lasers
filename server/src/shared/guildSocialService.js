@@ -11,6 +11,32 @@ import { clock, getWeekKey, weekEndUtc } from "./time/index.js";
 
 export const GUILD_MAX_MEMBERS = 50;
 const RANK_PRIORITY = { officer: 2, member: 1 };
+const GUILD_MEMBER_QUERY_LIMIT = 200;
+const GUILD_LOG_CLEANUP_LIMIT = 5_000;
+const GUILD_WAR_QUERY_LIMIT = 500;
+const PENDING_GUILD_INVITE_QUERY_LIMIT = 5;
+const PENDING_GUILD_REQUEST_QUERY_LIMIT = 20;
+const GUILD_REQUEST_HISTORY_LIMIT = 50;
+const GUILD_STARTING_XP_REQUIREMENT = 1_000;
+const GUILD_XP_REQUIREMENT_GROWTH = 1.4;
+const NEXUS_GUILD_XP_MULTIPLIER = 1.05;
+const GUILD_LEVELS_PER_CHALLENGE_TIER = 3;
+const CHALLENGE_GOAL_PER_MEMBER = 5;
+const MISSION_GUILD_XP_SHARE = 0.5;
+const WAR_READY_QUERY_LIMIT = 200;
+const WAR_FIGHTER_EQUIPMENT_LIMIT = 20;
+const WAR_REWARD_BASE = 80;
+const WAR_REWARD_PER_FIGHTER = 15;
+const WAR_REWARD_SCALE = 10;
+const WAR_REWARD_GUILD_XP_SHARE = 0.8;
+const RIVAL_WAR_REWARD_BASE = 120;
+const RIVAL_WAR_REWARD_PER_LEVEL = 25;
+const RIVAL_FIELD_MAX_LENGTH = 64;
+const RIVAL_EVENT_LIMIT = 50;
+const DEFAULT_GUILD_LEADERBOARD_LIMIT = 50;
+const MAX_GUILD_LEADERBOARD_LIMIT = 100;
+const DEFAULT_NEARBY_GUILD_RADIUS = 5;
+const MAX_NEARBY_GUILD_RADIUS = 25;
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -37,9 +63,57 @@ export function getMyGuildState(characterId) {
   const membership = membershipOf(characterId);
   if (!membership) return { membership: null, guild: null, members: [] };
   const guild = entities.Guild.get(membership.guild_id) || null;
-  const members =
-    entities.GuildMember.filter({ guild_id: membership.guild_id }, null, 200) || [];
+  const members = hydrateGuildMembers(
+    entities.GuildMember.filter(
+      { guild_id: membership.guild_id },
+      null,
+      GUILD_MEMBER_QUERY_LIMIT,
+    ) || [],
+  );
   return { membership, guild, members };
+}
+
+/** Keep GuildMember.character_level in sync with live Character.level. */
+export function syncGuildMemberFromCharacter(character) {
+  if (!character?.id) return null;
+  const membership = membershipOf(character.id);
+  if (!membership) return null;
+  const nextLevel = Math.max(1, Number(character.level) || 1);
+  const nextName = character.name || membership.character_name;
+  if (
+    Number(membership.character_level || 0) === nextLevel &&
+    String(membership.character_name || "") === String(nextName || "")
+  ) {
+    return membership;
+  }
+  return entities.GuildMember.update(membership.id, {
+    character_level: nextLevel,
+    character_name: nextName,
+  });
+}
+
+export function hydrateGuildMembers(members) {
+  return (members || []).map((m) => {
+    if (!m?.character_id) return m;
+    const ch = entities.Character.get(m.character_id);
+    if (!ch) return m;
+    const nextLevel = Math.max(1, Number(ch.level) || 1);
+    const nextName = ch.name || m.character_name;
+    if (
+      Number(m.character_level || 0) === nextLevel &&
+      String(m.character_name || "") === String(nextName || "")
+    ) {
+      return m;
+    }
+    try {
+      return entities.GuildMember.update(m.id, {
+        character_level: nextLevel,
+        character_name: nextName,
+      });
+    } catch {
+      return { ...m, character_level: nextLevel, character_name: nextName };
+    }
+  });
 }
 
 export function joinGuild(character, guildId) {
@@ -83,21 +157,37 @@ export function leaveGuild(character) {
     return { success: true, guildDeleted: false };
   }
   const members =
-    entities.GuildMember.filter({ guild_id: guild.id }, null, 200) || [];
+    entities.GuildMember.filter({ guild_id: guild.id }, null, GUILD_MEMBER_QUERY_LIMIT) || [];
   const remaining = members.filter((m) => m.id !== membership.id);
 
   if (remaining.length === 0) {
     entities.GuildMember.delete(membership.id);
-    for (const log of entities.GuildLog.filter({ guild_id: guild.id }, null, 5000) || []) {
+    for (const log of entities.GuildLog.filter(
+      { guild_id: guild.id },
+      null,
+      GUILD_LOG_CLEANUP_LIMIT,
+    ) || []) {
       entities.GuildLog.delete(log.id);
     }
-    for (const w of entities.GuildWarReady.filter({ guild_id: guild.id }, null, 500) || []) {
+    for (const w of entities.GuildWarReady.filter(
+      { guild_id: guild.id },
+      null,
+      GUILD_WAR_QUERY_LIMIT,
+    ) || []) {
       entities.GuildWarReady.delete(w.id);
     }
-    for (const w of entities.GuildWar.filter({ attacker_guild_id: guild.id }, null, 500) || []) {
+    for (const w of entities.GuildWar.filter(
+      { attacker_guild_id: guild.id },
+      null,
+      GUILD_WAR_QUERY_LIMIT,
+    ) || []) {
       entities.GuildWar.delete(w.id);
     }
-    for (const w of entities.GuildWar.filter({ defender_guild_id: guild.id }, null, 500) || []) {
+    for (const w of entities.GuildWar.filter(
+      { defender_guild_id: guild.id },
+      null,
+      GUILD_WAR_QUERY_LIMIT,
+    ) || []) {
       entities.GuildWar.delete(w.id);
     }
     entities.Guild.delete(guild.id);
@@ -158,7 +248,7 @@ export function inviteToGuild(officerChar, targetCharacterId) {
         folder: "inbox",
       },
       null,
-      5,
+      PENDING_GUILD_INVITE_QUERY_LIMIT,
     ) || [];
   if (pending.length) httpErr(409, "An invitation has already been sent to this player.");
 
@@ -220,13 +310,17 @@ export function requestToJoinGuild(character, guildId) {
     entities.Mail.filter(
       { from_id: character.id, mail_type: "guild_request", folder: "inbox" },
       null,
-      20,
+      PENDING_GUILD_REQUEST_QUERY_LIMIT,
     ) || [];
   if (pending.length) {
     httpErr(409, "You already have a pending guild request.");
   }
 
-  const members = entities.GuildMember.filter({ guild_id: guild.id }, null, 200) || [];
+  const members = entities.GuildMember.filter(
+    { guild_id: guild.id },
+    null,
+    GUILD_MEMBER_QUERY_LIMIT,
+  ) || [];
   const recipients = members.filter((m) => m.role === "leader" || m.role === "officer");
   if (!recipients.length) httpErr(400, "No officers found to receive your request.");
 
@@ -290,7 +384,7 @@ export function acceptGuildRequest(character, guildId, requesterId) {
     entities.Mail.filter(
       { guild_id: guild.id, mail_type: "guild_request", from_id: target.id, folder: "inbox" },
       null,
-      50,
+      GUILD_REQUEST_HISTORY_LIMIT,
     ) || [];
   for (const r of requests) entities.Mail.update(r.id, { folder: "deleted", read: true });
 
@@ -324,7 +418,11 @@ export function kickGuildMember(actorChar, targetCharacterId) {
 
   const guild = entities.Guild.get(membership.guild_id);
   const members =
-    entities.GuildMember.filter({ guild_id: membership.guild_id }, null, 200) || [];
+    entities.GuildMember.filter(
+      { guild_id: membership.guild_id },
+      null,
+      GUILD_MEMBER_QUERY_LIMIT,
+    ) || [];
   entities.GuildMember.delete(targetMem.id);
   if (guild) {
     entities.Guild.update(guild.id, {
@@ -361,12 +459,12 @@ function applyGuildXpInternal(guild, xpAmount, characterName = "Challenge System
   if (!guild || xpAmount <= 0) return { guild, leveled: false };
   let exp = (guild.experience || 0) + xpAmount;
   let level = guild.level || 1;
-  let expToNext = guild.experience_to_next || 1000;
+  let expToNext = guild.experience_to_next || GUILD_STARTING_XP_REQUIREMENT;
   let leveled = false;
   while (exp >= expToNext) {
     exp -= expToNext;
     level += 1;
-    expToNext = Math.floor(expToNext * 1.4);
+    expToNext = Math.floor(expToNext * GUILD_XP_REQUIREMENT_GROWTH);
     leveled = true;
   }
   const updated = entities.Guild.update(guild.id, {
@@ -387,7 +485,7 @@ function applyGuildXpInternal(guild, xpAmount, characterName = "Challenge System
 
 function nexusXpMultiplier(guildId) {
   const nexus = entities.Nexus.filter({ singleton: true }, null, 1)[0];
-  if (nexus && nexus.owner_guild_id === guildId) return 1.05;
+  if (nexus && nexus.owner_guild_id === guildId) return NEXUS_GUILD_XP_MULTIPLIER;
   return 1;
 }
 
@@ -416,14 +514,17 @@ export function ensureWeeklyChallenge(character) {
 }
 
 function createChallengeRow(guild) {
-  const tierIdx = Math.min(CHALLENGE_TIERS.length - 1, Math.floor((guild.level || 1) / 3));
+  const tierIdx = Math.min(
+    CHALLENGE_TIERS.length - 1,
+    Math.floor((guild.level || 1) / GUILD_LEVELS_PER_CHALLENGE_TIER),
+  );
   const tier = CHALLENGE_TIERS[tierIdx];
   const membersN = Math.max(1, guild.member_count || 1);
   return entities.GuildChallenge.create({
     guild_id: guild.id,
     week_key: getWeekKey(),
     title: tier.title,
-    goal: tier.baseGoal + membersN * 5,
+    goal: tier.baseGoal + membersN * CHALLENGE_GOAL_PER_MEMBER,
     progress: 0,
     status: "active",
     reward_stardust: tier.stardust,
@@ -477,16 +578,16 @@ export function contributeGuildMission(character, mission = {}, gains = {}) {
   const stardust = Math.max(0, Math.floor(Number(gains.stardust) || 0));
   const xp = Math.max(0, Math.floor(Number(gains.experience) || 0));
   const xpMult = nexusXpMultiplier(guild.id);
-  const guildXpGain = Math.floor(xp * 0.5 * xpMult);
+  const guildXpGain = Math.floor(xp * MISSION_GUILD_XP_SHARE * xpMult);
 
   let newExp = (guild.experience || 0) + guildXpGain;
   let level = guild.level || 1;
-  let expToNext = guild.experience_to_next || 1000;
+  let expToNext = guild.experience_to_next || GUILD_STARTING_XP_REQUIREMENT;
   let leveled = false;
   while (newExp >= expToNext) {
     newExp -= expToNext;
     level += 1;
-    expToNext = Math.floor(expToNext * 1.4);
+    expToNext = Math.floor(expToNext * GUILD_XP_REQUIREMENT_GROWTH);
     leveled = true;
   }
 
@@ -630,7 +731,7 @@ export function toggleGuildWarReady(character, warId) {
 
 function loadWarFighters(warId, side) {
   const readies =
-    entities.GuildWarReady.filter({ war_id: warId, side }, null, 200) || [];
+    entities.GuildWarReady.filter({ war_id: warId, side }, null, WAR_READY_QUERY_LIMIT) || [];
   const fighters = [];
   for (const r of readies) {
     const cid = String(r.character_id || "");
@@ -638,7 +739,11 @@ function loadWarFighters(warId, side) {
     const ch = entities.Character.get(cid);
     if (!ch) continue;
     const items =
-      entities.Item.filter({ character_id: cid, is_equipped: true }, null, 20) || [];
+      entities.Item.filter(
+        { character_id: cid, is_equipped: true },
+        null,
+        WAR_FIGHTER_EQUIPMENT_LIMIT,
+      ) || [];
     fighters.push({ character: ch, items, ready: r });
   }
   fighters.sort((a, b) => (b.character.level || 1) - (a.character.level || 1));
@@ -677,8 +782,12 @@ function simulateGauntlet(attackerFighters, defenderFighters) {
 }
 
 function computeWarRewards(totalFighters) {
-  const base = (80 + totalFighters * 15) * 10;
-  return { stardust: base, guild_xp: Math.round(base * 0.8) };
+  const base = (WAR_REWARD_BASE + totalFighters * WAR_REWARD_PER_FIGHTER)
+    * WAR_REWARD_SCALE;
+  return {
+    stardust: base,
+    guild_xp: Math.round(base * WAR_REWARD_GUILD_XP_SHARE),
+  };
 }
 
 function bumpGuildWarRecord(guildId, won) {
@@ -795,11 +904,15 @@ export function applyRivalGuildWarResult(character, body = {}) {
   }
 
   const playerWon = !!body.won;
-  const rivalName = String(body.rival_name || "Rival Guild").slice(0, 64);
+  const rivalName = String(body.rival_name || "Rival Guild").slice(
+    0,
+    RIVAL_FIELD_MAX_LENGTH,
+  );
   const rivalLevel = Math.max(1, Math.floor(Number(body.rival_level) || 1));
-  const base = (120 + rivalLevel * 25) * 10;
+  const base = (RIVAL_WAR_REWARD_BASE + rivalLevel * RIVAL_WAR_REWARD_PER_LEVEL)
+    * WAR_REWARD_SCALE;
   const rewards = playerWon
-    ? { stardust: base, guild_xp: Math.round(base * 0.8) }
+    ? { stardust: base, guild_xp: Math.round(base * WAR_REWARD_GUILD_XP_SHARE) }
     : { stardust: 0, guild_xp: 0 };
 
   applyGuildXpInternal(guild, rewards.guild_xp, character.name);
@@ -807,7 +920,10 @@ export function applyRivalGuildWarResult(character, body = {}) {
 
   const battle = entities.GuildBattle.create({
     attacker_guild_id: guild.id,
-    defender_guild_id: String(body.rival_id || `rival-${Date.now()}`).slice(0, 64),
+    defender_guild_id: String(body.rival_id || `rival-${Date.now()}`).slice(
+      0,
+      RIVAL_FIELD_MAX_LENGTH,
+    ),
     attacker_guild_name: guild.name,
     defender_guild_name: rivalName,
     attacker_guild_level: guild.level || 1,
@@ -815,7 +931,7 @@ export function applyRivalGuildWarResult(character, body = {}) {
     attacker_power: Number(body.atk_power) || 0,
     defender_power: Number(body.def_power) || 0,
     winner_side: playerWon ? "attacker" : "defender",
-    events: Array.isArray(body.events) ? body.events.slice(0, 50) : [],
+    events: Array.isArray(body.events) ? body.events.slice(0, RIVAL_EVENT_LIMIT) : [],
     reward_stardust: rewards.stardust,
     reward_guild_xp: rewards.guild_xp,
     initiated_by: character.name,
@@ -836,5 +952,101 @@ export function applyRivalGuildWarResult(character, body = {}) {
     battle,
     rewards,
     guild: entities.Guild.get(guild.id),
+  };
+}
+
+/** All guilds — no default 100-row cap (needed for global rank). */
+function allGuilds() {
+  return entities.Guild.filter({}, "-created_date", null) || [];
+}
+
+/**
+ * Guild ladder order: level DESC → XP DESC → member_count DESC → created_date ASC → id ASC.
+ * Ordinal ranks (no shared-place ties).
+ */
+export function compareGuildRank(a, b) {
+  const ld = (Number(b?.level) || 1) - (Number(a?.level) || 1);
+  if (ld !== 0) return ld;
+  const xd = (Number(b?.experience) || 0) - (Number(a?.experience) || 0);
+  if (xd !== 0) return xd;
+  const md = (Number(b?.member_count) || 0) - (Number(a?.member_count) || 0);
+  if (md !== 0) return md;
+  const ca = String(a?.created_date || "");
+  const cb = String(b?.created_date || "");
+  if (ca !== cb) return ca.localeCompare(cb);
+  return String(a?.id || "").localeCompare(String(b?.id || ""));
+}
+
+export function sortedGuilds() {
+  return allGuilds().slice().sort(compareGuildRank);
+}
+
+export function publicGuildRankRow(guild, rank, { is_self = false } = {}) {
+  if (!guild) return null;
+  const tag = String(guild.tag || "").trim();
+  return {
+    rank,
+    id: guild.id,
+    guild_id: guild.id,
+    name: guild.name || "",
+    tag,
+    level: guild.level || 1,
+    guild_level: guild.level || 1,
+    experience: guild.experience || 0,
+    guild_xp: guild.experience || 0,
+    experience_to_next: guild.experience_to_next || GUILD_STARTING_XP_REQUIREMENT,
+    member_count: guild.member_count || 0,
+    leader_id: guild.leader_id || null,
+    leader_name: guild.leader_name || "",
+    emblem: tag || null,
+    is_self: !!is_self,
+  };
+}
+
+export function listGuildLeaderboard({ limit = DEFAULT_GUILD_LEADERBOARD_LIMIT, offset = 0 } = {}) {
+  const lim = Math.min(
+    MAX_GUILD_LEADERBOARD_LIMIT,
+    Math.max(1, Math.floor(Number(limit) || DEFAULT_GUILD_LEADERBOARD_LIMIT)),
+  );
+  const off = Math.max(0, Math.floor(Number(offset) || 0));
+  const all = sortedGuilds();
+  return all.slice(off, off + lim).map((g, i) => publicGuildRankRow(g, off + i + 1));
+}
+
+export function computeGuildRank(guildId) {
+  if (!guildId) return 0;
+  const idx = sortedGuilds().findIndex((g) => g.id === guildId);
+  return idx < 0 ? 0 : idx + 1;
+}
+
+export function getNearbyGuildEntries(
+  guildId,
+  { radius = DEFAULT_NEARBY_GUILD_RADIUS } = {},
+) {
+  const all = sortedGuilds();
+  const idx = guildId ? all.findIndex((g) => g.id === guildId) : -1;
+  if (idx < 0) {
+    return { player_guild_rank: 0, total: all.length, entries: [], radius };
+  }
+  const parsedRadius = Number(radius);
+  const r = Math.max(
+    0,
+    Math.min(
+      MAX_NEARBY_GUILD_RADIUS,
+      Math.floor(
+        Number.isFinite(parsedRadius) ? parsedRadius : DEFAULT_NEARBY_GUILD_RADIUS,
+      ),
+    ),
+  );
+  const start = Math.max(0, idx - r);
+  const end = Math.min(all.length, idx + r + 1);
+  const entries = all.slice(start, end).map((g, i) =>
+    publicGuildRankRow(g, start + i + 1, { is_self: g.id === guildId }),
+  );
+  return {
+    player_guild_rank: idx + 1,
+    total: all.length,
+    entries,
+    radius: r,
   };
 }

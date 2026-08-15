@@ -8,6 +8,23 @@
 
 export const DEFAULT_GAME_ZONE = "America/New_York";
 
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+const ET_MIDNIGHT_SEARCH_WINDOW_HOURS = 26;
+const ET_SEARCH_PRECISION_MS = 250;
+const ET_UTC_ESTIMATE_OFFSET_HOURS = 4;
+const ET_UTC_SEARCH_RADIUS_HOURS = 6;
+const ET_UTC_SEARCH_ITERATIONS = 40;
+const SHOP_WINDOW_MORNING_START_HOUR = 2;
+const SHOP_WINDOW_AFTERNOON_START_HOUR = 14;
+const SHOP_WINDOW_DURATION_HOURS = 12;
+const SHOP_GAME_DAY_RESET_HOUR = SHOP_WINDOW_AFTERNOON_START_HOUR;
+const NEXT_DAY_PROBE_LIMIT_HOURS = 48;
+const DATE_PART_PAD_WIDTH = 2;
+
 let _serverOffsetMs = 0;
 let _lastSyncAt = 0;
 
@@ -40,8 +57,8 @@ export function todayET(fromMs = estimateServerNowMs()) {
 export function msUntilNextETMidnight(from = estimateServerNowMs()) {
   const startDay = new Date(from).toLocaleDateString("en-CA", { timeZone: DEFAULT_GAME_ZONE });
   let lo = from;
-  let hi = from + 26 * 60 * 60 * 1000;
-  while (hi - lo > 250) {
+  let hi = from + ET_MIDNIGHT_SEARCH_WINDOW_HOURS * MILLISECONDS_PER_HOUR;
+  while (hi - lo > ET_SEARCH_PRECISION_MS) {
     const mid = Math.floor((lo + hi) / 2);
     const day = new Date(mid).toLocaleDateString("en-CA", { timeZone: DEFAULT_GAME_ZONE });
     if (day === startDay) lo = mid;
@@ -52,9 +69,9 @@ export function msUntilNextETMidnight(from = estimateServerNowMs()) {
 
 /** Compact countdown for quota chips — e.g. "5h 12m" or "42m". */
 export function formatEtaShort(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
+  const s = Math.max(0, Math.floor(ms / MILLISECONDS_PER_SECOND));
+  const h = Math.floor(s / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR));
+  const m = Math.floor((s % (SECONDS_PER_MINUTE * MINUTES_PER_HOUR)) / SECONDS_PER_MINUTE);
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m`;
   return "<1m";
@@ -78,7 +95,7 @@ function etParts(fromMs) {
   }).formatToParts(d);
   const get = (t) => Number(parts.find((p) => p.type === t)?.value);
   let hour = get("hour");
-  if (hour === 24) hour = 0; // some engines use 24 for midnight
+  if (hour === HOURS_PER_DAY) hour = 0; // some engines use 24 for midnight
   return { year: get("year"), month: get("month"), day: get("day"), hour };
 }
 
@@ -87,13 +104,14 @@ function etParts(fromMs) {
  * Display/countdown only — server getShopWindow is authoritative.
  */
 function etLocalToUtcMs({ year, month, day, hour, minute = 0 }) {
-  const targetKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-  let lo = Date.UTC(year, month - 1, day, hour + 4, minute) - 6 * 3600 * 1000;
-  let hi = Date.UTC(year, month - 1, day, hour + 4, minute) + 6 * 3600 * 1000;
-  for (let i = 0; i < 40; i++) {
+  const targetKey = `${year}-${String(month).padStart(DATE_PART_PAD_WIDTH, "0")}-${String(day).padStart(DATE_PART_PAD_WIDTH, "0")}T${String(hour).padStart(DATE_PART_PAD_WIDTH, "0")}:${String(minute).padStart(DATE_PART_PAD_WIDTH, "0")}`;
+  const utcEstimate = Date.UTC(year, month - 1, day, hour + ET_UTC_ESTIMATE_OFFSET_HOURS, minute);
+  let lo = utcEstimate - ET_UTC_SEARCH_RADIUS_HOURS * MILLISECONDS_PER_HOUR;
+  let hi = utcEstimate + ET_UTC_SEARCH_RADIUS_HOURS * MILLISECONDS_PER_HOUR;
+  for (let i = 0; i < ET_UTC_SEARCH_ITERATIONS; i++) {
     const mid = Math.floor((lo + hi) / 2);
     const p = etParts(mid);
-    const key = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}T${String(p.hour).padStart(2, "0")}:00`;
+    const key = `${p.year}-${String(p.month).padStart(DATE_PART_PAD_WIDTH, "0")}-${String(p.day).padStart(DATE_PART_PAD_WIDTH, "0")}T${String(p.hour).padStart(DATE_PART_PAD_WIDTH, "0")}:00`;
     if (key < targetKey) lo = mid;
     else hi = mid;
   }
@@ -105,13 +123,13 @@ export function getShopWindow(nowMs = estimateServerNowMs()) {
   const parts = etParts(nowMs);
   let startHour;
   let anchorMs = nowMs;
-  if (parts.hour >= 14) {
-    startHour = 14;
-  } else if (parts.hour >= 2) {
-    startHour = 2;
+  if (parts.hour >= SHOP_WINDOW_AFTERNOON_START_HOUR) {
+    startHour = SHOP_WINDOW_AFTERNOON_START_HOUR;
+  } else if (parts.hour >= SHOP_WINDOW_MORNING_START_HOUR) {
+    startHour = SHOP_WINDOW_MORNING_START_HOUR;
   } else {
-    startHour = 14;
-    anchorMs = nowMs - 12 * 3600 * 1000;
+    startHour = SHOP_WINDOW_AFTERNOON_START_HOUR;
+    anchorMs = nowMs - SHOP_WINDOW_DURATION_HOURS * MILLISECONDS_PER_HOUR;
   }
   const anchor = etParts(anchorMs);
   const startsAt = etLocalToUtcMs({
@@ -121,13 +139,14 @@ export function getShopWindow(nowMs = estimateServerNowMs()) {
     hour: startHour,
     minute: 0,
   });
-  const endsAt = startsAt + 12 * 60 * 60 * 1000;
-  const idx = Math.floor(startsAt / (12 * 60 * 60 * 1000));
+  const shopWindowDurationMs = SHOP_WINDOW_DURATION_HOURS * MILLISECONDS_PER_HOUR;
+  const endsAt = startsAt + shopWindowDurationMs;
+  const idx = Math.floor(startsAt / shopWindowDurationMs);
   return {
     idx,
     startsAt,
     endsAt,
-    secondsLeft: Math.max(0, Math.floor((endsAt - nowMs) / 1000)),
+    secondsLeft: Math.max(0, Math.floor((endsAt - nowMs) / MILLISECONDS_PER_SECOND)),
   };
 }
 
@@ -137,43 +156,43 @@ export function getShopGameDayKey(nowMs = estimateServerNowMs()) {
   let y = parts.year;
   let m = parts.month;
   let d = parts.day;
-  if (parts.hour < 14) {
-    const back = etParts(nowMs - 14 * 3600 * 1000);
+  if (parts.hour < SHOP_GAME_DAY_RESET_HOUR) {
+    const back = etParts(nowMs - SHOP_GAME_DAY_RESET_HOUR * MILLISECONDS_PER_HOUR);
     y = back.year;
     m = back.month;
     d = back.day;
   }
-  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return `${y}-${String(m).padStart(DATE_PART_PAD_WIDTH, "0")}-${String(d).padStart(DATE_PART_PAD_WIDTH, "0")}`;
 }
 
 /** Ms until next 2:00 PM ET Hot Deal / game-day reset. */
 export function msUntilNextShopGameDay(fromMs = estimateServerNowMs()) {
   const parts = etParts(fromMs);
   let target;
-  if (parts.hour < 14) {
+  if (parts.hour < SHOP_GAME_DAY_RESET_HOUR) {
     target = etLocalToUtcMs({
       year: parts.year,
       month: parts.month,
       day: parts.day,
-      hour: 14,
+      hour: SHOP_GAME_DAY_RESET_HOUR,
       minute: 0,
     });
   } else {
     // Tomorrow 2 PM ET — walk forward until calendar day advances.
-    let probe = fromMs + (24 - parts.hour) * 3600 * 1000;
-    for (let i = 0; i < 48; i++) {
+    let probe = fromMs + (HOURS_PER_DAY - parts.hour) * MILLISECONDS_PER_HOUR;
+    for (let i = 0; i < NEXT_DAY_PROBE_LIMIT_HOURS; i++) {
       const p = etParts(probe);
       if (p.year !== parts.year || p.month !== parts.month || p.day !== parts.day) {
         target = etLocalToUtcMs({
           year: p.year,
           month: p.month,
           day: p.day,
-          hour: 14,
+          hour: SHOP_GAME_DAY_RESET_HOUR,
           minute: 0,
         });
         break;
       }
-      probe += 3600 * 1000;
+      probe += MILLISECONDS_PER_HOUR;
     }
   }
   return Math.max(0, (target || fromMs) - fromMs);

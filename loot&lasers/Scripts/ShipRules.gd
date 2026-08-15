@@ -4,6 +4,14 @@ extends RefCounted
 
 const MAX_FUEL_STACK := 3
 const REDUCTION_CAP := 0.9
+const MILLISECONDS_PER_SECOND := 1_000.0
+const SECONDS_PER_MINUTE := 60.0
+const MIN_EFFECTIVE_MISSION_SECONDS := 15
+const MISSION_DURATION_STEP_SECONDS := 15.0
+const MIN_EFFECTIVE_FUEL_COST := 0.25
+const FUEL_COST_PRECISION := 0.01
+const PERCENT_SCALE := 100.0
+const LABEL_DECIMAL_STEP := 0.1
 
 const FUEL_MOUNTS := [
 	{"id": 1, "name": "Ion Booster", "speed": 0.10, "duration_hours": 1, "stardust": 1200, "crystals": 0},
@@ -195,7 +203,7 @@ static func active_fuel_mounts(character: Dictionary) -> Array:
 	var raw: Variant = character.get("active_fuel_mounts", [])
 	if typeof(raw) != TYPE_ARRAY:
 		return out
-	var now_ms := int(Time.get_unix_time_from_system() * 1000.0)
+	var now_ms := int(Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND)
 	for m in raw:
 		if typeof(m) != TYPE_DICTIONARY:
 			continue
@@ -252,16 +260,26 @@ static func effective_mission_duration(character: Dictionary, mission: Dictionar
 	var speed := fuel_speed(character)
 	var total := minf(REDUCTION_CAP, warp + speed)
 	var raw := maxi(1, int(floor(float(mission.get("duration_seconds", 0)) * (1.0 - total))))
-	return maxi(15, int(round(float(raw) / 15.0)) * 15)
+	return maxi(
+		MIN_EFFECTIVE_MISSION_SECONDS,
+		int(round(float(raw) / MISSION_DURATION_STEP_SECONDS))
+		* int(MISSION_DURATION_STEP_SECONDS),
+	)
 
 
 ## Fuel charged at launch — pinned fuel_cost OR effective minutes − fuel injectors.
 static func effective_fuel_cost(character: Dictionary, mission: Dictionary) -> float:
 	if mission.has("fuel_cost") and typeof(mission["fuel_cost"]) in [TYPE_FLOAT, TYPE_INT]:
-		return maxf(0.25, snappedf(float(mission["fuel_cost"]), 0.01))
+		return maxf(
+			MIN_EFFECTIVE_FUEL_COST,
+			snappedf(float(mission["fuel_cost"]), FUEL_COST_PRECISION),
+		)
 	var secs := effective_mission_duration(character, mission)
-	var raw := float(secs) / 60.0 - mod_effect_total(character, "fuel_cost_reduction")
-	return maxf(0.25, snappedf(raw, 0.01))
+	var raw := (
+		float(secs) / SECONDS_PER_MINUTE
+		- mod_effect_total(character, "fuel_cost_reduction")
+	)
+	return maxf(MIN_EFFECTIVE_FUEL_COST, snappedf(raw, FUEL_COST_PRECISION))
 
 
 static func mount_by_id(mount_id: int) -> Dictionary:
@@ -282,7 +300,7 @@ static func _parse_iso_ms(iso: String) -> int:
 			if "." in time_part:
 				time_part = time_part.split(".")[0]
 			s = "%sT%s" % [parts[0], time_part]
-	return int(Time.get_unix_time_from_datetime_string(s)) * 1000
+	return int(Time.get_unix_time_from_datetime_string(s) * MILLISECONDS_PER_SECOND)
 
 
 const SCOUT_MILESTONE_LEVEL := 20
@@ -293,16 +311,16 @@ static func inherent_label(ship: Dictionary) -> String:
 	var inh: Dictionary = ship.get("inherent", {})
 	var parts: PackedStringArray = []
 	if float(inh.get("mission_stardust_mult", 0)) > 0:
-		parts.append("+%s%% Stardust" % int(round(float(inh["mission_stardust_mult"]) * 100.0)))
+		parts.append("+%s%% Stardust" % int(round(float(inh["mission_stardust_mult"]) * PERCENT_SCALE)))
 	if float(inh.get("mission_xp_mult", 0)) > 0:
-		parts.append("+%s%% XP" % int(round(float(inh["mission_xp_mult"]) * 100.0)))
+		parts.append("+%s%% XP" % int(round(float(inh["mission_xp_mult"]) * PERCENT_SCALE)))
 	if float(inh.get("mission_duration_reduction", 0)) > 0:
-		parts.append("-%s%% Time" % int(round(float(inh["mission_duration_reduction"]) * 100.0)))
+		parts.append("-%s%% Time" % int(round(float(inh["mission_duration_reduction"]) * PERCENT_SCALE)))
 	if float(inh.get("fuel_cost_reduction", 0)) > 0:
 		parts.append("-%s Fuel" % str(inh["fuel_cost_reduction"]))
 	var mult := float(ship.get("upgrade_mult", 1.0))
 	if mult > 1.0:
-		parts.append("+%s%% Upgrade Power" % int(round((mult - 1.0) * 100.0)))
+		parts.append("+%s%% Upgrade Power" % int(round((mult - 1.0) * PERCENT_SCALE)))
 	return " · ".join(parts)
 
 
@@ -314,16 +332,16 @@ static func tier_effect_label(tier: Dictionary, ship_id: String) -> String:
 	if tier.has("max_fuel_bonus"):
 		parts.append("+%s Max Fuel" % int(round(float(tier["max_fuel_bonus"]) * mult)))
 	if tier.has("fuel_cost_reduction"):
-		parts.append("-%s Fuel Cost" % str(snappedf(float(tier["fuel_cost_reduction"]) * mult, 0.1)))
+		parts.append("-%s Fuel Cost" % str(snappedf(float(tier["fuel_cost_reduction"]) * mult, LABEL_DECIMAL_STEP)))
 	if tier.has("mission_duration_reduction"):
-		var pct := float(tier["mission_duration_reduction"]) * mult * 100.0
-		parts.append("-%s%% Time" % str(snappedf(pct, 0.1)).trim_suffix(".0"))
+		var pct := float(tier["mission_duration_reduction"]) * mult * PERCENT_SCALE
+		parts.append("-%s%% Time" % str(snappedf(pct, LABEL_DECIMAL_STEP)).trim_suffix(".0"))
 	if tier.has("mission_stardust_mult"):
-		var pct2 := float(tier["mission_stardust_mult"]) * mult * 100.0
-		parts.append("+%s%% Stardust" % str(snappedf(pct2, 0.1)).trim_suffix(".0"))
+		var pct2 := float(tier["mission_stardust_mult"]) * mult * PERCENT_SCALE
+		parts.append("+%s%% Stardust" % str(snappedf(pct2, LABEL_DECIMAL_STEP)).trim_suffix(".0"))
 	if tier.has("mission_xp_mult"):
-		var pct3 := float(tier["mission_xp_mult"]) * mult * 100.0
-		parts.append("+%s%% XP" % str(snappedf(pct3, 0.1)).trim_suffix(".0"))
+		var pct3 := float(tier["mission_xp_mult"]) * mult * PERCENT_SCALE
+		parts.append("+%s%% XP" % str(snappedf(pct3, LABEL_DECIMAL_STEP)).trim_suffix(".0"))
 	if tier.has("inventory_cap_bonus"):
 		parts.append("+%s Inventory" % int(round(float(tier["inventory_cap_bonus"]) * mult)))
 	return " · ".join(parts)

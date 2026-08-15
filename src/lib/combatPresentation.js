@@ -4,6 +4,7 @@
  */
 
 import { STAT_COLORS } from "@/lib/gameData";
+import { PHANTOM_SIGNAL_CHARGES } from "@/lib/classPassives";
 
 const DEV_KEY = "ll_combat_dev_diagnostics";
 
@@ -29,20 +30,26 @@ export const FLOAT_FONT_PX = Object.freeze({
 });
 
 const CRIT_DARKEN = 0.18;
+const RGB_CHANNEL_MAX = 255;
+const HEX_COLOR_LENGTH = 6;
+const HEX_CHANNEL_WIDTH = 2;
+const HEX_RADIX = 16;
 
 function clampByte(n) {
-  return Math.max(0, Math.min(255, Math.round(n)));
+  return Math.max(0, Math.min(RGB_CHANNEL_MAX, Math.round(n)));
 }
 
 /** Slightly darken a #RRGGBB hex (Crit presentation only). */
 export function darkenHex(hex, amount = CRIT_DARKEN) {
   const raw = String(hex || "").replace("#", "");
-  if (raw.length < 6) return hex;
-  const r = parseInt(raw.slice(0, 2), 16);
-  const g = parseInt(raw.slice(2, 4), 16);
-  const b = parseInt(raw.slice(4, 6), 16);
+  if (raw.length < HEX_COLOR_LENGTH) return hex;
+  const r = parseInt(raw.slice(0, HEX_CHANNEL_WIDTH), HEX_RADIX);
+  const g = parseInt(raw.slice(HEX_CHANNEL_WIDTH, HEX_CHANNEL_WIDTH * 2), HEX_RADIX);
+  const b = parseInt(raw.slice(HEX_CHANNEL_WIDTH * 2, HEX_COLOR_LENGTH), HEX_RADIX);
   const f = 1 - Math.max(0, Math.min(1, amount));
-  return `#${[r, g, b].map((c) => clampByte(c * f).toString(16).padStart(2, "0")).join("")}`;
+  return `#${[r, g, b]
+    .map((c) => clampByte(c * f).toString(HEX_RADIX).padStart(HEX_CHANNEL_WIDTH, "0"))
+    .join("")}`;
 }
 
 /** Color for a damage event from its damageType field (not attacker class). */
@@ -151,7 +158,7 @@ function applyEventToStatus(state, ev) {
   }
   if (kind === "phantom_signal_armed") {
     if (slot) {
-      slot.phantomCharges = Number(ev.charges) || 2;
+      slot.phantomCharges = Number(ev.charges) || PHANTOM_SIGNAL_CHARGES;
       slot.lastPassive = "Phantom Signal";
     }
     return;

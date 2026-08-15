@@ -18,6 +18,7 @@ const USE_LEGACY_CONTENT_LAYOUT := false
 const MIN_COMFORTABLE := Vector2i(1280, 720)
 ## Safe physical default when no override / usable rect is available.
 const DEFAULT_PHYSICAL_WINDOW := Vector2i(1920, 1080)
+const WINDOW_DECORATION_PADDING := Vector2i(12, 28)
 
 var _last_viewport_size := Vector2i.ZERO
 var _last_game_rect := Rect2()
@@ -128,7 +129,7 @@ func _ensure_physical_window_fits_display() -> void:
 	var client := Vector2i(DisplayServer.window_get_size())
 	var decor := Vector2i(DisplayServer.window_get_size_with_decorations())
 	var chrome := decor - client
-	var pad := Vector2i(12, 28)
+	var pad := WINDOW_DECORATION_PADDING
 	var max_client := Vector2i(
 		maxi(MIN_COMFORTABLE.x, usable.size.x - maxi(chrome.x, 0) - pad.x),
 		maxi(MIN_COMFORTABLE.y, usable.size.y - maxi(chrome.y, 0) - pad.y)

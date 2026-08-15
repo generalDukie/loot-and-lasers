@@ -2,6 +2,8 @@ extends Control
 ## Comms Terminal — Global frequency (default) + Private channels.
 ## Presentation parity with web MessagesPage / Chat panels.
 
+const CONVERSATION_PREVIEW_LENGTH := 42
+
 var _meta: Label
 var _status: Label
 var _sidebar: VBoxContainer
@@ -463,7 +465,7 @@ func _make_conversation_row(convo: Dictionary) -> Button:
 	var peer_name := ChatManager.other_participant_name(convo)
 	var preview := str(convo.get("last_message_preview", "")).strip_edges()
 	if preview.length() > 42:
-		preview = preview.substr(0, 42) + "…"
+		preview = preview.substr(0, CONVERSATION_PREVIEW_LENGTH) + "…"
 	var unread := int(convo.get("unread_count", 0))
 	var active := (
 		str(convo.get("conversation_id", convo.get("id", "")))

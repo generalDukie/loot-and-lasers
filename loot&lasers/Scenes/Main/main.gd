@@ -6,6 +6,8 @@ const LOGO_WIDTH_FRAC := 0.75
 const STATUS_GAP_PX := 16.0
 const STATUS_FONT_PX := 23
 const MIN_SPLASH_SEC := 5.0
+const SPLASH_FADE_IN_SEC := 0.18
+const MILLISECONDS_PER_SECOND := 1_000.0
 
 var _status: Label
 var _brand: BrandGradientTitle
@@ -58,7 +60,7 @@ func _build_splash() -> void:
 
 	modulate.a = 0.0
 	var tw := create_tween()
-	tw.tween_property(self, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT)
+	tw.tween_property(self, "modulate:a", 1.0, SPLASH_FADE_IN_SEC).set_ease(Tween.EASE_OUT)
 
 
 func _layout_splash() -> void:
@@ -87,7 +89,9 @@ func _set_status(text: String) -> void:
 
 
 func _hold_splash() -> void:
-	var elapsed := float(Time.get_ticks_msec() - _splash_started_ms) / 1000.0
+	var elapsed := (
+		float(Time.get_ticks_msec() - _splash_started_ms) / MILLISECONDS_PER_SECOND
+	)
 	var remain := MIN_SPLASH_SEC - elapsed
 	if remain > 0.05:
 		_set_status("Bringing you into space...")

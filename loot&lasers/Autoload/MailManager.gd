@@ -14,6 +14,9 @@ signal mail_error(error: String)
 signal loading_changed(loading: bool)
 signal mutation_state_changed(mutating: bool)
 
+const MAIL_PREVIEW_LENGTH := 80
+const NAKAMA_MAIL_NOTIFICATION_CODE := 20
+
 var inbox: Array = []
 var selected_message: Dictionary = {}
 var mail_folder: String = "inbox"
@@ -133,7 +136,7 @@ func _summary_to_ui(s: Dictionary) -> Dictionary:
 		"created_date": str(s.get("created_date", s.get("created_at", ""))),
 		"expires_at": str(s.get("expires_at", "")),
 		"expired": bool(s.get("expired", false)),
-		"preview": str(s.get("body", s.get("preview", ""))).substr(0, 80),
+		"preview": str(s.get("body", s.get("preview", ""))).substr(0, MAIL_PREVIEW_LENGTH),
 	}
 
 
@@ -148,7 +151,7 @@ func _on_rt_connection(connected: bool) -> void:
 
 func _on_nakama_notification(n: Dictionary) -> void:
 	var code := int(n.get("code", -1))
-	if code != 20:
+	if code != NAKAMA_MAIL_NOTIFICATION_CODE:
 		return
 	var content: Variant = n.get("content", {})
 	if typeof(content) == TYPE_STRING:

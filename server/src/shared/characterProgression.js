@@ -7,6 +7,8 @@ import crypto from "node:crypto";
 import { expForLevel } from "./rewards.js";
 
 export const LEVEL_UP_ATTRS_PER_LEVEL = 2;
+const RANDOM_SAMPLE_UPPER_BOUND = 1_000_000;
+const MAX_LEVELS_PER_XP_GRANT = 100_000;
 
 export const ATTR_KEYS = Object.freeze([
   "strength",
@@ -54,7 +56,7 @@ export function levelUpAttributeWeights(className) {
 }
 
 export function defaultRng() {
-  return crypto.randomInt(0, 1_000_000) / 1_000_000;
+  return crypto.randomInt(0, RANDOM_SAMPLE_UPPER_BOUND) / RANDOM_SAMPLE_UPPER_BOUND;
 }
 
 export function pickLevelUpAttribute(className, rng = defaultRng) {
@@ -153,7 +155,6 @@ export function grantCharacterXp({
   let newLevel = previousLevel;
   let expToNext = previousReq;
   let safety = 0;
-  const maxLevels = 100_000;
 
   while (newExp >= expToNext) {
     if (!Number.isFinite(expToNext) || expToNext <= 0) {
@@ -166,7 +167,7 @@ export function grantCharacterXp({
     newLevel += 1;
     expToNext = expForLevel(newLevel);
     safety += 1;
-    if (safety > maxLevels) {
+    if (safety > MAX_LEVELS_PER_XP_GRANT) {
       const err = new Error("XP level-up safety limit exceeded");
       err.status = 500;
       err.code = "INTERNAL_ERROR";

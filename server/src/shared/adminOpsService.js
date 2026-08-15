@@ -51,6 +51,21 @@ export const AdminPermissions = Object.freeze({
 });
 
 const FEATURE_FLAGS_META_KEY = "feature_flags_v1";
+const FEATURE_FLAG_NAME_MAX_LENGTH = 64;
+const SITE_CONFIG_QUERY_LIMIT = 5;
+const DEFAULT_PLAYER_LOOKUP_LIMIT = 20;
+const MAX_PLAYER_LOOKUP_LIMIT = 50;
+const PLAYER_EXACT_MATCH_LIMIT = 5;
+const PLAYER_DIRECTORY_SCAN_LIMIT = 500;
+const INSPECT_INVENTORY_LIMIT = 500;
+const INSPECT_MAIL_LIMIT = 50;
+const INSPECT_MISSION_LIMIT = 20;
+const OPEN_REPORT_QUERY_LIMIT = 100;
+const OPS_QUARANTINE_LIMIT = 20;
+const OPS_REPAIR_AUDIT_LIMIT = 10;
+const ONLINE_PRESENCE_QUERY_LIMIT = 500;
+const OPS_DASHBOARD_SAMPLE_LIMIT = 5;
+const OPS_ANALYTICS_BUFFER_LIMIT = 20;
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -119,7 +134,7 @@ export function SetFeatureFlag(user, { flag, enabled, reason }) {
   assertAdminPermission(user, AdminPermissions.MODIFY_FEATURE_FLAGS);
   if (!flag || typeof flag !== "string") httpErr(400, "flag required");
   if (!reason) httpErr(400, "reason required");
-  const key = String(flag).trim().slice(0, 64);
+  const key = String(flag).trim().slice(0, FEATURE_FLAG_NAME_MAX_LENGTH);
   if (!/^[a-z][a-z0-9_]*$/.test(key)) {
     httpErr(400, "flag must be snake_case identifier");
   }
@@ -180,7 +195,7 @@ export function GetRuntimeConfiguration() {
 export function UpdateRuntimeConfiguration(user, patch = {}, reason = "") {
   assertAdminPermission(user, AdminPermissions.MODIFY_RUNTIME_CONFIG);
   if (!reason) httpErr(400, "reason required");
-  const list = entities.SiteConfig.list("-updated_date", 5) || [];
+  const list = entities.SiteConfig.list("-updated_date", SITE_CONFIG_QUERY_LIMIT) || [];
   let doc = list[0];
   const allowed = [
     "site_title",
@@ -236,7 +251,10 @@ export function UpdateRuntimeConfiguration(user, patch = {}, reason = "") {
 export function LookupPlayer(user, query = {}) {
   assertAdminPermission(user, AdminPermissions.VIEW_PLAYER);
   const q = String(query.q || query.query || query.id || "").trim();
-  const limit = Math.min(50, Math.max(1, Number(query.limit) || 20));
+  const limit = Math.min(
+    MAX_PLAYER_LOOKUP_LIMIT,
+    Math.max(1, Number(query.limit) || DEFAULT_PLAYER_LOOKUP_LIMIT),
+  );
   if (!q) httpErr(400, "query required");
 
   const results = { accounts: [], characters: [] };
@@ -249,7 +267,7 @@ export function LookupPlayer(user, query = {}) {
 
   // Nakama id
   const byNakama = db
-    .prepare(`SELECT * FROM users WHERE nakama_user_id = ? LIMIT 5`)
+    .prepare(`SELECT * FROM users WHERE nakama_user_id = ? LIMIT ${PLAYER_EXACT_MATCH_LIMIT}`)
     .all(q);
   for (const row of byNakama) {
     if (!results.accounts.some((a) => a.id === row.id)) {
@@ -259,7 +277,7 @@ export function LookupPlayer(user, query = {}) {
 
   // Email (exact, case-insensitive)
   const byEmail = db
-    .prepare(`SELECT * FROM users WHERE email = ? COLLATE NOCASE LIMIT 5`)
+    .prepare(`SELECT * FROM users WHERE email = ? COLLATE NOCASE LIMIT ${PLAYER_EXACT_MATCH_LIMIT}`)
     .all(q);
   for (const row of byEmail) {
     if (!results.accounts.some((a) => a.id === row.id)) {
@@ -272,7 +290,7 @@ export function LookupPlayer(user, query = {}) {
   if (chExact) results.characters.push(serializeCharacterSummary(chExact));
 
   // Name contains (scan capped)
-  const all = entities.Character.list("-created_date", 500) || [];
+  const all = entities.Character.list("-created_date", PLAYER_DIRECTORY_SCAN_LIMIT) || [];
   const ql = q.toLowerCase();
   for (const ch of all) {
     if (results.characters.length >= limit) break;
@@ -298,12 +316,16 @@ export function InspectCharacter(user, characterId) {
   if (!ch) httpErr(404, "Character not found");
 
   const account = ch.created_by_id ? getUserById(ch.created_by_id) : null;
-  const items = listOwnedItems(characterId, 500);
+  const items = listOwnedItems(characterId, INSPECT_INVENTORY_LIMIT);
   const modList = entities.PlayerModeration.filter({ character_id: characterId }) || [];
   const mail =
-    entities.Mail.filter({ owner_id: characterId }, "-created_date", 50) || [];
+    entities.Mail.filter({ owner_id: characterId }, "-created_date", INSPECT_MAIL_LIMIT) || [];
   const missions =
-    entities.Mission.filter({ character_id: characterId }, "-created_date", 20) || [];
+    entities.Mission.filter(
+      { character_id: characterId },
+      "-created_date",
+      INSPECT_MISSION_LIMIT,
+    ) || [];
 
   return {
     character: ch,
@@ -340,13 +362,19 @@ export function GetOpsDashboard(user) {
   const users = db.prepare("SELECT COUNT(*) AS c FROM users").get()?.c ?? 0;
   const characters = db.prepare("SELECT COUNT(*) AS c FROM entities WHERE type = 'Character'").get()?.c ?? 0;
   const openReports =
-    (entities.Report.filter({ status: "open" }, "-created_date", 100) || []).length;
-  const quarantine = listOpenQuarantine({ limit: 20 });
-  const recentRepairs = listRepairAudits({ limit: 10 });
+    (entities.Report.filter(
+      { status: "open" },
+      "-created_date",
+      OPEN_REPORT_QUERY_LIMIT,
+    ) || []).length;
+  const quarantine = listOpenQuarantine({ limit: OPS_QUARANTINE_LIMIT });
+  const recentRepairs = listRepairAudits({ limit: OPS_REPAIR_AUDIT_LIMIT });
 
   let presenceCount = 0;
   try {
-    presenceCount = (entities.PlayerPresence.list("-updated_date", 500) || []).length;
+    presenceCount = (
+      entities.PlayerPresence.list("-updated_date", ONLINE_PRESENCE_QUERY_LIMIT) || []
+    ).length;
   } catch {
     presenceCount = 0;
   }
@@ -359,13 +387,13 @@ export function GetOpsDashboard(user) {
     maintenance,
     feature_flags: flags,
     pending_quarantine: quarantine.length,
-    quarantine_sample: quarantine.slice(0, 5).map((q) => ({
+    quarantine_sample: quarantine.slice(0, OPS_DASHBOARD_SAMPLE_LIMIT).map((q) => ({
       id: q.id,
       issue_code: q.issue_code,
       severity: q.severity,
       entity_type: q.entity_type,
     })),
-    recent_repairs: recentRepairs.slice(0, 5).map((r) => ({
+    recent_repairs: recentRepairs.slice(0, OPS_DASHBOARD_SAMPLE_LIMIT).map((r) => ({
       id: r.id,
       repair_type: r.repair_type,
       created_at: r.created_at,
@@ -381,7 +409,7 @@ export function GetOpsTelemetry(user) {
   return {
     dashboard: GetOpsDashboard(user),
     dependencies: GetDependencyHealth(),
-    analytics_buffer: getAnalyticsBuffer(20),
+    analytics_buffer: getAnalyticsBuffer(OPS_ANALYTICS_BUFFER_LIMIT),
     note: "Operational telemetry only. Analytics is non-authoritative.",
   };
 }

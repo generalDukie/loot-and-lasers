@@ -7,8 +7,12 @@
  */
 
 export const MISSION_MIN_DURATION_SECONDS = 15;
-export const MISSION_MAX_DURATION_SECONDS = 1200; // 20 minutes hard cap
-export const MISSION_MIN_FUEL = 0.25; // 15s
+export const MISSION_MAX_DURATION_SECONDS = 1_200; // 20 minutes hard cap
+export const MISSION_SECONDS_PER_FUEL = 60;
+export const MISSION_MIN_FUEL = MISSION_MIN_DURATION_SECONDS / MISSION_SECONDS_PER_FUEL;
+
+const MISSION_MAX_RULE_LEVEL = 21;
+const FUEL_PRECISION_SCALE = 100;
 
 /** Per-level { min, max, step } in seconds. Level 21+ uses entry 21 permanently. */
 const MISSION_DURATION_RULES = {
@@ -42,8 +46,8 @@ function normalizeLevel(level = 1) {
 
 function ruleForLevel(level = 1) {
   const lvl = normalizeLevel(level);
-  if (lvl >= 21) return MISSION_DURATION_RULES[21];
-  return MISSION_DURATION_RULES[lvl] || MISSION_DURATION_RULES[21];
+  if (lvl >= MISSION_MAX_RULE_LEVEL) return MISSION_DURATION_RULES[MISSION_MAX_RULE_LEVEL];
+  return MISSION_DURATION_RULES[lvl] || MISSION_DURATION_RULES[MISSION_MAX_RULE_LEVEL];
 }
 
 /** Normal allowed durations (seconds) for a level — no leftover-fuel exception. */
@@ -73,7 +77,7 @@ export function rollMissionDurationSeconds(level = 1, unit = Math.random()) {
 }
 
 function normalizeFuelAmount(n) {
-  return Math.round((Number(n) || 0) * 100) / 100;
+  return Math.round((Number(n) || 0) * FUEL_PRECISION_SCALE) / FUEL_PRECISION_SCALE;
 }
 
 /**
@@ -83,7 +87,7 @@ function normalizeFuelAmount(n) {
 export function remainingFuelDurationSeconds(currentFuel) {
   const fuel = normalizeFuelAmount(currentFuel);
   if (fuel < MISSION_MIN_FUEL) return null;
-  const sec = Math.round(fuel * 60);
+  const sec = Math.round(fuel * MISSION_SECONDS_PER_FUEL);
   return Math.min(
     MISSION_MAX_DURATION_SECONDS,
     Math.max(MISSION_MIN_DURATION_SECONDS, sec)
@@ -98,7 +102,7 @@ export function needsRemainingFuelException(level, currentFuel) {
   const fuel = normalizeFuelAmount(currentFuel);
   if (fuel < MISSION_MIN_FUEL) return false;
   const pool = getAllowedMissionDurations(level);
-  const cheapest = Math.min(...pool.map((sec) => normalizeFuelAmount(sec / 60)));
+  const cheapest = Math.min(...pool.map((sec) => normalizeFuelAmount(sec / MISSION_SECONDS_PER_FUEL)));
   return fuel < cheapest;
 }
 

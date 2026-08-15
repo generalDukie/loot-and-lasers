@@ -33,9 +33,30 @@ import {
   listBotsNearRating,
 } from "../arena/bots.js";
 import { generateArenaBot } from "../../../src/lib/arenaBotGenerator.js";
+import { ARENA_DEFAULT_RATING } from "../arena/config.js";
+
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const ARENA_OFFER_TTL_HOURS = 2;
+const ARENA_BATTLE_COOLDOWN_MINUTES = 10;
+const SHUFFLE_HASH_MULTIPLIER = 33;
+const SHUFFLE_LCG_MULTIPLIER = 1_664_525;
+const SHUFFLE_LCG_INCREMENT = 1_013_904_223;
+const UNSIGNED_32_BIT_RANGE = 4_294_967_296;
+const PREFERRED_BOT_QUERY_BUFFER = 6;
+const FALLBACK_BOT_QUERY_BUFFER = 8;
+const DEFAULT_ARENA_LEADERBOARD_LIMIT = 50;
+const ARENA_OFFER_ID_LENGTH = 12;
+const EPHEMERAL_BOT_ID_LENGTH = 10;
+const EPHEMERAL_BOT_NAME_ID_LENGTH = 4;
+const EPHEMERAL_BOT_RATING_VARIANCE = 40;
 
 /** Challenger board lifetime (offer snapshots). */
-export const ARENA_OFFER_TTL_MS = 2 * 60 * 60 * 1000;
+export const ARENA_OFFER_TTL_MS = ARENA_OFFER_TTL_HOURS
+  * MINUTES_PER_HOUR
+  * SECONDS_PER_MINUTE
+  * MILLISECONDS_PER_SECOND;
 
 function shuffleArenaOffers(offers) {
   const out = Array.isArray(offers) ? offers.slice() : [];
@@ -45,13 +66,13 @@ function shuffleArenaOffers(offers) {
   for (const row of out) {
     const id = String(row?.offer_id || "");
     for (let i = 0; i < id.length; i += 1) {
-      seed = (seed * 33 + id.charCodeAt(i)) >>> 0;
+      seed = (seed * SHUFFLE_HASH_MULTIPLIER + id.charCodeAt(i)) >>> 0;
     }
   }
   if (seed === 0) seed = 1;
   const rand = () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 4294967296;
+    seed = (Math.imul(seed, SHUFFLE_LCG_MULTIPLIER) + SHUFFLE_LCG_INCREMENT) >>> 0;
+    return seed / UNSIGNED_32_BIT_RANGE;
   };
   for (let i = out.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rand() * (i + 1));
@@ -66,7 +87,9 @@ function shuffleArenaOffers(offers) {
 export const ARENA_REFRESH_MS = ARENA_OFFER_TTL_MS;
 
 /** Finalized: 10-minute normal Arena cooldown. */
-export const ARENA_BATTLE_COOLDOWN_MS = 10 * 60 * 1000;
+export const ARENA_BATTLE_COOLDOWN_MS = ARENA_BATTLE_COOLDOWN_MINUTES
+  * SECONDS_PER_MINUTE
+  * MILLISECONDS_PER_SECOND;
 
 /** Client fields that must never drive settlement (stripped / rejected). */
 const CLIENT_STRIP = [
@@ -285,13 +308,13 @@ function pickBotsWithExclusions(character, needBots, hardExclude, softExclude) {
   ensureBotPoolForPlayer(character);
   const hard = [...hardExclude].map(String);
   const soft = [...softExclude].map(String);
-  let bots = listBotsNearRating(character.arena_rating || 1000, {
-    limit: needBots + 6,
+  let bots = listBotsNearRating(character.arena_rating || ARENA_DEFAULT_RATING, {
+    limit: needBots + PREFERRED_BOT_QUERY_BUFFER,
     excludeIds: [...hard, ...soft],
   });
   if (bots.length < needBots) {
-    const more = listBotsNearRating(character.arena_rating || 1000, {
-      limit: needBots + 8,
+    const more = listBotsNearRating(character.arena_rating || ARENA_DEFAULT_RATING, {
+      limit: needBots + FALLBACK_BOT_QUERY_BUFFER,
       excludeIds: hard,
     });
     const seen = new Set(bots.map((b) => b.id));
@@ -353,7 +376,7 @@ function publicRankRow(ch, rank) {
     name: ch.name,
     level: ch.level || 1,
     class: ch.class,
-    arena_rating: ch.arena_rating || 1000,
+    arena_rating: ch.arena_rating || ARENA_DEFAULT_RATING,
     arena_wins: ch.arena_wins || 0,
     arena_losses: ch.arena_losses || 0,
     race: ch.race,
@@ -367,7 +390,8 @@ export function computeArenaRank(characterId) {
   const all = entities.Character.filter({})
     .slice()
     .sort((a, b) => {
-      const rd = (b.arena_rating || 1000) - (a.arena_rating || 1000);
+      const rd = (b.arena_rating || ARENA_DEFAULT_RATING)
+        - (a.arena_rating || ARENA_DEFAULT_RATING);
       if (rd !== 0) return rd;
       const wd = (b.arena_wins || 0) - (a.arena_wins || 0);
       if (wd !== 0) return wd;
@@ -377,11 +401,12 @@ export function computeArenaRank(characterId) {
   return idx >= 0 ? idx + 1 : 0;
 }
 
-export function listArenaLeaderboard({ limit = 50, offset = 0 } = {}) {
+export function listArenaLeaderboard({ limit = DEFAULT_ARENA_LEADERBOARD_LIMIT, offset = 0 } = {}) {
   const all = entities.Character.filter({})
     .slice()
     .sort((a, b) => {
-      const rd = (b.arena_rating || 1000) - (a.arena_rating || 1000);
+      const rd = (b.arena_rating || ARENA_DEFAULT_RATING)
+        - (a.arena_rating || ARENA_DEFAULT_RATING);
       if (rd !== 0) return rd;
       const wd = (b.arena_wins || 0) - (a.arena_wins || 0);
       if (wd !== 0) return wd;
@@ -404,7 +429,7 @@ export function serializeArenaState(character, nowMs = clock.nowMs(), today = to
   const pending = readArenaPendingCombat(character);
   const rank = computeArenaRank(character.id);
   return {
-    rating: character.arena_rating || 1000,
+    rating: character.arena_rating || ARENA_DEFAULT_RATING,
     rank_position: rank,
     rank,
     wins: character.arena_wins || 0,
@@ -470,7 +495,7 @@ export function generateAndStoreArenaOffers(character, {
     }));
     return {
       character,
-      offers: shuffleArenaOffers(existing.offers.map(publicOpponentOffer)),
+      offers: existing.offers.map(publicOpponentOffer),
       replay: true,
       expires_at: existing.expires_at,
     };
@@ -504,7 +529,10 @@ export function generateAndStoreArenaOffers(character, {
   let realTarget = ARENA_MAX_REAL_OPPONENTS;
   if (ranked.length > ARENA_MAX_REAL_OPPONENTS) {
     const third = ranked[ARENA_MAX_REAL_OPPONENTS];
-    const gap = Math.abs((third.arena_rating || 1000) - (character.arena_rating || 1000));
+    const gap = Math.abs(
+      (third.arena_rating || ARENA_DEFAULT_RATING)
+        - (character.arena_rating || ARENA_DEFAULT_RATING),
+    );
     if (gap <= ARENA_RATING_BAND_WIDE) {
       realTarget = Math.min(ARENA_CHALLENGER_SLOTS, ranked.length);
     }
@@ -521,7 +549,7 @@ export function generateAndStoreArenaOffers(character, {
     const items = loadEquippedItemsForCharacter(ch.id);
     const opp = characterToOpponent(ch, items);
     return {
-      offer_id: nanoid(12),
+      offer_id: nanoid(ARENA_OFFER_ID_LENGTH),
       matchup: "Operative",
       opponent: {
         ...opp,
@@ -552,7 +580,7 @@ export function generateAndStoreArenaOffers(character, {
     };
     const power = computePower(combatant, []);
     return {
-      offer_id: nanoid(12),
+      offer_id: nanoid(ARENA_OFFER_ID_LENGTH),
       matchup: "Bot",
       opponent: {
         ...combatant,
@@ -568,16 +596,18 @@ export function generateAndStoreArenaOffers(character, {
   // Ephemeral generateArenaBot fill if ladder empty (still server-side).
   while (realOffers.length + botOffers.length < ARENA_CHALLENGER_SLOTS) {
     const snap = generateArenaBot({ playerLevel: character.level || 1 });
-    const id = nanoid(10);
+    const id = nanoid(EPHEMERAL_BOT_ID_LENGTH);
     const combatant = {
       id,
-      name: `Operative-${id.slice(0, 4)}`,
+      name: `Operative-${id.slice(0, EPHEMERAL_BOT_NAME_ID_LENGTH)}`,
       race: "Synthara",
       class: snap.class,
       level: snap.level,
       arena_rating: Math.max(
         0,
-        (character.arena_rating || 1000) + Math.floor(Math.random() * 80) - 40,
+        (character.arena_rating || ARENA_DEFAULT_RATING)
+          + Math.floor(Math.random() * EPHEMERAL_BOT_RATING_VARIANCE * 2)
+          - EPHEMERAL_BOT_RATING_VARIANCE,
       ),
       stats: snap.stats,
       isBot: true,
@@ -587,7 +617,7 @@ export function generateAndStoreArenaOffers(character, {
       strengthMultiplier: snap.strengthMultiplier,
     };
     botOffers.push({
-      offer_id: nanoid(12),
+      offer_id: nanoid(ARENA_OFFER_ID_LENGTH),
       matchup: "Bot",
       opponent: {
         ...combatant,

@@ -20,15 +20,17 @@ $ExportExe = Join-Path $ExportDir "LootAndLasers.exe"
 $InstallerScript = Join-Path $Root "installer\LootAndLasers.iss"
 $LF = [string][char]10
 $DefaultHetznerIdentityFile = Join-Path $env:USERPROFILE "Desktop\LootLasers\SSH\Farts"
+$ThisMachineHetznerIdentityFile = Join-Path $env:USERPROFILE ".ssh\loot_hetzner_deploy"
 
 function Resolve-HetznerIdentityFile {
     param([string]$IdentityFile)
 
     if ($IdentityFile) { return $IdentityFile }
+    if (Test-Path $ThisMachineHetznerIdentityFile) { return $ThisMachineHetznerIdentityFile }
     if (Test-Path $DefaultHetznerIdentityFile) { return $DefaultHetznerIdentityFile }
     $fallbackKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
     if (Test-Path $fallbackKey) { return $fallbackKey }
-    return $DefaultHetznerIdentityFile
+    return $ThisMachineHetznerIdentityFile
 }
 
 function Resolve-Executable {

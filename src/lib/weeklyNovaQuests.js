@@ -2,6 +2,8 @@ import { api } from "@/api/gameClient";
 import { getWeekKey, weekEndDate } from "@/lib/guildEngine";
 import { primeMyCharacterCache } from "@/lib/socialEngine";
 
+const MILLISECONDS_PER_SECOND = 1_000;
+
 /** Weekly F2P Nova drip — earn by playing, claim from Crystal Store. */
 export const WEEKLY_NOVA_QUESTS = [
   {
@@ -71,7 +73,7 @@ export function weeklyNovaQuestStatus(character) {
 
 export function weeklyNovaSecondsLeft() {
   const end = new Date(weekEndDate()).getTime();
-  return Math.max(0, Math.floor((end - Date.now()) / 1000));
+  return Math.max(0, Math.floor((end - Date.now()) / MILLISECONDS_PER_SECOND));
 }
 
 /**

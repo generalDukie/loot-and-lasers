@@ -13,6 +13,7 @@ import {
   WHEEL_TIERS,
   REFINING_LADDER,
   CACHE_CARGO,
+  SMUGGLERS_CACHE_CRATE_COUNT,
   stardustWagerLimits,
   wheelSegmentLayout,
 } from "./casinoGames.js";
@@ -243,7 +244,7 @@ export function publicSessionState(session) {
     return {
       status: session.status,
       wager: session.wager,
-      crate_count: 6,
+      crate_count: SMUGGLERS_CACHE_CRATE_COUNT,
       selected_index: st.selected_index ?? null,
       board: sealed ? null : st.board || null,
       sealed,

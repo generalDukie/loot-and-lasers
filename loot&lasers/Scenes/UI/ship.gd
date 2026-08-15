@@ -35,7 +35,7 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 func _boot() -> void:
 	_status.visible = true
 	_status.text = "Loading hangar…"
-	await ShipManager.refresh()
+	await ShipManager.refresh(true)
 	var mil: Dictionary = await ShipManager.claim_scout_milestone()
 	if mil.ok:
 		_status.text = "Scout bay tuned — free Reinforced Fuel Tank T1 installed."

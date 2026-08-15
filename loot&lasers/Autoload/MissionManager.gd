@@ -21,6 +21,12 @@ signal reward_received(reward: Dictionary)
 const STATUS_MIN_INTERVAL_SEC := 2.0
 ## Skip Character GET on rapid page hops when GameManager already has this character.
 const CHARACTER_REFRESH_TTL_MS := 20000
+const RPC_LOCK_TIMEOUT_SEC := 12.0
+const MILLISECONDS_PER_SECOND := 1_000.0
+const REQUEST_ID_CHARACTER_PREFIX_LENGTH := 8
+const REQUEST_ID_RANDOM_RANGE := 100_000
+const EQUIPPED_ITEM_QUERY_LIMIT := 20
+const FALLBACK_MISSION_DURATION_SECONDS := 15
 
 var offers: Array = []
 var active_mission: Dictionary = {}
@@ -49,17 +55,17 @@ func _ready() -> void:
 	print("[MissionManager] ready (Node mission authority)")
 
 
-func _await_nakama_idle(timeout_sec: float = 12.0) -> bool:
+func _await_nakama_idle(timeout_sec: float = RPC_LOCK_TIMEOUT_SEC) -> bool:
 	var start_ms := Time.get_ticks_msec()
 	while _nakama_busy:
-		if Time.get_ticks_msec() - start_ms >= int(timeout_sec * 1000.0):
+		if Time.get_ticks_msec() - start_ms >= int(timeout_sec * MILLISECONDS_PER_SECOND):
 			return false
 		await get_tree().process_frame
 	return true
 
 
 ## Acquire exclusive Nakama mission RPC slot. Returns op id (>0) or 0 on timeout.
-func _acquire_nakama(timeout_sec: float = 12.0) -> int:
+func _acquire_nakama(timeout_sec: float = RPC_LOCK_TIMEOUT_SEC) -> int:
 	if not await _await_nakama_idle(timeout_sec):
 		return 0
 	_nakama_op += 1
@@ -86,9 +92,12 @@ func buy_fuel() -> Dictionary:
 	_fuel_buy_busy = true
 	if _pending_fuel_request_id.is_empty():
 		_pending_fuel_request_id = "fuel-%s-%d-%d" % [
-			str(GameManager.active_character.get("id", "")).substr(0, 8),
+			str(GameManager.active_character.get("id", "")).substr(
+				0,
+				REQUEST_ID_CHARACTER_PREFIX_LENGTH,
+			),
 			int(Time.get_unix_time_from_system()),
-			randi() % 100000,
+			randi() % REQUEST_ID_RANDOM_RANGE,
 		]
 	var res: Dictionary = await GameApiClient.invoke("BuyFuel", {
 		"request_id": _pending_fuel_request_id,
@@ -466,7 +475,10 @@ func _load_equipped_items() -> Array:
 		return []
 	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/Item/filter",
-		{"query": {"character_id": cid, "is_equipped": true}, "limit": 20}, true
+		{
+			"query": {"character_id": cid, "is_equipped": true},
+			"limit": EQUIPPED_ITEM_QUERY_LIMIT,
+		}, true
 	)
 	return res.data if res.ok and typeof(res.data) == TYPE_ARRAY else []
 
@@ -481,7 +493,7 @@ func get_active_mission(character_id: String = "") -> Dictionary:
 
 
 func refresh_mission_status(character_id: String = "", force: bool = false) -> Dictionary:
-	var now := Time.get_ticks_msec() / 1000.0
+	var now := Time.get_ticks_msec() / MILLISECONDS_PER_SECOND
 	if not force and (now - _last_status_at) < STATUS_MIN_INTERVAL_SEC and not active_mission.is_empty():
 		return {
 			"ok": true,
@@ -493,7 +505,7 @@ func refresh_mission_status(character_id: String = "", force: bool = false) -> D
 		}
 	var _unused_character_id := character_id
 	var res: Dictionary = await fetch_active_mission()
-	_last_status_at = Time.get_ticks_msec() / 1000.0
+	_last_status_at = Time.get_ticks_msec() / MILLISECONDS_PER_SECOND
 	if not res.ok:
 		var err := str(res.get("error", "mission_status failed"))
 		mission_error.emit(err)
@@ -586,7 +598,9 @@ func _ui_offer_from_nakama(m: Dictionary) -> Dictionary:
 		"location": str(m.get("location", "")),
 		"sector": int(m.get("sector", 1)),
 		"level_requirement": int(m.get("level_requirement", 1)),
-		"duration_seconds": int(m.get("duration_seconds", 15)),
+		"duration_seconds": int(
+			m.get("duration_seconds", FALLBACK_MISSION_DURATION_SECONDS)
+		),
 		"difficulty": str(m.get("difficulty", "")),
 		"risk": int(m.get("risk", 0)),
 		"status": str(m.get("status", "available")),
@@ -612,7 +626,12 @@ func _ui_active_from_nakama(wrapper: Dictionary) -> Dictionary:
 	offer["completes_at_unix"] = int(m.get("completes_at_unix", 0))
 	offer["started_at"] = str(m.get("started_at", ""))
 	offer["start_time"] = str(m.get("started_at", ""))
-	offer["duration_seconds"] = int(m.get("duration_seconds", offer.get("duration_seconds", 15)))
+	offer["duration_seconds"] = int(
+		m.get(
+			"duration_seconds",
+			offer.get("duration_seconds", FALLBACK_MISSION_DURATION_SECONDS),
+		)
+	)
 	return offer
 
 

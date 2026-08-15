@@ -5,6 +5,11 @@ extends Control
 signal closed
 signal claimed(payload: Dictionary)
 
+const MILLISECONDS_PER_SECOND := 1_000.0
+const SECONDS_PER_MINUTE := 60
+const MINUTES_PER_HOUR := 60
+const CLAIM_SUCCESS_HOLD_SEC := 0.85
+
 var _dim: ColorRect
 var _panel: PanelContainer
 var _title: Label
@@ -313,9 +318,10 @@ func _refresh_countdown() -> void:
 	if not is_instance_valid(_countdown):
 		return
 	var ms: int = ProgressManager.ms_until_daily_reset_display()
-	var total_s := maxi(0, int(ms / 1000.0))
-	var hh := total_s / 3600
-	var mm := (total_s % 3600) / 60
+	var total_s := maxi(0, int(ms / MILLISECONDS_PER_SECOND))
+	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+	var hh := total_s / seconds_per_hour
+	var mm := (total_s % seconds_per_hour) / SECONDS_PER_MINUTE
 	var ss := total_s % 60
 	_countdown.text = "Next reward in %02d:%02d:%02d" % [hh, mm, ss]
 
@@ -358,7 +364,7 @@ func _on_claim() -> void:
 	ClientUi.show_toast(self, "Daily reward claimed!", "Day %s · %s" % [day, label])
 	claimed.emit(data)
 	# Keep modal open briefly so the player sees confirmation, then refresh grid.
-	await get_tree().create_timer(0.85).timeout
+	await get_tree().create_timer(CLAIM_SUCCESS_HOLD_SEC).timeout
 	if is_inside_tree():
 		await _reload()
 

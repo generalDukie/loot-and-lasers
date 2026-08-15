@@ -5,15 +5,17 @@
 
 import {
   ARENA_DIRECT_ELO_K,
+  ARENA_DEFAULT_RATING,
+  ARENA_ELO_RATING_SCALE,
   ARENA_RATING_POLICY_VERSION,
   DIRECT_CHALLENGE_RATING as CFG,
   REPEAT_OPPONENT,
 } from "./config.js";
 
 export function eloExpectedScore(challengerRating, opponentRating) {
-  const a = Number(challengerRating) || 1000;
-  const b = Number(opponentRating) || 1000;
-  return 1 / (1 + 10 ** ((b - a) / 400));
+  const a = Number(challengerRating) || ARENA_DEFAULT_RATING;
+  const b = Number(opponentRating) || ARENA_DEFAULT_RATING;
+  return 1 / (1 + 10 ** ((b - a) / ARENA_ELO_RATING_SCALE));
 }
 
 /**
@@ -21,7 +23,8 @@ export function eloExpectedScore(challengerRating, opponentRating) {
  * Multiplier applies only on challenger wins vs lower-rated opponents.
  */
 export function gapMultiplierForWin(challengerRating, opponentRating, cfg = CFG) {
-  const gapBelow = (Number(challengerRating) || 1000) - (Number(opponentRating) || 1000);
+  const gapBelow = (Number(challengerRating) || ARENA_DEFAULT_RATING)
+    - (Number(opponentRating) || ARENA_DEFAULT_RATING);
   if (gapBelow <= 0) {
     return { multiplier: 1, band: "underdog_or_equal", zeroReward: false };
   }
@@ -94,8 +97,8 @@ export function computeDirectChallengeRatingDelta({
     };
   }
 
-  const cr = Number(challengerRating) || 1000;
-  const or = Number(opponentRating) || 1000;
+  const cr = Number(challengerRating) || ARENA_DEFAULT_RATING;
+  const or = Number(opponentRating) || ARENA_DEFAULT_RATING;
   const expected = eloExpectedScore(cr, or);
   const actual = won ? 1 : 0;
   let baseChange = k * (actual - expected);

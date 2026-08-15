@@ -44,6 +44,7 @@ import {
 } from "../shared/mailService.js";
 import {
   getMyGuildState,
+  hydrateGuildMembers,
   joinGuild,
   leaveGuild,
   inviteToGuild,
@@ -103,7 +104,7 @@ import {
   SkipTutorial,
   CompleteTutorial,
 } from "./tutorial.js";
-import { getInventoryCap, STARDUST_MAX } from "../shared/economyFormulas.js";
+import { getInventoryCap, STARDUST_MAX, FUEL_MAX } from "../shared/economyFormulas.js";
 import { countBagOccupancy } from "../shared/inventoryGrant.js";
 import { todayET, clock, TimeErrors } from "../shared/time/index.js";
 import { getGameTime } from "../shared/schedulerService.js";
@@ -127,6 +128,7 @@ import {
   CYCLE_THEMES as DAILY_CYCLE_THEMES,
 } from "../shared/dailyLoginService.js";
 import { getBalances } from "../shared/currencyService.js";
+import { ARENA_DEFAULT_RATING } from "../arena/config.js";
 import {
   auditAdminModeration,
   recordCurrencyChange,
@@ -136,6 +138,27 @@ import {
 } from "../audit/index.js";
 
 const CYCLE_THEMES = DAILY_CYCLE_THEMES;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const MILLISECONDS_PER_MINUTE = SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+const MILLISECONDS_PER_HOUR = MINUTES_PER_HOUR * MILLISECONDS_PER_MINUTE;
+const MILLISECONDS_PER_DAY = HOURS_PER_DAY * MILLISECONDS_PER_HOUR;
+const DEFAULT_ADMIN_MUTE_MINUTES = 30;
+const SYSTEM_MAIL_RECIPIENT_QUERY_LIMIT = 2_000;
+const ADMIN_OPERATION_RANDOM_RANGE = 1_000_000;
+const CHARACTER_ID_BATCH_LIMIT = 50;
+const CONVERSATION_LIST_LIMIT = 200;
+const CONVERSATION_SCAN_LIMIT = 10_000;
+const CONVERSATION_UNREAD_QUERY_LIMIT = 100;
+const DEFAULT_CHAT_HISTORY_LIMIT = 50;
+const MAX_CHAT_HISTORY_LIMIT = 100;
+const MARK_CONVERSATION_READ_LIMIT = 200;
+const PROMO_CODE_MIN_LENGTH = 2;
+const PROMO_CODE_MAX_LENGTH = 48;
+const PROMO_CODE_ALLOWED_CHARACTERS = /^[A-Z0-9_-]+$/;
+const DEFAULT_ARENA_SUSPENSION_HOURS = 24;
 
 /**
  * Resolve the account-global selected Character via shared gameplay context.
@@ -236,7 +259,7 @@ export async function ClaimDailyLogin(user, body = {}) {
         }),
         deliver: async (payload, claim) => {
           const claimedDays = [...(progress.claimed_days || []), day];
-          const wrapped = day >= 30;
+          const wrapped = day >= DAILY_REWARDS.length;
           const nextDay = wrapped ? 1 : day + 1;
           const newTheme = wrapped
             ? CYCLE_THEMES[(CYCLE_THEMES.indexOf(progress.cycle_theme || CYCLE_THEMES[0]) + 1) % CYCLE_THEMES.length]
@@ -751,11 +774,14 @@ export async function GetCollections(user, body = {}) {
 
 // ── SendMessage ──────────────────────────────────────────────
 const MAX_LEN = 280;
-const GLOBAL_COOLDOWN_MS = 2000;
-const PRIVATE_COOLDOWN_MS = 1000;
-const SPAM_WINDOW_MS = 10000;
+const GLOBAL_COOLDOWN_MS = 2_000;
+const PRIVATE_COOLDOWN_MS = 1_000;
+const SPAM_WINDOW_MS = 10_000;
 const SPAM_THRESHOLD = 5;
-const SPAM_MUTE_MS = 3 * 60 * 1000;
+const SPAM_MUTE_MINUTES = 3;
+const SPAM_MUTE_MS = SPAM_MUTE_MINUTES * MILLISECONDS_PER_MINUTE;
+const SPAM_ACTIVITY_QUERY_LIMIT = 10;
+const PRIVATE_MESSAGE_PREVIEW_MAX_LENGTH = 80;
 
 function applyFilter(content, words) {
   let out = content;
@@ -787,9 +813,21 @@ export async function SendMessage(user, body) {
   }
 
   const sinceMs = Date.now() - SPAM_WINDOW_MS;
-  const recentChats = entities.ChatMessage.filter({ sender_id: character.id }, "-created_date", 10);
-  const recentPrivs = entities.PrivateMessage.filter({ sender_id: character.id }, "-created_date", 10);
-  const recentMails = entities.Mail.filter({ from_id: character.id, mail_type: "player" }, "-created_date", 10);
+  const recentChats = entities.ChatMessage.filter(
+    { sender_id: character.id },
+    "-created_date",
+    SPAM_ACTIVITY_QUERY_LIMIT,
+  );
+  const recentPrivs = entities.PrivateMessage.filter(
+    { sender_id: character.id },
+    "-created_date",
+    SPAM_ACTIVITY_QUERY_LIMIT,
+  );
+  const recentMails = entities.Mail.filter(
+    { from_id: character.id, mail_type: "player" },
+    "-created_date",
+    SPAM_ACTIVITY_QUERY_LIMIT,
+  );
   const countSince = (list) => (list || []).filter((m) => new Date(m.created_date).getTime() > sinceMs).length;
   if (countSince(recentChats) + countSince(recentPrivs) + countSince(recentMails) >= SPAM_THRESHOLD) {
     const mutedUntil = new Date(Date.now() + SPAM_MUTE_MS).toISOString();
@@ -835,7 +873,7 @@ export async function SendMessage(user, body) {
       return { status: 429, body: { error: "Slow down — chat cooldown active." } };
     }
 
-    const convs = entities.PrivateConversation.list(null, 10000);
+    const convs = entities.PrivateConversation.list(null, CONVERSATION_SCAN_LIMIT);
     let conversation = convs.find((c) => {
       const p = c.participant_ids || [];
       return p.includes(character.id) && p.includes(recipientId);
@@ -843,13 +881,13 @@ export async function SendMessage(user, body) {
     if (!conversation) {
       conversation = entities.PrivateConversation.create({
         participant_ids: [character.id, recipientId],
-        last_message_preview: filtered.slice(0, 80),
+        last_message_preview: filtered.slice(0, PRIVATE_MESSAGE_PREVIEW_MAX_LENGTH),
         last_message_at: nowIso(),
         last_sender_id: character.id,
       });
     } else {
       conversation = entities.PrivateConversation.update(conversation.id, {
-        last_message_preview: filtered.slice(0, 80),
+        last_message_preview: filtered.slice(0, PRIVATE_MESSAGE_PREVIEW_MAX_LENGTH),
         last_message_at: nowIso(),
         last_sender_id: character.id,
       });
@@ -867,7 +905,7 @@ export async function SendMessage(user, body) {
       owner_id: recipientId,
       type: "private_message",
       title: character.name,
-      body: filtered.slice(0, 80),
+      body: filtered.slice(0, PRIVATE_MESSAGE_PREVIEW_MAX_LENGTH),
       related_id: conversation.id,
       priority: "normal",
       idempotency_key: `pm:${msg.id}`,
@@ -882,14 +920,30 @@ export async function SendMessage(user, body) {
 // ── ResolveNexusAssault ──────────────────────────────────────
 const RARITY_WEIGHT = { common: 1, uncommon: 2, rare: 4, epic: 8, legendary: 16 };
 const HOLD_HOURS = 24;
-const ASSAULT_COOLDOWN_MS = 30 * 60 * 1000;
-const GARRISON_BASE = 1200;
+const ASSAULT_COOLDOWN_MINUTES = 30;
+const ASSAULT_COOLDOWN_MS = ASSAULT_COOLDOWN_MINUTES * MILLISECONDS_PER_MINUTE;
+const GARRISON_BASE = 1_200;
+const NEXUS_MEMBER_LEVEL_POWER = 12;
+const NEXUS_GUILD_LEVEL_POWER = 80;
+const NEXUS_ACTIVE_MEMBER_BONUS = 50;
+const NEXUS_BREACH_SHARE_THRESHOLD = 0.5;
+const NEXUS_TURNING_SHARE_THRESHOLD = 0.45;
+const NEXUS_GUILD_MEMBER_QUERY_LIMIT = 200;
+const NEXUS_REQUIRED_GUILD_POWER = 500;
+const NEXUS_EQUIPMENT_QUERY_LIMIT = 500;
+const NEXUS_PARTICIPATION_MIN = 0.8;
+const NEXUS_PARTICIPATION_MAX = 1.0;
+const NEXUS_STRENGTH_VARIANCE_MIN = 0.9;
+const NEXUS_STRENGTH_VARIANCE_MAX = 1.1;
 
 function memberPower(members) {
-  return (members || []).reduce((a, m) => a + ((m.character_level || 1) * 12), 0);
+  return (members || []).reduce(
+    (total, member) => total + ((member.character_level || 1) * NEXUS_MEMBER_LEVEL_POWER),
+    0,
+  );
 }
 function guildUpgrades(guild) {
-  return (guild.level || 1) * 80;
+  return (guild.level || 1) * NEXUS_GUILD_LEVEL_POWER;
 }
 function equipmentQuality(memberIds, items) {
   const set = new Set(memberIds);
@@ -897,11 +951,13 @@ function equipmentQuality(memberIds, items) {
 }
 function strengthOf(guild, members, equip, participation, randomness) {
   const base = memberPower(members) + equip + guildUpgrades(guild);
-  const activeBonus = Math.log2(1 + (members || []).length) * 50;
+  const activeBonus = Math.log2(1 + (members || []).length) * NEXUS_ACTIVE_MEMBER_BONUS;
   return Math.max(1, Math.round((base + activeBonus) * participation * randomness));
 }
 function rand(min, max) { return min + Math.random() * (max - min); }
-function daysBetween(a, b) { return Math.max(0, Math.round((new Date(b) - new Date(a)) / 86400000)); }
+function daysBetween(a, b) {
+  return Math.max(0, Math.round((new Date(b) - new Date(a)) / MILLISECONDS_PER_DAY));
+}
 
 function buildEvents(atkName, defName, atkStrength, defStrength, attackerWon) {
   const atkShare = atkStrength / (atkStrength + defStrength);
@@ -909,10 +965,10 @@ function buildEvents(atkName, defName, atkStrength, defStrength, attackerWon) {
   ev.push({ phase: "arrival", side: "attacker", emoji: "🛸", text: `${atkName}'s fleet drops out of warp above the Galactic Command Nexus.` });
   ev.push({ phase: "bombardment", side: "attacker", emoji: "💥", text: `Orbital laser batteries rain fire on ${defName}'s defensive platforms.` });
   ev.push({ phase: "turrets", side: "defender", emoji: "🛡️", text: `${defName}'s auto-turrets return fire, shredding attacker screens.` });
-  if (atkShare > 0.5) ev.push({ phase: "breach", side: "attacker", emoji: "👾", text: `${atkName}'s alien assault marines breach the station corridors.` });
+  if (atkShare > NEXUS_BREACH_SHARE_THRESHOLD) ev.push({ phase: "breach", side: "attacker", emoji: "👾", text: `${atkName}'s alien assault marines breach the station corridors.` });
   else ev.push({ phase: "breach", side: "defender", emoji: "🪖", text: `${defName} repels the boarding parties at the airlock.` });
   ev.push({ phase: "explosion", side: "both", emoji: "🔥", text: `A reactor core detonates — debris and casualties on both sides!` });
-  if (atkShare > 0.45) ev.push({ phase: "turning", side: "attacker", emoji: "⚡", text: `${atkName} breaks through the inner defensive ring.` });
+  if (atkShare > NEXUS_TURNING_SHARE_THRESHOLD) ev.push({ phase: "turning", side: "attacker", emoji: "⚡", text: `${atkName} breaks through the inner defensive ring.` });
   else ev.push({ phase: "turning", side: "defender", emoji: "🧱", text: `${defName} holds the line — the assault falters.` });
   if (attackerWon) {
     ev.push({ phase: "climax", side: "attacker", emoji: "🏁", text: `${atkName} overruns the command deck!` });
@@ -942,7 +998,23 @@ export async function ResolveNexusAssault(user, body) {
   }
 
   const attackerGuild = entities.Guild.get(attackerGuildId);
-  const attackerMembers = entities.GuildMember.filter({ guild_id: attackerGuildId });
+  const attackerMembers = hydrateGuildMembers(
+    entities.GuildMember.filter(
+      { guild_id: attackerGuildId },
+      null,
+      NEXUS_GUILD_MEMBER_QUERY_LIMIT,
+    ) || [],
+  );
+  const atkPower = memberPower(attackerMembers) + guildUpgrades(attackerGuild);
+  if (atkPower < NEXUS_REQUIRED_GUILD_POWER) {
+    return {
+      status: 403,
+      body: {
+        error: `Guild power ${NEXUS_REQUIRED_GUILD_POWER} required (have ${atkPower}).`,
+        code: "NEXUS_POWER",
+      },
+    };
+  }
 
   let nexus = entities.Nexus.filter({ singleton: true })[0];
   if (!nexus) {
@@ -963,27 +1035,52 @@ export async function ResolveNexusAssault(user, body) {
   let defenderIsGuild = false;
 
   if (hasOwner) {
-    const heldMs = now - new Date(nexus.captured_at);
-    if (heldMs < HOLD_HOURS * 3600 * 1000) {
-      const hoursLeft = Math.ceil((HOLD_HOURS * 3600 * 1000 - heldMs) / 3600000);
-      return { status: 409, body: { error: `The Nexus is not yet vulnerable. It can be attacked in ~${hoursLeft}h.` } };
+    if (nexus.owner_guild_id === attackerGuildId) {
+      return { status: 409, body: { error: "Your guild already holds the Nexus." } };
     }
     defenderGuild = entities.Guild.get(nexus.owner_guild_id);
-    defenderMembers = entities.GuildMember.filter({ guild_id: nexus.owner_guild_id });
+    defenderMembers = hydrateGuildMembers(
+      entities.GuildMember.filter(
+        { guild_id: nexus.owner_guild_id },
+        null,
+        NEXUS_GUILD_MEMBER_QUERY_LIMIT,
+      ) || [],
+    );
     defenderName = defenderGuild.name;
     defenderIsGuild = true;
   }
 
-  const allItems = entities.Item.filter({ is_equipped: true }, "-created_date", 500);
+  const allItems = entities.Item.filter(
+    { is_equipped: true },
+    "-created_date",
+    NEXUS_EQUIPMENT_QUERY_LIMIT,
+  );
   const atkMemberIds = attackerMembers.map((m) => m.character_id);
   const defMemberIds = defenderMembers.map((m) => m.character_id);
   const atkEquip = equipmentQuality(atkMemberIds, allItems);
   const defEquip = defenderIsGuild ? equipmentQuality(defMemberIds, allItems) : 0;
 
-  const atkStrength = strengthOf(attackerGuild, attackerMembers, atkEquip, rand(0.8, 1.0), rand(0.9, 1.1));
+  const atkStrength = strengthOf(
+    attackerGuild,
+    attackerMembers,
+    atkEquip,
+    rand(NEXUS_PARTICIPATION_MIN, NEXUS_PARTICIPATION_MAX),
+    rand(NEXUS_STRENGTH_VARIANCE_MIN, NEXUS_STRENGTH_VARIANCE_MAX),
+  );
   const defStrength = defenderIsGuild
-    ? strengthOf(defenderGuild, defenderMembers, defEquip, rand(0.8, 1.0), rand(0.9, 1.1))
-    : Math.max(1, Math.round(GARRISON_BASE * rand(0.9, 1.1)));
+    ? strengthOf(
+        defenderGuild,
+        defenderMembers,
+        defEquip,
+        rand(NEXUS_PARTICIPATION_MIN, NEXUS_PARTICIPATION_MAX),
+        rand(NEXUS_STRENGTH_VARIANCE_MIN, NEXUS_STRENGTH_VARIANCE_MAX),
+      )
+    : Math.max(
+        1,
+        Math.round(
+          GARRISON_BASE * rand(NEXUS_STRENGTH_VARIANCE_MIN, NEXUS_STRENGTH_VARIANCE_MAX),
+        ),
+      );
 
   const atkShare = atkStrength / (atkStrength + defStrength);
   const attackerWon = Math.random() < atkShare;
@@ -1086,7 +1183,8 @@ async function adminModerationInner(user, body) {
   if (action === "mute") {
     const { character_id, minutes, reason } = body;
     if (!reason) return { status: 400, body: { error: "reason required" } };
-    const until = new Date(Date.now() + (minutes || 30) * 60000).toISOString();
+    const muteMinutes = minutes || DEFAULT_ADMIN_MUTE_MINUTES;
+    const until = new Date(Date.now() + muteMinutes * MILLISECONDS_PER_MINUTE).toISOString();
     const list = entities.PlayerModeration.filter({ character_id });
     let rec = list[0];
     const before = rec ? { ...rec } : null;
@@ -1099,7 +1197,7 @@ async function adminModerationInner(user, body) {
       reason,
       beforeState: before,
       afterState: { chat_muted_until: until },
-      changeSet: { minutes: minutes || 30 },
+      changeSet: { minutes: muteMinutes },
     });
     return { status: 200, body: { success: true, moderation: rec } };
   }
@@ -1178,10 +1276,15 @@ async function adminModerationInner(user, body) {
     const { subject, body: mailBody, rewards, recipients, expires_days, reason } = body;
     let recipientIds = recipients || [];
     if (recipients === "all") {
-      recipientIds = entities.Character.list("-created_date", 2000).map((c) => c.id);
+      recipientIds = entities.Character.list(
+        "-created_date",
+        SYSTEM_MAIL_RECIPIENT_QUERY_LIMIT,
+      ).map((c) => c.id);
     }
     const hasRewards = !!(rewards && Object.keys(rewards).length);
-    const expiresAt = expires_days ? new Date(Date.now() + expires_days * 86400000).toISOString() : null;
+    const expiresAt = expires_days
+      ? new Date(Date.now() + expires_days * MILLISECONDS_PER_DAY).toISOString()
+      : null;
     const records = recipientIds.map((rid) => ({
       owner_id: rid,
       from_id: "system",
@@ -1369,7 +1472,7 @@ async function adminModerationInner(user, body) {
         amount: Math.abs(wagerableDelta),
         category: wagerableDelta > 0 ? "admin_purchased" : "admin_remove",
         reasonCode: wagerableDelta > 0 ? "admin_grant_wagerable" : "admin_remove_wagerable",
-        idempotencyKey: `admin_nova_w_${live.id}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+        idempotencyKey: `admin_nova_w_${live.id}_${Date.now()}_${Math.floor(Math.random() * ADMIN_OPERATION_RANDOM_RANGE)}`,
         balanceType: NovaBalanceTypes.WAGERABLE,
         debitPolicy: NovaBalanceTypes.WAGERABLE,
       });
@@ -1384,7 +1487,7 @@ async function adminModerationInner(user, body) {
         amount: Math.abs(promoDelta),
         category: "admin_promotional",
         reasonCode: promoDelta > 0 ? "admin_grant_promotional" : "admin_remove_promotional",
-        idempotencyKey: `admin_nova_p_${live.id}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+        idempotencyKey: `admin_nova_p_${live.id}_${Date.now()}_${Math.floor(Math.random() * ADMIN_OPERATION_RANDOM_RANGE)}`,
         balanceType: NovaBalanceTypes.PROMOTIONAL,
         debitPolicy: NovaBalanceTypes.PROMOTIONAL,
       });
@@ -1392,7 +1495,10 @@ async function adminModerationInner(user, body) {
       Object.assign(patch, mut.patch);
     }
     if (deltas.fuel != null && deltas.fuel !== 0) {
-      patch.fuel = Math.max(0, Math.min(ch.max_fuel || 100, (ch.fuel || 0) + Number(deltas.fuel)));
+      patch.fuel = Math.max(
+        0,
+        Math.min(ch.max_fuel || FUEL_MAX, (ch.fuel || 0) + Number(deltas.fuel)),
+      );
     }
     if (deltas.arena_attempts != null && deltas.arena_attempts !== 0) {
       patch.arena_attempts_left = Math.max(0, (ch.arena_attempts_left || 0) + Number(deltas.arena_attempts));
@@ -1491,9 +1597,9 @@ async function adminModerationInner(user, body) {
       nova_dual_balance_v1: true, unspent_stat_points: 0, attribute_purchases: 0,
       attribute_purchases_by_stat: { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 },
       discovered_species: [], collected_artifacts: [], collected_relics: [],
-      arena_wins: 0, arena_losses: 0, arena_rating: 1000,
+      arena_wins: 0, arena_losses: 0, arena_rating: ARENA_DEFAULT_RATING,
       arena_streak: 0, arena_max_streak: 0, arena_battles: 0,
-      fuel: ch.max_fuel || 100, fuel_purchases: 0,
+      fuel: ch.max_fuel || FUEL_MAX, fuel_purchases: 0,
       equipped_items: {}, active_mission_id: "", mission_end_time: "",
       missions_completed: 0, highest_sector: 1, dungeon_clears: 0,
       highest_damage: 0, total_stardust_earned: 0,
@@ -1504,7 +1610,12 @@ async function adminModerationInner(user, body) {
       targetAccountId: ch.created_by_id,
       reason,
       beforeState: before,
-      afterState: { level: 1, stardust: 0, nova_crystals: 0, arena_rating: 1000 },
+      afterState: {
+        level: 1,
+        stardust: 0,
+        nova_crystals: 0,
+        arena_rating: ARENA_DEFAULT_RATING,
+      },
     });
     return { status: 200, body: { success: true, character: updated } };
   }
@@ -1597,10 +1708,16 @@ async function adminModerationInner(user, body) {
   if (action === "create_promo_code") {
     const cleanCode = String(body.code || "").trim().toUpperCase();
     if (!cleanCode) return { status: 400, body: { error: "Code required" } };
-    if (!/^[A-Z0-9_-]{2,48}$/.test(cleanCode)) {
+    if (
+      cleanCode.length < PROMO_CODE_MIN_LENGTH
+      || cleanCode.length > PROMO_CODE_MAX_LENGTH
+      || !PROMO_CODE_ALLOWED_CHARACTERS.test(cleanCode)
+    ) {
       return {
         status: 400,
-        body: { error: "Code must be 2–48 chars: letters, numbers, _ or -" },
+        body: {
+          error: `Code must be ${PROMO_CODE_MIN_LENGTH}–${PROMO_CODE_MAX_LENGTH} chars: letters, numbers, _ or -`,
+        },
       };
     }
     const existing = entities.PromoCode.filter({}).find(
@@ -1683,8 +1800,8 @@ async function adminModerationInner(user, body) {
     }
     if (action === "arena_suspend" || action === "suspend") {
       arenaSuspended = true;
-      const h = Math.max(1, Number(hours) || 24);
-      suspendedUntil = new Date(Date.now() + h * 3600000).toISOString();
+      const h = Math.max(1, Number(hours) || DEFAULT_ARENA_SUSPENSION_HOURS);
+      suspendedUntil = new Date(Date.now() + h * MILLISECONDS_PER_HOUR).toISOString();
     }
     if (action === "arena_unsuspend" || action === "unsuspend") {
       arenaSuspended = false;
@@ -1847,7 +1964,10 @@ export async function GetCharactersByIds(user, body = {}) {
     const character = await myCharacter(user);
     if (!character) return { status: 404, body: { error: "No character" } };
     const ids = Array.isArray(body.ids) ? body.ids : [];
-    return socialOk({ success: true, characters: getCharactersByIds(ids.slice(0, 50)) });
+    return socialOk({
+      success: true,
+      characters: getCharactersByIds(ids.slice(0, CHARACTER_ID_BATCH_LIMIT)),
+    });
   } catch (err) {
     return socialCatch(err);
   }
@@ -1858,7 +1978,10 @@ export async function ListPrivateConversations(user, _body = {}) {
   try {
     const character = await myCharacter(user);
     if (!character) return { status: 404, body: { error: "No character" } };
-    const all = entities.PrivateConversation.list("-last_message_at", 200) || [];
+    const all = entities.PrivateConversation.list(
+      "-last_message_at",
+      CONVERSATION_LIST_LIMIT,
+    ) || [];
     const mine = all.filter((c) => (c.participant_ids || []).includes(character.id));
     const otherIds = mine
       .map((c) => (c.participant_ids || []).find((id) => id && id !== character.id) || "")
@@ -1873,7 +1996,7 @@ export async function ListPrivateConversations(user, _body = {}) {
           entities.PrivateMessage.filter(
             { conversation_id: c.id, recipient_id: character.id, read_by_recipient: false },
             null,
-            100,
+            CONVERSATION_UNREAD_QUERY_LIMIT,
           ) || []
         ).length;
       return {
@@ -1899,7 +2022,10 @@ export async function GetChatHistory(user, body = {}) {
     const character = await myCharacter(user);
     if (!character) return { status: 404, body: { error: "No character" } };
     const channel = String(body.channel || "global").toLowerCase();
-    const lim = Math.max(1, Math.min(100, Number(body.limit) || 50));
+    const lim = Math.max(
+      1,
+      Math.min(MAX_CHAT_HISTORY_LIMIT, Number(body.limit) || DEFAULT_CHAT_HISTORY_LIMIT),
+    );
     if (channel === "global") {
       const messages = entities.ChatMessage.list("-created_date", lim) || [];
       return socialOk({ success: true, messages: messages.reverse() });
@@ -1909,7 +2035,7 @@ export async function GetChatHistory(user, body = {}) {
       const recipientId = String(body.recipient_id || "").trim();
       let convId = conversationId;
       if (!convId && recipientId) {
-        const convs = entities.PrivateConversation.list(null, 10000) || [];
+        const convs = entities.PrivateConversation.list(null, CONVERSATION_SCAN_LIMIT) || [];
         const found = convs.find((c) => {
           const p = c.participant_ids || [];
           return p.includes(character.id) && p.includes(recipientId);
@@ -2201,7 +2327,7 @@ export async function MarkConversationRead(user, body = {}) {
       entities.PrivateMessage.filter(
         { conversation_id: conversationId, recipient_id: character.id, read_by_recipient: false },
         null,
-        200,
+        MARK_CONVERSATION_READ_LIMIT,
       ) || [];
     for (const m of msgs) {
       entities.PrivateMessage.update(m.id, { read_by_recipient: true });

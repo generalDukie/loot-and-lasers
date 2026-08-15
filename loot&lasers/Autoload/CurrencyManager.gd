@@ -17,6 +17,14 @@ const CURRENCY_NOVA := "nova_crystals"
 const CURRENCY_IDS := [CURRENCY_FUEL, CURRENCY_STARDUST, CURRENCY_NOVA]
 const SOURCE_CHARACTER := "node_character"
 const SOURCE_REALTIME := "wallet_updated"
+const BALANCE_COMPARISON_EPSILON := 0.0000001
+const FUEL_DISPLAY_STEP := 0.01
+const NOVA_DISPLAY_STEP := 0.5
+const NOVA_HALF_UNITS_PER_DISPLAY_UNIT := 2.0
+const NOVA_HALF_UNIT_STORAGE_SCALE := 2
+const WALLET_SCHEMA_VERSION := 2
+const MAX_SEEN_TRANSACTION_IDS := 128
+const MILLISECONDS_PER_SECOND := 1_000.0
 
 var wallet: Dictionary = {}
 var loading := false
@@ -79,13 +87,13 @@ func nova_promotional() -> float:
 
 
 func can_afford(currency_id: String, amount: float) -> bool:
-	return amount >= 0.0 and float(get_balance(currency_id)) + 0.0000001 >= amount
+	return amount >= 0.0 and float(get_balance(currency_id)) + BALANCE_COMPARISON_EPSILON >= amount
 
 
 func format_balance(currency_id: String) -> String:
 	var value: float = float(get_balance(currency_id))
 	if currency_id == CURRENCY_FUEL:
-		var rounded := snappedf(float(value), 0.01)
+		var rounded := snappedf(float(value), FUEL_DISPLAY_STEP)
 		return str(int(rounded)) if is_equal_approx(rounded, float(int(rounded))) else "%.2f" % rounded
 	if currency_id == CURRENCY_NOVA:
 		# Wallet always shows display Nova snapped to the nearest 0.5.
@@ -205,7 +213,7 @@ func apply_character_snapshot(
 		_last_server_revision = character_revision
 	if not transaction_id.is_empty():
 		_seen_transaction_ids[transaction_id] = true
-		if _seen_transaction_ids.size() > 128:
+		if _seen_transaction_ids.size() > MAX_SEEN_TRANSACTION_IDS:
 			_seen_transaction_ids.erase(_seen_transaction_ids.keys()[0])
 
 	var changed: Array = []
@@ -224,11 +232,11 @@ func apply_character_snapshot(
 	var nova_w := _read_nova_split(character, "nova_wagerable", "nova_wagerable_half")
 	var nova_p := _read_nova_split(character, "nova_promotional", "nova_promotional_half")
 	wallet = {
-		"wallet_version": 2,
+		"wallet_version": WALLET_SCHEMA_VERSION,
 		"balances": balances,
 		"character_id": character_id,
 		"source": source,
-		"updated_at": int(Time.get_unix_time_from_system() * 1000.0),
+		"updated_at": int(Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND),
 		"last_transaction_id": transaction_id,
 		"revision": _last_applied_sequence,
 		"server_revision": _last_server_revision,
@@ -315,7 +323,9 @@ func _read_nova_split(character: Dictionary, display_key: String, half_key: Stri
 	if character.has(display_key):
 		return _snap_nova_display(float(character.get(display_key, 0)))
 	if character.has(half_key):
-		return _snap_nova_display(float(character.get(half_key, 0)) / 2.0)
+		return _snap_nova_display(
+			float(character.get(half_key, 0)) / NOVA_HALF_UNITS_PER_DISPLAY_UNIT
+		)
 	# Prefer previous wallet value over treating total as wagerable.
 	return float(wallet.get(display_key, 0.0))
 
@@ -329,22 +339,22 @@ func _empty_balances() -> Dictionary:
 
 
 func _snap_nova_display(value: float) -> float:
-	return maxf(0.0, snappedf(value, 0.5))
+	return maxf(0.0, snappedf(value, NOVA_DISPLAY_STEP))
 
 
 ## Write display Nova onto a Character dict without poisoning half-unit storage.
 func _apply_nova_display_to_character(character: Dictionary, display_raw: float) -> void:
 	var display := _snap_nova_display(display_raw)
 	character["nova_display"] = display
-	if int(character.get("economy_nova_scale", 1)) == 2:
-		character[CURRENCY_NOVA] = int(round(display * 2.0))
+	if int(character.get("economy_nova_scale", 1)) == NOVA_HALF_UNIT_STORAGE_SCALE:
+		character[CURRENCY_NOVA] = int(round(display * NOVA_HALF_UNITS_PER_DISPLAY_UNIT))
 	else:
 		character[CURRENCY_NOVA] = display
 
 
 func _normalize_balance(currency_id: String, value: Variant) -> Variant:
 	if currency_id == CURRENCY_FUEL:
-		return maxf(0.0, snappedf(float(value), 0.01))
+		return maxf(0.0, snappedf(float(value), FUEL_DISPLAY_STEP))
 	if currency_id == CURRENCY_NOVA:
 		return _snap_nova_display(float(value))
 	return maxi(0, int(value))
@@ -361,8 +371,8 @@ func _nova_display_from_character(character: Dictionary) -> float:
 			float(character.get("nova_wagerable", 0)) + float(character.get("nova_promotional", 0))
 		)
 	var raw := float(character.get(CURRENCY_NOVA, 0))
-	if int(character.get("economy_nova_scale", 1)) == 2:
-		return _snap_nova_display(raw / 2.0)
+	if int(character.get("economy_nova_scale", 1)) == NOVA_HALF_UNIT_STORAGE_SCALE:
+		return _snap_nova_display(raw / NOVA_HALF_UNITS_PER_DISPLAY_UNIT)
 	return _snap_nova_display(raw)
 
 

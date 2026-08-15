@@ -32,10 +32,17 @@ func _run() -> void:
 	await _test_mutation_is_not_retried_against_stub()
 	if _failed:
 		return
+	# Character changes normally wake managers such as TutorialManager, which may
+	# start authenticated production requests. Keep this contract test isolated
+	# from saved user sessions while it exercises the authoritative cache helpers.
+	var game_signals_were_blocked := GameManager.is_blocking_signals()
+	GameManager.set_block_signals(true)
 	_test_authoritative_response_application()
 	if _failed:
+		GameManager.set_block_signals(game_signals_were_blocked)
 		return
 	_test_logout_clears_loading_state()
+	GameManager.set_block_signals(game_signals_were_blocked)
 	if _failed:
 		return
 

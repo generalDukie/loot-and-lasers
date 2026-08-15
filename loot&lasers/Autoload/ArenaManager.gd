@@ -13,6 +13,17 @@ signal arena_error(error: String)
 signal loading_changed(loading: bool)
 signal battle_state_changed(battling: bool)
 
+const DEFAULT_ARENA_RATING := 1_000
+const EQUIPPED_ITEM_QUERY_LIMIT := 20
+const DEFAULT_LEADERBOARD_LIMIT := 100
+const MAX_LEADERBOARD_LIMIT := 100
+const DEFAULT_NEARBY_RADIUS := 5
+const MAX_NEARBY_RADIUS := 25
+const BOARD_HASH_MULTIPLIER := 33
+const BOARD_HASH_MODULUS := 2_147_483_647
+const MILLISECONDS_PER_SECOND := 1_000.0
+const DEFAULT_BOT_RAID_BATCH := 2
+
 var opponents: Array = []
 var equipped_items: Array = []
 var free_battles_left: int = ArenaRules.DAILY_FREE_BATTLES
@@ -70,7 +81,12 @@ func is_battling() -> bool:
 
 
 func get_rating() -> int:
-	return int(arena_state.get("rating", GameManager.active_character.get("arena_rating", 1000)))
+	return int(
+		arena_state.get(
+			"rating",
+			GameManager.active_character.get("arena_rating", DEFAULT_ARENA_RATING),
+		)
+	)
 
 
 func get_rank() -> int:
@@ -125,7 +141,7 @@ func _apply_board_from_payload(data: Dictionary) -> void:
 	opponents = _map_opponent_cards(data.get("opponents", []))
 	var expires := _iso_field(data.get("expires_at", null))
 	if not expires.is_empty():
-		refresh_at_unix_ms = _parse_iso_unix(expires) * 1000
+		refresh_at_unix_ms = int(_parse_iso_unix(expires) * MILLISECONDS_PER_SECOND)
 	opponents_loaded.emit(opponents)
 
 
@@ -150,7 +166,9 @@ func _apply_arena_state(data: Dictionary) -> void:
 	elif arena_state.has("arena_attempts_left"):
 		free_battles_left = int(arena_state["arena_attempts_left"])
 	if typeof(GameManager.active_character) == TYPE_DICTIONARY and not GameManager.active_character.is_empty():
-		GameManager.active_character["arena_rating"] = int(arena_state.get("rating", 1000))
+		GameManager.active_character["arena_rating"] = int(
+			arena_state.get("rating", DEFAULT_ARENA_RATING)
+		)
 		GameManager.active_character["arena_wins"] = int(arena_state.get("wins", 0))
 		GameManager.active_character["arena_losses"] = int(arena_state.get("losses", 0))
 		GameManager.active_character["arena_streak"] = int(arena_state.get("win_streak", 0))
@@ -210,7 +228,10 @@ func load_equipped() -> Array:
 	var res: Dictionary = await GameApiClient.request(
 		"POST",
 		"/api/entities/Item/filter",
-		{"query": {"character_id": cid, "is_equipped": true}, "limit": 20},
+		{
+			"query": {"character_id": cid, "is_equipped": true},
+			"limit": EQUIPPED_ITEM_QUERY_LIMIT,
+		},
 		true
 	)
 	equipped_items = []
@@ -255,13 +276,13 @@ func refresh_opponents(_charge: bool = false) -> Dictionary:
 	return await load_opponents()
 
 
-func load_rankings(_character_id: String = "", _cursor: String = "", limit: int = 100, offset: int = 0) -> Dictionary:
+func load_rankings(_character_id: String = "", _cursor: String = "", limit: int = DEFAULT_LEADERBOARD_LIMIT, offset: int = 0) -> Dictionary:
 	if _busy:
 		return _fail("Arena request already in progress")
 	_busy = true
 	_set_loading(true)
 	var res: Dictionary = await GameApiClient.invoke("GetArenaLeaderboard", {
-		"limit": clampi(limit, 1, 100),
+		"limit": clampi(limit, 1, MAX_LEADERBOARD_LIMIT),
 		"offset": maxi(0, offset),
 	})
 	_busy = false
@@ -276,7 +297,7 @@ func load_rankings(_character_id: String = "", _cursor: String = "", limit: int 
 
 
 ## Nearby window around the active character (server rank; not client-computed).
-func load_nearby_rankings(radius: int = 5) -> Dictionary:
+func load_nearby_rankings(radius: int = DEFAULT_NEARBY_RADIUS) -> Dictionary:
 	if _busy:
 		return _fail("Arena request already in progress")
 	_busy = true
@@ -285,7 +306,7 @@ func load_nearby_rankings(radius: int = 5) -> Dictionary:
 		"limit": 1,
 		"offset": 0,
 		"nearby": true,
-		"nearby_radius": clampi(radius, 0, 25),
+		"nearby_radius": clampi(radius, 0, MAX_NEARBY_RADIUS),
 	})
 	_busy = false
 	_set_loading(false)
@@ -468,7 +489,7 @@ func finish_battle() -> Dictionary:
 			print("[ArenaOffers] %s" % JSON.stringify(debug_offers))
 		var expires := str(data.get("expires_at", ""))
 		if not expires.is_empty():
-			refresh_at_unix_ms = _parse_iso_unix(expires) * 1000
+			refresh_at_unix_ms = int(_parse_iso_unix(expires) * MILLISECONDS_PER_SECOND)
 		opponents_loaded.emit(opponents)
 	else:
 		# Finish should have reminted; reload current board (server ignores force).
@@ -566,7 +587,7 @@ func recover_match(combat_id: String = "") -> Dictionary:
 	return {"ok": true, "data": data}
 
 
-func process_bot_raids(_limit: int = 2) -> Dictionary:
+func process_bot_raids(_limit: int = DEFAULT_BOT_RAID_BATCH) -> Dictionary:
 	return {"ok": true, "raids": []}
 
 
@@ -579,7 +600,12 @@ func resolve_revenge_opponent(match: Dictionary) -> Dictionary:
 		"character_id": oid,
 		"realCharacterId": oid,
 		"name": str(match.get("opponent_name", "Rival")),
-		"arena_rating": int(match.get("opponent_rating_before", match.get("opponent_rating", 1000))),
+		"arena_rating": int(
+			match.get(
+				"opponent_rating_before",
+				match.get("opponent_rating", DEFAULT_ARENA_RATING),
+			)
+		),
 		"isBot": false,
 	}
 
@@ -614,7 +640,7 @@ func cooldown_ends_unix_ms() -> int:
 	if not end_iso.is_empty():
 		var end_unix := _parse_iso_unix(end_iso)
 		if end_unix > 0:
-			return end_unix * 1000
+			return int(end_unix * MILLISECONDS_PER_SECOND)
 	var start := _iso_field(GameManager.active_character.get("arena_cooldown_at", null))
 	if start.is_empty():
 		start = _iso_field(arena_state.get("arena_cooldown_at", null))
@@ -623,7 +649,7 @@ func cooldown_ends_unix_ms() -> int:
 	var start_unix := _parse_iso_unix(start)
 	if start_unix <= 0:
 		return 0
-	return start_unix * 1000 + ArenaRules.BATTLE_COOLDOWN_MS
+	return int(start_unix * MILLISECONDS_PER_SECOND) + ArenaRules.BATTLE_COOLDOWN_MS
 
 
 func cooldown_active() -> bool:
@@ -768,7 +794,9 @@ func _map_opponent_cards(raw: Variant) -> Array:
 			"class": str(r.get("class", "Vanguard")),
 			"race": str(r.get("race", "")),
 			"level": int(r.get("level", 1)),
-			"arena_rating": int(r.get("arena_rating", r.get("rating", 1000))),
+			"arena_rating": int(
+				r.get("arena_rating", r.get("rating", DEFAULT_ARENA_RATING))
+			),
 			"matchup": str(r.get("matchup", "even")),
 			"isBot": is_bot,
 			"arena_bot_id": r.get("arena_bot_id", null),
@@ -790,7 +818,7 @@ func _shuffle_board_slots(cards: Array) -> Array:
 		if typeof(card) != TYPE_DICTIONARY:
 			continue
 		var oid := str((card as Dictionary).get("offer_id", ""))
-		seed = int((seed * 33 + oid.hash()) % 2147483647)
+		seed = int((seed * BOARD_HASH_MULTIPLIER + oid.hash()) % BOARD_HASH_MODULUS)
 		if seed <= 0:
 			seed = 1
 	var rng := RandomNumberGenerator.new()
@@ -805,7 +833,7 @@ func _shuffle_board_slots(cards: Array) -> Array:
 
 
 func _now_unix_ms() -> int:
-	return int(Time.get_unix_time_from_system() * 1000.0)
+	return int(Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND)
 
 
 func _iso_field(value: Variant) -> String:

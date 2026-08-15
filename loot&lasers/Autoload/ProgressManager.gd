@@ -2,6 +2,9 @@ extends Node
 ## Daily login + achievements / titles.
 
 const PROMPT_CFG := "user://godot_daily_prompt.cfg"
+const MILLISECONDS_PER_SECOND := 1_000
+const ET_STANDARD_OFFSET_HOURS := 5
+const SECONDS_PER_HOUR := 3_600
 
 var daily_progress: Dictionary = {}
 var last_sync: Dictionary = {}
@@ -43,14 +46,17 @@ func sync_server_time() -> Dictionary:
 		if not server_iso.is_empty():
 			var server_ms := _parse_iso_ms(server_iso)
 			if server_ms > 0:
-				server_offset_ms = server_ms - int(Time.get_unix_time_from_system() * 1000)
+				server_offset_ms = (
+					server_ms
+					- int(Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND)
+				)
 		ms_until_daily_reset = int(data.get("msUntilDailyReset", data.get("msUntilNextETMidnight", 0)))
 		last_time_payload = data
 	return res
 
 
 func estimate_server_now_ms() -> int:
-	return int(Time.get_unix_time_from_system() * 1000) + server_offset_ms
+	return int(Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND) + server_offset_ms
 
 
 ## Prefer Node nextDailyResetAtUtc; fallback to local ET approx.
@@ -70,14 +76,16 @@ func _parse_iso_ms(iso: String) -> int:
 	var t := Time.get_unix_time_from_datetime_string(iso)
 	if t <= 0:
 		return 0
-	return int(t * 1000)
+	return int(t * MILLISECONDS_PER_SECOND)
 
 
 ## Prefer server calendar day; fallback approximates America/New_York (UTC−5, no DST).
 func today_et() -> String:
 	if not server_today_et.is_empty():
 		return server_today_et
-	var unix: int = int(Time.get_unix_time_from_system()) - 5 * 3600
+	var unix: int = (
+		int(Time.get_unix_time_from_system()) - ET_STANDARD_OFFSET_HOURS * SECONDS_PER_HOUR
+	)
 	var d := Time.get_datetime_dict_from_unix_time(unix)
 	return "%04d-%02d-%02d" % [int(d.get("year", 2026)), int(d.get("month", 1)), int(d.get("day", 1))]
 

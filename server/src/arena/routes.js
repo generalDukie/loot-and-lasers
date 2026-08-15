@@ -24,6 +24,14 @@ import {
   processIncomingBotRaids,
 } from "./bots.js";
 import { entities } from "../entities.js";
+import { ARENA_DEFAULT_RATING } from "./config.js";
+
+const DEFAULT_AUDIT_LIMIT = 50;
+const MAX_AUDIT_LIMIT = 200;
+const DEFAULT_BOT_LIST_LIMIT = 8;
+const MAX_BOT_LIST_LIMIT = 20;
+const DEFAULT_BOT_RAIDS_PER_REQUEST = 2;
+const MAX_BOT_RAIDS_PER_REQUEST = 3;
 
 function handleErr(res, err) {
   if (err instanceof ArenaError) {
@@ -113,7 +121,7 @@ export function createArenaRouter(express) {
     if (!isAdmin(req.user)) {
       return res.status(403).json({ error: "Admin only", code: ArenaErrors.ARENA_CHALLENGE_NOT_ALLOWED });
     }
-    const limit = Math.min(200, Number(req.query.limit) || 50);
+    const limit = Math.min(MAX_AUDIT_LIMIT, Number(req.query.limit) || DEFAULT_AUDIT_LIMIT);
     res.json({ audit: listRecentAudit(limit) });
   });
 
@@ -125,9 +133,13 @@ export function createArenaRouter(express) {
       if (!ch || ch.created_by_id !== req.user.id) {
         return res.status(403).json({ error: "Not your character" });
       }
-      const limit = Math.min(20, Math.max(1, Number(req.query.limit) || 8));
+      const limit = Math.min(
+        MAX_BOT_LIST_LIMIT,
+        Math.max(1, Number(req.query.limit) || DEFAULT_BOT_LIST_LIMIT),
+      );
       ensureBotPoolForPlayer(ch);
-      const bots = listBotsNearRating(ch.arena_rating || 1000, { limit }).map(botToPublicOpponent);
+      const bots = listBotsNearRating(ch.arena_rating || ARENA_DEFAULT_RATING, { limit })
+        .map(botToPublicOpponent);
       res.json({ bots });
     } catch (err) {
       handleErr(res, err);
@@ -150,7 +162,10 @@ export function createArenaRouter(express) {
           throw err;
         }
         return processIncomingBotRaids(ch, {
-          maxRaids: Math.min(3, Math.max(1, Number(req.body?.max) || 2)),
+          maxRaids: Math.min(
+            MAX_BOT_RAIDS_PER_REQUEST,
+            Math.max(1, Number(req.body?.max) || DEFAULT_BOT_RAIDS_PER_REQUEST),
+          ),
           force: !!req.body?.force && isAdmin(req.user),
         });
       });

@@ -5,6 +5,14 @@ import { broadcastWalletUpdated } from "./realtime.js";
 import { clampStardust } from "./shared/economyFormulas.js";
 
 const MAX_AMOUNT = 1_000_000_000;
+const NOVA_HALF_UNIT_STORAGE_SCALE = 2;
+const LEGACY_NOVA_STORAGE_SCALE = 1;
+const DEFAULT_TOKEN_MAX_LENGTH = 128;
+const OPERATION_TYPE_MAX_LENGTH = 64;
+const FUEL_PRECISION_SCALE = 100;
+const MIN_FUEL_AMOUNT = 0.01;
+const AMOUNT_PRECISION_EPSILON = 1e-9;
+const WALLET_TRANSACTION_ID_LENGTH = 24;
 const OPERATIONS = Object.freeze({
   mission_start_fuel: {
     currency: "fuel", direction: -1, compensation: "mission_start_fuel_refund",
@@ -60,21 +68,27 @@ function parseEntity(row) {
 
 function balancesOf(character) {
   const rawNova = Math.max(0, Math.floor(Number(character?.nova_crystals) || 0));
-  const scale = Number(character?.economy_nova_scale) === 2 ? 2 : 1;
+  const scale = Number(character?.economy_nova_scale) === NOVA_HALF_UNIT_STORAGE_SCALE
+    ? NOVA_HALF_UNIT_STORAGE_SCALE
+    : LEGACY_NOVA_STORAGE_SCALE;
   return {
     fuel: Number(character?.fuel) || 0,
     stardust: Math.max(0, Math.floor(Number(character?.stardust) || 0)),
     // Compatibility wallet returns display Nova (.0 / .5).
-    nova_crystals: scale === 2 ? rawNova / 2 : rawNova,
+    nova_crystals: scale === NOVA_HALF_UNIT_STORAGE_SCALE
+      ? rawNova / NOVA_HALF_UNIT_STORAGE_SCALE
+      : rawNova,
   };
 }
 
 function novaStorageDelta(character, displayDelta) {
-  const scale = Number(character?.economy_nova_scale) === 2 ? 2 : 1;
+  const scale = Number(character?.economy_nova_scale) === NOVA_HALF_UNIT_STORAGE_SCALE
+    ? NOVA_HALF_UNIT_STORAGE_SCALE
+    : LEGACY_NOVA_STORAGE_SCALE;
   return displayDelta * scale;
 }
 
-function requireToken(value, name, max = 128) {
+function requireToken(value, name, max = DEFAULT_TOKEN_MAX_LENGTH) {
   const token = String(value || "").trim();
   if (!token || token.length > max || !/^[A-Za-z0-9:_-]+$/.test(token)) {
     throw walletError(400, `Invalid ${name}`, "INVALID_REQUEST");
@@ -83,15 +97,21 @@ function requireToken(value, name, max = 128) {
 }
 
 function normalizedRequest(input) {
-  const operationType = requireToken(input?.operation_type, "operation_type", 64);
+  const operationType = requireToken(
+    input?.operation_type,
+    "operation_type",
+    OPERATION_TYPE_MAX_LENGTH,
+  );
   const definition = OPERATIONS[operationType];
   if (!definition) throw walletError(400, "Operation is not allowed", "OPERATION_NOT_ALLOWED");
   const rawAmount = Number(input?.amount);
   const amount = definition.currency === "fuel"
-    ? Math.round(rawAmount * 100) / 100
+    ? Math.round(rawAmount * FUEL_PRECISION_SCALE) / FUEL_PRECISION_SCALE
     : rawAmount;
   const validAmount = definition.currency === "fuel"
-    ? Number.isFinite(rawAmount) && amount >= 0.01 && Math.abs(rawAmount - amount) < 1e-9
+    ? Number.isFinite(rawAmount)
+      && amount >= MIN_FUEL_AMOUNT
+      && Math.abs(rawAmount - amount) < AMOUNT_PRECISION_EPSILON
     : Number.isSafeInteger(amount) && amount >= 1;
   if (!validAmount || amount > MAX_AMOUNT) {
     throw walletError(400, "Invalid amount", "INVALID_AMOUNT");
@@ -239,7 +259,7 @@ export function applyWalletOperation(input, { broadcast = true } = {}) {
       storageAfter = request.currency === "stardust"
         ? clampStardust(rawAfter)
         : request.currency === "fuel"
-          ? Math.round(rawAfter * 100) / 100
+          ? Math.round(rawAfter * FUEL_PRECISION_SCALE) / FUEL_PRECISION_SCALE
           : rawAfter;
     }
     const after = storageAfter;
@@ -248,11 +268,13 @@ export function applyWalletOperation(input, { broadcast = true } = {}) {
       "SELECT COALESCE(MAX(revision), 0) + 1 AS revision FROM wallet_operations WHERE account_id = ?"
     ).get(account.id);
     const revision = Number(revisionRow?.revision) || 1;
-    const transactionId = `wallet:${nanoid(24)}`;
+    const transactionId = `wallet:${nanoid(WALLET_TRANSACTION_ID_LENGTH)}`;
     const next = {
       ...character,
       [request.currency]: after,
-      ...(request.currency === "nova_crystals" ? { economy_nova_scale: 2 } : {}),
+      ...(request.currency === "nova_crystals"
+        ? { economy_nova_scale: NOVA_HALF_UNIT_STORAGE_SCALE }
+        : {}),
       wallet_revision: revision,
       updated_date: updatedAt,
     };

@@ -19,6 +19,12 @@ const TAB_DEFS: Array = [
 	{"id": "ops", "label": "Ops"},
 ]
 
+const REFERENCE_PREVIEW_LENGTH := 12
+const ID_PREVIEW_LENGTH := 8
+const AUDIT_ID_PREVIEW_LENGTH := 10
+const INSPECT_JSON_PREVIEW_LENGTH := 1_200
+const OPS_JSON_PREVIEW_LENGTH := 1_500
+
 var _status: Label
 var _tabs: HBoxContainer
 var _tab_bodies: Dictionary = {}
@@ -303,9 +309,9 @@ func _run(label: String, work: Callable) -> void:
 	var audit := str(res.get("audit_id", ""))
 	var corr := str(res.get("correlation_id", ""))
 	if not audit.is_empty() and msg.find("audit=") < 0:
-		msg = "%s · audit=%s" % [msg, audit.substr(0, 12)]
+		msg = "%s · audit=%s" % [msg, audit.substr(0, REFERENCE_PREVIEW_LENGTH)]
 	elif not corr.is_empty() and msg.find("corr=") < 0:
-		msg = "%s · corr=%s" % [msg, corr.substr(0, 12)]
+		msg = "%s · corr=%s" % [msg, corr.substr(0, REFERENCE_PREVIEW_LENGTH)]
 	_status.text = msg
 
 
@@ -406,7 +412,7 @@ func _make_report_row(row: Dictionary) -> Control:
 	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lab.text = "%s · %s → %s · %s" % [
-		str(row.get("id", "")).substr(0, 8),
+		str(row.get("id", "")).substr(0, ID_PREVIEW_LENGTH),
 		str(row.get("reporter_name", row.get("reporter_id", "?"))),
 		str(row.get("reported_name", row.get("reported_id", "?"))),
 		str(row.get("reason", "")),
@@ -492,7 +498,10 @@ func _build_players() -> void:
 				var inv_count := 0
 				if typeof(inv) == TYPE_DICTIONARY:
 					inv_count = int(inv.get("count", 0))
-				_detail.text = "[b]Inspect[/b] ok · inventory=%s\n%s" % [inv_count, JSON.stringify(res.data).substr(0, 1200)]
+				_detail.text = "[b]Inspect[/b] ok · inventory=%s\n%s" % [
+					inv_count,
+					JSON.stringify(res.data).substr(0, INSPECT_JSON_PREVIEW_LENGTH),
+				]
 			return res
 		)
 	)
@@ -650,7 +659,7 @@ func _on_search_players() -> void:
 			var b := _btn("%s  ·  Lv%s  ·  %s" % [
 				str(row.get("name", "?")),
 				ClientUi.format_level(row.get("level", 1)),
-				str(row.get("id", "")).substr(0, 8),
+				str(row.get("id", "")).substr(0, ID_PREVIEW_LENGTH),
 			])
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			var snap: Dictionary = row
@@ -662,7 +671,7 @@ func _on_search_players() -> void:
 			var ab := _btn("Account · %s · role=%s · %s" % [
 				str(acc.get("email", "?")),
 				str(acc.get("role", "user")),
-				str(acc.get("id", "")).substr(0, 8),
+				str(acc.get("id", "")).substr(0, ID_PREVIEW_LENGTH),
 			])
 			ab.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			var asnap: Dictionary = acc
@@ -744,7 +753,10 @@ func _build_guild() -> void:
 				if typeof(row) != TYPE_DICTIONARY:
 					continue
 				var mid := str(row.get("character_id", row.get("id", "")))
-				var b := _btn("%s · %s" % [str(row.get("name", row.get("character_name", "?"))), mid.substr(0, 8)])
+				var b := _btn("%s · %s" % [
+					str(row.get("name", row.get("character_name", "?"))),
+					mid.substr(0, ID_PREVIEW_LENGTH),
+				])
 				b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 				b.pressed.connect(func() -> void:
 					_new_leader_id.text = mid
@@ -797,8 +809,8 @@ func _on_load_guilds() -> void:
 			var gid := str(g.get("id", ""))
 			var b := _btn("%s · leader=%s · %s" % [
 				str(g.get("name", "?")),
-				str(g.get("leader_id", "")).substr(0, 8),
-				gid.substr(0, 8),
+				str(g.get("leader_id", "")).substr(0, ID_PREVIEW_LENGTH),
+				gid.substr(0, ID_PREVIEW_LENGTH),
 			])
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			b.pressed.connect(func() -> void:
@@ -1282,7 +1294,7 @@ func _fill_schedule_list(res: Dictionary) -> void:
 		lab.text = "%s · enabled=%s · %s" % [
 			str(row.get("name", row.get("id", "?"))),
 			str(row.get("enabled", true)),
-			str(row.get("id", "")).substr(0, 8),
+			str(row.get("id", "")).substr(0, ID_PREVIEW_LENGTH),
 		]
 		box.add_child(lab)
 		var sid := str(row.get("id", ""))
@@ -1496,7 +1508,7 @@ func _build_ops() -> void:
 		_run("Loading runtime config…", func() -> Dictionary:
 			var res: Dictionary = await AdminManager.get_runtime_config()
 			if res.ok:
-				_ops_out.text = "[b]Runtime config[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+				_ops_out.text = "[b]Runtime config[/b]\n%s" % JSON.stringify(res.data).substr(0, OPS_JSON_PREVIEW_LENGTH)
 			return res
 		)
 	)
@@ -1567,7 +1579,7 @@ func _build_ops() -> void:
 		_run("Running integrity audit…", func() -> Dictionary:
 			var res: Dictionary = await AdminManager.run_integrity_audit(_cid(), "", false)
 			if res.ok:
-				_ops_out.text = "[b]Integrity audit[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+				_ops_out.text = "[b]Integrity audit[/b]\n%s" % JSON.stringify(res.data).substr(0, OPS_JSON_PREVIEW_LENGTH)
 			return res
 		)
 	)
@@ -1586,7 +1598,7 @@ func _build_ops() -> void:
 				_repair_type.get_item_text(_repair_type.selected), _cid(), false
 			)
 			if res.ok:
-				_ops_out.text = "[b]Repair dry-run[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+				_ops_out.text = "[b]Repair dry-run[/b]\n%s" % JSON.stringify(res.data).substr(0, OPS_JSON_PREVIEW_LENGTH)
 			return res
 		)
 	)
@@ -1601,7 +1613,7 @@ func _build_ops() -> void:
 					_repair_type.get_item_text(_repair_type.selected), _cid(), true
 				)
 				if res.ok:
-					_ops_out.text = "[b]Repair applied[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+					_ops_out.text = "[b]Repair applied[/b]\n%s" % JSON.stringify(res.data).substr(0, OPS_JSON_PREVIEW_LENGTH)
 				return res
 			)
 		)
@@ -1619,7 +1631,7 @@ func _build_ops() -> void:
 		_run("Dry-run migration…", func() -> Dictionary:
 			var res: Dictionary = await AdminManager.run_migration(_migration_id.text.strip_edges(), false)
 			if res.ok:
-				_ops_out.text = "[b]Migration dry-run[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+				_ops_out.text = "[b]Migration dry-run[/b]\n%s" % JSON.stringify(res.data).substr(0, OPS_JSON_PREVIEW_LENGTH)
 			return res
 		)
 	)
@@ -1637,7 +1649,7 @@ func _build_ops() -> void:
 			_run("Applying migration…", func() -> Dictionary:
 				var res: Dictionary = await AdminManager.run_migration(_migration_id.text.strip_edges(), true)
 				if res.ok:
-					_ops_out.text = "[b]Migration applied[/b]\n%s" % JSON.stringify(res.data).substr(0, 1500)
+					_ops_out.text = "[b]Migration applied[/b]\n%s" % JSON.stringify(res.data).substr(0, OPS_JSON_PREVIEW_LENGTH)
 				return res
 			)
 		)
@@ -1716,9 +1728,15 @@ func _fill_kv_list(host: VBoxContainer, res: Dictionary) -> void:
 		if typeof(row) == TYPE_DICTIONARY:
 			lab.text = str(row.get("id", row.get("action", row.get("code", row))))
 			if row.has("action"):
-				lab.text = "%s · %s" % [str(row.get("action")), str(row.get("id", "")).substr(0, 10)]
+				lab.text = "%s · %s" % [
+					str(row.get("action")),
+					str(row.get("id", "")).substr(0, AUDIT_ID_PREVIEW_LENGTH),
+				]
 			elif row.has("status"):
-				lab.text = "%s · %s" % [str(row.get("status")), str(row.get("id", "")).substr(0, 10)]
+				lab.text = "%s · %s" % [
+					str(row.get("status")),
+					str(row.get("id", "")).substr(0, AUDIT_ID_PREVIEW_LENGTH),
+				]
 		else:
 			lab.text = str(row)
 		host.add_child(lab)

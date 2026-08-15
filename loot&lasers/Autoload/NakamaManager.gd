@@ -27,6 +27,8 @@ const RPC_TIMEOUT_SEC := 10.0
 const RPC_TRANSIENT_RETRIES := 2
 ## Base delay between transient retries (seconds); doubles each attempt.
 const RPC_RETRY_BACKOFF_SEC := 0.35
+const MIN_RPC_TIMEOUT_SEC := 0.25
+const MILLISECONDS_PER_SECOND := 1_000.0
 
 ## Sole non-auth RPCs still permitted (read-only client config). Everything else
 ## must go through Node GameApiClient — including profile/inventory/missions/equip.
@@ -687,7 +689,7 @@ func _rpc_once(rpc_id: String, payload: Variant, timeout_sec: float, use_socket:
 	_rpc_worker(rpc_id, encoded, use_socket, box)
 
 	var start_ms := Time.get_ticks_msec()
-	var limit_ms := int(maxf(0.25, timeout_sec) * 1000.0)
+	var limit_ms := int(maxf(MIN_RPC_TIMEOUT_SEC, timeout_sec) * MILLISECONDS_PER_SECOND)
 	while not bool(box.get("done", false)):
 		if Time.get_ticks_msec() - start_ms >= limit_ms:
 			box["abandoned"] = true

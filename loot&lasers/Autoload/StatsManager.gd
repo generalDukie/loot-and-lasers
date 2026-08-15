@@ -4,6 +4,9 @@ extends Node
 ## Emitted whenever an authoritative purchase updates the local character.
 signal character_changed
 
+const CHARACTER_REFRESH_RESULT_INDEX: int = 0
+const MAX_ATTRIBUTE_PURCHASE_BATCH: int = 20
+
 var equipped_items: Array = []
 var all_items: Array = []
 var last_buy: Dictionary = {}
@@ -53,11 +56,14 @@ func apply_inventory_snapshot(data: Dictionary) -> bool:
 	return applied
 
 
-func refresh() -> Dictionary:
-	var res: Dictionary = await MissionManager.refresh_character()
-	await load_equipped()
-	await load_attribute_sheet()
-	return res
+func refresh(force_character: bool = false) -> Dictionary:
+	var requests := AsyncGroup.new()
+	requests.add(MissionManager.refresh_character.bind(force_character))
+	requests.add(load_equipped)
+	requests.add(load_attribute_sheet)
+	var results := await requests.wait()
+	var character_result: Dictionary = results[CHARACTER_REFRESH_RESULT_INDEX]
+	return character_result
 
 
 func load_equipped() -> Array:
@@ -135,7 +141,7 @@ func next_cost(character: Dictionary, stat: String) -> int:
 func buy_attribute(stat: String, count: int = 1) -> Dictionary:
 	if not stat in StatsRules.ATTR_KEYS:
 		return {"ok": false, "error": "Invalid stat", "data": {}}
-	var n := clampi(count, 1, 20)
+	var n := clampi(count, 1, MAX_ATTRIBUTE_PURCHASE_BATCH)
 	var ch: Dictionary = GameManager.active_character
 	var dust := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	n = mini(n, StatsRules.max_affordable_purchases(ch, stat, dust))

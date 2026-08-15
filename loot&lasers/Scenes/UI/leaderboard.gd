@@ -4,14 +4,27 @@ extends Control
 const MEDAL := [Color("#FFD700"), Color("#C0C0C0"), Color("#CD7F32")]
 ## Visual podium column heights for order [2nd, 1st, 3rd] — web h-24 / h-36 / h-20.
 const PODIUM_H := [96.0, 144.0, 80.0]
+const GUILD_PAGE := 50
+const CHARACTER_RANKING_RESULT_INDEX: int = 1
 
 var _status: Label
+var _subtitle: Label
 var _podium: HBoxContainer
 var _list: VBoxContainer
+var _scroll: ScrollContainer
+var _you_bar: PanelContainer
+var _tab_buttons: Array[Button] = []
+var _mode := "character"
 var _busy := false
 var _challenging_id := ""
 var _guild_by_char: Dictionary = {} # character_id -> guild tag
 var _preview_cache: Dictionary = {} # character_id -> preview dict
+var _char_cache: Dictionary = {}
+var _guild_cache: Dictionary = {}
+var _guild_rows: Array = []
+var _guild_offset := 0
+var _guild_has_more := false
+var _guild_loading_more := false
 
 
 func _ready() -> void:
@@ -55,10 +68,13 @@ func _build() -> void:
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	head.add_child(sub)
+	_subtitle = sub
 
 	_status = ClientUi.make_status()
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_status)
+
+	root.add_child(_make_tab_bar())
 
 	# Podium — items_end aligned (shorter pillars sit lower)
 	_podium = HBoxContainer.new()
@@ -72,51 +88,260 @@ func _build() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(scroll)
+	_scroll = scroll
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_list.add_theme_constant_override("separation", 8)
 	TutorialManager.tag_target(_list, "ranks-board")
 	scroll.add_child(_list)
+	scroll.get_v_scroll_bar().changed.connect(_on_scroll_changed)
+
+	_you_bar = PanelContainer.new()
+	_you_bar.visible = false
+	_you_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_you_bar.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+		Color(ClientUi.GOLD, 0.10), Color(ClientUi.GOLD, 0.45), 10, 1
+	))
+	root.add_child(_you_bar)
+
+
+func _make_tab_bar() -> CenterContainer:
+	var wrap := CenterContainer.new()
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 8)
+	wrap.add_child(tabs)
+	_tab_buttons.clear()
+	for spec in [
+		{"id": "character", "label": "CHARACTER RANKING", "icon": "crown", "tint": ClientUi.GOLD},
+		{"id": "guild", "label": "GUILD RANKING", "icon": "users", "tint": ClientUi.CYAN},
+	]:
+		var b := Button.new()
+		b.text = str(spec["label"])
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(220, 40)
+		b.add_theme_font_size_override("font_size", 15)
+		ClientUi.apply_display_font(b)
+		UiIcon.apply_leading_icon(b, str(spec["icon"]), spec["tint"], 16.0)
+		b.set_meta("tab_id", spec["id"])
+		b.set_meta("tint", spec["tint"])
+		b.pressed.connect(_select_tab.bind(str(spec["id"])))
+		tabs.add_child(b)
+		_tab_buttons.append(b)
+	_style_tabs()
+	return wrap
+
+
+func _tab_flat(bg: Color, border: Color) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(10)
+	s.content_margin_left = 14
+	s.content_margin_right = 14
+	s.content_margin_top = 8
+	s.content_margin_bottom = 8
+	return s
+
+
+func _style_tabs() -> void:
+	for b in _tab_buttons:
+		var tid := str(b.get_meta("tab_id", ""))
+		var tint: Color = b.get_meta("tint", ClientUi.CYAN)
+		var active := tid == _mode
+		if active:
+			b.add_theme_stylebox_override("normal", _tab_flat(Color(tint, 0.16), Color(tint, 0.75)))
+			b.add_theme_stylebox_override("hover", _tab_flat(Color(tint, 0.22), Color(tint, 0.9)))
+			b.add_theme_stylebox_override("pressed", _tab_flat(Color(tint, 0.14), Color(tint, 0.65)))
+			b.add_theme_color_override("font_color", tint.lightened(0.12))
+			b.add_theme_color_override("font_hover_color", tint.lightened(0.25))
+			UiIcon.apply_button_icon_colors(b, tint.lightened(0.12))
+		else:
+			b.add_theme_stylebox_override("normal", _tab_flat(Color(0.06, 0.08, 0.12, 0.45), Color(0.4, 0.45, 0.55, 0.35)))
+			b.add_theme_stylebox_override("hover", _tab_flat(Color(0.1, 0.12, 0.16, 0.75), Color(0.5, 0.55, 0.65, 0.5)))
+			b.add_theme_stylebox_override("pressed", _tab_flat(Color(0.08, 0.1, 0.14, 0.6), Color(0.45, 0.5, 0.6, 0.45)))
+			b.add_theme_color_override("font_color", ClientUi.MUTED)
+			b.add_theme_color_override("font_hover_color", ClientUi.TEXT)
+			UiIcon.apply_button_icon_colors(b, ClientUi.MUTED)
+
+
+func _select_tab(id: String) -> void:
+	if id == _mode:
+		return
+	_mode = id
+	_style_tabs()
+	_apply_subtitle()
+	await _refresh()
+
+
+func _apply_subtitle() -> void:
+	if _subtitle == null:
+		return
+	if _mode == "guild":
+		_subtitle.text = "Ranked by guild level · Ties broken by XP, then members"
+	else:
+		_subtitle.text = "Ranked by arena rating · Challenge any eligible rival"
 
 
 func _refresh() -> void:
-	if _busy:
-		return
-	_busy = true
-	_set_status("Loading ladder…", ClientUi.MUTED)
+	if _mode == "guild":
+		await _refresh_guild()
+	else:
+		await _refresh_character()
+
+
+func _clear_board() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	for c in _podium.get_children():
 		c.queue_free()
+	_hide_you_bar()
 
-	await _load_guild_tags()
 
-	# Node GetArenaLeaderboard — authoritative order (rating → wins → id).
-	var board: Dictionary = await ArenaManager.load_rankings()
+func _refresh_character() -> void:
+	_busy = true
+	_set_status("Loading ladder…", ClientUi.MUTED)
+	_clear_board()
+	var requests := AsyncGroup.new()
+	requests.add(_load_guild_tags)
+	requests.add(ArenaManager.load_rankings)
+	var results := await requests.wait()
+	var board: Dictionary = results[CHARACTER_RANKING_RESULT_INDEX]
 	_busy = false
 	if not bool(board.get("ok", false)):
 		_set_status(str(board.get("error", "Failed to load leaderboard")), ClientUi.DANGER)
 		return
-
 	var data: Dictionary = board.get("data", {}) if typeof(board.get("data", null)) == TYPE_DICTIONARY else {}
+	_char_cache = data
+	if _mode != "character":
+		return
+	_render_character(data, true)
+
+
+func _normalize_char_rows(data: Dictionary) -> Array:
 	var raw: Array = data.get("rankings", []) if typeof(data.get("rankings", null)) == TYPE_ARRAY else []
 	var rows: Array = []
 	for row in raw:
 		if typeof(row) != TYPE_DICTIONARY:
 			continue
 		var r: Dictionary = row
-		# Normalize id for challenge / highlight helpers.
 		if str(r.get("id", "")).is_empty() and not str(r.get("character_id", "")).is_empty():
 			r["id"] = r["character_id"]
 		rows.append(r)
+	return rows
 
+
+func _render_character(data: Dictionary, _animate_podium: bool) -> void:
+	var rows: Array = _normalize_char_rows(data)
 	if rows.is_empty():
 		_set_status("No commanders ranked yet.", ClientUi.MUTED)
+		_hide_you_bar()
 		return
-
 	_set_status("", ClientUi.MUTED)
-	_build_podium(rows)
+	_build_podium(rows, false)
 	_build_list(rows)
+	_show_character_you_bar(data, rows)
+
+
+func _refresh_guild(append: bool = false) -> void:
+	if append:
+		if _guild_loading_more or not _guild_has_more:
+			return
+		_guild_loading_more = true
+		_set_status("Loading more guilds…", ClientUi.MUTED)
+		var more: Dictionary = await SocialManager.load_guild_rankings(GUILD_PAGE, _guild_offset, false)
+		_guild_loading_more = false
+		if _mode != "guild":
+			return
+		if not bool(more.get("ok", false)):
+			_set_status(str(more.get("error", "Failed to load guild rankings")), ClientUi.DANGER)
+			return
+		var more_data: Dictionary = more.get("data", {}) if typeof(more.get("data", null)) == TYPE_DICTIONARY else {}
+		_append_guild_page(more_data)
+		return
+	_busy = true
+	_set_status("Loading guild rankings…", ClientUi.MUTED)
+	_clear_board()
+	_guild_rows.clear()
+	_guild_offset = 0
+	var board: Dictionary = await SocialManager.load_guild_rankings(GUILD_PAGE, 0, true)
+	_busy = false
+	if not bool(board.get("ok", false)):
+		_set_status(str(board.get("error", "Failed to load guild rankings")), ClientUi.DANGER)
+		return
+	var data: Dictionary = board.get("data", {}) if typeof(board.get("data", null)) == TYPE_DICTIONARY else {}
+	_guild_cache = data
+	if _mode != "guild":
+		return
+	_render_guild(data, true)
+
+
+func _render_guild(data: Dictionary, reset: bool) -> void:
+	if reset:
+		_guild_rows.clear()
+		_guild_offset = 0
+		for c in _list.get_children():
+			c.queue_free()
+		for c in _podium.get_children():
+			c.queue_free()
+	_append_guild_page(data)
+
+
+func _append_guild_page(data: Dictionary) -> void:
+	var existing := _list.get_node_or_null("LoadMore")
+	if existing:
+		existing.queue_free()
+	var raw: Array = data.get("rankings", []) if typeof(data.get("rankings", null)) == TYPE_ARRAY else []
+	var page: Array = []
+	for row in raw:
+		if typeof(row) == TYPE_DICTIONARY:
+			page.append(row)
+	var was_empty := _guild_rows.is_empty()
+	for r in page:
+		_guild_rows.append(r)
+	_guild_offset = int(data.get("offset", 0)) + int(data.get("limit", page.size()))
+	_guild_has_more = bool(data.get("has_more", false))
+	if _guild_rows.is_empty():
+		_set_status("No guilds ranked yet.", ClientUi.MUTED)
+		_hide_you_bar()
+		return
+	if was_empty:
+		_build_podium(_guild_rows, true)
+		_build_guild_list(_guild_rows)
+	else:
+		_build_guild_list_tail(page)
+	_set_status("", ClientUi.MUTED)
+	if not bool(data.get("in_guild", false)):
+		_set_status("Join or create a guild to compete in the Guild Rankings.", ClientUi.MUTED)
+	_show_guild_you_bar(data)
+	_ensure_load_more_button()
+
+
+func _on_scroll_changed() -> void:
+	if _mode != "guild" or not _guild_has_more or _guild_loading_more or _busy:
+		return
+	if _scroll == null:
+		return
+	var bar := _scroll.get_v_scroll_bar()
+	if bar.max_value <= 0.0:
+		return
+	if bar.value >= bar.max_value - bar.page - 48.0:
+		_refresh_guild(true)
+
+
+func _ensure_load_more_button() -> void:
+	var existing := _list.get_node_or_null("LoadMore")
+	if existing:
+		existing.queue_free()
+	if _mode != "guild" or not _guild_has_more:
+		return
+	var btn := Button.new()
+	btn.name = "LoadMore"
+	btn.text = "Load more guilds"
+	btn.focus_mode = Control.FOCUS_NONE
+	ClientUi.apply_ghost_button(btn)
+	btn.pressed.connect(func() -> void: _refresh_guild(true))
+	_list.add_child(btn)
 
 
 func _load_guild_tags() -> void:
@@ -158,7 +383,7 @@ func _class_key(c: Dictionary) -> String:
 	return str(c.get("class", ""))
 
 
-func _build_podium(rows: Array) -> void:
+func _build_podium(rows: Array, is_guild: bool) -> void:
 	var top3: Array = []
 	for i in mini(3, rows.size()):
 		top3.append(rows[i])
@@ -181,7 +406,8 @@ func _build_podium(rows: Array) -> void:
 		var card := _make_podium_card(
 			int(entry["rank"]),
 			int(entry["visual_i"]),
-			entry["c"]
+			entry["c"],
+			is_guild
 		)
 		col.add_child(card)
 		card.modulate.a = 0.0
@@ -193,16 +419,24 @@ func _build_podium(rows: Array) -> void:
 		_bob_emoji(card.get_node_or_null("Emoji"), float(entry["visual_i"]) * 0.2)
 
 
-func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxContainer:
+func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary, is_guild: bool = false) -> VBoxContainer:
 	var wrap := VBoxContainer.new()
 	wrap.custom_minimum_size.x = 149
 	wrap.alignment = BoxContainer.ALIGNMENT_CENTER
 	wrap.add_theme_constant_override("separation", 4)
-	if str(c.get("id", "")) == str(GameManager.active_character.get("id", "")):
+	var me_id := str(GameManager.active_character.get("id", ""))
+	if is_guild:
+		if bool(c.get("is_self", false)):
+			TutorialManager.tag_target(wrap, "ranks-you")
+	elif str(c.get("id", "")) == me_id:
 		TutorialManager.tag_target(wrap, "ranks-you")
 
 	var medal: Color = MEDAL[medal_rank]
-	var emoji := ClassIcon.make(_class_key(c), ClassIcon.SIZE_PODIUM)
+	var emoji: Control
+	if is_guild:
+		emoji = UiIcon.make("shield", medal, 52.0)
+	else:
+		emoji = ClassIcon.make(_class_key(c), ClassIcon.SIZE_PODIUM)
 	emoji.name = "Emoji"
 	wrap.add_child(emoji)
 
@@ -219,17 +453,30 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	name_l.add_theme_color_override("font_color", medal)
 	ClientUi.apply_display_font(name_l)
 	name_row.add_child(name_l)
-	var gtag := _guild_tag(c)
-	if not gtag.is_empty():
-		var g := Label.new()
-		g.text = "[%s]" % gtag
-		g.add_theme_font_size_override("font_size", 16)
-		g.add_theme_color_override("font_color", Color(ClientUi.VIOLET, 0.85))
-		ClientUi.apply_display_font(g)
-		name_row.add_child(g)
+	if is_guild:
+		var gtag := str(c.get("tag", c.get("emblem", "")))
+		if not gtag.is_empty():
+			var g := Label.new()
+			g.text = "[%s]" % gtag
+			g.add_theme_font_size_override("font_size", 16)
+			g.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.9))
+			ClientUi.apply_display_font(g)
+			name_row.add_child(g)
+	else:
+		var gtag2 := _guild_tag(c)
+		if not gtag2.is_empty():
+			var g2 := Label.new()
+			g2.text = "[%s]" % gtag2
+			g2.add_theme_font_size_override("font_size", 16)
+			g2.add_theme_color_override("font_color", Color(ClientUi.VIOLET, 0.85))
+			ClientUi.apply_display_font(g2)
+			name_row.add_child(g2)
 
 	var meta := Label.new()
-	meta.text = "%s · %sW" % [str(c.get("arena_rating", 1000)), str(c.get("arena_wins", 0))]
+	if is_guild:
+		meta.text = "Lv %s · %s" % [str(c.get("level", c.get("guild_level", 1))), str(c.get("member_count", 0))]
+	else:
+		meta.text = "%s · %sW" % [str(c.get("arena_rating", 1000)), str(c.get("arena_wins", 0))]
 	meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	meta.add_theme_font_size_override("font_size", 17)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -253,9 +500,14 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary) -> VBoxCon
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 	wrap.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var capt: Dictionary = c
+	var guild_click := is_guild
 	wrap.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			GameManager.go_public_profile(capt)
+			if guild_click:
+				if bool(capt.get("is_self", false)):
+					GameManager.go_guild()
+			else:
+				GameManager.go_public_profile(capt)
 	)
 	return wrap
 
@@ -297,6 +549,191 @@ func _build_list(rows: Array) -> void:
 		var c: Dictionary = rows[i]
 		var rank := i + 1
 		_list.add_child(_make_row(rank, c, str(c.get("id", "")) == my_id, my_account))
+
+
+func _build_guild_list(rows: Array) -> void:
+	for i in range(3, rows.size()):
+		var g: Dictionary = rows[i]
+		_list.add_child(_make_guild_row(int(g.get("rank", i + 1)), g, bool(g.get("is_self", false))))
+
+
+func _build_guild_list_tail(page: Array) -> void:
+	for g in page:
+		if typeof(g) != TYPE_DICTIONARY:
+			continue
+		var rank := int(g.get("rank", 0))
+		if rank <= 3:
+			continue
+		_list.add_child(_make_guild_row(rank, g, bool(g.get("is_self", false))))
+
+
+func _make_guild_row(rank: int, g: Dictionary, is_mine: bool) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if is_mine:
+		panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+			Color(ClientUi.GOLD, 0.12), Color(ClientUi.GOLD, 0.50), 12, 1
+		))
+		TutorialManager.tag_target(panel, "ranks-you")
+	else:
+		panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+			Color(0.05, 0.06, 0.09, 0.72), Color(0.35, 0.40, 0.48, 0.40), 12, 1
+		))
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	panel.add_child(row)
+
+	var id_row := HBoxContainer.new()
+	id_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	id_row.add_theme_constant_override("separation", 10)
+	id_row.mouse_filter = Control.MOUSE_FILTER_STOP
+	if is_mine:
+		id_row.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		id_row.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				GameManager.go_guild()
+		)
+	row.add_child(id_row)
+
+	var rank_lab := Label.new()
+	rank_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rank_lab.text = str(rank)
+	rank_lab.custom_minimum_size.x = 37
+	rank_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rank_lab.add_theme_font_size_override("font_size", 19)
+	rank_lab.add_theme_color_override("font_color", ClientUi.GOLD if is_mine else ClientUi.MUTED)
+	ClientUi.apply_display_font(rank_lab)
+	id_row.add_child(rank_lab)
+
+	id_row.add_child(UiIcon.make("shield", ClientUi.CYAN if not is_mine else ClientUi.GOLD, 28.0))
+
+	var mid := VBoxContainer.new()
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 1)
+	id_row.add_child(mid)
+
+	var name_row := HBoxContainer.new()
+	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_row.add_theme_constant_override("separation", 6)
+	mid.add_child(name_row)
+	var name_l := Label.new()
+	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_l.text = str(g.get("name", "?"))
+	name_l.clip_text = true
+	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_l.add_theme_font_size_override("font_size", 17)
+	name_l.add_theme_color_override("font_color", ClientUi.GOLD if is_mine else ClientUi.TEXT)
+	ClientUi.apply_display_font(name_l)
+	name_row.add_child(name_l)
+	var tag := str(g.get("tag", g.get("emblem", "")))
+	if not tag.is_empty():
+		var gchip := PanelContainer.new()
+		gchip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gchip.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
+			Color(ClientUi.CYAN, 0.08), Color(ClientUi.CYAN, 0.30), 4, 1
+		))
+		name_row.add_child(gchip)
+		var gl := Label.new()
+		gl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gl.text = "[%s]" % tag
+		gl.add_theme_font_size_override("font_size", 12)
+		gl.add_theme_color_override("font_color", Color(ClientUi.CYAN, 0.9))
+		ClientUi.apply_display_font(gl)
+		gchip.add_child(gl)
+
+	var leader := str(g.get("leader_name", ""))
+	var detail := Label.new()
+	detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if leader.is_empty():
+		detail.text = "%s members" % str(g.get("member_count", 0))
+	else:
+		detail.text = "%s members · %s" % [str(g.get("member_count", 0)), leader]
+	detail.add_theme_font_size_override("font_size", 16)
+	detail.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_body_font(detail)
+	mid.add_child(detail)
+
+	var lvl := HBoxContainer.new()
+	lvl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lvl.add_theme_constant_override("separation", 4)
+	lvl.add_child(UiIcon.make("shield", ClientUi.GOLD, 16.0))
+	var lvl_lab := Label.new()
+	lvl_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lvl_lab.text = "Lv %s" % str(g.get("level", g.get("guild_level", 1)))
+	lvl_lab.add_theme_font_size_override("font_size", 16)
+	lvl_lab.add_theme_color_override("font_color", ClientUi.GOLD)
+	ClientUi.apply_display_font(lvl_lab)
+	lvl.add_child(lvl_lab)
+	id_row.add_child(lvl)
+	return panel
+
+
+func _hide_you_bar() -> void:
+	if _you_bar == null:
+		return
+	_you_bar.visible = false
+	for c in _you_bar.get_children():
+		c.queue_free()
+
+
+func _fill_you_bar(text: String) -> void:
+	_hide_you_bar()
+	var lab := Label.new()
+	lab.text = text
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", 16)
+	lab.add_theme_color_override("font_color", ClientUi.GOLD)
+	ClientUi.apply_display_font(lab)
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_left", 12)
+	pad.add_theme_constant_override("margin_right", 12)
+	pad.add_theme_constant_override("margin_top", 8)
+	pad.add_theme_constant_override("margin_bottom", 8)
+	pad.add_child(lab)
+	_you_bar.add_child(pad)
+	_you_bar.visible = true
+
+
+func _show_character_you_bar(data: Dictionary, rows: Array) -> void:
+	var my_id := str(GameManager.active_character.get("id", ""))
+	var my_rank := int(data.get("player_rank", 0))
+	var visible := false
+	for r in rows:
+		if typeof(r) == TYPE_DICTIONARY and str(r.get("id", "")) == my_id:
+			visible = true
+			break
+	if my_rank <= 0 or visible:
+		_hide_you_bar()
+		return
+	_fill_you_bar("You — Rank #%s" % str(my_rank))
+
+
+func _show_guild_you_bar(data: Dictionary) -> void:
+	if not bool(data.get("in_guild", false)):
+		_hide_you_bar()
+		return
+	var mine: Variant = data.get("your_guild", null)
+	if typeof(mine) != TYPE_DICTIONARY:
+		_hide_you_bar()
+		return
+	var gid := str(mine.get("guild_id", mine.get("id", "")))
+	var rank := int(data.get("player_guild_rank", mine.get("rank", 0)))
+	var visible := false
+	for r in _guild_rows:
+		if typeof(r) == TYPE_DICTIONARY and str(r.get("guild_id", "")) == gid:
+			visible = true
+			break
+	if rank <= 0:
+		_hide_you_bar()
+		return
+	if visible and rank <= _guild_rows.size() and rank <= 3:
+		# Still show a compact reminder under podium/list for own guild.
+		pass
+	var gname := str(mine.get("name", "Your Guild"))
+	var lvl := str(mine.get("level", mine.get("guild_level", 1)))
+	_fill_you_bar("Your Guild — Rank #%s — Level %s  ·  %s" % [str(rank), lvl, gname])
 
 
 func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> PanelContainer:

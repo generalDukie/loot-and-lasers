@@ -10,6 +10,15 @@ import { TimeError, TimeErrors } from "./errors.js";
 
 const WEEKDAY_TO_NUM = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 const NUM_TO_WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_HOUR = 60;
+const SECONDS_PER_MINUTE = 60;
+const MILLISECONDS_PER_SECOND = 1_000;
+const MAX_DAILY_SEARCH_DAYS_PER_OCCURRENCE = 400;
+const WEEKLY_SEARCH_DAY_COUNT = 8;
+const MONTHLY_SEARCH_MONTH_COUNT = 24;
+const DEFAULT_WEEKDAY = 1;
+const OCCURRENCE_CURSOR_ADVANCE_MS = MILLISECONDS_PER_SECOND;
 
 function parseLocalTime(localTime) {
   const m = String(localTime || "00:00").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
@@ -17,7 +26,11 @@ function parseLocalTime(localTime) {
   const hour = Number(m[1]);
   const minute = Number(m[2]);
   const second = Number(m[3] || 0);
-  if (hour > 23 || minute > 59 || second > 59) {
+  if (
+    hour >= HOURS_PER_DAY ||
+    minute >= MINUTES_PER_HOUR ||
+    second >= SECONDS_PER_MINUTE
+  ) {
     throw new TimeError(TimeErrors.INVALID_RECURRENCE, `Bad localTime: ${localTime}`);
   }
   return { hour, minute, second };
@@ -54,7 +67,11 @@ export function computeNextOccurrences(schedule, from, count = 1) {
   const out = [];
   let cursor = fromDate;
 
-  for (let n = 0; n < count * 400 && out.length < count; n++) {
+  for (
+    let n = 0;
+    n < count * MAX_DAILY_SEARCH_DAYS_PER_OCCURRENCE && out.length < count;
+    n++
+  ) {
     const parts = getZonedParts(cursor, schedule.timeZoneId);
     let candidateDay = { year: parts.year, month: parts.month, day: parts.day };
 
@@ -67,16 +84,16 @@ export function computeNextOccurrences(schedule, from, count = 1) {
       );
       if (todayTry.utc.getTime() > cursor.getTime()) {
         out.push(buildOccurrence(schedule, todayTry, { ...candidateDay, hour, minute, second }));
-        cursor = new Date(todayTry.utc.getTime() + 1000);
+        cursor = new Date(todayTry.utc.getTime() + OCCURRENCE_CURSOR_ADVANCE_MS);
         continue;
       }
       candidateDay = addCalendarDays(candidateDay.year, candidateDay.month, candidateDay.day, 1);
     } else if (recurrence === "weekly") {
       const wanted = Array.isArray(schedule.weekdays) && schedule.weekdays.length
         ? schedule.weekdays.map(Number)
-        : [1]; // default Monday
+        : [DEFAULT_WEEKDAY]; // default Monday
       let found = null;
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < WEEKLY_SEARCH_DAY_COUNT; i++) {
         const day = addCalendarDays(candidateDay.year, candidateDay.month, candidateDay.day, i);
         const noon = zonedLocalToUtc({ ...day, hour: 12, minute: 0, second: 0 }, schedule.timeZoneId).utc;
         const wd = WEEKDAY_TO_NUM[getZonedParts(noon, schedule.timeZoneId).weekday];
@@ -92,17 +109,18 @@ export function computeNextOccurrences(schedule, from, count = 1) {
         }
       }
       if (!found) {
-        cursor = new Date(cursor.getTime() + 86400000);
+        const oneDayMs = HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+        cursor = new Date(cursor.getTime() + oneDayMs);
         continue;
       }
       out.push(buildOccurrence(schedule, found.tryAt, { ...found.day, hour, minute, second }));
-      cursor = new Date(found.tryAt.utc.getTime() + 1000);
+      cursor = new Date(found.tryAt.utc.getTime() + OCCURRENCE_CURSOR_ADVANCE_MS);
       continue;
     } else if (recurrence === "monthly") {
       let dom = Number(schedule.dayOfMonth || 1);
       let y = parts.year;
       let m = parts.month;
-      for (let guard = 0; guard < 24; guard++) {
+      for (let guard = 0; guard < MONTHLY_SEARCH_MONTH_COUNT; guard++) {
         const dim = daysInMonth(y, m);
         const day = Math.min(dom, dim); // last-day policy when month lacks day
         const tryAt = zonedLocalToUtc(
@@ -112,7 +130,7 @@ export function computeNextOccurrences(schedule, from, count = 1) {
         );
         if (tryAt.utc.getTime() > cursor.getTime()) {
           out.push(buildOccurrence(schedule, tryAt, { year: y, month: m, day, hour, minute, second }));
-          cursor = new Date(tryAt.utc.getTime() + 1000);
+          cursor = new Date(tryAt.utc.getTime() + OCCURRENCE_CURSOR_ADVANCE_MS);
           break;
         }
         m += 1;
@@ -133,9 +151,10 @@ export function computeNextOccurrences(schedule, from, count = 1) {
     );
     if (tryAt.utc.getTime() > cursor.getTime()) {
       out.push(buildOccurrence(schedule, tryAt, { ...candidateDay, hour, minute, second }));
-      cursor = new Date(tryAt.utc.getTime() + 1000);
+      cursor = new Date(tryAt.utc.getTime() + OCCURRENCE_CURSOR_ADVANCE_MS);
     } else {
-      cursor = new Date(cursor.getTime() + 3600000);
+      const oneHourMs = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+      cursor = new Date(cursor.getTime() + oneHourMs);
     }
   }
 

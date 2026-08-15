@@ -25,6 +25,8 @@ import {
   getBalances,
   hasNova,
   novaDebitPatch,
+  NOVA_HALF_UNITS_PER_NOVA,
+  ECONOMY_NOVA_SCALE,
 } from "../shared/currencyService.js";
 import {
   ATTR_STAT_KEYS,
@@ -88,6 +90,7 @@ import {
   MISSION_PATRONS,
   MISSION_COLLECTIBLES,
   exploreImageId,
+  EXPLORE_SCENE_COUNT,
   shuffleInPlace,
   pickExploreScenes,
   missionLootTypeFromName,
@@ -137,6 +140,26 @@ import {
   unequipItemForCharacter,
 } from "../shared/inventoryEquipment.js";
 
+const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+const NEXUS_MISSION_REWARD_MULTIPLIER = 1.05;
+const MISSION_REWARD_REROLL_LIMIT = 20;
+const MISSION_REWARD_COLLISION_NUDGE_LIMIT = 64;
+const MISSION_OFFER_ID_RANDOM_RANGE = 1_000_000_000;
+const FUEL_PRECISION_SCALE = 100;
+const FUEL_COMPARISON_TOLERANCE = 0.001;
+const MISSION_BOARD_OFFER_COUNT = 3;
+const LOW_FUEL_OFFER_ID_OFFSET = 100;
+const MAX_ATTRIBUTE_PURCHASE_BATCH = 20;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND
+  * SECONDS_PER_MINUTE
+  * MINUTES_PER_HOUR;
+const MISSION_LOSS_REWARD_DIVISOR = 2;
+const MAX_DIRECT_NOVA_DEBIT = 5_000;
+const PERCENT_SCALE = 100;
+
 function httpErr(status, message, code) {
   const e = new Error(message);
   e.status = status;
@@ -151,7 +174,7 @@ function requireMyChar(user) {
 function normalizeOperationKey(value) {
   const key = String(value || "").trim();
   if (!key) return "";
-  if (key.length > 128 || !/^[A-Za-z0-9:_-]+$/.test(key)) {
+  if (key.length > IDEMPOTENCY_KEY_MAX_LENGTH || !/^[A-Za-z0-9:_-]+$/.test(key)) {
     httpErr(400, "Invalid request_id");
   }
   return key;
@@ -207,7 +230,7 @@ function stripShopFields(slot) {
 }
 
 function computeMissionGains(character, mission, nexusBonus) {
-  const bonusMult = nexusBonus ? 1.05 : 1;
+  const bonusMult = nexusBonus ? NEXUS_MISSION_REWARD_MULTIPLIER : 1;
   const stardustMult = 1 + getModEffectTotal(character, "mission_stardust_mult");
   const xpMult = 1 + getModEffectTotal(character, "mission_xp_mult");
   const percentage = getCollectionPercentage(character, 0);
@@ -266,14 +289,14 @@ function dedupeOfferRewards(snapshotChar, offers, rng) {
   const seen = new Set();
   for (const offer of offers) {
     let tries = 0;
-    while (seen.has(keyOf(offer)) && tries < 20) {
+    while (seen.has(keyOf(offer)) && tries < MISSION_REWARD_REROLL_LIMIT) {
       offer.stardust_efficiency = rollMissionEfficiency(level, rng);
       offer.xp_efficiency = rollMissionEfficiency(level, rng);
       Object.assign(offer, finalizeMissionRewards(snapshotChar, offer));
       tries += 1;
     }
     let guard = 0;
-    while (seen.has(keyOf(offer)) && guard < 64) {
+    while (seen.has(keyOf(offer)) && guard < MISSION_REWARD_COLLISION_NUDGE_LIMIT) {
       offer.final_stardust += 1;
       if (seen.has(keyOf(offer))) offer.final_xp += 1;
       guard += 1;
@@ -313,12 +336,12 @@ const MISSION_BOARD_VERSION = 4;
 
 function makeMissionOfferId(index) {
   const t = clock.nowMs().toString(36);
-  const r = Math.floor(secureRandom() * 1e9).toString(36);
+  const r = Math.floor(secureRandom() * MISSION_OFFER_ID_RANDOM_RANGE).toString(36);
   return `off_${t}_${r}_${index}`;
 }
 
 function normalizeBoardFuel(n) {
-  return Math.round((Number(n) || 0) * 100) / 100;
+  return Math.round((Number(n) || 0) * FUEL_PRECISION_SCALE) / FUEL_PRECISION_SCALE;
 }
 
 function boardCanAffordAny(ch, offers) {
@@ -328,7 +351,7 @@ function boardCanAffordAny(ch, offers) {
       duration_seconds: o.duration_seconds,
       fuel_cost: typeof o.fuel_cost === "number" ? o.fuel_cost : undefined,
     });
-    if (cost <= fuel + 0.001) return true;
+    if (cost <= fuel + FUEL_COMPARISON_TOLERANCE) return true;
   }
   return false;
 }
@@ -348,9 +371,9 @@ function generateDailyOffers(ch, rng) {
   if (pool.length === 0) pool = MISSION_TEMPLATES.slice();
   pool = shuffleInPlace(pool.slice(), rng);
   const givers = shuffleInPlace(MISSION_PATRONS.slice(), rng);
-  const exploreIndices = pickExploreScenes(3, rng);
+  const exploreIndices = pickExploreScenes(MISSION_BOARD_OFFER_COUNT, rng);
   const offers = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < MISSION_BOARD_OFFER_COUNT; i++) {
     const tpl = pool[i % pool.length];
     const sceneI = exploreIndices[i];
     offers.push({
@@ -380,7 +403,7 @@ function generateLowFuelOffers(ch, rng) {
   const duration = remainingFuelDurationSeconds(fuel);
   if (duration == null) return [];
   const givers = shuffleInPlace(MISSION_PATRONS.slice(), rng);
-  const count = Math.min(3, LOW_FUEL_TEMPLATES.length);
+  const count = Math.min(MISSION_BOARD_OFFER_COUNT, LOW_FUEL_TEMPLATES.length);
   const exploreIndices = pickExploreScenes(count, rng);
   const pinned = Math.max(MISSION_MIN_FUEL, fuel);
   const offers = [];
@@ -388,7 +411,7 @@ function generateLowFuelOffers(ch, rng) {
     const tpl = LOW_FUEL_TEMPLATES[i];
     const sceneI = exploreIndices[i];
     offers.push({
-      offer_id: makeMissionOfferId(100 + i),
+      offer_id: makeMissionOfferId(LOW_FUEL_OFFER_ID_OFFSET + i),
       name: tpl.name,
       description: tpl.description,
       location: tpl.location,
@@ -761,7 +784,10 @@ export async function BuyAttribute(user, body) {
   if (!ATTR_STAT_KEYS.includes(stat)) {
     return { status: 400, body: { error: "Invalid stat" } };
   }
-  const requested = Math.min(20, Math.max(1, Math.floor(Number(body?.count ?? 1)) || 1));
+  const requested = Math.min(
+    MAX_ATTRIBUTE_PURCHASE_BATCH,
+    Math.max(1, Math.floor(Number(body?.count ?? 1)) || 1),
+  );
 
   try {
     const result = await withTransactionAsync(async () => {
@@ -863,7 +889,7 @@ export async function BuyFuel(user, body = {}) {
       const receipt = {
         request_id: requestId,
         nova_debited: FUEL_PURCHASE_COST,
-        nova_half_units_debited: FUEL_PURCHASE_COST * 2,
+        nova_half_units_debited: FUEL_PURCHASE_COST * NOVA_HALF_UNITS_PER_NOVA,
         fuel_granted: FUEL_PURCHASE_AMOUNT,
         transaction_id: mut.transaction.transaction_id,
         balances: mut.balances,
@@ -896,7 +922,7 @@ export async function BuyFuelMount(user, body) {
       }
 
       const now = Date.now();
-      const durationMs = mount.duration_hours * 3600 * 1000;
+      const durationMs = mount.duration_hours * MILLISECONDS_PER_HOUR;
       const active = getActiveFuelMounts(ch);
       const activeMount = active[0] || null;
 
@@ -925,7 +951,7 @@ export async function BuyFuelMount(user, body) {
         stardust: (ch.stardust || 0) - mount.stardust,
         ...(mount.crystals
           ? { ...novaDebitPatch(ch, mount.crystals) }
-          : { economy_nova_scale: 2 }),
+          : { economy_nova_scale: ECONOMY_NOVA_SCALE }),
         active_fuel_mounts: [entry],
       };
       const character = entities.Character.update(ch.id, patch);
@@ -1105,7 +1131,8 @@ export async function LaunchMission(user, body) {
       ch = resetCh;
 
       const level = ch.level || 1;
-      const currentFuel = Math.round((ch.fuel ?? FUEL_MAX) * 100) / 100;
+      const currentFuel = Math.round((ch.fuel ?? FUEL_MAX) * FUEL_PRECISION_SCALE)
+        / FUEL_PRECISION_SCALE;
 
       const board = ch.mission_board;
       const offer =
@@ -1151,16 +1178,14 @@ export async function LaunchMission(user, body) {
         ? normalizeMissionEfficiency(template.xp_efficiency, level)
         : rollMissionEfficiency(level);
 
-      const LOOT_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
-      const lootType = LOOT_TYPES[String(template.name).length % 8];
+      const lootType = missionLootTypeFromName(template.name);
       const missStreak = missionGearMissStreak(ch);
       const lootDropChance = missionGearDropChance(missStreak);
       const rewardDef = snapshotDefinitionRef("mission_completion");
 
       const startNow = clock.now();
-      const endTime = new Date(startNow.getTime() + duration * 1000);
+      const endTime = new Date(startNow.getTime() + duration * MILLISECONDS_PER_SECOND);
 
-      const EXPLORE_SCENE_COUNT = 6;
       const rawScene = Number(template.explore_scene);
       const exploreScene = Number.isFinite(rawScene)
         ? ((Math.floor(rawScene) % EXPLORE_SCENE_COUNT) + EXPLORE_SCENE_COUNT) % EXPLORE_SCENE_COUNT
@@ -1208,7 +1233,8 @@ export async function LaunchMission(user, body) {
         mission_board_status: "locked_active",
         active_mission_id: mission.id,
         mission_end_time: endTime.toISOString(),
-        fuel: Math.round((currentFuel - fuelCost) * 100) / 100,
+        fuel: Math.round((currentFuel - fuelCost) * FUEL_PRECISION_SCALE)
+          / FUEL_PRECISION_SCALE,
         fuel_updated_at: startNow.toISOString(),
       };
       if (shouldReserveFirstMissionBonusLaunch(ch)) {
@@ -1376,8 +1402,14 @@ export async function ClaimMission(user, body) {
         entities.Mission.update(mission.id, { status: "failed" });
         const live = entities.Character.get(ch.id) || ch;
         const { finalXp, finalStardust } = resolveMissionFinals(live, mission);
-        const lossXp = Math.max(0, Math.round((finalXp || 0) / 2));
-        let lossStardust = Math.max(0, Math.round((finalStardust || 0) / 2));
+        const lossXp = Math.max(
+          0,
+          Math.round((finalXp || 0) / MISSION_LOSS_REWARD_DIVISOR),
+        );
+        let lossStardust = Math.max(
+          0,
+          Math.round((finalStardust || 0) / MISSION_LOSS_REWARD_DIVISOR),
+        );
         const patch = {
           active_mission_id: "",
           mission_end_time: "",
@@ -1630,7 +1662,7 @@ export async function DebitNovaCrystals(user, body) {
   const requestId = normalizeOperationKey(
     body?.request_id || body?.idempotencyKey || `mission_skip:${missionId}`,
   );
-  if (!Number.isFinite(amount) || amount < 1 || amount > 5000) {
+  if (!Number.isFinite(amount) || amount < 1 || amount > MAX_DIRECT_NOVA_DEBIT) {
     return { status: 400, body: { error: "Invalid amount" } };
   }
   if (purpose !== "mission_skip") {
@@ -2000,7 +2032,13 @@ export async function BuyShopGear(user, body) {
             ...serializeShopPresentation(nextMeta, win),
           };
         }
-        const pct = Math.max(1, Math.round(Number(outcome.pct) || Math.round((1 - outcome.mult) * 100)));
+        const pct = Math.max(
+          1,
+          Math.round(
+            Number(outcome.pct)
+              || Math.round((1 - outcome.mult) * PERCENT_SCALE),
+          ),
+        );
         const discounted = Math.max(1, Math.round(stardustCost * outcome.mult));
         const nextMeta = applyHaggleDiscount(meta, slotId, isHot, pct, discounted, stardustCost);
         const patch = { shop_meta: nextMeta };

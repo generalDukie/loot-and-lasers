@@ -101,6 +101,7 @@ async function main() {
   const tests = [
     ["GetArenaStatus", {}],
     ["GetArenaLeaderboard", { limit: 10 }],
+    ["GetGuildLeaderboard", { limit: 10 }],
     ["GetChatHistory", { channel: "global", limit: 5 }],
     ["GetSocialState", {}],
     ["SendMessage", { channel: "global", content: "probe ping" }],

@@ -25,6 +25,9 @@ const PROJECT_SECRETS_PATH := "res://Config/nakama_secrets.cfg"
 const USER_SECRETS_PATH := "user://nakama_secrets.cfg"
 const RELEASE_CLIENT_CONFIG_PATH := "res://Config/release_client.cfg"
 const RELEASE_FEATURE := "staging_client"
+const MIN_SERVER_KEY_LENGTH := 8
+const SHORT_KEY_FINGERPRINT_LENGTH := 4
+const KEY_FINGERPRINT_TAIL_LENGTH := 2
 
 ## Public connection endpoints only — no DB/console/SSH secrets here.
 ## node_api_base_url is the legacy Node gameplay API (characters/economy) — NOT Godot auth.
@@ -248,7 +251,7 @@ func _read_secret_field(path: String, field: String) -> String:
 	if from_cfg.begins_with("\"") and from_cfg.ends_with("\"") and from_cfg.length() >= 2:
 		from_cfg = from_cfg.substr(1, from_cfg.length() - 2)
 	# Reject absurdly short keys from typed ConfigFile coercion.
-	if field == "server_key" and from_cfg.length() < 8:
+	if field == "server_key" and from_cfg.length() < MIN_SERVER_KEY_LENGTH:
 		return ""
 	return from_cfg
 
@@ -287,9 +290,12 @@ func _read_secret_field_lines(path: String, field: String) -> String:
 func _key_fingerprint(key: String) -> String:
 	if key.is_empty():
 		return "missing"
-	if key.length() <= 4:
+	if key.length() <= SHORT_KEY_FINGERPRINT_LENGTH:
 		return "set(len=%d)" % key.length()
-	return "set(len=%d,tail=%s)" % [key.length(), key.substr(key.length() - 2, 2)]
+	return "set(len=%d,tail=%s)" % [
+		key.length(),
+		key.substr(key.length() - KEY_FINGERPRINT_TAIL_LENGTH, KEY_FINGERPRINT_TAIL_LENGTH),
+	]
 
 
 func _log_selection() -> void:

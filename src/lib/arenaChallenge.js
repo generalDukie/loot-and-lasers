@@ -1,3 +1,5 @@
+import { DEFAULT_ARENA_RATING } from "@/lib/arenaEngine";
+
 /** Convert a server defense snapshot into Arena opponent shape. */
 export function defenseSnapshotToOpponent(snap) {
   if (!snap) return null;
@@ -9,7 +11,7 @@ export function defenseSnapshotToOpponent(snap) {
     race: snap.race,
     class: snap.class,
     level: snap.level || 1,
-    arena_rating: snap.arena_rating || 1000,
+    arena_rating: snap.arena_rating || DEFAULT_ARENA_RATING,
     stats: snap.stats || {},
     power: 0,
     arena_wins: snap.arena_wins || 0,

@@ -65,10 +65,11 @@ total_stardust_earned, level, playtime_seconds (non-authoritative note).
 
 ### 17–20. Leaderboards
 
-- **Only restored board:** `arena_rating` (Galactic Rankings).
-- Score = Character `arena_rating`; rank via deterministic sort.
-- Non-Arena boards: **none** in codebase — not invented.
-- Economy public boards: **none** (privacy).
+- **Boards:** `arena_rating` (Galactic Rankings) and `guild_level` (Guild Rankings).
+- Character score = `arena_rating`; guild score = `Guild.level`.
+- Guild ties: experience DESC → member_count DESC → created_date ASC → guild id ASC.
+- Rank style: **ordinal row position** (1…N).
+- `GetGuildLeaderboard` pages guilds server-side (`limit`/`offset`/`has_more`) and returns `your_guild` / `player_guild_rank` without requiring a relog (reads live Guild entities after XP/level mutations).
 
 ### 21. Tie / rank numbering
 

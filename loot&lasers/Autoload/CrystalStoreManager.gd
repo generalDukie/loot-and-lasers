@@ -103,6 +103,14 @@ const QUESTS := [
 	},
 ]
 
+const FALLBACK_QUEST_GOAL := 5
+const ET_STANDARD_OFFSET_HOURS := 5
+const SECONDS_PER_MINUTE := 60
+const MINUTES_PER_HOUR := 60
+const HOURS_PER_DAY := 24
+const DAYS_PER_WEEK := 7
+const PERCENT_SCALE := 100.0
+
 
 func _ready() -> void:
 	print("[CrystalStoreManager] ready")
@@ -127,7 +135,7 @@ func is_claimed(quest_id: String) -> bool:
 func can_claim(quest_id: String) -> bool:
 	if is_claimed(quest_id):
 		return false
-	var goal := 5
+	var goal := FALLBACK_QUEST_GOAL
 	for q in QUESTS:
 		if str(q["id"]) == quest_id:
 			goal = int(q["goal"])
@@ -144,7 +152,9 @@ func total_weekly_reward() -> int:
 
 ## Seconds until next Monday 00:00 America/New_York (approx UTC−5, matches SocialManager week math).
 func weekly_seconds_left() -> int:
-	var unix: int = int(Time.get_unix_time_from_system()) - 5 * 3600
+	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+	var seconds_per_day := seconds_per_hour * HOURS_PER_DAY
+	var unix: int = int(Time.get_unix_time_from_system()) - ET_STANDARD_OFFSET_HOURS * seconds_per_hour
 	var dict := Time.get_datetime_dict_from_unix_time(unix)
 	var y: int = int(dict.get("year", 2026))
 	var m: int = int(dict.get("month", 1))
@@ -152,25 +162,27 @@ func weekly_seconds_left() -> int:
 	var t := [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
 	var yy: int = y - (1 if m < 3 else 0)
 	var wd: int = (yy + int(yy / 4) - int(yy / 100) + int(yy / 400) + int(t[m - 1]) + d) % 7
-	var since_mon: int = (wd + 6) % 7
+	var since_mon: int = (wd + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK
 	# Days until next Monday (0 if already Monday → still count to next week end = 7d from this Mon midnight).
-	var days_to_end: int = 7 - since_mon
+	var days_to_end: int = DAYS_PER_WEEK - since_mon
 	if days_to_end <= 0:
-		days_to_end = 7
+		days_to_end = DAYS_PER_WEEK
 	var hour: int = int(dict.get("hour", 0))
 	var minute: int = int(dict.get("minute", 0))
 	var second: int = int(dict.get("second", 0))
-	var sec_into_day: int = hour * 3600 + minute * 60 + second
-	var left: int = days_to_end * 86400 - sec_into_day
+	var sec_into_day: int = hour * seconds_per_hour + minute * SECONDS_PER_MINUTE + second
+	var left: int = days_to_end * seconds_per_day - sec_into_day
 	return maxi(0, left)
 
 
 static func format_week_left(sec: int) -> String:
-	var d := int(sec / 86400)
-	var h := int((sec % 86400) / 3600)
+	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+	var seconds_per_day := seconds_per_hour * HOURS_PER_DAY
+	var d := int(sec / seconds_per_day)
+	var h := int((sec % seconds_per_day) / seconds_per_hour)
 	if d > 0:
 		return "%sd %sh" % [d, h]
-	var m := int((sec % 3600) / 60)
+	var m := int((sec % seconds_per_hour) / SECONDS_PER_MINUTE)
 	if h > 0:
 		return "%sh %sm" % [h, m]
 	return "%sm" % m
@@ -211,7 +223,7 @@ func pack_value_bonus_pct(pack: Dictionary) -> int:
 	if usd <= 0.0:
 		return 0
 	var rate := crystals / usd
-	return maxi(0, int(round((rate / base_rate - 1.0) * 100.0)))
+	return maxi(0, int(round((rate / base_rate - 1.0) * PERCENT_SCALE)))
 
 
 func featured_packs() -> Array:

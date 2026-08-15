@@ -3,6 +3,9 @@ extends Control
 
 const CREATE_COST := 5000
 const NAME_NO_DIGITS_MSG := "Names cannot contain numbers"
+const SECONDS_PER_MINUTE := 60
+const MINUTES_PER_HOUR := 60
+const HOURS_PER_DAY := 24
 
 var _status: Label
 var _list: VBoxContainer
@@ -38,8 +41,10 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 
 func _boot() -> void:
 	_set_status("Loading guild…")
-	await SocialManager.load_my_guild()
-	await SocialManager.browse_guilds()
+	var requests := AsyncGroup.new()
+	requests.add(SocialManager.load_my_guild)
+	requests.add(SocialManager.browse_guilds)
+	await requests.wait()
 	await _populate()
 
 
@@ -495,8 +500,10 @@ func _challenge_time_left(chg: Dictionary) -> String:
 	if unix <= 0:
 		return "—"
 	var left := maxi(0, int(unix - Time.get_unix_time_from_system()))
-	var days := left / 86400
-	var hours := (left % 86400) / 3600
+	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+	var seconds_per_day := seconds_per_hour * HOURS_PER_DAY
+	var days := left / seconds_per_day
+	var hours := (left % seconds_per_day) / seconds_per_hour
 	return "%sd %sh left" % [days, hours]
 
 
@@ -948,13 +955,15 @@ func _time_ago(iso: String) -> String:
 	if unix <= 0:
 		return ""
 	var diff := int(Time.get_unix_time_from_system() - unix)
-	if diff < 60:
+	if diff < SECONDS_PER_MINUTE:
 		return "just now"
-	if diff < 3600:
-		return "%sm ago" % (diff / 60)
-	if diff < 86400:
-		return "%sh ago" % (diff / 3600)
-	return "%sd ago" % (diff / 86400)
+	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+	var seconds_per_day := seconds_per_hour * HOURS_PER_DAY
+	if diff < seconds_per_hour:
+		return "%sm ago" % (diff / SECONDS_PER_MINUTE)
+	if diff < seconds_per_day:
+		return "%sh ago" % (diff / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR))
+	return "%sd ago" % (diff / seconds_per_day)
 
 
 func _empty(t: String) -> Label:

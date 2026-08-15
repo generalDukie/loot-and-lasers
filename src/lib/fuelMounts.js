@@ -17,6 +17,8 @@ export const FUEL_MOUNTS = [
 export const MAX_FUEL_MOUNTS = 3;
 // Total time reduction is capped so a mission always takes some time.
 const REDUCTION_CAP = 0.9;
+const MIN_EFFECTIVE_MISSION_DURATION_SECONDS = 1;
+const MISSION_DURATION_STEP_SECONDS = 15;
 
 export function getFuelMountById(id) {
   return FUEL_MOUNTS.find((m) => m.id === id) || null;
@@ -43,8 +45,14 @@ export function getEffectiveMissionDuration(character, mission) {
   const warpReduction = getModEffectTotal(character, "mission_duration_reduction");
   const fuelSpeed = getFuelSpeedTotal(character);
   const totalReduction = Math.min(REDUCTION_CAP, warpReduction + fuelSpeed);
-  const raw = Math.max(1, Math.floor((mission?.duration_seconds || 0) * (1 - totalReduction)));
+  const raw = Math.max(
+    MIN_EFFECTIVE_MISSION_DURATION_SECONDS,
+    Math.floor((mission?.duration_seconds || 0) * (1 - totalReduction)),
+  );
   // Snap to the nearest 15s so mission times (and fuel, charged per minute)
   // always land on clean 15-second increments.
-  return Math.max(15, Math.round(raw / 15) * 15);
+  return Math.max(
+    MISSION_DURATION_STEP_SECONDS,
+    Math.round(raw / MISSION_DURATION_STEP_SECONDS) * MISSION_DURATION_STEP_SECONDS,
+  );
 }

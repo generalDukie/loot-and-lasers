@@ -278,17 +278,17 @@ func _populate() -> void:
 		var pill := PanelContainer.new()
 		pill.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
 			Color(0.04, 0.04, 0.07, 0.95),
-			ClientUi.DANGER if vuln else ClientUi.SUCCESS,
+			ClientUi.DANGER,
 			12, 1
 		))
 		status_row.add_child(pill)
 		var pill_row := HBoxContainer.new()
 		pill_row.add_theme_constant_override("separation", 4)
 		pill.add_child(pill_row)
-		var pill_tint := ClientUi.DANGER if vuln else ClientUi.SUCCESS
+		var pill_tint := ClientUi.DANGER
 		pill_row.add_child(UiIcon.make("triangle-alert" if vuln else "shield", pill_tint, 14.0))
 		var pill_l := Label.new()
-		pill_l.text = "VULNERABLE" if vuln else "FORTIFIED"
+		pill_l.text = "CONTESTABLE"
 		pill_l.add_theme_font_size_override("font_size", 18)
 		pill_l.add_theme_color_override("font_color", pill_tint)
 		ClientUi.apply_display_font(pill_l)
@@ -297,9 +297,7 @@ func _populate() -> void:
 		status_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		status_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		status_hint.text = (
-			"Open to assault from eligible guilds."
-			if vuln
-			else "Defenses hold — becomes vulnerable after 24h."
+			"Open to assault from any guild with enough power."
 		)
 		status_hint.add_theme_font_size_override("font_size", 19)
 		status_hint.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -496,9 +494,6 @@ func _on_assault() -> void:
 		return
 	if NexusManager.owns_nexus(str(guild.get("id", ""))):
 		Notify.blocked("You already own the Nexus")
-		return
-	if not NexusManager.is_vulnerable():
-		Notify.blocked("Owner still protected")
 		return
 	if NexusManager.assault_cooldown_ms() > 0:
 		Notify.blocked("Assault on cooldown")

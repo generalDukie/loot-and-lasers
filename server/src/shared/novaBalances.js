@@ -9,6 +9,7 @@ import { entities } from "../entities.js";
 
 export const NOVA_HALF_UNITS_PER_NOVA = 2;
 export const ECONOMY_NOVA_SCALE = 2;
+const NOVA_PRECISION_EPSILON = 1e-9;
 
 export const NovaBalanceTypes = Object.freeze({
   WAGERABLE: "wagerable",
@@ -30,7 +31,7 @@ export function toNovaHalfUnits(displayNova) {
     throw e;
   }
   const half = Math.round(n * NOVA_HALF_UNITS_PER_NOVA);
-  if (Math.abs(n * NOVA_HALF_UNITS_PER_NOVA - half) > 1e-9) {
+  if (Math.abs(n * NOVA_HALF_UNITS_PER_NOVA - half) > NOVA_PRECISION_EPSILON) {
     const e = new Error("Nova amount must end in .0 or .5");
     e.status = 400;
     e.code = "INVALID_NOVA_PRECISION";

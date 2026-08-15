@@ -21,12 +21,18 @@ const {
   serializeLeaderboardPage,
   getNearbyArenaEntries,
   sortedArenaCharacters,
+  serializeGuildLeaderboardPage,
+  getNearbyGuildEntries,
+  sortedGuilds,
 } = await import("../src/shared/statisticsService.js");
 const { computeArenaRank, listArenaLeaderboard } = await import("../src/shared/arenaService.js");
+const { computeGuildRank, listGuildLeaderboard } = await import("../src/shared/guildSocialService.js");
+const { FUNCTION_HANDLERS } = await import("../src/functions/index.js");
 const {
   GetCharacterStatistics,
   GetPublicProfileStatistics,
   GetArenaLeaderboard,
+  GetGuildLeaderboard,
 } = await import("../src/functions/economyFollowOn.js");
 
 let passed = 0;
@@ -256,6 +262,136 @@ await testAsync("GetArenaLeaderboard page + nearby + player_rank", async () => {
   assert.ok(res.body.nearby);
   assert.ok(res.body.nearby.entries.some((e) => e.is_self));
   assert.equal(res.body.leaderboard_id, "arena_rating");
+});
+
+function makeGuild(opts = {}) {
+  return entities.Guild.create({
+    name: opts.name || `G-${Math.random().toString(36).slice(2, 7)}`,
+    tag: opts.tag || "TAG",
+    leader_id: opts.leader_id || "c1",
+    leader_name: opts.leader_name || "Lead",
+    level: opts.level ?? 1,
+    experience: opts.experience ?? 0,
+    experience_to_next: opts.experience_to_next ?? 1000,
+    member_count: opts.member_count ?? 1,
+    created_date: opts.created_date,
+  });
+}
+
+test("guild ranking definition present", () => {
+  const ids = LEADERBOARD_DEFINITIONS.map((d) => d.id);
+  assert.ok(ids.includes("guild_level"));
+});
+
+test("guild leaderboard is registered as an RPC function", () => {
+  assert.equal(FUNCTION_HANDLERS.GetGuildLeaderboard, GetGuildLeaderboard);
+});
+
+test("guild rank: level then xp then members then created_date then id", () => {
+  const u = insertUser("u-gr", "gr@t.test");
+  const low = makeGuild({ name: "Low", tag: "LOW", level: 2, experience: 900, member_count: 40 });
+  const midXp = makeGuild({ name: "MidXp", tag: "MXP", level: 5, experience: 10, member_count: 2 });
+  const highXp = makeGuild({ name: "HiXp", tag: "HXP", level: 5, experience: 800, member_count: 2 });
+  const moreMem = makeGuild({ name: "Mem", tag: "MEM", level: 5, experience: 800, member_count: 9 });
+  const top = makeGuild({ name: "Top", tag: "TOP", level: 8, experience: 0, member_count: 1 });
+  const ids = new Set([low.id, midXp.id, highXp.id, moreMem.id, top.id]);
+  const sorted = sortedGuilds().filter((g) => ids.has(g.id));
+  assert.equal(sorted[0].id, top.id);
+  assert.equal(sorted[1].id, moreMem.id);
+  assert.equal(sorted[2].id, highXp.id);
+  assert.equal(sorted[3].id, midXp.id);
+  assert.equal(sorted[4].id, low.id);
+  assert.equal(computeGuildRank(top.id), sortedGuilds().findIndex((g) => g.id === top.id) + 1);
+  void u;
+});
+
+test("guild nearby radius zero returns only the selected guild", () => {
+  const guild = makeGuild({
+    name: "RadiusZero",
+    tag: "RZ0",
+    level: 3,
+    experience: 75,
+    member_count: 2,
+  });
+  const nearby = getNearbyGuildEntries(guild.id, { radius: 0 });
+  assert.equal(nearby.radius, 0);
+  assert.equal(nearby.entries.length, 1);
+  assert.equal(nearby.entries[0].guild_id, guild.id);
+});
+
+test("guild pagination no overlap and ordinal ranks", () => {
+  const stamp = Date.now();
+  for (let i = 0; i < 6; i++) {
+    makeGuild({
+      name: `GP${i}`,
+      tag: `G${i}`,
+      level: 1,
+      experience: i,
+      member_count: 1,
+      created_date: new Date(stamp + i).toISOString(),
+    });
+  }
+  const p0 = serializeGuildLeaderboardPage({ limit: 2, offset: 0 });
+  const p1 = serializeGuildLeaderboardPage({ limit: 2, offset: 2 });
+  const ids0 = new Set(p0.rankings.map((r) => r.guild_id));
+  for (const r of p1.rankings) {
+    assert.equal(ids0.has(r.guild_id), false);
+  }
+  assert.equal(p0.leaderboard_id, "guild_level");
+  assert.equal(p0.rankings[0].rank, 1);
+  assert.equal(p1.rankings[0].rank, 3);
+});
+
+test("equal level+xp+members ties by created_date then id", () => {
+  const a = makeGuild({
+    name: "TieA",
+    tag: "TIA",
+    level: 4,
+    experience: 50,
+    member_count: 3,
+    created_date: "2026-01-01T00:00:00.000Z",
+  });
+  const b = makeGuild({
+    name: "TieB",
+    tag: "TIB",
+    level: 4,
+    experience: 50,
+    member_count: 3,
+    created_date: "2026-01-01T00:00:00.000Z",
+  });
+  const page = listGuildLeaderboard({ limit: 500, offset: 0 });
+  const pair = page.filter((r) => r.guild_id === a.id || r.guild_id === b.id);
+  assert.equal(pair.length, 2);
+  const expectedFirst = String(a.id).localeCompare(String(b.id)) < 0 ? a.id : b.id;
+  assert.equal(pair[0].guild_id, expectedFirst);
+});
+
+await testAsync("GetGuildLeaderboard page + your guild + no-guild viewer", async () => {
+  const u = insertUser("u-glb", "glb@t.test");
+  const me = makeChar(u.id, { name: "GMe" });
+  db.prepare("UPDATE users SET active_character_id = ? WHERE id = ?").run(me.id, u.id);
+  const user = { ...u, active_character_id: me.id };
+  const none = await GetGuildLeaderboard(user, { limit: 20, offset: 0, nearby: true });
+  assert.equal(none.status, 200);
+  assert.equal(none.body.in_guild, false);
+  assert.equal(none.body.player_guild_rank, 0);
+  assert.equal(none.body.your_guild, null);
+  assert.equal(none.body.leaderboard_id, "guild_level");
+
+  const g = makeGuild({ name: "Mine", tag: "MIN", level: 6, experience: 100, leader_id: me.id, leader_name: me.name });
+  entities.GuildMember.create({
+    guild_id: g.id,
+    character_id: me.id,
+    character_name: me.name,
+    role: "leader",
+  });
+  const res = await GetGuildLeaderboard(user, { limit: 50, offset: 0, nearby: true });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.in_guild, true);
+  assert.ok(res.body.player_guild_rank >= 1);
+  assert.equal(res.body.your_guild.guild_id, g.id);
+  assert.ok(res.body.rankings.some((r) => r.is_self && r.guild_id === g.id));
+  assert.ok(res.body.nearby.entries.some((e) => e.is_self));
 });
 
 await testAsync("client score/rank on leaderboard body is stripped not trusted", async () => {

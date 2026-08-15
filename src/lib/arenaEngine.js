@@ -36,11 +36,24 @@ import { generateArenaBot, ARENA_BOT_CLASSES } from "@/lib/arenaBotGenerator";
 // First 10 arena battles each day are free (grant xp + stardust + rating on wins only).
 // Losses never grant XP or stardust. Beyond the free quota, each battle costs nova
 // crystals and yields rating only, but can be fought indefinitely to climb.
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_DAY = MINUTES_PER_HOUR * HOURS_PER_DAY;
+const MILLISECONDS_PER_MINUTE = MILLISECONDS_PER_SECOND * SECONDS_PER_MINUTE;
+const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+const PERCENT_SCALE = 100;
+const EVEN_CHANCE = 0.5;
+
+export const DEFAULT_ARENA_RATING = 1_000;
 export const ARENA_DAILY_FREE_BATTLES = 10;
 export const ARENA_PAID_BATTLE_COST = 15; // nova crystals per battle after the free quota
-export const ARENA_REFRESH_MS = 2 * 60 * 60 * 1000; // board TTL (manual refresh removed)
+export const ARENA_REFRESH_HOURS = 2;
+export const ARENA_REFRESH_MS = ARENA_REFRESH_HOURS * MILLISECONDS_PER_HOUR;
 export const ARENA_REFRESH_COST = 500; // stardust (10× scale) — unused; kept for catalog compatibility
-export const ARENA_BATTLE_COOLDOWN_MS = 10 * 60 * 1000; // 10-minute cooldown between battles
+export const ARENA_BATTLE_COOLDOWN_MINUTES = 10;
+export const ARENA_BATTLE_COOLDOWN_MS = ARENA_BATTLE_COOLDOWN_MINUTES * MILLISECONDS_PER_MINUTE;
 export const ARENA_SKIP_COST = 1; // nova crystals to skip the cooldown
 export const ARENA_CHALLENGER_SLOTS = 3;
 /** Prefer this many real players when the population supports it (rest filled with bots). */
@@ -51,6 +64,31 @@ export const ARENA_RATING_BAND_WIDE = 280;
 export const ARENA_LEVEL_BAND = 8;
 /** Personal match log size (oldest pruned after each fight). */
 export const ARENA_HISTORY_LIMIT = 10;
+
+const DEFAULT_CLASS_STAT_WEIGHT = 0.1;
+const ARENA_POWER_PER_LEVEL = 10;
+const ARENA_POWER_PER_WEIGHTED_ATTRIBUTE = 7.5;
+const ARENA_LEVEL_GAP_SCORE_WEIGHT = 28;
+const CANDIDATE_RECENT_THRESHOLD_MINUTES = 60;
+const CANDIDATE_ACTIVE_THRESHOLD_MINUTES = MINUTES_PER_DAY;
+const CANDIDATE_STALE_THRESHOLD_MINUTES = 7 * MINUTES_PER_DAY;
+const CANDIDATE_UNKNOWN_AGE_MINUTES = 14 * MINUTES_PER_DAY;
+const CANDIDATE_RECENT_SCORE_BONUS = 18;
+const CANDIDATE_ACTIVE_SCORE_BONUS = 8;
+const CANDIDATE_STALE_SCORE_PENALTY = 45;
+const RANKED_CANDIDATE_PICK_BAND_SIZE = 5;
+const BOT_RATING_VARIANCE = 40;
+const BOT_WIN_RATING_DIVISOR = 4;
+const BOT_RANDOM_WIN_BONUS_LIMIT = 20;
+const BOT_LOSS_RATIO_MIN = 0.4;
+const BOT_LOSS_RATIO_RANGE = 0.6;
+const BOT_GUILD_MEMBERSHIP_CHANCE = 0.6;
+const BOT_LAST_ONLINE_MAX_DAYS = 3;
+const LADDER_BOT_LAST_ONLINE_MAX_MINUTES = 180;
+const AVATAR_SPECIES_COUNT = 30;
+const AVATAR_SPECIES_INDEX_MULTIPLIER = 7;
+const COMBAT_ROUND_LIMIT = 5_000;
+const ELO_RATING_SCALE = 400;
 
 const BOT_NAMES = [
   "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
@@ -104,8 +142,14 @@ export function getSeason() {
 export function computePower(character, equippedItems = []) {
   const w = getClassWeights(character?.class);
   const total = computeTotalStats(character, equippedItems);
-  const weighted = POWER_STAT_KEYS.reduce((sum, k) => sum + (total[k] || 0) * (w[k] ?? 0.1), 0);
-  return Math.round((character.level || 1) * 10 + weighted * 7.5);
+  const weighted = POWER_STAT_KEYS.reduce(
+    (sum, k) => sum + (total[k] || 0) * (w[k] ?? DEFAULT_CLASS_STAT_WEIGHT),
+    0,
+  );
+  return Math.round(
+    (character.level || 1) * ARENA_POWER_PER_LEVEL
+    + weighted * ARENA_POWER_PER_WEIGHTED_ATTRIBUTE,
+  );
 }
 
 function randomAppearance(raceKey) {
@@ -158,10 +202,16 @@ export function resolveOpponentItems(opp, catalogItems = []) {
 export function characterToOpponent(char, equippedItems = [], guildTag = null) {
   const stats = computeTotalStats(char, equippedItems);
   const w = getClassWeights(char.class);
-  const weighted = POWER_STAT_KEYS.reduce((sum, k) => sum + (stats[k] || 0) * (w[k] ?? 0.1), 0);
-  const power = Math.round((char.level || 1) * 10 + weighted * 7.5);
+  const weighted = POWER_STAT_KEYS.reduce(
+    (sum, k) => sum + (stats[k] || 0) * (w[k] ?? DEFAULT_CLASS_STAT_WEIGHT),
+    0,
+  );
+  const power = Math.round(
+    (char.level || 1) * ARENA_POWER_PER_LEVEL
+    + weighted * ARENA_POWER_PER_WEIGHTED_ATTRIBUTE,
+  );
   const lastOnlineMins = char.updated_date
-    ? Math.max(0, Math.floor((Date.now() - new Date(char.updated_date).getTime()) / 60000))
+    ? Math.max(0, Math.floor((Date.now() - new Date(char.updated_date).getTime()) / MILLISECONDS_PER_MINUTE))
     : 0;
   const guild = guildTag
     ? (String(guildTag).startsWith("[") ? guildTag : `[${guildTag}]`)
@@ -173,7 +223,7 @@ export function characterToOpponent(char, equippedItems = [], guildTag = null) {
     race: char.race,
     class: char.class,
     level: char.level || 1,
-    arena_rating: char.arena_rating || 1000,
+    arena_rating: char.arena_rating || DEFAULT_ARENA_RATING,
     stats: char.stats || {},
     power,
     arena_wins: char.arena_wins || 0,
@@ -193,17 +243,17 @@ export function characterToOpponent(char, equippedItems = [], guildTag = null) {
  * Lower score = better match. Prefers similar rating, then level, then recent activity.
  */
 export function scoreArenaCandidate(player, candidate) {
-  const myRating = player.arena_rating || 1000;
-  const theirRating = candidate.arena_rating || 1000;
+  const myRating = player.arena_rating || DEFAULT_ARENA_RATING;
+  const theirRating = candidate.arena_rating || DEFAULT_ARENA_RATING;
   const ratingGap = Math.abs(theirRating - myRating);
   const levelGap = Math.abs((candidate.level || 1) - (player.level || 1));
-  let score = ratingGap + levelGap * 28;
+  let score = ratingGap + levelGap * ARENA_LEVEL_GAP_SCORE_WEIGHT;
   const mins = candidate.updated_date
-    ? Math.max(0, (Date.now() - new Date(candidate.updated_date).getTime()) / 60000)
-    : 14 * 24 * 60;
-  if (mins <= 60) score -= 18;
-  else if (mins <= 24 * 60) score -= 8;
-  else if (mins > 7 * 24 * 60) score += 45;
+    ? Math.max(0, (Date.now() - new Date(candidate.updated_date).getTime()) / MILLISECONDS_PER_MINUTE)
+    : CANDIDATE_UNKNOWN_AGE_MINUTES;
+  if (mins <= CANDIDATE_RECENT_THRESHOLD_MINUTES) score -= CANDIDATE_RECENT_SCORE_BONUS;
+  else if (mins <= CANDIDATE_ACTIVE_THRESHOLD_MINUTES) score -= CANDIDATE_ACTIVE_SCORE_BONUS;
+  else if (mins > CANDIDATE_STALE_THRESHOLD_MINUTES) score += CANDIDATE_STALE_SCORE_PENALTY;
   return score;
 }
 
@@ -217,7 +267,7 @@ export function rankArenaCandidates(player, candidates, {
   wideBand = ARENA_RATING_BAND_WIDE,
 } = {}) {
   const myLevel = player.level || 1;
-  const myRating = player.arena_rating || 1000;
+  const myRating = player.arena_rating || DEFAULT_ARENA_RATING;
   const eligible = candidates.filter((c) => Math.abs((c.level || 1) - myLevel) <= levelBand);
   const scored = eligible
     .map((c) => ({ c, score: scoreArenaCandidate(player, c) }))
@@ -227,7 +277,7 @@ export function rankArenaCandidates(player, candidates, {
   const wide = [];
   const rest = [];
   for (const row of scored) {
-    const gap = Math.abs((row.c.arena_rating || 1000) - myRating);
+    const gap = Math.abs((row.c.arena_rating || DEFAULT_ARENA_RATING) - myRating);
     if (gap <= tightBand) tight.push(row);
     else if (gap <= wideBand) wide.push(row);
     else rest.push(row);
@@ -242,7 +292,7 @@ export function pickRankedCandidates(ranked, count) {
   const pool = [...ranked];
   const out = [];
   while (out.length < count && pool.length) {
-    const band = pool.slice(0, Math.min(5, pool.length));
+    const band = pool.slice(0, Math.min(RANKED_CANDIDATE_PICK_BAND_SIZE, pool.length));
     const weights = band.map((_, i) => band.length - i);
     let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
     let idx = 0;
@@ -257,9 +307,9 @@ export function pickRankedCandidates(ranked, count) {
   return out;
 }
 
-export function generateOpponents(character, count = 3, catalogItems = []) {
+export function generateOpponents(character, count = ARENA_CHALLENGER_SLOTS, catalogItems = []) {
   const myLevel = character.level || 1;
-  const myRating = character.arena_rating || 1000;
+  const myRating = character.arena_rating || DEFAULT_ARENA_RATING;
   const used = new Set();
   const out = [];
   for (let i = 0; i < count; i++) {
@@ -268,12 +318,19 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
     const classKey = snap.class;
     const level = snap.level;
     // Opponent rating stays near the player's (±40) so fights stay competitive.
-    const rating = Math.max(0, myRating + Math.floor(Math.random() * 80) - 40);
+    const rating = Math.max(
+      0,
+      myRating + Math.floor(Math.random() * BOT_RATING_VARIANCE * 2) - BOT_RATING_VARIANCE,
+    );
     const stats = snap.stats;
     const equippedItems = pickGearForBot(catalogItems, classKey, level);
     const power = computePower({ level, class: classKey, stats }, equippedItems);
-    const wins = Math.max(0, Math.floor(rating / 4) + Math.floor(Math.random() * 20));
-    const losses = Math.floor(wins * (0.4 + Math.random() * 0.6));
+    const wins = Math.max(
+      0,
+      Math.floor(rating / BOT_WIN_RATING_DIVISOR)
+      + Math.floor(Math.random() * BOT_RANDOM_WIN_BONUS_LIMIT),
+    );
+    const losses = Math.floor(wins * (BOT_LOSS_RATIO_MIN + Math.random() * BOT_LOSS_RATIO_RANGE));
     let name = pick(BOT_NAMES);
     while (used.has(name)) name = pick(BOT_NAMES);
     used.add(name);
@@ -288,11 +345,11 @@ export function generateOpponents(character, count = 3, catalogItems = []) {
       power,
       arena_wins: wins,
       arena_losses: losses,
-      guild: Math.random() < 0.6 ? pick(BOT_GUILDS) : null,
-      lastOnlineMins: Math.floor(Math.random() * 60 * 24 * 3),
+      guild: Math.random() < BOT_GUILD_MEMBERSHIP_CHANCE ? pick(BOT_GUILDS) : null,
+      lastOnlineMins: Math.floor(Math.random() * MINUTES_PER_DAY * BOT_LAST_ONLINE_MAX_DAYS),
       appearance: randomAppearance(raceKey),
       isBot: true,
-      speciesId: ((i * 7 + name.charCodeAt(0)) % 30) + 1,
+      speciesId: ((i * AVATAR_SPECIES_INDEX_MULTIPLIER + name.charCodeAt(0)) % AVATAR_SPECIES_COUNT) + 1,
       equippedItems,
       equippedItemIds: equippedItems.map((it) => it.id),
       buildKey: snap.buildKey,
@@ -337,16 +394,16 @@ export function ladderBotToOpponent(bot, catalogItems = []) {
     race: bot.race,
     class: classKey,
     level,
-    arena_rating: bot.arena_rating || 1000,
+    arena_rating: bot.arena_rating || DEFAULT_ARENA_RATING,
     stats,
     power,
     arena_wins: bot.arena_wins || 0,
     arena_losses: bot.arena_losses || 0,
     guild: bot.guild || null,
-    lastOnlineMins: bot.lastOnlineMins ?? Math.floor(Math.random() * 180),
+    lastOnlineMins: bot.lastOnlineMins ?? Math.floor(Math.random() * LADDER_BOT_LAST_ONLINE_MAX_MINUTES),
     appearance: bot.appearance || randomAppearance(bot.race),
     isBot: true,
-    speciesId: bot.speciesId ?? (((bot.name?.charCodeAt(0) || 1) % 30) + 1),
+    speciesId: bot.speciesId ?? (((bot.name?.charCodeAt(0) || 1) % AVATAR_SPECIES_COUNT) + 1),
     equippedItems,
     equippedItemIds: equippedItems.map((it) => it.id),
   };
@@ -416,9 +473,9 @@ export function buildFighter(c, items, side) {
     /** Sheet expected attack (no variance) — used by secondary effects like Fire Support. */
     standardAttack: derived.damage,
     damageBase,
-    crit: derived.critChance / 100,
+    crit: derived.critChance / PERCENT_SCALE,
     critMult: derived.critMult || CRIT_MULT,
-    dodge: derived.dodgeChance / 100,
+    dodge: derived.dodgeChance / PERCENT_SCALE,
     armorPercent: derived.armor || 0,
     techResistPercent: derived.techResist || 0,
     damageType: derived.damageType || "strength",
@@ -622,7 +679,7 @@ function buildStimTurnPlan(A, B, rng) {
   let runner;
   let other;
   if (aStim && bStim) {
-    runner = rng() < 0.5 ? A : B;
+    runner = rng() < EVEN_CHANCE ? A : B;
     other = runner === A ? B : A;
   } else if (aStim) {
     runner = A;
@@ -671,7 +728,7 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = [], opt
       text: `Stim Injector overrides opening turns`,
     });
   } else {
-    const playerGoesFirst = rng() < 0.5;
+    const playerGoesFirst = rng() < EVEN_CHANCE;
     attacker = playerGoesFirst ? A : B;
     defender = playerGoesFirst ? B : A;
     initiativeFirstSide = attacker.side;
@@ -685,7 +742,7 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = [], opt
   });
 
   let round = 0;
-  while (A.hp > 0 && B.hp > 0 && round < 5000) {
+  while (A.hp > 0 && B.hp > 0 && round < COMBAT_ROUND_LIMIT) {
     round++;
 
     events.push(...onTurnStart(attacker, rng));
@@ -727,7 +784,9 @@ export const ARENA_RATING_DELTA_MAX = 36;
 
 /** Expected win chance for `playerRating` vs `oppRating` (classic Elo). */
 export function eloExpectedScore(playerRating, oppRating) {
-  return 1 / (1 + 10 ** (((oppRating || 1000) - (playerRating || 1000)) / 400));
+  return 1 / (
+    1 + 10 ** (((oppRating || DEFAULT_ARENA_RATING) - (playerRating || DEFAULT_ARENA_RATING)) / ELO_RATING_SCALE)
+  );
 }
 
 /**
@@ -754,7 +813,11 @@ function lootForOutcome(player, opp, won, free) {
 }
 
 export function computeRewards(player, opp, won, free = true) {
-  const ratingDelta = eloRatingDelta(player.arena_rating || 1000, opp.arena_rating || 1000, won);
+  const ratingDelta = eloRatingDelta(
+    player.arena_rating || DEFAULT_ARENA_RATING,
+    opp.arena_rating || DEFAULT_ARENA_RATING,
+    won,
+  );
   const loot = lootForOutcome(player, opp, won, free);
   return {
     won,

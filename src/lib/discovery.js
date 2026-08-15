@@ -7,11 +7,17 @@
 import { ALIEN_SPECIES, ARTIFACTS, RELICS } from "@/lib/collectibles";
 import { gearCatalogKey } from "@/lib/gameData";
 
+const SPECIES_HASH_MULTIPLIER = 31;
+const RELIC_DISCOVERY_CHANCE = 0.02;
+const ARTIFACT_DISCOVERY_CHANCE = 0.03;
+
 // Map an enemy to a stable species id (enemies carry speciesId directly when generated).
 export function speciesIdForEnemy(enemy) {
   if (enemy?.speciesId != null) return enemy.speciesId;
   let h = 0;
-  for (const c of enemy?.name || "x") h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  for (const c of enemy?.name || "x") {
+    h = (h * SPECIES_HASH_MULTIPLIER + c.charCodeAt(0)) >>> 0;
+  }
   return (h % ALIEN_SPECIES.length) + 1;
 }
 
@@ -74,7 +80,7 @@ export function processDiscovery(character, { win, speciesId, gearItems }) {
 
   if (win) {
     const relics = [...new Set(character.collected_relics || [])];
-    if (Math.random() < 0.02 && relics.length < RELICS.length) {
+    if (Math.random() < RELIC_DISCOVERY_CHANCE && relics.length < RELICS.length) {
       const remaining = RELICS.filter((r) => !relics.includes(r.id));
       const r = weightedPick(remaining);
       if (r) {
@@ -87,7 +93,7 @@ export function processDiscovery(character, { win, speciesId, gearItems }) {
     }
 
     const arts = [...new Set(character.collected_artifacts || [])];
-    if (Math.random() < 0.03 && arts.length < ARTIFACTS.length) {
+    if (Math.random() < ARTIFACT_DISCOVERY_CHANCE && arts.length < ARTIFACTS.length) {
       const remaining = ARTIFACTS.filter((a) => !arts.includes(a.id));
       const a = weightedPick(remaining);
       if (a) {

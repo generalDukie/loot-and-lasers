@@ -56,6 +56,12 @@ import "./audit/store.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const IS_PROD = process.env.NODE_ENV === "production";
+const DEFAULT_ENTITY_READ_LIMIT = 100;
+const MAX_ENTITY_READ_LIMIT = 500;
+const CHARACTER_CREATE_REQUEST_ID_MIN_LENGTH = 8;
+const CHARACTER_CREATE_REQUEST_ID_MAX_LENGTH = 128;
+const ENTITY_BULK_MUTATION_SCAN_LIMIT = 100_000;
+const FUNCTION_NAME_LOG_MAX_LENGTH = 64;
 const app = express();
 const bootLog = CreateStructuredLogger("boot");
 
@@ -159,7 +165,11 @@ function requestFingerprint(value) {
   return createHash("sha256").update(stableJson(value)).digest("hex");
 }
 
-function readLimit(value, fallback = 100, max = 500) {
+function readLimit(
+  value,
+  fallback = DEFAULT_ENTITY_READ_LIMIT,
+  max = MAX_ENTITY_READ_LIMIT,
+) {
   if (value == null || value === "") return fallback;
   const limit = Number(value);
   if (!Number.isInteger(limit) || limit < 1 || limit > max) {
@@ -237,7 +247,11 @@ app.post("/api/entities/:type", requireAuth, enforceMaintenanceWrites, (req, res
     if (
       req.params.type === "Character"
       && req.authIdentity?.token_use === "nakama_gameplay"
-      && !/^[A-Za-z0-9._:-]{8,128}$/.test(requestId)
+      && (
+        requestId.length < CHARACTER_CREATE_REQUEST_ID_MIN_LENGTH
+        || requestId.length > CHARACTER_CREATE_REQUEST_ID_MAX_LENGTH
+        || !/^[A-Za-z0-9._:-]+$/.test(requestId)
+      )
     ) {
       return res.status(400).json({ error: "Character creation requires a valid request_id" });
     }
@@ -433,7 +447,8 @@ app.post("/api/entities/:type/delete-many", requireAuth, enforceMaintenanceWrite
     if (!queryIsConstrained(query)) {
       return res.status(400).json({ error: "delete-many requires a constrained query" });
     }
-    const matches = store.filter(query, null, 100000).filter((d) => canDeleteDoc(req.user, req.params.type, d));
+    const matches = store.filter(query, null, ENTITY_BULK_MUTATION_SCAN_LIMIT)
+      .filter((d) => canDeleteDoc(req.user, req.params.type, d));
     let deleted = 0;
     for (const item of matches) {
       store.delete(item.id);
@@ -468,7 +483,8 @@ app.post("/api/entities/:type/update-many", requireAuth, enforceMaintenanceWrite
     delete body.created_by;
     delete body.id;
     body = sanitizeUpdatePayload(req.user, req.params.type, body);
-    const matches = store.filter(query, null, 100000).filter((d) => canWriteDoc(req.user, req.params.type, d));
+    const matches = store.filter(query, null, ENTITY_BULK_MUTATION_SCAN_LIMIT)
+      .filter((d) => canWriteDoc(req.user, req.params.type, d));
     if (req.params.type === "Item" && body.is_equipped === false) {
       for (const m of matches) assertCanUnequipToBag(m, body);
     }
@@ -511,11 +527,12 @@ app.post("/api/entities/:type/bulk", requireAuth, enforceMaintenanceWrites, (req
 // ── Cloud functions ──────────────────────────────────────────
 app.post("/api/functions/:name", requireAuth, async (req, res) => {
   const fnLog = CreateStructuredLogger("rpc");
-  const op = String(req.params.name || "unknown").slice(0, 64);
+  const op = String(req.params.name || "unknown").slice(0, FUNCTION_NAME_LOG_MAX_LENGTH);
   try {
     const handler = FUNCTION_HANDLERS[req.params.name];
     if (!handler) {
-      const missing = String(req.params.name || "").slice(0, 64) || "unknown";
+      const missing = String(req.params.name || "")
+        .slice(0, FUNCTION_NAME_LOG_MAX_LENGTH) || "unknown";
       incCounter("rpc_unknown_total", { operation: missing });
       fnLog.error("rpc_unknown", {
         request_id: req.requestId,

@@ -5,6 +5,8 @@ extends Node
 signal notifications_changed
 
 const UNREAD_REFRESH_TTL_MS := 15000
+const INBOX_NOTIFICATION_LIMIT := 50
+const UNREAD_NOTIFICATION_LIMIT := 100
 
 var notifications: Array = []
 var unread_count: int = 0
@@ -34,7 +36,10 @@ func load_inbox() -> Array:
 		unread_count = 0
 		notifications_changed.emit()
 		return notifications
-	var res: Dictionary = await GameApiClient.invoke("GetNotifications", {"limit": 50})
+	var res: Dictionary = await GameApiClient.invoke(
+		"GetNotifications",
+		{"limit": INBOX_NOTIFICATION_LIMIT},
+	)
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 		var rows: Variant = res.data.get("notifications", [])
 		var raw: Array = rows if typeof(rows) == TYPE_ARRAY else []
@@ -60,7 +65,7 @@ func refresh_unread(force: bool = false) -> int:
 		return unread_count
 	var res: Dictionary = await GameApiClient.invoke("GetNotifications", {
 		"unread_only": true,
-		"limit": 100,
+		"limit": UNREAD_NOTIFICATION_LIMIT,
 	})
 	_unread_refresh_ms = Time.get_ticks_msec()
 	if res.ok and typeof(res.data) == TYPE_DICTIONARY:

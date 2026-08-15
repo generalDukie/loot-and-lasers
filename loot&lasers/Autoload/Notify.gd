@@ -13,6 +13,15 @@ extends Node
 const HOLD_SEC := 1.5
 const DUP_WINDOW_MS := 900
 const MAX_WIDTH := 460.0
+const ENTER_SCALE := Vector2(0.94, 0.94)
+const FADE_IN_SEC := 0.14
+const SCALE_IN_SEC := 0.18
+const FADE_OUT_SEC := 0.3
+const MIN_CONTENT_REGION_SIZE := 8.0
+const CARD_Z_INDEX := 10
+const CARD_MIN_WIDTH := 220.0
+const MESSAGE_MIN_WIDTH := 180.0
+const MESSAGE_FONT_SIZE := 18
 
 var _layer: CanvasLayer
 var _overlay: Control
@@ -126,18 +135,18 @@ func _show(message: String, hint: String) -> void:
 	_card.resized.connect(_center_card)
 
 	_card.modulate.a = 0.0
-	_card.scale = Vector2(0.94, 0.94)
+	_card.scale = ENTER_SCALE
 	_tween = create_tween()
-	_tween.tween_property(_card, "modulate:a", 1.0, 0.14)
+	_tween.tween_property(_card, "modulate:a", 1.0, FADE_IN_SEC)
 	(
 		_tween
 		. parallel()
-		. tween_property(_card, "scale", Vector2.ONE, 0.18)
+		. tween_property(_card, "scale", Vector2.ONE, SCALE_IN_SEC)
 		. set_trans(Tween.TRANS_BACK)
 		. set_ease(Tween.EASE_OUT)
 	)
 	_tween.tween_interval(HOLD_SEC)
-	_tween.tween_property(_card, "modulate:a", 0.0, 0.3)
+	_tween.tween_property(_card, "modulate:a", 0.0, FADE_OUT_SEC)
 	_tween.tween_callback(
 		func() -> void:
 			if is_instance_valid(_card):
@@ -157,7 +166,7 @@ func _center_card() -> void:
 		and _region.is_visible_in_tree()
 	):
 		var r := _region.get_global_rect()
-		if r.size.x > 8.0 and r.size.y > 8.0:
+		if r.size.x > MIN_CONTENT_REGION_SIZE and r.size.y > MIN_CONTENT_REGION_SIZE:
 			center = r.position + r.size * 0.5
 	var sz := _card.get_combined_minimum_size()
 	sz.x = minf(sz.x, MAX_WIDTH)
@@ -170,11 +179,11 @@ func _build_card(message: String, hint: String) -> PanelContainer:
 	var amber := Color("#F5A524")
 	var card := PanelContainer.new()
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.z_index = 10
+	card.z_index = CARD_Z_INDEX
 	card.add_theme_stylebox_override(
 		"panel", ClientUi.panel_style(Color(0.12, 0.07, 0.02, 0.96), Color(amber.r, amber.g, amber.b, 0.85))
 	)
-	card.custom_minimum_size = Vector2(220.0, 0.0)
+	card.custom_minimum_size = Vector2(CARD_MIN_WIDTH, 0.0)
 
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -196,8 +205,8 @@ func _build_card(message: String, hint: String) -> PanelContainer:
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title.text = message
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.custom_minimum_size.x = 180.0
-	title.add_theme_font_size_override("font_size", 18)
+	title.custom_minimum_size.x = MESSAGE_MIN_WIDTH
+	title.add_theme_font_size_override("font_size", MESSAGE_FONT_SIZE)
 	title.add_theme_color_override("font_color", Color(1.0, 0.96, 0.9))
 	ClientUi.apply_body_font(title)
 	col.add_child(title)
@@ -207,7 +216,7 @@ func _build_card(message: String, hint: String) -> PanelContainer:
 		sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		sub.text = hint
 		sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sub.custom_minimum_size.x = 180.0
+		sub.custom_minimum_size.x = MESSAGE_MIN_WIDTH
 		sub.add_theme_font_size_override("font_size", ClientUi.BODY_FS)
 		sub.add_theme_color_override("font_color", Color(0.86, 0.78, 0.62))
 		ClientUi.apply_body_font(sub)

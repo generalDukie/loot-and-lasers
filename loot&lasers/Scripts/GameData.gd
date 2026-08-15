@@ -500,6 +500,9 @@ static func build_create_payload(
 const SHOP_WINDOW_MS := 12 * 60 * 60 * 1000
 const SHOP_REFRESH_COST := 20
 const STARDUST_COLOR := Color("#E879F9")
+const MILLISECONDS_PER_SECOND := 1_000.0
+const SECONDS_PER_MINUTE := 60
+const MINUTES_PER_HOUR := 60
 
 const VENDOR_LINES: PackedStringArray = [
 	"Cash only. No names. No receipts.",
@@ -518,7 +521,7 @@ const VENDOR_LINES: PackedStringArray = [
 
 
 static func get_shop_window() -> Dictionary:
-	var ms := int(Time.get_unix_time_from_system() * 1000.0)
+	var ms := int(Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND)
 	var idx := int(ms / SHOP_WINDOW_MS)
 	var starts_at := idx * SHOP_WINDOW_MS
 	var ends_at := starts_at + SHOP_WINDOW_MS
@@ -526,15 +529,16 @@ static func get_shop_window() -> Dictionary:
 		"idx": idx,
 		"startsAt": starts_at,
 		"endsAt": ends_at,
-		"secondsLeft": maxi(0, int((ends_at - ms) / 1000)),
+		"secondsLeft": maxi(0, int((ends_at - ms) / MILLISECONDS_PER_SECOND)),
 	}
 
 
 static func format_shop_countdown(sec: int) -> String:
 	var s := maxi(0, sec)
-	var h := s / 3600
-	var m := (s % 3600) / 60
-	var r := s % 60
+	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+	var h := s / seconds_per_hour
+	var m := (s % seconds_per_hour) / SECONDS_PER_MINUTE
+	var r := s % SECONDS_PER_MINUTE
 	return "%sh %sm %02ds" % [h, m, r]
 
 

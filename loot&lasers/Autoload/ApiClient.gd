@@ -16,6 +16,8 @@ const DEFAULT_TIMEOUT_SEC := 30.0
 ## One automatic re-attempt after the first failure for safe reads / idempotent calls.
 const DEFAULT_SAFE_RETRIES := 1
 const RETRY_BACKOFF_SEC := 0.25
+const MIN_REQUEST_TIMEOUT_SEC := 0.25
+const REQUEST_ID_RANDOM_RANGE := 100_000
 
 const CODE_UNAUTHORIZED := "UNAUTHORIZED"
 const CODE_AUTH_SESSION_INVALID := "AUTH_SESSION_INVALID"
@@ -183,7 +185,7 @@ func _request_once(
 			)
 
 	var http := HTTPRequest.new()
-	http.timeout = maxf(0.25, timeout_sec)
+	http.timeout = maxf(MIN_REQUEST_TIMEOUT_SEC, timeout_sec)
 	add_child(http)
 
 	var headers: PackedStringArray = ["Content-Type: application/json", "Accept: application/json"]
@@ -480,7 +482,7 @@ func _load_base_url() -> void:
 
 
 func _new_request_id() -> String:
-	return "g%d-%d" % [Time.get_unix_time_from_system(), randi() % 100000]
+	return "g%d-%d" % [Time.get_unix_time_from_system(), randi() % REQUEST_ID_RANDOM_RANGE]
 
 
 func _diag_fail(

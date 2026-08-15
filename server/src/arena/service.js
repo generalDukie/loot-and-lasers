@@ -8,11 +8,18 @@ import { todayET } from "../shared/economyFormulas.js";
 import { clock } from "../shared/time/clock.js";
 import {
   ARENA_RATING_POLICY_VERSION,
+  ARENA_DEFAULT_RATING,
   CHALLENGE_LIMITS,
   CHALLENGE_TYPES,
   FARMING_SIGNAL_THRESHOLDS,
   DIRECT_CHALLENGE_RATING,
 } from "./config.js";
+
+const DATE_PART_PAD_WIDTH = 2;
+const MILLISECONDS_PER_SECOND = 1_000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
 import { ArenaError, ArenaErrors } from "./errors.js";
 import {
   assertOwnsCharacter,
@@ -43,7 +50,7 @@ import {
 
 export function currentSeasonId(now = new Date()) {
   // Monthly season stub aligned with client getSeason().
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(DATE_PART_PAD_WIDTH, "0")}`;
 }
 
 export function currentPeriodId() {
@@ -51,7 +58,7 @@ export function currentPeriodId() {
 }
 
 function hourAgoIso() {
-  return new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  return new Date(Date.now() - MILLISECONDS_PER_HOUR).toISOString();
 }
 
 function assertChallengeLimits(accountId) {
@@ -100,7 +107,7 @@ function buildPreviewPayload({
   challengeAllowed,
   challengeType,
 }) {
-  const cr = challengerChar.arena_rating || 1000;
+  const cr = challengerChar.arena_rating || ARENA_DEFAULT_RATING;
   const est = estimateWinLoss({
     challengerRating: cr,
     opponentRating,
@@ -248,7 +255,7 @@ export function createDirectChallenge(user, body = {}) {
     resolved.opponent.id
   );
   const prior = getPairBattleStats(accountPairKey, periodId);
-  const cr = challengerChar.arena_rating || 1000;
+  const cr = challengerChar.arena_rating || ARENA_DEFAULT_RATING;
   const or = resolved.opponentRating;
 
   const est = estimateWinLoss({
@@ -472,7 +479,7 @@ export function completeDirectChallenge(user, body = {}) {
   });
 
   const challengerChar = assertOwnsCharacter(user, challenge.challengerCharacterId);
-  const prevRating = challengerChar.arena_rating || 1000;
+  const prevRating = challengerChar.arena_rating || ARENA_DEFAULT_RATING;
   // Apply delta to live character, but delta was computed from snapshot.
   const newRating = Math.max(0, prevRating + calc.ratingDelta);
 

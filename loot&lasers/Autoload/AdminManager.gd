@@ -3,6 +3,16 @@ extends Node
 
 signal admin_action_finished(result: Dictionary)
 
+const AUDIT_REFERENCE_PREVIEW_LENGTH := 12
+const DEFAULT_ADMIN_LIST_LIMIT := 50
+const DEFAULT_PLAYER_SEARCH_LIMIT := 200
+const DEFAULT_GUILD_LIST_LIMIT := 100
+const DEFAULT_SYSTEM_MAIL_EXPIRY_DAYS := 14
+const DEFAULT_PROMO_MAX_REDEMPTIONS := 100
+const MAX_LOOKUP_RESULTS := 50
+const MAX_ADMIN_LIST_RESULTS := 200
+const MAX_CHARACTER_RESULTS := 500
+
 
 func _ready() -> void:
 	print("[AdminManager] ready")
@@ -34,9 +44,15 @@ func _result(res: Dictionary, fallback_msg: String = "") -> Dictionary:
 		correlation_id = str(data.get("correlation_id", data.get("correlationId", "")))
 		reference_id = str(data.get("transaction_id", data.get("id", "")))
 		if audit_id.is_empty() == false:
-			msg = "%s · audit=%s" % [msg, audit_id.substr(0, 12)]
+			msg = "%s · audit=%s" % [
+				msg,
+				audit_id.substr(0, AUDIT_REFERENCE_PREVIEW_LENGTH),
+			]
 		elif correlation_id.is_empty() == false:
-			msg = "%s · corr=%s" % [msg, correlation_id.substr(0, 12)]
+			msg = "%s · corr=%s" % [
+				msg,
+				correlation_id.substr(0, AUDIT_REFERENCE_PREVIEW_LENGTH),
+			]
 	var out := {
 		"ok": ok,
 		"message": msg,
@@ -133,7 +149,7 @@ func transfer_guild(guild_id: String, new_leader_id: String, reason: String = ""
 	})
 
 
-func send_system_mail(subject: String, body: String, recipients: Variant, reason: String, rewards: Dictionary = {}, expires_days: int = 14) -> Dictionary:
+func send_system_mail(subject: String, body: String, recipients: Variant, reason: String, rewards: Dictionary = {}, expires_days: int = DEFAULT_SYSTEM_MAIL_EXPIRY_DAYS) -> Dictionary:
 	var payload := {
 		"subject": subject,
 		"body": body,
@@ -150,7 +166,7 @@ func edit_filter(words: Array) -> Dictionary:
 	return await moderation("edit_filter", {"words": words})
 
 
-func create_promo_code(code: String, label: String, rewards: Dictionary, max_redemptions: int = 100) -> Dictionary:
+func create_promo_code(code: String, label: String, rewards: Dictionary, max_redemptions: int = DEFAULT_PROMO_MAX_REDEMPTIONS) -> Dictionary:
 	return await moderation("create_promo_code", {
 		"code": code,
 		"label": label,
@@ -170,14 +186,14 @@ func toggle_promo_code(promo_code_id: String, active: bool) -> Dictionary:
 	})
 
 
-func search_players(query: String = "", limit: int = 200) -> Dictionary:
+func search_players(query: String = "", limit: int = DEFAULT_PLAYER_SEARCH_LIMIT) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
 	var q := query.strip_edges()
 	# Prefer authoritative LookupPlayer when a query is present (name / id / email / nakama).
 	if not q.is_empty():
-		var look: Dictionary = await lookup_player(q, clampi(limit, 1, 50))
+		var look: Dictionary = await lookup_player(q, clampi(limit, 1, MAX_LOOKUP_RESULTS))
 		if look.ok and typeof(look.data) == TYPE_DICTIONARY:
 			var chars: Array = look.data.get("characters", []) if typeof(look.data.get("characters", null)) == TYPE_ARRAY else []
 			var accounts: Array = look.data.get("accounts", []) if typeof(look.data.get("accounts", null)) == TYPE_ARRAY else []
@@ -193,7 +209,7 @@ func search_players(query: String = "", limit: int = 200) -> Dictionary:
 		if not look.ok:
 			return look
 	var res: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/Character?sort=-created_date&limit=%s" % clampi(limit, 1, 500), null, true
+		"GET", "/api/entities/Character?sort=-created_date&limit=%s" % clampi(limit, 1, MAX_CHARACTER_RESULTS), null, true
 	)
 	var out := _result(res, "players")
 	if not out.ok:
@@ -235,7 +251,7 @@ func list_character_items(character_id: String) -> Dictionary:
 		return gate
 	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/Item/filter",
-		{"query": {"character_id": character_id}, "limit": 200}, true
+		{"query": {"character_id": character_id}, "limit": MAX_ADMIN_LIST_RESULTS}, true
 	)
 	return _result(res, "items")
 
@@ -251,7 +267,7 @@ func rename_character(character_id: String, new_name: String) -> Dictionary:
 	return _result(res, "renamed")
 
 
-func list_open_reports(limit: int = 50) -> Dictionary:
+func list_open_reports(limit: int = DEFAULT_ADMIN_LIST_LIMIT) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
@@ -262,12 +278,12 @@ func list_open_reports(limit: int = 50) -> Dictionary:
 	return _result(res, "reports")
 
 
-func list_guilds(limit: int = 100) -> Dictionary:
+func list_guilds(limit: int = DEFAULT_GUILD_LIST_LIMIT) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
 	var res: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/Guild?sort=-created_date&limit=%s" % clampi(limit, 1, 200), null, true
+		"GET", "/api/entities/Guild?sort=-created_date&limit=%s" % clampi(limit, 1, MAX_ADMIN_LIST_RESULTS), null, true
 	)
 	return _result(res, "guilds")
 
@@ -278,7 +294,7 @@ func list_guild_members(guild_id: String) -> Dictionary:
 		return gate
 	var res: Dictionary = await GameApiClient.request(
 		"POST", "/api/entities/GuildMember/filter",
-		{"query": {"guild_id": guild_id}, "limit": 100}, true
+		{"query": {"guild_id": guild_id}, "limit": DEFAULT_GUILD_LIST_LIMIT}, true
 	)
 	return _result(res, "members")
 
@@ -288,7 +304,7 @@ func list_promo_codes() -> Dictionary:
 	if not gate.is_empty():
 		return gate
 	var res: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/PromoCode?sort=-created_date&limit=200", null, true
+		"GET", "/api/entities/PromoCode?sort=-created_date&limit=%s" % MAX_ADMIN_LIST_RESULTS, null, true
 	)
 	return _result(res, "promos")
 
@@ -317,13 +333,13 @@ func economy_snapshot() -> Dictionary:
 	if not gate.is_empty():
 		return gate
 	var chars: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/Character?sort=-created_date&limit=500", null, true
+		"GET", "/api/entities/Character?sort=-created_date&limit=%s" % MAX_CHARACTER_RESULTS, null, true
 	)
 	var nova_ev: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/NovaSpendEvent?sort=-created_date&limit=200", null, true
+		"GET", "/api/entities/NovaSpendEvent?sort=-created_date&limit=%s" % MAX_ADMIN_LIST_RESULTS, null, true
 	)
 	var sd_ev: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/StardustSpendEvent?sort=-created_date&limit=200", null, true
+		"GET", "/api/entities/StardustSpendEvent?sort=-created_date&limit=%s" % MAX_ADMIN_LIST_RESULTS, null, true
 	)
 	if not chars.ok:
 		return _result(chars, "economy")
@@ -523,12 +539,12 @@ func audit_integrity(entry_id: String) -> Dictionary:
 
 # —— Email / Schedules ——
 
-func email_log(limit: int = 50) -> Dictionary:
+func email_log(limit: int = DEFAULT_ADMIN_LIST_LIMIT) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
 	var res: Dictionary = await GameApiClient.request(
-		"GET", "/api/auth/admin/email-log?limit=%s" % clampi(limit, 1, 200), null, true
+		"GET", "/api/auth/admin/email-log?limit=%s" % clampi(limit, 1, MAX_ADMIN_LIST_RESULTS), null, true
 	)
 	return _result(res, "email_log")
 
@@ -549,12 +565,12 @@ func schedules_list() -> Dictionary:
 	return _result(res, "schedules")
 
 
-func schedules_audit(limit: int = 50) -> Dictionary:
+func schedules_audit(limit: int = DEFAULT_ADMIN_LIST_LIMIT) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
 	var res: Dictionary = await GameApiClient.request(
-		"GET", "/api/schedules/audit?limit=%s" % clampi(limit, 1, 200), null, true
+		"GET", "/api/schedules/audit?limit=%s" % clampi(limit, 1, MAX_ADMIN_LIST_RESULTS), null, true
 	)
 	return _result(res, "schedule_audit")
 

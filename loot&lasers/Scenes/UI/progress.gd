@@ -1,6 +1,8 @@
 extends Control
 ## Progress — mirrors web AchievementsPage (progress panel · title pills · 2-col cards).
 
+const ACHIEVEMENT_SYNC_RESULT_INDEX: int = 1
+
 var _meta: Label
 var _status: Label
 var _list: VBoxContainer
@@ -17,9 +19,12 @@ func _ready() -> void:
 func _boot() -> void:
 	_busy = true
 	_status.text = "Syncing…"
-	await MissionManager.refresh_character()
-	await ProgressManager.load_daily()
-	var sync: Dictionary = await ProgressManager.sync_achievements()
+	await MissionManager.refresh_character(true)
+	var requests := AsyncGroup.new()
+	requests.add(ProgressManager.load_daily)
+	requests.add(ProgressManager.sync_achievements)
+	var results := await requests.wait()
+	var sync: Dictionary = results[ACHIEVEMENT_SYNC_RESULT_INDEX]
 	_busy = false
 	if not sync.ok:
 		_status.text = str(sync.get("error", "SyncAchievements failed"))

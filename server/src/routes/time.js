@@ -21,6 +21,9 @@ import {
   listAudit,
 } from "../scheduling/store.js";
 
+const DEFAULT_AUDIT_ENTRY_LIMIT = 50;
+const DEFAULT_PREVIEW_OCCURRENCE_COUNT = 5;
+
 function adminOnly(req, res) {
   if (!isAdmin(req.user)) {
     res.status(403).json({ error: "Admin only", code: "FORBIDDEN" });
@@ -59,7 +62,7 @@ export function createScheduleRouter(express) {
 
   router.get("/audit", requireAuth, (req, res) => {
     if (!adminOnly(req, res)) return;
-    res.json({ audit: listAudit(Number(req.query.limit) || 50) });
+    res.json({ audit: listAudit(Number(req.query.limit) || DEFAULT_AUDIT_ENTRY_LIMIT) });
   });
 
   router.post("/preview", requireAuth, (req, res) => {
@@ -69,7 +72,10 @@ export function createScheduleRouter(express) {
       if (body.timeZoneId && !isValidTimeZone(body.timeZoneId)) {
         return res.status(400).json({ error: "Invalid time zone", code: TimeErrors.INVALID_TIME_ZONE });
       }
-      const occurrences = previewOccurrences(body, Number(body.count) || 5);
+      const occurrences = previewOccurrences(
+        body,
+        Number(body.count) || DEFAULT_PREVIEW_OCCURRENCE_COUNT,
+      );
       res.json({ occurrences });
     } catch (err) {
       res.status(400).json({ error: err.message, code: err.code || TimeErrors.INVALID_RECURRENCE });

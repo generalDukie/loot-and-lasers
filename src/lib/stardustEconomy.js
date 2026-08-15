@@ -64,6 +64,15 @@ export const ARENA_WIN_FUEL_EQUIVALENT = 2.25;
 export const ARENA_WIN_STARDUST_MULTIPLIER = ARENA_WIN_FUEL_EQUIVALENT;
 export const MINING_EFFICIENCY = 0.03;
 
+const MINUTES_PER_HOUR = 60;
+const STARDUST_PER_FUEL_BASE = 50;
+const STARDUST_GROWTH_COEFFICIENT = 1.009;
+const STARDUST_GROWTH_EXPONENT = 1.625;
+const STARDUST_HIGH_LEVEL_REFERENCE = 166.66;
+const STARDUST_HIGH_LEVEL_EXPONENT = 3.055;
+const LEGACY_LEVEL_INPUT_MAX = 500;
+const DROP_CHANCE_PRECISION_SCALE = 10_000;
+
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 
 /** @deprecated Historical PCHIP waypoints — not production authority (Restoration 11). */
@@ -188,12 +197,12 @@ export function getMissionStardustPerFuel(level = 1) {
  */
 export function StardustPerFuel(level = 1) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
-  if (L <= 1) return 50;
+  if (L <= 1) return STARDUST_PER_FUEL_BASE;
   const growth =
-    1.009
-    * (L - 1) ** 1.625
-    * (1 + (L / 166.66) ** 3.055);
-  return Math.max(1, Math.round(50 + growth));
+    STARDUST_GROWTH_COEFFICIENT
+    * (L - 1) ** STARDUST_GROWTH_EXPONENT
+    * (1 + (L / STARDUST_HIGH_LEVEL_REFERENCE) ** STARDUST_HIGH_LEVEL_EXPONENT);
+  return Math.max(1, Math.round(STARDUST_PER_FUEL_BASE + growth));
 }
 
 export function AttributePurchaseCost(purchaseNumber = 1) {
@@ -221,7 +230,7 @@ export function MiningStardust(level, minutes) {
 
 /** Mining hours helper — snapshots use hours at session start. */
 export function computeMiningReward(level, hours) {
-  return MiningStardust(level, (Number(hours) || 0) * 60);
+  return MiningStardust(level, (Number(hours) || 0) * MINUTES_PER_HOUR);
 }
 
 /**
@@ -253,7 +262,7 @@ export function computeMissionJunkSellValue(missionStardustOrLevel, maybeFuelOrR
     if (typeof maybeRng === "function") rng = maybeRng;
   } else {
     const n = Number(missionStardustOrLevel);
-    if (Number.isFinite(n) && n > 0 && n === Math.floor(n) && n <= 500) {
+    if (Number.isFinite(n) && n > 0 && n === Math.floor(n) && n <= LEGACY_LEVEL_INPUT_MAX) {
       reward = MissionStardustReward(n, 1);
     } else {
       reward = n;
@@ -287,7 +296,10 @@ export function GearSaleValue(item) {
 export function missionGearDropChance(missStreak = 0) {
   const streak = Math.max(0, Math.floor(Number(missStreak) || 0));
   const raw = MISSION_GEAR_BASE_CHANCE + streak * MISSION_GEAR_PITY_INCREMENT;
-  return Math.min(MISSION_GEAR_DROP_CAP, Math.round(raw * 10000) / 10000);
+  return Math.min(
+    MISSION_GEAR_DROP_CAP,
+    Math.round(raw * DROP_CHANCE_PRECISION_SCALE) / DROP_CHANCE_PRECISION_SCALE,
+  );
 }
 
 export function rollMissionGearDrop(missStreak = 0, rng = Math.random) {

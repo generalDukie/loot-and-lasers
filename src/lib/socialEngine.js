@@ -13,7 +13,12 @@ import { getCurrentUserId, getCurrentUser } from "@/lib/currentUser";
 // any cache hit.
 let _meCache = null;       // { userId, char, at }
 let _meInFlight = null;    // { userId, promise }
-const ME_TTL = 10000;
+const ME_CACHE_TTL_MS = 10_000;
+const ME_FETCH_MAX_RETRIES = 3;
+const ME_FETCH_RETRY_BASE_DELAY_MS = 350;
+const ME_CHARACTER_FALLBACK_LIMIT = 3;
+const OWNED_CHARACTER_QUERY_LIMIT = 10;
+const CHARACTER_SEARCH_LIMIT = 20;
 
 // Resolve the current user id from the AuthContext-synced snapshot (always
 // current — no stale cache), falling back to api.auth.me() only before the
@@ -28,7 +33,7 @@ async function currentUserId() {
 export async function getMyCharacter({ force = false } = {}) {
   const uid = await currentUserId();
   const now = Date.now();
-  if (!force && _meCache && _meCache.userId === uid && now - _meCache.at < ME_TTL) {
+  if (!force && _meCache && _meCache.userId === uid && now - _meCache.at < ME_CACHE_TTL_MS) {
     return _meCache.char;
   }
   if (_meInFlight && _meInFlight.userId === uid) return _meInFlight.promise;
@@ -45,7 +50,11 @@ export async function getMyCharacter({ force = false } = {}) {
     }
     if (!ch) {
       // Fallback: newest character owned by this user.
-      const list = await api.entities.Character.filter({ created_by_id: uid }, "-created_date", 3);
+      const list = await api.entities.Character.filter(
+        { created_by_id: uid },
+        "-created_date",
+        ME_CHARACTER_FALLBACK_LIMIT,
+      );
       ch = list[0] || null;
       // Defensive: never trust a record that isn't actually owned by this user.
       if (ch && ch.created_by_id !== uid) ch = null;
@@ -61,19 +70,19 @@ export async function getMyCharacter({ force = false } = {}) {
       legacy_display: ch.legacy_display || me?.legacy_display || "surname",
     };
   };
-  const MAX_RETRIES = 3;
   const isTransient = (msg) => /rate limit|429|network|fetch|timeout|econnaborted|failed to fetch|5\d{2}/i.test(msg);
   const p = (async () => {
     try {
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      for (let attempt = 0; attempt <= ME_FETCH_MAX_RETRIES; attempt++) {
         try {
           const ch = await fetchOne();
           _meCache = { userId: uid, char: ch, at: Date.now() };
           return ch;
         } catch (err) {
           const msg = err?.message || String(err);
-          if (attempt < MAX_RETRIES && isTransient(msg)) {
-            await new Promise((r) => setTimeout(r, 350 * Math.pow(2, attempt)));
+          if (attempt < ME_FETCH_MAX_RETRIES && isTransient(msg)) {
+            const retryDelayMs = ME_FETCH_RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+            await new Promise((r) => setTimeout(r, retryDelayMs));
             continue;
           }
           // Terminal failure: return the last-known character (or null) so the
@@ -133,7 +142,11 @@ export function primeMyCharacterCache(char, opts = {}) {
 export async function getMyCharacters() {
   const uid = await currentUserId();
   if (!uid) return [];
-  return api.entities.Character.filter({ created_by_id: uid }, "-created_date", 10);
+  return api.entities.Character.filter(
+    { created_by_id: uid },
+    "-created_date",
+    OWNED_CHARACTER_QUERY_LIMIT,
+  );
 }
 
 // Pin a character as the account's active operative and drop the cache so the
@@ -147,9 +160,9 @@ export async function setActiveCharacter(characterId) {
 export async function searchCharacters(query, excludeId) {
   const q = (query || "").trim();
   if (!q) return [];
-  const res = await api.functions.invoke("SearchCharacters", { query: q, limit: 20 });
+  const res = await api.functions.invoke("SearchCharacters", { query: q, limit: CHARACTER_SEARCH_LIMIT });
   const results = Array.isArray(res?.results) ? res.results : Array.isArray(res?.data?.results) ? res.data.results : [];
-  return results.filter((c) => c.id !== excludeId).slice(0, 20);
+  return results.filter((c) => c.id !== excludeId).slice(0, CHARACTER_SEARCH_LIMIT);
 }
 
 export async function getFriends(characterId) {

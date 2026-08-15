@@ -55,7 +55,10 @@ var _page_nav_pending := false
 var _page_swap_token := 0
 ## Compiled PackedScenes — first `load()` compiles GDScript and is the hitch.
 var _packed_cache: Dictionary = {}
-## Live page instances kept across hops so revisits skip _build().
+## Packed scenes stay cached, but rendered page instances do not. Rebuilding on
+## each visit prevents a parked page from flashing an old data snapshot before
+## its live refresh completes.
+const RETAIN_RENDERED_PAGE_INSTANCES := false
 var _page_instances: Dictionary = {}
 var _warm_queue: Array = []
 var _warmup_paused := false
@@ -69,6 +72,13 @@ const _WALLET_VALUE_GAP := 8.0
 const _WALLET_TRAILING_SIZE := 29.0
 var _last_nav_ms := 0
 const NAV_COOLDOWN_MS := 200
+const CHROME_REFRESH_INTERVAL_SEC := 1.0
+const DAILY_PROMPT_DELAY_SEC := 0.45
+const NAV_WARMUP_RESUME_DELAY_SEC := 0.45
+const PAGE_FADE_IN_SEC := 0.12
+const TRANSITION_FLASH_PEAK_ALPHA := 0.06
+const TRANSITION_FLASH_IN_SEC := 0.04
+const TRANSITION_FLASH_OUT_SEC := 0.12
 
 
 func _ready() -> void:
@@ -99,7 +109,7 @@ func _complete_shell_boot() -> void:
 	AudioManager.start_station_ambient()
 	SettingsManager.apply_audio()
 	var timer := Timer.new()
-	timer.wait_time = 1.0
+	timer.wait_time = CHROME_REFRESH_INTERVAL_SEC
 	timer.timeout.connect(_refresh_chrome)
 	add_child(timer)
 	timer.start()
@@ -139,7 +149,7 @@ func _try_daily_prompt_after_tutorial() -> void:
 	if not is_inside_tree():
 		return
 	# Let skip/complete overlays clear before offering the daily choice.
-	await get_tree().create_timer(0.45).timeout
+	await get_tree().create_timer(DAILY_PROMPT_DELAY_SEC).timeout
 	if not is_inside_tree():
 		return
 	if TutorialManager.blocks_daily_login_prompt():
@@ -1209,14 +1219,14 @@ func show_page(path: String) -> void:
 	if _page != null and is_instance_valid(_page):
 		var outgoing := _page
 		_page = null
-		if _keeps_page(outgoing_path):
+		if _retains_page_instance(outgoing_path):
 			_park_page(outgoing)
 			_page_instances[outgoing_path] = outgoing
 		else:
 			_page_instances.erase(outgoing_path)
 			outgoing.queue_free()
 	var restored := false
-	if _page_instances.has(path) and is_instance_valid(_page_instances[path]):
+	if _retains_page_instance(path) and _page_instances.has(path) and is_instance_valid(_page_instances[path]):
 		_page = _page_instances[path]
 		_unpark_page(_page)
 		restored = true
@@ -1250,7 +1260,7 @@ func show_page(path: String) -> void:
 			_schedule_nav_warmup_resume()
 			return
 		_content.add_child(_page)
-		if _keeps_page(path):
+		if _retains_page_instance(path):
 			_page_instances[path] = _page
 	_restack_content_layers()
 	_hero_page_open = path == GameManager.SCENE_STATS
@@ -1296,6 +1306,10 @@ func _keeps_page(path: String) -> bool:
 		GameManager.SCENE_ARENA_COMBAT,
 		GameManager.SCENE_GALAXY_COMBAT,
 	]
+
+
+func _retains_page_instance(path: String) -> bool:
+	return RETAIN_RENDERED_PAGE_INSTANCES and _keeps_page(path)
 
 
 func _load_packed(path: String) -> PackedScene:
@@ -1429,7 +1443,10 @@ func _schedule_nav_warmup_resume() -> void:
 	var tree := get_tree()
 	if tree == null:
 		return
-	tree.create_timer(0.45).timeout.connect(_warm_next_scene, CONNECT_ONE_SHOT)
+	tree.create_timer(NAV_WARMUP_RESUME_DELAY_SEC).timeout.connect(
+		_warm_next_scene,
+		CONNECT_ONE_SHOT,
+	)
 
 
 func _warm_next_scene() -> void:
@@ -2014,12 +2031,22 @@ func _animate_page_entry(page_control: Control) -> void:
 	page_control.offset_bottom = 0.0
 	page_control.modulate.a = 0.0
 	var tween := page_control.create_tween()
-	tween.tween_property(page_control, "modulate:a", 1.0, 0.12).set_ease(Tween.EASE_OUT)
+	tween.tween_property(page_control, "modulate:a", 1.0, PAGE_FADE_IN_SEC).set_ease(Tween.EASE_OUT)
 	if _transition_flash != null and is_instance_valid(_transition_flash):
 		_transition_flash.modulate.a = 0.0
 		var flash := _transition_flash.create_tween()
-		flash.tween_property(_transition_flash, "modulate:a", 0.06, 0.04)
-		flash.tween_property(_transition_flash, "modulate:a", 0.0, 0.12).set_ease(Tween.EASE_OUT)
+		flash.tween_property(
+			_transition_flash,
+			"modulate:a",
+			TRANSITION_FLASH_PEAK_ALPHA,
+			TRANSITION_FLASH_IN_SEC,
+		)
+		flash.tween_property(
+			_transition_flash,
+			"modulate:a",
+			0.0,
+			TRANSITION_FLASH_OUT_SEC,
+		).set_ease(Tween.EASE_OUT)
 
 
 func _fit_page_to_stage() -> void:

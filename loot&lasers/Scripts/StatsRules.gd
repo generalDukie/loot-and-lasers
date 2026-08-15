@@ -22,6 +22,12 @@ const CLASS_BASE_STATS := {
 }
 
 const CLASS_BASE_STAT_TOTAL := 50
+const MAX_ATTRIBUTE_PURCHASE_BATCH := 50
+const MILLISECONDS_PER_SECOND := 1_000
+const AGILITY_ARCHETYPE_DAMAGE_MULTIPLIER := 0.925
+const DEFAULT_COMBAT_STAT_WEIGHT := 0.1
+const COMBAT_POWER_PER_LEVEL := 50.0
+const COMBAT_POWER_PER_WEIGHTED_STAT := 10.0
 
 
 static func primary_stat(class_key: String) -> String:
@@ -70,7 +76,7 @@ static func next_cost(character: Dictionary, stat: String) -> int:
 
 ## Sum of the next `count` purchase costs for one stat (authoritative curve).
 static func batch_cost(character: Dictionary, stat: String, count: int) -> int:
-	var n := clampi(count, 0, 50)
+	var n := clampi(count, 0, MAX_ATTRIBUTE_PURCHASE_BATCH)
 	var start := purchase_count(character, stat)
 	var total := 0
 	for i in n:
@@ -82,7 +88,7 @@ static func max_affordable_purchases(character: Dictionary, stat: String, stardu
 	var start := purchase_count(character, stat)
 	var left := maxi(0, stardust)
 	var n := 0
-	while n < 50:
+	while n < MAX_ATTRIBUTE_PURCHASE_BATCH:
 		var c := point_cost(start + n + 1)
 		if c <= 0 or left < c:
 			break
@@ -111,7 +117,7 @@ static func active_buffs(character: Dictionary) -> Array:
 	var raw: Variant = character.get("active_buffs", [])
 	if typeof(raw) != TYPE_ARRAY:
 		return out
-	var now_ms := int(Time.get_unix_time_from_system() * 1000.0)
+	var now_ms := int(Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND)
 	for b in raw:
 		if typeof(b) != TYPE_DICTIONARY:
 			continue
@@ -125,7 +131,7 @@ static func active_buffs(character: Dictionary) -> Array:
 		var exp_unix := _parse_iso_unix(exp_iso)
 		if exp_unix <= 0:
 			continue
-		if exp_unix * 1000 > now_ms:
+		if exp_unix * MILLISECONDS_PER_SECOND > now_ms:
 			out.append(b)
 	return out
 
@@ -143,7 +149,13 @@ static func derived(character: Dictionary, totals: Dictionary) -> Dictionary:
 	var primary_key := primary_stat(class_key)
 	var primary_val := float(totals.get(primary_key, 0))
 	var raw_dmg := MissionCombat.base_damage(primary_val)
-	var damage := int(round(raw_dmg * 0.925 if arch == "agi" else raw_dmg))
+	var damage := int(
+		round(
+			raw_dmg * AGILITY_ARCHETYPE_DAMAGE_MULTIPLIER
+			if arch == "agi"
+			else raw_dmg
+		)
+	)
 	var armor := 0.0
 	var tech := 0.0
 	if arch != "str":
@@ -200,8 +212,13 @@ static func combat_power(character: Dictionary, equipped: Array = []) -> int:
 	var weights: Dictionary = ArenaRules.CLASS_WEIGHTS.get(class_key, ArenaRules.CLASS_WEIGHTS["Vanguard"])
 	var weighted := 0.0
 	for k in ATTR_KEYS:
-		weighted += float(totals.get(k, 0)) * float(weights.get(k, 0.1))
-	return int(round(float(int(character.get("level", 1))) * 50.0 + weighted * 10.0))
+		weighted += float(totals.get(k, 0)) * float(weights.get(k, DEFAULT_COMBAT_STAT_WEIGHT))
+	return int(
+		round(
+			float(int(character.get("level", 1))) * COMBAT_POWER_PER_LEVEL
+			+ weighted * COMBAT_POWER_PER_WEIGHTED_STAT
+		)
+	)
 
 
 static func _apply_buffs(stats: Dictionary, buffs: Array) -> Dictionary:

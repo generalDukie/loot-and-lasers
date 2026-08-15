@@ -14,6 +14,13 @@ const SETTINGS_PATH := "user://settings.cfg"
 const SETTINGS_VERSION := 4
 const DESIGN_SIZE := ResolutionRules.DESIGN_SIZE
 const MIN_WINDOW := Vector2i(960, 540)
+const WINDOW_RECHECK_DELAY_SHORT_SEC := 0.15
+const WINDOW_RECHECK_DELAY_LONG_SEC := 0.4
+const AUDIO_SAVE_DEBOUNCE_SEC := 0.35
+const COMBAT_ANIMATION_MIN_SPEED := 0.5
+const COMBAT_ANIMATION_MAX_SPEED := 2.0
+const LEGACY_COMBAT_SPEED_EPSILON := 0.01
+const WINDOW_DECORATION_PADDING := Vector2i(12, 28)
 
 ## Local-only keys (must never POST to Node as authority).
 const LOCAL_KEYS := [
@@ -95,8 +102,8 @@ func _ready() -> void:
 		# Editor / Windows often need a few passes before maximize sticks.
 		call_deferred("_ensure_visible_window")
 		get_tree().process_frame.connect(_ensure_visible_window, CONNECT_ONE_SHOT)
-		get_tree().create_timer(0.15).timeout.connect(_ensure_visible_window)
-		get_tree().create_timer(0.4).timeout.connect(_ensure_visible_window)
+		get_tree().create_timer(WINDOW_RECHECK_DELAY_SHORT_SEC).timeout.connect(_ensure_visible_window)
+		get_tree().create_timer(WINDOW_RECHECK_DELAY_LONG_SEC).timeout.connect(_ensure_visible_window)
 	print("[SettingsManager] ready v%s design=%sx%s" % [SETTINGS_VERSION, DESIGN_SIZE.x, DESIGN_SIZE.y])
 
 
@@ -140,7 +147,11 @@ func load_settings() -> void:
 	privacy_guild_invites = bool(_config.get_value("privacy", "guild_invites", DEFAULTS["privacy_guild_invites"]))
 	privacy_show_online = bool(_config.get_value("privacy", "show_online", DEFAULTS["privacy_show_online"]))
 	_migrate_settings_file_if_needed()
-	combat_anim_speed = clampf(combat_anim_speed, 0.5, 2.0)
+	combat_anim_speed = clampf(
+		combat_anim_speed,
+		COMBAT_ANIMATION_MIN_SPEED,
+		COMBAT_ANIMATION_MAX_SPEED,
+	)
 
 
 func save_settings() -> Error:
@@ -364,7 +375,7 @@ func set_play_music_when_unfocused(on: bool, persist: bool = true) -> void:
 
 
 func set_combat_anim_speed(v: float, persist: bool = true) -> void:
-	combat_anim_speed = clampf(v, 0.5, 2.0)
+	combat_anim_speed = clampf(v, COMBAT_ANIMATION_MIN_SPEED, COMBAT_ANIMATION_MAX_SPEED)
 	if persist:
 		save_settings()
 
@@ -384,7 +395,7 @@ func _persist_audio(immediate: bool) -> void:
 	if tree == null:
 		save_settings()
 		return
-	_audio_save_timer = tree.create_timer(0.35)
+	_audio_save_timer = tree.create_timer(AUDIO_SAVE_DEBOUNCE_SEC)
 	var token := _audio_save_timer
 	token.timeout.connect(func() -> void:
 		if _audio_save_timer != token:
@@ -434,8 +445,12 @@ func _migrate_settings_file_if_needed() -> void:
 		window_mode = "fullscreen" if fullscreen else "maximized"
 	# v3 → v4: combat_anim_speed was a duration scale (higher = slower).
 	# Now it is a playback rate (higher = faster). Invert prior saves.
-	if ver < 4 and combat_anim_speed > 0.01:
-		combat_anim_speed = clampf(1.0 / combat_anim_speed, 0.5, 2.0)
+	if ver < 4 and combat_anim_speed > LEGACY_COMBAT_SPEED_EPSILON:
+		combat_anim_speed = clampf(
+			1.0 / combat_anim_speed,
+			COMBAT_ANIMATION_MIN_SPEED,
+			COMBAT_ANIMATION_MAX_SPEED,
+		)
 	_config.set_value("meta", "version", SETTINGS_VERSION)
 	_config.set_value("display", "window_mode", window_mode)
 	_config.set_value("accessibility", "combat_anim_speed", combat_anim_speed)
@@ -505,7 +520,7 @@ func _ensure_visible_window() -> void:
 			_enforcing_size = true
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 			var chrome := decor - Vector2i(DisplayServer.window_get_size())
-			var pad := Vector2i(12, 28)
+			var pad := WINDOW_DECORATION_PADDING
 			var max_client := Vector2i(
 				maxi(MIN_WINDOW.x, usable.size.x - maxi(chrome.x, 0) - pad.x),
 				maxi(MIN_WINDOW.y, usable.size.y - maxi(chrome.y, 0) - pad.y)
@@ -541,7 +556,7 @@ func _ensure_visible_window() -> void:
 	var client := Vector2i(DisplayServer.window_get_size())
 	var decor2 := Vector2i(DisplayServer.window_get_size_with_decorations())
 	var chrome2 := decor2 - client
-	var pad2 := Vector2i(12, 28)
+	var pad2 := WINDOW_DECORATION_PADDING
 	var max_client2 := Vector2i(
 		maxi(MIN_WINDOW.x, usable.size.x - maxi(chrome2.x, 0) - pad2.x),
 		maxi(MIN_WINDOW.y, usable.size.y - maxi(chrome2.y, 0) - pad2.y)

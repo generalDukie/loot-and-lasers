@@ -1,6 +1,12 @@
 extends Control
 ## Arena lobby — mirrors web ArenaPage (stats frame · challenger cards · history).
 
+const BOT_RAID_PROCESS_LIMIT: int = 2
+const MATCH_HISTORY_TTL_HOURS := 24.0
+const MINUTES_PER_HOUR := 60.0
+const SECONDS_PER_MINUTE := 60.0
+const MILLISECONDS_PER_SECOND := 1_000.0
+
 var _status: Label
 var _rating_label: Label
 var _stat_wl: Label
@@ -39,8 +45,6 @@ func _ready() -> void:
 		TutorialManager.tutorial_finished.connect(_on_tutorial_lock_changed)
 	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
 		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
-	if not ArenaManager.opponents.is_empty():
-		_populate()
 	await _boot()
 	_sync_view_rewards_cta()
 
@@ -81,9 +85,8 @@ func _on_tutorial_lock_changed(_unused = null) -> void:
 func _boot() -> void:
 	_set_status("Loading arena…")
 	await ArenaManager.sync_day()
-	await ArenaManager.refresh_character()
-	await ArenaManager.load_equipped()
-	var raids: Dictionary = await ArenaManager.process_bot_raids(2)
+	# SyncArenaDay already returns and applies the current character + arena state.
+	var raids: Dictionary = await ArenaManager.process_bot_raids(BOT_RAID_PROCESS_LIMIT)
 	if not is_inside_tree() or not visible:
 		return
 	if raids.ok:
@@ -99,7 +102,10 @@ func _boot() -> void:
 				"%s · rating %s%s" % [bot_name, "+" if delta >= 0 else "", delta]
 			)
 	# Always pull the board — never reuse a stale in-memory offer set across visits.
-	await ArenaManager.load_opponents()
+	var requests := AsyncGroup.new()
+	requests.add(ArenaManager.load_equipped)
+	requests.add(ArenaManager.load_opponents)
+	await requests.wait()
 	await ArenaManager.load_history()
 	if not is_inside_tree() or not visible:
 		return
@@ -615,8 +621,13 @@ func _populate_news() -> void:
 		_news_status.visible = true
 		return
 	var rows: Array = res.data if typeof(res.data) == TYPE_ARRAY else []
-	var now_ms := Time.get_unix_time_from_system() * 1000.0
-	var ttl_ms := 24.0 * 60.0 * 60.0 * 1000.0
+	var now_ms := Time.get_unix_time_from_system() * MILLISECONDS_PER_SECOND
+	var ttl_ms := (
+		MATCH_HISTORY_TTL_HOURS
+		* MINUTES_PER_HOUR
+		* SECONDS_PER_MINUTE
+		* MILLISECONDS_PER_SECOND
+	)
 	var shown := 0
 	for n in rows:
 		if typeof(n) != TYPE_DICTIONARY:
@@ -627,7 +638,10 @@ func _populate_news() -> void:
 			if "." in s:
 				s = s.get_slice(".", 0)
 			var then_unix := Time.get_unix_time_from_datetime_string(s)
-			if then_unix > 0 and (now_ms - then_unix * 1000.0) >= ttl_ms:
+			if (
+				then_unix > 0
+				and (now_ms - then_unix * MILLISECONDS_PER_SECOND) >= ttl_ms
+			):
 				continue
 		var row := PanelContainer.new()
 		row.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(

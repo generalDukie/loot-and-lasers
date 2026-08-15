@@ -21,10 +21,12 @@ func _ready() -> void:
 
 func _boot() -> void:
 	_set_status("Loading friends…")
-	await SocialManager.load_friends()
-	await SocialManager.load_blocks()
-	await _warm_names()
-	await _warm_presence()
+	# GetSocialState hydrates both friendships and blocks in one request.
+	await SocialManager.load_social_state()
+	var requests := AsyncGroup.new()
+	requests.add(_warm_names)
+	requests.add(_warm_presence)
+	await requests.wait()
 	_populate()
 	_set_status("")
 

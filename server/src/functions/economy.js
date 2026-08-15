@@ -1087,8 +1087,12 @@ export async function LaunchMission(user, body) {
     const result = await withTransactionAsync(async () => {
       let ch = requireMyChar(user);
       if (ch.active_mission_id) httpErr(409, "Already on a mission");
-      if (ch.mining_end_time && new Date(ch.mining_end_time).getTime() > clock.nowMs()) {
-        httpErr(409, "Mining in progress");
+      if (ch.mining_end_time) {
+        const endMs = new Date(ch.mining_end_time).getTime();
+        if (Number.isFinite(endMs) && endMs > clock.nowMs()) {
+          httpErr(409, "Mining in progress", "MINING_IN_PROGRESS");
+        }
+        httpErr(409, "Collect your mining node first", "MINING_READY_COLLECT");
       }
       if (countBagOccupancy(ch) >= getInventoryCap(ch)) {
         httpErr(400, "Inventory full — clear bag space before launching a mission");

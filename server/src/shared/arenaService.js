@@ -37,6 +37,31 @@ import { generateArenaBot } from "../../../src/lib/arenaBotGenerator.js";
 /** Challenger board lifetime (offer snapshots). */
 export const ARENA_OFFER_TTL_MS = 2 * 60 * 60 * 1000;
 
+function shuffleArenaOffers(offers) {
+  const out = Array.isArray(offers) ? offers.slice() : [];
+  // Deterministic per board so cached real-first packs are reordered once,
+  // not re-rolled on every GetArenaOpponents / lobby tick.
+  let seed = 1;
+  for (const row of out) {
+    const id = String(row?.offer_id || "");
+    for (let i = 0; i < id.length; i += 1) {
+      seed = (seed * 33 + id.charCodeAt(i)) >>> 0;
+    }
+  }
+  if (seed === 0) seed = 1;
+  const rand = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = out[i];
+    out[i] = out[j];
+    out[j] = tmp;
+  }
+  return out;
+}
+
 /** @deprecated Manual refresh removed — alias kept for older imports. */
 export const ARENA_REFRESH_MS = ARENA_OFFER_TTL_MS;
 
@@ -445,7 +470,7 @@ export function generateAndStoreArenaOffers(character, {
     }));
     return {
       character,
-      offers: existing.offers.map(publicOpponentOffer),
+      offers: shuffleArenaOffers(existing.offers.map(publicOpponentOffer)),
       replay: true,
       expires_at: existing.expires_at,
     };
@@ -573,7 +598,8 @@ export function generateAndStoreArenaOffers(character, {
     });
   }
 
-  const offers = [...realOffers, ...botOffers].slice(0, ARENA_CHALLENGER_SLOTS);
+  const packed = [...realOffers, ...botOffers].slice(0, ARENA_CHALLENGER_SLOTS);
+  const offers = shuffleArenaOffers(packed);
   const newlySelected = offers.flatMap(arenaOpponentIdentityIds);
   const nowIso = clock.nowIso();
   const expiresAt = new Date(clock.nowMs() + ARENA_OFFER_TTL_MS).toISOString();

@@ -166,16 +166,21 @@ func _request_once(
 	timeout_sec: float,
 	allow_reauth: bool
 ) -> Dictionary:
-	if authed and allow_reauth and AuthManager != null:
-		var expires_at := int(AuthManager.node_token_expires_at)
-		if expires_at > 0 and expires_at <= Time.get_unix_time_from_system() + AuthManager.NODE_REFRESH_SKEW_SEC:
-			var proactive: Dictionary = await AuthManager.refresh_node_gameplay_session()
-			if not proactive.get("success", false):
+	if authed and allow_reauth and AuthManager != null and _node_gameplay_token_needs_refresh():
+		var proactive: Dictionary = await AuthManager.refresh_node_gameplay_session()
+		if AuthManager.access_token.is_empty():
+			if AuthManager.is_logged_in():
 				return _client_error(
-					int(proactive.get("status", 401)),
-					str(proactive.get("error", "Gameplay session expired")),
-					CODE_UNAUTHORIZED
+					int(proactive.get("status", 503)),
+					str(proactive.get("error", "Gameplay session unavailable")),
+					"NODE_SESSION_UNAVAILABLE",
+					true
 				)
+			return _client_error(
+				int(proactive.get("status", 401)),
+				str(proactive.get("error", "Not logged in")),
+				CODE_UNAUTHORIZED
+			)
 
 	var http := HTTPRequest.new()
 	http.timeout = maxf(0.25, timeout_sec)
@@ -185,9 +190,11 @@ func _request_once(
 	var request_id := _new_request_id()
 	headers.append("X-Request-Id: %s" % request_id)
 	if authed:
-		var token := AuthManager.access_token
+		var token := AuthManager.access_token if AuthManager != null else ""
 		if token.is_empty():
 			http.queue_free()
+			if AuthManager != null and AuthManager.is_logged_in():
+				return _client_error(0, "Gameplay session unavailable", "NODE_SESSION_UNAVAILABLE", true)
 			return _client_error(0, "Not logged in", CODE_UNAUTHORIZED)
 		headers.append("Authorization: Bearer %s" % token)
 
@@ -245,6 +252,17 @@ func _request_once(
 			return await _request_once(method, path, body, authed, timeout_sec, false)
 
 	return envelope
+
+
+func _node_gameplay_token_needs_refresh() -> bool:
+	if AuthManager == null:
+		return false
+	if AuthManager.access_token.is_empty():
+		return AuthManager.is_logged_in()
+	var expires_at := int(AuthManager.node_token_expires_at)
+	if expires_at <= 0:
+		return false
+	return expires_at <= Time.get_unix_time_from_system() + AuthManager.NODE_REFRESH_SKEW_SEC
 
 
 ## Apply server-authored character / patch / wallet / attribute sheet fields.

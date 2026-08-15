@@ -323,6 +323,10 @@ func prepare_challenge(
 	if offer_id.is_empty():
 		return _fail("Missing opponent offer id")
 
+	# Lock the clicked contender before any await so the battle overlay cannot
+	# boot (or keep showing) the previous fight's opponent.
+	_begin_active_opponent(opp)
+
 	_set_battling(true)
 	challenge_started.emit()
 	var payload := {
@@ -337,11 +341,8 @@ func prepare_challenge(
 		var err_data := _payload(res)
 		if code == "ARENA_BOARD_REFRESHED":
 			_apply_board_from_payload(err_data)
-			# Board synced — retry once if the same foe (or offer) is still listed.
-			if not _board_retry:
-				var again := _match_offer_on_board(opp)
-				if not again.is_empty():
-					return await prepare_challenge(again, skip_cooldown, _cooldown_retry, true)
+			# Never auto-start a substitute offer — that fought whoever landed
+			# in the same slot after remint while the card still showed the last foe.
 			return _fail(
 				str(res.get("error", "Challengers updated — pick again")),
 				code,
@@ -654,6 +655,47 @@ static func defense_snapshot_to_opponent(snap: Dictionary) -> Dictionary:
 	return snap.duplicate(true)
 
 
+func _begin_active_opponent(opp: Dictionary) -> void:
+	pending_opp = opp.duplicate(true)
+	pending_battle = {}
+	pending_rewards = {}
+	pending_combat_id = ""
+	pending_offer_id = str(opp.get("offer_id", ""))
+	pending_challenge_id = ""
+
+
+## Combat math / items only. Never replace the locked contender's identity
+## (name, appearance, class, race, ids) with a stale combat.enemy blob.
+func _merge_opponent_combat_fields(dst: Dictionary, src: Dictionary) -> void:
+	if src.is_empty():
+		return
+	for key in ["display_stats", "stats", "equippedItems", "power"]:
+		if not src.has(key):
+			continue
+		var value: Variant = src.get(key)
+		if value == null:
+			continue
+		if typeof(value) == TYPE_DICTIONARY:
+			dst[key] = (value as Dictionary).duplicate(true)
+		elif typeof(value) == TYPE_ARRAY:
+			dst[key] = (value as Array).duplicate(true)
+		else:
+			dst[key] = value
+	for key in [
+		"name", "display_name", "class", "race", "level", "appearance", "avatar_url",
+		"avatar_config", "guild", "character_id", "realCharacterId", "id", "isBot",
+		"is_bot", "arena_bot_id", "offer_id",
+	]:
+		if dst.has(key):
+			var cur: Variant = dst.get(key)
+			if typeof(cur) == TYPE_STRING and str(cur).strip_edges().is_empty():
+				pass
+			elif cur != null and str(cur) != "":
+				continue
+		if src.has(key) and src.get(key) != null:
+			dst[key] = src.get(key)
+
+
 func _ingest_prepare_result(opp: Dictionary, data: Dictionary, requested_skip: bool = false) -> void:
 	pending_offer_id = str(data.get("offer_id", opp.get("offer_id", "")))
 	pending_is_free = bool(data.get("is_free", free_battles_left > 0))
@@ -663,12 +705,12 @@ func _ingest_prepare_result(opp: Dictionary, data: Dictionary, requested_skip: b
 	var combat: Dictionary = data.get("combat", {}) if typeof(data.get("combat", {})) == TYPE_DICTIONARY else {}
 	pending_combat_id = str(combat.get("combat_id", ""))
 	_ingest_combat_payload(combat)
-	pending_opp = opp.duplicate(true)
-	if typeof(data.get("opponent", null)) == TYPE_DICTIONARY and not (data.get("opponent") as Dictionary).is_empty():
-		pending_opp.merge(data["opponent"], true)
-	# Authoritative EPA / effective matchup attrs from committed combat.
+	if pending_opp.is_empty() or str(pending_opp.get("offer_id", "")) != str(opp.get("offer_id", "")):
+		pending_opp = opp.duplicate(true)
+	if typeof(data.get("opponent", null)) == TYPE_DICTIONARY:
+		_merge_opponent_combat_fields(pending_opp, data["opponent"])
 	if typeof(combat.get("enemy", null)) == TYPE_DICTIONARY:
-		pending_opp.merge(combat["enemy"], true)
+		_merge_opponent_combat_fields(pending_opp, combat["enemy"])
 	var player_disp: Variant = combat.get("player_display_stats", null)
 	if typeof(player_disp) != TYPE_DICTIONARY and typeof(data.get("player_display_stats", null)) == TYPE_DICTIONARY:
 		player_disp = data.get("player_display_stats")
@@ -724,6 +766,7 @@ func _map_opponent_cards(raw: Variant) -> Array:
 			"name": str(r.get("name", r.get("display_name", "Rival"))),
 			"display_name": str(r.get("name", r.get("display_name", "Rival"))),
 			"class": str(r.get("class", "Vanguard")),
+			"race": str(r.get("race", "")),
 			"level": int(r.get("level", 1)),
 			"arena_rating": int(r.get("arena_rating", r.get("rating", 1000))),
 			"matchup": str(r.get("matchup", "even")),
@@ -734,6 +777,30 @@ func _map_opponent_cards(raw: Variant) -> Array:
 			"appearance": r.get("appearance", {}),
 			"equippedItems": [],
 		})
+	return _shuffle_board_slots(out)
+
+
+## Stable per-board slot order so real operatives are not always index 0.
+## Seeded from offer_ids so UI rebuilds do not jump the same three cards around.
+func _shuffle_board_slots(cards: Array) -> Array:
+	if cards.size() <= 1:
+		return cards
+	var seed := 1
+	for card in cards:
+		if typeof(card) != TYPE_DICTIONARY:
+			continue
+		var oid := str((card as Dictionary).get("offer_id", ""))
+		seed = int((seed * 33 + oid.hash()) % 2147483647)
+		if seed <= 0:
+			seed = 1
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var out: Array = cards.duplicate()
+	for i in range(out.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp: Variant = out[i]
+		out[i] = out[j]
+		out[j] = tmp
 	return out
 
 

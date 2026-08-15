@@ -2,6 +2,7 @@ extends Control
 ## Character select — large operative roster (logic unchanged).
 
 const MAX_SLOTS := 3
+const StationLoadingOverlay := preload("res://Scripts/UI/StationLoadingOverlay.gd")
 
 var _list: HBoxContainer
 var _status: Label
@@ -19,6 +20,7 @@ var _active_id := ""
 var _enter_btn: Button
 var _create_btn: Button
 var _unlock_btn: Button
+var _delete_btn: Button
 var _card_buttons: Dictionary = {} # id -> Button
 
 
@@ -47,7 +49,7 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		KEY_ENTER, KEY_KP_ENTER:
 			var focus := get_viewport().gui_get_focus_owner()
-			if focus == _create_btn or focus == _unlock_btn:
+			if focus == _create_btn or focus == _unlock_btn or focus == _delete_btn:
 				return
 			_enter_selected()
 			get_viewport().set_input_as_handled()
@@ -163,15 +165,23 @@ func _build() -> void:
 	logout_btn.pressed.connect(_on_logout)
 	row.add_child(logout_btn)
 
+	_delete_btn = Button.new()
+	_delete_btn.text = "Delete Operative"
+	_delete_btn.custom_minimum_size = Vector2(200, 48)
+	ClientUi.apply_danger_button(_delete_btn)
+	ClientUi.apply_interaction_motion(_delete_btn)
+	_delete_btn.pressed.connect(_on_delete_selected_step1)
+	row.add_child(_delete_btn)
+
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
 
 	_unlock_btn = Button.new()
-	_unlock_btn.text = "Unlock Slot · %s" % AccountManager.SLOT_NOVA_COST
-	CurrencyIcon.apply_button_cost(_unlock_btn, 16.0)
 	_unlock_btn.custom_minimum_size = Vector2(220, 52)
-	_apply_accent_button(_unlock_btn)
+	ClientUi.fill_priced_action_button(
+		_unlock_btn, "Unlock Slot", "nova", AccountManager.SLOT_NOVA_COST, Color.WHITE, 13, 16.0, 52
+	)
 	_unlock_btn.pressed.connect(_on_unlock_slot)
 	row.add_child(_unlock_btn)
 
@@ -264,6 +274,7 @@ func _refresh() -> void:
 		_status.text = "No operatives yet. Re-login if Character APIs failed to bridge."
 		_create_btn.disabled = false
 		_enter_btn.disabled = true
+		_delete_btn.disabled = true
 		_unlock_btn.visible = false
 		_rebuild_roster()
 		return
@@ -310,6 +321,7 @@ func _update_slot_actions() -> void:
 		else "Not enough Nova Crystals"
 	)
 	_enter_btn.disabled = _selected_id.is_empty() or _switching
+	_delete_btn.disabled = _selected_id.is_empty() or _switching or _busy or _characters.is_empty()
 	if not _switching:
 		_enter_btn.text = "PLAY"
 	_status.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -737,6 +749,7 @@ func _on_unlock_slot() -> void:
 	_busy = true
 	_unlock_btn.disabled = true
 	_create_btn.disabled = true
+	_delete_btn.disabled = true
 	_status.add_theme_color_override("font_color", ClientUi.MUTED)
 	_status.text = "Unlocking slot…"
 	if str(AuthManager.user.get("active_character_id", "")) != debit_id:
@@ -791,6 +804,7 @@ func _enter(character: Dictionary) -> void:
 	_enter_btn.text = "LOADING…"
 	_create_btn.disabled = true
 	_unlock_btn.disabled = true
+	_delete_btn.disabled = true
 	var cid := str(character.get("id", ""))
 	var op_name := LegacyName.full_name(character).strip_edges()
 	if op_name.is_empty():
@@ -871,6 +885,87 @@ func _stop_loading_spinner() -> void:
 	set_process(false)
 	if is_instance_valid(_loading_spinner):
 		_loading_spinner.rotation = 0.0
+
+
+func _selected_character() -> Dictionary:
+	for character in _characters:
+		if typeof(character) == TYPE_DICTIONARY and str(character.get("id", "")) == _selected_id:
+			return character
+	return {}
+
+
+func _on_delete_selected_step1() -> void:
+	if _busy or _switching or _selected_id.is_empty():
+		return
+	var character := _selected_character()
+	if character.is_empty():
+		return
+	var cname := LegacyName.full_name(character).strip_edges()
+	if cname.is_empty():
+		cname = "Operative"
+	var sheet := ClientUi.make_confirm_sheet(
+		"DANGER",
+		"Delete %s?" % cname,
+		"This permanently erases this operative and all progress. This cannot be undone.",
+		_on_delete_selected_step2,
+		Callable(),
+		"Continue",
+		"Cancel",
+		ClientUi.DANGER,
+		true
+	)
+	add_child(sheet)
+
+
+func _on_delete_selected_step2() -> void:
+	if _busy or _switching or _selected_id.is_empty():
+		return
+	var character := _selected_character()
+	if character.is_empty():
+		return
+	var cname := LegacyName.full_name(character).strip_edges()
+	if cname.is_empty():
+		cname = "this operative"
+	var sheet := ClientUi.make_confirm_sheet(
+		"FINAL WARNING",
+		"Confirm deletion",
+		"Type the operative name “%s” in your mind, then confirm. There is no recovery." % cname,
+		_on_delete_selected_final,
+		Callable(),
+		"Delete Forever",
+		"Cancel",
+		ClientUi.DANGER,
+		true
+	)
+	add_child(sheet)
+
+
+func _on_delete_selected_final() -> void:
+	if _busy or _switching or _selected_id.is_empty():
+		return
+	var character := _selected_character()
+	if character.is_empty():
+		return
+	var cid := str(character.get("id", ""))
+	var cname := LegacyName.full_name(character).strip_edges()
+	_busy = true
+	_delete_btn.disabled = true
+	_create_btn.disabled = true
+	_unlock_btn.disabled = true
+	_enter_btn.disabled = true
+	_status.add_theme_color_override("font_color", ClientUi.MUTED)
+	_status.text = "Purging %s…" % (cname if not cname.is_empty() else "operative")
+	var res: Dictionary = await AccountManager.purge_and_delete_character(cid, cname)
+	_busy = false
+	if not res.ok:
+		_update_slot_actions()
+		_status.add_theme_color_override("font_color", ClientUi.DANGER)
+		_status.text = str(res.get("error", "Delete failed"))
+		return
+	_selected_id = ""
+	_status.add_theme_color_override("font_color", ClientUi.SUCCESS)
+	_status.text = "Operative deleted."
+	await _refresh()
 
 
 func _on_logout() -> void:

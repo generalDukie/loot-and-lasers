@@ -623,12 +623,12 @@ func _refresh_values() -> void:
 			if title_lab != null and is_instance_valid(title_lab):
 				title_lab.add_theme_color_override(
 					"font_color",
-					ClientUi.CYAN_SOFT if affordable or holding else Color(ClientUi.MUTED, 0.75)
+					Color.WHITE if affordable or holding else Color(ClientUi.MUTED, 0.75)
 				)
 			if cost_lab != null and is_instance_valid(cost_lab):
 				cost_lab.add_theme_color_override(
 					"font_color",
-					ClientUi.TEXT if affordable or holding else Color(ClientUi.MUTED, 0.8)
+					CurrencyIcon.STARDUST_FUCHSIA if affordable or holding else Color(ClientUi.MUTED, 0.8)
 				)
 		if row.has("panel") and is_instance_valid(row["panel"]):
 			(row["panel"] as Control).tooltip_text = StatsRules.attribute_tooltip(str(stat), c, eq)
@@ -1827,7 +1827,7 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	buy_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	buy_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	buy_title.add_theme_font_size_override("font_size", 17)
-	buy_title.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
+	buy_title.add_theme_color_override("font_color", Color.WHITE)
 	ClientUi.apply_display_font(buy_title)
 	buy_col.add_child(buy_title)
 	var cost_row := HBoxContainer.new()
@@ -1843,7 +1843,7 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	buy_cost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	buy_cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	buy_cost.add_theme_font_size_override("font_size", 19)
-	buy_cost.add_theme_color_override("font_color", ClientUi.TEXT)
+	buy_cost.add_theme_color_override("font_color", CurrencyIcon.STARDUST_FUCHSIA)
 	ClientUi.apply_display_font(buy_cost)
 	cost_row.add_child(buy_cost)
 
@@ -2174,21 +2174,21 @@ func _apply_attr_buy_style(btn: Button, affordable: bool) -> void:
 	var dark := Color(0.04, 0.055, 0.08, 0.98)
 	var dark_hover := Color(0.06, 0.085, 0.12, 0.98)
 	var dark_pressed := Color(0.03, 0.045, 0.07, 0.98)
-	var cyan := ClientUi.CYAN
-	var cyan_soft := ClientUi.CYAN_SOFT
+	var fuchsia := CurrencyIcon.STARDUST_FUCHSIA
+	var fuchsia_soft := fuchsia.lightened(0.12)
 	var muted_border := Color(0.28, 0.34, 0.42, 0.55)
 	if affordable:
-		btn.add_theme_stylebox_override("normal", ClientUi.button_style(dark, cyan))
-		btn.add_theme_stylebox_override("hover", ClientUi.button_style(dark_hover, cyan_soft))
-		btn.add_theme_stylebox_override("pressed", ClientUi.button_style(dark_pressed, cyan))
+		btn.add_theme_stylebox_override("normal", ClientUi.button_style(dark, fuchsia))
+		btn.add_theme_stylebox_override("hover", ClientUi.button_style(dark_hover, fuchsia_soft))
+		btn.add_theme_stylebox_override("pressed", ClientUi.button_style(dark_pressed, fuchsia))
 		btn.add_theme_stylebox_override("disabled", ClientUi.button_style(dark, muted_border))
 	else:
 		btn.add_theme_stylebox_override("normal", ClientUi.button_style(dark, muted_border))
 		btn.add_theme_stylebox_override("hover", ClientUi.button_style(dark, muted_border))
 		btn.add_theme_stylebox_override("pressed", ClientUi.button_style(dark, muted_border))
 		btn.add_theme_stylebox_override("disabled", ClientUi.button_style(dark, muted_border))
-	btn.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
-	btn.add_theme_color_override("font_hover_color", ClientUi.CYAN_SOFT)
+	btn.add_theme_color_override("font_color", fuchsia_soft)
+	btn.add_theme_color_override("font_hover_color", fuchsia_soft)
 	btn.add_theme_color_override("font_pressed_color", ClientUi.TEXT)
 	btn.add_theme_color_override("font_disabled_color", Color(ClientUi.MUTED, 0.7))
 	btn.set_meta("ui_sfx_kind", "confirm")

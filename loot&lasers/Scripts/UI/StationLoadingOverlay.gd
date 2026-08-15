@@ -1,24 +1,25 @@
 extends CanvasLayer
-class_name StationLoadingOverlay
 ## Full-screen station loading veil that lives on the viewport root so the
 ## spinner keeps turning across character-select → game-shell scene changes.
+## Uses load().new() so this works in a game run without editor class-cache.
 
 const SPIN_SEC := 0.9
 const LAYER_NAME := "StationLoadingOverlay"
+const SCRIPT_PATH := "res://Scripts/UI/StationLoadingOverlay.gd"
 
 var _status: Label
 var _spinner: TextureRect
 var _spinning := false
 
 
-static func instance() -> StationLoadingOverlay:
+static func instance() -> CanvasLayer:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null or tree.root == null:
 		return null
 	var existing := tree.root.get_node_or_null(LAYER_NAME)
-	if existing is StationLoadingOverlay:
-		return existing as StationLoadingOverlay
-	var overlay := StationLoadingOverlay.new()
+	if existing is CanvasLayer:
+		return existing as CanvasLayer
+	var overlay: CanvasLayer = load(SCRIPT_PATH).new()
 	overlay.name = LAYER_NAME
 	overlay.layer = 120
 	tree.root.add_child(overlay)
@@ -29,24 +30,24 @@ static func show_loading(message: String) -> void:
 	var overlay := instance()
 	if overlay == null:
 		return
-	overlay._ensure_ui()
-	overlay._set_message(message)
+	overlay.call("_ensure_ui")
+	overlay.call("_set_message", message)
 	overlay.visible = true
-	overlay._start_spin()
+	overlay.call("_start_spin")
 
 
 static func set_message(message: String) -> void:
 	var overlay := instance()
 	if overlay == null:
 		return
-	overlay._set_message(message)
+	overlay.call("_set_message", message)
 
 
 static func hide_loading() -> void:
 	var overlay := instance()
 	if overlay == null:
 		return
-	overlay._stop_spin()
+	overlay.call("_stop_spin")
 	overlay.visible = false
 
 

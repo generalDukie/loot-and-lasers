@@ -669,7 +669,7 @@ func _build_sd_wager_row() -> VBoxContainer:
 	for pct in SD_QUICK_PCTS:
 		var b := Button.new()
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ClientUi.apply_ghost_button(b)
+		ClientUi.apply_dark_outline_button(b, CurrencyIcon.STARDUST_FUCHSIA, 36)
 		var p := float(pct)
 		b.pressed.connect(func() -> void: _set_sd_wager_pct(p))
 		row.add_child(b)
@@ -858,7 +858,9 @@ func _refresh_wager_controls() -> void:
 		var pct: float = SD_QUICK_PCTS[i]
 		var amt := int(floor(float(sd_bal) * pct))
 		var btn := _sd_quick_btns[i]
-		btn.text = "%d%% · %s" % [int(pct * 100.0), _fmt(amt)]
+		ClientUi.fill_priced_action_button(
+			btn, "%d%%" % int(pct * 100.0), "stardust", _fmt(amt), Color.WHITE, 13, 14.0, 36
+		)
 		var ok := amt >= mn and amt <= mx and amt <= sd_bal and amt > 0
 		btn.disabled = _busy or not ok
 		btn.button_pressed = (_sd_wager == amt and ok)

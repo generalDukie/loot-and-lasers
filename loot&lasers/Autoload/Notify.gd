@@ -72,6 +72,7 @@ const _SYSTEM_CODES := {
 	"INTERNAL_ERROR": true,
 	"UNAUTHORIZED": true,
 	"AUTH_SESSION_INVALID": true,
+	"NODE_SESSION_UNAVAILABLE": true,
 }
 
 

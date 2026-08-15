@@ -666,5 +666,3 @@ func _apply_wallet_from_data(data: Variant, source: String) -> bool:
 		character_updated.emit(GameManager.active_character)
 		return true
 	return false
-
-

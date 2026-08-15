@@ -121,6 +121,26 @@ test("reward is snapshotted at start (SPF × 0.03 × minutes)", () => {
   assert.ok(patch.mining_end_time);
 });
 
+await testAsync("duplicate StartMining returns existing job", async () => {
+  freeze(1_710_000_000_000);
+  const first = await StartMining(user, { hours: 2 });
+  assert.equal(first.status, 200);
+  const second = await StartMining(user, { hours: 8 });
+  assert.equal(second.status, 200);
+  assert.equal(second.body.already_active, true);
+  assert.equal(second.body.mining.hours, 2);
+  assert.equal(entities.Character.get(ch.id).mining_hours, 2);
+});
+
+await testAsync("duplicate CancelMining is idle-safe", async () => {
+  const first = await CancelMining(user, {});
+  assert.equal(first.status, 200);
+  const second = await CancelMining(user, {});
+  assert.equal(second.status, 200);
+  assert.equal(second.body.already_idle, true);
+  assert.equal(second.body.mining.mining_state, MiningStates.IDLE);
+});
+
 await testAsync("StartMining persists session + committed reward", async () => {
   freeze(1_700_000_000_000);
   const res = await StartMining(user, { hours: 2 });
@@ -229,6 +249,20 @@ await testAsync("serializeMiningState idle when cleared", async () => {
   assert.equal(s.mining_state, MiningStates.IDLE);
   assert.equal(s.reward_state, "none");
   assert.equal(s.collected, true);
+});
+
+await testAsync("CancelMining refuses a finished uncollected job", async () => {
+  freeze(2_000_000_000_000);
+  const start = await StartMining(user, { hours: 1 });
+  assert.equal(start.status, 200);
+  freeze(2_000_000_000_000 + 3600 * 1000 + 1);
+  const cancel = await CancelMining(user, {});
+  assert.equal(cancel.status, 409);
+  assert.equal(cancel.body.code, "MINING_READY_COLLECT");
+  const live = entities.Character.get(ch.id);
+  assert.ok(live.mining_end_time);
+  const collect = await CollectMining(user, { request_id: "mine_ready_must_collect" });
+  assert.equal(collect.status, 200, collect.body?.error);
 });
 
 await testAsync("ownership: other account cannot collect foreign character", async () => {

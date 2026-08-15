@@ -236,8 +236,11 @@ func ensure_node_bridge() -> Dictionary:
 				node_bridge_ok = true
 				user_changed.emit(user)
 				return {"success": true, "error": "", "status": 200, "data": user}
-		# Stale, near-expiry, or cross-account JWT — clear and re-bridge.
-		_clear_node_session_only()
+		# Wrong account on the JWT — drop it. Near-expiry keeps the live token
+		# until the bridge returns a replacement so concurrent Node RPCs do not
+		# observe an empty gameplay session and report "Not logged in".
+		if not binding_matches:
+			_clear_node_session_only()
 	var email := str(user.get("email", "")).strip_edges().to_lower()
 	if email.is_empty() and NakamaManager != null and NakamaManager.has_method("get_account_email"):
 		email = str(NakamaManager.get_account_email()).strip_edges().to_lower()
@@ -247,11 +250,19 @@ func ensure_node_bridge() -> Dictionary:
 func refresh_node_gameplay_session() -> Dictionary:
 	if NakamaManager == null:
 		return {"success": false, "error": "Nakama manager unavailable", "status": 401}
+	## Coalesce overlapping refreshes. Never clear the live JWT first — concurrent
+	## Node RPCs (mining, presence) would otherwise see an empty token while Nakama
+	## is still valid.
+	if _bridge_in_progress:
+		var pending: Dictionary = await node_bridge_completed
+		if has_node_gameplay_session():
+			return {"success": true, "error": "", "status": 200, "data": user}
+		return pending
 	if NakamaManager.session != null and NakamaManager.session.would_expire_in(NODE_REFRESH_SKEW_SEC):
 		var refreshed: Dictionary = await NakamaManager.refresh_session()
 		if not refreshed.get("success", false):
-			_clear_node_session_only()
 			if _is_terminal_auth_failure(refreshed):
+				_clear_node_session_only()
 				await logout_nakama()
 				clear_session()
 				GameManager.go_login()
@@ -266,7 +277,6 @@ func refresh_node_gameplay_session() -> Dictionary:
 		clear_session()
 		GameManager.go_login()
 		return {"success": false, "error": "Nakama session expired", "status": 401}
-	_clear_node_session_only()
 	var email := ""
 	if NakamaManager.has_method("get_account_email"):
 		email = str(NakamaManager.get_account_email()).strip_edges().to_lower()
@@ -274,7 +284,7 @@ func refresh_node_gameplay_session() -> Dictionary:
 	if not bridged.get("success", false):
 		if str(bridged.get("code", "")) == CODE_AUTH_SESSION_INVALID:
 			return bridged
-		if int(bridged.get("status", 0)) == 401:
+		if int(bridged.get("status", 0)) == 401 and not is_nakama_authenticated():
 			await logout_nakama()
 			clear_session()
 			GameManager.go_login()

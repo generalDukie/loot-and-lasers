@@ -1,6 +1,8 @@
 extends Control
 ## Persistent in-game console. Page scenes swap inside the recessed content stage.
 
+const StationLoadingOverlay := preload("res://Scripts/UI/StationLoadingOverlay.gd")
+
 var _content: Control
 var _overlay_host: Control
 var _nav_buttons: Dictionary = {}
@@ -1141,7 +1143,13 @@ func try_begin_page_nav(path: String) -> bool:
 		return false
 	if _page_swap_busy or _page_nav_pending:
 		return false
+	# Same page under a dismissed overlay (Arena after a fight) must still
+	# run show_page → on_shell_reshow so reminted challenger cards replace
+	# the pre-fight portraits.
 	if path == _page_path and _page != null and is_instance_valid(_page):
+		if _page.has_method("on_shell_reshow"):
+			_page_nav_pending = true
+			return true
 		return false
 	var now := Time.get_ticks_msec()
 	if now - _last_nav_ms < NAV_COOLDOWN_MS:
@@ -1159,10 +1167,12 @@ func show_page(path: String) -> void:
 		return
 	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR) and path == GameManager.SCENE_SHIP:
 		return
+	if path == _page_path and _page != null and is_instance_valid(_page):
+		_refresh_kept_page(_page)
+		return
+
 	# Never re-enter while a page is mounting — that freed nodes mid-_ready.
 	if _page_swap_busy:
-		return
-	if path == _page_path and _page != null and is_instance_valid(_page):
 		return
 
 	_pause_nav_warmup()
@@ -2187,7 +2197,7 @@ func _character_stamp() -> Array:
 	if MissionManager.has_active_mission():
 		mission_tick = MissionManager.seconds_remaining()
 	var mining_tick := -1
-	if MiningManager.is_mining_busy():
+	if MiningManager.is_mining():
 		mining_tick = int(ceil(float(MiningManager.remaining_ms()) / 1000.0))
 	return [
 		c.get("id", ""),
@@ -2200,7 +2210,7 @@ func _character_stamp() -> Array:
 		c.get("experience_to_next_level", 0),
 		c.get("active_title", ""),
 		MissionManager.has_active_mission(),
-		MiningManager.is_mining_busy(),
+		MiningManager.is_mining(),
 		mission_tick,
 		mining_tick,
 	]
@@ -2211,7 +2221,7 @@ func _on_activity_pressed() -> void:
 	if MissionManager.has_active_mission():
 		GameManager.go_mission_run()
 		return
-	if MiningManager.is_mining_busy():
+	if MiningManager.is_mining():
 		GameManager.go_mining()
 		return
 	GameManager.go_hub()
@@ -2273,6 +2283,16 @@ func _refresh_chrome() -> void:
 			else:
 				_set_activity_icon("rocket", tint)
 				_activity_label.text = "Mission in Progress\n%s" % MissionBoard.format_duration(remaining)
+	elif MiningManager.is_ready():
+		var tint_r := Color("#4ADE80")
+		_apply_activity_styles("mining_ready", tint_r)
+		_activity.disabled = false
+		_activity.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		_activity.tooltip_text = "Collect mining"
+		_set_activity_icon("sparkles", tint_r)
+		if is_instance_valid(_activity_label):
+			_activity_label.add_theme_color_override("font_color", tint_r)
+			_activity_label.text = "Mining Complete\nCOLLECT"
 	elif MiningManager.is_mining_busy():
 		var tint_m := Color("#F59E0B")
 		_apply_activity_styles("mining", tint_m)

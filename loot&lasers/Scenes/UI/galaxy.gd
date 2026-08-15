@@ -402,11 +402,9 @@ func _build() -> void:
 	ClientUi.apply_display_font(_cooldown_lab)
 	cd_row.add_child(_cooldown_lab)
 	_skip_btn = Button.new()
-	_skip_btn.text = "Skip · %s" % DungeonRules.SKIP_COST
-	ClientUi.apply_ghost_button(_skip_btn)
-	UiIcon.apply_leading_icon(_skip_btn, "zap", Color("#FDE68A"), 16.0)
-	_skip_btn.add_theme_font_size_override("font_size", 15)
-	_skip_btn.add_theme_color_override("font_color", Color("#FDE68A"))
+	ClientUi.fill_priced_action_button(
+		_skip_btn, "Skip", "nova", DungeonRules.SKIP_COST, Color.WHITE, 15, 16.0, 0
+	)
 	_skip_btn.pressed.connect(_on_skip)
 	cd_row.add_child(_skip_btn)
 

@@ -31,6 +31,8 @@ func _ready() -> void:
 	_build()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
+	if not ArenaManager.opponents_loaded.is_connected(_on_opponents_loaded):
+		ArenaManager.opponents_loaded.connect(_on_opponents_loaded)
 	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_lock_changed):
 		TutorialManager.tutorial_changed.connect(_on_tutorial_lock_changed)
 	if not TutorialManager.tutorial_finished.is_connected(_on_tutorial_lock_changed):
@@ -46,13 +48,19 @@ func _ready() -> void:
 func on_shell_reshow() -> void:
 	_update_lobby_chrome()
 	_sync_view_rewards_cta()
-	# Drop stale challenger cards immediately — closures can still hold offer_ids from
-	# the pre-fight board after Finish remints, which triggers "pick again" on skip.
-	for c in _list.get_children():
-		c.queue_free()
+	# Finish already reminted ArenaManager.opponents — paint that board now so
+	# the slot you just fought cannot keep the old portrait/offer_id.
+	_populate_challengers()
 	_set_status("Syncing challengers…")
 	_busy = false
 	call_deferred("_resync_board")
+
+
+func _on_opponents_loaded(_opponents: Array = []) -> void:
+	if not is_inside_tree():
+		return
+	_populate_challengers()
+	_update_lobby_chrome()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
@@ -371,23 +379,55 @@ func _on_view_rewards() -> void:
 	_sync_view_rewards_cta()
 
 
-func _apply_skip_fight_button(btn: Button) -> void:
-	## Web amber SKIP & FIGHT only (Challenge stays painted cyan).
-	ClientUi.apply_display_font(btn)
-	btn.add_theme_font_size_override("font_size", 16)
-	btn.add_theme_stylebox_override("normal", ClientUi.button_style(
-		Color("#F59E0B"), Color("#FCD34D")
-	))
-	btn.add_theme_stylebox_override("hover", ClientUi.button_style(
-		Color("#FBBF24"), Color("#FDE68A")
-	))
-	btn.add_theme_stylebox_override("pressed", ClientUi.button_style(
-		Color("#D97706"), Color("#F59E0B")
-	))
-	btn.add_theme_color_override("font_color", Color(0.05, 0.05, 0.05))
-	btn.add_theme_color_override("font_hover_color", Color(0.02, 0.02, 0.02))
-	btn.add_theme_color_override("font_pressed_color", Color(0.08, 0.05, 0.0))
-	ClientUi.apply_interaction_motion(btn)
+func _apply_market_action_button(btn: Button, accent: Color) -> void:
+	ClientUi.apply_dark_outline_button(btn, accent)
+	btn.text = ""
+	btn.icon = null
+
+
+func _fight_btn_label(text: String, color: Color, font_size: int = 13) -> Label:
+	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.text = text
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", font_size)
+	lab.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(lab)
+	return lab
+
+
+func _fill_fight_button(btn: Button, skip_cooldown: bool) -> void:
+	var accent := CurrencyIcon.NOVA_GOLD if skip_cooldown else ClientUi.CYAN
+	_apply_market_action_button(btn, accent)
+	var pad := MarginContainer.new()
+	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pad.add_theme_constant_override("margin_left", 0)
+	pad.add_theme_constant_override("margin_right", 0)
+	btn.add_child(pad)
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 4)
+	pad.add_child(row)
+	if skip_cooldown:
+		row.add_child(_fight_btn_label("SKIP & FIGHT", Color.WHITE, 16))
+		var cost_cluster := HBoxContainer.new()
+		cost_cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cost_cluster.alignment = BoxContainer.ALIGNMENT_CENTER
+		cost_cluster.add_theme_constant_override("separation", 2)
+		var glyph := CurrencyIcon.make("nova", 18.0)
+		glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cost_cluster.add_child(glyph)
+		cost_cluster.add_child(_fight_btn_label(str(ArenaRules.SKIP_COST), accent, 16))
+		row.add_child(cost_cluster)
+		return
+	var swords := UiIcon.make("swords", accent, 18.0)
+	swords.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(swords)
+	row.add_child(_fight_btn_label("CHALLENGE", accent))
 
 
 func _add_stat_chip(parent: GridContainer, icon: String, label: String, color: Color) -> Label:
@@ -614,16 +654,19 @@ func _set_status(text: String) -> void:
 
 
 func _populate_challengers() -> void:
-	for c in _list.get_children():
-		c.queue_free()
+	if _list == null:
+		return
+	while _list.get_child_count() > 0:
+		var child := _list.get_child(_list.get_child_count() - 1)
+		_list.remove_child(child)
+		child.free()
 	if ArenaManager.opponents.is_empty():
 		_set_status("No challengers available right now.")
 		return
 	_set_status("")
 	for opp in ArenaManager.opponents:
-		if typeof(opp) != TYPE_DICTIONARY:
-			continue
-		_list.add_child(_make_card(opp))
+		if typeof(opp) == TYPE_DICTIONARY:
+			_list.add_child(_make_card((opp as Dictionary).duplicate(true)))
 
 
 func _populate_history() -> void:
@@ -889,19 +932,9 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 
 	var fight := Button.new()
 	fight.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if ArenaManager.cooldown_active():
-		# Web only: amber while skipping cooldown. Normal challenges are cyan painted-btn.
-		fight.text = "SKIP & FIGHT · %s" % ArenaRules.SKIP_COST
-		CurrencyIcon.apply_button_cost(fight, 16.0, "nova", true)
-		_apply_skip_fight_button(fight)
-	else:
-		fight.text = "CHALLENGE"
-		fight.icon = UiIcon.texture("swords")
-		fight.expand_icon = true
-		fight.add_theme_constant_override("icon_max_width", 18)
-		ClientUi.apply_primary_button(fight)
-		UiIcon.apply_button_icon_colors(fight, Color.WHITE)
-	fight.pressed.connect(func() -> void: _on_challenge(opp))
+	fight.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_fill_fight_button(fight, ArenaManager.cooldown_active())
+	fight.pressed.connect(_on_challenge.bind(opp.duplicate(true)))
 	TutorialManager.tag_target(fight, "arena-fight")
 	if TutorialManager.blocks_arena_combat():
 		fight.disabled = true

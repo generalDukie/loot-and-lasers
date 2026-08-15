@@ -468,17 +468,30 @@ func _make_restock_button() -> Button:
 	restock_row.add_theme_constant_override("separation", 10)
 	restock_pad.add_child(restock_row)
 	var restock_lab := Label.new()
-	restock_lab.text = "Restock · %s" % ShopManager.SHOP_REFRESH_COST
+	restock_lab.text = "Restock"
 	restock_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	restock_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	restock_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	restock_lab.add_theme_font_size_override("font_size", REFRESH_TIMER_FS)
-	restock_lab.add_theme_color_override("font_color", accent.lightened(0.12))
+	restock_lab.add_theme_color_override("font_color", Color.WHITE)
 	ClientUi.apply_display_font(restock_lab)
 	restock_row.add_child(restock_lab)
+	var restock_cluster := HBoxContainer.new()
+	restock_cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_cluster.alignment = BoxContainer.ALIGNMENT_CENTER
+	restock_cluster.add_theme_constant_override("separation", 2)
+	restock_row.add_child(restock_cluster)
 	var restock_nova := CurrencyIcon.make("nova", REFRESH_TIMER_ICON)
 	restock_nova.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	restock_row.add_child(restock_nova)
+	restock_cluster.add_child(restock_nova)
+	var restock_amt := Label.new()
+	restock_amt.text = str(ShopManager.SHOP_REFRESH_COST)
+	restock_amt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	restock_amt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	restock_amt.add_theme_font_size_override("font_size", REFRESH_TIMER_FS)
+	restock_amt.add_theme_color_override("font_color", accent)
+	ClientUi.apply_display_font(restock_amt)
+	restock_cluster.add_child(restock_amt)
 	restock.pressed.connect(func() -> void: _on_refresh("all"))
 	TutorialManager.tag_target(restock, "shop-restock")
 	if TutorialManager.blocks_black_market_commerce():

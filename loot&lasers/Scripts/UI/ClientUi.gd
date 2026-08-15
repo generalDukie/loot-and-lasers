@@ -351,6 +351,112 @@ static func apply_tinted_painted_button(btn: Button, tint: Color) -> void:
 	apply_interaction_motion(btn)
 
 
+static func dark_outline_btn_style(border: Color, glow: float = 0.35) -> StyleBoxFlat:
+	## Dark fill + colored outline for spend CTAs that show a price on the button.
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(0.04, 0.055, 0.09, 0.95)
+	s.border_color = border
+	s.set_border_width_all(2)
+	s.set_corner_radius_all(10)
+	s.content_margin_left = 14
+	s.content_margin_right = 14
+	s.content_margin_top = 8
+	s.content_margin_bottom = 8
+	s.shadow_color = Color(border.r, border.g, border.b, clampf(glow, 0.0, 1.0) * 0.45)
+	s.shadow_size = 0
+	s.shadow_offset = Vector2(0, 3)
+	return s
+
+
+static func apply_dark_outline_button(btn: Button, accent: Color, min_height: int = 40) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	apply_display_font(btn)
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.clip_contents = false
+	btn.add_theme_stylebox_override("normal", dark_outline_btn_style(Color(accent, 0.7), 0.35))
+	btn.add_theme_stylebox_override("hover", dark_outline_btn_style(Color(accent, 0.95), 0.55))
+	btn.add_theme_stylebox_override("pressed", dark_outline_btn_style(accent, 0.25))
+	btn.add_theme_stylebox_override("focus", dark_outline_btn_style(Color(accent, 0.95), 0.55))
+	btn.add_theme_stylebox_override("disabled", dark_outline_btn_style(Color(accent, 0.28), 0.0))
+	btn.add_theme_color_override("font_color", accent)
+	btn.add_theme_color_override("font_hover_color", accent)
+	btn.add_theme_color_override("font_pressed_color", accent)
+	btn.add_theme_color_override("font_disabled_color", Color(accent, 0.45))
+	btn.set_meta("ui_sfx_kind", "confirm")
+	apply_interaction_motion(btn)
+	if min_height > 0:
+		btn.custom_minimum_size.y = maxi(int(round(btn.custom_minimum_size.y)), min_height)
+
+
+static func fill_priced_action_button(
+	btn: Button,
+	title: String,
+	currency_id: String,
+	amount: Variant,
+	title_color: Color = Color.WHITE,
+	font_size: int = 13,
+	icon_size: float = 16.0,
+	min_height: int = 40
+) -> void:
+	## Title (white by default) + currency glyph immediately beside the numeric cost.
+	if btn == null or not is_instance_valid(btn):
+		return
+	var accent := CYAN
+	var cid := currency_id.strip_edges().to_lower()
+	if cid == "nova":
+		accent = CurrencyIcon.NOVA_GOLD
+	elif cid == "stardust":
+		accent = CurrencyIcon.STARDUST_FUCHSIA
+	apply_dark_outline_button(btn, accent, min_height)
+	btn.text = ""
+	btn.icon = null
+	var old := btn.get_node_or_null("PricePad")
+	if old != null:
+		btn.remove_child(old)
+		old.free()
+	var pad := MarginContainer.new()
+	pad.name = "PricePad"
+	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pad.add_theme_constant_override("margin_left", 0)
+	pad.add_theme_constant_override("margin_right", 0)
+	btn.add_child(pad)
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	pad.add_child(row)
+	if not title.strip_edges().is_empty():
+		var title_lab := Label.new()
+		title_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title_lab.text = title
+		title_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title_lab.add_theme_font_size_override("font_size", font_size)
+		title_lab.add_theme_color_override("font_color", title_color)
+		apply_display_font(title_lab)
+		row.add_child(title_lab)
+	if cid == "nova" or cid == "stardust":
+		var cluster := HBoxContainer.new()
+		cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cluster.alignment = BoxContainer.ALIGNMENT_CENTER
+		cluster.add_theme_constant_override("separation", 2)
+		var glyph := CurrencyIcon.make(cid, icon_size)
+		glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cluster.add_child(glyph)
+		var amt := Label.new()
+		amt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		amt.text = str(amount)
+		amt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		amt.add_theme_font_size_override("font_size", font_size)
+		amt.add_theme_color_override("font_color", accent)
+		apply_display_font(amt)
+		cluster.add_child(amt)
+		row.add_child(cluster)
+
+
 static func _painted_btn_style(top: Color, bottom: Color, border: Color) -> StyleBoxFlat:
 	## Approximate CSS linear-gradient + chunky bottom shadow.
 	var s := StyleBoxFlat.new()

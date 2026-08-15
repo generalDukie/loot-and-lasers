@@ -28,6 +28,7 @@ var _buy_fuel_row: HBoxContainer
 var _buy_fuel_title: Label
 var _buy_fuel_word_lab: Label
 var _buy_fuel_cost_lab: Label
+var _buy_fuel_cost_amt_lab: Label
 var _buy_fuel_divider: Control
 var _buy_fuel_reserve_panel: PanelContainer
 var _buy_fuel_reserve_row: HBoxContainer
@@ -189,11 +190,13 @@ func _build() -> void:
 	cost_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cost_wrap.add_theme_constant_override("separation", 7)
 	_buy_fuel_row.add_child(cost_wrap)
-	_buy_fuel_cost_lab = _make_fuel_btn_label("Cost %s" % ShopManager.FUEL_PURCHASE_COST, CurrencyIcon.NOVA_GOLD)
+	_buy_fuel_cost_lab = _make_fuel_btn_label("Cost", Color.WHITE)
 	cost_wrap.add_child(_buy_fuel_cost_lab)
 	_buy_fuel_nova_icon = CurrencyIcon.make("nova", FUEL_BTN_ICON)
 	_buy_fuel_nova_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cost_wrap.add_child(_buy_fuel_nova_icon)
+	_buy_fuel_cost_amt_lab = _make_fuel_btn_label(str(ShopManager.FUEL_PURCHASE_COST), CurrencyIcon.NOVA_GOLD)
+	cost_wrap.add_child(_buy_fuel_cost_amt_lab)
 	_fit_buy_fuel_button()
 	call_deferred("_fit_buy_fuel_button")
 
@@ -532,8 +535,10 @@ func _render() -> void:
 		)
 	)
 
-	_mining_banner.visible = MiningManager.is_mining_busy()
-	if MiningManager.is_mining_busy():
+	_mining_banner.visible = MiningManager.is_mining()
+	if MiningManager.is_ready():
+		_stage_hint.text = "Mining complete — collect your node"
+	elif MiningManager.is_mining_busy():
 		_stage_hint.text = "Mining in progress"
 	else:
 		_stage_hint.text = "Hover a patron for the full job · click to accept"
@@ -594,8 +599,11 @@ func _sync_buy_fuel_button(left: int, sold_out: bool) -> void:
 	if is_instance_valid(_buy_fuel_cost_lab) and _buy_fuel_cost_lab.get_parent() != null:
 		_buy_fuel_cost_lab.get_parent().visible = true
 	if is_instance_valid(_buy_fuel_cost_lab):
-		_buy_fuel_cost_lab.text = "Cost %s" % ShopManager.FUEL_PURCHASE_COST
-		_buy_fuel_cost_lab.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD)
+		_buy_fuel_cost_lab.text = "Cost"
+		_buy_fuel_cost_lab.add_theme_color_override("font_color", Color.WHITE)
+	if is_instance_valid(_buy_fuel_cost_amt_lab):
+		_buy_fuel_cost_amt_lab.text = str(ShopManager.FUEL_PURCHASE_COST)
+		_buy_fuel_cost_amt_lab.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD)
 	_fit_buy_fuel_button()
 
 
@@ -679,17 +687,17 @@ func _apply_buy_fuel_style(btn: Button, active: bool) -> void:
 	var dark_hover := Color(0.06, 0.09, 0.07, 0.98)
 	var muted_border := Color(0.28, 0.34, 0.42, 0.55)
 	if active:
-		btn.add_theme_stylebox_override("normal", ClientUi.button_style(dark, FUEL_COLOR))
-		btn.add_theme_stylebox_override("hover", ClientUi.button_style(dark_hover, FUEL_COLOR.lightened(0.12)))
-		btn.add_theme_stylebox_override("pressed", ClientUi.button_style(dark, FUEL_COLOR.darkened(0.1)))
+		btn.add_theme_stylebox_override("normal", ClientUi.button_style(dark, CurrencyIcon.NOVA_GOLD))
+		btn.add_theme_stylebox_override("hover", ClientUi.button_style(dark_hover, CurrencyIcon.NOVA_GOLD.lightened(0.12)))
+		btn.add_theme_stylebox_override("pressed", ClientUi.button_style(dark, CurrencyIcon.NOVA_GOLD.darkened(0.1)))
 		btn.add_theme_stylebox_override("disabled", ClientUi.button_style(dark, muted_border))
 	else:
 		btn.add_theme_stylebox_override("normal", ClientUi.button_style(dark, muted_border))
 		btn.add_theme_stylebox_override("hover", ClientUi.button_style(dark, muted_border))
 		btn.add_theme_stylebox_override("pressed", ClientUi.button_style(dark, muted_border))
 		btn.add_theme_stylebox_override("disabled", ClientUi.button_style(dark, muted_border))
-	btn.add_theme_color_override("font_color", FUEL_COLOR)
-	btn.add_theme_color_override("font_hover_color", FUEL_COLOR)
+	btn.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD)
+	btn.add_theme_color_override("font_hover_color", CurrencyIcon.NOVA_GOLD)
 	btn.add_theme_color_override("font_pressed_color", ClientUi.TEXT)
 	btn.add_theme_color_override("font_disabled_color", Color(ClientUi.MUTED, 0.75))
 	btn.set_meta("ui_sfx_kind", "confirm")
@@ -727,7 +735,7 @@ func _make_patron(offer: Dictionary) -> Button:
 	var ch := GameManager.active_character
 	var locked := int(offer.get("level_requirement", 1)) > int(ch.get("level", 1))
 	# Fuel affordability is preview-only; Nakama mission_start bridges the authoritative debit.
-	var mining := MiningManager.is_mining_busy()
+	var mining := MiningManager.is_mining()
 	var state := "Accept"
 	if mining:
 		state = "Busy"
@@ -1388,6 +1396,10 @@ func _on_launch(offer: Dictionary) -> void:
 	var level_req := int(offer.get("level_requirement", 1))
 	if level_req > int(ch.get("level", 1)):
 		Notify.blocked("Locked", "Reach level %s to accept this contract" % level_req)
+		return
+	if MiningManager.is_ready():
+		Notify.blocked("Collect mining first", "Your drone finished — collect the node before launching")
+		_mining_banner.visible = true
 		return
 	if MiningManager.is_mining_busy():
 		Notify.blocked("Ship is mining", "Cancel or finish mining before launching")

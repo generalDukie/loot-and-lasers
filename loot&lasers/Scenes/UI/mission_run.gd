@@ -182,20 +182,7 @@ func _build() -> void:
 	_skip_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	ClientUi.apply_display_font(_skip_btn)
 	_skip_btn.add_theme_font_size_override("font_size", 19)
-	_skip_btn.add_theme_color_override("font_color", Color("#FCD34D"))
-	_skip_btn.add_theme_color_override("font_hover_color", Color("#FEF3C7"))
-	_skip_btn.add_theme_stylebox_override(
-		"normal",
-		ClientUi.painted_panel_style(Color(0.12, 0.09, 0.03, 0.92), Color("#F59E0B", 0.45), 8, 1)
-	)
-	_skip_btn.add_theme_stylebox_override(
-		"hover",
-		ClientUi.painted_panel_style(Color(0.18, 0.12, 0.04, 0.96), Color("#FBBF24", 0.65), 8, 1)
-	)
-	_skip_btn.add_theme_stylebox_override(
-		"pressed",
-		ClientUi.painted_panel_style(Color(0.1, 0.07, 0.02, 0.96), Color("#D97706", 0.7), 8, 1)
-	)
+	ClientUi.apply_dark_outline_button(_skip_btn, CurrencyIcon.NOVA_GOLD, 40)
 	_build_skip_btn_content(_skip_btn)
 	_skip_btn.pressed.connect(_on_skip)
 	active_col.add_child(_skip_btn)
@@ -485,12 +472,13 @@ func _refresh_skip_btn_label(prefix: String, cost: float) -> void:
 		var child := row.get_child(0)
 		row.remove_child(child)
 		child.free()
-	var tint := Color("#FEF3C7") if not _skip_btn.disabled else Color("#FCD34D", 0.55)
+	var title_tint := Color.WHITE if not _skip_btn.disabled else Color(1, 1, 1, 0.55)
+	var cost_tint := CurrencyIcon.NOVA_GOLD if not _skip_btn.disabled else Color(CurrencyIcon.NOVA_GOLD, 0.55)
 	var lab := Label.new()
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lab.add_theme_font_size_override("font_size", 19)
-	lab.add_theme_color_override("font_color", tint)
+	lab.add_theme_color_override("font_color", title_tint)
 	ClientUi.apply_display_font(lab)
 	row.add_child(lab)
 	if cost < 0.0:
@@ -506,7 +494,7 @@ func _refresh_skip_btn_label(prefix: String, cost: float) -> void:
 	amount.text = str(cost)
 	amount.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	amount.add_theme_font_size_override("font_size", 19)
-	amount.add_theme_color_override("font_color", tint)
+	amount.add_theme_color_override("font_color", cost_tint)
 	ClientUi.apply_display_font(amount)
 	row.add_child(amount)
 

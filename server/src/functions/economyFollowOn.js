@@ -11,6 +11,7 @@ import {
   buildMiningClearPatch,
   buildMiningStartPatch,
   serializeMiningState,
+  MiningStates,
 } from "../shared/miningService.js";
 import {
   assertDungeonClientSafe,
@@ -510,8 +511,8 @@ export const PrepareArenaCombat = wrap((user, body = {}) => {
       success: true,
       combat: pubExisting,
       opponent: {
-        ...(resolved.publicOpponent || {}),
         ...(pubExisting?.enemy || {}),
+        ...(resolved.publicOpponent || {}),
       },
       offer_id: offerId,
       arena: serializeArenaState(ch, clock.nowMs(), today),
@@ -540,8 +541,8 @@ export const PrepareArenaCombat = wrap((user, body = {}) => {
   // failed prepare never spends. (Combat already committed.)
   const pub = publicCombatResult(prepared.combat);
   const opponent = {
-    ...(resolved.publicOpponent || {}),
     ...(pub?.enemy || {}),
+    ...(resolved.publicOpponent || {}),
   };
   return {
     success: true,
@@ -1566,8 +1567,18 @@ export const StartMining = wrap((user, body) => {
   if (ch.active_mission_id && ch.mission_end_time) {
     httpErr(400, "Ship busy on mission", "MINING_SHIP_BUSY");
   }
-  if (ch.mining_end_time) httpErr(400, "Already mining", "MINING_ALREADY_ACTIVE");
   const nowMs = clock.nowMs();
+  if (ch.mining_end_time) {
+    const mining = serializeMiningState(ch, nowMs);
+    return {
+      success: true,
+      already_active: true,
+      hours: mining.hours,
+      patch: {},
+      mining,
+      character: ch,
+    };
+  }
   const patch = buildMiningStartPatch(ch, body.hours, nowMs);
   const character = entities.Character.update(ch.id, patch);
   const mining = serializeMiningState(character, nowMs);
@@ -1595,10 +1606,12 @@ export const StartMining = wrap((user, body) => {
 
 export const CollectMining = wrap((user, body = {}) => {
   assertMiningClientSafe(body);
+  const ch = requireMyChar(user);
   const requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
-  const replay = getWalletOperation(user.id, "collect_mining", requestId);
+  if (!requestId) httpErr(400, "request_id required", "MISSING_REQUEST_ID");
+  const opKey = `${ch.id}:${requestId}`;
+  const replay = getWalletOperation(user.id, "collect_mining", opKey);
   if (replay) {
-    const ch = requireMyChar(user);
     return {
       success: true,
       ...replay,
@@ -1609,7 +1622,6 @@ export const CollectMining = wrap((user, body = {}) => {
     };
   }
 
-  const ch = requireMyChar(user);
   const nowMs = clock.nowMs();
   assertMiningFinished(ch, nowMs);
   const r = Math.max(0, Math.floor(Number(ch.mining_reward) || 0));
@@ -1649,14 +1661,27 @@ export const CollectMining = wrap((user, body = {}) => {
     stardust_gained: r,
     mining_session_id: sessionId,
   };
-  saveWalletOperation(user.id, "collect_mining", requestId, receipt);
+  saveWalletOperation(user.id, "collect_mining", opKey, receipt);
   return { success: true, ...receipt, patch, mining, character };
 });
 
 export const CancelMining = wrap((user, body = {}) => {
   assertMiningClientSafe(body);
   const ch = requireMyChar(user);
-  if (!ch.mining_end_time) httpErr(400, "Not mining", "MINING_NOT_ACTIVE");
+  const live = serializeMiningState(ch);
+  if (live.mining_state === MiningStates.READY) {
+    httpErr(409, "Mining finished — collect the node", "MINING_READY_COLLECT");
+  }
+  if (!ch.mining_end_time) {
+    const mining = serializeMiningState(ch);
+    return {
+      success: true,
+      already_idle: true,
+      patch: {},
+      mining,
+      character: ch,
+    };
+  }
   const patch = buildMiningClearPatch();
   const character = entities.Character.update(ch.id, patch);
   const mining = serializeMiningState(character);

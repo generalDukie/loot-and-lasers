@@ -1,6 +1,7 @@
 class_name TutorialAttributeCopy
 ## Class-specific Attributes tutorial copy (hero_upgrade step) with stat BBCode coloring.
 
+const TutorialCurrencyCopy := preload("res://Scripts/UI/TutorialCurrencyCopy.gd")
 const STAT_DISPLAY := ["Strength", "Agility", "Intellect", "Vitality", "Luck"]
 
 const _INTELLECT_PRIMARY := (

@@ -1,6 +1,8 @@
 extends CanvasLayer
 ## Large page-aware coach overlay — dims UI, spotlights tutorial targets, never covers the hole.
 
+const TutorialAttributeCopy := preload("res://Scripts/UI/TutorialAttributeCopy.gd")
+const TutorialCurrencyCopy := preload("res://Scripts/UI/TutorialCurrencyCopy.gd")
 const CARD_W := 540.0
 const CARD_PAD := 20.0
 const HOLE_PAD := 10.0

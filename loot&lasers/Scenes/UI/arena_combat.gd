@@ -614,6 +614,8 @@ func _is_dungeon() -> bool:
 
 
 func _opp() -> Dictionary:
+	if not _duel_enemy.is_empty():
+		return _duel_enemy
 	if _is_mission():
 		return MissionManager.pending_enemy
 	if _is_dungeon():
@@ -643,12 +645,13 @@ func _boot_arena() -> void:
 		GameManager.close_overlay()
 		GameManager.go_arena()
 		return
+	var battle_opp: Dictionary = ArenaManager.pending_opp.duplicate(true)
 	_start_duel(
 		GameManager.active_character,
-		ArenaManager.pending_opp,
-		ArenaManager.pending_battle,
+		battle_opp,
+		ArenaManager.pending_battle.duplicate(true),
 		ArenaManager.equipped_items,
-		ArenaRules.resolve_opp_items(ArenaManager.pending_opp)
+		ArenaRules.resolve_opp_items(battle_opp)
 	)
 
 
@@ -869,10 +872,10 @@ func _start_duel(
 	_prev_level = int(player.get("level", 1))
 	_player_weapon = GameData.weapon_from_items(player_items)
 	_enemy_weapon = GameData.weapon_from_items(opp_items)
-	_duel_player = player
-	_duel_enemy = opp
-	_duel_player_items = player_items
-	_duel_enemy_items = opp_items
+	_duel_player = player.duplicate(true)
+	_duel_enemy = opp.duplicate(true)
+	_duel_player_items = player_items.duplicate(true)
+	_duel_enemy_items = opp_items.duplicate(true)
 	var server_player: Variant = battle.get("player_display_stats", null)
 	# Prefer explicit display_stats; only fall back to stats when display_stats key is absent.
 	var server_enemy: Variant = null

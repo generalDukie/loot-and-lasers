@@ -177,9 +177,9 @@ func _make_creation_flow() -> VBoxContainer:
 	ClientUi.apply_body_font(_desc_edit)
 	_create_block.add_child(_desc_edit)
 	_create_submit_btn = Button.new()
-	_create_submit_btn.text = "FOUND GUILD · %s" % CREATE_COST
-	CurrencyIcon.apply_stardust_button_cost(_create_submit_btn, 16.0)
-	ClientUi.apply_primary_button(_create_submit_btn)
+	ClientUi.fill_priced_action_button(
+		_create_submit_btn, "FOUND GUILD", "stardust", CREATE_COST
+	)
 	_create_submit_btn.disabled = not CurrencyManager.can_afford(
 		CurrencyManager.CURRENCY_STARDUST,
 		CREATE_COST
@@ -619,9 +619,9 @@ func _make_wars_panel(guild: Dictionary, wars: Array) -> PanelContainer:
 
 	if can_declare:
 		var declare := Button.new()
-		declare.text = "Declare War · %s" % GuildWarManager.DECLARE_COST
-		CurrencyIcon.apply_stardust_button_cost(declare, 16.0)
-		ClientUi.apply_primary_button(declare)
+		ClientUi.fill_priced_action_button(
+			declare, "Declare War", "stardust", GuildWarManager.DECLARE_COST
+		)
 		declare.pressed.connect(func() -> void:
 			_show_war_picker = not _show_war_picker
 			_populate()

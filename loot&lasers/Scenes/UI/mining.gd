@@ -38,16 +38,32 @@ func _ready() -> void:
 	_build()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
+	if not MiningManager.phase_changed.is_connected(_on_mining_phase_changed):
+		MiningManager.phase_changed.connect(_on_mining_phase_changed)
 	await _boot()
+
+
+func _exit_tree() -> void:
+	if MiningManager.phase_changed.is_connected(_on_mining_phase_changed):
+		MiningManager.phase_changed.disconnect(_on_mining_phase_changed)
+	if CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
+		CurrencyManager.wallet_changed.disconnect(_on_wallet_changed)
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_populate()
 
 
+func _on_mining_phase_changed(_phase: String) -> void:
+	_populate()
+
+
 func _boot() -> void:
+	_busy = true
+	_populate()
 	await MissionManager.refresh_character()
 	await MiningManager.refresh_status()
+	_busy = false
 	_populate()
 	_tick = Timer.new()
 	_tick.wait_time = 1.0
@@ -431,18 +447,19 @@ func _populate() -> void:
 	var mining := MiningManager.is_mining()
 	var ready := MiningManager.is_ready()
 	var rem := MiningManager.remaining_ms()
-	var reward := int(c.get("mining_reward", 0))
+	var reward := MiningManager.committed_reward()
 
 	_idle_box.visible = not mining
 	_busy_box.visible = mining and not ready
 	_ready_box.visible = ready
-	_start_btn.disabled = _busy or TutorialManager.blocks_mining_start()
+	var locked := _busy or MiningManager.is_mutation_locked()
+	_start_btn.disabled = locked or TutorialManager.blocks_mining_start()
 	if TutorialManager.blocks_mining_start():
 		_start_btn.tooltip_text = "Finish or skip the tutorial before deploying the mining drone"
 	else:
 		_start_btn.tooltip_text = ""
-	_abort_btn.disabled = _busy
-	_collect_btn.disabled = _busy
+	_abort_btn.disabled = locked
+	_collect_btn.disabled = locked
 
 	var phase := "idle"
 	if ready:
@@ -470,10 +487,9 @@ func _populate() -> void:
 		_hero_sub.text = "Your drone is harvesting a stardust node..."
 		_remain_lab.text = "⏱  %s" % _format_remaining(rem)
 		_reward_lab.text = str(reward)
-		# Derive duration from reward ≈ StardustPerFuel × 0.03 × minutes.
-		var rate := float(spf) * StardustEconomy.MINING_EFFICIENCY * 60.0
-		var total_h := float(reward) / maxf(1.0, rate)
-		var total_ms := maxf(1.0, total_h * 3600000.0)
+		var total_ms := float(MiningManager.job_duration_ms())
+		if total_ms <= 1.0:
+			total_ms = maxf(1.0, float(rem + 1))
 		var elapsed := total_ms - float(rem)
 		_progress.value = clampf(elapsed / total_ms * 100.0, 0.0, 100.0)
 		_set_glow(Color(0.96, 0.62, 0.04, 0.22), true)
@@ -555,7 +571,7 @@ func _format_remaining(ms: int) -> String:
 
 
 func _on_start() -> void:
-	if _busy:
+	if _busy or MiningManager.is_mutation_locked():
 		return
 	if TutorialManager.blocks_mining_start():
 		Notify.blocked("Finish or skip the tutorial before deploying the mining drone")
@@ -570,22 +586,30 @@ func _on_start() -> void:
 	var res: Dictionary = await MiningManager.start(hours)
 	_busy = false
 	if not res.ok:
+		_set_status(_mining_error_text(res, "StartMining failed"), ClientUi.DANGER)
 		if not Notify.from_result(res):
-			_set_status(str(res.get("error", "StartMining failed")), ClientUi.DANGER)
+			pass
 	else:
 		var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 		var patch: Variant = data.get("patch", {})
 		var gained := 0
 		if typeof(patch) == TYPE_DICTIONARY:
 			gained = int(patch.get("mining_reward", 0))
+		if gained <= 0 and typeof(data.get("mining", null)) == TYPE_DICTIONARY:
+			gained = int((data.mining as Dictionary).get("mining_reward", 0))
+		if gained <= 0:
+			gained = MiningManager.committed_reward()
 		if gained <= 0:
 			gained = MiningManager.preview_reward(hours)
-		_set_status("Mining started! Collect %s Stardust in %sh." % [gained, hours], GameData.STARDUST_COLOR)
+		var shown_hours := MiningManager.job_hours()
+		if shown_hours <= 0:
+			shown_hours = hours
+		_set_status("Mining started! Collect %s Stardust in %sh." % [gained, shown_hours], GameData.STARDUST_COLOR)
 	_populate()
 
 
 func _on_collect() -> void:
-	if _busy:
+	if _busy or MiningManager.is_mutation_locked():
 		return
 	_busy = true
 	_collect_btn.disabled = true
@@ -593,7 +617,7 @@ func _on_collect() -> void:
 	var res: Dictionary = await MiningManager.collect()
 	_busy = false
 	if not res.ok:
-		_set_status(str(res.get("error", "CollectMining failed")), ClientUi.DANGER)
+		_set_status(_mining_error_text(res, "CollectMining failed"), ClientUi.DANGER)
 	else:
 		var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 		_set_status(
@@ -604,7 +628,7 @@ func _on_collect() -> void:
 
 
 func _on_cancel() -> void:
-	if _busy:
+	if _busy or MiningManager.is_mutation_locked():
 		return
 	_busy = true
 	_abort_btn.disabled = true
@@ -617,8 +641,26 @@ func _on_cancel() -> void:
 			ClientUi.MUTED
 		)
 	else:
-		_set_status(str(res.get("error", "Cancel failed")), ClientUi.DANGER)
+		_set_status(_mining_error_text(res, "Cancel failed"), ClientUi.DANGER)
 	_populate()
+
+
+func _mining_error_text(res: Dictionary, fallback: String) -> String:
+	var code := str(res.get("code", ""))
+	if code == "NODE_SESSION_UNAVAILABLE" or (
+		code == GameApiClient.CODE_UNAUTHORIZED and AuthManager != null and AuthManager.is_logged_in()
+	):
+		return "Mining is reconnecting to the gameplay server. Try again."
+	if code == "MINING_BUSY":
+		return "Wait for the current mining request to finish."
+	if code == "MINING_NOT_ACTIVE" or code == "ALREADY_ABORTED":
+		return "No active mining job."
+	if code == "MINING_READY_COLLECT":
+		return "Mining finished — collect the node instead of aborting."
+	var msg := str(res.get("error", "")).strip_edges()
+	if msg.to_lower() == "not logged in" and AuthManager != null and AuthManager.is_logged_in():
+		return "Mining is reconnecting to the gameplay server. Try again."
+	return msg if not msg.is_empty() else fallback
 
 
 func _set_status(text: String, color: Color) -> void:

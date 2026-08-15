@@ -561,10 +561,10 @@ func _make_hull_card(ship_id: String) -> PanelContainer:
 		pass
 	else:
 		var buy := Button.new()
-		buy.text = "Buy · %s" % str(info.get("cost", 0))
-		CurrencyIcon.apply_button_cost(buy, 16.0)
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ClientUi.apply_primary_button(buy)
+		ClientUi.fill_priced_action_button(
+			buy, "Buy", "nova", info.get("cost", 0)
+		)
 		buy.disabled = not CurrencyManager.can_afford(
 			CurrencyManager.CURRENCY_NOVA,
 			int(info.get("cost", 0))
@@ -681,21 +681,9 @@ func _make_mod_card(category: String, accent: Color) -> PanelContainer:
 		var cost := ShipRules.tier_cost(next, _edit_ship)
 		var buy := Button.new()
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ClientUi.fill_priced_action_button(buy, "Install", "stardust", cost)
 		if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-			buy.text = "  %s" % cost
-			buy.icon = UiIcon.texture("lock")
-			buy.expand_icon = true
-			buy.alignment = HORIZONTAL_ALIGNMENT_CENTER
-			buy.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			buy.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-			buy.add_theme_constant_override("icon_max_width", 16)
-			ClientUi.apply_ghost_button(buy)
-			UiIcon.apply_button_icon_colors(buy, Color(ClientUi.MUTED))
 			buy.disabled = true
-		else:
-			buy.text = "Install · %s" % cost
-			ClientUi.apply_primary_button(buy)
-			CurrencyIcon.apply_stardust_button_cost(buy, 16.0)
 		buy.pressed.connect(func() -> void: _on_buy_mod(category, cost))
 		col.add_child(buy)
 	return panel

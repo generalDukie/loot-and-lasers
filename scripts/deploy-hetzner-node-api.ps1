@@ -106,11 +106,16 @@ Write-Host "Uploading archive..."
 if ($LASTEXITCODE -ne 0) { throw "scp failed" }
 
 $buildMetadataPath = Join-Path $env:TEMP "loot-node-api-build-${buildId}.env"
-@(
+$buildMetadata = @(
   "RELEASE_VERSION=$releaseVersion"
   "GIT_SHA=$gitSha"
   "BUILD_ID=$buildId"
-) | Set-Content -Path $buildMetadataPath -Encoding ascii
+) -join "`n"
+[System.IO.File]::WriteAllText(
+  $buildMetadataPath,
+  "${buildMetadata}`n",
+  [System.Text.Encoding]::ASCII
+)
 & scp @sshBase $buildMetadataPath "${sshTarget}:${RemoteDir}/.deploy-build.env"
 if ($LASTEXITCODE -ne 0) { throw "build metadata upload failed" }
 

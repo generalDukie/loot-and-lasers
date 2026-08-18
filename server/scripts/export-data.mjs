@@ -17,6 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API = process.env.API_URL || process.env.VITE_API_URL || "http://localhost:8787";
 const TOKEN = process.env.API_TOKEN || process.env.ACCESS_TOKEN || "";
 const APP_ID = process.env.APP_ID || "lootandlasers-local";
+const ENTITY_EXPORT_PAGE_SIZE = 500;
 
 function parseArgs(argv) {
   const opts = {
@@ -47,16 +48,33 @@ async function api(pathname, { method = "GET", body } = {}) {
   return data;
 }
 
-async function fetchEntityType(type, limit = 50000) {
-  try {
-    return await api(`/api/entities/${type}/filter`, {
-      method: "POST",
-      body: { query: {}, sort: "created_date", limit },
-    });
-  } catch {
-    const q = new URLSearchParams({ sort: "created_date", limit: String(limit) });
-    return await api(`/api/entities/${type}?${q}`);
+async function fetchEntityType(type) {
+  const rows = [];
+  for (let offset = 0; ; offset += ENTITY_EXPORT_PAGE_SIZE) {
+    let page;
+    try {
+      page = await api(`/api/entities/${type}/filter`, {
+        method: "POST",
+        body: {
+          query: {},
+          sort: "created_date",
+          limit: ENTITY_EXPORT_PAGE_SIZE,
+          offset,
+        },
+      });
+    } catch {
+      const q = new URLSearchParams({
+        sort: "created_date",
+        limit: String(ENTITY_EXPORT_PAGE_SIZE),
+        offset: String(offset),
+      });
+      page = await api(`/api/entities/${type}?${q}`);
+    }
+    const batch = Array.isArray(page) ? page : [];
+    rows.push(...batch);
+    if (batch.length < ENTITY_EXPORT_PAGE_SIZE) break;
   }
+  return rows;
 }
 
 async function fetchUsers() {

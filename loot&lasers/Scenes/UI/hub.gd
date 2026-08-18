@@ -17,14 +17,13 @@ func _ready() -> void:
 
 
 func on_shell_reshow() -> void:
-	AudioManager.start_hub_bed()
-	_populate()
+	await _boot()
 
 
 func _boot() -> void:
 	var boot_t0 := Time.get_ticks_msec()
 	var requests := AsyncGroup.new()
-	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(MissionManager.refresh_character)
 	requests.add(SocialManager.load_my_guild)
 	requests.add(SocialManager.refresh_unread)
 	# Unread badge TTL-cached; Realtime also pushes updates.

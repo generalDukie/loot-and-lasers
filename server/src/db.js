@@ -14,6 +14,12 @@ fs.mkdirSync(dataDir, { recursive: true });
 const dbPath = process.env.DB_PATH || path.join(dataDir, "game.db");
 export const db = new DatabaseSync(dbPath);
 
+db.function("search_normalize", { deterministic: true }, (value) => String(value || "")
+  .normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .trim());
+
 /** Run async fn inside a SQLite transaction (BEGIN IMMEDIATE). */
 export async function withTransactionAsync(fn) {
   db.exec("BEGIN IMMEDIATE");
@@ -62,6 +68,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
   CREATE INDEX IF NOT EXISTS idx_entities_created_by_id ON entities(created_by_id);
   CREATE INDEX IF NOT EXISTS idx_entities_type_created ON entities(type, created_date);
+  CREATE INDEX IF NOT EXISTS idx_entities_type_character_id
+    ON entities(type, json_extract(data, '$.character_id'));
+  CREATE INDEX IF NOT EXISTS idx_entities_type_guild_id
+    ON entities(type, json_extract(data, '$.guild_id'));
+  CREATE INDEX IF NOT EXISTS idx_entities_type_name_search
+    ON entities(type, search_normalize(CAST(json_extract(data, '$.name') AS TEXT)));
+  CREATE INDEX IF NOT EXISTS idx_entities_arena_rank
+    ON entities(
+      type,
+      CAST(COALESCE(json_extract(data, '$.arena_rating'), 1000) AS INTEGER) DESC,
+      CAST(COALESCE(json_extract(data, '$.arena_wins'), 0) AS INTEGER) DESC,
+      id ASC
+    );
+  CREATE INDEX IF NOT EXISTS idx_entities_arena_rank_nocase
+    ON entities(
+      type,
+      CAST(COALESCE(json_extract(data, '$.arena_rating'), 1000) AS INTEGER) DESC,
+      CAST(COALESCE(json_extract(data, '$.arena_wins'), 0) AS INTEGER) DESC,
+      id COLLATE NOCASE ASC
+    );
 
   CREATE TABLE IF NOT EXISTS wallet_operations (
     account_id TEXT NOT NULL,

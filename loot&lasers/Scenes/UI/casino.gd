@@ -129,7 +129,7 @@ func _on_casino_state(_casino: Dictionary) -> void:
 func _boot() -> void:
 	_set_status("Loading casino…", ClientUi.MUTED)
 	var requests := AsyncGroup.new()
-	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(MissionManager.refresh_character)
 	requests.add(CasinoManager.load_state)
 	var results := await requests.wait()
 	var res: Dictionary = results[CASINO_STATE_RESULT_INDEX]

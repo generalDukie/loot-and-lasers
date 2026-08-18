@@ -5,7 +5,8 @@ const MEDAL := [Color("#FFD700"), Color("#C0C0C0"), Color("#CD7F32")]
 ## Visual podium column heights for order [2nd, 1st, 3rd] — web h-24 / h-36 / h-20.
 const PODIUM_H := [96.0, 144.0, 80.0]
 const GUILD_PAGE := 50
-const CHARACTER_RANKING_RESULT_INDEX: int = 1
+const MODE_CHARACTER := "character"
+const MODE_GUILD := "guild"
 
 var _status: Label
 var _subtitle: Label
@@ -14,10 +15,11 @@ var _list: VBoxContainer
 var _scroll: ScrollContainer
 var _you_bar: PanelContainer
 var _tab_buttons: Array[Button] = []
-var _mode := "character"
+var _mode := MODE_CHARACTER
 var _busy := false
+var _refresh_busy := false
+var _refresh_generation := 0
 var _challenging_id := ""
-var _guild_by_char: Dictionary = {} # character_id -> guild tag
 var _preview_cache: Dictionary = {} # character_id -> preview dict
 var _char_cache: Dictionary = {}
 var _guild_cache: Dictionary = {}
@@ -34,6 +36,10 @@ func _ready() -> void:
 
 
 func _boot() -> void:
+	await _refresh()
+
+
+func on_shell_reshow() -> void:
 	await _refresh()
 
 
@@ -112,8 +118,8 @@ func _make_tab_bar() -> CenterContainer:
 	wrap.add_child(tabs)
 	_tab_buttons.clear()
 	for spec in [
-		{"id": "character", "label": "CHARACTER RANKING", "icon": "crown", "tint": ClientUi.GOLD},
-		{"id": "guild", "label": "GUILD RANKING", "icon": "users", "tint": ClientUi.CYAN},
+		{"id": MODE_CHARACTER, "label": "CHARACTER RANKING", "icon": "crown", "tint": ClientUi.GOLD},
+		{"id": MODE_GUILD, "label": "GUILD RANKING", "icon": "users", "tint": ClientUi.CYAN},
 	]:
 		var b := Button.new()
 		b.text = str(spec["label"])
@@ -177,17 +183,23 @@ func _select_tab(id: String) -> void:
 func _apply_subtitle() -> void:
 	if _subtitle == null:
 		return
-	if _mode == "guild":
+	if _mode == MODE_GUILD:
 		_subtitle.text = "Ranked by guild level · Ties broken by XP, then members"
 	else:
 		_subtitle.text = "Ranked by arena rating · Challenge any eligible rival"
 
 
 func _refresh() -> void:
-	if _mode == "guild":
-		await _refresh_guild()
+	_refresh_generation += 1
+	var refresh_token := _refresh_generation
+	if _mode == MODE_GUILD:
+		await _refresh_guild(refresh_token)
 	else:
-		await _refresh_character()
+		await _refresh_character(refresh_token)
+
+
+func _refresh_is_current(refresh_token: int, expected_mode: String) -> bool:
+	return refresh_token == _refresh_generation and _mode == expected_mode
 
 
 func _clear_board() -> void:
@@ -198,24 +210,25 @@ func _clear_board() -> void:
 	_hide_you_bar()
 
 
-func _refresh_character() -> void:
-	_busy = true
+func _refresh_character(refresh_token: int) -> void:
+	_refresh_busy = true
 	_set_status("Loading ladder…", ClientUi.MUTED)
 	_clear_board()
-	var requests := AsyncGroup.new()
-	requests.add(_load_guild_tags)
-	requests.add(ArenaManager.load_rankings)
-	var results := await requests.wait()
-	var board: Dictionary = results[CHARACTER_RANKING_RESULT_INDEX]
-	_busy = false
+	var bundle := await _load_character_refresh_bundle()
+	if not _refresh_is_current(refresh_token, MODE_CHARACTER):
+		return
+	_refresh_busy = false
+	var board: Dictionary = bundle.get("board", {})
 	if not bool(board.get("ok", false)):
 		_set_status(str(board.get("error", "Failed to load leaderboard")), ClientUi.DANGER)
 		return
 	var data: Dictionary = board.get("data", {}) if typeof(board.get("data", null)) == TYPE_DICTIONARY else {}
 	_char_cache = data
-	if _mode != "character":
-		return
 	_render_character(data, true)
+
+
+func _load_character_refresh_bundle() -> Dictionary:
+	return {"board": await ArenaManager.load_rankings()}
 
 
 func _normalize_char_rows(data: Dictionary) -> Array:
@@ -243,36 +256,39 @@ func _render_character(data: Dictionary, _animate_podium: bool) -> void:
 	_show_character_you_bar(data, rows)
 
 
-func _refresh_guild(append: bool = false) -> void:
+func _refresh_guild(refresh_token: int, append: bool = false) -> void:
+	if not _refresh_is_current(refresh_token, MODE_GUILD):
+		return
 	if append:
 		if _guild_loading_more or not _guild_has_more:
 			return
 		_guild_loading_more = true
 		_set_status("Loading more guilds…", ClientUi.MUTED)
 		var more: Dictionary = await SocialManager.load_guild_rankings(GUILD_PAGE, _guild_offset, false)
-		_guild_loading_more = false
-		if _mode != "guild":
+		if not _refresh_is_current(refresh_token, MODE_GUILD):
 			return
+		_guild_loading_more = false
 		if not bool(more.get("ok", false)):
 			_set_status(str(more.get("error", "Failed to load guild rankings")), ClientUi.DANGER)
 			return
 		var more_data: Dictionary = more.get("data", {}) if typeof(more.get("data", null)) == TYPE_DICTIONARY else {}
 		_append_guild_page(more_data)
 		return
-	_busy = true
+	_refresh_busy = true
+	_guild_loading_more = false
 	_set_status("Loading guild rankings…", ClientUi.MUTED)
 	_clear_board()
 	_guild_rows.clear()
 	_guild_offset = 0
 	var board: Dictionary = await SocialManager.load_guild_rankings(GUILD_PAGE, 0, true)
-	_busy = false
+	if not _refresh_is_current(refresh_token, MODE_GUILD):
+		return
+	_refresh_busy = false
 	if not bool(board.get("ok", false)):
 		_set_status(str(board.get("error", "Failed to load guild rankings")), ClientUi.DANGER)
 		return
 	var data: Dictionary = board.get("data", {}) if typeof(board.get("data", null)) == TYPE_DICTIONARY else {}
 	_guild_cache = data
-	if _mode != "guild":
-		return
 	_render_guild(data, true)
 
 
@@ -318,7 +334,7 @@ func _append_guild_page(data: Dictionary) -> void:
 
 
 func _on_scroll_changed() -> void:
-	if _mode != "guild" or not _guild_has_more or _guild_loading_more or _busy:
+	if _mode != MODE_GUILD or not _guild_has_more or _guild_loading_more or _refresh_busy or _busy:
 		return
 	if _scroll == null:
 		return
@@ -326,57 +342,26 @@ func _on_scroll_changed() -> void:
 	if bar.max_value <= 0.0:
 		return
 	if bar.value >= bar.max_value - bar.page - 48.0:
-		_refresh_guild(true)
+		_refresh_guild(_refresh_generation, true)
 
 
 func _ensure_load_more_button() -> void:
 	var existing := _list.get_node_or_null("LoadMore")
 	if existing:
 		existing.queue_free()
-	if _mode != "guild" or not _guild_has_more:
+	if _mode != MODE_GUILD or not _guild_has_more:
 		return
 	var btn := Button.new()
 	btn.name = "LoadMore"
 	btn.text = "Load more guilds"
 	btn.focus_mode = Control.FOCUS_NONE
 	ClientUi.apply_ghost_button(btn)
-	btn.pressed.connect(func() -> void: _refresh_guild(true))
+	btn.pressed.connect(func() -> void: _refresh_guild(_refresh_generation, true))
 	_list.add_child(btn)
 
 
-func _load_guild_tags() -> void:
-	_guild_by_char.clear()
-	var guilds_res: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/Guild?limit=200", null, true
-	)
-	var members_res: Dictionary = await GameApiClient.request(
-		"GET", "/api/entities/GuildMember?limit=500", null, true
-	)
-	var tag_by_gid: Dictionary = {}
-	if guilds_res.ok and typeof(guilds_res.data) == TYPE_ARRAY:
-		for g in guilds_res.data:
-			if typeof(g) != TYPE_DICTIONARY:
-				continue
-			var gid := str(g.get("id", ""))
-			if gid.is_empty():
-				continue
-			var tag := str(g.get("tag", ""))
-			if tag.is_empty():
-				tag = str(g.get("name", ""))
-			tag_by_gid[gid] = tag
-	if members_res.ok and typeof(members_res.data) == TYPE_ARRAY:
-		for m in members_res.data:
-			if typeof(m) != TYPE_DICTIONARY:
-				continue
-			var cid := str(m.get("character_id", ""))
-			var gid := str(m.get("guild_id", ""))
-			if cid.is_empty() or gid.is_empty():
-				continue
-			_guild_by_char[cid] = str(tag_by_gid.get(gid, ""))
-
-
 func _guild_tag(c: Dictionary) -> String:
-	return str(_guild_by_char.get(str(c.get("id", "")), ""))
+	return str(c.get("guild_tag", ""))
 
 
 func _class_key(c: Dictionary) -> String:
@@ -914,7 +899,7 @@ func _confirm_async(title: String, text: String) -> bool:
 
 
 func _on_challenge(c: Dictionary, btn: Button = null, detail: Label = null) -> void:
-	if _busy:
+	if _busy or _refresh_busy:
 		return
 	var oid := str(c.get("id", ""))
 	_busy = true

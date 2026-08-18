@@ -143,8 +143,10 @@ func buy_attribute(stat: String, count: int = 1) -> Dictionary:
 		return {"ok": false, "error": "Invalid stat", "data": {}}
 	var n := clampi(count, 1, MAX_ATTRIBUTE_PURCHASE_BATCH)
 	var ch: Dictionary = GameManager.active_character
-	var dust := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
-	n = mini(n, StatsRules.max_affordable_purchases(ch, stat, dust))
+	var requested_cost := StatsRules.batch_cost(ch, stat, n)
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, requested_cost):
+		var dust := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
+		n = mini(n, StatsRules.max_affordable_purchases(ch, stat, dust))
 	if n <= 0:
 		var one := next_cost(ch, stat)
 		return {"ok": false, "error": "Need %s stardust" % one, "data": {}}

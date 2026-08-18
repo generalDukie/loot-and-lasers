@@ -31,8 +31,12 @@ services:
       GAMEPLAY_JWT_ISSUER: "${GAMEPLAY_JWT_ISSUER:-lootandlasers-node}"
       GAMEPLAY_JWT_AUDIENCE: "${GAMEPLAY_JWT_AUDIENCE:-lootandlasers-gameplay}"
       NAKAMA_HTTP_URL: "${NAKAMA_HTTP_URL:-http://nakama:7350}"
+      NAKAMA_HTTP_KEY: "${NAKAMA_HTTP_KEY:-${LOOT_WALLET_BRIDGE_SECRET}}"
       LOOT_WALLET_BRIDGE_SECRET: "${LOOT_WALLET_BRIDGE_SECRET:?set LOOT_WALLET_BRIDGE_SECRET in .env.node-api}"
       APP_ID: "${APP_ID:-lootandlasers-staging}"
+      RELEASE_VERSION: "${RELEASE_VERSION:-dev}"
+      GIT_SHA: "${GIT_SHA:-}"
+      BUILD_ID: "${BUILD_ID:-}"
       PUBLIC_CLIENT_URL: "${PUBLIC_CLIENT_URL:-https://178.156.210.186}"
       # Leave SMTP unset → register auto-verifies (no email OTP).
       SMTP_HOST: "${SMTP_HOST:-}"
@@ -40,6 +44,12 @@ services:
       SMTP_USER: "${SMTP_USER:-}"
       SMTP_PASS: "${SMTP_PASS:-}"
       SMTP_FROM: "${SMTP_FROM:-}"
+      AUTH_RATE_WINDOW_SEC: "${AUTH_RATE_WINDOW_SEC:-60}"
+      AUTH_RATE_MAX: "${AUTH_RATE_MAX:-30}"
+      PASSWORD_RECOVERY_RATE_WINDOW_SEC: "${PASSWORD_RECOVERY_RATE_WINDOW_SEC:-900}"
+      PASSWORD_RECOVERY_RATE_MAX: "${PASSWORD_RECOVERY_RATE_MAX:-5}"
+      RPC_RATE_WINDOW_SEC: "${RPC_RATE_WINDOW_SEC:-60}"
+      RPC_RATE_MAX: "${RPC_RATE_MAX:-240}"
     volumes:
       - node_api_data:/app/server/data
     healthcheck:

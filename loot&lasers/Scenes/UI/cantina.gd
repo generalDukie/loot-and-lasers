@@ -72,13 +72,11 @@ func _ready() -> void:
 
 func on_shell_reshow() -> void:
 	AudioManager.start_cantina_bed()
-	if not MissionManager.offers.is_empty():
-		_render()
-	_sync_view_rewards_cta()
 	# Invalidate any in-flight boot (e.g. redirected to mission-run with `_busy` stuck).
 	_boot_gen += 1
 	_busy = false
-	call_deferred("_boot")
+	await _boot()
+	_sync_view_rewards_cta()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:

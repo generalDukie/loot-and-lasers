@@ -53,6 +53,7 @@ import "./entitlements/hooks.js";
 import "./rewards/store.js";
 import "./arena/store.js";
 import "./audit/store.js";
+import { rateLimitFromEnv } from "./rateLimit.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const IS_PROD = process.env.NODE_ENV === "production";
@@ -62,6 +63,7 @@ const CHARACTER_CREATE_REQUEST_ID_MIN_LENGTH = 8;
 const CHARACTER_CREATE_REQUEST_ID_MAX_LENGTH = 128;
 const ENTITY_BULK_MUTATION_SCAN_LIMIT = 100_000;
 const FUNCTION_NAME_LOG_MAX_LENGTH = 64;
+const RPC_RATE_DEFAULTS = Object.freeze({ windowSeconds: 60, max: 240 });
 const app = express();
 const bootLog = CreateStructuredLogger("boot");
 
@@ -181,17 +183,30 @@ function readLimit(
   return limit;
 }
 
+function readOffset(value) {
+  if (value == null || value === "") return 0;
+  const offset = Number(value);
+  if (!Number.isInteger(offset) || offset < 0) {
+    const err = new Error("offset must be a non-negative integer");
+    err.status = 422;
+    err.code = "INVALID_OFFSET";
+    throw err;
+  }
+  return offset;
+}
+
 app.get("/api/entities/:type", requireAuth, (req, res) => {
   try {
     const store = getStore(req.params.type);
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
     const sort = req.query.sort || "-created_date";
     const limit = readLimit(req.query.limit);
+    const offset = readOffset(req.query.offset);
     const scoped = scopeReadQuery(req.user, req.params.type, {});
     if (scoped && Object.keys(scoped).length > 0) {
-      return res.json(store.filter(scoped, sort, limit));
+      return res.json(store.filter(scoped, sort, limit, offset));
     }
-    res.json(store.list(sort, limit));
+    res.json(store.list(sort, limit, offset));
   } catch (err) {
     sendApiError(res, err, { fallbackMessage: "Could not list entities" });
   }
@@ -203,8 +218,9 @@ app.post("/api/entities/:type/filter", requireAuth, (req, res) => {
     if (!store) return res.status(404).json({ error: "Unknown entity type" });
     const { query = {}, sort = "-created_date" } = req.body || {};
     const limit = readLimit(req.body?.limit);
+    const offset = readOffset(req.body?.offset);
     const scoped = scopeReadQuery(req.user, req.params.type, query);
-    res.json(store.filter(scoped, sort, limit));
+    res.json(store.filter(scoped, sort, limit, offset));
   } catch (err) {
     sendApiError(res, err, { fallbackMessage: "Could not filter entities" });
   }
@@ -525,7 +541,11 @@ app.post("/api/entities/:type/bulk", requireAuth, enforceMaintenanceWrites, (req
 });
 
 // ── Cloud functions ──────────────────────────────────────────
-app.post("/api/functions/:name", requireAuth, async (req, res) => {
+app.post(
+  "/api/functions/:name",
+  requireAuth,
+  rateLimitFromEnv("rpc", RPC_RATE_DEFAULTS),
+  async (req, res) => {
   const fnLog = CreateStructuredLogger("rpc");
   const op = String(req.params.name || "unknown").slice(0, FUNCTION_NAME_LOG_MAX_LENGTH);
   try {
@@ -576,7 +596,8 @@ app.post("/api/functions/:name", requireAuth, async (req, res) => {
     });
     sendApiError(res, err, { fallbackMessage: "Gameplay request failed" });
   }
-});
+  },
+);
 
 const servingStatic = attachStaticApp(app);
 

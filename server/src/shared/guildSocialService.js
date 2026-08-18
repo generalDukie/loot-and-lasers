@@ -49,6 +49,11 @@ function membershipOf(characterId) {
   return entities.GuildMember.filter({ character_id: characterId }, null, 1)[0] || null;
 }
 
+/** Membership-only lookup for callers that do not need to hydrate a guild roster. */
+export function getGuildMembership(characterId) {
+  return membershipOf(characterId);
+}
+
 function canInvite(role) {
   return role === "leader" || role === "officer";
 }
@@ -1003,27 +1008,32 @@ export function publicGuildRankRow(guild, rank, { is_self = false } = {}) {
   };
 }
 
-export function listGuildLeaderboard({ limit = DEFAULT_GUILD_LEADERBOARD_LIMIT, offset = 0 } = {}) {
+export function listGuildLeaderboard({
+  limit = DEFAULT_GUILD_LEADERBOARD_LIMIT,
+  offset = 0,
+  guilds = null,
+} = {}) {
   const lim = Math.min(
     MAX_GUILD_LEADERBOARD_LIMIT,
     Math.max(1, Math.floor(Number(limit) || DEFAULT_GUILD_LEADERBOARD_LIMIT)),
   );
   const off = Math.max(0, Math.floor(Number(offset) || 0));
-  const all = sortedGuilds();
+  const all = Array.isArray(guilds) ? guilds : sortedGuilds();
   return all.slice(off, off + lim).map((g, i) => publicGuildRankRow(g, off + i + 1));
 }
 
-export function computeGuildRank(guildId) {
+export function computeGuildRank(guildId, guilds = null) {
   if (!guildId) return 0;
-  const idx = sortedGuilds().findIndex((g) => g.id === guildId);
+  const all = Array.isArray(guilds) ? guilds : sortedGuilds();
+  const idx = all.findIndex((g) => g.id === guildId);
   return idx < 0 ? 0 : idx + 1;
 }
 
 export function getNearbyGuildEntries(
   guildId,
-  { radius = DEFAULT_NEARBY_GUILD_RADIUS } = {},
+  { radius = DEFAULT_NEARBY_GUILD_RADIUS, guilds = null } = {},
 ) {
-  const all = sortedGuilds();
+  const all = Array.isArray(guilds) ? guilds : sortedGuilds();
   const idx = guildId ? all.findIndex((g) => g.id === guildId) : -1;
   if (idx < 0) {
     return { player_guild_rank: 0, total: all.length, entries: [], radius };

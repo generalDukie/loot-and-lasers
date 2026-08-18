@@ -112,8 +112,7 @@ func _ready() -> void:
 
 
 func on_shell_reshow() -> void:
-	_populate()
-	call_deferred("_start_boot")
+	await _boot()
 
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:

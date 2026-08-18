@@ -47,10 +47,8 @@ func _ready() -> void:
 
 
 func on_shell_reshow() -> void:
-	_populate()
+	await _boot()
 	_sync_view_rewards_cta()
-	if _tick == null or not is_instance_valid(_tick):
-		call_deferred("_boot")
 
 
 func _on_combat_return_changed() -> void:
@@ -60,7 +58,7 @@ func _on_combat_return_changed() -> void:
 func _boot() -> void:
 	_status.text = "Syncing frontier…"
 	var requests := AsyncGroup.new()
-	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(MissionManager.refresh_character)
 	requests.add(DungeonManager.sync_state)
 	var results := await requests.wait()
 	var res: Dictionary = results[DUNGEON_SYNC_RESULT_INDEX]

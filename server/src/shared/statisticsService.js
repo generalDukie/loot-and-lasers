@@ -10,6 +10,7 @@ import {
   computeGuildRank,
   getNearbyGuildEntries,
   listGuildLeaderboard,
+  publicGuildRankRow,
   sortedGuilds,
 } from "./guildSocialService.js";
 
@@ -56,6 +57,17 @@ export const LEADERBOARD_DEFINITIONS = Object.freeze([
     bots_included: false,
     page_size_max: 100,
   },
+]);
+
+const ARENA_DEFAULT_RATING = 1_000;
+const ARENA_DEFAULT_PAGE_SIZE = 50;
+const ARENA_MAX_PAGE_SIZE = 100;
+const ARENA_DEFAULT_NEARBY_RADIUS = 5;
+const ARENA_MAX_NEARBY_RADIUS = 25;
+const ARENA_RANK_SORT = Object.freeze([
+  { field: "arena_rating", direction: "desc", defaultValue: ARENA_DEFAULT_RATING, cast: "integer", nullable: false },
+  { field: "arena_wins", direction: "desc", defaultValue: 0, cast: "integer", nullable: false },
+  { field: "id", direction: "asc", collation: "nocase", nullable: false },
 ]);
 
 function arrLen(v) {
@@ -131,77 +143,64 @@ export function serializePublicProfileStatistics(character) {
 
 /** Deterministic Arena ordering shared with listArenaLeaderboard. */
 export function sortedArenaCharacters() {
-  return entities.Character.filter({})
-    .slice()
-    .sort((a, b) => {
-      const rd = (b.arena_rating || 1000) - (a.arena_rating || 1000);
-      if (rd !== 0) return rd;
-      const wd = (b.arena_wins || 0) - (a.arena_wins || 0);
-      if (wd !== 0) return wd;
-      return String(a.id).localeCompare(String(b.id));
-    });
+  return entities.Character.ranked(ARENA_RANK_SORT, entities.Character.count(), 0);
 }
 
 /**
  * Nearby-player view around a character (server-authoritative rank window).
  */
-export function getNearbyArenaEntries(characterId, { radius = 5 } = {}) {
-  const all = sortedArenaCharacters();
-  const idx = all.findIndex((c) => c.id === characterId);
-  if (idx < 0) {
+export function getNearbyArenaEntries(characterId, { radius = ARENA_DEFAULT_NEARBY_RADIUS } = {}) {
+  const total = entities.Character.count();
+  const playerRank = computeArenaRank(characterId);
+  if (playerRank < 1) {
     return {
       player_rank: 0,
-      total: all.length,
+      total,
       entries: [],
       radius,
     };
   }
-  const r = Math.max(0, Math.min(25, Math.floor(Number(radius) || 5)));
-  const start = Math.max(0, idx - r);
-  const end = Math.min(all.length, idx + r + 1);
-  const entries = all.slice(start, end).map((c, i) => ({
-    rank: start + i + 1,
-    id: c.id,
-    character_id: c.id,
-    name: c.name,
-    level: c.level || 1,
-    class: c.class,
-    arena_rating: c.arena_rating || 1000,
-    arena_wins: c.arena_wins || 0,
-    arena_losses: c.arena_losses || 0,
-    race: c.race,
-    created_by_id: c.created_by_id || null,
-    is_self: c.id === characterId,
-  }));
+  const r = Math.max(
+    0,
+    Math.min(ARENA_MAX_NEARBY_RADIUS, Math.floor(Number(radius) || ARENA_DEFAULT_NEARBY_RADIUS)),
+  );
+  const start = Math.max(0, playerRank - 1 - r);
+  const entries = listArenaLeaderboard({ limit: r * 2 + 1, offset: start })
+    .map((entry) => ({ ...entry, is_self: entry.character_id === characterId }));
   return {
-    player_rank: idx + 1,
-    total: all.length,
+    player_rank: playerRank,
+    total,
     entries,
     radius: r,
   };
 }
 
-export function serializeLeaderboardPage({ limit = 50, offset = 0 } = {}) {
-  const lim = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
+export function serializeLeaderboardPage({ limit = ARENA_DEFAULT_PAGE_SIZE, offset = 0 } = {}) {
+  const lim = Math.min(
+    ARENA_MAX_PAGE_SIZE,
+    Math.max(1, Math.floor(Number(limit) || ARENA_DEFAULT_PAGE_SIZE)),
+  );
   const off = Math.max(0, Math.floor(Number(offset) || 0));
-  const all = sortedArenaCharacters();
+  const total = entities.Character.count();
   const rankings = listArenaLeaderboard({ limit: lim, offset: off });
   return {
     leaderboard_id: "arena_rating",
     definition: LEADERBOARD_DEFINITIONS[0],
     rankings,
-    total: all.length,
+    total,
     limit: lim,
     offset: off,
-    has_more: off + lim < all.length,
+    has_more: off + lim < total,
   };
 }
 
-export function serializeGuildLeaderboardPage({ limit = 50, offset = 0 } = {}) {
+export function serializeGuildLeaderboardPage({ limit = 50, offset = 0, guilds = null } = {}) {
   const lim = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
   const off = Math.max(0, Math.floor(Number(offset) || 0));
-  const all = sortedGuilds();
-  const rankings = listGuildLeaderboard({ limit: lim, offset: off });
+  const all = Array.isArray(guilds) ? guilds : sortedGuilds();
+  const rankings = all
+    .slice(off, off + lim)
+    .map((guild, index) => publicGuildRankRow(guild, off + index + 1));
   return {
     leaderboard_id: "guild_level",
     definition: LEADERBOARD_DEFINITIONS.find((d) => d.id === "guild_level") || null,

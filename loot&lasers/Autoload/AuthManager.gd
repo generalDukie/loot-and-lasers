@@ -314,7 +314,7 @@ func _post_nakama_auth(email: String) -> Dictionary:
 		if not wres.get("success", false) and not wres.get("ok", false):
 			print("[AuthManager] WARNING: Nakama wallet unavailable — %s" % str(wres.get("error", "unknown")))
 	if RealtimeManager != null and RealtimeManager.has_method("start_nakama"):
-		var sock: Dictionary = await RealtimeManager.start_nakama()
+		var sock: Dictionary = await RealtimeManager.start_nakama(false)
 		if not bool(sock.get("ok", false)):
 			print("[AuthManager] WARNING: realtime socket — %s" % str(sock.get("error", "unknown")))
 		if RealtimeManager.has_method("start_node_wallet_events"):
@@ -703,7 +703,7 @@ func ensure_nakama_session(status_cb: Callable = Callable()) -> Dictionary:
 				print("[AuthManager] WARNING: Nakama wallet unavailable — %s" % str(wres.get("error", "unknown")))
 		if RealtimeManager != null:
 			if RealtimeManager.has_method("start_nakama"):
-				var socket_result: Dictionary = await RealtimeManager.start_nakama()
+				var socket_result: Dictionary = await RealtimeManager.start_nakama(false)
 				if not bool(socket_result.get("ok", false)):
 					print("[AuthManager] WARNING: realtime socket — %s" % str(socket_result.get("error", "unknown")))
 			if RealtimeManager.has_method("start_node_wallet_events"):
@@ -765,31 +765,56 @@ func is_nakama_authenticated() -> bool:
 	return NakamaManager != null and NakamaManager.is_authenticated()
 
 
-func change_password(_current_password: String, _new_password: String) -> Dictionary:
-	return {
-		"ok": false,
-		"error": "Password change via Node API is disabled. Use Nakama Console or a future Nakama password flow.",
-		"data": {},
-		"status": 410,
-	}
+func change_password(current_password: String, new_password: String) -> Dictionary:
+	var email := str(NakamaManager.get_account_email()).strip_edges().to_lower()
+	if email.is_empty():
+		return {"ok": false, "error": "Account email is unavailable", "data": {}, "status": 409}
+	var verified: Dictionary = await NakamaManager.authenticate_email(email, current_password, false)
+	if not bool(verified.get("success", false)):
+		return {
+			"ok": false,
+			"error": "Current password is incorrect",
+			"data": {},
+			"status": int(verified.get("status_code", 400)),
+		}
+	# Reauthentication creates a new Nakama session key. Close the old Node socket
+	# before force-claiming it so this same client does not consume its own kick event.
+	if RealtimeManager != null and RealtimeManager.has_method("stop_node"):
+		RealtimeManager.stop_node()
+	var bridged: Dictionary = await bridge_node_session(email, "", true)
+	if not bool(bridged.get("success", false)):
+		if RealtimeManager != null and RealtimeManager.has_method("start_node_wallet_events"):
+			RealtimeManager.start_node_wallet_events()
+		return {
+			"ok": false,
+			"error": str(bridged.get("error", "Gameplay session unavailable")),
+			"data": {},
+			"status": int(bridged.get("status", 503)),
+		}
+	var changed: Dictionary = await GameApiClient.request(
+		"POST", "/api/auth/change-password", {"new_password": new_password}, true
+	)
+	if RealtimeManager != null and RealtimeManager.has_method("start_node_wallet_events"):
+		RealtimeManager.start_node_wallet_events()
+	return changed
 
 
-func request_password_reset(_email: String) -> Dictionary:
-	return {
-		"ok": false,
-		"error": "Password reset is not available in the Godot client yet (Nakama email auth). Contact an admin if locked out.",
-		"data": {},
-		"status": 410,
-	}
+func request_password_reset(email: String) -> Dictionary:
+	return await GameApiClient.request(
+		"POST",
+		"/api/auth/reset-password-request",
+		{"email": email.strip_edges().to_lower()},
+		false
+	)
 
 
-func reset_password(_reset_token: String, _new_password: String) -> Dictionary:
-	return {
-		"ok": false,
-		"error": "Password reset is not available in the Godot client yet.",
-		"data": {},
-		"status": 410,
-	}
+func reset_password(reset_token: String, new_password: String) -> Dictionary:
+	return await GameApiClient.request(
+		"POST",
+		"/api/auth/reset-password",
+		{"reset_token": reset_token.strip_edges(), "new_password": new_password},
+		false
+	)
 
 
 func get_auth_diagnostics() -> Dictionary:

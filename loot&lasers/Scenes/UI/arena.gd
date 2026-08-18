@@ -52,12 +52,9 @@ func _ready() -> void:
 func on_shell_reshow() -> void:
 	_update_lobby_chrome()
 	_sync_view_rewards_cta()
-	# Finish already reminted ArenaManager.opponents — paint that board now so
-	# the slot you just fought cannot keep the old portrait/offer_id.
-	_populate_challengers()
 	_set_status("Syncing challengers…")
 	_busy = false
-	call_deferred("_resync_board")
+	await _resync_board()
 
 
 func _on_opponents_loaded(_opponents: Array = []) -> void:

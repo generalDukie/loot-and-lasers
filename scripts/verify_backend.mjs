@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
+const LIVE_SERVICE_VERIFICATION_ENABLED = process.env.LOOT_VERIFY_LIVE === "1";
 
 const results = [];
 
@@ -552,9 +553,9 @@ async function checkDockerNakama() {
   }
 }
 
-function runChild(scriptPath) {
+function runChild(scriptPath, args = []) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [scriptPath], {
+    const child = spawn(process.execPath, [scriptPath, ...args], {
       cwd: ROOT,
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
@@ -587,8 +588,16 @@ async function runPhaseScripts() {
 
   for (const name of files) {
     const full = path.join(scriptsDir, name);
+    const source = fs.readFileSync(full, "utf8");
+    const requiresLiveService = /\bfetch\s*\(/.test(source) && !/--live/.test(source);
+    if (requiresLiveService && !LIVE_SERVICE_VERIFICATION_ENABLED) {
+      console.log(`  → ${name}… skipped (set LOOT_VERIFY_LIVE=1 with local services running)`);
+      pass(`Phase script ${name}`, "live services not requested");
+      continue;
+    }
     process.stdout.write(`  → ${name}… `);
-    const { code, out } = await runChild(full);
+    const args = LIVE_SERVICE_VERIFICATION_ENABLED ? ["--live"] : [];
+    const { code, out } = await runChild(full, args);
     if (code === 0) {
       console.log("ok");
       pass(`Phase script ${name}`);

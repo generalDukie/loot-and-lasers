@@ -188,10 +188,7 @@ async function main() {
         claimed: false,
       },
     });
-    assert(
-      forged.status === 201 && forged.data?.has_rewards === false,
-      `player mail strips forged rewards (${forged.status})`
-    );
+    assert(forged.status === 403, `player reward mail create blocked (${forged.status})`);
 
     const r = await req("/api/entities/Mail", {
       method: "POST",
@@ -248,31 +245,22 @@ async function main() {
   // Guild create + member
   {
     const tag = alphaName("SG").slice(0, 4);
-    const g = await req("/api/entities/Guild", {
+    await req(`/api/entities/Character/${character.id}`, {
+      method: "PATCH",
+      token,
+      body: { stardust: 10_000 },
+    });
+    const g = await req("/api/functions/CreateGuild", {
       method: "POST",
       token: smokeToken,
       body: {
         name: alphaName("SmokeGuild"),
         tag,
-        leader_id: character.id,
-        member_count: 1,
-        recruiting: true,
-        public_listing: true,
+        description: "API smoke guild",
       },
     });
-    assert(g.status === 201 && g.data?.id, `create guild (${g.status})`);
-
-    const m = await req("/api/entities/GuildMember", {
-      method: "POST",
-      token: smokeToken,
-      body: {
-        guild_id: g.data.id,
-        character_id: character.id,
-        character_name: character.name,
-        role: "leader",
-      },
-    });
-    assert(m.status === 201 && m.data?.id, `guild member (${m.status})`);
+    assert(g.ok && g.data?.guild?.id, `CreateGuild (${g.status})`);
+    assert(g.ok && g.data?.member?.character_id === character.id, "CreateGuild returns leader membership");
   }
 
   // Item CRUD: players cannot invent/delete items; admin + DissolveItem is the path
@@ -311,12 +299,12 @@ async function main() {
   {
     const conv = await req("/api/entities/PrivateConversation", {
       method: "POST",
-      token: smokeToken,
+      token,
       body: { participant_ids: [character.id, "other"], last_message_at: new Date().toISOString() },
     });
     const msg = await req("/api/entities/PrivateMessage", {
       method: "POST",
-      token: smokeToken,
+      token,
       body: {
         conversation_id: conv.data.id,
         sender_id: "other",
@@ -327,7 +315,7 @@ async function main() {
     });
     const um = await req("/api/entities/PrivateMessage/update-many", {
       method: "POST",
-      token: smokeToken,
+      token,
       body: {
         query: { conversation_id: conv.data.id, recipient_id: character.id },
         update: { $set: { read_by_recipient: true } },
@@ -335,7 +323,7 @@ async function main() {
     });
     const updatedCount = Array.isArray(um.data) ? um.data.length : um.data?.updated;
     assert(um.ok && updatedCount >= 1, `updateMany $set (${um.status})`);
-    assert(msg.ok, `private message create (${msg.status})`);
+    assert(msg.status === 201, `admin private-message fixture (${msg.status})`);
   }
 
   // Promo code (admin)
@@ -362,25 +350,36 @@ async function main() {
       body: { email: email2, password },
     });
     const otp2 = reg2.data?.otp_dev;
-    let friendToken = smokeToken;
-    if (reg2.ok && otp2) {
+    let friendToken = reg2.data?.access_token || "";
+    if (reg2.ok && otp2 && !friendToken) {
       const ver2 = await req("/api/auth/verify-otp", {
         method: "POST",
         body: { email: email2, otpCode: otp2 },
       });
-      friendToken = ver2.data?.access_token || smokeToken;
+      friendToken = ver2.data?.access_token || "";
     }
+    assert(reg2.ok && !!friendToken, `friend account auth (${reg2.status})`);
     const other = await req("/api/entities/Character", {
       method: "POST",
       token: friendToken,
       body: { name: alphaName("Friend"), race: "human", class: "Shadow Operative" },
     });
     assert(other.status === 201 && other.data?.id, `friend character (${other.status})`);
+    await req("/api/auth/me", {
+      method: "PATCH",
+      token: friendToken,
+      body: { active_character_id: other.data.id },
+    });
 
-    const friendship = await req("/api/entities/Friendship", {
+    const sent = await req("/api/functions/SendFriendRequest", {
       method: "POST",
       token: smokeToken,
-      body: { participant_ids: [character.id, other.data.id] },
+      body: { to_character_id: other.data.id },
+    });
+    const friendship = await req("/api/functions/AcceptFriendRequest", {
+      method: "POST",
+      token: friendToken,
+      body: { request_id: sent.data?.request?.id },
     });
     const found = await req("/api/entities/Friendship/filter", {
       method: "POST",
@@ -388,9 +387,23 @@ async function main() {
       body: { query: { participant_ids: character.id } },
     });
     assert(
-      friendship.status === 201 && found.ok && found.data?.some((f) => f.id === friendship.data?.id),
+      sent.ok && friendship.ok && found.ok
+        && found.data?.some((f) => f.id === friendship.data?.friendship?.id),
       "friendship filter by participant_ids"
     );
+
+    const privateMessage = await req("/api/functions/SendMessage", {
+      method: "POST",
+      token: smokeToken,
+      body: { channel: "private", recipient_id: other.data.id, content: "private smoke hello" },
+    });
+    assert(privateMessage.ok && privateMessage.data?.message?.id, `SendMessage private (${privateMessage.status})`);
+    const marked = await req("/api/functions/MarkConversationRead", {
+      method: "POST",
+      token: friendToken,
+      body: { conversation_id: privateMessage.data?.conversation_id },
+    });
+    assert(marked.ok && marked.data?.marked >= 1, `MarkConversationRead (${marked.status})`);
   }
 
   // Unauthorized

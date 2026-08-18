@@ -266,12 +266,12 @@ func _build() -> void:
 	ClientUi.apply_body_font(_forgot_sent)
 	form.add_child(_forgot_sent)
 
-	# Dev reset token fields (local API convenience — not on web UI)
+	# Reset token fields. Desktop players paste the token delivered by email.
 	_reset_wrap = VBoxContainer.new()
 	_reset_wrap.visible = false
 	_reset_wrap.add_theme_constant_override("separation", _s(8))
 	form.add_child(_reset_wrap)
-	_reset_wrap.add_child(_field_label("Reset token (dev)"))
+	_reset_wrap.add_child(_field_label("Reset token"))
 	_reset_token = ClientUi.make_field("Token from email / API")
 	_style_auth_field(_reset_token)
 	_reset_wrap.add_child(_reset_token)
@@ -551,14 +551,35 @@ func _on_forgot() -> void:
 	_set_busy(false)
 	_primary_btn.text = "Send reset link"
 	_primary_btn.icon = null
+	if not bool(res.get("ok", false)):
+		_show_error(str(res.get("error", "Could not request a reset token")))
+		return
 	_forgot_sent_flag = true
 	_email.visible = false
 	_primary_btn.visible = false
 	_forgot_sent.visible = true
-	_forgot_sent.text = str(res.get("error", "Password reset is not available in the Godot client yet."))
-	_show_error(str(res.get("error", "")), true)
+	_forgot_sent.text = "If an account exists with that email, a reset token has been sent. Enter it below."
+	_reset_wrap.visible = true
+	var response_data: Variant = res.get("data", {})
+	if typeof(response_data) == TYPE_DICTIONARY:
+		_reset_token.text = str((response_data as Dictionary).get("reset_token_dev", ""))
+	_show_error("Reset request accepted.", true)
 
 
 func _on_reset_password() -> void:
-	_show_error("Password reset is not available in the Godot client yet.", true)
+	if _busy:
+		return
+	if _reset_token.text.strip_edges().is_empty():
+		_show_error("Enter the reset token from your email.")
+		return
+	if _reset_pw.text.length() < 8:
+		_show_error("New password must be at least 8 characters.")
+		return
+	_set_busy(true)
+	var res: Dictionary = await AuthManager.reset_password(_reset_token.text, _reset_pw.text)
+	_set_busy(false)
+	if not bool(res.get("ok", false)):
+		_show_error(str(res.get("error", "Password reset failed")))
+		return
 	_set_mode("login")
+	_show_error("Password updated. You can log in now.", true)

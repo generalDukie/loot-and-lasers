@@ -19,7 +19,7 @@ func _ready() -> void:
 func _boot() -> void:
 	_busy = true
 	_status.text = "Syncing…"
-	await MissionManager.refresh_character(true)
+	await MissionManager.refresh_character()
 	var requests := AsyncGroup.new()
 	requests.add(ProgressManager.load_daily)
 	requests.add(ProgressManager.sync_achievements)

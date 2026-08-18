@@ -152,7 +152,7 @@ expect(
 );
 expect(
   "server/src/walletBridge.js",
-  /mission_start_fuel[\s\S]*Math\.round\(rawAmount \* 100\)/,
+  /FUEL_PRECISION_SCALE\s*=\s*100[\s\S]*mission_start_fuel[\s\S]*Math\.round\(rawAmount \* FUEL_PRECISION_SCALE\)/,
   "mission Fuel bridge must support authoritative hundredths",
 );
 expect(

@@ -859,8 +859,8 @@ func _flash_status(text: String) -> void:
 func _on_change_password() -> void:
 	if _busy:
 		return
-	if _new_pw.text.length() < 6:
-		_flash_status("New password must be at least 6 characters.")
+	if _new_pw.text.length() < 8:
+		_flash_status("New password must be at least 8 characters.")
 		return
 	if _new_pw.text != _confirm_pw.text:
 		_flash_status("New password and confirmation differ.")

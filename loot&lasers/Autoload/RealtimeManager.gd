@@ -1,6 +1,6 @@
 extends Node
 ## Phase 19: owns exactly one Nakama realtime socket (via NakamaManager).
-## Phase 20: Nakama notifications drive new-mail; legacy Node poll retained for guild.
+## Nakama/Node realtime drive updates; periodic polling is an outage fallback only.
 
 signal entity_event(entity: String, event_type: String, data: Dictionary)
 signal connection_changed(connected: bool)
@@ -9,6 +9,10 @@ signal nakama_connection_changed(connected: bool)
 signal nakama_channel_message(message: Dictionary)
 signal nakama_presence(event: Dictionary)
 signal nakama_notification(notification: Dictionary)
+
+const MAIL_FALLBACK_POLL_SECONDS := 30.0
+const LEGACY_CHAT_POLL_SECONDS := 8.0
+const REALTIME_RECONNECT_SECONDS := 5.0
 
 var _socket: WebSocketPeer
 var _connected := false
@@ -25,23 +29,24 @@ var _refreshing_guild := false
 var _nakama_signals_bound := false
 var _nakama_was_connected := false
 var _wallet_reconcile_running := false
+var _skip_connection_reconcile_once := false
 
 
 func _ready() -> void:
-	print("[RealtimeManager] ready (Nakama socket owner + legacy Node poll)")
+	print("[RealtimeManager] ready (Nakama + Node realtime, fallback polling)")
 	_poll_mail = Timer.new()
-	_poll_mail.wait_time = 30.0
+	_poll_mail.wait_time = MAIL_FALLBACK_POLL_SECONDS
 	_poll_mail.timeout.connect(_on_mail_poll)
 	add_child(_poll_mail)
 
 	_poll_chat = Timer.new()
-	_poll_chat.wait_time = 8.0
+	_poll_chat.wait_time = LEGACY_CHAT_POLL_SECONDS
 	_poll_chat.timeout.connect(_on_chat_poll)
 	add_child(_poll_chat)
 
 	_reconnect = Timer.new()
 	_reconnect.one_shot = true
-	_reconnect.wait_time = 5.0
+	_reconnect.wait_time = REALTIME_RECONNECT_SECONDS
 	_reconnect.timeout.connect(_on_reconnect)
 	add_child(_reconnect)
 
@@ -69,11 +74,12 @@ func nakama_channel_listener_count() -> int:
 
 
 ## Preferred entry — connect Nakama socket once after auth.
-func start_nakama() -> Dictionary:
+func start_nakama(reconcile_wallet: bool = true) -> Dictionary:
 	if _nakama_connecting:
 		return {"ok": false, "error": "Socket connect already in progress"}
 	_want_nakama = true
 	_nakama_connecting = true
+	_skip_connection_reconcile_once = not reconcile_wallet
 	var auth: Dictionary = await NakamaManager.ensure_authenticated()
 	if not bool(auth.get("success", false)):
 		_nakama_connecting = false
@@ -85,9 +91,13 @@ func start_nakama() -> Dictionary:
 	nakama_connection_changed.emit(ok)
 	connection_changed.emit(ok or _connected)
 	if ok:
-		await SocialManager.load_social_state()
-		await _reconcile_wallet_once("nakama_connect")
+		call_deferred("_load_social_state_deferred")
+	_sync_fallback_polling()
 	return {"ok": ok, "error": str(res.get("error", ""))}
+
+
+func _load_social_state_deferred() -> void:
+	await SocialManager.load_social_state()
 
 
 func stop_nakama() -> void:
@@ -96,6 +106,7 @@ func stop_nakama() -> void:
 	_nakama_was_connected = false
 	await NakamaManager.disconnect_socket()
 	nakama_connection_changed.emit(false)
+	_sync_fallback_polling()
 	ChatManager.clear_account_chat_cache()
 	SocialManager.clear_account_social_cache()
 	if MailManager != null and MailManager.has_method("clear_account_mail_cache"):
@@ -175,9 +186,14 @@ func _on_nakama_mgr_connection(connected: bool) -> void:
 	if connected:
 		_ensure_socket_message_binds()
 		if not _nakama_was_connected:
-			call_deferred("_reconcile_wallet_deferred", "nakama_reconnect")
+			if _skip_connection_reconcile_once:
+				_skip_connection_reconcile_once = false
+			else:
+				call_deferred("_reconcile_wallet_deferred", "nakama_reconnect")
 	_nakama_was_connected = connected
 	nakama_connection_changed.emit(connected)
+	connection_changed.emit(connected or _connected)
+	_sync_fallback_polling()
 
 
 func _on_nakama_channel_message(p_message) -> void:
@@ -216,9 +232,7 @@ func start(entity: String = "ChatMessage") -> void:
 	if not is_nakama_connected() and not _nakama_connecting:
 		call_deferred("_boot_nakama_deferred")
 	_connect_ws()
-	if not _poll_mail.is_stopped():
-		_poll_mail.stop()
-	_poll_mail.start()
+	_sync_fallback_polling()
 	_poll_chat.stop()
 	MailManager.refresh_unread()
 
@@ -229,6 +243,7 @@ func start_node_wallet_events() -> void:
 	_want_connect = true
 	_entity_filter = "*"
 	_connect_ws()
+	_sync_fallback_polling()
 
 
 func _boot_nakama_deferred() -> void:
@@ -252,6 +267,7 @@ func stop_node() -> void:
 	_connected = false
 	set_process(false)
 	connection_changed.emit(false)
+	_sync_fallback_polling()
 
 
 func _connect_ws() -> void:
@@ -288,6 +304,7 @@ func _process(_delta: float) -> void:
 		if not _connected:
 			_connected = true
 			connection_changed.emit(true)
+			_sync_fallback_polling()
 		while _socket.get_available_packet_count() > 0:
 			var packet := _socket.get_packet().get_string_from_utf8()
 			_handle_packet(packet)
@@ -299,6 +316,7 @@ func _process(_delta: float) -> void:
 		set_process(false)
 		if _want_connect:
 			_reconnect.start()
+		_sync_fallback_polling()
 
 
 func _handle_packet(packet: String) -> void:
@@ -353,8 +371,23 @@ func _reconcile_wallet_once(_source: String) -> void:
 
 
 func _on_mail_poll() -> void:
+	if is_nakama_connected() or has_node_ws():
+		_sync_fallback_polling()
+		return
 	MailManager.refresh_unread()
 	NotificationManager.refresh_unread()
+
+
+func _sync_fallback_polling() -> void:
+	if _poll_mail == null:
+		return
+	var wants_realtime := _want_connect or _want_nakama
+	var has_realtime := is_nakama_connected() or has_node_ws()
+	if not wants_realtime or has_realtime:
+		_poll_mail.stop()
+		return
+	if _poll_mail.is_stopped():
+		_poll_mail.start()
 
 
 func _on_chat_poll() -> void:

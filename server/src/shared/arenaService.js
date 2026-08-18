@@ -5,6 +5,7 @@
  */
 import { nanoid } from "nanoid";
 import { entities } from "../entities.js";
+import { db } from "../db.js";
 import { clock } from "./time/clock.js";
 import {
   ARENA_DAILY_FREE_BATTLES,
@@ -51,6 +52,11 @@ const ARENA_OFFER_ID_LENGTH = 12;
 const EPHEMERAL_BOT_ID_LENGTH = 10;
 const EPHEMERAL_BOT_NAME_ID_LENGTH = 4;
 const EPHEMERAL_BOT_RATING_VARIANCE = 40;
+const ARENA_RANK_SORT = Object.freeze([
+  { field: "arena_rating", direction: "desc", defaultValue: ARENA_DEFAULT_RATING, cast: "integer", nullable: false },
+  { field: "arena_wins", direction: "desc", defaultValue: 0, cast: "integer", nullable: false },
+  { field: "id", direction: "asc", collation: "nocase", nullable: false },
+]);
 
 /** Challenger board lifetime (offer snapshots). */
 export const ARENA_OFFER_TTL_MS = ARENA_OFFER_TTL_HOURS
@@ -368,7 +374,7 @@ export function publicOpponentOffer(offer) {
   };
 }
 
-function publicRankRow(ch, rank) {
+function publicRankRow(ch, rank, guildTag = "") {
   return {
     rank,
     id: ch.id, // UI alias (LeaderboardPage / Godot rows)
@@ -382,38 +388,65 @@ function publicRankRow(ch, rank) {
     race: ch.race,
     // Account id for same-account challenge gating (not Nakama user id).
     created_by_id: ch.created_by_id || null,
+    guild_tag: guildTag,
   };
+}
+
+function guildTagsForCharacters(characters) {
+  const characterIds = [...new Set(characters.map((character) => character?.id).filter(Boolean))];
+  if (characterIds.length === 0) return new Map();
+  const memberships = entities.GuildMember.filter(
+    { character_id: { $in: characterIds } },
+    "-created_date",
+    characterIds.length,
+  );
+  const guildIds = [...new Set(memberships.map((membership) => membership.guild_id).filter(Boolean))];
+  const guilds = guildIds.length > 0
+    ? entities.Guild.filter({ id: { $in: guildIds } }, null, guildIds.length)
+    : [];
+  const tagByGuildId = new Map(guilds.map((guild) => [
+    guild.id,
+    String(guild.tag || guild.name || ""),
+  ]));
+  return new Map(memberships.map((membership) => [
+    membership.character_id,
+    tagByGuildId.get(membership.guild_id) || "",
+  ]));
 }
 
 /** Rank by arena_rating desc, then wins, then id (deterministic). */
 export function computeArenaRank(characterId) {
-  const all = entities.Character.filter({})
-    .slice()
-    .sort((a, b) => {
-      const rd = (b.arena_rating || ARENA_DEFAULT_RATING)
-        - (a.arena_rating || ARENA_DEFAULT_RATING);
-      if (rd !== 0) return rd;
-      const wd = (b.arena_wins || 0) - (a.arena_wins || 0);
-      if (wd !== 0) return wd;
-      return String(a.id).localeCompare(String(b.id));
-    });
-  const idx = all.findIndex((c) => c.id === characterId);
-  return idx >= 0 ? idx + 1 : 0;
+  const character = entities.Character.get(characterId);
+  if (!character) return 0;
+  const rating = Number(character.arena_rating) || ARENA_DEFAULT_RATING;
+  const wins = Number(character.arena_wins) || 0;
+  const before = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM entities
+    WHERE type = 'Character' AND (
+      CAST(COALESCE(json_extract(data, '$.arena_rating'), ${ARENA_DEFAULT_RATING}) AS INTEGER) > ?
+      OR (
+        CAST(COALESCE(json_extract(data, '$.arena_rating'), ${ARENA_DEFAULT_RATING}) AS INTEGER) = ?
+        AND CAST(COALESCE(json_extract(data, '$.arena_wins'), 0) AS INTEGER) > ?
+      )
+      OR (
+        CAST(COALESCE(json_extract(data, '$.arena_rating'), ${ARENA_DEFAULT_RATING}) AS INTEGER) = ?
+        AND CAST(COALESCE(json_extract(data, '$.arena_wins'), 0) AS INTEGER) = ?
+        AND id COLLATE NOCASE < ? COLLATE NOCASE
+      )
+    )
+  `).get(rating, rating, wins, rating, wins, character.id);
+  return Number(before?.count || 0) + 1;
 }
 
 export function listArenaLeaderboard({ limit = DEFAULT_ARENA_LEADERBOARD_LIMIT, offset = 0 } = {}) {
-  const all = entities.Character.filter({})
-    .slice()
-    .sort((a, b) => {
-      const rd = (b.arena_rating || ARENA_DEFAULT_RATING)
-        - (a.arena_rating || ARENA_DEFAULT_RATING);
-      if (rd !== 0) return rd;
-      const wd = (b.arena_wins || 0) - (a.arena_wins || 0);
-      if (wd !== 0) return wd;
-      return String(a.id).localeCompare(String(b.id));
-    });
-  const slice = all.slice(offset, offset + limit);
-  return slice.map((c, i) => publicRankRow(c, offset + i + 1));
+  const page = entities.Character.ranked(ARENA_RANK_SORT, limit, offset);
+  const guildTags = guildTagsForCharacters(page);
+  return page.map((character, index) => publicRankRow(
+    character,
+    offset + index + 1,
+    guildTags.get(character.id) || "",
+  ));
 }
 
 export function serializeArenaState(character, nowMs = clock.nowMs(), today = todayET()) {

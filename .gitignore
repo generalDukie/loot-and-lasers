@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.node-api.example
+!.env.backup.example
 
 # Logs
 /logs

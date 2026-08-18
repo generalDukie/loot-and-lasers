@@ -20,6 +20,7 @@ const RELEASE =
   process.env.GIT_SHA ||
   "dev";
 const BUILD = process.env.BUILD_ID || process.env.GIT_SHA || null;
+const GIT_SHA = process.env.GIT_SHA || null;
 
 function configuredLevel() {
   const raw = String(process.env.LOG_LEVEL || (ENV === "production" ? "info" : "debug")).toLowerCase();
@@ -92,6 +93,7 @@ export function getBuildInfo() {
     environment: ENV,
     release: RELEASE,
     build: BUILD,
+    git_sha: GIT_SHA,
     app: "lootandlasers",
   };
 }

@@ -39,6 +39,7 @@ const { searchAuditLogs } = await import("../src/audit/writer.js");
 
 let passed = 0;
 let failed = 0;
+const FORMER_PLAYER_LOOKUP_SCAN_CAP = 500;
 
 function test(name, fn) {
   try {
@@ -124,6 +125,18 @@ test("lookup by name / nakama / email", () => {
   assert.ok(byNk.accounts.some((x) => x.id === a.id));
   const byEmail = LookupPlayer(a, { q: "look@t.test" });
   assert.ok(byEmail.accounts.some((x) => x.id === a.id));
+});
+
+test("admin lookup reaches characters older than the former scan cap", () => {
+  const admin = insertUser("u-look-cap", "look-cap@t.test", "admin");
+  const target = makeCharacter("ch-look-cap", admin.id, "AncientAdminTarget");
+  db.prepare("UPDATE entities SET created_date = ? WHERE id = ?")
+    .run("2000-01-01T00:00:00.000Z", target.id);
+  for (let index = 0; index <= FORMER_PLAYER_LOOKUP_SCAN_CAP; index += 1) {
+    makeCharacter(`ch-look-fill-${index}`, admin.id, `AdminFiller${index}`);
+  }
+  const result = LookupPlayer(admin, { q: "AncientAdminTarget" });
+  assert.ok(result.characters.some((character) => character.id === target.id));
 });
 
 test("inspect character is read-only snapshot", () => {

@@ -30,7 +30,7 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 
 
 func _boot() -> void:
-	await MissionManager.refresh_character(true)
+	await MissionManager.refresh_character()
 	_populate()
 
 

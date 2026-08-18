@@ -37,6 +37,7 @@ const {
 
 let passed = 0;
 let failed = 0;
+const FORMER_GUILD_MEMBER_HYDRATION_CAP = 500;
 
 function test(name, fn) {
   try {
@@ -180,6 +181,44 @@ test("leaderboard pagination no overlap", () => {
   assert.equal(p0.rankings[0].rank, 1);
   assert.equal(p1.rankings[0].rank, 4);
   assert.ok(p0.rankings[0].id);
+});
+
+test("arena leaderboard resolves guild tags beyond the former hydration cap", () => {
+  const u = insertUser("u-tag-cap", "tag-cap@t.test");
+  const target = makeChar(u.id, { name: "TaggedTarget", arena_rating: 1_000_000 });
+  const targetGuild = entities.Guild.create({
+    name: "Ancient Guild",
+    tag: "OLD",
+    leader_id: target.id,
+    leader_name: target.name,
+    member_count: 1,
+  });
+  entities.GuildMember.create({
+    guild_id: targetGuild.id,
+    character_id: target.id,
+    character_name: target.name,
+    role: "leader",
+    created_date: "2000-01-01T00:00:00.000Z",
+  });
+  const fillerGuild = entities.Guild.create({
+    name: "Filler Guild",
+    tag: "FIL",
+    leader_id: "filler-leader",
+    leader_name: "Filler",
+    member_count: FORMER_GUILD_MEMBER_HYDRATION_CAP + 1,
+  });
+  for (let index = 0; index <= FORMER_GUILD_MEMBER_HYDRATION_CAP; index += 1) {
+    entities.GuildMember.create({
+      guild_id: fillerGuild.id,
+      character_id: `filler-character-${index}`,
+      character_name: `Filler ${index}`,
+      role: "member",
+      created_date: `2026-01-01T00:${String(Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}.000Z`,
+    });
+  }
+  const row = listArenaLeaderboard({ limit: 1, offset: 0 })[0];
+  assert.equal(row.character_id, target.id);
+  assert.equal(row.guild_tag, "OLD");
 });
 
 test("nearby includes self and correct rank", () => {
@@ -385,8 +424,20 @@ await testAsync("GetGuildLeaderboard page + your guild + no-guild viewer", async
     character_name: me.name,
     role: "leader",
   });
-  const res = await GetGuildLeaderboard(user, { limit: 50, offset: 0, nearby: true });
+  const originalGuildFilter = entities.Guild.filter;
+  let guildFilterCalls = 0;
+  entities.Guild.filter = (...args) => {
+    guildFilterCalls += 1;
+    return originalGuildFilter(...args);
+  };
+  let res;
+  try {
+    res = await GetGuildLeaderboard(user, { limit: 50, offset: 0, nearby: true });
+  } finally {
+    entities.Guild.filter = originalGuildFilter;
+  }
   assert.equal(res.status, 200);
+  assert.equal(guildFilterCalls, 1, "one Guild Ranking request builds one sorted guild snapshot");
   assert.equal(res.body.in_guild, true);
   assert.ok(res.body.player_guild_rank >= 1);
   assert.equal(res.body.your_guild.guild_id, g.id);

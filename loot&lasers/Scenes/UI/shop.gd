@@ -77,13 +77,14 @@ func _ready() -> void:
 
 func on_shell_reshow() -> void:
 	_update_meta()
-	if not ShopManager.shop_window.is_empty():
-		_populate()
-	elif not _booting:
-		_set_status("Opening Black Market…")
-	if _busy or _booting:
+	if _booting:
+		while _booting and is_inside_tree():
+			await get_tree().process_frame
 		return
-	call_deferred("_start_boot")
+	if _busy:
+		return
+	_set_status("Opening Black Market…")
+	await _boot()
 
 
 func _start_boot() -> void:

@@ -56,7 +56,6 @@ const SITE_CONFIG_QUERY_LIMIT = 5;
 const DEFAULT_PLAYER_LOOKUP_LIMIT = 20;
 const MAX_PLAYER_LOOKUP_LIMIT = 50;
 const PLAYER_EXACT_MATCH_LIMIT = 5;
-const PLAYER_DIRECTORY_SCAN_LIMIT = 500;
 const INSPECT_INVENTORY_LIMIT = 500;
 const INSPECT_MAIL_LIMIT = 50;
 const INSPECT_MISSION_LIMIT = 20;
@@ -289,8 +288,8 @@ export function LookupPlayer(user, query = {}) {
   const chExact = entities.Character.get(q);
   if (chExact) results.characters.push(serializeCharacterSummary(chExact));
 
-  // Name contains (scan capped)
-  const all = entities.Character.list("-created_date", PLAYER_DIRECTORY_SCAN_LIMIT) || [];
+  // Name contains across the complete directory; SQLite applies the result cap.
+  const all = entities.Character.searchText("name", q, "-created_date", limit) || [];
   const ql = q.toLowerCase();
   for (const ch of all) {
     if (results.characters.length >= limit) break;

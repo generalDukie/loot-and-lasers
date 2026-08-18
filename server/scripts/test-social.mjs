@@ -63,6 +63,7 @@ const { installFakeClock, resetClockState } = await import("../src/shared/time/i
 
 let passed = 0;
 let failed = 0;
+const FORMER_DIRECTORY_SCAN_CAP = 500;
 
 function test(name, fn) {
   try {
@@ -180,6 +181,18 @@ test("search characters by name", () => {
   makeChar(u.id, { name: "ZorpFinder" });
   const hits = searchCharacters("zorp");
   assert.ok(hits.some((h) => h.name === "ZorpFinder"));
+});
+
+test("character search reaches records older than the former scan cap", () => {
+  const u = insertUser("u-search-cap", "search-cap@t.test");
+  const target = makeChar(u.id, { name: "AncientZorpTarget" });
+  db.prepare("UPDATE entities SET created_date = ? WHERE id = ?")
+    .run("2000-01-01T00:00:00.000Z", target.id);
+  for (let index = 0; index <= FORMER_DIRECTORY_SCAN_CAP; index += 1) {
+    makeChar(u.id, { name: `DirectoryFiller${index}` });
+  }
+  const hits = searchCharacters("ancientzorptarget");
+  assert.ok(hits.some((hit) => hit.id === target.id));
 });
 
 test("friend send accept remove + duplicate prevention", () => {

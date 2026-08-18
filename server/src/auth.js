@@ -16,6 +16,7 @@ import {
   readAccountServerSession,
   writeAccountServerSession,
 } from "./accountServerSession.js";
+import { rateLimitFromEnv } from "./rateLimit.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "lootandlasers-dev-secret-change-me";
 const TOKEN_TTL = process.env.JWT_TTL || "30d";
@@ -45,13 +46,20 @@ const OTP_VALUE_COUNT = 900_000;
 const NAKAMA_ERROR_PREVIEW_MAX_LENGTH = 200;
 const BRIDGE_PASSWORD_TOKEN_LENGTH = 48;
 const PASSWORD_HASH_ROUNDS = 10;
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 128;
 const OTP_EXPIRY_MINUTES = 15;
 const LEGACY_NAME_MIN_LENGTH = 2;
 const LEGACY_NAME_MAX_LENGTH = 20;
 const PASSWORD_RESET_TOKEN_LENGTH = 32;
 const PASSWORD_RESET_EXPIRY_HOURS = 1;
 const DEFAULT_EMAIL_LOG_LIMIT = 50;
+const NAKAMA_HTTP_URL = process.env.NAKAMA_HTTP_URL || "http://127.0.0.1:7350";
+const NAKAMA_HTTP_KEY = process.env.NAKAMA_HTTP_KEY
+  || process.env.LOOT_WALLET_BRIDGE_SECRET
+  || (IS_PROD ? "" : "defaulthttpkey");
+const AUTH_RATE_DEFAULTS = Object.freeze({ windowSeconds: 60, max: 30 });
+const RECOVERY_RATE_DEFAULTS = Object.freeze({ windowSeconds: 15 * 60, max: 5 });
 
 function devOnlyExtras(payload) {
   // Never expose OTP / reset tokens to clients in production — even if SMTP is off.
@@ -59,7 +67,41 @@ function devOnlyExtras(payload) {
   return payload;
 }
 
-const PUBLIC_CLIENT_URL = process.env.PUBLIC_CLIENT_URL || "http://localhost:8787";
+async function setNakamaPassword(row, newPassword) {
+  if (!row?.nakama_user_id || !row?.email) {
+    const err = new Error("Account is not linked to Nakama email authentication");
+    err.status = 409;
+    err.code = "NAKAMA_ACCOUNT_NOT_LINKED";
+    throw err;
+  }
+  if (!NAKAMA_HTTP_KEY) {
+    const err = new Error("Password service is not configured");
+    err.status = 503;
+    err.code = "PASSWORD_SERVICE_UNAVAILABLE";
+    throw err;
+  }
+  const endpoint = new URL("/v2/rpc/auth_password_set", NAKAMA_HTTP_URL);
+  endpoint.searchParams.set("http_key", NAKAMA_HTTP_KEY);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(JSON.stringify({
+      user_id: row.nakama_user_id,
+      email: row.email,
+      password: newPassword,
+    })),
+  });
+  let rpc = {};
+  try { rpc = await response.json(); } catch { /* handled below */ }
+  let result = {};
+  try { result = JSON.parse(rpc.payload || "{}"); } catch { /* handled below */ }
+  if (!response.ok || result.success !== true) {
+    const err = new Error(result.error || `Nakama password update failed (${response.status})`);
+    err.status = Number(result.status_code) || (response.status >= 400 ? response.status : 502);
+    err.code = result.code || "NAKAMA_PASSWORD_UPDATE_FAILED";
+    throw err;
+  }
+}
 
 function publicUser(row) {
   if (!row) return null;
@@ -360,6 +402,8 @@ function resolveBridgeUser(nakamaUserId, email) {
 
 export function createAuthRouter(express) {
   const router = express.Router();
+  const authRateLimit = rateLimitFromEnv("auth", AUTH_RATE_DEFAULTS);
+  const recoveryRateLimit = rateLimitFromEnv("password_recovery", RECOVERY_RATE_DEFAULTS);
 
   router.get("/me", requireAuth, (req, res) => {
     res.json(req.user);
@@ -388,7 +432,7 @@ export function createAuthRouter(express) {
    * Body: { nakama_token, email? }
    * Godot credentials never cross this boundary; Nakama owns authentication.
    */
-  router.post("/nakama-bridge", async (req, res) => {
+  router.post("/nakama-bridge", authRateLimit, async (req, res) => {
     try {
       const nakamaToken = String(req.body?.nakama_token || req.body?.session_token || "").trim();
       const emailHint = String(req.body?.email || "").trim().toLowerCase();
@@ -528,7 +572,7 @@ export function createAuthRouter(express) {
     }
   });
 
-  router.post("/register", async (req, res) => {
+  router.post("/register", authRateLimit, async (req, res) => {
     try {
       const email = String(req.body?.email || "").trim().toLowerCase();
       const password = String(req.body?.password || "");
@@ -586,11 +630,11 @@ export function createAuthRouter(express) {
         ...devOnlyExtras({ otp_dev: code, auto_verified: true }),
       });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message, code: err.code });
     }
   });
 
-  router.post("/verify-otp", async (req, res) => {
+  router.post("/verify-otp", authRateLimit, async (req, res) => {
     try {
       const email = String(req.body?.email || "").trim().toLowerCase();
       const otp = String(req.body?.otpCode || req.body?.otp || "").trim();
@@ -612,11 +656,11 @@ export function createAuthRouter(express) {
       const access_token = signToken(row.id);
       res.json({ success: true, access_token, user: getUserById(row.id) });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message, code: err.code });
     }
   });
 
-  router.post("/resend-otp", async (req, res) => {
+  router.post("/resend-otp", authRateLimit, async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const row = getUserByEmail(email);
     if (!row) return res.status(404).json({ error: "User not found" });
@@ -652,7 +696,7 @@ export function createAuthRouter(express) {
     res.json({ success: true, ...devOnlyExtras({ otp_dev: code }) });
   });
 
-  router.post("/login", async (req, res) => {
+  router.post("/login", authRateLimit, async (req, res) => {
     try {
       const email = String(req.body?.email || "").trim().toLowerCase();
       const password = String(req.body?.password || "");
@@ -756,12 +800,12 @@ export function createAuthRouter(express) {
     res.json({ success: true });
   });
 
-  router.post("/reset-password-request", async (req, res) => {
+  router.post("/reset-password-request", recoveryRateLimit, async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const row = getUserByEmail(email);
     const ip = req.ip || req.headers["x-forwarded-for"] || null;
     // Always succeed to avoid email enumeration
-    if (row) {
+    if (row?.nakama_user_id) {
       const token = nanoid(PASSWORD_RESET_TOKEN_LENGTH);
       const expires = new Date(
         Date.now()
@@ -787,7 +831,7 @@ export function createAuthRouter(express) {
             type: "reset",
             to: email,
             subject: "Reset your Loot & Lasers password",
-            text: `We received a password reset request.\n\nTo reset your password, open this link:\n${PUBLIC_CLIENT_URL}/reset-password?token=${encodeURIComponent(token)}\n\nThis link expires in 1 hour.\n\nIf you did not request this, you can ignore this message.`,
+            text: `We received a password reset request.\n\nOpen Loot & Lasers, choose Forgot password, then enter this reset token:\n\n${token}\n\nThis token expires in 1 hour.\n\nIf you did not request this, you can ignore this message.`,
           });
         } catch (e) {
           console.error(`[auth] Failed to send reset email to ${email}:`, e);
@@ -808,22 +852,44 @@ export function createAuthRouter(express) {
     res.json({ success: true });
   });
 
-  router.post("/reset-password", async (req, res) => {
+  router.post("/reset-password", recoveryRateLimit, async (req, res) => {
     try {
       const token = String(req.body?.resetToken || req.body?.reset_token || "");
       const newPassword = String(req.body?.newPassword || req.body?.new_password || "");
       const ip = req.ip || req.headers["x-forwarded-for"] || null;
       if (!token || !newPassword) return res.status(400).json({ error: "Token and new password required" });
+      if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+        return res.status(422).json({
+          error: `Password must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters`,
+        });
+      }
       const row = db.prepare("SELECT * FROM users WHERE reset_token = ?").get(token);
       if (!row) return res.status(400).json({ error: "Invalid reset token" });
       if (row.reset_expires_at && new Date(row.reset_expires_at) < new Date()) {
         return res.status(400).json({ error: "Reset token expired" });
       }
+      await setNakamaPassword(row, newPassword);
       const hash = await bcrypt.hash(newPassword, PASSWORD_HASH_ROUNDS);
       db.prepare(`
         UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires_at = NULL, updated_date = ?
         WHERE id = ?
       `).run(hash, nowIso(), row.id);
+      const serverId = getServerId();
+      const currentSession = readAccountServerSession(row.id, serverId);
+      const nextVersion = Math.max(
+        1,
+        Math.floor(Number(currentSession?.session_version) || 1) + 1,
+      );
+      writeAccountServerSession(
+        row.id,
+        { sessionVersion: nextVersion, sessionKey: null },
+        serverId,
+      );
+      const { kickAccountSessions } = await import("./realtime.js");
+      kickAccountSessions(row.id, {
+        reason: "password_reset",
+        message: "Password changed. Please log in again.",
+      });
       auditAuthEvent({
         action: "password_reset_completed",
         user: publicUser(row),
@@ -834,18 +900,21 @@ export function createAuthRouter(express) {
       });
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message, code: err.code });
     }
   });
 
-  router.post("/change-password", requireAuth, async (req, res) => {
+  router.post("/change-password", requireAuth, recoveryRateLimit, async (req, res) => {
     try {
-      const currentPassword = String(req.body?.currentPassword || "");
-      const newPassword = String(req.body?.newPassword || "");
+      const newPassword = String(req.body?.newPassword || req.body?.new_password || "");
       const ip = req.ip || req.headers["x-forwarded-for"] || null;
       const row = getUserRowById(req.user.id);
-      const ok = await bcrypt.compare(currentPassword, row.password_hash);
-      if (!ok) return res.status(400).json({ error: "Current password is incorrect" });
+      if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+        return res.status(422).json({
+          error: `Password must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters`,
+        });
+      }
+      await setNakamaPassword(row, newPassword);
       const hash = await bcrypt.hash(newPassword, PASSWORD_HASH_ROUNDS);
       db.prepare("UPDATE users SET password_hash = ?, updated_date = ? WHERE id = ?")
         .run(hash, nowIso(), row.id);
@@ -859,7 +928,7 @@ export function createAuthRouter(express) {
       });
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(err.status || 500).json({ error: err.message, code: err.code });
     }
   });
 

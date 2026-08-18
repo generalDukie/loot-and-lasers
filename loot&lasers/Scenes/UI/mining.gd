@@ -66,7 +66,7 @@ func _on_mining_phase_changed(_phase: String) -> void:
 func _boot() -> void:
 	_busy = true
 	var requests := AsyncGroup.new()
-	requests.add(MissionManager.refresh_character.bind(true))
+	requests.add(MissionManager.refresh_character)
 	requests.add(MiningManager.refresh_status)
 	await requests.wait()
 	_busy = false

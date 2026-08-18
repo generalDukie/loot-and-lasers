@@ -6,17 +6,18 @@
   "scripts": {
     "dev": "node --watch --import ./scripts/register-src-alias.mjs src/index.js",
     "start": "node --import ./scripts/register-src-alias.mjs src/index.js",
-    "seed": "node src/seed.js",
+    "seed": "node --import ./scripts/register-src-alias.mjs src/seed.js",
     "smoke": "node scripts/smoke-test.mjs",
-    "test:time": "node scripts/test-time.mjs",
-    "test:entitlements": "node scripts/test-entitlements.mjs",
-    "test:rewards": "node scripts/test-rewards.mjs",
-    "test:wallet-bridge": "node scripts/test-wallet-bridge.mjs",
+    "test:time": "node --import ./scripts/register-src-alias.mjs scripts/test-time.mjs",
+    "test:entitlements": "node --import ./scripts/register-src-alias.mjs scripts/test-entitlements.mjs",
+    "test:rewards": "node --import ./scripts/register-src-alias.mjs scripts/test-rewards.mjs",
+    "test:wallet-bridge": "node --import ./scripts/register-src-alias.mjs scripts/test-wallet-bridge.mjs",
     "backup:export": "node scripts/export-data.mjs",
-    "backup:import": "node scripts/import-data.mjs",
-    "integrity:audit": "node scripts/run-integrity-audit.mjs",
-    "integrity:migrate": "node scripts/run-migration.mjs",
-    "integrity:restore-drill": "node scripts/restore-drill.mjs"
+    "backup:import": "node --import ./scripts/register-src-alias.mjs scripts/import-data.mjs",
+    "backup:snapshot": "node --import ./scripts/register-src-alias.mjs scripts/snapshot-db.mjs",
+    "integrity:audit": "node --import ./scripts/register-src-alias.mjs scripts/run-integrity-audit.mjs",
+    "integrity:migrate": "node --import ./scripts/register-src-alias.mjs scripts/run-migration.mjs",
+    "integrity:restore-drill": "node --import ./scripts/register-src-alias.mjs scripts/restore-drill.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

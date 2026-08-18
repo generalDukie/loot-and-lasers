@@ -77,8 +77,8 @@ reject(
 );
 expect(
   "loot&lasers/Scenes/Main/main.gd",
-  /ensure_nakama_session[\s\S]*fetch_me[\s\S]*get_selected_character/,
-  "boot does not enforce auth → account → selected Character order",
+  /ensure_nakama_session[\s\S]*has_node_gameplay_session[\s\S]*fetch_me[\s\S]*_leave_to_character_select/,
+  "boot does not enforce auth → gameplay account → Character select order",
 );
 reject(
   "loot&lasers/Scenes/Main/main.gd",

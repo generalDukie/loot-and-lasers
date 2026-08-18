@@ -84,9 +84,9 @@ func _set_status(text: String) -> void:
 func _populate() -> void:
 	for c in _list.get_children():
 		c.queue_free()
-	_show_war_picker = false
 
 	if SocialManager.my_guild.is_empty():
+		_show_war_picker = false
 		_list.add_child(_make_creation_flow())
 		_set_status("")
 		return
@@ -629,10 +629,7 @@ func _make_wars_panel(guild: Dictionary, wars: Array) -> PanelContainer:
 		ClientUi.fill_priced_action_button(
 			declare, "Declare War", "stardust", GuildWarManager.DECLARE_COST
 		)
-		declare.pressed.connect(func() -> void:
-			_show_war_picker = not _show_war_picker
-			_populate()
-		)
+		declare.pressed.connect(_on_toggle_war_picker)
 		col.add_child(declare)
 		if _show_war_picker:
 			col.add_child(_empty("Choose a rival guild:"))
@@ -1018,6 +1015,16 @@ func _make_browse_row(g: Dictionary) -> PanelContainer:
 
 # ─── Actions ────────────────────────────────────────────────────────────────
 
+func _on_toggle_war_picker() -> void:
+	if _busy:
+		return
+	_show_war_picker = not _show_war_picker
+	if _show_war_picker:
+		_set_status("Loading rivals…")
+		await SocialManager.browse_guilds()
+	await _populate()
+
+
 func _on_declare_war(gid: String) -> void:
 	if _busy:
 		return
@@ -1028,6 +1035,7 @@ func _on_declare_war(gid: String) -> void:
 	if not res.ok:
 		_set_status(_err(res))
 		return
+	_show_war_picker = false
 	_set_status("War declared (−%s Stardust)." % GuildWarManager.DECLARE_COST)
 	await SocialManager.load_my_guild()
 	await SocialManager.browse_guilds()

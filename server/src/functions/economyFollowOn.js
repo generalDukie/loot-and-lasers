@@ -191,10 +191,10 @@ import {
   LEADERBOARD_DEFINITIONS,
 } from "../shared/statisticsService.js";
 import {
-  getMyGuildState,
+  getGuildMembership,
   getNearbyGuildEntries,
-  computeGuildRank,
   publicGuildRankRow,
+  sortedGuilds,
 } from "../shared/guildSocialService.js";
 import { secureRandom, secureRandomInt } from "../rewards/rng.js";
 import { isAdmin } from "../entityAccess.js";
@@ -416,20 +416,23 @@ export const GetGuildLeaderboard = wrap((user, body = {}) => {
       if (Object.prototype.hasOwnProperty.call(body, k)) delete body[k];
     }
   }
+  const guilds = sortedGuilds();
   const page = serializeGuildLeaderboardPage({
     limit: body.limit,
     offset: body.offset,
+    guilds,
   });
-  const mine = getMyGuildState(ch.id);
-  const guildId = mine.guild?.id || mine.membership?.guild_id || null;
-  const player_guild_rank = guildId ? computeGuildRank(guildId) : 0;
+  const membership = getGuildMembership(ch.id);
+  const guildId = membership?.guild_id || null;
+  const guildIndex = guildId ? guilds.findIndex((guild) => guild.id === guildId) : -1;
+  const player_guild_rank = guildIndex < 0 ? 0 : guildIndex + 1;
   const selfId = guildId || "";
   const rankings = (page.rankings || []).map((row) => ({
     ...row,
     is_self: selfId !== "" && row.guild_id === selfId,
   }));
   const your_guild = guildId
-    ? publicGuildRankRow(mine.guild || entities.Guild.get(guildId), player_guild_rank, {
+    ? publicGuildRankRow(guildIndex >= 0 ? guilds[guildIndex] : entities.Guild.get(guildId), player_guild_rank, {
         is_self: true,
       })
     : null;
@@ -448,6 +451,7 @@ export const GetGuildLeaderboard = wrap((user, body = {}) => {
   if (body.nearby) {
     out.nearby = getNearbyGuildEntries(guildId, {
       radius: body.nearby_radius ?? body.radius ?? DEFAULT_NEARBY_RANK_RADIUS,
+      guilds,
     });
   }
   return out;

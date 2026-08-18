@@ -5,6 +5,7 @@ extends Node
 signal board_changed(offers: Array)
 signal active_mission_changed(mission: Dictionary)
 signal character_updated(character: Dictionary)
+signal character_refresh_completed(completion: Dictionary)
 signal claim_ready(result: Dictionary)
 
 signal missions_loaded(board: Dictionary)
@@ -32,6 +33,7 @@ var offers: Array = []
 var active_mission: Dictionary = {}
 var _character_refresh_ms := 0
 var _character_refresh_id := ""
+var _character_refresh_inflight_id := ""
 ## True when a dangling / unreadable active pointer exists (legacy Node path).
 var active_mission_missing := false
 var last_claim_result: Dictionary = {}
@@ -122,13 +124,26 @@ func refresh_character(force: bool = false) -> Dictionary:
 		and not GameManager.active_character.is_empty()
 	):
 		return {"ok": true, "error": "", "data": GameManager.active_character, "cached": true}
+	if not _character_refresh_inflight_id.is_empty():
+		var completion: Dictionary = await character_refresh_completed
+		if str(completion.get("character_id", "")) == cid:
+			var shared_result: Variant = completion.get("result", {})
+			return shared_result if typeof(shared_result) == TYPE_DICTIONARY else {}
+		return await refresh_character(force)
+	_character_refresh_inflight_id = cid
 	var res: Dictionary = await AuthManager.get_character(cid)
-	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
+	if (
+		res.ok
+		and typeof(res.data) == TYPE_DICTIONARY
+		and GameManager.selected_character_id() == cid
+	):
 		GameManager.apply_active_character(res.data, "mission_refresh")
 		character_updated.emit(res.data)
 		_character_refresh_ms = Time.get_ticks_msec()
 		_character_refresh_id = cid
 		await _restore_active_mission_from_node()
+	_character_refresh_inflight_id = ""
+	character_refresh_completed.emit({"character_id": cid, "result": res})
 	return res
 
 

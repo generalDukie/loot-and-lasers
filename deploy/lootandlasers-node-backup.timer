@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Loot & Lasers encrypted offsite backup
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+RandomizedDelaySec=1800
+Persistent=true
+Unit=lootandlasers-node-backup.service
+
+[Install]
+WantedBy=timers.target

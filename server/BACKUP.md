@@ -1,6 +1,7 @@
 # Database backup & restore
 
-Export and import game data as JSON (users + entities).
+Export and import game data as paginated JSON (users + entities), or create a
+transactionally consistent SQLite snapshot for encrypted offsite storage.
 
 Godot clients are **not** backups. Nakama auth data alone cannot reconstruct gameplay.
 
@@ -49,3 +50,26 @@ ALLOW_PROD_MIGRATION=1 npm run integrity:migrate -- --id … --apply  # producti
 
 See `scripts/import-data.mjs` source for `--skip-users`, `--types`, `--replace`.
 See `docs/PHASE_INTEGRITY.md` for RPO/RTO honesty and quarantine/repair policy.
+
+## Scheduled encrypted offsite backup
+
+Production uses `scripts/backup-node-api.sh` with restic. Restic encrypts each
+snapshot before upload, applies daily/weekly/monthly retention, and runs an
+integrity check after every backup.
+
+1. Install `restic` on the Docker host.
+2. Copy `.env.backup.example` to `/etc/lootandlasers/backup.env`, replace every
+   placeholder, and set file permissions to `0600`.
+3. Deploy. The deploy script installs and enables
+   `lootandlasers-node-backup.timer` when that credential file exists.
+4. Trigger and inspect the first backup:
+
+```bash
+systemctl start lootandlasers-node-backup.service
+journalctl -u lootandlasers-node-backup.service -n 100 --no-pager
+restic snapshots --tag lootandlasers-node-api
+```
+
+The systemd timer runs daily at 04:00 UTC with a randomized delay. Credentials
+are intentionally not stored in Git. A backup is not considered active until
+the service succeeds and a snapshot is visible in the offsite repository.

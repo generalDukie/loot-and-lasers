@@ -55,11 +55,13 @@ var _page_nav_pending := false
 var _page_swap_token := 0
 ## Compiled PackedScenes — first `load()` compiles GDScript and is the hitch.
 var _packed_cache: Dictionary = {}
-## Packed scenes stay cached, but rendered page instances do not. Rebuilding on
-## each visit prevents a parked page from flashing an old data snapshot before
-## its live refresh completes.
-const RETAIN_RENDERED_PAGE_INSTANCES := false
+## Pages with an explicit live-reshow contract keep their built control trees.
+## A loading veil covers them until the fresh request finishes, so reuse never
+## exposes the parked data snapshot from the prior visit.
+const RETAIN_RENDERED_PAGE_INSTANCES := true
 var _page_instances: Dictionary = {}
+var _page_live_refresh_token := 0
+var _page_live_refresh_active := false
 var _warm_queue: Array = []
 var _warmup_paused := false
 var _cached_character_id := ""
@@ -1157,6 +1159,8 @@ func try_begin_page_nav(path: String) -> bool:
 	# run show_page → on_shell_reshow so reminted challenger cards replace
 	# the pre-fight portraits.
 	if path == _page_path and _page != null and is_instance_valid(_page):
+		if _page_live_refresh_active:
+			return false
 		if _page.has_method("on_shell_reshow"):
 			_page_nav_pending = true
 			return true
@@ -1185,6 +1189,7 @@ func show_page(path: String) -> void:
 	if _page_swap_busy:
 		return
 
+	_cancel_live_page_refresh()
 	_pause_nav_warmup()
 	_page_swap_busy = true
 	# Failsafe — never leave the shell permanently locked if a page script errors mid-mount.
@@ -1270,7 +1275,7 @@ func show_page(path: String) -> void:
 		page_control.scale = Vector2.ONE
 		page_control.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 		if restored:
-			page_control.modulate.a = 1.0
+			page_control.modulate.a = 0.0
 			call_deferred("_fit_page_to_stage")
 			call_deferred("_refresh_kept_page", _page)
 		else:
@@ -1309,7 +1314,19 @@ func _keeps_page(path: String) -> bool:
 
 
 func _retains_page_instance(path: String) -> bool:
-	return RETAIN_RENDERED_PAGE_INSTANCES and _keeps_page(path)
+	return (
+		RETAIN_RENDERED_PAGE_INSTANCES
+		and _keeps_page(path)
+		and path in [
+			GameManager.SCENE_HUB,
+			GameManager.SCENE_STATS,
+			GameManager.SCENE_SHOP,
+			GameManager.SCENE_ARENA,
+			GameManager.SCENE_CANTINA,
+			GameManager.SCENE_GALAXY,
+			GameManager.SCENE_LEADERBOARD,
+		]
+	)
 
 
 func _load_packed(path: String) -> PackedScene:
@@ -1360,13 +1377,35 @@ func _stop_page_audio(root: Node) -> void:
 func _refresh_kept_page(page: Node) -> void:
 	if page == null or not is_instance_valid(page) or page != _page:
 		return
-	if page.has_method("on_shell_reshow"):
-		page.call("on_shell_reshow")
+	if _page_live_refresh_active:
 		return
-	if page.has_method("_populate"):
-		page.call("_populate")
-	elif page.has_method("_render"):
-		page.call("_render")
+	if not page.has_method("on_shell_reshow"):
+		return
+	_page_live_refresh_token += 1
+	var refresh_token := _page_live_refresh_token
+	_page_live_refresh_active = true
+	StationLoadingOverlay.show_loading("Loading live page…")
+	if page is Control:
+		(page as Control).modulate.a = 0.0
+	await page.call("on_shell_reshow")
+	if (
+		refresh_token != _page_live_refresh_token
+		or page != _page
+		or not is_instance_valid(page)
+	):
+		return
+	if page is Control:
+		(page as Control).modulate.a = 1.0
+	_page_live_refresh_active = false
+	StationLoadingOverlay.hide_loading()
+
+
+func _cancel_live_page_refresh() -> void:
+	_page_live_refresh_token += 1
+	if not _page_live_refresh_active:
+		return
+	_page_live_refresh_active = false
+	StationLoadingOverlay.hide_loading()
 
 
 func _purge_parked_pages() -> void:

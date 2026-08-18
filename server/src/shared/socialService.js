@@ -14,7 +14,6 @@ const PRESENCE_OFFLINE_MS = 90_000;
 const PRESENCE_STATUSES = new Set(["online", "away", "busy", "offline", "in_mission"]);
 const SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
-const SOCIAL_DIRECTORY_QUERY_LIMIT = 500;
 const FRIENDSHIP_QUERY_LIMIT = 500;
 const PENDING_PAIR_QUERY_LIMIT = 5;
 const FRIEND_REQUEST_LIST_LIMIT = 100;
@@ -198,7 +197,7 @@ export function searchCharacters(query, { excludeId = null, limit = SEARCH_LIMIT
   const q = normalizeForSearch(query);
   if (!q) return [];
   const lim = Math.max(1, Math.min(MAX_SEARCH_LIMIT, Number(limit) || SEARCH_LIMIT));
-  const all = entities.Character.list("-created_date", SOCIAL_DIRECTORY_QUERY_LIMIT) || [];
+  const all = entities.Character.searchText("name", q, "-created_date", lim) || [];
   const legacyCache = new Map();
   const hits = [];
   for (const c of all) {
@@ -214,7 +213,6 @@ export function searchCharacters(query, { excludeId = null, limit = SEARCH_LIMIT
       avatar_url: c.avatar_url || "",
       arena_rating: c.arena_rating || ARENA_DEFAULT_RATING,
     });
-    if (hits.length >= lim) break;
   }
   return hits;
 }

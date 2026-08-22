@@ -22,11 +22,11 @@ import {
   scopeReadQuery,
 } from "./entityAccess.js";
 import { assertCanUnequipToBag } from "./shared/inventoryGrant.js";
-import { db, nowIso, migrateXpRequirementSlowdown } from "./db.js";
+import { db, nowIso, migrateXpRequirementSlowdown, migratePhase1ProgressionFoundation } from "./db.js";
 import { expForLevel } from "./shared/rewards.js";
-import { grantCharacterXp } from "./shared/characterProgression.js";
+import { grantCharacterXp, reconstructProgressionState } from "./shared/characterProgression.js";
 import { applyCharacterCreationStartingGrant } from "./shared/currencyService.js";
-import { ensureCharacterPermanentStats } from "./shared/characterStatsRepair.js";
+import { ensureCharacterLiveCreateDefaults } from "./shared/characterStatsRepair.js";
 import { ensureDefaultSchedules } from "./scheduling/bootstrap.js";
 import { startScheduler } from "./scheduling/worker.js";
 import { createTimeRouter, createScheduleRouter } from "./routes/time.js";
@@ -204,9 +204,17 @@ app.get("/api/entities/:type", requireAuth, (req, res) => {
     const offset = readOffset(req.query.offset);
     const scoped = scopeReadQuery(req.user, req.params.type, {});
     if (scoped && Object.keys(scoped).length > 0) {
-      return res.json(store.filter(scoped, sort, limit, offset));
+      const rows = store.filter(scoped, sort, limit, offset);
+      if (req.params.type === "Character") {
+        return res.json(rows.map((row) => ensureCharacterLiveCreateDefaults(req.user, row).character));
+      }
+      return res.json(rows);
     }
-    res.json(store.list(sort, limit, offset));
+    const listed = store.list(sort, limit, offset);
+    if (req.params.type === "Character") {
+      return res.json(listed.map((row) => ensureCharacterLiveCreateDefaults(req.user, row).character));
+    }
+    res.json(listed);
   } catch (err) {
     sendApiError(res, err, { fallbackMessage: "Could not list entities" });
   }
@@ -220,7 +228,11 @@ app.post("/api/entities/:type/filter", requireAuth, (req, res) => {
     const limit = readLimit(req.body?.limit);
     const offset = readOffset(req.body?.offset);
     const scoped = scopeReadQuery(req.user, req.params.type, query);
-    res.json(store.filter(scoped, sort, limit, offset));
+    const rows = store.filter(scoped, sort, limit, offset);
+    if (req.params.type === "Character") {
+      return res.json(rows.map((row) => ensureCharacterLiveCreateDefaults(req.user, row).character));
+    }
+    res.json(rows);
   } catch (err) {
     sendApiError(res, err, { fallbackMessage: "Could not filter entities" });
   }
@@ -241,7 +253,7 @@ app.get("/api/entities/:type/:id", requireAuth, (req, res) => {
     if (!doc) return res.status(404).json({ error: "Not found" });
     assertCanRead(req.user, req.params.type, doc);
     if (req.params.type === "Character") {
-      const ensured = ensureCharacterPermanentStats(doc);
+      const ensured = ensureCharacterLiveCreateDefaults(req.user, doc);
       return res.json(ensured.character);
     }
     res.json(doc);
@@ -302,13 +314,12 @@ app.post("/api/entities/:type", requireAuth, enforceMaintenanceWrites, (req, res
       emit: !fingerprint,
     });
     // Per-character starting Nova (500) via economy ledger — not client/Nakama authored.
-    if (req.params.type === "Character" && !isAdmin(req.user)) {
+    if (req.params.type === "Character") {
       const grant = applyCharacterCreationStartingGrant(req.user, created, {
         requestId,
       });
       created = grant.character;
-      const ensured = ensureCharacterPermanentStats(created);
-      created = ensured.character;
+      created = ensureCharacterLiveCreateDefaults(req.user, created).character;
     }
     if (fingerprint) {
       const account = db.prepare("SELECT active_character_id FROM users WHERE id = ?").get(req.user.id);
@@ -630,6 +641,12 @@ server.listen(PORT, () => {
   } catch (err) {
     bootLog.error("xp_slowdown_migration_failed", { error: String(err?.message || err) });
     console.error("[migrate] XP requirement slowdown failed:", err);
+  }
+  try {
+    migratePhase1ProgressionFoundation({ reconstructProgressionState });
+  } catch (err) {
+    bootLog.error("phase1_progression_migration_failed", { error: String(err?.message || err) });
+    console.error("[migrate] Phase 1 production progression failed:", err);
   }
   try {
     ensureDefaultSchedules();

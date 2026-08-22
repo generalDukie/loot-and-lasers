@@ -58,10 +58,10 @@ const mission = { name: "Salvage Run", rewards: {} };
 
 console.log("\nMission rewards tests (Restoration 11)\n");
 
-test("XP/Fuel game scale + 0.85 rebalance", () => {
+test("XP/Fuel canonical 1:1 units + 0.85 rebalance", () => {
   assert.equal(MISSION_XP_REBALANCE, 0.85);
   const scaled = getMissionXpPerFuel(1);
-  assert.equal(scaled, 100); // design curve rounds to 10, ×10 game scale
+  assert.equal(scaled, 10);
   assert.equal(computeMissionXpFromFuel(10, 100, 1), Math.round(10 * getMissionXpPerFuel(100) * 0.85));
   for (const L of [1, 10, 100, 200, 500, 1000]) {
     assert.ok(getMissionXpPerFuel(L) >= getMissionXpPerFuel(Math.max(1, L - 1)));

@@ -1,25 +1,42 @@
 /**
- * Authoritative character attribute sheet (Restoration 05).
+ * Authoritative character attribute sheet (Restoration 05 / Phase 1).
  *
- * Permanent attrs persist on Character.stats (class base + level grants + buys).
- * Effective attrs and derived combat stats are computed here — never stored.
- *
- * Class passives remain combat-time (unchanged) — not folded into sheet totals.
+ * Permanent attrs persist as components: class start + free-from-level + purchases.
+ * Character.stats is a recomputed cache of those components.
+ * Effective attrs add gear + stims. Derived *sheet* stats use productionMath.
+ * Combat event resolution still uses statEngine until Phase 3.
  */
 import { entities } from "../entities.js";
 import {
   PRIMARY_STATS,
   computePermanentTotalStats,
   computeTotalStats,
-  computeDerivedStats,
   computeCombatPower,
   CRIT_MULT,
+  getClassWeights,
+  getDamageType,
   resolvePermanentAttributes,
 } from "./statEngine.js";
 import { getActiveBuffs } from "../../../src/lib/gameData.js";
 import { getNextAttributePointCost } from "./economyFormulas.js";
+import {
+  maxHp,
+  rawStandardAttack,
+  critChance,
+  dodgeChance,
+  resistances,
+  classArchetype,
+  classPrimaryIndex,
+  roundHalfUp,
+} from "./productionMath.js";
 
 export const ATTR_KEYS = PRIMARY_STATS;
+const SHEET_CHANCE_PERCENT_SCALE = 100;
+const ARCHETYPE_TO_COMBAT_KEY = Object.freeze({
+  Might: "str",
+  Reflex: "agi",
+  Tech: "int",
+});
 
 export function emptyAttrMap() {
   const out = {};
@@ -56,6 +73,37 @@ export function loadEquippedItemsForCharacter(characterId) {
 }
 
 /**
+ * Phase 1 character-sheet derived stats from productionMath.
+ * Combat resolution continues to use statEngine.computeDerivedStats (Phase 3).
+ */
+export function computeProductionSheetDerived(totalStats, character) {
+  const level = Math.max(1, Math.floor(Number(character?.level) || 1));
+  const className = character?.class || "";
+  const archetype = classArchetype(className);
+  const primaryIndex = classPrimaryIndex(className);
+  const attrs = ATTR_KEYS.map((k) => Math.max(0, Number(totalStats?.[k]) || 0));
+  const resist = resistances(level, attrs, archetype);
+  const primaryKey = ATTR_KEYS[primaryIndex] || "strength";
+  const primaryValue = attrs[primaryIndex] || 0;
+  return {
+    damage: roundHalfUp(rawStandardAttack(primaryValue)),
+    critChance: critChance(level, attrs[4]) * SHEET_CHANCE_PERCENT_SCALE,
+    critMult: CRIT_MULT,
+    health: maxHp(attrs[3]),
+    dodgeChance: dodgeChance(level, attrs[1], archetype) * SHEET_CHANCE_PERCENT_SCALE,
+    armor: resist.might * SHEET_CHANCE_PERCENT_SCALE,
+    techResist: resist.tech * SHEET_CHANCE_PERCENT_SCALE,
+    reflexResist: resist.reflex * SHEET_CHANCE_PERCENT_SCALE,
+    damageType: getDamageType(className),
+    archetype: ARCHETYPE_TO_COMBAT_KEY[archetype] || "str",
+    primaryStat: primaryKey,
+    primaryValue,
+    weights: getClassWeights(className),
+    level,
+  };
+}
+
+/**
  * Build the full authoritative attribute sheet for a Character document.
  * @param {object} character
  * @param {object[]|null} equippedItems — omit to load from entities
@@ -82,8 +130,8 @@ export function buildAttributeSheet(character, equippedItems = null) {
   // Passives apply during combat settlement — sheet matches live web/Godot.
   const class_passive_bonuses = emptyAttrMap();
 
-  const derived_permanent = computeDerivedStats(permanent_totals, character);
-  const derived = computeDerivedStats(effective_attributes, character);
+  const derived_permanent = computeProductionSheetDerived(permanent_totals, character);
+  const derived = computeProductionSheetDerived(effective_attributes, character);
 
   const next_costs = {};
   for (const k of ATTR_KEYS) {

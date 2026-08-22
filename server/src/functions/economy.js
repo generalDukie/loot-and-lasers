@@ -114,7 +114,8 @@ import {
   buildAttributeSheet,
   loadEquippedItemsForCharacter,
 } from "../shared/characterAttributes.js";
-import { ensureCharacterPermanentStats } from "../shared/characterStatsRepair.js";
+import { ensureCharacterLiveCreateDefaults } from "../shared/characterStatsRepair.js";
+import { composePermanentAttributes } from "../../../src/lib/characterStats.js";
 import { settleMissionItemChain } from "../shared/missionRewards.js";
 import {
   shouldReserveFirstMissionBonusLaunch,
@@ -753,7 +754,7 @@ export async function UnequipItem(user, body = {}) {
 export async function GetCharacterAttributes(user, _body = {}) {
   try {
     let character = requireMyChar(user);
-    const ensured = ensureCharacterPermanentStats(character);
+    const ensured = ensureCharacterLiveCreateDefaults(user, character);
     character = ensured.character;
     const equipped = loadEquippedItemsForCharacter(character.id);
     const sheet = buildAttributeSheet(character, equipped);
@@ -788,31 +789,43 @@ export async function BuyAttribute(user, body) {
     MAX_ATTRIBUTE_PURCHASE_BATCH,
     Math.max(1, Math.floor(Number(body?.count ?? 1)) || 1),
   );
+  const requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
 
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
+      const replay = getWalletOperation(user.id, "buy_attribute", requestId);
+      if (replay) {
+        return {
+          success: true,
+          ...replay,
+          patch: {},
+          character: ch,
+          sheet: buildAttributeSheet(ch, loadEquippedItemsForCharacter(ch.id)),
+          idempotent_replay: true,
+        };
+      }
       const byStat = {
         strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
         ...(ch.attribute_purchases_by_stat || {}),
       };
-      const stats = { ...(ch.stats || {}) };
-      let working = { ...ch, stats, attribute_purchases_by_stat: byStat };
+      let working = { ...ch, attribute_purchases_by_stat: byStat };
       let totalCost = 0;
       let applied = 0;
+      const balance = Math.max(0, Math.floor(Number(ch.stardust) || 0));
       while (applied < requested) {
         const cost = getNextAttributePointCost(working, stat);
-        if ((ch.stardust || 0) - totalCost < cost) break;
+        if (balance - totalCost < cost) break;
         totalCost += cost;
         byStat[stat] = (byStat[stat] || 0) + 1;
-        stats[stat] = (stats[stat] || 0) + 1;
-        working = { ...working, stats, attribute_purchases_by_stat: { ...byStat } };
+        working = { ...working, attribute_purchases_by_stat: { ...byStat } };
         applied += 1;
       }
       if (applied === 0) httpErr(400, "Not enough stardust");
 
+      const stats = composePermanentAttributes(working);
       const patch = {
-        stardust: (ch.stardust || 0) - totalCost,
+        stardust: balance - totalCost,
         stats,
         attribute_purchases_by_stat: byStat,
         attribute_purchases: Object.values(byStat).reduce((a, b) => a + (b || 0), 0),
@@ -822,7 +835,15 @@ export async function BuyAttribute(user, body) {
         character,
         loadEquippedItemsForCharacter(character.id),
       );
-      return { success: true, cost: totalCost, count: applied, stat, patch, character, sheet };
+      const receipt = {
+        success: true,
+        cost: totalCost,
+        count: applied,
+        stat,
+        request_id: requestId,
+      };
+      saveWalletOperation(user.id, "buy_attribute", requestId, receipt);
+      return { ...receipt, patch, character, sheet };
     });
     return { status: 200, body: result };
   } catch (err) {

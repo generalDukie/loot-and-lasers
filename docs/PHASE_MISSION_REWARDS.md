@@ -1,5 +1,7 @@
 # Phase / Restoration 11 — Mission Rewards and Atomic Settlement
 
+> **Superseded XP unit policy (Phase 1):** Production XP is completely 1:1. Live `getMissionXpPerFuel` is `max(1, roundHalfUp(missionXpPerFuel(L)))` with no ×10. The historical `round(design) × 10` text below is a prior-phase snapshot, not current production policy. Mission XP *reward formulas* remain later-phase; they now consume canonical XP/Fuel. `XP_STARDUST_SCALE = 10` is legacy economy implementation debt, not XP.
+
 Architecture: Nakama owns auth/sessions. **Node owns all mission reward authority.**
 Godot presents committed XP, Stardust, progression, and the exclusive item outcome.
 Combat playback does not settle rewards.

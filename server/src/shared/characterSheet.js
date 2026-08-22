@@ -13,6 +13,7 @@ export {
 } from "./characterAttributes.js";
 export {
   ensureCharacterPermanentStats,
+  ensureCharacterLiveCreateDefaults,
   repairPermanentAttributes,
   permanentStatsNeedClassBaseRepair,
 } from "./characterStatsRepair.js";

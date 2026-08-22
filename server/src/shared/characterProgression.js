@@ -1,14 +1,25 @@
 /**
- * Authoritative character XP grants + permanent free attribute awards on level-up.
- * XP curve remains in rewards.js (expForLevel). This module owns the grant loop
- * and class-weighted permanent attribute allocation (Prompt 04).
+ * Authoritative character XP grants + deterministic free attributes on level-up.
+ * XP curve: productionMath.xpToNext. Allocation: productionMath.freeLevelAttributes.
+ *
+ * MAX_LEVELS_PER_XP_GRANT is a runaway-loop safety guard, not a gameplay level cap.
+ * Production has no player-facing max level. L2000 is a validation horizon only.
  */
-import crypto from "node:crypto";
-import { expForLevel } from "./rewards.js";
+import {
+  xpToNext,
+  freeLevelAttributes,
+  classPrimaryIndex,
+  PLAYER_FREE_ATTR_WEIGHTS,
+  FREE_ATTRS_PER_LEVEL_AFTER_1,
+} from "./productionMath.js";
+import {
+  composePermanentAttributes,
+  readPurchasesByStat,
+} from "@/lib/characterStats.js";
 
-export const LEVEL_UP_ATTRS_PER_LEVEL = 2;
-const RANDOM_SAMPLE_UPPER_BOUND = 1_000_000;
-const MAX_LEVELS_PER_XP_GRANT = 100_000;
+export const LEVEL_UP_ATTRS_PER_LEVEL = FREE_ATTRS_PER_LEVEL_AFTER_1;
+/** Safety guard against infinite level-up loops. Not a production max level. */
+export const MAX_LEVELS_PER_XP_GRANT = 100_000;
 
 export const ATTR_KEYS = Object.freeze([
   "strength",
@@ -28,14 +39,10 @@ export const CLASS_PRIMARY_STAT = Object.freeze({
   "Cosmic Engineer": "intellect",
 });
 
-/**
- * Per-point weights for free permanent attrs on level-up.
- * 35% primary · 25% vitality · 20% luck · 10% / 10% remaining core offs.
- */
-export const LEVEL_UP_WEIGHT_PRIMARY = 0.35;
-export const LEVEL_UP_WEIGHT_VITALITY = 0.25;
-export const LEVEL_UP_WEIGHT_LUCK = 0.2;
-export const LEVEL_UP_WEIGHT_OFF = 0.1;
+export const LEVEL_UP_WEIGHT_PRIMARY = PLAYER_FREE_ATTR_WEIGHTS.primary;
+export const LEVEL_UP_WEIGHT_VITALITY = PLAYER_FREE_ATTR_WEIGHTS.vitality;
+export const LEVEL_UP_WEIGHT_LUCK = PLAYER_FREE_ATTR_WEIGHTS.luck;
+export const LEVEL_UP_WEIGHT_OFF = PLAYER_FREE_ATTR_WEIGHTS.off1;
 
 export function classPrimaryStat(className) {
   return CLASS_PRIMARY_STAT[className] || "strength";
@@ -51,48 +58,33 @@ export function levelUpAttributeWeights(className) {
     vitality: LEVEL_UP_WEIGHT_VITALITY,
     luck: LEVEL_UP_WEIGHT_LUCK,
     [offs[0]]: LEVEL_UP_WEIGHT_OFF,
-    [offs[1]]: LEVEL_UP_WEIGHT_OFF,
+    [offs[1]]: PLAYER_FREE_ATTR_WEIGHTS.off2,
   });
 }
 
-export function defaultRng() {
-  return crypto.randomInt(0, RANDOM_SAMPLE_UPPER_BOUND) / RANDOM_SAMPLE_UPPER_BOUND;
-}
-
-export function pickLevelUpAttribute(className, rng = defaultRng) {
-  const weights = levelUpAttributeWeights(className);
-  const entries = Object.entries(weights);
-  const total = entries.reduce((sum, [, w]) => sum + w, 0);
-  let roll = (typeof rng === "function" ? rng() : Number(rng) || 0) * total;
-  if (!Number.isFinite(roll) || roll < 0) roll = 0;
-  for (const [stat, weight] of entries) {
-    roll -= weight;
-    if (roll < 0) return stat;
+function awardsFromFreeDelta(before, after) {
+  const awards = [];
+  for (let i = 0; i < ATTR_KEYS.length; i++) {
+    const delta = Math.max(0, (after[i] || 0) - (before[i] || 0));
+    for (let n = 0; n < delta; n++) awards.push({ stat: ATTR_KEYS[i] });
   }
-  return entries[entries.length - 1][0];
+  return awards;
 }
 
 /**
- * Award exactly `2 * levelsGained` permanent attribute points into stats.
- * Returns { stats, awards } where awards is [{ stat }, ...] in award order.
+ * Recompute permanent stats at `fromLevel + levelsGained` from production components.
+ * `rng` is ignored — allocation is deterministic (largest remainder).
  */
-export function allocateLevelUpAttributes(character, levelsGained, rng = defaultRng) {
+export function allocateLevelUpAttributes(character, levelsGained, _rng) {
+  const from = Math.max(1, Math.floor(Number(character?.level) || 1));
   const n = Math.max(0, Math.floor(Number(levelsGained) || 0));
-  const stats = {
-    strength: 0,
-    agility: 0,
-    intellect: 0,
-    vitality: 0,
-    luck: 0,
-    ...(character?.stats && typeof character.stats === "object" ? character.stats : {}),
-  };
-  const awards = [];
-  const points = n * LEVEL_UP_ATTRS_PER_LEVEL;
-  for (let i = 0; i < points; i++) {
-    const stat = pickLevelUpAttribute(character?.class, rng);
-    stats[stat] = (Number(stats[stat]) || 0) + 1;
-    awards.push({ stat });
-  }
+  const to = from + n;
+  const primary = classPrimaryIndex(character?.class);
+  const stats = composePermanentAttributes({ ...character, level: to });
+  const awards = awardsFromFreeDelta(
+    freeLevelAttributes(from, primary),
+    freeLevelAttributes(to, primary),
+  );
   return { stats, awards };
 }
 
@@ -108,22 +100,47 @@ export function getStatPointsForLevelRange(fromLevel, toLevel) {
 }
 
 /**
- * Authoritative XP grant with multi-level carryover + permanent attrs.
- * Does not persist — callers write `result.patch` inside their transaction.
+ * Rebuild derived progression caches without granting levels from stale leftover XP.
+ * Used for development-data reconstruction after the Phase 0 curve/unit change.
+ */
+export function reconstructProgressionState(character) {
+  const ch = character && typeof character === "object" ? character : {};
+  const level = Math.max(1, Math.floor(Number(ch.level) || 1));
+  const req = xpToNext(level);
+  let experience = Math.max(0, Math.floor(Number(ch.experience) || 0));
+  if (experience >= req) experience = Math.max(0, req - 1);
+  const purchases = readPurchasesByStat(ch);
+  const next = {
+    ...ch,
+    level,
+    attribute_purchases_by_stat: purchases,
+  };
+  const stats = composePermanentAttributes(next);
+  const purchaseTotal = ATTR_KEYS.reduce((sum, k) => sum + purchases[k], 0);
+  return {
+    level,
+    experience,
+    experience_to_next_level: req,
+    stats,
+    attribute_purchases_by_stat: purchases,
+    attribute_purchases: purchaseTotal,
+  };
+}
+
+/**
+ * Authoritative XP grant with multi-level carryover + composed permanent attrs.
+ * XP is 1:1 (no storage scale). Does not persist — callers write `result.patch`.
+ * Always recomputes experience_to_next_level from xpToNext(level); never trusts stale storage.
  */
 export function grantCharacterXp({
   character,
   xpAmount,
   source = "unknown",
-  rng = defaultRng,
 } = {}) {
   const ch = character && typeof character === "object" ? character : {};
   const previousLevel = Math.max(1, Math.floor(Number(ch.level) || 1));
   const previousXp = Math.max(0, Math.floor(Number(ch.experience) || 0));
-  const previousReq = Math.max(
-    1,
-    Math.floor(Number(ch.experience_to_next_level) || expForLevel(previousLevel)),
-  );
+  const previousReq = xpToNext(previousLevel);
 
   const raw = Number(xpAmount);
   if (!Number.isFinite(raw) || raw < 0) {
@@ -134,6 +151,7 @@ export function grantCharacterXp({
   }
   const awarded = Math.floor(raw);
 
+  const composedNow = composePermanentAttributes(ch);
   const progression = {
     source: String(source || "unknown"),
     previous_level: previousLevel,
@@ -144,11 +162,15 @@ export function grantCharacterXp({
     experience: previousXp,
     experience_to_next_level: previousReq,
     attribute_awards: [],
-    stats: ch.stats && typeof ch.stats === "object" ? { ...ch.stats } : {},
+    stats: composedNow,
   };
 
   if (awarded === 0) {
-    return { patch: {}, progression };
+    const patch = {};
+    if (Number(ch.experience_to_next_level) !== previousReq) {
+      patch.experience_to_next_level = previousReq;
+    }
+    return { patch, progression };
   }
 
   let newExp = previousXp + awarded;
@@ -165,7 +187,7 @@ export function grantCharacterXp({
     }
     newExp -= expToNext;
     newLevel += 1;
-    expToNext = expForLevel(newLevel);
+    expToNext = xpToNext(newLevel);
     safety += 1;
     if (safety > MAX_LEVELS_PER_XP_GRANT) {
       const err = new Error("XP level-up safety limit exceeded");
@@ -183,19 +205,20 @@ export function grantCharacterXp({
     experience_to_next_level: expToNext,
   };
 
-  let awards = [];
-  if (levelsGained > 0) {
-    const allocated = allocateLevelUpAttributes(ch, levelsGained, rng);
-    patch.stats = allocated.stats;
-    awards = allocated.awards;
-  }
+  const nextCharacter = { ...ch, level: newLevel };
+  patch.stats = composePermanentAttributes(nextCharacter);
+  const primary = classPrimaryIndex(ch.class);
+  const awards = awardsFromFreeDelta(
+    freeLevelAttributes(previousLevel, primary),
+    freeLevelAttributes(newLevel, primary),
+  );
 
   progression.level = newLevel;
   progression.levels_gained = levelsGained;
   progression.experience = newExp;
   progression.experience_to_next_level = expToNext;
   progression.attribute_awards = awards;
-  progression.stats = patch.stats ? { ...patch.stats } : { ...(ch.stats || {}) };
+  progression.stats = { ...patch.stats };
 
   return { patch, progression };
 }

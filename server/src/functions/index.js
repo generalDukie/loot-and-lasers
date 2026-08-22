@@ -1,5 +1,6 @@
 import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, randomItem } from "../shared/rewards.js";
 import { grantCharacterXp, consumeProgression } from "../shared/characterProgression.js";
+import { composePermanentAttributes } from "../../../src/lib/characterStats.js";
 import {
   mergeAchievementUnlocks,
   assertAchievementClientSafe,
@@ -1591,11 +1592,13 @@ async function adminModerationInner(user, body) {
       arena_rating: ch.arena_rating,
     };
     entities.Item.deleteMany({ character_id });
+    const resetPurchases = { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 };
     const updated = entities.Character.update(character_id, {
       level: 1, experience: 0, experience_to_next_level: expForLevel(1),
       stardust: 0, nova_crystals: 0, nova_wagerable_half: 0, nova_promotional_half: 0,
       nova_dual_balance_v1: true, unspent_stat_points: 0, attribute_purchases: 0,
-      attribute_purchases_by_stat: { strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0 },
+      attribute_purchases_by_stat: resetPurchases,
+      stats: composePermanentAttributes({ class: ch.class, level: 1, attribute_purchases_by_stat: resetPurchases }),
       discovered_species: [], collected_artifacts: [], collected_relics: [],
       arena_wins: 0, arena_losses: 0, arena_rating: ARENA_DEFAULT_RATING,
       arena_streak: 0, arena_max_streak: 0, arena_battles: 0,

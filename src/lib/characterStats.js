@@ -1,12 +1,23 @@
 /**
- * Persisted Character.stats helpers — class base repair + normalization.
- * Each class starts with 50 permanent attribute points (STR / AGI / INT spread).
+ * Persisted Character.stats helpers — compose starting + free-from-level + purchases.
+ * Gear, Stims, Ship/Hangar, Collection/Nexus are not baked into persisted stats.
  */
-import { CLASSES, ATTR_STAT_KEYS } from "./gameData.js";
+import { ATTR_STAT_KEYS } from "./gameData.js";
+import {
+  startingAttributesForClass,
+  freeLevelAttributes,
+  classPrimaryIndex,
+} from "./productionMath/index.js";
 
 export { ATTR_STAT_KEYS };
 
-const BASE_STAT_TOTAL = 50;
+const EMPTY_PURCHASES = Object.freeze({
+  strength: 0,
+  agility: 0,
+  intellect: 0,
+  vitality: 0,
+  luck: 0,
+});
 
 export function parseStoredStats(raw) {
   if (raw == null) return {};
@@ -38,41 +49,69 @@ export function sumAttrStats(stats) {
 }
 
 export function classBaseStats(className) {
-  const base = CLASSES[className]?.baseStats;
-  if (!base || typeof base !== "object") return null;
-  return normalizeAttrStats(base);
+  const a = startingAttributesForClass(className);
+  return normalizeAttrStats({
+    strength: a[0],
+    agility: a[1],
+    intellect: a[2],
+    vitality: a[3],
+    luck: a[4],
+  });
 }
 
-/** True when persisted stats are missing the class base spread (sum < 50). */
-export function permanentStatsNeedClassBaseRepair(character) {
-  const base = classBaseStats(character?.class);
-  if (!base) return false;
-  const current = normalizeAttrStats(parseStoredStats(character?.stats));
-  return sumAttrStats(current) < BASE_STAT_TOTAL;
+export function readPurchasesByStat(character) {
+  const out = { ...EMPTY_PURCHASES };
+  const by = character?.attribute_purchases_by_stat;
+  if (by && typeof by === "object") {
+    for (const k of ATTR_STAT_KEYS) {
+      out[k] = Math.max(0, Math.floor(Number(by[k]) || 0));
+    }
+  }
+  return out;
 }
 
 /**
- * Merge class base into stored stats when the base spread was never applied.
- * Preserves level-up grants / purchases already stored (added on top of base).
+ * Authoritative permanent attributes:
+ * class starting + certified freeLevelAttributes(level) + purchased.
+ */
+export function composePermanentAttributes(character) {
+  const className = character?.class || "";
+  const level = Math.max(1, Math.floor(Number(character?.level) || 1));
+  const start = startingAttributesForClass(className);
+  const free = freeLevelAttributes(level, classPrimaryIndex(className));
+  const purchased = readPurchasesByStat(character);
+  const stats = {};
+  for (let i = 0; i < ATTR_STAT_KEYS.length; i++) {
+    const k = ATTR_STAT_KEYS[i];
+    stats[k] = start[i] + free[i] + purchased[k];
+  }
+  return stats;
+}
+
+function statsEqual(a, b) {
+  for (const k of ATTR_STAT_KEYS) {
+    if ((a[k] || 0) !== (b[k] || 0)) return false;
+  }
+  return true;
+}
+
+/** True when persisted stats drift from composed production components. */
+export function permanentStatsNeedClassBaseRepair(character) {
+  const expected = composePermanentAttributes(character);
+  const current = normalizeAttrStats(parseStoredStats(character?.stats));
+  return !statsEqual(current, expected);
+}
+
+/**
+ * Recompute persisted stats from starting + free-from-level + purchases.
+ * Ignores stale stored totals (development data is disposable).
  */
 export function repairPermanentAttributes(character) {
-  const className = character?.class || "";
-  const base = classBaseStats(className);
+  const expected = composePermanentAttributes(character);
   const current = normalizeAttrStats(parseStoredStats(character?.stats));
-  if (!base) return { stats: current, repaired: false };
-
-  if (sumAttrStats(current) >= BASE_STAT_TOTAL) {
-    return { stats: current, repaired: false };
-  }
-
-  const repaired = {};
-  for (const k of ATTR_STAT_KEYS) {
-    repaired[k] = Math.max(0, Math.round(Number(base[k]) || 0))
-      + Math.max(0, Math.round(Number(current[k]) || 0));
-  }
-  return { stats: repaired, repaired: true };
+  return { stats: expected, repaired: !statsEqual(current, expected) };
 }
 
 export function resolvePermanentAttributes(character) {
-  return repairPermanentAttributes(character).stats;
+  return composePermanentAttributes(character);
 }

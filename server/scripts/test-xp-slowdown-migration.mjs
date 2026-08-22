@@ -20,9 +20,10 @@ import path from "node:path";
 const tmpDb = path.join(os.tmpdir(), `ll-xp-mig-${process.pid}-${Date.now()}.db`);
 process.env.DB_PATH = tmpDb;
 
-const { db, migrateXpRequirementSlowdown } = await import("../src/db.js");
+const { db, migrateXpRequirementSlowdown, migratePhase1ProgressionFoundation } = await import("../src/db.js");
 const { expForLevel } = await import("../src/shared/rewards.js");
-const { grantCharacterXp } = await import("../src/shared/characterProgression.js");
+const { grantCharacterXp, reconstructProgressionState } = await import("../src/shared/characterProgression.js");
+const { composePermanentAttributes } = await import("../../src/lib/characterStats.js");
 
 // OLD requirement (pre-slowdown): round(design × post200Growth) × 10.
 function oldExpForLevel(level) {
@@ -52,11 +53,11 @@ function test(name, fn) {
 
 console.log("\nXP requirement slowdown — existing-character migration\n");
 
-// Normal mid-level character stored under the OLD curve.
+// Normal mid-level character whose leftover XP is below the production requirement.
 const L = 50;
 insertCharacter("c-normal", {
   level: L,
-  experience: oldExpForLevel(L) - 100, // < old requirement (invariant)
+  experience: Math.max(0, expForLevel(L) - 5),
   experience_to_next_level: oldExpForLevel(L),
   stats: { strength: 20, agility: 10, intellect: 8, vitality: 25, luck: 12 },
 });
@@ -84,10 +85,10 @@ test("migration ran (not skipped) and updated all characters", () => {
   assert.equal(result.updated, 3);
 });
 
-test("normal character: requirement raised to new curve, XP/level preserved", () => {
+test("normal character: leftover below new req keeps level; requirement uses production curve", () => {
   const c = readCharacter("c-normal");
   assert.equal(c.level, L, "level unchanged");
-  assert.equal(c.experience, oldExpForLevel(L) - 100, "experience preserved exactly");
+  assert.equal(c.experience, Math.max(0, expForLevel(L) - 5), "experience preserved exactly");
   assert.equal(c.experience_to_next_level, expForLevel(L), "requirement uses new curve");
   assert.ok(c.experience < c.experience_to_next_level, "no accidental level-up");
 });
@@ -114,6 +115,31 @@ test("overflow character: authoritative carryover, no XP lost", () => {
 test("migration is idempotent (second run skips)", () => {
   const second = migrateXpRequirementSlowdown({ expForLevel, grantCharacterXp });
   assert.equal(second.skipped, true);
+});
+
+insertCharacter("c-phase1-stale", {
+  class: "Vanguard",
+  level: 10,
+  experience: 999_999_999,
+  experience_to_next_level: oldExpForLevel(10),
+  stats: { strength: 1, agility: 1, intellect: 1, vitality: 1, luck: 1 },
+  attribute_purchases_by_stat: { strength: 3, agility: 0, intellect: 0, vitality: 0, luck: 0 },
+});
+
+test("Phase 1 reconstruct clamps leftover XP and recomposes attributes", () => {
+  const result = migratePhase1ProgressionFoundation({ reconstructProgressionState });
+  assert.equal(result.skipped, false);
+  const c = readCharacter("c-phase1-stale");
+  assert.equal(c.level, 10, "does not convert obsolete leftover XP into extra levels");
+  assert.equal(c.experience_to_next_level, expForLevel(10));
+  assert.ok(c.experience < c.experience_to_next_level);
+  assert.deepEqual(c.stats, composePermanentAttributes({
+    class: "Vanguard",
+    level: 10,
+    attribute_purchases_by_stat: { strength: 3, agility: 0, intellect: 0, vitality: 0, luck: 0 },
+  }));
+  const again = migratePhase1ProgressionFoundation({ reconstructProgressionState });
+  assert.equal(again.skipped, true);
 });
 
 // Cleanup temp DB files.

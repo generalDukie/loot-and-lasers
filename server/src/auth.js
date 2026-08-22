@@ -9,7 +9,7 @@ import { getEmailLog } from "./emailLog.js";
 import { NAME_NO_DIGITS_MSG } from "./shared/nameRules.js";
 import { auditAuthEvent, AuditResults } from "./audit/index.js";
 import { apiErrorBody, ApiErrorCodes } from "./apiResponse.js";
-import { ensureCharacterPermanentStats } from "./shared/characterStatsRepair.js";
+import { ensureCharacterLiveCreateDefaults } from "./shared/characterStatsRepair.js";
 import {
   getServerId,
   migrateLegacyUserSessionColumns,
@@ -421,7 +421,7 @@ export function createAuthRouter(express) {
     if (character.created_by_id !== req.user.id) {
       return res.status(403).json({ error: "Selected character does not belong to you" });
     }
-    const ensured = ensureCharacterPermanentStats(character);
+    const ensured = ensureCharacterLiveCreateDefaults(req.user, character);
     return res.json(ensured.character);
   });
 

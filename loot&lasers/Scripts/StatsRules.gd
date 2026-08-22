@@ -12,6 +12,7 @@ const ATTR_LABELS := {
 }
 const CRIT_MULT := 1.5
 
+## Starting attributes — must match productionMath.STARTING_ATTRIBUTES.
 const CLASS_BASE_STATS := {
 	"Vanguard": {"strength": 15, "agility": 8, "intellect": 6, "vitality": 14, "luck": 7},
 	"Astral Warden": {"strength": 15, "agility": 8, "intellect": 6, "vitality": 14, "luck": 7},
@@ -24,10 +25,31 @@ const CLASS_BASE_STATS := {
 const CLASS_BASE_STAT_TOTAL := 50
 const MAX_ATTRIBUTE_PURCHASE_BATCH := 50
 const MILLISECONDS_PER_SECOND := 1_000
-const AGILITY_ARCHETYPE_DAMAGE_MULTIPLIER := 0.925
 const DEFAULT_COMBAT_STAT_WEIGHT := 0.1
 const COMBAT_POWER_PER_LEVEL := 50.0
 const COMBAT_POWER_PER_WEIGHTED_STAT := 10.0
+const SHEET_CHANCE_PERCENT_SCALE := 100.0
+const HEALTH_BASE := 50.0
+const HEALTH_PER_VITALITY := 2.5
+const HEALTH_VITALITY_SQUARED_COEFFICIENT := 0.008
+const RAW_ATTACK_BASE := 15.0
+const RAW_ATTACK_COEFFICIENT := 0.0032
+const RAW_ATTACK_EXPONENT := 1.727
+const GENERIC_FORMAX_AT_100 := 700.0
+const GENERIC_FORMAX_EXPONENT := 0.95
+const GENERIC_ATTR_EXPONENT := 1.2
+const GENERIC_EARLY_EXPONENT := 0.65
+const NATURAL_CRIT_CAP := 0.3
+const NATURAL_DODGE_CAP := 0.25
+const NATURAL_RESIST_CAP := 0.3
+const CRIT_FORMAX_MULT := 1.55
+const CRIT_ATTR_EXPONENT := 1.8
+const REFLEX_CONVERSION_LOW := 0.225
+const REFLEX_CONVERSION_HIGH := 0.325
+const REFLEX_RAMP_START_LEVEL := 400.0
+const REFLEX_RAMP_END_LEVEL := 750.0
+const REFLEX_BLEND_HALF_WIDTH := 6.0
+const SOFT_CAP_REFERENCE_LEVEL := 100.0
 
 
 static func primary_stat(class_key: String) -> String:
@@ -61,9 +83,7 @@ static func purchase_count(character: Dictionary, stat: String) -> int:
 	var by: Variant = character.get("attribute_purchases_by_stat", null)
 	if typeof(by) == TYPE_DICTIONARY and by.has(stat) and typeof(by[stat]) in [TYPE_INT, TYPE_FLOAT]:
 		return maxi(0, int(by[stat]))
-	var base: Dictionary = CLASS_BASE_STATS.get(str(character.get("class", "Vanguard")), CLASS_BASE_STATS["Vanguard"])
-	var cur := int(raw_stats(character).get(stat, 0))
-	return maxi(0, cur - int(base.get(stat, 0)))
+	return 0
 
 
 static func point_cost(purchase_number: int) -> int:
@@ -142,34 +162,111 @@ static func display_totals(character: Dictionary, equipped: Array = []) -> Dicti
 	return _apply_buffs(permanent, active_buffs(character))
 
 
+static func _round_half_up(value: float) -> int:
+	return int(floor(value + 0.5))
+
+
+static func _round_half_even(value: float) -> int:
+	var sign := -1 if value < 0.0 else 1
+	var ax := absf(value)
+	var n := int(floor(ax))
+	var frac := ax - float(n)
+	if frac < 0.5:
+		return sign * n
+	if frac > 0.5:
+		return sign * (n + 1)
+	return sign * (n if (n % 2 == 0) else n + 1)
+
+
+static func _sheet_archetype(arch: String) -> String:
+	if arch == "agi":
+		return "Reflex"
+	if arch == "int":
+		return "Tech"
+	return "Might"
+
+
+static func _generic_for_max(level: int) -> float:
+	return GENERIC_FORMAX_AT_100 * pow(float(level) / SOFT_CAP_REFERENCE_LEVEL, GENERIC_FORMAX_EXPONENT)
+
+
+static func _derived_stat(level: int, attr: float, cap: float, for_max_mult: float, attr_exponent: float) -> float:
+	var x := maxf(0.0, attr)
+	var fm := _generic_for_max(level) * for_max_mult
+	var from_attr := cap * minf(1.0, 0.0 if fm <= 0.0 else pow(x / fm, attr_exponent))
+	var early := cap * minf(1.0, pow(float(level) / SOFT_CAP_REFERENCE_LEVEL, GENERIC_EARLY_EXPONENT))
+	return minf(minf(from_attr, early), cap)
+
+
+static func _reflex_piece(x: float) -> float:
+	var lo := REFLEX_CONVERSION_LOW
+	var hi := REFLEX_CONVERSION_HIGH
+	var a := REFLEX_RAMP_START_LEVEL
+	var b := REFLEX_RAMP_END_LEVEL
+	if x <= a:
+		return lo
+	if x >= b:
+		return hi
+	return lo + ((hi - lo) / (b - a)) * (x - a)
+
+
+static func _reflex_blend(x: float, knot: float) -> float:
+	var w := REFLEX_BLEND_HALF_WIDTH
+	var t := (x - (knot - w)) / (2.0 * w)
+	if t <= 0.0:
+		return _reflex_piece(knot - w)
+	if t >= 1.0:
+		return _reflex_piece(knot + w)
+	var s := clampf(t, 0.0, 1.0)
+	s = s * s * (3.0 - 2.0 * s)
+	return _reflex_piece(knot - w) * (1.0 - s) + _reflex_piece(knot + w) * s
+
+
+static func _reflex_agi_conversion(level: int) -> float:
+	var L := float(maxi(1, level))
+	var a := REFLEX_RAMP_START_LEVEL
+	var b := REFLEX_RAMP_END_LEVEL
+	var w := REFLEX_BLEND_HALF_WIDTH
+	if absf(L - a) < w:
+		return _reflex_blend(L, a)
+	if absf(L - b) < w:
+		return _reflex_blend(L, b)
+	return _reflex_piece(L)
+
+
+## Preview-only character-sheet derived stats (productionMath). Combat uses MissionCombat.
 static func derived(character: Dictionary, totals: Dictionary) -> Dictionary:
 	var level := maxi(1, int(character.get("level", 1)))
 	var class_key := str(character.get("class", "Vanguard"))
 	var arch := MissionCombat.damage_archetype(class_key)
+	var sheet_arch := _sheet_archetype(arch)
 	var primary_key := primary_stat(class_key)
-	var primary_val := float(totals.get(primary_key, 0))
-	var raw_dmg := MissionCombat.base_damage(primary_val)
-	var damage := int(
-		round(
-			raw_dmg * AGILITY_ARCHETYPE_DAMAGE_MULTIPLIER
-			if arch == "agi"
-			else raw_dmg
-		)
-	)
-	var armor := 0.0
-	var tech := 0.0
-	if arch != "str":
-		armor = MissionCombat.soft_cap_percent(level, float(totals.get("strength", 0)), MissionCombat.ARMOR_CAP)
-	if arch != "int":
-		tech = MissionCombat.soft_cap_percent(level, float(totals.get("intellect", 0)), MissionCombat.TECH_RESIST_CAP)
+	var primary_val := maxf(0.0, float(totals.get(primary_key, 0)))
+	var vit := maxf(0.0, float(totals.get("vitality", 0)))
+	var luck := maxf(0.0, float(totals.get("luck", 0)))
+	var agi := maxf(0.0, float(totals.get("agility", 0)))
+	var strength := maxf(0.0, float(totals.get("strength", 0)))
+	var intel := maxf(0.0, float(totals.get("intellect", 0)))
+	var converted_agi := agi * _reflex_agi_conversion(level) if sheet_arch == "Reflex" else agi
+	var might_resist := 0.0
+	var tech_resist := 0.0
+	if sheet_arch == "Might":
+		tech_resist = _derived_stat(level, intel, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
+	elif sheet_arch == "Reflex":
+		might_resist = _derived_stat(level, strength, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
+		tech_resist = _derived_stat(level, intel, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
+	else:
+		might_resist = _derived_stat(level, strength, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
+	var hp := maxi(1, _round_half_even(HEALTH_BASE + HEALTH_PER_VITALITY * vit + HEALTH_VITALITY_SQUARED_COEFFICIENT * vit * vit))
+	var raw_atk := RAW_ATTACK_BASE + RAW_ATTACK_COEFFICIENT * pow(primary_val, RAW_ATTACK_EXPONENT)
 	return {
-		"damage": damage,
-		"critChance": MissionCombat.soft_cap_percent(level, float(totals.get("luck", 0)), MissionCombat.CRIT_CAP),
+		"damage": _round_half_up(raw_atk),
+		"critChance": _derived_stat(level, luck, NATURAL_CRIT_CAP, CRIT_FORMAX_MULT, CRIT_ATTR_EXPONENT) * SHEET_CHANCE_PERCENT_SCALE,
 		"critMult": CRIT_MULT,
-		"health": MissionCombat.max_hp(float(totals.get("vitality", 0))),
-		"dodgeChance": MissionCombat.soft_cap_percent(level, float(totals.get("agility", 0)), MissionCombat.DODGE_CAP),
-		"armor": armor,
-		"techResist": tech,
+		"health": hp,
+		"dodgeChance": _derived_stat(level, converted_agi, NATURAL_DODGE_CAP, 1.0, GENERIC_ATTR_EXPONENT) * SHEET_CHANCE_PERCENT_SCALE,
+		"armor": might_resist * SHEET_CHANCE_PERCENT_SCALE,
+		"techResist": tech_resist * SHEET_CHANCE_PERCENT_SCALE,
 		"primaryStat": primary_key,
 		"archetype": arch,
 	}

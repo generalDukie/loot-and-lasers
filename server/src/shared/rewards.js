@@ -5,22 +5,19 @@ import {
   EQUIPMENT_SLOTS,
   GenerateGearItem,
 } from "./itemGeneration.js";
+// LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION
 import { XP_STARDUST_SCALE } from "./economyConstants.js";
+import { xpToNext, missionXpPerFuel, roundHalfUp } from "./productionMath.js";
 
-export { XP_STARDUST_SCALE };
+export { XP_STARDUST_SCALE }; // legacy Stardust callers only — not XP
 export { StardustPerFuel, StardustPerFuel as getMissionStardustPerFuel } from "./stardustEconomy.js";
 export { GenerateGearItem } from "./itemGeneration.js";
 
 const DEFAULT_INVENTORY_CAP = 10;
-const XP_DESIGN_LEVEL_COEFFICIENT = 2.106;
-const XP_DESIGN_LEVEL_EXPONENT = 1.532;
-const XP_DESIGN_HIGH_LEVEL_REFERENCE = 266;
-const XP_DESIGN_HIGH_LEVEL_EXPONENT = 3.683;
 const POST_200_LEVEL_INTERVAL = 100;
-const BASE_MISSION_XP_PER_FUEL = 10;
 const DEFAULT_MAX_FUEL = 100;
 const REWARD_COLLECTION_QUERY_LIMIT = 500;
-const LEGACY_COLLECTIBLE_SELL_VALUE = 25 * XP_STARDUST_SCALE;
+const LEGACY_COLLECTIBLE_SELL_VALUE = 25 * XP_STARDUST_SCALE; // Stardust sell, not XP
 
 /** Prefer live getInventoryCap from economyFormulas (wired below / via hooks). */
 function getInventoryCap(ch) {
@@ -91,16 +88,10 @@ export function randomItemForClass(className) {
     randomItem(rarity, level, type, typeof rng === "function" ? rng : Math.random, className);
 }
 
-/** XP required to reach the next level, on the game's actual scale.
- *
- * The design curve is a rounded polynomial × a smooth Post200Growth. The final
- * ×10 game scale is applied AFTER the integer rounding of that curve. This is
- * deliberate: round(curve) × 10 is NOT the same as round(curve × 10), so the
- * scale is kept as an explicit final step to preserve exact historical outputs.
- * There is intentionally no separate pre-scale ("base") function.
- *
- * DesignXPToNext(L) = ROUND(1.35 × 2.106 × L^1.532 × (1 + (L/266)^3.683))
- * Post200Growth(L)  = 1 + A×X^P + B×X^Q  where X = MAX(0, (L-200)/100)
+/**
+ * Live XP-to-next is productionMath.xpToNext (canonical 1:1 units).
+ * Historical polynomial / Post-200 / early-game constants below are unused by
+ * live progression — retained for the historical fit script only.
  */
 export const XP_REQUIREMENT_MULTIPLIER = 1.35;
 export const POST_200_START_LEVEL = 200;
@@ -108,74 +99,35 @@ export const POST_200_A = 0.8;
 export const POST_200_P = 0.48;
 export const POST_200_B = 0.79;
 export const POST_200_Q = 0.71;
-
-/**
- * Leveling-pace multipliers applied to the XP *requirement* only (never to XP
- * earned). These scale the amount of XP needed for L → L+1; every XP source
- * therefore experiences the same slowdown.
- *
- * - XP_GLOBAL_SLOWDOWN: flat 1.5× requirement at every level.
- * - Early-game modifier: smooth extra requirement of +20% at L1 tapering to
- *   0 by L100, so NewXpToNext(L) = round(core(L) × 1.5 × EarlyGameModifier(L)).
- */
 export const XP_GLOBAL_SLOWDOWN = 1.5;
 export const EARLY_GAME_XP_START_BONUS = 0.2;
 export const EARLY_GAME_XP_TAPER_LEVEL = 100;
 
-/** Smooth XP-requirement multiplier; exactly 1 at L<=200, grows indefinitely after. */
+/** @deprecated Historical — live XPToNext is productionMath.xpToNext. */
 export function post200Growth(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   const X = Math.max(0, (L - POST_200_START_LEVEL) / POST_200_LEVEL_INTERVAL);
   return 1 + POST_200_A * X ** POST_200_P + POST_200_B * X ** POST_200_Q;
 }
 
-/** Early-game slowdown: 1 + 0.20 × max(0, 1 − L/100). ~1.20× at L1 → 1.00× at L>=100. */
+/** @deprecated Historical — live XPToNext is productionMath.xpToNext. */
 export function earlyGameXpModifier(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   return 1 + EARLY_GAME_XP_START_BONUS * Math.max(0, 1 - L / EARLY_GAME_XP_TAPER_LEVEL);
 }
 
 export function expForLevel(level) {
-  const L = Math.max(1, Math.floor(Number(level) || 1));
-  const design = Math.max(
-    1,
-    Math.round(
-      XP_REQUIREMENT_MULTIPLIER
-        * XP_DESIGN_LEVEL_COEFFICIENT
-        * (L ** XP_DESIGN_LEVEL_EXPONENT)
-        * (
-          1
-          + (L / XP_DESIGN_HIGH_LEVEL_REFERENCE) ** XP_DESIGN_HIGH_LEVEL_EXPONENT
-        ),
-    ),
-  );
-  // Pacing multipliers (global 1.5× + tapering early-game) applied before the
-  // single final integer round, preserving the design + Post-200 curve shape.
-  const units = Math.max(
-    1,
-    Math.round(design * post200Growth(L) * XP_GLOBAL_SLOWDOWN * earlyGameXpModifier(L))
-  );
-  return units * XP_STARDUST_SCALE;
+  return xpToNext(level);
 }
 
-/** Mission XP per 1 Fuel, on the game's actual scale. Works for all L>=1 (no waypoints).
- *  Rounds the design curve to an integer, then applies the ×10 game scale as a
- *  final step (round(curve) × 10) to preserve exact historical outputs. */
+/** Coefficients match productionMath.missionXpPerFuel. */
 export const XP_PER_FUEL_LINEAR_COEFFICIENT = 0.5;
 export const XP_PER_FUEL_POWER_COEFFICIENT = 0.032;
 export const XP_PER_FUEL_EXPONENT = 1.67;
 
+/** Canonical mission XP per 1 Fuel — 1:1 units. Reward formulas stay later-phase. */
 export function getMissionXpPerFuel(level = 1) {
-  const L = Math.max(1, Math.floor(Number(level) || 1));
-  const design = Math.max(
-    1,
-    Math.round(
-      BASE_MISSION_XP_PER_FUEL
-      + XP_PER_FUEL_LINEAR_COEFFICIENT * (L - 1)
-      + XP_PER_FUEL_POWER_COEFFICIENT * (L ** XP_PER_FUEL_EXPONENT - 1)
-    )
-  );
-  return design * XP_STARDUST_SCALE;
+  return Math.max(1, roundHalfUp(missionXpPerFuel(level)));
 }
 
 // StardustPerFuel / getMissionStardustPerFuel — see stardustEconomy.js (re-exported above).

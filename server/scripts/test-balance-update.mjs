@@ -70,26 +70,20 @@ function seqRng(values) {
 
 console.log("\nBalance update tests\n");
 
-test("XP_STARDUST_SCALE is 10", () => {
+test("legacy XP_STARDUST_SCALE remains 10 (economy debt, not XP)", () => {
   assert.equal(XP_STARDUST_SCALE, 10);
 });
 
 test("XP formula from L1 forever — no L500 boundary", () => {
-  // Design curve at L1 (post200Growth(1) === 1) × pacing (1.5× × early ~1.198) × 10 game scale.
-  const l1Design = Math.round(1.35 * 2.106 * (1 ** 1.532) * (1 + (1 / 266) ** 3.683));
-  const l1Units = Math.round(Math.max(1, l1Design) * 1.5 * (1 + 0.2 * (1 - 1 / 100)));
-  assert.equal(expForLevel(1), l1Units * 10);
+  assert.equal(expForLevel(1), 13);
   assert.ok(expForLevel(501) > expForLevel(500));
   assert.ok(Number.isFinite(expForLevel(10000)));
   assert.ok(expForLevel(10000) > expForLevel(1000));
-  // Game scale applied as a final ×10 step (values stay multiples of 10).
-  assert.equal(expForLevel(100) % XP_STARDUST_SCALE, 0);
 });
 
-test("Mission XP uses 0.85 rebalance; XP/F scale once", () => {
+test("Mission XP uses 0.85 rebalance; canonical XP/Fuel", () => {
   assert.equal(MISSION_XP_REBALANCE, 0.85);
   const rate = getMissionXpPerFuel(100);
-  assert.equal(rate % XP_STARDUST_SCALE, 0);
   const xp = computeMissionXpFromFuel(10, 100, 1);
   assert.equal(xp, Math.round(10 * rate * 0.85));
 });

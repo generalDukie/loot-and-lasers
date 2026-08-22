@@ -370,7 +370,7 @@ export function canDeleteDoc(user, type, doc) {
 /**
  * Strip client-controlled ownership / id forges on create.
  * Rejects client-supplied ids (Critical #3) unless admin.
- * Character.create forces economy defaults for non-admins.
+ * Character.create forces production starting progression for every operative.
  */
 export function sanitizeCreatePayload(user, type, data = {}) {
   const out = { ...data };
@@ -438,56 +438,54 @@ export function sanitizeCreatePayload(user, type, data = {}) {
         }
         throw err;
       }
-      out.level = 1;
-      out.experience = 0;
-      out.experience_to_next_level = expForLevel(1);
-      out.stardust = 0;
-      out.total_stardust_earned = 0;
-      out.unspent_stat_points = 0;
-      out.attribute_purchases = 0;
-      out.attribute_purchases_by_stat = {
-        strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
-      };
-      out.missions_completed = 0;
-      out.highest_sector = 1;
-      out.active_mission_id = "";
-      out.mission_end_time = "";
-      if (!out.equipped_items || typeof out.equipped_items !== "object") {
-        out.equipped_items = {};
-      }
-      // Force class base stats — never trust client progression attributes.
-      const base = CLASS_BASE_STATS[out.class];
-      if (!base) {
-        const err = new Error("Invalid character class");
-        err.status = 400;
-        throw err;
-      }
-      out.stats = { ...base };
-      // Starting balances: Stardust=0, Nova=0 here; Nova granted via ledger after create.
-      out.stardust = 0;
-      out.total_stardust_earned = 0;
-      out.nova_crystals = 0;
-      out.economy_nova_scale = NOVA_STORAGE_SCALE;
+    }
 
-      // Strip other locked progression fields if client forged them.
-      for (const key of CHARACTER_ECONOMY_FIELDS) {
-        if (
-          key === "level" || key === "experience" || key === "experience_to_next_level"
-          || key === "stardust" || key === "total_stardust_earned"
-          || key === "unspent_stat_points" || key === "attribute_purchases"
-          || key === "attribute_purchases_by_stat" || key === "fuel" || key === "max_fuel"
-          || key === "fuel_purchases" || key === "fuel_reset_at" || key === "fuel_updated_at"
-          || key === "missions_completed" || key === "highest_sector"
-          || key === "active_mission_id" || key === "mission_end_time"
-          || key === "nova_crystals" || key === "stats"
-          || key === "equipped_items"
-        ) {
-          continue;
-        }
-        delete out[key];
+    // Production starting progression — every new operative, including admins.
+    out.level = 1;
+    out.experience = 0;
+    out.experience_to_next_level = expForLevel(1);
+    out.stardust = 0;
+    out.total_stardust_earned = 0;
+    out.unspent_stat_points = 0;
+    out.attribute_purchases = 0;
+    out.attribute_purchases_by_stat = {
+      strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
+    };
+    out.missions_completed = 0;
+    out.highest_sector = 1;
+    out.active_mission_id = "";
+    out.mission_end_time = "";
+    if (!out.equipped_items || typeof out.equipped_items !== "object") {
+      out.equipped_items = {};
+    }
+    const base = CLASS_BASE_STATS[out.class];
+    if (!base) {
+      const err = new Error("Invalid character class");
+      err.status = 400;
+      throw err;
+    }
+    out.stats = { ...base };
+    out.nova_crystals = 0;
+    out.economy_nova_scale = NOVA_STORAGE_SCALE;
+
+    for (const key of CHARACTER_ECONOMY_FIELDS) {
+      if (
+        key === "level" || key === "experience" || key === "experience_to_next_level"
+        || key === "stardust" || key === "total_stardust_earned"
+        || key === "unspent_stat_points" || key === "attribute_purchases"
+        || key === "attribute_purchases_by_stat" || key === "fuel" || key === "max_fuel"
+        || key === "fuel_purchases" || key === "fuel_reset_at" || key === "fuel_updated_at"
+        || key === "missions_completed" || key === "highest_sector"
+        || key === "active_mission_id" || key === "mission_end_time"
+        || key === "nova_crystals" || key === "stats"
+        || key === "equipped_items"
+      ) {
+        continue;
       }
-      assertCharacterCreateShape(out);
-      // New operatives start the interactive onboarding once (server-owned).
+      delete out[key];
+    }
+    assertCharacterCreateShape(out);
+    if (!isAdmin(user)) {
       out.onboarding_tutorial = defaultOnboardingState();
     }
   }

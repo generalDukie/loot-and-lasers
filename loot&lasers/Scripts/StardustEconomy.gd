@@ -55,6 +55,7 @@ const STARDUST_PER_FUEL_ANCHORS := [
 ]
 
 ## AttributePurchaseCost anchors (absolute Stardust).
+## @deprecated Historical PCHIP waypoints — not live attrcost authority (Phase 1 uses Horner).
 const ATTRIBUTE_PURCHASE_COST_ANCHORS := [
 	[1, 100],
 	[10, 150],
@@ -173,8 +174,25 @@ static func stardust_per_fuel(level: int = 1) -> int:
 	return maxi(1, int(round(STARDUST_PER_FUEL_BASE + growth)))
 
 
+const ATTR_COST_HORNER := [
+	0.00263490059,
+	-0.0530391365,
+	0.411171165,
+	-0.985347882,
+	-0.461561195,
+	7.41094646,
+]
+const ATTR_COST_LOG_OFFSET := 20.0
+
+
 static func attribute_purchase_cost(purchase_number: int = 1) -> int:
-	return log_pchip_anchors(ATTRIBUTE_PURCHASE_COST_ANCHORS, float(maxi(1, purchase_number)))
+	## Preview-only Horner attrcost. Server BuyAttribute is authoritative.
+	var n := maxi(1, purchase_number)
+	var z := log(float(n) + ATTR_COST_LOG_OFFSET)
+	var v := 0.0
+	for q in ATTR_COST_HORNER:
+		v = v * z + float(q)
+	return maxi(1, int(floor(exp(v) + 0.5)))
 
 
 static func mission_stardust_reward(level: int, fuel_cost: float) -> int:

@@ -133,6 +133,25 @@ assert.equal(createdPayload.nova_crystals, 0);
 assert.equal(createdPayload.stardust, 0);
 assert.equal(createdPayload.level, 1);
 assert.deepEqual(createdPayload.stats, classBaseStats("Vanguard"));
+assert.equal(createdPayload.experience, 0);
+assert.equal(createdPayload.experience_to_next_level, expForLevel(1));
+assert.equal(createdPayload.experience_to_next_level, 13);
+
+const adminAccount = {
+  id: "foundation-admin-1",
+  email: "admin@example.com",
+  role: "admin",
+};
+const adminPayload = sanitizeCreatePayload(adminAccount, "Character", {
+  name: "AdminOp",
+  race: "Zyrathi",
+  class: "Vanguard",
+  nova_crystals: 999999,
+});
+assert.equal(adminPayload.experience_to_next_level, 13);
+assert.equal(adminPayload.nova_crystals, 0);
+assert.equal(adminPayload.level, 1);
+assert.deepEqual(adminPayload.stats, classBaseStats("Vanguard"));
 
 const { applyCharacterCreationStartingGrant, getBalances, STARTING_NOVA_DISPLAY, STARTING_STARDUST } =
   await import("../src/shared/currencyService.js");
@@ -160,6 +179,24 @@ const granted2 = applyCharacterCreationStartingGrant(account, character2);
 assert.equal(granted2.balances.nova_crystals, 500);
 assert.equal(granted2.balances.stardust, 0);
 assert.notEqual(character.id, character2.id);
+
+const { ensureCharacterLiveCreateDefaults } = await import("../src/shared/characterStatsRepair.js");
+const brokenSlot = entities.Character.create({
+  name: "BrokenSlot",
+  race: "Zyrathi",
+  class: "Vanguard",
+  created_by_id: account.id,
+  created_by: account.email,
+  level: 1,
+  experience: 0,
+  stats: classBaseStats("Vanguard"),
+});
+assert.ok(brokenSlot.experience_to_next_level == null || brokenSlot.experience_to_next_level <= 1);
+const repairedSlot = ensureCharacterLiveCreateDefaults(account, brokenSlot);
+assert.equal(repairedSlot.character.experience_to_next_level, 13);
+assert.equal(getBalances(repairedSlot.character).nova_crystals, 500);
+const repairedAgain = ensureCharacterLiveCreateDefaults(account, repairedSlot.character);
+assert.equal(getBalances(repairedAgain.character).nova_crystals, 500);
 
 // Retry grant is idempotent — no double Nova
 const replay = applyCharacterCreationStartingGrant(account, granted.character);

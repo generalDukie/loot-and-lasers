@@ -24,34 +24,36 @@ import {
 } from "../server/src/shared/economyFormulas.js";
 import { computeItemVendorValue } from "../server/src/shared/itemGeneration.js";
 
-if (XP_STARDUST_SCALE !== 10) throw new Error(`Expected XP_STARDUST_SCALE=10, got ${XP_STARDUST_SCALE}`);
+if (XP_STARDUST_SCALE !== 10) {
+  throw new Error(
+    `Expected leftover XP_STARDUST_SCALE=10 (legacy Stardust economy debt, not XP), got ${XP_STARDUST_SCALE}`,
+  );
+}
 
 function assertEq(label, got, expected) {
   if (got !== expected) throw new Error(`${label}: got ${got}, expected ${expected}`);
   console.log(`ok  ${label} = ${got}`);
 }
 
-// Design curve at L1 (post200Growth(1) === 1) × 10 game scale.
-assertEq("L1→2 XP", expForLevel(1), Math.max(1, Math.round(1.35 * 2.106 * 1 * (1 + (1 / 266) ** 3.683))) * 10);
-assertEq("XP on game scale (L100 multiple of 10)", expForLevel(100) % XP_STARDUST_SCALE, 0);
+assertEq("L1→2 XP", expForLevel(1), 13);
 if (!(expForLevel(501) > expForLevel(500))) throw new Error("L501 should exceed L500");
 
-assertEq("L1 XP/fuel", getMissionXpPerFuel(1), 100);
-assertEq("L10 XP/fuel", getMissionXpPerFuel(10), 160);
+assertEq("L1 XP/fuel", getMissionXpPerFuel(1), 10);
+assertEq("L10 XP/fuel", getMissionXpPerFuel(10), 16);
 assertEq("L1 SD/fuel", getMissionStardustPerFuel(1), 50);
 assertEq("L10 SD/fuel", getMissionStardustPerFuel(10), Math.round(50 + 1.009 * 9 ** 1.625 * (1 + (10 / 166.66) ** 3.055)));
-assertEq("L100 XP/fuel", getMissionXpPerFuel(100), 1290);
+assertEq("L100 XP/fuel", getMissionXpPerFuel(100), 129);
 assertEq("L100 SD/fuel", getMissionStardustPerFuel(100), Math.round(50 + 1.009 * 99 ** 1.625 * (1 + (100 / 166.66) ** 3.055)));
 assertEq("MISSION_XP_REBALANCE", MISSION_XP_REBALANCE, 0.85);
-assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), Math.round(10 * 1290 * 0.85));
+assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), Math.round(10 * 129 * 0.85));
 
 assertEq("Attr cost #1", getAttributePointCost(1), 100);
-assertEq("Attr cost #10", getAttributePointCost(10), 150);
-assertEq("Attr cost #650", getAttributePointCost(650), 10_000_000);
+assertEq("Attr cost #10", getAttributePointCost(10), 112);
+assertEq("Attr cost #650", getAttributePointCost(650), 111517);
 
 const sd10 = getMissionStardustPerFuel(10);
 const sd50 = getMissionStardustPerFuel(50);
-assertEq("Arena XP L10", getArenaXpReward(10), Math.max(1, Math.round((160 * 5) / 7)));
+assertEq("Arena XP L10", getArenaXpReward(10), Math.max(1, Math.round((16 * 5) / 7)));
 assertEq("Arena SD L10", getArenaStardustReward(10), Math.round(2.25 * sd10));
 assertEq("Arena refresh", ARENA_REFRESH_COST, 500);
 assertEq("Guild create", GUILD_CREATE_COST, 5000);

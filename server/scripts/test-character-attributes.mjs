@@ -19,7 +19,9 @@ const {
   readPermanentAttributes,
   equipmentAttributeBonuses,
   emptyAttrMap,
+  computeProductionSheetDerived,
 } = await import("../src/shared/characterAttributes.js");
+const { composePermanentAttributes } = await import("../../src/lib/characterStats.js");
 const { entities } = await import("../src/entities.js");
 const { GetCharacterAttributes, BuyAttribute } = await import(
   "../src/functions/economy.js"
@@ -82,10 +84,20 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
     class: "Vanguard",
     level: 2,
     stats: { strength: 1, intellect: 1 },
+    attribute_purchases_by_stat: {
+      strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
+    },
   });
   assert.equal(leveled.repaired, true);
-  assert.equal(leveled.stats.strength, 16);
-  assert.equal(leveled.stats.intellect, 7);
+  assert.equal(
+    leveled.stats.strength + leveled.stats.agility + leveled.stats.intellect
+      + leveled.stats.vitality + leveled.stats.luck,
+    52,
+  );
+  assert.deepEqual(
+    leveled.stats,
+    composePermanentAttributes({ class: "Vanguard", level: 2 }),
+  );
   console.log("  ✓ class base stat repair");
 }
 
@@ -106,12 +118,12 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
   assert.deepEqual(sheet.equipment_bonuses, emptyAttrMap());
   const libPerm = libStat.computePermanentTotalStats(character, []);
   const libEff = libStat.computeTotalStats(character, []);
-  const libDer = libStat.computeDerivedStats(libPerm, character);
+  const sheetDer = computeProductionSheetDerived(libPerm, character);
   assert.deepEqual(sheet.permanent_totals, libPerm);
   assert.deepEqual(sheet.effective_attributes, libEff);
-  assert.equal(sheet.derived.health, libDer.health);
-  assert.equal(sheet.derived.damage, libDer.damage);
-  assert.equal(sheet.derived_permanent.health, libDer.health);
+  assert.equal(sheet.derived.health, sheetDer.health);
+  assert.equal(sheet.derived.damage, sheetDer.damage);
+  assert.equal(sheet.derived_permanent.health, sheetDer.health);
   console.log("  ✓ new character sheet");
 }
 
@@ -149,7 +161,7 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
     sheet.effective_attributes.intellect,
     sheet.permanent_totals.intellect + sheet.stim_bonuses.intellect,
   );
-  const derEff = libStat.computeDerivedStats(libEff, character);
+  const derEff = computeProductionSheetDerived(libEff, character);
   assert.equal(sheet.derived.health, derEff.health);
   assert.equal(sheet.derived.damage, derEff.damage);
   assert.equal(sheet.derived.critChance, derEff.critChance);
@@ -170,13 +182,13 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
     critChance: 99,
   };
   const sheet = buildAttributeSheet(character, []);
-  const expected = libStat.computeDerivedStats(
+  const expected = computeProductionSheetDerived(
     libStat.computePermanentTotalStats(character, []),
     character,
   );
   assert.equal(sheet.derived.damage, expected.damage);
   assert.notEqual(sheet.derived.damage, 99999);
-  assert.equal(readPermanentAttributes(character).agility, 40);
+  assert.deepEqual(readPermanentAttributes(character), composePermanentAttributes(character));
   console.log("  ✓ ignores client-supplied derived fields");
 }
 
@@ -240,15 +252,29 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
     ).strength,
   );
 
-  const beforeVit = ch.stats.vitality;
-  const buy = await BuyAttribute(account, { stat: "vitality" });
+  const liveBefore = entities.Character.get(ch.id);
+  const expectedVit = composePermanentAttributes({
+    class: "Vanguard",
+    level: liveBefore.level,
+    attribute_purchases_by_stat: {
+      ...(liveBefore.attribute_purchases_by_stat || {}),
+      vitality: (liveBefore.attribute_purchases_by_stat?.vitality || 0) + 1,
+    },
+  }).vitality;
+  const buy = await BuyAttribute(account, { stat: "vitality", request_id: "buy-vit-phase1" });
   assert.equal(buy.status, 200, JSON.stringify(buy.body));
   assert.ok(buy.body.sheet);
-  assert.equal(buy.body.character.stats.vitality, beforeVit + 1);
+  assert.equal(buy.body.character.stats.vitality, expectedVit);
   assert.equal(
     buy.body.sheet.permanent_attributes.vitality,
     buy.body.character.stats.vitality,
   );
+  const afterBuyStardust = buy.body.character.stardust;
+  const replay = await BuyAttribute(account, { stat: "vitality", request_id: "buy-vit-phase1" });
+  assert.equal(replay.status, 200, JSON.stringify(replay.body));
+  assert.equal(replay.body.idempotent_replay, true);
+  assert.equal(entities.Character.get(ch.id).stardust, afterBuyStardust);
+  assert.equal(entities.Character.get(ch.id).stats.vitality, expectedVit);
   console.log("  ✓ GetCharacterAttributes + BuyAttribute sheet round-trip");
 }
 

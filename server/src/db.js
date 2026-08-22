@@ -171,8 +171,9 @@ db.exec(`
 })();
 
 /**
- * One-time 10× XP & Stardust unit-scale migration.
- * Preserves progression / purchasing power after formula exits were scaled.
+ * One-time historical 10× inflation of Stardust/shop stored amounts.
+ * XP is 1:1 production policy — this migration must not convert XP.
+ * Already-stamped databases are unchanged (idempotent via app_meta).
  */
 (function migrateXpStardustScale10x() {
   const SCALE = 10;
@@ -205,8 +206,7 @@ db.exec(`
 
   const scaleCharacter = (data) => {
     const d = { ...data };
-    if (d.experience != null) d.experience = mul(d.experience);
-    if (d.experience_to_next_level != null) d.experience_to_next_level = mul(d.experience_to_next_level);
+    // XP is 1:1 — do not multiply experience / experience_to_next_level.
     if (d.stardust != null) d.stardust = mul(d.stardust);
     if (d.total_stardust_earned != null) d.total_stardust_earned = mul(d.total_stardust_earned);
     if (d.mining_reward != null) d.mining_reward = mul(d.mining_reward);
@@ -231,7 +231,7 @@ db.exec(`
     const r = d.rewards;
     if (r && typeof r === "object") {
       const next = { ...r };
-      if (next.experience != null) next.experience = mul(next.experience);
+      // XP is 1:1 — do not multiply next.experience.
       if (next.stardust != null) next.stardust = mul(next.stardust);
       if (next.sell_value != null) next.sell_value = mul(next.sell_value);
       if (next.collectible?.sell_value != null) {
@@ -260,7 +260,7 @@ db.exec(`
     const r = d.rewards;
     if (r && typeof r === "object") {
       const next = { ...r };
-      if (next.experience != null) next.experience = mul(next.experience);
+      // XP is 1:1 — do not multiply next.experience.
       if (next.stardust != null) next.stardust = mul(next.stardust);
       d.rewards = next;
     }
@@ -299,10 +299,10 @@ db.exec(`
       "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     ).run(META_KEY, "done");
     db.exec("COMMIT");
-    console.log(`[migrate] XP/Stardust 10× scale applied (${META_KEY})`);
+    console.log(`[migrate] Legacy Stardust 10× amounts applied (${META_KEY}); XP left 1:1`);
   } catch (err) {
     try { db.exec("ROLLBACK"); } catch { /* ignore */ }
-    console.error("[migrate] XP/Stardust 10× scale failed:", err);
+    console.error("[migrate] Legacy Stardust 10× amounts failed:", err);
     throw err;
   }
 })();
@@ -566,6 +566,59 @@ export function migrateXpRequirementSlowdown({ expForLevel, grantCharacterXp } =
   } catch (err) {
     try { db.exec("ROLLBACK"); } catch { /* ignore */ }
     console.error("[migrate] XP requirement slowdown failed:", err);
+    throw err;
+  }
+}
+
+/**
+ * Phase 1: reconstruct development character progression onto productionMath.
+ * Recomputes XP-to-next from xpToNext(level), clamps leftover XP (does not
+ * convert obsolete ×10 units into extra levels), and recomposes attributes
+ * from starting + free-from-level + purchases.
+ */
+export function migratePhase1ProgressionFoundation({ reconstructProgressionState } = {}) {
+  const META_KEY = "phase1_production_progression_v1";
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+  const existing = db.prepare("SELECT value FROM app_meta WHERE key = ?").get(META_KEY);
+  if (existing?.value === "done") return { skipped: true };
+  if (typeof reconstructProgressionState !== "function") {
+    throw new Error("migratePhase1ProgressionFoundation requires reconstructProgressionState");
+  }
+
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    const rows = db.prepare("SELECT id, data FROM entities WHERE type = 'Character'").all();
+    const update = db.prepare(
+      "UPDATE entities SET data = ?, updated_date = ? WHERE id = ? AND type = 'Character'",
+    );
+    const now = new Date().toISOString();
+    let updated = 0;
+    for (const row of rows) {
+      let data;
+      try {
+        data = JSON.parse(row.data);
+      } catch {
+        continue;
+      }
+      const rebuilt = reconstructProgressionState(data);
+      Object.assign(data, rebuilt);
+      update.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
+      updated += 1;
+    }
+    db.prepare(
+      "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run(META_KEY, "done");
+    db.exec("COMMIT");
+    console.log(`[migrate] Phase 1 production progression applied (${META_KEY}) updated=${updated}`);
+    return { skipped: false, updated };
+  } catch (err) {
+    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+    console.error("[migrate] Phase 1 production progression failed:", err);
     throw err;
   }
 }

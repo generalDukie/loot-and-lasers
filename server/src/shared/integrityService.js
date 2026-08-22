@@ -512,7 +512,7 @@ export function ValidateCurrencyIntegrity(characterId) {
     );
   } else if (sd > STARDUST_MAX) {
     report.findings.push(
-      finding(IntegritySeverity.HIGH, "STARDUST_ABOVE_CEILING", "Stardust exceeds clamp ceiling", {
+      finding(IntegritySeverity.HIGH, "STARDUST_ABOVE_CEILING", "Stardust exceeds JS safe-integer bound", {
         character_id: characterId,
         stardust: sd,
         ceiling: STARDUST_MAX,

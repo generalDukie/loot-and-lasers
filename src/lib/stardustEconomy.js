@@ -4,6 +4,7 @@
  *
  * XP, fuel costs, combat, and gear STAT budgets are intentionally out of scope.
  */
+import { attributePurchaseCost } from "./productionMath/index.js";
 
 // ── Constants ────────────────────────────────────────────────
 export const MISSION_GEAR_BASE_CHANCE = 0.2;
@@ -89,7 +90,7 @@ export const STARDUST_PER_FUEL_ANCHORS = Object.freeze([
   [300, 75000],
 ]);
 
-/** AttributePurchaseCost anchors (absolute Stardust) — still PCHIP (not mission rewards). */
+/** @deprecated Historical PCHIP waypoints — live attrcost is productionMath Horner. */
 export const ATTRIBUTE_PURCHASE_COST_ANCHORS = Object.freeze([
   [1, 100],
   [10, 150],
@@ -206,10 +207,7 @@ export function StardustPerFuel(level = 1) {
 }
 
 export function AttributePurchaseCost(purchaseNumber = 1) {
-  return logPchipAnchors(
-    ATTRIBUTE_PURCHASE_COST_ANCHORS,
-    Math.max(1, Math.floor(purchaseNumber || 1))
-  );
+  return attributePurchaseCost(purchaseNumber);
 }
 
 export function MissionStardustReward(level, fuelCost) {

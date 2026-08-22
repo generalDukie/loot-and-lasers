@@ -1,0 +1,80 @@
+/**
+ * AUTHORITATIVE FORMULA MODULE — PHASE 1 LIVE FOR attributePurchaseCost
+ * Gear generation remains unwired until a later phase.
+ */
+import { roundHalfUp } from "./rounding.js";
+import {
+  ATTR_COST_HORNER,
+  ATTR_COST_LOG_OFFSET,
+  GEAR_RARITY_BUDGET_MULT,
+  GEAR_SLOT_NORMAL_MULT,
+  GEAR_SLOT_PREMIUM_MULT,
+  PREMIUM_GEAR_SLOTS,
+  PVE_HIDDEN_BUDGET_OFFSET,
+  PVE_HIDDEN_BUDGET_OFFSET_MATURE,
+} from "./constants.js";
+
+function levelInt(level) {
+  return Math.max(1, Math.floor(Number(level) || 1));
+}
+
+function purchaseInt(n) {
+  return Math.max(1, Math.floor(Number(n) || 1));
+}
+
+/** ROUND(1.4079*L + 2.2988*sqrt(L) + 8.277) */
+export function gearBaseStatBudget(level) {
+  const L = levelInt(level);
+  return Math.max(1, roundHalfUp(1.4079 * L + 2.2988 * Math.sqrt(L) + 8.277));
+}
+
+export function gearSlotMultiplier(slot) {
+  const key = String(slot || "").toLowerCase().replace(/\s+/g, "_");
+  if (PREMIUM_GEAR_SLOTS.includes(key) || slot === 6 || slot === 7) return GEAR_SLOT_PREMIUM_MULT;
+  return GEAR_SLOT_NORMAL_MULT;
+}
+
+export function gearRarityBudgetMultiplier(rarity) {
+  if (typeof rarity === "number") {
+    return [0.7, 0.85, 1, 1.2, 1.5][rarity] ?? 1;
+  }
+  return GEAR_RARITY_BUDGET_MULT[rarity] ?? 1;
+}
+
+export function gearStatPool(itemLevel, slot, rarity) {
+  return Math.max(
+    1,
+    roundHalfUp(
+      gearBaseStatBudget(Math.max(1, itemLevel))
+      * gearSlotMultiplier(slot)
+      * gearRarityBudgetMultiplier(rarity),
+    ),
+  );
+}
+
+/**
+ * PvE hidden stat-budget offset. Discrete. Affects Gear STAT BUDGET reference only.
+ * Does not raise economic item level, resale level, or Market price level.
+ */
+export function pveHiddenStatBudgetOffset(playerLevel) {
+  const L = levelInt(playerLevel);
+  for (const row of PVE_HIDDEN_BUDGET_OFFSET) {
+    if (L <= row.maxLevel) return row.offset;
+  }
+  return PVE_HIDDEN_BUDGET_OFFSET_MATURE;
+}
+
+export function pveGearStatBudgetLevel(playerLevel) {
+  return levelInt(playerLevel) + pveHiddenStatBudgetOffset(playerLevel);
+}
+
+/**
+ * attrcost(n) = max(1, rround(exp(Horner(log(max(1,n)+20)))))
+ */
+export function attributePurchaseCost(purchaseNumber) {
+  const n = purchaseInt(purchaseNumber);
+  const z = Math.log(n + ATTR_COST_LOG_OFFSET);
+  let v = 0;
+  for (const q of ATTR_COST_HORNER) v = v * z + q;
+  return Math.max(1, roundHalfUp(Math.exp(v)));
+}

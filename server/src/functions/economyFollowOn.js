@@ -2802,7 +2802,8 @@ export const AcceptPendingLoot = wrap((user, body) => {
 export const ApplyGuildWarResult = wrap((user, body) => {
   const ch = requireMyChar(user);
   const won = !!body.won;
-  // Server-authoritative reward (scaled units). Client amounts are ignored.
+  // LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION
+  // Server-authoritative Stardust payout. Client amounts are ignored. Not XP.
   const capped = (
     won ? GUILD_WAR_SIM_WIN_REWARD_UNSCALED : GUILD_WAR_SIM_LOSS_REWARD_UNSCALED
   ) * XP_STARDUST_SCALE;

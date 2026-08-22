@@ -9,7 +9,14 @@ import {
   getStatPointsForLevelRange,
 } from "./rewards.js";
 import { grantCharacterXp } from "./characterProgression.js";
+// LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION.
+// Historical ×10 inflation. Not production XP. Not production economy authority.
 import { XP_STARDUST_SCALE } from "./economyConstants.js";
+import {
+  startingAttributesForClass,
+  CLASS_PRIMARY_INDEX,
+  attributePurchaseCost,
+} from "./productionMath.js";
 
 /** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
 export const MISSION_XP_REBALANCE = 0.85;
@@ -26,7 +33,6 @@ import { todayET as todayETFromClock, getWeekKey as getWeekKeyFromClock, clock }
 import { DEFAULT_GAME_ZONE, getZonedParts } from "./time/zones.js";
 import { zonedLocalToUtc } from "./time/periods.js";
 import {
-  AttributePurchaseCost,
   MissionStardustReward,
   ArenaWinStardust,
   computeMiningReward as miningStardustFromHours,
@@ -100,7 +106,7 @@ const WORMHOLE_LEVELS_PER_DEPTH = 35;
 const WORMHOLE_FIRST_ENEMY_OFFSET = 3;
 const DRU_PRECISION_SCALE = 100;
 
-export { XP_STARDUST_SCALE };
+export { XP_STARDUST_SCALE }; // legacy Stardust callers only — not XP
 
 /** Temporary Coming Soon gates — flip to restore hangar / void without hunting call sites. */
 export const FEATURE_FLAGS = {
@@ -149,24 +155,24 @@ export function todayET(now = clock.now()) {
 export function getWeekKey(date = clock.now()) {
   return getWeekKeyFromClock(date);
 }
-// ── Classes (baseStats only) ─────────────────────────────────
-const CLASS_TYPE_BASE_STATS = {
-  strength:  { strength: 15, agility: 8,  intellect: 6,  vitality: 14, luck: 7  },
-  agility:   { strength: 7,  agility: 15, intellect: 7,  vitality: 11, luck: 10 },
-  intellect: { strength: 6,  agility: 8,  intellect: 15, vitality: 13, luck: 8  },
-};
+// ── Classes (baseStats from productionMath.STARTING_ATTRIBUTES) ────────
+function namedStartingStats(className) {
+  const a = startingAttributesForClass(className);
+  return {
+    strength: a[0],
+    agility: a[1],
+    intellect: a[2],
+    vitality: a[3],
+    luck: a[4],
+  };
+}
 
-export const CLASS_BASE_STATS = {
-  Vanguard: { ...CLASS_TYPE_BASE_STATS.strength },
-  "Shadow Operative": { ...CLASS_TYPE_BASE_STATS.agility },
-  Technomancer: { ...CLASS_TYPE_BASE_STATS.intellect },
-  "Astral Warden": { ...CLASS_TYPE_BASE_STATS.strength },
-  "Void Runner": { ...CLASS_TYPE_BASE_STATS.agility },
-  "Cosmic Engineer": { ...CLASS_TYPE_BASE_STATS.intellect },
-};
+export const CLASS_BASE_STATS = Object.fromEntries(
+  Object.keys(CLASS_PRIMARY_INDEX).map((className) => [className, namedStartingStats(className)]),
+);
 
 // ── Attribute purchases ──────────────────────────────────────
-// Cost curve: AttributePurchaseCost in stardustEconomy.js (log-PCHIP anchors).
+// Cost curve: productionMath.attributePurchaseCost (Horner).
 
 export function lerpWaypoints(level, points) {
   const L = Math.max(1, Math.floor(level || 1));
@@ -186,7 +192,7 @@ export function lerpWaypoints(level, points) {
 }
 
 export function getAttributePointCost(purchaseNumber) {
-  return AttributePurchaseCost(purchaseNumber);
+  return attributePurchaseCost(purchaseNumber);
 }
 
 export const ATTR_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -198,8 +204,7 @@ export function getAttributePurchaseCount(character, stat) {
     if (by && typeof by[stat] === "number" && Number.isFinite(by[stat])) {
       return Math.max(0, Math.floor(by[stat]));
     }
-    const base = CLASS_BASE_STATS[character.class] || {};
-    return Math.max(0, (character.stats?.[stat] || 0) - (base[stat] || 0));
+    return 0;
   }
   if (character.attribute_purchases_by_stat && typeof character.attribute_purchases_by_stat === "object") {
     return ATTR_STAT_KEYS.reduce((sum, k) => sum + getAttributePurchaseCount(character, k), 0);
@@ -218,6 +223,7 @@ export function getNextAttributePointCost(character, stat) {
 }
 
 // ── Stardust dissolve ────────────────────────────────────────
+// LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION
 export const STARDUST_PER_RARITY = {
   common: 8 * XP_STARDUST_SCALE,
   uncommon: 20 * XP_STARDUST_SCALE,
@@ -243,8 +249,8 @@ export function computeNovaCrystalCost(item) {
 
 // ── Fuel ─────────────────────────────────────────────────────
 export const FUEL_MAX = 100;
-/** Hard wallet ceiling for character stardust balance. */
-export const STARDUST_MAX = 5_000_000_000_000 * XP_STARDUST_SCALE;
+/** JS integer safety bound — not a gameplay Stardust wallet cap. Casino wager caps are separate. */
+export const STARDUST_MAX = Number.MAX_SAFE_INTEGER;
 
 export function clampStardust(amount) {
   const n = Number(amount);
@@ -311,7 +317,7 @@ export const STARTER_SHIP = "scout";
 export const SCOUT_MILESTONE_LEVEL = 20;
 export const SCOUT_MILESTONE_MOD_ID = "fuel_tank_1";
 export const NAME_CHANGE_COST = 500;
-export const GUILD_WAR_SIM_COST = 500 * XP_STARDUST_SCALE;
+export const GUILD_WAR_SIM_COST = 500 * XP_STARDUST_SCALE; // legacy Stardust, not XP
 export const SHIP_UPGRADE_STEP = 1.08;
 export const SHIP_COST_STEP = 1.10;
 
@@ -343,6 +349,7 @@ export const SHIP_TYPES = {
 };
 
 /** Tier costs + effects — ids/costs match client SHIP_MODS. */
+// LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION
 const FUEL_TANK_COSTS = [200, 450, 800, 1250, 1800, 2500, 3400, 4500, 5600, 6800].map((c) => c * XP_STARDUST_SCALE);
 const FUEL_EFF_COSTS = [350, 700, 1100, 1600, 2200, 2900, 3700, 4600, 5600, 6800].map((c) => c * XP_STARDUST_SCALE);
 const WARP_COSTS = [500, 950, 1450, 2000, 2600, 3300, 4100, 5000, 6000, 7100].map((c) => c * XP_STARDUST_SCALE);
@@ -530,7 +537,7 @@ export function normalizeMissionEfficiency(value, playerLevel = 1) {
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
   const eff = normalizeMissionEfficiency(efficiency, level);
-  // getMissionXpPerFuel already includes XP_STARDUST_SCALE once.
+  // getMissionXpPerFuel is canonical 1:1 XP (no storage ×10).
   return Math.max(
     fuel > 0 ? 1 : 0,
     Math.round(fuel * getMissionXpPerFuel(level) * eff * MISSION_XP_REBALANCE)
@@ -1341,7 +1348,7 @@ export { getMissionXpPerFuel, getMissionStardustPerFuel, expForLevel };
 export const ARENA_DAILY_FREE_BATTLES = 10;
 /** Finalized: additional Arena battle entitlement. */
 export const ARENA_PAID_BATTLE_COST = 15;
-export const ARENA_REFRESH_COST = 50 * XP_STARDUST_SCALE;
+export const ARENA_REFRESH_COST = 50 * XP_STARDUST_SCALE; // legacy Stardust, not XP
 export const ARENA_SKIP_COST = 1;
 export const ARENA_ELO_K = 28;
 export const ARENA_RATING_DELTA_MIN = 6;
@@ -1505,7 +1512,7 @@ export function druToRewards(dru, enemyLevel) {
   const units = Math.max(0, Number(dru) || 0);
   return {
     // Standard dungeon: XP only — no direct Stardust.
-    // getMissionXpPerFuel already includes XP_STARDUST_SCALE once.
+    // getMissionXpPerFuel is canonical 1:1 XP (no storage ×10).
     // XP = round(DRU × MissionXPPerFuel(enemyLevel) × DUNGEON_XP_PER_DRU_MULTIPLIER).
     stardust: 0,
     experience: Math.max(
@@ -1560,7 +1567,7 @@ export const CASINO_MAX_NOVA_BET = 1000;
 export const CASINO_MIN_NOVA_BET = 100;
 /** Max stardust bet = 50× mission SD/F; min = 1× SD/F. */
 export const CASINO_STARDUST_BET_SD_MULT = 50;
-export const CASINO_MAX_STARDUST_BET_CAP = 10_000_000 * XP_STARDUST_SCALE;
+export const CASINO_MAX_STARDUST_BET_CAP = 10_000_000 * XP_STARDUST_SCALE; // legacy Stardust cap, not XP
 export const CASINO_MIN_STARDUST_BET_FLOOR = 1;
 
 export function getCasinoMaxStardustBet(level = 1) {
@@ -1585,8 +1592,8 @@ export const CASINO_WHEEL_TIERS = [
   { p: 0.02, mult: 10, label: "10×" },
 ];
 
-export const GUILD_CREATE_COST = 500 * XP_STARDUST_SCALE;
-export const GUILD_WAR_DECLARE_COST = 500 * XP_STARDUST_SCALE;
+export const GUILD_CREATE_COST = 500 * XP_STARDUST_SCALE; // legacy Stardust, not XP
+export const GUILD_WAR_DECLARE_COST = 500 * XP_STARDUST_SCALE; // legacy Stardust, not XP
 export const GUILD_WAR_READY_HOURS = 24;
 export const CHARACTER_SLOT_COST = 500;
 export const CHARACTER_MAX_SLOTS = 3;

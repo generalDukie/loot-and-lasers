@@ -20,7 +20,6 @@ import {
   arenaWinGrantsStardust,
   getArenaRewardedWinsState,
   STARDUST_PER_FUEL_ANCHORS,
-  ATTRIBUTE_PURCHASE_COST_ANCHORS,
   MISSION_GEAR_BASE_CHANCE,
   MISSION_GEAR_PITY_INCREMENT,
   MISSION_GEAR_RARITY_WEIGHTS,
@@ -216,11 +215,12 @@ test("Mining 3% efficiency", () => {
   assert.equal(computeMiningReward(50, 1), Math.round(sd50 * 0.03 * 60));
 });
 
-test("Attribute purchase anchors + independent counters", () => {
-  for (const [n, cost] of ATTRIBUTE_PURCHASE_COST_ANCHORS) {
-    assert.equal(AttributePurchaseCost(n), cost, `purchase #${n}`);
-    assert.equal(getAttributePointCost(n), cost);
-  }
+test("Attribute purchase Horner costs + independent counters", () => {
+  assert.equal(AttributePurchaseCost(1), 100);
+  assert.equal(AttributePurchaseCost(10), 112);
+  assert.equal(AttributePurchaseCost(50), 260);
+  assert.equal(AttributePurchaseCost(650), 111517);
+  assert.equal(getAttributePointCost(1), AttributePurchaseCost(1));
   assert.ok(AttributePurchaseCost(651) > AttributePurchaseCost(650));
   const ch = {
     class: "Vanguard",

@@ -7,6 +7,12 @@ import {
   msUntilNextShopGameDay,
 } from "@/lib/gameTime";
 import {
+  STARTING_ATTRIBUTES,
+  xpToNext,
+  missionXpPerFuel,
+  roundHalfUp,
+} from "@/lib/productionMath";
+import {
   EQUIPMENT_SLOTS,
   rollItemStats,
   computeItemVendorValue,
@@ -69,8 +75,9 @@ export {
   MISSION_SECONDS_PER_FUEL,
 };
 /**
- * Global XP & Stardust numerical resolution (unit size ×10).
- * Apply once at formula exits / configured amounts — not Nova or Fuel.
+ * LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION
+ * Historical ×10 value inflation. NOT production XP policy. NOT production
+ * economy authority. Do not apply this constant to XP.
  */
 export const XP_STARDUST_SCALE = 10;
 
@@ -138,11 +145,29 @@ export const RACES = {
 // ═══════════════════════════════════════════
 // CLASSES
 // ═══════════════════════════════════════════
-/** Starting attributes by primary type (always sum to 50). */
+/** Starting attributes by primary type — sourced from productionMath.STARTING_ATTRIBUTES. */
 export const CLASS_TYPE_BASE_STATS = {
-  strength:  { strength: 15, agility: 8,  intellect: 6,  vitality: 14, luck: 7  },
-  agility:   { strength: 7,  agility: 15, intellect: 7,  vitality: 11, luck: 10 },
-  intellect: { strength: 6,  agility: 8,  intellect: 15, vitality: 13, luck: 8  },
+  strength: {
+    strength: STARTING_ATTRIBUTES.Might.str,
+    agility: STARTING_ATTRIBUTES.Might.agi,
+    intellect: STARTING_ATTRIBUTES.Might.int,
+    vitality: STARTING_ATTRIBUTES.Might.vit,
+    luck: STARTING_ATTRIBUTES.Might.luck,
+  },
+  agility: {
+    strength: STARTING_ATTRIBUTES.Reflex.str,
+    agility: STARTING_ATTRIBUTES.Reflex.agi,
+    intellect: STARTING_ATTRIBUTES.Reflex.int,
+    vitality: STARTING_ATTRIBUTES.Reflex.vit,
+    luck: STARTING_ATTRIBUTES.Reflex.luck,
+  },
+  intellect: {
+    strength: STARTING_ATTRIBUTES.Tech.str,
+    agility: STARTING_ATTRIBUTES.Tech.agi,
+    intellect: STARTING_ATTRIBUTES.Tech.int,
+    vitality: STARTING_ATTRIBUTES.Tech.vit,
+    luck: STARTING_ATTRIBUTES.Tech.luck,
+  },
 };
 
 export const CLASSES = {
@@ -549,7 +574,7 @@ const ATTR_PURCHASE_COST_WAYPOINTS = [
 
 /**
  * Stardust cost for purchase number `n` (1 = first bought point).
- * Authoritative curve: AttributePurchaseCost (log-PCHIP anchors).
+ * Authoritative curve: productionMath.attributePurchaseCost (via AttributePurchaseCost).
  */
 export function getAttributePointCost(purchaseNumber) {
   return AttributePurchaseCost(purchaseNumber);
@@ -559,7 +584,8 @@ export const ATTR_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "
 
 /**
  * Purchases already bought for one attribute (each stat has its own cost curve).
- * Prefers `attribute_purchases_by_stat[stat]`; else derives from stats vs class base.
+ * Prefers `attribute_purchases_by_stat[stat]`. Missing counters are 0 —
+ * do not infer purchases from stats−base (stats also include free-from-level).
  */
 export function getAttributePurchaseCount(character, stat) {
   if (!character) return 0;
@@ -568,8 +594,7 @@ export function getAttributePurchaseCount(character, stat) {
     if (by && typeof by[stat] === "number" && Number.isFinite(by[stat])) {
       return Math.max(0, Math.floor(by[stat]));
     }
-    const base = CLASSES[character.class]?.baseStats || {};
-    return Math.max(0, (character.stats?.[stat] || 0) - (base[stat] || 0));
+    return 0;
   }
   // Total across all stats (legacy / sync helper).
   if (
@@ -615,7 +640,8 @@ export function getStatPointsForLevelRange(fromLevel, toLevel) {
 // STARDUST (primary currency — earned via missions, arena, and dissolving gear in the Void)
 // ═══════════════════════════════════════════
 /** Hard wallet ceiling for character stardust balance. */
-export const STARDUST_MAX = 5_000_000_000_000 * XP_STARDUST_SCALE;
+/** JS integer safety bound — not a gameplay Stardust wallet cap. */
+export const STARDUST_MAX = Number.MAX_SAFE_INTEGER;
 
 export function clampStardust(amount) {
   const n = Number(amount);
@@ -623,6 +649,7 @@ export function clampStardust(amount) {
   return Math.min(STARDUST_MAX, Math.max(0, Math.floor(n)));
 }
 
+// LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION
 export const STARDUST_PER_RARITY = {
   common: 8 * XP_STARDUST_SCALE,
   uncommon: 20 * XP_STARDUST_SCALE,
@@ -805,8 +832,8 @@ export function rollItemRarity(chanceString, playerLevel = 1) {
 }
 
 /**
- * XP to next: closed-form base × smooth Post200Growth, then × XP_STARDUST_SCALE once.
- * Keep in sync with server/src/shared/rewards.js.
+ * XP to next: productionMath.xpToNext (canonical 1:1 units).
+ * Historical polynomial / Post-200 constants below are unused by live progression.
  */
 export const XP_REQUIREMENT_MULTIPLIER = 1.35;
 export const POST_200_START_LEVEL = 200;
@@ -815,46 +842,31 @@ export const POST_200_P = 0.48;
 export const POST_200_B = 0.79;
 export const POST_200_Q = 0.71;
 
-// Leveling-pace multipliers on the XP requirement only (mirror of
-// server/src/shared/rewards.js). Never applied to XP earned.
 export const XP_GLOBAL_SLOWDOWN = 1.5;
 export const EARLY_GAME_XP_START_BONUS = 0.2;
 export const EARLY_GAME_XP_TAPER_LEVEL = 100;
 
 const POST_200_LEVEL_INTERVAL = 100;
-const XP_BASE_COEFFICIENT = 2.106;
-const XP_BASE_LEVEL_EXPONENT = 1.532;
-const XP_HIGH_LEVEL_REFERENCE = 266;
-const XP_HIGH_LEVEL_EXPONENT = 3.683;
-const MISSION_XP_PER_FUEL_BASE = 10;
 
+/** @deprecated Historical — live XPToNext is productionMath.xpToNext. */
 export function post200Growth(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   const X = Math.max(0, (L - POST_200_START_LEVEL) / POST_200_LEVEL_INTERVAL);
   return 1 + POST_200_A * X ** POST_200_P + POST_200_B * X ** POST_200_Q;
 }
 
+/** @deprecated Historical — live XPToNext is productionMath.xpToNext. */
 export function earlyGameXpModifier(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));
   return 1 + EARLY_GAME_XP_START_BONUS * Math.max(0, 1 - L / EARLY_GAME_XP_TAPER_LEVEL);
 }
 
 export function xpToNextBase(level) {
-  const L = Math.max(1, Math.floor(Number(level) || 1));
-  const base = Math.max(
-    1,
-    Math.round(
-      XP_REQUIREMENT_MULTIPLIER
-      * XP_BASE_COEFFICIENT
-      * (L ** XP_BASE_LEVEL_EXPONENT)
-      * (1 + (L / XP_HIGH_LEVEL_REFERENCE) ** XP_HIGH_LEVEL_EXPONENT),
-    ),
-  );
-  return Math.max(1, Math.round(base * post200Growth(L) * XP_GLOBAL_SLOWDOWN * earlyGameXpModifier(L)));
+  return xpToNext(level);
 }
 
 export function getExpForLevel(level) {
-  return xpToNextBase(level) * XP_STARDUST_SCALE;
+  return xpToNext(level);
 }
 
 /** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
@@ -866,20 +878,12 @@ export const XP_PER_FUEL_POWER_COEFFICIENT = 0.032;
 export const XP_PER_FUEL_EXPONENT = 1.67;
 
 export function missionXpPerFuelBase(level = 1) {
-  const L = Math.max(1, Math.floor(Number(level) || 1));
-  return Math.max(
-    1,
-    Math.round(
-      MISSION_XP_PER_FUEL_BASE
-      + XP_PER_FUEL_LINEAR_COEFFICIENT * (L - 1)
-      + XP_PER_FUEL_POWER_COEFFICIENT * (L ** XP_PER_FUEL_EXPONENT - 1)
-    )
-  );
+  return Math.max(1, roundHalfUp(missionXpPerFuel(level)));
 }
 
-/** Mission XP per 1 fuel; × XP_STARDUST_SCALE exactly once. */
+/** Mission XP per 1 fuel in canonical units (no ×10). */
 export function getMissionXpPerFuel(level = 1) {
-  return missionXpPerFuelBase(level) * XP_STARDUST_SCALE;
+  return missionXpPerFuelBase(level);
 }
 
 /** Mission stardust per 1 fuel at this level (SD/F). */
@@ -889,7 +893,7 @@ export function getMissionStardustPerFuel(level = 1) {
 
 /** Max stardust casino bet = 50× SD/F; min = 1× SD/F (casino_v2). */
 export const CASINO_STARDUST_BET_SD_MULT = 50;
-export const CASINO_MAX_STARDUST_BET_CAP = 10_000_000 * XP_STARDUST_SCALE;
+export const CASINO_MAX_STARDUST_BET_CAP = 10_000_000 * XP_STARDUST_SCALE; // legacy Stardust cap, not XP
 export const CASINO_MIN_STARDUST_BET_FLOOR = 1;
 export const CASINO_MIN_NOVA_BET = 100;
 export const CASINO_MAX_NOVA_BET = 1000;
@@ -982,7 +986,7 @@ export function formatEfficiencyPct(efficiency, playerLevel = 1) {
 
 /**
  * Mission XP = Fuel × Level XP/F × efficiency × MISSION_XP_REBALANCE.
- * Before ship/collection bonuses. getMissionXpPerFuel already includes XP_STARDUST_SCALE once.
+ * Before ship/collection bonuses. getMissionXpPerFuel is canonical 1:1 XP.
  */
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
@@ -1022,8 +1026,9 @@ export function scaleXpReward(baseXp, level = 1) {
 }
 
 /**
- * Combat/frontier XP — scales with the mission XP/fuel chart so fights stay
- * relevant at every band. `baseXp` is treated as ~L1 "fuel-minutes" × 10.
+ * Combat/frontier XP helper (later-phase). COMBAT_XP_BASE_UNITS matches design
+ * mission_xpf(1)=10 so baseXp is L1 fuel-minutes. Not XP_STARDUST_SCALE and
+ * not an XP storage conversion.
  */
 export function scaleCombatXp(baseXp, playerLevel = 1, contentLevel = 1) {
   const pl = Math.max(1, playerLevel || 1);

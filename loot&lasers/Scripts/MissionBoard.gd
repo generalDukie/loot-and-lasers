@@ -13,18 +13,22 @@ extends RefCounted
 ##   • `collection_percentage` — used by stats.gd for the collection bonus readout.
 ## Do not reintroduce mission gameplay formulas here; Node is authoritative.
 
-const XP_STARDUST_SCALE := 10
 const XP_PER_FUEL_LINEAR := 0.5
 const XP_PER_FUEL_POWER := 0.032
 const XP_PER_FUEL_EXP := 1.67
+const XP_PER_FUEL_BASE := 10.0
 
 
-## Mission XP/Fuel (game scale). Mirrors server getMissionXpPerFuel: round(design) × 10.
+## Mission XP/Fuel in canonical 1:1 units. Mirrors server getMissionXpPerFuel.
 ## Client mirror retained for ArenaRules' Arena XP estimate — NOT used for the mission board.
 static func xp_per_fuel(level: int) -> int:
 	var L := maxi(1, level)
-	var pre := 10.0 + XP_PER_FUEL_LINEAR * float(L - 1) + XP_PER_FUEL_POWER * (pow(float(L), XP_PER_FUEL_EXP) - 1.0)
-	return maxi(1, int(round(pre))) * XP_STARDUST_SCALE
+	var pre := (
+		XP_PER_FUEL_BASE
+		+ XP_PER_FUEL_LINEAR * float(L - 1)
+		+ XP_PER_FUEL_POWER * (pow(float(L), XP_PER_FUEL_EXP) - 1.0)
+	)
+	return maxi(1, int(floor(pre + 0.5)))
 
 
 ## Collection bonus percentage — mirrors server getCollectionPercentage(character, 0).

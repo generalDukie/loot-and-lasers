@@ -12,6 +12,12 @@
  *  - Generation uses the authoritative missionDuration pools.
  *
  * Run: node --import ./scripts/register-src-alias.mjs scripts/test-mission-reward-finalization.mjs
+ *
+ * Known deferred baseline (Phase 1 lock, 2026-08-22) — not XP-product regressions:
+ *  - Pity test uses items.length as “gear”; Stim/Junk also grant items.
+ *  - Low-fuel test assumes L8 cheapest normal offer is 1 Fuel; missing
+ *    onboarding_tutorial pins the board to 30s (0.5 Fuel) via tutorial pin.
+ * See docs/PHASE1_LIVE_CALLER_MIGRATION_MAP.md and docs/PHASE_MISSION_REWARDS.md §36.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -206,6 +212,7 @@ await testAsync("LOSS grants 50% XP/Stardust, no item, freezes pity, resolves + 
 });
 
 await testAsync("WIN increments pity streak on a Nothing outcome; not frozen like loss", async () => {
+  // DEFERRED BASELINE: items.length is not gear. Stim/Junk leave streak incremented.
   // A win with no gear should bump the pity streak (unchanged item/pity math).
   const { user, ch } = makeCharacter({ mission_gear_miss_streak: 0 });
   const board = await GetMissionBoard(user, {});
@@ -270,6 +277,7 @@ await testAsync("Low-fuel remaining-duration edges preserved", () => {
 });
 
 await testAsync("Low-fuel board is served when no normal offer is affordable", async () => {
+  // DEFERRED BASELINE: missing onboarding_tutorial pins durations to 30s (0.5 Fuel).
   // 0.5 fuel cannot pay for any L8 normal-pool mission (cheapest = 1 min = 1 fuel).
   const { user } = makeCharacter({ level: 8, fuel: 0.5, max_fuel: 100 });
   const res = await GetMissionBoard(user, {});

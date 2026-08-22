@@ -28,6 +28,7 @@ import {
   applyXpToCharacter,
   DUNGEON_UNLOCK_LEVELS,
 } from "../src/shared/economyFormulas.js";
+import { missionXpReward } from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -139,8 +140,11 @@ test("XP/Fuel monotonic and unbounded", () => {
 });
 
 test("Mission XP uses shared XP/Fuel ×0.85; scale once", () => {
-  const rate = getMissionXpPerFuel(100);
-  assert.equal(computeMissionXpFromFuel(10, 100, 1), Math.round(10 * rate * 0.85));
+  assert.equal(computeMissionXpFromFuel(10, 100, 1), missionXpReward({
+    fuel: 10,
+    snapshotLevel: 100,
+    xpVariance: 1,
+  }));
   assert.equal(MISSION_XP_REBALANCE, 0.85);
 });
 

@@ -23,6 +23,7 @@ const {
   getEffectiveMissionDuration,
   normalizeMissionEfficiency,
 } = await import("../src/shared/economyFormulas.js");
+const { applyXpBonus, getCollectionPercentage } = await import("../src/shared/collectionBonus.js");
 const { isLaunchableMissionDuration } = await import("../../src/lib/missionDuration.js");
 
 let passed = 0;
@@ -146,6 +147,22 @@ await testAsync("Displayed XP/Stardust equal Node's authoritative formulas (pari
       getEffectiveMissionDuration(ch, { duration_seconds: o.duration_seconds }),
       "display duration is authoritative effective duration"
     );
+  }
+});
+
+await testAsync("Collection XP bonus bakes into preview once", async () => {
+  const { user, ch } = makeCharacter({
+    level: 1,
+    discovered_species: Array.from({ length: 20 }, (_, i) => `audit-species-${i}`),
+  });
+  const pct = getCollectionPercentage(ch, 0);
+  assert.ok(pct > 0, "fixture collection %");
+  const res = await GetMissionBoard(user, {});
+  for (const o of res.body.offers) {
+    const base = computeMissionXpFromFuel(o.fuel_cost, 1, o.xp_efficiency);
+    const expected = applyXpBonus(base, pct);
+    assert.equal(o.preview_xp, expected, "preview includes collection once");
+    assert.notEqual(o.preview_xp, applyXpBonus(expected, pct), "not applied twice");
   }
 });
 

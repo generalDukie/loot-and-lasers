@@ -31,8 +31,8 @@ Combat event resolution still uses `src/lib/statEngine.js` / `MissionCombat.gd` 
 |---|---|
 | **Old** | `round(design) * 10` in `getMissionXpPerFuel` |
 | **New** | `max(1, roundHalfUp(missionXpPerFuel(L)))` — no ×10 |
-| **Callers** | Arena/Dungeon/Mission XP **amounts** still use existing later-phase formulas; they now consume canonical XP/Fuel. Reward *formulas* themselves were not rewritten. |
-| **Godot** | `MissionBoard.xp_per_fuel` preview (Arena estimate) — 1:1, preview-only |
+| **Callers** | Live Mission XP product: `computeMissionXpFromFuel` → `missionXpReward` (`ROUND(Fuel * xpf * variance * 0.85 * 0.85)`). Arena/Dungeon **amount** formulas remain later-phase; they consume canonical XP/Fuel. |
+| **Godot** | Mission board displays server `preview_xp` / `final_xp` (not a client formula). `MissionBoard.xp_per_fuel` is Arena estimate only. |
 
 ## XP grant loop
 
@@ -41,7 +41,7 @@ Combat event resolution still uses `src/lib/statEngine.js` / `MissionCombat.gd` 
 | **Old** | `grantCharacterXp` trusted stored `experience_to_next_level`; RNG `pickLevelUpAttribute` 35/25/20/10/10 |
 | **New** | always `xpToNext(level)`; leftover preserved; compose stats; deterministic 35/35/20/5/5 |
 | **Callers migrated** | `applyXpToCharacter`, `applyCharacterRewards` (daily login / promo / reward pipeline), Arena/Dungeon/Mission settlement (`economyFollowOn.js`), admin XP grant |
-| **Sources not migrated (amount formulas)** | Mission XP, Arena XP, Dungeon/Wormhole XP, daily-login/promo tables, collection XP bonus. They already pass a resolved integer into the common grant primitive. |
+| **Sources not migrated (amount formulas)** | Arena XP, Dungeon/Wormhole XP, daily-login/promo tables. They already pass a resolved integer into the common grant primitive. Mission XP **product** now uses certified `missionXpReward` (both 0.85 factors) before Collection/ship bonuses. Collection bonus still applies once in `computeMissionGains`, not inside `grantCharacterXp`. |
 
 ## Free attribute allocation
 
@@ -112,3 +112,23 @@ Gameplay wallet cap `5e12 * 10` removed. `STARDUST_MAX` is now `Number.MAX_SAFE_
 ## Intentionally not migrated (later phases)
 
 Gear generation, backpack, companies/shipments/commissions/frontier, combat engine, mission generation, mission enemy scaling, market/contraband, stims, mining, dungeons/wormholes **reward formulas**, Arena **reward formulas**, GES, Ship/Hangar bonuses (remain disabled), UI redesign.
+
+## Known deferred baseline — `test-mission-reward-finalization.mjs`
+
+Classified 2026-08-22 while locking Phase 1 after the L1 Mission XP product fix. **Do not treat these as Phase 1 regressions.** Both failures reproduce on `main` HEAD (`83489ca`) with the XP working-tree files reverted. Production pin / pity / item-chain code was not changed in this pass.
+
+### Pity streak (`WIN increments pity streak on a Nothing outcome`)
+
+- **Cause:** The assertion treats `(claim.body.items || []).length > 0` as a gear drop. Live settlement is exclusive GEAR → STIM → JUNK → NONE. Stim/Junk grant an item but increment pity (`gearDropped === false`). Expected fail rate ≈ 65% (`0.80 × 0.25` Stim + `0.80 × 0.75 × 0.75` Junk).
+- **Not tutorial helmet:** `entities.Character.create` in this fixture does not run `sanitizeCreatePayload`, so `onboarding_tutorial` is missing. `shouldReserveFirstMissionBonusLaunch` reads **raw** onboarding and does not grant the helmet. Observed outcomes are GEAR/STIM/JUNK/NONE from `settleMissionItemChain`.
+- **Classification:** Test encoding of obsolete “any item = gear” behavior. Introduced with the finalization suite (`634317c`, 2026-08-09), **before** Phase 1 XP work.
+- **Later Mission phase:** Assert `item_outcome === "GEAR"` (or `gearDropped`), not bag length.
+
+### Low-fuel board (`Low-fuel board is served when no normal offer is affordable`)
+
+- **Cause:** The test assumes L8’s cheapest **normal pool** offer is 60s / 1 Fuel, so 0.5 Fuel must receive `low_fuel` offers. `shouldPinTutorialOnboardingMissionDurations` uses `onboardingForCharacter` → `normalizeOnboarding(missing)` → **pending tutorial**. Missing `missions_completed` counts as 0. All three daily offers pin to `TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS` (30) → Fuel 0.5 → `boardCanAffordAny` is true → **normal** 30s offers, not `low_fuel`.
+- **Split onboarding helpers:** `getOnboardingFromCharacter` treats missing `onboarding_tutorial` as **completed**; pin uses `normalizeOnboarding` and treats missing as **pending**. Fixture characters therefore pin like a fresh tutorial operative.
+- **Classification:** Pre-existing tutorial duration pin (`37adce3`, 2026-08-11) vs a test written two days earlier (`634317c`) that never disables tutorial. Not from Mission XP / Phase 1. Live pin for real onboarding is intentional.
+- **Later Mission phase:** Fixture should opt out of tutorial (`onboarding_tutorial.status = "completed"` and/or `missions_completed > 0`) if the intent is post-tutorial L8 low-fuel. Do not change the 30s pin in Phase 1.
+
+Phase 1 lock is **not blocked** by these two cases. The file remains red until Mission-phase test hygiene.

@@ -25,24 +25,23 @@ double settlement. Inventory overflow uses `pending_loot` via
 
 ### 3. Existing mission XP implementation
 
-- Authoritative XP/Fuel: `getMissionXpPerFuel(level)` = `ROUND(designCurve) × 10`
-  (single function; the ×10 game scale is a final step after rounding — there is
-  no separate pre-scale `missionXpPerFuelBase`)
-- Mission: `computeMissionXpFromFuel(fuel, level, xpEfficiency)`
-- Grant: `applyXpToCharacter` inside claim `deliver`
+- Authoritative XP/Fuel: `getMissionXpPerFuel(level)` = `max(1, roundHalfUp(missionXpPerFuel(L)))` (1:1; no ×10)
+- Mission product: `computeMissionXpFromFuel` → production `missionXpReward`
+- Grant: `applyXpToCharacter` inside claim `deliver` (does not re-apply Mission modifiers)
 
-### 4. Application point of `MISSION_XP_REBALANCE`
+### 4. Application point of `MISSION_XP_REBALANCE` / `XP_REWARD_EFFICIENCY`
 
-Exactly once inside `computeMissionXpFromFuel`:
+Certified Mission XP applies the 0.85 efficiency factor **twice**:
 
-`ROUND(fuel × getMissionXpPerFuel(level) × xpEfficiency × 0.85)`
+`ROUND(fuel × mission_xpf(snapshotLevel) × xpVariance × 0.85 × 0.85)`
+
+Live `computeMissionXpFromFuel` delegates to that primitive. Collection % and ship `mission_xp_mult` are applied **after** this BASE product in `computeMissionGains`, once. Nexus +5% applies to Mission Stardust, not XP.
 
 ### 5. Global XP-scale ordering
 
-The ×10 game scale is applied inside `getMissionXpPerFuel` (as `round(design) × 10`)
-**before** mission rebalance and efficiency. Not applied again in ClaimMission.
+There is no runtime XP ×10. Order:
 
-Order: **round(design curve) → ×10 game scale → fuel × efficiency × 0.85 → round**.
+**mission_xpf(float) × fuel × variance × 0.85 × 0.85 → roundHalfUp → optional ship/Collection → store as `final_xp` → grantCharacterXp(final_xp)**.
 
 ### 6. Existing Stardust formula implementation
 
@@ -250,6 +249,7 @@ If design wants different weights, confirm before changing.
 - Stim activation / stacking UX (dedicated Stim prompt)
 - Shop restoration (Prompt 12)
 - Full currency ledger microservice (if desired) vs character field + claim audit
+- **Known deferred baseline (not Phase 1):** `server/scripts/test-mission-reward-finalization.mjs` — (1) pity test treats Stim/Junk bag items as gear; (2) L8 0.5 Fuel low-fuel test vs tutorial 30s board pin when `onboarding_tutorial` is missing. Reproduced on `main` HEAD without the Mission XP product fix. See `docs/PHASE1_LIVE_CALLER_MIGRATION_MAP.md` § Known deferred baseline. Do not retune pin/pity product for Phase 1.
 
 ### 37. Regression risks
 

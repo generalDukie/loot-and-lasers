@@ -16,9 +16,10 @@ import {
   startingAttributesForClass,
   CLASS_PRIMARY_INDEX,
   permanentAttributePurchaseCost,
+  missionXpReward,
 } from "./productionMath.js";
 
-/** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
+/** One production XP-efficiency factor. Mission XP applies it twice (certified). */
 export const MISSION_XP_REBALANCE = 0.85;
 /**
  * Dungeon DRU → XP conversion: 1 DRU = 2 fuel-equivalents of XP at the
@@ -538,11 +539,13 @@ export function normalizeMissionEfficiency(value, playerLevel = 1) {
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
   const eff = normalizeMissionEfficiency(efficiency, level);
-  // getMissionXpPerFuel is canonical 1:1 XP (no storage ×10).
-  return Math.max(
-    fuel > 0 ? 1 : 0,
-    Math.round(fuel * getMissionXpPerFuel(level) * eff * MISSION_XP_REBALANCE)
-  );
+  const xp = missionXpReward({
+    fuel,
+    snapshotLevel: level,
+    xpVariance: eff,
+    defeated: false,
+  });
+  return Math.max(fuel > 0 ? 1 : 0, xp);
 }
 
 /** Mission Stardust = ROUND(StardustPerFuel(level) * fuel). Efficiency does not apply. */

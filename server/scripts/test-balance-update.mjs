@@ -43,6 +43,7 @@ import {
   GearSaleValue,
   MiningStardust,
 } from "../src/shared/stardustEconomy.js";
+import { missionXpReward } from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -83,9 +84,8 @@ test("XP formula from L1 forever — no L500 boundary", () => {
 
 test("Mission XP uses 0.85 rebalance; canonical XP/Fuel", () => {
   assert.equal(MISSION_XP_REBALANCE, 0.85);
-  const rate = getMissionXpPerFuel(100);
   const xp = computeMissionXpFromFuel(10, 100, 1);
-  assert.equal(xp, Math.round(10 * rate * 0.85));
+  assert.equal(xp, missionXpReward({ fuel: 10, snapshotLevel: 100, xpVariance: 1 }));
 });
 
 test("Dungeon DRU totals and XP × 2.0 per DRU", () => {

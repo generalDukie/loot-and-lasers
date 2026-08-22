@@ -57,7 +57,10 @@ test("Mission XP uses canonical XP/Fuel (no storage ×10)", () => {
       for (const eff of effs) {
         const got = computeMissionXpFromFuel(f, L, eff);
         const nEff = normalizeMissionEfficiency(eff, L);
-        const ref = Math.max(f > 0 ? 1 : 0, Math.round(f * getMissionXpPerFuel(L) * nEff * MISSION_XP_REBALANCE));
+        const ref = Math.max(
+          f > 0 ? 1 : 0,
+          roundHalfUp(missionXpPerFuel(L) * f * nEff * MISSION_XP_REBALANCE * MISSION_XP_REBALANCE),
+        );
         assert.equal(got, ref, `mission XP L${L} f${f} eff${eff}`);
       }
     }

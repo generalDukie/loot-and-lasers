@@ -15,6 +15,7 @@ import {
   MISSION_XPF_LINEAR_COEFFICIENT,
   MISSION_XPF_POWER_COEFFICIENT,
   MISSION_XPF_EXPONENT,
+  missionXpReward,
   permanentAttributePurchaseCost,
 } from "@/lib/productionMath";
 import {
@@ -874,7 +875,7 @@ export function getExpForLevel(level) {
   return xpToNext(level);
 }
 
-/** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
+/** One production XP-efficiency factor. Mission XP applies it twice (certified). */
 export const MISSION_XP_REBALANCE = 0.85;
 
 /** Mission XP/Fuel production formula. Keep in sync with server rewards.js. */
@@ -991,16 +992,20 @@ export function formatEfficiencyPct(efficiency, playerLevel = 1) {
 }
 
 /**
- * Mission XP = Fuel × Level XP/F × efficiency × MISSION_XP_REBALANCE.
- * Before ship/collection bonuses. getMissionXpPerFuel is canonical 1:1 XP.
+ * Live Mission XP. Delegates to productionMath.missionXpReward:
+ * ROUND(Fuel * mission_xpf(snapL) * XPVariance * 0.85 * 0.85).
+ * Ship/Collection bonuses are applied by the mission board, not here.
  */
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   const fuel = Math.max(0, Number(fuelCost) || 0);
   const eff = normalizeMissionEfficiency(efficiency, level);
-  return Math.max(
-    fuel > 0 ? 1 : 0,
-    Math.round(fuel * getMissionXpPerFuel(level) * eff * MISSION_XP_REBALANCE)
-  );
+  const xp = missionXpReward({
+    fuel,
+    snapshotLevel: level,
+    xpVariance: eff,
+    defeated: false,
+  });
+  return Math.max(fuel > 0 ? 1 : 0, xp);
 }
 
 /**

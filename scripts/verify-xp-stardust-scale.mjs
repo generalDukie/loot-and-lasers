@@ -22,6 +22,7 @@ import {
   CASINO_MAX_STARDUST_BET_CAP,
   SHIP_TYPES,
 } from "../server/src/shared/economyFormulas.js";
+import { missionXpReward } from "../src/lib/productionMath/index.js";
 import { computeItemVendorValue } from "../server/src/shared/itemGeneration.js";
 
 if (XP_STARDUST_SCALE !== 10) {
@@ -45,7 +46,11 @@ assertEq("L10 SD/fuel", getMissionStardustPerFuel(10), Math.round(50 + 1.009 * 9
 assertEq("L100 XP/fuel", getMissionXpPerFuel(100), 1295);
 assertEq("L100 SD/fuel", getMissionStardustPerFuel(100), Math.round(50 + 1.009 * 99 ** 1.625 * (1 + (100 / 166.66) ** 3.055)));
 assertEq("MISSION_XP_REBALANCE", MISSION_XP_REBALANCE, 0.85);
-assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), Math.round(10 * 1295 * 0.85));
+assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), missionXpReward({
+  fuel: 10,
+  snapshotLevel: 100,
+  xpVariance: 1,
+}));
 
 assertEq("Certified attrcost #1", getAttributePointCost(6), 100);
 assertEq("Live purchase #1", getAttributePointCost(1), 10);

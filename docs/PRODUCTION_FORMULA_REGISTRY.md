@@ -95,7 +95,7 @@ Combat HP / per-hit `round()` uses half-even. Economy/XP `rround` uses half-up. 
 
 | Field | Value |
 |---|---|
-| Classification | **B** vs live mission-reward *product* (Phase 2); T18 math **A**. Live XP/Fuel unit is 1:1 as of Phase 1. |
+| Classification | **A** live Mission XP product (`computeMissionXpFromFuel` → `missionXpReward`). T18 math **A**. Live XP/Fuel unit is 1:1. |
 | Equation | `rround(Fuel * mission_xpf(snapL) * xpVariance * 0.85 * 0.85)`; defeat `rround(win * 0.5)` |
 | RNG | explicit `xpVariance` in [0.90, 1.10]; independent of Stardust |
 | Level | snapshot at Mission acceptance |

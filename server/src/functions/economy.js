@@ -236,14 +236,17 @@ function computeMissionGains(character, mission, nexusBonus) {
   const xpMult = 1 + getModEffectTotal(character, "mission_xp_mult");
   const percentage = getCollectionPercentage(character, 0);
   const fuelCost = getEffectiveFuelCost(character, mission);
-  const level = character.level || 1;
-  const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency, level);
-  const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency, level);
-  const chartXp = computeMissionXpFromFuel(fuelCost, level, xpEff);
+  const snapshotLevel = Number.isFinite(Number(mission?.character_level))
+    && Number(mission.character_level) >= 1
+    ? Math.floor(Number(mission.character_level))
+    : (character.level || 1);
+  const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency, snapshotLevel);
+  const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency, snapshotLevel);
+  const chartXp = computeMissionXpFromFuel(fuelCost, snapshotLevel, xpEff);
   // chartSd is the un-varied base (efficiency ignored inside the helper). We
   // apply the independent Stardust variance (sdEff) here so both XP and Stardust
   // carry their own 0.90–1.10 roll. stardustBase stays un-varied for junk value.
-  const chartSd = computeMissionStardustFromFuel(fuelCost, level, sdEff);
+  const chartSd = computeMissionStardustFromFuel(fuelCost, snapshotLevel, sdEff);
   const baseXp = Math.round(chartXp * xpMult);
   return {
     bonusMult,

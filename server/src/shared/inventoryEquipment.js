@@ -3,9 +3,10 @@
  * Item rows live in entities.Item; Character.equipped_items is a server-owned slot map.
  */
 import { entities } from "../entities.js";
-import { EQUIPMENT_SLOTS } from "./itemGeneration.js";
+import { EQUIPMENT_SLOTS, computeItemVendorValue } from "./itemGeneration.js";
 import { countBagOccupancy } from "./inventoryGrant.js";
 import { getInventoryCap } from "./economyFormulas.js";
+import { canonicalGearSlot } from "./productionMath.js";
 import {
   buildAttributeSheet,
   loadEquippedItemsForCharacter,
@@ -23,8 +24,12 @@ function httpErr(status, message, code) {
   throw e;
 }
 
+function computeLiveSellValue(item) {
+  return computeItemVendorValue(item);
+}
+
 export function isEquippableType(type) {
-  return EQUIPABLE_SET.has(String(type || ""));
+  return !!canonicalGearSlot(type) || EQUIPABLE_SET.has(String(type || ""));
 }
 
 /** All Item rows owned by a character (bag + equipped). */
@@ -36,20 +41,25 @@ export function listOwnedItems(characterId, limit = 500) {
 /** Canonical client-facing item shape (optional fields preserved when present). */
 export function serializeItem(item) {
   if (!item || typeof item !== "object") return null;
+  const type = canonicalGearSlot(item.type) || item.type;
   return {
     id: item.id,
     name: item.name,
     base_name: item.base_name,
-    type: item.type,
+    type,
     rarity: item.rarity,
     level: item.level ?? item.level_requirement ?? null,
     level_requirement: item.level_requirement ?? item.level ?? null,
+    stat_budget_level: item.stat_budget_level ?? item.level ?? item.level_requirement ?? null,
     stats: item.stats && typeof item.stats === "object" ? item.stats : {},
     is_equipped: !!item.is_equipped,
     locked: !!item.locked,
     character_id: item.character_id || null,
     owner_id: item.owner_id || null,
-    sell_value: item.sell_value,
+    sell_value: computeLiveSellValue(item),
+    origin: item.origin || "unassigned",
+    manufacturer: item.manufacturer ?? null,
+    shipment_eligible: item.shipment_eligible ?? null,
     consumable: item.consumable,
     flavor_text: item.flavor_text,
     created_date: item.created_date,
@@ -62,6 +72,7 @@ export function buildInventorySnapshot(character) {
   const items = raw.map(serializeItem).filter(Boolean);
   const equipped_items = items.filter((i) => i.is_equipped);
   const bag_items = items.filter((i) => !i.is_equipped);
+  const gear_bag_items = bag_items.filter((i) => isEquippableType(i.type));
   const sheet = buildAttributeSheet(
     character,
     loadEquippedItemsForCharacter(character?.id),
@@ -70,7 +81,7 @@ export function buildInventorySnapshot(character) {
     items,
     equipped_items,
     bag_items,
-    bag_occupancy: bag_items.length,
+    bag_occupancy: gear_bag_items.length,
     bag_capacity: getInventoryCap(character),
     equipped_map: { ...(character?.equipped_items || {}) },
     sheet,
@@ -94,7 +105,8 @@ function requireOwnedItem(ch, itemId) {
  */
 export function equipItemForCharacter(ch, itemId) {
   const item = requireOwnedItem(ch, itemId);
-  if (!isEquippableType(item.type)) {
+  const slot = canonicalGearSlot(item.type) || item.type;
+  if (!isEquippableType(slot)) {
     httpErr(400, "Item is not equippable", "SLOT_INCOMPATIBLE");
   }
 
@@ -105,17 +117,18 @@ export function equipItemForCharacter(ch, itemId) {
 
   const owned = listOwnedItems(ch.id);
   const current = owned.find(
-    (i) => i.type === item.type && i.is_equipped && i.id !== item.id,
+    (i) => (canonicalGearSlot(i.type) || i.type) === slot && i.is_equipped && i.id !== item.id,
   );
 
   // Equip first so a full bag can still receive the displaced piece.
-  entities.Item.update(item.id, { is_equipped: true });
+  entities.Item.update(item.id, { is_equipped: true, type: slot });
   if (current) {
     entities.Item.update(current.id, { is_equipped: false });
   }
 
   const eq = { ...(ch.equipped_items || {}) };
-  eq[item.type] = item.id;
+  if (eq.ring && slot === "accessory") delete eq.ring;
+  eq[slot] = item.id;
   const character = entities.Character.update(ch.id, { equipped_items: eq });
   const snap = buildInventorySnapshot(character);
   return {
@@ -123,7 +136,7 @@ export function equipItemForCharacter(ch, itemId) {
     already: false,
     swapped_from: current?.id || null,
     item_id: item.id,
-    type: item.type,
+    type: slot,
     ...snap,
   };
 }
@@ -150,7 +163,9 @@ export function unequipItemForCharacter(ch, itemId) {
 
   entities.Item.update(item.id, { is_equipped: false });
   const eq = { ...(ch.equipped_items || {}) };
-  if (eq[item.type] === item.id) delete eq[item.type];
+  const slot = canonicalGearSlot(item.type) || item.type;
+  if (eq[slot] === item.id) delete eq[slot];
+  if (eq.ring === item.id) delete eq.ring;
   const character = entities.Character.update(ch.id, { equipped_items: eq });
   const snap = buildInventorySnapshot(character);
   return {

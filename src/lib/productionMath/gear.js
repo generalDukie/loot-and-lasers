@@ -1,6 +1,6 @@
 /**
- * AUTHORITATIVE FORMULA MODULE — PHASE 1 LIVE FOR attributePurchaseCost
- * Gear generation remains unwired until a later phase.
+ * AUTHORITATIVE FORMULA MODULE — PHASE 2 LIVE FOR GEAR BUDGET / SLOT / RESALE REFS
+ * Stat allocation remains in itemGeneration.GenerateGearItem (canonical generator).
  */
 import { roundHalfUp } from "./rounding.js";
 import {
@@ -8,12 +8,17 @@ import {
   ATTR_COST_LOG_OFFSET,
   ATTR_INTRO_PURCHASE_COUNT,
   ATTR_INTRO_PURCHASE_COSTS,
+  GEAR_ORIGINS,
   GEAR_RARITY_BUDGET_MULT,
+  GEAR_SLOT_ALIASES,
   GEAR_SLOT_NORMAL_MULT,
   GEAR_SLOT_PREMIUM_MULT,
+  GEAR_SLOTS,
   PREMIUM_GEAR_SLOTS,
   PVE_HIDDEN_BUDGET_OFFSET,
   PVE_HIDDEN_BUDGET_OFFSET_MATURE,
+  SHIPMENT_ELIGIBLE_ORIGINS,
+  SHIPMENT_INELIGIBLE_ORIGINS,
 } from "./constants.js";
 
 function levelInt(level) {
@@ -30,10 +35,54 @@ export function gearBaseStatBudget(level) {
   return Math.max(1, roundHalfUp(1.4079 * L + 2.2988 * Math.sqrt(L) + 8.277));
 }
 
-export function gearSlotMultiplier(slot) {
+export function canonicalGearSlot(slot) {
   const key = String(slot || "").toLowerCase().replace(/\s+/g, "_");
+  const mapped = GEAR_SLOT_ALIASES[key] || key;
+  if (GEAR_SLOTS.includes(mapped)) return mapped;
+  return null;
+}
+
+export function gearSlotMultiplier(slot) {
+  const key = canonicalGearSlot(slot) || String(slot || "").toLowerCase().replace(/\s+/g, "_");
   if (PREMIUM_GEAR_SLOTS.includes(key) || slot === 6 || slot === 7) return GEAR_SLOT_PREMIUM_MULT;
   return GEAR_SLOT_NORMAL_MULT;
+}
+
+export function canonicalGearOrigin(origin) {
+  const key = String(origin || "").toLowerCase();
+  if (GEAR_ORIGINS.includes(key)) return key;
+  return null;
+}
+
+/** null = not yet classified (Phase 9 / source phase). No gameplay effect in Phase 2. */
+export function defaultShipmentEligible(origin) {
+  const key = canonicalGearOrigin(origin);
+  if (!key || key === "unassigned") return null;
+  if (SHIPMENT_INELIGIBLE_ORIGINS.includes(key)) return false;
+  if (SHIPMENT_ELIGIBLE_ORIGINS.includes(key)) return true;
+  return null;
+}
+
+/**
+ * Separate economic/display level from hidden PvE stat-budget reference.
+ * Callers must opt into the PvE offset; Mission/Dungeon/Wormhole do not in Phase 2.
+ */
+export function resolveGearLevelRefs({
+  economicLevel,
+  itemLevel,
+  statBudgetLevel,
+  playerLevel,
+  applyPveHiddenBudgetOffset = false,
+} = {}) {
+  const economic = levelInt(economicLevel ?? itemLevel);
+  if (statBudgetLevel != null) {
+    return { economicLevel: economic, statBudgetLevel: levelInt(statBudgetLevel) };
+  }
+  if (applyPveHiddenBudgetOffset) {
+    const pveL = playerLevel != null ? levelInt(playerLevel) : economic;
+    return { economicLevel: economic, statBudgetLevel: pveGearStatBudgetLevel(pveL) };
+  }
+  return { economicLevel: economic, statBudgetLevel: economic };
 }
 
 export function gearRarityBudgetMultiplier(rarity) {

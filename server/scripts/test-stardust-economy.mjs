@@ -160,7 +160,6 @@ test("Gear sale values", () => {
   const a = GearSaleValue({ type: "boots", rarity: "rare", level_requirement: 25, from: "mission" });
   const b = GearSaleValue({ type: "boots", rarity: "rare", level_requirement: 25, from: "dungeon" });
   assert.equal(a, b);
-  assert.equal(computeItemVendorValue({ type: "boots", rarity: "rare", level_requirement: 25 }), a);
 });
 
 test("Dungeon rewards: 0 direct Stardust", () => {

@@ -173,6 +173,20 @@ entities.Item.create({
 }
 
 {
+  const ch = entities.Character.get(chA.id);
+  const beforeSd = ch.stardust || 0;
+  const beforeBag = countBagOccupancy(ch);
+  const res = await DissolveItem(accountA, { item_id: "inv-blade-1" });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, "ITEM_EQUIPPED");
+  assert.equal(entities.Item.get("inv-blade-1").is_equipped, true);
+  assert.equal(entities.Character.get(chA.id).stardust, beforeSd);
+  assert.equal(countBagOccupancy(entities.Character.get(chA.id)), beforeBag);
+  assert.equal(entities.Character.get(chA.id).equipped_items.weapon, "inv-blade-1");
+  console.log("  ✓ equipped item cannot be dissolved");
+}
+
+{
   entities.Item.create({
     id: "inv-blade-2",
     name: "Better Blade",

@@ -19,10 +19,10 @@ Phase 0 did **not** migrate live callers. This map exists so later phases do not
 | Three-channel resists | `statEngine.js` (live Armor/Tech + dungeon 75% caps) | Phase 3 combat |
 | Mission enemy base ramp | `statEngine.js` (already close) | Phase 3 combat |
 | Mission outgoing × / context multipliers | `arenaEngine.js` / mission combat | Phase 3 combat |
-| Gear base / Legendary 1.50 / slot premium | `src/lib/itemGeneration.js` | Phase 4 gear |
-| PvE hidden budget offset (stat only) | dungeon/wormhole loot gen | Phase 4/5 PvE |
-| Mission vs Dungeon rarity tables | mission loot; dungeon loot | Phase 2 / Phase 5 |
-| Market 8-slot / rarity / stim bands / prices / resale / nova surcharge | `economyFormulas.js` shop generation | Phase 4 market |
+| Gear base / Legendary 1.50 / slot premium | `src/lib/itemGeneration.js` via `productionMath` | **Phase 2 complete** (universal item; source rarity tables later) |
+| PvE hidden budget offset (stat only) | dungeon/wormhole loot gen | **API staged Phase 2**; source opt-in later |
+| Mission vs Dungeon rarity tables | mission loot; dungeon loot | Phase 4 / Phase 7 |
+| Market 8-slot / rarity / stim bands / prices / resale / nova surcharge | `economyFormulas.js` shop generation | Phase 6 market (player **resale** is Phase 2) |
 | Stim duration stacking | stim engine | Phase 4 stim |
 | Dungeon DRU + XP conversion | `dungeonEngine.js` / `economyFormulas.js` | Phase 5 PvE |
 | Wormhole wormlevel / BandWeight / XP | dungeon/wormhole engine | Phase 5 PvE |

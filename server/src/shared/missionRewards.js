@@ -98,7 +98,9 @@ export function settleMissionItemChain({
     gearDropped = true;
     itemOutcome = "GEAR";
     const rarity = rollMissionGearRarity(rng);
-    itemTemplates.push(randomItem(rarity, level, lootType, rng, character?.class));
+    itemTemplates.push(randomItem(rarity, level, lootType, rng, character?.class, {
+      origin: "mission",
+    }));
   } else if (rng() < MISSION_STIM_CHANCE_AFTER_GEAR_FAIL) {
     stimDropped = true;
     itemOutcome = "STIM";

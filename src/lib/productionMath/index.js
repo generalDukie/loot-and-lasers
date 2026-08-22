@@ -1,8 +1,8 @@
 /**
  * AUTHORITATIVE FORMULA MODULE — PHASE 1 LIVE FOR CHARACTER PROGRESSION
  *
- * Canonical production math for Loot & Lasers. Phase 1 progression systems
- * import this module. Do not copy formulas into alternate live files.
+ * Canonical production math for Loot & Lasers. Phase 1 progression and
+ * Phase 2 Gear import this module. Do not copy formulas into alternate live files.
  * GES is not a production mechanic and is not exported.
  */
 

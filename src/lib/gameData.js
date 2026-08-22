@@ -17,11 +17,13 @@ import {
   MISSION_XPF_EXPONENT,
   missionXpReward,
   permanentAttributePurchaseCost,
+  BACKPACK_UNEQUIPPED_GEAR_CAP,
 } from "@/lib/productionMath";
 import {
   EQUIPMENT_SLOTS,
   rollItemStats,
   computeItemVendorValue,
+  GenerateGearItem,
 } from "@/lib/itemGeneration";
 import {
   getAllowedMissionDurations,
@@ -377,18 +379,13 @@ export function weaponCombatStyleFor(name, baseName, emoji) {
   return "shoot";
 }
 
-// Maximum unequipped items a character can hold in the bag (hard limit).
-export const INVENTORY_CAP = 10;
+// Maximum unequipped Gear a character can hold in the backpack (hard production cap).
+export const INVENTORY_CAP = BACKPACK_UNEQUIPPED_GEAR_CAP;
 
-/** Hard bag ceiling — unequipped items only. Never exceeds INVENTORY_CAP. */
-export function getInventoryCap(character) {
-  const base = INVENTORY_CAP;
-  try {
-    const modBonus = Math.round(getModEffectTotal(character, "inventory_cap_bonus") || 0);
-    return base + modBonus;
-  } catch {
-    return base;
-  }
+/** Hard backpack ceiling — unequipped Gear only. Cargo Hold does not expand it. */
+export function getInventoryCap(_character) {
+  void _character;
+  return BACKPACK_UNEQUIPPED_GEAR_CAP;
 }
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 
@@ -493,17 +490,19 @@ function _rollItem(rarity, playerLevel, type, rng, className) {
   const names = ITEM_NAMES[itemType] || ITEM_NAMES.weapon;
   const baseName = names[Math.floor(r() * names.length)];
   const itemLevel = Math.max(1, playerLevel || 1);
-  const { stats } = rollItemStats({ itemLevel, type: itemType, rarity, rng: r, className });
+  const generated = GenerateGearItem({
+    itemLevel,
+    itemType,
+    rarity,
+    rng: r,
+    className,
+  });
 
   const item = {
-    name: buildItemName(baseName, rarity, stats, r),
+    ...generated,
+    name: buildItemName(baseName, rarity, generated.stats, r),
     base_name: baseName,
-    type: itemType,
-    rarity,
-    level_requirement: itemLevel,
-    stats,
     flavor_text: FLAVOR_TEXTS[Math.floor(r() * FLAVOR_TEXTS.length)],
-    is_equipped: false,
     ...(itemType === "weapon" ? { emoji: weaponEmojiFor(baseName, baseName) } : {}),
   };
   item.sell_value = computeItemVendorValue(item);
@@ -515,20 +514,20 @@ function _rollItem(rarity, playerLevel, type, rng, className) {
 export function generateClassWeapon(className, rarity, playerLevel, rng = Math.random) {
   const w = CLASS_WEAPONS[className] || CLASS_WEAPONS.Vanguard;
   const itemLevel = Math.max(1, playerLevel || 1);
-  const { stats } = rollItemStats({ itemLevel, type: "weapon", rarity, rng, className });
-  const item = {
-    name: buildItemName(w.name, rarity, stats, rng),
-    base_name: w.name,
-    type: "weapon",
+  const generated = GenerateGearItem({
+    itemLevel,
+    itemType: "weapon",
     rarity,
-    level_requirement: itemLevel,
-    stats,
+    rng,
+    className,
+  });
+  return {
+    ...generated,
+    name: buildItemName(w.name, rarity, generated.stats, rng),
+    base_name: w.name,
     flavor_text: w.flavor,
-    is_equipped: false,
     emoji: w.emoji,
   };
-  item.sell_value = computeItemVendorValue(item);
-  return item;
 }
 
 const CLASS_SIGNATURE_WEAPON_CHANCE = 0.20;
@@ -673,9 +672,9 @@ export {
   computeItemVendorValue,
 } from "@/lib/itemGeneration";
 
-// Stardust yielded by dissolving an item — GearSaleValue (level × rarity × type).
+// Stardust yielded by dissolving Gear — production resale (server recomputes).
 export function computeStardustValue(item) {
-  return GearSaleValue(item);
+  return computeItemVendorValue(item);
 }
 
 // Nova-crystal cost for premium gear — legendary items require both currencies,
@@ -1473,11 +1472,12 @@ export function getStatColor(stat) {
   return STAT_COLORS[stat] || STAT_COLORS.all;
 }
 
-// Display label for an item's gear type. The stored type stays lowercase
-// ("accessory"); only the visible label changes to "Ring".
+// Display label for an item's gear type. Stored type is always lowercase
+// ("accessory"); production label is Accessory (not Ring).
 export function gearTypeLabel(type) {
   if (!type) return "";
-  if (type === "accessory") return "Ring";
+  if (type === "accessory" || type === "ring") return "Accessory";
+  if (type === "ship_module") return "Ship Module";
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
 

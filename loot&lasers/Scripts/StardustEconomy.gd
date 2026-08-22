@@ -27,6 +27,21 @@ const RARITY_SALE_MULT := {
 }
 const WEAPON_VENDOR_MULT := 1.2
 const SHIP_MODULE_VENDOR_MULT := 1.2
+const MARKET_PRICE_RARITY_MULT := {
+	"common": 2.8,
+	"uncommon": 4.25,
+	"rare": 7.0,
+	"epic": 12.0,
+	"legendary": 24.5,
+}
+const GEAR_RESALE_FRACTION := {
+	"common": 0.6,
+	"uncommon": 0.6,
+	"rare": 0.4,
+	"epic": 0.35,
+	"legendary": 0.3,
+}
+const GEAR_SLOT_PREMIUM_MULT := 1.2
 
 const ARENA_REWARDED_WINS_PER_DAY := 10
 const ARENA_WIN_FUEL_EQUIVALENT := 2.25
@@ -252,31 +267,38 @@ static func junk_sale_value(mission_stardust_reward_amt: int, unit_roll: float =
 	return maxi(1, int(round(base_junk * mult)))
 
 
+static func _round_half_up(value: float) -> int:
+	if not is_finite(value):
+		return 0
+	return int(floor(value + 0.5))
+
+
 static func item_type_vendor_mult(item_type: String) -> float:
-	if item_type == "weapon":
-		return WEAPON_VENDOR_MULT
-	if item_type == "ship_module":
-		return SHIP_MODULE_VENDOR_MULT
+	if item_type == "weapon" or item_type == "ship_module":
+		return GEAR_SLOT_PREMIUM_MULT
 	return 1.0
 
 
 static func gear_sale_value(item: Dictionary) -> int:
+	## Preview-only production resale. Server DissolveItem recomputes and is authority.
 	if item.is_empty():
-		return 1
+		return 0
 	var itype := str(item.get("type", ""))
+	if itype == "ring":
+		itype = "accessory"
 	if itype == "consumable" or itype == "material":
 		var flat := int(item.get("sell_value", 0))
 		if flat > 0:
 			return maxi(1, flat)
 		return 1
-	var item_level := maxi(1, int(item.get("level_requirement", item.get("level", 1))))
+	var item_level := maxi(1, int(item.get("level", item.get("level_requirement", 1))))
 	var rarity := str(item.get("rarity", "common"))
-	var rarity_mult := float(RARITY_SALE_MULT.get(rarity, 1.0))
-	var type_mult := item_type_vendor_mult(itype)
-	return maxi(
-		1,
-		int(round(float(stardust_per_fuel(item_level)) * GEAR_BASE_FUEL_EQUIVALENT * rarity_mult * type_mult))
-	)
+	var rar_mult := float(MARKET_PRICE_RARITY_MULT.get(rarity, 0.0))
+	if rar_mult <= 0.0:
+		return 0
+	var frac := float(GEAR_RESALE_FRACTION.get(rarity, 0.0))
+	var base := float(stardust_per_fuel(item_level)) * rar_mult * item_type_vendor_mult(itype)
+	return maxi(0, _round_half_up(base * frac))
 
 
 static func mission_gear_drop_chance(miss_streak: int = 0) -> float:

@@ -623,8 +623,86 @@ export function migratePhase1ProgressionFoundation({ reconstructProgressionState
   }
 }
 
-(function migrateAccountServerSessionsFromUsers() {
-  migrateLegacyUserSessionColumns();
+(function migratePhase2GearItemModel() {
+  const META_KEY = "phase2_gear_item_model_v1";
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+  const existing = db.prepare("SELECT value FROM app_meta WHERE key = ?").get(META_KEY);
+  if (existing?.value === "done") return;
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    const items = db.prepare("SELECT id, data FROM entities WHERE type = 'Item'").all();
+    const updateItem = db.prepare(
+      "UPDATE entities SET data = ?, updated_date = ? WHERE id = ? AND type = 'Item'",
+    );
+    const chars = db.prepare("SELECT id, data FROM entities WHERE type = 'Character'").all();
+    const updateChar = db.prepare(
+      "UPDATE entities SET data = ?, updated_date = ? WHERE id = ? AND type = 'Character'",
+    );
+    const now = new Date().toISOString();
+    let itemsUpdated = 0;
+    let charsUpdated = 0;
+    for (const row of items) {
+      let data;
+      try {
+        data = JSON.parse(row.data);
+      } catch {
+        continue;
+      }
+      let changed = false;
+      if (data.type === "ring") {
+        data.type = "accessory";
+        changed = true;
+      }
+      if (data.origin == null || data.origin === "") {
+        data.origin = "unassigned";
+        changed = true;
+      }
+      if (!("manufacturer" in data)) {
+        data.manufacturer = null;
+        changed = true;
+      }
+      if (!("shipment_eligible" in data)) {
+        data.shipment_eligible = null;
+        changed = true;
+      }
+      if (changed) {
+        updateItem.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
+        itemsUpdated += 1;
+      }
+    }
+    for (const row of chars) {
+      let data;
+      try {
+        data = JSON.parse(row.data);
+      } catch {
+        continue;
+      }
+      const eq = data.equipped_items;
+      if (eq && typeof eq === "object" && eq.ring) {
+        if (!eq.accessory) eq.accessory = eq.ring;
+        delete eq.ring;
+        data.equipped_items = eq;
+        updateChar.run(JSON.stringify({ ...data, id: row.id }), now, row.id);
+        charsUpdated += 1;
+      }
+    }
+    db.prepare(
+      "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run(META_KEY, "done");
+    db.exec("COMMIT");
+    console.log(
+      `[migrate] Phase 2 gear item model applied (${META_KEY}) items=${itemsUpdated} chars=${charsUpdated}`,
+    );
+  } catch (err) {
+    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+    console.error("[migrate] Phase 2 gear item model failed:", err);
+    throw err;
+  }
 })();
 
 import { clock } from "./shared/time/clock.js";

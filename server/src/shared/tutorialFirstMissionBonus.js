@@ -86,7 +86,7 @@ export function generateTutorialFirstMissionHelmet(character, rng = Math.random)
   const level = Math.max(1, Math.floor(Number(character?.level) || 1));
   const budget = getItemStatBudget(level, "helmet", "common");
   const stats = allocateStatBudget([primary], budget, rng, "common");
-  const item = randomItem("common", level, "helmet", rng, classKey);
+  const item = randomItem("common", level, "helmet", rng, classKey, { origin: "mission" });
   return {
     ...item,
     stats,

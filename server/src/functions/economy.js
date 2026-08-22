@@ -160,6 +160,9 @@ const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND
 const MISSION_LOSS_REWARD_DIVISOR = 2;
 const MAX_DIRECT_NOVA_DEBIT = 5_000;
 const PERCENT_SCALE = 100;
+/** Equipped Gear cannot be sold. Unequip first. */
+const DISSOLVE_EQUIPPED_ERROR_CODE = "ITEM_EQUIPPED";
+const DISSOLVE_EQUIPPED_ERROR_MESSAGE = "Unequip this item before selling it";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -607,26 +610,30 @@ export async function GetCantinaOffers(user, body = {}) {
 export async function DissolveItem(user, body) {
   const itemId = body?.item_id;
   if (!itemId) return { status: 400, body: { error: "Missing item_id" } };
+  const requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
 
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
+      if (requestId) {
+        const replay = getWalletOperation(user.id, "dissolve_item", requestId);
+        if (replay) {
+          return { ...replay, patch: {}, character: ch, idempotent_replay: true };
+        }
+      }
       const item = entities.Item.get(itemId);
       if (!item) httpErr(404, "Item not found");
       if (item.character_id !== ch.id) httpErr(403, "Not your item");
       if (item.locked) httpErr(400, "Item is locked");
+      if (item.is_equipped) {
+        httpErr(400, DISSOLVE_EQUIPPED_ERROR_MESSAGE, DISSOLVE_EQUIPPED_ERROR_CODE);
+      }
 
       const gained = computeStardustValue(item);
       const patch = {
         stardust: (ch.stardust || 0) + gained,
         total_stardust_earned: (ch.total_stardust_earned || 0) + gained,
       };
-      // Allow dissolving equipped gear (needed when the bag is full and unequip is blocked).
-      if (item.is_equipped) {
-        const eq = { ...(ch.equipped_items || {}) };
-        if (eq[item.type] === item.id) delete eq[item.type];
-        patch.equipped_items = eq;
-      }
       entities.Item.delete(itemId);
       const character = entities.Character.update(ch.id, patch);
       const corr = newCorrelationId();
@@ -636,7 +643,7 @@ export async function DissolveItem(user, body) {
         item,
         previousOwnerCharacterId: ch.id,
         newOwnerCharacterId: null,
-        previousLocation: item.is_equipped ? "equipped" : "inventory",
+        previousLocation: "inventory",
         newLocation: "dissolved",
         correlationId: corr,
         actorType: ActorTypes.PLAYER,
@@ -653,11 +660,15 @@ export async function DissolveItem(user, body) {
         correlationId: corr,
         actorType: ActorTypes.PLAYER,
       });
-      return { success: true, stardust_gained: gained, patch, character };
+      const receipt = { success: true, stardust_gained: gained, request_id: requestId || null };
+      if (requestId) saveWalletOperation(user.id, "dissolve_item", requestId, receipt);
+      return { ...receipt, patch, character };
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) {
+      return { status: err.status, body: { error: err.message, code: err.code } };
+    }
     throw err;
   }
 }
@@ -675,6 +686,7 @@ export async function DissolveJunk(user, body) {
       for (const id of ids) {
         const item = entities.Item.get(id);
         if (!item || item.character_id !== ch.id) continue;
+        // Equipped Gear cannot be sold. Skip rather than unequip/dissolve it.
         if (item.locked || item.is_equipped) continue;
         total += computeStardustValue(item);
         entities.Item.delete(id);
@@ -715,10 +727,26 @@ export async function GetInventory(user, _body = {}) {
 // ── EquipItem ────────────────────────────────────────────────
 export async function EquipItem(user, body = {}) {
   const itemId = body?.item_id || body?.itemId;
+  const requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
-      return equipItemForCharacter(ch, itemId);
+      if (requestId) {
+        const replay = getWalletOperation(user.id, "equip_item", requestId);
+        if (replay) return { ...replay, character: ch, idempotent_replay: true };
+      }
+      const out = equipItemForCharacter(ch, itemId);
+      if (requestId) {
+        saveWalletOperation(user.id, "equip_item", requestId, {
+          success: out.success,
+          already: out.already,
+          item_id: out.item_id,
+          type: out.type,
+          swapped_from: out.swapped_from || null,
+          request_id: requestId,
+        });
+      }
+      return out;
     });
     return { status: 200, body: result };
   } catch (err) {
@@ -735,10 +763,25 @@ export async function EquipItem(user, body = {}) {
 // ── UnequipItem ──────────────────────────────────────────────
 export async function UnequipItem(user, body = {}) {
   const itemId = body?.item_id || body?.itemId;
+  const requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
-      return unequipItemForCharacter(ch, itemId);
+      if (requestId) {
+        const replay = getWalletOperation(user.id, "unequip_item", requestId);
+        if (replay) return { ...replay, character: ch, idempotent_replay: true };
+      }
+      const out = unequipItemForCharacter(ch, itemId);
+      if (requestId) {
+        saveWalletOperation(user.id, "unequip_item", requestId, {
+          success: out.success,
+          already: out.already,
+          item_id: out.item_id,
+          type: out.type,
+          request_id: requestId,
+        });
+      }
+      return out;
     });
     return { status: 200, body: result };
   } catch (err) {
@@ -1842,7 +1885,7 @@ function buildShopStock(ch, meta, win, { refreshHotDeal = false } = {}) {
   const level = ch.level || 1;
   const gearSeed = shopGearSeed(meta, win);
   const day = meta.hot_day || getShopGameDayKey();
-  const forClass = randomItemForClass(ch.class);
+  const forClass = randomItemForClass(ch.class, { origin: "market" });
   const shop_stock = generateSimpleShopStock(gearSeed, level, forClass);
   let hot_deal = meta.hot_deal;
   if (refreshHotDeal || !hot_deal) {
@@ -2350,7 +2393,7 @@ export async function RefreshShop(user, body) {
         hotDeal = generateSimpleHotDeal(
           meta.hot_day || getShopGameDayKey(),
           ch.level || 1,
-          randomItemForClass(ch.class)
+          randomItemForClass(ch.class, { origin: "market" })
         );
       }
 

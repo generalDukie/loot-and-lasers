@@ -1,15 +1,23 @@
 import { entities } from "../entities.js";
 import { getInventoryCap } from "./economyFormulas.js";
 import { createPendingLoot } from "../rewards/store.js";
+import { EQUIPMENT_SLOTS } from "./itemGeneration.js";
+import { canonicalGearSlot } from "./productionMath.js";
 
-/** Bag occupancy — equipped gear does not consume inventory slots. */
+const GEAR_TYPE_SET = new Set(EQUIPMENT_SLOTS);
+
+export function isBackpackGearType(type) {
+  return !!canonicalGearSlot(type) || GEAR_TYPE_SET.has(String(type || ""));
+}
+
+/** Unequipped Gear occupancy. Stim/junk/materials do not consume the Gear backpack cap. */
 export function countBagOccupancy(ch) {
   const owned = entities.Item.filter({ character_id: ch.id }, null, 500);
-  return owned.filter((i) => !i.is_equipped).length;
+  return owned.filter((i) => !i.is_equipped && isBackpackGearType(i.type)).length;
 }
 
 /**
- * Block unequipping into a full bag. Equipped→bag increases occupancy by 1.
+ * Block unequipping into a full Gear backpack. Equipped→bag increases occupancy by 1.
  * Slot swaps (equip another piece of the same type) keep bag size the same and are allowed.
  */
 export function assertCanUnequipToBag(existing, patch) {
@@ -24,14 +32,18 @@ export function assertCanUnequipToBag(existing, patch) {
   }
 }
 
-/** Grant an item, or return it as pending loot when the bag is at cap (no auto-dissolve). */
+/** Grant Gear into the backpack, or pending loot when the Gear backpack is at cap. Non-gear always inserts. */
 export function grantItemOrPending(ch, itemPayload) {
-  const cap = getInventoryCap(ch);
-  if (countBagOccupancy(ch) >= cap) {
-    return { item: null, pending: itemPayload, compensated: 0 };
+  const isGear = isBackpackGearType(itemPayload?.type);
+  if (isGear) {
+    const cap = getInventoryCap(ch);
+    if (countBagOccupancy(ch) >= cap) {
+      return { item: null, pending: itemPayload, compensated: 0 };
+    }
   }
   const created = entities.Item.create({
     ...itemPayload,
+    type: canonicalGearSlot(itemPayload?.type) || itemPayload?.type,
     owner_id: ch.created_by_id,
     character_id: ch.id,
     is_equipped: false,

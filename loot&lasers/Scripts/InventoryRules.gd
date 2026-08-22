@@ -10,7 +10,10 @@ const BAG_CAP_DEFAULT := 10
 
 
 static func is_equippable(item_type: String) -> bool:
-	return item_type in EQUIPPABLE_TYPES
+	var t := item_type
+	if t == "ring":
+		t = "accessory"
+	return t in EQUIPPABLE_TYPES
 
 
 static func is_consumable(item: Dictionary) -> bool:
@@ -25,14 +28,16 @@ static func bag_occupancy(items: Array) -> int:
 	for it in items:
 		if typeof(it) != TYPE_DICTIONARY:
 			continue
-		if not bool(it.get("is_equipped", false)):
+		if bool(it.get("is_equipped", false)):
+			continue
+		if is_equippable(str(it.get("type", ""))):
 			n += 1
 	return n
 
 
-## Client estimate: 10 + ship cargo mods (with upgrade multiplier), matching web getInventoryCap.
-static func bag_cap(character: Dictionary = {}) -> int:
-	return BAG_CAP_DEFAULT + int(round(ShipRules.mod_effect_total(character, "inventory_cap_bonus")))
+## Client estimate: production backpack is a hard 10 unequipped Gear. Cargo Hold does not expand it.
+static func bag_cap(_character: Dictionary = {}) -> int:
+	return BAG_CAP_DEFAULT
 
 
 static func find_equipped_of_type(items: Array, item_type: String) -> Dictionary:

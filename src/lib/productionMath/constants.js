@@ -117,6 +117,31 @@ export const PREMIUM_GEAR_SLOTS = Object.freeze(["weapon", "ship_module"]);
 export const GEAR_SLOT_PREMIUM_MULT = 1.2;
 export const GEAR_SLOT_NORMAL_MULT = 1;
 
+/** Hard production Backpack cap — unequipped Gear only. No cargo/entitlement expansion. */
+export const BACKPACK_UNEQUIPPED_GEAR_CAP = 10;
+
+/**
+ * Production Gear origin keys. Company/manufacturer assignment is Phase 9.
+ * Unknown/legacy items use `unassigned`.
+ */
+export const GEAR_ORIGINS = Object.freeze([
+  "mission",
+  "dungeon",
+  "wormhole",
+  "market",
+  "contraband",
+  "commission",
+  "unassigned",
+]);
+export const GEAR_SLOT_ALIASES = Object.freeze({ ring: "accessory" });
+export const SHIPMENT_INELIGIBLE_ORIGINS = Object.freeze(["market", "contraband"]);
+export const SHIPMENT_ELIGIBLE_ORIGINS = Object.freeze([
+  "mission",
+  "dungeon",
+  "wormhole",
+  "commission",
+]);
+
 export const RARITIES = Object.freeze(["common", "uncommon", "rare", "epic", "legendary"]);
 export const GEAR_RARITY_BUDGET_MULT = Object.freeze({
   common: 0.7,

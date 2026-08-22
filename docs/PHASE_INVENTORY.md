@@ -80,7 +80,9 @@ Mission/dungeon/shop already used `grantItemOrPending`.
 
 ## 15. Selling / consumption
 
-`DissolveItem` / `UseConsumable` unchanged (ownership + tx). Selling formulas not retuned.
+Equipped Gear cannot be sold. Gear must be unequipped before resale.
+`DissolveItem` rejects equipped items (`ITEM_EQUIPPED`) with no Stardust, equipment, or Backpack mutation.
+`DissolveJunk` skips equipped ids. `UseConsumable` is separate.
 
 ## 16. Effective attributes
 

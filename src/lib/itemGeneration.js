@@ -10,7 +10,18 @@
  * is provided. Legendary: always all five stats.
  */
 
-import { GearSaleValue } from "./stardustEconomy.js";
+import {
+  GEAR_RARITY_BUDGET_MULT,
+  canonicalGearOrigin,
+  canonicalGearSlot,
+  defaultShipmentEligible,
+  gearBaseStatBudget,
+  gearRarityBudgetMultiplier,
+  gearResaleValue,
+  gearSlotMultiplier,
+  gearStatPool,
+  resolveGearLevelRefs,
+} from "./productionMath/index.js";
 
 export const ITEM_ATTR_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
 
@@ -51,7 +62,7 @@ export const EQUIPMENT_SLOTS = [
   "ship_module",
 ];
 
-/** Slot budget multipliers — Weapon & Ship Module are 20% stronger. */
+/** Slot budget multipliers — Weapon & Ship Module are 20% stronger. Delegates to productionMath. */
 export const SLOT_STAT_MULT = {
   helmet: 1.0,
   armor: 1.0,
@@ -71,14 +82,8 @@ export const RARITY_ATTR_COUNT = {
   legendary: 5,
 };
 
-/** Rarity STAT-budget multipliers (not vendor sale multipliers). */
-export const RARITY_BUDGET_MULT = {
-  common: 0.7,
-  uncommon: 0.85,
-  rare: 1.0,
-  epic: 1.2,
-  legendary: 1.35,
-};
+/** Rarity STAT-budget multipliers — productionMath.GEAR_RARITY_BUDGET_MULT (Legendary 1.50). */
+export const RARITY_BUDGET_MULT = { ...GEAR_RARITY_BUDGET_MULT };
 
 /** Minimum share of TotalStatPool each rolled stat must receive. */
 export const RARITY_MIN_STAT_SHARE = {
@@ -148,15 +153,10 @@ function lerpWaypoints(level, points) {
 
 /**
  * Rare normal-slot base budget at item level (before slot/rarity multipliers).
- * One continuous formula for every level — the same expression evaluates at
- * L50, L500, L2000, and beyond (no breakpoint, lookup table, or cap).
+ * Delegates to productionMath.gearBaseStatBudget (round-half-up).
  */
 export function BaseGearStatBudget(itemLevel) {
-  const L = Math.max(1, Math.floor(Number(itemLevel) || 1));
-  return Math.max(
-    1,
-    Math.round(GEAR_BUDGET_LINEAR * L + GEAR_BUDGET_CURVE * Math.sqrt(L) + GEAR_BUDGET_FLOOR),
-  );
+  return gearBaseStatBudget(itemLevel);
 }
 
 /** Alias — Rare normal-slot base budget. */
@@ -170,11 +170,11 @@ export function getFullSetAttributeBudget(itemLevel) {
 }
 
 export function getSlotMultiplier(type) {
-  return SLOT_STAT_MULT[type] ?? 1.0;
+  return gearSlotMultiplier(canonicalGearSlot(type) || type);
 }
 
 export function getRarityBudgetMultiplier(rarity) {
-  return RARITY_BUDGET_MULT[rarity] ?? 1.0;
+  return gearRarityBudgetMultiplier(rarity);
 }
 
 export function getRarityAttributeCount(rarity) {
@@ -187,12 +187,11 @@ export function getRarityMinStatShare(rarity) {
 
 /**
  * Final TotalStatPool for one item.
- * ROUND(BaseGearStatBudget(level) × SlotMult × RarityMult)
+ * productionMath.gearStatPool: rround(Base × SlotMult × RarityMult).
  */
 export function getItemStatBudget(itemLevel, type, rarity) {
-  return Math.round(
-    BaseGearStatBudget(itemLevel) * getSlotMultiplier(type) * getRarityBudgetMultiplier(rarity)
-  );
+  const slot = canonicalGearSlot(type) || type;
+  return gearStatPool(itemLevel, slot, rarity);
 }
 
 function shuffleInPlace(arr, rng) {
@@ -351,6 +350,7 @@ export function allocateLegendaryStatBudget(budget, rng = Math.random) {
  */
 export function rollItemStats({
   itemLevel,
+  statBudgetLevel,
   type,
   rarity,
   rng = Math.random,
@@ -358,8 +358,10 @@ export function rollItemStats({
   variancePct = 0, // ignored — TotalStatPool is authoritative
 } = {}) {
   void variancePct;
+  const slot = canonicalGearSlot(type) || type;
   const { attrs, poolMode } = selectItemAttributes(rarity, rng, { className });
-  const budget = Math.max(attrs.length, getItemStatBudget(itemLevel, type, rarity));
+  const budgetLevel = Math.max(1, Math.floor(Number(statBudgetLevel ?? itemLevel) || 1));
+  const budget = Math.max(attrs.length, getItemStatBudget(budgetLevel, slot, rarity));
   const stats = allocateStatBudget(attrs, budget, rng, rarity);
   const sum = Object.values(stats).reduce((a, b) => a + (b || 0), 0);
   return {
@@ -380,35 +382,57 @@ export const SelectGearAttributes = selectItemAttributes;
 export const AllocateGearStats = allocateStatBudget;
 
 /**
- * Source-independent gear payload (Restoration 07).
- * Reward/shop systems choose level, type, rarity; this finalizes persistent stats.
- * `generationContext` is metadata only — it must not change budget math.
+ * Canonical production Gear generator (Phase 2).
+ * Source systems choose slot / rarity / economic level / origin; this finalizes stats.
+ * Hidden PvE stat-budget offset is opt-in (`applyPveHiddenBudgetOffset`) so Mission /
+ * Dungeon / Wormhole callers are not redesigned in this phase.
  *
  * @param {object} opts
- * @param {number} opts.itemLevel
+ * @param {number} [opts.itemLevel] economic/display level (alias of economicLevel)
+ * @param {number} [opts.economicLevel]
+ * @param {number} [opts.statBudgetLevel]
+ * @param {number} [opts.playerLevel] used only when applyPveHiddenBudgetOffset
+ * @param {boolean} [opts.applyPveHiddenBudgetOffset]
  * @param {string} opts.itemType
  * @param {string} opts.rarity
  * @param {() => number} [opts.rng]
  * @param {string|null} [opts.className]
+ * @param {string|null} [opts.origin]
+ * @param {string|null} [opts.manufacturer]
+ * @param {boolean|null} [opts.shipmentEligible]
  * @param {object|null} [opts.generationContext]
  */
 export function GenerateGearItem({
   itemLevel,
+  economicLevel,
+  statBudgetLevel,
+  playerLevel,
+  applyPveHiddenBudgetOffset = false,
   itemType,
   rarity,
   rng = Math.random,
   className = null,
+  origin = null,
+  manufacturer = null,
+  shipmentEligible = null,
   generationContext = null,
 } = {}) {
-  void generationContext;
-  const L = Math.max(1, Math.floor(Number(itemLevel) || 1));
+  const ctxOrigin = origin || generationContext?.origin || generationContext?.source || null;
+  const levels = resolveGearLevelRefs({
+    economicLevel,
+    itemLevel,
+    statBudgetLevel,
+    playerLevel,
+    applyPveHiddenBudgetOffset,
+  });
+  const L = levels.economicLevel;
   if (!Number.isFinite(L) || L < 1) {
     const err = new Error("Invalid item level");
     err.status = VALIDATION_HTTP_STATUS;
     err.code = "VALIDATION_ERROR";
     throw err;
   }
-  const type = EQUIPMENT_SLOTS.includes(itemType) ? itemType : null;
+  const type = canonicalGearSlot(itemType);
   if (!type) {
     const err = new Error("Invalid gear item type");
     err.status = VALIDATION_HTTP_STATUS;
@@ -425,24 +449,32 @@ export function GenerateGearItem({
 
   const rolled = rollItemStats({
     itemLevel: L,
+    statBudgetLevel: levels.statBudgetLevel,
     type,
     rarity: r,
     rng,
     className,
   });
+  const resolvedOrigin = canonicalGearOrigin(ctxOrigin) || "unassigned";
   const item = {
     type,
     rarity: r,
     level_requirement: L,
     level: L,
+    stat_budget_level: levels.statBudgetLevel,
     stats: rolled.stats,
     is_equipped: false,
+    origin: resolvedOrigin,
+    manufacturer: manufacturer == null ? null : String(manufacturer),
+    shipment_eligible: shipmentEligible == null
+      ? defaultShipmentEligible(resolvedOrigin)
+      : !!shipmentEligible,
   };
   item.sell_value = computeItemVendorValue(item);
   return item;
 }
 
-/** Legacy vendor factors (unused by GearSaleValue; kept for shop heuristics if any). */
+/** Legacy vendor factors (unused by live resale; kept for shop heuristics if any). */
 export const RARITY_SELL_FACTOR = {
   common: 0.55,
   uncommon: 0.7,
@@ -465,9 +497,22 @@ export const ITEM_SELL_TYPE_WEIGHT = {
 };
 
 /**
- * Stardust vendor/dissolve value — universal gear formula (level × rarity × type).
- * Source (mission/dungeon/shop) does not affect sale value.
+ * Production Gear resale — pre-variance Black Market base × rarity fraction,
+ * at ECONOMIC item level (hidden PvE stat-budget level must not be used).
+ * Consumables/materials keep their snapshotted sell_value.
  */
 export function computeItemVendorValue(item) {
-  return GearSaleValue(item);
+  if (!item) return 0;
+  const type = canonicalGearSlot(item.type) || item.type;
+  if (item.type === "consumable" || item.type === "material" || !canonicalGearSlot(item.type)) {
+    const flat = item.sell_value;
+    if (typeof flat === "number" && flat > 0) return Math.max(1, Math.round(flat));
+    return 1;
+  }
+  const economic = Math.max(
+    1,
+    Math.floor(Number(item.level ?? item.level_requirement) || 1),
+  );
+  const rarity = String(item.rarity || "").toLowerCase();
+  return gearResaleValue(economic, type, rarity);
 }

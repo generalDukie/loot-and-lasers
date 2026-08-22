@@ -10,7 +10,7 @@ const FRAME_SLOTS: Array = [
 	{"type": "ship_module", "label": "Ship Module"},
 	{"type": "boots", "label": "Boots"},
 	{"type": "legs", "label": "Legs"},
-	{"type": "accessory", "label": "Ring"},
+	{"type": "accessory", "label": "Accessory"},
 ]
 
 ## Hold-to-buy ramp — preload so the page compiles even before global class cache refresh.

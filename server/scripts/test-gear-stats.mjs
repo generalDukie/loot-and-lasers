@@ -24,10 +24,11 @@ import {
   computeItemVendorValue,
 } from "../../src/lib/itemGeneration.js";
 
-/** Reference C4 curve — must mirror BaseGearStatBudget exactly. */
+/** Reference C4 curve — must mirror BaseGearStatBudget exactly (round-half-up). */
 const c4Budget = (L) =>
-  Math.max(1, Math.round(GEAR_BUDGET_LINEAR * L + GEAR_BUDGET_CURVE * Math.sqrt(L) + GEAR_BUDGET_FLOOR));
+  Math.max(1, Math.trunc(Math.floor(GEAR_BUDGET_LINEAR * L + GEAR_BUDGET_CURVE * Math.sqrt(L) + GEAR_BUDGET_FLOOR + 0.5)));
 import { GearSaleValue } from "../../src/lib/stardustEconomy.js";
+import { gearResaleValue } from "../../src/lib/productionMath/index.js";
 import { randomItem } from "../src/shared/rewards.js";
 
 let passed = 0;
@@ -107,9 +108,11 @@ test("rarity total budgets at L100", () => {
   assert.equal(getItemStatBudget(100, "armor", "uncommon"), Math.round(b100 * 0.85));
   assert.equal(getItemStatBudget(100, "armor", "rare"), b100);
   assert.equal(getItemStatBudget(100, "armor", "epic"), Math.round(b100 * 1.2));
-  assert.equal(getItemStatBudget(100, "armor", "legendary"), Math.round(b100 * 1.35));
-  assert.equal(getItemStatBudget(100, "weapon", "legendary"), Math.round(b100 * 1.2 * 1.35));
-  assert.equal(GetGearRarityStatMultiplier("legendary"), 1.35);
+  assert.equal(getItemStatBudget(100, "armor", "legendary"), Math.round(b100 * 1.5));
+  assert.equal(getItemStatBudget(100, "weapon", "legendary"), Math.round(b100 * 1.2 * 1.5));
+  assert.equal(getItemStatBudget(100, "accessory", "legendary"), Math.round(b100 * 1.5));
+  assert.equal(GetGearRarityStatMultiplier("legendary"), 1.5);
+  assert.notEqual(GetGearRarityStatMultiplier("legendary"), 1.35);
   assert.notEqual(GetGearRarityStatMultiplier("legendary"), 1.75);
 });
 
@@ -282,10 +285,11 @@ test("GenerateGearItem rejects bad inputs", () => {
   );
 });
 
-test("vendor logic unchanged (sale ≠ stat mult)", () => {
-  const item = { type: "weapon", rarity: "legendary", level_requirement: 100 };
-  assert.equal(computeItemVendorValue(item), GearSaleValue(item));
-  assert.equal(getRarityBudgetMultiplier("legendary"), 1.35);
+test("vendor logic uses production resale (sale ≠ stat mult)", () => {
+  const item = { type: "weapon", rarity: "legendary", level_requirement: 100, level: 100 };
+  assert.equal(computeItemVendorValue(item), gearResaleValue(100, "weapon", "legendary"));
+  assert.notEqual(computeItemVendorValue(item), GearSaleValue(item));
+  assert.equal(getRarityBudgetMultiplier("legendary"), 1.5);
 });
 
 test("odd small pools reconcile exactly", () => {

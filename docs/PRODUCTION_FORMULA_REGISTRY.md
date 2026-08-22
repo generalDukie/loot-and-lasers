@@ -206,11 +206,11 @@ Context: Mission player ×1.0; D/WH player ×2.5 enemy ×2.75; Arena ×2.5 symme
 
 Base `rround(1.4079*L + 2.2988*sqrt(L) + 8.277)`. **A**.
 
-Rarity budget 0.70/0.85/1.00/1.20/**1.50**. **B** for Legendary vs live 1.35.
+Rarity budget 0.70/0.85/1.00/1.20/**1.50**. **A** live via `GenerateGearItem` / `gearStatPool` (Phase 2).
 
 Slot: Weapon and Ship Module ×1.20; Accessory normal.
 
-PvE hidden offset discrete +5 (L≤150) … +10 (L>190). **D**. Stat budget only — not economic/resale/Market level.
+PvE hidden offset discrete +5 (L≤150) … +10 (L>190). **D** for source application. Generator API is live (opt-in). Stat budget only — not economic/resale/Market level.
 
 ---
 

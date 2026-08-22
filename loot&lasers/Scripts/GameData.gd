@@ -550,8 +550,8 @@ static func get_vendor_line(seed: int = 0) -> String:
 static func gear_type_label(type_key: String) -> String:
 	if type_key.is_empty():
 		return ""
-	if type_key == "accessory":
-		return "Ring"
+	if type_key == "accessory" or type_key == "ring":
+		return "Accessory"
 	# Title-case snake_case keys ("ship_module" → "Ship Module"), never keep underscores.
 	return type_key.capitalize()
 

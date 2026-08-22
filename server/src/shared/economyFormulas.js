@@ -17,6 +17,7 @@ import {
   CLASS_PRIMARY_INDEX,
   permanentAttributePurchaseCost,
   missionXpReward,
+  BACKPACK_UNEQUIPPED_GEAR_CAP,
 } from "./productionMath.js";
 
 /** One production XP-efficiency factor. Mission XP applies it twice (certified). */
@@ -70,7 +71,7 @@ const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND
   * MINUTES_PER_HOUR;
 
 const NOVA_ITEM_LEVEL_MULTIPLIER = 0.1;
-const BASE_INVENTORY_CAP = 10;
+const BASE_INVENTORY_CAP = BACKPACK_UNEQUIPPED_GEAR_CAP;
 const MISSION_DURATION_STEP_SECONDS = 15;
 const MISSION_REWARD_VARIANCE = 0.10;
 const FUEL_COST_PRECISION_SCALE = 100;
@@ -452,24 +453,11 @@ export function getModEffectTotal(character, effectKey) {
   return modTotal + (ship.inherent?.[effectKey] || 0);
 }
 
-export function getInventoryCap(character) {
-  const base = BASE_INVENTORY_CAP;
-  const modBonus = Math.round(getModEffectTotal(character, "inventory_cap_bonus") || 0);
-  let entBonus = 0;
-  const accountId = character?.created_by_id;
-  if (accountId) {
-    // Lazy import avoids circular init with entitlements ↔ economyFormulas.
-    try {
-      // eslint-disable-next-line no-undef
-      const resolveMod = globalThis.__llResolveInventoryExpansion;
-      if (typeof resolveMod === "function") {
-        entBonus = resolveMod(accountId);
-      }
-    } catch {
-      entBonus = 0;
-    }
-  }
-  return base + modBonus + entBonus;
+export function getInventoryCap(_character) {
+  void _character;
+  // Production Backpack is a hard 10 unequipped Gear. Cargo Hold / entitlements
+  // do not expand it (Ship/Hangar UI is preserved but this bonus stays disabled).
+  return BACKPACK_UNEQUIPPED_GEAR_CAP;
 }
 
 // Wire for applyCharacterRewards without an import cycle (rewards ↔ this module).

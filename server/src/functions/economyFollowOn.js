@@ -1443,7 +1443,9 @@ export const FinishDungeonBattle = wrap((user, body) => {
     const gearRarity = isBoss
       ? rollDungeonBossRarity(secureRandom)
       : rollDungeonRegularRarity(secureRandom);
-    const gear = randomItem(gearRarity, itemLevel, undefined, secureRandom, ch.class);
+    const gear = randomItem(gearRarity, itemLevel, undefined, secureRandom, ch.class, {
+      origin: viewingWormhole ? "wormhole" : "dungeon",
+    });
     const grantCtx = { accountId: user.id, characterId: ch.id };
     if (gear) {
       collectGrant(grantOrCompensate(ch, stripShopNoise(gear), patch), itemsGranted, pendingLoot, grantCtx);

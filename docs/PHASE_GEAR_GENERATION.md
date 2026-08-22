@@ -1,5 +1,7 @@
 # Restoration 07 — Gear Generation & Item Persistence
 
+> **Phase 2 update:** Live Legendary stat-budget multiplier is **1.50** via `productionMath`. Universal generator is `GenerateGearItem`. See `docs/PHASE2_GEAR_CALLER_MIGRATION_MAP.md`. Historical 1.35 text below is a prior-phase snapshot.
+
 Architecture: Nakama = auth only. **Node owns all gear rolls and persistence.**
 Godot displays committed items only.
 
@@ -41,12 +43,12 @@ It did **not** retune budgets, drop chances, shop pricing, or vendor formulas.
 | Rule | Implementation |
 |------|----------------|
 | Slot mult | Weapon & ship_module **1.20×** stat budget (`SLOT_STAT_MULT`) |
-| Rarity stat mult | 0.70 / 0.85 / 1.00 / 1.20 / **1.35** (Legendary) |
+| Rarity stat mult | 0.70 / 0.85 / 1.00 / 1.20 / **1.50** (Legendary; Phase 2 live) |
 | Stat counts | 1 / 2 / 3 / 3 / 5 |
 | Min shares | 100% / 30% / 20% / 20% / 10% |
 | Exact sum | `SUM(stats) === TotalStatPool` always |
 
-Legendary **sale** multiplier 1.75× stays in `GearSaleValue` only — not used for stats.
+Legendary **sale** 1.75× remains on historical `GearSaleValue` (shop markup until Phase 6). Player dissolve uses production `gearResaleValue`.
 
 ## 8. Favored pools — reconciled (keep)
 

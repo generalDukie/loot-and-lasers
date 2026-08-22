@@ -61,6 +61,7 @@
     "test:mission-enemy": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-mission-enemy.mjs",
     "test:expected-player": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-expected-player-attributes.mjs",
     "test:gear-stats": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-gear-stats.mjs",
+    "test:phase2-gear": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-phase2-gear-economy.mjs",
     "test:combat": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-combat-engine.mjs",
     "test:stims": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-stims.mjs",
     "test:balance-update": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-balance-update.mjs",

@@ -56,8 +56,7 @@ var _page_swap_token := 0
 ## Compiled PackedScenes — first `load()` compiles GDScript and is the hitch.
 var _packed_cache: Dictionary = {}
 ## Pages with an explicit live-reshow contract keep their built control trees.
-## A loading veil covers them until the fresh request finishes, so reuse never
-## exposes the parked data snapshot from the prior visit.
+## Refresh runs in place so reuse never hides the page while staging RPCs wait.
 const RETAIN_RENDERED_PAGE_INSTANCES := true
 var _page_instances: Dictionary = {}
 var _page_live_refresh_token := 0
@@ -1274,14 +1273,13 @@ func show_page(path: String) -> void:
 		page_control.mouse_filter = Control.MOUSE_FILTER_STOP
 		page_control.scale = Vector2.ONE
 		page_control.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		page_control.modulate.a = 0.0
+		# Fit then enter in one deferred pass so they cannot race.
+		# Restored pages keep their built tree visible after the fade — live
+		# refresh must not hide them again while staging RPCs wait.
+		call_deferred("_fit_and_enter_page", page_control)
 		if restored:
-			page_control.modulate.a = 0.0
-			call_deferred("_fit_page_to_stage")
 			call_deferred("_refresh_kept_page", _page)
-		else:
-			page_control.modulate.a = 0.0
-			# Fit then enter in one deferred pass so they cannot race.
-			call_deferred("_fit_and_enter_page", page_control)
 	_update_nav_state()
 	_refresh_chrome()
 	_apply_console_portrait_mode()
@@ -1384,20 +1382,21 @@ func _refresh_kept_page(page: Node) -> void:
 	_page_live_refresh_token += 1
 	var refresh_token := _page_live_refresh_token
 	_page_live_refresh_active = true
-	StationLoadingOverlay.show_loading("Loading live page…")
-	if page is Control:
-		(page as Control).modulate.a = 0.0
+	# Refresh in place. Zeroing alpha + the station veil left Hub/chrome-visible
+	# pages blank for the whole staging round-trip (or forever on a hung RPC).
 	await page.call("on_shell_reshow")
-	if (
-		refresh_token != _page_live_refresh_token
-		or page != _page
-		or not is_instance_valid(page)
-	):
+	_finish_live_page_refresh(page, refresh_token)
+
+
+func _finish_live_page_refresh(page: Node, refresh_token: int) -> void:
+	if refresh_token != _page_live_refresh_token:
+		return
+	_page_live_refresh_active = false
+	StationLoadingOverlay.hide_loading()
+	if page == null or page != _page or not is_instance_valid(page):
 		return
 	if page is Control:
 		(page as Control).modulate.a = 1.0
-	_page_live_refresh_active = false
-	StationLoadingOverlay.hide_loading()
 
 
 func _cancel_live_page_refresh() -> void:
@@ -1406,6 +1405,8 @@ func _cancel_live_page_refresh() -> void:
 		return
 	_page_live_refresh_active = false
 	StationLoadingOverlay.hide_loading()
+	if _page is Control and is_instance_valid(_page):
+		(_page as Control).modulate.a = 1.0
 
 
 func _purge_parked_pages() -> void:

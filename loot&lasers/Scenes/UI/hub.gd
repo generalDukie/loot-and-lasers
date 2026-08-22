@@ -8,19 +8,30 @@ var _nexus_chatter: Label
 var _chatter_lines: PackedStringArray = []
 var _chatter_idx := 0
 var _chatter_timer: Timer
+var _boot_gen := 0
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
-	await _boot()
+	# Defer live boot so shell show_page can finish mounting / fading the dock
+	# without waiting on staging RPCs inside _ready.
+	call_deferred("_start_boot")
 
 
 func on_shell_reshow() -> void:
 	await _boot()
 
 
+func _start_boot() -> void:
+	if not is_inside_tree() or not is_instance_valid(self):
+		return
+	await _boot()
+
+
 func _boot() -> void:
+	_boot_gen += 1
+	var boot_gen := _boot_gen
 	var boot_t0 := Time.get_ticks_msec()
 	var requests := AsyncGroup.new()
 	requests.add(MissionManager.refresh_character)
@@ -31,8 +42,12 @@ func _boot() -> void:
 	requests.add(NexusManager.load_nexus)
 	requests.add(InventoryManager.list_pending_loot)
 	await requests.wait()
+	if boot_gen != _boot_gen or not is_inside_tree() or not is_instance_valid(self):
+		return
 	if not InventoryManager.pending_loot.is_empty():
 		await InventoryManager.try_claim_pending()
+	if boot_gen != _boot_gen or not is_inside_tree() or not is_instance_valid(self):
+		return
 	RealtimeManager.start("ChatMessage")
 	var status := "in_mission" if MissionManager.has_active_mission() else "online"
 	PresenceManager.start(status)

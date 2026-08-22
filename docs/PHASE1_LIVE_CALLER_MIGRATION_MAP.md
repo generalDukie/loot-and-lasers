@@ -64,10 +64,15 @@ Combat event resolution still uses `src/lib/statEngine.js` / `MissionCombat.gd` 
 | | |
 |---|---|
 | **Old** | `AttributePurchaseCost` log-PCHIP anchors |
-| **New** | `attributePurchaseCost` Horner (`attrcost`) |
+| **New** | Certified Horner `attributePurchaseCost` (`attrcost`) **unchanged** |
+| **Live mapping** | `permanentAttributePurchaseCost(n)` — **INTENTIONAL DISCRETE INTRODUCTORY ATTRIBUTE-PRICE TABLE** |
+| **Intro table** | 1→10; 2→20; 3→40; 4→60; 5→80 (global total purchases, all stats) |
+| **After intro** | `globalPurchaseCost(n) = attrcost(n - 5)` for `n ≥ 6`. Global #6 is certified curve purchase #1. |
 | **Callers** | `getAttributePointCost` / `getNextAttributePointCost`, `BuyAttribute` (server authority + optional `request_id` replay) |
-| **Godot** | `StardustEconomy.attribute_purchase_cost` Horner preview-only |
+| **Godot** | `StardustEconomy.permanent_attribute_purchase_cost` preview-only (Horner clone remains for attrcost) |
 | **PCHIP** | unused by live attrcost; historical leftover |
+
+The certified attrcost curve itself is unchanged. The first five fixed-price purchases precede it; global purchase #6 is certified attrcost curve purchase #1.
 
 ## Character creation defaults
 
@@ -93,6 +98,7 @@ Combat event resolution still uses `src/lib/statEngine.js` / `MissionCombat.gd` 
 
 - `experience_to_next_level` is a **cache**: always regenerated from `xpToNext(level)`.
 - Permanent stats are **composed**: starting + free-from-level + `attribute_purchases_by_stat`. Gear/Stim/Ship are not baked in.
+- Global permanent-attribute purchase count is reconstructed as the sum of `attribute_purchases_by_stat`. Live pricing uses that global count; per-stat ownership is unchanged.
 - Startup migration `phase1_production_progression_v1` clamps leftover XP (does **not** convert obsolete ×10 leftover into extra levels) and recomposes attributes.
 
 ## Stardust wallet

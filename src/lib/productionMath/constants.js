@@ -398,6 +398,21 @@ export const ATTR_COST_HORNER = Object.freeze([
 ]);
 export const ATTR_COST_LOG_OFFSET = 20;
 
+/** First N global permanent-attribute purchases use a discrete intro table, not attrcost. */
+export const ATTR_INTRO_PURCHASE_COUNT = 5;
+export const ATTR_INTRO_PURCHASE_COST_1 = 10;
+export const ATTR_INTRO_PURCHASE_COST_2 = 20;
+export const ATTR_INTRO_PURCHASE_COST_3 = 40;
+export const ATTR_INTRO_PURCHASE_COST_4 = 60;
+export const ATTR_INTRO_PURCHASE_COST_5 = 80;
+export const ATTR_INTRO_PURCHASE_COSTS = Object.freeze([
+  ATTR_INTRO_PURCHASE_COST_1,
+  ATTR_INTRO_PURCHASE_COST_2,
+  ATTR_INTRO_PURCHASE_COST_3,
+  ATTR_INTRO_PURCHASE_COST_4,
+  ATTR_INTRO_PURCHASE_COST_5,
+]);
+
 export const MISSION_OUTGOING_KNOTS = Object.freeze([
   Object.freeze([1, 0.3]),
   Object.freeze([10, 0.35]),

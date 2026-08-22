@@ -15,6 +15,7 @@ import {
   MISSION_XPF_LINEAR_COEFFICIENT,
   MISSION_XPF_POWER_COEFFICIENT,
   MISSION_XPF_EXPONENT,
+  permanentAttributePurchaseCost,
 } from "@/lib/productionMath";
 import {
   EQUIPMENT_SLOTS,
@@ -577,19 +578,20 @@ const ATTR_PURCHASE_COST_WAYPOINTS = [
 ];
 
 /**
- * Stardust cost for purchase number `n` (1 = first bought point).
- * Authoritative curve: productionMath.attributePurchaseCost (via AttributePurchaseCost).
+ * Stardust cost for global purchase number `n` (1 = first bought point, all stats).
+ * Authoritative helper: productionMath.permanentAttributePurchaseCost.
+ * Certified attrcost Horner is unchanged; intro purchases #1–#5 precede it.
  */
 export function getAttributePointCost(purchaseNumber) {
-  return AttributePurchaseCost(purchaseNumber);
+  return permanentAttributePurchaseCost(purchaseNumber);
 }
 
 export const ATTR_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
 
 /**
- * Purchases already bought for one attribute (each stat has its own cost curve).
- * Prefers `attribute_purchases_by_stat[stat]`. Missing counters are 0 —
+ * Purchases already bought for one attribute. Missing counters are 0 —
  * do not infer purchases from stats−base (stats also include free-from-level).
+ * Pricing uses the sum of these counters (global purchase count), not a per-stat curve.
  */
 export function getAttributePurchaseCount(character, stat) {
   if (!character) return 0;
@@ -619,13 +621,9 @@ export function getAttributePurchaseCount(character, stat) {
   );
 }
 
-/** Cost of the next +1 for a specific attribute (each stat scales independently). */
-export function getNextAttributePointCost(character, stat) {
-  if (!stat) {
-    // Cheapest next buy among all stats — useful for “can afford anything?” checks.
-    return Math.min(...ATTR_STAT_KEYS.map((k) => getNextAttributePointCost(character, k)));
-  }
-  return getAttributePointCost(getAttributePurchaseCount(character, stat) + 1);
+/** Cost of the next +1. All stats share one global purchase sequence. */
+export function getNextAttributePointCost(character, _stat) {
+  return getAttributePointCost(getAttributePurchaseCount(character) + 1);
 }
 
 /** Permanent attrs awarded for crossing one level threshold. */

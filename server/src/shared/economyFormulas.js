@@ -15,7 +15,7 @@ import { XP_STARDUST_SCALE } from "./economyConstants.js";
 import {
   startingAttributesForClass,
   CLASS_PRIMARY_INDEX,
-  attributePurchaseCost,
+  permanentAttributePurchaseCost,
 } from "./productionMath.js";
 
 /** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
@@ -172,7 +172,8 @@ export const CLASS_BASE_STATS = Object.fromEntries(
 );
 
 // ── Attribute purchases ──────────────────────────────────────
-// Cost curve: productionMath.attributePurchaseCost (Horner).
+// Live price: productionMath.permanentAttributePurchaseCost
+// (intro table #1–#5, then certified attrcost(n-5)). Horner curve unchanged.
 
 export function lerpWaypoints(level, points) {
   const L = Math.max(1, Math.floor(level || 1));
@@ -192,7 +193,7 @@ export function lerpWaypoints(level, points) {
 }
 
 export function getAttributePointCost(purchaseNumber) {
-  return attributePurchaseCost(purchaseNumber);
+  return permanentAttributePurchaseCost(purchaseNumber);
 }
 
 export const ATTR_STAT_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -215,11 +216,8 @@ export function getAttributePurchaseCount(character, stat) {
   return ATTR_STAT_KEYS.reduce((sum, k) => sum + getAttributePurchaseCount(character, k), 0);
 }
 
-export function getNextAttributePointCost(character, stat) {
-  if (!stat) {
-    return Math.min(...ATTR_STAT_KEYS.map((k) => getNextAttributePointCost(character, k)));
-  }
-  return getAttributePointCost(getAttributePurchaseCount(character, stat) + 1);
+export function getNextAttributePointCost(character, _stat) {
+  return getAttributePointCost(getAttributePurchaseCount(character) + 1);
 }
 
 // ── Stardust dissolve ────────────────────────────────────────

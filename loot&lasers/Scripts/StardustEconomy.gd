@@ -183,16 +183,38 @@ const ATTR_COST_HORNER := [
 	7.41094646,
 ]
 const ATTR_COST_LOG_OFFSET := 20.0
+const ATTR_INTRO_PURCHASE_COUNT := 5
+const ATTR_INTRO_PURCHASE_COST_1 := 10
+const ATTR_INTRO_PURCHASE_COST_2 := 20
+const ATTR_INTRO_PURCHASE_COST_3 := 40
+const ATTR_INTRO_PURCHASE_COST_4 := 60
+const ATTR_INTRO_PURCHASE_COST_5 := 80
+const ATTR_INTRO_PURCHASE_COSTS := [
+	ATTR_INTRO_PURCHASE_COST_1,
+	ATTR_INTRO_PURCHASE_COST_2,
+	ATTR_INTRO_PURCHASE_COST_3,
+	ATTR_INTRO_PURCHASE_COST_4,
+	ATTR_INTRO_PURCHASE_COST_5,
+]
 
 
 static func attribute_purchase_cost(purchase_number: int = 1) -> int:
-	## Preview-only Horner attrcost. Server BuyAttribute is authoritative.
+	## Certified Horner attrcost preview. Unchanged. Not the live global purchase price.
 	var n := maxi(1, purchase_number)
 	var z := log(float(n) + ATTR_COST_LOG_OFFSET)
 	var v := 0.0
 	for q in ATTR_COST_HORNER:
 		v = v * z + float(q)
 	return maxi(1, int(floor(exp(v) + 0.5)))
+
+
+static func permanent_attribute_purchase_cost(global_purchase_number: int = 1) -> int:
+	## Preview-only mirror of productionMath.permanentAttributePurchaseCost.
+	## Server BuyAttribute remains settlement authority.
+	var n := maxi(1, global_purchase_number)
+	if n <= ATTR_INTRO_PURCHASE_COUNT:
+		return int(ATTR_INTRO_PURCHASE_COSTS[n - 1])
+	return attribute_purchase_cost(n - ATTR_INTRO_PURCHASE_COUNT)
 
 
 static func mission_stardust_reward(level: int, fuel_cost: float) -> int:

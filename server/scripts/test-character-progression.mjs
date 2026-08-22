@@ -151,13 +151,22 @@ for (const L of checkLevels) {
   assert.deepEqual(again.stats, granted.patch.stats);
 }
 
-assert.equal(getAttributePointCost(1), attributePurchaseCost(1));
-assert.equal(getAttributePointCost(1), 100);
-assert.equal(getAttributePointCost(10), 112);
-assert.equal(getAttributePointCost(50), 260);
-assert.equal(getAttributePointCost(650), 111517);
-assert.ok(getAttributePointCost(2500) > getAttributePointCost(1000));
-assert.ok(Number.isFinite(getAttributePointCost(2500)));
+assert.equal(attributePurchaseCost(1), 100);
+assert.equal(attributePurchaseCost(10), 112);
+assert.equal(attributePurchaseCost(50), 260);
+assert.equal(attributePurchaseCost(650), 111517);
+assert.equal(getAttributePointCost(1), 10);
+assert.equal(getAttributePointCost(2), 20);
+assert.equal(getAttributePointCost(3), 40);
+assert.equal(getAttributePointCost(4), 60);
+assert.equal(getAttributePointCost(5), 80);
+assert.equal(getAttributePointCost(6), attributePurchaseCost(1));
+assert.equal(getAttributePointCost(6), 100);
+assert.equal(getAttributePointCost(15), 112);
+assert.equal(getAttributePointCost(55), 260);
+assert.equal(getAttributePointCost(655), 111517);
+assert.ok(getAttributePointCost(2505) > getAttributePointCost(1005));
+assert.ok(Number.isFinite(getAttributePointCost(2505)));
 
 const sheet = computeProductionSheetDerived(
   { strength: 15, agility: 8, intellect: 6, vitality: 14, luck: 7 },

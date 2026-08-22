@@ -47,9 +47,11 @@ assertEq("L100 SD/fuel", getMissionStardustPerFuel(100), Math.round(50 + 1.009 *
 assertEq("MISSION_XP_REBALANCE", MISSION_XP_REBALANCE, 0.85);
 assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), Math.round(10 * 1295 * 0.85));
 
-assertEq("Attr cost #1", getAttributePointCost(1), 100);
-assertEq("Attr cost #10", getAttributePointCost(10), 112);
-assertEq("Attr cost #650", getAttributePointCost(650), 111517);
+assertEq("Certified attrcost #1", getAttributePointCost(6), 100);
+assertEq("Live purchase #1", getAttributePointCost(1), 10);
+assertEq("Live purchase #5", getAttributePointCost(5), 80);
+assertEq("Live purchase #15 (= attrcost 10)", getAttributePointCost(15), 112);
+assertEq("Live purchase #655 (= attrcost 650)", getAttributePointCost(655), 111517);
 
 const sd10 = getMissionStardustPerFuel(10);
 const sd50 = getMissionStardustPerFuel(50);

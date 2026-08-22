@@ -188,6 +188,39 @@ test("attribute purchase cost closed form", () => {
   }
 });
 
+test("introductory permanent-attribute price table precedes certified attrcost", () => {
+  assert.deepEqual(Array.from(M.ATTR_COST_HORNER), [
+    0.00263490059,
+    -0.0530391365,
+    0.411171165,
+    -0.985347882,
+    -0.461561195,
+    7.41094646,
+  ]);
+  assert.equal(M.ATTR_INTRO_PURCHASE_COUNT, 5);
+  assert.equal(M.permanentAttributePurchaseCost(1), 10);
+  assert.equal(M.permanentAttributePurchaseCost(2), 20);
+  assert.equal(M.permanentAttributePurchaseCost(3), 40);
+  assert.equal(M.permanentAttributePurchaseCost(4), 60);
+  assert.equal(M.permanentAttributePurchaseCost(5), 80);
+  assert.equal(M.permanentAttributePurchaseCost(6), M.attributePurchaseCost(1));
+  assert.equal(M.permanentAttributePurchaseCost(6), 100);
+  assert.equal(M.permanentAttributePurchaseCost(7), M.attributePurchaseCost(2));
+  assert.equal(M.permanentAttributePurchaseCost(8), M.attributePurchaseCost(3));
+  assert.equal(M.permanentAttributePurchaseCost(9), M.attributePurchaseCost(4));
+  assert.equal(M.permanentAttributePurchaseCost(10), M.attributePurchaseCost(5));
+  assert.equal(M.permanentAttributePurchaseCost(15), 112);
+  assert.equal(M.permanentAttributePurchaseCost(55), 260);
+  assert.equal(M.permanentAttributePurchaseCost(655), 111517);
+  for (let n = 1; n <= 650; n++) {
+    assert.equal(
+      M.permanentAttributePurchaseCost(n + M.ATTR_INTRO_PURCHASE_COUNT),
+      M.attributePurchaseCost(n),
+      `global #${n + 5} vs attrcost(${n})`,
+    );
+  }
+});
+
 test("HP uses half-even combat ROUND", () => {
   assert.equal(M.maxHp(0), 50);
   assert.equal(M.maxHp(10), rround(50 + 25 + 0.8) || M.roundHalfEven(50 + 25 + 0.8));

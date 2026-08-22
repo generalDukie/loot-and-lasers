@@ -587,7 +587,7 @@ func _refresh_values() -> void:
 		var preview_n := _hold_pending_count(str(stat))
 		var total := int(display.get(stat, 0)) + preview_n
 		var bonus := int(display.get(stat, 0)) - int(naked.get(stat, 0))
-		var cost := StatsRules.point_cost(StatsRules.purchase_count(c, str(stat)) + preview_n + 1)
+		var cost := StatsRules.point_cost(StatsRules.global_purchase_count(c) + preview_n + 1)
 		var affordable := shown_dust >= cost or (str(stat) == _hold_stat and _hold.is_active())
 
 		var value_lab := row["value"] as Label
@@ -2306,7 +2306,7 @@ func _can_hold_fire() -> bool:
 	var dust := int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	var pending := _hold_pending_count()
 	var reserved := StatsRules.batch_cost(c, _hold_stat, pending)
-	var next := StatsRules.point_cost(StatsRules.purchase_count(c, _hold_stat) + pending + 1)
+	var next := StatsRules.point_cost(StatsRules.global_purchase_count(c) + pending + 1)
 	if next <= 0:
 		return false
 	return dust - reserved >= next

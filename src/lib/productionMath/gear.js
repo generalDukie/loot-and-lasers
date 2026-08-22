@@ -6,6 +6,8 @@ import { roundHalfUp } from "./rounding.js";
 import {
   ATTR_COST_HORNER,
   ATTR_COST_LOG_OFFSET,
+  ATTR_INTRO_PURCHASE_COUNT,
+  ATTR_INTRO_PURCHASE_COSTS,
   GEAR_RARITY_BUDGET_MULT,
   GEAR_SLOT_NORMAL_MULT,
   GEAR_SLOT_PREMIUM_MULT,
@@ -69,7 +71,8 @@ export function pveGearStatBudgetLevel(playerLevel) {
 }
 
 /**
- * attrcost(n) = max(1, rround(exp(Horner(log(max(1,n)+20)))))
+ * Certified attrcost(n) = max(1, rround(exp(Horner(log(max(1,n)+20))))).
+ * Unchanged Horner curve. Do not call this as the live global purchase price.
  */
 export function attributePurchaseCost(purchaseNumber) {
   const n = purchaseInt(purchaseNumber);
@@ -77,4 +80,17 @@ export function attributePurchaseCost(purchaseNumber) {
   let v = 0;
   for (const q of ATTR_COST_HORNER) v = v * z + q;
   return Math.max(1, roundHalfUp(Math.exp(v)));
+}
+
+/**
+ * Live Stardust price for the player's Nth total permanent-attribute purchase
+ * (all stats share one global count). Purchases 1–5 use a discrete intro table;
+ * purchase 6+ is certified attrcost(N - 5). The curve itself is not shifted.
+ */
+export function permanentAttributePurchaseCost(globalPurchaseNumber) {
+  const n = purchaseInt(globalPurchaseNumber);
+  if (n <= ATTR_INTRO_PURCHASE_COUNT) {
+    return ATTR_INTRO_PURCHASE_COSTS[n - 1];
+  }
+  return attributePurchaseCost(n - ATTR_INTRO_PURCHASE_COUNT);
 }

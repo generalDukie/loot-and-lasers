@@ -22,6 +22,15 @@ const {
   computeProductionSheetDerived,
 } = await import("../src/shared/characterAttributes.js");
 const { composePermanentAttributes } = await import("../../src/lib/characterStats.js");
+const {
+  getAttributePointCost,
+  getAttributePurchaseCount,
+} = await import("../src/shared/economyFormulas.js");
+const { getAttributePointCost: libGetAttributePointCost } = await import("../../src/lib/gameData.js");
+const {
+  attributePurchaseCost,
+  permanentAttributePurchaseCost,
+} = await import("../../src/lib/productionMath/index.js");
 const { entities } = await import("../src/entities.js");
 const { GetCharacterAttributes, BuyAttribute } = await import(
   "../src/functions/economy.js"
@@ -276,6 +285,141 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
   assert.equal(entities.Character.get(ch.id).stardust, afterBuyStardust);
   assert.equal(entities.Character.get(ch.id).stats.vitality, expectedVit);
   console.log("  ✓ GetCharacterAttributes + BuyAttribute sheet round-trip");
+}
+
+{
+  for (let n = 1; n <= 15; n++) {
+    assert.equal(getAttributePointCost(n), permanentAttributePurchaseCost(n), `server n=${n}`);
+    assert.equal(libGetAttributePointCost(n), permanentAttributePurchaseCost(n), `client n=${n}`);
+  }
+  console.log("  ✓ client preview parity with authoritative helper");
+}
+
+{
+  const account = {
+    id: "attr-user-intro",
+    email: "intro@example.com",
+    role: "user",
+    active_character_id: "",
+  };
+  const ch = entities.Character.create({
+    id: "attr-char-intro",
+    name: "IntroPricing",
+    class: "Vanguard",
+    race: "Keldris",
+    level: 1,
+    experience: 0,
+    experience_to_next_level: 133,
+    stardust: 1_000,
+    nova_crystals: 0,
+    fuel: 10,
+    max_fuel: 20,
+    stats: { strength: 15, agility: 8, intellect: 6, vitality: 14, luck: 7 },
+    attribute_purchases: 0,
+    attribute_purchases_by_stat: {
+      strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
+    },
+    equipped_items: {},
+    created_by_id: account.id,
+    created_by: account.email,
+    active_buffs: [],
+  });
+  account.active_character_id = ch.id;
+
+  const sequence = [
+    ["strength", 10],
+    ["vitality", 20],
+    ["luck", 40],
+    ["agility", 60],
+    ["intellect", 80],
+  ];
+  let dust = 1_000;
+  for (let i = 0; i < sequence.length; i++) {
+    const [stat, expectedCost] = sequence[i];
+    const before = entities.Character.get(ch.id);
+    assert.equal(getAttributePurchaseCount(before), i);
+    const buy = await BuyAttribute(account, { stat, request_id: `intro-${i + 1}` });
+    assert.equal(buy.status, 200, JSON.stringify(buy.body));
+    assert.equal(buy.body.cost, expectedCost);
+    assert.equal(buy.body.count, 1);
+    dust -= expectedCost;
+    const live = entities.Character.get(ch.id);
+    assert.equal(live.stardust, dust);
+    assert.ok(live.stardust >= 0);
+    assert.equal(getAttributePurchaseCount(live), i + 1);
+    assert.equal(live.attribute_purchases, i + 1);
+  }
+
+  const afterFive = entities.Character.get(ch.id);
+  assert.equal(afterFive.attribute_purchases_by_stat.strength, 1);
+  assert.equal(afterFive.attribute_purchases_by_stat.vitality, 1);
+  assert.equal(afterFive.attribute_purchases_by_stat.luck, 1);
+  assert.equal(afterFive.attribute_purchases_by_stat.agility, 1);
+  assert.equal(afterFive.attribute_purchases_by_stat.intellect, 1);
+  const reloadFive = await GetCharacterAttributes(account, {});
+  assert.equal(reloadFive.status, 200, JSON.stringify(reloadFive.body));
+  assert.equal(getAttributePurchaseCount(reloadFive.body.character), 5);
+  assert.equal(reloadFive.body.sheet.next_costs.strength, 100);
+  assert.equal(reloadFive.body.sheet.next_costs.vitality, attributePurchaseCost(1));
+  assert.equal(reloadFive.body.character.stardust, 790);
+
+  const sixth = await BuyAttribute(account, { stat: "strength", request_id: "intro-6" });
+  assert.equal(sixth.status, 200, JSON.stringify(sixth.body));
+  assert.equal(sixth.body.cost, 100);
+  assert.equal(sixth.body.cost, attributePurchaseCost(1));
+  const afterSix = entities.Character.get(ch.id);
+  assert.equal(afterSix.stardust, 690);
+  assert.equal(afterSix.attribute_purchases, 6);
+  assert.equal(afterSix.attribute_purchases_by_stat.strength, 2);
+  assert.equal(getAttributePurchaseCount(afterSix), 6);
+  const reloadSix = await GetCharacterAttributes(account, {});
+  assert.equal(reloadSix.status, 200);
+  assert.equal(reloadSix.body.sheet.next_costs.strength, attributePurchaseCost(2));
+  assert.equal(reloadSix.body.sheet.next_costs.luck, getAttributePointCost(7));
+
+  const replaySix = await BuyAttribute(account, { stat: "strength", request_id: "intro-6" });
+  assert.equal(replaySix.status, 200, JSON.stringify(replaySix.body));
+  assert.equal(replaySix.body.idempotent_replay, true);
+  assert.equal(entities.Character.get(ch.id).stardust, 690);
+  assert.equal(entities.Character.get(ch.id).attribute_purchases, 6);
+  console.log("  ✓ intro table sequential mixed-stat purchases + reload + replay");
+}
+
+{
+  const account = {
+    id: "attr-user-broke",
+    email: "broke@example.com",
+    role: "user",
+    active_character_id: "",
+  };
+  const ch = entities.Character.create({
+    id: "attr-char-broke",
+    name: "Broke",
+    class: "Vanguard",
+    race: "Keldris",
+    level: 1,
+    experience: 0,
+    experience_to_next_level: 133,
+    stardust: 5,
+    nova_crystals: 0,
+    fuel: 10,
+    max_fuel: 20,
+    stats: { strength: 15, agility: 8, intellect: 6, vitality: 14, luck: 7 },
+    attribute_purchases: 0,
+    attribute_purchases_by_stat: {
+      strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
+    },
+    equipped_items: {},
+    created_by_id: account.id,
+    created_by: account.email,
+    active_buffs: [],
+  });
+  account.active_character_id = ch.id;
+  const denied = await BuyAttribute(account, { stat: "strength", request_id: "broke-1" });
+  assert.equal(denied.status, 400);
+  assert.equal(entities.Character.get(ch.id).stardust, 5);
+  assert.equal(entities.Character.get(ch.id).attribute_purchases, 0);
+  console.log("  ✓ insufficient Stardust rejects without debit or grant");
 }
 
 {

@@ -86,26 +86,33 @@ static func purchase_count(character: Dictionary, stat: String) -> int:
 	return 0
 
 
+static func global_purchase_count(character: Dictionary) -> int:
+	var total := 0
+	for k in ATTR_KEYS:
+		total += purchase_count(character, k)
+	return total
+
+
 static func point_cost(purchase_number: int) -> int:
-	return StardustEconomy.attribute_purchase_cost(purchase_number)
+	return StardustEconomy.permanent_attribute_purchase_cost(purchase_number)
 
 
-static func next_cost(character: Dictionary, stat: String) -> int:
-	return point_cost(purchase_count(character, stat) + 1)
+static func next_cost(character: Dictionary, _stat: String = "") -> int:
+	return point_cost(global_purchase_count(character) + 1)
 
 
-## Sum of the next `count` purchase costs for one stat (authoritative curve).
-static func batch_cost(character: Dictionary, stat: String, count: int) -> int:
+## Sum of the next `count` global purchase costs (authoritative mapping).
+static func batch_cost(character: Dictionary, _stat: String, count: int) -> int:
 	var n := clampi(count, 0, MAX_ATTRIBUTE_PURCHASE_BATCH)
-	var start := purchase_count(character, stat)
+	var start := global_purchase_count(character)
 	var total := 0
 	for i in n:
 		total += point_cost(start + i + 1)
 	return total
 
 
-static func max_affordable_purchases(character: Dictionary, stat: String, stardust: int) -> int:
-	var start := purchase_count(character, stat)
+static func max_affordable_purchases(character: Dictionary, _stat: String, stardust: int) -> int:
+	var start := global_purchase_count(character)
 	var left := maxi(0, stardust)
 	var n := 0
 	while n < MAX_ATTRIBUTE_PURCHASE_BATCH:

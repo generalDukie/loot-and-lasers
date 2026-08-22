@@ -4,7 +4,7 @@
  */
 import { entities } from "../entities.js";
 import { EQUIPMENT_SLOTS, computeItemVendorValue } from "./itemGeneration.js";
-import { countBagOccupancy } from "./inventoryGrant.js";
+import { countBagOccupancy, BACKPACK_FULL_ERROR_MESSAGE } from "./inventoryGrant.js";
 import { getInventoryCap } from "./economyFormulas.js";
 import { canonicalGearSlot } from "./productionMath.js";
 import {
@@ -155,7 +155,7 @@ export function unequipItemForCharacter(ch, itemId) {
   if (countBagOccupancy(ch) >= cap) {
     httpErr(
       400,
-      "Inventory full — dissolve an item before unequipping",
+      BACKPACK_FULL_ERROR_MESSAGE,
       "INVENTORY_FULL",
     );
   }

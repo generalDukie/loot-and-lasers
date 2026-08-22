@@ -1,5 +1,5 @@
 extends Node
-## Dissolve gear + pending loot claim/dissolve + bag-pressure prompts.
+## Inventory mutations, pending-loot claim, and bag-pressure prompts.
 ## Node Items are the sole inventory authority. Nakama inventory_get is blocked.
 
 signal pressure_resolved
@@ -52,23 +52,23 @@ func is_inventory_full_error(res: Dictionary) -> bool:
 	return code == "INVENTORY_FULL" or err.to_lower().contains("inventory full")
 
 
-## Returns true if the backpack has a free slot (after optional dissolve prompt).
-func ensure_space(host: Node, reason: String = "Inventory full — free a backpack slot first") -> bool:
+## Returns true if the backpack has a free slot (after optional bag-pressure prompt).
+func ensure_space(host: Node, reason: String = "Inventory full — sell an item at the Black Market first") -> bool:
 	if not await is_bag_full():
 		return true
 	var action := await prompt_bag_pressure(host, reason)
-	if action == "inventory" or action == "cancel":
+	if action == "inventory" or action == "shop" or action == "cancel":
 		return false
 	if await is_bag_full():
-		Notify.blocked("Bag full", "Free a backpack slot first")
+		Notify.blocked("Bag full", "Sell an item at the Black Market first")
 		return false
 	return true
 
 
-## Blocking painted recovery sheet (mirrors web InventoryFullModal).
-## Returns: "ready" (already had space), "inventory", "dissolved", or "cancel".
+## Blocking painted recovery sheet.
+## Returns: "ready" (already had space), "inventory", "shop", or "cancel".
 func prompt_bag_pressure(host: Node, reason: String = "Inventory full") -> String:
-	if host == null or not is_instance_valid(host):
+	if host == null or not is_instance_valid(host) or not host.is_inside_tree():
 		return "cancel"
 	var n := await bag_occupancy()
 	var cap := bag_cap()
@@ -76,13 +76,19 @@ func prompt_bag_pressure(host: Node, reason: String = "Inventory full") -> Strin
 	# Space free and nothing waiting — no modal needed.
 	if n >= 0 and n < cap and pending_loot.is_empty():
 		return "ready"
+	if host == null or not is_instance_valid(host) or not host.is_inside_tree():
+		return "cancel"
 
 	var sheet := InventoryFullSheet.new()
 	host.add_child(sheet)
 	var choice: String = await sheet.run(reason)
 	if is_instance_valid(sheet):
 		sheet.queue_free()
-	if choice == "dissolved" or choice == "ready":
+	if choice == "inventory":
+		GameManager.go_stats()
+	elif choice == "shop":
+		GameManager.go_shop()
+	if choice == "ready":
 		pressure_resolved.emit()
 	return choice
 
@@ -99,7 +105,7 @@ func dissolve_item(item_id: String, auto_claim: bool = false) -> Dictionary:
 	var res: Dictionary = await GameApiClient.invoke("DissolveItem", {"item_id": item_id})
 	_apply_character(res)
 	# Never auto-claim by default — claiming pending loot into a just-freed slot
-	# makes dissolve look like the item "turned into" the waiting drop.
+	# makes the sold item look like it "turned into" the waiting drop.
 	if res.ok and auto_claim:
 		await try_claim_pending()
 	return res

@@ -367,7 +367,9 @@ func _on_claim() -> void:
 	ClientUi.show_toast(self, "Daily reward claimed!", "Day %s · %s" % [day, label])
 	claimed.emit(data)
 	# Keep modal open briefly so the player sees confirmation, then refresh grid.
-	await get_tree().create_timer(CLAIM_SUCCESS_HOLD_SEC).timeout
+	var tree := get_tree()
+	if tree != null and is_inside_tree():
+		await tree.create_timer(CLAIM_SUCCESS_HOLD_SEC).timeout
 	if is_inside_tree():
 		await _reload()
 

@@ -1,6 +1,6 @@
 class_name InventoryRules
 extends RefCounted
-## Slot / bag / dissolve rules mirroring web inventoryJunk + inventoryCap.
+## Slot / bag / sell rules mirroring inventory junk heuristics + backpack cap.
 
 const EQUIPPABLE_TYPES: PackedStringArray = [
 	"helmet", "armor", "legs", "boots", "weapon", "neck", "accessory", "ship_module",
@@ -66,7 +66,7 @@ static func power_rating(item: Dictionary) -> int:
 	return sum
 
 
-## Class-weighted power for dissolve-junk heuristics (mirrors web powerRating).
+## Class-weighted power for Black Market junk heuristics (mirrors web powerRating).
 ## Not used for gear comparison presentation — see compare_gear_attributes.
 static func class_power_rating(item: Dictionary, class_key: String = "Vanguard") -> int:
 	var stats: Variant = item.get("stats", {})
@@ -121,7 +121,7 @@ static func estimate_sell_value(item: Dictionary) -> int:
 	return StardustEconomy.gear_sale_value(item)
 
 
-## True if Void can dissolve this bag piece (unlocked + unequipped).
+## True if the Black Market can buy this bag piece (unlocked + unequipped).
 static func is_sellable(item: Dictionary) -> bool:
 	if item.is_empty():
 		return false

@@ -642,7 +642,7 @@ export function getStatPointsForLevelRange(fromLevel, toLevel) {
 }
 
 // ═══════════════════════════════════════════
-// STARDUST (primary currency — earned via missions, arena, and dissolving gear in the Void)
+// STARDUST (primary currency — earned via missions, arena, and Black Market sales)
 // ═══════════════════════════════════════════
 /** Hard wallet ceiling for character stardust balance. */
 /** JS integer safety bound — not a gameplay Stardust wallet cap. */

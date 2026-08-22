@@ -231,7 +231,7 @@ func buy_offer(_character_id: String, _shop_id: String, offer_id: String) -> Dic
 
 
 func sell_item(_character_id: String, item_instance_id: String, _quantity: int = 1) -> Dictionary:
-	## Inventory dissolve/sell remains on Node inventory paths (Part B / inventory).
+	## Black Market sell — Node DissolveItem is the settlement RPC.
 	if item_instance_id.is_empty():
 		return _fail("Missing item_instance_id")
 	if InventoryManager != null and InventoryManager.has_method("dissolve_item"):
@@ -242,7 +242,7 @@ func sell_item(_character_id: String, item_instance_id: String, _quantity: int =
 	return _fail("Sell not available")
 
 
-## Batch fence — reuses authoritative DissolveJunk (same payout path as Void).
+## Batch fence — same payout path as a single Black Market sale.
 func sell_items(item_ids: Array) -> Dictionary:
 	if item_ids.is_empty():
 		return _fail("No items")

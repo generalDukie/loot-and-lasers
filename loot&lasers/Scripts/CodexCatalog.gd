@@ -73,7 +73,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("Equip better gear on your [b]Character[/b] page to raise your combat power.")
 				+ _li("Spend [b]Stardust[/b] to buy attribute points anytime — each attribute has its own rising cost. Tap once or hold (~1s) to keep buying.")
 				+ _li("Try the [b]Arena[/b] for PvP, or brave the [b]Galaxy Dungeon[/b] for risky loot.")
-				+ _li("Dissolve unwanted gear in the [b]Void[/b] (or from your inventory) to reclaim stardust.")
+				+ _li("Sell unwanted gear at the [b]Black Market[/b] to reclaim stardust and free backpack slots.")
 				+ "\n" + _h("Where things live")
 				+ _p("The [b]station hub[/b] on the home screen is your map — tap any glowing module to travel there. The %s gives quests, the [b]Nav Deck[/b] is the dungeon, [b]Operative / Ship Hangar[/b] is your character and vessel." % _amber("Cantina"))
 				+ _tip("Tip: this guide lives in [b]Settings → Codex[/b] whenever you need a refresher.")
@@ -81,7 +81,7 @@ static func body_bbcode(section_id: String) -> String:
 		"currencies":
 			return (
 				_stardust_h()
-				+ _p("The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and dissolving gear in the Void. Spent in the Black Market, on ship mods, and attribute buys.")
+				+ _p("The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and selling gear at the Black Market. Spent in the Black Market, on ship mods, and attribute buys.")
 				+ _h("Nova Crystals")
 				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas (%s Nova Crystals per arena battle after free fights). Frontier cooldown skip costs %s Nova Crystals." % [
 					str(ARENA_PAID_BATTLE_COST), str(DUNGEON_SKIP_COST)
@@ -153,6 +153,8 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("Compare listed gear to what you have equipped before buying.")
 				+ _li("[b]Haggle[/b] on gear — about 40% of the time you get 15–20% off the listing; Buy separately at the new price. If haggle fails, they yank the listing (no purchase).")
 				+ _li("Rare [b]Scrap Crates[/b] (2 commons) show up as bundle deals.")
+				+ "\n" + _h("Sell")
+				+ _p("Stage unequipped backpack items in the sell tray to convert them to Stardust. Equipped gear must be unequipped on Operative first. This is the only way to remove items from your backpack.")
 				+ "\n" + _h("Contraband Item")
 				+ _p("One spotlight piece per day (midnight Eastern). It does [b]not[/b] change when you restock the Black Market — buy it or wait for tomorrow.")
 			)

@@ -1615,8 +1615,7 @@ func _on_unequip(item_id: String) -> void:
 	if not res.ok:
 		var err := str(res.get("error", "Unequip failed"))
 		if err.to_lower().contains("inventory full"):
-			Notify.blocked("Bag full", "Free a bag slot before unequipping")
-			await InventoryManager.prompt_bag_pressure(self, "Free a bag slot before unequipping.")
+			await InventoryManager.prompt_bag_pressure(self, "Sell an item at the Black Market before unequipping.")
 			await StatsManager.refresh()
 			_refresh_after_inventory_change(true)
 		elif not Notify.from_result(res):

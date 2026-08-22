@@ -1244,7 +1244,7 @@ func _err(res: Dictionary) -> String:
 	return err
 
 
-# ── Sell fence (authoritative DissolveJunk / Void eligibility) ─────────────
+# ── Sell fence (Black Market buyback) ─────────────
 
 func _make_sell_section() -> VBoxContainer:
 	var col := VBoxContainer.new()

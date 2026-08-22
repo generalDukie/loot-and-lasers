@@ -66,7 +66,7 @@ func _maybe_bag_pressure() -> void:
 		return
 	if await InventoryManager.is_bag_full():
 		await InventoryManager.prompt_bag_pressure(
-			self, "Pending loot is waiting — free a bag slot to claim it."
+			self, "Pending loot is waiting — sell an item at the Black Market to claim it."
 		)
 
 
@@ -762,7 +762,12 @@ func _dock_split(icon_id: String, label: String, tint_hex: String, options: Arra
 		fly.position = Vector2((wrap.size.x - fly.size.x) * 0.5, -fly.size.y - 6.0)
 	)
 	wrap.mouse_exited.connect(func() -> void:
-		await get_tree().create_timer(0.12).timeout
+		var tree := get_tree()
+		if tree == null:
+			return
+		await tree.create_timer(0.12).timeout
+		if not is_instance_valid(fly) or not is_instance_valid(wrap) or not is_inside_tree():
+			return
 		if not fly.get_global_rect().has_point(get_global_mouse_position()) \
 				and not wrap.get_global_rect().has_point(get_global_mouse_position()):
 			fly.visible = false
@@ -770,7 +775,12 @@ func _dock_split(icon_id: String, label: String, tint_hex: String, options: Arra
 				_open_flyout = null
 	)
 	fly.mouse_exited.connect(func() -> void:
-		await get_tree().create_timer(0.12).timeout
+		var tree := get_tree()
+		if tree == null:
+			return
+		await tree.create_timer(0.12).timeout
+		if not is_instance_valid(fly) or not is_instance_valid(wrap) or not is_inside_tree():
+			return
 		if not fly.get_global_rect().has_point(get_global_mouse_position()) \
 				and not wrap.get_global_rect().has_point(get_global_mouse_position()):
 			fly.visible = false

@@ -8,7 +8,7 @@ const GEAR_TYPE_SET = new Set(EQUIPMENT_SLOTS);
 const OWNED_ITEM_QUERY_LIMIT = 500;
 
 export const BACKPACK_FULL_ERROR_CODE = "INVENTORY_FULL";
-export const BACKPACK_FULL_ERROR_MESSAGE = "Inventory full — free a backpack slot first";
+export const BACKPACK_FULL_ERROR_MESSAGE = "Inventory full — sell an item at the Black Market first";
 
 export function isBackpackGearType(type) {
   return !!canonicalGearSlot(type) || GEAR_TYPE_SET.has(String(type || ""));
@@ -63,7 +63,7 @@ export function assertCanUnequipToBag(existing, patch) {
   if (!ch) return;
   const cap = getInventoryCap(ch);
   if (countBagOccupancy(ch) >= cap) {
-    const err = new Error("Inventory full — dissolve an item before unequipping");
+    const err = new Error(BACKPACK_FULL_ERROR_MESSAGE);
     err.status = 400;
     err.code = BACKPACK_FULL_ERROR_CODE;
     throw err;

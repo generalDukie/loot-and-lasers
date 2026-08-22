@@ -39,6 +39,32 @@ func is_bag_full() -> bool:
 	return n >= bag_cap()
 
 
+## True when an API result is the backpack-full gate (server INVENTORY_FULL).
+func is_inventory_full_error(res: Dictionary) -> bool:
+	if res.is_empty() or bool(res.get("ok", false)):
+		return false
+	var code := ""
+	var err := str(res.get("error", ""))
+	if typeof(res.get("data", null)) == TYPE_DICTIONARY:
+		code = str(res.data.get("code", ""))
+		if res.data.has("error"):
+			err = str(res.data["error"])
+	return code == "INVENTORY_FULL" or err.to_lower().contains("inventory full")
+
+
+## Returns true if the backpack has a free slot (after optional dissolve prompt).
+func ensure_space(host: Node, reason: String = "Inventory full — free a backpack slot first") -> bool:
+	if not await is_bag_full():
+		return true
+	var action := await prompt_bag_pressure(host, reason)
+	if action == "inventory" or action == "cancel":
+		return false
+	if await is_bag_full():
+		Notify.blocked("Bag full", "Free a backpack slot first")
+		return false
+	return true
+
+
 ## Blocking painted recovery sheet (mirrors web InventoryFullModal).
 ## Returns: "ready" (already had space), "inventory", "dissolved", or "cancel".
 func prompt_bag_pressure(host: Node, reason: String = "Inventory full") -> String:

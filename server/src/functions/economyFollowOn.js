@@ -50,7 +50,7 @@ import {
   mergeSpeciesDiscovery,
   rollCombatCollectibleDiscoveries,
 } from "../shared/discovery.js";
-import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
+import { collectGrant, grantItemOrPending, assertBackpackHasSpace } from "../shared/inventoryGrant.js";
 import {
   acceptServerPendingLoot,
   dissolveServerPendingLoot,
@@ -1298,6 +1298,7 @@ export const PrepareDungeonCombat = wrap((user, body) => {
   // New fights require a clear shared cooldown; replaying an unfinished pending combat does not.
   if (!willReplay) {
     assertCooldownClear(ch, nowMs);
+    assertBackpackHasSpace(ch);
   }
 
   const prepared = prepareDungeonCombatForCharacter(ch, {

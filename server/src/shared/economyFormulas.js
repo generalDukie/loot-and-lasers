@@ -455,8 +455,8 @@ export function getModEffectTotal(character, effectKey) {
 
 export function getInventoryCap(_character) {
   void _character;
-  // Production Backpack is a hard 10 unequipped Gear. Cargo Hold / entitlements
-  // do not expand it (Ship/Hangar UI is preserved but this bonus stays disabled).
+  // Production Backpack is a hard 10 unequipped items (Gear, stims, junk).
+  // Cargo Hold / entitlements do not expand it.
   return BACKPACK_UNEQUIPPED_GEAR_CAP;
 }
 

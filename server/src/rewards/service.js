@@ -18,6 +18,7 @@ import {
 } from "./store.js";
 import { requireRewardDefinition } from "./definitions.js";
 import { applyCharacterRewards } from "../shared/rewards.js";
+import { assertBackpackHasSpace, backpackSlotsNeeded } from "../shared/inventoryGrant.js";
 import { createService, entities } from "../entities.js";
 import { nanoid } from "nanoid";
 import { auditRewardClaimBridge } from "../audit/index.js";
@@ -393,6 +394,10 @@ export async function grantAdminReward({
     ? "compensation"
     : "administrator_grant";
   const defKey = compensation ? "compensation" : "administrator_grant";
+  const adminSlots = backpackSlotsNeeded(rewards);
+  if (ch && adminSlots > 0) {
+    assertBackpackHasSpace(ch, adminSlots);
+  }
 
   return executeRewardClaim({
     claimKey: ClaimKeys.admin(idempotencyKey),

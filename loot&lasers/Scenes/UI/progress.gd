@@ -259,6 +259,8 @@ func _on_claim_daily() -> void:
 		var err := str(res.get("error", "Daily claim failed"))
 		if typeof(res.get("data", null)) == TYPE_DICTIONARY and res.data.has("error"):
 			err = str(res.data["error"])
+		if InventoryManager.is_inventory_full_error(res):
+			await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before claiming an item reward.")
 		_status.text = err
 		_populate()
 		return

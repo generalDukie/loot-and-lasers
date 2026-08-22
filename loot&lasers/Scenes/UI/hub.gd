@@ -365,6 +365,8 @@ func _on_daily_claim_from_hub() -> void:
 			_status.text = "Daily reward claimed."
 		_populate()
 	else:
+		if InventoryManager.is_inventory_full_error(res):
+			await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before claiming an item reward.")
 		_status.text = str(res.get("error", "Daily claim failed"))
 
 

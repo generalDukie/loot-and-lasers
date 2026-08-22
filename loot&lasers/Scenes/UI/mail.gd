@@ -546,6 +546,8 @@ func _on_claim(mail_id: String) -> void:
 	var res: Dictionary = await MailManager.claim_mail(mail_id)
 	_busy = false
 	if not res.ok:
+		if InventoryManager.is_inventory_full_error(res):
+			await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before claiming an attached item.")
 		_status.text = _err(res)
 		return
 	_status.text = "Rewards claimed."

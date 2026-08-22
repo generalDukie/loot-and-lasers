@@ -999,13 +999,14 @@ func _update_backpack() -> void:
 	for item in StatsManager.all_items:
 		if typeof(item) == TYPE_DICTIONARY and not bool(item.get("is_equipped", false)):
 			bag.append(item)
-	var cap := mini(10, InventoryRules.bag_cap(GameManager.active_character))
+	var cap := InventoryRules.bag_cap(GameManager.active_character)
 	_bag_count.text = "%s/%s" % [bag.size(), cap]
 	_bag_count.add_theme_color_override(
 		"font_color",
 		ClientUi.WARNING if bag.size() >= cap else ClientUi.MUTED
 	)
-	var rows_n := maxi(1, int(ceil(float(cap) / float(BAG_COLS))))
+	var slots_n := maxi(cap, bag.size())
+	var rows_n := maxi(1, int(ceil(float(slots_n) / float(BAG_COLS))))
 	var avail_h := _bag_grid.size.y
 	if avail_h < 8.0 and is_instance_valid(_backpack):
 		avail_h = maxf(0.0, _backpack.size.y - 48.0)
@@ -1014,7 +1015,7 @@ func _update_backpack() -> void:
 	_bag_slot_min_h = clampf((avail_h - sep) / float(rows_n), 56.0, 112.0)
 	var row: HBoxContainer = null
 	var tutorial_helmet_tagged := false
-	for i in range(cap):
+	for i in range(slots_n):
 		if i % BAG_COLS == 0:
 			row = HBoxContainer.new()
 			row.size_flags_vertical = Control.SIZE_EXPAND_FILL

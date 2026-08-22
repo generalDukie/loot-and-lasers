@@ -884,6 +884,8 @@ func _on_promo() -> void:
 	_busy = true
 	var res: Dictionary = await AccountManager.redeem_promo(_promo.text)
 	_busy = false
+	if not res.ok and InventoryManager.is_inventory_full_error(res):
+		await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before redeeming an item promo.")
 	_flash_status("Promo redeemed." if res.ok else str(res.get("error", "Redeem failed")))
 
 

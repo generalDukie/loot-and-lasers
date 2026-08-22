@@ -117,8 +117,9 @@ export const PREMIUM_GEAR_SLOTS = Object.freeze(["weapon", "ship_module"]);
 export const GEAR_SLOT_PREMIUM_MULT = 1.2;
 export const GEAR_SLOT_NORMAL_MULT = 1;
 
-/** Hard production Backpack cap — unequipped Gear only. No cargo/entitlement expansion. */
-export const BACKPACK_UNEQUIPPED_GEAR_CAP = 10;
+/** Hard production Backpack cap — 10 unequipped items of any type. No cargo/entitlement expansion. */
+export const BACKPACK_UNEQUIPPED_ITEM_CAP = 10;
+export const BACKPACK_UNEQUIPPED_GEAR_CAP = BACKPACK_UNEQUIPPED_ITEM_CAP;
 
 /**
  * Production Gear origin keys. Company/manufacturer assignment is Phase 9.

@@ -1,4 +1,4 @@
-import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, randomItem } from "../shared/rewards.js";
+import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, randomItem, PROMO_CODES } from "../shared/rewards.js";
 import { grantCharacterXp, consumeProgression } from "../shared/characterProgression.js";
 import { composePermanentAttributes } from "../../../src/lib/characterStats.js";
 import {
@@ -106,7 +106,7 @@ import {
   CompleteTutorial,
 } from "./tutorial.js";
 import { getInventoryCap, STARDUST_MAX, FUEL_MAX } from "../shared/economyFormulas.js";
-import { countBagOccupancy } from "../shared/inventoryGrant.js";
+import { countBagOccupancy, assertBackpackHasSpace, backpackSlotsNeeded, BACKPACK_FULL_ERROR_CODE, BACKPACK_FULL_ERROR_MESSAGE } from "../shared/inventoryGrant.js";
 import { todayET, clock, TimeErrors } from "../shared/time/index.js";
 import { getGameTime } from "../shared/schedulerService.js";
 import {
@@ -241,6 +241,10 @@ export async function ClaimDailyLogin(user, body = {}) {
 
       const day = progress.current_day || 1;
       const rewardEntry = DAILY_REWARDS[(day - 1)] || DAILY_REWARDS[0];
+      const dailySlots = backpackSlotsNeeded(rewardEntry.rewards);
+      if (dailySlots > 0) {
+        assertBackpackHasSpace(character, dailySlots);
+      }
 
       const claimOut = await executeRewardClaim({
         claimKey,
@@ -382,6 +386,10 @@ export async function ClaimMailReward(user, body) {
       }
 
       const attachment = mail.rewards || {};
+      const mailSlots = backpackSlotsNeeded(attachment);
+      if (mailSlots > 0) {
+        assertBackpackHasSpace(character, mailSlots);
+      }
 
       const claimOut = await executeRewardClaim({
         claimKey,
@@ -470,6 +478,10 @@ export async function RedeemPromoCode(user, body) {
           err.status = 410;
           throw err;
         }
+        const promoSlots = backpackSlotsNeeded(fresh.rewards);
+        if (promoSlots > 0) {
+          assertBackpackHasSpace(character, promoSlots);
+        }
 
         const claimOut = await executeRewardClaim({
           claimKey,
@@ -526,6 +538,18 @@ export async function RedeemPromoCode(user, body) {
 
   if (alreadyOnCharacter) {
     return { status: 409, body: { error: "Code already redeemed", code: RewardErrors.REWARD_ALREADY_CLAIMED } };
+  }
+
+  const catalogEntry = PROMO_CODES[rawCode]
+    || PROMO_CODES[Object.keys(PROMO_CODES).find((k) => k.toLowerCase() === rawCode.toLowerCase())];
+  const catalogSlots = backpackSlotsNeeded(catalogEntry?.rewards);
+  if (catalogSlots > 0) {
+    try {
+      assertBackpackHasSpace(character, catalogSlots);
+    } catch (err) {
+      if (err.code) return { status: 400, body: { error: err.message, code: err.code } };
+      throw err;
+    }
   }
 
   const result = await redeemPromoCode(game, character, code);
@@ -1367,7 +1391,8 @@ async function adminModerationInner(user, body) {
       return {
         status: 400,
         body: {
-          error: `Inventory full (${bagCount}/${cap}) — only unequipped items count. Free a bag slot first.`,
+          error: BACKPACK_FULL_ERROR_MESSAGE,
+          code: BACKPACK_FULL_ERROR_CODE,
           inventory_count: bagCount,
           inventory_cap: cap,
         },

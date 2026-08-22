@@ -750,12 +750,20 @@ func _sync_view_rewards_cta() -> void:
 func _on_fight() -> void:
 	if _busy:
 		return
+	if not await InventoryManager.ensure_space(self, "Free a backpack slot before fighting. Loot needs somewhere to go."):
+		return
 	_busy = true
 	_set_status("Preparing encounter…")
 	var prep: Dictionary = await DungeonManager.prepare_fight()
 	_busy = false
 	if not prep.ok:
 		var err := str(prep.get("error", "Cannot fight"))
+		if InventoryManager.is_inventory_full_error(prep):
+			Notify.blocked("Bag full", err)
+			await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before fighting. Loot needs somewhere to go.")
+			_set_status("")
+			_populate_meta()
+			return
 		var low := err.to_lower()
 		if low.contains("failed") or low.contains("network") or low.contains("timeout"):
 			_set_status(err, true)

@@ -1402,21 +1402,11 @@ func _on_launch(offer: Dictionary) -> void:
 		_mining_banner.visible = true
 		return
 
-	if await InventoryManager.is_bag_full():
-		_busy = true
-		var action: String = await InventoryManager.prompt_bag_pressure(
-			self,
-			"Your bag is at capacity. Clear inventory space before starting a mission so loot has somewhere to go."
-		)
-		_busy = false
-		if action == "inventory":
-			return
-		if action == "cancel":
-			Notify.blocked("Bag full", "Launch cancelled — inventory still full")
-			return
-		if await InventoryManager.is_bag_full():
-			Notify.blocked("Bag full", "Free a slot, then launch again")
-			return
+	if not await InventoryManager.ensure_space(
+		self,
+		"Your backpack is full. Free a slot before starting a mission so loot has somewhere to go."
+	):
+		return
 
 	_busy = true
 	_status.text = "Launching…"

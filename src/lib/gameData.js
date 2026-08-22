@@ -382,7 +382,7 @@ export function weaponCombatStyleFor(name, baseName, emoji) {
 // Maximum unequipped Gear a character can hold in the backpack (hard production cap).
 export const INVENTORY_CAP = BACKPACK_UNEQUIPPED_GEAR_CAP;
 
-/** Hard backpack ceiling — unequipped Gear only. Cargo Hold does not expand it. */
+/** Hard backpack ceiling — 10 unequipped items of any type. Cargo Hold does not expand it. */
 export function getInventoryCap(_character) {
   void _character;
   return BACKPACK_UNEQUIPPED_GEAR_CAP;

@@ -167,6 +167,7 @@ export {
 } from "./characterProgression.js";
 import { grantCharacterXp } from "./characterProgression.js";
 import { createPendingLoot } from "../rewards/store.js";
+import { grantItemOrPending } from "./inventoryGrant.js";
 import {
   creditNova,
   NOVA_HALF_UNITS_PER_NOVA,
@@ -242,18 +243,16 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
       character_id: ch.id,
       is_equipped: false,
     };
-    const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
-    const bagCount = owned.filter((i) => !i.is_equipped).length;
-    if (bagCount >= getInventoryCap(ch)) {
+    const granted = grantItemOrPending(ch, payload);
+    if (granted.item) {
+      items.push(granted.item);
+    } else if (granted.pending) {
       const pl = createPendingLoot({
         accountId: ch.created_by_id,
         characterId: ch.id,
-        item: payload,
+        item: granted.pending,
       });
       pending_loot.push({ id: pl.id, item: pl.item });
-    } else {
-      const created = await gameService.asServiceRole.entities.Item.create(payload);
-      items.push(created);
     }
   }
   if (rewards.collectible) {
@@ -272,18 +271,16 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
         owner_id: ch.created_by_id,
         character_id: ch.id,
       };
-      const owned = await gameService.asServiceRole.entities.Item.filter({ character_id: ch.id });
-      const bagCount = owned.filter((i) => !i.is_equipped).length;
-      if (bagCount >= getInventoryCap(ch)) {
+      const granted = grantItemOrPending(ch, payload);
+      if (granted.item) {
+        items.push(granted.item);
+      } else if (granted.pending) {
         const pl = createPendingLoot({
           accountId: ch.created_by_id,
           characterId: ch.id,
-          item: payload,
+          item: granted.pending,
         });
         pending_loot.push({ id: pl.id, item: pl.item });
-      } else {
-        const created = await gameService.asServiceRole.entities.Item.create(payload);
-        items.push(created);
       }
     }
     if (c.kind === "species" && c.id) {

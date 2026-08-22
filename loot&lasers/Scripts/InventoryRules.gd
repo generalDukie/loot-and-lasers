@@ -30,12 +30,11 @@ static func bag_occupancy(items: Array) -> int:
 			continue
 		if bool(it.get("is_equipped", false)):
 			continue
-		if is_equippable(str(it.get("type", ""))):
-			n += 1
+		n += 1
 	return n
 
 
-## Client estimate: production backpack is a hard 10 unequipped Gear. Cargo Hold does not expand it.
+## Client estimate: production backpack is a hard 10 unequipped items of any type.
 static func bag_cap(_character: Dictionary = {}) -> int:
 	return BAG_CAP_DEFAULT
 

@@ -57,10 +57,12 @@ GES is not a production mechanic and is not exported.
 | | |
 |---|---|
 | **Old** | `getInventoryCap` = 10 + cargo_hold mods + entitlement expansion |
-| **New** | `BACKPACK_UNEQUIPPED_GEAR_CAP = 10` hard. Cargo/entitlements ignored |
-| **Occupancy** | Unequipped **Gear** only (`countBagOccupancy`). Stims/junk do not consume the cap |
-| **Callers** | `grantItemOrPending`, equip/unequip, `GetInventory` snapshot, Godot `InventoryRules.bag_cap` |
-| **Disposition** | Hangar Cargo Hold UI/mod tree **preserved**, bonus **disabled** for backpack |
+| **New** | `BACKPACK_UNEQUIPPED_ITEM_CAP = 10` hard. Cargo/entitlements ignored |
+| **Occupancy** | All unequipped backpack items (Gear, stims, junk). Equipped Gear does not count |
+| **Full-bag gates** | LaunchMission, ClaimMission, BuyShopGear, BuyShopConsumable, PrepareDungeonCombat (new fights), ClaimDailyLogin (item days), ClaimMailReward (item attachments), RedeemPromoCode (item rewards), admin give_item / grantAdminReward |
+
+| **Callers** | `grantItemOrPending`, `assertBackpackHasSpace`, equip/unequip, `GetInventory` snapshot, Godot `InventoryRules.bag_cap` |
+| **Disposition** | Hangar Cargo Hold UI/mod tree **preserved**, bonus **disabled** for backpack. In-flight dungeon Finish may still park loot as pending if the bag filled after Prepare |
 
 ## Equip / unequip / swap
 

@@ -77,7 +77,11 @@ import {
   getInventoryCap,
   progressWeeklyNovaQuest,
 } from "../shared/economyFormulas.js";
-import { collectGrant, grantItemOrPending, countBagOccupancy } from "../shared/inventoryGrant.js";
+import {
+  collectGrant,
+  grantItemOrPending,
+  assertBackpackHasSpace,
+} from "../shared/inventoryGrant.js";
 import {
   isLaunchableMissionDuration,
   rollMissionDurationSeconds,
@@ -1187,9 +1191,7 @@ export async function LaunchMission(user, body) {
         }
         httpErr(409, "Collect your mining node first", "MINING_READY_COLLECT");
       }
-      if (countBagOccupancy(ch) >= getInventoryCap(ch)) {
-        httpErr(400, "Inventory full — clear bag space before launching a mission");
-      }
+      assertBackpackHasSpace(ch);
       if (String(ch.mission_board_status || "") === "locked_active") {
         httpErr(409, "No mission offers available");
       }
@@ -1415,6 +1417,7 @@ export async function ClaimMission(user, body) {
       if (prior?.status === "completed" && prior.deliveredPayload) {
         return { ...prior.deliveredPayload, idempotentReplay: true, reward_claim_id: prior.id };
       }
+      assertBackpackHasSpace(ch);
 
       let mission = entities.Mission.get(missionId);
       if (!mission) {
@@ -2140,6 +2143,11 @@ export async function BuyShopGear(user, body) {
       if ((ch.stardust || 0) < stardustCost) httpErr(400, "Not enough stardust");
       if (novaCost && !hasNova(ch, novaCost)) httpErr(400, "Not enough Nova Crystals");
 
+      const payloads = slot._bundle === "scrap_crate" && Array.isArray(slot.bundle_items)
+        ? slot.bundle_items
+        : [stripShopFields(slot)];
+      assertBackpackHasSpace(ch, payloads.length);
+
       const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot, "purchased");
       const beforeStardust = ch.stardust || 0;
       const beforeNovaDisplay = fromNovaHalfUnits(readNovaHalfUnits(ch));
@@ -2148,10 +2156,6 @@ export async function BuyShopGear(user, body) {
         shop_meta: nextMeta,
         ...(novaCost ? novaDebitPatch(ch, novaCost) : {}),
       };
-
-      const payloads = slot._bundle === "scrap_crate" && Array.isArray(slot.bundle_items)
-        ? slot.bundle_items
-        : [stripShopFields(slot)];
 
       const items = [];
       const pendingLoot = [];
@@ -2295,6 +2299,7 @@ export async function BuyShopConsumable(user, body) {
       // Persisted listing cost only — never trust client; fallback is server formula.
       const cost = Number(slot.cost ?? slot._cost ?? stimShopPurchasePrice(slot.rarity, ch.level || 1));
       if ((ch.stardust || 0) < cost) httpErr(400, "Not enough stardust");
+      assertBackpackHasSpace(ch);
 
       const beforeStardust = ch.stardust || 0;
       const patch = { stardust: beforeStardust - cost };

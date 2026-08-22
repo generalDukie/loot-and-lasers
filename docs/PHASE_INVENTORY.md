@@ -6,7 +6,7 @@ Godot displays and requests mutations; it never invents item IDs or authority.
 ## 1. Existing authoritative inventory
 
 - Schemaless `entities.Item` rows in SQLite (`character_id`, `owner_id`, `is_equipped`, `locked`, `type`, `stats`, …)
-- Bag occupancy = unequipped items only (`countBagOccupancy`)
+- Bag occupancy = all unequipped items (`countBagOccupancy`). Cap 10. Stims/junk count.
 - Grants via `grantItemOrPending` → Item create or pending loot
 
 ## 2. Existing authoritative equipment
@@ -31,8 +31,9 @@ No inventory quantity stacking. Stim duration stacking is separate (economy form
 
 ## 6. Capacity
 
-`getInventoryCap` — base 10 + ship mods + entitlements. Unequip blocked when full.
-Overflow → pending loot (`grantItemOrPending` / `createPendingLoot`).
+`getInventoryCap` — hard 10 unequipped items (Gear, stims, junk). Cargo Hold / entitlements do not expand it.
+Unequip blocked when full. Player actions that can grant items are blocked until a slot is free.
+Overflow from an already-started dungeon finish may still go to pending loot (`grantItemOrPending` / `createPendingLoot`).
 
 ## 7. Equip replacement
 

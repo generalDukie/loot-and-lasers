@@ -72,7 +72,6 @@ export function buildInventorySnapshot(character) {
   const items = raw.map(serializeItem).filter(Boolean);
   const equipped_items = items.filter((i) => i.is_equipped);
   const bag_items = items.filter((i) => !i.is_equipped);
-  const gear_bag_items = bag_items.filter((i) => isEquippableType(i.type));
   const sheet = buildAttributeSheet(
     character,
     loadEquippedItemsForCharacter(character?.id),
@@ -81,7 +80,7 @@ export function buildInventorySnapshot(character) {
     items,
     equipped_items,
     bag_items,
-    bag_occupancy: gear_bag_items.length,
+    bag_occupancy: bag_items.length,
     bag_capacity: getInventoryCap(character),
     equipped_map: { ...(character?.equipped_items || {}) },
     sheet,

@@ -37,9 +37,14 @@ const {
   UnequipItem,
   GetInventory,
   DissolveItem,
+  EnsureShop,
+  BuyShopGear,
+  BuyShopConsumable,
+  LaunchMission,
 } = await import("../src/functions/economy.js");
-const { grantItemOrPending, countBagOccupancy } = await import("../src/shared/inventoryGrant.js");
+const { grantItemOrPending, countBagOccupancy, assertBackpackHasSpace } = await import("../src/shared/inventoryGrant.js");
 const { getInventoryCap } = await import("../src/shared/economyFormulas.js");
+const { PrepareDungeonCombat } = await import("../src/functions/economyFollowOn.js");
 
 let passed = 0;
 let failed = 0;
@@ -282,11 +287,11 @@ test("no GES export / auto-equip flags on generated items", () => {
   assert.equal(item.gearScore, undefined);
 });
 
-await testAsync("Backpack cap is exactly 10 unequipped Gear; stims do not consume it", async () => {
+await testAsync("Backpack cap is exactly 10 unequipped items; stims consume a slot", async () => {
   const { ch } = makeCharacter();
   assert.equal(getInventoryCap(ch), BACKPACK_UNEQUIPPED_GEAR_CAP);
   assert.equal(BACKPACK_UNEQUIPPED_GEAR_CAP, 10);
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 9; i++) {
     const g = grantItemOrPending(ch, {
       name: `Gear ${i}`,
       type: "helmet",
@@ -296,16 +301,6 @@ await testAsync("Backpack cap is exactly 10 unequipped Gear; stims do not consum
     });
     assert.ok(g.item, `insert ${i}`);
   }
-  assert.equal(countBagOccupancy(ch), 10);
-  const overflow = grantItemOrPending(ch, {
-    name: "Eleventh",
-    type: "boots",
-    rarity: "common",
-    stats: { agility: 1 },
-    level: 1,
-  });
-  assert.equal(overflow.item, null);
-  assert.ok(overflow.pending);
   const stim = grantItemOrPending(ch, {
     name: "Stim",
     type: "consumable",
@@ -315,7 +310,71 @@ await testAsync("Backpack cap is exactly 10 unequipped Gear; stims do not consum
   });
   assert.ok(stim.item);
   assert.equal(countBagOccupancy(ch), 10);
+  const overflowGear = grantItemOrPending(ch, {
+    name: "Eleventh",
+    type: "boots",
+    rarity: "common",
+    stats: { agility: 1 },
+    level: 1,
+  });
+  assert.equal(overflowGear.item, null);
+  assert.ok(overflowGear.pending);
+  const overflowStim = grantItemOrPending(ch, {
+    name: "Stim 2",
+    type: "consumable",
+    rarity: "uncommon",
+    sell_value: 12,
+    consumable: { attribute: "agility" },
+  });
+  assert.equal(overflowStim.item, null);
+  assert.ok(overflowStim.pending);
+  assert.equal(countBagOccupancy(ch), 10);
   evidence.push(`backpack max observed=${countBagOccupancy(ch)}`);
+});
+
+await testAsync("shop buy and mission launch reject when backpack is full", async () => {
+  const { user, ch } = makeCharacter({ stardust: 500_000, nova_crystals: 50 });
+  for (let i = 0; i < 10; i++) {
+    assert.ok(grantItemOrPending(ch, {
+      name: `Fill ${i}`,
+      type: "helmet",
+      rarity: "common",
+      stats: { vitality: 1 },
+      level: 1,
+    }).item);
+  }
+  const live = entities.Character.get(ch.id);
+  assert.equal(countBagOccupancy(live), 10);
+  const beforeSd = live.stardust;
+  assert.throws(
+    () => assertBackpackHasSpace(live),
+    (err) => err.code === "INVENTORY_FULL",
+  );
+
+  const shop = await EnsureShop(user, {});
+  assert.equal(shop.status, 200, shop.body?.error);
+  const liveShop = entities.Character.get(ch.id);
+  const stock = liveShop.shop_meta?.shop_stock || liveShop.shop_meta?.gear_stock || [];
+  const gearSlot = stock.find((s) => s.type !== "consumable" && s._offerKind !== "stim");
+  const stimSlot = stock.find((s) => s.type === "consumable" || s._offerKind === "stim");
+  assert.ok(gearSlot, "need a gear shop slot");
+  assert.ok(stimSlot, "need a stim shop slot");
+  const buy = await BuyShopGear(user, { slot_id: gearSlot._slotId });
+  assert.equal(buy.status, 400, buy.body?.error);
+  assert.equal(buy.body.code, "INVENTORY_FULL");
+  assert.equal(entities.Character.get(ch.id).stardust, beforeSd);
+  assert.ok(!buy.body.items?.length);
+  const buyC = await BuyShopConsumable(user, { slot_id: stimSlot._slotId });
+  assert.equal(buyC.status, 400, buyC.body?.error);
+  assert.equal(buyC.body.code, "INVENTORY_FULL");
+  assert.equal(entities.Character.get(ch.id).stardust, beforeSd);
+  const launch = await LaunchMission(user, { board_offer_id: "no-such-offer" });
+  assert.equal(launch.status, 400);
+  assert.equal(launch.body.code, "INVENTORY_FULL");
+  const dungeon = await PrepareDungeonCombat(user, { planet_id: 1, enemy_index: 1 });
+  assert.equal(dungeon.status, 400, dungeon.body?.error);
+  assert.equal(dungeon.body.code, "INVENTORY_FULL");
+  evidence.push("full-bag shop/mission/dungeon launch blocked INVENTORY_FULL");
 });
 
 await testAsync("equip empty slot, occupied swap, full-backpack swap, mismatch, replay", async () => {

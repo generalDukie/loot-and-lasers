@@ -348,10 +348,13 @@ func _on_claim() -> void:
 		await _reload()
 		return
 	if not bool(res.get("ok", false)):
-		_status.text = str(res.get("error", "Claim failed"))
+		var err := str(res.get("error", "Claim failed"))
+		_status.text = err
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_claim_btn.disabled = false
 		_claim_btn.text = "Claim Today's Reward"
+		if InventoryManager.is_inventory_full_error(res):
+			await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before claiming an item reward.")
 		return
 
 	var data: Dictionary = res.get("data", {}) if typeof(res.get("data", {})) == TYPE_DICTIONARY else {}

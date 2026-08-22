@@ -1147,6 +1147,8 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
 		Notify.blocked("Not enough Stardust", "Need %s — you have %s" % [cost, sd])
 		return
+	if not await InventoryManager.ensure_space(self, "Free a backpack slot before buying."):
+		return
 	_busy = true
 	_busy_slot = slot_id
 	_set_status("Buying stim…")
@@ -1154,6 +1156,8 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 	_busy = false
 	_busy_slot = ""
 	if not res.ok:
+		if InventoryManager.is_inventory_full_error(res):
+			await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before buying.")
 		if not Notify.from_result(res):
 			_set_status(_err(res))
 		_update_meta()
@@ -1178,6 +1182,8 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 	if nova > 0 and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, nova):
 		Notify.blocked("Not enough Nova Crystals", "Need %s Nova" % nova)
 		return
+	if not haggle and not await InventoryManager.ensure_space(self, "Free a backpack slot before buying."):
+		return
 	_busy = true
 	_busy_slot = slot_id
 	_set_status("Buying gear…" if not haggle else "Haggling…")
@@ -1185,6 +1191,8 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 	_busy = false
 	_busy_slot = ""
 	if not res.ok:
+		if InventoryManager.is_inventory_full_error(res):
+			await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before buying.")
 		if not Notify.from_result(res):
 			_set_status(_err(res))
 		_update_meta()
@@ -1223,7 +1231,7 @@ func _purchase_msg(purchase: Dictionary, fallback: String) -> String:
 	if nova_cost > 0:
 		parts.append("−%s Nova" % nova_cost)
 	if typeof(pending) == TYPE_ARRAY and (pending as Array).size() > 0:
-		parts.append("bag full — item held as pending loot")
+		parts.append("held as pending loot")
 	elif typeof(items) == TYPE_ARRAY and (items as Array).size() > 0:
 		parts.append("added to inventory")
 	return " · ".join(parts)

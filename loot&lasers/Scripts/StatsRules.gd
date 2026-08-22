@@ -250,13 +250,16 @@ static func derived(character: Dictionary, totals: Dictionary) -> Dictionary:
 	var converted_agi := agi * _reflex_agi_conversion(level) if sheet_arch == "Reflex" else agi
 	var might_resist := 0.0
 	var tech_resist := 0.0
+	var reflex_resist := 0.0
 	if sheet_arch == "Might":
 		tech_resist = _derived_stat(level, intel, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
+		reflex_resist = tech_resist
 	elif sheet_arch == "Reflex":
 		might_resist = _derived_stat(level, strength, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
 		tech_resist = _derived_stat(level, intel, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
 	else:
 		might_resist = _derived_stat(level, strength, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
+		reflex_resist = might_resist
 	var hp := maxi(1, _round_half_even(HEALTH_BASE + HEALTH_PER_VITALITY * vit + HEALTH_VITALITY_SQUARED_COEFFICIENT * vit * vit))
 	var raw_atk := RAW_ATTACK_BASE + RAW_ATTACK_COEFFICIENT * pow(primary_val, RAW_ATTACK_EXPONENT)
 	return {
@@ -267,6 +270,7 @@ static func derived(character: Dictionary, totals: Dictionary) -> Dictionary:
 		"dodgeChance": _derived_stat(level, converted_agi, NATURAL_DODGE_CAP, 1.0, GENERIC_ATTR_EXPONENT) * SHEET_CHANCE_PERCENT_SCALE,
 		"armor": might_resist * SHEET_CHANCE_PERCENT_SCALE,
 		"techResist": tech_resist * SHEET_CHANCE_PERCENT_SCALE,
+		"reflexResist": reflex_resist * SHEET_CHANCE_PERCENT_SCALE,
 		"primaryStat": primary_key,
 		"archetype": arch,
 	}
@@ -292,13 +296,18 @@ static func attribute_tooltip(stat: String, character: Dictionary, equipped: Arr
 			return lines
 		"intellect":
 			var lines2 := "Increases tech resistance by %.1f%%." % float(d.get("techResist", 0))
+			if arch == "str":
+				lines2 += "\nIncreases Reflex Resist by %.1f%%." % float(d.get("reflexResist", 0))
 			if primary == "intellect":
 				lines2 += "\nAlso sets attack damage to %d." % int(d.get("damage", 0))
 			return lines2
 		"strength":
 			if arch == "str" or primary == "strength":
 				return "Increases attack damage to %d." % int(d.get("damage", 0))
-			return "Increases Might Resistance by %.1f%%." % float(d.get("armor", 0))
+			var str_line := "Increases Might Resistance by %.1f%%." % float(d.get("armor", 0))
+			if arch == "int":
+				str_line += "\nIncreases Reflex Resist by %.1f%%." % float(d.get("reflexResist", 0))
+			return str_line
 		_:
 			return "Contributes to combat power and derived stats."
 

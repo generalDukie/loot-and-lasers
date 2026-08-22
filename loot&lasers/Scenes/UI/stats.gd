@@ -89,6 +89,9 @@ const BAG_ATTR_FONT_PX := 26
 ## Lift attr chips off the pane bottom edge.
 const BAG_ATTR_BOTTOM_PAD := 6.0
 const ARMOR_STAT_LABEL := "Might Resistance"
+const REFLEX_RESIST_LABEL := "Reflex Resist"
+## Lime/chartreuse — same tile chrome as Dodge, different green family from agility mint `#34D399`.
+const REFLEX_RESIST_TILE_COLOR := Color("#A3E635")
 ## Half-period of the slow tutorial pulse (~2 full cycles over a 5s hold).
 const COMBAT_STAT_FLASH_HALF_SEC := 1.25
 const COMBAT_STAT_FLASH_PEAK := Color(1.55, 1.9, 1.2, 1.0)
@@ -1934,13 +1937,14 @@ func _make_combat_card() -> VBoxContainer:
 	def_row_b.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	def_row_b.add_theme_constant_override("separation", 6)
 	def_col.add_child(def_row_b)
-	# STR classes never gain Might Resistance; INT never gain Tech Resist.
-	# AGI keeps both. Remaining single resist stretches full row width.
+	# No self-resistance. Might: Tech + Reflex. Tech: Might + Reflex. Reflex: Might + Tech.
 	var arch := MissionCombat.damage_archetype(class_key)
 	if arch != "str":
 		def_row_b.add_child(_combat_tile(ARMOR_STAT_LABEL, GameData.stat_color("strength")))
 	if arch != "int":
 		def_row_b.add_child(_combat_tile("Tech Resist", GameData.stat_color("intellect")))
+	if arch != "agi":
+		def_row_b.add_child(_combat_tile(REFLEX_RESIST_LABEL, REFLEX_RESIST_TILE_COLOR))
 	return root
 
 
@@ -1953,6 +1957,7 @@ func _update_combat(derived: Dictionary, permanent: Dictionary, display: Diction
 		"Dodge Chance": "%s%%" % _fmt_pct(float(derived.get("dodgeChance", 0))),
 		ARMOR_STAT_LABEL: "%s%%" % _fmt_pct(float(derived.get("armor", 0))),
 		"Tech Resist": "%s%%" % _fmt_pct(float(derived.get("techResist", 0))),
+		REFLEX_RESIST_LABEL: "%s%%" % _fmt_pct(float(derived.get("reflexResist", 0))),
 	}
 	for key in values:
 		if _combat_values.has(key):
@@ -2029,13 +2034,18 @@ func _combat_labels_for_attribute(stat: String) -> Array:
 			var out: Array = []
 			if arch != "int":
 				out.append("Tech Resist")
+			if arch == "str":
+				out.append(REFLEX_RESIST_LABEL)
 			if primary == "intellect":
 				out.append("Damage")
 			return out
 		"strength":
 			if arch == "str" or primary == "strength":
 				return ["Damage"]
-			return [ARMOR_STAT_LABEL]
+			var out_str: Array = [ARMOR_STAT_LABEL]
+			if arch == "int":
+				out_str.append(REFLEX_RESIST_LABEL)
+			return out_str
 		_:
 			return []
 

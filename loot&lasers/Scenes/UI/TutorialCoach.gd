@@ -449,13 +449,18 @@ func _combat_labels_for_flash_stat(stat: String) -> Array:
 			var out: Array = []
 			if arch != "int":
 				out.append("Tech Resist")
+			if arch == "str":
+				out.append("Reflex Resist")
 			if primary == "intellect":
 				out.append("Damage")
 			return out
 		"strength":
 			if arch == "str" or primary == "strength":
 				return ["Damage"]
-			return ["Might Resistance"]
+			var out_str: Array = ["Might Resistance"]
+			if arch == "int":
+				out_str.append("Reflex Resist")
+			return out_str
 		_:
 			return []
 

@@ -30,7 +30,12 @@ function rround(x) {
   return Math.trunc(Math.floor(x + 0.5));
 }
 
-function t18MissionXpf(L) {
+function productionMissionXpf(L) {
+  return 100 + 5 * (L - 1) + 0.32 * (L ** 1.67 - 1);
+}
+
+/** Historical pre-denomination formula — parity comparison only, not live. */
+function historicalMissionXpf(L) {
   return 10 + 0.5 * (L - 1) + 0.032 * (L ** 1.67 - 1);
 }
 
@@ -47,7 +52,7 @@ function t18Empl(L) {
 }
 
 function t18Xpnext(L) {
-  return Math.max(1, rround(t18Avgfuel(L) * t18MissionXpf(L) * 0.85 * t18Empl(L) / 0.46));
+  return Math.max(1, rround(t18Avgfuel(L) * productionMissionXpf(L) * 0.85 * t18Empl(L) / 0.46));
 }
 
 function t18Sdpf(L) {
@@ -113,11 +118,15 @@ test("Fuel/Nova quantization", () => {
   assert.equal(M.quantizeNova(1.25), 1.5);
 });
 
-test("mission_xpf exact T18, no ×10", () => {
+test("mission_xpf exact production coefficients, no runtime ×10", () => {
   for (const L of STRESS) {
-    assert.equal(M.missionXpPerFuel(L), t18MissionXpf(L));
+    assert.equal(M.missionXpPerFuel(L), productionMissionXpf(L));
   }
-  assert.ok(M.missionXpPerFuel(1) < 20, "must be design units, not storage ×10");
+  assert.equal(M.missionXpPerFuel(1), 100);
+  assert.equal(M.MISSION_XPF_BASE, 100);
+  assert.equal(M.MISSION_XPF_LINEAR_COEFFICIENT, 5);
+  assert.equal(M.MISSION_XPF_POWER_COEFFICIENT, 0.32);
+  assert.equal(M.MISSION_XPF_EXPONENT, 1.67);
 });
 
 test("avgfuel discrete table", () => {
@@ -283,9 +292,9 @@ test("Mission XP/Stardust independent variance + defeat rounding", () => {
   const sd90 = M.missionStardustReward({ fuel: 12.5, snapshotLevel: 40, stardustVariance: 0.9 });
   const sd100 = M.missionStardustReward({ fuel: 12.5, snapshotLevel: 40, stardustVariance: 1 });
   const sd110 = M.missionStardustReward({ fuel: 12.5, snapshotLevel: 40, stardustVariance: 1.1 });
-  assert.equal(xp90, rround(12.5 * t18MissionXpf(40) * 0.9 * 0.85 * 0.85));
-  assert.equal(xp100, rround(12.5 * t18MissionXpf(40) * 1 * 0.85 * 0.85));
-  assert.equal(xp110, rround(12.5 * t18MissionXpf(40) * 1.1 * 0.85 * 0.85));
+  assert.equal(xp90, rround(12.5 * productionMissionXpf(40) * 0.9 * 0.85 * 0.85));
+  assert.equal(xp100, rround(12.5 * productionMissionXpf(40) * 1 * 0.85 * 0.85));
+  assert.equal(xp110, rround(12.5 * productionMissionXpf(40) * 1.1 * 0.85 * 0.85));
   assert.equal(sd90, rround(12.5 * t18Sdpf(40) * 0.9));
   assert.equal(sd100, rround(12.5 * t18Sdpf(40) * 1));
   assert.equal(sd110, rround(12.5 * t18Sdpf(40) * 1.1));
@@ -313,8 +322,8 @@ test("Stardust has no XP 0.85 factors", () => {
 
 test("Arena XP 2.125 xpf vs repo 5/7 conflict is replaced here", () => {
   for (const L of [1, 10, 50, 100, 800, 2500]) {
-    assert.equal(M.arenaXpReward(L), rround(2.125 * t18MissionXpf(L)));
-    assert.notEqual(M.arenaXpReward(L), rround((5 / 7) * t18MissionXpf(L)));
+    assert.equal(M.arenaXpReward(L), rround(2.125 * productionMissionXpf(L)));
+    assert.notEqual(M.arenaXpReward(L), rround((5 / 7) * productionMissionXpf(L)));
   }
 });
 
@@ -375,7 +384,7 @@ test("Mission rarity ≠ Dungeon rarity", () => {
 
 test("Dungeon DRU exact + XP conversion order", () => {
   assert.deepEqual([...M.DUNGEON_DRU], [60, 150, 170, 300, 340, 495, 715, 810, 1060, 1330]);
-  const raw = rround(60 * 0.05 * t18MissionXpf(10) * 0.87 * 2.1);
+  const raw = rround(60 * 0.05 * productionMissionXpf(10) * 0.87 * 2.1);
   assert.equal(M.dungeonEncounterXpPreMultiplier(0, 0), raw);
   assert.equal(M.dungeonEncounterXp(0, 0), rround(raw * 1.25));
 });
@@ -449,12 +458,49 @@ test("numeric safety vs MAX_SAFE_INTEGER", () => {
   evidence.push(`numeric samples L2500 ${JSON.stringify(samples)}`);
 });
 
-test("XP unit policy is identity 1:1", () => {
+test("XP denomination amendment: L1 anchors, 1:1 units, pacing ratios", () => {
+  assert.equal(M.missionXpPerFuel(1), 100);
+  assert.equal(M.xpToNext(1), 133);
+  assert.equal(M.missionXpReward({ fuel: 0.5, snapshotLevel: 1, xpVariance: 1 }), 36);
+  assert.equal(M.missionXpReward({ fuel: 0.5, snapshotLevel: 1, xpVariance: 0.9 }), 33);
+  assert.equal(M.missionXpReward({ fuel: 0.5, snapshotLevel: 1, xpVariance: 1.1 }), 40);
   assert.equal(M.PRODUCTION_XP_STORAGE_SCALE, 1);
   assert.equal(M.PRODUCTION_XP_STORAGE_POLICY, "identity");
-  assert.equal(M.toStorageXp(7), 7);
-  assert.equal(M.fromStorageXp(7), 7);
+  assert.equal(M.toStorageXp(133), 133);
+  assert.equal(M.fromStorageXp(133), 133);
   assert.equal(M.xpToNext(10), M.toStorageXp(M.xpToNext(10)));
+
+  const levels = [1, 10, 50, 100, 500, 800, 1500, 2000];
+  let maxRatioDev = 0;
+  let maxAt = 1;
+  for (const L of levels) {
+    const fuel = L === 1 ? 0.5 : 12.5;
+    const oldXpf = historicalMissionXpf(L);
+    const oldNext = Math.max(1, rround(t18Avgfuel(L) * oldXpf * 0.85 * t18Empl(L) / 0.46));
+    const oldMission = rround(fuel * oldXpf * 1 * 0.85 * 0.85);
+    const newNext = M.xpToNext(L);
+    const newMission = M.missionXpReward({ fuel, snapshotLevel: L, xpVariance: 1 });
+    const oldRatio = oldMission / oldNext;
+    const newRatio = newMission / newNext;
+    const dev = Math.abs(newRatio - oldRatio) / oldRatio;
+    if (dev > maxRatioDev) {
+      maxRatioDev = dev;
+      maxAt = L;
+    }
+    assert.ok(Math.abs(M.missionXpPerFuel(L) / oldXpf - 10) < 1e-12, `xpf L${L} not 10× historical`);
+  }
+  evidence.push(`denomination pacing max |Δ(MissionXP/XPToNext)| ${ (100 * maxRatioDev).toFixed(4)}% at L${maxAt} (integer rounding)`);
+  // L1 0.5-Fuel products are tiny integers; L10+ should stay under 1%.
+  for (const L of [10, 50, 100, 500, 800, 1500, 2000]) {
+    const fuel = 12.5;
+    const oldXpf = historicalMissionXpf(L);
+    const oldNext = Math.max(1, rround(t18Avgfuel(L) * oldXpf * 0.85 * t18Empl(L) / 0.46));
+    const oldMission = rround(fuel * oldXpf * 1 * 0.85 * 0.85);
+    const newRatio = M.missionXpReward({ fuel, snapshotLevel: L, xpVariance: 1 }) / M.xpToNext(L);
+    const oldRatio = oldMission / oldNext;
+    const dev = Math.abs(newRatio - oldRatio) / oldRatio;
+    assert.ok(dev < 0.01, `L${L} pacing ${dev}`);
+  }
 });
 
 test("frozen fixtures exist and match live module for key values", () => {

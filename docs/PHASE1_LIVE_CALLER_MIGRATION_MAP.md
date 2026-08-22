@@ -4,6 +4,8 @@ Phase 1 migrates the live **character progression foundation** onto locked Phase
 
 XP unit policy (latest user decision, overrides Phase 1 prompt §9): **completely 1:1**. Calculated = granted = stored = API = displayed. `PRODUCTION_XP_STORAGE_SCALE = 1` (identity sentinel, not a conversion). There is no XP ×10 / ÷10.
 
+The production XP denomination was increased by rewriting the authoritative XP formulas and constants. This is NOT an XP scaling layer.
+
 `XP_STARDUST_SCALE = 10` is **LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION**. It is not production XP policy and not production economy authority. Remaining casino / guild / ship / vendor ×10 usages keep today's live numbers until those systems' assigned phases. It is not applied to any XP calculation, grant, storage, requirement, or display path.
 
 `MAX_LEVELS_PER_XP_GRANT = 100000` is a runaway-loop safety guard in `grantCharacterXp`, not a gameplay level cap. L2000 is a validation horizon only.
@@ -73,7 +75,7 @@ Combat event resolution still uses `src/lib/statEngine.js` / `MissionCombat.gd` 
 |---|---|
 | Level | 1 |
 | XP / leftover | 0 |
-| XP-to-next | `xpToNext(1)` = 13 |
+| XP-to-next | `xpToNext(1)` = 133 |
 | Stats | class starting attributes |
 | Nova | 500 (ledger grant) |
 | Stardust | 0 |

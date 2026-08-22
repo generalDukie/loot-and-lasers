@@ -42,12 +42,12 @@ function sumAttrs(stats) {
 console.log("\nPhase 1 live character progression\n");
 
 assert.equal(expForLevel(1), xpToNext(1));
-assert.equal(expForLevel(1), 13);
+assert.equal(expForLevel(1), 133);
 assert.equal(expForLevel(50), xpToNext(50));
-assert.equal(expForLevel(50), 6362);
-assert.equal(expForLevel(100), 20240);
+assert.equal(expForLevel(50), 63623);
+assert.equal(expForLevel(100), 202397);
 assert.notEqual(expForLevel(1) % 10, 0, "XP is 1:1, not forced multiples of 10");
-assert.equal(getMissionXpPerFuel(1), 10);
+assert.equal(getMissionXpPerFuel(1), 100);
 assert.ok(MAX_LEVELS_PER_XP_GRANT >= 100_000, "safety guard is not a practical cap");
 
 const classes = {

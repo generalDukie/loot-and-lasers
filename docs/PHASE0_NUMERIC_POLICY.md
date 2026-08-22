@@ -4,9 +4,9 @@ Phase 0 established units and rounding. XP unit policy was later locked as compl
 
 ## Canonical design units
 
-Certified Test 18 formulas are expressed in **design units**:
+Certified Test 18 formulas are expressed in **design units**. A later production decision raised the XP denomination by rewriting the authoritative XP coefficients (`mission_xpf(1)=100`, `xpToNext(1)=133`). This is NOT an XP scaling layer.
 
-- XP rewards and XPToNext: unscaled T18 integers (`mission_xpf(1)=10`, `xpToNext(1)=13`).
+- XP rewards and XPToNext: unscaled production integers (`mission_xpf(1)=100`, `xpToNext(1)=133`).
 - Stardust: T18 integers from `sdpf` / `rround` products.
 - Fuel: quarter-units (0.25).
 - Nova: half-units (0.5).
@@ -19,6 +19,8 @@ Certified Test 18 formulas are expressed in **design units**:
 Production XP is completely 1:1:
 
 1 calculated XP = 1 granted XP = 1 stored XP = 1 API XP = 1 displayed XP
+
+The production XP denomination was increased by rewriting the authoritative XP formulas and constants. This is NOT an XP scaling layer.
 
 `PRODUCTION_XP_STORAGE_SCALE = 1` is an **identity sentinel**, not a conversion. `toStorageXp` / `fromStorageXp` are identity helpers. There is no intended ×10 or ÷10 XP conversion anywhere.
 
@@ -66,11 +68,11 @@ At L2500 (ordinary gameplay-scale samples):
 
 | Value | Magnitude |
 |---|---|
-| XPToNext | 4_349_592_878 |
+| XPToNext | 43_495_928_775 |
 | SPF | 1_313_360_839 |
 | Legendary weapon market @1.20 | 46_335_370_400 |
 | Attr cost n=2500 | 173_096_476 |
-| Wormhole encounter XP (idx 1149, enemy L~2500) | 9_840_359_900 |
+| Wormhole encounter XP (idx 1149, enemy L~2500) | 98_403_598_998 |
 
 All of the above are well below MAX_SAFE_INTEGER. XPToNext grows ~L^4 from `empl`; SPF grows ~L^{1.625+3.055}. JS Number remains safe for **reasonable indefinite progression** (thousands of levels). Beyond ~L10^5, XPToNext would threaten the 53-bit mantissa; a later bigint/decimal wallet can wait until that horizon is relevant.
 

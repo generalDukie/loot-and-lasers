@@ -13,10 +13,10 @@ extends RefCounted
 ##   • `collection_percentage` — used by stats.gd for the collection bonus readout.
 ## Do not reintroduce mission gameplay formulas here; Node is authoritative.
 
-const XP_PER_FUEL_LINEAR := 0.5
-const XP_PER_FUEL_POWER := 0.032
+const XP_PER_FUEL_LINEAR := 5.0
+const XP_PER_FUEL_POWER := 0.32
 const XP_PER_FUEL_EXP := 1.67
-const XP_PER_FUEL_BASE := 10.0
+const XP_PER_FUEL_BASE := 100.0
 
 
 ## Mission XP/Fuel in canonical 1:1 units. Mirrors server getMissionXpPerFuel.

@@ -37,15 +37,14 @@ test("getMissionXpPerFuel === roundHalfUp(missionXpPerFuel) with no ×10", () =>
   assert.equal(mismatches.length, 0, `mismatched levels: ${mismatches.slice(0, 10).join(",")}`);
 });
 
-test("XP is not forced to multiples of 10", () => {
-  assert.equal(expForLevel(1), 13);
-  assert.equal(getMissionXpPerFuel(1), 10);
+test("XP is canonical 1:1 production denomination", () => {
+  assert.equal(expForLevel(1), 133);
+  assert.equal(getMissionXpPerFuel(1), 100);
 });
 
 test("XP_STARDUST_SCALE is leftover economy debt and is not applied to XP", () => {
   assert.equal(XP_STARDUST_SCALE, 10);
   assert.notEqual(expForLevel(1), 13 * XP_STARDUST_SCALE);
-  assert.notEqual(getMissionXpPerFuel(1), 10 * XP_STARDUST_SCALE);
   assert.equal(expForLevel(1), xpToNext(1));
 });
 

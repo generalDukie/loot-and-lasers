@@ -105,12 +105,12 @@ console.log("\nXP curve update tests\n");
 
 test("legacy economy constant still 10; XP/Fuel is 1:1", () => {
   assert.equal(XP_STARDUST_SCALE, 10);
-  assert.equal(expForLevel(1), 13);
+  assert.equal(expForLevel(1), 133);
   assert.notEqual(expForLevel(1), 13 * XP_STARDUST_SCALE);
   assert.equal(XP_REQUIREMENT_MULTIPLIER, 1.35);
   assert.equal(MISSION_XP_REBALANCE, 0.85);
-  assert.equal(XP_PER_FUEL_LINEAR_COEFFICIENT, 0.5);
-  assert.equal(XP_PER_FUEL_POWER_COEFFICIENT, 0.032);
+  assert.equal(XP_PER_FUEL_LINEAR_COEFFICIENT, 5);
+  assert.equal(XP_PER_FUEL_POWER_COEFFICIENT, 0.32);
   assert.equal(XP_PER_FUEL_EXPONENT, 1.67);
   assert.equal(POST_200_START_LEVEL, 200);
   assert.equal(POST_200_A, 0.8);
@@ -122,10 +122,10 @@ test("legacy economy constant still 10; XP/Fuel is 1:1", () => {
 });
 
 test("XP/Fuel reference outputs (canonical 1:1 units)", () => {
-  assert.equal(getMissionXpPerFuel(1), 10);
-  assert.equal(getMissionXpPerFuel(10), 16);
-  assert.ok(getMissionXpPerFuel(50) >= 50);
-  assert.ok(getMissionXpPerFuel(100) >= 100);
+  assert.equal(getMissionXpPerFuel(1), 100);
+  assert.equal(getMissionXpPerFuel(10), 160);
+  assert.ok(getMissionXpPerFuel(50) >= 500);
+  assert.ok(getMissionXpPerFuel(100) >= 1000);
 });
 
 test("XP/Fuel monotonic and unbounded", () => {
@@ -164,8 +164,8 @@ test("Historical Post200Growth helper still defined; live XPToNext is production
   assert.equal(post200Growth(1), 1);
   assert.equal(post200Growth(200), 1);
   assert.ok(post200Growth(201) > 1);
-  assert.equal(expForLevel(1), 13);
-  assert.equal(expForLevel(50), 6362);
+  assert.equal(expForLevel(1), 133);
+  assert.equal(expForLevel(50), 63623);
   assert.ok(expForLevel(201) >= expForLevel(200));
 });
 

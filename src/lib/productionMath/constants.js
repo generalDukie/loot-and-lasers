@@ -10,10 +10,22 @@ export const MODULE_STATUS = "CERTIFIED FORMULA — PHASE 1 LIVE FOR PROGRESSION
  * XP is completely 1:1. Calculated = granted = stored = displayed.
  * This named constant is an identity sentinel (must stay 1). It is not a conversion.
  * Do not reintroduce a hidden ×10 / ÷10 XP layer.
+ * The production XP denomination was increased by rewriting the authoritative
+ * XP formulas and constants. This is NOT an XP scaling layer.
  */
 export const CANONICAL_XP_UNIT = "design";
 export const PRODUCTION_XP_STORAGE_SCALE = 1;
 export const PRODUCTION_XP_STORAGE_POLICY = "identity";
+
+/**
+ * Production MissionXPPerFuel coefficients.
+ * Denomination was raised by rewriting these coefficients — not by an XP ×10 scale.
+ * mission_xpf(L) = BASE + LINEAR*(L-1) + POWER*(L^EXPONENT - 1)
+ */
+export const MISSION_XPF_BASE = 100;
+export const MISSION_XPF_LINEAR_COEFFICIENT = 5;
+export const MISSION_XPF_POWER_COEFFICIENT = 0.32;
+export const MISSION_XPF_EXPONENT = 1.67;
 
 export const STRESS_LEVELS = Object.freeze([
   1, 10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 600, 700, 800, 1000, 2500,

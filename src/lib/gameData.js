@@ -11,6 +11,10 @@ import {
   xpToNext,
   missionXpPerFuel,
   roundHalfUp,
+  MISSION_XPF_BASE,
+  MISSION_XPF_LINEAR_COEFFICIENT,
+  MISSION_XPF_POWER_COEFFICIENT,
+  MISSION_XPF_EXPONENT,
 } from "@/lib/productionMath";
 import {
   EQUIPMENT_SLOTS,
@@ -872,10 +876,11 @@ export function getExpForLevel(level) {
 /** Global mission XP rebalance (applied after XP/Fuel × efficiency; scale already in XP/Fuel). */
 export const MISSION_XP_REBALANCE = 0.85;
 
-/** Mission XP/Fuel design formula (pre-scale). Keep in sync with server rewards.js. */
-export const XP_PER_FUEL_LINEAR_COEFFICIENT = 0.5;
-export const XP_PER_FUEL_POWER_COEFFICIENT = 0.032;
-export const XP_PER_FUEL_EXPONENT = 1.67;
+/** Mission XP/Fuel production formula. Keep in sync with server rewards.js. */
+export const XP_PER_FUEL_BASE = MISSION_XPF_BASE;
+export const XP_PER_FUEL_LINEAR_COEFFICIENT = MISSION_XPF_LINEAR_COEFFICIENT;
+export const XP_PER_FUEL_POWER_COEFFICIENT = MISSION_XPF_POWER_COEFFICIENT;
+export const XP_PER_FUEL_EXPONENT = MISSION_XPF_EXPONENT;
 
 export function missionXpPerFuelBase(level = 1) {
   return Math.max(1, roundHalfUp(missionXpPerFuel(level)));
@@ -930,7 +935,7 @@ const COMBAT_XP_RELATIVE_MIN = 0.5;
 const COMBAT_XP_RELATIVE_MAX = 1.65;
 const COMBAT_XP_RELATIVE_BASE = 0.55;
 const COMBAT_XP_LEVEL_RATIO_WEIGHT = 0.45;
-const COMBAT_XP_BASE_UNITS = 10;
+const COMBAT_XP_BASE_UNITS = 100;
 const EARLY_FUEL_DISCOUNT_BRACKETS = Object.freeze([
   Object.freeze({ maxLevel: 2, discount: 3 }),
   Object.freeze({ maxLevel: 4, discount: 2 }),
@@ -1027,7 +1032,7 @@ export function scaleXpReward(baseXp, level = 1) {
 
 /**
  * Combat/frontier XP helper (later-phase). COMBAT_XP_BASE_UNITS matches design
- * mission_xpf(1)=10 so baseXp is L1 fuel-minutes. Not XP_STARDUST_SCALE and
+ * mission_xpf(1)=100 so baseXp is L1 fuel-minutes. Not XP_STARDUST_SCALE and
  * not an XP storage conversion.
  */
 export function scaleCombatXp(baseXp, playerLevel = 1, contentLevel = 1) {

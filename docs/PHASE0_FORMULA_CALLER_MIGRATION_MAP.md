@@ -2,7 +2,7 @@
 
 Phase 0 did **not** migrate live callers. This map exists so later phases do not leave stale duplicates.
 
-**Amendment:** Phase 1 wired character-progression callers (`xpToNext`, live `missionXpPerFuel` units, starting/free attrs, attrcost, sheet derived). XP is completely 1:1 (`PRODUCTION_XP_STORAGE_SCALE = 1`). `XP_STARDUST_SCALE = 10` is legacy economy implementation debt, not production XP or economy authority.
+**Amendment:** Phase 1 wired character-progression callers (`xpToNext`, live `missionXpPerFuel` units, starting/free attrs, attrcost, sheet derived). XP is completely 1:1 (`PRODUCTION_XP_STORAGE_SCALE = 1`). The production XP denomination was increased by rewriting the authoritative XP formulas and constants. This is NOT an XP scaling layer. `XP_STARDUST_SCALE = 10` is legacy economy implementation debt, not production XP or economy authority.
 
 | Primitive | Future live callers | Suggested phase |
 |---|---|---|

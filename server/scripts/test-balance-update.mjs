@@ -75,7 +75,7 @@ test("legacy XP_STARDUST_SCALE remains 10 (economy debt, not XP)", () => {
 });
 
 test("XP formula from L1 forever — no L500 boundary", () => {
-  assert.equal(expForLevel(1), 13);
+  assert.equal(expForLevel(1), 133);
   assert.ok(expForLevel(501) > expForLevel(500));
   assert.ok(Number.isFinite(expForLevel(10000)));
   assert.ok(expForLevel(10000) > expForLevel(1000));

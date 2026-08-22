@@ -25,7 +25,7 @@ const fixtures = {
   moduleStatus: M.MODULE_STATUS,
   xpUnitPolicy: "identity-1:1",
   productionXpStorageScale: M.PRODUCTION_XP_STORAGE_SCALE,
-  generatedAt: "Phase 0",
+  generatedAt: "Phase 0 + XP denomination amendment",
   xpToNext: Object.fromEntries(STRESS.map((L) => [L, M.xpToNext(L)])),
   missionXpPerFuel: Object.fromEntries(STRESS.map((L) => [L, M.missionXpPerFuel(L)])),
   stardustPerFuel: Object.fromEntries(STRESS.map((L) => [L, M.stardustPerFuel(L)])),

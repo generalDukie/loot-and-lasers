@@ -1,6 +1,6 @@
 # Prompt 04 — Character Progression (XP, Levels, Free Attributes)
 
-> **Superseded XP unit policy (Phase 1):** Production XP is completely 1:1. Calculated = granted = stored = API = displayed. `PRODUCTION_XP_STORAGE_SCALE = 1`. There is no XP ×10. Live authority is `productionMath.xpToNext` via `expForLevel`. The historical `units × 10` text below is a prior-phase snapshot, not current production policy. `XP_STARDUST_SCALE = 10` is legacy economy implementation debt, not XP.
+> **Superseded XP unit policy (Phase 1):** Production XP is completely 1:1. Calculated = granted = stored = API = displayed. `PRODUCTION_XP_STORAGE_SCALE = 1`. There is no XP ×10. Live authority is `productionMath.xpToNext` via `expForLevel`. The production XP denomination was increased by rewriting the authoritative XP formulas and constants. This is NOT an XP scaling layer. The historical `units × 10` text below is a prior-phase snapshot, not current production policy. `XP_STARDUST_SCALE = 10` is legacy economy implementation debt, not XP.
 
 ## 1. Existing authoritative progression
 

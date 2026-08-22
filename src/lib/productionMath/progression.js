@@ -9,6 +9,10 @@ import {
   CANONICAL_XP_UNIT,
   DEFEAT_REWARD_FACTOR,
   DRU_REFERENCE_MISSION_SHARE,
+  MISSION_XPF_BASE,
+  MISSION_XPF_EXPONENT,
+  MISSION_XPF_LINEAR_COEFFICIENT,
+  MISSION_XPF_POWER_COEFFICIENT,
   PRODUCTION_XP_STORAGE_SCALE,
   XP_MISSION_SHARE,
   XP_REWARD_EFFICIENCY,
@@ -18,10 +22,17 @@ function levelInt(level) {
   return Math.max(1, Math.floor(Number(level) || 1));
 }
 
-/** Certified `mission_xpf(L)` in design units. Completely 1:1 — no ×10 / ÷10. */
+/**
+ * Certified `mission_xpf(L)` in production design units. Completely 1:1.
+ * Coefficients are the production formula — not `oldFormula * 10` and not an XP_SCALE.
+ */
 export function missionXpPerFuel(level) {
   const L = levelInt(level);
-  return 10 + 0.5 * (L - 1) + 0.032 * (L ** 1.67 - 1);
+  return (
+    MISSION_XPF_BASE
+    + MISSION_XPF_LINEAR_COEFFICIENT * (L - 1)
+    + MISSION_XPF_POWER_COEFFICIENT * (L ** MISSION_XPF_EXPONENT - 1)
+  );
 }
 
 /** Intentional discrete avgfuel(L); matures at 12.5. */
@@ -89,5 +100,5 @@ export function arenaXpReward(level) {
 export const XP_UNIT_POLICY = Object.freeze({
   canonical: CANONICAL_XP_UNIT,
   storageScale: PRODUCTION_XP_STORAGE_SCALE,
-  note: "XP is completely 1:1. Calculated = granted = stored = API = displayed. PRODUCTION_XP_STORAGE_SCALE is identity 1, not a conversion. Do not bake ×10 or ÷10 into missionXpPerFuel / xpToNext / arena / dungeon primitives, grants, persistence, or HUD.",
+  note: "The production XP denomination was increased by rewriting the authoritative XP formulas and constants. This is NOT an XP scaling layer. Calculated = granted = stored = API = displayed. PRODUCTION_XP_STORAGE_SCALE is identity 1.",
 });

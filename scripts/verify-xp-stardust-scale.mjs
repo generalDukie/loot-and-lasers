@@ -35,17 +35,17 @@ function assertEq(label, got, expected) {
   console.log(`ok  ${label} = ${got}`);
 }
 
-assertEq("L1→2 XP", expForLevel(1), 13);
+assertEq("L1→2 XP", expForLevel(1), 133);
 if (!(expForLevel(501) > expForLevel(500))) throw new Error("L501 should exceed L500");
 
-assertEq("L1 XP/fuel", getMissionXpPerFuel(1), 10);
-assertEq("L10 XP/fuel", getMissionXpPerFuel(10), 16);
+assertEq("L1 XP/fuel", getMissionXpPerFuel(1), 100);
+assertEq("L10 XP/fuel", getMissionXpPerFuel(10), 160);
 assertEq("L1 SD/fuel", getMissionStardustPerFuel(1), 50);
 assertEq("L10 SD/fuel", getMissionStardustPerFuel(10), Math.round(50 + 1.009 * 9 ** 1.625 * (1 + (10 / 166.66) ** 3.055)));
-assertEq("L100 XP/fuel", getMissionXpPerFuel(100), 129);
+assertEq("L100 XP/fuel", getMissionXpPerFuel(100), 1295);
 assertEq("L100 SD/fuel", getMissionStardustPerFuel(100), Math.round(50 + 1.009 * 99 ** 1.625 * (1 + (100 / 166.66) ** 3.055)));
 assertEq("MISSION_XP_REBALANCE", MISSION_XP_REBALANCE, 0.85);
-assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), Math.round(10 * 129 * 0.85));
+assertEq("Mission XP 10 fuel L100 eff1", computeMissionXpFromFuel(10, 100, 1), Math.round(10 * 1295 * 0.85));
 
 assertEq("Attr cost #1", getAttributePointCost(1), 100);
 assertEq("Attr cost #10", getAttributePointCost(10), 112);
@@ -53,7 +53,7 @@ assertEq("Attr cost #650", getAttributePointCost(650), 111517);
 
 const sd10 = getMissionStardustPerFuel(10);
 const sd50 = getMissionStardustPerFuel(50);
-assertEq("Arena XP L10", getArenaXpReward(10), Math.max(1, Math.round((16 * 5) / 7)));
+assertEq("Arena XP L10", getArenaXpReward(10), Math.max(1, Math.round((160 * 5) / 7)));
 assertEq("Arena SD L10", getArenaStardustReward(10), Math.round(2.25 * sd10));
 assertEq("Arena refresh", ARENA_REFRESH_COST, 500);
 assertEq("Guild create", GUILD_CREATE_COST, 5000);

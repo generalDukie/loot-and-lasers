@@ -11,7 +11,9 @@ Banner: **AUTHORITATIVE FORMULA MODULE — PHASE 1 LIVE FOR CHARACTER PROGRESSIO
 
 **XP unit policy (post-Phase 0 user override):** XP is completely 1:1. Calculated = granted = stored = API = displayed. `PRODUCTION_XP_STORAGE_SCALE = 1` (identity sentinel, not a conversion). There is no XP ×10 or ÷10.
 
-`XP_STARDUST_SCALE = 10` is **LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION**. It is not production XP policy and not production economy authority. Certified equations in this registry are unchanged.
+The production XP denomination was increased by rewriting the authoritative XP formulas and constants. This is NOT an XP scaling layer.
+
+`XP_STARDUST_SCALE = 10` is **LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION**. It is not production XP policy and not production economy authority.
 
 GES is not a production mechanic and is not registered.
 
@@ -54,11 +56,11 @@ Combat HP / per-hit `round()` uses half-even. Economy/XP `rround` uses half-up. 
 | Field | Value |
 |---|---|
 | Classification | **A** |
-| Equation | `10 + 0.5*(L-1) + 0.032*(L^1.67 - 1)` |
-| Units | canonical design XP / Fuel (no ×10) |
+| Equation | `100 + 5*(L-1) + 0.32*(L^1.67 - 1)` |
+| Units | canonical design XP / Fuel (no ×10). Denomination raised by rewriting coefficients, not a scale. |
 | Rounding | none (full float) |
 | Clamps | L≥1 |
-| L1000 / L2500 | 3784.005575… / 16384.969841… |
+| L1 / L1000 / L2500 | 100 / 37840.05575… / 163849.69841… |
 | Migration | Phase 1+ (rewards) |
 | Tests | exact equality vs T18 clone |
 
@@ -84,7 +86,7 @@ Combat HP / per-hit `round()` uses half-even. Economy/XP `rround` uses half-up. 
 | Units | design XP |
 | Rounding | rround after full product |
 | Clamps | max(1, ·); no level cap |
-| L1 / L800 / L1000 / L2500 | 13 / 8728476 / 27795027 / 4349592878 |
+| L1 / L800 / L1000 / L2500 | 133 / 87284765 / 277950267 / 43495928775 |
 | Monotone | yes L1→L2500 |
 
 ---
@@ -97,7 +99,7 @@ Combat HP / per-hit `round()` uses half-even. Economy/XP `rround` uses half-up. 
 | Equation | `rround(Fuel * mission_xpf(snapL) * xpVariance * 0.85 * 0.85)`; defeat `rround(win * 0.5)` |
 | RNG | explicit `xpVariance` in [0.90, 1.10]; independent of Stardust |
 | Level | snapshot at Mission acceptance |
-| Fixtures L50 Fuel 12.5 | 0.90→4544; 1.00→5049; 1.10→5554; defeat@1.00→2525 |
+| Fixtures L50 Fuel 12.5 | 0.90→4590; 1.00→5100; 1.10→5610; defeat@1.00→2550 |
 
 ---
 

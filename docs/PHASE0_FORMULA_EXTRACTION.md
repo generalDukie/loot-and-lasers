@@ -6,11 +6,11 @@ Module: `src/lib/productionMath/` — **AUTHORITATIVE FORMULA MODULE — PHASE 1
 
 ## Amendment — XP unit policy (post-Phase 0 user override)
 
-Certified formulas remain in **design units** and were **not** refit. A later production decision locked XP as completely 1:1:
-
-1 calculated = 1 granted = 1 stored = 1 API = 1 displayed.
+Certified formulas remain in **design units** and were **not** refit except for the later XP denomination amendment (coefficients only).
 
 `PRODUCTION_XP_STORAGE_SCALE = 1` (identity). There is no XP ×10 / ÷10 conversion.
+
+The production XP denomination was increased by rewriting the authoritative XP formulas and constants. This is NOT an XP scaling layer.
 
 Historical extraction notes below that describe live `getMissionXpPerFuel` as `round(design)×10` or applying `XP_STARDUST_SCALE` to XP are **obsolete**. Live Phase 1 XP uses canonical design units.
 
@@ -25,9 +25,10 @@ Phase 1 later wired progression callers (`xpToNext`, live `missionXpPerFuel` uni
 ### Mission XP per Fuel
 - T18: `mission_xpf` in `test18_runner.py`
 - Repo (Phase 0 snapshot): `getMissionXpPerFuel` then applied a ×10 storage step. **Superseded:** live is 1:1 via `max(1, roundHalfUp(missionXpPerFuel(L)))`.
-- T18 eq: `10+0.5*(L-1)+0.032*(L^1.67-1)`
-- Classification: **A** for the polynomial; XP storage scale is identity 1, not part of the primitive
-- Action: centralized design-unit primitive; no ×10 inside
+- Production eq (denomination amendment): `100+5*(L-1)+0.32*(L^1.67-1)`
+- Historical T18 eq: `10+0.5*(L-1)+0.032*(L^1.67-1)`
+- Classification: **A** for the polynomial; denomination raised by rewriting coefficients. XP storage scale is identity 1, not part of the primitive
+- Action: centralized design-unit primitive; no runtime ×10 inside
 - Rounding: none
 
 ### avgfuel / XPToNext
@@ -35,7 +36,7 @@ Phase 1 later wired progression callers (`xpToNext`, live `missionXpPerFuel` uni
 - Repo: different closed form in `rewards.js` (`2.106 * L^1.532 * …` × 1.35 × post-200 × 1.5 × early)
 - Classification: **B** (live XPToNext) / **A** (certified architecture, indefinitely valid)
 - Action: centralized exact T18 `xpnext`; no replacement curve
-- Evidence: exact equality L1–L2500 vs T18 clone; monotone; L2500=4_349_592_878
+- Evidence: exact equality L1–L2500 vs production clone; monotone; L2500=43_495_928_775
 
 ### Mission XP reward
 - T18 `mission_block`: `mx=rround(F*mission_xpf(snapL)*eff*.85*.85)`; defeat `mx=rround(mx*.5)`

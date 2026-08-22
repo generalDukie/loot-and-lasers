@@ -135,7 +135,7 @@ assert.equal(createdPayload.level, 1);
 assert.deepEqual(createdPayload.stats, classBaseStats("Vanguard"));
 assert.equal(createdPayload.experience, 0);
 assert.equal(createdPayload.experience_to_next_level, expForLevel(1));
-assert.equal(createdPayload.experience_to_next_level, 13);
+assert.equal(createdPayload.experience_to_next_level, 133);
 
 const adminAccount = {
   id: "foundation-admin-1",
@@ -148,7 +148,7 @@ const adminPayload = sanitizeCreatePayload(adminAccount, "Character", {
   class: "Vanguard",
   nova_crystals: 999999,
 });
-assert.equal(adminPayload.experience_to_next_level, 13);
+assert.equal(adminPayload.experience_to_next_level, 133);
 assert.equal(adminPayload.nova_crystals, 0);
 assert.equal(adminPayload.level, 1);
 assert.deepEqual(adminPayload.stats, classBaseStats("Vanguard"));
@@ -193,7 +193,7 @@ const brokenSlot = entities.Character.create({
 });
 assert.ok(brokenSlot.experience_to_next_level == null || brokenSlot.experience_to_next_level <= 1);
 const repairedSlot = ensureCharacterLiveCreateDefaults(account, brokenSlot);
-assert.equal(repairedSlot.character.experience_to_next_level, 13);
+assert.equal(repairedSlot.character.experience_to_next_level, 133);
 assert.equal(getBalances(repairedSlot.character).nova_crystals, 500);
 const repairedAgain = ensureCharacterLiveCreateDefaults(account, repairedSlot.character);
 assert.equal(getBalances(repairedAgain.character).nova_crystals, 500);

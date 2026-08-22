@@ -25,6 +25,7 @@ const { composePermanentAttributes } = await import("../../src/lib/characterStat
 const {
   getAttributePointCost,
   getAttributePurchaseCount,
+  getNextAttributePointCost,
 } = await import("../src/shared/economyFormulas.js");
 const { getAttributePointCost: libGetAttributePointCost } = await import("../../src/lib/gameData.js");
 const {
@@ -328,17 +329,18 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
 
   const sequence = [
     ["strength", 10],
-    ["vitality", 20],
-    ["luck", 40],
-    ["agility", 60],
-    ["intellect", 80],
+    ["vitality", 10],
+    ["luck", 10],
+    ["agility", 10],
+    ["intellect", 10],
   ];
   let dust = 1_000;
   for (let i = 0; i < sequence.length; i++) {
     const [stat, expectedCost] = sequence[i];
     const before = entities.Character.get(ch.id);
-    assert.equal(getAttributePurchaseCount(before), i);
-    const buy = await BuyAttribute(account, { stat, request_id: `intro-${i + 1}` });
+    assert.equal(getAttributePurchaseCount(before, stat), 0);
+    assert.equal(getNextAttributePointCost(before, stat), 10);
+    const buy = await BuyAttribute(account, { stat, request_id: `intro-${stat}-1` });
     assert.equal(buy.status, 200, JSON.stringify(buy.body));
     assert.equal(buy.body.cost, expectedCost);
     assert.equal(buy.body.count, 1);
@@ -346,43 +348,65 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
     const live = entities.Character.get(ch.id);
     assert.equal(live.stardust, dust);
     assert.ok(live.stardust >= 0);
-    assert.equal(getAttributePurchaseCount(live), i + 1);
-    assert.equal(live.attribute_purchases, i + 1);
+    assert.equal(getAttributePurchaseCount(live, stat), 1);
+    assert.equal(getNextAttributePointCost(live, stat), 20);
   }
 
-  const afterFive = entities.Character.get(ch.id);
-  assert.equal(afterFive.attribute_purchases_by_stat.strength, 1);
-  assert.equal(afterFive.attribute_purchases_by_stat.vitality, 1);
-  assert.equal(afterFive.attribute_purchases_by_stat.luck, 1);
-  assert.equal(afterFive.attribute_purchases_by_stat.agility, 1);
-  assert.equal(afterFive.attribute_purchases_by_stat.intellect, 1);
-  const reloadFive = await GetCharacterAttributes(account, {});
-  assert.equal(reloadFive.status, 200, JSON.stringify(reloadFive.body));
-  assert.equal(getAttributePurchaseCount(reloadFive.body.character), 5);
-  assert.equal(reloadFive.body.sheet.next_costs.strength, 100);
-  assert.equal(reloadFive.body.sheet.next_costs.vitality, attributePurchaseCost(1));
-  assert.equal(reloadFive.body.character.stardust, 790);
+  const afterMixed = entities.Character.get(ch.id);
+  assert.equal(afterMixed.attribute_purchases_by_stat.strength, 1);
+  assert.equal(afterMixed.attribute_purchases_by_stat.vitality, 1);
+  assert.equal(afterMixed.attribute_purchases_by_stat.luck, 1);
+  assert.equal(afterMixed.attribute_purchases_by_stat.agility, 1);
+  assert.equal(afterMixed.attribute_purchases_by_stat.intellect, 1);
+  assert.equal(afterMixed.attribute_purchases, 5);
+  const reloadMixed = await GetCharacterAttributes(account, {});
+  assert.equal(reloadMixed.status, 200, JSON.stringify(reloadMixed.body));
+  assert.equal(reloadMixed.body.sheet.next_costs.strength, 20);
+  assert.equal(reloadMixed.body.sheet.next_costs.vitality, 20);
+  assert.equal(reloadMixed.body.character.stardust, 950);
 
-  const sixth = await BuyAttribute(account, { stat: "strength", request_id: "intro-6" });
-  assert.equal(sixth.status, 200, JSON.stringify(sixth.body));
-  assert.equal(sixth.body.cost, 100);
-  assert.equal(sixth.body.cost, attributePurchaseCost(1));
-  const afterSix = entities.Character.get(ch.id);
-  assert.equal(afterSix.stardust, 690);
-  assert.equal(afterSix.attribute_purchases, 6);
-  assert.equal(afterSix.attribute_purchases_by_stat.strength, 2);
-  assert.equal(getAttributePurchaseCount(afterSix), 6);
-  const reloadSix = await GetCharacterAttributes(account, {});
-  assert.equal(reloadSix.status, 200);
-  assert.equal(reloadSix.body.sheet.next_costs.strength, attributePurchaseCost(2));
-  assert.equal(reloadSix.body.sheet.next_costs.luck, getAttributePointCost(7));
+  const strRest = [20, 40, 60, 80];
+  for (let i = 0; i < strRest.length; i++) {
+    const buy = await BuyAttribute(account, {
+      stat: "strength",
+      request_id: `intro-str-${i + 2}`,
+    });
+    assert.equal(buy.status, 200, JSON.stringify(buy.body));
+    assert.equal(buy.body.cost, strRest[i]);
+    dust -= strRest[i];
+  }
 
-  const replaySix = await BuyAttribute(account, { stat: "strength", request_id: "intro-6" });
+  const afterFiveStr = entities.Character.get(ch.id);
+  assert.equal(afterFiveStr.attribute_purchases_by_stat.strength, 5);
+  assert.equal(afterFiveStr.attribute_purchases_by_stat.vitality, 1);
+  assert.equal(afterFiveStr.stardust, dust);
+  const reloadFiveStr = await GetCharacterAttributes(account, {});
+  assert.equal(reloadFiveStr.status, 200, JSON.stringify(reloadFiveStr.body));
+  assert.equal(reloadFiveStr.body.sheet.next_costs.strength, 100);
+  assert.equal(reloadFiveStr.body.sheet.next_costs.vitality, 20);
+  assert.equal(reloadFiveStr.body.sheet.next_costs.luck, 20);
+
+  const sixthStr = await BuyAttribute(account, { stat: "strength", request_id: "intro-str-6" });
+  assert.equal(sixthStr.status, 200, JSON.stringify(sixthStr.body));
+  assert.equal(sixthStr.body.cost, 100);
+  assert.equal(sixthStr.body.cost, attributePurchaseCost(1));
+  dust -= 100;
+  const afterSixStr = entities.Character.get(ch.id);
+  assert.equal(afterSixStr.stardust, dust);
+  assert.equal(afterSixStr.attribute_purchases_by_stat.strength, 6);
+  assert.equal(afterSixStr.attribute_purchases_by_stat.vitality, 1);
+  const reloadSixStr = await GetCharacterAttributes(account, {});
+  assert.equal(reloadSixStr.status, 200);
+  assert.equal(reloadSixStr.body.sheet.next_costs.strength, attributePurchaseCost(2));
+  assert.equal(reloadSixStr.body.sheet.next_costs.vitality, 20);
+  assert.equal(getNextAttributePointCost(reloadSixStr.body.character, "luck"), 20);
+
+  const replaySix = await BuyAttribute(account, { stat: "strength", request_id: "intro-str-6" });
   assert.equal(replaySix.status, 200, JSON.stringify(replaySix.body));
   assert.equal(replaySix.body.idempotent_replay, true);
-  assert.equal(entities.Character.get(ch.id).stardust, 690);
-  assert.equal(entities.Character.get(ch.id).attribute_purchases, 6);
-  console.log("  ✓ intro table sequential mixed-stat purchases + reload + replay");
+  assert.equal(entities.Character.get(ch.id).stardust, dust);
+  assert.equal(entities.Character.get(ch.id).attribute_purchases_by_stat.strength, 6);
+  console.log("  ✓ per-stat intro table mixed purchases + independent next costs + reload + replay");
 }
 
 {

@@ -398,7 +398,7 @@ export const ATTR_COST_HORNER = Object.freeze([
 ]);
 export const ATTR_COST_LOG_OFFSET = 20;
 
-/** First N global permanent-attribute purchases use a discrete intro table, not attrcost. */
+/** First N purchases of each attribute use a discrete intro table, not attrcost. */
 export const ATTR_INTRO_PURCHASE_COUNT = 5;
 export const ATTR_INTRO_PURCHASE_COST_1 = 10;
 export const ATTR_INTRO_PURCHASE_COST_2 = 20;

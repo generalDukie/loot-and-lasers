@@ -215,7 +215,7 @@ test("Mining 3% efficiency", () => {
   assert.equal(computeMiningReward(50, 1), Math.round(sd50 * 0.03 * 60));
 });
 
-test("Attribute purchase Horner costs + global intro mapping", () => {
+test("Attribute purchase Horner costs + independent per-stat intro mapping", () => {
   assert.equal(AttributePurchaseCost(1), 100);
   assert.equal(AttributePurchaseCost(10), 112);
   assert.equal(AttributePurchaseCost(50), 260);
@@ -235,9 +235,12 @@ test("Attribute purchase Horner costs + global intro mapping", () => {
   assert.equal(getAttributePurchaseCount(ch, "strength"), 200);
   assert.equal(getAttributePurchaseCount(ch, "agility"), 50);
   assert.equal(getAttributePurchaseCount(ch), 250);
-  assert.equal(getNextAttributePointCost(ch, "strength"), getNextAttributePointCost(ch, "agility"));
-  assert.equal(getNextAttributePointCost(ch, "strength"), getAttributePointCost(251));
-  assert.equal(getNextAttributePointCost(ch, "strength"), AttributePurchaseCost(246));
+  assert.notEqual(getNextAttributePointCost(ch, "strength"), getNextAttributePointCost(ch, "agility"));
+  assert.equal(getNextAttributePointCost(ch, "strength"), getAttributePointCost(201));
+  assert.equal(getNextAttributePointCost(ch, "agility"), getAttributePointCost(51));
+  assert.equal(getNextAttributePointCost(ch, "intellect"), 10);
+  assert.equal(getNextAttributePointCost(ch, "strength"), AttributePurchaseCost(196));
+  assert.equal(getNextAttributePointCost(ch, "agility"), AttributePurchaseCost(46));
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

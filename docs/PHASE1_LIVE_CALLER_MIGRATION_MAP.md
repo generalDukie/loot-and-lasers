@@ -66,13 +66,13 @@ Combat event resolution still uses `src/lib/statEngine.js` / `MissionCombat.gd` 
 | **Old** | `AttributePurchaseCost` log-PCHIP anchors |
 | **New** | Certified Horner `attributePurchaseCost` (`attrcost`) **unchanged** |
 | **Live mapping** | `permanentAttributePurchaseCost(n)` — **INTENTIONAL DISCRETE INTRODUCTORY ATTRIBUTE-PRICE TABLE** |
-| **Intro table** | 1→10; 2→20; 3→40; 4→60; 5→80 (global total purchases, all stats) |
-| **After intro** | `globalPurchaseCost(n) = attrcost(n - 5)` for `n ≥ 6`. Global #6 is certified curve purchase #1. |
+| **Intro table** | 1→10; 2→20; 3→40; 4→60; 5→80 **per attribute** (independent counters) |
+| **After intro** | That stat's purchase #n ≥ 6 costs `attrcost(n - 5)`. That stat's #6 is certified curve purchase #1. |
 | **Callers** | `getAttributePointCost` / `getNextAttributePointCost`, `BuyAttribute` (server authority + optional `request_id` replay) |
 | **Godot** | `StardustEconomy.permanent_attribute_purchase_cost` preview-only (Horner clone remains for attrcost) |
 | **PCHIP** | unused by live attrcost; historical leftover |
 
-The certified attrcost curve itself is unchanged. The first five fixed-price purchases precede it; global purchase #6 is certified attrcost curve purchase #1.
+The certified attrcost curve itself is unchanged. Each attribute's first five fixed-price purchases precede **that attribute's** certified curve; that attribute's purchase #6 is certified attrcost curve purchase #1. Buying Strength does not raise Vitality's next price.
 
 ## Character creation defaults
 
@@ -98,7 +98,7 @@ The certified attrcost curve itself is unchanged. The first five fixed-price pur
 
 - `experience_to_next_level` is a **cache**: always regenerated from `xpToNext(level)`.
 - Permanent stats are **composed**: starting + free-from-level + `attribute_purchases_by_stat`. Gear/Stim/Ship are not baked in.
-- Global permanent-attribute purchase count is reconstructed as the sum of `attribute_purchases_by_stat`. Live pricing uses that global count; per-stat ownership is unchanged.
+- Each attribute's next Stardust price uses **that stat's** `attribute_purchases_by_stat` count. Counters stay independent through the intro table and the certified curve.
 - Startup migration `phase1_production_progression_v1` clamps leftover XP (does **not** convert obsolete ×10 leftover into extra levels) and recomposes attributes.
 
 ## Stardust wallet

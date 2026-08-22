@@ -199,7 +199,7 @@ const ATTR_INTRO_PURCHASE_COSTS := [
 
 
 static func attribute_purchase_cost(purchase_number: int = 1) -> int:
-	## Certified Horner attrcost preview. Unchanged. Not the live global purchase price.
+	## Certified Horner attrcost preview. Unchanged. Not the live per-stat purchase price.
 	var n := maxi(1, purchase_number)
 	var z := log(float(n) + ATTR_COST_LOG_OFFSET)
 	var v := 0.0
@@ -208,10 +208,10 @@ static func attribute_purchase_cost(purchase_number: int = 1) -> int:
 	return maxi(1, int(floor(exp(v) + 0.5)))
 
 
-static func permanent_attribute_purchase_cost(global_purchase_number: int = 1) -> int:
+static func permanent_attribute_purchase_cost(purchase_number: int = 1) -> int:
 	## Preview-only mirror of productionMath.permanentAttributePurchaseCost.
-	## Server BuyAttribute remains settlement authority.
-	var n := maxi(1, global_purchase_number)
+	## Per-stat purchase index. Server BuyAttribute remains settlement authority.
+	var n := maxi(1, purchase_number)
 	if n <= ATTR_INTRO_PURCHASE_COUNT:
 		return int(ATTR_INTRO_PURCHASE_COSTS[n - 1])
 	return attribute_purchase_cost(n - ATTR_INTRO_PURCHASE_COUNT)

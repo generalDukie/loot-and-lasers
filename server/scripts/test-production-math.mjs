@@ -216,7 +216,7 @@ test("introductory permanent-attribute price table precedes certified attrcost",
     assert.equal(
       M.permanentAttributePurchaseCost(n + M.ATTR_INTRO_PURCHASE_COUNT),
       M.attributePurchaseCost(n),
-      `global #${n + 5} vs attrcost(${n})`,
+      `purchase #${n + 5} vs attrcost(${n})`,
     );
   }
 });

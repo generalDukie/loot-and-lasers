@@ -72,7 +72,7 @@ export function pveGearStatBudgetLevel(playerLevel) {
 
 /**
  * Certified attrcost(n) = max(1, rround(exp(Horner(log(max(1,n)+20))))).
- * Unchanged Horner curve. Do not call this as the live global purchase price.
+ * Unchanged Horner curve. Do not call this as the live per-stat purchase price.
  */
 export function attributePurchaseCost(purchaseNumber) {
   const n = purchaseInt(purchaseNumber);
@@ -83,12 +83,13 @@ export function attributePurchaseCost(purchaseNumber) {
 }
 
 /**
- * Live Stardust price for the player's Nth total permanent-attribute purchase
- * (all stats share one global count). Purchases 1–5 use a discrete intro table;
- * purchase 6+ is certified attrcost(N - 5). The curve itself is not shifted.
+ * Live Stardust price for the Nth purchase of one attribute.
+ * Each stat has an independent purchase count. Purchases 1–5 of that stat use
+ * a discrete intro table; purchase 6+ is certified attrcost(N - 5).
+ * The curve itself is not shifted.
  */
-export function permanentAttributePurchaseCost(globalPurchaseNumber) {
-  const n = purchaseInt(globalPurchaseNumber);
+export function permanentAttributePurchaseCost(purchaseNumber) {
+  const n = purchaseInt(purchaseNumber);
   if (n <= ATTR_INTRO_PURCHASE_COUNT) {
     return ATTR_INTRO_PURCHASE_COSTS[n - 1];
   }

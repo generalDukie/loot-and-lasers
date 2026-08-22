@@ -146,7 +146,7 @@ Free level: +2/L after L1; **35/35/20/5/5** largest-remainder. Classification **
 
 `attrcost(n)=max(1,rround(exp(Horner(log(n+20)))))`. **B** vs live PCHIP. n=1→11; 650 and 2500 finite.
 
-The certified `attrcost` curve itself is unchanged. The first five fixed-price purchases precede it; global purchase #6 is certified attrcost curve purchase #1.
+The certified `attrcost` curve itself is unchanged. Each attribute's first five fixed-price purchases precede **that attribute's** curve; that attribute's purchase #6 is certified attrcost curve purchase #1. Costs do not combine across stats.
 
 ---
 
@@ -157,14 +157,14 @@ The certified `attrcost` curve itself is unchanged. The first five fixed-price p
 | Classification | **D** INTENTIONAL DISCRETE RULE |
 | Status | PRODUCTION LIVE |
 | Authority | `productionMath.permanentAttributePurchaseCost` |
-| Intent | First five **total** permanent-attribute purchases (all stats share one global count) use a fixed Stardust table. They are a separate introductory sequence placed **before** the certified curve. |
-| Table | 1→10; 2→20; 3→40; 4→60; 5→80 |
-| Afterward | `globalPurchaseCost(n) = attrcost(n - 5)` for `n ≥ 6` |
-| Mapping | `curvePurchaseIndex = globalPurchaseNumber - 5` for every global purchase ≥ 6 |
-| Anchors | global #6 = attrcost(1) = 100; #15 = attrcost(10) = 112; #55 = attrcost(50) = 260; #655 = attrcost(650) = 111517 |
-| Explicit | The certified attrcost curve itself is unchanged. Do not describe this as shifting or modifying the curve. Horner coefficients are untouched. |
-| Persistence | Global count = sum of `attribute_purchases_by_stat` (per-stat ownership preserved) |
-| Settlement | Server `BuyAttribute` via `getAttributePointCost` / `getNextAttributePointCost`. Godot preview mirrors the helper; it does not control settlement. |
+| Intent | First five purchases **of each attribute** use a fixed Stardust table. Each stat has an independent purchase count. The table is a separate introductory sequence placed **before** that stat's certified curve. |
+| Table | 1→10; 2→20; 3→40; 4→60; 5→80 (per attribute) |
+| Afterward | For that stat, `purchaseCost(n) = attrcost(n - 5)` for `n ≥ 6` |
+| Mapping | `curvePurchaseIndex = thatStatPurchaseNumber - 5` for every per-stat purchase ≥ 6 |
+| Anchors | that stat #6 = attrcost(1) = 100; #15 = attrcost(10) = 112; #55 = attrcost(50) = 260; #655 = attrcost(650) = 111517 |
+| Explicit | The certified attrcost curve itself is unchanged. Do not describe this as shifting or modifying the curve. Horner coefficients are untouched. Buying one attribute does not advance another attribute's price. |
+| Persistence | Per-stat count = `attribute_purchases_by_stat[stat]` |
+| Settlement | Server `BuyAttribute` via `getAttributePointCost` / `getNextAttributePointCost(character, stat)`. Godot preview mirrors the helper; it does not control settlement. |
 
 ---
 

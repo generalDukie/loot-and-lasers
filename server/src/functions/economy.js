@@ -133,6 +133,10 @@ import {
   settleTutorialFirstMissionBonus,
   TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS,
 } from "../shared/tutorialFirstMissionBonus.js";
+import {
+  remainingTutorialAttributePurchases,
+  TUTORIAL_ATTRIBUTE_LOCK_ERROR,
+} from "../shared/tutorialService.js";
 import { serializeShopPresentation, assertShopPurchaseClientSafe, shopMetaHasStock } from "../shared/shopService.js";
 import {
   prepareMissionCombatForCharacter,
@@ -855,6 +859,14 @@ export async function BuyAttribute(user, body) {
           idempotent_replay: true,
         };
       }
+      const tutorialRemaining = remainingTutorialAttributePurchases(ch);
+      if (tutorialRemaining === 0) {
+        httpErr(400, TUTORIAL_ATTRIBUTE_LOCK_ERROR);
+      }
+      const cappedRequest =
+        tutorialRemaining == null
+          ? requested
+          : Math.min(requested, tutorialRemaining);
       const byStat = {
         strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
         ...(ch.attribute_purchases_by_stat || {}),
@@ -863,7 +875,7 @@ export async function BuyAttribute(user, body) {
       let totalCost = 0;
       let applied = 0;
       const balance = Math.max(0, Math.floor(Number(ch.stardust) || 0));
-      while (applied < requested) {
+      while (applied < cappedRequest) {
         const cost = getNextAttributePointCost(working, stat);
         if (balance - totalCost < cost) break;
         totalCost += cost;

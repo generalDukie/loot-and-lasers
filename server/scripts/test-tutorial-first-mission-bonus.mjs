@@ -7,7 +7,6 @@ import {
   normalizeOnboarding,
 } from "../src/shared/tutorialService.js";
 import {
-  TUTORIAL_FIRST_MISSION_STARDUST_BONUS,
   TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS,
   shouldReserveFirstMissionBonusLaunch,
   shouldGrantFirstMissionBonusAtClaim,
@@ -109,7 +108,7 @@ function testSettlement() {
     missStreak: 2,
     rng: () => 0.5,
   });
-  assert(bonus.stardustBonus === TUTORIAL_FIRST_MISSION_STARDUST_BONUS, "bonus stardust");
+  assert(bonus.stardustBonus === 0, "no extra tutorial stardust");
   assert(bonus.itemOutcome === "GEAR", "gear outcome");
   assert(bonus.itemTemplates.length === 1, "one item only");
   assert(bonus.itemTemplates[0].type === "helmet", "helmet drop");

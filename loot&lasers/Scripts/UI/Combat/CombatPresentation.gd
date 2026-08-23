@@ -9,6 +9,8 @@ const FLOAT_FONT_DAMAGE := 40
 const FLOAT_FONT_CRIT := 76
 ## Presentation mirror of src/lib/classPassives.js OVERCLOCK_STACK_CAP (server is authority).
 const OVERCLOCK_STACK_CAP := 6
+## Presentation mirror of src/lib/combatPresentation.js CRIT_DARKEN (visual only).
+const CRIT_DARKEN := 0.18
 
 
 ## Damage float colors ← Hero attribute panes (GameData.STAT_COLORS).

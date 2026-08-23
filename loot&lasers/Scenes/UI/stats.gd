@@ -104,6 +104,8 @@ func _ready() -> void:
 	_build()
 	_hold.stopped.connect(_on_hold_controller_stopped)
 	StatsManager.character_changed.connect(_refresh_values)
+	if not TutorialManager.tutorial_changed.is_connected(_on_tutorial_changed):
+		TutorialManager.tutorial_changed.connect(_on_tutorial_changed)
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
 		CurrencyManager.wallet_changed.connect(_on_wallet_changed)
 	var win := get_window()
@@ -122,6 +124,10 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_refresh_values()
 
 
+func _on_tutorial_changed(_tutorial: Dictionary = {}) -> void:
+	_refresh_values()
+
+
 func _start_boot() -> void:
 	if not is_inside_tree() or not is_instance_valid(self):
 		return
@@ -137,6 +143,8 @@ func _exit_tree() -> void:
 		win.focus_exited.disconnect(_on_window_focus_out)
 	if StatsManager.character_changed.is_connected(_refresh_values):
 		StatsManager.character_changed.disconnect(_refresh_values)
+	if TutorialManager.tutorial_changed.is_connected(_on_tutorial_changed):
+		TutorialManager.tutorial_changed.disconnect(_on_tutorial_changed)
 
 
 func _boot() -> void:
@@ -567,10 +575,11 @@ func _refresh_values() -> void:
 		_stardust_lab.text = _fmt_int(shown_dust)
 
 	var can_buy_any := false
-	for stat in StatsRules.ATTR_KEYS:
-		var cost_i := StatsManager.next_cost(c, str(stat))
-		if CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost_i):
-			can_buy_any = true
+	if not TutorialManager.locks_attribute_upgrades():
+		for stat in StatsRules.ATTR_KEYS:
+			var cost_i := StatsManager.next_cost(c, str(stat))
+			if CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost_i):
+				can_buy_any = true
 
 	if is_instance_valid(_attrs_panel):
 		_attrs_panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
@@ -604,19 +613,24 @@ func _refresh_values() -> void:
 		var buy := row["buy"] as Button
 		if buy != null and is_instance_valid(buy):
 			var holding := str(stat) == _hold_stat and _hold.is_active()
-			buy.disabled = not affordable and not holding
-			_apply_attr_buy_style(buy, affordable or holding)
+			var tutorial_blocked := _tutorial_blocks_attr_buy(str(stat))
+			var can_press := (affordable or holding) and not tutorial_blocked
+			buy.disabled = not can_press
+			_apply_attr_buy_style(buy, can_press)
 			_tighten_attr_buy_margins(buy)
 			# Don't fight ClientUi hover motion with a forced disabled modulate — that
 			# left buttons stuck bright after mouse-exit while disabled.
-			if holding:
+			if holding and not tutorial_blocked:
 				buy.modulate = Color(1.08, 1.12, 1.06)
 			elif buy.disabled or not bool(buy.get_meta("client_ui_hovered", false)):
 				buy.modulate = Color.WHITE
-			buy.tooltip_text = (
-				"Spend %s Stardust · hold to keep buying" % cost if affordable or holding
-				else "Need %s Stardust for the next point" % cost
-			)
+			if tutorial_blocked:
+				buy.tooltip_text = TutorialManager.ATTRIBUTE_UPGRADE_LOCK_HINT
+			else:
+				buy.tooltip_text = (
+					"Spend %s Stardust · hold to keep buying" % cost if affordable or holding
+					else "Need %s Stardust for the next point" % cost
+				)
 			var cost_lab := row.get("buy_cost", null) as Label
 			if cost_lab != null and is_instance_valid(cost_lab):
 				cost_lab.text = _fmt_int(cost)
@@ -624,12 +638,12 @@ func _refresh_values() -> void:
 			if title_lab != null and is_instance_valid(title_lab):
 				title_lab.add_theme_color_override(
 					"font_color",
-					Color.WHITE if affordable or holding else Color(ClientUi.MUTED, 0.75)
+					Color.WHITE if can_press else Color(ClientUi.MUTED, 0.75)
 				)
 			if cost_lab != null and is_instance_valid(cost_lab):
 				cost_lab.add_theme_color_override(
 					"font_color",
-					CurrencyIcon.STARDUST_FUCHSIA if affordable or holding else Color(ClientUi.MUTED, 0.8)
+					CurrencyIcon.STARDUST_FUCHSIA if can_press else Color(ClientUi.MUTED, 0.8)
 				)
 		if row.has("panel") and is_instance_valid(row["panel"]):
 			(row["panel"] as Control).tooltip_text = StatsRules.attribute_tooltip(str(stat), c, eq)
@@ -1949,10 +1963,9 @@ func _make_combat_card() -> VBoxContainer:
 
 
 func _update_combat(derived: Dictionary, permanent: Dictionary, display: Dictionary) -> void:
-	var mult := float(derived.get("critMult", StatsRules.CRIT_MULT))
 	var values := {
 		"Damage": str(derived.get("damage", 0)),
-		"Crit Chance": "%s%% · %s×" % [_fmt_pct(float(derived.get("critChance", 0))), mult],
+		"Crit Chance": "%s%%" % _fmt_pct(float(derived.get("critChance", 0))),
 		"Max Health": str(derived.get("health", 0)),
 		"Dodge Chance": "%s%%" % _fmt_pct(float(derived.get("dodgeChance", 0))),
 		ARMOR_STAT_LABEL: "%s%%" % _fmt_pct(float(derived.get("armor", 0))),
@@ -2263,12 +2276,15 @@ func _process(_delta: float) -> void:
 func _start_upgrade_hold(stat: String) -> void:
 	if _busy:
 		return
+	if _tutorial_blocks_attr_buy(stat):
+		return
 	if _hold_flushing and _hold_stat != stat:
 		return
 	if not _hold_stat.is_empty() and _hold_stat != stat and (_hold_queued + _hold_inflight) > 0:
 		_stop_upgrade_hold(true)
 		return
 	_hold_stat = stat
+	_refresh_values()
 	_hold.start(_on_hold_fire, _can_hold_fire)
 
 
@@ -2297,8 +2313,27 @@ func _hold_pending_count(stat: String = "") -> int:
 	return extra
 
 
+func _tutorial_blocks_attr_buy(stat: String) -> bool:
+	if TutorialManager.locks_attribute_upgrades():
+		return true
+	var left: int = TutorialManager.remaining_tutorial_attribute_purchases()
+	if left < 0:
+		return false
+	if not _hold_stat.is_empty() and str(stat) != _hold_stat:
+		return true
+	var pending := _hold_queued + _hold_inflight
+	if pending <= 0:
+		return false
+	return pending >= left
+
+
 func _can_hold_fire() -> bool:
 	if _hold_stat.is_empty():
+		return false
+	var left: int = TutorialManager.remaining_tutorial_attribute_purchases()
+	if left == 0:
+		return false
+	if left > 0 and _hold_queued + _hold_inflight >= left:
 		return false
 	if _hold_queued + _hold_inflight >= 20:
 		return true
@@ -2313,6 +2348,13 @@ func _can_hold_fire() -> bool:
 
 
 func _on_hold_fire() -> void:
+	var left: int = TutorialManager.remaining_tutorial_attribute_purchases()
+	if left == 0:
+		_hold.stop()
+		return
+	if left > 0 and _hold_queued + _hold_inflight >= left:
+		_flush_hold_queue()
+		return
 	if _hold_queued + _hold_inflight >= 20:
 		_flush_hold_queue()
 		return
@@ -2331,7 +2373,19 @@ func _flush_hold_queue() -> void:
 	_hold_flushing = true
 	var stat := _hold_stat
 	var n := _hold_queued
-	_hold_queued = 0
+	var left: int = TutorialManager.remaining_tutorial_attribute_purchases()
+	if left == 0:
+		_hold_queued = 0
+		_hold_flushing = false
+		_hold.stop()
+		_hold_stat = ""
+		_refresh_values()
+		return
+	if left > 0:
+		n = mini(n, left)
+		_hold_queued = maxi(0, _hold_queued - n)
+	else:
+		_hold_queued = 0
 	_hold_inflight = n
 	_hold_purchases_at_flush = StatsRules.purchase_count(GameManager.active_character, stat)
 	_refresh_values()
@@ -2371,6 +2425,12 @@ func _flush_hold_queue() -> void:
 		await TutorialManager.complete_hero_upgrade_purchase(stat)
 		_stop_attr_flashes()
 		_stop_combat_flashes()
+	if TutorialManager.locks_attribute_upgrades():
+		_hold.stop()
+		_hold_queued = 0
+		_hold_stat = ""
+		_refresh_values()
+		return
 	if leftover > 0 and server_reported_count:
 		# Server bought as many as dust/cap allowed.
 		_hold.stop()

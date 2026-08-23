@@ -1,5 +1,6 @@
 /**
- * One-time first-mission tutorial package (common primary-stat helmet + bonus stardust).
+ * One-time first-mission tutorial package (common primary-stat helmet).
+ * Mission Stardust stays the certified base product — no extra tutorial grant.
  * Eligibility is stamped on new operatives only; progress is tracked on onboarding_tutorial.
  */
 import { CLASSES } from "../../../src/lib/gameData.js";
@@ -12,7 +13,7 @@ import {
   normalizeOnboarding,
 } from "./tutorialService.js";
 
-export const TUTORIAL_FIRST_MISSION_STARDUST_BONUS = 100;
+export const TUTORIAL_FIRST_MISSION_STARDUST_BONUS = 0;
 /** Cantina board during onboarding — all three offers use this duration. */
 export const TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS = 30;
 

@@ -36,6 +36,10 @@ const { entities } = await import("../src/entities.js");
 const { GetCharacterAttributes, BuyAttribute } = await import(
   "../src/functions/economy.js"
 );
+const {
+  defaultOnboardingState,
+  TUTORIAL_ATTRIBUTE_LOCK_ERROR,
+} = await import("../src/shared/tutorialService.js");
 
 console.log("\nCharacter attributes / derived stats tests\n");
 
@@ -484,6 +488,57 @@ const { ensureCharacterPermanentStats } = await import("../src/shared/characterS
   const reloaded = entities.Character.get(broken.id);
   assert.equal(reloaded.stats.intellect, 15);
   console.log("  ✓ GetCharacterAttributes repairs missing class base stats");
+}
+
+{
+  const account = {
+    id: "attr-user-tutorial",
+    email: "tutorial-attr@example.com",
+    role: "user",
+    active_character_id: "",
+  };
+  const ch = entities.Character.create({
+    id: "attr-char-tutorial",
+    name: "TutorialCap",
+    class: "Vanguard",
+    race: "Keldris",
+    level: 1,
+    experience: 0,
+    experience_to_next_level: 133,
+    stardust: 1_000,
+    nova_crystals: 0,
+    fuel: 10,
+    max_fuel: 20,
+    stats: { strength: 15, agility: 8, intellect: 6, vitality: 14, luck: 7 },
+    attribute_purchases: 0,
+    attribute_purchases_by_stat: {
+      strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
+    },
+    equipped_items: {},
+    created_by_id: account.id,
+    created_by: account.email,
+    active_buffs: [],
+    onboarding_tutorial: defaultOnboardingState(),
+  });
+  account.active_character_id = ch.id;
+
+  const batch = await BuyAttribute(account, {
+    stat: "strength",
+    count: 5,
+    request_id: "tut-attr-batch",
+  });
+  assert.equal(batch.status, 200, JSON.stringify(batch.body));
+  assert.equal(batch.body.count, 1);
+  assert.equal(entities.Character.get(ch.id).attribute_purchases, 1);
+
+  const denied = await BuyAttribute(account, {
+    stat: "vitality",
+    request_id: "tut-attr-second",
+  });
+  assert.equal(denied.status, 400, JSON.stringify(denied.body));
+  assert.equal(denied.body.error, TUTORIAL_ATTRIBUTE_LOCK_ERROR);
+  assert.equal(entities.Character.get(ch.id).attribute_purchases, 1);
+  console.log("  ✓ tutorial BuyAttribute allows one purchase then locks");
 }
 
 console.log("\nPASS character attributes\n");

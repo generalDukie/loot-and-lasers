@@ -8,6 +8,9 @@ const FIGHTER_H_BASE := 360.0
 const PORTRAIT_BASE := 280.0
 const HP_BAR_H_BASE := 38.0
 const CLASS_ICON_BASE := 36.0
+## Above the combat-report overlay (sheet host 80 + report 120) so the log stays
+## visible after the fight; below reward inspect (report + 300).
+const COMBAT_LOG_Z_INDEX := 250
 ## Temporary: hide GearIcon weapon glyphs in all duel UIs (mission/arena/frontier).
 ## Bump/lunge + attack SFX stay. Flip back on when better glyphs land.
 const SHOW_WEAPON_GLYPHS := false
@@ -401,7 +404,7 @@ func _build() -> void:
 	_combat_log.scroll_active = true
 	_combat_log.scroll_following = true
 	_combat_log.clip_contents = true
-	_combat_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_combat_log.mouse_filter = Control.MOUSE_FILTER_STOP
 	_combat_log.set_anchors_preset(PRESET_BOTTOM_RIGHT)
 	_combat_log.anchor_left = 1.0
 	_combat_log.anchor_top = 1.0
@@ -413,7 +416,7 @@ func _build() -> void:
 	_combat_log.offset_bottom = -72
 	_combat_log.add_theme_font_size_override("normal_font_size", 15)
 	_combat_log.add_theme_color_override("default_color", Color(1, 1, 1, 0.78))
-	_combat_log.z_index = 25
+	_combat_log.z_index = COMBAT_LOG_Z_INDEX
 	add_child(_combat_log)
 
 	_dev_diag = Label.new()

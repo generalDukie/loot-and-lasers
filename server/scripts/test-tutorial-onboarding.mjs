@@ -14,6 +14,8 @@ import {
   publicTutorialPayload,
   defaultOnboardingState,
   normalizeOnboarding,
+  remainingTutorialAttributePurchases,
+  TUTORIAL_ATTRIBUTE_PURCHASE_LIMIT,
   ONBOARDING_STEPS,
 } from "../src/shared/tutorialService.js";
 
@@ -144,5 +146,42 @@ function testService() {
   console.log(`tutorialService ok — ${ONBOARDING_STEPS.length} steps`);
 }
 
+function testTutorialAttributeCap() {
+  assert(TUTORIAL_ATTRIBUTE_PURCHASE_LIMIT === 1, "one guided buy");
+  const emptyPurchases = {
+    strength: 0, agility: 0, intellect: 0, vitality: 0, luck: 0,
+  };
+  const pendingChar = {
+    onboarding_tutorial: defaultOnboardingState(),
+    attribute_purchases: 0,
+    attribute_purchases_by_stat: { ...emptyPurchases },
+  };
+  assert(remainingTutorialAttributePurchases(pendingChar) === 1, "first buy allowed");
+
+  const afterFirst = {
+    ...pendingChar,
+    attribute_purchases: 1,
+    attribute_purchases_by_stat: { ...emptyPurchases, strength: 1 },
+  };
+  assert(remainingTutorialAttributePurchases(afterFirst) === 0, "no more during tutorial");
+
+  const completed = {
+    ...afterFirst,
+    onboarding_tutorial: markCompleted(beginOrResume(defaultOnboardingState()), {
+      rewardClaimed: true,
+    }).state,
+  };
+  assert(remainingTutorialAttributePurchases(completed) === null, "unlimited after complete");
+
+  const skipped = {
+    ...afterFirst,
+    onboarding_tutorial: markSkipped(beginOrResume(defaultOnboardingState())),
+  };
+  assert(remainingTutorialAttributePurchases(skipped) === null, "unlimited after skip");
+
+  assert(remainingTutorialAttributePurchases({ attribute_purchases: 3 }) === null, "legacy unlimited");
+}
+
 testService();
+testTutorialAttributeCap();
 console.log("PASS");

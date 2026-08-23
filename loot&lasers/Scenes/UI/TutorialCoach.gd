@@ -17,6 +17,8 @@ const DIM_OVERLAP := 1.0
 const RING_BORDER := Color(0.05, 0.85, 0.95, 0.98)
 ## Slow cyan ring pulse during hero attribute / equip flash holds.
 const HERO_FLASH_RING_HALF_SEC := 1.25
+## Extra rings for combat tiles linked to the flashing attribute (Dodge + Damage, etc.).
+const HERO_FLASH_COMBAT_RING_COUNT := 3
 ## Black Market Basics outline rings — ~5s full pulse (border alpha only).
 const SHOP_OUTLINE_RING_HALF_SEC := 2.5
 const SHOP_OUTLINE_RING_COUNT := 3
@@ -61,6 +63,9 @@ var _shop_restock_flash_target: Control
 var _shop_outline_rings: Array = [] ## Panel
 var _shop_outline_pulses: Array = [] ## Tween
 var _shop_outline_pulse_running := false
+var _flash_combat_rings: Array = [] ## Panel
+var _flash_combat_pulses: Array = [] ## Tween
+var _flash_combat_pulse_running := false
 var _reward_stardust_flash_tween: Tween
 var _reward_stardust_flash_target: Control
 var _reward_helmet_flash_tween: Tween
@@ -112,6 +117,16 @@ func _build() -> void:
 	_ring_extra.add_theme_stylebox_override("panel", ring_extra_sb)
 	root.add_child(_ring_extra)
 	_ring_extra.visible = false
+
+	_flash_combat_rings.clear()
+	for _i in HERO_FLASH_COMBAT_RING_COUNT:
+		var flash_ring := Panel.new()
+		flash_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		flash_ring.visible = false
+		var flash_sb := ring_sb.duplicate() as StyleBoxFlat
+		flash_ring.add_theme_stylebox_override("panel", flash_sb)
+		root.add_child(flash_ring)
+		_flash_combat_rings.append(flash_ring)
 
 	_shop_outline_rings.clear()
 	for _i in SHOP_OUTLINE_RING_COUNT:
@@ -310,6 +325,7 @@ func _on_tutorial_changed(_t: Dictionary) -> void:
 func _hide_coach() -> void:
 	_stop_ring_pulse()
 	_stop_extra_ring_pulse()
+	_hide_flash_combat_rings()
 	_stop_shop_outline_rings()
 	_stop_fuel_flash()
 	_stop_timer_flash()
@@ -600,6 +616,7 @@ func _layout_spotlight() -> void:
 		else:
 			_card.visible = false
 		_layout_secondary_spotlight_ring()
+		_hide_flash_combat_rings()
 		_update_fuel_hint()
 		_update_stim_hint()
 		_update_shop_refresh_hint()
@@ -663,13 +680,13 @@ func _layout_spotlight() -> void:
 		_ring.visible = false
 		_stop_ring_pulse()
 
-	if using_flash_hold and flash_holes.size() > 1 and is_instance_valid(_ring_extra):
-		# Slow secondary ring on the first combat tile while the attribute flashes.
-		_ring_extra.visible = true
-		_ring_extra.position = flash_holes[1].position
-		_ring_extra.size = flash_holes[1].size
-		_pulse_extra_ring(true)
+	if using_flash_hold:
+		if is_instance_valid(_ring_extra):
+			_ring_extra.visible = false
+			_stop_extra_ring_pulse()
+		_layout_flash_combat_rings(flash_holes)
 	else:
+		_hide_flash_combat_rings()
 		_layout_secondary_spotlight_ring()
 
 	var placement := str(TutorialManager.current_step().get("placement", "auto"))
@@ -1241,6 +1258,68 @@ func _secondary_spotlight_id_for_step() -> String:
 
 func _secondary_spotlight_subtle(step_id: String) -> bool:
 	return false
+
+
+func _layout_flash_combat_rings(flash_holes: Array) -> void:
+	var combat_holes: Array = []
+	for i in range(1, flash_holes.size()):
+		combat_holes.append(flash_holes[i])
+	if combat_holes.is_empty():
+		_hide_flash_combat_rings()
+		return
+	for i in _flash_combat_rings.size():
+		var ring: Panel = _flash_combat_rings[i]
+		if not is_instance_valid(ring):
+			continue
+		if i < combat_holes.size():
+			var hole: Rect2 = combat_holes[i]
+			ring.visible = true
+			ring.position = hole.position
+			ring.size = hole.size
+		else:
+			ring.visible = false
+	_pulse_flash_combat_rings()
+
+
+func _pulse_flash_combat_rings() -> void:
+	if _flash_combat_pulse_running:
+		return
+	_flash_combat_pulse_running = true
+	_flash_combat_pulses.clear()
+	var dim := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, 0.22)
+	var bright := Color(RING_BORDER.r, RING_BORDER.g, RING_BORDER.b, 0.85)
+	for ring_v in _flash_combat_rings:
+		var ring: Panel = ring_v
+		if not is_instance_valid(ring) or not ring.visible:
+			continue
+		var sb := ring.get_theme_stylebox("panel") as StyleBoxFlat
+		if sb == null:
+			continue
+		sb.shadow_size = 0
+		sb.bg_color = Color(0, 0, 0, 0)
+		sb.border_color = dim
+		var tw := create_tween().set_loops()
+		tw.tween_property(sb, "border_color", bright, HERO_FLASH_RING_HALF_SEC).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(sb, "border_color", dim, HERO_FLASH_RING_HALF_SEC).set_trans(Tween.TRANS_SINE)
+		_flash_combat_pulses.append(tw)
+
+
+func _hide_flash_combat_rings() -> void:
+	for tw_v in _flash_combat_pulses:
+		if tw_v != null and is_instance_valid(tw_v):
+			(tw_v as Tween).kill()
+	_flash_combat_pulses.clear()
+	_flash_combat_pulse_running = false
+	for ring_v in _flash_combat_rings:
+		var ring: Panel = ring_v
+		if not is_instance_valid(ring):
+			continue
+		ring.visible = false
+		var sb := ring.get_theme_stylebox("panel") as StyleBoxFlat
+		if sb != null:
+			sb.border_color = RING_BORDER
+			sb.shadow_size = 0
+			sb.bg_color = Color(0, 0, 0, 0)
 
 
 func _layout_secondary_spotlight_ring() -> void:

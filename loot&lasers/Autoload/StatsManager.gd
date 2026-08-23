@@ -142,6 +142,16 @@ func buy_attribute(stat: String, count: int = 1) -> Dictionary:
 	if not stat in StatsRules.ATTR_KEYS:
 		return {"ok": false, "error": "Invalid stat", "data": {}}
 	var n := clampi(count, 1, MAX_ATTRIBUTE_PURCHASE_BATCH)
+	if TutorialManager != null:
+		var left: int = TutorialManager.remaining_tutorial_attribute_purchases()
+		if left == 0:
+			return {
+				"ok": false,
+				"error": TutorialManager.ATTRIBUTE_UPGRADE_LOCK_HINT,
+				"data": {},
+			}
+		if left > 0:
+			n = mini(n, left)
 	var ch: Dictionary = GameManager.active_character
 	var requested_cost := StatsRules.batch_cost(ch, stat, n)
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, requested_cost):

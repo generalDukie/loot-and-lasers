@@ -4,6 +4,12 @@
  */
 import { clock } from "./time/clock.js";
 
+/** One guided attribute buy during onboarding; further purchases wait until finish/skip. */
+export const TUTORIAL_ATTRIBUTE_PURCHASE_LIMIT = 1;
+export const TUTORIAL_ATTRIBUTE_LOCK_ERROR =
+  "Finish or skip the tutorial before buying more attributes";
+const TUTORIAL_ATTRIBUTE_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
+
 function httpErr(status, message, code) {
   const e = new Error(message);
   e.status = status;
@@ -386,6 +392,28 @@ export function getOnboardingFromCharacter(character) {
     return { ...normalized, ...completed, first_mission_bonus_eligible: false };
   }
   return normalized;
+}
+
+export function isOnboardingTutorialActive(character) {
+  const status = String(getOnboardingFromCharacter(character).status || "");
+  return status === "pending" || status === "active";
+}
+
+function tutorialAttributePurchaseTotal(character) {
+  const by = character?.attribute_purchases_by_stat;
+  if (by && typeof by === "object") {
+    return TUTORIAL_ATTRIBUTE_KEYS.reduce(
+      (sum, key) => sum + Math.max(0, Math.floor(Number(by[key]) || 0)),
+      0,
+    );
+  }
+  return Math.max(0, Math.floor(Number(character?.attribute_purchases) || 0));
+}
+
+/** Remaining guided buys, or null when onboarding is not limiting purchases. */
+export function remainingTutorialAttributePurchases(character) {
+  if (!isOnboardingTutorialActive(character)) return null;
+  return Math.max(0, TUTORIAL_ATTRIBUTE_PURCHASE_LIMIT - tutorialAttributePurchaseTotal(character));
 }
 
 export function stepIndex(stepId) {

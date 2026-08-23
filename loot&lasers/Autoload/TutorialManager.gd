@@ -8,6 +8,9 @@ const HARD_GATES := ["click_target", "launch_mission", "arena_battle", "buy_attr
 const CLICK_GATES := ["click_target"]
 const HERO_UPGRADE_FLASH_HOLD_SEC := 4.0
 const HERO_EQUIP_FLASH_HOLD_SEC := 4.0
+## Mirrors server TUTORIAL_ATTRIBUTE_PURCHASE_LIMIT.
+const TUTORIAL_ATTRIBUTE_PURCHASE_LIMIT := 1
+const ATTRIBUTE_UPGRADE_LOCK_HINT := "Finish or skip the tutorial before buying more attributes"
 
 var tutorial: Dictionary = {}
 var busy: bool = false
@@ -125,6 +128,20 @@ func blocks_black_market_commerce() -> bool:
 ## mine_explain is explain-only (ack); collect/cancel stay available if already mining.
 func blocks_mining_start() -> bool:
 	return should_show() or blocks_daily_login_prompt()
+
+
+## Remaining guided attribute buys, or -1 when onboarding is not limiting purchases.
+func remaining_tutorial_attribute_purchases() -> int:
+	if not blocks_daily_login_prompt():
+		return -1
+	if _hero_upgrade_advance_pending:
+		return 0
+	return maxi(0, TUTORIAL_ATTRIBUTE_PURCHASE_LIMIT - _attr_purchases(GameManager.active_character))
+
+
+## Disable Operative upgrade buttons after the first tutorial purchase until finish/skip.
+func locks_attribute_upgrades() -> bool:
+	return remaining_tutorial_attribute_purchases() == 0
 
 
 ## First tutorial mission fight must be watched — no SKIP TO RESULTS.

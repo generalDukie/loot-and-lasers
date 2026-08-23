@@ -178,13 +178,13 @@ function applyEventToStatus(state, ev) {
   if (kind === "overclock_stack_gained" || kind === "overclock_ready" || kind === "overclock_vented") {
     if (slot) {
       slot.overclockActive = true;
-      slot.overclockStacks = Number(ev.stacks) || 0;
+      slot.overclockStacks = Math.trunc(Number(ev.stacks) || 0);
       slot.lastPassive = "Overclock";
     }
     return;
   }
   if (kind === "overclock_stacks_removed") {
-    if (slot) slot.overclockStacks = Number(ev.stacks) || 0;
+    if (slot) slot.overclockStacks = Math.trunc(Number(ev.stacks) || 0);
     return;
   }
   if (kind === "dirty_trick_selected" || ev.dirtyTrick) {

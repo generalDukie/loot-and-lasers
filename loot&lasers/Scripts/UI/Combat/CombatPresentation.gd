@@ -247,7 +247,7 @@ static func status_chip_parts(side: Dictionary) -> Array:
 	if bool(side.get("overclock_active", false)) or int(side.get("overclock_stacks", 0)) > 0:
 		parts.append({
 			"icon": "zap",
-			"text": "OC %s/%s" % [int(side.get("overclock_stacks", 0)), OVERCLOCK_STACK_CAP],
+			"text": "OC %d/%d" % [int(side.get("overclock_stacks", 0)), OVERCLOCK_STACK_CAP],
 			"color": overclock_c,
 			"tip": "Overclock stacks",
 		})
@@ -483,13 +483,13 @@ static func _format_ability_log_bit(ev: Dictionary) -> String:
 		"phantom_signal", "phantom_signal_miss":
 			detail = "Scrambled"
 		"overclock_stack_gained":
-			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
+			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
 		"overclock_stacks_removed":
-			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
+			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
 		"overclock_vented":
-			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
+			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
 		"overclock_ready":
-			detail = "0/6"
+			detail = "0/%d" % OVERCLOCK_STACK_CAP
 		"defensive_protocol_applied":
 			detail = "Defensive Protocol"
 		"defensive_protocol_consumed":

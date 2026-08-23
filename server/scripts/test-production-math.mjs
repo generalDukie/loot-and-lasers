@@ -250,14 +250,23 @@ test("player Base Damage is the native combat-scale polynomial", () => {
   assert.equal(M.PLAYER_BASE_DAMAGE_SCALE, undefined);
 });
 
-test("generic derived-stat + Crit specialization", () => {
+test("generic derived-stat uses PCHIP level cap, not (L/100)^0.65", () => {
   const L = 100;
   const fm = 700;
   const attr = 350;
-  const generic = Math.min(0.25 * Math.min(1, (attr / fm) ** 1.2), 0.25 * Math.min(1, 1 ** 0.65), 0.25);
-  assert.ok(Math.abs(M.derivedStat(L, attr, 0.25) - generic) < 1e-12);
+  const fromAttr = 0.25 * Math.min(1, (attr / fm) ** 1.2);
+  const expected = Math.min(fromAttr, M.naturalDodgeLevelCap(L), 0.25);
+  assert.ok(Math.abs(M.derivedStat(L, attr, 0.25) - expected) < 1e-12);
+  assert.equal(M.naturalDodgeLevelCap(1), 0.08);
+  assert.equal(M.naturalDodgeLevelCap(25), 0.15);
+  assert.equal(M.naturalDodgeLevelCap(75), 0.20);
+  assert.equal(M.naturalDodgeLevelCap(100), 0.25);
+  assert.equal(M.naturalCritResistLevelCap(1), 0.10);
+  assert.equal(M.naturalCritResistLevelCap(25), 0.175);
+  assert.equal(M.naturalCritResistLevelCap(75), 0.25);
+  assert.equal(M.naturalCritResistLevelCap(100), 0.30);
   const critFm = fm * 1.55;
-  const crit = Math.min(0.3 * Math.min(1, (attr / critFm) ** 1.8), 0.3 * Math.min(1, 1), 0.3);
+  const crit = Math.min(0.3 * Math.min(1, (attr / critFm) ** 1.8), M.naturalCritResistLevelCap(L), 0.3);
   assert.ok(Math.abs(M.critChance(L, attr) - crit) < 1e-12);
   assert.ok(M.critChance(800, 1e9) <= 0.3 + 1e-12);
   assert.ok(M.dodgeChance(800, 1e9, "Might") <= 0.25 + 1e-12);

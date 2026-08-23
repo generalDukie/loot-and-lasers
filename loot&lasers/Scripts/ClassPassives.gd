@@ -107,13 +107,13 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 		"phantom_signal", "phantom_signal_miss":
 			detail = "Scrambled"
 		"overclock_stack_gained":
-			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
+			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
 		"overclock_stacks_removed":
-			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
+			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
 		"overclock_vented":
-			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
+			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
 		"overclock_ready":
-			detail = "0/%s" % OVERCLOCK_STACK_CAP
+			detail = "0/%d" % OVERCLOCK_STACK_CAP
 		"defensive_protocol_applied":
 			detail = "Defensive Protocol"
 		"defensive_protocol_consumed":

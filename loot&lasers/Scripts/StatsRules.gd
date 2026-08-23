@@ -39,7 +39,6 @@ const PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT := 1.727
 const GENERIC_FORMAX_AT_100 := 700.0
 const GENERIC_FORMAX_EXPONENT := 0.95
 const GENERIC_ATTR_EXPONENT := 1.2
-const GENERIC_EARLY_EXPONENT := 0.65
 const NATURAL_CRIT_CAP := 0.3
 const NATURAL_DODGE_CAP := 0.25
 const NATURAL_RESIST_CAP := 0.3
@@ -195,8 +194,8 @@ static func _derived_stat(level: int, attr: float, cap: float, for_max_mult: flo
 	var x := maxf(0.0, attr)
 	var fm := _generic_for_max(level) * for_max_mult
 	var from_attr := cap * minf(1.0, 0.0 if fm <= 0.0 else pow(x / fm, attr_exponent))
-	var early := cap * minf(1.0, pow(float(level) / SOFT_CAP_REFERENCE_LEVEL, GENERIC_EARLY_EXPONENT))
-	return minf(minf(from_attr, early), cap)
+	var level_cap := DerivedStatLevelCaps.natural_dodge_level_cap(level) if is_equal_approx(cap, NATURAL_DODGE_CAP) else DerivedStatLevelCaps.natural_crit_resist_level_cap(level)
+	return minf(minf(from_attr, level_cap), cap)
 
 
 static func _reflex_piece(x: float) -> float:
@@ -235,7 +234,7 @@ static func _reflex_agi_conversion(level: int) -> float:
 	return _reflex_piece(L)
 
 
-## Preview-only character-sheet derived stats (productionMath). Combat uses MissionCombat.
+## Preview-only character-sheet derived stats (productionMath). Combat settlement uses server combatMath.
 static func derived(character: Dictionary, totals: Dictionary) -> Dictionary:
 	var level := maxi(1, int(character.get("level", 1)))
 	var class_key := str(character.get("class", "Vanguard"))

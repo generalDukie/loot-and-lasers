@@ -186,13 +186,17 @@ Variance: explicit Uniform(0.90,1.10) all archetypes. **E** (remove AGI extra U(
 
 ## PM-DERIVED / PM-CRIT / PM-DODGE / PM-RESIST
 
-Generic ForMax `700*(L/100)^0.95`; FromAttr/Early as certified. **A**. Tested to L2500.
+Generic ForMax `700*(L/100)^0.95`; FromAttr as certified. **A**. Tested to L2500.
 
-Crit: ForMax×1.55, exp 1.80, cap 30%. **B** vs live generic 1.20.
+Natural level ceilings (Dodge / Crit / each Resistance) are **PCHIP (Fritsch–Carlson monotone cubic)** through named anchors, not `(L/100)^0.65`. Actual stat = `min(FromAttr, LevelNaturalCap, mature cap)`.
 
-Reflex AGI conversion: C1-smoothed 22.5%→32.5%, blend half-width 6, mature 32.5% forever. **C**. Max checkpoint error **0.381%**. Natural Dodge cap 25%.
+Dodge anchors: 8% @ L1, 15% @ L25, 20% @ L75, 25% @ L100+. Crit / each Resistance: 10% @ L1, 17.5% @ L25, 25% @ L75, 30% @ L100+. Authority: `naturalDodgeLevelCap` / `naturalCritResistLevelCap` in `src/lib/productionMath/derivedStatCaps.js`.
 
-Resists: three channels, cap 30%, no self-resist. **B** vs live Armor/Tech-only.
+Crit: ForMax×1.55, exp 1.80, mature cap 30%. **B** vs live generic 1.20. Only the **level ceiling** changed in the derived-stat-cap retune; attribute conversion is unchanged.
+
+Reflex AGI conversion: C1-smoothed 22.5%→32.5%, blend half-width 6, mature 32.5% forever. **C**. Max checkpoint error **0.381%**. Natural Dodge mature cap 25% (level ceiling is the PCHIP curve above).
+
+Resists: three channels, mature cap 30%, no self-resist. **B** vs live Armor/Tech-only. Level ceiling shares the Crit/Resistance PCHIP curve. Explicit cap-bypass (Flashbang / Targeting Beacon) is applied after the natural cap.
 
 ---
 

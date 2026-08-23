@@ -252,7 +252,7 @@ const CLASS_CATALOG := {
 		"baseType": "intellect",
 		"special": {
 			"name": "Orbital Assistant",
-			"effect": "On Engineer turns 2, 4, 6, 8, 10, then every 3rd turn from 13, the drone picks Fire Support (60% True Damage), Defensive Protocol (−25% next hit), or Acquire Target (+40 Crit on next attack).",
+			"effect": "On Engineer turns 2, 4, 6, 8, 10, then every 3rd turn from 13, the drone acts before the Engineer attacks and picks Fire Support (60% True Damage), Defensive Protocol (−25% until the Engineer is hit), or Acquire Target (+40 Crit on that attack).",
 			"identity": "Wins through gadgets and sustained pressure.",
 		},
 	},

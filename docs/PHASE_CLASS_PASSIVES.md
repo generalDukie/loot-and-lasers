@@ -76,9 +76,10 @@ authoritative code — reported intentionally.
 
 ### 12. Cosmic Engineer — Orbital Assistant
 
-Every 2nd Engineer turn; 1/3 Fire Support / Defensive Protocol / Acquire Target.
+Every 2nd Engineer turn, **before** the Engineer's attack; 1/3 Fire Support / Defensive Protocol / Acquire Target.
 Fire Support: secondary True Damage, **can Dodge** (fixed this phase), cannot Crit,
-not a normal attack. Defense/Acquire re-select refreshes one pending instance (no stack).
+not a normal attack — resolves first so the Engineer still attacks if the foe lives.
+Acquire Target: +40 Crit on **that same** Engineer attack. Defensive Protocol: −25% until the Engineer is hit.
 
 ### 13. Dirty Tricks probability validation
 

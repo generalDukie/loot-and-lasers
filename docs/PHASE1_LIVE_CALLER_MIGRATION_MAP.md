@@ -92,7 +92,7 @@ The certified attrcost curve itself is unchanged. Each attribute's first five fi
 |---|---|---|
 | HP | `maxHp` round-half-even | `statEngine.getMaxHP` / `MissionCombat.max_hp` |
 | Raw attack | `rawStandardAttack` (no variance) | `computeDerivedStats` / `MissionCombat.base_damage` (+ AGI 0.925 on old sheet) |
-| Crit / Dodge / Resist | production Crit×1.55 exp 1.80 caps; Reflex dodge; 3-channel resist mapped to existing `armor`/`techResist` UI | `softCapPercent` |
+| Crit / Dodge / Resist | production Crit×1.55 exp 1.80; PCHIP natural level caps (`naturalDodgeLevelCap` / `naturalCritResistLevelCap`); Reflex dodge conversion unchanged; 3-channel resist mapped to existing `armor`/`techResist` UI | Retired `(L/100)^0.65` early factor (`GENERIC_EARLY_EXPONENT`, historical). `softCapPercent` now scales the same PCHIP caps. |
 
 ## Persistence
 

@@ -103,6 +103,10 @@ function titleCaseKey(key) {
   return String(key).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function wholeStackCount(n) {
+  return String(Math.trunc(Number(n) || 0));
+}
+
 function pickIndex(rng, count) {
   if (count <= 0) return 0;
   const u = typeof rng === "function" ? rng() : 0;
@@ -170,11 +174,13 @@ export function resolveAbilityBanner(ev, player, opponent) {
   } else if (kind === "phantom_signal_miss") {
     detail = "Scrambled";
   } else if (kind === "overclock_stack_gained") {
-    detail = `${ev.before ?? 0} → ${ev.stacks}`;
+    detail = `${wholeStackCount(ev.before)} → ${wholeStackCount(ev.stacks ?? ev.after)}`;
   } else if (kind === "overclock_stacks_removed") {
-    detail = `${ev.before ?? (ev.stacks + (ev.removed || 0))} → ${ev.stacks}`;
+    detail = `${wholeStackCount(ev.before ?? (Number(ev.stacks) + Number(ev.removed || 0)))} → ${wholeStackCount(ev.stacks)}`;
   } else if (kind === "overclock_vented") {
-    detail = `${ev.before} → ${ev.stacks}`;
+    detail = `${wholeStackCount(ev.before)} → ${wholeStackCount(ev.stacks ?? ev.after)}`;
+  } else if (kind === "overclock_ready") {
+    detail = `0/${OVERCLOCK_STACK_CAP}`;
   } else if (kind === "defensive_protocol_applied") {
     detail = ORBITAL_LABELS.defensive_protocol;
   } else if (kind === "defensive_protocol_consumed") {
@@ -518,7 +524,7 @@ export function gainOverclockStack(fighter, events) {
   if (fighter.className !== "Technomancer") return;
   const ps = fighter.passiveState;
   if (!ps) return;
-  const before = ps.overclockStacks;
+  const before = Math.trunc(ps.overclockStacks || 0);
   ps.overclockStacks = Math.min(OVERCLOCK_STACK_CAP, before + OVERCLOCK_STACKS_PER_ATTACK);
   events.push({
     type: "passive",
@@ -537,7 +543,7 @@ export function tickOverclockAfterAttempt(fighter, events) {
   if (fighter.className !== "Technomancer") return;
   const ps = fighter.passiveState;
   if (!ps) return;
-  const before = ps.overclockStacks || 0;
+  const before = Math.trunc(ps.overclockStacks || 0);
   if (before >= OVERCLOCK_STACK_CAP) {
     ps.overclockStacks = Math.max(0, before - OVERCLOCK_VENT_STACKS);
     events.push({
@@ -559,7 +565,7 @@ export function removeOverclockStacks(fighter, amount, events) {
   if (fighter.className !== "Technomancer") return;
   const ps = fighter.passiveState;
   if (!ps) return;
-  const before = ps.overclockStacks;
+  const before = Math.trunc(ps.overclockStacks || 0);
   ps.overclockStacks = Math.max(0, before - amount);
   events.push({
     type: "passive",
@@ -638,7 +644,9 @@ export function isOrbitalActivationTurn(engineerTurns) {
 }
 
 /**
- * After Cosmic Engineer's normal attack resolves on their own turn.
+ * Start of Cosmic Engineer's own turn, before their normal attack.
+ * Acquire Target therefore buffs this same strike; Fire Support resolves first;
+ * Defensive Protocol still lasts until the Engineer is hit.
  */
 export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.random) {
   if (engineer.className !== "Cosmic Engineer") return;

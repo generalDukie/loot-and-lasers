@@ -348,7 +348,7 @@ test("24. Defensive Protocol reduces next hit by 25%", () => {
   assert.ok(events.some((e) => e.kind === "defensive_protocol_consumed"));
 });
 
-test("25. Acquire Target +40 Crit uncapped on next attack mods", () => {
+test("25. Acquire Target +40 Crit uncapped on the same-turn attack mods", () => {
   const eng = fighter("Cosmic Engineer", "player", { crit: 0.14 });
   onCombatStart(eng);
   eng.passiveState.nextAttackCritBonus = ACQUIRE_TARGET_CRIT_BONUS;
@@ -360,6 +360,35 @@ test("25. Acquire Target +40 Crit uncapped on next attack mods", () => {
   const events = [];
   endNormalAttackModifiers(eng, mods, events);
   assert.equal(eng.passiveState.nextAttackCritBonus, 0);
+});
+
+test("25b. Acquire Target from Orbital Assistant buffs the same Engineer attack", () => {
+  const eng = fighter("Cosmic Engineer", "player", { crit: 0.14, standardAttack: 50 });
+  const foe = fighter("Vanguard", "opponent", { hp: 100000, dodge: 0 });
+  onCombatStart(eng);
+  onCombatStart(foe);
+  eng.passiveState.engineerTurns = 1;
+  const events = [];
+  maybeOrbitalAssistant(eng, foe, events, () => 0.8);
+  assert.ok(events.some((e) => e.kind === "orbital_assistant_activated" && e.effect === "acquire_target"));
+  assert.equal(eng.passiveState.nextAttackCritBonus, ACQUIRE_TARGET_CRIT_BONUS);
+  resolveNormalAttack(eng, foe, events, { rng: () => 0 });
+  assert.ok(events.some((e) => e.kind === "acquire_target_consumed"));
+  assert.equal(eng.passiveState.nextAttackCritBonus, 0);
+  const activateAt = events.findIndex((e) => e.kind === "orbital_assistant_activated");
+  const attackAt = events.findIndex((e) => e.type === "attack");
+  assert.ok(activateAt >= 0 && attackAt >= 0 && activateAt < attackAt);
+});
+
+test("25c. resolveNormalAttack does not fire Orbital Assistant after the strike", () => {
+  const eng = fighter("Cosmic Engineer", "player", { standardAttack: 50 });
+  const foe = fighter("Vanguard", "opponent", { hp: 100000, dodge: 0 });
+  onCombatStart(eng);
+  onCombatStart(foe);
+  const events = [];
+  resolveNormalAttack(eng, foe, events, { rng: () => 0 });
+  assert.equal(eng.passiveState.engineerTurns, 0);
+  assert.ok(!events.some((e) => e.kind === "orbital_assistant_activated"));
 });
 
 test("26. Passive state cleared between separate combats", () => {

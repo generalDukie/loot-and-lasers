@@ -22,8 +22,9 @@ import { resolvePermanentAttributes } from "@/lib/characterStats.js";
 import {
   CRIT_DAMAGE_MULT,
   GENERIC_ATTR_EXPONENT,
-  GENERIC_EARLY_EXPONENT,
   GENERIC_FORMAX_AT_100,
+  naturalCritResistLevelCap,
+  naturalDodgeLevelCap,
   GENERIC_FORMAX_EXPONENT,
   GENERIC_FORMAX_REFERENCE_LEVEL,
   HP_BASE,
@@ -86,16 +87,17 @@ export function getClassWeights(className) {
 }
 
 // ── Caps & constants (authoritative combat system) ──
-export const CRIT_CAP = 30;            // % absolute max (players)
-export const DODGE_CAP = 25;           // % absolute max (players)
-export const ARMOR_CAP = 30;           // % absolute max vs Strength damage (players)
-export const TECH_RESIST_CAP = 30;     // % absolute max vs Tech damage (players)
+export const CRIT_CAP = 30;            // % absolute max (players and Dungeon/Wormhole)
+export const DODGE_CAP = 25;           // % absolute max (players and Dungeon/Wormhole)
+export const ARMOR_CAP = 30;           // % absolute max vs Strength damage (players and Dungeon/Wormhole)
+export const TECH_RESIST_CAP = 30;     // % absolute max vs Tech damage (players and Dungeon/Wormhole)
 
-/** Dungeon enemies may soft-cap past player ceilings up to these maxima. */
-export const DUNGEON_CRIT_CAP = 75;
-export const DUNGEON_DODGE_CAP = 75;
-export const DUNGEON_ARMOR_CAP = 75;
-export const DUNGEON_TECH_RESIST_CAP = 75;
+/**
+ * Historical unused elevated dungeon derived-stat maxima (percent).
+ * Not live combat authority. Dungeon/Wormhole use the production natural caps
+ * above. Kept as a named record so 75 is not reintroduced as a live ceiling.
+ */
+export const HISTORICAL_DUNGEON_DERIVED_STAT_CAP_PERCENT = 75;
 export const CRIT_MULT = CRIT_DAMAGE_MULT;
 export const DAMAGE_BASE = STANDARD_ATTACK_FLAT;
 /** Early-game flat floor for mission soft foes + arena bots (not dungeon / not players). */
@@ -115,7 +117,6 @@ const SOFT_CAP_REFERENCE_LEVEL = GENERIC_FORMAX_REFERENCE_LEVEL;
 const SOFT_CAP_REFERENCE_ATTRIBUTE = GENERIC_FORMAX_AT_100;
 const SOFT_CAP_REFERENCE_GROWTH_EXPONENT = GENERIC_FORMAX_EXPONENT;
 const SOFT_CAP_ATTRIBUTE_EXPONENT = GENERIC_ATTR_EXPONENT;
-const SOFT_CAP_LEVEL_EXPONENT = GENERIC_EARLY_EXPONENT;
 const HEALTH_BASE = HP_BASE;
 const HEALTH_PER_VITALITY = HP_PER_VITALITY;
 const HEALTH_VITALITY_SQUARED_COEFFICIENT = HP_VITALITY_SQUARED_COEFFICIENT;
@@ -128,22 +129,27 @@ export function randomBetween(min, max, rng = Math.random) {
   return min + (max - min) * rng();
 }
 
-/** Soft-cap % curve shared by Crit / Dodge / Armor / Tech Resist. */
+/**
+ * Soft-cap % curve shared by Crit / Dodge / Armor / Tech Resist.
+ * Level ceiling is the production PCHIP natural cap at player mature maxima.
+ * Dungeon 75% maxima are historical and are not applied.
+ * The retired (L/100)^0.65 early ceiling is not applied.
+ */
 export function softCapPercent(level, totalAttr, maxPercent) {
   const L = Math.max(1, level || 1);
   const attr = Math.max(0, totalAttr || 0);
+  const isDodgeFamily = maxPercent === DODGE_CAP;
+  const playerMaturePercent = isDodgeFamily ? DODGE_CAP : CRIT_CAP;
   const forMax = SOFT_CAP_REFERENCE_ATTRIBUTE * Math.pow(
     L / SOFT_CAP_REFERENCE_LEVEL,
     SOFT_CAP_REFERENCE_GROWTH_EXPONENT,
   );
   const fromAttr = forMax > 0
-    ? maxPercent * Math.min(1, Math.pow(attr / forMax, SOFT_CAP_ATTRIBUTE_EXPONENT))
+    ? playerMaturePercent * Math.min(1, Math.pow(attr / forMax, SOFT_CAP_ATTRIBUTE_EXPONENT))
     : 0;
-  const pre100Cap = maxPercent * Math.min(
-    1,
-    Math.pow(L / SOFT_CAP_REFERENCE_LEVEL, SOFT_CAP_LEVEL_EXPONENT),
-  );
-  return Math.min(fromAttr, pre100Cap, maxPercent);
+  const nativeCap = isDodgeFamily ? naturalDodgeLevelCap(L) : naturalCritResistLevelCap(L);
+  const levelCapPercent = nativeCap * PERCENT_SCALE;
+  return Math.min(fromAttr, levelCapPercent, playerMaturePercent);
 }
 
 export function getMaxHP(totalVitality) {
@@ -317,17 +323,11 @@ export function computeDerivedStats(totalStats, character) {
   const rawBase = getBaseDamageFromPrimary(primaryValue, damageBase);
   const damage = Math.round(rawBase);
 
-  const dungeonCaps = !!(character?.dungeonEnemy);
-  const critCap = dungeonCaps ? DUNGEON_CRIT_CAP : CRIT_CAP;
-  const dodgeCap = dungeonCaps ? DUNGEON_DODGE_CAP : DODGE_CAP;
-  const armorCap = dungeonCaps ? DUNGEON_ARMOR_CAP : ARMOR_CAP;
-  const techCap = dungeonCaps ? DUNGEON_TECH_RESIST_CAP : TECH_RESIST_CAP;
-
-  const critChance = getCritChance(level, s("luck"), critCap);
+  const critChance = getCritChance(level, s("luck"), CRIT_CAP);
   const health = getMaxHP(s("vitality"));
-  const dodgeChance = getDodgeChance(level, s("agility"), dodgeCap);
-  const armor = getAttributeArmorPercent(className, level, s("strength"), armorCap);
-  const techResist = getAttributeTechResistancePercent(className, level, s("intellect"), techCap);
+  const dodgeChance = getDodgeChance(level, s("agility"), DODGE_CAP);
+  const armor = getAttributeArmorPercent(className, level, s("strength"), ARMOR_CAP);
+  const techResist = getAttributeTechResistancePercent(className, level, s("intellect"), TECH_RESIST_CAP);
 
   return {
     damage,

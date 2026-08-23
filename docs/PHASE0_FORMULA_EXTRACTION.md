@@ -75,8 +75,9 @@ Phase 1 later wired progression callers (`xpToNext`, live `missionXpPerFuel` uni
 - Variance T18 `.90+.20*U` all archetypes; repo extra AGI U(0.80,1.05). **E**
 
 ### Derived / Crit / Dodge / Resist
-- Generic curve T18 `nsoft` ≡ repo `softCapPercent`. **A**
-- Crit T18 `ncrit` ForMax×1.55 exp 1.80 vs repo generic 1.20. **B**
+- Generic curve T18 `nsoft` FromAttr ≡ repo FromAttr (`ForMax=700*(L/100)^0.95`, exp 1.20). **A**
+- Live Dodge/Crit/Resistance **level ceiling** is PCHIP through named anchors (`naturalDodgeLevelCap` / `naturalCritResistLevelCap`). The T18/repo `(L/100)^0.65` early factor is **retired** for these stats (historical `GENERIC_EARLY_EXPONENT` only).
+- Crit T18 `ncrit` ForMax×1.55 exp 1.80 vs repo generic 1.20. **B** (attribute conversion unchanged; only the level ceiling retuned)
 - Reflex coeff T18 piecewise 0.225→0.325. **C** → C1-smoothed ramp, max error 0.381%
 - Resists T18 three-channel vs repo two-channel. **B**
 

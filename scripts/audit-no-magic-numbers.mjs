@@ -24,6 +24,7 @@ const SCAN_FILES = [
   "src/lib/productionMath/economy.js",
   "src/lib/productionMath/gear.js",
   "src/lib/productionMath/combatStats.js",
+  "src/lib/productionMath/derivedStatCaps.js",
   "src/lib/productionMath/attributes.js",
   "src/lib/productionMath/pve.js",
   "src/lib/productionMath/market.js",

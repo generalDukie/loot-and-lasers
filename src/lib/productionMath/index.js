@@ -11,6 +11,7 @@ export * from "./rounding.js";
 export * from "./progression.js";
 export * from "./economy.js";
 export * from "./gear.js";
+export * from "./derivedStatCaps.js";
 export * from "./combatStats.js";
 export * from "./attributes.js";
 export * from "./pve.js";

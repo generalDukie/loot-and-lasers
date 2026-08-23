@@ -616,14 +616,11 @@ export function resolveNormalAttack(attacker, defender, events, {
     return ev;
   };
 
-  /** After any normal-attack attempt (hit/miss/dodge): consume mods, Overclock, Orbital. */
+  /** After any normal-attack attempt (hit/miss/dodge): consume mods, then Overclock. */
   const finishNormalAttackAttempt = (outcome, killed = false) => {
     endNormalAttackModifiers(attacker, mods, events);
     if (attacker.className === "Technomancer") {
       tickOverclockAfterAttempt(attacker, events);
-    }
-    if (!killed && defender.hp > 0 && attacker.hp > 0) {
-      maybeOrbitalAssistant(attacker, defender, events, rng);
     }
     return { killed, outcome };
   };
@@ -818,13 +815,17 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = [], opt
     events.push(...onTurnStart(attacker, rng));
 
     const eventStart = events.length;
-    const result = resolveNormalAttack(attacker, defender, events, {
-      rng,
-      forcedDamageTypeEnum,
-      forcedCanDodge,
-      totalTurn: round,
-      ownTurn,
-    });
+    maybeOrbitalAssistant(attacker, defender, events, rng);
+    let result = { killed: A.hp <= 0 || B.hp <= 0 };
+    if (A.hp > 0 && B.hp > 0) {
+      result = resolveNormalAttack(attacker, defender, events, {
+        rng,
+        forcedDamageTypeEnum,
+        forcedCanDodge,
+        totalTurn: round,
+        ownTurn,
+      });
+    }
 
     for (let i = eventStart; i < events.length; i++) {
       const ev = events[i];

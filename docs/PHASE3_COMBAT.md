@@ -48,11 +48,21 @@ Documented and implemented in `resolveNormalAttack` / `simulateBattle`:
 16. Enemy Crit vs Technomancer −2 stacks (floor 0)
 17. Consume Tantrum / Acquire Target (including on miss/dodge)
 18. Overclock tick: if stacks ≥ 6 vent 2 else +1
-19. Orbital Assistant if both still alive
-20. Stim Injector opening-charge consume / extra Void turn
-21. Death check
+19. Stim Injector opening-charge consume / extra Void turn
+20. Death check
 
-Crit **chance** uses Phase 0 ForMax ×1.55, exponent 1.80, natural cap 30% (cap-bypass passives remain separate). Crit **damage** is ×1.5 unless a Tantrum override applies.
+Cosmic Engineer **Orbital Assistant** is **not** in the post-hit pipeline. It runs at the **start of the Engineer's own turn**, before step 1, on turns 2/4/6/8/10 then every 3rd from 13. Acquire Target therefore applies to that same strike; Fire Support resolves before the Engineer's attack; Defensive Protocol still lasts until the Engineer is hit.
+
+Crit **chance** uses Phase 0 ForMax ×1.55, exponent 1.80, then `min(FromAttr, naturalCritResistLevelCap(L), 30%)` (cap-bypass passives remain separate). Dodge uses the same FromAttr curve with `naturalDodgeLevelCap(L)` and mature 25%. Each resistance channel uses `naturalCritResistLevelCap(L)` and mature 30%. Crit **damage** is ×1.5 unless a Tantrum override applies.
+
+Natural level ceilings (not guaranteed stats):
+
+| | L1 | L25 | L75 | L100+ |
+|---|---:|---:|---:|---:|
+| Dodge | 8% | 15% | 20% | 25% |
+| Crit / each Resistance | 10% | 17.5% | 25% | 30% |
+
+Interpolation is Fritsch–Carlson PCHIP. Combat and the character sheet consume `min(attribute-derived, level cap)`. Do not display the theoretical cap in place of the actual stat.
 
 Named combat authorities: `src/lib/productionMath/constants.js` (HP, raw attack, caps, context multipliers, Mission ramp) and `src/lib/classPassives.js` (class-passive cadence/values). See `docs/PRODUCTION_NO_MAGIC_NUMBER_POLICY.md`.
 

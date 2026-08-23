@@ -30,7 +30,7 @@ import {
   ARENA_RATING_BAND,
   ARENA_RATING_BAND_WIDE,
 } from "../../src/lib/arenaEngine.js";
-import { computeDerivedStats, CRIT_CAP, DODGE_CAP, ARMOR_CAP, TECH_RESIST_CAP, DUNGEON_CRIT_CAP } from "../../src/lib/statEngine.js";
+import { computeDerivedStats, CRIT_CAP, DODGE_CAP, ARMOR_CAP, TECH_RESIST_CAP } from "../../src/lib/statEngine.js";
 import { simulateBattle } from "../../src/lib/arenaEngine.js";
 import { CLASSES } from "../../src/lib/gameData.js";
 import { passiveNameForClass } from "../../src/lib/classPassives.js";
@@ -127,7 +127,7 @@ test("allocated attributes always sum exactly to BotTotalAttributes", () => {
   }
 });
 
-test("bots use player combat caps, not dungeon 75%", () => {
+test("bots use production natural combat caps (same as Dungeon/Wormhole)", () => {
   const snap = generateArenaBot({
     playerLevel: 200,
     level: 200,
@@ -144,7 +144,6 @@ test("bots use player combat caps, not dungeon 75%", () => {
   assert.ok(derived.dodgeChance <= DODGE_CAP + 1e-9);
   assert.ok(derived.armor <= ARMOR_CAP + 1e-9);
   assert.ok(derived.techResist <= TECH_RESIST_CAP + 1e-9);
-  assert.ok(CRIT_CAP < DUNGEON_CRIT_CAP);
 });
 
 test("bots reuse authoritative class passives in simulateBattle", () => {

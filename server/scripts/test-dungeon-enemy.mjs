@@ -21,7 +21,10 @@ import {
   generateDungeonEnemy,
 } from "../../src/lib/dungeonEngine.js";
 import { DUNGEON_PLANETS } from "../../src/lib/dungeonData.js";
-import { computeDerivedStats } from "../../src/lib/statEngine.js";
+import { computeDerivedStats, CRIT_CAP, DODGE_CAP, ARMOR_CAP, TECH_RESIST_CAP } from "../../src/lib/statEngine.js";
+import { derivedCombatStats } from "../../src/lib/combatMath.js";
+import { buildFighter } from "../../src/lib/arenaEngine.js";
+import * as M from "@/lib/productionMath";
 
 let passed = 0;
 let failed = 0;
@@ -154,13 +157,50 @@ test("generated enemy suppresses passives and uses dungeon flags", () => {
   assert.ok(enemy.appearance?.race);
 });
 
-test("dungeon enemies use 75% combat-stat caps in derived stats", () => {
+test("dungeon enemies use production natural derived-stat caps, not 75%", () => {
   const enemy = generateDungeonEnemy(DUNGEON_PLANETS[9], 10, 140); // D10 boss L200
-  const derived = computeDerivedStats(enemy.stats, enemy);
-  assert.ok(derived.critChance <= 75);
-  assert.ok(derived.dodgeChance <= 75);
-  assert.ok(derived.armor <= 75);
-  assert.ok(derived.techResist <= 75);
+  const sheet = computeDerivedStats(enemy.stats, enemy);
+  assert.ok(sheet.critChance <= CRIT_CAP + 1e-9);
+  assert.ok(sheet.dodgeChance <= DODGE_CAP + 1e-9);
+  assert.ok(sheet.armor <= ARMOR_CAP + 1e-9);
+  assert.ok(sheet.techResist <= TECH_RESIST_CAP + 1e-9);
+
+  const live = derivedCombatStats(enemy.level, enemy.stats, enemy.class, { dungeonEnemy: true });
+  assert.ok(live.crit <= M.NATURAL_CRIT_CAP + 1e-12);
+  assert.ok(live.dodge <= M.NATURAL_DODGE_CAP + 1e-12);
+  assert.ok(live.resists.might <= M.NATURAL_RESIST_CAP + 1e-12);
+  assert.ok(live.resists.reflex <= M.NATURAL_RESIST_CAP + 1e-12);
+  assert.ok(live.resists.tech <= M.NATURAL_RESIST_CAP + 1e-12);
+
+  const dungeonFighter = buildFighter(enemy, [], "opponent", { content: "dungeon" });
+  const wormholeFighter = buildFighter(enemy, [], "opponent", { content: "wormhole" });
+  for (const fighter of [dungeonFighter, wormholeFighter]) {
+    assert.ok(fighter.crit <= M.NATURAL_CRIT_CAP + 1e-12);
+    assert.ok(fighter.dodge <= M.NATURAL_DODGE_CAP + 1e-12);
+    assert.ok(fighter.resists.might <= M.NATURAL_RESIST_CAP + 1e-12);
+    assert.ok(fighter.resists.reflex <= M.NATURAL_RESIST_CAP + 1e-12);
+    assert.ok(fighter.resists.tech <= M.NATURAL_RESIST_CAP + 1e-12);
+    assert.equal(fighter.contextMult, M.DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT);
+  }
+});
+
+test("saturated dungeon attributes still cannot exceed production natural caps", () => {
+  const attrs = { strength: 1e9, agility: 1e9, intellect: 1e9, vitality: 1e9, luck: 1e9 };
+  const live = derivedCombatStats(100, attrs, "Technomancer", { dungeonEnemy: true });
+  assert.equal(live.crit, M.NATURAL_CRIT_CAP);
+  assert.equal(live.dodge, M.NATURAL_DODGE_CAP);
+  assert.equal(live.resists.might, M.NATURAL_RESIST_CAP);
+  assert.equal(live.resists.reflex, M.NATURAL_RESIST_CAP);
+  assert.equal(live.resists.tech, 0);
+  const sheet = computeDerivedStats(attrs, {
+    level: 100,
+    class: "Technomancer",
+    dungeonEnemy: true,
+  });
+  assert.ok(sheet.critChance <= CRIT_CAP + 1e-9);
+  assert.ok(sheet.dodgeChance <= DODGE_CAP + 1e-9);
+  assert.ok(sheet.armor <= ARMOR_CAP + 1e-9);
+  assert.ok(sheet.techResist <= TECH_RESIST_CAP + 1e-9);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

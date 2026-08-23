@@ -8,7 +8,6 @@ import {
   CRIT_ATTR_EXPONENT,
   CRIT_FORMAX_MULT,
   GENERIC_ATTR_EXPONENT,
-  GENERIC_EARLY_EXPONENT,
   GENERIC_FORMAX_AT_100,
   GENERIC_FORMAX_EXPONENT,
   GENERIC_FORMAX_REFERENCE_LEVEL,
@@ -37,6 +36,7 @@ import {
   REFLEX_RAMP_START_LEVEL,
   STANDARD_ATTACK_FLAT,
 } from "./constants.js";
+import { naturalCritResistLevelCap, naturalDodgeLevelCap } from "./derivedStatCaps.js";
 
 function levelNum(level) {
   return Math.max(1, Number(level) || 1);
@@ -97,25 +97,44 @@ export function genericForMax(level) {
 }
 
 /**
- * Generic derived-stat curve (Dodge/Resist and non-Crit specs).
- * Final = min(FromAttr, Early, cap) with ForMax = 700*(L/100)^0.95 and exp 1.20.
+ * Attribute-side conversion only (no level ceiling).
+ * FromAttr = cap * min(1, (attr / (ForMax * forMaxMult)) ** attrExponent)
+ * ForMax = 700 * (L/100)^0.95
  */
-export function derivedStat(level, attr, cap, {
+export function attributeDerivedAmount(level, attr, cap, {
   forMaxMult = 1,
   attrExponent = GENERIC_ATTR_EXPONENT,
 } = {}) {
   const L = levelNum(level);
   const x = attrNum(attr);
   const fm = genericForMax(L) * forMaxMult;
-  const fromAttr = cap * Math.min(1, fm > 0 ? (x / fm) ** attrExponent : 0);
-  const early = cap * Math.min(1, (L / GENERIC_FORMAX_REFERENCE_LEVEL) ** GENERIC_EARLY_EXPONENT);
-  return Math.min(fromAttr, early, cap);
+  return cap * Math.min(1, fm > 0 ? (x / fm) ** attrExponent : 0);
+}
+
+/**
+ * Final natural derived stat = min(FromAttr, LevelNaturalCap, mature cap).
+ * Dodge uses naturalDodgeLevelCap; Crit and Resistance use naturalCritResistLevelCap.
+ * The retired (L/100)^0.65 early ceiling is not applied.
+ */
+export function derivedStat(level, attr, cap, {
+  forMaxMult = 1,
+  attrExponent = GENERIC_ATTR_EXPONENT,
+  naturalLevelCap,
+} = {}) {
+  const fromAttr = attributeDerivedAmount(level, attr, cap, { forMaxMult, attrExponent });
+  const levelCap = naturalLevelCap != null
+    ? naturalLevelCap
+    : cap === NATURAL_DODGE_CAP
+      ? naturalDodgeLevelCap(level)
+      : naturalCritResistLevelCap(level);
+  return Math.min(fromAttr, levelCap, cap);
 }
 
 export function critChance(level, luck) {
   return derivedStat(level, luck, NATURAL_CRIT_CAP, {
     forMaxMult: CRIT_FORMAX_MULT,
     attrExponent: CRIT_ATTR_EXPONENT,
+    naturalLevelCap: naturalCritResistLevelCap(level),
   });
 }
 
@@ -153,7 +172,9 @@ export function dodgeChance(level, agility, archetype = "Might") {
   const converted = archetype === "Reflex"
     ? attrNum(agility) * reflexAgiConversion(level)
     : attrNum(agility);
-  return derivedStat(level, converted, NATURAL_DODGE_CAP);
+  return derivedStat(level, converted, NATURAL_DODGE_CAP, {
+    naturalLevelCap: naturalDodgeLevelCap(level),
+  });
 }
 
 /**
@@ -166,7 +187,9 @@ export function resistances(level, attrs, archetype) {
     : [attrs?.str, attrs?.agi, attrs?.int, attrs?.vit, attrs?.luck];
   const str = attrNum(a[0]);
   const intel = attrNum(a[2]);
-  const vs = (x) => derivedStat(level, x, NATURAL_RESIST_CAP);
+  const vs = (x) => derivedStat(level, x, NATURAL_RESIST_CAP, {
+    naturalLevelCap: naturalCritResistLevelCap(level),
+  });
   if (archetype === "Might") {
     return { might: 0, reflex: vs(intel), tech: vs(intel) };
   }

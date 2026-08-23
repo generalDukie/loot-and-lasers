@@ -28,10 +28,6 @@ const CRIT_CAP := 30.0
 const DODGE_CAP := 25.0
 const ARMOR_CAP := 30.0
 const TECH_RESIST_CAP := 30.0
-const DUNGEON_CRIT_CAP := 75.0
-const DUNGEON_DODGE_CAP := 75.0
-const DUNGEON_ARMOR_CAP := 75.0
-const DUNGEON_TECH_RESIST_CAP := 75.0
 const DAMAGE_BASE := 15.0
 const DAMAGE_BASE_RAMP_FLOOR := 5.0
 const DAMAGE_BASE_RAMP_FULL_LEVEL := 25
@@ -41,7 +37,6 @@ const SOFT_CAP_ATTRIBUTE_REFERENCE := 700.0
 const SOFT_CAP_LEVEL_REFERENCE := 100.0
 const SOFT_CAP_LEVEL_SCALING_EXPONENT := 0.95
 const SOFT_CAP_ATTRIBUTE_EXPONENT := 1.20
-const SOFT_CAP_PRE_LEVEL_REFERENCE_EXPONENT := 0.65
 const BASE_HEALTH := 50.0
 const HEALTH_PER_VITALITY := 2.5
 const HEALTH_QUADRATIC_COEFFICIENT := 0.008
@@ -106,17 +101,17 @@ static func soft_cap_percent(level: int, total_attr: float, max_percent: float) 
 		L / SOFT_CAP_LEVEL_REFERENCE,
 		SOFT_CAP_LEVEL_SCALING_EXPONENT,
 	)
+	var is_dodge := is_equal_approx(max_percent, DODGE_CAP)
+	var player_mature := DODGE_CAP if is_dodge else CRIT_CAP
 	var from_attr := 0.0
 	if for_max > 0.0:
-		from_attr = max_percent * minf(
+		from_attr = player_mature * minf(
 			1.0,
 			pow(attr / for_max, SOFT_CAP_ATTRIBUTE_EXPONENT),
 		)
-	var pre100 := max_percent * minf(
-		1.0,
-		pow(L / SOFT_CAP_LEVEL_REFERENCE, SOFT_CAP_PRE_LEVEL_REFERENCE_EXPONENT),
-	)
-	return minf(minf(from_attr, pre100), max_percent)
+	var native_frac := DerivedStatLevelCaps.natural_dodge_level_cap(level) if is_dodge else DerivedStatLevelCaps.natural_crit_resist_level_cap(level)
+	var level_cap_percent := native_frac * DerivedStatLevelCaps.CHANCE_PERCENT_SCALE
+	return minf(minf(from_attr, level_cap_percent), player_mature)
 
 
 static func max_hp(vitality: float) -> int:

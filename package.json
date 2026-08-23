@@ -57,6 +57,7 @@
     "test:dungeon": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-dungeon.mjs",
     "audit:no-magic-numbers": "node scripts/audit-no-magic-numbers.mjs",
     "test:production-math": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-production-math.mjs",
+    "test:derived-stat-caps": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-derived-stat-caps.mjs",
     "test:economy": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-economy.mjs",
     "test:stardust-economy": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-stardust-economy.mjs",
     "test:mission-enemy": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-mission-enemy.mjs",

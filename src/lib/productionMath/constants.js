@@ -356,7 +356,47 @@ export const GENERIC_FORMAX_AT_100 = 700;
 export const GENERIC_FORMAX_REFERENCE_LEVEL = 100;
 export const GENERIC_FORMAX_EXPONENT = 0.95;
 export const GENERIC_ATTR_EXPONENT = 1.2;
+/**
+ * Retired live formula: cap * min(1, (Level / 100) ** GENERIC_EARLY_EXPONENT).
+ * Dodge / Crit / Resistance natural ceilings now use PCHIP anchors below.
+ * Kept as a named historical record so 0.65 is not a stray literal.
+ */
 export const GENERIC_EARLY_EXPONENT = 0.65;
+
+export const DERIVED_STAT_LEVEL_CAP_LEVEL_1 = 1;
+export const DERIVED_STAT_LEVEL_CAP_LEVEL_25 = 25;
+export const DERIVED_STAT_LEVEL_CAP_LEVEL_75 = 75;
+export const DERIVED_STAT_LEVEL_CAP_LEVEL_100 = GENERIC_FORMAX_REFERENCE_LEVEL;
+
+export const DODGE_LEVEL_CAP_AT_1 = 0.08;
+export const DODGE_LEVEL_CAP_AT_25 = 0.15;
+export const DODGE_LEVEL_CAP_AT_75 = 0.2;
+export const DODGE_LEVEL_CAP_AT_100 = NATURAL_DODGE_CAP;
+
+export const CRIT_RESIST_LEVEL_CAP_AT_1 = 0.1;
+export const CRIT_RESIST_LEVEL_CAP_AT_25 = 0.175;
+export const CRIT_RESIST_LEVEL_CAP_AT_75 = 0.25;
+export const CRIT_RESIST_LEVEL_CAP_AT_100 = NATURAL_CRIT_CAP;
+
+export const DODGE_LEVEL_CAP_ANCHORS = Object.freeze([
+  Object.freeze({ level: DERIVED_STAT_LEVEL_CAP_LEVEL_1, cap: DODGE_LEVEL_CAP_AT_1 }),
+  Object.freeze({ level: DERIVED_STAT_LEVEL_CAP_LEVEL_25, cap: DODGE_LEVEL_CAP_AT_25 }),
+  Object.freeze({ level: DERIVED_STAT_LEVEL_CAP_LEVEL_75, cap: DODGE_LEVEL_CAP_AT_75 }),
+  Object.freeze({ level: DERIVED_STAT_LEVEL_CAP_LEVEL_100, cap: DODGE_LEVEL_CAP_AT_100 }),
+]);
+
+export const CRIT_RESIST_LEVEL_CAP_ANCHORS = Object.freeze([
+  Object.freeze({ level: DERIVED_STAT_LEVEL_CAP_LEVEL_1, cap: CRIT_RESIST_LEVEL_CAP_AT_1 }),
+  Object.freeze({ level: DERIVED_STAT_LEVEL_CAP_LEVEL_25, cap: CRIT_RESIST_LEVEL_CAP_AT_25 }),
+  Object.freeze({ level: DERIVED_STAT_LEVEL_CAP_LEVEL_75, cap: CRIT_RESIST_LEVEL_CAP_AT_75 }),
+  Object.freeze({ level: DERIVED_STAT_LEVEL_CAP_LEVEL_100, cap: CRIT_RESIST_LEVEL_CAP_AT_100 }),
+]);
+
+/** Fritsch–Carlson / cubic Hermite identities — not gameplay knobs. */
+export const PCHIP_SECANT_DOUBLE_WEIGHT = 2;
+export const CUBIC_HERMITE_SQUARE_COEFFICIENT = 3;
+export const CUBIC_HERMITE_CUBE_COEFFICIENT = 2;
+export const PCHIP_ENDPOINT_SLOPE_LIMIT = 3;
 
 export const DUNGEON_COUNT = 10;
 export const DUNGEON_ENCOUNTERS_PER_DUNGEON = 10;

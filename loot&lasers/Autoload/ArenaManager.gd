@@ -118,6 +118,36 @@ func release_presentation_lock() -> void:
 		_set_battling(false)
 
 
+func _combat_overlay_visible() -> bool:
+	var current := get_tree().current_scene
+	if current != null and current.has_method("has_combat_replay_overlay"):
+		return bool(current.call("has_combat_replay_overlay"))
+	return false
+
+
+## If Settings / nav tore down the duel overlay, settle or unlock so the lobby
+## is not stuck on "Arena battle already in progress".
+func recover_orphan_presentation() -> Dictionary:
+	if _combat_overlay_visible():
+		return {"ok": true, "overlay": true}
+	if CombatReturnManager.kind == "arena" and CombatReturnManager.state == CombatReturnManager.STATE_SETTLING:
+		return {"ok": true, "settling": true}
+	if CombatReturnManager.is_for_kind("arena"):
+		return {"ok": true, "awaiting_rewards": true}
+	if not battling and pending_combat_id.is_empty() and pending_offer_id.is_empty():
+		return {"ok": true}
+	if pending_combat_id.is_empty() and pending_offer_id.is_empty():
+		release_presentation_lock()
+		return {"ok": true, "unlocked": true}
+	var fin: Dictionary = await finish_battle()
+	if not bool(fin.get("ok", false)):
+		var rec: Dictionary = await recover_match()
+		if bool(rec.get("ok", false)):
+			fin = await finish_battle()
+	release_presentation_lock()
+	return {"ok": true, "settled": bool(fin.get("ok", false))}
+
+
 func _fail(msg: String, code: String = "", data: Dictionary = {}) -> Dictionary:
 	arena_error.emit(msg)
 	return {"ok": false, "error": msg, "code": code, "data": data}
@@ -333,8 +363,20 @@ func prepare_challenge(
 	_cooldown_retry: bool = false,
 	_board_retry: bool = false
 ) -> Dictionary:
-	if _busy or battling:
-		return _fail("Arena battle already in progress")
+	if _busy:
+		return _fail("Arena request already in progress")
+	if battling:
+		_busy = true
+		var orphan: Dictionary = await recover_orphan_presentation()
+		_busy = false
+		if bool(orphan.get("overlay", false)):
+			return _fail("Arena battle already in progress")
+		if bool(orphan.get("settling", false)):
+			return _fail("Still settling arena rewards…")
+		if bool(orphan.get("awaiting_rewards", false)):
+			return _fail("Collect your arena rewards first")
+		if battling:
+			return _fail("Arena battle already in progress")
 	# Paying the skip is opt-in via the lobby button, but if our clock/state
 	# already knows a cooldown is active, always send skip so the server charge path runs.
 	if cooldown_active():

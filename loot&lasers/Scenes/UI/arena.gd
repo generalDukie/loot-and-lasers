@@ -46,10 +46,12 @@ func _ready() -> void:
 	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
 		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
 	await _boot()
+	await ArenaManager.recover_orphan_presentation()
 	_sync_view_rewards_cta()
 
 
 func on_shell_reshow() -> void:
+	await ArenaManager.recover_orphan_presentation()
 	_update_lobby_chrome()
 	_sync_view_rewards_cta()
 	_set_status("Syncing challengers…")

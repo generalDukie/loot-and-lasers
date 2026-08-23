@@ -52,7 +52,12 @@ func _unhandled_input(event: InputEvent) -> void:
 func _close_settings() -> void:
 	var tw := create_tween()
 	tw.tween_property(self, "modulate:a", 0.0, 0.16).set_trans(Tween.TRANS_SINE)
-	tw.tween_callback(func() -> void: GameManager.go_hub())
+	tw.tween_callback(func() -> void:
+		if bool(get_meta("settings_overlay", false)):
+			GameManager.close_settings_overlay()
+		else:
+			GameManager.go_hub()
+	)
 
 
 func _build() -> void:
@@ -147,6 +152,13 @@ func _build_header() -> Control:
 	var title := UiIcon.make_title_row("settings", "Settings", ClientUi.TEXT, 30, 30.0)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
+
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(110, BTN_H)
+	_style_ghost_btn(close_btn)
+	close_btn.pressed.connect(_close_settings)
+	head.add_child(close_btn)
 
 	var codex := Button.new()
 	codex.text = "Codex"

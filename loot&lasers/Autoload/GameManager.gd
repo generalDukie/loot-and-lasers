@@ -264,7 +264,17 @@ func go_guild_wars() -> void:
 
 func go_settings() -> void:
 	change_state(GameState.IN_GAME)
+	var current := get_tree().current_scene
+	if current != null and current.is_in_group("game_shell") and current.has_method("show_settings_overlay"):
+		current.call("show_settings_overlay")
+		return
 	open_game_page(SCENE_SETTINGS)
+
+
+func close_settings_overlay() -> void:
+	var current := get_tree().current_scene
+	if current != null and current.is_in_group("game_shell") and current.has_method("clear_settings_overlay"):
+		current.call("clear_settings_overlay")
 
 
 func go_crystal_store() -> void:

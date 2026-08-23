@@ -109,6 +109,8 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_beats = CombatBeatConfig.make_default()
+	if not SettingsManager.settings_changed.is_connected(_on_settings_changed):
+		SettingsManager.settings_changed.connect(_on_settings_changed)
 	_fx = CombatFxLayer.new()
 	_motion = CombatFighterMotion.new()
 	_hp = CombatHpPresenter.new()
@@ -120,7 +122,15 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	if SettingsManager.settings_changed.is_connected(_on_settings_changed):
+		SettingsManager.settings_changed.disconnect(_on_settings_changed)
 	handle_external_dismiss()
+
+
+func _on_settings_changed() -> void:
+	if _beats == null:
+		return
+	_beats.speed = SettingsManager.combat_anim_speed
 
 
 ## Called when the shell clears the combat overlay (nav away / close).

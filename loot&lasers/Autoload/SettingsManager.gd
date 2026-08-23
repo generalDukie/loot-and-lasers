@@ -378,6 +378,8 @@ func set_combat_anim_speed(v: float, persist: bool = true) -> void:
 	combat_anim_speed = clampf(v, COMBAT_ANIMATION_MIN_SPEED, COMBAT_ANIMATION_MAX_SPEED)
 	if persist:
 		save_settings()
+	else:
+		settings_changed.emit()
 
 
 func set_screen_shake_scale(v: float, persist: bool = true) -> void:

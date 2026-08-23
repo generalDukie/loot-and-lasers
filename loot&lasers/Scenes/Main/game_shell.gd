@@ -2,9 +2,12 @@ extends Control
 ## Persistent in-game console. Page scenes swap inside the recessed content stage.
 
 const StationLoadingOverlay := preload("res://Scripts/UI/StationLoadingOverlay.gd")
+const SETTINGS_MODAL_Z_INDEX := 200
 
 var _content: Control
 var _overlay_host: Control
+var _modal_host: Control
+var _settings_overlay: Control
 var _nav_buttons: Dictionary = {}
 var _page_path := ""
 var _page: Node
@@ -391,6 +394,12 @@ func _build() -> void:
 	_overlay_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_overlay_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_content.add_child(_overlay_host)
+	_modal_host = Control.new()
+	_modal_host.name = "ChromeModalHost"
+	_modal_host.z_index = SETTINGS_MODAL_Z_INDEX
+	_modal_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_modal_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_content.add_child(_modal_host)
 	_build_notification_center()
 	_restack_content_layers()
 	# Center player-fault notifications over the content stage, not the whole window.
@@ -1174,6 +1183,7 @@ func try_begin_page_nav(path: String) -> bool:
 
 func show_page(path: String) -> void:
 	_page_nav_pending = false
+	clear_settings_overlay()
 	if path.is_empty():
 		return
 	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID) and path == GameManager.SCENE_VOID:
@@ -1684,6 +1694,42 @@ func has_combat_replay_overlay() -> bool:
 	return false
 
 
+func show_settings_overlay() -> void:
+	## Stack Settings over combat instead of swapping the page (that dismissed the duel).
+	if _settings_overlay != null and is_instance_valid(_settings_overlay):
+		return
+	if _modal_host == null:
+		return
+	var packed := _load_packed(GameManager.SCENE_SETTINGS)
+	if packed == null:
+		push_error("Could not load settings overlay")
+		return
+	var node := packed.instantiate()
+	if not node is Control:
+		node.queue_free()
+		push_error("Settings scene is not a Control")
+		return
+	_settings_overlay = node as Control
+	_settings_overlay.set_meta("settings_overlay", true)
+	if _settings_overlay.mouse_filter == Control.MOUSE_FILTER_PASS:
+		_settings_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_settings_overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	_modal_host.add_child(_settings_overlay)
+	if _content != null:
+		_content.move_child(_modal_host, -1)
+
+
+func clear_settings_overlay() -> void:
+	if _settings_overlay != null and is_instance_valid(_settings_overlay):
+		_settings_overlay.queue_free()
+	_settings_overlay = null
+	if _modal_host == null or not is_instance_valid(_modal_host):
+		return
+	for child in _modal_host.get_children():
+		if is_instance_valid(child):
+			child.queue_free()
+
+
 func clear_overlays() -> void:
 	if _overlay_host == null or not is_instance_valid(_overlay_host):
 		return
@@ -1710,6 +1756,8 @@ func _restack_content_layers() -> void:
 		_content.move_child(_notif_dock, -1)
 	if _overlay_host != null and is_instance_valid(_overlay_host):
 		_content.move_child(_overlay_host, -1)
+	if _modal_host != null and is_instance_valid(_modal_host):
+		_content.move_child(_modal_host, -1)
 	for path in _page_instances:
 		var parked: Variant = _page_instances[path]
 		if parked is Node and parked != _page and is_instance_valid(parked) and parked.get_parent() == _content:

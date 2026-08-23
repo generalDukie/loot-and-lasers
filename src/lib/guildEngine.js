@@ -357,7 +357,9 @@ export function simulateGauntlet(attackerFighters, defenderFighters) {
     const atk = attackerFighters[aIdx];
     while (defIdx < defenderFighters.length) {
       const def = defenderFighters[defIdx];
-      const battle = simulateBattle(atk.character, def.character, atk.items || [], def.items || []);
+      const battle = simulateBattle(atk.character, def.character, atk.items || [], def.items || [], {
+        content: "arena",
+      });
       const atkWon = battle.winner === "player";
       duels.push({
         attacker_name: atk.character.name,

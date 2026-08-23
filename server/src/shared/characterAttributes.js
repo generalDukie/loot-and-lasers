@@ -74,7 +74,7 @@ export function loadEquippedItemsForCharacter(characterId) {
 
 /**
  * Phase 1 character-sheet derived stats from productionMath.
- * Combat resolution continues to use statEngine.computeDerivedStats (Phase 3).
+ * Live combat uses combatMath.derivedCombatStats (Phase 3), not computeDerivedStats.
  */
 export function computeProductionSheetDerived(totalStats, character) {
   const level = Math.max(1, Math.floor(Number(character?.level) || 1));

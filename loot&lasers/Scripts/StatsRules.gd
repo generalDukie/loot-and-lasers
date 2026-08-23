@@ -12,7 +12,7 @@ const ATTR_LABELS := {
 }
 const CRIT_MULT := 1.5
 
-## Starting attributes — must match productionMath.STARTING_ATTRIBUTES.
+## Starting attributes — must match productionMath.STARTING_ATTRIBUTES (server is authority).
 const CLASS_BASE_STATS := {
 	"Vanguard": {"strength": 15, "agility": 8, "intellect": 6, "vitality": 14, "luck": 7},
 	"Astral Warden": {"strength": 15, "agility": 8, "intellect": 6, "vitality": 14, "luck": 7},

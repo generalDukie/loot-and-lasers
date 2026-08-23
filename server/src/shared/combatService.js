@@ -8,7 +8,7 @@ import { entities } from "../entities.js";
 import { secureRandom } from "../rewards/rng.js";
 import { simulateBattle } from "./combatEngine.js";
 import { loadEquippedItemsForCharacter } from "./characterAttributes.js";
-import { computeTotalStats } from "./statEngine.js";
+import { computeCombatantTotalStats } from "./statEngine.js";
 import { ATTR_KEYS } from "./expectedPlayerAttributes.js";
 import { generateMissionEncounter } from "../../../src/lib/missionCombat.js";
 import { generateDungeonEnemy } from "../../../src/lib/dungeonEngine.js";
@@ -21,10 +21,21 @@ function httpErr(status, message, code) {
   throw e;
 }
 
-/** Strip internal passive runtime state before returning to clients. */
+/** Client HUD snapshot — no internal passive runtime object. */
 function publicEndState(end) {
   if (!end || typeof end !== "object") return end;
-  return { hp: end.hp, barrier: end.barrier ?? 0 };
+  return {
+    hp: end.hp,
+    barrier: end.barrier ?? 0,
+    overclockStacks: Number(end.overclockStacks || 0),
+    overclockActive: !!end.overclockActive,
+    phantomPending: !!end.phantomPending,
+    dirtyTricks: Array.isArray(end.dirtyTricks) ? end.dirtyTricks : [],
+    kineticTantrum: end.kineticTantrum || null,
+    defensiveProtocol: !!end.defensiveProtocol,
+    acquireTarget: !!end.acquireTarget,
+    openingCharges: Number(end.openingCharges || 0),
+  };
 }
 
 /** Integer ATTR_KEYS map for matchup UI (EPA / effective totals). */
@@ -45,7 +56,7 @@ export function computeCombatDisplayStats(combatant, equippedItems = []) {
   if (!combatant || typeof combatant !== "object") {
     return normalizeDisplayStats({});
   }
-  return normalizeDisplayStats(computeTotalStats(combatant, equippedItems || []));
+  return normalizeDisplayStats(computeCombatantTotalStats(combatant, equippedItems || []));
 }
 
 /** Safe enemy display fields (no client-trustable combat math overrides). */
@@ -112,6 +123,8 @@ export function buildCombatResult(battle, {
     turn_count: events.filter(
       (e) => e?.type === "attack" || e?.type === "dodge" || e?.type === "miss",
     ).length,
+    telemetry: battle.telemetry || null,
+    content: battle.content || mode || "combat",
     events,
     playerMaxHp: battle.playerMaxHp,
     opponentMaxHp: battle.opponentMaxHp,
@@ -176,6 +189,8 @@ export function SimulateCombat({
   const battle = simulateBattle(player, opponent, playerItems, opponentItems, {
     ...opts,
     rng,
+    content: opts.content || mode,
+    mode,
   });
   return buildCombatResult(battle, {
     mode,

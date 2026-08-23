@@ -1,6 +1,6 @@
 /**
  * Layer 2 / Restoration 08 — shared combat simulation.
- * Authoritative source: src/lib/arenaEngine.js (+ classPassives + statEngine).
+ * Authoritative source: src/lib/arenaEngine.js (+ classPassives + combatMath/productionMath).
  * Requires Node `@/` alias (server start / tests use register-src-alias).
  */
 export {
@@ -16,10 +16,10 @@ export {
   calculateStrengthDamage,
   calculateTechDamage,
   calculateAgilityDamage,
-  mitigationForDamageType,
+  mitigationForDamageType, // historical Armor/Tech helper — not live settlement
   getMaxHP,
   CRIT_MULT,
-  AGI_VARIANCE_MIN,
+  AGI_VARIANCE_MIN, // historical — not live combat variance
   AGI_VARIANCE_MAX,
   UNIVERSAL_VARIANCE_MIN,
   UNIVERSAL_VARIANCE_MAX,

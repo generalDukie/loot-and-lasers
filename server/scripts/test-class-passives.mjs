@@ -21,7 +21,10 @@ import {
   DIRTY_TRICK_FLAT_BONUS,
   ASTRAL_BARRIER_MAX_HP_FRAC,
   ASTRAL_BARRIER_CHANCE,
+  tickOverclockAfterAttempt,
+  OVERCLOCK_STACK_CAP,
   OVERCLOCK_CRIT_STACK_LOSS,
+  PHANTOM_REPRIME_OWN_TURNS,
   STRONG_TANTRUM_CRIT_MULT,
   ACQUIRE_TARGET_CRIT_BONUS,
   FIRE_SUPPORT_FRAC,
@@ -68,6 +71,8 @@ function fighter(className, side = "player", overrides = {}) {
     dodge: 0.1,
     armorPercent: 0,
     techResistPercent: 0,
+    resists: { might: 0, reflex: 0, tech: 0 },
+    damageChannel: "might",
     damageType: "strength",
     stats: {},
     passive: null,
@@ -141,7 +146,7 @@ test("4. Normal Kinetic Tantrum guarantees Crit but not hit", () => {
   const mods = beginNormalAttackModifiers(v);
   assert.equal(mods.guaranteedCrit, true);
   assert.equal(mods.guaranteedHit, false);
-  assert.equal(mods.critMultOverride, null);
+  assert.equal(mods.critMultOverride, 1.5);
 });
 
 test("5. Dodge vs Normal Tantrum upgrades to Strong", () => {
@@ -178,16 +183,15 @@ test("7. Phantom Signal miss is not a Dodge (no Kinetic trigger path)", () => {
   assert.equal(events[0].hologram, true);
 });
 
-test("8–9. Phantom Signal forces exactly 2 misses then normal", () => {
+test("8–9. Phantom Signal forces the next incoming attack, then must re-prime", () => {
   const shadow = fighter("Shadow Operative");
   onCombatStart(shadow);
-  assert.equal(shadow.passiveState.phantomCharges, 2);
+  assert.equal(shadow.passiveState.phantomPending, true);
   const events = [];
   assert.equal(tryPhantomSignalMiss(shadow, events).forcedMiss, true);
-  assert.equal(tryPhantomSignalMiss(shadow, events).forcedMiss, true);
+  assert.equal(shadow.passiveState.phantomPending, false);
   assert.equal(tryPhantomSignalMiss(shadow, events).forcedMiss, false);
-  assert.equal(shadow.passiveState.phantomCharges, 0);
-  assert.equal(events.filter((e) => e.missKind === "phantom_signal").length, 2);
+  assert.equal(events.filter((e) => e.missKind === "phantom_signal").length, 1);
 });
 
 // ── Astral Barrier ───────────────────────────────────────────
@@ -274,7 +278,7 @@ test("17. Stim Injector opening turn order via simulateBattle", () => {
 });
 
 // ── Overclock ────────────────────────────────────────────────
-test("18–20. Overclock stacks, multipliers, crit removes 3", () => {
+test("18–20. Overclock stacks, multipliers, crit removes 2, floor 0", () => {
   const t = fighter("Technomancer");
   onCombatStart(t);
   const events = [];
@@ -287,13 +291,13 @@ test("18–20. Overclock stacks, multipliers, crit removes 3", () => {
   assert.ok(Math.abs(overclockDealtMultiplier(t) - (1 + 4 * 0.125)) < 1e-9);
   assert.ok(Math.abs(overclockTakenMultiplier(t) - (1 + 4 * 0.05)) < 1e-9);
   removeOverclockStacks(t, OVERCLOCK_CRIT_STACK_LOSS, events);
-  assert.equal(t.passiveState.overclockStacks, 1);
+  assert.equal(t.passiveState.overclockStacks, 2);
   removeOverclockStacks(t, OVERCLOCK_CRIT_STACK_LOSS, events);
   assert.equal(t.passiveState.overclockStacks, 0);
 });
 
 // ── Orbital Assistant ────────────────────────────────────────
-test("21–23. Orbital Assistant every 2nd turn; Fire Support secondary True", () => {
+test("21–23. Orbital Assistant on engineer turns 2/4/6/8/10; Fire Support secondary True", () => {
   const eng = fighter("Cosmic Engineer", "player", { standardAttack: 100 });
   const foe = fighter("Vanguard", "opponent", { hp: 1000, dodge: 0 });
   onCombatStart(eng);
@@ -412,7 +416,10 @@ test("Registry maps six finalized classes; no superseded names", () => {
   assert.ok(!blob.includes("Now You See Me"));
   assert.ok(!blob.includes("Bag of Tricks"));
   assert.equal(passiveNameForClass("UnknownClass"), null);
-  assert.equal(PHANTOM_SIGNAL_CHARGES, 2);
+  assert.equal(PHANTOM_SIGNAL_CHARGES, 1);
+  assert.equal(PHANTOM_REPRIME_OWN_TURNS, 10);
+  assert.equal(OVERCLOCK_STACK_CAP, 6);
+  assert.equal(OVERCLOCK_CRIT_STACK_LOSS, 2);
   assert.equal(OVERCLOCK_DEALT_PER_STACK, 0.125);
   assert.equal(DIRTY_TRICKS.length, 3);
   assert.equal(ORBITAL_EFFECTS.length, 3);
@@ -445,7 +452,7 @@ test("Barrier broken event emits when barrier depletes", () => {
   assert.equal(w.barrier, 0);
 });
 
-test("Mission/Dungeon SimulateCombat share passive engine (seeded)", () => {
+test("Mission/Dungeon SimulateCombat share the same engine; context differs", () => {
   const player = baseChar("Void Runner");
   const opponent = {
     ...baseChar("Vanguard"),
@@ -454,12 +461,18 @@ test("Mission/Dungeon SimulateCombat share passive engine (seeded)", () => {
     suppressClassPassive: true,
   };
   const a = SimulateCombat({ player, opponent, rng: seededRng(55), mode: "mission" });
-  const b = SimulateCombat({ player, opponent, rng: seededRng(55), mode: "dungeon" });
-  assert.equal(a.winner, b.winner);
-  assert.deepEqual(
-    a.events.filter((e) => e.type === "passive").map((e) => e.kind),
-    b.events.filter((e) => e.type === "passive").map((e) => e.kind),
-  );
+  const b = SimulateCombat({
+    player,
+    opponent: { ...opponent, missionEnemy: false, dungeonEnemy: true },
+    rng: seededRng(55),
+    mode: "dungeon",
+  });
+  assert.equal(a.content, "mission");
+  assert.equal(b.content, "dungeon");
+  assert.ok(a.events.some((e) => e.type === "initiative"));
+  assert.ok(b.events.some((e) => e.type === "initiative"));
+  assert.ok(a.events.some((e) => e.kind === "dirty_trick_selected"));
+  assert.ok(b.events.some((e) => e.kind === "dirty_trick_selected"));
 });
 
 test("Statistical: Dirty Tricks ~1/3 each", () => {

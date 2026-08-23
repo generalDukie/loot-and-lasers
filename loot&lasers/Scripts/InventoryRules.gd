@@ -6,7 +6,11 @@ const EQUIPPABLE_TYPES: PackedStringArray = [
 	"helmet", "armor", "legs", "boots", "weapon", "neck", "accessory", "ship_module",
 ]
 
-const BAG_CAP_DEFAULT := 10
+## Client estimate: production backpack is a hard 10 unequipped items of any type.
+## Mirrors src/lib/productionMath BACKPACK_UNEQUIPPED_ITEM_CAP (server is authority).
+const BACKPACK_UNEQUIPPED_ITEM_CAP := 10
+## @deprecated Use BACKPACK_UNEQUIPPED_ITEM_CAP.
+const BAG_CAP_DEFAULT := BACKPACK_UNEQUIPPED_ITEM_CAP
 
 
 static func is_equippable(item_type: String) -> bool:
@@ -36,7 +40,7 @@ static func bag_occupancy(items: Array) -> int:
 
 ## Client estimate: production backpack is a hard 10 unequipped items of any type.
 static func bag_cap(_character: Dictionary = {}) -> int:
-	return BAG_CAP_DEFAULT
+	return BACKPACK_UNEQUIPPED_ITEM_CAP
 
 
 static func find_equipped_of_type(items: Array, item_type: String) -> Dictionary:

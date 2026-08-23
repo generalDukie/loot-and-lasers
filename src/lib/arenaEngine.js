@@ -4,14 +4,21 @@
 import { RACES, CLASSES, generateClassWeapon, getArenaStardustReward, getArenaXpReward } from "@/lib/gameData";
 import {
   computeTotalStats,
-  computeDerivedStats,
+  computeCombatantTotalStats,
   getClassWeights,
-  getDamageBaseForCombatant,
-  rollBasicAttackDamage,
-  mitigationForDamageType,
   CRIT_MULT,
-  DAMAGE_BASE,
 } from "@/lib/statEngine";
+import {
+  derivedCombatStats,
+  inferCombatContent,
+  resistFraction,
+  rollUniversalVariance,
+  roundCombatDamage,
+  contextMultiplierFor,
+  rawAttack,
+  STANDARD_ATTACK_FLAT,
+  DAMAGE_CHANNEL,
+} from "@/lib/combatMath";
 import {
   onCombatStart,
   onTurnStart,
@@ -21,14 +28,17 @@ import {
   tryPhantomSignalMiss,
   overclockDealtMultiplier,
   overclockTakenMultiplier,
-  gainOverclockStack,
+  tickOverclockAfterAttempt,
   removeOverclockStacks,
   applyDamageWithBarrier,
   maybeOrbitalAssistant,
-  hasStimInjector,
+  maybeUnlockDirtyTricks,
+  consumeStimOpening,
   OVERCLOCK_CRIT_STACK_LOSS,
+  CRIT_DAMAGE_MULT,
   passiveNameForClass,
   createPassiveState,
+  snapshotPassiveHud,
 } from "@/lib/classPassives";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
 import { generateArenaBot, ARENA_BOT_CLASSES } from "@/lib/arenaBotGenerator";
@@ -88,7 +98,10 @@ const LADDER_BOT_LAST_ONLINE_MAX_MINUTES = 180;
 const AVATAR_SPECIES_COUNT = 30;
 const AVATAR_SPECIES_INDEX_MULTIPLIER = 7;
 const COMBAT_ROUND_LIMIT = 5_000;
+/** Log shows resist mitigation when the absorbed amount exceeds this HP. */
+const COMBAT_LOG_RESIST_NOTE_THRESHOLD = 0.5;
 const ELO_RATING_SCALE = 400;
+const ELO_EXPECTED_SCORE_BASE = 10;
 
 const BOT_NAMES = [
   "Vrax'Nok", "Zyx-7", "Kaelith", "Drogath", "Nebulon", "Zyr'kara", "Cygnus",
@@ -141,7 +154,7 @@ export function getSeason() {
 // stat weapon boosts power noticeably while off-stat loot barely moves it.
 export function computePower(character, equippedItems = []) {
   const w = getClassWeights(character?.class);
-  const total = computeTotalStats(character, equippedItems);
+  const total = computeCombatantTotalStats(character, equippedItems);
   const weighted = POWER_STAT_KEYS.reduce(
     (sum, k) => sum + (total[k] || 0) * (w[k] ?? DEFAULT_CLASS_STAT_WEIGHT),
     0,
@@ -320,11 +333,11 @@ export function generateOpponents(character, count = ARENA_CHALLENGER_SLOTS, cat
     // Opponent rating stays near the player's (±40) so fights stay competitive.
     const rating = Math.max(
       0,
-      myRating + Math.floor(Math.random() * BOT_RATING_VARIANCE * 2) - BOT_RATING_VARIANCE,
+      myRating + Math.floor(Math.random() * BOT_RATING_VARIANCE * 2) - BOT_RATING_VARIANCE, // magic-number-ok: symmetric ±variance window
     );
     const stats = snap.stats;
     const equippedItems = pickGearForBot(catalogItems, classKey, level);
-    const power = computePower({ level, class: classKey, stats }, equippedItems);
+    const power = computePower({ level, class: classKey, stats, isBot: true }, equippedItems);
     const wins = Math.max(
       0,
       Math.floor(rating / BOT_WIN_RATING_DIVISOR)
@@ -386,7 +399,7 @@ export function ladderBotToOpponent(bot, catalogItems = []) {
     classKey = snap.class;
   }
   const equippedItems = pickGearForBot(catalogItems, classKey, level);
-  const power = computePower({ level, class: classKey, stats }, equippedItems);
+  const power = computePower({ level, class: classKey, stats, isBot: true }, equippedItems);
   return {
     id: bot.id,
     arena_bot_id: bot.arena_bot_id || bot.id,
@@ -449,36 +462,46 @@ export function snapshotOpponent(opp) {
   };
 }
 
-export function buildFighter(c, items, side) {
-  // Effective totals — Stim multipliers apply as the final attribute step.
-  const stats = computeTotalStats(c, items);
+export function buildFighter(c, items, side, opts = {}) {
+  // Effective totals — Stim multipliers apply as the final attribute step (Phase 5 owns Stim product).
+  const stats = computeCombatantTotalStats(c, items);
   const cls = CLASSES[c.class] || CLASSES.Vanguard;
-  const derived = computeDerivedStats(stats, c);
   const className = cls.name;
-  // Mission enemies (and any suppressClassPassive combatant) keep class-family
-  // damage/resist rules via computeDerivedStats(character.class) but must not
-  // receive player class passives — blank className for passive hooks.
   const suppress = !!(c.suppressClassPassive || c.missionEnemy || c.dungeonEnemy);
-  // Mission soft foes + arena bots: ramped flat. Dungeon (also isBot) and players: full 15.
-  const damageBase = getDamageBaseForCombatant(c);
+  const derived = derivedCombatStats(c.level || 1, stats, className, {
+    missionEnemy: !!c.missionEnemy,
+    dungeonEnemy: !!c.dungeonEnemy,
+  });
+  const content = opts.content || "arena";
+  const role = side === "player" ? "player" : "enemy";
+  const contextMult = contextMultiplierFor(content, role, c.level || 1);
+  const damageTypeEnum = derived.archetype === "Reflex"
+    ? "REFLEX"
+    : derived.archetype === "Tech"
+      ? "TECH"
+      : "MIGHT";
   return {
     side,
     name: c.name,
     className: suppress ? null : className,
-    hp: derived.health,
-    maxHp: derived.health,
+    level: c.level || 1,
+    hp: derived.maxHp,
+    maxHp: derived.maxHp,
     barrier: 0,
     primaryValue: derived.primaryValue,
+    intellectValue: derived.intellectValue,
+    vitalityValue: derived.vitalityValue,
     archetype: derived.archetype,
-    /** Sheet expected attack (no variance) — used by secondary effects like Fire Support. */
-    standardAttack: derived.damage,
-    damageBase,
-    crit: derived.critChance / PERCENT_SCALE,
-    critMult: derived.critMult || CRIT_MULT,
-    dodge: derived.dodgeChance / PERCENT_SCALE,
-    armorPercent: derived.armor || 0,
-    techResistPercent: derived.techResist || 0,
-    damageType: derived.damageType || "strength",
+    standardAttack: derived.standardAttack,
+    damageBase: derived.damageBase,
+    crit: derived.crit,
+    critMult: CRIT_DAMAGE_MULT || CRIT_MULT,
+    dodge: derived.dodge,
+    resists: derived.resists,
+    damageChannel: derived.damageChannel,
+    damageType: damageTypeEnum,
+    contextMult,
+    content,
     stats,
     suppressClassPassive: suppress,
     passive: suppress ? null : passiveNameForClass(className),
@@ -487,21 +510,27 @@ export function buildFighter(c, items, side) {
 }
 
 /**
- * Resolve one basic hit after dodge/miss has already been resolved:
- * raw → optional outgoing mult (Overclock) → crit → mitigation → incoming taken mult → round.
+ * Resolve one basic hit after dodge/miss has already been resolved.
+ * Order (Test 18 / Phase 3):
+ * raw → variance → Overclock outgoing → Crit/Tantrum → 3-channel resist
+ * → Overclock incoming → context multiplier → round.
  */
 export function resolveBasicHit(attacker, defender, {
   canCrit = true,
   forceCrit = false,
   critChanceBonus = 0,
   critMultOverride = null,
-  damageTypeForMitigation = attacker.damageType,
+  damageTypeForMitigation = attacker.damageChannel,
   outgoingMult = 1,
   incomingTakenMult = 1,
+  contextMult = attacker.contextMult != null ? attacker.contextMult : 1,
   rng = Math.random,
+  variance = null,
 } = {}) {
-  const flat = attacker.damageBase != null ? attacker.damageBase : DAMAGE_BASE;
-  let damage = rollBasicAttackDamage(attacker.archetype, attacker.primaryValue, rng, flat);
+  const flat = attacker.damageBase != null ? attacker.damageBase : STANDARD_ATTACK_FLAT;
+  const raw = rawAttack(attacker.primaryValue, flat);
+  const rolledVariance = rollUniversalVariance(rng, variance);
+  let damage = raw * rolledVariance;
   damage *= outgoingMult;
 
   let crit = false;
@@ -509,21 +538,29 @@ export function resolveBasicHit(attacker, defender, {
     const critChance = Math.max(0, (attacker.crit || 0) + (critChanceBonus || 0));
     crit = forceCrit || rng() < critChance;
     if (crit) {
-      const mult = critMultOverride != null ? critMultOverride : (attacker.critMult || CRIT_MULT);
+      const mult = critMultOverride != null ? critMultOverride : (attacker.critMult || CRIT_DAMAGE_MULT);
       damage *= mult;
     }
   }
 
-  const mit = mitigationForDamageType(
-    damageTypeForMitigation,
-    defender.armorPercent,
-    defender.techResistPercent,
-  );
-  damage *= (1 - mit);
+  const channel = String(damageTypeForMitigation || attacker.damageChannel || "might").toLowerCase();
+  const resistPct = channel === DAMAGE_CHANNEL.True ? 0 : resistFraction(defender.resists, channel);
+  const beforeResist = damage;
+  damage *= (1 - resistPct);
+  const resistedAmount = beforeResist - damage;
   damage *= incomingTakenMult;
+  damage *= contextMult;
 
-  const finalDamage = Math.max(0, Math.round(damage));
-  return { finalDamage, crit };
+  const finalDamage = roundCombatDamage(damage);
+  return {
+    finalDamage,
+    crit,
+    variance: rolledVariance,
+    resistPercent: resistPct,
+    resistedAmount,
+    damageChannel: channel,
+    raw,
+  };
 }
 
 export function applyHealing(target, healAmount) {
@@ -536,16 +573,19 @@ export function applyHealing(target, healAmount) {
 
 function damageTypeEnumFor(attacker, forcedDamageTypeEnum) {
   if (forcedDamageTypeEnum) return forcedDamageTypeEnum;
-  if (attacker.damageType === "strength") return "MIGHT";
-  if (attacker.damageType === "tech") return "TECH";
-  return "REFLEX";
+  if (attacker.damageType === "MIGHT" || attacker.damageType === "REFLEX" || attacker.damageType === "TECH") {
+    return attacker.damageType;
+  }
+  if (attacker.archetype === "Tech" || attacker.damageChannel === "tech") return "TECH";
+  if (attacker.archetype === "Reflex" || attacker.damageChannel === "reflex") return "REFLEX";
+  return "MIGHT";
 }
 
-function mitigationTypeForEnum(damageTypeEnum) {
-  if (damageTypeEnum === "MIGHT") return "strength";
+function channelForEnum(damageTypeEnum) {
+  if (damageTypeEnum === "TRUE") return "true";
   if (damageTypeEnum === "TECH") return "tech";
-  if (damageTypeEnum === "REFLEX") return "agility";
-  return "true";
+  if (damageTypeEnum === "REFLEX") return "reflex";
+  return "might";
 }
 
 /**
@@ -556,20 +596,27 @@ export function resolveNormalAttack(attacker, defender, events, {
   rng,
   forcedDamageTypeEnum = null,
   forcedCanDodge = true,
-}) {
+  totalTurn = null,
+  ownTurn = null,
+} = {}) {
   const damageTypeEnum = damageTypeEnumFor(attacker, forcedDamageTypeEnum);
   const canCritBase = damageTypeEnum !== "TRUE";
-  const mitigationType = mitigationTypeForEnum(damageTypeEnum);
+  const channel = channelForEnum(damageTypeEnum);
   const mods = beginNormalAttackModifiers(attacker);
+
+  const stamp = (ev) => {
+    if (!ev) return ev;
+    if (totalTurn != null) ev.totalTurn = totalTurn;
+    if (ownTurn != null) ev.ownTurn = ownTurn;
+    return ev;
+  };
 
   /** After any normal-attack attempt (hit/miss/dodge): consume mods, Overclock, Orbital. */
   const finishNormalAttackAttempt = (outcome, killed = false) => {
     endNormalAttackModifiers(attacker, mods, events);
-    // Missed/Dodged normal attacks still grant Overclock stacks.
     if (attacker.className === "Technomancer") {
-      gainOverclockStack(attacker, events);
+      tickOverclockAfterAttempt(attacker, events);
     }
-    // Skip drone action if combat already ended on this attack.
     if (!killed && defender.hp > 0 && attacker.hp > 0) {
       maybeOrbitalAssistant(attacker, defender, events, rng);
     }
@@ -585,6 +632,7 @@ export function resolveNormalAttack(attacker, defender, events, {
         last.attacker = attacker.side;
         last.defender = defender.side;
         last.isNormalAttack = true;
+        stamp(last);
       }
       return finishNormalAttackAttempt("miss", false);
     }
@@ -595,7 +643,7 @@ export function resolveNormalAttack(attacker, defender, events, {
   if (canDodge) {
     const dodgeRoll = rng();
     if (dodgeRoll < defender.dodge) {
-      events.push({
+      events.push(stamp({
         type: "dodge",
         attacker: attacker.side,
         defender: defender.side,
@@ -609,10 +657,10 @@ export function resolveNormalAttack(attacker, defender, events, {
         shieldHit: false,
         ability: attacker.passive,
         isNormalAttack: true,
-        text: `${defender.name} dodges!`,
-      });
+        naturalDodge: true,
+        text: `${defender.name} dodges`,
+      }));
 
-      // Dodge-specific hooks (Kinetic Tantrum).
       if (defender.className === "Vanguard") {
         activateKineticTantrum(defender, "normal", events);
       }
@@ -629,15 +677,19 @@ export function resolveNormalAttack(attacker, defender, events, {
     forceCrit: mods.guaranteedCrit,
     critChanceBonus: mods.critBonusFlat,
     critMultOverride: mods.critMultOverride,
-    damageTypeForMitigation: mitigationType,
+    damageTypeForMitigation: channel,
     outgoingMult: overclockDealtMultiplier(attacker),
     incomingTakenMult: overclockTakenMultiplier(defender),
+    contextMult: attacker.contextMult != null ? attacker.contextMult : 1,
     rng,
   });
 
   const res = applyDamageWithBarrier(defender, hit.finalDamage, events, { isDamagingHit: true });
 
-  events.push({
+  const resistNote = hit.resistedAmount > COMBAT_LOG_RESIST_NOTE_THRESHOLD
+    ? ` · resist −${roundCombatDamage(hit.resistedAmount)}`
+    : "";
+  events.push(stamp({
     type: "attack",
     attacker: attacker.side,
     defender: defender.side,
@@ -657,10 +709,13 @@ export function resolveNormalAttack(attacker, defender, events, {
     guaranteedCrit: !!mods.guaranteedCrit,
     critMultOverride: mods.critMultOverride,
     kineticMode: mods.kineticMode,
-  });
+    resistPercent: hit.resistPercent,
+    resistedAmount: hit.resistedAmount,
+    variance: hit.variance,
+    damageChannel: hit.damageChannel,
+    text: `${attacker.name} hits ${defender.name} for ${res.hpDamage}${hit.crit ? " CRIT" : ""}${resistNote}`,
+  }));
 
-  // Enemy Crit vs Technomancer removes Overclock stacks after crit is confirmed.
-  // Uses pre-removal stacks for the incoming +5%/stack already applied above.
   if (hit.crit && defender.className === "Technomancer") {
     removeOverclockStacks(defender, OVERCLOCK_CRIT_STACK_LOSS, events);
   }
@@ -668,70 +723,52 @@ export function resolveNormalAttack(attacker, defender, events, {
   return finishNormalAttackAttempt("hit", defender.hp <= 0);
 }
 
-/**
- * Build opening turn order when Stim Injector is active.
- * Returns null for normal initiative alternating.
- */
-function buildStimTurnPlan(A, B, rng) {
-  const aStim = hasStimInjector(A);
-  const bStim = hasStimInjector(B);
-  if (!aStim && !bStim) return null;
-  let runner;
-  let other;
-  if (aStim && bStim) {
-    runner = rng() < EVEN_CHANCE ? A : B;
-    other = runner === A ? B : A;
-  } else if (aStim) {
-    runner = A;
-    other = B;
-  } else {
-    runner = B;
-    other = A;
-  }
-  // Opening: runner, runner, other, then alternate starting with runner.
-  return {
-    kind: "stim_injector",
-    runnerSide: runner.side,
-    queue: [runner, runner, other],
-    afterAlternateAttacker: runner,
-  };
-}
-
 export function simulateBattle(player, opp, playerItems = [], oppItems = [], opts = {}) {
   const { rng = Math.random } = opts || {};
   const forcedDamageTypeEnum = opts?.forceDamageTypeEnum ?? null;
   const forcedCanDodge = typeof opts?.forceCanDodge === "boolean" ? opts.forceCanDodge : true;
+  const content = inferCombatContent(opts, player, opp);
 
-  const A = buildFighter(player, playerItems, "player");
-  const B = buildFighter(opp, oppItems, "opponent");
+  const A = buildFighter(player, playerItems, "player", { content });
+  const B = buildFighter(opp, oppItems, "opponent", { content });
 
   const events = [];
   events.push(...onCombatStart(A, rng));
   events.push(...onCombatStart(B, rng));
 
-  const stimPlan = buildStimTurnPlan(A, B, rng);
   let attacker;
   let defender;
   let initiativeFirstSide;
-  let stimQueue = null;
 
-  if (stimPlan) {
-    stimQueue = [...stimPlan.queue];
-    attacker = stimQueue.shift();
+  const aOpening = A.passiveState?.openingCharges || 0;
+  const bOpening = B.passiveState?.openingCharges || 0;
+  if (aOpening > 0 && bOpening > 0) {
+    attacker = rng() < EVEN_CHANCE ? A : B;
     defender = attacker === A ? B : A;
-    initiativeFirstSide = stimPlan.runnerSide;
-    events.push({
-      type: "passive",
-      passive: "Dirty Tricks",
-      kind: "stim_injector_turn_order",
-      side: stimPlan.runnerSide,
-      text: `Stim Injector overrides opening turns`,
-    });
+    initiativeFirstSide = attacker.side;
+  } else if (aOpening > 0) {
+    attacker = A;
+    defender = B;
+    initiativeFirstSide = "player";
+  } else if (bOpening > 0) {
+    attacker = B;
+    defender = A;
+    initiativeFirstSide = "opponent";
   } else {
     const playerGoesFirst = rng() < EVEN_CHANCE;
     attacker = playerGoesFirst ? A : B;
     defender = playerGoesFirst ? B : A;
     initiativeFirstSide = attacker.side;
+  }
+
+  if (aOpening > 0 || bOpening > 0) {
+    events.push({
+      type: "passive",
+      passive: "Dirty Tricks",
+      kind: "stim_injector_turn_order",
+      side: initiativeFirstSide,
+      text: `Stim Injector takes the next two attack turns`,
+    });
   }
 
   events.push({
@@ -741,27 +778,67 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = [], opt
     text: `${initiativeFirstSide === "player" ? A.name : B.name} opens combat`,
   });
 
+  const telemetry = {
+    totalTurns: 0,
+    playerTurns: 0,
+    opponentTurns: 0,
+    playerDamage: 0,
+    opponentDamage: 0,
+    critCount: 0,
+    dodgeCount: 0,
+    forcedMissCount: 0,
+    passiveActivations: 0,
+  };
+
   let round = 0;
   while (A.hp > 0 && B.hp > 0 && round < COMBAT_ROUND_LIMIT) {
     round++;
+    telemetry.totalTurns = round;
+    if (attacker.side === "player") telemetry.playerTurns += 1;
+    else telemetry.opponentTurns += 1;
 
+    const stimStoleTurn = maybeUnlockDirtyTricks(A, round, rng, events)
+      || maybeUnlockDirtyTricks(B, round, rng, events);
+    if (stimStoleTurn) {
+      if ((A.passiveState?.openingCharges || 0) > 0 && attacker !== A) {
+        attacker = A;
+        defender = B;
+      } else if ((B.passiveState?.openingCharges || 0) > 0 && attacker !== B) {
+        attacker = B;
+        defender = A;
+      }
+    }
+
+    const ownTurn = attacker.side === "player" ? telemetry.playerTurns : telemetry.opponentTurns;
     events.push(...onTurnStart(attacker, rng));
 
+    const eventStart = events.length;
     const result = resolveNormalAttack(attacker, defender, events, {
       rng,
       forcedDamageTypeEnum,
       forcedCanDodge,
+      totalTurn: round,
+      ownTurn,
     });
+
+    for (let i = eventStart; i < events.length; i++) {
+      const ev = events[i];
+      if (ev?.type === "dodge") telemetry.dodgeCount += 1;
+      if (ev?.type === "miss") telemetry.forcedMissCount += 1;
+      if (ev?.crit) telemetry.critCount += 1;
+      if ((ev?.type === "attack" || ev?.kind === "fire_support") && Number(ev.damage || 0) > 0) {
+        if (ev.attacker === "player") telemetry.playerDamage += Number(ev.damage);
+        else if (ev.attacker === "opponent") telemetry.opponentDamage += Number(ev.damage);
+      }
+      if (ev?.type === "passive") telemetry.passiveActivations += 1;
+    }
 
     if (result.killed || A.hp <= 0 || B.hp <= 0) break;
 
-    if (stimQueue && stimQueue.length > 0) {
-      attacker = stimQueue.shift();
-      defender = attacker === A ? B : A;
+    if (consumeStimOpening(attacker, events)) {
       continue;
     }
 
-    // Normal alternating after stim opening (or always when no stim).
     [attacker, defender] = [defender, attacker];
   }
 
@@ -772,8 +849,10 @@ export function simulateBattle(player, opp, playerItems = [], oppItems = [], opt
     playerMaxHp: A.maxHp,
     opponentMaxHp: B.maxHp,
     initiativeFirstSide,
-    playerEnd: { hp: A.hp, barrier: A.barrier, passiveState: { ...A.passiveState } },
-    opponentEnd: { hp: B.hp, barrier: B.barrier, passiveState: { ...B.passiveState } },
+    content,
+    telemetry,
+    playerEnd: { hp: A.hp, barrier: A.barrier, ...snapshotPassiveHud(A) },
+    opponentEnd: { hp: B.hp, barrier: B.barrier, ...snapshotPassiveHud(B) },
   };
 }
 
@@ -785,7 +864,7 @@ export const ARENA_RATING_DELTA_MAX = 36;
 /** Expected win chance for `playerRating` vs `oppRating` (classic Elo). */
 export function eloExpectedScore(playerRating, oppRating) {
   return 1 / (
-    1 + 10 ** (((oppRating || DEFAULT_ARENA_RATING) - (playerRating || DEFAULT_ARENA_RATING)) / ELO_RATING_SCALE)
+    1 + ELO_EXPECTED_SCORE_BASE ** (((oppRating || DEFAULT_ARENA_RATING) - (playerRating || DEFAULT_ARENA_RATING)) / ELO_RATING_SCALE)
   );
 }
 

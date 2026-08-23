@@ -6,18 +6,22 @@
 import {
   NOVA_SURCHARGE_BANDS,
   NOVA_SURCHARGE_TABLE,
+  STIM_RARE_LEVEL_MAX,
   STIM_TIERS,
+  STIM_UNCOMMON_LEVEL_MAX,
 } from "./constants.js";
+
+const STIM_TIER_RANK = Object.freeze({ uncommon: 0, rare: 1, epic: 2 });
 
 function levelInt(level) {
   return Math.max(1, Math.floor(Number(level) || 1));
 }
 
-/** Player-level-band Stim shop tier: L<20 Uncommon, L<50 Rare, else Epic. */
+/** Player-level-band Stim shop tier: L≤UNCOMMON_MAX Uncommon, L≤RARE_MAX Rare, else Epic. */
 export function marketStimTier(playerLevel) {
   const L = levelInt(playerLevel);
-  if (L < 20) return "uncommon";
-  if (L < 50) return "rare";
+  if (L <= STIM_UNCOMMON_LEVEL_MAX) return "uncommon";
+  if (L <= STIM_RARE_LEVEL_MAX) return "rare";
   return "epic";
 }
 
@@ -33,9 +37,8 @@ export function nextStimState(current, incomingTier) {
   const spec = STIM_TIERS[incomingTier];
   if (!spec) return current;
   const cur = current && current.tier ? current : { tier: null, remainingHours: 0 };
-  const rank = { uncommon: 0, rare: 1, epic: 2 };
-  const inc = rank[incomingTier];
-  const have = cur.tier == null ? -1 : rank[cur.tier];
+  const inc = STIM_TIER_RANK[incomingTier];
+  const have = cur.tier == null ? -1 : STIM_TIER_RANK[cur.tier];
   if (inc > have) return { tier: incomingTier, remainingHours: spec.baseHours };
   if (inc === have) {
     return {
@@ -54,12 +57,10 @@ export function marketGearReferenceLevel(playerLevel, offsetIndex) {
 
 export function novaSurchargeBandIndex(percentile) {
   const p = Number(percentile);
-  if (!Number.isFinite(p) || p < NOVA_SURCHARGE_BANDS[1].minInclusive) return 0;
-  if (p >= 0.99) return 5;
-  if (p >= 0.97) return 4;
-  if (p >= 0.92) return 3;
-  if (p >= 0.85) return 2;
-  if (p >= 0.75) return 1;
+  if (!Number.isFinite(p)) return 0;
+  for (let i = NOVA_SURCHARGE_BANDS.length - 1; i >= 0; i--) {
+    if (p >= NOVA_SURCHARGE_BANDS[i].minInclusive) return i;
+  }
   return 0;
 }
 

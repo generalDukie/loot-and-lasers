@@ -19,6 +19,22 @@
 //
 import { CLASSES, getActiveBuffs, applyBuffs } from "@/lib/gameData";
 import { resolvePermanentAttributes } from "@/lib/characterStats.js";
+import {
+  CRIT_DAMAGE_MULT,
+  GENERIC_ATTR_EXPONENT,
+  GENERIC_EARLY_EXPONENT,
+  GENERIC_FORMAX_AT_100,
+  GENERIC_FORMAX_EXPONENT,
+  GENERIC_FORMAX_REFERENCE_LEVEL,
+  HP_BASE,
+  HP_PER_VITALITY,
+  HP_VITALITY_SQUARED_COEFFICIENT,
+  MISSION_ENEMY_BASE_RAMP_FLOOR,
+  MISSION_ENEMY_BASE_RAMP_FULL_LEVEL,
+  RAW_ATTACK_COEFFICIENT,
+  RAW_ATTACK_EXPONENT,
+  STANDARD_ATTACK_FLAT,
+} from "@/lib/productionMath";
 
 // ── Primary attribute keys (display order) ──
 export const PRIMARY_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
@@ -80,30 +96,30 @@ export const DUNGEON_CRIT_CAP = 75;
 export const DUNGEON_DODGE_CAP = 75;
 export const DUNGEON_ARMOR_CAP = 75;
 export const DUNGEON_TECH_RESIST_CAP = 75;
-export const CRIT_MULT = 1.5;          // crit damage multiplier
-export const DAMAGE_BASE = 15;
+export const CRIT_MULT = CRIT_DAMAGE_MULT;
+export const DAMAGE_BASE = STANDARD_ATTACK_FLAT;
 /** Early-game flat floor for mission soft foes + arena bots (not dungeon / not players). */
-export const DAMAGE_BASE_RAMP_FLOOR = 5;
+export const DAMAGE_BASE_RAMP_FLOOR = MISSION_ENEMY_BASE_RAMP_FLOOR;
 /** Level at which ramped flat reaches DAMAGE_BASE. */
-export const DAMAGE_BASE_RAMP_FULL_LEVEL = 25;
-export const DAMAGE_COEFF = 0.0032;
-export const DAMAGE_EXP = 1.727;
+export const DAMAGE_BASE_RAMP_FULL_LEVEL = MISSION_ENEMY_BASE_RAMP_FULL_LEVEL;
+export const DAMAGE_COEFF = RAW_ATTACK_COEFFICIENT;
+export const DAMAGE_EXP = RAW_ATTACK_EXPONENT;
+/** Historical Reflex special variance — NOT live combat authority (Phase 3). */
 export const AGI_VARIANCE_MIN = 0.80;
 export const AGI_VARIANCE_MAX = 1.05;
 export const UNIVERSAL_VARIANCE_MIN = 0.90;
 export const UNIVERSAL_VARIANCE_MAX = 1.10;
 
 const DEFAULT_CLASS_STAT_WEIGHT = 0.1;
-const SOFT_CAP_REFERENCE_LEVEL = 100;
-const SOFT_CAP_REFERENCE_ATTRIBUTE = 700;
-const SOFT_CAP_REFERENCE_GROWTH_EXPONENT = 0.95;
-const SOFT_CAP_ATTRIBUTE_EXPONENT = 1.20;
-const SOFT_CAP_LEVEL_EXPONENT = 0.65;
-const HEALTH_BASE = 50;
-const HEALTH_PER_VITALITY = 2.5;
-const HEALTH_VITALITY_SQUARED_COEFFICIENT = 0.008;
+const SOFT_CAP_REFERENCE_LEVEL = GENERIC_FORMAX_REFERENCE_LEVEL;
+const SOFT_CAP_REFERENCE_ATTRIBUTE = GENERIC_FORMAX_AT_100;
+const SOFT_CAP_REFERENCE_GROWTH_EXPONENT = GENERIC_FORMAX_EXPONENT;
+const SOFT_CAP_ATTRIBUTE_EXPONENT = GENERIC_ATTR_EXPONENT;
+const SOFT_CAP_LEVEL_EXPONENT = GENERIC_EARLY_EXPONENT;
+const HEALTH_BASE = HP_BASE;
+const HEALTH_PER_VITALITY = HP_PER_VITALITY;
+const HEALTH_VITALITY_SQUARED_COEFFICIENT = HP_VITALITY_SQUARED_COEFFICIENT;
 const PERCENT_SCALE = 100;
-const AGILITY_AVERAGE_VARIANCE = (AGI_VARIANCE_MIN + AGI_VARIANCE_MAX) / 2;
 const COMBAT_POWER_PER_LEVEL = 50;
 const COMBAT_POWER_PER_WEIGHTED_ATTRIBUTE = 10;
 
@@ -135,7 +151,7 @@ export function getMaxHP(totalVitality) {
   return Math.round(
     HEALTH_BASE
     + HEALTH_PER_VITALITY * v
-    + HEALTH_VITALITY_SQUARED_COEFFICIENT * Math.pow(v, 2),
+    + HEALTH_VITALITY_SQUARED_COEFFICIENT * v * v,
   );
 }
 
@@ -202,21 +218,18 @@ export function calculateTechDamage(totalIntellect, rng = Math.random, damageBas
 }
 
 export function calculateAgilityDamage(totalAgility, rng = Math.random, damageBase = DAMAGE_BASE) {
-  return getBaseDamageFromPrimary(totalAgility, damageBase)
-    * randomBetween(AGI_VARIANCE_MIN, AGI_VARIANCE_MAX, rng)
-    * randomBetween(UNIVERSAL_VARIANCE_MIN, UNIVERSAL_VARIANCE_MAX, rng);
+  // Phase 3: universal Uniform(0.90, 1.10) for all archetypes. AGI U(0.80,1.05) is not live.
+  return getBaseDamageFromPrimary(totalAgility, damageBase) * randomBetween(UNIVERSAL_VARIANCE_MIN, UNIVERSAL_VARIANCE_MAX, rng);
 }
 
 /** Roll one basic-attack raw damage for the given archetype (pre-crit / pre-mit). */
-export function rollBasicAttackDamage(archetype, primaryValue, rng = Math.random, damageBase = DAMAGE_BASE) {
-  if (archetype === "agi") return calculateAgilityDamage(primaryValue, rng, damageBase);
-  if (archetype === "int") return calculateTechDamage(primaryValue, rng, damageBase);
-  return calculateStrengthDamage(primaryValue, rng, damageBase);
+export function rollBasicAttackDamage(_archetype, primaryValue, rng = Math.random, damageBase = DAMAGE_BASE) {
+  return getBaseDamageFromPrimary(primaryValue, damageBase) * randomBetween(UNIVERSAL_VARIANCE_MIN, UNIVERSAL_VARIANCE_MAX, rng);
 }
 
 /**
- * Mitigation fraction (0–1) for a damage type against a defender's % resists.
- * Agility damage ignores Armor and Tech Resistance.
+ * Historical two-channel Armor/Tech mitigation. Live combat uses
+ * combatMath.resistFraction (Might/Reflex/Tech). Do not call from settlement.
  */
 export function mitigationForDamageType(damageType, armorPercent, techResistPercent) {
   if (damageType === "strength") return Math.max(0, (armorPercent || 0) / PERCENT_SCALE);
@@ -245,6 +258,37 @@ export function computeTotalStats(character, equippedItems = []) {
   return applyBuffs(permanent, getActiveBuffs(character));
 }
 
+/**
+ * Generated combatants (mission/dungeon foes, arena bots) already carry totaled
+ * snapshot stats. Do not re-compose starting/free/purchased on top of them.
+ */
+export function computeSnapshotTotalStats(character, equippedItems = []) {
+  const stats = {};
+  for (const k of PRIMARY_STATS) {
+    stats[k] = Math.max(0, Number(character?.stats?.[k]) || 0);
+  }
+  for (const it of equippedItems) {
+    for (const [k, v] of Object.entries(it.stats || {})) {
+      stats[k] = (stats[k] || 0) + (v || 0);
+    }
+  }
+  return applyBuffs(stats, getActiveBuffs(character));
+}
+
+/** Player characters compose; generated foes/bots use their snapshot stats. */
+export function computeCombatantTotalStats(character, equippedItems = []) {
+  if (
+    character?.missionEnemy
+    || character?.dungeonEnemy
+    || character?.isBot
+    || character?.is_bot
+    || character?.snapshotStats
+  ) {
+    return computeSnapshotTotalStats(character, equippedItems);
+  }
+  return computeTotalStats(character, equippedItems);
+}
+
 export function computeTotalStatsNoBuffs(character, equippedItems = []) {
   return computePermanentTotalStats(character, equippedItems);
 }
@@ -271,7 +315,7 @@ export function computeDerivedStats(totalStats, character) {
   // Mission / arena-bot combatants use the early flat ramp; dungeon + players stay at 15.
   const damageBase = getDamageBaseForCombatant(character);
   const rawBase = getBaseDamageFromPrimary(primaryValue, damageBase);
-  const damage = Math.round(archetype === "agi" ? rawBase * AGILITY_AVERAGE_VARIANCE : rawBase);
+  const damage = Math.round(rawBase);
 
   const dungeonCaps = !!(character?.dungeonEnemy);
   const critCap = dungeonCaps ? DUNGEON_CRIT_CAP : CRIT_CAP;

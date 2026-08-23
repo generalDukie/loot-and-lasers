@@ -20,6 +20,11 @@ const CLASS_ABILITY_COLORS := {
 	"Cosmic Engineer": Color("#FBBF24"),
 }
 
+## Presentation mirrors of src/lib/classPassives.js — Node combat events are authority.
+const OVERCLOCK_STACK_CAP := 6
+const STRONG_TANTRUM_CRIT_MULT := 2.0
+const NORMAL_TANTRUM_CRIT_MULT := 1.5
+
 
 static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent: Dictionary) -> Dictionary:
 	if ev.is_empty():
@@ -52,12 +57,15 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 		"astral_barrier_created": true,
 		"astral_barrier_restored": true,
 		"phantom_signal_armed": true,
+		"phantom_signal_reprimed": true,
 		"phantom_signal": true,
 		"phantom_signal_miss": true,
 		"overclock_stack_gained": true,
 		"overclock_stacks_removed": true,
+		"overclock_vented": true,
 		"overclock_ready": true,
 		"defensive_protocol_applied": true,
+		"defensive_protocol_consumed": true,
 		"acquire_target_applied": true,
 	}
 	if not is_passiveish or not banner_kinds.has(kind):
@@ -78,6 +86,8 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 	match kind:
 		"dirty_trick_selected":
 			detail = str(ev.get("dirtyTrick", "")).replace("_", " ").capitalize()
+		"stim_injector_charge":
+			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("after", 0))]
 		"orbital_assistant_activated":
 			detail = str(ev.get("effect", "")).replace("_", " ").capitalize()
 		"fire_support":
@@ -85,25 +95,29 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 		"fire_support_dodged":
 			detail = "Fire Support · Dodged"
 		"kinetic_tantrum_strong":
-			detail = "Strong"
+			detail = "%.1f× guaranteed hit" % STRONG_TANTRUM_CRIT_MULT
 		"kinetic_tantrum_normal":
-			detail = "Normal"
+			detail = "%.1f×" % NORMAL_TANTRUM_CRIT_MULT
 		"astral_barrier_created":
-			detail = "Raised"
+			detail = "%s shield" % str(ev.get("barrier", ev.get("barrierMax", 0)))
 		"astral_barrier_restored":
-			detail = "Restored"
-		"phantom_signal_armed":
-			detail = "%s charges" % str(ev.get("charges", 2))
+			detail = "Refresh %s" % str(ev.get("barrier", ev.get("barrierMax", 0)))
+		"phantom_signal_armed", "phantom_signal_reprimed":
+			detail = "Primed"
 		"phantom_signal", "phantom_signal_miss":
-			detail = "Miss · %s left" % str(ev.get("chargesRemaining", 0))
+			detail = "Scrambled"
 		"overclock_stack_gained":
-			detail = "Stack %s" % str(ev.get("stacks", 0))
+			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
 		"overclock_stacks_removed":
-			detail = "−%s → %s" % [str(ev.get("removed", 0)), str(ev.get("stacks", 0))]
+			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
+		"overclock_vented":
+			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
 		"overclock_ready":
-			detail = "Armed"
+			detail = "0/%s" % OVERCLOCK_STACK_CAP
 		"defensive_protocol_applied":
 			detail = "Defensive Protocol"
+		"defensive_protocol_consumed":
+			detail = "−%s" % str(ev.get("amount", 0))
 		"acquire_target_applied":
 			detail = "Acquire Target"
 	return {

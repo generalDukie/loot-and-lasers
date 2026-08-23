@@ -12,6 +12,8 @@ alwaysApply: true
 - Express fractional authoritative rates with an integer fixed-point unit such as basis points, and centralize the conversion.
 - Keep authoritative constants in `src/lib/` or `server/`; mirror them in Godot only when presentation requires it.
 - Structural literals such as `0`, `1`, and `-1` are allowed only when their meaning is obvious from the operation.
+- Domain-significant gameplay values (caps, rates, multipliers, probabilities, costs, cadence, budgets) must be named in the owning domain. See `docs/PRODUCTION_NO_MAGIC_NUMBER_POLICY.md`.
+- Every future phase (Phase 4 onward) must define new gameplay values as named constants, reuse canonical names, and include a magic-number audit in the phase completion gate (`npm run audit:no-magic-numbers`).
 
 ```gdscript
 const PAGE_SWAP_TIMEOUT_MS: int = 2000

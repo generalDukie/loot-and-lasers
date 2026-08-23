@@ -7,6 +7,7 @@ import {
   startingAttributesForClass,
   freeLevelAttributes,
   classPrimaryIndex,
+  PERMANENT_ATTRIBUTE_POINTS_PER_PURCHASE,
 } from "./productionMath/index.js";
 
 export { ATTR_STAT_KEYS };
@@ -83,7 +84,7 @@ export function composePermanentAttributes(character) {
   const stats = {};
   for (let i = 0; i < ATTR_STAT_KEYS.length; i++) {
     const k = ATTR_STAT_KEYS[i];
-    stats[k] = start[i] + free[i] + purchased[k];
+    stats[k] = start[i] + free[i] + purchased[k] * PERMANENT_ATTRIBUTE_POINTS_PER_PURCHASE;
   }
   return stats;
 }

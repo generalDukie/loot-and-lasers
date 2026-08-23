@@ -1,7 +1,6 @@
 /**
  * AUTHORITATIVE FORMULA MODULE — PHASE 1 LIVE FOR CHARACTER-SHEET STATS
- *
- * Combat event resolution still uses src/lib/statEngine.js until Phase 3.
+ * PHASE 3 LIVE FOR COMBAT EVENT RESOLUTION (via src/lib/combatMath.js).
  */
 import { roundHalfEven } from "./rounding.js";
 import {
@@ -12,16 +11,28 @@ import {
   GENERIC_EARLY_EXPONENT,
   GENERIC_FORMAX_AT_100,
   GENERIC_FORMAX_EXPONENT,
+  GENERIC_FORMAX_REFERENCE_LEVEL,
+  HP_BASE,
+  HP_PER_VITALITY,
+  HP_VITALITY_SQUARED_COEFFICIENT,
+  MISSION_ENEMY_BASE_MATURE,
+  MISSION_ENEMY_BASE_RAMP_FLOOR,
+  MISSION_ENEMY_BASE_RAMP_FULL_LEVEL,
+  MISSION_ENEMY_BASE_RAMP_LEVEL_SPAN,
+  MISSION_ENEMY_BASE_RAMP_RISE,
   MISSION_OUTGOING_ASYMPTOTE,
   MISSION_OUTGOING_KNOTS,
   NATURAL_CRIT_CAP,
   NATURAL_DODGE_CAP,
   NATURAL_RESIST_CAP,
+  RAW_ATTACK_COEFFICIENT,
+  RAW_ATTACK_EXPONENT,
   REFLEX_BLEND_HALF_WIDTH,
   REFLEX_CONVERSION_HIGH,
   REFLEX_CONVERSION_LOW,
   REFLEX_RAMP_END_LEVEL,
   REFLEX_RAMP_START_LEVEL,
+  STANDARD_ATTACK_FLAT,
 } from "./constants.js";
 
 function levelNum(level) {
@@ -32,26 +43,32 @@ function attrNum(attr) {
   return Math.max(0, Number(attr) || 0);
 }
 
-/** Certified combat HP: Python round(50 + 2.5*VIT + 0.008*VIT^2). */
-export function maxHp(vitality) {
+/** Unrounded certified HP polynomial — barrier uses 15% of this, then Python round. */
+export function unroundedMaxHp(vitality) {
   const v = attrNum(vitality);
-  return Math.max(1, roundHalfEven(50 + 2.5 * v + 0.008 * v * v));
+  return HP_BASE + HP_PER_VITALITY * v + HP_VITALITY_SQUARED_COEFFICIENT * v * v;
 }
 
-/** Raw standard attack. Variance is NOT included. */
-export function rawStandardAttack(primaryAttr) {
+/** Certified combat HP: Python round(BASE + PER_VIT*VIT + SQ*VIT^2). */
+export function maxHp(vitality) {
+  return Math.max(1, roundHalfEven(unroundedMaxHp(vitality)));
+}
+
+/** Raw standard attack. Variance is NOT included. Optional `flat` replaces the mature STANDARD_ATTACK_FLAT. */
+export function rawStandardAttack(primaryAttr, flat = STANDARD_ATTACK_FLAT) {
   const p = attrNum(primaryAttr);
-  return 15 + 0.0032 * p ** 1.727;
+  const base = Number.isFinite(Number(flat)) ? Number(flat) : STANDARD_ATTACK_FLAT;
+  return base + RAW_ATTACK_COEFFICIENT * p ** RAW_ATTACK_EXPONENT;
 }
 
-/** Universal standard-attack variance Uniform(0.90, 1.10). RNG stays outside. */
-export function standardAttackWithVariance(primaryAttr, variance = 1) {
-  return rawStandardAttack(primaryAttr) * Number(variance);
+/** Universal standard-attack variance Uniform(VARIANCE_MIN, VARIANCE_MAX). RNG stays outside. */
+export function standardAttackWithVariance(primaryAttr, variance = 1, flat = STANDARD_ATTACK_FLAT) {
+  return rawStandardAttack(primaryAttr, flat) * Number(variance);
 }
 
 export function genericForMax(level) {
   const L = levelNum(level);
-  return GENERIC_FORMAX_AT_100 * (L / 100) ** GENERIC_FORMAX_EXPONENT;
+  return GENERIC_FORMAX_AT_100 * (L / GENERIC_FORMAX_REFERENCE_LEVEL) ** GENERIC_FORMAX_EXPONENT;
 }
 
 /**
@@ -66,7 +83,7 @@ export function derivedStat(level, attr, cap, {
   const x = attrNum(attr);
   const fm = genericForMax(L) * forMaxMult;
   const fromAttr = cap * Math.min(1, fm > 0 ? (x / fm) ** attrExponent : 0);
-  const early = cap * Math.min(1, (L / 100) ** GENERIC_EARLY_EXPONENT);
+  const early = cap * Math.min(1, (L / GENERIC_FORMAX_REFERENCE_LEVEL) ** GENERIC_EARLY_EXPONENT);
   return Math.min(fromAttr, early, cap);
 }
 
@@ -94,9 +111,9 @@ export function reflexAgiConversion(level) {
     if (x >= b) return hi;
     return lo + slope * (x - a);
   };
-  const hermite = (t) => t * t * (3 - 2 * t);
+  const hermite = (t) => t * t * (3 - 2 * t); // magic-number-ok: cubic Hermite identity
   const blend = (x, knot) => {
-    const t = (x - (knot - w)) / (2 * w);
+    const t = (x - (knot - w)) / (2 * w); // magic-number-ok: full blend width = 2 * half-width
     if (t <= 0) return piece(knot - w);
     if (t >= 1) return piece(knot + w);
     const s = hermite(Math.max(0, Math.min(1, t)));
@@ -134,11 +151,14 @@ export function resistances(level, attrs, archetype) {
   return { might: vs(str), reflex: vs(str), tech: 0 };
 }
 
-/** Mission enemy base ramp. EL<25: 5+10*(EL-1)/24; else 15. Endpoint: EL=24 ramps, EL=25 is 15. */
+/** Mission enemy base ramp. EL<FULL_LEVEL: FLOOR+RISE*(EL-1)/SPAN; else MATURE. Endpoint: EL=24 ramps, EL=25 is MATURE. */
 export function missionEnemyBaseDamage(enemyLevel) {
   const EL = levelNum(enemyLevel);
-  if (EL < 25) return 5 + 10 * (EL - 1) / 24;
-  return 15;
+  if (EL < MISSION_ENEMY_BASE_RAMP_FULL_LEVEL) {
+    return MISSION_ENEMY_BASE_RAMP_FLOOR
+      + MISSION_ENEMY_BASE_RAMP_RISE * (EL - 1) / MISSION_ENEMY_BASE_RAMP_LEVEL_SPAN;
+  }
+  return MISSION_ENEMY_BASE_MATURE;
 }
 
 /**

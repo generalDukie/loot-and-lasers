@@ -8,12 +8,18 @@ import {
   ATTR_COST_LOG_OFFSET,
   ATTR_INTRO_PURCHASE_COUNT,
   ATTR_INTRO_PURCHASE_COSTS,
+  GEAR_BUDGET_CURVE,
+  GEAR_BUDGET_FLOOR,
+  GEAR_BUDGET_LINEAR,
   GEAR_ORIGINS,
   GEAR_RARITY_BUDGET_MULT,
+  GEAR_RARITY_BUDGET_MULT_BY_INDEX,
+  GEAR_RARITY_BUDGET_MULT_DEFAULT,
   GEAR_SLOT_ALIASES,
   GEAR_SLOT_NORMAL_MULT,
   GEAR_SLOT_PREMIUM_MULT,
   GEAR_SLOTS,
+  PREMIUM_GEAR_SLOT_INDICES,
   PREMIUM_GEAR_SLOTS,
   PVE_HIDDEN_BUDGET_OFFSET,
   PVE_HIDDEN_BUDGET_OFFSET_MATURE,
@@ -29,10 +35,10 @@ function purchaseInt(n) {
   return Math.max(1, Math.floor(Number(n) || 1));
 }
 
-/** ROUND(1.4079*L + 2.2988*sqrt(L) + 8.277) */
+/** ROUND(GEAR_BUDGET_LINEAR*L + GEAR_BUDGET_CURVE*sqrt(L) + GEAR_BUDGET_FLOOR) */
 export function gearBaseStatBudget(level) {
   const L = levelInt(level);
-  return Math.max(1, roundHalfUp(1.4079 * L + 2.2988 * Math.sqrt(L) + 8.277));
+  return Math.max(1, roundHalfUp(GEAR_BUDGET_LINEAR * L + GEAR_BUDGET_CURVE * Math.sqrt(L) + GEAR_BUDGET_FLOOR));
 }
 
 export function canonicalGearSlot(slot) {
@@ -44,7 +50,7 @@ export function canonicalGearSlot(slot) {
 
 export function gearSlotMultiplier(slot) {
   const key = canonicalGearSlot(slot) || String(slot || "").toLowerCase().replace(/\s+/g, "_");
-  if (PREMIUM_GEAR_SLOTS.includes(key) || slot === 6 || slot === 7) return GEAR_SLOT_PREMIUM_MULT;
+  if (PREMIUM_GEAR_SLOTS.includes(key) || PREMIUM_GEAR_SLOT_INDICES.includes(slot)) return GEAR_SLOT_PREMIUM_MULT;
   return GEAR_SLOT_NORMAL_MULT;
 }
 
@@ -87,9 +93,9 @@ export function resolveGearLevelRefs({
 
 export function gearRarityBudgetMultiplier(rarity) {
   if (typeof rarity === "number") {
-    return [0.7, 0.85, 1, 1.2, 1.5][rarity] ?? 1;
+    return GEAR_RARITY_BUDGET_MULT_BY_INDEX[rarity] ?? GEAR_RARITY_BUDGET_MULT_DEFAULT;
   }
-  return GEAR_RARITY_BUDGET_MULT[rarity] ?? 1;
+  return GEAR_RARITY_BUDGET_MULT[rarity] ?? GEAR_RARITY_BUDGET_MULT_DEFAULT;
 }
 
 export function gearStatPool(itemLevel, slot, rarity) {

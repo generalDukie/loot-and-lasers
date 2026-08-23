@@ -1,7 +1,9 @@
 # Phase / Restoration 08 — Authoritative Combat Engine
 
+> **Phase 3 (production combat):** Live settlement is `src/lib/arenaEngine.js` + `src/lib/combatMath.js` + locked `productionMath`. Class passives are `src/lib/classPassives.js`. See **`docs/PHASE3_COMBAT.md`**. Historical notes below (Reflex AGI variance, Armor/Tech, Nakama Arena) are pre-Phase-3.
+
 Architecture: Nakama owns auth/sessions. **Node owns all combat authority.**
-Godot (and web) request combat, play committed events, and never decide outcomes.
+Godot request combat, play committed events, and never decide outcomes.
 
 ## Completion report
 

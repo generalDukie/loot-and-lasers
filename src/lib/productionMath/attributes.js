@@ -4,6 +4,8 @@
 import {
   CLASS_ARCHETYPE,
   CLASS_PRIMARY_INDEX,
+  ARCHETYPE_INDEX_MAX,
+  ATTR_INDEX,
   ENEMY_ATTR_WEIGHTS,
   EPA_CHEBYSHEV_COEFFICIENTS,
   EPA_COMPACT_LAMBDA,
@@ -25,8 +27,8 @@ function chebT(n, x) {
   if (n === 1) return x;
   let t0 = 1;
   let t1 = x;
-  for (let k = 2; k <= n; k++) {
-    const t2 = 2 * x * t1 - t0;
+  for (let k = 2; k <= n; k++) { // magic-number-ok: Chebyshev recurrence from T2
+    const t2 = 2 * x * t1 - t0; // magic-number-ok: Chebyshev T_{n}=2xT_{n-1}-T_{n-2}
     t0 = t1;
     t1 = t2;
   }
@@ -40,10 +42,10 @@ function chebT(n, x) {
 export function expectedPlayerAttributes(level) {
   const L = levelInt(level);
   const x = L / (L + EPA_COMPACT_LAMBDA);
-  const u = 2 * x - 1;
+  const u = 2 * x - 1; // magic-number-ok: map compact x in (0,1) onto Chebyshev [-1,1]
   const c = EPA_CHEBYSHEV_COEFFICIENTS;
   let v = c[0] + c[1] * L;
-  for (let k = 2; k < c.length; k++) {
+  for (let k = 2; k < c.length; k++) { // magic-number-ok: skip linear Chebyshev terms T0/T1
     v += c[k] * chebT(k, u);
   }
   for (const g of EPA_RESIDUAL_GAUSSIANS) {
@@ -55,7 +57,7 @@ export function expectedPlayerAttributes(level) {
 
 function weightsFor(primaryIndex, table) {
   const w = [table.off1, table.off1, table.off1, table.vitality, table.luck];
-  const offs = [0, 1, 2].filter((i) => i !== primaryIndex);
+  const offs = [ATTR_INDEX.str, ATTR_INDEX.agi, ATTR_INDEX.int].filter((i) => i !== primaryIndex);
   w[primaryIndex] = table.primary;
   w[offs[0]] = table.off1;
   w[offs[1]] = table.off2;
@@ -107,7 +109,7 @@ export function missionEnemyAttributeTotal(snapshotPlayerLevel) {
 
 export function missionEnemyAttributes(snapshotPlayerLevel, archetypeIndex = 0) {
   const total = missionEnemyAttributeTotal(snapshotPlayerLevel);
-  const arch = Math.max(0, Math.min(2, Math.floor(Number(archetypeIndex) || 0)));
+  const arch = Math.max(0, Math.min(ARCHETYPE_INDEX_MAX, Math.floor(Number(archetypeIndex) || 0)));
   return {
     total,
     archetypeIndex: arch,

@@ -11,6 +11,7 @@ import { entities } from "../entities.js";
 import { db } from "../db.js";
 import { clock } from "./time/clock.js";
 import { clampStardust, STARDUST_MAX } from "./economyFormulas.js";
+import { STARTING_NOVA, STARTING_STARDUST as PRODUCTION_STARTING_STARDUST } from "./productionMath.js";
 import { recordCurrencyChange, ActorTypes, newCorrelationId } from "../audit/index.js";
 import {
   NovaBalanceTypes,
@@ -39,10 +40,10 @@ const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
 const MISSION_SKIP_HALF_UNITS_PER_FUEL = 0.2;
 
 /** Starting Nova for every new character (display). Per-character, not account-wide. */
-export const STARTING_NOVA_DISPLAY = 500;
+export const STARTING_NOVA_DISPLAY = STARTING_NOVA;
 export const STARTING_NOVA_HALF_UNITS = STARTING_NOVA_DISPLAY * NOVA_HALF_UNITS_PER_NOVA;
 /** Starting Stardust for every new character. */
-export const STARTING_STARDUST = 0;
+export const STARTING_STARDUST = PRODUCTION_STARTING_STARDUST;
 
 export const CHARACTER_CREATION_NOVA_REASON = "character_creation_starting_nova";
 export const CHARACTER_CREATION_STARDUST_REASON = "character_creation_starting_stardust";

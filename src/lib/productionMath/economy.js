@@ -9,6 +9,11 @@ import {
   GEAR_RESALE_FRACTION,
   MARKET_PRICE_RARITY_MULT,
   MINING_STARDUST_PER_SPF_PER_MINUTE,
+  STARDUST_PF_BASE,
+  STARDUST_PF_GROWTH_COEFFICIENT,
+  STARDUST_PF_GROWTH_EXPONENT,
+  STARDUST_PF_HILL_EXPONENT,
+  STARDUST_PF_HILL_REFERENCE_LEVEL,
   STIM_SELL_MULT,
   STIM_SHOP_MULT,
 } from "./constants.js";
@@ -20,14 +25,16 @@ function levelInt(level) {
 
 /**
  * Certified StardustPerFuel.
- * ROUND(50 + 1.009*(L-1)^1.625 * (1 + (L/166.66)^3.055))
+ * ROUND(STARDUST_PF_BASE + GROWTH*(L-1)^EXP * (1 + (L/HILL_REF)^HILL_EXP))
  * Do not multiply by XP storage scale.
  */
 export function stardustPerFuel(level) {
   const L = levelInt(level);
-  if (L <= 1) return 50;
-  const growth = 1.009 * (L - 1) ** 1.625 * (1 + (L / 166.66) ** 3.055);
-  return Math.max(1, roundHalfUp(50 + growth));
+  if (L <= 1) return STARDUST_PF_BASE;
+  const growth = STARDUST_PF_GROWTH_COEFFICIENT
+    * (L - 1) ** STARDUST_PF_GROWTH_EXPONENT
+    * (1 + (L / STARDUST_PF_HILL_REFERENCE_LEVEL) ** STARDUST_PF_HILL_EXPONENT);
+  return Math.max(1, roundHalfUp(STARDUST_PF_BASE + growth));
 }
 
 /**

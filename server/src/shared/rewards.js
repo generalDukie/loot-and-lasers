@@ -15,16 +15,17 @@ import {
   MISSION_XPF_LINEAR_COEFFICIENT,
   MISSION_XPF_POWER_COEFFICIENT,
   MISSION_XPF_EXPONENT,
-  BACKPACK_UNEQUIPPED_GEAR_CAP,
+  BACKPACK_UNEQUIPPED_ITEM_CAP,
+  STARTING_FUEL,
 } from "./productionMath.js";
 
 export { XP_STARDUST_SCALE }; // legacy Stardust callers only — not XP
 export { StardustPerFuel, StardustPerFuel as getMissionStardustPerFuel } from "./stardustEconomy.js";
 export { GenerateGearItem } from "./itemGeneration.js";
 
-const DEFAULT_INVENTORY_CAP = BACKPACK_UNEQUIPPED_GEAR_CAP;
+const DEFAULT_INVENTORY_CAP = BACKPACK_UNEQUIPPED_ITEM_CAP;
 const POST_200_LEVEL_INTERVAL = 100;
-const DEFAULT_MAX_FUEL = 100;
+const DEFAULT_MAX_FUEL = STARTING_FUEL;
 const REWARD_COLLECTION_QUERY_LIMIT = 500;
 const LEGACY_COLLECTIBLE_SELL_VALUE = 25 * XP_STARDUST_SCALE; // Stardust sell, not XP
 

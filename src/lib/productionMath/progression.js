@@ -9,6 +9,12 @@ import {
   CANONICAL_XP_UNIT,
   DEFEAT_REWARD_FACTOR,
   DRU_REFERENCE_MISSION_SHARE,
+  EMPLOYMENT_LOAD_BASE,
+  EMPLOYMENT_LOAD_POWER_COEFFICIENT,
+  EMPLOYMENT_LOAD_POWER_EXPONENT,
+  EMPLOYMENT_LOAD_QUARTIC_COEFFICIENT,
+  EMPLOYMENT_LOAD_QUARTIC_EXPONENT,
+  EMPLOYMENT_LOAD_QUARTIC_REFERENCE_LEVEL,
   MISSION_XPF_BASE,
   MISSION_XPF_EXPONENT,
   MISSION_XPF_LINEAR_COEFFICIENT,
@@ -46,7 +52,9 @@ export function averageMissionFuel(level) {
 
 export function employmentLoad(level) {
   const L = levelInt(level);
-  return 1.67985 + 0.239507 * L ** 0.662355 + 18.3178 * (L / 500) ** 4;
+  return EMPLOYMENT_LOAD_BASE
+    + EMPLOYMENT_LOAD_POWER_COEFFICIENT * L ** EMPLOYMENT_LOAD_POWER_EXPONENT
+    + EMPLOYMENT_LOAD_QUARTIC_COEFFICIENT * (L / EMPLOYMENT_LOAD_QUARTIC_REFERENCE_LEVEL) ** EMPLOYMENT_LOAD_QUARTIC_EXPONENT;
 }
 
 function xpToNextCore(level, share) {
@@ -77,7 +85,7 @@ export function fromStorageXp(storageXp) {
 
 /**
  * Mission win XP. Variance is an explicit input — RNG stays outside this primitive.
- * Order: ROUND(Fuel * mission_xpf(snapL) * xpVariance * 0.85 * 0.85)
+ * Order: ROUND(Fuel * mission_xpf(snapL) * xpVariance * XP_REWARD_EFFICIENCY * XP_REWARD_EFFICIENCY)
  */
 export function missionXpReward({
   fuel,

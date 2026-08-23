@@ -4,7 +4,6 @@
  */
 
 import { STAT_COLORS } from "@/lib/gameData";
-import { PHANTOM_SIGNAL_CHARGES } from "@/lib/classPassives";
 
 const DEV_KEY = "ll_combat_dev_diagnostics";
 
@@ -106,11 +105,15 @@ function emptySide() {
   return {
     barrier: 0,
     barrierMax: 0,
+    phantomPending: false,
     phantomCharges: 0,
     overclockStacks: 0,
+    overclockActive: false,
     dirtyTrick: null,
+    dirtyTricks: [],
     kineticTantrum: null,
     stimAttacksLeft: null,
+    orbitalPrimed: null,
     droneReady: false,
     lastPassive: null,
   };
@@ -156,24 +159,25 @@ function applyEventToStatus(state, ev) {
     }
     return;
   }
-  if (kind === "phantom_signal_armed") {
+  if (kind === "phantom_signal_armed" || kind === "phantom_signal_reprimed") {
     if (slot) {
-      slot.phantomCharges = Number(ev.charges) || PHANTOM_SIGNAL_CHARGES;
+      slot.phantomPending = true;
+      slot.phantomCharges = 1;
       slot.lastPassive = "Phantom Signal";
     }
     return;
   }
   if (kind === "phantom_signal_miss" || (ev.type === "miss" && ev.missKind === "phantom_signal")) {
     const def = state[ev.defender];
-    if (def && typeof ev.chargesRemaining === "number") {
-      def.phantomCharges = ev.chargesRemaining;
-    } else if (def) {
-      def.phantomCharges = Math.max(0, (def.phantomCharges || 0) - 1);
+    if (def) {
+      def.phantomPending = false;
+      def.phantomCharges = 0;
     }
     return;
   }
-  if (kind === "overclock_stack_gained" || kind === "overclock_ready") {
+  if (kind === "overclock_stack_gained" || kind === "overclock_ready" || kind === "overclock_vented") {
     if (slot) {
+      slot.overclockActive = true;
       slot.overclockStacks = Number(ev.stacks) || 0;
       slot.lastPassive = "Overclock";
     }
@@ -186,8 +190,17 @@ function applyEventToStatus(state, ev) {
   if (kind === "dirty_trick_selected" || ev.dirtyTrick) {
     if (slot) {
       slot.dirtyTrick = ev.dirtyTrick || slot.dirtyTrick;
+      if (Array.isArray(ev.dirtyTricks)) slot.dirtyTricks = [...ev.dirtyTricks];
+      else if (ev.dirtyTrick && !slot.dirtyTricks.includes(ev.dirtyTrick)) {
+        slot.dirtyTricks = [...slot.dirtyTricks, ev.dirtyTrick];
+      }
       slot.lastPassive = "Dirty Tricks";
+      if (ev.openingCharges != null) slot.stimAttacksLeft = Number(ev.openingCharges) || 0;
     }
+    return;
+  }
+  if (kind === "stim_injector_charge") {
+    if (slot) slot.stimAttacksLeft = Number(ev.after ?? ev.openingCharges) || 0;
     return;
   }
   if (kind === "kinetic_tantrum_strong" || kind === "kinetic_tantrum_normal") {
@@ -202,8 +215,6 @@ function applyEventToStatus(state, ev) {
     return;
   }
   if (ev.passive === "Orbital Assistant" || kind?.includes?.("orbital") || kind?.includes?.("drone") || kind?.includes?.("fire_support") || kind?.includes?.("defensive_protocol") || kind?.includes?.("acquire_target")) {
-    // Engineer owns the drone — prefer side, then attacker (never defender).
-    // Fire Support events set defender=foe and used to paint the bot chip on the wrong HP bar.
     const engSide =
       ev.side === "player" || ev.side === "opponent"
         ? ev.side
@@ -212,8 +223,19 @@ function applyEventToStatus(state, ev) {
           : null;
     const engSlot = engSide ? state[engSide] : null;
     if (engSlot) {
-      engSlot.droneReady = true;
       engSlot.lastPassive = "Orbital Assistant";
+      if (kind === "defensive_protocol_applied") engSlot.orbitalPrimed = "defensive_protocol";
+      else if (kind === "acquire_target_applied") engSlot.orbitalPrimed = "acquire_target";
+      else if (kind === "defensive_protocol_consumed" || kind === "acquire_target_consumed") {
+        engSlot.orbitalPrimed = null;
+        engSlot.droneReady = false;
+      } else if (kind === "fire_support" || kind === "fire_support_dodged") {
+        engSlot.droneReady = false;
+      } else if (kind === "orbital_assistant_activated") {
+        engSlot.droneReady = ev.effect === "fire_support";
+        if (ev.effect === "defensive_protocol") engSlot.orbitalPrimed = "defensive_protocol";
+        if (ev.effect === "acquire_target") engSlot.orbitalPrimed = "acquire_target";
+      }
     }
   }
 }

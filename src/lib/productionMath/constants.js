@@ -27,6 +27,27 @@ export const MISSION_XPF_LINEAR_COEFFICIENT = 5;
 export const MISSION_XPF_POWER_COEFFICIENT = 0.32;
 export const MISSION_XPF_EXPONENT = 1.67;
 
+/**
+ * Certified employment-load(L) inside XPToNext.
+ * 1.67985 + 0.239507*L^0.662355 + 18.3178*(L/500)^4
+ */
+export const EMPLOYMENT_LOAD_BASE = 1.67985;
+export const EMPLOYMENT_LOAD_POWER_COEFFICIENT = 0.239507;
+export const EMPLOYMENT_LOAD_POWER_EXPONENT = 0.662355;
+export const EMPLOYMENT_LOAD_QUARTIC_COEFFICIENT = 18.3178;
+export const EMPLOYMENT_LOAD_QUARTIC_REFERENCE_LEVEL = 500;
+export const EMPLOYMENT_LOAD_QUARTIC_EXPONENT = 4;
+
+/**
+ * Certified StardustPerFuel.
+ * ROUND(50 + 1.009*(L-1)^1.625 * (1 + (L/166.66)^3.055))
+ */
+export const STARDUST_PF_BASE = 50;
+export const STARDUST_PF_GROWTH_COEFFICIENT = 1.009;
+export const STARDUST_PF_GROWTH_EXPONENT = 1.625;
+export const STARDUST_PF_HILL_REFERENCE_LEVEL = 166.66;
+export const STARDUST_PF_HILL_EXPONENT = 3.055;
+
 export const STRESS_LEVELS = Object.freeze([
   1, 10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 600, 700, 800, 1000, 2500,
 ]);
@@ -39,6 +60,8 @@ export const MARKET_PRICE_VARIANCE_MAX = 1.2;
 export const XP_MISSION_SHARE = 0.46;
 export const DRU_REFERENCE_MISSION_SHARE = 0.6;
 export const XP_REWARD_EFFICIENCY = 0.85;
+/** @deprecated Use XP_REWARD_EFFICIENCY. Same Mission XP efficiency factor. */
+export const MISSION_XP_REBALANCE = XP_REWARD_EFFICIENCY;
 export const DEFEAT_REWARD_FACTOR = 0.5;
 export const PVE_XP_MULTIPLIER = 1.25;
 export const DUNGEON_XP_SHARE_COEFFICIENT = 0.87;
@@ -93,6 +116,7 @@ export const CLASS_PRIMARY_INDEX = Object.freeze({
   Technomancer: 2,
   "Cosmic Engineer": 2,
 });
+export const ARCHETYPE_INDEX_MAX = 2;
 
 export const ATTR_INDEX = Object.freeze({
   str: 0,
@@ -116,9 +140,25 @@ export const GEAR_SLOTS = Object.freeze([
 export const PREMIUM_GEAR_SLOTS = Object.freeze(["weapon", "ship_module"]);
 export const GEAR_SLOT_PREMIUM_MULT = 1.2;
 export const GEAR_SLOT_NORMAL_MULT = 1;
+export const GEAR_SLOT_INDEX = Object.freeze(
+  Object.fromEntries(GEAR_SLOTS.map((slot, index) => [slot, index])),
+);
+export const PREMIUM_GEAR_SLOT_INDICES = Object.freeze(
+  PREMIUM_GEAR_SLOTS.map((slot) => GEAR_SLOT_INDEX[slot]),
+);
 
-/** Hard production Backpack cap — 10 unequipped items of any type. No cargo/entitlement expansion. */
+/** Rare normal-slot BaseGearStatBudget(L) = ROUND(LINEAR*L + CURVE*√L + FLOOR). */
+export const GEAR_BUDGET_LINEAR = 1.4079;
+export const GEAR_BUDGET_CURVE = 2.2988;
+export const GEAR_BUDGET_FLOOR = 8.277;
+
+/**
+ * Hard production Backpack cap — 10 unequipped items of any type
+ * (Gear, Stims, Junk, materials, and other backpack-held items).
+ * Equipped Gear does not count. No cargo/entitlement expansion.
+ */
 export const BACKPACK_UNEQUIPPED_ITEM_CAP = 10;
+/** @deprecated Use BACKPACK_UNEQUIPPED_ITEM_CAP. Cap is all unequipped items, not Gear-only. */
 export const BACKPACK_UNEQUIPPED_GEAR_CAP = BACKPACK_UNEQUIPPED_ITEM_CAP;
 
 /**
@@ -151,6 +191,10 @@ export const GEAR_RARITY_BUDGET_MULT = Object.freeze({
   epic: 1.2,
   legendary: 1.5,
 });
+export const GEAR_RARITY_BUDGET_MULT_BY_INDEX = Object.freeze(
+  RARITIES.map((rarity) => GEAR_RARITY_BUDGET_MULT[rarity]),
+);
+export const GEAR_RARITY_BUDGET_MULT_DEFAULT = GEAR_RARITY_BUDGET_MULT.rare;
 
 export const MARKET_RARITY_WEIGHTS = Object.freeze({
   common: 0.2,
@@ -261,6 +305,27 @@ export const COMBAT_CONTEXT_MULT = Object.freeze({
   arena: 2.5,
 });
 
+/** Mature standard-attack flat (players, dungeon foes, Mission EL≥25). */
+export const STANDARD_ATTACK_FLAT = 15;
+export const RAW_ATTACK_COEFFICIENT = 0.0032;
+export const RAW_ATTACK_EXPONENT = 1.727;
+export const CRIT_DAMAGE_MULT = 1.5;
+
+/** Certified HP: round_half_even(BASE + PER_VIT*VIT + SQ*VIT^2). */
+export const HP_BASE = 50;
+export const HP_PER_VITALITY = 2.5;
+export const HP_VITALITY_SQUARED_COEFFICIENT = 0.008;
+
+/**
+ * Mission enemy early flat ramp. EL<25: FLOOR + RISE*(EL-1)/SPAN; else MATURE.
+ * Endpoint: EL=24 still ramps; EL=25 is STANDARD_ATTACK_FLAT.
+ */
+export const MISSION_ENEMY_BASE_RAMP_FULL_LEVEL = 25;
+export const MISSION_ENEMY_BASE_RAMP_FLOOR = 5;
+export const MISSION_ENEMY_BASE_RAMP_RISE = 10;
+export const MISSION_ENEMY_BASE_RAMP_LEVEL_SPAN = 24;
+export const MISSION_ENEMY_BASE_MATURE = STANDARD_ATTACK_FLAT;
+
 export const NATURAL_CRIT_CAP = 0.3;
 export const NATURAL_DODGE_CAP = 0.25;
 export const NATURAL_RESIST_CAP = 0.3;
@@ -268,10 +333,15 @@ export const CRIT_FORMAX_MULT = 1.55;
 export const CRIT_ATTR_EXPONENT = 1.8;
 
 export const GENERIC_FORMAX_AT_100 = 700;
+export const GENERIC_FORMAX_REFERENCE_LEVEL = 100;
 export const GENERIC_FORMAX_EXPONENT = 0.95;
 export const GENERIC_ATTR_EXPONENT = 1.2;
 export const GENERIC_EARLY_EXPONENT = 0.65;
 
+export const DUNGEON_COUNT = 10;
+export const DUNGEON_ENCOUNTERS_PER_DUNGEON = 10;
+export const DUNGEON_INDEX_MAX = DUNGEON_COUNT - 1;
+export const DUNGEON_ENCOUNTER_INDEX_MAX = DUNGEON_ENCOUNTERS_PER_DUNGEON - 1;
 export const DUNGEON_DRU = Object.freeze([60, 150, 170, 300, 340, 495, 715, 810, 1060, 1330]);
 export const DUNGEON_UNLOCK_LEVELS = Object.freeze([10, 20, 30, 40, 50, 60, 70, 90, 120, 140]);
 export const DUNGEON_XP_SHARES = Object.freeze([
@@ -300,6 +370,7 @@ export const GAME_DAY_RESET_HOUR_UTC = 19;
 export const MARKET_REFRESH_HOURS_UTC = Object.freeze([19, 7]);
 export const CONTRABAND_RESET_HOUR_UTC = 19;
 export const FREE_FUEL_PER_GAME_DAY = 100;
+export const STARTING_FUEL = FREE_FUEL_PER_GAME_DAY;
 export const PAID_FUEL_PER_PURCHASE = 20;
 export const PAID_FUEL_NOVA_COST = 20;
 export const MAX_PAID_FUEL_PURCHASES_PER_GAME_DAY = 10;
@@ -425,6 +496,7 @@ export const ATTR_COST_HORNER = Object.freeze([
 export const ATTR_COST_LOG_OFFSET = 20;
 
 /** First N purchases of each attribute use a discrete intro table, not attrcost. */
+export const PERMANENT_ATTRIBUTE_POINTS_PER_PURCHASE = 1;
 export const ATTR_INTRO_PURCHASE_COUNT = 5;
 export const ATTR_INTRO_PURCHASE_COST_1 = 10;
 export const ATTR_INTRO_PURCHASE_COST_2 = 20;

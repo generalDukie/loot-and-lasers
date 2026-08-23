@@ -1,10 +1,19 @@
 /**
  * Class passive registry + combat-state helpers.
- * Mechanics source of truth: Kinetic Tantrum, Astral Barrier, Phantom Signal,
- * Dirty Tricks, Overclock, Orbital Assistant.
+ * Production mechanics (Phase 3 / Test 18): Kinetic Tantrum, Astral Barrier,
+ * Phantom Signal, Dirty Tricks, Overclock, Orbital Assistant.
  *
- * Hooks are invoked by arenaEngine; formulas stay in statEngine.
+ * Hooks are invoked by arenaEngine; damage primitives stay in combatMath/productionMath.
  */
+import {
+  ASTRAL_BARRIER_MAX_HP_FRAC,
+  astralBarrierAmount,
+  CRIT_DAMAGE_MULT,
+  rawAttack,
+  rollUniversalVariance,
+  roundCombatDamage,
+  STANDARD_ATTACK_FLAT,
+} from "@/lib/combatMath";
 
 export const PASSIVE_BY_CLASS = Object.freeze({
   Vanguard: "Kinetic Tantrum",
@@ -40,6 +49,34 @@ const ORBITAL_LABELS = Object.freeze({
   acquire_target: "Acquire Target",
 });
 
+export const OVERCLOCK_DEALT_PER_STACK = 0.125;
+export const OVERCLOCK_TAKEN_PER_STACK = 0.05;
+export const OVERCLOCK_STACK_CAP = 6;
+export const OVERCLOCK_VENT_STACKS = 2;
+export const OVERCLOCK_CRIT_STACK_LOSS = 2;
+export const OVERCLOCK_STACKS_PER_ATTACK = 1;
+export const ASTRAL_BARRIER_CHANCE = 0.1;
+export { ASTRAL_BARRIER_MAX_HP_FRAC };
+export const PHANTOM_REPRIME_OWN_TURNS = 10;
+export const PHANTOM_SIGNAL_STARTS_ARMED = true;
+export const DIRTY_TRICK_FLAT_BONUS = 0.075;
+export const DIRTY_TRICK_TURN_TWO = 14;
+export const DIRTY_TRICK_TURN_THREE = 28;
+export const STIM_INJECTOR_OPENING_ATTACK_TURNS = 2;
+export const FIRE_SUPPORT_FRAC = 0.6;
+export const DEFENSIVE_PROTOCOL_REDUCTION = 0.25;
+export const ACQUIRE_TARGET_CRIT_BONUS = 0.4;
+export const STRONG_TANTRUM_CRIT_MULT = 2.0;
+export const NORMAL_TANTRUM_CRIT_MULT = 1.5;
+export const ORBITAL_EARLY_TURN_CAP = 10;
+export const ORBITAL_EARLY_INTERVAL = 2;
+export const ORBITAL_LATE_START_TURN = 13;
+export const ORBITAL_LATE_INTERVAL = 3;
+export const ORBITAL_PROTOCOL_COUNT = ORBITAL_EFFECTS.length;
+
+/** Historical alias — Phantom is a pending flag, not a charge count. */
+export const PHANTOM_SIGNAL_CHARGES = 1;
+
 /** Passive event kinds that should flash on the combat screen. */
 const BANNER_KINDS = new Set([
   "dirty_trick_selected",
@@ -51,16 +88,26 @@ const BANNER_KINDS = new Set([
   "astral_barrier_created",
   "astral_barrier_restored",
   "phantom_signal_armed",
+  "phantom_signal_reprimed",
   "phantom_signal_miss",
   "overclock_stack_gained",
   "overclock_stacks_removed",
+  "overclock_vented",
   "defensive_protocol_applied",
+  "defensive_protocol_consumed",
   "acquire_target_applied",
+  "acquire_target_consumed",
 ]);
 
 function titleCaseKey(key) {
   if (!key) return null;
   return String(key).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function pickIndex(rng, count) {
+  if (count <= 0) return 0;
+  const u = typeof rng === "function" ? rng() : 0;
+  return Math.min(count - 1, Math.max(0, Math.floor(u * count)));
 }
 
 /**
@@ -112,23 +159,27 @@ export function resolveAbilityBanner(ev, player, opponent) {
   } else if (kind === "fire_support" || kind === "fire_support_dodged") {
     detail = ORBITAL_LABELS.fire_support;
   } else if (kind === "kinetic_tantrum_strong") {
-    detail = "Strong";
+    detail = `${STRONG_TANTRUM_CRIT_MULT.toFixed(1)}× guaranteed hit`;
   } else if (kind === "kinetic_tantrum_normal") {
-    detail = "Normal";
+    detail = `${NORMAL_TANTRUM_CRIT_MULT.toFixed(1)}×`;
   } else if (kind === "astral_barrier_created") {
-    detail = "Raised";
+    detail = `${ev.barrier ?? ev.barrierMax ?? 0} shield`;
   } else if (kind === "astral_barrier_restored") {
-    detail = "Restored";
-  } else if (kind === "phantom_signal_armed") {
-    detail = `${ev.charges ?? PHANTOM_SIGNAL_CHARGES} charges`;
+    detail = `Refresh ${ev.barrier ?? ev.barrierMax ?? 0}`;
+  } else if (kind === "phantom_signal_armed" || kind === "phantom_signal_reprimed") {
+    detail = "Primed";
   } else if (kind === "phantom_signal_miss") {
-    detail = `Miss · ${ev.chargesRemaining ?? 0} left`;
+    detail = "Scrambled";
   } else if (kind === "overclock_stack_gained") {
-    detail = `Stack ${ev.stacks}`;
+    detail = `${ev.before ?? 0} → ${ev.stacks}`;
   } else if (kind === "overclock_stacks_removed") {
-    detail = `−${ev.removed} → ${ev.stacks}`;
+    detail = `${ev.before ?? (ev.stacks + (ev.removed || 0))} → ${ev.stacks}`;
+  } else if (kind === "overclock_vented") {
+    detail = `${ev.before} → ${ev.stacks}`;
   } else if (kind === "defensive_protocol_applied") {
     detail = ORBITAL_LABELS.defensive_protocol;
+  } else if (kind === "defensive_protocol_consumed") {
+    detail = `−${ev.amount ?? 0}`;
   } else if (kind === "acquire_target_applied") {
     detail = ORBITAL_LABELS.acquire_target;
   }
@@ -143,36 +194,66 @@ export function resolveAbilityBanner(ev, player, opponent) {
   };
 }
 
-export const OVERCLOCK_DEALT_PER_STACK = 0.125;
-export const OVERCLOCK_TAKEN_PER_STACK = 0.05;
-export const OVERCLOCK_CRIT_STACK_LOSS = 3;
-export const ASTRAL_BARRIER_CHANCE = 0.1;
-export const ASTRAL_BARRIER_MAX_HP_FRAC = 0.15;
-export const PHANTOM_SIGNAL_CHARGES = 2;
-export const DIRTY_TRICK_FLAT_BONUS = 0.075; // 7.5 percentage points as 0–1
-export const FIRE_SUPPORT_FRAC = 0.6;
-export const DEFENSIVE_PROTOCOL_REDUCTION = 0.25;
-export const ACQUIRE_TARGET_CRIT_BONUS = 0.4;
-export const STRONG_TANTRUM_CRIT_MULT = 2.0;
-export const ORBITAL_ASSISTANT_TRIGGER_INTERVAL = 2;
-
 /** Fresh per-fighter combat state (cleared between combats via new fighter build). */
 export function createPassiveState() {
   return {
-    kineticTantrum: null, // null | "normal" | "strong"
-    phantomCharges: 0,
+    kineticTantrum: null,
+    phantomPending: false,
+    shadowOwnTurns: 0,
+    dirtyTricks: [],
     dirtyTrick: null,
+    openingCharges: 0,
     overclockStacks: 0,
     engineerTurns: 0,
-    /** Multiplier applied to next incoming damaging hit after pipeline (Defensive Protocol). */
     nextIncomingDamageMult: 1,
-    /** Flat crit chance (0–1) added to next normal attack (Acquire Target). */
     nextAttackCritBonus: 0,
+  };
+}
+
+export function snapshotPassiveHud(fighter) {
+  const ps = fighter?.passiveState || createPassiveState();
+  return {
+    barrier: fighter?.barrier ?? 0,
+    overclockStacks: ps.overclockStacks || 0,
+    overclockActive: fighter?.className === "Technomancer",
+    phantomPending: !!ps.phantomPending,
+    dirtyTricks: [...(ps.dirtyTricks || [])],
+    kineticTantrum: ps.kineticTantrum || null,
+    defensiveProtocol: (ps.nextIncomingDamageMult ?? 1) !== 1,
+    acquireTarget: (ps.nextAttackCritBonus ?? 0) > 0,
+    openingCharges: ps.openingCharges || 0,
   };
 }
 
 export function passiveNameForClass(className) {
   return PASSIVE_BY_CLASS[className] || null;
+}
+
+function applyDirtyTrickBonus(fighter, trick) {
+  if (trick === "flashbang") {
+    fighter.dodge = (fighter.dodge || 0) + DIRTY_TRICK_FLAT_BONUS;
+  } else if (trick === "targeting_beacon") {
+    fighter.crit = (fighter.crit || 0) + DIRTY_TRICK_FLAT_BONUS;
+  } else if (trick === "stim_injector") {
+    fighter.passiveState.openingCharges = STIM_INJECTOR_OPENING_ATTACK_TURNS;
+  }
+}
+
+function emitDirtyTrickSelected(fighter, trick, events, extra = {}) {
+  const ps = fighter.passiveState;
+  events.push({
+    type: "passive",
+    passive: "Dirty Tricks",
+    kind: "dirty_trick_selected",
+    side: fighter.side,
+    dirtyTrick: trick,
+    dirtyTricks: [...(ps.dirtyTricks || [])],
+    dodge: fighter.dodge,
+    crit: fighter.crit,
+    openingCharges: ps.openingCharges,
+    totalTurn: extra.totalTurn ?? null,
+    text: `${fighter.name} deploys ${DIRTY_TRICK_LABELS[trick] || trick}`,
+  });
 }
 
 /**
@@ -194,36 +275,24 @@ export function onCombatStart(fighter, rng = Math.random) {
   const ps = fighter.passiveState;
 
   if (cls === "Shadow Operative") {
-    ps.phantomCharges = PHANTOM_SIGNAL_CHARGES;
+    ps.phantomPending = PHANTOM_SIGNAL_STARTS_ARMED;
     events.push({
       type: "passive",
       passive: "Phantom Signal",
       kind: "phantom_signal_armed",
       side: fighter.side,
-      charges: ps.phantomCharges,
-      text: `${fighter.name} arms Phantom Signal (${ps.phantomCharges} charges)`,
+      primed: PHANTOM_SIGNAL_STARTS_ARMED,
+      phantomPending: PHANTOM_SIGNAL_STARTS_ARMED,
+      text: `${fighter.name} primes Phantom Signal`,
     });
   }
 
   if (cls === "Void Runner") {
-    const trick = DIRTY_TRICKS[Math.floor(rng() * DIRTY_TRICKS.length)];
+    const trick = DIRTY_TRICKS[pickIndex(rng, DIRTY_TRICKS.length)];
+    ps.dirtyTricks = [trick];
     ps.dirtyTrick = trick;
-    if (trick === "flashbang") {
-      // May exceed normal Dodge cap.
-      fighter.dodge = (fighter.dodge || 0) + DIRTY_TRICK_FLAT_BONUS;
-    } else if (trick === "targeting_beacon") {
-      fighter.crit = (fighter.crit || 0) + DIRTY_TRICK_FLAT_BONUS;
-    }
-    events.push({
-      type: "passive",
-      passive: "Dirty Tricks",
-      kind: "dirty_trick_selected",
-      side: fighter.side,
-      dirtyTrick: trick,
-      dodge: fighter.dodge,
-      crit: fighter.crit,
-      text: `${fighter.name} selects Dirty Trick: ${trick.replace(/_/g, " ")}`,
-    });
+    applyDirtyTrickBonus(fighter, trick);
+    emitDirtyTrickSelected(fighter, trick, events, { totalTurn: 0 });
   }
 
   if (cls === "Technomancer") {
@@ -234,20 +303,43 @@ export function onCombatStart(fighter, rng = Math.random) {
       kind: "overclock_ready",
       side: fighter.side,
       stacks: 0,
-      text: `${fighter.name} begins at 0 Overclock stacks`,
+      before: 0,
+      after: 0,
+      text: `${fighter.name} Overclock 0/${OVERCLOCK_STACK_CAP}`,
     });
   }
 
   return events;
 }
 
-/** Start-of-turn hooks (Astral Barrier). Returns events. */
+/** Start-of-own-turn hooks (Astral Barrier + Shadow re-prime). */
 export function onTurnStart(fighter, rng = Math.random) {
   const events = [];
+  if (fighter.suppressClassPassive || fighter.className == null) return events;
+
+  if (fighter.className === "Shadow Operative") {
+    const ps = fighter.passiveState || createPassiveState();
+    fighter.passiveState = ps;
+    ps.shadowOwnTurns = (ps.shadowOwnTurns || 0) + 1;
+    if (ps.shadowOwnTurns % PHANTOM_REPRIME_OWN_TURNS === 0) {
+      ps.phantomPending = PHANTOM_SIGNAL_STARTS_ARMED;
+      events.push({
+        type: "passive",
+        passive: "Phantom Signal",
+        kind: "phantom_signal_reprimed",
+        side: fighter.side,
+        ownTurn: ps.shadowOwnTurns,
+        primed: PHANTOM_SIGNAL_STARTS_ARMED,
+        phantomPending: PHANTOM_SIGNAL_STARTS_ARMED,
+        text: `${fighter.name} re-primes Phantom Signal`,
+      });
+    }
+  }
+
   if (fighter.className !== "Astral Warden") return events;
 
   if (rng() < ASTRAL_BARRIER_CHANCE) {
-    const full = Math.round((fighter.maxHp || 0) * ASTRAL_BARRIER_MAX_HP_FRAC);
+    const full = astralBarrierAmount(fighter.vitalityValue, fighter.maxHp || 0);
     const restored = fighter.barrier > 0;
     fighter.barrier = full;
     events.push({
@@ -258,11 +350,31 @@ export function onTurnStart(fighter, rng = Math.random) {
       barrier: fighter.barrier,
       barrierMax: full,
       text: restored
-        ? `${fighter.name}'s Astral Barrier restored (${full})`
+        ? `${fighter.name}'s Astral Barrier refreshes (${full})`
         : `${fighter.name} raises Astral Barrier (${full})`,
     });
   }
   return events;
+}
+
+/**
+ * Second/third distinct Dirty Trick at total combat turns 14 and 28.
+ * Stim Injector sets openingCharges=2 and should steal the current turn.
+ */
+export function maybeUnlockDirtyTricks(fighter, totalTurn, rng, events) {
+  if (fighter.className !== "Void Runner" || fighter.suppressClassPassive) return false;
+  if (totalTurn !== DIRTY_TRICK_TURN_TWO && totalTurn !== DIRTY_TRICK_TURN_THREE) return false;
+  const ps = fighter.passiveState;
+  if (!ps) return false;
+  const active = new Set(ps.dirtyTricks || []);
+  const remaining = DIRTY_TRICKS.filter((t) => !active.has(t));
+  if (remaining.length === 0) return false;
+  const trick = remaining[pickIndex(rng, remaining.length)];
+  ps.dirtyTricks = [...(ps.dirtyTricks || []), trick];
+  ps.dirtyTrick = trick;
+  applyDirtyTrickBonus(fighter, trick);
+  emitDirtyTrickSelected(fighter, trick, events, { totalTurn });
+  return trick === "stim_injector";
 }
 
 /**
@@ -274,14 +386,13 @@ export function activateKineticTantrum(vanguard, strength, events) {
   const ps = vanguard.passiveState;
   if (!ps) return;
   if (strength === "normal" && ps.kineticTantrum === "strong") {
-    // Strong always overrides Normal — never downgrade.
     events.push({
       type: "passive",
       passive: "Kinetic Tantrum",
       kind: "kinetic_tantrum_blocked_downgrade",
       side: vanguard.side,
       kineticTantrum: "strong",
-      text: `${vanguard.name}'s Strong Kinetic Tantrum blocks Normal overwrite`,
+      text: `${vanguard.name}'s 2.0× Kinetic Tantrum holds`,
     });
     return;
   }
@@ -292,10 +403,11 @@ export function activateKineticTantrum(vanguard, strength, events) {
     kind: strength === "strong" ? "kinetic_tantrum_strong" : "kinetic_tantrum_normal",
     side: vanguard.side,
     kineticTantrum: strength,
+    guaranteedHit: strength === "strong",
     text:
       strength === "strong"
-        ? `${vanguard.name} activates Strong Kinetic Tantrum`
-        : `${vanguard.name} activates Kinetic Tantrum`,
+        ? `${vanguard.name} primes Kinetic Tantrum 2.0× (guaranteed hit)`
+        : `${vanguard.name} primes Kinetic Tantrum 1.5×`,
   });
 }
 
@@ -320,7 +432,7 @@ export function beginNormalAttackModifiers(attacker) {
     mods.critMultOverride = STRONG_TANTRUM_CRIT_MULT;
   } else if (ps.kineticTantrum === "normal") {
     mods.guaranteedCrit = true;
-    // Normal crit mult; still subject to dodge.
+    mods.critMultOverride = NORMAL_TANTRUM_CRIT_MULT;
   }
 
   if (ps.nextAttackCritBonus > 0) {
@@ -343,7 +455,7 @@ export function endNormalAttackModifiers(attacker, mods, events) {
       kind: "kinetic_tantrum_consumed",
       side: attacker.side,
       consumed: mods.kineticMode,
-      text: `${attacker.name} consumes Kinetic Tantrum (${mods.kineticMode})`,
+      text: `${attacker.name} spends Kinetic Tantrum (${mods.kineticMode === "strong" ? "2.0×" : "1.5×"})`,
     });
   }
 
@@ -356,34 +468,34 @@ export function endNormalAttackModifiers(attacker, mods, events) {
       kind: "acquire_target_consumed",
       side: attacker.side,
       critBonus: bonus,
-      text: `${attacker.name} consumes Acquire Target`,
+      text: `${attacker.name} spends Acquire Target`,
     });
   }
 }
 
 /**
- * Phantom Signal: force miss (not dodge) for first N incoming normal attacks.
- * @returns {{ forcedMiss: boolean, events: object[] }}
+ * Phantom Signal: force miss (not dodge) for the next incoming normal attack.
+ * @returns {{ forcedMiss: boolean }}
  */
 export function tryPhantomSignalMiss(defender, events) {
   const ps = defender.passiveState;
   if (!ps || defender.className !== "Shadow Operative") return { forcedMiss: false };
-  if (ps.phantomCharges <= 0) return { forcedMiss: false };
+  if (!ps.phantomPending) return { forcedMiss: false };
 
-  ps.phantomCharges -= 1;
+  ps.phantomPending = false;
   events.push({
     type: "miss",
     missKind: "phantom_signal",
     passive: "Phantom Signal",
     kind: "phantom_signal_miss",
-    attacker: null, // filled by caller
+    attacker: null,
     defender: defender.side,
     dodged: false,
     missed: true,
     hologram: true,
-    chargesRemaining: ps.phantomCharges,
+    phantomPending: false,
     damage: 0,
-    text: `${defender.name}'s Phantom Signal forces a miss`,
+    text: `${defender.name}'s Phantom Signal scrambles the incoming attack`,
   });
   return { forcedMiss: true };
 }
@@ -395,26 +507,53 @@ export function overclockDealtMultiplier(fighter) {
   return 1 + stacks * OVERCLOCK_DEALT_PER_STACK;
 }
 
-/** Overclock incoming multiplier (participates in pipeline after resistance / with taken). */
+/** Overclock incoming multiplier (after resistance). */
 export function overclockTakenMultiplier(fighter) {
   if (fighter.className !== "Technomancer") return 1;
   const stacks = fighter.passiveState?.overclockStacks || 0;
   return 1 + stacks * OVERCLOCK_TAKEN_PER_STACK;
 }
 
+/** +1 stack, capped. Tests and pre-vent path. */
 export function gainOverclockStack(fighter, events) {
   if (fighter.className !== "Technomancer") return;
   const ps = fighter.passiveState;
   if (!ps) return;
-  ps.overclockStacks += 1;
+  const before = ps.overclockStacks;
+  ps.overclockStacks = Math.min(OVERCLOCK_STACK_CAP, before + OVERCLOCK_STACKS_PER_ATTACK);
   events.push({
     type: "passive",
     passive: "Overclock",
     kind: "overclock_stack_gained",
     side: fighter.side,
+    before,
+    after: ps.overclockStacks,
     stacks: ps.overclockStacks,
-    text: `${fighter.name} gains Overclock (${ps.overclockStacks})`,
+    text: `${fighter.name} Overclock +${OVERCLOCK_STACKS_PER_ATTACK} → ${ps.overclockStacks}/${OVERCLOCK_STACK_CAP}`,
   });
+}
+
+/** After a Technomancer attack attempt: vent 6→4, else +1 up to 6. */
+export function tickOverclockAfterAttempt(fighter, events) {
+  if (fighter.className !== "Technomancer") return;
+  const ps = fighter.passiveState;
+  if (!ps) return;
+  const before = ps.overclockStacks || 0;
+  if (before >= OVERCLOCK_STACK_CAP) {
+    ps.overclockStacks = Math.max(0, before - OVERCLOCK_VENT_STACKS);
+    events.push({
+      type: "passive",
+      passive: "Overclock",
+      kind: "overclock_vented",
+      side: fighter.side,
+      before,
+      after: ps.overclockStacks,
+      stacks: ps.overclockStacks,
+      text: `${fighter.name} Overclock vents ${before} → ${ps.overclockStacks}`,
+    });
+    return;
+  }
+  gainOverclockStack(fighter, events);
 }
 
 export function removeOverclockStacks(fighter, amount, events) {
@@ -428,9 +567,11 @@ export function removeOverclockStacks(fighter, amount, events) {
     passive: "Overclock",
     kind: "overclock_stacks_removed",
     side: fighter.side,
+    before,
     removed: before - ps.overclockStacks,
+    after: ps.overclockStacks,
     stacks: ps.overclockStacks,
-    text: `${fighter.name} loses ${before - ps.overclockStacks} Overclock (now ${ps.overclockStacks})`,
+    text: `${fighter.name} Overclock disrupted ${before} → ${ps.overclockStacks}`,
   });
 }
 
@@ -442,8 +583,9 @@ export function applyDamageWithBarrier(target, pipelineDamage, events, { isDamag
   const ps = target.passiveState;
 
   if (isDamagingHit && ps && ps.nextIncomingDamageMult !== 1 && dmg > 0) {
+    const before = dmg;
     const mult = ps.nextIncomingDamageMult;
-    dmg = Math.max(0, Math.round(dmg * mult));
+    dmg = Math.max(0, roundCombatDamage(dmg * mult));
     ps.nextIncomingDamageMult = 1;
     events.push({
       type: "passive",
@@ -451,8 +593,11 @@ export function applyDamageWithBarrier(target, pipelineDamage, events, { isDamag
       kind: "defensive_protocol_consumed",
       side: target.side,
       mult,
+      amount: before - dmg,
+      before,
+      after: dmg,
       damageAfter: dmg,
-      text: `${target.name}'s Defensive Protocol reduces the hit`,
+      text: `${target.name}'s Defensive Protocol reduces ${before - dmg} damage`,
     });
   }
 
@@ -485,16 +630,25 @@ export function applyDamageWithBarrier(target, pipelineDamage, events, { isDamag
   return { hpDamage, barrierAbsorbed, shieldHit: barrierAbsorbed > 0, finalIncoming: dmg };
 }
 
+export function isOrbitalActivationTurn(engineerTurns) {
+  const n = Number(engineerTurns) || 0;
+  if (n <= 0) return false;
+  if (n <= ORBITAL_EARLY_TURN_CAP) return n % ORBITAL_EARLY_INTERVAL === 0;
+  if (n >= ORBITAL_LATE_START_TURN) return (n - ORBITAL_LATE_START_TURN) % ORBITAL_LATE_INTERVAL === 0;
+  return false;
+}
+
 /**
- * After Cosmic Engineer's normal attack resolves on their turn (every 2nd turn).
+ * After Cosmic Engineer's normal attack resolves on their own turn.
  */
 export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.random) {
   if (engineer.className !== "Cosmic Engineer") return;
   const ps = engineer.passiveState;
   ps.engineerTurns += 1;
-  if (ps.engineerTurns % ORBITAL_ASSISTANT_TRIGGER_INTERVAL !== 0) return;
+  if (!isOrbitalActivationTurn(ps.engineerTurns)) return;
+  if (engineer.hp <= 0 || opponent.hp <= 0) return;
 
-  const effect = ORBITAL_EFFECTS[Math.floor(rng() * ORBITAL_EFFECTS.length)];
+  const effect = ORBITAL_EFFECTS[pickIndex(rng, ORBITAL_PROTOCOL_COUNT)];
   events.push({
     type: "passive",
     passive: "Orbital Assistant",
@@ -502,14 +656,16 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
     side: engineer.side,
     effect,
     engineerTurns: ps.engineerTurns,
-    text: `${engineer.name}'s Orbital Assistant: ${effect.replace(/_/g, " ")}`,
+    ownTurn: ps.engineerTurns,
+    text: `${engineer.name}'s Orbital Assistant: ${ORBITAL_LABELS[effect] || effect}`,
   });
 
   if (effect === "fire_support") {
-    // Secondary True Damage — 60% of sheet standard attack. Not a normal attack.
-    // CanDodge by default; cannot Crit; bypasses Might/Tech resistance.
-    const raw = Math.round((engineer.standardAttack || 0) * FIRE_SUPPORT_FRAC);
-    const trueDmg = Math.max(0, raw);
+    const context = Number(engineer.contextMult != null ? engineer.contextMult : 1);
+    const trueRaw = engineer.intellectValue != null
+      ? rawAttack(engineer.intellectValue, STANDARD_ATTACK_FLAT) * FIRE_SUPPORT_FRAC * context
+      : (engineer.standardAttack || 0) * FIRE_SUPPORT_FRAC * context;
+    const trueDmg = roundCombatDamage(trueRaw);
     if ((opponent.dodge || 0) > 0 && rng() < opponent.dodge) {
       events.push({
         type: "dodge",
@@ -526,7 +682,7 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
         damageType: "TRUE",
         canCrit: false,
         canDodge: true,
-        text: `${opponent.name} dodges Fire Support!`,
+        text: `${opponent.name} dodges Fire Support`,
       });
       if (opponent.className === "Vanguard") {
         activateKineticTantrum(opponent, "normal", events);
@@ -551,13 +707,13 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
       damageType: "TRUE",
       canCrit: false,
       canDodge: true,
-      text: `Orbital Assistant Fire Support deals ${res.hpDamage} True Damage`,
+      trueDamage: true,
+      text: `Fire Support deals ${res.hpDamage} True Damage`,
     });
     return;
   }
 
   if (effect === "defensive_protocol") {
-    // Re-select while pending: refresh one instance — do not stack reductions.
     ps.nextIncomingDamageMult = 1 - DEFENSIVE_PROTOCOL_REDUCTION;
     events.push({
       type: "passive",
@@ -565,13 +721,12 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
       kind: "defensive_protocol_applied",
       side: engineer.side,
       reduction: DEFENSIVE_PROTOCOL_REDUCTION,
-      text: `${engineer.name} applies Defensive Protocol (−25% next hit)`,
+      text: `${engineer.name} readies Defensive Protocol`,
     });
     return;
   }
 
   if (effect === "acquire_target") {
-    // Re-select while pending: keep a single +40pp bonus — do not stack to +80.
     ps.nextAttackCritBonus = ACQUIRE_TARGET_CRIT_BONUS;
     events.push({
       type: "passive",
@@ -579,12 +734,34 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
       kind: "acquire_target_applied",
       side: engineer.side,
       critBonus: ACQUIRE_TARGET_CRIT_BONUS,
-      text: `${engineer.name} acquires target (+40% Crit next attack)`,
+      text: `${engineer.name} acquires target (+40 Crit)`,
     });
   }
 }
 
-/** Whether Stim Injector should override opening turn order for this fighter. */
+/** Whether Stim Injector currently forces extra Void attack turns. */
 export function hasStimInjector(fighter) {
-  return fighter.className === "Void Runner" && fighter.passiveState?.dirtyTrick === "stim_injector";
+  const ps = fighter.passiveState;
+  if (fighter.className !== "Void Runner" || !ps) return false;
+  return (ps.openingCharges || 0) > 0 || (ps.dirtyTricks || []).includes("stim_injector") || ps.dirtyTrick === "stim_injector";
 }
+
+export function consumeStimOpening(fighter, events = []) {
+  const ps = fighter.passiveState;
+  if (!ps || (ps.openingCharges || 0) <= 0) return false;
+  const before = ps.openingCharges;
+  ps.openingCharges -= 1;
+  events.push({
+    type: "passive",
+    passive: "Dirty Tricks",
+    kind: "stim_injector_charge",
+    side: fighter.side,
+    before,
+    after: ps.openingCharges,
+    openingCharges: ps.openingCharges,
+    text: `${fighter.name}'s Stim Injector ${before} → ${ps.openingCharges}`,
+  });
+  return ps.openingCharges > 0;
+}
+
+export { CRIT_DAMAGE_MULT, rollUniversalVariance };

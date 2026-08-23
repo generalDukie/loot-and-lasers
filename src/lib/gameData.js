@@ -17,7 +17,8 @@ import {
   MISSION_XPF_EXPONENT,
   missionXpReward,
   permanentAttributePurchaseCost,
-  BACKPACK_UNEQUIPPED_GEAR_CAP,
+  BACKPACK_UNEQUIPPED_ITEM_CAP,
+  XP_REWARD_EFFICIENCY,
 } from "@/lib/productionMath";
 import {
   EQUIPMENT_SLOTS,
@@ -201,7 +202,7 @@ export const CLASSES = {
     baseStats: { ...CLASS_TYPE_BASE_STATS.agility },
     special: {
       name: "Phantom Signal",
-      effect: "The first 2 attacks made against the Shadow Operative each combat are guaranteed to hit a hologram and miss. These do not count as dodges.",
+      effect: "The first incoming attack against the Shadow Operative is a guaranteed miss (not a Dodge). Every 10th Shadow turn re-primes the next incoming attack.",
       identity: "Leave only a hologram for the opening volleys.",
     },
   },
@@ -214,7 +215,7 @@ export const CLASSES = {
     baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
     special: {
       name: "Overclock",
-      effect: "Each attack (regardless of hit or miss) grants a stack that increases damage dealt by 12.5% and damage taken by 5%. Enemy critical hits remove 3 stacks.",
+      effect: "Each attack attempt grants an Overclock stack (max 6): +12.5% damage dealt and +5% damage taken per stack. A 6-stack attack resolves at full power, then vents to 4. Enemy Crits remove 2 stacks.",
       identity: "Push the core until it screams.",
     },
   },
@@ -240,7 +241,7 @@ export const CLASSES = {
     baseStats: { ...CLASS_TYPE_BASE_STATS.agility },
     special: {
       name: "Dirty Tricks",
-      effect: "At the start of each fight, the Void Runner has an equal chance to gain one trick for the combat: Flashbang (+7.5% Dodge), Targeting Beacon (+7.5% Crit Chance), or Unlicensed Stimulant (2 attacks before the opponent can act).",
+      effect: "At combat start, one random Dirty Trick. Distinct second and third tricks deploy at total combat turns 14 and 28. Flashbang +7.5 Dodge, Targeting Beacon +7.5 Crit (both cap-bypass), Stim Injector takes the next two attack turns.",
       identity: "Never fight fair.",
     },
   },
@@ -253,7 +254,7 @@ export const CLASSES = {
     baseStats: { ...CLASS_TYPE_BASE_STATS.intellect },
     special: {
       name: "Orbital Assistant",
-      effect: "Every 2nd turn, the Engineer’s drone has an equal chance to provide Fire Support (Deal 60% of the engineer's base damage as True Damage), Defensive Protocol (25% reduction in damage from next hit the engineer takes), or Acquire Target (Increases the critical strike chance of the engineer's next attack by 40%).",
+      effect: "On Engineer turns 2, 4, 6, 8, 10, then every 3rd turn from 13, the drone picks Fire Support (60% True Damage), Defensive Protocol (−25% next hit), or Acquire Target (+40 Crit on next attack).",
       identity: "Wins through gadgets and sustained pressure.",
     },
   },
@@ -326,7 +327,8 @@ export const CLASS_WEAPONS = {
   "Cosmic Engineer":  { name: "Plasma Multi-Cannon",    emoji: "💥", style: "shoot", flavor: "Jury-rigged to fire everything from drones to EMPs." },
 };
 
-export const RARITY_MULTIPLIERS = { common: 1, uncommon: 1.3, rare: 1.7, epic: 2.2, legendary: 3 };
+/** Historical unused rarity display multipliers — not live Gear budget (`GEAR_RARITY_BUDGET_MULT`). */
+const RARITY_MULTIPLIERS = { common: 1, uncommon: 1.3, rare: 1.7, epic: 2.2, legendary: 3 };
 
 // Resolve a weapon icon from its base/full name. Prefers class signature matches,
 // then known loot base names, then keyword heuristics — never falls back to the
@@ -379,13 +381,14 @@ export function weaponCombatStyleFor(name, baseName, emoji) {
   return "shoot";
 }
 
-// Maximum unequipped Gear a character can hold in the backpack (hard production cap).
-export const INVENTORY_CAP = BACKPACK_UNEQUIPPED_GEAR_CAP;
+// Maximum unequipped items a character can hold in the backpack (hard production cap).
+/** @deprecated Use BACKPACK_UNEQUIPPED_ITEM_CAP. Same 10-item unequipped backpack. */
+export const INVENTORY_CAP = BACKPACK_UNEQUIPPED_ITEM_CAP;
 
 /** Hard backpack ceiling — 10 unequipped items of any type. Cargo Hold does not expand it. */
 export function getInventoryCap(_character) {
   void _character;
-  return BACKPACK_UNEQUIPPED_GEAR_CAP;
+  return BACKPACK_UNEQUIPPED_ITEM_CAP;
 }
 const RARITY_COLORS = { common: "#9CA3AF", uncommon: "#22C55E", rare: "#3B82F6", epic: "#A855F7", legendary: "#F59E0B" };
 
@@ -875,7 +878,7 @@ export function getExpForLevel(level) {
 }
 
 /** One production XP-efficiency factor. Mission XP applies it twice (certified). */
-export const MISSION_XP_REBALANCE = 0.85;
+export const MISSION_XP_REBALANCE = XP_REWARD_EFFICIENCY;
 
 /** Mission XP/Fuel production formula. Keep in sync with server rewards.js. */
 export const XP_PER_FUEL_BASE = MISSION_XPF_BASE;

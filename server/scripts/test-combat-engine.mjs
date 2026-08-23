@@ -9,12 +9,11 @@ import {
   calculateAgilityDamage,
   getMaxHP,
   CRIT_MULT,
-  AGI_VARIANCE_MIN,
-  AGI_VARIANCE_MAX,
   UNIVERSAL_VARIANCE_MIN,
   UNIVERSAL_VARIANCE_MAX,
   mitigationForDamageType,
 } from "../../src/lib/statEngine.js";
+import { resistFraction } from "../../src/lib/combatMath.js";
 import {
   simulateBattle,
   buildFighter,
@@ -101,16 +100,11 @@ test("Tech Damage uses universal variance only", () => {
   assert.ok(Math.abs(dmg - base * 1.1) < 1e-9);
 });
 
-test("Reflex Damage uses two independent rolls (not collapsed)", () => {
-  let calls = 0;
-  const rng = () => {
-    calls += 1;
-    return calls === 1 ? 0.0 : 1.0; // agi→0.80, univ→1.10
-  };
+test("Reflex Damage uses the same universal variance as Might/Tech", () => {
+  const rng = seqRng([0.0]); // -> 0.90
   const dmg = calculateAgilityDamage(100, rng);
-  assert.equal(calls, 2);
   const base = 15 + 0.0032 * Math.pow(100, 1.727);
-  assert.ok(Math.abs(dmg - base * AGI_VARIANCE_MIN * UNIVERSAL_VARIANCE_MAX) < 1e-9);
+  assert.ok(Math.abs(dmg - base * UNIVERSAL_VARIANCE_MIN) < 1e-9);
 });
 
 test("Combat damage rounds nearest (not floor)", () => {
@@ -122,7 +116,7 @@ test("Combat damage rounds nearest (not floor)", () => {
       critMult: CRIT_MULT,
       damageType: "strength",
     },
-    { armorPercent: 0, techResistPercent: 0 },
+    { resists: { might: 0, reflex: 0, tech: 0 } },
     { canCrit: false, rng: () => 0.5 },
   );
   assert.equal(hit.finalDamage, Math.round(hit.finalDamage));
@@ -176,7 +170,7 @@ test("Successful Dodge deals zero damage and emits dodge", () => {
 test("Forced miss deals zero damage and does not emit dodge", () => {
   const defender = buildFighter(baseChar("Shadow Operative"), [], "opponent");
   defender.passiveState = createPassiveState();
-  defender.passiveState.phantomCharges = 1;
+  defender.passiveState.phantomPending = true;
   const events = [];
   const miss = tryPhantomSignalMiss(defender, events);
   assert.equal(miss.forcedMiss, true);
@@ -200,12 +194,14 @@ console.log("\nCrit and resistance");
 test("Normal Crit multiplier is 1.5× and does not bypass resistance", () => {
   const attacker = {
     primaryValue: 100,
-    archetype: "str",
+    archetype: "Might",
+    damageChannel: "might",
     crit: 1,
     critMult: CRIT_MULT,
-    damageType: "strength",
+    damageType: "MIGHT",
+    damageBase: 15,
   };
-  const defender = { armorPercent: 20, techResistPercent: 0 };
+  const defender = { resists: { might: 0.2, reflex: 0, tech: 0 } };
   // Fixed variance mid; forceCrit path via canCrit + crit roll 0
   const rawBase = 15 + 0.0032 * Math.pow(100, 1.727);
   const rng = seqRng([0.5, 0.0]); // variance mid-ish, then crit roll
@@ -239,11 +235,13 @@ test("True Damage cannot Crit", () => {
   assert.equal(atk.canCrit, false);
 });
 
-test("Might uses Might Resistance; Tech uses Tech; Reflex none; True bypasses", () => {
+test("Might / Reflex / Tech channels resist; True bypasses", () => {
+  assert.equal(resistFraction({ might: 0.25, reflex: 0.1, tech: 0.4 }, "might"), 0.25);
+  assert.equal(resistFraction({ might: 0.25, reflex: 0.1, tech: 0.4 }, "tech"), 0.4);
+  assert.equal(resistFraction({ might: 0.25, reflex: 0.1, tech: 0.4 }, "reflex"), 0.1);
+  assert.equal(resistFraction({ might: 0.25, reflex: 0.1, tech: 0.4 }, "true"), 0);
+  // Historical two-channel helper is not live combat authority.
   assert.equal(mitigationForDamageType("strength", 25, 40), 0.25);
-  assert.equal(mitigationForDamageType("tech", 25, 40), 0.4);
-  assert.equal(mitigationForDamageType("agility", 25, 40), 0);
-  assert.equal(mitigationForDamageType("true", 25, 40), 0);
 });
 
 test("No Armor field introduced on combat events", () => {
@@ -284,7 +282,7 @@ test("Replaying stored events does not require resimulation", () => {
   assert.equal(pub.combat_id, committed.combat_id);
 });
 
-test("Identical snapshots + seeded RNG → identical SimulateCombat outcomes", () => {
+test("Same snapshot + seed is identical within one content; Mission vs Dungeon context differs", () => {
   const a = SimulateCombat({
     player: baseChar(),
     opponent: softEnemy(),
@@ -295,14 +293,19 @@ test("Identical snapshots + seeded RNG → identical SimulateCombat outcomes", (
     player: baseChar(),
     opponent: softEnemy(),
     rng: seededRng(123),
-    mode: "dungeon",
+    mode: "mission",
   });
   assert.equal(a.winner, b.winner);
   assert.equal(a.events.length, b.events.length);
-  assert.deepEqual(
-    a.events.map((e) => e.type),
-    b.events.map((e) => e.type),
-  );
+  const dungeon = SimulateCombat({
+    player: baseChar(),
+    opponent: { ...softEnemy(), missionEnemy: false, dungeonEnemy: true },
+    rng: seededRng(123),
+    mode: "dungeon",
+  });
+  assert.equal(a.content, "mission");
+  assert.equal(dungeon.content, "dungeon");
+  assert.ok(Array.isArray(dungeon.events) && dungeon.events.length > 0);
 });
 
 test("Client-facing result hides _enemy_full / passive internals", () => {
@@ -345,12 +348,14 @@ test("Crit frequency matches supplied chance (~15%)", () => {
     const hit = resolveBasicHit(
       {
         primaryValue: 50,
-        archetype: "str",
+        archetype: "Might",
+        damageChannel: "might",
         crit: 0.15,
         critMult: CRIT_MULT,
-        damageType: "strength",
+        damageType: "MIGHT",
+        damageBase: 15,
       },
-      { armorPercent: 0, techResistPercent: 0 },
+      { resists: { might: 0, reflex: 0, tech: 0 } },
       { canCrit: true, rng: seededRng(i * 19 + 7) },
     );
     hits += 1;

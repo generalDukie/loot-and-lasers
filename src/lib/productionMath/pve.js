@@ -4,7 +4,9 @@
 import { roundHalfUp, roundToMultipleOf5 } from "./rounding.js";
 import {
   DUNGEON_DRU,
+  DUNGEON_ENCOUNTER_INDEX_MAX,
   DUNGEON_ENEMY_LEVELS,
+  DUNGEON_INDEX_MAX,
   DUNGEON_UNLOCK_LEVELS,
   DUNGEON_XP_DRU_COEFFICIENT,
   DUNGEON_XP_SHARE_COEFFICIENT,
@@ -26,19 +28,19 @@ function indexInt(n, lo, hi) {
 }
 
 export function dungeonUnlockLevel(dungeonIndex) {
-  return DUNGEON_UNLOCK_LEVELS[indexInt(dungeonIndex, 0, 9)];
+  return DUNGEON_UNLOCK_LEVELS[indexInt(dungeonIndex, 0, DUNGEON_INDEX_MAX)];
 }
 
 export function dungeonDru(dungeonIndex) {
-  return DUNGEON_DRU[indexInt(dungeonIndex, 0, 9)];
+  return DUNGEON_DRU[indexInt(dungeonIndex, 0, DUNGEON_INDEX_MAX)];
 }
 
 export function dungeonEnemyLevel(dungeonIndex, encounterIndex) {
-  return DUNGEON_ENEMY_LEVELS[indexInt(dungeonIndex, 0, 9)][indexInt(encounterIndex, 0, 9)];
+  return DUNGEON_ENEMY_LEVELS[indexInt(dungeonIndex, 0, DUNGEON_INDEX_MAX)][indexInt(encounterIndex, 0, DUNGEON_ENCOUNTER_INDEX_MAX)];
 }
 
 export function dungeonEncounterShare(encounterIndex) {
-  return DUNGEON_XP_SHARES[indexInt(encounterIndex, 0, 9)];
+  return DUNGEON_XP_SHARES[indexInt(encounterIndex, 0, DUNGEON_ENCOUNTER_INDEX_MAX)];
 }
 
 function pveXpFromDru(dru, share, referenceLevel) {
@@ -53,15 +55,15 @@ function pveXpFromDru(dru, share, referenceLevel) {
 
 /** ROUND(DRU * share * mission_xpf(enemyL) * 0.87 * 2.10) then ROUND(* 1.25). No Frontier. */
 export function dungeonEncounterXp(dungeonIndex, encounterIndex) {
-  const d = indexInt(dungeonIndex, 0, 9);
-  const j = indexInt(encounterIndex, 0, 9);
+  const d = indexInt(dungeonIndex, 0, DUNGEON_INDEX_MAX);
+  const j = indexInt(encounterIndex, 0, DUNGEON_ENCOUNTER_INDEX_MAX);
   const raw = pveXpFromDru(DUNGEON_DRU[d], DUNGEON_XP_SHARES[j], DUNGEON_ENEMY_LEVELS[d][j]);
   return roundHalfUp(raw * PVE_XP_MULTIPLIER);
 }
 
 export function dungeonEncounterXpPreMultiplier(dungeonIndex, encounterIndex) {
-  const d = indexInt(dungeonIndex, 0, 9);
-  const j = indexInt(encounterIndex, 0, 9);
+  const d = indexInt(dungeonIndex, 0, DUNGEON_INDEX_MAX);
+  const j = indexInt(encounterIndex, 0, DUNGEON_ENCOUNTER_INDEX_MAX);
   return pveXpFromDru(DUNGEON_DRU[d], DUNGEON_XP_SHARES[j], DUNGEON_ENEMY_LEVELS[d][j]);
 }
 
@@ -78,14 +80,16 @@ export function wormholeBandIndex(encounterIndex) {
 
 function wormholeBandWeight(band) {
   const B = Math.max(1, Math.floor(Number(band) || 1));
-  const start = 201 + WORMHOLE_BAND_WIDTH * (B - 1);
+  const start = WORMHOLE_BASE_LEVEL + WORMHOLE_BAND_WIDTH * (B - 1) - 1;
   let prog = 0;
   for (let L = start; L < start + WORMHOLE_BAND_WIDTH; L++) {
     prog += xpToNextDruReference(L);
   }
   let prim = 0;
   for (let i = 0; i < WORMHOLE_ENCOUNTERS_PER_BAND; i++) {
-    prim += DUNGEON_XP_SHARES[i] * missionXpPerFuel(202 + WORMHOLE_BAND_WIDTH * (B - 1) + 2 * i);
+    prim += DUNGEON_XP_SHARES[i] * missionXpPerFuel(
+      WORMHOLE_BASE_LEVEL + WORMHOLE_BAND_WIDTH * (B - 1) + WORMHOLE_LEVEL_PER_INDEX * i,
+    );
   }
   prim *= DUNGEON_XP_SHARE_COEFFICIENT * DUNGEON_XP_DRU_COEFFICIENT;
   return prog / prim;

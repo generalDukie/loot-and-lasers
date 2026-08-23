@@ -13,12 +13,12 @@ Phase 0 did **not** migrate live callers. This map exists so later phases do not
 | EPA / mission enemy budget 0.35 | `src/lib/expectedPlayerAttributes.js`; mission combat construction | Phase 2 Missions |
 | Free attrs 35/35/20/5/5 | `server/src/shared/characterProgression.js` | **Phase 1 complete** |
 | Attr cost closed form | `productionMath.attributePurchaseCost` (live Horner; PCHIP leftover unused) | **Phase 1 complete** |
-| HP / raw ATK / universal variance | `src/lib/statEngine.js` / `arenaEngine.js` | Phase 3 combat |
-| Crit 1.55/1.80/30% | `statEngine.js` | Phase 3 combat |
-| Reflex AGI conversion + Dodge cap | `statEngine.js` | Phase 3 combat |
-| Three-channel resists | `statEngine.js` (live Armor/Tech + dungeon 75% caps) | Phase 3 combat |
-| Mission enemy base ramp | `statEngine.js` (already close) | Phase 3 combat |
-| Mission outgoing × / context multipliers | `arenaEngine.js` / mission combat | Phase 3 combat |
+| HP / raw ATK / universal variance | `src/lib/statEngine.js` / `arenaEngine.js` | **Phase 3 complete** via `combatMath` + `arenaEngine` |
+| Crit 1.55/1.80/30% | `statEngine.js` | **Phase 3 complete** (`productionMath.critChance`) |
+| Reflex AGI conversion + Dodge cap | `statEngine.js` | **Phase 3 complete** (`productionMath.dodgeChance`) |
+| Three-channel resists | `statEngine.js` (live Armor/Tech + dungeon 75% caps) | **Phase 3 complete** (`productionMath.resistances`) |
+| Mission enemy base ramp | `statEngine.js` (already close) | **Phase 3 complete** |
+| Mission outgoing × / context multipliers | `arenaEngine.js` / mission combat | **Phase 3 complete** |
 | Gear base / Legendary 1.50 / slot premium | `src/lib/itemGeneration.js` via `productionMath` | **Phase 2 complete** (universal item; source rarity tables later) |
 | PvE hidden budget offset (stat only) | dungeon/wormhole loot gen | **API staged Phase 2**; source opt-in later |
 | Mission vs Dungeon rarity tables | mission loot; dungeon loot | Phase 4 / Phase 7 |

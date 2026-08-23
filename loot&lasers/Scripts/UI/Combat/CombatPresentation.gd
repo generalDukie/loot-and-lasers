@@ -7,7 +7,8 @@ class_name CombatPresentation
 const FLOAT_FONT_OTHER := 26
 const FLOAT_FONT_DAMAGE := 40
 const FLOAT_FONT_CRIT := 76
-const CRIT_DARKEN := 0.18
+## Presentation mirror of src/lib/classPassives.js OVERCLOCK_STACK_CAP (server is authority).
+const OVERCLOCK_STACK_CAP := 6
 
 
 ## Damage float colors ← Hero attribute panes (GameData.STAT_COLORS).
@@ -37,11 +38,16 @@ static func empty_side() -> Dictionary:
 	return {
 		"barrier": 0,
 		"barrier_max": 0,
+		"phantom_pending": false,
 		"phantom_charges": 0,
 		"overclock_stacks": 0,
+		"overclock_active": false,
 		"dirty_trick": "",
+		"dirty_tricks": [],
 		"kinetic_tantrum": "",
+		"orbital_primed": "",
 		"drone_ready": false,
+		"stim_charges": 0,
 	}
 
 
@@ -81,21 +87,21 @@ static func _apply(state: Dictionary, ev: Dictionary) -> void:
 		if kind == "barrier_broken":
 			s["barrier"] = 0
 		return
-	if kind == "phantom_signal_armed":
+	if kind == "phantom_signal_armed" or kind == "phantom_signal_reprimed":
 		if not slot.is_empty():
-			slot["phantom_charges"] = int(ev.get("charges", 2))
+			slot["phantom_pending"] = true
+			slot["phantom_charges"] = 1
 		return
 	if kind == "phantom_signal_miss" or (str(ev.get("type", "")) == "miss" and str(ev.get("missKind", "")) == "phantom_signal"):
 		var def: Dictionary = _slot(state, str(ev.get("defender", "")))
 		if def.is_empty():
 			return
-		if ev.has("chargesRemaining"):
-			def["phantom_charges"] = int(ev.get("chargesRemaining", 0))
-		else:
-			def["phantom_charges"] = maxi(0, int(def.get("phantom_charges", 0)) - 1)
+		def["phantom_pending"] = false
+		def["phantom_charges"] = 0
 		return
-	if kind == "overclock_stack_gained" or kind == "overclock_ready":
+	if kind == "overclock_stack_gained" or kind == "overclock_ready" or kind == "overclock_vented":
 		if not slot.is_empty():
+			slot["overclock_active"] = true
 			slot["overclock_stacks"] = int(ev.get("stacks", 0))
 		return
 	if kind == "overclock_stacks_removed":
@@ -105,6 +111,18 @@ static func _apply(state: Dictionary, ev: Dictionary) -> void:
 	if kind == "dirty_trick_selected" or str(ev.get("dirtyTrick", "")) != "":
 		if not slot.is_empty():
 			slot["dirty_trick"] = str(ev.get("dirtyTrick", ""))
+			var tricks: Array = slot.get("dirty_tricks", [])
+			if typeof(ev.get("dirtyTricks", null)) == TYPE_ARRAY:
+				tricks = (ev.get("dirtyTricks") as Array).duplicate()
+			elif str(ev.get("dirtyTrick", "")) != "" and not tricks.has(ev.get("dirtyTrick")):
+				tricks.append(ev.get("dirtyTrick"))
+			slot["dirty_tricks"] = tricks
+			if ev.has("openingCharges"):
+				slot["stim_charges"] = int(ev.get("openingCharges", 0))
+		return
+	if kind == "stim_injector_charge":
+		if not slot.is_empty():
+			slot["stim_charges"] = int(ev.get("after", ev.get("openingCharges", 0)))
 		return
 	if kind == "kinetic_tantrum_strong" or kind == "kinetic_tantrum_normal":
 		if not slot.is_empty():
@@ -120,15 +138,27 @@ static func _apply(state: Dictionary, ev: Dictionary) -> void:
 	if str(ev.get("passive", "")).begins_with("Orbital") or kind.contains("drone") \
 			or kind.contains("fire_support") or kind.contains("acquire_target") \
 			or kind.contains("defensive_protocol"):
-		# Cosmic Engineer owns the drone. Prefer explicit side, then attacker —
-		# never defender (Fire Support hits tag the foe as defender and used to
-		# paint the bot chip under the wrong HP bar).
 		var eng_side := str(ev.get("side", ""))
 		if eng_side != "player" and eng_side != "opponent":
 			eng_side = str(ev.get("attacker", ""))
 		var eng_slot: Dictionary = _slot(state, eng_side)
 		if not eng_slot.is_empty():
-			eng_slot["drone_ready"] = true
+			if kind == "defensive_protocol_applied":
+				eng_slot["orbital_primed"] = "defensive_protocol"
+			elif kind == "acquire_target_applied":
+				eng_slot["orbital_primed"] = "acquire_target"
+			elif kind == "defensive_protocol_consumed" or kind == "acquire_target_consumed":
+				eng_slot["orbital_primed"] = ""
+				eng_slot["drone_ready"] = false
+			elif kind == "fire_support" or kind == "fire_support_dodged":
+				eng_slot["drone_ready"] = false
+			elif kind == "orbital_assistant_activated":
+				var effect := str(ev.get("effect", ""))
+				eng_slot["drone_ready"] = effect == "fire_support"
+				if effect == "defensive_protocol":
+					eng_slot["orbital_primed"] = "defensive_protocol"
+				elif effect == "acquire_target":
+					eng_slot["orbital_primed"] = "acquire_target"
 		return
 
 
@@ -205,17 +235,17 @@ static func status_chip_parts(side: Dictionary) -> Array:
 			"color": barrier_c,
 			"tip": "Astral Barrier",
 		})
-	if int(side.get("phantom_charges", 0)) > 0:
+	if bool(side.get("phantom_pending", false)) or int(side.get("phantom_charges", 0)) > 0:
 		parts.append({
 			"icon": "ghost",
-			"text": "Phantom ×%s" % int(side.get("phantom_charges", 0)),
+			"text": "Phantom primed",
 			"color": phantom_c,
-			"tip": "Phantom Signal charges",
+			"tip": "Phantom Signal — next incoming attack misses",
 		})
-	if int(side.get("overclock_stacks", 0)) > 0:
+	if bool(side.get("overclock_active", false)) or int(side.get("overclock_stacks", 0)) > 0:
 		parts.append({
 			"icon": "zap",
-			"text": "OC %s" % int(side.get("overclock_stacks", 0)),
+			"text": "OC %s/%s" % [int(side.get("overclock_stacks", 0)), OVERCLOCK_STACK_CAP],
 			"color": overclock_c,
 			"tip": "Overclock stacks",
 		})
@@ -234,21 +264,46 @@ static func status_chip_parts(side: Dictionary) -> Array:
 			"color": tantrum_c,
 			"tip": "Kinetic Tantrum · Normal",
 		})
-	var trick := str(side.get("dirty_trick", ""))
-	if not trick.is_empty():
+	var tricks: Array = side.get("dirty_tricks", [])
+	if tricks.is_empty():
+		var single := str(side.get("dirty_trick", ""))
+		if not single.is_empty():
+			tricks = [single]
+	for trick_raw in tricks:
+		var trick := str(trick_raw)
+		if trick.is_empty():
+			continue
 		var trick_lab := trick.replace("_", " ").capitalize()
+		if trick == "stim_injector":
+			var charges := int(side.get("stim_charges", 0))
+			trick_lab = "Stim Injector %s" % charges if charges > 0 else "Stim Injector"
 		parts.append({
 			"icon": "list-checks",
 			"text": trick_lab,
 			"color": trick_c,
 			"tip": "Dirty Trick · %s" % trick_lab,
 		})
-	if bool(side.get("drone_ready", false)):
+	var primed := str(side.get("orbital_primed", ""))
+	if primed == "defensive_protocol":
 		parts.append({
 			"icon": "bot",
-			"text": "Drone",
+			"text": "Def. Protocol",
 			"color": drone_c,
-			"tip": "Orbital Assistant ready",
+			"tip": "Orbital Assistant · Defensive Protocol primed",
+		})
+	elif primed == "acquire_target":
+		parts.append({
+			"icon": "bot",
+			"text": "Acquire Target",
+			"color": drone_c,
+			"tip": "Orbital Assistant · Acquire Target primed",
+		})
+	elif bool(side.get("drone_ready", false)):
+		parts.append({
+			"icon": "bot",
+			"text": "Fire Support",
+			"color": drone_c,
+			"tip": "Orbital Assistant",
 		})
 	return parts
 
@@ -403,6 +458,8 @@ static func _format_ability_log_bit(ev: Dictionary) -> String:
 	match kind:
 		"dirty_trick_selected":
 			detail = str(ev.get("dirtyTrick", "")).replace("_", " ").capitalize()
+		"stim_injector_charge":
+			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("after", 0))]
 		"orbital_assistant_activated":
 			detail = str(ev.get("effect", "")).replace("_", " ").capitalize()
 		"fire_support":
@@ -418,17 +475,23 @@ static func _format_ability_log_bit(ev: Dictionary) -> String:
 		"astral_barrier_restored":
 			detail = "Restored"
 		"phantom_signal_armed":
-			detail = "%s charges" % str(ev.get("charges", 2))
+			detail = "Primed"
+		"phantom_signal_reprimed":
+			detail = "Re-primed"
 		"phantom_signal", "phantom_signal_miss":
-			detail = "Miss · %s left" % str(ev.get("chargesRemaining", 0))
+			detail = "Scrambled"
 		"overclock_stack_gained":
-			detail = "Stack %s" % str(ev.get("stacks", 0))
+			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
 		"overclock_stacks_removed":
-			detail = "−%s → %s" % [str(ev.get("removed", 0)), str(ev.get("stacks", 0))]
+			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
+		"overclock_vented":
+			detail = "%s → %s" % [str(ev.get("before", 0)), str(ev.get("stacks", 0))]
 		"overclock_ready":
-			detail = "Armed"
+			detail = "0/6"
 		"defensive_protocol_applied":
 			detail = "Defensive Protocol"
+		"defensive_protocol_consumed":
+			detail = "−%s" % str(ev.get("amount", 0))
 		"acquire_target_applied":
 			detail = "Acquire Target"
 		_:

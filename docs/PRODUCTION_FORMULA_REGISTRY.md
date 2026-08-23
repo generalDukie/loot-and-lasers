@@ -17,6 +17,8 @@ The production XP denomination was increased by rewriting the authoritative XP f
 
 GES is not a production mechanic and is not registered.
 
+**No-magic-number policy:** gameplay/domain-significant numeric values must have named authoritative definitions. See `docs/PRODUCTION_NO_MAGIC_NUMBER_POLICY.md`. Constant names live in `src/lib/productionMath/constants.js` (formulas), `src/lib/classPassives.js` (class passives), and `src/lib/itemGeneration.js` (Gear stat counts).
+
 Accessory is the production Gear slot name (Test 18 `Ring`).
 
 ---

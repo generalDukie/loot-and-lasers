@@ -5,11 +5,16 @@
  * Do not assume JS Math.round, Python 3 round, and T18 rround are identical.
  */
 
+export const FUEL_QUANTIZE_STEP = 0.25;
+export const NOVA_QUANTIZE_STEP = 0.5;
+export const ROUND_HALF_UP_OFFSET = 0.5;
+export const ROUND_TO_MULTIPLE_OF_5_STEP = 5;
+
 /** Test 18 `rround(x) = int(math.floor(x + 0.5))` — round-half-up for x ≥ 0. */
 export function roundHalfUp(value) {
   const x = Number(value);
   if (!Number.isFinite(x)) return 0;
-  return Math.trunc(Math.floor(x + 0.5));
+  return Math.trunc(Math.floor(x + ROUND_HALF_UP_OFFSET));
 }
 
 /**
@@ -23,21 +28,21 @@ export function roundHalfEven(value) {
   const ax = Math.abs(x);
   const n = Math.floor(ax);
   const frac = ax - n;
-  if (frac < 0.5) return sign * n;
-  if (frac > 0.5) return sign * (n + 1);
-  return sign * (n % 2 === 0 ? n : n + 1);
+  if (frac < ROUND_HALF_UP_OFFSET) return sign * n;
+  if (frac > ROUND_HALF_UP_OFFSET) return sign * (n + 1);
+  return sign * (n % 2 === 0 ? n : n + 1); // magic-number-ok: even/odd banker's rounding
 }
 
 /** Test 18 `round5` — nearest multiple of 5, half-up on the quotient. */
 export function roundToMultipleOf5(value) {
   const x = Number(value);
   if (!Number.isFinite(x)) return 0;
-  return 5 * roundHalfUp(x / 5);
+  return ROUND_TO_MULTIPLE_OF_5_STEP * roundHalfUp(x / ROUND_TO_MULTIPLE_OF_5_STEP);
 }
 
 /**
  * Quantize to a positive step using round-half-up on the quotient.
- * Fuel uses step 0.25; Nova uses step 0.5.
+ * Fuel uses FUEL_QUANTIZE_STEP; Nova uses NOVA_QUANTIZE_STEP.
  */
 export function quantizeNearest(value, step) {
   const x = Number(value);
@@ -45,9 +50,6 @@ export function quantizeNearest(value, step) {
   if (!Number.isFinite(x) || !Number.isFinite(s) || s <= 0) return 0;
   return roundHalfUp(x / s) * s;
 }
-
-export const FUEL_QUANTIZE_STEP = 0.25;
-export const NOVA_QUANTIZE_STEP = 0.5;
 
 export function quantizeFuel(value) {
   return quantizeNearest(value, FUEL_QUANTIZE_STEP);

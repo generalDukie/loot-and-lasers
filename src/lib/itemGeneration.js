@@ -11,7 +11,14 @@
  */
 
 import {
+  GEAR_BUDGET_CURVE,
+  GEAR_BUDGET_FLOOR,
+  GEAR_BUDGET_LINEAR,
   GEAR_RARITY_BUDGET_MULT,
+  GEAR_SLOT_NORMAL_MULT,
+  GEAR_SLOT_PREMIUM_MULT,
+  GEAR_SLOTS,
+  PREMIUM_GEAR_SLOTS,
   canonicalGearOrigin,
   canonicalGearSlot,
   defaultShipmentEligible,
@@ -62,25 +69,27 @@ export const EQUIPMENT_SLOTS = [
   "ship_module",
 ];
 
-/** Slot budget multipliers — Weapon & Ship Module are 20% stronger. Delegates to productionMath. */
-export const SLOT_STAT_MULT = {
-  helmet: 1.0,
-  armor: 1.0,
-  legs: 1.0,
-  boots: 1.0,
-  neck: 1.0,
-  accessory: 1.0,
-  weapon: 1.2,
-  ship_module: 1.2,
-};
+/** Slot budget multipliers — Weapon & Ship Module use GEAR_SLOT_PREMIUM_MULT. */
+export const SLOT_STAT_MULT = Object.freeze(Object.fromEntries(
+  GEAR_SLOTS.map((slot) => [
+    slot,
+    PREMIUM_GEAR_SLOTS.includes(slot) ? GEAR_SLOT_PREMIUM_MULT : GEAR_SLOT_NORMAL_MULT,
+  ]),
+));
 
-export const RARITY_ATTR_COUNT = {
-  common: 1,
-  uncommon: 2,
-  rare: 3,
-  epic: 3,
-  legendary: 5,
-};
+export const COMMON_GEAR_STAT_COUNT = 1;
+export const UNCOMMON_GEAR_STAT_COUNT = 2;
+export const RARE_GEAR_STAT_COUNT = 3;
+export const EPIC_GEAR_STAT_COUNT = 3;
+export const LEGENDARY_GEAR_STAT_COUNT = 5;
+
+export const RARITY_ATTR_COUNT = Object.freeze({
+  common: COMMON_GEAR_STAT_COUNT,
+  uncommon: UNCOMMON_GEAR_STAT_COUNT,
+  rare: RARE_GEAR_STAT_COUNT,
+  epic: EPIC_GEAR_STAT_COUNT,
+  legendary: LEGENDARY_GEAR_STAT_COUNT,
+});
 
 /** Rarity STAT-budget multipliers — productionMath.GEAR_RARITY_BUDGET_MULT (Legendary 1.50). */
 export const RARITY_BUDGET_MULT = { ...GEAR_RARITY_BUDGET_MULT };
@@ -106,9 +115,7 @@ export const LEGENDARY_MIN_STAT_SHARE = 0.1;
  *   GEAR_BUDGET_CURVE  — early/mid front-loading (√L bend)
  *   GEAR_BUDGET_FLOOR  — Level-1 floor offset
  */
-export const GEAR_BUDGET_LINEAR = 1.4079;
-export const GEAR_BUDGET_CURVE = 2.2988;
-export const GEAR_BUDGET_FLOOR = 8.277;
+export { GEAR_BUDGET_LINEAR, GEAR_BUDGET_CURVE, GEAR_BUDGET_FLOOR };
 
 /**
  * Full equipped-set attribute totals (balance reference for progressing-player
@@ -145,7 +152,7 @@ function lerpWaypoints(level, points) {
       return y0 + (y1 - y0) * t;
     }
   }
-  const [xA, yA] = points[points.length - 2];
+  const [xA, yA] = points[points.length - 2]; // magic-number-ok: previous waypoint pair
   const [xB, yB] = points[points.length - 1];
   const slope = (yB - yA) / (xB - xA);
   return yB + slope * (L - xB);
@@ -178,11 +185,11 @@ export function getRarityBudgetMultiplier(rarity) {
 }
 
 export function getRarityAttributeCount(rarity) {
-  return RARITY_ATTR_COUNT[rarity] ?? 1;
+  return RARITY_ATTR_COUNT[rarity] ?? COMMON_GEAR_STAT_COUNT;
 }
 
 export function getRarityMinStatShare(rarity) {
-  return RARITY_MIN_STAT_SHARE[rarity] ?? 0.2;
+  return RARITY_MIN_STAT_SHARE[rarity] ?? RARITY_MIN_STAT_SHARE.rare;
 }
 
 /**

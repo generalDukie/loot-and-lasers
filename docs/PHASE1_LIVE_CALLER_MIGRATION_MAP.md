@@ -10,7 +10,7 @@ The production XP denomination was increased by rewriting the authoritative XP f
 
 `MAX_LEVELS_PER_XP_GRANT = 100000` is a runaway-loop safety guard in `grantCharacterXp`, not a gameplay level cap. L2000 is a validation horizon only.
 
-Combat event resolution still uses `src/lib/statEngine.js` / `MissionCombat.gd` (Phase 3). Character-sheet derived stats use productionMath.
+Combat event resolution uses `src/lib/arenaEngine.js` + `src/lib/combatMath.js` (Phase 3). Character-sheet derived stats use productionMath.
 
 ---
 

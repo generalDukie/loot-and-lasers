@@ -8,6 +8,7 @@ import { createOwnedMail } from "./mailService.js";
 import { tryCreateNotification } from "./notificationService.js";
 import { simulateBattle } from "./combatEngine.js";
 import { clock, getWeekKey, weekEndUtc } from "./time/index.js";
+import { secureRandom } from "../rewards/rng.js";
 
 export const GUILD_MAX_MEMBERS = 50;
 const RANK_PRIORITY = { officer: 2, member: 1 };
@@ -763,7 +764,10 @@ function simulateGauntlet(attackerFighters, defenderFighters) {
     const atk = attackerFighters[aIdx];
     while (defIdx < defenderFighters.length) {
       const def = defenderFighters[defIdx];
-      const battle = simulateBattle(atk.character, def.character, atk.items || [], def.items || []);
+      const battle = simulateBattle(atk.character, def.character, atk.items || [], def.items || [], {
+        rng: secureRandom,
+        content: "arena",
+      });
       const atkWon = battle.winner === "player";
       duels.push({
         attacker_name: atk.character.name,

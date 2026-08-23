@@ -208,7 +208,7 @@ const CLASS_CATALOG := {
 		"baseType": "agility",
 		"special": {
 			"name": "Phantom Signal",
-			"effect": "The first 2 attacks made against the Shadow Operative each combat are guaranteed to hit a hologram and miss. These do not count as dodges.",
+			"effect": "The first incoming attack against the Shadow Operative is a guaranteed miss (not a Dodge). Every 10th Shadow turn re-primes the next incoming attack.",
 			"identity": "Leave only a hologram for the opening volleys.",
 		},
 	},
@@ -219,7 +219,7 @@ const CLASS_CATALOG := {
 		"baseType": "intellect",
 		"special": {
 			"name": "Overclock",
-			"effect": "Each attack (regardless of hit or miss) grants a stack that increases damage dealt by 12.5% and damage taken by 5%. Enemy critical hits remove 3 stacks.",
+			"effect": "Each attack attempt grants an Overclock stack (max 6): +12.5% damage dealt and +5% damage taken per stack. A 6-stack attack resolves at full power, then vents to 4. Enemy Crits remove 2 stacks.",
 			"identity": "Push the core until it screams.",
 		},
 	},
@@ -241,7 +241,7 @@ const CLASS_CATALOG := {
 		"baseType": "agility",
 		"special": {
 			"name": "Dirty Tricks",
-			"effect": "At the start of each fight, the Void Runner has an equal chance to gain one trick for the combat: Flashbang (+7.5% Dodge), Targeting Beacon (+7.5% Crit Chance), or Unlicensed Stimulant (2 attacks before the opponent can act).",
+			"effect": "At combat start, one random Dirty Trick. Distinct second and third tricks deploy at total combat turns 14 and 28. Flashbang +7.5 Dodge, Targeting Beacon +7.5 Crit (both cap-bypass), Stim Injector takes the next two attack turns.",
 			"identity": "Never fight fair.",
 		},
 	},
@@ -252,7 +252,7 @@ const CLASS_CATALOG := {
 		"baseType": "intellect",
 		"special": {
 			"name": "Orbital Assistant",
-			"effect": "Every 2nd turn, the Engineer’s drone has an equal chance to provide Fire Support (Deal 60% of the engineer's base damage as True Damage), Defensive Protocol (25% reduction in damage from next hit the engineer takes), or Acquire Target (Increases the critical strike chance of the engineer's next attack by 40%).",
+			"effect": "On Engineer turns 2, 4, 6, 8, 10, then every 3rd turn from 13, the drone picks Fire Support (60% True Damage), Defensive Protocol (−25% next hit), or Acquire Target (+40 Crit on next attack).",
 			"identity": "Wins through gadgets and sustained pressure.",
 		},
 	},

@@ -17,11 +17,12 @@ import {
   CLASS_PRIMARY_INDEX,
   permanentAttributePurchaseCost,
   missionXpReward,
-  BACKPACK_UNEQUIPPED_GEAR_CAP,
+  BACKPACK_UNEQUIPPED_ITEM_CAP,
+  XP_REWARD_EFFICIENCY,
 } from "./productionMath.js";
 
 /** One production XP-efficiency factor. Mission XP applies it twice (certified). */
-export const MISSION_XP_REBALANCE = 0.85;
+export const MISSION_XP_REBALANCE = XP_REWARD_EFFICIENCY;
 /**
  * Dungeon DRU → XP conversion: 1 DRU = 2 fuel-equivalents of XP at the
  * enemy's level. Single authoritative balance constant.
@@ -71,7 +72,7 @@ const MILLISECONDS_PER_HOUR = MILLISECONDS_PER_SECOND
   * MINUTES_PER_HOUR;
 
 const NOVA_ITEM_LEVEL_MULTIPLIER = 0.1;
-const BASE_INVENTORY_CAP = BACKPACK_UNEQUIPPED_GEAR_CAP;
+const BASE_INVENTORY_CAP = BACKPACK_UNEQUIPPED_ITEM_CAP;
 const MISSION_DURATION_STEP_SECONDS = 15;
 const MISSION_REWARD_VARIANCE = 0.10;
 const FUEL_COST_PRECISION_SCALE = 100;
@@ -457,7 +458,7 @@ export function getInventoryCap(_character) {
   void _character;
   // Production Backpack is a hard 10 unequipped items (Gear, stims, junk).
   // Cargo Hold / entitlements do not expand it.
-  return BACKPACK_UNEQUIPPED_GEAR_CAP;
+  return BACKPACK_UNEQUIPPED_ITEM_CAP;
 }
 
 // Wire for applyCharacterRewards without an import cycle (rewards ↔ this module).

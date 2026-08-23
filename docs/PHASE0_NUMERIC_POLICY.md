@@ -2,6 +2,8 @@
 
 Phase 0 established units and rounding. XP unit policy was later locked as completely 1:1 (post-Phase 0 user override / Phase 1). Certified formulas are unchanged.
 
+Named coefficient authorities live in `src/lib/productionMath/constants.js`. See `docs/PRODUCTION_NO_MAGIC_NUMBER_POLICY.md`.
+
 ## Canonical design units
 
 Certified Test 18 formulas are expressed in **design units**. A later production decision raised the XP denomination by rewriting the authoritative XP coefficients (`mission_xpf(1)=100`, `xpToNext(1)=133`). This is NOT an XP scaling layer.

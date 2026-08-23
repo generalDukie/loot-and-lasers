@@ -13,6 +13,8 @@ Banner: **AUTHORITATIVE FORMULA MODULE — PHASE 1 LIVE FOR CHARACTER PROGRESSIO
 
 The production XP denomination was increased by rewriting the authoritative XP formulas and constants. This is NOT an XP scaling layer.
 
+**Player Base Damage (native formula):** `playerBaseDamage(Primary) = PLAYER_BASE_DAMAGE_FLAT + PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT × Primary^PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT` → `37.5 + 0.008 × Primary^1.727`. This is the live player attack baseline. There is no live `PLAYER_BASE_DAMAGE_SCALE`. Player combat-context multipliers are `PLAYER_COMBAT_CONTEXT_MULT` (×1.0) in every content. Dungeon/Wormhole enemies use the same native polynomial (`dungeonWormholeEnemyBaseDamage`) then `DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT` (×1.10). Mission enemies still use the historical unscaled `rawStandardAttack` until Phase 4.
+
 `XP_STARDUST_SCALE = 10` is **LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION**. It is not production XP policy and not production economy authority.
 
 GES is not a production mechanic and is not registered.
@@ -174,7 +176,9 @@ The certified `attrcost` curve itself is unchanged. Each attribute's first five 
 
 HP: `roundHalfEven(50+2.5*VIT+0.008*VIT^2)` — combat Python `round`. **A**.
 
-Raw ATK: `15+0.0032*Primary^1.727` (no variance). **A**.
+**Player Base Damage (live):** `playerBaseDamage = 37.5 + 0.008 × Primary^1.727` (`PLAYER_BASE_DAMAGE_FLAT` / `PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT` / `PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT`). Algebraically identical to the historical `(15 + 0.0032 × Primary^1.727) × 2.5`. Character-sheet Damage is `roundHalfUp(playerBaseDamage)`. Combat starts from the unrounded canonical value. No universal player scale after this polynomial.
+
+**Mission-enemy / historical unscaled polynomial:** `rawStandardAttack = 15 + 0.0032 × Primary^1.727` (`STANDARD_ATTACK_FLAT` / `RAW_ATTACK_COEFFICIENT` / `RAW_ATTACK_EXPONENT`). **Technical debt until Phase 4.** Not the player formula. Dungeon/Wormhole enemies no longer use this as live Base Damage.
 
 Variance: explicit Uniform(0.90,1.10) all archetypes. **E** (remove AGI extra U(0.80,1.05)).
 
@@ -200,7 +204,7 @@ Base ramp: EL<25 → `5+10*(EL-1)/24` else 15. **A**. EL=25 is mature 15.
 
 Outgoing: certified knots L1=0.30 … L200+=12.00, constant 12 thereafter. **C** classified as already-infinite certified architecture. Smooth 4-hill/sigmoid retry hits knots (≤0.06%) but distorts the L15–L20 cliff (L25 error ~67%); exact interpolation retained as a behavioral-fidelity exception.
 
-Context: Mission player ×1.0; D/WH player ×2.5 enemy ×2.75; Arena ×2.5 symmetric.
+Context (live): player ×1.0 in every content (native `playerBaseDamage`). Arena opponents use the same player formula ×1.0. Dungeon/Wormhole **enemy** native combat-scale Base Damage × `DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT` (×1.10), which preserves former unscaled-raw ×2.75. Mission enemies remain on historical `rawStandardAttack` with live context ×1.0 until Phase 4. Certified Mission enemy outgoing knots remain locked and staged OFF.
 
 ---
 

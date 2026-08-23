@@ -14,6 +14,8 @@ The production XP denomination was increased by rewriting the authoritative XP f
 
 Historical extraction notes below that describe live `getMissionXpPerFuel` as `round(design)×10` or applying `XP_STARDUST_SCALE` to XP are **obsolete**. Live Phase 1 XP uses canonical design units.
 
+**Player Base Damage (native formula):** Live player combat uses `37.5 + 0.008 × Primary^1.727`. There is no live `PLAYER_BASE_DAMAGE_SCALE`. Player context is ×1.0 everywhere. Dungeon/Wormhole enemies use the same native polynomial then ×1.10 (preserving former unscaled ×2.75). The Phase 0 “Context mults … 2.5 / 2.75 / 2.5” row is extraction-era, not live authority. Mission enemies still use historical `15 + 0.0032 × Primary^1.727` until Phase 4.
+
 `XP_STARDUST_SCALE = 10` is **LEGACY ECONOMY IMPLEMENTATION — PENDING SYSTEM-SPECIFIC MIGRATION/RECONCILIATION**. It is not production XP policy and not production economy authority.
 
 Phase 1 later wired progression callers (`xpToNext`, live `missionXpPerFuel` units, starting/free attrs, attrcost, sheet derived). Other rows remain later-phase.

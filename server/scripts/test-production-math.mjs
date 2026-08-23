@@ -233,6 +233,23 @@ test("raw attack has no variance", () => {
   assert.equal(M.standardAttackWithVariance(15, 1.1), raw * 1.1);
 });
 
+test("player Base Damage is the native combat-scale polynomial", () => {
+  const p = 15;
+  const native = M.PLAYER_BASE_DAMAGE_FLAT
+    + M.PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT * p ** M.PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT;
+  assert.equal(M.playerBaseDamage(p), native);
+  assert.equal(M.dungeonWormholeEnemyBaseDamage(p), native);
+  const historical = (M.STANDARD_ATTACK_FLAT + M.RAW_ATTACK_COEFFICIENT * p ** M.RAW_ATTACK_EXPONENT) * 2.5;
+  assert.ok(Math.abs(M.playerBaseDamage(p) - historical) <= 64 * Number.EPSILON * Math.max(1, historical));
+  assert.equal(M.combatContextMultiplier({ content: "dungeon", role: "player" }), M.PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(M.combatContextMultiplier({ content: "arena", role: "player" }), M.PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(M.combatContextMultiplier({ content: "arena", role: "enemy" }), M.PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(M.combatContextMultiplier({ content: "mission", role: "player" }), M.PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(M.combatContextMultiplier({ content: "dungeon", role: "enemy" }), M.DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT);
+  assert.equal(2.5 * M.DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT, 2.75);
+  assert.equal(M.PLAYER_BASE_DAMAGE_SCALE, undefined);
+});
+
 test("generic derived-stat + Crit specialization", () => {
   const L = 100;
   const fm = 700;

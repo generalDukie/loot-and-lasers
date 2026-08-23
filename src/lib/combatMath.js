@@ -14,13 +14,15 @@ import {
   dodgeChance,
   maxHp,
   missionEnemyBaseDamage,
+  playerBaseDamage,
+  dungeonWormholeEnemyBaseDamage,
   rawStandardAttack,
   resistances,
   roundHalfEven,
   unroundedMaxHp,
 } from "@/lib/productionMath";
 
-export { STANDARD_ATTACK_FLAT, CRIT_DAMAGE_MULT };
+export { STANDARD_ATTACK_FLAT, CRIT_DAMAGE_MULT, playerBaseDamage, dungeonWormholeEnemyBaseDamage };
 export const ASTRAL_BARRIER_MAX_HP_FRAC = 0.15;
 /** Fallback unit-interval sample when no RNG function is supplied. */
 const UNIT_INTERVAL_MIDPOINT = 0.5;
@@ -112,6 +114,12 @@ export function derivedCombatStats(level, attrs, className, { missionEnemy = fal
   const flat = missionEnemy && !dungeonEnemy
     ? missionEnemyBaseDamage(level)
     : STANDARD_ATTACK_FLAT;
+  const missionGenerated = !!(missionEnemy && !dungeonEnemy);
+  const canonical = missionGenerated
+    ? rawAttack(primary, flat)
+    : dungeonEnemy
+      ? dungeonWormholeEnemyBaseDamage(primary)
+      : playerBaseDamage(primary);
   return {
     archetype,
     damageChannel: damageChannelForArchetype(archetype),
@@ -124,7 +132,8 @@ export function derivedCombatStats(level, attrs, className, { missionEnemy = fal
     intellectValue: a.int,
     vitalityValue: a.vit,
     damageBase: flat,
-    standardAttack: rawAttack(primary, STANDARD_ATTACK_FLAT),
+    standardAttack: canonical,
+    canonicalDamage: canonical,
   };
 }
 

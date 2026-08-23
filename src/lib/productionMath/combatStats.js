@@ -25,6 +25,9 @@ import {
   NATURAL_CRIT_CAP,
   NATURAL_DODGE_CAP,
   NATURAL_RESIST_CAP,
+  PLAYER_BASE_DAMAGE_FLAT,
+  PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT,
+  PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT,
   RAW_ATTACK_COEFFICIENT,
   RAW_ATTACK_EXPONENT,
   REFLEX_BLEND_HALF_WIDTH,
@@ -54,11 +57,33 @@ export function maxHp(vitality) {
   return Math.max(1, roundHalfEven(unroundedMaxHp(vitality)));
 }
 
-/** Raw standard attack. Variance is NOT included. Optional `flat` replaces the mature STANDARD_ATTACK_FLAT. */
+/**
+ * Mission-enemy / historical unscaled polynomial. Variance is NOT included.
+ * Optional `flat` replaces the mature STANDARD_ATTACK_FLAT (Mission EL ramp).
+ * Not player Base Damage — see playerBaseDamage.
+ */
 export function rawStandardAttack(primaryAttr, flat = STANDARD_ATTACK_FLAT) {
   const p = attrNum(primaryAttr);
   const base = Number.isFinite(Number(flat)) ? Number(flat) : STANDARD_ATTACK_FLAT;
   return base + RAW_ATTACK_COEFFICIENT * p ** RAW_ATTACK_EXPONENT;
+}
+
+/**
+ * Canonical player Base Damage (unrounded). Native combat-scale polynomial.
+ * No universal player scale is applied after this value.
+ */
+export function playerBaseDamage(primaryAttr) {
+  const p = attrNum(primaryAttr);
+  return PLAYER_BASE_DAMAGE_FLAT
+    + PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT * p ** PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT;
+}
+
+/**
+ * Dungeon/Wormhole enemy canonical Base Damage (unrounded).
+ * Same native combat-scale polynomial as players; context is ×1.10, not ×2.75.
+ */
+export function dungeonWormholeEnemyBaseDamage(primaryAttr) {
+  return playerBaseDamage(primaryAttr);
 }
 
 /** Universal standard-attack variance Uniform(VARIANCE_MIN, VARIANCE_MAX). RNG stays outside. */

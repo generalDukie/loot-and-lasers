@@ -298,17 +298,37 @@ export const STIM_MAX_ACTIVE_EFFECTS = 3;
 export const STIM_UNCOMMON_LEVEL_MAX = 19;
 export const STIM_RARE_LEVEL_MAX = 49;
 
+/**
+ * Player combat-context tempo is ×1 everywhere. Player Base Damage is the native
+ * combat-scale polynomial (PLAYER_BASE_DAMAGE_*), not a scaled legacy raw.
+ */
+export const PLAYER_COMBAT_CONTEXT_MULT = 1;
+/**
+ * Dungeon/Wormhole enemy tempo after native combat-scale Base Damage.
+ * Preserves former unscaled-raw × 2.75 because 2.5 × 1.10 = 2.75.
+ */
+export const DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT = 1.10;
+
+/** Canonical player (and Dungeon/Wormhole enemy) Base Damage flat. */
+export const PLAYER_BASE_DAMAGE_FLAT = 37.5;
+export const PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT = 0.008;
+export const PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT = 1.727;
+
 export const COMBAT_CONTEXT_MULT = Object.freeze({
-  missionPlayer: 1,
-  dungeonWormholePlayer: 2.5,
-  dungeonWormholeEnemy: 2.75,
-  arena: 2.5,
+  missionPlayer: PLAYER_COMBAT_CONTEXT_MULT,
+  dungeonWormholePlayer: PLAYER_COMBAT_CONTEXT_MULT,
+  dungeonWormholeEnemy: DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT,
+  arena: PLAYER_COMBAT_CONTEXT_MULT,
 });
 
-/** Mature standard-attack flat (players, dungeon foes, Mission EL≥25). */
+/**
+ * Mission-enemy / historical unscaled polynomial flat.
+ * Players and Dungeon/Wormhole enemies do not use this as live Base Damage.
+ * Phase 4 must reconcile Mission enemy construction onto combat-scale damage.
+ */
 export const STANDARD_ATTACK_FLAT = 15;
 export const RAW_ATTACK_COEFFICIENT = 0.0032;
-export const RAW_ATTACK_EXPONENT = 1.727;
+export const RAW_ATTACK_EXPONENT = PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT;
 export const CRIT_DAMAGE_MULT = 1.5;
 
 /** Certified HP: round_half_even(BASE + PER_VIT*VIT + SQ*VIT^2). */

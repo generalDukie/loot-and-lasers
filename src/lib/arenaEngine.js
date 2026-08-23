@@ -493,6 +493,7 @@ export function buildFighter(c, items, side, opts = {}) {
     vitalityValue: derived.vitalityValue,
     archetype: derived.archetype,
     standardAttack: derived.standardAttack,
+    canonicalDamage: derived.canonicalDamage,
     damageBase: derived.damageBase,
     crit: derived.crit,
     critMult: CRIT_DAMAGE_MULT || CRIT_MULT,
@@ -512,8 +513,10 @@ export function buildFighter(c, items, side, opts = {}) {
 /**
  * Resolve one basic hit after dodge/miss has already been resolved.
  * Order (Test 18 / Phase 3):
- * raw → variance → Overclock outgoing → Crit/Tantrum → 3-channel resist
+ * canonical/raw → variance → Overclock outgoing → Crit/Tantrum → 3-channel resist
  * → Overclock incoming → context multiplier → round.
+ * Player and Dungeon/Wormhole-enemy canonical damage is the native combat-scale
+ * polynomial; player context is ×1, Dungeon/Wormhole enemy context is ×1.10.
  */
 export function resolveBasicHit(attacker, defender, {
   canCrit = true,
@@ -528,7 +531,9 @@ export function resolveBasicHit(attacker, defender, {
   variance = null,
 } = {}) {
   const flat = attacker.damageBase != null ? attacker.damageBase : STANDARD_ATTACK_FLAT;
-  const raw = rawAttack(attacker.primaryValue, flat);
+  const raw = attacker.canonicalDamage != null
+    ? Number(attacker.canonicalDamage)
+    : rawAttack(attacker.primaryValue, flat);
   const rolledVariance = rollUniversalVariance(rng, variance);
   let damage = raw * rolledVariance;
   damage *= outgoingMult;

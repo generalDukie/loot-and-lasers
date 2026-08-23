@@ -34,6 +34,8 @@ import {
   combatContextMultiplier,
   missionEnemyOutgoingMultiplier,
   missionEnemyBaseDamage,
+  PLAYER_COMBAT_CONTEXT_MULT,
+  DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT,
   VARIANCE_MIN,
   VARIANCE_MAX,
 } from "../../src/lib/productionMath/index.js";
@@ -114,7 +116,7 @@ test("Universal variance injects 0.90 / 1.00 / 1.10", () => {
 });
 
 test("Context multipliers: Mission / Dungeon / Arena", () => {
-  assert.equal(combatContextMultiplier({ content: "mission", role: "player" }), 1);
+  assert.equal(combatContextMultiplier({ content: "mission", role: "player" }), PLAYER_COMBAT_CONTEXT_MULT);
   assert.equal(missionEnemyOutgoingMultiplier(1), 0.3);
   assert.equal(missionEnemyOutgoingMultiplier(10), 0.35);
   assert.equal(missionEnemyOutgoingMultiplier(15), 0.5);
@@ -122,15 +124,16 @@ test("Context multipliers: Mission / Dungeon / Arena", () => {
   assert.equal(missionEnemyOutgoingMultiplier(50), 6);
   assert.equal(missionEnemyOutgoingMultiplier(100), 10);
   assert.equal(missionEnemyOutgoingMultiplier(200), 12);
-  assert.equal(combatContextMultiplier({ content: "dungeon", role: "player" }), 2.5);
-  assert.equal(combatContextMultiplier({ content: "dungeon", role: "enemy" }), 2.75);
-  assert.equal(combatContextMultiplier({ content: "arena", role: "player" }), 2.5);
-  assert.equal(combatContextMultiplier({ content: "arena", role: "enemy" }), 2.5);
+  assert.equal(combatContextMultiplier({ content: "dungeon", role: "player" }), PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(combatContextMultiplier({ content: "dungeon", role: "enemy" }), DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT);
+  assert.equal(combatContextMultiplier({ content: "arena", role: "player" }), PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(combatContextMultiplier({ content: "arena", role: "enemy" }), PLAYER_COMBAT_CONTEXT_MULT);
   assert.equal(APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT, false);
-  assert.equal(contextMultiplierFor("mission", "enemy", 50), 1);
-  assert.equal(contextMultiplierFor("mission", "player", 50), 1);
-  assert.equal(contextMultiplierFor("dungeon", "enemy", 50), 2.75);
-  assert.equal(contextMultiplierFor("arena", "enemy", 50), 2.5);
+  assert.equal(contextMultiplierFor("mission", "enemy", 50), PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(contextMultiplierFor("mission", "player", 50), PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(contextMultiplierFor("dungeon", "enemy", 50), DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT);
+  assert.equal(contextMultiplierFor("dungeon", "player", 50), PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(contextMultiplierFor("arena", "enemy", 50), PLAYER_COMBAT_CONTEXT_MULT);
 });
 
 test("Mission early base-damage ramp is separate from outgoing curve", () => {

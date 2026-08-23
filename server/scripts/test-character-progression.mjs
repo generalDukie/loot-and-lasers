@@ -3,7 +3,7 @@
  * XPToNext, grants, 35/35/20/5/5 allocation, attrcost, high-level stress.
  */
 import assert from "node:assert/strict";
-import { xpToNext, freeLevelAttributes, classPrimaryIndex, attributePurchaseCost, STARTING_ATTRIBUTES, STARTING_NOVA, STARTING_STARDUST, FREE_FUEL_PER_GAME_DAY, maxHp, rawStandardAttack, critChance, dodgeChance, resistances, classArchetype } from "../../src/lib/productionMath/index.js";
+import { xpToNext, freeLevelAttributes, classPrimaryIndex, attributePurchaseCost, STARTING_ATTRIBUTES, STARTING_NOVA, STARTING_STARDUST, FREE_FUEL_PER_GAME_DAY, maxHp, playerBaseDamage, critChance, dodgeChance, resistances, classArchetype, roundHalfUp } from "../../src/lib/productionMath/index.js";
 import { expForLevel, getMissionXpPerFuel } from "../src/shared/rewards.js";
 import {
   grantCharacterXp,
@@ -173,7 +173,7 @@ const sheet = computeProductionSheetDerived(
   { class: "Vanguard", level: 1 },
 );
 assert.equal(sheet.health, maxHp(14));
-assert.equal(sheet.damage, Math.trunc(Math.floor(rawStandardAttack(15) + 0.5)));
+assert.equal(sheet.damage, roundHalfUp(playerBaseDamage(15)));
 assert.ok(sheet.critChance >= 0 && sheet.critChance <= 30);
 assert.ok(sheet.dodgeChance >= 0 && sheet.dodgeChance <= 25);
 const resist = resistances(1, [15, 8, 6, 14, 7], classArchetype("Vanguard"));

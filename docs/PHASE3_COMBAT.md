@@ -10,11 +10,11 @@ Void Runner **Stim Injector** is a class passive and is in scope.
 
 | Caller | Old path | New authoritative engine | Context | Passive authority | Client presentation | Old disposition |
 |---|---|---|---|---|---|---|
-| **Mission** | `PrepareMissionCombat` → `simulateMissionCombat` → `simulateBattle` | Same `SimulateCombat` → `arenaEngine` + `combatMath` | Live `content: "mission"` player ×1.0 / enemy ×1.0 (certified EL curve **staged** until Phase 4) | `classPassives.js`; foes suppressed | Godot overlay replays `events` | Curve locked in productionMath; live application deferred |
-| **Arena** | `PrepareArenaCombat` → `simulateArenaCombat` → same engine, old math | Same engine | `content: "arena"` — both ×2.5 | Full class passives for players and bots | `ArenaManager` → same overlay | FinishArenaBattle still reads committed pending winner (not client `won` on ladder) |
-| **Dungeon** | `PrepareDungeonCombat` → `simulateDungeonCombat` | Same engine | `content: "dungeon"` (`mode: "dungeon"`) — player ×2.5 / enemy ×2.75 | Foes suppressed; player passives live | `DungeonManager` → same overlay | Reward tables **not** migrated |
+| **Mission** | `PrepareMissionCombat` → `simulateMissionCombat` → `simulateBattle` | Same `SimulateCombat` → `arenaEngine` + `combatMath` | Live `content: "mission"` player ×1.0 (canonical Base Damage) / enemy ×1.0 (certified EL curve **staged** until Phase 4) | `classPassives.js`; foes suppressed | Godot overlay replays `events` | Curve locked in productionMath; live application deferred |
+| **Arena** | `PrepareArenaCombat` → `simulateArenaCombat` → same engine, old math | Same engine | `content: "arena"` — both ×1.0; both sides use canonical player Base Damage | Full class passives for players and bots | `ArenaManager` → same overlay | FinishArenaBattle still reads committed pending winner (not client `won` on ladder) |
+| **Dungeon** | `PrepareDungeonCombat` → `simulateDungeonCombat` | Same engine | `content: "dungeon"` (`mode: "dungeon"`) — player ×1.0 / enemy native Base Damage ×1.10 | Foes suppressed; player passives live | `DungeonManager` → same overlay | Reward tables **not** migrated |
 | **Wormhole** | Same prepare as dungeon (`viewing_wormhole` meta) | Same engine | `mode: "dungeon"` / `content: "dungeon"` (identical multipliers) | Same as dungeon | Same overlay | Reward formulas **not** migrated |
-| **Guild war** | Node `guildSocialService.simulateGauntlet` | Same `simulateBattle` | `content: "arena"` (PvP ×2.5 both) | Full class passives | Existing guild presentation | `src/lib/guildEngine.js` duplicate gauntlet is not the live Node path |
+| **Guild war** | Node `guildSocialService.simulateGauntlet` | Same `simulateBattle` | `content: "arena"` (PvP ×1.0 both; canonical player damage) | Full class passives | Existing guild presentation | `src/lib/guildEngine.js` duplicate gauntlet is not the live Node path |
 | **Nakama `combat_simulate`** | `modules/combat.lua` + `combat_formulas.lua` | **Not a live Godot caller** | n/a | Old Lua passives/formulas | Unused by Godot Prepare* | Historical / training RPC. Dual-engine **blocker only if** a client still invokes it. Godot does not. |
 
 Combatant stats:
@@ -35,7 +35,7 @@ Documented and implemented in `resolveNormalAttack` / `simulateBattle`:
 3. Snapshot Kinetic Tantrum / Acquire Target modifiers
 4. Phantom Signal forced miss (not Dodge; no Kinetic)
 5. Natural Dodge unless Strong Tantrum guaranteed hit
-6. Raw attack (`missionEnemy` EL&lt;25: `5+10*(EL-1)/24` else 15; plus `0.0032*primary^1.727`)
+6. Canonical attack. Players / Arena opponents / Dungeon-Wormhole enemies: native `playerBaseDamage` / `dungeonWormholeEnemyBaseDamage` (`37.5 + 0.008 × Primary^1.727`). Mission enemies (temporary): historical `rawStandardAttack` (`missionEnemy` EL&lt;25: `5+10*(EL-1)/24` else 15; plus `0.0032 × Primary^1.727`).
 7. Universal variance Uniform(0.90, 1.10)
 8. Overclock outgoing
 9. Crit / Tantrum / Acquire Target (natural Crit damage ×1.5; Strong ×2.0; Normal ×1.5)
@@ -82,16 +82,22 @@ Hit events expose `resistPercent` / `resistedAmount`. Log line adds `· resist �
 
 ## Context multipliers
 
+Player Damage is universal across combat contexts. Context-specific player tempo multipliers are ×1.0. Differences come from enemy construction, enemy context rules, resistance, Crit, variance, passives, and content mechanics — not a hidden blanket player damage multiplier.
+
 Centralized in `productionMath.combatContextMultiplier` / `combatMath.contextMultiplierFor`:
 
 | Content | Player outgoing | Enemy outgoing |
 |---|---|---|
 | Mission (certified primitive) | ×1.0 | `missionEnemyOutgoingMultiplier(EL)` (L1=0.30 … L200+=12.00) |
 | Mission (**live settlement, staged**) | ×1.0 | ×1.0 until Phase 4 |
-| Dungeon / Wormhole | ×2.5 | ×2.75 |
-| Arena / PvP / guild | ×2.5 | ×2.5 |
+| Dungeon / Wormhole | ×1.0 | ×1.10 (`DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT`) on native combat-scale Base Damage |
+| Arena / PvP / guild | ×1.0 | ×1.0 (opponents use native player Base Damage) |
 
-The locked curve is unchanged in `productionMath`. Live Mission combat does **not** apply it (`APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT = false`) because Test 18 paired that curve with EPA-complete players. Live starting+free+Gear players at L50 were wiped when ×6 hit 35% EPA foes. Phase 4 Mission construction/player-fill owns enabling the curve.
+Native player Base Damage: `playerBaseDamage = 37.5 + 0.008 × Primary^1.727`. Algebraically identical to the historical `(15 + 0.0032 × Primary^1.727) × 2.5`. There is no live `PLAYER_BASE_DAMAGE_SCALE`. Dungeon/Wormhole enemies use the same native polynomial, then ×1.10, so they deal about 10% more baseline damage than an equivalently constructed combatant (preserving former unscaled ×2.75).
+
+Mission enemies remain on historical `rawStandardAttack` until Phase 4.
+
+The locked Mission enemy outgoing curve is unchanged in `productionMath`. Live Mission combat does **not** apply it (`APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT = false`) because Test 18 paired that curve with EPA-complete players. Live starting+free+Gear players at L50 were wiped when ×6 hit 35% EPA foes. Phase 4 Mission construction/player-fill owns enabling the curve **and** rebalancing Mission enemies around the now-universal player damage scale. Do not add a Mission player ×0.4 (or similar) inverse scalar.
 
 Mission early base-damage ramp is **separate** from the outgoing curve.
 
@@ -136,7 +142,7 @@ Also: `telemetry` `{ totalTurns, playerTurns, opponentTurns, playerDamage, oppon
 | Shadow Operative | Two charges | First incoming forced miss; re-prime every 10th **Shadow own turn**. Not natural Dodge | Yes | phase3 + passives | Phantom primed chip; FORCED MISS |
 | Void Runner | One trick at start | Distinct tricks at start, total turn 14, 28. Flashbang/Beacon +7.5pp cap-bypass. Stim Injector = next two attack turns (`openingCharges=2`) | Yes | phase3 + passives | Trick name chips; Stim Injector N |
 | Technomancer | Uncapped; Crit −3 | Cap 6; +12.5% out / +5% in per stack; attack at 6 then vent 6→4; enemy Crit −2 floor 0 | Yes | phase3 + passives | OC n/6 from combat start (`overclock_ready`) |
-| Cosmic Engineer | Every 2 turns forever | Own turns 2/4/6/8/10 then 13,16,19… Equal 1/3 Fire / Defense / Acquire. Fire Support 60% INT raw × context, True, dodgeable | Yes | phase3 + passives | Def. Protocol / Acquire Target chips; Fire Support log |
+| Cosmic Engineer | Every 2 turns forever | Own turns 2/4/6/8/10 then 13,16,19… Equal 1/3 Fire / Defense / Acquire. Fire Support 60% of canonical player Base Damage (INT primary) × context (×1.0), True, dodgeable | Yes | phase3 + passives | Def. Protocol / Acquire Target chips; Fire Support log |
 
 ---
 
@@ -185,8 +191,8 @@ Existing combat window, HP bars, turn flow, log feed, buttons, animations, resul
 | `statEngine.getMaxHP` `Math.round` | Sheet helper. Combat HP is `productionMath.maxHp` (`roundHalfEven`). |
 | `combatEngine.js` re-exports of AGI_VARIANCE / mitigation | Façade for old tests. Settlement exports `simulateBattle` from arenaEngine. |
 | `modules/lib/combat_formulas.lua` AGI 0.80–1.05 | Historical Nakama `combat_simulate`. Godot live path is Node Prepare*. |
-| `loot&lasers/Scripts/MissionCombat.gd` | Presentation / foe-preview mirror. **Not** mission/dungeon settlement. |
-| Godot `StatsRules.gd` Armor/Tech labels | Character-sheet presentation (Phase 1 productionMath). Not combat authority. |
+| `loot&lasers/Scripts/MissionCombat.gd` | Presentation / foe-preview mirror. **Not** mission/dungeon settlement. Unscaled polynomial (not player Base Damage). |
+| Godot `StatsRules.gd` Damage | Character-sheet presentation of canonical `playerBaseDamage`. Combat authority remains server `combatMath`. |
 | Direct-challenge `FinishArenaBattle` `body.won` fallback | Legacy challenge path; ladder uses pending combat. Not a second math engine. |
 | Consumable Stim combat mods | Existing `applyBuffs` last step. **Not expanded** (Phase 5). |
 
@@ -199,6 +205,7 @@ No second live JS engine can settle Mission/Arena/Dungeon/Wormhole.
 Commands (from repo root):
 
 - `npm run test:phase3-combat` — 21 fixtures (variance, context, ramp, six classes, events, gear-once, snapshot stats, Fire Support True, Stim Injector charges, L1–L2000 finite, death)
+- `npm run test:damage-scale` — native player polynomial / dungeon enemy ×1.10 parity / Mission enemy unscaled / staged outgoing OFF
 - `npm run test:combat` — 23/23
 - `npm run test:passives` — 27/27
 - `npm run test:mission-enemy` — generation + combat input wiring
@@ -214,7 +221,7 @@ Deferred (unchanged, Phase 4 Mission product): pity test treating any item as Ge
 
 ## Later dependencies (not started)
 
-Phase 4 Mission construction/rewards/drops/pity. Phase 5 Stims (consumable). Dungeon/Wormhole/Arena **reward** formulas. Market, Mining, Companies, Shipments, Reputation, Commissions, GES.
+Phase 4 Mission construction/rewards/drops/pity **and** Mission enemy rebalance around canonical (universal) player Base Damage. Do not add a hidden Mission player inverse scalar. Certified Mission enemy outgoing remains staged OFF until that pass. Phase 5 Stims (consumable). Dungeon/Wormhole/Arena **reward** formulas. Market, Mining, Companies, Shipments, Reputation, Commissions, GES.
 
 ---
 

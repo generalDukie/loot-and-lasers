@@ -9,10 +9,9 @@ import {
   ASTRAL_BARRIER_MAX_HP_FRAC,
   astralBarrierAmount,
   CRIT_DAMAGE_MULT,
-  rawAttack,
+  playerBaseDamage,
   rollUniversalVariance,
   roundCombatDamage,
-  STANDARD_ATTACK_FLAT,
 } from "@/lib/combatMath";
 
 export const PASSIVE_BY_CLASS = Object.freeze({
@@ -662,9 +661,12 @@ export function maybeOrbitalAssistant(engineer, opponent, events, rng = Math.ran
 
   if (effect === "fire_support") {
     const context = Number(engineer.contextMult != null ? engineer.contextMult : 1);
-    const trueRaw = engineer.intellectValue != null
-      ? rawAttack(engineer.intellectValue, STANDARD_ATTACK_FLAT) * FIRE_SUPPORT_FRAC * context
-      : (engineer.standardAttack || 0) * FIRE_SUPPORT_FRAC * context;
+    const baseline = engineer.canonicalDamage != null
+      ? Number(engineer.canonicalDamage)
+      : engineer.intellectValue != null
+        ? playerBaseDamage(engineer.intellectValue)
+        : (engineer.standardAttack || 0);
+    const trueRaw = baseline * FIRE_SUPPORT_FRAC * context;
     const trueDmg = roundCombatDamage(trueRaw);
     if ((opponent.dodge || 0) > 0 && rng() < opponent.dodge) {
       events.push({

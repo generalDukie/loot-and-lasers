@@ -3,8 +3,8 @@
  *
  * Permanent attrs persist as components: class start + free-from-level + purchases.
  * Character.stats is a recomputed cache of those components.
- * Effective attrs add gear + stims. Derived *sheet* stats use productionMath.
- * Combat event resolution still uses statEngine until Phase 3.
+ * Effective attrs add gear + stims. Derived *sheet* stats use productionMath
+ * (`playerBaseDamage`). Live combat uses combatMath.derivedCombatStats.
  */
 import { entities } from "../entities.js";
 import {
@@ -21,7 +21,7 @@ import { getActiveBuffs } from "../../../src/lib/gameData.js";
 import { getNextAttributePointCost } from "./economyFormulas.js";
 import {
   maxHp,
-  rawStandardAttack,
+  playerBaseDamage,
   critChance,
   dodgeChance,
   resistances,
@@ -86,7 +86,7 @@ export function computeProductionSheetDerived(totalStats, character) {
   const primaryKey = ATTR_KEYS[primaryIndex] || "strength";
   const primaryValue = attrs[primaryIndex] || 0;
   return {
-    damage: roundHalfUp(rawStandardAttack(primaryValue)),
+    damage: roundHalfUp(playerBaseDamage(primaryValue)),
     critChance: critChance(level, attrs[4]) * SHEET_CHANCE_PERCENT_SCALE,
     critMult: CRIT_MULT,
     health: maxHp(attrs[3]),

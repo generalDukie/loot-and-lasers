@@ -176,8 +176,8 @@ export function getAttributeTechResistancePercent(characterClass, level, totalIn
 }
 
 /**
- * Linear flat ramp: 5 at L1 → 15 at L25+. Used only for mission enemies / arena bots.
- * Dungeon enemies and real players always keep DAMAGE_BASE (15).
+ * Linear flat ramp: 5 at L1 → 15 at L25+. Mission enemies (and historical bot
+ * helpers) only. Live player / Dungeon combat uses combatMath canonical damage.
  */
 export function getRampedDamageBase(level) {
   const L = Math.max(1, Math.floor(Number(level) || 1));

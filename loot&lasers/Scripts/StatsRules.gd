@@ -32,9 +32,10 @@ const SHEET_CHANCE_PERCENT_SCALE := 100.0
 const HEALTH_BASE := 50.0
 const HEALTH_PER_VITALITY := 2.5
 const HEALTH_VITALITY_SQUARED_COEFFICIENT := 0.008
-const RAW_ATTACK_BASE := 15.0
-const RAW_ATTACK_COEFFICIENT := 0.0032
-const RAW_ATTACK_EXPONENT := 1.727
+## Mirrors productionMath native player Base Damage (not a scaled legacy raw).
+const PLAYER_BASE_DAMAGE_FLAT := 37.5
+const PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT := 0.008
+const PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT := 1.727
 const GENERIC_FORMAX_AT_100 := 700.0
 const GENERIC_FORMAX_EXPONENT := 0.95
 const GENERIC_ATTR_EXPONENT := 1.2
@@ -261,9 +262,9 @@ static func derived(character: Dictionary, totals: Dictionary) -> Dictionary:
 		might_resist = _derived_stat(level, strength, NATURAL_RESIST_CAP, 1.0, GENERIC_ATTR_EXPONENT)
 		reflex_resist = might_resist
 	var hp := maxi(1, _round_half_even(HEALTH_BASE + HEALTH_PER_VITALITY * vit + HEALTH_VITALITY_SQUARED_COEFFICIENT * vit * vit))
-	var raw_atk := RAW_ATTACK_BASE + RAW_ATTACK_COEFFICIENT * pow(primary_val, RAW_ATTACK_EXPONENT)
+	var canonical_atk := PLAYER_BASE_DAMAGE_FLAT + PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT * pow(primary_val, PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT)
 	return {
-		"damage": _round_half_up(raw_atk),
+		"damage": _round_half_up(canonical_atk),
 		"critChance": _derived_stat(level, luck, NATURAL_CRIT_CAP, CRIT_FORMAX_MULT, CRIT_ATTR_EXPONENT) * SHEET_CHANCE_PERCENT_SCALE,
 		"critMult": CRIT_MULT,
 		"health": hp,

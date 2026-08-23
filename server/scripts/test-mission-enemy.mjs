@@ -325,7 +325,7 @@ test("mission / arena-bot flat damage ramps; dungeon and players stay at 15", ()
   assert.equal(getDamageBaseForCombatant({ level: 1, class: "Vanguard" }), 15);
 });
 
-test("bare player favored at L1; L10 35% EPA foes punish unallocated builds", () => {
+test("bare player favored at L1; L10 naked uses canonical Mission player damage", () => {
   function bareWinRate(level, seed0) {
     let wins = 0;
     const N = 40;
@@ -346,7 +346,11 @@ test("bare player favored at L1; L10 35% EPA foes punish unallocated builds", ()
   const l10 = bareWinRate(10, 9000);
   console.log(`    bare Vanguard: L1 ${(l1 * 100).toFixed(0)}%  L10 ${(l10 * 100).toFixed(0)}%`);
   assert.ok(l1 >= 0.85, `L1 bare should still win easily: ${l1}`);
-  assert.ok(l10 <= 0.5, `L10 bare should be punished by 35% EPA foes: ${l10}`);
+  // Pre-normalization, L10 naked lost to 35% EPA foes because Mission player damage
+  // was the unscaled polynomial. Canonical player Base Damage is now universal;
+  // do not restore the old L10-naked loss rate with a hidden Mission player ×0.4.
+  // Phase 4 must rebalance Mission enemy construction around this scale.
+  assert.ok(l10 >= 0.85, `L10 bare now uses canonical player damage: ${l10}`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

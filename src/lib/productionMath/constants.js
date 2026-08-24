@@ -60,6 +60,10 @@ export const MARKET_PRICE_VARIANCE_MAX = 1.2;
 export const XP_MISSION_SHARE = 0.46;
 export const DRU_REFERENCE_MISSION_SHARE = 0.6;
 export const XP_REWARD_EFFICIENCY = 0.85;
+/** Named Mission XP efficiency factor (locked 0.85). */
+export const MISSION_XP_EFFICIENCY = XP_REWARD_EFFICIENCY;
+/** Named Mission XP reward scalar (locked 0.85). Distinct from efficiency. */
+export const MISSION_XP_REWARD_SCALAR = XP_REWARD_EFFICIENCY;
 /** @deprecated Use XP_REWARD_EFFICIENCY. Same Mission XP efficiency factor. */
 export const MISSION_XP_REBALANCE = XP_REWARD_EFFICIENCY;
 export const DEFEAT_REWARD_FACTOR = 0.5;
@@ -337,6 +341,24 @@ export const HP_PER_VITALITY = 2.5;
 export const HP_VITALITY_SQUARED_COEFFICIENT = 0.008;
 
 /**
+ * Mission-only final MaxHP normalization. Universal maxHp(Vitality) is unchanged.
+ * Native-damage term restores historical HP removed per player hit after the
+ * Phase 3 native Base Damage migration:
+ *   PLAYER_BASE_DAMAGE_FLAT / STANDARD_ATTACK_FLAT = 37.5 / 15 = 2.5
+ *   PLAYER_BASE_DAMAGE_PRIMARY_COEFFICIENT / RAW_ATTACK_COEFFICIENT = 0.008 / 0.0032 = 2.5
+ * Pacing term is the approved extra Mission combat-presence factor (not part of
+ * the 2.5 algebraic identity). Effective scale = 2.5 × 1.20 = 3.0.
+ * Vitality, EPA, attributes, and Base Damage are not changed.
+ */
+export const MISSION_ENEMY_HP_NATIVE_DAMAGE_NORMALIZATION =
+  PLAYER_BASE_DAMAGE_FLAT / STANDARD_ATTACK_FLAT;
+export const MISSION_ENEMY_HP_PACING_MULTIPLIER = 1.20;
+export const MISSION_ENEMY_HP_SCALE =
+  MISSION_ENEMY_HP_NATIVE_DAMAGE_NORMALIZATION * MISSION_ENEMY_HP_PACING_MULTIPLIER;
+/** Frozen on Mission acceptance so in-flight combats cannot silently retune. */
+export const MISSION_COMBAT_RULES_VERSION = "phase4_mission_combat_v1";
+
+/**
  * Mission enemy early flat ramp. EL<25: FLOOR + RISE*(EL-1)/SPAN; else MATURE.
  * Endpoint: EL=24 still ramps; EL=25 is STANDARD_ATTACK_FLAT.
  */
@@ -581,6 +603,68 @@ export const MISSION_OUTGOING_KNOTS = Object.freeze([
   Object.freeze([200, 12]),
 ]);
 export const MISSION_OUTGOING_ASYMPTOTE = 12;
+
+/** Simultaneous Cantina offers on a normal board. */
+export const MISSION_OFFER_COUNT = 3;
+export const MISSION_SECONDS_PER_FUEL = 60;
+export const MISSION_MIN_DURATION_SECONDS = 15;
+export const MISSION_MAX_DURATION_SECONDS = 1200;
+export const MISSION_DURATION_POOL_MATURE_LEVEL = 21;
+export const MISSION_MIN_FUEL = MISSION_MIN_DURATION_SECONDS / MISSION_SECONDS_PER_FUEL;
+
+/**
+ * Discrete production Mission duration pools (seconds). Uniform selection.
+ * L21+ is intentionally stable forever — not a level cap.
+ */
+export const MISSION_DURATION_POOLS = Object.freeze({
+  1: Object.freeze([15, 30]),
+  2: Object.freeze([15, 30]),
+  3: Object.freeze([15, 30, 45]),
+  4: Object.freeze([30, 45, 60]),
+  5: Object.freeze([30, 45, 60, 75]),
+  6: Object.freeze([30, 60, 90]),
+  7: Object.freeze([30, 60, 90]),
+  8: Object.freeze([60, 90, 120]),
+  9: Object.freeze([60, 90, 120, 150]),
+  10: Object.freeze([60, 90, 120, 150]),
+  11: Object.freeze([150, 300]),
+  12: Object.freeze([150, 300]),
+  13: Object.freeze([150, 300, 450]),
+  14: Object.freeze([150, 300, 450]),
+  15: Object.freeze([150, 300, 450, 600]),
+  16: Object.freeze([300, 450, 600, 750]),
+  17: Object.freeze([300, 450, 600, 750]),
+  18: Object.freeze([300, 450, 600, 750, 900]),
+  19: Object.freeze([300, 450, 600, 750, 900, 1050]),
+  20: Object.freeze([300, 450, 600, 750, 900, 1050, 1200]),
+  21: Object.freeze([300, 600, 900, 1200]),
+});
+
+export const MISSION_SKIP_RAW_NOVA_PER_FUEL = 0.1;
+export const MISSION_SKIP_MIN_NOVA = 0.5;
+
+export const MISSION_GEAR_REFERENCE_FUEL = AVGFUEL_MATURE;
+export const MISSION_GEAR_REFERENCE_CHANCE = 0.3;
+export const MISSION_GEAR_PITY_INCREMENT = 0.025;
+export const MISSION_GEAR_PITY_CLAMP = 0.999;
+export const MISSION_STIM_NO_DROP_BASE = 0.9;
+export const MISSION_JUNK_NO_DROP_BASE = 0.25;
+export const MISSION_JUNK_VALUE_RATIO = 0.45;
+export const MISSION_JUNK_VARIANCE_MIN = 0.6;
+export const MISSION_JUNK_VARIANCE_MAX = 1.4;
+
+export const MISSION_ENEMY_ARCHETYPES = Object.freeze(["Might", "Reflex", "Tech"]);
+export const MISSION_ENEMY_ARCHETYPE_WEIGHTS = Object.freeze([1, 1, 1]);
+export const MISSION_ENEMY_ARCHETYPE_CLASS = Object.freeze({
+  Might: "Vanguard",
+  Reflex: "Shadow Operative",
+  Tech: "Technomancer",
+});
+
+export const MISSION_OFFER_DEDUPE_REROLL_LIMIT = 20;
+export const MISSION_OFFER_DEDUPE_NUDGE_LIMIT = 64;
+export const MISSION_BOARD_AFFORDABLE_REROLL_LIMIT = 32;
+export const MISSION_VARIANCE_PRECISION_SCALE = 100;
 
 export const PVE_HIDDEN_BUDGET_OFFSET = Object.freeze([
   Object.freeze({ maxLevel: 150, offset: 5 }),

@@ -25,6 +25,7 @@ import {
   rawStandardAttack,
   playerBaseDamage,
   dungeonWormholeEnemyBaseDamage,
+  missionEnemyOutgoingMultiplier,
   roundHalfUp,
   roundHalfEven,
   PLAYER_BASE_DAMAGE_FLAT,
@@ -131,9 +132,9 @@ test("PLAYER_BASE_DAMAGE_SCALE is not a live production export", () => {
   assert.equal(PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT, 1.727);
 });
 
-test("Mission enemy certified outgoing remains staged OFF", () => {
-  assert.equal(APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT, false);
-  assert.equal(contextMultiplierFor("mission", "enemy", 50), PLAYER_COMBAT_CONTEXT_MULT);
+test("Mission enemy certified outgoing is live ON", () => {
+  assert.equal(APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT, true);
+  assert.equal(contextMultiplierFor("mission", "enemy", 50), 6);
 });
 
 test("player context is identity; dungeon enemy tempo is ×1.10", () => {
@@ -334,16 +335,17 @@ test("Dungeon enemy hits through Barrier and Defensive Protocol stay at historic
   assert.equal(reduced, historicalReduced);
 });
 
-test("Mission player uses native formula; Mission enemy stays on unscaled raw", () => {
+test("Mission player uses native formula; Mission enemy stays on unscaled raw × certified outgoing", () => {
   const player = buildFighter(baseChar("Vanguard", 50), [], "player", { content: "mission" });
   const enemy = buildFighter(missionFoe(20), [], "opponent", { content: "mission" });
   assert.equal(player.canonicalDamage, playerBaseDamage(player.primaryValue));
   assert.ok(ulpClose(player.canonicalDamage, historicalScaledPlayer(player.primaryValue)));
   const unscaled = rawStandardAttack(enemy.primaryValue, enemy.damageBase);
+  const outgoing = missionEnemyOutgoingMultiplier(20);
   assert.equal(enemy.canonicalDamage, unscaled);
-  assert.equal(enemy.contextMult, PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(enemy.contextMult, outgoing);
   const eHit = resolveBasicHit(enemy, { resists: { might: 0, reflex: 0, tech: 0 } }, { canCrit: false, variance: 1 });
-  assert.equal(eHit.finalDamage, roundHalfEven(unscaled));
+  assert.equal(eHit.finalDamage, roundHalfEven(unscaled * outgoing));
   assert.notEqual(eHit.finalDamage, roundHalfEven(dungeonWormholeEnemyBaseDamage(enemy.primaryValue)));
 });
 

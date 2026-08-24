@@ -22,6 +22,8 @@ import {
   PRODUCTION_XP_STORAGE_SCALE,
   XP_MISSION_SHARE,
   XP_REWARD_EFFICIENCY,
+  MISSION_XP_EFFICIENCY,
+  MISSION_XP_REWARD_SCALAR,
 } from "./constants.js";
 
 function levelInt(level) {
@@ -85,7 +87,7 @@ export function fromStorageXp(storageXp) {
 
 /**
  * Mission win XP. Variance is an explicit input — RNG stays outside this primitive.
- * Order: ROUND(Fuel * mission_xpf(snapL) * xpVariance * XP_REWARD_EFFICIENCY * XP_REWARD_EFFICIENCY)
+ * Order: ROUND(Fuel * mission_xpf(snapL) * xpVariance * MISSION_XP_EFFICIENCY * MISSION_XP_REWARD_SCALAR)
  */
 export function missionXpReward({
   fuel,
@@ -95,7 +97,7 @@ export function missionXpReward({
 } = {}) {
   const F = Number(fuel) || 0;
   const v = Number(xpVariance);
-  const raw = F * missionXpPerFuel(snapshotLevel) * v * XP_REWARD_EFFICIENCY * XP_REWARD_EFFICIENCY;
+  const raw = F * missionXpPerFuel(snapshotLevel) * v * MISSION_XP_EFFICIENCY * MISSION_XP_REWARD_SCALAR;
   let xp = roundHalfUp(raw);
   if (defeated) xp = roundHalfUp(xp * DEFEAT_REWARD_FACTOR);
   return Math.max(0, xp);

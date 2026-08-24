@@ -15,8 +15,6 @@
  *
  * Known deferred baseline (Phase 1 lock, 2026-08-22) — not XP-product regressions:
  *  - Pity test uses items.length as “gear”; Stim/Junk also grant items.
- *  - Low-fuel test assumes L8 cheapest normal offer is 1 Fuel; missing
- *    onboarding_tutorial pins the board to 30s (0.5 Fuel) via tutorial pin.
  * See docs/PHASE1_LIVE_CALLER_MIGRATION_MAP.md and docs/PHASE_MISSION_REWARDS.md §36.
  */
 import assert from "node:assert/strict";
@@ -181,8 +179,8 @@ await testAsync("Mid-mission LEVEL-UP does not change the finalized reward", asy
   assert.equal(claim.body.gains.stardust, offer.preview_stardust, "Stardust unchanged by level-up");
 });
 
-await testAsync("LOSS grants 50% XP/Stardust, no item, freezes pity, resolves + rotates", async () => {
-  const { user, ch } = makeCharacter({ mission_gear_miss_streak: 3 });
+await testAsync("LOSS grants 50% XP/Stardust, no item, freezes Fuel pity, resolves + rotates", async () => {
+  const { user, ch } = makeCharacter({ fuel_since_last_gear: 12.5 });
   const board = await GetMissionBoard(user, {});
   const launchedIds = board.body.offers.map((o) => o.offer_id).sort();
   const offer = board.body.offers[0];
@@ -200,34 +198,33 @@ await testAsync("LOSS grants 50% XP/Stardust, no item, freezes pity, resolves + 
   assert.equal(claim.body.item_outcome, "NONE", "forced Nothing outcome");
 
   const after = entities.Character.get(ch.id);
-  assert.equal(after.mission_gear_miss_streak, 3, "pity streak frozen on loss");
+  assert.equal(after.fuel_since_last_gear, 12.5, "Fuel pity frozen on loss");
   assert.equal(after.stardust - beforeStardust, Math.round(offer.preview_stardust / 2), "wallet delta = 50% Stardust");
   assert.equal(after.active_mission_id, "", "mission slot freed");
   assert.equal(entities.Mission.get(missionId).status, "failed", "mission marked failed");
 
-  // Board rotated: a fresh set of offers, different ids.
   const rotatedIds = claim.body.cantina_offers.map((o) => o.offer_id).sort();
   assert.equal(claim.body.cantina_offers.length, 3, "loss rotates to a new 3-offer board");
   assert.notDeepEqual(rotatedIds, launchedIds, "loss produces a new offer set");
 });
 
-await testAsync("WIN increments pity streak on a Nothing outcome; not frozen like loss", async () => {
-  // DEFERRED BASELINE: items.length is not gear. Stim/Junk leave streak incremented.
-  // A win with no gear should bump the pity streak (unchanged item/pity math).
-  const { user, ch } = makeCharacter({ mission_gear_miss_streak: 0 });
+await testAsync("WIN updates Fuel pity: reset on Gear, else add Mission Fuel", async () => {
+  const { user, ch } = makeCharacter({ fuel_since_last_gear: 0 });
   const board = await GetMissionBoard(user, {});
   const offer = board.body.offers[0];
   const launch = await LaunchMission(user, { board_offer_id: offer.offer_id });
   const missionId = launch.body.mission.id;
+  const missionFuel = Number(launch.body.mission.fuel_cost);
   forceResolve(ch.id, missionId, "player");
   const claim = await ClaimMission(user, { mission_id: missionId });
   assert.equal(claim.body.won, true);
   const after = entities.Character.get(ch.id);
-  const gotGear = (claim.body.items || []).length > 0;
+  const gotGear = (claim.body.item_outcome || "") === "GEAR"
+    || (claim.body.items || []).some((it) => it.origin === "mission" && it.type !== "consumable" && it.type !== "material");
   if (gotGear) {
-    assert.equal(after.mission_gear_miss_streak, 0, "gear drop resets streak");
+    assert.equal(after.fuel_since_last_gear, 0, "gear drop resets Fuel pity");
   } else {
-    assert.equal(after.mission_gear_miss_streak, 1, "no-gear win increments streak");
+    assert.equal(after.fuel_since_last_gear, missionFuel, "no-gear win adds Mission Fuel to pity");
   }
 });
 
@@ -270,16 +267,21 @@ await testAsync("Generation uses authoritative duration pools (boundaries)", () 
 });
 
 await testAsync("Low-fuel remaining-duration edges preserved", () => {
-  assert.equal(remainingFuelDurationSeconds(MISSION_MIN_FUEL - 0.01), null, "below min fuel → no offer");
+  assert.equal(remainingFuelDurationSeconds(0), null, "zero fuel → no offer");
+  assert.equal(remainingFuelDurationSeconds(0.12), null, "quantizes below min → no offer");
   assert.equal(remainingFuelDurationSeconds(MISSION_MIN_FUEL), 15, "0.25 fuel → 15s");
   assert.equal(remainingFuelDurationSeconds(5), 300, "5 fuel → 5 min");
   assert.equal(remainingFuelDurationSeconds(9999), 1200, "huge fuel clamps to 20 min");
 });
 
 await testAsync("Low-fuel board is served when no normal offer is affordable", async () => {
-  // DEFERRED BASELINE: missing onboarding_tutorial pins durations to 30s (0.5 Fuel).
-  // 0.5 fuel cannot pay for any L8 normal-pool mission (cheapest = 1 min = 1 fuel).
-  const { user } = makeCharacter({ level: 8, fuel: 0.5, max_fuel: 100 });
+  // L8 normal pool starts at 60s (1 Fuel). 0.5 Fuel is below that, so remainder exception.
+  const { user } = makeCharacter({
+    level: 8,
+    fuel: 0.5,
+    max_fuel: 100,
+    missions_completed: 1,
+  });
   const res = await GetMissionBoard(user, {});
   assert.ok(res.body.offers.length >= 1, "a low-fuel offer is served");
   for (const o of res.body.offers) {

@@ -81,6 +81,7 @@ import {
   collectGrant,
   grantItemOrPending,
   assertBackpackHasSpace,
+  BACKPACK_FULL_ERROR_CODE,
 } from "../shared/inventoryGrant.js";
 import {
   isLaunchableMissionDuration,
@@ -88,6 +89,16 @@ import {
   remainingFuelDurationSeconds,
   MISSION_MIN_FUEL,
 } from "../../../src/lib/missionDuration.js";
+import {
+  generateMissionOfferEconomics,
+  fuelFromDurationSeconds,
+  readFuelSinceLastGear,
+  nextFuelSinceLastGear,
+  snapshotMissionAcceptance,
+  missionDefeatXp,
+  missionDefeatStardust,
+} from "../../../src/lib/productionMath/missions.js";
+import { MISSION_OFFER_COUNT } from "../../../src/lib/productionMath/constants.js";
 import {
   MISSION_TEMPLATES,
   LOW_FUEL_TEMPLATES,
@@ -154,6 +165,7 @@ const NEXUS_MISSION_REWARD_MULTIPLIER = 1.05;
 const MISSION_REWARD_REROLL_LIMIT = 20;
 const MISSION_REWARD_COLLISION_NUDGE_LIMIT = 64;
 const MISSION_OFFER_ID_RANDOM_RANGE = 1_000_000_000;
+const MISSION_OFFER_ID_RADIX = 36;
 const FUEL_PRECISION_SCALE = 100;
 const FUEL_COMPARISON_TOLERANCE = 0.001;
 const MISSION_BOARD_OFFER_COUNT = 3;
@@ -254,9 +266,6 @@ function computeMissionGains(character, mission, nexusBonus) {
   const sdEff = normalizeMissionEfficiency(mission?.stardust_efficiency, snapshotLevel);
   const xpEff = normalizeMissionEfficiency(mission?.xp_efficiency, snapshotLevel);
   const chartXp = computeMissionXpFromFuel(fuelCost, snapshotLevel, xpEff);
-  // chartSd is the un-varied base (efficiency ignored inside the helper). We
-  // apply the independent Stardust variance (sdEff) here so both XP and Stardust
-  // carry their own 0.90–1.10 roll. stardustBase stays un-varied for junk value.
   const chartSd = computeMissionStardustFromFuel(fuelCost, snapshotLevel, sdEff);
   const baseXp = Math.round(chartXp * xpMult);
   return {
@@ -264,7 +273,7 @@ function computeMissionGains(character, mission, nexusBonus) {
     fuelCost,
     efficiency: sdEff,
     xpEfficiency: xpEff,
-    stardustGain: Math.round(chartSd * sdEff * bonusMult * stardustMult),
+    stardustGain: Math.round(chartSd * bonusMult * stardustMult),
     stardustBase: chartSd,
     xpBase: chartXp,
     xpGain: applyXpBonus(baseXp, percentage),
@@ -350,8 +359,8 @@ function resolveMissionFinals(character, mission) {
 const MISSION_BOARD_VERSION = 4;
 
 function makeMissionOfferId(index) {
-  const t = clock.nowMs().toString(36);
-  const r = Math.floor(secureRandom() * MISSION_OFFER_ID_RANDOM_RANGE).toString(36);
+  const t = clock.nowMs().toString(MISSION_OFFER_ID_RADIX);
+  const r = Math.floor(secureRandom() * MISSION_OFFER_ID_RANDOM_RANGE).toString(MISSION_OFFER_ID_RADIX);
   return `off_${t}_${r}_${index}`;
 }
 
@@ -371,11 +380,16 @@ function boardCanAffordAny(ch, offers) {
   return false;
 }
 
-function generateDailyOffers(ch, rng) {
+function generateMissionBoardOffers(ch, rng) {
   const level = ch.level || 1;
   const pinnedDuration = shouldPinTutorialOnboardingMissionDurations(ch)
     ? TUTORIAL_ONBOARDING_MISSION_DURATION_SECONDS
     : null;
+  const economics = generateMissionOfferEconomics({
+    level,
+    availableFuel: ch.fuel,
+    rng,
+  });
   const maxSector = (ch.highest_sector || 1) + 1;
   let pool = MISSION_TEMPLATES.filter(
     (t) => (t.level_requirement || 1) <= level && (t.sector || 1) <= maxSector
@@ -386,70 +400,38 @@ function generateDailyOffers(ch, rng) {
   if (pool.length === 0) pool = MISSION_TEMPLATES.slice();
   pool = shuffleInPlace(pool.slice(), rng);
   const givers = shuffleInPlace(MISSION_PATRONS.slice(), rng);
-  const exploreIndices = pickExploreScenes(MISSION_BOARD_OFFER_COUNT, rng);
+  const count = MISSION_OFFER_COUNT;
+  const exploreIndices = pickExploreScenes(count, rng);
+  const lowFuel = economics.some((e) => e.lowFuel) && !pinnedDuration;
+  const templates = lowFuel
+    ? LOW_FUEL_TEMPLATES
+    : pool;
   const offers = [];
-  for (let i = 0; i < MISSION_BOARD_OFFER_COUNT; i++) {
-    const tpl = pool[i % pool.length];
+  for (let i = 0; i < count; i++) {
+    const econ = economics[i];
+    const tpl = templates[i % templates.length];
     const sceneI = exploreIndices[i];
+    const duration = pinnedDuration ?? econ.durationSeconds;
+    const fuelCost = pinnedDuration ? fuelFromDurationSeconds(pinnedDuration) : econ.fuelCost;
     offers.push({
-      offer_id: makeMissionOfferId(i),
+      offer_id: makeMissionOfferId(lowFuel ? LOW_FUEL_OFFER_ID_OFFSET + i : i),
       name: tpl.name,
       description: tpl.description,
       location: tpl.location,
-      sector: tpl.sector,
-      level_requirement: tpl.level_requirement,
-      duration_seconds: pinnedDuration ?? rollMissionDurationSeconds(level, rng()),
-      stardust_efficiency: rollMissionEfficiency(level, rng),
-      xp_efficiency: rollMissionEfficiency(level, rng),
+      sector: lowFuel ? 1 : tpl.sector,
+      level_requirement: lowFuel ? 1 : tpl.level_requirement,
+      duration_seconds: duration,
+      fuel_cost: fuelCost,
+      stardust_efficiency: econ.stardustVariance,
+      xp_efficiency: econ.xpVariance,
       patron: givers[i % givers.length],
       explore_scene: sceneI,
       image_id: exploreImageId(sceneI),
       collectible: MISSION_COLLECTIBLES[Math.floor(rng() * MISSION_COLLECTIBLES.length)],
-      low_fuel: false,
+      low_fuel: !pinnedDuration && !!econ.lowFuel,
     });
   }
   return offers;
-}
-
-function generateLowFuelOffers(ch, rng) {
-  const fuel = normalizeBoardFuel(ch.fuel);
-  if (fuel < MISSION_MIN_FUEL) return [];
-  const level = ch.level || 1;
-  const duration = remainingFuelDurationSeconds(fuel);
-  if (duration == null) return [];
-  const givers = shuffleInPlace(MISSION_PATRONS.slice(), rng);
-  const count = Math.min(MISSION_BOARD_OFFER_COUNT, LOW_FUEL_TEMPLATES.length);
-  const exploreIndices = pickExploreScenes(count, rng);
-  const pinned = Math.max(MISSION_MIN_FUEL, fuel);
-  const offers = [];
-  for (let i = 0; i < count; i++) {
-    const tpl = LOW_FUEL_TEMPLATES[i];
-    const sceneI = exploreIndices[i];
-    offers.push({
-      offer_id: makeMissionOfferId(LOW_FUEL_OFFER_ID_OFFSET + i),
-      name: tpl.name,
-      description: tpl.description,
-      location: tpl.location,
-      sector: 1,
-      level_requirement: 1,
-      duration_seconds: duration,
-      fuel_cost: pinned,
-      stardust_efficiency: rollMissionEfficiency(level, rng),
-      xp_efficiency: rollMissionEfficiency(level, rng),
-      patron: givers[i % givers.length],
-      explore_scene: sceneI,
-      image_id: exploreImageId(sceneI),
-      low_fuel: true,
-    });
-  }
-  return offers;
-}
-
-function generateMissionBoardOffers(ch, rng) {
-  const normal = generateDailyOffers(ch, rng);
-  if (boardCanAffordAny(ch, normal)) return normal;
-  const low = generateLowFuelOffers(ch, rng);
-  return low.length ? low : normal;
 }
 
 /**
@@ -575,13 +557,23 @@ export async function GetMissionBoard(user, _body = {}) {
 
       const locked = String(ch.mission_board_status || "") === "locked_active";
       if (!locked && hasValidMissionBoard(ch)) {
-        const offers = ch.mission_board.offers.map((o) => serializeBoardOffer(chForGen, o));
+        const liveLevel = chForGen.level || 1;
+        let board = ch.mission_board;
+        if (Number(board.character_level || 0) !== liveLevel) {
+          const offers = board.offers.map((o) => ({
+            ...o,
+            ...finalizeMissionRewards(chForGen, o),
+          }));
+          board = { ...board, character_level: liveLevel, offers };
+          ch = entities.Character.update(ch.id, { mission_board: board });
+        }
+        const offers = board.offers.map((o) => serializeBoardOffer(chForGen, o));
         return {
           success: true,
           state: "AVAILABLE_OFFERS",
           offers,
           generated: false,
-          board_generated_at: ch.mission_board.generated_at,
+          board_generated_at: board.generated_at,
         };
       }
 
@@ -1187,7 +1179,9 @@ export async function SyncFuelCycle(user) {
 
 // ── LaunchMission ────────────────────────────────────────────
 export async function LaunchMission(user, body) {
-  const boardOfferId = String(body?.board_offer_id || body?.offer_id || "").trim();
+  const boardOfferId = String(
+    body?.board_offer_id || body?.board_offer_id || body?.offer_id || "",
+  ).trim();
   if (!boardOfferId) {
     return { status: 400, body: { error: "Missing board_offer_id" } };
   }
@@ -1238,30 +1232,33 @@ export async function LaunchMission(user, body) {
       };
 
       const duration = getEffectiveMissionDuration(ch, draft);
-      // Rewards + fuel were finalized at board generation; charge and carry the
-      // exact stored values so the board display equals what is charged/granted.
-      // A defensive fallback re-finalizes only for a legacy offer missing them.
-      let finalXp = Number.isFinite(offer.final_xp) ? offer.final_xp : null;
-      let finalStardust = Number.isFinite(offer.final_stardust) ? offer.final_stardust : null;
-      let fuelCost = Number.isFinite(offer.fuel_cost) ? offer.fuel_cost : null;
-      if (finalXp == null || finalStardust == null || fuelCost == null) {
-        const fin = finalizeMissionRewards(ch, offer);
-        if (finalXp == null) finalXp = fin.final_xp;
-        if (finalStardust == null) finalStardust = fin.final_stardust;
-        if (fuelCost == null) fuelCost = fin.fuel_cost;
-      }
-      const snapshotLevel = Number.isFinite(offer.character_level) ? offer.character_level : level;
+      // Ignore client-submitted economics. Recompute at the current acceptance
+      // level from stored duration + independent variances, then freeze.
+      const fin = finalizeMissionRewards(ch, offer);
+      const finalXp = fin.final_xp;
+      const finalStardust = fin.final_stardust;
+      const fuelCost = fin.fuel_cost;
+      const snapshot = snapshotMissionAcceptance({
+        characterLevel: level,
+        offer: {
+          ...offer,
+          fuelCost,
+          durationSeconds: rawDuration,
+          xpVariance: offer.xp_efficiency,
+          stardustVariance: offer.stardust_efficiency,
+          finalXp,
+          finalStardust,
+          offerId: boardOfferId,
+          name: template.name,
+        },
+        collectionPct: getCollectionPercentage(ch, 0),
+        nexusBonus: !!resolveNexusBonus(ch.id),
+      });
       if (currentFuel < fuelCost) httpErr(400, "Not enough fuel");
-      const sdEff = template.stardust_efficiency != null
-        ? normalizeMissionEfficiency(template.stardust_efficiency, level)
-        : rollMissionEfficiency(level);
-      const xpEff = template.xp_efficiency != null
-        ? normalizeMissionEfficiency(template.xp_efficiency, level)
-        : rollMissionEfficiency(level);
+      const sdEff = snapshot.stardust_efficiency;
+      const xpEff = snapshot.xp_efficiency;
 
       const lootType = missionLootTypeFromName(template.name);
-      const missStreak = missionGearMissStreak(ch);
-      const lootDropChance = missionGearDropChance(missStreak);
       const rewardDef = snapshotDefinitionRef("mission_completion");
 
       const startNow = clock.now();
@@ -1291,21 +1288,23 @@ export async function LaunchMission(user, body) {
         rewards: {
           ...safeTemplateRewards,
           loot_type: lootType,
-          loot_drop_chance: lootDropChance,
-          loot_miss_streak: missStreak,
           reward_definition_key: rewardDef.definitionKey,
           reward_definition_version: rewardDef.definitionVersion,
+          snapshot: snapshot,
         },
         level_requirement: template.level_requirement || 1,
         patron: template.patron || null,
-        fuel_cost: fuelCost,
-        stardust_efficiency: sdEff,
-        xp_efficiency: xpEff,
-        // Finalized-at-generation rewards + level snapshot (granted verbatim on
-        // win; halved on loss). ClaimMission never recomputes these.
-        final_xp: finalXp,
-        final_stardust: finalStardust,
-        character_level: snapshotLevel,
+        fuel_cost: snapshot.fuel_cost,
+        original_fuel_cost: snapshot.original_fuel_cost,
+        stardust_efficiency: snapshot.stardust_efficiency,
+        xp_efficiency: snapshot.xp_efficiency,
+        final_xp: snapshot.final_xp,
+        final_stardust: snapshot.final_stardust,
+        character_level: snapshot.character_level,
+        enemy_epa_level: snapshot.enemy_epa_level,
+        mission_combat_rules_version: snapshot.mission_combat_rules_version,
+        mission_enemy_hp_scale: snapshot.mission_enemy_hp_scale,
+        mission_enemy_outgoing_multiplier: snapshot.mission_enemy_outgoing_multiplier,
         explore_scene: exploreScene,
       }, { created_by_id: user.id, created_by: user.email });
 
@@ -1429,7 +1428,6 @@ export async function ClaimMission(user, body) {
       if (prior?.status === "completed" && prior.deliveredPayload) {
         return { ...prior.deliveredPayload, idempotentReplay: true, reward_claim_id: prior.id };
       }
-      assertBackpackHasSpace(ch);
 
       let mission = entities.Mission.get(missionId);
       if (!mission) {
@@ -1561,27 +1559,26 @@ export async function ClaimMission(user, body) {
         correlationId: body?.correlationId || null,
         generate: async () => {
           const live = entities.Character.get(ch.id) || ch;
+          assertBackpackHasSpace(live);
           const nexusBonus = resolveNexusBonus(live.id);
           // WIN: grant the exact finalized reward stored at generation — no
           // recompute, no re-roll. Item outcome + pity are unchanged.
           const { finalXp, finalStardust, fuelCost, snapshotLevel } = resolveMissionFinals(live, mission);
           const rewards = mission.rewards || {};
-          const missStreak = missionGearMissStreak(live);
-          // Junk trinket value uses the un-varied base Stardust at the snapshot
-          // level (item outcome system unchanged).
-          const junkBase = computeMissionStardustFromFuel(fuelCost, snapshotLevel);
+          const pityBefore = readFuelSinceLastGear(live);
+          const junkBase = finalStardust || 0;
           let chain = settleMissionItemChain({
             character: live,
             mission,
             missionStardustReward: junkBase,
-            missStreak,
+            fuelSinceLastGear: pityBefore,
             rng: secureRandom,
           });
           let bonusStardust = 0;
           if (shouldGrantFirstMissionBonusAtClaim(live, missionId)) {
             const bonus = settleTutorialFirstMissionBonus({
               character: live,
-              missStreak,
+              missStreak: 0,
               rng: secureRandom,
             });
             bonusStardust = bonus.stardustBonus;
@@ -1592,7 +1589,8 @@ export async function ClaimMission(user, body) {
               junkDropped: false,
               itemTemplates: bonus.itemTemplates,
               gearChance: bonus.gearChance,
-              pityBefore: bonus.pityBefore,
+              pityBefore,
+              fuelSinceLastGearAfter: pityBefore,
             };
           }
           // Species discovery only from mission snapshot — never client species_id
@@ -1631,7 +1629,12 @@ export async function ClaimMission(user, body) {
             highest_sector: Math.max(live.highest_sector || 1, mission.sector || 1),
             active_mission_id: "",
             mission_end_time: "",
-            mission_gear_miss_streak: gearDropped ? 0 : missionGearMissStreak(live) + 1,
+            fuel_since_last_gear: nextFuelSinceLastGear({
+              fuelSinceLastGear: payload.gainsMeta?.pityBefore ?? readFuelSinceLastGear(live),
+              missionFuel: payload.gainsMeta?.fuelSpent ?? mission.fuel_cost,
+              gearDropped,
+            }),
+            mission_gear_miss_streak: 0,
           };
           applyXpToCharacter(live, payload.experience || 0, patch);
 
@@ -1650,27 +1653,18 @@ export async function ClaimMission(user, body) {
           }
 
           const items = [];
-          const pendingLoot = [];
           for (const gear of payload.itemTemplates || []) {
+            assertBackpackHasSpace(live);
             const granted = grantOrCompensate(live, gear, patch);
             if (granted.item) {
               items.push(granted.item);
             } else if (granted.pending) {
-              const pl = createPendingLoot({
-                accountId: user.id,
-                characterId: live.id,
-                claimId: claim.id,
-                claimKey: claim.claimKey,
-                item: granted.pending,
-              });
-              pendingLoot.push({ id: pl.id, item: pl.item });
+              httpErr(409, "Backpack full", "BACKPACK_FULL");
             }
           }
 
-          // Cosmic Vault — discover gear from granted + pending templates (not consumables/materials).
           mergeDiscoveredGear(live, [
             ...items,
-            ...pendingLoot.map((p) => p.item),
             ...(payload.itemTemplates || []),
           ], patch);
 
@@ -1698,7 +1692,7 @@ export async function ClaimMission(user, body) {
             character,
             progression,
             items,
-            pending_loot: pendingLoot,
+            pending_loot: [],
             newly_unlocked: ach.newly_unlocked,
             discoveries,
             cantina_offers: cantinaOffers,
@@ -1710,7 +1704,7 @@ export async function ClaimMission(user, body) {
               ...(payload.gainsMeta || {}),
             },
             reward_claim_id: claim.id,
-            deliveryDestination: pendingLoot.length ? "pending_loot" : "character",
+            deliveryDestination: "character",
           };
         },
       });
@@ -1719,6 +1713,12 @@ export async function ClaimMission(user, body) {
     });
     return { status: 200, body: result };
   } catch (err) {
+    if (err.code === BACKPACK_FULL_ERROR_CODE || err.code === "BACKPACK_FULL") {
+      return {
+        status: 409,
+        body: { error: "Backpack full", code: "BACKPACK_FULL" },
+      };
+    }
     if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
     if (err.code) {
       const status =

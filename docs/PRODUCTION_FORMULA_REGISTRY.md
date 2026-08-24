@@ -118,6 +118,29 @@ Combat HP / per-hit `round()` uses half-even. Economy/XP `rround` uses half-up. 
 
 ---
 
+## PM-MISSION-PHASE4 — Mission economy / snapshots / loot (Phase 4)
+
+| Field | Value |
+|---|---|
+| Status | PHASE 4 LIVE |
+| Authority | `src/lib/productionMath/missions.js` + `docs/PHASE4_MISSIONS.md` |
+| Duration | Discrete `MISSION_DURATION_POOLS`; L21+ stable `[300,600,900,1200]` |
+| Fuel | `duration/60`, quantized 0.25, min 0.25; remainder exception when no pool duration is affordable |
+| Board | Exactly 3 offers; no free/paid/timer/login/nav/reconnect reroll; rotate only after resolved Mission |
+| Snapshot | Acceptance freezes level, Fuel, duration, both variances, preview XP/SD, item-level basis, enemy EPA, `mission_combat_rules_version`, `mission_enemy_hp_scale`, `mission_enemy_outgoing_multiplier` |
+| XP | `missionXpReward` = ROUND(Fuel × mission_xpf(L) × xpVariance × MISSION_XP_EFFICIENCY × MISSION_XP_REWARD_SCALAR) |
+| Stardust | `missionStardustReward` = ROUND(Fuel × SPF(L) × stardustVariance); no XP-efficiency scalar |
+| Defeat | Named `DEFEAT_REWARD_FACTOR` 50% XP/SD; no item chain; pity frozen |
+| Skip | `missionSkipCostNova(originalFuel)`; elapsed time never reduces price |
+| Enemy HP | Universal `maxHp(Vitality)` then Mission-only `roundHalfEven(HP × 2.50 × 1.20)`; effective ×3.00. 2.50 native-damage normalization; 1.20 approved pacing. Starting CurrentHP = MaxHP. |
+| Outgoing | Certified knots locked; live `APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT` **ON** (exactly once). Purchased-ish ~46.9% gate invalidated; exact Test 18 states 100% wins. |
+| Loot | Exclusive Gear→Stim→Junk→None; Fuel pity; Stim 10% at 12.5 Fuel; Junk 75% at 12.5 Fuel |
+| Gear rarity | Mission-only 60/30/10; 0% Epic/Legendary |
+| Junk value | ROUND(MissionStardust × 0.45 × Uniform(0.60,1.40)), snapshotted |
+| Tests | `npm run test:phase4-missions` |
+
+---
+
 ## PM-MISSION-SD — Mission Stardust reward
 
 | Field | Value |

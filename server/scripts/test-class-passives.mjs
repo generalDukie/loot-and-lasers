@@ -401,9 +401,12 @@ test("26. Passive state cleared between separate combats", () => {
     r1.events.filter((e) => e.kind === "overclock_stack_gained").length,
     r2.events.filter((e) => e.kind === "overclock_stack_gained").length
   );
-  // New combat always starts at 0 stacks
-  assert.ok(r1.events.some((e) => e.kind === "overclock_ready"));
-  assert.ok(r2.events.some((e) => e.kind === "overclock_ready"));
+  // New combat starts at 0 stacks with no opening 0/6 card
+  assert.ok(!r1.events.some((e) => e.kind === "overclock_ready"));
+  assert.ok(!r2.events.some((e) => e.kind === "overclock_ready"));
+  const firstGain = r1.events.find((e) => e.kind === "overclock_stack_gained");
+  assert.ok(firstGain);
+  assert.equal(firstGain.before, 0);
 });
 
 test("27. Seeded combat is deterministic", () => {

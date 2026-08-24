@@ -13,6 +13,7 @@ import {
   critChance,
   dodgeChance,
   maxHp,
+  missionEnemyMaxHp,
   missionEnemyBaseDamage,
   playerBaseDamage,
   dungeonWormholeEnemyBaseDamage,
@@ -22,7 +23,13 @@ import {
   unroundedMaxHp,
 } from "@/lib/productionMath";
 
-export { STANDARD_ATTACK_FLAT, CRIT_DAMAGE_MULT, playerBaseDamage, dungeonWormholeEnemyBaseDamage };
+export {
+  STANDARD_ATTACK_FLAT,
+  CRIT_DAMAGE_MULT,
+  playerBaseDamage,
+  dungeonWormholeEnemyBaseDamage,
+  missionEnemyMaxHp,
+};
 export const ASTRAL_BARRIER_MAX_HP_FRAC = 0.15;
 /** Fallback unit-interval sample when no RNG function is supplied. */
 const UNIT_INTERVAL_MIDPOINT = 0.5;
@@ -70,13 +77,16 @@ export function attackFlatBase(combatant) {
 
 /**
  * Certified Mission enemy outgoing (`missionEnemyOutgoingMultiplier`) is locked
- * in productionMath. Live Mission settlement does not apply it yet: Test 18
- * paired that curve with EPA-complete players (free + purchases + gear +
- * typical Stims). Live characters are starting+free+equipped Gear only until
- * later fill. Applying ×6 at L50 made routine Missions unwinnable.
- * Phase 4 Mission construction/player-fill owns turning the curve on.
+ * in productionMath. Phase 4 live combat applies it exactly once via
+ * contextMultiplierFor → combatContextMultiplier. Do not also multiply by
+ * Dungeon/Wormhole ×1.10. Test hook may still toggle for diagnostics.
  */
-export const APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT = false;
+export let APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT = true;
+
+/** Test/evaluation hook. Production default is true after Phase 4 activation. */
+export function setApplyCertifiedMissionEnemyOutgoingInLiveCombat(value) {
+  APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT = !!value;
+}
 
 export function contextMultiplierFor(content, role, level) {
   if (
@@ -100,7 +110,11 @@ export function rawAttack(primaryAttr, flat = STANDARD_ATTACK_FLAT) {
   return rawStandardAttack(primaryAttr, flat);
 }
 
-export function derivedCombatStats(level, attrs, className, { missionEnemy = false, dungeonEnemy = false } = {}) {
+export function derivedCombatStats(level, attrs, className, {
+  missionEnemy = false,
+  dungeonEnemy = false,
+  missionEnemyHpScale,
+} = {}) {
   const archetype = combatantArchetype(className);
   const a = {
     str: Number(attrs?.strength || attrs?.str || 0),
@@ -123,7 +137,9 @@ export function derivedCombatStats(level, attrs, className, { missionEnemy = fal
   return {
     archetype,
     damageChannel: damageChannelForArchetype(archetype),
-    maxHp: maxHp(a.vit),
+    maxHp: missionGenerated
+      ? missionEnemyMaxHp(a.vit, missionEnemyHpScale)
+      : maxHp(a.vit),
     unroundedMaxHp: unroundedMaxHp(a.vit),
     crit: critChance(level, a.luck),
     dodge: dodgeChance(level, a.agi, archetype),

@@ -99,7 +99,7 @@ Centralized in `productionMath.combatContextMultiplier` / `combatMath.contextMul
 | Content | Player outgoing | Enemy outgoing |
 |---|---|---|
 | Mission (certified primitive) | ×1.0 | `missionEnemyOutgoingMultiplier(EL)` (L1=0.30 … L200+=12.00) |
-| Mission (**live settlement, staged**) | ×1.0 | ×1.0 until Phase 4 |
+| Mission (**live settlement**) | ×1.0 | certified `missionEnemyOutgoingMultiplier(EL)` applied once |
 | Dungeon / Wormhole | ×1.0 | ×1.10 (`DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT`) on native combat-scale Base Damage |
 | Arena / PvP / guild | ×1.0 | ×1.0 (opponents use native player Base Damage) |
 
@@ -107,7 +107,7 @@ Native player Base Damage: `playerBaseDamage = 37.5 + 0.008 × Primary^1.727`. A
 
 Mission enemies remain on historical `rawStandardAttack` until Phase 4.
 
-The locked Mission enemy outgoing curve is unchanged in `productionMath`. Live Mission combat does **not** apply it (`APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT = false`) because Test 18 paired that curve with EPA-complete players. Live starting+free+Gear players at L50 were wiped when ×6 hit 35% EPA foes. Phase 4 Mission construction/player-fill owns enabling the curve **and** rebalancing Mission enemies around the now-universal player damage scale. Do not add a Mission player ×0.4 (or similar) inverse scalar.
+The locked Mission enemy outgoing curve is unchanged in `productionMath`. Phase 4 live Mission combat applies it (`APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT = true`) exactly once. Mission enemy MaxHP then receives the Mission-only ×2.50 native-damage normalization × ×1.20 pacing factor (effective ×3.00). Do not add a Mission player ×0.4 (or similar) inverse scalar.
 
 Mission early base-damage ramp is **separate** from the outgoing curve.
 
@@ -231,7 +231,7 @@ Deferred (unchanged, Phase 4 Mission product): pity test treating any item as Ge
 
 ## Later dependencies (not started)
 
-Phase 4 Mission construction/rewards/drops/pity **and** Mission enemy rebalance around canonical (universal) player Base Damage. Do not add a hidden Mission player inverse scalar. Certified Mission enemy outgoing remains staged OFF until that pass. Phase 5 Stims (consumable). Dungeon/Wormhole/Arena **reward** formulas. Market, Mining, Companies, Shipments, Reputation, Commissions, GES.
+Phase 4 Mission construction/rewards/drops/pity and Mission combat activation (certified outgoing ON, Mission enemy HP ×3.00) are complete. Do not add a hidden Mission player inverse scalar. Phase 5 Stims (consumable / resale). Dungeon/Wormhole/Arena **reward** formulas. Market, Mining, Companies, Shipments, Reputation, Commissions, GES.
 
 ---
 

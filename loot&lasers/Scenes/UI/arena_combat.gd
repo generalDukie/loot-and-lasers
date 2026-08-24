@@ -92,6 +92,8 @@ var _portrait_px: float = PORTRAIT_BASE
 
 var _events: Array = []
 var _event_i := 0
+## Last event index folded onto the current attack beat (Overclock stack/vent).
+var _playback_fold_through := -1
 var _phase := "intro"
 var _playing := false
 var _finished := false
@@ -1228,11 +1230,25 @@ func _run_playback() -> void:
 			_event_i += 1
 			continue
 		var ev: Dictionary = raw
+		if CombatPresentation.skips_playback_beat(ev):
+			# Absorb/break stay on the hit beat; Dirty Tricks / Phantom chips apply immediately.
+			if CombatPresentation.applies_skipped_playback_status(ev):
+				_refresh_status_presentation()
+			if CombatPresentation.logs_skipped_playback_event(ev):
+				_append_combat_log(ev)
+			# Dirty Tricks still flash the trick card; Tantrum spend does not re-open after the hit.
+			if CombatPresentation.shows_skipped_playback_banner(ev):
+				_maybe_ability_banner(ev)
+			_event_i += 1
+			continue
 		_combo = _combo_at(_event_i)
 		_update_combo(str(ev.get("attacker", "")))
 		await _play_one_event(ev, gen)
 		if gen != _generation or _finished:
 			return
+		if _playback_fold_through > _event_i:
+			_event_i = _playback_fold_through
+		_playback_fold_through = -1
 		_event_i += 1
 		if _hp.player_hp <= 0 or _hp.enemy_hp <= 0:
 			break
@@ -1253,12 +1269,17 @@ func _play_one_event(ev: Dictionary, gen: int) -> void:
 	# Ability banners linger on their own timer; only replace when a new one fires.
 	var land_at := _beats.land_delay(ev)
 	_maybe_ability_banner(ev)
+	var tantrum_spend: Dictionary = CombatPresentation.following_tantrum_consume(_events, _event_i)
+	if not tantrum_spend.is_empty():
+		_maybe_ability_banner(tantrum_spend)
 	_begin_event_fx(ev)
 	if land_at > 0.0:
 		await get_tree().create_timer(land_at).timeout
 		if gen != _generation or _finished:
 			return
 	_land_event(ev)
+	if not tantrum_spend.is_empty():
+		_hide_ability_banner()
 	# Crits get a tiny readable hold without stretching the whole fight.
 	if bool(ev.get("crit", false)):
 		var hold := _beats.scaled(_beats.hit_pause_crit_s)
@@ -1266,7 +1287,41 @@ func _play_one_event(ev: Dictionary, gen: int) -> void:
 			await get_tree().create_timer(hold).timeout
 			if gen != _generation or _finished:
 				return
-	await get_tree().create_timer(_beats.recovery_after_land(ev)).timeout
+	var recovery := _beats.recovery_after_land(ev)
+	var fold_end := CombatPresentation.attached_overclock_end_index(_events, _event_i)
+	if fold_end > _event_i:
+		# Spend part of this swing's recovery on the Overclock flash — do not add a second beat.
+		var gap := minf(_beats.scaled(_beats.overclock_after_hit_s), recovery)
+		if gap > 0.01:
+			await get_tree().create_timer(gap).timeout
+			if gen != _generation or _finished:
+				return
+		_fold_overclock_onto_attack()
+		recovery = maxf(0.0, recovery - gap)
+	if recovery > 0.01:
+		await get_tree().create_timer(recovery).timeout
+
+
+func _fold_overclock_onto_attack() -> void:
+	var fold_end := CombatPresentation.attached_overclock_end_index(_events, _event_i)
+	if fold_end <= _event_i:
+		return
+	for j in range(_event_i + 1, fold_end + 1):
+		var raw: Variant = _events[j]
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var follow: Dictionary = raw
+		if CombatPresentation.skips_playback_beat(follow):
+			if CombatPresentation.applies_skipped_playback_status(follow):
+				_refresh_status_presentation(j)
+			if CombatPresentation.logs_skipped_playback_event(follow):
+				_append_combat_log(follow)
+			if CombatPresentation.shows_skipped_playback_banner(follow):
+				_maybe_ability_banner(follow)
+			continue
+		_maybe_ability_banner(follow)
+		_land_event(follow, j)
+	_playback_fold_through = fold_end
 
 
 func _begin_event_fx(ev: Dictionary) -> void:
@@ -1290,7 +1345,7 @@ func _begin_event_fx(ev: Dictionary) -> void:
 		_motion.lunge(attacker, side)
 
 
-func _land_event(ev: Dictionary) -> void:
+func _land_event(ev: Dictionary, status_upto: int = -1) -> void:
 	var t := str(ev.get("type", ""))
 	var defender := _card_for(ev.get("defender", null))
 	if defender == null and (t == "barrier" or t == "passive"):
@@ -1299,7 +1354,7 @@ func _land_event(ev: Dictionary) -> void:
 	var side := str(ev.get("attacker", "player"))
 	var weapon: Dictionary = _player_weapon if side == "player" else _enemy_weapon
 
-	_refresh_status_presentation()
+	_refresh_status_presentation(status_upto)
 	_append_combat_log(ev)
 
 	var floater: Dictionary = CombatPresentation.floater_label(ev)
@@ -1386,8 +1441,9 @@ func _maybe_ability_banner(ev: Dictionary) -> void:
 	_show_ability_banner(banner)
 
 
-func _refresh_status_presentation() -> void:
-	var status: Dictionary = CombatPresentation.reduce_status(_events, _event_i)
+func _refresh_status_presentation(upto: int = -1) -> void:
+	var idx := _event_i if upto < 0 else upto
+	var status: Dictionary = CombatPresentation.reduce_status(_events, idx)
 	var player_side: Dictionary = status.get("player", {}) as Dictionary
 	var opponent_side: Dictionary = status.get("opponent", {}) as Dictionary
 	if _player_status:

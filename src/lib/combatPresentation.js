@@ -273,7 +273,12 @@ export function resolveCombatFloater(ev) {
     return otherFloater("barrier", `SHIELD −${ev.absorbed || 0}`, DAMAGE_TYPE_COLORS.BARRIER);
   }
   if (ev.shieldHit && !(ev.damage > 0)) {
-    return otherFloater("barrier", "BLOCK", DAMAGE_TYPE_COLORS.BARRIER);
+    const absorbed = Number(ev.barrierAbsorbed) || 0;
+    return otherFloater(
+      "barrier",
+      absorbed > 0 ? `SHIELD −${absorbed}` : "BLOCK",
+      DAMAGE_TYPE_COLORS.BARRIER,
+    );
   }
   if (ev.damage > 0) {
     const dtype = String(ev.damageType || "NORMAL").toUpperCase();
@@ -281,10 +286,12 @@ export function resolveCombatFloater(ev) {
     const isCrit = !!ev.crit && dtype !== "TRUE";
     const color = damageTypeColor(dtype, isCrit);
     const prefix = dtype === "TRUE" ? "TRUE " : isCrit ? "CRIT " : "";
-    const shieldNote = ev.shieldHit && ev.barrierAbsorbed ? ` · SHIELD −${ev.barrierAbsorbed}` : "";
+    const shieldNote = ev.shieldHit && ev.barrierAbsorbed
+      ? `SHIELD −${ev.barrierAbsorbed} · BREAK · `
+      : "";
     return {
       kind: isCrit ? "crit" : dtype === "TRUE" ? "true" : "damage",
-      label: `${prefix}−${ev.damage}${shieldNote}`,
+      label: `${shieldNote}${prefix}−${ev.damage}`,
       color,
       damageType: dtype,
       fontSize: isCrit ? FLOAT_FONT_PX.crit : FLOAT_FONT_PX.damage,
@@ -374,4 +381,114 @@ export function dirtyTrickLabel(trick) {
     stim_injector: "Stim Injector",
   };
   return map[trick] || String(trick).replace(/_/g, " ");
+}
+
+/**
+ * Status / absorb events that already apply on a neighboring action.
+ * Playback should not spend a second visual beat — fold feedback into the hit.
+ */
+export const INSTANT_PLAYBACK_KINDS = Object.freeze([
+  "orbital_assistant_activated",
+  "defensive_protocol_consumed",
+  "acquire_target_consumed",
+  "barrier_absorbed",
+  "barrier_broken",
+  "overclock_ready",
+  "dirty_trick_selected",
+  "stim_injector_charge",
+  "stim_injector_turn_order",
+  "phantom_signal_armed",
+  "phantom_signal_reprimed",
+  "kinetic_tantrum_consumed",
+]);
+
+/** Overclock ticks that belong on the Technomancer's own attack beat (not the foe's). */
+export const OVERCLOCK_ATTACK_TICK_KINDS = Object.freeze([
+  "overclock_stack_gained",
+  "overclock_vented",
+]);
+
+/** @deprecated Use INSTANT_PLAYBACK_KINDS */
+export const ORBITAL_INSTANT_STATUS_KINDS = INSTANT_PLAYBACK_KINDS;
+
+export function skipsPlaybackBeat(ev) {
+  const kind = ev?.kind || ev?.missKind || ev?.secondaryKind || "";
+  return INSTANT_PLAYBACK_KINDS.includes(kind);
+}
+
+/** Folded events still belong in the combat log; the roll is covered by the apply/hit event. */
+export function logsSkippedPlaybackEvent(ev) {
+  const kind = ev?.kind || "";
+  return (
+    kind === "defensive_protocol_consumed" ||
+    kind === "acquire_target_consumed" ||
+    kind === "barrier_absorbed" ||
+    kind === "barrier_broken" ||
+    kind === "dirty_trick_selected" ||
+    kind === "phantom_signal_armed" ||
+    kind === "phantom_signal_reprimed" ||
+    kind === "kinetic_tantrum_consumed"
+  );
+}
+
+/** Chip-only feedback: apply status while skipping the beat (not absorb/break). */
+export function appliesSkippedPlaybackStatus(ev) {
+  const kind = ev?.kind || "";
+  return (
+    kind === "dirty_trick_selected" ||
+    kind === "stim_injector_charge" ||
+    kind === "phantom_signal_armed" ||
+    kind === "phantom_signal_reprimed" ||
+    kind === "kinetic_tantrum_consumed"
+  );
+}
+
+/** Ability banner on a skipped beat (Dirty Tricks card). Tantrum spend banners on the attack instead. */
+export function showsSkippedPlaybackBanner(ev) {
+  return (ev?.kind || "") === "dirty_trick_selected";
+}
+
+export function isAttackAttemptEvent(ev) {
+  const t = ev?.type || "";
+  return t === "attack" || t === "dodge" || t === "miss" || !!ev?.dodged || !!ev?.isNormalAttack;
+}
+
+export function isOverclockAttackTick(ev) {
+  const kind = ev?.kind || "";
+  return OVERCLOCK_ATTACK_TICK_KINDS.includes(kind);
+}
+
+/**
+ * Last event index to play on the same visual beat as `attackIndex`.
+ * Skips instant status events, then attaches stack-gain / vent. Returns `attackIndex` when none.
+ */
+export function attachedOverclockEndIndex(events, attackIndex) {
+  const list = Array.isArray(events) ? events : [];
+  if (attackIndex < 0 || attackIndex >= list.length) return attackIndex;
+  if (!isAttackAttemptEvent(list[attackIndex])) return attackIndex;
+  let i = attackIndex + 1;
+  while (i < list.length && skipsPlaybackBeat(list[i])) i += 1;
+  if (i < list.length && isOverclockAttackTick(list[i])) return i;
+  return attackIndex;
+}
+
+/**
+ * Kinetic Tantrum spend that belongs on the Vanguard's attack beat (not a second beat).
+ * Returns the consume event, or null.
+ */
+export function followingTantrumConsumeEvent(events, attackIndex) {
+  const list = Array.isArray(events) ? events : [];
+  if (attackIndex < 0 || attackIndex >= list.length) return null;
+  if (!isAttackAttemptEvent(list[attackIndex])) return null;
+  let i = attackIndex + 1;
+  while (i < list.length) {
+    const ev = list[i];
+    if ((ev?.kind || "") === "kinetic_tantrum_consumed") return ev;
+    if (skipsPlaybackBeat(ev)) {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+  return null;
 }

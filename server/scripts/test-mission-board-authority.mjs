@@ -136,9 +136,10 @@ await testAsync("Displayed XP/Stardust equal Node's authoritative formulas (pari
     // Stardust now carries independent variance (its efficiency roll), applied on
     // top of the base. No ship mods / zero collection on a fresh character → the
     // only modifiers are the variance rolls themselves.
-    const expectedSd = Math.round(
-      computeMissionStardustFromFuel(o.fuel_cost, level) *
-        normalizeMissionEfficiency(o.stardust_efficiency, level)
+    const expectedSd = computeMissionStardustFromFuel(
+      o.fuel_cost,
+      level,
+      o.stardust_efficiency,
     );
     assert.equal(o.preview_xp, expectedXp, "XP preview matches settlement formula");
     assert.equal(o.preview_stardust, expectedSd, "Stardust preview matches settlement formula");

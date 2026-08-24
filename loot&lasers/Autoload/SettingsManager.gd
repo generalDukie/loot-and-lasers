@@ -71,7 +71,7 @@ var fullscreen: bool = false
 var window_mode: String = "maximized"
 var play_music_when_unfocused: bool = true
 var vsync: bool = true
-## Combat presentation only (1.0 = default pace).
+## Combat presentation only (1.0 = default pace; two 0.85× retunes from authored times).
 var combat_anim_speed: float = 1.0
 ## 0 = no shake, 1 = full CombatBeatConfig shake.
 var screen_shake_scale: float = 1.0

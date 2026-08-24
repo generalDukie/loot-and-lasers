@@ -34,6 +34,7 @@ import {
   combatContextMultiplier,
   missionEnemyOutgoingMultiplier,
   missionEnemyBaseDamage,
+  missionEnemyMaxHp,
   PLAYER_COMBAT_CONTEXT_MULT,
   DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT,
   VARIANCE_MIN,
@@ -128,8 +129,8 @@ test("Context multipliers: Mission / Dungeon / Arena", () => {
   assert.equal(combatContextMultiplier({ content: "dungeon", role: "enemy" }), DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT);
   assert.equal(combatContextMultiplier({ content: "arena", role: "player" }), PLAYER_COMBAT_CONTEXT_MULT);
   assert.equal(combatContextMultiplier({ content: "arena", role: "enemy" }), PLAYER_COMBAT_CONTEXT_MULT);
-  assert.equal(APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT, false);
-  assert.equal(contextMultiplierFor("mission", "enemy", 50), PLAYER_COMBAT_CONTEXT_MULT);
+  assert.equal(APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT, true);
+  assert.equal(contextMultiplierFor("mission", "enemy", 50), missionEnemyOutgoingMultiplier(50));
   assert.equal(contextMultiplierFor("mission", "player", 50), PLAYER_COMBAT_CONTEXT_MULT);
   assert.equal(contextMultiplierFor("dungeon", "enemy", 50), DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT);
   assert.equal(contextMultiplierFor("dungeon", "player", 50), PLAYER_COMBAT_CONTEXT_MULT);
@@ -356,7 +357,7 @@ test("generated foes use snapshot stats; players compose sheet totals", () => {
     stats: { strength: 80, agility: 80, intellect: 80, vitality: 400, luck: 40 },
   });
   const f = buildFighter(foe, [], "opponent", { content: "mission" });
-  assert.equal(f.maxHp, maxHp(400));
+  assert.equal(f.maxHp, missionEnemyMaxHp(400));
 
   const player = {
     name: "Sheet",
@@ -379,8 +380,8 @@ test("equipped Gear is counted exactly once", () => {
   const foe = pveFoe({
     stats: { strength: 10, agility: 10, intellect: 10, vitality: 100, luck: 10 },
   });
-  assert.equal(buildFighter(foe, [], "opponent").maxHp, maxHp(100));
-  assert.equal(buildFighter(foe, gear, "opponent").maxHp, maxHp(110));
+  assert.equal(buildFighter(foe, [], "opponent").maxHp, missionEnemyMaxHp(100));
+  assert.equal(buildFighter(foe, gear, "opponent").maxHp, missionEnemyMaxHp(110));
 });
 
 test("Fire Support True Damage skips resist; Defensive Protocol still applies", () => {

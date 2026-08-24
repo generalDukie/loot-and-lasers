@@ -20,17 +20,25 @@ db.function("search_normalize", { deterministic: true }, (value) => String(value
   .toLowerCase()
   .trim());
 
+/** Serialize SQLite writers — one connection cannot nest BEGIN IMMEDIATE. */
+let transactionTail = Promise.resolve();
+
 /** Run async fn inside a SQLite transaction (BEGIN IMMEDIATE). */
 export async function withTransactionAsync(fn) {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const result = await fn();
-    db.exec("COMMIT");
-    return result;
-  } catch (err) {
-    try { db.exec("ROLLBACK"); } catch { /* ignore */ }
-    throw err;
-  }
+  const run = async () => {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = await fn();
+      db.exec("COMMIT");
+      return result;
+    } catch (err) {
+      try { db.exec("ROLLBACK"); } catch { /* ignore */ }
+      throw err;
+    }
+  };
+  const queued = transactionTail.then(run, run);
+  transactionTail = queued.then(() => {}, () => {});
+  return queued;
 }
 
 db.exec(`

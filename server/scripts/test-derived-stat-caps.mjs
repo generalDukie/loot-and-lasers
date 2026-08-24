@@ -421,7 +421,7 @@ test("native player damage architecture and Mission outgoing staging unchanged",
   assert.equal(M.PLAYER_BASE_DAMAGE_PRIMARY_EXPONENT, 1.727);
   assert.equal(M.PLAYER_COMBAT_CONTEXT_MULT, 1);
   assert.equal(M.DUNGEON_WORMHOLE_ENEMY_DAMAGE_MULT, 1.10);
-  assert.equal(APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT, false);
+  assert.equal(APPLY_CERTIFIED_MISSION_ENEMY_OUTGOING_IN_LIVE_COMBAT, true);
   assert.equal(M.PLAYER_BASE_DAMAGE_SCALE, undefined);
 });
 

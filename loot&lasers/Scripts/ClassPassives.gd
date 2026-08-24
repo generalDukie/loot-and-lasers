@@ -48,24 +48,20 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 		or (t == "secondary" and ev.get("passive", null) != null) \
 		or (t == "dodge" and str(ev.get("kind", "")) == "fire_support_dodged")
 	var banner_kinds := {
-		"dirty_trick_selected": true,
-		"orbital_assistant_activated": true,
 		"fire_support": true,
 		"fire_support_dodged": true,
+		"dirty_trick_selected": true,
 		"kinetic_tantrum_normal": true,
 		"kinetic_tantrum_strong": true,
+		"kinetic_tantrum_consumed": true,
 		"astral_barrier_created": true,
 		"astral_barrier_restored": true,
-		"phantom_signal_armed": true,
-		"phantom_signal_reprimed": true,
 		"phantom_signal": true,
 		"phantom_signal_miss": true,
 		"overclock_stack_gained": true,
 		"overclock_stacks_removed": true,
 		"overclock_vented": true,
-		"overclock_ready": true,
 		"defensive_protocol_applied": true,
-		"defensive_protocol_consumed": true,
 		"acquire_target_applied": true,
 	}
 	if not is_passiveish or not banner_kinds.has(kind):
@@ -98,6 +94,11 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 			detail = "%.1f× guaranteed hit" % STRONG_TANTRUM_CRIT_MULT
 		"kinetic_tantrum_normal":
 			detail = "%.1f×" % NORMAL_TANTRUM_CRIT_MULT
+		"kinetic_tantrum_consumed":
+			if str(ev.get("consumed", "")) == "strong":
+				detail = "%.1f× guaranteed hit" % STRONG_TANTRUM_CRIT_MULT
+			else:
+				detail = "%.1f×" % NORMAL_TANTRUM_CRIT_MULT
 		"astral_barrier_created":
 			detail = "%s shield" % str(ev.get("barrier", ev.get("barrierMax", 0)))
 		"astral_barrier_restored":
@@ -112,8 +113,6 @@ static func resolve_ability_banner(ev: Dictionary, player: Dictionary, opponent:
 			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
 		"overclock_vented":
 			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
-		"overclock_ready":
-			detail = "0/%d" % OVERCLOCK_STACK_CAP
 		"defensive_protocol_applied":
 			detail = "Defensive Protocol"
 		"defensive_protocol_consumed":

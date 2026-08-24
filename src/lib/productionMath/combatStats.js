@@ -18,6 +18,7 @@ import {
   MISSION_ENEMY_BASE_RAMP_FLOOR,
   MISSION_ENEMY_BASE_RAMP_FULL_LEVEL,
   MISSION_ENEMY_BASE_RAMP_LEVEL_SPAN,
+  MISSION_ENEMY_HP_SCALE,
   MISSION_ENEMY_BASE_RAMP_RISE,
   MISSION_OUTGOING_ASYMPTOTE,
   MISSION_OUTGOING_KNOTS,
@@ -55,6 +56,20 @@ export function unroundedMaxHp(vitality) {
 /** Certified combat HP: Python round(BASE + PER_VIT*VIT + SQ*VIT^2). */
 export function maxHp(vitality) {
   return Math.max(1, roundHalfEven(unroundedMaxHp(vitality)));
+}
+
+/**
+ * Mission-only MaxHP. Universal maxHp(Vitality) first, then the named Mission
+ * scale, then the same certified half-even round used for combat HP.
+ * Default scale is MISSION_ENEMY_HP_SCALE (2.5 × 1.20 = 3.0). Callers may pass
+ * a snapshotted scale so accepted Missions stay deterministic.
+ */
+export function missionEnemyMaxHp(vitality, scale = MISSION_ENEMY_HP_SCALE) {
+  const normal = maxHp(vitality);
+  const applied = Number.isFinite(Number(scale)) && Number(scale) > 0
+    ? Number(scale)
+    : MISSION_ENEMY_HP_SCALE;
+  return Math.max(1, roundHalfEven(normal * applied));
 }
 
 /**

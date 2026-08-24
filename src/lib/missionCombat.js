@@ -1,11 +1,11 @@
 import { RACES } from "@/lib/gameData";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
+import { constructMissionEnemy } from "@/lib/productionMath/missions.js";
 import {
-  missionEnemyAttributeBudget,
-  pickMissionEnemyArchetype,
-  distributeMissionEnemyAttributes,
-  MISSION_ENEMY_ARCHETYPE_CLASS,
-} from "@/lib/expectedPlayerAttributes";
+  MISSION_COMBAT_RULES_VERSION,
+  MISSION_ENEMY_HP_SCALE,
+  missionEnemyOutgoingMultiplier,
+} from "@/lib/productionMath";
 
 const ENCOUNTER_NAMES = [
   "Scrap Raider", "Dust Bandit", "Vermin Scout", "Hull Rat", "Junk Drone",
@@ -17,51 +17,68 @@ const MISSION_ENEMY_POWER_PER_ATTRIBUTE = 2;
 const MISSION_ENEMY_BASE_ARENA_RATING = 800;
 const MISSION_ENEMY_ARENA_RATING_PER_LEVEL = 5;
 
-function pick(arr, rng = Math.random) {
+function pick(arr, rng) {
   return arr[Math.floor(rng() * arr.length)];
+}
+
+function snapshotValue(mission, key) {
+  if (mission && mission[key] != null) return mission[key];
+  const snap = mission?.rewards?.snapshot;
+  if (snap && snap[key] != null) return snap[key];
+  return undefined;
 }
 
 /**
  * Soft end-of-mission foe.
- * Power = expectedPlayerAttributes(playerLevel) × 35% (EPA benchmark),
- * distributed by a hidden MIGHT / REFLEX / TECH archetype. The low-level
- * base-damage ramp (statEngine) still wraps this foe via missionEnemy/level.
- * Presentation (name/race/art) is independent. Combat uses player formulas via
- * a class family mapping with passives suppressed.
+ * Combat stats come from productionMath constructMissionEnemy using the
+ * Mission acceptance snapshot level (not live character level).
+ * Presentation (name/race/art) is independent and has no combat effect.
  */
-export function generateMissionEncounter(character, mission, rng = Math.random) {
-  const playerLevel = Math.max(1, Math.floor(Number(character?.level) || 1));
-  // Presentation level = player level (no direct combat level multiplier).
-  const level = playerLevel;
-
-  const archetype = pickMissionEnemyArchetype(rng);
-  const budget = missionEnemyAttributeBudget(level);
-  const stats = distributeMissionEnemyAttributes(budget, archetype);
-  const classKey = MISSION_ENEMY_ARCHETYPE_CLASS[archetype];
-
-  // Appearance only — race combat bonuses are intentionally not applied
-  // (character.race left unset so attribute budget stays exact).
+export function generateMissionEncounter(character, mission, rng) {
+  if (typeof rng !== "function") {
+    throw new Error("generateMissionEncounter requires injected RNG");
+  }
+  const snapshotLevel = Math.max(
+    1,
+    Math.floor(Number(
+      mission?.character_level
+      ?? mission?.enemy_epa_level
+      ?? mission?.rewards?.snapshot?.character_level
+      ?? character?.level
+      ?? 1,
+    )),
+  );
+  const built = constructMissionEnemy({ snapshotLevel, rng });
   const raceKey = pick(Object.keys(RACES), rng);
   const race = RACES[raceKey];
+  const stats = built.stats;
+  const attrSum = Object.values(stats).reduce((a, b) => a + b, 0);
+  const snapHpScale = Number(snapshotValue(mission, "mission_enemy_hp_scale"));
+  const snapOutgoing = Number(snapshotValue(mission, "mission_enemy_outgoing_multiplier"));
+  const missionEnemyHpScale = Number.isFinite(snapHpScale) && snapHpScale > 0
+    ? snapHpScale
+    : MISSION_ENEMY_HP_SCALE;
+  const missionEnemyOutgoingMultiplierFrozen = Number.isFinite(snapOutgoing)
+    ? snapOutgoing
+    : missionEnemyOutgoingMultiplier(snapshotLevel);
+  const missionCombatRulesVersion = snapshotValue(mission, "mission_combat_rules_version")
+    || MISSION_COMBAT_RULES_VERSION;
 
   return {
     id: `mission-foe-${Date.now()}`,
     name: pick(ENCOUNTER_NAMES, rng),
-    // Hidden combat archetype — not shown in UI.
-    missionEnemyArchetype: archetype,
+    missionEnemyArchetype: built.missionEnemyArchetype,
     missionEnemy: true,
     suppressClassPassive: true,
-    // Class is ONLY for primary damage / resist-family rules in statEngine.
-    class: classKey,
-    // No race combat bonus — keeps the soft progressing budget exact.
+    class: built.class,
     race: null,
-    level,
+    level: snapshotLevel,
     stats,
     power: Math.round(
-      level * MISSION_ENEMY_POWER_PER_LEVEL
-      + Object.values(stats).reduce((a, b) => a + b, 0) * MISSION_ENEMY_POWER_PER_ATTRIBUTE,
+      snapshotLevel * MISSION_ENEMY_POWER_PER_LEVEL
+      + attrSum * MISSION_ENEMY_POWER_PER_ATTRIBUTE,
     ),
-    arena_rating: MISSION_ENEMY_BASE_ARENA_RATING + level * MISSION_ENEMY_ARENA_RATING_PER_LEVEL,
+    arena_rating: MISSION_ENEMY_BASE_ARENA_RATING + snapshotLevel * MISSION_ENEMY_ARENA_RATING_PER_LEVEL,
     arena_wins: 0,
     arena_losses: 0,
     guild: null,
@@ -77,7 +94,15 @@ export function generateMissionEncounter(character, mission, rng = Math.random) 
       marking: pick(MARKINGS, rng),
     },
     speciesId: raceKey,
-    // mission arg reserved for future authored encounter overrides
     _missionId: mission?.id || null,
+    noGear: true,
+    noPassive: true,
+    noRaceEffect: true,
+    baseDamage: built.baseDamage,
+    attributeTotal: built.attributeTotal,
+    expectedBudget: built.expectedBudget,
+    missionEnemyHpScale,
+    missionEnemyOutgoingMultiplier: missionEnemyOutgoingMultiplierFrozen,
+    missionCombatRulesVersion,
   };
 }

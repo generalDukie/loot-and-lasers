@@ -59,14 +59,14 @@ static func _pchip_end_slope(h0: float, h1: float, m0: float, m1: float) -> floa
 
 static func _pchip(x: float, xs: Array, ys: Array) -> float:
 	var n := xs.size()
-	var h: Array = []
-	var m: Array = []
+	var h := PackedFloat64Array()
+	var m := PackedFloat64Array()
 	h.resize(n - 1)
 	m.resize(n - 1)
 	for i in range(n - 1):
 		h[i] = float(xs[i + 1]) - float(xs[i])
 		m[i] = (float(ys[i + 1]) - float(ys[i])) / h[i]
-	var d: Array = []
+	var d := PackedFloat64Array()
 	d.resize(n)
 	d[0] = _pchip_end_slope(h[0], h[1], m[0], m[1])
 	d[n - 1] = _pchip_end_slope(h[n - 2], h[n - 3], m[n - 2], m[n - 3])
@@ -74,9 +74,11 @@ static func _pchip(x: float, xs: Array, ys: Array) -> float:
 		if m[i - 1] == 0.0 or m[i] == 0.0 or sign(m[i - 1]) != sign(m[i]):
 			d[i] = 0.0
 		else:
-			var w1 := PCHIP_SECANT_DOUBLE_WEIGHT * h[i] + h[i - 1]
-			var w2 := h[i] + PCHIP_SECANT_DOUBLE_WEIGHT * h[i - 1]
-			d[i] = (w1 + w2) / (w1 / m[i - 1] + w2 / m[i])
+			var hi: float = float(h[i])
+			var h_prev: float = float(h[i - 1])
+			var w1: float = PCHIP_SECANT_DOUBLE_WEIGHT * hi + h_prev
+			var w2: float = hi + PCHIP_SECANT_DOUBLE_WEIGHT * h_prev
+			d[i] = (w1 + w2) / (w1 / float(m[i - 1]) + w2 / float(m[i]))
 	if x <= float(xs[0]):
 		return float(ys[0])
 	if x >= float(xs[n - 1]):
@@ -84,9 +86,9 @@ static func _pchip(x: float, xs: Array, ys: Array) -> float:
 	var k := 0
 	while k < n - 2 and x > float(xs[k + 1]):
 		k += 1
-	var t := (x - float(xs[k])) / h[k]
-	var t2 := t * t
-	var t3 := t2 * t
+	var t: float = (x - float(xs[k])) / float(h[k])
+	var t2: float = t * t
+	var t3: float = t2 * t
 	var h00 := CUBIC_HERMITE_CUBE_COEFFICIENT * t3 - CUBIC_HERMITE_SQUARE_COEFFICIENT * t2 + 1.0
 	var h10 := t3 - CUBIC_HERMITE_CUBE_COEFFICIENT * t2 + t
 	var h01 := -CUBIC_HERMITE_CUBE_COEFFICIENT * t3 + CUBIC_HERMITE_SQUARE_COEFFICIENT * t2

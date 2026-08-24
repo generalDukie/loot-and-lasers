@@ -105,7 +105,7 @@ test("mission skip Fuel formula reference ranges", () => {
   assert.equal(skipCostFor(m), missionSkipCostDisplay(8));
   assert.equal(skipCostHalfUnits(m), missionSkipCostHalfUnits(8));
   const done = { fuel_cost: 8, end_time: new Date(Date.now() - 1000).toISOString() };
-  assert.equal(skipCostFor(done), 0);
+  assert.equal(skipCostFor(done), missionSkipCostDisplay(8), "elapsed time does not reduce skip cost");
 });
 
 test("StardustPerFuel shared primitive still authoritative", () => {

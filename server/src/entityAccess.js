@@ -44,6 +44,7 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "mission_end_time",
   "missions_completed",
   "mission_gear_miss_streak",
+  "fuel_since_last_gear",
   "cantina_offers",
   "cantina_offers_status",
   "cantina_offers_generated_at",

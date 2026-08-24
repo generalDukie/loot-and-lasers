@@ -1,123 +1,139 @@
 /**
- * Mission reward helpers (Restoration 11).
- * Settlement authority remains ClaimMission + executeRewardClaim;
- * this module centralizes the exclusive item chain and related constants.
+ * Phase 4 Mission physical-reward chain.
+ *
+ * Exclusive Test-18 checksum: Gear → Stim → Junk → None.
+ * Settlement RNG is injected. Pity is Fuel-normalized, not mission-count.
+ * Stim sale value is intentionally unfinished (Phase 5).
  */
+import { GenerateGearItem } from "../../../src/lib/itemGeneration.js";
 import {
-  MISSION_GEAR_BASE_CHANCE,
-  MISSION_GEAR_PITY_INCREMENT,
-  MISSION_STIM_CHANCE_AFTER_GEAR_FAIL,
-  MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL,
-  JUNK_MISSION_REWARD_MULTIPLIER,
-  JUNK_VARIANCE_MIN,
-  JUNK_VARIANCE_MAX,
-  missionGearDropChance,
-  rollMissionGearDrop,
+  LOOT_OUTCOME_GEAR,
+  LOOT_OUTCOME_JUNK,
+  LOOT_OUTCOME_NONE,
+  LOOT_OUTCOME_STIM,
+  missionGearDropProbability,
+  missionJunkConditionalProbability,
+  missionStimConditionalProbability,
+  missionStimRarityForLevel,
+  nextFuelSinceLastGear,
+  readFuelSinceLastGear,
+  rollMissionGearItemLevel,
   rollMissionGearRarity,
-  JunkSaleValue,
-  MissionStardustReward,
-  StardustPerFuel,
-} from "./stardustEconomy.js";
-import { randomItem } from "./rewards.js";
-import { randomConsumable, priceStimOffer } from "./economyFormulas.js";
+  rollMissionGearSlot,
+  rollMissionJunkValue,
+  rollMissionLootOutcome,
+  rollMissionStimAttribute,
+} from "../../../src/lib/productionMath/missions.js";
 
 export {
-  MISSION_GEAR_BASE_CHANCE,
-  MISSION_GEAR_PITY_INCREMENT,
-  MISSION_STIM_CHANCE_AFTER_GEAR_FAIL,
-  MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL,
-  JUNK_MISSION_REWARD_MULTIPLIER,
-  JUNK_VARIANCE_MIN,
-  JUNK_VARIANCE_MAX,
-  missionGearDropChance,
-  rollMissionGearDrop,
+  LOOT_OUTCOME_GEAR,
+  LOOT_OUTCOME_JUNK,
+  LOOT_OUTCOME_NONE,
+  LOOT_OUTCOME_STIM,
+  missionGearDropProbability,
+  missionJunkConditionalProbability,
+  missionStimConditionalProbability,
+  nextFuelSinceLastGear,
+  readFuelSinceLastGear,
+  rollMissionLootOutcome,
   rollMissionGearRarity,
-  JunkSaleValue,
-  MissionStardustReward,
-  StardustPerFuel,
+  rollMissionJunkValue,
 };
 
-export const MISSION_LOOT_SLOTS = Object.freeze([
-  "weapon",
-  "armor",
-  "helmet",
-  "boots",
-  "legs",
-  "neck",
-  "accessory",
-  "ship_module",
-]);
+const MISSION_GEAR_ORIGIN = "mission";
+const STIM_ITEM_TYPE = "consumable";
+const JUNK_ITEM_TYPE = "material";
+const JUNK_RARITY = "common";
+const DEFAULT_JUNK_NAME = "Salvaged Trinket";
 
-/** Mission Gear item level = character level at settlement (authoritative existing rule). */
-export function missionGearItemLevel(character) {
+function snapshotLevelOf(character, mission) {
+  const fromMission = Number(mission?.character_level ?? mission?.reward_item_level_basis);
+  if (Number.isFinite(fromMission) && fromMission >= 1) return Math.floor(fromMission);
   return Math.max(1, Math.floor(Number(character?.level) || 1));
 }
 
-/** Deterministic slot from mission name when launch did not pin loot_type. */
-export function missionGearSlotFromMission(mission) {
-  const name = String(mission?.name || mission?.rewards?.loot_type || "mission");
-  if (MISSION_LOOT_SLOTS.includes(mission?.rewards?.loot_type)) {
-    return mission.rewards.loot_type;
+function requireRng(rng, label) {
+  if (typeof rng !== "function") {
+    throw new Error(`${label} requires injected RNG`);
   }
-  return MISSION_LOOT_SLOTS[name.length % MISSION_LOOT_SLOTS.length];
+  return rng;
+}
+
+export function missionGearItemLevel(character, mission) {
+  return snapshotLevelOf(character, mission);
 }
 
 /**
- * Exclusive item chain at settlement (exactly once per claim generate):
- * Gear (pity) → Stim 25% → Junk 75% → NONE
- *
- * @returns {{
- *   itemOutcome: 'GEAR'|'STIM'|'JUNK'|'NONE',
- *   gearDropped: boolean,
- *   stimDropped: boolean,
- *   junkDropped: boolean,
- *   itemTemplates: object[],
- *   gearChance: number,
- *   pityBefore: number,
- * }}
+ * Exclusive item chain at settlement (victory only, exactly once per claim):
+ * Gear → Stim → Junk → NONE
  */
 export function settleMissionItemChain({
   character,
   mission,
   missionStardustReward,
-  missStreak,
-  rng = Math.random,
+  fuelSinceLastGear,
+  rng,
 } = {}) {
-  const pityBefore = Math.max(0, Math.floor(Number(missStreak) || 0));
-  const gearChance = missionGearDropChance(pityBefore);
+  const r = requireRng(rng, "settleMissionItemChain");
+  const missionFuel = Number(
+    mission?.original_fuel_cost ?? mission?.fuel_cost ?? 0,
+  );
+  const pityBefore = readFuelSinceLastGear({
+    fuel_since_last_gear: fuelSinceLastGear ?? character?.fuel_since_last_gear,
+    mission_gear_miss_streak: character?.mission_gear_miss_streak,
+  });
+  const snapshotLevel = snapshotLevelOf(character, mission);
+  const rolled = rollMissionLootOutcome({
+    missionFuel,
+    fuelSinceLastGear: pityBefore,
+    rng: r,
+  });
   const itemTemplates = [];
   let gearDropped = false;
   let stimDropped = false;
   let junkDropped = false;
-  let itemOutcome = "NONE";
+  const itemOutcome = rolled.outcome;
 
-  const level = missionGearItemLevel(character);
-  const lootType = missionGearSlotFromMission(mission);
-
-  if (rollMissionGearDrop(pityBefore, rng)) {
+  if (itemOutcome === LOOT_OUTCOME_GEAR) {
     gearDropped = true;
-    itemOutcome = "GEAR";
-    const rarity = rollMissionGearRarity(rng);
-    itemTemplates.push(randomItem(rarity, level, lootType, rng, character?.class, {
-      origin: "mission",
+    const rarity = rollMissionGearRarity(r);
+    const slot = rollMissionGearSlot(r);
+    const itemLevel = rollMissionGearItemLevel(snapshotLevel, r);
+    itemTemplates.push(GenerateGearItem({
+      itemLevel,
+      itemType: slot,
+      rarity,
+      rng: r,
+      origin: MISSION_GEAR_ORIGIN,
     }));
-  } else if (rng() < MISSION_STIM_CHANCE_AFTER_GEAR_FAIL) {
+  } else if (itemOutcome === LOOT_OUTCOME_STIM) {
     stimDropped = true;
-    itemOutcome = "STIM";
-    const { _cost, ...consItem } = randomConsumable(rng);
-    itemTemplates.push(priceStimOffer(consItem, level));
-  } else if (rng() < MISSION_JUNK_CHANCE_AFTER_GEAR_AND_STIM_FAIL) {
+    const rarity = missionStimRarityForLevel(snapshotLevel);
+    const attr = rollMissionStimAttribute(r);
+    itemTemplates.push({
+      name: `${attr} Stim`,
+      type: STIM_ITEM_TYPE,
+      rarity,
+      level_requirement: snapshotLevel,
+      stats: {},
+      flavor_text: "A field stim recovered on mission.",
+      origin: MISSION_GEAR_ORIGIN,
+      consumable: { stat: attr, tier: rarity },
+      // Phase 5 owns Stim sale-value migration. Leave unfinished sell path intact.
+    });
+  } else if (itemOutcome === LOOT_OUTCOME_JUNK) {
     junkDropped = true;
-    itemOutcome = "JUNK";
-    const junkName = mission?.rewards?.collectible?.name || "Salvaged Trinket";
+    const junkName = mission?.rewards?.collectible?.name || DEFAULT_JUNK_NAME;
+    const sellValue = rollMissionJunkValue(missionStardustReward, r);
     itemTemplates.push({
       name: junkName,
-      type: "material",
-      rarity: "common",
-      level_requirement: level,
+      type: JUNK_ITEM_TYPE,
+      rarity: JUNK_RARITY,
+      level_requirement: snapshotLevel,
       stats: {},
       flavor_text: "A curious trinket recovered on mission.",
-      sell_value: JunkSaleValue(missionStardustReward, rng),
+      origin: MISSION_GEAR_ORIGIN,
+      sell_value: sellValue,
     });
   }
 
@@ -127,7 +143,12 @@ export function settleMissionItemChain({
     stimDropped,
     junkDropped,
     itemTemplates,
-    gearChance,
+    gearChance: rolled.pGear,
     pityBefore,
+    fuelSinceLastGearAfter: nextFuelSinceLastGear({
+      fuelSinceLastGear: pityBefore,
+      missionFuel,
+      gearDropped,
+    }),
   };
 }

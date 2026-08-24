@@ -16,3 +16,4 @@ export * from "./combatStats.js";
 export * from "./attributes.js";
 export * from "./pve.js";
 export * from "./market.js";
+export * from "./missions.js";

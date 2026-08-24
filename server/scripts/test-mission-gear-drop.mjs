@@ -1,16 +1,19 @@
 /**
- * Mission gear drop chance / pity tests.
+ * Mission Gear drop chance / Fuel-pity tests (Test 18 checksum).
  * Run: npm run test:mission-gear-drop
  */
 import assert from "node:assert/strict";
 import {
-  MISSION_GEAR_DROP_BASE,
-  MISSION_GEAR_PITY_STEP,
-  MISSION_GEAR_DROP_CAP,
-  missionGearDropChance,
-  missionGearMissStreak,
-  rollMissionGearDrop,
-} from "../src/shared/economyFormulas.js";
+  MISSION_GEAR_REFERENCE_CHANCE,
+  MISSION_GEAR_REFERENCE_FUEL,
+  MISSION_GEAR_PITY_INCREMENT,
+  MISSION_GEAR_PITY_CLAMP,
+} from "../../src/lib/productionMath/constants.js";
+import {
+  missionGearDropProbability,
+  nextFuelSinceLastGear,
+  readFuelSinceLastGear,
+} from "../../src/lib/productionMath/missions.js";
 
 let passed = 0;
 let failed = 0;
@@ -27,38 +30,34 @@ function test(name, fn) {
   }
 }
 
-console.log("\nMission gear drop tests\n");
+console.log("\nMission Gear drop tests (Fuel pity)\n");
 
-test("base chance is 20%", () => {
-  assert.equal(MISSION_GEAR_DROP_BASE, 0.2);
-  assert.equal(missionGearDropChance(0), 0.2);
+test("reference chance is 30% at 12.5 Fuel and zero pity", () => {
+  assert.equal(MISSION_GEAR_REFERENCE_CHANCE, 0.3);
+  assert.equal(MISSION_GEAR_REFERENCE_FUEL, 12.5);
+  assert.ok(Math.abs(missionGearDropProbability(12.5, 0) - 0.3) < 1e-12);
 });
 
-test("pity adds 2.5% per miss", () => {
-  assert.equal(MISSION_GEAR_PITY_STEP, 0.025);
-  assert.equal(missionGearDropChance(1), 0.225);
-  assert.equal(missionGearDropChance(4), 0.3);
+test("pity increments 2.5% of reference Fuel in the reference pity term", () => {
+  assert.equal(MISSION_GEAR_PITY_INCREMENT, 0.025);
+  assert.ok(missionGearDropProbability(12.5, 12.5) > missionGearDropProbability(12.5, 0));
 });
 
-test("pity can reach 100% (no 50% soft-cap)", () => {
-  assert.equal(MISSION_GEAR_DROP_CAP, 1);
-  assert.equal(missionGearDropChance(12), 0.5);
-  assert.equal(missionGearDropChance(32), 1);
-  assert.equal(missionGearDropChance(100), 1);
+test("reference pity clamps at 0.999", () => {
+  assert.equal(MISSION_GEAR_PITY_CLAMP, 0.999);
+  const p = missionGearDropProbability(12.5, 12.5 * 1000);
+  assert.ok(p <= 1 && p >= 0.999);
 });
 
-test("miss streak coerces safely", () => {
-  assert.equal(missionGearMissStreak(null), 0);
-  assert.equal(missionGearMissStreak({}), 0);
-  assert.equal(missionGearMissStreak({ mission_gear_miss_streak: 3.9 }), 3);
-  assert.equal(missionGearMissStreak({ mission_gear_miss_streak: -2 }), 0);
+test("legacy mission-count streak migrates as Fuel pity", () => {
+  assert.equal(readFuelSinceLastGear({}), 0);
+  assert.equal(readFuelSinceLastGear({ fuel_since_last_gear: 7.5 }), 7.5);
+  assert.equal(readFuelSinceLastGear({ mission_gear_miss_streak: 2 }), 25);
 });
 
-test("rollMissionGearDrop respects chance", () => {
-  assert.equal(rollMissionGearDrop(0, () => 0.19), true);
-  assert.equal(rollMissionGearDrop(0, () => 0.2), false);
-  assert.equal(rollMissionGearDrop(12, () => 0.499), true);
-  assert.equal(rollMissionGearDrop(12, () => 0.5), false);
+test("success resets Fuel pity; failure adds Mission Fuel", () => {
+  assert.equal(nextFuelSinceLastGear({ fuelSinceLastGear: 10, missionFuel: 2.5, gearDropped: true }), 0);
+  assert.equal(nextFuelSinceLastGear({ fuelSinceLastGear: 10, missionFuel: 2.5, gearDropped: false }), 12.5);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

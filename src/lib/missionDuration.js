@@ -1,140 +1,51 @@
 /**
- * Mission-duration pools by player level — used when generating cantina offers.
- * Accept/complete only enforce hard bounds (isLaunchableMissionDuration), so a
- * board rolled at an earlier level stays playable after the player levels up.
- * Fuel cost remains duration_minutes (1 min = 1 Fuel).
- * Integer seconds only — no interpolated / legacy brackets.
+ * Mission duration compatibility layer.
+ * Authoritative pools, Fuel mapping, and remainder exception live in productionMath.
  */
+import {
+  MISSION_MAX_DURATION_SECONDS as AUTH_MAX_DURATION_SECONDS,
+  MISSION_MIN_DURATION_SECONDS as AUTH_MIN_DURATION_SECONDS,
+  MISSION_MIN_FUEL as AUTH_MIN_FUEL,
+  MISSION_SECONDS_PER_FUEL as AUTH_SECONDS_PER_FUEL,
+} from "./productionMath/constants.js";
+import {
+  getAllowedMissionDurations,
+  isLaunchableMissionDuration as isLaunchableFromAuthority,
+  isNormalPoolDuration,
+  isValidMissionDuration,
+  needsRemainingFuelException as needsRemainderFromAuthority,
+  remainingFuelDurationSeconds as remainingFuelFromAuthority,
+  rollMissionDurationSeconds as rollMissionDurationFromAuthority,
+} from "./productionMath/missions.js";
 
-export const MISSION_MIN_DURATION_SECONDS = 15;
-export const MISSION_MAX_DURATION_SECONDS = 1_200; // 20 minutes hard cap
-export const MISSION_SECONDS_PER_FUEL = 60;
-export const MISSION_MIN_FUEL = MISSION_MIN_DURATION_SECONDS / MISSION_SECONDS_PER_FUEL;
+export const MISSION_MIN_DURATION_SECONDS = AUTH_MIN_DURATION_SECONDS;
+export const MISSION_MAX_DURATION_SECONDS = AUTH_MAX_DURATION_SECONDS;
+export const MISSION_SECONDS_PER_FUEL = AUTH_SECONDS_PER_FUEL;
+export const MISSION_MIN_FUEL = AUTH_MIN_FUEL;
 
-const MISSION_MAX_RULE_LEVEL = 21;
-const FUEL_PRECISION_SCALE = 100;
-
-/** Per-level { min, max, step } in seconds. Level 21+ uses entry 21 permanently. */
-const MISSION_DURATION_RULES = {
-  1: { min: 15, max: 30, step: 15 },
-  2: { min: 15, max: 30, step: 15 },
-  3: { min: 15, max: 45, step: 15 },
-  4: { min: 30, max: 60, step: 15 },
-  5: { min: 30, max: 75, step: 15 },
-  6: { min: 30, max: 90, step: 30 },
-  7: { min: 30, max: 90, step: 30 },
-  8: { min: 60, max: 120, step: 30 },
-  9: { min: 60, max: 150, step: 30 },
-  10: { min: 60, max: 150, step: 30 },
-  11: { min: 150, max: 300, step: 150 },
-  12: { min: 150, max: 300, step: 150 },
-  13: { min: 150, max: 450, step: 150 },
-  14: { min: 150, max: 450, step: 150 },
-  15: { min: 150, max: 600, step: 150 },
-  16: { min: 300, max: 750, step: 150 },
-  17: { min: 300, max: 750, step: 150 },
-  18: { min: 300, max: 900, step: 150 },
-  19: { min: 300, max: 1050, step: 150 },
-  20: { min: 300, max: 1200, step: 150 },
-  /** Level 21 and above — fixed pool, never grows past 20 min. */
-  21: { min: 300, max: 1200, step: 300 },
+export {
+  getAllowedMissionDurations,
+  isNormalPoolDuration,
+  isValidMissionDuration,
 };
 
-function normalizeLevel(level = 1) {
-  return Math.max(1, Math.floor(Number(level) || 1));
+export function remainingFuelDurationSeconds(currentFuel) {
+  return remainingFuelFromAuthority(currentFuel);
 }
 
-function ruleForLevel(level = 1) {
-  const lvl = normalizeLevel(level);
-  if (lvl >= MISSION_MAX_RULE_LEVEL) return MISSION_DURATION_RULES[MISSION_MAX_RULE_LEVEL];
-  return MISSION_DURATION_RULES[lvl] || MISSION_DURATION_RULES[MISSION_MAX_RULE_LEVEL];
+export function needsRemainingFuelException(level, currentFuel) {
+  return needsRemainderFromAuthority(level, currentFuel);
 }
 
-/** Normal allowed durations (seconds) for a level — no leftover-fuel exception. */
-export function getAllowedMissionDurations(level = 1) {
-  const { min, max, step } = ruleForLevel(level);
-  const out = [];
-  for (let s = min; s <= max; s += step) out.push(s);
-  return out;
+export function isLaunchableMissionDuration(durationSeconds) {
+  return isLaunchableFromAuthority(durationSeconds);
 }
 
-/** Min/max of the normal pool (legacy helpers / UI). */
 export function getMissionDurationBracket(level = 1) {
   const pool = getAllowedMissionDurations(level);
   return { minSec: pool[0], maxSec: pool[pool.length - 1] };
 }
 
-/**
- * Pick one duration from the normal level pool.
- * `unit` in [0,1] maps across the discrete pool (deterministic when provided).
- */
-export function rollMissionDurationSeconds(level = 1, unit = Math.random()) {
-  const pool = getAllowedMissionDurations(level);
-  const t = Math.min(1, Math.max(0, Number(unit)));
-  if (!Number.isFinite(t)) return pool[0];
-  const idx = Math.min(pool.length - 1, Math.round((pool.length - 1) * t));
-  return pool[idx];
-}
-
-function normalizeFuelAmount(n) {
-  return Math.round((Number(n) || 0) * FUEL_PRECISION_SCALE) / FUEL_PRECISION_SCALE;
-}
-
-/**
- * Exact leftover-fuel duration (seconds): 1 Fuel = 60 seconds.
- * Clamped to [15, 1200]. Returns null if below minimum spendable fuel.
- */
-export function remainingFuelDurationSeconds(currentFuel) {
-  const fuel = normalizeFuelAmount(currentFuel);
-  if (fuel < MISSION_MIN_FUEL) return null;
-  const sec = Math.round(fuel * MISSION_SECONDS_PER_FUEL);
-  return Math.min(
-    MISSION_MAX_DURATION_SECONDS,
-    Math.max(MISSION_MIN_DURATION_SECONDS, sec)
-  );
-}
-
-/**
- * True when remaining fuel cannot pay for any normal-pool mission
- * (using base fuel = duration/60, before ship mods).
- */
-export function needsRemainingFuelException(level, currentFuel) {
-  const fuel = normalizeFuelAmount(currentFuel);
-  if (fuel < MISSION_MIN_FUEL) return false;
-  const pool = getAllowedMissionDurations(level);
-  const cheapest = Math.min(...pool.map((sec) => normalizeFuelAmount(sec / MISSION_SECONDS_PER_FUEL)));
-  return fuel < cheapest;
-}
-
-/** Whether a duration is in the normal generation pool for the level. */
-export function isNormalPoolDuration(level, durationSeconds) {
-  const sec = Math.floor(Number(durationSeconds));
-  return getAllowedMissionDurations(level).includes(sec);
-}
-
-/**
- * Hard bounds for launching a mission (accept/complete).
- * Level pools do not apply here — only generation uses getAllowedMissionDurations.
- */
-export function isLaunchableMissionDuration(durationSeconds) {
-  const sec = Math.floor(Number(durationSeconds));
-  return (
-    Number.isFinite(sec)
-    && sec >= MISSION_MIN_DURATION_SECONDS
-    && sec <= MISSION_MAX_DURATION_SECONDS
-  );
-}
-
-/**
- * Generation-time check: normal-pool duration, or exact remaining-fuel exception.
- * Do not use this to gate LaunchMission — use isLaunchableMissionDuration.
- * `pinnedFuel` is the optional fuel_cost on low-fuel / residual offers.
- */
-export function isValidMissionDuration(level, durationSeconds, pinnedFuel = null) {
-  const sec = Math.floor(Number(durationSeconds));
-  if (!isLaunchableMissionDuration(sec)) return false;
-  if (isNormalPoolDuration(level, sec)) return true;
-  if (pinnedFuel == null || !Number.isFinite(Number(pinnedFuel))) return false;
-  const expected = remainingFuelDurationSeconds(pinnedFuel);
-  return expected != null && expected === sec;
+export function rollMissionDurationSeconds(level = 1, unitOrRng) {
+  return rollMissionDurationFromAuthority(level, unitOrRng);
 }

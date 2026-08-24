@@ -17,6 +17,8 @@ import {
   CLASS_PRIMARY_INDEX,
   permanentAttributePurchaseCost,
   missionXpReward,
+  missionStardustReward,
+  missionSkipCostNova,
   BACKPACK_UNEQUIPPED_ITEM_CAP,
   XP_REWARD_EFFICIENCY,
 } from "./productionMath.js";
@@ -537,9 +539,14 @@ export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {
   return Math.max(fuel > 0 ? 1 : 0, xp);
 }
 
-/** Mission Stardust = ROUND(StardustPerFuel(level) * fuel). Efficiency does not apply. */
-export function computeMissionStardustFromFuel(fuelCost, level = 1, _efficiency = 1) {
-  return MissionStardustReward(level, fuelCost);
+/** Mission Stardust = ROUND(StardustPerFuel(level) * fuel * variance). */
+export function computeMissionStardustFromFuel(fuelCost, level = 1, efficiency = 1) {
+  return missionStardustReward({
+    fuel: fuelCost,
+    snapshotLevel: level,
+    stardustVariance: efficiency,
+    defeated: false,
+  });
 }
 
 /** Junk vendor value — 45% of originating mission Stardust × Uniform(0.60, 1.40), snapshotted. */
@@ -558,23 +565,15 @@ export const SKIP_CRYSTALS_PER_MINUTE = 5; // retained for audit/migration refer
 
 export function skipCostFor(mission, _nowMs = clock.nowMs()) {
   if (!mission) return 0;
-  // Naturally complete → no charge (caller should use completion path).
-  if (mission.end_time) {
-    const remainingMs = Math.max(0, new Date(mission.end_time).getTime() - (_nowMs || clock.nowMs()));
-    if (remainingMs <= 0) return 0;
-  }
+  void _nowMs;
+  // Elapsed time never reduces skip price. Cost is always original Fuel.
   const fuel =
-    typeof mission.fuel_cost === "number"
-      ? mission.fuel_cost
-      : typeof mission.original_fuel_cost === "number"
-        ? mission.original_fuel_cost
+    typeof mission.original_fuel_cost === "number"
+      ? mission.original_fuel_cost
+      : typeof mission.fuel_cost === "number"
+        ? mission.fuel_cost
         : 0;
-  // Lazy import avoided — inline half-unit formula (same as currencyService).
-  const half = Math.max(
-    1,
-    Math.ceil(Math.max(0, Number(fuel) || 0) * SKIP_NOVA_HALF_UNITS_PER_FUEL),
-  );
-  return half / NOVA_HALF_UNIT_SCALE; // display Nova (.0 or .5)
+  return missionSkipCostNova(fuel);
 }
 
 /** Skip cost in integer half-Nova units. */

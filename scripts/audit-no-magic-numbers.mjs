@@ -28,6 +28,11 @@ const SCAN_FILES = [
   "src/lib/productionMath/attributes.js",
   "src/lib/productionMath/pve.js",
   "src/lib/productionMath/market.js",
+  "src/lib/productionMath/missions.js",
+  "src/lib/missionDuration.js",
+  "src/lib/missionCombat.js",
+  "server/src/shared/missionRewards.js",
+  "server/src/functions/economy.js",
   "src/lib/combatMath.js",
   "src/lib/classPassives.js",
   "src/lib/arenaEngine.js",
@@ -37,8 +42,21 @@ const SCAN_FILES = [
 ];
 
 const STRUCTURAL = new Set(["0", "1", "-1"]);
+/** Protocol / transport codes — not gameplay rules. */
+const HTTP_STATUS = new Set([
+  "200", "201", "204",
+  "400", "401", "403", "404", "409", "410", "422", "429",
+  "500", "502", "503",
+]);
 const NUMBER_RE = /(?<![\w.])[-+]?(?:\d+\.\d+|\d+|\.\d+)(?:[eE][-+]?\d+)?(?![\w.])/g;
 const NAMED_CONST_START = /^\s*(export\s+)?const\s+[A-Z][A-Z0-9_]*\s*=/;
+
+function isRegexStart(src, i) {
+  let k = i - 1;
+  while (k >= 0 && /[ \t]/.test(src[k])) k -= 1;
+  if (k < 0) return true;
+  return "({[=:,!&|?;".includes(src[k]) || src[k] === "\n";
+}
 
 function stripCommentsAndStrings(src) {
   let out = "";
@@ -74,7 +92,25 @@ function stripCommentsAndStrings(src) {
         }
         j += 1;
       }
-      out += " ".repeat(Math.max(0, j - i));
+      out += src.slice(i, j).replace(/[^\n]/g, " ");
+      i = j;
+      continue;
+    }
+    if (c === "/" && n !== "/" && n !== "*" && isRegexStart(src, i)) {
+      let j = i + 1;
+      while (j < src.length && src[j] !== "\n") {
+        if (src[j] === "\\") {
+          j += 2;
+          continue;
+        }
+        if (src[j] === "/") {
+          j += 1;
+          while (j < src.length && /[a-z]/i.test(src[j])) j += 1;
+          break;
+        }
+        j += 1;
+      }
+      out += src.slice(i, j).replace(/[^\n]/g, " ");
       i = j;
       continue;
     }
@@ -128,6 +164,7 @@ function scanFile(relPath) {
     while ((match = NUMBER_RE.exec(line))) {
       const token = match[0];
       if (STRUCTURAL.has(token)) continue;
+      if (HTTP_STATUS.has(token)) continue;
       if (isArrayIndexUse(line, match.index)) continue;
       hits.push({
         file: relPath,

@@ -9,8 +9,31 @@ const FLOAT_FONT_DAMAGE := 40
 const FLOAT_FONT_CRIT := 76
 ## Presentation mirror of src/lib/classPassives.js OVERCLOCK_STACK_CAP (server is authority).
 const OVERCLOCK_STACK_CAP := 6
+## Presentation mirror of src/lib/classPassives.js DIRTY_TRICK_FLAT_BONUS (server is authority).
+const DIRTY_TRICK_FLAT_BONUS := 0.075
+const FRACTION_TO_PERCENT := 100.0
 ## Presentation mirror of src/lib/combatPresentation.js CRIT_DARKEN (visual only).
 const CRIT_DARKEN := 0.18
+## Status / absorb events that already apply on a neighboring action — skip a second visual beat.
+const INSTANT_PLAYBACK_KINDS := {
+	"orbital_assistant_activated": true,
+	"defensive_protocol_consumed": true,
+	"acquire_target_consumed": true,
+	"barrier_absorbed": true,
+	"barrier_broken": true,
+	"overclock_ready": true,
+	"dirty_trick_selected": true,
+	"stim_injector_charge": true,
+	"stim_injector_turn_order": true,
+	"phantom_signal_armed": true,
+	"phantom_signal_reprimed": true,
+	"kinetic_tantrum_consumed": true,
+}
+## Overclock ticks that belong on the Technomancer's own attack beat (not the foe's).
+const OVERCLOCK_ATTACK_TICK_KINDS := {
+	"overclock_stack_gained": true,
+	"overclock_vented": true,
+}
 
 
 ## Damage float colors ← Hero attribute panes (GameData.STAT_COLORS).
@@ -189,6 +212,9 @@ static func floater_label(ev: Dictionary) -> Dictionary:
 		return _other_floater("SHIELD −%s" % int(ev.get("absorbed", 0)), Color("#67E8F9"))
 	var dmg := int(ev.get("damage", 0))
 	if bool(ev.get("shieldHit", false)) and dmg <= 0:
+		var absorbed := int(ev.get("barrierAbsorbed", 0))
+		if absorbed > 0:
+			return _other_floater("SHIELD −%s" % absorbed, Color("#67E8F9"))
 		return _other_floater("BLOCK", Color("#67E8F9"))
 	if dmg > 0:
 		var dtype := str(ev.get("damageType", "")).to_upper()
@@ -200,11 +226,12 @@ static func floater_label(ev: Dictionary) -> Dictionary:
 			prefix = "TRUE "
 		elif is_crit:
 			prefix = "CRIT "
+		# Overflow through a broken barrier: show absorb + HP on the same hit beat.
 		var shield := ""
 		if bool(ev.get("shieldHit", false)) and int(ev.get("barrierAbsorbed", 0)) > 0:
-			shield = " · SHIELD −%s" % int(ev.get("barrierAbsorbed", 0))
+			shield = "SHIELD −%s · BREAK · " % int(ev.get("barrierAbsorbed", 0))
 		return {
-			"label": "%s−%s%s" % [prefix, dmg, shield],
+			"label": "%s%s−%s" % [shield, prefix, dmg],
 			"color": col,
 			"crit": is_crit,
 			"bold": is_crit,
@@ -240,11 +267,11 @@ static func status_chip_parts(side: Dictionary) -> Array:
 	if bool(side.get("phantom_pending", false)) or int(side.get("phantom_charges", 0)) > 0:
 		parts.append({
 			"icon": "ghost",
-			"text": "Phantom primed",
+			"text": "Scrambled",
 			"color": phantom_c,
 			"tip": "Phantom Signal — next incoming attack misses",
 		})
-	if bool(side.get("overclock_active", false)) or int(side.get("overclock_stacks", 0)) > 0:
+	if int(side.get("overclock_stacks", 0)) > 0:
 		parts.append({
 			"icon": "zap",
 			"text": "OC %d/%d" % [int(side.get("overclock_stacks", 0)), OVERCLOCK_STACK_CAP],
@@ -275,10 +302,7 @@ static func status_chip_parts(side: Dictionary) -> Array:
 		var trick := str(trick_raw)
 		if trick.is_empty():
 			continue
-		var trick_lab := trick.replace("_", " ").capitalize()
-		if trick == "stim_injector":
-			var charges := int(side.get("stim_charges", 0))
-			trick_lab = "Stim Injector %s" % charges if charges > 0 else "Stim Injector"
+		var trick_lab := _dirty_trick_chip_label(trick, int(side.get("stim_charges", 0)))
 		parts.append({
 			"icon": "list-checks",
 			"text": trick_lab,
@@ -308,6 +332,17 @@ static func status_chip_parts(side: Dictionary) -> Array:
 			"tip": "Orbital Assistant",
 		})
 	return parts
+
+
+static func _dirty_trick_chip_label(trick: String, stim_charges: int) -> String:
+	if trick == "stim_injector":
+		return "Stim Injector %s" % stim_charges if stim_charges > 0 else "Stim Injector"
+	var bonus := "+%.1f%%" % (DIRTY_TRICK_FLAT_BONUS * FRACTION_TO_PERCENT)
+	if trick == "flashbang":
+		return "Flashbang - %s Dodge" % bonus
+	if trick == "targeting_beacon":
+		return "Targeting Beacon - %s Crit" % bonus
+	return trick.replace("_", " ").capitalize()
 
 
 static func fill_status_chip(host: Control, side: Dictionary, align_right: bool = false) -> void:
@@ -472,6 +507,8 @@ static func _format_ability_log_bit(ev: Dictionary) -> String:
 			detail = "Strong"
 		"kinetic_tantrum_normal":
 			detail = "Normal"
+		"kinetic_tantrum_consumed":
+			detail = "Spent"
 		"astral_barrier_created":
 			detail = "Raised"
 		"astral_barrier_restored":
@@ -488,8 +525,6 @@ static func _format_ability_log_bit(ev: Dictionary) -> String:
 			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
 		"overclock_vented":
 			detail = "%d → %d" % [int(ev.get("before", 0)), int(ev.get("stacks", ev.get("after", 0)))]
-		"overclock_ready":
-			detail = "0/%d" % OVERCLOCK_STACK_CAP
 		"defensive_protocol_applied":
 			detail = "Defensive Protocol"
 		"defensive_protocol_consumed":
@@ -507,6 +542,85 @@ static func _format_ability_log_bit(ev: Dictionary) -> String:
 
 static func is_ability_log_event(ev: Dictionary) -> bool:
 	return not _format_ability_log_bit(ev).is_empty()
+
+
+static func skips_playback_beat(ev: Dictionary) -> bool:
+	var kind := str(ev.get("kind", ev.get("missKind", ev.get("secondaryKind", ""))))
+	return INSTANT_PLAYBACK_KINDS.has(kind)
+
+
+static func logs_skipped_playback_event(ev: Dictionary) -> bool:
+	var kind := str(ev.get("kind", ""))
+	return kind == "defensive_protocol_consumed" or kind == "acquire_target_consumed" \
+			or kind == "barrier_absorbed" or kind == "barrier_broken" \
+			or kind == "dirty_trick_selected" \
+			or kind == "phantom_signal_armed" or kind == "phantom_signal_reprimed" \
+			or kind == "kinetic_tantrum_consumed"
+
+
+static func applies_skipped_playback_status(ev: Dictionary) -> bool:
+	var kind := str(ev.get("kind", ""))
+	return kind == "dirty_trick_selected" or kind == "stim_injector_charge" \
+			or kind == "phantom_signal_armed" or kind == "phantom_signal_reprimed" \
+			or kind == "kinetic_tantrum_consumed"
+
+
+static func shows_skipped_playback_banner(ev: Dictionary) -> bool:
+	return str(ev.get("kind", "")) == "dirty_trick_selected"
+
+
+static func is_attack_attempt_event(ev: Dictionary) -> bool:
+	var t := str(ev.get("type", ""))
+	return t == "attack" or t == "dodge" or t == "miss" \
+			or bool(ev.get("dodged", false)) or bool(ev.get("isNormalAttack", false))
+
+
+static func is_overclock_attack_tick(ev: Dictionary) -> bool:
+	return OVERCLOCK_ATTACK_TICK_KINDS.has(str(ev.get("kind", "")))
+
+
+## Last index to play on the same visual beat as `attack_index`. Returns `attack_index` when none.
+static func attached_overclock_end_index(events: Array, attack_index: int) -> int:
+	if attack_index < 0 or attack_index >= events.size():
+		return attack_index
+	var attack: Variant = events[attack_index]
+	if typeof(attack) != TYPE_DICTIONARY or not is_attack_attempt_event(attack):
+		return attack_index
+	var i := attack_index + 1
+	while i < events.size():
+		var raw: Variant = events[i]
+		if typeof(raw) != TYPE_DICTIONARY:
+			break
+		var follow: Dictionary = raw
+		if skips_playback_beat(follow):
+			i += 1
+			continue
+		if is_overclock_attack_tick(follow):
+			return i
+		break
+	return attack_index
+
+
+## Kinetic Tantrum spend on the same visual beat as the Vanguard's attack. Empty when none.
+static func following_tantrum_consume(events: Array, attack_index: int) -> Dictionary:
+	if attack_index < 0 or attack_index >= events.size():
+		return {}
+	var attack: Variant = events[attack_index]
+	if typeof(attack) != TYPE_DICTIONARY or not is_attack_attempt_event(attack):
+		return {}
+	var i := attack_index + 1
+	while i < events.size():
+		var raw: Variant = events[i]
+		if typeof(raw) != TYPE_DICTIONARY:
+			break
+		var follow: Dictionary = raw
+		if str(follow.get("kind", "")) == "kinetic_tantrum_consumed":
+			return follow
+		if skips_playback_beat(follow):
+			i += 1
+			continue
+		break
+	return {}
 
 
 static func is_dev_diagnostics_enabled() -> bool:

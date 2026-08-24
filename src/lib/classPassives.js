@@ -78,24 +78,20 @@ export const PHANTOM_SIGNAL_CHARGES = 1;
 
 /** Passive event kinds that should flash on the combat screen. */
 const BANNER_KINDS = new Set([
-  "dirty_trick_selected",
-  "orbital_assistant_activated",
   "fire_support",
   "fire_support_dodged",
+  "dirty_trick_selected",
   "kinetic_tantrum_normal",
   "kinetic_tantrum_strong",
+  "kinetic_tantrum_consumed",
   "astral_barrier_created",
   "astral_barrier_restored",
-  "phantom_signal_armed",
-  "phantom_signal_reprimed",
   "phantom_signal_miss",
   "overclock_stack_gained",
   "overclock_stacks_removed",
   "overclock_vented",
   "defensive_protocol_applied",
-  "defensive_protocol_consumed",
   "acquire_target_applied",
-  "acquire_target_consumed",
 ]);
 
 function titleCaseKey(key) {
@@ -161,9 +157,9 @@ export function resolveAbilityBanner(ev, player, opponent) {
     detail = ORBITAL_LABELS[ev.effect] || titleCaseKey(ev.effect);
   } else if (kind === "fire_support" || kind === "fire_support_dodged") {
     detail = ORBITAL_LABELS.fire_support;
-  } else if (kind === "kinetic_tantrum_strong") {
+  } else if (kind === "kinetic_tantrum_strong" || (kind === "kinetic_tantrum_consumed" && ev.consumed === "strong")) {
     detail = `${STRONG_TANTRUM_CRIT_MULT.toFixed(1)}× guaranteed hit`;
-  } else if (kind === "kinetic_tantrum_normal") {
+  } else if (kind === "kinetic_tantrum_normal" || kind === "kinetic_tantrum_consumed") {
     detail = `${NORMAL_TANTRUM_CRIT_MULT.toFixed(1)}×`;
   } else if (kind === "astral_barrier_created") {
     detail = `${ev.barrier ?? ev.barrierMax ?? 0} shield`;
@@ -298,20 +294,6 @@ export function onCombatStart(fighter, rng = Math.random) {
     ps.dirtyTrick = trick;
     applyDirtyTrickBonus(fighter, trick);
     emitDirtyTrickSelected(fighter, trick, events, { totalTurn: 0 });
-  }
-
-  if (cls === "Technomancer") {
-    ps.overclockStacks = 0;
-    events.push({
-      type: "passive",
-      passive: "Overclock",
-      kind: "overclock_ready",
-      side: fighter.side,
-      stacks: 0,
-      before: 0,
-      after: 0,
-      text: `${fighter.name} Overclock 0/${OVERCLOCK_STACK_CAP}`,
-    });
   }
 
   return events;

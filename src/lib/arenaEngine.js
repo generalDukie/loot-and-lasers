@@ -471,10 +471,17 @@ export function buildFighter(c, items, side, opts = {}) {
   const derived = derivedCombatStats(c.level || 1, stats, className, {
     missionEnemy: !!c.missionEnemy,
     dungeonEnemy: !!c.dungeonEnemy,
+    missionEnemyHpScale: c.missionEnemyHpScale,
   });
   const content = opts.content || "arena";
   const role = side === "player" ? "player" : "enemy";
-  const contextMult = contextMultiplierFor(content, role, c.level || 1);
+  const liveContext = contextMultiplierFor(content, role, c.level || 1);
+  const frozenOutgoing = Number(c.missionEnemyOutgoingMultiplier);
+  const contextMult = (
+    c.missionEnemy && !c.dungeonEnemy && Number.isFinite(frozenOutgoing)
+  )
+    ? frozenOutgoing
+    : liveContext;
   const damageTypeEnum = derived.archetype === "Reflex"
     ? "REFLEX"
     : derived.archetype === "Tech"

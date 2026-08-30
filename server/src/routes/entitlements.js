@@ -28,6 +28,8 @@ import {
   FEATURE_FLAGS,
 } from "../entitlements/index.js";
 
+const ADMIN_GRANT_SOURCE_REFERENCE_FALLBACK = "admin_grant";
+
 function adminOnly(req, res) {
   if (!isAdmin(req.user)) {
     res.status(403).json({ error: "Admin only", code: EntitlementErrors.FORBIDDEN });
@@ -186,9 +188,7 @@ export function createEntitlementRouter(express) {
     if (!adminOnly(req, res)) return;
     try {
       const body = req.body || {};
-      if (!body.reason) {
-        return res.status(400).json({ error: "reason required", code: EntitlementErrors.REASON_REQUIRED });
-      }
+      const grantReason = String(body.reason || "").trim();
       const highValue = [
         "account.premium_edition",
         "account.founder_status",
@@ -211,10 +211,10 @@ export function createEntitlementRouter(express) {
         expiresAt: body.expiresAt || null,
         sourceType: "administrator",
         sourceReferenceType: "admin_grant",
-        sourceReferenceId: body.reason,
+        sourceReferenceId: grantReason || ADMIN_GRANT_SOURCE_REFERENCE_FALLBACK,
         idempotencyKey: body.idempotencyKey || `admin-grant:${nanoid()}`,
         createdBy: req.user.email || req.user.id,
-        metadata: { reason: body.reason },
+        metadata: grantReason ? { reason: grantReason } : null,
       });
       res.status(201).json(result);
     } catch (err) {

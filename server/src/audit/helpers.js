@@ -43,6 +43,7 @@ export function auditAdminModeration(user, moderationAction, detail = {}) {
     give_item: "item_granted_by_admin",
     adjust_currency: "admin_currency_grant",
     reset_player: "admin_player_reset",
+    simulate_level: "admin_player_edit",
     set_role: "account_role_changed",
     transfer_guild: "guild_leadership_transferred",
     create_promo_code: "admin_player_edit",

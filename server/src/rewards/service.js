@@ -22,6 +22,10 @@ import { assertBackpackHasSpace, backpackSlotsNeeded } from "../shared/inventory
 import { createService, entities } from "../entities.js";
 import { nanoid } from "nanoid";
 import { auditRewardClaimBridge } from "../audit/index.js";
+import {
+  broadcastAccountCharacterRefresh,
+  ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_REWARD,
+} from "../realtime.js";
 
 function hashRequest(parts) {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32);
@@ -373,9 +377,7 @@ export async function grantAdminReward({
   correlationId = null,
   compensation = false,
 }) {
-  if (!reason || !String(reason).trim()) {
-    throw new RewardError(RewardErrors.REASON_REQUIRED, "Admin reason required");
-  }
+  const adminReason = String(reason || "").trim();
   if (!idempotencyKey) {
     throw new RewardError(RewardErrors.IDEMPOTENCY_KEY_REQUIRED, "idempotencyKey required");
   }
@@ -414,14 +416,14 @@ export async function grantAdminReward({
     generate: async () => ({
       ...rewards,
       bonusReasons: [compensation ? "compensation" : "administrator_grant"],
-      adminReason: String(reason).slice(0, 500),
+      adminReason: adminReason.slice(0, 500),
     }),
     deliver: async (payload, claim) => {
       if (!characterId) {
         return { ...payload, deliveryDestination: "account", note: "no character — payload recorded only" };
       }
       const user = { id: ownerId };
-      return deliverViaApplyCharacterRewards({
+      const delivered = await deliverViaApplyCharacterRewards({
         user,
         characterId,
         payload: {
@@ -434,6 +436,13 @@ export async function grantAdminReward({
         },
         claim,
       });
+      const live = entities.Character.get(characterId);
+      broadcastAccountCharacterRefresh(
+        live?.created_by_id || ownerId,
+        characterId,
+        ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_REWARD,
+      );
+      return delivered;
     },
   });
 }

@@ -530,6 +530,10 @@ function retireAndGenerateMissionBoard(character, extraPatch = {}) {
   };
 }
 
+export function rebuildMissionBoardForCharacter(character, extraPatch = {}) {
+  return retireAndGenerateMissionBoard(character, extraPatch);
+}
+
 // ── GetMissionBoard ──────────────────────────────────────────
 // Authoritative Cantina board. Generates + persists only when READY_FOR_NEW_OFFERS.
 // Reconnects, page hops, and reroll flags re-serve the SAME persisted offers.

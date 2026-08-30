@@ -85,9 +85,11 @@ export function generateTutorialFirstMissionHelmet(character, rng = Math.random)
   const classKey = String(character?.class || "Vanguard");
   const primary = CLASSES[classKey]?.primaryStat || "strength";
   const level = Math.max(1, Math.floor(Number(character?.level) || 1));
-  const budget = getItemStatBudget(level, "helmet", "common");
-  const stats = allocateStatBudget([primary], budget, rng, "common");
   const item = randomItem("common", level, "helmet", rng, classKey, { origin: "mission" });
+  const budget = Number.isFinite(Number(item.stat_budget))
+    ? Math.max(1, Math.floor(Number(item.stat_budget)))
+    : getItemStatBudget(level, "helmet", "common");
+  const stats = allocateStatBudget([primary], budget, rng, "common");
   return {
     ...item,
     stats,

@@ -346,6 +346,15 @@ func _handle_packet(packet: String) -> void:
 func _handle_wallet_event(payload: Dictionary) -> void:
 	if CurrencyManager == null:
 		return
+	var event_character_id := str(payload.get("character_id", "")).strip_edges()
+	var selected_id := str(GameManager.active_character.get("id", "")).strip_edges()
+	if not event_character_id.is_empty() and not selected_id.is_empty() and event_character_id != selected_id:
+		return
+	if bool(payload.get("force_reconcile", false)):
+		if MissionManager != null and MissionManager.has_method("invalidate_character_cache"):
+			MissionManager.invalidate_character_cache()
+		call_deferred("_reconcile_wallet_deferred", str(payload.get("source", "wallet_event")))
+		return
 	if CurrencyManager.apply_realtime_wallet(payload):
 		var character := GameManager.active_character.duplicate(true)
 		var balances: Dictionary = CurrencyManager.get_balances()
@@ -360,13 +369,21 @@ func _reconcile_wallet_deferred(source: String) -> void:
 	await _reconcile_wallet_once(source)
 
 
-func _reconcile_wallet_once(_source: String) -> void:
+func _reconcile_wallet_once(source: String) -> void:
 	if _wallet_reconcile_running or CurrencyManager == null:
 		return
 	if str(GameManager.active_character.get("id", "")).is_empty():
 		return
 	_wallet_reconcile_running = true
 	await CurrencyManager.reconcile_wallet()
+	var cid := str(GameManager.active_character.get("id", "")).strip_edges()
+	if (
+		source.begins_with("admin_")
+		and not cid.is_empty()
+		and InventoryManager != null
+		and InventoryManager.has_method("load_inventory")
+	):
+		await InventoryManager.load_inventory(cid)
 	_wallet_reconcile_running = false
 
 

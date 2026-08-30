@@ -12,6 +12,7 @@ const DEFAULT_PROMO_MAX_REDEMPTIONS := 100
 const MAX_LOOKUP_RESULTS := 50
 const MAX_ADMIN_LIST_RESULTS := 200
 const MAX_CHARACTER_RESULTS := 500
+const ADMIN_GRANT_UNSPECIFIED_REASON := "unspecified"
 
 
 func _ready() -> void:
@@ -84,6 +85,11 @@ func moderation(action: String, body: Dictionary = {}) -> Dictionary:
 	return _result(res, action)
 
 
+func _reason_for_grant(reason: String) -> String:
+	var r := reason.strip_edges()
+	return r if not r.is_empty() else ADMIN_GRANT_UNSPECIFIED_REASON
+
+
 func mute_player(character_id: String, minutes: int, reason: String) -> Dictionary:
 	return await moderation("mute", {
 		"character_id": character_id,
@@ -111,22 +117,51 @@ func resolve_report(report_id: String, action_taken: String = "warned") -> Dicti
 	})
 
 
+func _refresh_if_active_character(character_id: String) -> void:
+	var cid := character_id.strip_edges()
+	if cid.is_empty() or cid != GameManager.selected_character_id():
+		return
+	if MissionManager != null and MissionManager.has_method("invalidate_character_cache"):
+		MissionManager.invalidate_character_cache()
+	if MissionManager != null:
+		await MissionManager.refresh_character(true)
+	if InventoryManager != null and InventoryManager.has_method("load_inventory"):
+		await InventoryManager.load_inventory(cid)
+
+
 func adjust_currency(character_id: String, deltas: Dictionary, reason: String) -> Dictionary:
-	return await moderation("adjust_currency", {
+	var res: Dictionary = await moderation("adjust_currency", {
 		"character_id": character_id,
 		"deltas": deltas,
-		"reason": reason,
+		"reason": _reason_for_grant(reason),
 	})
+	if bool(res.get("ok", false)):
+		await _refresh_if_active_character(character_id)
+	return res
 
 
 func grant_item(character_id: String, item_spec: Dictionary, reason: String) -> Dictionary:
-	var body := {"character_id": character_id, "reason": reason}
+	var body := {"character_id": character_id, "reason": _reason_for_grant(reason)}
 	body.merge(item_spec, true)
-	return await moderation("give_item", body)
+	var res: Dictionary = await moderation("give_item", body)
+	if bool(res.get("ok", false)):
+		await _refresh_if_active_character(character_id)
+	return res
 
 
 func reset_player(character_id: String, reason: String) -> Dictionary:
 	return await moderation("reset_player", {"character_id": character_id, "reason": reason})
+
+
+func simulate_level(character_id: String, level: int, reason: String) -> Dictionary:
+	var res: Dictionary = await moderation("simulate_level", {
+		"character_id": character_id,
+		"level": level,
+		"reason": _reason_for_grant(reason),
+	})
+	if bool(res.get("ok", false)):
+		await _refresh_if_active_character(character_id)
+	return res
 
 
 func set_role(user_id: String, role: String, reason: String, character_id: String = "") -> Dictionary:
@@ -184,6 +219,22 @@ func toggle_promo_code(promo_code_id: String, active: bool) -> Dictionary:
 		"promo_code_id": promo_code_id,
 		"active": active,
 	})
+
+
+func list_own_characters() -> Dictionary:
+	var gate := _require_admin()
+	if not gate.is_empty():
+		return gate
+	var res: Dictionary = await AuthManager.list_characters()
+	var out := _result(res, "own_characters")
+	var rows: Array = []
+	if typeof(out.raw) == TYPE_ARRAY:
+		rows = out.raw
+	elif typeof(out.data) == TYPE_DICTIONARY and typeof(out.data.get("data", null)) == TYPE_ARRAY:
+		rows = out.data["data"]
+	out["data"] = {"players": rows, "characters": rows}
+	out["raw"] = rows
+	return out
 
 
 func search_players(query: String = "", limit: int = DEFAULT_PLAYER_SEARCH_LIMIT) -> Dictionary:
@@ -387,7 +438,9 @@ func entitlements_grant(body: Dictionary) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await GameApiClient.request("POST", "/api/entitlements/admin/grant", body, true)
+	var payload := body.duplicate(true)
+	payload["reason"] = _reason_for_grant(str(payload.get("reason", "")))
+	var res: Dictionary = await GameApiClient.request("POST", "/api/entitlements/admin/grant", payload, true)
 	return _result(res, "granted")
 
 
@@ -453,8 +506,13 @@ func rewards_grant(body: Dictionary) -> Dictionary:
 	var gate := _require_admin()
 	if not gate.is_empty():
 		return gate
-	var res: Dictionary = await GameApiClient.request("POST", "/api/rewards/admin/grant", body, true)
-	return _result(res, "reward_granted")
+	var payload := body.duplicate(true)
+	payload["reason"] = _reason_for_grant(str(payload.get("reason", "")))
+	var res: Dictionary = await GameApiClient.request("POST", "/api/rewards/admin/grant", payload, true)
+	var out: Dictionary = _result(res, "reward_granted")
+	if bool(out.get("ok", false)):
+		await _refresh_if_active_character(str(payload.get("characterId", payload.get("character_id", ""))))
+	return out
 
 
 func rewards_retry(claim_id: String, body: Dictionary = {}) -> Dictionary:

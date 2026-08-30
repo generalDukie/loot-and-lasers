@@ -3,8 +3,9 @@
  * Items roll only the five core attributes; combat %/HP/damage are derived elsewhere.
  *
  * Pipeline:
- *   ItemLevel → BaseGearStatBudget → SlotMult → RarityMult → TotalStatPool
- *   → select stats by rarity → min floors → random remainder → integer repair
+ *   ItemLevel → BaseGearStatBudget → SlotMult → RarityMult → pre-variance pool
+ *   → intrinsic Uniform(GEAR_STAT_BUDGET_VARIANCE_MIN, GEAR_STAT_BUDGET_VARIANCE_MAX)
+ *   → ROUND → select stats by rarity → min floors → random remainder → integer repair
  *
  * Common–Epic: optional per-item 60/40 Favored vs Total pool when a player class
  * is provided. Legendary: always all five stats.
@@ -27,6 +28,8 @@ import {
   gearResaleValue,
   gearSlotMultiplier,
   gearStatPool,
+  applyGearStatBudgetVariance,
+  rollGearStatBudgetVariance,
   resolveGearLevelRefs,
 } from "./productionMath/index.js";
 
@@ -352,8 +355,9 @@ export function allocateLegendaryStatBudget(budget, rng = Math.random) {
 
 /**
  * Generate item stats from level / type / rarity.
- * TotalStatPool is fixed (no post-budget variance).
+ * Intrinsic budget variance is rolled once here and must be persisted on the item.
  * Pass `className` for Common–Epic class-aware pool selection.
+ * Pass `statBudgetVariance` to inject 0.90 / 1.00 / 1.10 in tests.
  */
 export function rollItemStats({
   itemLevel,
@@ -362,13 +366,17 @@ export function rollItemStats({
   rarity,
   rng = Math.random,
   className,
-  variancePct = 0, // ignored — TotalStatPool is authoritative
+  statBudgetVariance = null,
+  variancePct = 0, // ignored — live path is GEAR_STAT_BUDGET_VARIANCE_*
 } = {}) {
   void variancePct;
   const slot = canonicalGearSlot(type) || type;
   const { attrs, poolMode } = selectItemAttributes(rarity, rng, { className });
   const budgetLevel = Math.max(1, Math.floor(Number(statBudgetLevel ?? itemLevel) || 1));
-  const budget = Math.max(attrs.length, getItemStatBudget(budgetLevel, slot, rarity));
+  const preVarianceBudget = getItemStatBudget(budgetLevel, slot, rarity);
+  const variance = rollGearStatBudgetVariance(rng, statBudgetVariance);
+  const variedBudget = applyGearStatBudgetVariance(preVarianceBudget, variance);
+  const budget = Math.max(attrs.length, variedBudget);
   const stats = allocateStatBudget(attrs, budget, rng, rarity);
   const sum = Object.values(stats).reduce((a, b) => a + (b || 0), 0);
   return {
@@ -376,6 +384,8 @@ export function rollItemStats({
     budget: sum,
     attributes: attrs,
     targetBudget: budget,
+    preVarianceBudget,
+    statBudgetVariance: variance,
     poolMode,
   };
 }
@@ -469,6 +479,9 @@ export function GenerateGearItem({
     level_requirement: L,
     level: L,
     stat_budget_level: levels.statBudgetLevel,
+    pre_variance_stat_budget: rolled.preVarianceBudget,
+    stat_budget_variance: rolled.statBudgetVariance,
+    stat_budget: rolled.targetBudget,
     stats: rolled.stats,
     is_equipped: false,
     origin: resolvedOrigin,

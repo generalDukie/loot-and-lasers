@@ -17,6 +17,7 @@ const ADMIN_MGR = path.join(ROOT, "loot&lasers", "Autoload", "AdminManager.gd");
 const REQUIRED_UI_ACTIONS = [
   "list_open_reports",
   "resolve_report",
+  "list_own_characters",
   "search_players",
   "inspect_character",
   "list_character_items",
@@ -25,6 +26,7 @@ const REQUIRED_UI_ACTIONS = [
   "unban_player",
   "unmute_player",
   "reset_player",
+  "simulate_level",
   "rename_character",
   "set_role",
   "adjust_currency",
@@ -144,6 +146,48 @@ if (!ui.includes("Server Refresh wipe is intentionally not exposed") && !ui.incl
   }
 } else {
   pass("wipe remains non-executable stub");
+}
+
+if (ui.includes("MY CHARACTERS")) {
+  pass("My Characters selector present");
+} else {
+  fail("My Characters selector present");
+}
+
+if (ui.includes("optional for grants")) {
+  pass("grant reason marked optional");
+} else {
+  fail("grant reason marked optional");
+}
+
+const tabIds = [...ui.matchAll(/\{"id": "([^"]+)", "label":/g)].map((m) => m[1]);
+if (
+  tabIds.length === 7
+  && tabIds.includes("grants")
+  && tabIds.includes("players")
+  && tabIds.includes("simulate")
+) {
+  pass(`tab consolidation (${tabIds.join(", ")})`);
+} else {
+  fail("tab consolidation", `found ${tabIds.length}: ${tabIds.join(", ")}`);
+}
+
+const scrollCount = (ui.match(/ScrollContainer\.new\(\)/g) || []).length;
+if (scrollCount === 1) {
+  pass("single page-level ScrollContainer (no new nested scrollers)");
+} else {
+  fail("single page-level ScrollContainer", `found ${scrollCount}`);
+}
+
+if (
+  ui.includes("GRANT_TYPE_FUEL") &&
+  ui.includes("GRANT_TYPE_GEAR") &&
+  ui.includes("GRANT_TYPE_XP") &&
+  ui.includes("GRANT_TYPE_ENTITLEMENT")
+) {
+  pass("unified grant types include Fuel, Gear, XP, Entitlement");
+} else {
+  fail("unified grant types include Fuel, Gear, XP, Entitlement");
 }
 
 console.log(`\n${REQUIRED_UI_ACTIONS.length} required actions checked; ${failed} failure(s)\n`);

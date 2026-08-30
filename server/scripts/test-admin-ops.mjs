@@ -202,15 +202,16 @@ await testAsync("promo create is audited", async () => {
   assert.ok(res.body.promo_code?.id);
 });
 
-await testAsync("currency grant requires reason and works for admin", async () => {
+await testAsync("currency grant works without reason and still records a supplied reason", async () => {
   const a = insertUser("u-cur", "cur@t.test", "admin");
   makeCharacter("ch-cur", a.id);
-  const bad = await AdminModeration(a, {
+  const none = await AdminModeration(a, {
     action: "adjust_currency",
     character_id: "ch-cur",
     deltas: { stardust: 5 },
   });
-  assert.equal(bad.status, 400);
+  assert.equal(none.status, 200);
+  assert.equal(entities.Character.get("ch-cur").stardust, 55);
   const ok = await AdminModeration(a, {
     action: "adjust_currency",
     character_id: "ch-cur",
@@ -218,7 +219,7 @@ await testAsync("currency grant requires reason and works for admin", async () =
     reason: "compensation",
   });
   assert.equal(ok.status, 200);
-  assert.equal(entities.Character.get("ch-cur").stardust, 55);
+  assert.equal(entities.Character.get("ch-cur").stardust, 60);
 });
 
 await testAsync("LookupPlayer / InspectCharacter RPCs", async () => {
@@ -265,6 +266,93 @@ await testAsync("arena_suspend via AdminModeration", async () => {
   });
   assert.equal(res.status, 200);
   assert.equal(isArenaBanned("ch-as"), true);
+});
+
+const { buildSimulateLoadoutPlan, SIMULATE_GEAR_RARITY, SIMULATE_NOVA_GRANT, GEAR_SLOTS } =
+  await import("../../src/lib/productionMath/index.js");
+const { composePermanentAttributes } = await import("../../src/lib/characterStats.js");
+
+await testAsync("simulate_level denies non-admin", async () => {
+  const u = insertUser("u-sim-deny", "sim-deny@t.test", "user");
+  const res = await AdminModeration(u, { action: "simulate_level", character_id: "x", level: 10 });
+  assert.equal(res.status, 403);
+});
+
+await testAsync("simulate_level missing character is 404", async () => {
+  const a = insertUser("u-sim-404", "sim-404@t.test", "admin");
+  const res = await AdminModeration(a, {
+    action: "simulate_level",
+    character_id: "missing-sim-char",
+    level: 10,
+  });
+  assert.equal(res.status, 404);
+});
+
+await testAsync("simulate_level rebuilds L1 Vanguard snapshot", async () => {
+  const a = insertUser("u-sim-l1", "sim-l1@t.test", "admin");
+  makeCharacter("ch-sim-l1", a.id, "SimOne");
+  entities.Item.create({
+    name: "Old Junk",
+    type: "weapon",
+    rarity: "common",
+    character_id: "ch-sim-l1",
+    owner_id: a.id,
+    is_equipped: false,
+  });
+  const res = await AdminModeration(a, {
+    action: "simulate_level",
+    character_id: "ch-sim-l1",
+    level: 1,
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  const ch = entities.Character.get("ch-sim-l1");
+  const plan = buildSimulateLoadoutPlan({ className: "Vanguard", level: 1, nowMs: Date.now() });
+  assert.equal(ch.class, "Vanguard");
+  assert.equal(ch.level, 1);
+  assert.equal(ch.experience, 0);
+  assert.equal(ch.attribute_purchases, 0);
+  assert.equal(ch.fuel, ch.max_fuel);
+  assert.equal(ch.stardust, plan.stardust);
+  const { getBalances } = await import("../src/shared/currencyService.js");
+  assert.equal(getBalances(ch).nova_crystals, SIMULATE_NOVA_GRANT);
+  assert.equal(ch.onboarding_tutorial?.status, "completed");
+  const items = entities.Item.filter({ character_id: "ch-sim-l1" }) || [];
+  assert.equal(items.length, GEAR_SLOTS.length);
+  assert.ok(items.every((it) => it.rarity === SIMULATE_GEAR_RARITY && it.is_equipped === true));
+  assert.ok(items.every((it) => Number(it.level || it.level_requirement) === 1));
+  assert.equal(Object.keys(ch.equipped_items || {}).length, GEAR_SLOTS.length);
+  assert.equal((ch.active_buffs || []).length, 3);
+  assert.ok((ch.active_buffs || []).every((b) => b.rarity === "uncommon"));
+  assert.ok(!items.some((it) => it.name === "Old Junk"));
+});
+
+await testAsync("simulate_level L25 Technomancer purchases and epic-band not yet", async () => {
+  const a = insertUser("u-sim-l25", "sim-l25@t.test", "admin");
+  const created = makeCharacter("ch-sim-l25", a.id, "SimTech");
+  entities.Character.update(created.id, { class: "Technomancer" });
+  const res = await AdminModeration(a, {
+    action: "simulate_level",
+    character_id: "ch-sim-l25",
+    level: 25,
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  const ch = entities.Character.get("ch-sim-l25");
+  const plan = buildSimulateLoadoutPlan({ className: "Technomancer", level: 25, nowMs: Date.now() });
+  assert.equal(ch.class, "Technomancer");
+  assert.equal(ch.level, 25);
+  assert.equal(ch.experience, 0);
+  assert.equal(ch.attribute_purchases, plan.purchaseTotal);
+  assert.equal(ch.attribute_purchases_by_stat.intellect, plan.purchasesByStat.intellect);
+  const expectedStats = composePermanentAttributes({
+    class: "Technomancer",
+    level: 25,
+    attribute_purchases_by_stat: plan.purchasesByStat,
+  });
+  assert.equal(ch.stats.intellect, expectedStats.intellect);
+  assert.ok((ch.active_buffs || []).every((b) => b.rarity === "rare"));
+  const items = entities.Item.filter({ character_id: "ch-sim-l25" }) || [];
+  assert.equal(items.length, GEAR_SLOTS.length);
+  assert.ok(items.every((it) => Number(it.level || it.level_requirement) === 25));
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

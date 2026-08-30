@@ -1,6 +1,7 @@
 import { applyCharacterRewards, DAILY_REWARDS, redeemPromoCode, expForLevel, randomItem, PROMO_CODES } from "../shared/rewards.js";
 import { grantCharacterXp, consumeProgression } from "../shared/characterProgression.js";
 import { composePermanentAttributes } from "../../../src/lib/characterStats.js";
+import { applyAdminSimulateLevel } from "../shared/adminSimulateLoadout.js";
 import {
   mergeAchievementUnlocks,
   assertAchievementClientSafe,
@@ -98,6 +99,11 @@ import {
 import { createService, entities } from "../entities.js";
 import { db, nowIso, withTransactionAsync } from "../db.js";
 import { getUserById } from "../auth.js";
+import {
+  broadcastAccountCharacterRefresh,
+  ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_CURRENCY,
+  ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_ITEM,
+} from "../realtime.js";
 import { ECONOMY_HANDLERS } from "./economy.js";
 import {
   GetTutorialState,
@@ -1358,8 +1364,8 @@ async function adminModerationInner(user, body) {
   }
 
   if (action === "give_item") {
-    const { character_id, reason } = body;
-    if (!reason) return { status: 400, body: { error: "reason required for item grants" } };
+    const { character_id } = body;
+    const reason = String(body.reason || "").trim();
     const ch = entities.Character.get(character_id);
     if (!ch) return { status: 404, body: { error: "Character not found" } };
 
@@ -1433,6 +1439,11 @@ async function adminModerationInner(user, body) {
       changeSet: { itemName: created.name, rarity: created.rarity, type: created.type },
       afterState: { itemId: created.id },
     });
+    broadcastAccountCharacterRefresh(
+      ch.created_by_id,
+      ch.id,
+      ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_ITEM,
+    );
     return {
       status: 200,
       body: {
@@ -1447,8 +1458,8 @@ async function adminModerationInner(user, body) {
   }
 
   if (action === "adjust_currency") {
-    const { character_id, deltas, reason } = body;
-    if (!reason) return { status: 400, body: { error: "reason required for currency adjustments" } };
+    const { character_id, deltas } = body;
+    const reason = String(body.reason || "").trim();
     if (!deltas || typeof deltas !== "object") {
       return { status: 400, body: { error: "deltas required" } };
     }
@@ -1593,6 +1604,11 @@ async function adminModerationInner(user, body) {
       changeSet: { deltas },
       correlationId: corr,
     });
+    broadcastAccountCharacterRefresh(
+      updated.created_by_id || ch.created_by_id,
+      updated.id,
+      ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_CURRENCY,
+    );
     return {
       status: 200,
       body: {
@@ -1646,6 +1662,16 @@ async function adminModerationInner(user, body) {
       },
     });
     return { status: 200, body: { success: true, character: updated } };
+  }
+
+  if (action === "simulate_level") {
+    const out = applyAdminSimulateLevel({
+      user,
+      characterId: body.character_id,
+      level: body.level,
+      reason: body.reason,
+    });
+    return { status: 200, body: out };
   }
 
   if (action === "set_role") {

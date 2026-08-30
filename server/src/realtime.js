@@ -59,6 +59,11 @@ export function broadcastEntity(entityType, eventType, data) {
   }
 }
 
+export const ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_CURRENCY = "admin_currency";
+export const ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_REWARD = "admin_reward";
+export const ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_ITEM = "admin_item";
+export const ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_SIMULATE = "admin_simulate";
+
 /** Account-scoped event on the existing websocket transport. */
 export function broadcastWalletUpdated(accountId, data) {
   if (!accountId) return;
@@ -75,6 +80,21 @@ export function broadcastWalletUpdated(accountId, data) {
       subscribers.delete(sub);
     }
   }
+}
+
+/**
+ * Tell the live client for this account to re-fetch the granted character.
+ * Admin currency/XP/item writes update storage without a wallet-bridge receipt,
+ * so the HUD stays stale until the operative is reselected unless we fan this out.
+ */
+export function broadcastAccountCharacterRefresh(accountId, characterId, source) {
+  if (!accountId || !characterId) return;
+  broadcastWalletUpdated(accountId, {
+    character_id: characterId,
+    source,
+    force_reconcile: true,
+    type: "wallet_updated",
+  });
 }
 
 /** Close live sockets for an account — used when a newer login claims the session. */

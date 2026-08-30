@@ -19,6 +19,8 @@ import {
   GEAR_SLOT_NORMAL_MULT,
   GEAR_SLOT_PREMIUM_MULT,
   GEAR_SLOTS,
+  GEAR_STAT_BUDGET_VARIANCE_MAX,
+  GEAR_STAT_BUDGET_VARIANCE_MIN,
   PREMIUM_GEAR_SLOT_INDICES,
   PREMIUM_GEAR_SLOTS,
   PVE_HIDDEN_BUDGET_OFFSET,
@@ -107,6 +109,39 @@ export function gearStatPool(itemLevel, slot, rarity) {
       * gearRarityBudgetMultiplier(rarity),
     ),
   );
+}
+
+function unitClosedInterval(rng) {
+  const roll = typeof rng === "function" ? rng : Math.random;
+  const u = Number(roll());
+  if (!Number.isFinite(u) || u < 0) return 0;
+  if (u > 1) return 1;
+  return u;
+}
+
+/** Continuous Uniform(GEAR_STAT_BUDGET_VARIANCE_MIN, GEAR_STAT_BUDGET_VARIANCE_MAX). Inject `variance` in tests. */
+export function rollGearStatBudgetVariance(rng = Math.random, variance = null) {
+  if (variance != null && Number.isFinite(Number(variance))) {
+    return clampGearStatBudgetVariance(variance);
+  }
+  const span = GEAR_STAT_BUDGET_VARIANCE_MAX - GEAR_STAT_BUDGET_VARIANCE_MIN;
+  return GEAR_STAT_BUDGET_VARIANCE_MIN + unitClosedInterval(rng) * span;
+}
+
+export function clampGearStatBudgetVariance(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(
+    GEAR_STAT_BUDGET_VARIANCE_MAX,
+    Math.max(GEAR_STAT_BUDGET_VARIANCE_MIN, n),
+  );
+}
+
+/** ROUND(pre-variance pool × intrinsic quality). Floor 1 so a piece always has a budget. */
+export function applyGearStatBudgetVariance(preVarianceBudget, variance) {
+  const pre = Math.max(0, Number(preVarianceBudget) || 0);
+  const v = clampGearStatBudgetVariance(variance);
+  return Math.max(1, roundHalfUp(pre * v));
 }
 
 /**

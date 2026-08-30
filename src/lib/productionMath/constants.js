@@ -199,6 +199,9 @@ export const GEAR_RARITY_BUDGET_MULT_BY_INDEX = Object.freeze(
   RARITIES.map((rarity) => GEAR_RARITY_BUDGET_MULT[rarity]),
 );
 export const GEAR_RARITY_BUDGET_MULT_DEFAULT = GEAR_RARITY_BUDGET_MULT.rare;
+/** Intrinsic Gear total-stat-budget variance. Applied once at generation, then persisted. */
+export const GEAR_STAT_BUDGET_VARIANCE_MIN = 0.90;
+export const GEAR_STAT_BUDGET_VARIANCE_MAX = 1.10;
 
 export const MARKET_RARITY_WEIGHTS = Object.freeze({
   common: 0.2,
@@ -676,3 +679,27 @@ export const PVE_HIDDEN_BUDGET_OFFSET = Object.freeze([
   Object.freeze({ maxLevel: 190, offset: 9 }),
 ]);
 export const PVE_HIDDEN_BUDGET_OFFSET_MATURE = 10;
+
+/** Admin expected-loadout simulator (not a live player formula). */
+export const BASIS_POINTS_DENOMINATOR = 10000;
+/** Light-spender purchase share of EPA once the ramp completes. */
+export const SIMULATE_PURCHASE_EPA_SHARE_BPS = 3800;
+/** Purchase share is 0 at L1 and reaches SIMULATE_PURCHASE_EPA_SHARE_BPS at this level. */
+export const SIMULATE_PURCHASE_RAMP_COMPLETE_LEVEL = 25;
+export const SIMULATE_STARDUST_DAY_COUNT = 10;
+export const SIMULATE_NOVA_GRANT = 100000;
+export const SIMULATE_GEAR_RARITY = "rare";
+export const SIMULATE_ATTR_KEYS = Object.freeze([
+  "strength",
+  "agility",
+  "intellect",
+  "vitality",
+  "luck",
+]);
+export const SIMULATE_STIM_VITALITY_KEY = "vitality";
+export const SIMULATE_STIM_LUCK_KEY = "luck";
+export const MILLISECONDS_PER_SECOND = 1000;
+export const SECONDS_PER_MINUTE = 60;
+export const MINUTES_PER_HOUR = 60;
+export const MILLISECONDS_PER_HOUR =
+  MILLISECONDS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR;

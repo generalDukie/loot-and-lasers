@@ -500,6 +500,31 @@ test("EPA anchor error, monotone, infinite safety", () => {
   }
 });
 
+test("admin simulate loadout purchase ramp and stim bands", () => {
+  assert.equal(M.simulatePurchaseRampBps(1), 0);
+  assert.equal(M.simulatePurchaseTotal(1), 0);
+  assert.equal(M.simulatePurchaseRampBps(M.SIMULATE_PURCHASE_RAMP_COMPLETE_LEVEL), M.BASIS_POINTS_DENOMINATOR);
+  const l25 = M.simulatePurchaseTotal(25);
+  assert.equal(
+    l25,
+    Math.round(M.expectedPlayerAttributes(25) * M.SIMULATE_PURCHASE_EPA_SHARE_BPS / M.BASIS_POINTS_DENOMINATOR),
+  );
+  assert.equal(M.simulateStimTier(1), "uncommon");
+  assert.equal(M.simulateStimTier(M.STIM_UNCOMMON_LEVEL_MAX), "uncommon");
+  assert.equal(M.simulateStimTier(M.STIM_UNCOMMON_LEVEL_MAX + 1), "rare");
+  assert.equal(M.simulateStimTier(M.STIM_RARE_LEVEL_MAX), "rare");
+  assert.equal(M.simulateStimTier(M.STIM_RARE_LEVEL_MAX + 1), "epic");
+  const daily = M.expectedDailyMissionStardust(100);
+  assert.ok(finite(daily) && daily > 0);
+  assert.equal(M.simulateStardustGrant(100), daily * M.SIMULATE_STARDUST_DAY_COUNT);
+  const plan = M.buildSimulateLoadoutPlan({ className: "Technomancer", level: 100, nowMs: 0 });
+  assert.equal(plan.purchasesByStat.intellect >= plan.purchasesByStat.strength, true);
+  assert.equal(plan.stimBuffs.length, M.STIM_MAX_ACTIVE_EFFECTS);
+  assert.deepEqual(plan.stimBuffs.map((b) => b.stat), ["intellect", "vitality", "luck"]);
+  assert.equal(plan.nova, M.SIMULATE_NOVA_GRANT);
+  assert.equal(plan.gearSlots.length, M.GEAR_SLOTS.length);
+});
+
 test("numeric safety vs MAX_SAFE_INTEGER", () => {
   const samples = [
     M.xpToNext(2500),

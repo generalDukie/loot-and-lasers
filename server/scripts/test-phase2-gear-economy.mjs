@@ -16,6 +16,7 @@ const {
   getItemStatBudget,
   getSlotMultiplier,
   getRarityBudgetMultiplier,
+  rollItemStats,
   EQUIPMENT_SLOTS,
   ITEM_ATTR_KEYS,
   computeItemVendorValue,
@@ -24,10 +25,15 @@ const {
   gearBaseStatBudget,
   gearStatPool,
   gearResaleValue,
+  applyGearStatBudgetVariance,
+  rollGearStatBudgetVariance,
+  roundHalfUp,
   pveHiddenStatBudgetOffset,
   pveGearStatBudgetLevel,
   BACKPACK_UNEQUIPPED_GEAR_CAP,
   GEAR_RARITY_BUDGET_MULT,
+  GEAR_STAT_BUDGET_VARIANCE_MAX,
+  GEAR_STAT_BUDGET_VARIANCE_MIN,
   canonicalGearSlot,
 } = await import("../../src/lib/productionMath/index.js");
 const { GearSaleValue } = await import("../../src/lib/stardustEconomy.js");
@@ -178,7 +184,15 @@ test("universal generation: 8 slots × 5 rarities, exact budget, valid stats", (
         });
         const sum = Object.values(item.stats).reduce((a, b) => a + b, 0);
         const pool = getItemStatBudget(L, slot, rarity);
-        assert.equal(sum, pool, `${slot} ${rarity} L${L}`);
+        assert.ok(
+          item.stat_budget_variance >= GEAR_STAT_BUDGET_VARIANCE_MIN
+          && item.stat_budget_variance <= GEAR_STAT_BUDGET_VARIANCE_MAX,
+          `${slot} ${rarity} L${L} variance`,
+        );
+        const expected = applyGearStatBudgetVariance(pool, item.stat_budget_variance);
+        assert.equal(sum, expected, `${slot} ${rarity} L${L}`);
+        assert.equal(sum, item.stat_budget);
+        assert.equal(item.pre_variance_stat_budget, pool);
         assert.equal(item.level, L);
         assert.equal(item.stat_budget_level, L);
         for (const [k, v] of Object.entries(item.stats)) {
@@ -191,6 +205,98 @@ test("universal generation: 8 slots × 5 rarities, exact budget, valid stats", (
     }
   }
   assert.ok(ids.size > 100);
+});
+
+test("intrinsic Gear stat-budget variance is ±10%, once, persisted, exact allocation", () => {
+  assert.equal(GEAR_STAT_BUDGET_VARIANCE_MIN, 0.9);
+  assert.equal(GEAR_STAT_BUDGET_VARIANCE_MAX, 1.1);
+  const L = 100;
+  const slot = "armor";
+  const rarity = "rare";
+  const pre = getItemStatBudget(L, slot, rarity);
+  assert.equal(rollGearStatBudgetVariance(() => 0), GEAR_STAT_BUDGET_VARIANCE_MIN);
+  assert.equal(rollGearStatBudgetVariance(() => 0.5), 1);
+  assert.equal(rollGearStatBudgetVariance(() => 1), GEAR_STAT_BUDGET_VARIANCE_MAX);
+  assert.equal(
+    applyGearStatBudgetVariance(pre, GEAR_STAT_BUDGET_VARIANCE_MIN),
+    roundHalfUp(pre * GEAR_STAT_BUDGET_VARIANCE_MIN),
+  );
+  assert.equal(applyGearStatBudgetVariance(pre, 1), pre);
+  assert.equal(
+    applyGearStatBudgetVariance(pre, GEAR_STAT_BUDGET_VARIANCE_MAX),
+    roundHalfUp(pre * GEAR_STAT_BUDGET_VARIANCE_MAX),
+  );
+
+  const lo = rollItemStats({
+    itemLevel: L, type: slot, rarity, rng: seqRng(3), statBudgetVariance: GEAR_STAT_BUDGET_VARIANCE_MIN,
+  });
+  const mid = rollItemStats({
+    itemLevel: L, type: slot, rarity, rng: seqRng(3), statBudgetVariance: 1,
+  });
+  const hi = rollItemStats({
+    itemLevel: L, type: slot, rarity, rng: seqRng(3), statBudgetVariance: GEAR_STAT_BUDGET_VARIANCE_MAX,
+  });
+  assert.equal(lo.preVarianceBudget, pre);
+  assert.equal(mid.preVarianceBudget, pre);
+  assert.equal(hi.preVarianceBudget, pre);
+  assert.equal(lo.targetBudget, applyGearStatBudgetVariance(pre, GEAR_STAT_BUDGET_VARIANCE_MIN));
+  assert.equal(mid.targetBudget, pre);
+  assert.equal(hi.targetBudget, applyGearStatBudgetVariance(pre, GEAR_STAT_BUDGET_VARIANCE_MAX));
+  assert.equal(lo.budget, lo.targetBudget);
+  assert.equal(mid.budget, mid.targetBudget);
+  assert.equal(hi.budget, hi.targetBudget);
+  assert.equal(Object.values(lo.stats).reduce((a, b) => a + b, 0), lo.targetBudget);
+  assert.equal(Object.values(mid.stats).reduce((a, b) => a + b, 0), mid.targetBudget);
+  assert.equal(Object.values(hi.stats).reduce((a, b) => a + b, 0), hi.targetBudget);
+
+  const SAMPLE = 20000;
+  const meanRng = seqRng(1);
+  let sumVar = 0;
+  let sumRatio = 0;
+  for (let i = 0; i < SAMPLE; i++) {
+    const v = rollGearStatBudgetVariance(meanRng);
+    sumVar += v;
+    sumRatio += applyGearStatBudgetVariance(pre, v) / pre;
+  }
+  const meanVar = sumVar / SAMPLE;
+  const meanRatio = sumRatio / SAMPLE;
+  assert.ok(Math.abs(meanVar - 1) < 0.01, `mean variance ${meanVar}`);
+  assert.ok(Math.abs(meanRatio - 1) < 0.01, `mean budget ratio ${meanRatio}`);
+
+  const a = GenerateGearItem({
+    itemLevel: L, itemType: slot, rarity, rng: seqRng(42),
+  });
+  const b = GenerateGearItem({
+    itemLevel: L, itemType: slot, rarity, rng: seqRng(42),
+  });
+  assert.equal(a.stat_budget_variance, b.stat_budget_variance);
+  assert.deepEqual(a.stats, b.stats);
+  const c = GenerateGearItem({
+    itemLevel: L, itemType: slot, rarity, rng: seqRng(43),
+  });
+  assert.ok(
+    a.stat_budget_variance !== c.stat_budget_variance || JSON.stringify(a.stats) !== JSON.stringify(c.stats),
+  );
+
+  const persisted = entities.Item.create({
+    name: "Variance Blade",
+    type: a.type,
+    rarity: a.rarity,
+    level: a.level,
+    level_requirement: a.level_requirement,
+    stat_budget_level: a.stat_budget_level,
+    pre_variance_stat_budget: a.pre_variance_stat_budget,
+    stat_budget_variance: a.stat_budget_variance,
+    stat_budget: a.stat_budget,
+    stats: a.stats,
+  });
+  const again = entities.Item.get(persisted.id);
+  assert.equal(again.stat_budget_variance, a.stat_budget_variance);
+  assert.equal(again.stat_budget, a.stat_budget);
+  assert.deepEqual(again.stats, a.stats);
+  const sumAgain = Object.values(again.stats).reduce((s, n) => s + n, 0);
+  assert.equal(sumAgain, again.stat_budget);
+  assert.equal(sumAgain, applyGearStatBudgetVariance(again.pre_variance_stat_budget, again.stat_budget_variance));
 });
 
 test("PvE hidden budget is opt-in and does not inflate economic level or resale", () => {

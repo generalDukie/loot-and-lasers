@@ -28,7 +28,7 @@ import {
 const c4Budget = (L) =>
   Math.max(1, Math.trunc(Math.floor(GEAR_BUDGET_LINEAR * L + GEAR_BUDGET_CURVE * Math.sqrt(L) + GEAR_BUDGET_FLOOR + 0.5)));
 import { GearSaleValue } from "../../src/lib/stardustEconomy.js";
-import { gearResaleValue } from "../../src/lib/productionMath/index.js";
+import { applyGearStatBudgetVariance, gearResaleValue } from "../../src/lib/productionMath/index.js";
 import { randomItem } from "../src/shared/rewards.js";
 
 let passed = 0;
@@ -154,22 +154,30 @@ test("allocation floors + exact sum", () => {
           className: null,
         });
         const pool = getItemStatBudget(100, type, rarity);
+        const expected = rolled.targetBudget;
         const sum = Object.values(rolled.stats).reduce((a, b) => a + b, 0);
-        assert.equal(sum, pool, `${rarity} ${type} seed ${seed}`);
+        assert.equal(sum, expected, `${rarity} ${type} seed ${seed}`);
         assert.equal(sum, rolled.budget);
+        assert.equal(
+          expected,
+          Math.max(
+            rolled.attributes.length,
+            applyGearStatBudgetVariance(pool, rolled.statBudgetVariance),
+          ),
+        );
         const vals = Object.values(rolled.stats);
         assert.equal(vals.length, getRarityAttributeCount(rarity));
         assert.equal(new Set(Object.keys(rolled.stats)).size, vals.length);
-        const floor = Math.floor(pool * minShare);
+        const floor = Math.floor(expected * minShare);
         let minEach = floor;
-        while (minEach > 0 && minEach * vals.length > pool) minEach -= 1;
+        while (minEach > 0 && minEach * vals.length > expected) minEach -= 1;
         for (const v of vals) {
           assert.ok(Number.isInteger(v));
           assert.ok(v >= minEach, `${rarity} val ${v} < ${minEach}`);
           assert.ok(v >= 0);
         }
         if (rarity === "common") {
-          assert.equal(vals[0], pool);
+          assert.equal(vals[0], expected);
         }
       }
     }
@@ -255,7 +263,11 @@ test("GenerateGearItem source-independence (same inputs + RNG)", () => {
   assert.deepEqual(mission.stats, wormhole.stats);
   assert.equal(mission.sell_value, shop.sell_value);
   const sum = Object.values(mission.stats).reduce((a, b) => a + b, 0);
-  assert.equal(sum, getItemStatBudget(40, "weapon", "epic"));
+  assert.equal(sum, mission.stat_budget);
+  assert.equal(
+    sum,
+    applyGearStatBudgetVariance(getItemStatBudget(40, "weapon", "epic"), mission.stat_budget_variance),
+  );
 });
 
 test("randomItem wraps GenerateGearItem (stats parity)", () => {

@@ -21,6 +21,8 @@ import {
   missionSkipCostNova,
   BACKPACK_UNEQUIPPED_ITEM_CAP,
   XP_REWARD_EFFICIENCY,
+  rollMissionVariance,
+  clampMissionVariance,
 } from "./productionMath.js";
 
 /** One production XP-efficiency factor. Mission XP applies it twice (certified). */
@@ -78,7 +80,6 @@ const BASE_INVENTORY_CAP = BACKPACK_UNEQUIPPED_ITEM_CAP;
 const MISSION_DURATION_STEP_SECONDS = 15;
 const MISSION_REWARD_VARIANCE = 0.10;
 const FUEL_COST_PRECISION_SCALE = 100;
-const MISSION_EFFICIENCY_PRECISION_SCALE = 100;
 const SKIP_NOVA_HALF_UNITS_PER_FUEL = 0.2;
 const NOVA_HALF_UNIT_SCALE = 2;
 
@@ -502,29 +503,17 @@ export function getMissionRewardVariance(_playerLevel = 1) {
 
 /**
  * Per-mission variance roll — independent for XP and Stardust.
- * Uniform ±10% (0.90–1.10) at every level.
+ * Discrete thousandths in VARIANCE_MIN..VARIANCE_MAX at every level.
  */
 export function rollMissionEfficiency(playerLevel = 1, rng = Math.random) {
+  void playerLevel;
   const r = typeof rng === "function" ? rng : Math.random;
-  const v = getMissionRewardVariance(playerLevel);
-  const raw = (1 - v) + r() * (2 * v);
-  return Math.round(raw * MISSION_EFFICIENCY_PRECISION_SCALE)
-    / MISSION_EFFICIENCY_PRECISION_SCALE;
+  return rollMissionVariance(r);
 }
 
 /** Clamp / default efficiency for the player's variance band. */
-export function normalizeMissionEfficiency(value, playerLevel = 1) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 1;
-  const v = getMissionRewardVariance(playerLevel);
-  return Math.min(
-    1 + v,
-    Math.max(
-      1 - v,
-      Math.round(n * MISSION_EFFICIENCY_PRECISION_SCALE)
-        / MISSION_EFFICIENCY_PRECISION_SCALE,
-    ),
-  );
+export function normalizeMissionEfficiency(value, _playerLevel = 1) {
+  return clampMissionVariance(value);
 }
 
 export function computeMissionXpFromFuel(fuelCost, level = 1, efficiency = 1) {

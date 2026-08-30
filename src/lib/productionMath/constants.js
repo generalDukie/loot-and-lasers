@@ -664,7 +664,9 @@ export const MISSION_ENEMY_ARCHETYPE_CLASS = Object.freeze({
 export const MISSION_OFFER_DEDUPE_REROLL_LIMIT = 20;
 export const MISSION_OFFER_DEDUPE_NUDGE_LIMIT = 64;
 export const MISSION_BOARD_AFFORDABLE_REROLL_LIMIT = 32;
-export const MISSION_VARIANCE_PRECISION_SCALE = 100;
+/** Discrete Mission XP/Stardust variance increment: VARIANCE_MIN..VARIANCE_MAX in thousandths. */
+export const MISSION_VARIANCE_STEP = 0.001;
+export const MISSION_VARIANCE_PRECISION_SCALE = 1000;
 
 export const PVE_HIDDEN_BUDGET_OFFSET = Object.freeze([
   Object.freeze({ maxLevel: 150, offset: 5 }),

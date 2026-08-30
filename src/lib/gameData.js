@@ -19,6 +19,8 @@ import {
   permanentAttributePurchaseCost,
   BACKPACK_UNEQUIPPED_ITEM_CAP,
   XP_REWARD_EFFICIENCY,
+  rollMissionVariance,
+  clampMissionVariance,
 } from "@/lib/productionMath";
 import {
   EQUIPMENT_SLOTS,
@@ -934,7 +936,6 @@ export function getArenaStardustReward(level = 1) {
 const ARENA_XP_REWARD_NUMERATOR = 5;
 const ARENA_XP_REWARD_DENOMINATOR = 7;
 const MISSION_REWARD_VARIANCE = 0.10;
-const MISSION_EFFICIENCY_PRECISION_SCALE = 100;
 const COMBAT_XP_RELATIVE_MIN = 0.5;
 const COMBAT_XP_RELATIVE_MAX = 1.65;
 const COMBAT_XP_RELATIVE_BASE = 0.55;
@@ -964,24 +965,17 @@ export function getMissionRewardVariance(_playerLevel = 1) {
 
 /**
  * Per-mission variance roll — independent for XP and Stardust.
- * Uniform ±10% (0.90–1.10) at every level.
+ * Discrete thousandths in VARIANCE_MIN..VARIANCE_MAX at every level.
  */
 export function rollMissionEfficiency(playerLevel = 1, rng = Math.random) {
+  void playerLevel;
   const r = typeof rng === "function" ? rng : Math.random;
-  const v = getMissionRewardVariance(playerLevel);
-  const raw = (1 - v) + r() * (2 * v);
-  return Math.round(raw * MISSION_EFFICIENCY_PRECISION_SCALE)
-    / MISSION_EFFICIENCY_PRECISION_SCALE;
+  return rollMissionVariance(r);
 }
 
 /** Clamp / default efficiency for the player's variance band. */
-export function normalizeMissionEfficiency(value, playerLevel = 1) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 1;
-  const v = getMissionRewardVariance(playerLevel);
-  const rounded = Math.round(n * MISSION_EFFICIENCY_PRECISION_SCALE)
-    / MISSION_EFFICIENCY_PRECISION_SCALE;
-  return Math.min(1 + v, Math.max(1 - v, rounded));
+export function normalizeMissionEfficiency(value, _playerLevel = 1) {
+  return clampMissionVariance(value);
 }
 
 /** Display helper: 1.09 → "+9%", 0.93 → "-7%". */

@@ -16,6 +16,10 @@ import {
   MISSION_MIN_FUEL,
   MISSION_OFFER_COUNT,
   MISSION_SKIP_MIN_NOVA,
+  MISSION_VARIANCE_PRECISION_SCALE,
+  MISSION_VARIANCE_STEP,
+  VARIANCE_MAX,
+  VARIANCE_MIN,
 } from "../../src/lib/productionMath/constants.js";
 import {
   constructMissionEnemy,
@@ -40,6 +44,8 @@ import {
   rollMissionGearRarity,
   rollMissionJunkValue,
   rollMissionLootOutcome,
+  rollMissionVariance,
+  clampMissionVariance,
   snapshotMissionAcceptance,
 } from "../../src/lib/productionMath/missions.js";
 import {
@@ -209,6 +215,107 @@ test("XP/Stardust named factors, independent variance, snapshot level", () => {
     missionVictoryXp({ fuel, snapshotLevel: 200, xpVariance: 1 })
       > missionVictoryXp({ fuel, snapshotLevel: L, xpVariance: 1 }),
   );
+});
+
+test("Mission reward variance is discrete thousandths in 0.900–1.100", () => {
+  assert.equal(VARIANCE_MIN, 0.9);
+  assert.equal(VARIANCE_MAX, 1.1);
+  assert.equal(MISSION_VARIANCE_STEP, 0.001);
+  assert.equal(MISSION_VARIANCE_PRECISION_SCALE, 1000);
+  assert.equal(1 / MISSION_VARIANCE_PRECISION_SCALE, MISSION_VARIANCE_STEP);
+
+  assert.equal(clampMissionVariance(0.9), VARIANCE_MIN);
+  assert.equal(clampMissionVariance(1.1), VARIANCE_MAX);
+  assert.equal(clampMissionVariance(0.957), 0.957);
+  assert.equal(clampMissionVariance(1.013), 1.013);
+  assert.equal(clampMissionVariance(0.899), VARIANCE_MIN);
+  assert.equal(clampMissionVariance(1.101), VARIANCE_MAX);
+  assert.notEqual(clampMissionVariance(0.957), 0.96);
+
+  assert.equal(rollMissionVariance(() => 0), VARIANCE_MIN);
+  assert.equal(rollMissionVariance(() => 1), VARIANCE_MAX);
+
+  const rngPair = seqRng([0, 0.5]);
+  const xpRoll = rollMissionVariance(rngPair);
+  const sdRoll = rollMissionVariance(rngPair);
+  assert.notEqual(xpRoll, sdRoll, "XP and Stardust rolls are independent");
+
+  const seedA = mulberry32(4242);
+  const seedB = mulberry32(4242);
+  assert.equal(rollMissionVariance(seedA), rollMissionVariance(seedB));
+  assert.equal(rollMissionVariance(seedA), rollMissionVariance(seedB));
+
+  for (let i = 0; i < 4000; i++) {
+    const v = rollMissionVariance(mulberry32(i + 1));
+    const ticks = Math.round(v * MISSION_VARIANCE_PRECISION_SCALE);
+    assert.equal(v, ticks / MISSION_VARIANCE_PRECISION_SCALE, `granularity ${v}`);
+    assert.ok(v >= VARIANCE_MIN && v <= VARIANCE_MAX, `band ${v}`);
+  }
+
+  const xp = missionVictoryXp({ fuel: 12.5, snapshotLevel: 50, xpVariance: 0.957 });
+  const sd = missionVictoryStardust({ fuel: 12.5, snapshotLevel: 50, stardustVariance: 1.013 });
+  assert.ok(Number.isInteger(xp), `xp ${xp}`);
+  assert.ok(Number.isInteger(sd), `sd ${sd}`);
+  assert.equal(xp, missionXpReward({ fuel: 12.5, snapshotLevel: 50, xpVariance: 0.957 }));
+  assert.equal(
+    sd,
+    missionStardustReward({ fuel: 12.5, snapshotLevel: 50, stardustVariance: 1.013 }),
+  );
+
+  const offer = {
+    fuelCost: 2,
+    durationSeconds: 120,
+    xpVariance: 0.957,
+    stardustVariance: 1.013,
+    offerId: "off_var",
+    name: "Variance",
+  };
+  const snap1 = snapshotMissionAcceptance({ characterLevel: 12, offer });
+  const snap2 = snapshotMissionAcceptance({ characterLevel: 12, offer, rng: () => 0.99 });
+  assert.equal(snap1.xp_efficiency, 0.957);
+  assert.equal(snap1.stardust_efficiency, 1.013);
+  assert.equal(snap1.preview_xp, snap1.final_xp);
+  assert.equal(snap1.preview_stardust, snap1.final_stardust);
+  assert.equal(snap2.xp_efficiency, snap1.xp_efficiency);
+  assert.equal(snap2.stardust_efficiency, snap1.stardust_efficiency);
+  assert.equal(snap2.final_xp, snap1.final_xp);
+  assert.equal(snap2.final_stardust, snap1.final_stardust);
+  assert.equal(
+    snap1.final_xp,
+    missionVictoryXp({ fuel: 2, snapshotLevel: 12, xpVariance: 0.957 }),
+  );
+  assert.equal(
+    snap1.final_stardust,
+    missionVictoryStardust({ fuel: 2, snapshotLevel: 12, stardustVariance: 1.013 }),
+  );
+
+  const boardA = generateMissionOfferEconomics({
+    level: 25,
+    availableFuel: 20,
+    rng: mulberry32(777),
+  });
+  const boardB = generateMissionOfferEconomics({
+    level: 25,
+    availableFuel: 20,
+    rng: mulberry32(777),
+  });
+  assert.equal(boardA.length, boardB.length);
+  let sawIndependentBoard = false;
+  for (let i = 0; i < boardA.length; i++) {
+    assert.equal(boardA[i].xpVariance, boardB[i].xpVariance);
+    assert.equal(boardA[i].stardustVariance, boardB[i].stardustVariance);
+    const ticksXp = Math.round(boardA[i].xpVariance * MISSION_VARIANCE_PRECISION_SCALE);
+    const ticksSd = Math.round(boardA[i].stardustVariance * MISSION_VARIANCE_PRECISION_SCALE);
+    assert.equal(boardA[i].xpVariance, ticksXp / MISSION_VARIANCE_PRECISION_SCALE);
+    assert.equal(boardA[i].stardustVariance, ticksSd / MISSION_VARIANCE_PRECISION_SCALE);
+    if (boardA[i].xpVariance !== boardA[i].stardustVariance) sawIndependentBoard = true;
+    const frozen = snapshotMissionAcceptance({ characterLevel: 25, offer: boardA[i] });
+    assert.equal(frozen.xp_efficiency, boardA[i].xpVariance);
+    assert.equal(frozen.stardust_efficiency, boardA[i].stardustVariance);
+    assert.equal(frozen.preview_xp, frozen.final_xp);
+    assert.equal(frozen.preview_stardust, frozen.final_stardust);
+  }
+  assert.ok(sawIndependentBoard, "board XP/SD variance rolls differ");
 });
 
 test("defeat uses named 50% factor", () => {

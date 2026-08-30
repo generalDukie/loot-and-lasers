@@ -38,6 +38,7 @@ import {
   MISSION_SKIP_RAW_NOVA_PER_FUEL,
   MISSION_STIM_NO_DROP_BASE,
   MISSION_VARIANCE_PRECISION_SCALE,
+  MISSION_VARIANCE_STEP,
   MISSION_XP_EFFICIENCY,
   MISSION_XP_REWARD_SCALAR,
   RARITIES,
@@ -189,18 +190,42 @@ export function rollMissionDurationSeconds(level = 1, rngOrUnit) {
   return pool[idx];
 }
 
+function missionVarianceMinTicks() {
+  return roundHalfUp(VARIANCE_MIN * MISSION_VARIANCE_PRECISION_SCALE);
+}
+
+function missionVarianceMaxTicks() {
+  return roundHalfUp(VARIANCE_MAX * MISSION_VARIANCE_PRECISION_SCALE);
+}
+
+function missionVarianceInclusiveTickCount() {
+  return missionVarianceMaxTicks() - missionVarianceMinTicks() + 1;
+}
+
+function ticksFromMissionVariance(value) {
+  return roundHalfUp(Number(value) * MISSION_VARIANCE_PRECISION_SCALE);
+}
+
+function missionVarianceFromTicks(ticks) {
+  return ticks / MISSION_VARIANCE_PRECISION_SCALE;
+}
+
 export function rollMissionVariance(rng) {
   const r = requireRng(rng, "rollMissionVariance");
-  const span = VARIANCE_MAX - VARIANCE_MIN;
-  const raw = VARIANCE_MIN + unitClosedInterval(r) * span;
-  return roundHalfUp(raw * MISSION_VARIANCE_PRECISION_SCALE) / MISSION_VARIANCE_PRECISION_SCALE;
+  const minTicks = missionVarianceMinTicks();
+  const count = missionVarianceInclusiveTickCount();
+  const idx = Math.min(count - 1, Math.floor(unitInterval(r) * count));
+  return missionVarianceFromTicks(minTicks + idx);
 }
 
 export function clampMissionVariance(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 1;
-  const rounded = roundHalfUp(n * MISSION_VARIANCE_PRECISION_SCALE) / MISSION_VARIANCE_PRECISION_SCALE;
-  return Math.min(VARIANCE_MAX, Math.max(VARIANCE_MIN, rounded));
+  const ticks = Math.min(
+    missionVarianceMaxTicks(),
+    Math.max(missionVarianceMinTicks(), ticksFromMissionVariance(n)),
+  );
+  return missionVarianceFromTicks(ticks);
 }
 
 export function missionSkipCostNova(originalFuel) {
@@ -361,8 +386,7 @@ export function missionEconomicSignature({ durationSeconds, xpVariance, stardust
 }
 
 function nudgeVariance(value, rng) {
-  const step = 1 / MISSION_VARIANCE_PRECISION_SCALE;
-  const dir = pickUniform(VARIANCE_NUDGE_SIGNS, rng) * step;
+  const dir = pickUniform(VARIANCE_NUDGE_SIGNS, rng) * MISSION_VARIANCE_STEP;
   return clampMissionVariance((Number(value) || 1) + dir);
 }
 

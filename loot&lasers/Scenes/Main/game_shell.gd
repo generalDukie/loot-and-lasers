@@ -932,15 +932,15 @@ func _format_rail_amount(value: Variant) -> String:
 
 
 func _fit_currency_fonts() -> void:
-	# Shrink only for long exact values (e.g. "98,073.5") so every digit stays visible.
-	# Never touch rail / console layout.
+	# Wallet readout stays 25px. Shrink only for extreme exact strings that
+	# would otherwise clip — never for everyday Fuel / Stardust / Nova.
 	const WALLET_VALUE_FONT_DEFAULT := 25
 	const WALLET_VALUE_FONT_COMPACT := 20
 	const WALLET_VALUE_FONT_SMALL := 18
 	const WALLET_VALUE_FONT_TINY := 16
-	const WALLET_VALUE_LEN_COMPACT := 8
-	const WALLET_VALUE_LEN_SMALL := 12
-	const WALLET_VALUE_LEN_TINY := 16
+	const WALLET_VALUE_LEN_COMPACT := 12
+	const WALLET_VALUE_LEN_SMALL := 15
+	const WALLET_VALUE_LEN_TINY := 19
 	var max_len := 0
 	for lab in [_fuel_value, _stardust_value, _nova_value]:
 		if lab != null and is_instance_valid(lab):

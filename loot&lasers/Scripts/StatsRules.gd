@@ -132,6 +132,10 @@ static func gear_bonus(character: Dictionary, equipped: Array, stat: String) -> 
 	return int(permanent_totals(character, equipped).get(stat, 0)) - int(naked_totals(character).get(stat, 0))
 
 
+static func stim_bonus(character: Dictionary, equipped: Array, stat: String) -> int:
+	return int(display_totals(character, equipped).get(stat, 0)) - int(permanent_totals(character, equipped).get(stat, 0))
+
+
 static func active_buffs(character: Dictionary) -> Array:
 	var out: Array = []
 	var raw: Variant = character.get("active_buffs", [])

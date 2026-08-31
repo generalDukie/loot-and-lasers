@@ -258,6 +258,8 @@ export function computeNovaCrystalCost(item) {
 export const FUEL_MAX = 100;
 /** JS integer safety bound — not a gameplay Stardust wallet cap. Casino wager caps are separate. */
 export const STARDUST_MAX = Number.MAX_SAFE_INTEGER;
+/** JS integer safety bound for admin Fuel overfill — not a gameplay tank cap. */
+export const FUEL_STORAGE_MAX = Number.MAX_SAFE_INTEGER;
 
 export function clampStardust(amount) {
   const n = Number(amount);
@@ -271,7 +273,8 @@ export const FUEL_PURCHASE_COST = 20;
 export const FUEL_PURCHASE_MAX = 10;
 export const MISSION_MIN_FUEL = MISSION_DURATION_STEP_SECONDS / SECONDS_PER_MINUTE;
 
-export function checkFuelReset(character, nowMs = clock.nowMs()) {
+export function checkFuelReset(character, nowMs = clock.nowMs(), options = {}) {
+  const preserveOverfill = options?.preserveOverfill === true;
   const storedMax = character.max_fuel || FUEL_MAX;
   // While hangar is retired, daily refill uses base tank only — do not overwrite saved max_fuel.
   const max = getEffectiveMaxFuel(character);
@@ -279,8 +282,13 @@ export function checkFuelReset(character, nowMs = clock.nowMs()) {
   const now = Number(nowMs) || clock.nowMs();
   const fuelVal = Number(character.fuel);
   const fuelMissing = character.fuel == null || !Number.isFinite(fuelVal);
+  const overfilled = Number.isFinite(fuelVal) && fuelVal > max;
   if (fuelMissing || !resetAt || now - resetAt.getTime() >= FUEL_CYCLE_MS) {
-    return { fuel: max, max_fuel: storedMax, fuel_reset_at: new Date(now).toISOString(), fuel_purchases: 0 };
+    const fuelAfterCycle = (!fuelMissing && preserveOverfill && overfilled) ? fuelVal : max;
+    return { fuel: fuelAfterCycle, max_fuel: storedMax, fuel_reset_at: new Date(now).toISOString(), fuel_purchases: 0 };
+  }
+  if (overfilled && !preserveOverfill) {
+    return { fuel: max };
   }
   return null;
 }
@@ -317,6 +325,25 @@ export function getFuelSpeedTotal(character) {
 export function getEffectiveMaxFuel(character) {
   if (!isShipHangarEnabled()) return FUEL_MAX;
   return character?.max_fuel || FUEL_MAX;
+}
+
+/** Clamp a Fuel amount to the live gameplay tank. Does not rewrite stored max_fuel. */
+export function clampFuelToEffectiveMax(character, fuel) {
+  const cap = getEffectiveMaxFuel(character);
+  const n = Number(fuel);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(cap, Math.max(0, n));
+}
+
+/**
+ * Apply a Fuel grant. Admin-owned characters may exceed the tank cap;
+ * everyone else is clamped to the live gameplay max.
+ */
+export function nextFuelAfterGrant(character, nextFuel, { uncapped = false } = {}) {
+  const n = Number(nextFuel);
+  if (!Number.isFinite(n)) return 0;
+  if (uncapped) return Math.min(FUEL_STORAGE_MAX, Math.max(0, n));
+  return clampFuelToEffectiveMax(character, n);
 }
 
 // ── Ship mods (effect totals for mission fuel/duration/rewards) ─

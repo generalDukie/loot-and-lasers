@@ -1578,6 +1578,24 @@ func _on_skip() -> void:
 	_conclude_fight()
 
 
+func _input(event: InputEvent) -> void:
+	if not ClientUi.is_confirm_key(event):
+		return
+	if not is_visible_in_tree():
+		return
+	var vp := get_viewport()
+	if ClientUi.confirm_blocked_by_text_focus(vp):
+		return
+	if is_instance_valid(_sheet_host) and _sheet_host.visible and _sheet_host.get_child_count() > 0:
+		return
+	if is_instance_valid(_outro_layer) and _outro_layer.visible:
+		ClientUi.try_activate_confirm_button(_outro_btn, vp)
+		return
+	if _tutorial_mission_skip_locked():
+		return
+	ClientUi.try_activate_confirm_button(_skip_btn, vp)
+
+
 func _conclude_fight() -> void:
 	## Skip Victory/Defeat overlay — settle once (if needed) and open the combat report.
 	if _busy:

@@ -112,8 +112,7 @@ func _populate() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 
-	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
-	_balance_lab.text = "%s  Nova Crystals" % _fmt_int(nova)
+	_balance_lab.text = "%s  Nova Crystals" % CurrencyManager.format_balance(CurrencyManager.CURRENCY_NOVA)
 
 	_list.add_child(_make_quests_panel())
 	_list.add_child(_make_featured_section())

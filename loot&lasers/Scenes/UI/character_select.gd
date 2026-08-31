@@ -736,7 +736,6 @@ func _on_unlock_slot() -> void:
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = "Create an operative before buying a slot."
 		return
-	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	if not CurrencyManager.can_afford(
 		CurrencyManager.CURRENCY_NOVA,
 		AccountManager.SLOT_NOVA_COST
@@ -744,7 +743,7 @@ func _on_unlock_slot() -> void:
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = "Need %s Nova Crystals to unlock a slot — you have %s." % [
 			NumberDisplay.nova(AccountManager.SLOT_NOVA_COST),
-			NumberDisplay.nova(nova),
+			CurrencyManager.format_balance(CurrencyManager.CURRENCY_NOVA),
 		]
 		return
 	_busy = true

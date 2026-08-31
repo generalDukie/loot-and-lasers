@@ -127,6 +127,13 @@ test("Exclusive chain: Gear fail → Stim", () => {
   assert.equal(r.gearDropped, false);
   assert.equal(r.stimDropped, true);
   assert.equal(r.itemTemplates[0].type, "consumable");
+  const stim = r.itemTemplates[0];
+  assert.ok(stim.consumable?.stat);
+  assert.equal(stim.consumable.tier, stim.rarity);
+  assert.ok(Number(stim.consumable.mult) > 0, "mission stim must carry tier bonus");
+  assert.ok(Number(stim.consumable.duration_hours) > 0, "mission stim must carry duration");
+  assert.match(String(stim.name), /Stim$/);
+  assert.match(String(stim.flavor_text), /Boosts /);
 });
 
 test("Exclusive chain: Gear+Stim fail → Junk", () => {

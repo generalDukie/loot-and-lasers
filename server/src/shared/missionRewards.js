@@ -6,6 +6,7 @@
  * Stim sale value is intentionally unfinished (Phase 5).
  */
 import { randomItem } from "./rewards.js";
+import { getStimDefinition, MAX_BUFF_STACKS } from "./economyFormulas.js";
 import {
   LOOT_OUTCOME_GEAR,
   LOOT_OUTCOME_JUNK,
@@ -59,6 +60,36 @@ function requireRng(rng, label) {
   return rng;
 }
 
+function capitalizeStimStat(stat) {
+  const key = String(stat || "").toLowerCase();
+  if (!key) return "Strength";
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+/** Mission Stim inventory payload — same tier table UseConsumable trusts. */
+export function buildMissionStimItem({ rarity, stat, snapshotLevel } = {}) {
+  const key = String(stat || "strength").toLowerCase();
+  const def = getStimDefinition(rarity) || getStimDefinition("uncommon");
+  const hours = def.duration_hours;
+  const pct = def.bonus_percent;
+  const statName = capitalizeStimStat(key);
+  return {
+    name: `${def.label} ${statName} Stim`,
+    type: STIM_ITEM_TYPE,
+    rarity: def.rarity,
+    level_requirement: snapshotLevel,
+    stats: {},
+    flavor_text: `Boosts ${key} by ${pct}% for ${hours} hours (stacks duration up to ${hours * MAX_BUFF_STACKS}h).`,
+    origin: MISSION_GEAR_ORIGIN,
+    consumable: {
+      stat: key,
+      tier: def.rarity,
+      mult: def.mult,
+      duration_hours: hours,
+    },
+  };
+}
+
 export function missionGearItemLevel(character, mission) {
   return snapshotLevelOf(character, mission);
 }
@@ -109,19 +140,11 @@ export function settleMissionItemChain({
     ));
   } else if (itemOutcome === LOOT_OUTCOME_STIM) {
     stimDropped = true;
-    const rarity = missionStimRarityForLevel(snapshotLevel);
-    const attr = rollMissionStimAttribute(r);
-    itemTemplates.push({
-      name: `${attr} Stim`,
-      type: STIM_ITEM_TYPE,
-      rarity,
-      level_requirement: snapshotLevel,
-      stats: {},
-      flavor_text: "A field stim recovered on mission.",
-      origin: MISSION_GEAR_ORIGIN,
-      consumable: { stat: attr, tier: rarity },
-      // Phase 5 owns Stim sale-value migration. Leave unfinished sell path intact.
-    });
+    itemTemplates.push(buildMissionStimItem({
+      rarity: missionStimRarityForLevel(snapshotLevel),
+      stat: rollMissionStimAttribute(r),
+      snapshotLevel,
+    }));
   } else if (itemOutcome === LOOT_OUTCOME_JUNK) {
     junkDropped = true;
     const junkName = mission?.rewards?.collectible?.name || DEFAULT_JUNK_NAME;

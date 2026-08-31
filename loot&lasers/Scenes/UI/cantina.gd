@@ -55,6 +55,7 @@ var _detail_offer: Dictionary = {}
 var _detail_tint := Color("#FF9E4F")
 var _view_rewards_btn: Button
 var _reward_sheet_host: Control
+var _start_mission_btn: Button
 
 
 func _ready() -> void:
@@ -92,6 +93,24 @@ func _on_tutorial_changed(_unused = null) -> void:
 		_sync_hover_layer_parent()
 		return
 	call_deferred("_fit_hover_above_patrons")
+
+
+func _input(event: InputEvent) -> void:
+	if not ClientUi.is_confirm_key(event):
+		return
+	if not is_visible_in_tree() or _busy:
+		return
+	var vp := get_viewport()
+	if ClientUi.confirm_blocked_by_text_focus(vp):
+		return
+	if ClientUi.shell_has_blocking_overlay(self):
+		return
+	if _reward_sheet_open():
+		return
+	if _detail_open and ClientUi.try_activate_confirm_button(_start_mission_btn, vp):
+		return
+	if is_instance_valid(_view_rewards_btn):
+		ClientUi.try_activate_confirm_button(_view_rewards_btn, vp)
 
 
 func _build() -> void:
@@ -1044,6 +1063,7 @@ func _fit_hover_above_patrons() -> void:
 func _close_mission_sheet() -> void:
 	_detail_open = false
 	_detail_offer = {}
+	_start_mission_btn = null
 	_preview.visible = false
 	_preview_scrim.visible = false
 
@@ -1194,6 +1214,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 			_on_launch(launch_offer)
 		)
 	TutorialManager.tag_target(start, "cantina-start")
+	_start_mission_btn = start
 	_preview_body.add_child(start)
 
 	_preview_scrim.visible = true
@@ -1427,6 +1448,10 @@ func _on_launch(offer: Dictionary) -> void:
 			_status.text = err
 		return
 	GameManager.go_mission_run()
+
+
+func _reward_sheet_open() -> bool:
+	return is_instance_valid(_reward_sheet_host) and _reward_sheet_host.visible and _reward_sheet_host.get_child_count() > 0
 
 
 func _sync_view_rewards_cta() -> void:

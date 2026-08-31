@@ -57,6 +57,26 @@ func _on_combat_return_changed() -> void:
 	_sync_view_rewards_cta()
 
 
+func _input(event: InputEvent) -> void:
+	if not ClientUi.is_confirm_key(event):
+		return
+	if not is_visible_in_tree() or _busy or _claimed:
+		return
+	var vp := get_viewport()
+	if ClientUi.confirm_blocked_by_text_focus(vp):
+		return
+	if ClientUi.shell_has_blocking_overlay(self):
+		return
+	if _reward_sheet_open():
+		return
+	if is_instance_valid(_view_rewards_btn) and ClientUi.try_activate_confirm_button(_view_rewards_btn, vp):
+		return
+	if is_instance_valid(_skip_btn) and ClientUi.try_activate_confirm_button(_skip_btn, vp):
+		return
+	if is_instance_valid(_claim_btn):
+		ClientUi.try_activate_confirm_button(_claim_btn, vp)
+
+
 func _build() -> void:
 	# Void under art (visible only until texture loads).
 	add_child(ClientUi.make_page_bg(self, "void"))
@@ -389,6 +409,10 @@ func _on_view_rewards() -> void:
 	_sync_view_rewards_cta()
 	if not MissionManager.has_active_mission() and not CombatReturnManager.is_for_kind("mission"):
 		GameManager.go_cantina()
+
+
+func _reward_sheet_open() -> bool:
+	return is_instance_valid(_reward_sheet_host) and _reward_sheet_host.visible and _reward_sheet_host.get_child_count() > 0
 
 
 func _populate() -> void:
@@ -743,11 +767,10 @@ func _on_skip() -> void:
 		await _on_fight()
 		return
 	if cost > 0.0:
-		var crystals: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 		if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, cost):
 			Notify.blocked("Not enough Nova Crystals", "Need %s Nova (you have %s)" % [
 				NumberDisplay.nova(cost),
-				NumberDisplay.nova(crystals),
+				CurrencyManager.format_balance(CurrencyManager.CURRENCY_NOVA),
 			])
 			return
 	elif not _tutorial_free_skip():

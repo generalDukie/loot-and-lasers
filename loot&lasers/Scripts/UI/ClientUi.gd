@@ -65,6 +65,48 @@ static func format_nova(value: Variant) -> String:
 	return NumberDisplay.nova(value)
 
 
+static func is_confirm_key(event: InputEvent) -> bool:
+	if event == null or not (event is InputEventKey):
+		return false
+	var key := event as InputEventKey
+	return key.pressed and not key.echo and (key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER)
+
+
+static func confirm_blocked_by_text_focus(viewport: Viewport) -> bool:
+	if viewport == null:
+		return false
+	var focus := viewport.gui_get_focus_owner()
+	if focus == null:
+		return false
+	return focus is LineEdit or focus is TextEdit or focus is CodeEdit or focus is SpinBox
+
+
+static func shell_has_blocking_overlay(from: Node) -> bool:
+	if from == null or not from.is_inside_tree():
+		return false
+	var scene := from.get_tree().current_scene
+	if scene == null:
+		return false
+	if scene.has_method("has_overlay") and bool(scene.call("has_overlay")):
+		return true
+	if scene.has_method("has_settings_overlay") and bool(scene.call("has_settings_overlay")):
+		return true
+	return false
+
+
+static func try_activate_confirm_button(btn: Button, viewport: Viewport = null) -> bool:
+	if btn == null or not is_instance_valid(btn):
+		return false
+	if not btn.is_visible_in_tree() or btn.disabled:
+		return false
+	btn.pressed.emit()
+	# Navigation/overlay teardown can free the caller before the next line; use
+	# the viewport captured as an argument, not get_viewport() after emit.
+	if viewport != null:
+		viewport.set_input_as_handled()
+	return true
+
+
 const DISPLAY_FONT_PATH := "res://Assets/Fonts/Exo2-VariableFont_wght.ttf"
 const BODY_FONT_PATH := "res://Assets/Fonts/Inter-VariableFont_opsz_wght.ttf"
 

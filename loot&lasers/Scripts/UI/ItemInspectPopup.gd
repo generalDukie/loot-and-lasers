@@ -393,10 +393,10 @@ func _rebuild(options: Dictionary) -> void:
 
 	# —— Stats / stims ——
 	if InventoryRules.is_consumable(item):
-		var cons: Dictionary = item.get("consumable", {}) if typeof(item.get("consumable", {})) == TYPE_DICTIONARY else {}
-		var stim_stat := str(cons.get("stat", "")).strip_edges().to_lower()
-		var stim_pct := int(round(float(cons.get("mult", 0)) * 100.0))
-		var stim_hours := str(cons.get("duration_hours", "?"))
+		var effect := InventoryRules.stim_effect(item)
+		var stim_stat := str(effect.get("stat", ""))
+		var stim_pct := int(effect.get("percent", 0))
+		var stim_hours := str(effect.get("duration_hours", 0))
 		var stim_row := HBoxContainer.new()
 		stim_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		stim_row.add_theme_constant_override("separation", 6)

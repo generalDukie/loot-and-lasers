@@ -131,6 +131,38 @@ test("fuel reset uses clock not wall Date.now (fake clock)", () => {
     fuel_purchases: 2,
   };
   assert.equal(checkFuelReset(ch2), null);
+  const overCap = checkFuelReset({
+    fuel: 102,
+    max_fuel: 102,
+    fuel_reset_at: new Date(t0 - 1000).toISOString(),
+    fuel_purchases: 0,
+  });
+  assert.deepEqual(overCap, { fuel: FUEL_MAX });
+  const midCycleKeep = checkFuelReset({
+    fuel: 100_000,
+    max_fuel: FUEL_MAX,
+    fuel_reset_at: new Date(t0 - 1000).toISOString(),
+    fuel_purchases: 0,
+  }, t0, { preserveOverfill: true });
+  assert.equal(midCycleKeep, null);
+  const cycleKeepOverfill = checkFuelReset({
+    fuel: 100_000,
+    max_fuel: FUEL_MAX,
+    fuel_reset_at: new Date(t0 - FUEL_CYCLE_MS - 1000).toISOString(),
+    fuel_purchases: 5,
+  }, t0, { preserveOverfill: true });
+  assert.ok(cycleKeepOverfill);
+  assert.equal(cycleKeepOverfill.fuel, 100_000);
+  assert.equal(cycleKeepOverfill.fuel_purchases, 0);
+  assert.equal(Date.parse(cycleKeepOverfill.fuel_reset_at), t0);
+  const cycleFillBelowCap = checkFuelReset({
+    fuel: 50,
+    max_fuel: FUEL_MAX,
+    fuel_reset_at: new Date(t0 - FUEL_CYCLE_MS - 1000).toISOString(),
+    fuel_purchases: 5,
+  }, t0, { preserveOverfill: true });
+  assert.ok(cycleFillBelowCap);
+  assert.equal(cycleFillBelowCap.fuel, FUEL_MAX);
   resetClockState();
 });
 

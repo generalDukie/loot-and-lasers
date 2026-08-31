@@ -202,6 +202,63 @@ await testAsync("promo create is audited", async () => {
   assert.ok(res.body.promo_code?.id);
 });
 
+await testAsync("admin-owned character can receive uncapped fuel grants", async () => {
+  const a = insertUser("u-fueladmin", "fueladmin@t.test", "admin");
+  makeCharacter("ch-fueladmin", a.id);
+  entities.Character.update("ch-fueladmin", { fuel: 0, max_fuel: 102 });
+  const over = await AdminModeration(a, {
+    action: "adjust_currency",
+    character_id: "ch-fueladmin",
+    deltas: { fuel: 100_000 },
+    reason: "admin overfill",
+  });
+  assert.equal(over.status, 200);
+  const afterOver = entities.Character.get("ch-fueladmin");
+  assert.equal(afterOver.fuel, 100_000);
+  assert.equal(afterOver.max_fuel, 102);
+  const drain = await AdminModeration(a, {
+    action: "adjust_currency",
+    character_id: "ch-fueladmin",
+    deltas: { fuel: -50_000 },
+    reason: "drain overfill",
+  });
+  assert.equal(drain.status, 200);
+  assert.equal(entities.Character.get("ch-fueladmin").fuel, 50_000);
+});
+
+await testAsync("fuel grant on non-admin character cannot exceed effective max while hangar is retired", async () => {
+  const a = insertUser("u-fuelcap", "fuelcap@t.test", "admin");
+  const player = insertUser("u-fuelplayer", "fuelplayer@t.test", "user");
+  makeCharacter("ch-fuelcap", player.id);
+  entities.Character.update("ch-fuelcap", { fuel: 100, max_fuel: 102 });
+  const over = await AdminModeration(a, {
+    action: "adjust_currency",
+    character_id: "ch-fuelcap",
+    deltas: { fuel: 10 },
+    reason: "tank fill",
+  });
+  assert.equal(over.status, 200);
+  const afterOver = entities.Character.get("ch-fuelcap");
+  assert.equal(afterOver.fuel, 100);
+  assert.equal(afterOver.max_fuel, 102);
+  const under = await AdminModeration(a, {
+    action: "adjust_currency",
+    character_id: "ch-fuelcap",
+    deltas: { fuel: -15 },
+    reason: "drain",
+  });
+  assert.equal(under.status, 200);
+  assert.equal(entities.Character.get("ch-fuelcap").fuel, 85);
+  const fill = await AdminModeration(a, {
+    action: "adjust_currency",
+    character_id: "ch-fuelcap",
+    deltas: { fuel: 20 },
+    reason: "partial fill",
+  });
+  assert.equal(fill.status, 200);
+  assert.equal(entities.Character.get("ch-fuelcap").fuel, 100);
+});
+
 await testAsync("currency grant works without reason and still records a supplied reason", async () => {
   const a = insertUser("u-cur", "cur@t.test", "admin");
   makeCharacter("ch-cur", a.id);

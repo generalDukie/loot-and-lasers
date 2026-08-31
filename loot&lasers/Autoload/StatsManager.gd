@@ -119,11 +119,30 @@ func naked_totals(character: Dictionary) -> Dictionary:
 	return StatsRules.naked_totals(character)
 
 
+func stim_bonuses(character: Dictionary, equipped: Array = []) -> Dictionary:
+	var sheet := authoritative_sheet
+	if not sheet.is_empty() and typeof(sheet.get("stim_bonuses", null)) == TYPE_DICTIONARY:
+		return sheet["stim_bonuses"]
+	var out := {}
+	for stat in StatsRules.ATTR_KEYS:
+		out[stat] = StatsRules.stim_bonus(character, equipped, str(stat))
+	return out
+
+
+func equipment_bonuses(character: Dictionary, equipped: Array = []) -> Dictionary:
+	var sheet := authoritative_sheet
+	if not sheet.is_empty() and typeof(sheet.get("equipment_bonuses", null)) == TYPE_DICTIONARY:
+		return sheet["equipment_bonuses"]
+	var out := {}
+	for stat in StatsRules.ATTR_KEYS:
+		out[stat] = StatsRules.gear_bonus(character, equipped, str(stat))
+	return out
+
+
 func derived_stats(character: Dictionary, totals: Dictionary) -> Dictionary:
 	var sheet := authoritative_sheet
-	if not sheet.is_empty() and typeof(sheet.get("derived_permanent", null)) == TYPE_DICTIONARY:
-		# Hero combat panel uses pre-stim derived (matches prior StatsRules.derived(c, permanent)).
-		return sheet["derived_permanent"]
+	if not sheet.is_empty() and typeof(sheet.get("derived", null)) == TYPE_DICTIONARY:
+		return sheet["derived"]
 	return StatsRules.derived(character, totals)
 
 

@@ -787,7 +787,7 @@ func _make_cons_card(item: Dictionary, tutorial_stim := false) -> PanelContainer
 
 	# Face: attribute glyph + % only. Duration lives on hover inspect.
 	if typeof(cons) == TYPE_DICTIONARY and StatIcon.has(stat):
-		var pct := int(round(float(cons.get("mult", 0)) * 100.0))
+		var pct := int(InventoryRules.stim_effect(item).get("percent", 0))
 		if pct > 0:
 			col.add_child(_make_gear_attr_band([{"k": stat, "v": pct, "pct": true}], true))
 		var captured := item.duplicate(true)
@@ -1120,11 +1120,10 @@ func _on_refresh(which: String) -> void:
 	if TutorialManager.blocks_black_market_commerce():
 		Notify.blocked("Finish or skip the tutorial before restocking the Black Market")
 		return
-	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
-	if nova < ShopManager.SHOP_REFRESH_COST:
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, ShopManager.SHOP_REFRESH_COST):
 		Notify.blocked("Not enough Nova Crystals", "Need %s Nova to refresh (you have %s)" % [
 			NumberDisplay.nova(ShopManager.SHOP_REFRESH_COST),
-			NumberDisplay.nova(nova),
+			CurrencyManager.format_balance(CurrencyManager.CURRENCY_NOVA),
 		])
 		return
 	_busy = true

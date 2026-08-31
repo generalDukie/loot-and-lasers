@@ -932,19 +932,26 @@ func _format_rail_amount(value: Variant) -> String:
 
 
 func _fit_currency_fonts() -> void:
-	# Base value size is +40% over the previous 18px console readout (→ 25).
-	# Shrink only for very long exact values — never touch rail / console layout.
+	# Shrink only for long exact values (e.g. "98,073.5") so every digit stays visible.
+	# Never touch rail / console layout.
+	const WALLET_VALUE_FONT_DEFAULT := 25
+	const WALLET_VALUE_FONT_COMPACT := 20
+	const WALLET_VALUE_FONT_SMALL := 18
+	const WALLET_VALUE_FONT_TINY := 16
+	const WALLET_VALUE_LEN_COMPACT := 8
+	const WALLET_VALUE_LEN_SMALL := 12
+	const WALLET_VALUE_LEN_TINY := 16
 	var max_len := 0
 	for lab in [_fuel_value, _stardust_value, _nova_value]:
 		if lab != null and is_instance_valid(lab):
 			max_len = maxi(max_len, lab.text.length())
-	var value_size := 25
-	if max_len > 18:
-		value_size = 16
-	elif max_len > 14:
-		value_size = 18
-	elif max_len > 11:
-		value_size = 20
+	var value_size := WALLET_VALUE_FONT_DEFAULT
+	if max_len >= WALLET_VALUE_LEN_TINY:
+		value_size = WALLET_VALUE_FONT_TINY
+	elif max_len >= WALLET_VALUE_LEN_SMALL:
+		value_size = WALLET_VALUE_FONT_SMALL
+	elif max_len >= WALLET_VALUE_LEN_COMPACT:
+		value_size = WALLET_VALUE_FONT_COMPACT
 	for lab in [_fuel_value, _stardust_value, _nova_value]:
 		if lab == null or not is_instance_valid(lab):
 			continue
@@ -1664,6 +1671,10 @@ func _on_daily_login_claimed(_payload: Dictionary) -> void:
 
 func has_overlay() -> bool:
 	return _overlay_host != null and is_instance_valid(_overlay_host) and _overlay_host.get_child_count() > 0
+
+
+func has_settings_overlay() -> bool:
+	return _settings_overlay != null and is_instance_valid(_settings_overlay)
 
 
 func has_combat_replay_overlay() -> bool:

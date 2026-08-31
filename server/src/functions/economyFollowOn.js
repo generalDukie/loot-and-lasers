@@ -127,6 +127,10 @@ import {
 } from "../audit/index.js";
 import { resolveSelectedCharacter } from "../gameplayContext.js";
 import {
+  buildAttributeSheet,
+  loadEquippedItemsForCharacter,
+} from "../shared/characterAttributes.js";
+import {
   prepareDungeonCombatForCharacter,
   readDungeonPendingCombat,
   publicCombatResult,
@@ -2712,7 +2716,11 @@ export const DismissActiveBuff = wrap((user, body) => {
   if (!prepared.ok) httpErr(400, prepared.reason || "Failed to remove Stim");
   const patch = { active_buffs: prepared.buffs };
   const character = entities.Character.update(ch.id, patch);
-  return { success: true, patch, character };
+  const sheet = buildAttributeSheet(
+    character,
+    loadEquippedItemsForCharacter(character.id),
+  );
+  return { success: true, patch, character, sheet };
 });
 
 export const ClaimScoutMilestone = wrap((user) => {

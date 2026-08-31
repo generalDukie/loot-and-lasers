@@ -12,6 +12,20 @@ const BACKPACK_UNEQUIPPED_ITEM_CAP := 10
 ## @deprecated Use BACKPACK_UNEQUIPPED_ITEM_CAP.
 const BAG_CAP_DEFAULT := BACKPACK_UNEQUIPPED_ITEM_CAP
 
+## Authoritative Stim % / duration by rarity. Matches server CONSUMABLE_TIERS.
+## Mission drops historically stored only {stat, tier}; never trust a missing/forged mult.
+const STIM_PERCENT_SCALE := 100
+const STIM_TIER_MULT := {
+	"uncommon": 0.05,
+	"rare": 0.10,
+	"epic": 0.20,
+}
+const STIM_TIER_HOURS := {
+	"uncommon": 6,
+	"rare": 12,
+	"epic": 24,
+}
+
 
 static func is_equippable(item_type: String) -> bool:
 	var t := item_type
@@ -160,3 +174,37 @@ static func list_junk_ids(items: Array, character_class: String = "") -> Array:
 			if not iid.is_empty():
 				out.append(iid)
 	return out
+
+
+static func stim_rarity(item: Dictionary) -> String:
+	var cons: Variant = item.get("consumable", {})
+	var from_cons := ""
+	if typeof(cons) == TYPE_DICTIONARY:
+		from_cons = str((cons as Dictionary).get("tier", "")).strip_edges().to_lower()
+	var raw := str(item.get("rarity", from_cons)).strip_edges().to_lower()
+	if raw == "common" or raw == "minor":
+		return "uncommon"
+	if raw == "legendary" or raw == "mythic" or raw == "prime":
+		return "epic"
+	if STIM_TIER_MULT.has(raw):
+		return raw
+	if typeof(cons) == TYPE_DICTIONARY and STIM_TIER_MULT.has(from_cons):
+		return from_cons
+	return "uncommon"
+
+
+static func stim_effect(item: Dictionary) -> Dictionary:
+	var cons: Variant = item.get("consumable", {})
+	var stat := ""
+	if typeof(cons) == TYPE_DICTIONARY:
+		stat = str((cons as Dictionary).get("stat", "")).strip_edges().to_lower()
+	var rarity := stim_rarity(item)
+	var mult := float(STIM_TIER_MULT.get(rarity, 0.05))
+	var hours := int(STIM_TIER_HOURS.get(rarity, 6))
+	return {
+		"stat": stat,
+		"rarity": rarity,
+		"mult": mult,
+		"duration_hours": hours,
+		"percent": int(round(mult * float(STIM_PERCENT_SCALE))),
+	}

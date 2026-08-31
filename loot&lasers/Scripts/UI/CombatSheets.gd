@@ -149,6 +149,8 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 8 if action_n >= 3 else 10)
 	col.add_child(actions)
+	var primary_btn: Button = null
+	var first_btn: Button = null
 	for action in summary.get("actions", []):
 		if typeof(action) != TYPE_DICTIONARY:
 			continue
@@ -173,6 +175,10 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		if _tutorial_locks_report_actions():
 			_lock_report_action_button(btn)
 		actions.add_child(btn)
+		if first_btn == null:
+			first_btn = btn
+		if primary_btn == null and bool(action.get("primary", true)):
+			primary_btn = btn
 
 	if actions.get_child_count() == 0:
 		var done := Button.new()
@@ -183,6 +189,9 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 		if _tutorial_locks_report_actions():
 			_lock_report_action_button(done)
 		actions.add_child(done)
+		primary_btn = done
+	elif primary_btn == null:
+		primary_btn = first_btn
 
 	# Entry pop — modulate only (scale breaks nested button hit-testing).
 	card.modulate.a = 0.0
@@ -192,6 +201,7 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	if won:
 		_burst_confetti(root)
 
+	_bind_enter_to_button(root, primary_btn)
 	return root
 
 
@@ -312,6 +322,7 @@ static func make_level_up_sheet(
 	var audio: Node = Engine.get_main_loop().root.get_node_or_null("/root/AudioManager")
 	if audio != null:
 		audio.call("play_ui", "levelup")
+	_bind_enter_to_button(root, confirm)
 	return root
 
 
@@ -431,6 +442,29 @@ static func present_complete_then_level_up(
 
 static func _tutorial_locks_report_actions() -> bool:
 	return TutorialManager.locks_post_combat_report_actions()
+
+
+static func _bind_enter_to_button(host: Control, btn: Button) -> void:
+	if host == null or btn == null:
+		return
+	var binder := ConfirmBinder.new(btn)
+	host.add_child(binder)
+
+
+class ConfirmBinder extends Node:
+	var _btn: Button
+
+	func _init(p_btn: Button = null) -> void:
+		_btn = p_btn
+		name = "ConfirmBinder"
+
+	func _input(event: InputEvent) -> void:
+		if not ClientUi.is_confirm_key(event):
+			return
+		var vp := get_viewport()
+		if ClientUi.confirm_blocked_by_text_focus(vp):
+			return
+		ClientUi.try_activate_confirm_button(_btn, vp)
 
 
 static func _lock_report_action_button(btn: Button) -> void:

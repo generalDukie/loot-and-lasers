@@ -44,14 +44,15 @@ static func signed_quantity(value: Variant) -> String:
 	return quantity(n)
 
 
-## Nova: exact value with commas, never K/M/B. Keeps a trailing .5 when needed.
+## Nova: exact display amount with commas, never K/M/B.
+## Half-units are the storage quantum (1 Nova = 2); a leftover half always shows as .5.
 static func nova(value: Variant) -> String:
-	var snapped := snappedf(float(value), NOVA_HALF_STEP)
-	var negative := snapped < 0.0
-	var absv := absf(snapped)
-	var whole := int(floor(absv))
+	var half := int(round(float(value) / NOVA_HALF_STEP))
+	var negative := half < 0
+	var abs_half := absi(half)
+	var whole := abs_half / 2
 	var text := _comma_group(whole)
-	if not is_equal_approx(absv, float(whole)):
+	if abs_half % 2 == 1:
 		text += DECIMAL_POINT + "5"
 	return _signed(negative, text)
 

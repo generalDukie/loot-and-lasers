@@ -111,7 +111,12 @@ import {
   SkipTutorial,
   CompleteTutorial,
 } from "./tutorial.js";
-import { getInventoryCap, STARDUST_MAX, FUEL_MAX } from "../shared/economyFormulas.js";
+import {
+  getInventoryCap,
+  STARDUST_MAX,
+  getEffectiveMaxFuel,
+  nextFuelAfterGrant,
+} from "../shared/economyFormulas.js";
 import { countBagOccupancy, assertBackpackHasSpace, backpackSlotsNeeded, BACKPACK_FULL_ERROR_CODE, BACKPACK_FULL_ERROR_MESSAGE } from "../shared/inventoryGrant.js";
 import { todayET, clock, TimeErrors } from "../shared/time/index.js";
 import { getGameTime } from "../shared/schedulerService.js";
@@ -1532,10 +1537,12 @@ async function adminModerationInner(user, body) {
       Object.assign(patch, mut.patch);
     }
     if (deltas.fuel != null && deltas.fuel !== 0) {
-      patch.fuel = Math.max(
-        0,
-        Math.min(ch.max_fuel || FUEL_MAX, (ch.fuel || 0) + Number(deltas.fuel)),
-      );
+      const nextFuel = (Number(ch.fuel) || 0) + Number(deltas.fuel);
+      if (!Number.isFinite(nextFuel)) {
+        return { status: 400, body: { error: "Invalid fuel delta" } };
+      }
+      const owner = getUserById(ch.created_by_id);
+      patch.fuel = nextFuelAfterGrant(ch, nextFuel, { uncapped: isAdmin(owner) });
     }
     if (deltas.arena_attempts != null && deltas.arena_attempts !== 0) {
       patch.arena_attempts_left = Math.max(0, (ch.arena_attempts_left || 0) + Number(deltas.arena_attempts));
@@ -1643,7 +1650,7 @@ async function adminModerationInner(user, body) {
       discovered_species: [], collected_artifacts: [], collected_relics: [],
       arena_wins: 0, arena_losses: 0, arena_rating: ARENA_DEFAULT_RATING,
       arena_streak: 0, arena_max_streak: 0, arena_battles: 0,
-      fuel: ch.max_fuel || FUEL_MAX, fuel_purchases: 0,
+      fuel: getEffectiveMaxFuel(ch), fuel_purchases: 0,
       equipped_items: {}, active_mission_id: "", mission_end_time: "",
       missions_completed: 0, highest_sector: 1, dungeon_clears: 0,
       highest_damage: 0, total_stardust_earned: 0,

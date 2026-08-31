@@ -594,6 +594,8 @@ func use_consumable(item_id: String) -> Dictionary:
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
 		GameManager.apply_active_character(ch, "auth_use_consumable")
+	if StatsManager != null and StatsManager.has_method("apply_inventory_snapshot"):
+		StatsManager.apply_inventory_snapshot(data)
 	return {"ok": true, "error": "", "data": data, "status": 200}
 
 
@@ -608,6 +610,8 @@ func refresh_active_stims() -> Dictionary:
 		GameManager.apply_active_character(ch, "auth_refresh_stims")
 	elif typeof(data.get("active_buffs", null)) == TYPE_ARRAY:
 		GameManager.apply_active_character_patch({"active_buffs": data["active_buffs"]}, "auth_refresh_stims")
+	if StatsManager != null and StatsManager.has_method("apply_inventory_snapshot"):
+		StatsManager.apply_inventory_snapshot(data)
 	return {"ok": true, "error": "", "data": data}
 
 
@@ -633,6 +637,8 @@ func dismiss_active_buff(stat: String, expires_at: String = "", name: String = "
 	var ch: Variant = data.get("character", {})
 	if typeof(ch) == TYPE_DICTIONARY and not (ch as Dictionary).is_empty():
 		GameManager.apply_active_character(ch, "auth_dismiss_buff")
+	if StatsManager != null and StatsManager.has_method("apply_inventory_snapshot"):
+		StatsManager.apply_inventory_snapshot(data)
 	return {"ok": true, "error": "", "data": data, "status": 200}
 
 

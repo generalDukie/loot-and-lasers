@@ -42,6 +42,24 @@ func _run() -> void:
 	_check(not CurrencyManager.apply_authoritative_wallet(older, "test"), "older revision rejected")
 	_check(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST) == 125, "older response cannot overwrite")
 
+	var after_skip := {
+		"character_id": "char-a",
+		"balances": {"fuel": 19.75, "stardust": 125, "nova_crystals": 98073.5},
+		"transaction_id": "wallet-test-half-nova",
+		"revision": 6,
+	}
+	_check(CurrencyManager.apply_authoritative_wallet(after_skip, "test"), "half-unit Nova wallet applies")
+	_check(
+		is_equal_approx(float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)), 98073.5),
+		"Nova keeps leftover half after a 1.5 spend"
+	)
+	_check(
+		CurrencyManager.format_balance(CurrencyManager.CURRENCY_NOVA) == "98,073.5",
+		"Nova wallet shows the exact half-unit amount"
+	)
+	_check(NumberDisplay.nova(98075) == "98,075", "whole Nova does not append .0")
+	_check(NumberDisplay.nova(1.5) == "1.5", "skip cost 1.5 formats as 1.5")
+
 	GameManager.clear_active_character("test_logout")
 	_check(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST) == 0, "logout clears wallet")
 	var account_b := {

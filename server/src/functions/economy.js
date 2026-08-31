@@ -125,6 +125,7 @@ import {
   RewardErrors,
 } from "../rewards/index.js";
 import { resolveSelectedCharacter } from "../gameplayContext.js";
+import { isAdmin } from "../entityAccess.js";
 import {
   buildAttributeSheet,
   loadEquippedItemsForCharacter,
@@ -234,8 +235,12 @@ function saveWalletOperation(accountId, operationType, operationKey, result) {
   );
 }
 
-function applyFuelResetIfNeeded(ch) {
-  const reset = checkFuelReset(ch);
+function checkFuelResetForUser(ch, user) {
+  return checkFuelReset(ch, clock.nowMs(), { preserveOverfill: isAdmin(user) });
+}
+
+function applyFuelResetIfNeeded(ch, user) {
+  const reset = checkFuelResetForUser(ch, user);
   if (!reset) return { ch, resetPatch: null };
   const updated = entities.Character.update(ch.id, reset);
   return { ch: updated, resetPatch: reset };
@@ -568,7 +573,7 @@ export async function GetMissionBoard(user, _body = {}) {
   try {
     const result = await withTransactionAsync(async () => {
       let ch = requireMyChar(user);
-      const reset = checkFuelReset(ch);
+      const reset = checkFuelResetForUser(ch, user);
       const chForGen = reset ? { ...ch, ...reset } : ch;
 
       if (ch.active_mission_id) {
@@ -953,7 +958,7 @@ export async function BuyFuel(user, body = {}) {
           idempotent_replay: true,
         };
       }
-      const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch);
+      const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch, user);
       ch = resetCh;
 
       const purchases = ch.fuel_purchases || 0;
@@ -1193,7 +1198,7 @@ export async function SyncFuelCycle(user) {
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
-      const reset = checkFuelReset(ch);
+      const reset = checkFuelResetForUser(ch, user);
       if (!reset) {
         return { success: true, patch: {}, character: ch };
       }
@@ -1232,7 +1237,7 @@ export async function LaunchMission(user, body) {
         httpErr(409, "No mission offers available");
       }
 
-      const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch);
+      const { ch: resetCh, resetPatch } = applyFuelResetIfNeeded(ch, user);
       ch = resetCh;
 
       const level = ch.level || 1;

@@ -41,15 +41,17 @@ const GRANT_TYPE_GEAR := "gear"
 const GRANT_TYPE_COMPENSATION := "compensation"
 const GRANT_TYPE_ENTITLEMENT := "entitlement"
 
-const GRANT_PRESETS_FUEL: Array[int] = [1, 5, 10, 20, 50]
+const GRANT_PRESETS_FUEL: Array[int] = [1, 5, 10, 20, 50, 100_000]
 const GRANT_PRESETS_STANDARD: Array[int] = [10, 50, 100, 500, 1000]
 const GRANT_PRESETS_XP: Array[int] = [100, 500, 1000, 5000, 10000]
 const GRANT_FUEL_DEFAULT := 10
 const GRANT_STARDUST_DEFAULT := 100
 const GRANT_NOVA_DEFAULT := 10
 const GRANT_XP_DEFAULT := 1000
-const GRANT_FUEL_DELTA_MIN := -1000
-const GRANT_FUEL_DELTA_MAX := 1000
+## SpinBox bound for Fuel grants. Admin-owned characters may exceed the tank cap;
+## this is not a gameplay Fuel rule.
+const GRANT_FUEL_DELTA_MIN := -1_000_000
+const GRANT_FUEL_DELTA_MAX := 1_000_000
 const GRANT_SD_DELTA_MIN := -1_000_000
 const GRANT_SD_DELTA_MAX := 1_000_000
 const GRANT_NOVA_DELTA_MIN := -100_000

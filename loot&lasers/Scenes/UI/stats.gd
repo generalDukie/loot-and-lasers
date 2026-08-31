@@ -41,7 +41,6 @@ var _attrs_col: VBoxContainer
 var _vault_panel: PanelContainer
 var _backpack: PanelContainer
 var _combat_via: Label
-var _combat_stim: HBoxContainer
 var _stat_rows: Dictionary = {}
 var _combat_values: Dictionary = {}
 var _combat_panels: Dictionary = {}
@@ -561,9 +560,9 @@ func _refresh_values() -> void:
 		return
 	var eq: Array = StatsManager.equipped_items
 	var display: Dictionary = StatsManager.display_totals(c, eq)
-	var permanent: Dictionary = StatsManager.permanent_totals(c, eq)
-	var naked: Dictionary = StatsManager.naked_totals(c)
-	var derived: Dictionary = StatsManager.derived_stats(c, permanent)
+	var gear_map: Dictionary = StatsManager.equipment_bonuses(c, eq)
+	var stim_map: Dictionary = StatsManager.stim_bonuses(c, eq)
+	var derived: Dictionary = StatsManager.derived_stats(c, display)
 	var stardust: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	var hold_extra := _hold_pending_count()
 	var hold_cost := 0
@@ -595,7 +594,8 @@ func _refresh_values() -> void:
 			continue
 		var preview_n := _hold_pending_count(str(stat))
 		var total := int(display.get(stat, 0)) + preview_n
-		var bonus := int(display.get(stat, 0)) - int(naked.get(stat, 0))
+		var gear := int(gear_map.get(stat, 0))
+		var stim := int(stim_map.get(stat, 0))
 		var cost := StatsRules.point_cost(StatsRules.purchase_count(c, str(stat)) + preview_n + 1)
 		var affordable := shown_dust >= cost or (str(stat) == _hold_stat and _hold.is_active())
 
@@ -604,11 +604,20 @@ func _refresh_values() -> void:
 
 		var bonus_lab := row["bonus"] as Label
 		if bonus_lab != null and is_instance_valid(bonus_lab):
-			if bonus > 0:
+			if gear > 0:
 				bonus_lab.visible = true
-				bonus_lab.text = NumberDisplay.signed_quantity(bonus)
+				bonus_lab.text = NumberDisplay.signed_quantity(gear)
 			else:
 				bonus_lab.visible = false
+
+		var stim_lab := row.get("stim", null) as Label
+		if stim_lab != null and is_instance_valid(stim_lab):
+			if stim > 0:
+				stim_lab.visible = true
+				stim_lab.text = NumberDisplay.signed_quantity(stim)
+				stim_lab.add_theme_color_override("font_color", GameData.stat_color(str(stat)))
+			else:
+				stim_lab.visible = false
 
 		var buy := row["buy"] as Button
 		if buy != null and is_instance_valid(buy):
@@ -651,7 +660,7 @@ func _refresh_values() -> void:
 		if row.has("panel") and is_instance_valid(row["panel"]):
 			(row["panel"] as Control).tooltip_text = StatsRules.attribute_tooltip(str(stat), c, eq)
 
-	_update_combat(derived, permanent, display)
+	_update_combat(derived)
 
 
 func _update_hero() -> void:
@@ -1238,13 +1247,11 @@ func _bag_attr_entries(stats_raw: Dictionary) -> Array:
 
 ## Single-attribute stim chip for backpack panes (legacy "all" stims ignored).
 func _bag_stim_attr_entries(item: Dictionary) -> Array:
-	var cons: Variant = item.get("consumable", {})
-	if typeof(cons) != TYPE_DICTIONARY:
-		return []
-	var stat := str(cons.get("stat", "")).strip_edges().to_lower()
+	var effect := InventoryRules.stim_effect(item)
+	var stat := str(effect.get("stat", ""))
 	if not StatIcon.has(stat):
 		return []
-	var pct := int(round(float(cons.get("mult", 0)) * 100.0))
+	var pct := int(effect.get("percent", 0))
 	if pct <= 0:
 		return []
 	return [{"k": stat, "v": pct, "pct": true}]
@@ -1813,6 +1820,12 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 	ClientUi.apply_display_font(bonus_lab)
 	bonus_lab.visible = false
 	val_row.add_child(bonus_lab)
+	var stim_lab := Label.new()
+	stim_lab.add_theme_font_size_override("font_size", 18)
+	stim_lab.add_theme_color_override("font_color", accent)
+	ClientUi.apply_display_font(stim_lab)
+	stim_lab.visible = false
+	val_row.add_child(stim_lab)
 
 	var buy := Button.new()
 	buy.custom_minimum_size = Vector2(128, 70)
@@ -1869,6 +1882,7 @@ func _make_stat_row(stat: String, primary: String) -> PanelContainer:
 		"panel": panel,
 		"value": value_lab,
 		"bonus": bonus_lab,
+		"stim": stim_lab,
 		"buy": buy,
 		"buy_cost": buy_cost,
 		"buy_title": buy_title,
@@ -1896,17 +1910,6 @@ func _make_combat_card() -> VBoxContainer:
 	h2.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(h2)
 	head.add_child(h2)
-	_combat_stim = HBoxContainer.new()
-	_combat_stim.visible = false
-	_combat_stim.add_theme_constant_override("separation", 3)
-	_combat_stim.add_child(UiIcon.make("syringe", ClientUi.VIOLET, 12.0))
-	var stim_lab := Label.new()
-	stim_lab.text = "Stim"
-	stim_lab.add_theme_font_size_override("font_size", 12)
-	stim_lab.add_theme_color_override("font_color", ClientUi.VIOLET)
-	ClientUi.apply_display_font(stim_lab)
-	_combat_stim.add_child(stim_lab)
-	head.add_child(_combat_stim)
 	_combat_via = Label.new()
 	_combat_via.add_theme_font_size_override("font_size", 12)
 	_combat_via.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -1965,7 +1968,7 @@ func _make_combat_card() -> VBoxContainer:
 	return root
 
 
-func _update_combat(derived: Dictionary, permanent: Dictionary, display: Dictionary) -> void:
+func _update_combat(derived: Dictionary) -> void:
 	var values := {
 		"Damage": NumberDisplay.quantity(derived.get("damage", 0)),
 		"Crit Chance": "%s%%" % _fmt_pct(float(derived.get("critChance", 0))),
@@ -1981,12 +1984,6 @@ func _update_combat(derived: Dictionary, permanent: Dictionary, display: Diction
 
 	if _combat_via:
 		_combat_via.text = "via %s" % str(derived.get("primaryStat", ""))
-	if _combat_stim:
-		var buffs: Array = StatsRules.active_buffs(GameManager.active_character)
-		_combat_stim.visible = not buffs.is_empty()
-	# silence unused if callers pass permanent/display for future stim deltas
-	var _p := permanent
-	var _d := display
 
 
 func _combat_tile(label: String, color: Color) -> PanelContainer:

@@ -98,7 +98,7 @@ func format_balance(currency_id: String) -> String:
 			return NumberDisplay.quantity(int(rounded))
 		return "%.2f" % rounded
 	if currency_id == CURRENCY_NOVA:
-		return NumberDisplay.nova(_snap_nova_display(value))
+		return NumberDisplay.nova(value)
 	return NumberDisplay.quantity(int(value))
 
 

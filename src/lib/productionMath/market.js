@@ -38,7 +38,7 @@ export function stimBonusMultiplier(tier) {
   return spec.bonusBps / BASIS_POINTS_DENOMINATOR;
 }
 
-/** Minimum hours since last same-tier apply/extend before another dose is allowed. */
+/** Half of the tier's base duration — the wait from cap before another same-tier dose. */
 export function stimSameTierRestimCooldownHours(tier) {
   const spec = STIM_TIERS[tier];
   if (!spec) return 0;
@@ -46,9 +46,9 @@ export function stimSameTierRestimCooldownHours(tier) {
 }
 
 /**
- * At-cap remaining-hours illustration of the restim wait:
- * Uncommon 15h, Rare 30h, Epic 60h (`maxHours - cooldownHours`).
- * Live eligibility uses last_applied_at elapsed time, not client remaining.
+ * Same-tier restim is allowed when remaining hours are at or below this value:
+ * Uncommon 15h, Rare 30h, Epic 60h (`maxHours - half base` = 2.5 × baseHours).
+ * Authority is server `expires_at` vs now — not client remaining.
  */
 export function stimSameTierRestimRemainingBlockHours(tier) {
   const spec = STIM_TIERS[tier];

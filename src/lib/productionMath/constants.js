@@ -307,9 +307,11 @@ export const STIM_TIERS = Object.freeze({
 
 export const STIM_MAX_ACTIVE_EFFECTS = 3;
 /**
- * Same-tier restim on one attribute requires at least
- * `baseHours / STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR` to elapse since the
- * most recent same-tier application or extension (Uncommon 3h, Rare 6h, Epic 12h).
+ * Same-tier restim is allowed while remaining duration is at most
+ * `maxHours - baseHours / STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR`
+ * (2.5 × base: Uncommon 15h, Rare 30h, Epic 60h). Immediate 1→2→3 stacks
+ * to the cap are allowed; a fourth dose waits until remaining falls to that
+ * threshold, then extends and clamps (Epic 60h + 24h → 72h).
  */
 export const STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR = 2;
 export const STIM_UNCOMMON_LEVEL_MAX = 19;

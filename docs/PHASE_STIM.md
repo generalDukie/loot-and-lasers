@@ -41,7 +41,7 @@ Common/Legendary **not** in `CONSUMABLE_TIERS`. Legacy `common`/`major` labels r
 
 | Case | Behavior |
 |------|----------|
-| Same rarity | Remaining + base, cap at max; bonus unchanged; blocked until half that tier's base duration has elapsed since `last_applied_at` |
+| Same rarity | Remaining + base, cap at max; bonus unchanged; stacks immediately to 3× base; further dose blocked while remaining > 2.5 × base |
 | Higher rarity | **Replace**; duration = **now + new base** (fresh; old remaining discarded) |
 | Lower rarity | **Reject**, no consume |
 | 4th attribute | **Reject**, no consume |

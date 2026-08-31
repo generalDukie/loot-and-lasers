@@ -9,7 +9,6 @@ import {
   nextStimState,
   resolveStimRarity,
   stimBonusMultiplier,
-  stimSameTierRestimCooldownHours,
   stimSameTierRestimRemainingBlockHours,
   stimTierSpec,
 } from "./productionMath/index.js";
@@ -89,29 +88,16 @@ function makeStimBuff({
   };
 }
 
-function lastAppliedAtMs(buff) {
-  const raw = buff?.last_applied_at;
-  if (!raw) return null;
-  const ms = new Date(raw).getTime();
-  return Number.isFinite(ms) ? ms : null;
-}
-
 /**
- * Same-tier restim eligibility from server time vs persisted last_applied_at.
- * Legacy buffs without last_applied_at use remaining vs (maxHours - half base).
+ * Same-tier restim eligibility from server remaining duration vs 2.5 × base.
+ * Allowed at or below Uncommon 15h / Rare 30h / Epic 60h. Immediate stacks to
+ * cap are below that threshold. Does not trust client remaining values.
  */
 export function isSameTierRestimEligible(existing, nowMs) {
   const rarity = resolveStimRarity(existing);
-  const cooldownHours = stimSameTierRestimCooldownHours(rarity);
-  const cooldownMs = cooldownHours * MILLISECONDS_PER_HOUR;
-  if (cooldownMs <= 0) return true;
-  const lastMs = lastAppliedAtMs(existing);
-  if (lastMs != null) {
-    return nowMs - lastMs >= cooldownMs;
-  }
   const remainingMs = Math.max(0, new Date(existing.expires_at).getTime() - nowMs);
   const remainingHours = remainingMs / MILLISECONDS_PER_HOUR;
-  return remainingHours < stimSameTierRestimRemainingBlockHours(rarity);
+  return remainingHours <= stimSameTierRestimRemainingBlockHours(rarity);
 }
 
 function stacksFromRemainingHours(remainingHours, baseHours) {

@@ -100,31 +100,29 @@ test("first use activates with base duration + stacks=1", () => {
 
 test("same rarity stacks duration only — bonus stays +20%", () => {
   const now = Date.now();
-  const epicRestimWait = 12 * HOUR;
   const item = stimItem("intellect", "epic");
   let ch = charWithBuffs([]);
   let res = prepareConsumableBuffs(ch, item, undefined, now);
   ch = charWithBuffs(res.buffs);
-  const tooSoon = prepareConsumableBuffs(ch, item, undefined, now + HOUR);
-  assert.equal(tooSoon.ok, false);
-  const t2 = now + epicRestimWait;
-  res = prepareConsumableBuffs(ch, item, undefined, t2);
+  res = prepareConsumableBuffs(ch, item, undefined, now);
   assert.equal(res.ok, true);
   assert.equal(res.buffs.length, 1);
   assert.equal(res.buffs[0].mult, 0.2);
   assert.equal(res.buffs[0].stacks, 2);
-  const rem = new Date(res.buffs[0].expires_at).getTime() - t2;
-  assert.equal(rem, 36 * HOUR);
+  const rem = new Date(res.buffs[0].expires_at).getTime() - now;
+  assert.equal(rem, 48 * HOUR);
   ch = charWithBuffs(res.buffs);
-  const t3 = t2 + epicRestimWait;
-  res = prepareConsumableBuffs(ch, item, undefined, t3);
+  res = prepareConsumableBuffs(ch, item, undefined, now);
   assert.equal(res.ok, true);
-  assert.equal(res.buffs[0].stacks, 2);
+  assert.equal(res.buffs[0].stacks, 3);
   assert.equal(res.buffs[0].mult, 0.2);
-  assert.equal(new Date(res.buffs[0].expires_at).getTime() - t3, 48 * HOUR);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - now, 72 * HOUR);
+  ch = charWithBuffs(res.buffs);
+  const blocked = prepareConsumableBuffs(ch, item, undefined, now);
+  assert.equal(blocked.ok, false);
 });
 
-test("same-tier at cap is blocked until half-base elapsed; then clamps to maxHours", () => {
+test("same-tier at cap is blocked above 60h remaining; 60h + 24h clamps to 72h", () => {
   const item = stimItem("intellect", "epic");
   const now = Date.parse("2026-08-01T12:00:00.000Z");
   const at72 = [
@@ -136,20 +134,18 @@ test("same-tier at cap is blocked until half-base elapsed; then clamps to maxHou
       stacks: 3,
       name: item.name,
       expires_at: new Date(now + 72 * HOUR).toISOString(),
-      last_applied_at: new Date(now).toISOString(),
     },
   ];
   let res = prepareConsumableBuffs(charWithBuffs(at72), item, at72, now);
   assert.equal(res.ok, false);
 
-  const at59 = [
+  const at60 = [
     {
       ...at72[0],
-      expires_at: new Date(now + 59 * HOUR).toISOString(),
-      last_applied_at: new Date(now - 13 * HOUR).toISOString(),
+      expires_at: new Date(now + 60 * HOUR).toISOString(),
     },
   ];
-  res = prepareConsumableBuffs(charWithBuffs(at59), item, at59, now);
+  res = prepareConsumableBuffs(charWithBuffs(at60), item, at60, now);
   assert.equal(res.ok, true);
   assert.equal(res.buffs[0].mult, 0.2);
   assert.equal(new Date(res.buffs[0].expires_at).getTime() - now, 72 * HOUR);
@@ -171,8 +167,8 @@ test("uncommon/rare same-tier extension clamps to maxHours after restim wait", (
   ];
   const tooSoon = prepareConsumableBuffs(charWithBuffs(at16), u, at16, now);
   assert.equal(tooSoon.ok, false);
-  const at14 = [{ ...at16[0], expires_at: new Date(now + 14 * HOUR).toISOString() }];
-  const ur = prepareConsumableBuffs(charWithBuffs(at14), u, at14, now);
+  const at15 = [{ ...at16[0], expires_at: new Date(now + 15 * HOUR).toISOString() }];
+  const ur = prepareConsumableBuffs(charWithBuffs(at15), u, at15, now);
   assert.equal(ur.ok, true);
   assert.equal(new Date(ur.buffs[0].expires_at).getTime() - now, 18 * HOUR);
 
@@ -190,8 +186,8 @@ test("uncommon/rare same-tier extension clamps to maxHours after restim wait", (
   ];
   const rareTooSoon = prepareConsumableBuffs(charWithBuffs(at31), r, at31, now);
   assert.equal(rareTooSoon.ok, false);
-  const at29 = [{ ...at31[0], expires_at: new Date(now + 29 * HOUR).toISOString() }];
-  const rr = prepareConsumableBuffs(charWithBuffs(at29), r, at29, now);
+  const at30 = [{ ...at31[0], expires_at: new Date(now + 30 * HOUR).toISOString() }];
+  const rr = prepareConsumableBuffs(charWithBuffs(at30), r, at30, now);
   assert.equal(rr.ok, true);
   assert.equal(new Date(rr.buffs[0].expires_at).getTime() - now, 36 * HOUR);
 });
@@ -205,8 +201,7 @@ test("max 3 different attributes; duration stacks do not take slots", () => {
     buffs = res.buffs;
   }
   assert.equal(buffs.length, 3);
-  const later = now + 12 * HOUR;
-  const stacked = prepareConsumableBuffs(charWithBuffs(buffs), stimItem("intellect", "epic"), buffs, later);
+  const stacked = prepareConsumableBuffs(charWithBuffs(buffs), stimItem("intellect", "epic"), buffs, now);
   assert.equal(stacked.ok, true);
   assert.equal(stacked.buffs.length, 3);
   // Fourth attribute blocked

@@ -275,7 +275,7 @@ Nova surcharge: six-band tables exact. **D**.
 
 ## PM-STIM-DURATION
 
-Uncommon +5% 6h/18h; Rare +10% 12h/36h; Epic +20% 24h/72h. Same-tier extend to cap only after `baseHours / STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR` has elapsed since `last_applied_at` (3h/6h/12h). Early same-tier rejects without consume. Higher replaces with fresh base; lower rejects without consume. Max 3 concurrent attributes. Lazy expiry vs absolute `expires_at`. **A** live via `src/lib/stimActivation.js` + `nextStimState`.
+Uncommon +5% 6h/18h; Rare +10% 12h/36h; Epic +20% 24h/72h. Same-tier stacks immediately to cap; a further dose is allowed only when remaining ≤ 2.5 × baseHours (15h/30h/60h), then remaining + base clamp to cap. Early-at-cap rejects without consume. Higher replaces with fresh base; lower rejects without consume. Max 3 concurrent attributes. Lazy expiry vs absolute `expires_at`. **A** live via `src/lib/stimActivation.js` + `nextStimState`.
 
 Sell: `rround(SPF(economicLevel) × 0.75/1.50/3.25)` — item `level_requirement` else seller level. Shop purchase primitive (Phase 6 Market not built): `rround(SPF × 1.50/3.00/6.50)`.
 

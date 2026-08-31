@@ -110,6 +110,8 @@ test("tier metadata: +5/+10/+20 and 6/12/24 base, 18/36/72 max", () => {
   assert.equal(stimSameTierRestimCooldownHours("uncommon"), 3);
   assert.equal(stimSameTierRestimCooldownHours("rare"), 6);
   assert.equal(stimSameTierRestimCooldownHours("epic"), 12);
+  assert.equal(stimSameTierRestimRemainingBlockHours("uncommon"), 15);
+  assert.equal(stimSameTierRestimRemainingBlockHours("rare"), 30);
   assert.equal(stimSameTierRestimRemainingBlockHours("epic"), 60);
   assert.deepEqual([...STIM_ATTRIBUTES], ["strength", "agility", "intellect", "vitality", "luck"]);
 });
@@ -126,23 +128,21 @@ test("mission Stim metadata is immutable after generation", () => {
   assert.equal(copy.rarity, "rare");
 });
 
-test("uncommon fresh 6h +5%; same-tier extends after restim wait; cap 18h", () => {
+test("uncommon fresh 6h +5%; same-tier stacks immediately to 18h cap", () => {
   const item = stimItem("strength", "uncommon");
-  const wait = stimSameTierRestimCooldownHours("uncommon") * MILLISECONDS_PER_HOUR;
-  let t = NOW;
-  let res = prepareConsumableBuffs(charWithBuffs([]), item, [], t);
+  let res = prepareConsumableBuffs(charWithBuffs([]), item, [], NOW);
   assert.equal(res.ok, true);
   assert.equal(res.buffs[0].mult, 0.05);
-  assert.equal(new Date(res.buffs[0].expires_at).getTime() - t, 6 * MILLISECONDS_PER_HOUR);
-  assert.equal(prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, t).ok, false);
-  t += wait;
-  res = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, t);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - NOW, 6 * MILLISECONDS_PER_HOUR);
+  res = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW);
   assert.equal(res.ok, true);
-  assert.equal(new Date(res.buffs[0].expires_at).getTime() - t, 9 * MILLISECONDS_PER_HOUR);
-  t += wait;
-  res = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, t);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - NOW, 12 * MILLISECONDS_PER_HOUR);
+  res = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW);
   assert.equal(res.ok, true);
-  assert.equal(new Date(res.buffs[0].expires_at).getTime() - t, 12 * MILLISECONDS_PER_HOUR);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - NOW, 18 * MILLISECONDS_PER_HOUR);
+  const atCap = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW);
+  assert.equal(atCap.ok, false);
+  assert.equal(atCap.reason, STIM_TOO_CONCENTRATED_REASON);
   assert.equal(nextStimState({ tier: "uncommon", remainingHours: 16 }, "uncommon").remainingHours, 18);
 });
 
@@ -204,84 +204,75 @@ test("different attributes coexist up to the certified 3-effect cap", () => {
   assert.equal(fourth.buffs, undefined);
 });
 
-function restimCase(stat, rarity) {
-  const waitMs = stimSameTierRestimCooldownHours(rarity) * MILLISECONDS_PER_HOUR;
+function restimAtCapCase(stat, rarity) {
   const item = stimItem(stat, rarity);
-  const first = prepareConsumableBuffs(charWithBuffs([]), item, [], NOW);
-  assert.equal(first.ok, true);
-  const expiresBefore = first.buffs[0].expires_at;
-  const beforeWait = NOW + waitMs - 1;
-  const blocked = prepareConsumableBuffs(charWithBuffs(first.buffs), item, first.buffs, beforeWait);
+  const maxHours = STIM_TIERS[rarity].maxHours;
+  const thresholdHours = stimSameTierRestimRemainingBlockHours(rarity);
+  let res = prepareConsumableBuffs(charWithBuffs([]), item, [], NOW);
+  res = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW);
+  res = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW);
+  assert.equal(res.ok, true);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - NOW, maxHours * MILLISECONDS_PER_HOUR);
+  const expiresBefore = res.buffs[0].expires_at;
+  const blocked = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW);
   assert.equal(blocked.ok, false);
   assert.equal(blocked.reason, STIM_TOO_CONCENTRATED_REASON);
   assert.equal(blocked.buffs, undefined);
-  assert.equal(first.buffs[0].expires_at, expiresBefore);
-  const allowedAt = NOW + waitMs;
-  const allowed = prepareConsumableBuffs(charWithBuffs(first.buffs), item, first.buffs, allowedAt);
+  assert.equal(res.buffs[0].expires_at, expiresBefore);
+  const justAbove = NOW + (maxHours - thresholdHours) * MILLISECONDS_PER_HOUR - 1;
+  const stillBlocked = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, justAbove);
+  assert.equal(stillBlocked.ok, false);
+  const atThreshold = NOW + (maxHours - thresholdHours) * MILLISECONDS_PER_HOUR;
+  const allowed = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, atThreshold);
   assert.equal(allowed.ok, true);
-  const remainingAtAllow = Math.max(0, new Date(first.buffs[0].expires_at).getTime() - allowedAt);
-  const expected = Math.min(
-    STIM_TIERS[rarity].maxHours * MILLISECONDS_PER_HOUR,
-    remainingAtAllow + STIM_TIERS[rarity].baseHours * MILLISECONDS_PER_HOUR,
-  );
-  assert.equal(new Date(allowed.buffs[0].expires_at).getTime() - allowedAt, expected);
+  assert.equal(new Date(allowed.buffs[0].expires_at).getTime() - atThreshold, maxHours * MILLISECONDS_PER_HOUR);
 }
 
-test("uncommon same-tier blocked before 3h, allowed at 3h threshold", () => {
-  restimCase("strength", "uncommon");
+test("uncommon stacks to 18h; restim allowed at 15h remaining", () => {
+  restimAtCapCase("strength", "uncommon");
 });
 
-test("rare same-tier blocked before 6h, allowed at 6h threshold", () => {
-  restimCase("agility", "rare");
+test("rare stacks to 36h; restim allowed at 30h remaining", () => {
+  restimAtCapCase("agility", "rare");
 });
 
-test("epic same-tier blocked before 12h, allowed at 12h threshold", () => {
-  restimCase("intellect", "epic");
+test("epic stacks to 72h; restim allowed at 60h remaining", () => {
+  restimAtCapCase("intellect", "epic");
 });
 
-test("successful same-tier use extends and clamps; Epic 59h + 24h → 72h", () => {
+test("successful same-tier use at 60h remaining extends and clamps; Epic 60h + 24h → 72h", () => {
   const item = stimItem("strength", "epic");
-  const at59 = [{
+  const at60 = [{
     stat: "strength",
     mult: 0.20,
     rarity: "epic",
     duration_hours: 24,
     stacks: 3,
     name: item.name,
-    expires_at: new Date(NOW + 59 * MILLISECONDS_PER_HOUR).toISOString(),
-    last_applied_at: new Date(NOW - 13 * MILLISECONDS_PER_HOUR).toISOString(),
+    expires_at: new Date(NOW + 60 * MILLISECONDS_PER_HOUR).toISOString(),
   }];
-  const res = prepareConsumableBuffs(charWithBuffs(at59), item, at59, NOW);
+  const res = prepareConsumableBuffs(charWithBuffs(at60), item, at60, NOW);
   assert.equal(res.ok, true);
   assert.equal(new Date(res.buffs[0].expires_at).getTime() - NOW, 72 * MILLISECONDS_PER_HOUR);
-  assert.equal(res.buffs[0].last_applied_at, new Date(NOW).toISOString());
 });
 
-test("triple-stacked Epic at 72h is eligible below 60h remaining", () => {
+test("Epic with 24h remaining stacks immediately; 72h is blocked until 60h remaining", () => {
   const item = stimItem("strength", "epic");
-  const atCap = [{
-    stat: "strength",
-    mult: 0.20,
-    rarity: "epic",
-    duration_hours: 24,
-    stacks: 3,
-    name: item.name,
-    expires_at: new Date(NOW + 72 * MILLISECONDS_PER_HOUR).toISOString(),
-    last_applied_at: new Date(NOW).toISOString(),
-  }];
-  assert.equal(prepareConsumableBuffs(charWithBuffs(atCap), item, atCap, NOW).ok, false);
-  const at60 = NOW + stimSameTierRestimCooldownHours("epic") * MILLISECONDS_PER_HOUR;
-  const remainingAt60 = new Date(atCap[0].expires_at).getTime() - at60;
-  assert.equal(remainingAt60, stimSameTierRestimRemainingBlockHours("epic") * MILLISECONDS_PER_HOUR);
-  const stillAtThreshold = prepareConsumableBuffs(charWithBuffs(atCap), item, atCap, at60);
-  assert.equal(stillAtThreshold.ok, true);
-  assert.equal(new Date(stillAtThreshold.buffs[0].expires_at).getTime() - at60, 72 * MILLISECONDS_PER_HOUR);
-  const below60 = NOW + 13 * MILLISECONDS_PER_HOUR;
-  const remainingBelow = new Date(atCap[0].expires_at).getTime() - below60;
-  assert.ok(remainingBelow < stimSameTierRestimRemainingBlockHours("epic") * MILLISECONDS_PER_HOUR);
-  const allowed = prepareConsumableBuffs(charWithBuffs(atCap), item, atCap, below60);
+  let res = prepareConsumableBuffs(charWithBuffs([]), item, [], NOW);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - NOW, 24 * MILLISECONDS_PER_HOUR);
+  res = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW);
+  assert.equal(res.ok, true);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - NOW, 48 * MILLISECONDS_PER_HOUR);
+  res = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW);
+  assert.equal(res.ok, true);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - NOW, 72 * MILLISECONDS_PER_HOUR);
+  assert.equal(prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, NOW).ok, false);
+  const at61 = NOW + 11 * MILLISECONDS_PER_HOUR;
+  assert.equal(prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, at61).ok, false);
+  const at60 = NOW + 12 * MILLISECONDS_PER_HOUR;
+  const allowed = prepareConsumableBuffs(charWithBuffs(res.buffs), item, res.buffs, at60);
   assert.equal(allowed.ok, true);
-  assert.equal(new Date(allowed.buffs[0].expires_at).getTime() - below60, 72 * MILLISECONDS_PER_HOUR);
+  assert.equal(new Date(allowed.buffs[0].expires_at).getTime() - at60, 72 * MILLISECONDS_PER_HOUR);
 });
 
 test("expiration boundary: just-before applies, exact/after is 0%", () => {
@@ -492,16 +483,19 @@ await testAsync("reconnect clock does not reset remaining duration", async () =>
   assert.equal(remaining, 9 * MILLISECONDS_PER_HOUR);
 });
 
-await testAsync("early same-tier restim is rejected; item stays; duration unchanged", async () => {
+await testAsync("at-cap same-tier restim is rejected; item stays; duration unchanged", async () => {
   entities.Character.update(ch.id, { active_buffs: [] });
   resetClockState();
   installFakeClock(NOW);
-  makeOwnedStim("p5-restim-first", "uncommon", "luck");
-  const first = await UseConsumable(user, { item_id: "p5-restim-first" });
-  assert.equal(first.status, 200);
+  makeOwnedStim("p5-restim-1", "uncommon", "luck");
+  makeOwnedStim("p5-restim-2", "uncommon", "luck");
+  makeOwnedStim("p5-restim-3", "uncommon", "luck");
+  assert.equal((await UseConsumable(user, { item_id: "p5-restim-1" })).status, 200);
+  assert.equal((await UseConsumable(user, { item_id: "p5-restim-2" })).status, 200);
+  assert.equal((await UseConsumable(user, { item_id: "p5-restim-3" })).status, 200);
   const before = entities.Character.get(ch.id).active_buffs.find((b) => b.stat === "luck");
+  assert.equal(new Date(before.expires_at).getTime() - NOW, 18 * MILLISECONDS_PER_HOUR);
   const expiresBefore = before.expires_at;
-  const lastApplied = before.last_applied_at;
   makeOwnedStim("p5-restim-early", "uncommon", "luck");
   const bagBefore = countBagOccupancy(entities.Character.get(ch.id));
   const blocked = await UseConsumable(user, {
@@ -515,31 +509,33 @@ await testAsync("early same-tier restim is rejected; item stays; duration unchan
   assert.equal(countBagOccupancy(entities.Character.get(ch.id)), bagBefore);
   const after = entities.Character.get(ch.id).active_buffs.find((b) => b.stat === "luck");
   assert.equal(after.expires_at, expiresBefore);
-  assert.equal(after.last_applied_at, lastApplied);
 });
 
-await testAsync("reconnect preserves restim eligibility timing", async () => {
+await testAsync("reconnect preserves remaining-based restim eligibility", async () => {
   entities.Character.update(ch.id, { active_buffs: [] });
   resetClockState();
   installFakeClock(NOW);
-  makeOwnedStim("p5-elig-1", "uncommon", "vitality");
-  const first = await UseConsumable(user, { item_id: "p5-elig-1" });
-  assert.equal(first.status, 200);
-  const persisted = entities.Character.get(ch.id).active_buffs.find((b) => b.stat === "vitality");
-  assert.ok(persisted.last_applied_at);
-  makeOwnedStim("p5-elig-2", "uncommon", "vitality");
-  installFakeClock(NOW + 2 * MILLISECONDS_PER_HOUR);
-  const stillBlocked = await UseConsumable(user, { item_id: "p5-elig-2" });
+  makeOwnedStim("p5-elig-1", "epic", "vitality");
+  makeOwnedStim("p5-elig-2", "epic", "vitality");
+  makeOwnedStim("p5-elig-3", "epic", "vitality");
+  makeOwnedStim("p5-elig-4", "epic", "vitality");
+  assert.equal((await UseConsumable(user, { item_id: "p5-elig-1" })).status, 200);
+  assert.equal((await UseConsumable(user, { item_id: "p5-elig-2" })).status, 200);
+  assert.equal((await UseConsumable(user, { item_id: "p5-elig-3" })).status, 200);
+  const atCap = entities.Character.get(ch.id).active_buffs.find((b) => b.stat === "vitality");
+  assert.equal(new Date(atCap.expires_at).getTime() - NOW, 72 * MILLISECONDS_PER_HOUR);
+  installFakeClock(NOW + 6 * MILLISECONDS_PER_HOUR);
+  const stillBlocked = await UseConsumable(user, { item_id: "p5-elig-4" });
   assert.equal(stillBlocked.status, 400);
-  assert.ok(entities.Item.get("p5-elig-2"));
-  installFakeClock(NOW + stimSameTierRestimCooldownHours("uncommon") * MILLISECONDS_PER_HOUR);
-  const allowed = await UseConsumable(user, { item_id: "p5-elig-2" });
+  assert.ok(entities.Item.get("p5-elig-4"));
+  installFakeClock(NOW + stimSameTierRestimCooldownHours("epic") * MILLISECONDS_PER_HOUR);
+  const allowed = await UseConsumable(user, { item_id: "p5-elig-4" });
   assert.equal(allowed.status, 200);
-  assert.equal(entities.Item.get("p5-elig-2"), null);
+  assert.equal(entities.Item.get("p5-elig-4"), null);
   const live = entities.Character.get(ch.id).active_buffs.find((b) => b.stat === "vitality");
   assert.equal(
     new Date(live.expires_at).getTime() - clock.nowMs(),
-    9 * MILLISECONDS_PER_HOUR,
+    72 * MILLISECONDS_PER_HOUR,
   );
 });
 

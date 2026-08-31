@@ -94,14 +94,12 @@ func format_balance(currency_id: String) -> String:
 	var value: float = float(get_balance(currency_id))
 	if currency_id == CURRENCY_FUEL:
 		var rounded := snappedf(float(value), FUEL_DISPLAY_STEP)
-		return str(int(rounded)) if is_equal_approx(rounded, float(int(rounded))) else "%.2f" % rounded
+		if is_equal_approx(rounded, float(int(rounded))):
+			return NumberDisplay.quantity(int(rounded))
+		return "%.2f" % rounded
 	if currency_id == CURRENCY_NOVA:
-		# Wallet always shows display Nova snapped to the nearest 0.5.
-		var half := _snap_nova_display(value)
-		if is_equal_approx(half, float(int(half))):
-			return str(int(half))
-		return "%.1f" % half
-	return str(int(value))
+		return NumberDisplay.nova(_snap_nova_display(value))
+	return NumberDisplay.quantity(int(value))
 
 
 func next_request_sequence() -> int:

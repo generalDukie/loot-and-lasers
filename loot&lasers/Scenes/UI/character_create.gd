@@ -1781,7 +1781,7 @@ func _fill_stats_chart(host: VBoxContainer, compact: bool, fill_space: bool = fa
 			pri_lab.add_theme_color_override("font_color", Color.WHITE)
 			inner.add_child(pri_lab)
 		var num := Label.new()
-		num.text = str(val)
+		num.text = NumberDisplay.quantity(val)
 		num.add_theme_font_size_override("font_size", num_fs)
 		ClientUi.apply_display_font(num)
 		num.add_theme_color_override("font_color", color.lightened(0.25))

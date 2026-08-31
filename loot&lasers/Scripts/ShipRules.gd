@@ -317,7 +317,7 @@ static func inherent_label(ship: Dictionary) -> String:
 	if float(inh.get("mission_duration_reduction", 0)) > 0:
 		parts.append("-%s%% Time" % int(round(float(inh["mission_duration_reduction"]) * PERCENT_SCALE)))
 	if float(inh.get("fuel_cost_reduction", 0)) > 0:
-		parts.append("-%s Fuel" % str(inh["fuel_cost_reduction"]))
+		parts.append("-%s Fuel" % NumberDisplay.quantity(inh["fuel_cost_reduction"]))
 	var mult := float(ship.get("upgrade_mult", 1.0))
 	if mult > 1.0:
 		parts.append("+%s%% Upgrade Power" % int(round((mult - 1.0) * PERCENT_SCALE)))
@@ -330,7 +330,7 @@ static func tier_effect_label(tier: Dictionary, ship_id: String) -> String:
 	var mult := upgrade_mult(ship_id)
 	var parts: PackedStringArray = []
 	if tier.has("max_fuel_bonus"):
-		parts.append("+%s Max Fuel" % int(round(float(tier["max_fuel_bonus"]) * mult)))
+		parts.append("+%s Max Fuel" % NumberDisplay.quantity(int(round(float(tier["max_fuel_bonus"]) * mult))))
 	if tier.has("fuel_cost_reduction"):
 		parts.append("-%s Fuel Cost" % str(snappedf(float(tier["fuel_cost_reduction"]) * mult, LABEL_DECIMAL_STEP)))
 	if tier.has("mission_duration_reduction"):

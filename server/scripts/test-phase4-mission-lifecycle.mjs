@@ -247,5 +247,24 @@ await testAsync("PrepareMissionCombat is idempotent after skip", async () => {
   assert.equal(second.body.replay, true);
 });
 
+await testAsync("skip snaps the wait even if character.mission_end_time is missing", async () => {
+  const { user, ch } = makeCharacter();
+  const { launch } = await launchFirst(user);
+  const missionId = launch.body.mission.id;
+  const originalEnd = launch.body.mission.end_time;
+  const skip = await SkipMission(user, { mission_id: missionId });
+  assert.equal(skip.status, 200, skip.body?.error);
+  const skipped = entities.Mission.get(missionId);
+  assert.equal(skipped.status, "completed");
+  assert.notEqual(skipped.end_time, originalEnd);
+  const skipSnapClockSlackMs = 1_000;
+  assert.ok(new Date(skipped.end_time).getTime() <= Date.now() + skipSnapClockSlackMs);
+  entities.Character.update(ch.id, { mission_end_time: "" });
+  const prep = await PrepareMissionCombat(user, { mission_id: missionId });
+  assert.equal(prep.status, 200, prep.body?.error);
+  const claim = await ClaimMission(user, { mission_id: missionId });
+  assert.equal(claim.status, 200, claim.body?.error);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 if (failed) process.exit(1);

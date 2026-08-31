@@ -129,9 +129,9 @@ func _tween_bar(to_player: bool, target: float, flash: Color) -> void:
 
 func _apply_labels() -> void:
 	if player_nums:
-		player_nums.text = "%s / %s" % [player_hp, player_max]
+		player_nums.text = "%s / %s" % [NumberDisplay.quantity(player_hp), NumberDisplay.quantity(player_max)]
 	if enemy_nums:
-		enemy_nums.text = "%s / %s" % [enemy_hp, enemy_max]
+		enemy_nums.text = "%s / %s" % [NumberDisplay.quantity(enemy_hp), NumberDisplay.quantity(enemy_max)]
 
 
 func _apply_tints() -> void:

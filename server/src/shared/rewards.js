@@ -82,6 +82,7 @@ export function randomItem(
     rarity,
     rng,
     className,
+    statPool: generationContext?.statPool ?? null,
     origin: generationContext?.origin || generationContext?.source || null,
     manufacturer: generationContext?.manufacturer ?? null,
     shipmentEligible: generationContext?.shipmentEligible,

@@ -7,7 +7,7 @@ import { composePermanentAttributes } from "../../../src/lib/characterStats.js";
 import {
   buildSimulateLoadoutPlan,
   GEAR_SLOTS,
-  SIMULATE_GEAR_RARITY,
+  resolveSimulateGearSlots,
   SIMULATE_NOVA_GRANT,
   xpToNext,
 } from "./productionMath.js";
@@ -44,7 +44,7 @@ function simulateReason(reason) {
   return text || ADMIN_GRANT_UNSPECIFIED_REASON;
 }
 
-export function applyAdminSimulateLevel({ user, characterId, level, reason } = {}) {
+export function applyAdminSimulateLevel({ user, characterId, level, reason, slots } = {}) {
   const cid = String(characterId || "").trim();
   if (!cid) httpErr(400, "character_id required", "VALIDATION_ERROR");
   const rawLevel = Number(level);
@@ -54,6 +54,7 @@ export function applyAdminSimulateLevel({ user, characterId, level, reason } = {
   const L = Math.max(1, Math.floor(rawLevel));
   const ch = entities.Character.get(cid);
   if (!ch) httpErr(404, "Character not found", "NOT_FOUND");
+  const slotSpecs = resolveSimulateGearSlots(slots);
 
   const why = simulateReason(reason);
   const corr = newCorrelationId();
@@ -85,13 +86,14 @@ export function applyAdminSimulateLevel({ user, characterId, level, reason } = {
   const equippedItems = {};
   const createdItems = [];
   for (const slot of GEAR_SLOTS) {
+    const spec = slotSpecs[slot];
     const rolled = randomItem(
-      SIMULATE_GEAR_RARITY,
+      spec.rarity,
       L,
       slot,
       Math.random,
       ch.class,
-      { origin: SIMULATE_GEAR_ORIGIN },
+      { origin: SIMULATE_GEAR_ORIGIN, statPool: spec.pool },
     );
     const {
       id: _ignoreId,
@@ -108,7 +110,7 @@ export function applyAdminSimulateLevel({ user, characterId, level, reason } = {
       ...safeItem,
       name: String(safeItem.name || "Simulated Gear").trim() || "Simulated Gear",
       type: slot,
-      rarity: SIMULATE_GEAR_RARITY,
+      rarity: spec.rarity,
       owner_id: ch.created_by_id || user.id,
       character_id: cid,
       created_by_id: user.id,
@@ -251,7 +253,7 @@ export function applyAdminSimulateLevel({ user, characterId, level, reason } = {
       stardust: plan.stardust,
       nova: SIMULATE_NOVA_GRANT,
       stimTier: plan.stimTier,
-      gearRarity: SIMULATE_GEAR_RARITY,
+      gearSlots: slotSpecs,
       itemIds: createdItems.map((item) => item.id),
     },
   });
@@ -275,7 +277,7 @@ export function applyAdminSimulateLevel({ user, characterId, level, reason } = {
       stardust: plan.stardust,
       nova: plan.nova,
       gearRarity: plan.gearRarity,
-      gearSlots: plan.gearSlots,
+      gearSlots: slotSpecs,
     },
     balances: afterBal,
     equipped_item_ids: equippedItems,

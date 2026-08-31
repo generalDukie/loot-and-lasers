@@ -359,7 +359,7 @@ func can_buy_fuel() -> Dictionary:
 	if fuel_purchases_left() <= 0:
 		return {"ok": false, "error": "Daily fuel purchases used up"}
 	if nova < FUEL_PURCHASE_COST:
-		return {"ok": false, "error": "Need %s Nova" % FUEL_PURCHASE_COST}
+		return {"ok": false, "error": "Need %s Nova" % NumberDisplay.nova(FUEL_PURCHASE_COST)}
 	if fuel > max_fuel - FUEL_PURCHASE_AMOUNT:
 		return {"ok": false, "error": "Tank too full"}
 	return {"ok": true}

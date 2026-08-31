@@ -11,7 +11,6 @@ import {
   MISSION_COMBAT_RULES_VERSION,
   MISSION_ENEMY_HP_SCALE,
   GEAR_SLOTS,
-  MISSION_BOARD_AFFORDABLE_REROLL_LIMIT,
   MISSION_DURATION_POOL_MATURE_LEVEL,
   MISSION_DURATION_POOLS,
   MISSION_ENEMY_ARCHETYPE_CLASS,
@@ -427,13 +426,16 @@ export function hasDuplicateEconomicOffers(offers) {
   return false;
 }
 
-function rollBoardDurations(level, rng) {
-  const pool = getMissionDurationPool(level);
+function rollBoardDurationsFrom(pool, rng) {
   const durations = [];
   for (let i = 0; i < MISSION_OFFER_COUNT; i++) {
     durations.push(pickUniform(pool, rng));
   }
   return durations;
+}
+
+function rollBoardDurations(level, rng) {
+  return rollBoardDurationsFrom(getMissionDurationPool(level), rng);
 }
 
 export function generateMissionBoardDurations(opts = {}) {
@@ -444,19 +446,7 @@ export function generateMissionBoardDurations(opts = {}) {
   const fuel = quantizeFuel(availableFuel);
   const affordable = affordableNormalPoolDurations(level, fuel);
   if (affordable.length > 0) {
-    let durations = rollBoardDurations(level, r);
-    let attempts = 0;
-    while (
-      !durations.some((sec) => fuelFromDurationSeconds(sec) <= fuel)
-      && attempts < MISSION_BOARD_AFFORDABLE_REROLL_LIMIT
-    ) {
-      durations = rollBoardDurations(level, r);
-      attempts += 1;
-    }
-    if (!durations.some((sec) => fuelFromDurationSeconds(sec) <= fuel)) {
-      durations[0] = pickUniform(affordable, r);
-    }
-    return durations.map((sec) => ({
+    return rollBoardDurationsFrom(affordable, r).map((sec) => ({
       durationSeconds: sec,
       fuelCost: fuelFromDurationSeconds(sec),
       lowFuel: false,

@@ -103,9 +103,7 @@ static func compare_gear_attributes(hovered: Dictionary, equipped: Dictionary = 
 
 
 static func format_stat_delta(delta: int) -> String:
-	if delta > 0:
-		return "+%s" % delta
-	return str(delta)
+	return NumberDisplay.signed_quantity(delta)
 
 
 static func compare_lines(candidate: Dictionary, equipped: Dictionary) -> Array:

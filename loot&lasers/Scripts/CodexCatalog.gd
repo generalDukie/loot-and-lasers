@@ -84,13 +84,13 @@ static func body_bbcode(section_id: String) -> String:
 				+ _p("The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and selling gear at the Black Market. Spent in the Black Market, on ship mods, and attribute buys.")
 				+ _h("Nova Crystals")
 				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas (%s Nova Crystals per arena battle after free fights). Frontier cooldown skip costs %s Nova Crystals." % [
-					str(ARENA_PAID_BATTLE_COST), str(DUNGEON_SKIP_COST)
+					NumberDisplay.nova(ARENA_PAID_BATTLE_COST), NumberDisplay.nova(DUNGEON_SKIP_COST)
 				])
 				+ "[font_size=14]%s[/font_size]\n" % _fuel("FUEL")
 				+ _p("Your mission energy. Each mission costs fuel based on its length. You get a pool of 100 that [b]resets to full every 24 hours[/b]. Need more sooner? Spend [b]%s Nova Crystals[/b] to buy +%s fuel, up to [b]%s times[/b] per cycle." % [
-					str(FUEL_PURCHASE_COST),
-					str(FUEL_PURCHASE_AMOUNT),
-					str(FUEL_PURCHASE_MAX),
+					NumberDisplay.nova(FUEL_PURCHASE_COST),
+					NumberDisplay.quantity(FUEL_PURCHASE_AMOUNT),
+					NumberDisplay.quantity(FUEL_PURCHASE_MAX),
 				])
 			)
 		"missions":
@@ -103,9 +103,9 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("Impatient? Spend [b]Nova Crystals[/b] to skip — cost scales with time left (5 Nova Crystals per remaining minute).")
 				+ "\n" + _h("Fuel & reset")
 				+ _p("Your fuel pool refills to full every [b]24 hours[/b]. You can spend [b]%s Nova Crystals[/b] to buy +%s fuel, up to [b]%s times[/b] per cycle. Upgrade your [b]Reinforced Fuel Tank[/b] for more capacity and [b]Fuel Injector Tune[/b] to cut per-mission costs." % [
-					str(FUEL_PURCHASE_COST),
-					str(FUEL_PURCHASE_AMOUNT),
-					str(FUEL_PURCHASE_MAX),
+					NumberDisplay.nova(FUEL_PURCHASE_COST),
+					NumberDisplay.quantity(FUEL_PURCHASE_AMOUNT),
+					NumberDisplay.quantity(FUEL_PURCHASE_MAX),
 				])
 				+ _h("Ship bonuses")
 				+ _p("Your active ship and its mods apply at launch (fuel/time reduction) and at claim (stardust/XP boosts). Check the Ship Hangar.")
@@ -113,7 +113,7 @@ static func body_bbcode(section_id: String) -> String:
 		"combat":
 			return (
 				_p("The [b]Arena[/b] is automated PvP — your stats and gear fight an opponent in a simulated battle. You get [b]%s free battles per day[/b] (resets at midnight Eastern). After that, each fight costs [b]%s Nova Crystals[/b] and awards rating only." % [
-					str(ARENA_FREE_BATTLES), str(ARENA_PAID_BATTLE_COST)
+					NumberDisplay.quantity(ARENA_FREE_BATTLES), NumberDisplay.nova(ARENA_PAID_BATTLE_COST)
 				])
 				+ _h("Challengers")
 				+ _li("You see [b]three[/b] challengers at a time. The board lasts [b]2 hours[/b], remints after you fight one, or when you (or a real foe on the board) level up.")
@@ -136,7 +136,7 @@ static func body_bbcode(section_id: String) -> String:
 		"galaxy":
 			return (
 				_p("The [b]Galaxy Map[/b] (Nav Deck) is a turn-based dungeon crawl across planets. Each planet has enemies to clear and a boss to defeat. After every fight (win or loss) you wait a [b]1 hour cooldown[/b] shared across all worlds; skip it for [b]%s Nova Crystals[/b]." % [
-					str(DUNGEON_SKIP_COST)
+					NumberDisplay.nova(DUNGEON_SKIP_COST)
 				])
 				+ _li("Fight enemies in sequence — battles are auto-simulated like the arena.")
 				+ _li("Defeating the [b]boss[/b] clears the planet and advances you to the next.")
@@ -149,7 +149,7 @@ static func body_bbcode(section_id: String) -> String:
 			return (
 				_p("The [b]Black Market[/b] sells rotating gear and stims for stardust. Stock usually includes a class signature weapon.")
 				+ _h("Stalls")
-				+ _li("Stock refreshes on a timed window. Spend [b]%s Nova Crystals[/b] to restock early." % str(SHOP_REFRESH_COST))
+				+ _li("Stock refreshes on a timed window. Spend [b]%s Nova Crystals[/b] to restock early." % NumberDisplay.nova(SHOP_REFRESH_COST))
 				+ _li("Compare listed gear to what you have equipped before buying.")
 				+ _li("[b]Haggle[/b] on gear — about 40% of the time you get 15–20% off the listing; Buy separately at the new price. If haggle fails, they yank the listing (no purchase).")
 				+ _li("Rare [b]Scrap Crates[/b] (2 commons) show up as bundle deals.")

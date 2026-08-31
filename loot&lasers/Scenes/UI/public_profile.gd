@@ -149,9 +149,9 @@ func _populate(data: Dictionary) -> void:
 	mini.add_theme_constant_override("h_separation", 8)
 	mini.add_theme_constant_override("v_separation", 8)
 	_body.add_child(mini)
-	mini.add_child(_mini_stat("RATING", str(character.get("arena_rating", 1000)), ClientUi.CYAN))
-	mini.add_child(_mini_stat("WINS", str(character.get("arena_wins", 0)), ClientUi.SUCCESS))
-	mini.add_child(_mini_stat("LOSSES", str(character.get("arena_losses", 0)), ClientUi.DANGER))
+	mini.add_child(_mini_stat("RATING", NumberDisplay.quantity(character.get("arena_rating", 1000)), ClientUi.CYAN))
+	mini.add_child(_mini_stat("WINS", NumberDisplay.quantity(character.get("arena_wins", 0)), ClientUi.SUCCESS))
+	mini.add_child(_mini_stat("LOSSES", NumberDisplay.quantity(character.get("arena_losses", 0)), ClientUi.DANGER))
 
 	var bio := str(character.get("bio", ""))
 	if not bio.is_empty():
@@ -163,10 +163,10 @@ func _populate(data: Dictionary) -> void:
 		career_col.add_theme_constant_override("separation", 4)
 		career_col.add_child(ClientUi.make_section_header("CAREER", "Lifetime", ""))
 		career_col.add_child(_p("Missions %s · Arena wins %s · Dungeon clears %s · Top dmg %s" % [
-			str(career.get("missions_completed", 0)),
-			str(career.get("arena_wins", 0)),
-			str(career.get("dungeon_clears", 0)),
-			str(career.get("highest_damage", 0)),
+			NumberDisplay.quantity(career.get("missions_completed", 0)),
+			NumberDisplay.quantity(career.get("arena_wins", 0)),
+			NumberDisplay.quantity(career.get("dungeon_clears", 0)),
+			NumberDisplay.quantity(career.get("highest_damage", 0)),
 		]))
 		_body.add_child(_card(career_col))
 

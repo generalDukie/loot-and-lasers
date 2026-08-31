@@ -75,7 +75,7 @@ static func make_amount_row(
 	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(make(icon_id, size))
 	var lab := Label.new()
-	lab.text = str(amount)
+	lab.text = NumberDisplay.currency_amount(amount, icon_id)
 	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lab.add_theme_font_size_override("font_size", font_size)
 	lab.add_theme_color_override("font_color", tint.lightened(0.12))

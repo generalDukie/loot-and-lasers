@@ -39,8 +39,8 @@ func _on_wallet_changed(_wallet: Dictionary) -> void:
 func _refresh_balance() -> void:
 	if _balance_lab == null or not is_instance_valid(_balance_lab):
 		return
-	_balance_lab.text = "%s  stardust" % str(
-		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
+	_balance_lab.text = "%s  stardust" % CurrencyManager.format_balance(
+		CurrencyManager.CURRENCY_STARDUST
 	)
 
 

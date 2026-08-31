@@ -368,7 +368,7 @@ func _rebuild(options: Dictionary) -> void:
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meta.text = "%s · Requires Lv %s" % [
 		type_label if not type_label.is_empty() else "Item",
-		ClientUi.format_level(item.get("level_requirement", "?")),
+		ClientUi.format_level(item.get("level_requirement", item.get("level", 1))),
 	]
 	meta.autowrap_mode = TextServer.AUTOWRAP_OFF
 	meta.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -438,7 +438,7 @@ func _rebuild(options: Dictionary) -> void:
 		sell_row.add_child(CurrencyIcon.make("stardust", 14.0))
 		var sell := Label.new()
 		sell.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		sell.text = "Sell value · %s" % InventoryRules.estimate_sell_value(item)
+		sell.text = "Sell value · %s" % NumberDisplay.quantity(InventoryRules.estimate_sell_value(item))
 		sell.add_theme_font_size_override("font_size", META_FS)
 		sell.add_theme_color_override("font_color", GameData.STARDUST_COLOR)
 		ClientUi.apply_display_font(sell)
@@ -552,7 +552,7 @@ func _stat_row(stat_key: String, value: int, delta) -> Control:
 	lab.add_child(abbr)
 	var val := Label.new()
 	val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	val.text = ("+%s" % value) if value > 0 else "0"
+	val.text = NumberDisplay.signed_quantity(value) if value > 0 else "0"
 	val.add_theme_font_size_override("font_size", VAL_FS)
 	val.add_theme_color_override("font_color", ClientUi.TEXT if value > 0 else ClientUi.MUTED)
 	ClientUi.apply_body_font(val)

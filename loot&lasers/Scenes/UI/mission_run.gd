@@ -362,10 +362,14 @@ func _boot() -> void:
 	_sync_view_rewards_cta()
 
 
+func _has_mission_reward_cta() -> bool:
+	return CombatReturnManager != null and CombatReturnManager.is_for_kind("mission")
+
+
 func _sync_view_rewards_cta() -> void:
 	if not is_instance_valid(_view_rewards_btn):
 		return
-	var show := CombatReturnManager.is_for_kind("mission")
+	var show := _has_mission_reward_cta()
 	_view_rewards_btn.visible = show
 	if show:
 		var settling := CombatReturnManager.state == CombatReturnManager.STATE_SETTLING
@@ -491,7 +495,7 @@ func _refresh_skip_btn_label(prefix: String, cost: float) -> void:
 	row.add_child(glyph)
 	var amount := Label.new()
 	amount.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	amount.text = str(cost)
+	amount.text = NumberDisplay.nova(cost)
 	amount.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	amount.add_theme_font_size_override("font_size", 19)
 	amount.add_theme_color_override("font_color", cost_tint)
@@ -534,6 +538,18 @@ func _poll_status() -> void:
 	_refresh_timer()
 
 
+func _mission_progress() -> float:
+	var rem := MissionManager.seconds_remaining()
+	var m: Dictionary = MissionManager.active_mission
+	var total := maxi(1, int(m.get("duration_seconds", 1)))
+	return clampf(1.0 - float(rem) / float(total), 0.0, 1.0)
+
+
+func _layout_progress_bar() -> void:
+	var rem := MissionManager.seconds_remaining()
+	_set_progress(_mission_progress(), rem <= 0 or MissionManager.is_mission_finished())
+
+
 func _refresh_timer() -> void:
 	if _claimed or _busy:
 		return
@@ -550,12 +566,16 @@ func _refresh_timer() -> void:
 		return
 
 	var rem := MissionManager.seconds_remaining()
-	var m: Dictionary = MissionManager.active_mission
-	var total := maxi(1, int(m.get("duration_seconds", 1)))
-	var progress := clampf(1.0 - float(rem) / float(total), 0.0, 1.0)
+	var progress := _mission_progress()
 	_timer_label.text = MissionBoard.format_duration(rem) if rem > 0 else "DONE"
 	_goofy.text = _goofy_for_progress(progress)
-	_set_progress(progress, rem <= 0)
+	_set_progress(progress, rem <= 0 or MissionManager.is_mission_finished())
+
+	# Leftover View Rewards CTA + skip/fight visibility must not fight: toggling
+	# those buttons resizes the pane, which used to re-enter this function.
+	if _has_mission_reward_cta():
+		_sync_view_rewards_cta()
+		return
 
 	if rem <= 0 or MissionManager.is_mission_finished():
 		_start_ready_fx()
@@ -615,7 +635,7 @@ func _set_status(text: String, show: bool) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		if is_inside_tree() and not _claimed:
-			call_deferred("_refresh_timer")
+			call_deferred("_layout_progress_bar")
 
 
 func _start_ready_fx() -> void:
@@ -640,7 +660,7 @@ func _stop_ready_fx() -> void:
 
 func _start_mission_fight() -> void:
 	_set_status("Preparing encounter…", true)
-	var prep: Dictionary = await MissionManager.prepare_combat(false)
+	var prep: Dictionary = await MissionManager.prepare_combat(true)
 	_busy = false
 	if not prep.get("ok", false):
 		_set_status(str(prep.get("error", "Could not start fight")), true)
@@ -725,7 +745,10 @@ func _on_skip() -> void:
 	if cost > 0.0:
 		var crystals: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 		if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, cost):
-			Notify.blocked("Not enough Nova Crystals", "Need %s Nova (you have %s)" % [cost, crystals])
+			Notify.blocked("Not enough Nova Crystals", "Need %s Nova (you have %s)" % [
+				NumberDisplay.nova(cost),
+				NumberDisplay.nova(crystals),
+			])
 			return
 	elif not _tutorial_free_skip():
 		await _on_fight()
@@ -735,6 +758,9 @@ func _on_skip() -> void:
 	_skip_btn.disabled = true
 	_claim_btn.disabled = true
 	_set_status("Skipping wait…", true)
+	# Stale View Rewards from a previous dismissed fight must not hijack this skip.
+	if _has_mission_reward_cta() and MissionManager.pending_battle.is_empty():
+		CombatReturnManager.clear()
 	var res: Dictionary = await MissionManager.skip_mission()
 	if not res.ok:
 		var err := str(res.get("error", "Skip failed"))
@@ -749,6 +775,8 @@ func _on_skip() -> void:
 		_refresh_timer()
 		return
 
+	if _has_mission_reward_cta():
+		CombatReturnManager.clear()
 	_skip_btn.visible = false
 	_claim_btn.visible = true
 	_claim_btn.disabled = true

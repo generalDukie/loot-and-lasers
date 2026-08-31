@@ -444,12 +444,12 @@ func _populate() -> void:
 	var rate_per_hour := int(
 		round(float(spf) * StardustEconomy.MINING_EFFICIENCY * MINUTES_PER_HOUR)
 	)
-	_balance_lab.text = str(
+	_balance_lab.text = NumberDisplay.quantity(
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
 	)
-	_stat_level.text = str(level)
-	_stat_rate.text = "%s/h" % rate_per_hour
-	_stat_max.text = str(MiningManager.preview_reward(12))
+	_stat_level.text = ClientUi.format_level(level)
+	_stat_rate.text = "%s/h" % NumberDisplay.quantity(rate_per_hour)
+	_stat_max.text = NumberDisplay.quantity(MiningManager.preview_reward(12))
 	_refresh_idle_preview()
 
 	var mining := MiningManager.is_mining()
@@ -486,7 +486,7 @@ func _populate() -> void:
 		_hero_title.text = "NODE READY!"
 		_hero_title.add_theme_color_override("font_color", Color("#4ADE80"))
 		_hero_sub.text = "Your drone finished mining a stardust node."
-		_ready_reward.text = "+%s" % reward
+		_ready_reward.text = "+%s" % NumberDisplay.quantity(reward)
 		_set_glow(Color(0.13, 0.77, 0.37, 0.35), true)
 	else:
 		_set_hero_icon("pickaxe", Color("#F59E0B"))
@@ -494,7 +494,7 @@ func _populate() -> void:
 		_hero_title.add_theme_color_override("font_color", ClientUi.TEXT)
 		_hero_sub.text = "Your drone is harvesting a stardust node..."
 		_remain_lab.text = "⏱  %s" % _format_remaining(rem)
-		_reward_lab.text = str(reward)
+		_reward_lab.text = NumberDisplay.quantity(reward)
 		var total_ms := float(MiningManager.job_duration_ms())
 		if total_ms <= 1.0:
 			total_ms = maxf(1.0, float(rem + 1))
@@ -613,7 +613,7 @@ func _on_start() -> void:
 		var shown_hours := MiningManager.job_hours()
 		if shown_hours <= 0:
 			shown_hours = hours
-		_set_status("Mining started! Collect %s Stardust in %sh." % [gained, shown_hours], GameData.STARDUST_COLOR)
+		_set_status("Mining started! Collect %s Stardust in %sh." % [NumberDisplay.quantity(gained), shown_hours], GameData.STARDUST_COLOR)
 	_populate()
 
 
@@ -630,7 +630,7 @@ func _on_collect() -> void:
 	else:
 		var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 		_set_status(
-			"Node collected! +%s Stardust harvested." % str(data.get("stardust_gained", 0)),
+			"Node collected! +%s Stardust harvested." % NumberDisplay.quantity(data.get("stardust_gained", 0)),
 			Color("#4ADE80")
 		)
 	_populate()

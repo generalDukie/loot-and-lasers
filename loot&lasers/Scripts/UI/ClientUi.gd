@@ -46,11 +46,23 @@ static func format_level(value, fallback: Variant = 1) -> String:
 	if typeof(value) == TYPE_STRING:
 		var s := String(value).strip_edges()
 		if s.is_empty():
-			return str(int(fallback)) if typeof(fallback) != TYPE_STRING else String(fallback)
+			return NumberDisplay.quantity(fallback) if typeof(fallback) != TYPE_STRING else String(fallback)
 		if not s.is_valid_float():
 			return s
-		return str(int(float(s)))
-	return str(int(float(value)))
+		return NumberDisplay.quantity(int(float(s)))
+	return NumberDisplay.quantity(int(float(value)))
+
+
+static func format_quantity(value: Variant) -> String:
+	return NumberDisplay.quantity(value)
+
+
+static func format_quantity_exact(value: Variant) -> String:
+	return NumberDisplay.quantity_exact(value)
+
+
+static func format_nova(value: Variant) -> String:
+	return NumberDisplay.nova(value)
 
 
 const DISPLAY_FONT_PATH := "res://Assets/Fonts/Exo2-VariableFont_wght.ttf"
@@ -448,7 +460,7 @@ static func fill_priced_action_button(
 		cluster.add_child(glyph)
 		var amt := Label.new()
 		amt.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		amt.text = str(amount)
+		amt.text = NumberDisplay.currency_amount(amount, cid)
 		amt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		amt.add_theme_font_size_override("font_size", font_size)
 		amt.add_theme_color_override("font_color", accent)
@@ -932,14 +944,14 @@ static func make_currency_chip(symbol: String, value: Variant, tint: Color = CYA
 		chip.add_child(pad)
 		row.add_child(CurrencyIcon.make(currency_id, 16.0))
 		var amount := Label.new()
-		amount.text = str(value)
+		amount.text = NumberDisplay.currency_amount(value, currency_id)
 		amount.add_theme_font_size_override("font_size", 15)
 		amount.add_theme_color_override("font_color", tint.lightened(0.18))
 		apply_display_font(amount)
 		row.add_child(amount)
 		return chip
 	var label := Label.new()
-	label.text = "%s  %s" % [symbol, str(value)]
+	label.text = "%s  %s" % [symbol, NumberDisplay.quantity(value)]
 	label.add_theme_font_size_override("font_size", 15)
 	label.add_theme_color_override("font_color", tint.lightened(0.18))
 	apply_display_font(label)

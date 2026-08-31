@@ -237,7 +237,7 @@ func _make_achievement_row(entry: Dictionary, ch: Dictionary) -> PanelContainer:
 		ClientUi.apply_hp_bar(bar, ClientUi.SUCCESS if unlocked else ClientUi.CYAN)
 		col.add_child(bar)
 		var prog := Label.new()
-		prog.text = "%s / %s" % [str(p.get("current", 0)), str(p.get("target", 0))]
+		prog.text = "%s / %s" % [NumberDisplay.quantity(p.get("current", 0)), NumberDisplay.quantity(p.get("target", 0))]
 		prog.add_theme_font_size_override("font_size", 13)
 		prog.add_theme_color_override("font_color", ClientUi.MUTED)
 		col.add_child(prog)

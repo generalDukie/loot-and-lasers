@@ -5,7 +5,7 @@
  * Settlement RNG is injected. Pity is Fuel-normalized, not mission-count.
  * Stim sale value is intentionally unfinished (Phase 5).
  */
-import { GenerateGearItem } from "../../../src/lib/itemGeneration.js";
+import { randomItem } from "./rewards.js";
 import {
   LOOT_OUTCOME_GEAR,
   LOOT_OUTCOME_JUNK,
@@ -99,13 +99,14 @@ export function settleMissionItemChain({
     const rarity = rollMissionGearRarity(r);
     const slot = rollMissionGearSlot(r);
     const itemLevel = rollMissionGearItemLevel(snapshotLevel, r);
-    itemTemplates.push(GenerateGearItem({
-      itemLevel,
-      itemType: slot,
+    itemTemplates.push(randomItem(
       rarity,
-      rng: r,
-      origin: MISSION_GEAR_ORIGIN,
-    }));
+      itemLevel,
+      slot,
+      r,
+      character?.class,
+      { origin: MISSION_GEAR_ORIGIN },
+    ));
   } else if (itemOutcome === LOOT_OUTCOME_STIM) {
     stimDropped = true;
     const rarity = missionStimRarityForLevel(snapshotLevel);

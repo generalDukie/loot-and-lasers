@@ -335,7 +335,7 @@ func _make_hero(ch: Dictionary, active: String) -> PanelContainer:
 	fuel_row.add_child(fuel_bar)
 	fuel_row.add_child(CurrencyIcon.make("fuel", 14.0))
 	var fuel_lab := Label.new()
-	fuel_lab.text = "%s/%s" % [str(fuel), str(max_fuel)]
+	fuel_lab.text = "%s/%s" % [NumberDisplay.quantity(fuel), NumberDisplay.quantity(max_fuel)]
 	fuel_lab.add_theme_font_size_override("font_size", 13)
 	fuel_lab.add_theme_color_override("font_color", FUEL_COLOR)
 	ClientUi.apply_display_font(fuel_lab)
@@ -376,7 +376,7 @@ func _bonus_chips(ch: Dictionary, accent: Color) -> Array:
 	var fuel_save := int(round(ShipRules.mod_effect_total(ch, "fuel_cost_reduction")))
 	var time_pct := int(round(ShipRules.mod_effect_total(ch, "mission_duration_reduction") * 100.0))
 	var entries: Array = [
-		{"label": "Max Fuel", "value": str(max_fuel), "show": max_fuel > ShipRules.FUEL_MAX_BASE},
+		{"label": "Max Fuel", "value": NumberDisplay.quantity(max_fuel), "show": max_fuel > ShipRules.FUEL_MAX_BASE},
 		{"label": "Stardust", "value": "+%s%%" % stardust_pct, "show": stardust_pct > 0},
 		{"label": "XP", "value": "+%s%%" % xp_pct, "show": xp_pct > 0},
 		{"label": "Fuel Cost", "value": "-%s" % fuel_save, "show": fuel_save > 0},
@@ -807,9 +807,9 @@ func _make_mount_card(mount: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(title)
 	col.add_child(title)
 	var detail := Label.new()
-	var price := "%s Stardust" % str(mount.get("stardust", 0))
+	var price := "%s Stardust" % NumberDisplay.quantity(mount.get("stardust", 0))
 	if int(mount.get("crystals", 0)) > 0:
-		price += " + %s Nova" % str(mount.get("crystals", 0))
+		price += " + %s Nova" % NumberDisplay.nova(mount.get("crystals", 0))
 	detail.text = "+%s%% speed · %sh · %s" % [
 		str(int(round(float(mount.get("speed", 0)) * 100.0))),
 		str(mount.get("duration_hours", 1)),
@@ -856,7 +856,10 @@ func _on_buy_mod(category: String, cost: int) -> void:
 	if _busy:
 		return
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		Notify.blocked("Not enough Stardust", "Need %s Stardust" % cost)
+		Notify.blocked("Not enough Stardust", "Need %s Stardust (you have %s)" % [
+			NumberDisplay.quantity_exact(cost),
+			NumberDisplay.quantity_exact(int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))),
+		])
 		return
 	_busy = true
 	_set_status("Installing mod…")

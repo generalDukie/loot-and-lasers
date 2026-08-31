@@ -5,10 +5,15 @@ import {
   ATTR_INDEX,
   BASIS_POINTS_DENOMINATOR,
   GEAR_SLOTS,
+  GEAR_STAT_POOL_IDS,
+  GEAR_STAT_POOL_PARTIAL_B,
+  GEAR_STAT_POOL_PARTIAL_B_BLOCKED_RARITIES,
   MILLISECONDS_PER_HOUR,
   PLAYER_FREE_ATTR_WEIGHTS,
+  RARITIES,
   SIMULATE_ATTR_KEYS,
   SIMULATE_GEAR_RARITY,
+  SIMULATE_GEAR_STAT_POOL_DEFAULT,
   SIMULATE_NOVA_GRANT,
   SIMULATE_PURCHASE_EPA_SHARE_BPS,
   SIMULATE_PURCHASE_RAMP_COMPLETE_LEVEL,
@@ -57,6 +62,78 @@ function titleCase(value) {
   const s = String(value || "");
   if (!s) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+const SIMULATE_SLOT_VALIDATION_HTTP_STATUS = 400;
+
+function simulateSlotValidationError(message) {
+  const err = new Error(message);
+  err.status = SIMULATE_SLOT_VALIDATION_HTTP_STATUS;
+  err.code = "VALIDATION_ERROR";
+  throw err;
+}
+
+export function normalizeSimulateStatPool(value) {
+  if (value == null || value === "") return SIMULATE_GEAR_STAT_POOL_DEFAULT;
+  const pool = String(value).trim().toLowerCase();
+  if (!GEAR_STAT_POOL_IDS.includes(pool)) {
+    simulateSlotValidationError(`invalid gear stat pool: ${pool}`);
+  }
+  return pool;
+}
+
+export function normalizeSimulateRarity(value) {
+  const rarity = String(value == null || value === "" ? SIMULATE_GEAR_RARITY : value)
+    .trim()
+    .toLowerCase();
+  if (!RARITIES.includes(rarity)) {
+    simulateSlotValidationError(`invalid gear rarity: ${rarity}`);
+  }
+  return rarity;
+}
+
+export function defaultSimulateGearSlots() {
+  return Object.fromEntries(
+    GEAR_SLOTS.map((slot) => [
+      slot,
+      { rarity: SIMULATE_GEAR_RARITY, pool: SIMULATE_GEAR_STAT_POOL_DEFAULT },
+    ]),
+  );
+}
+
+/** Per-slot rarity + pool for admin simulate. Missing slots use Rare + Normal. */
+export function resolveSimulateGearSlots(slotsInput) {
+  const defaults = defaultSimulateGearSlots();
+  if (slotsInput == null) return defaults;
+  if (typeof slotsInput !== "object" || Array.isArray(slotsInput)) {
+    simulateSlotValidationError("slots must be an object keyed by gear slot");
+  }
+  for (const key of Object.keys(slotsInput)) {
+    if (!GEAR_SLOTS.includes(key)) {
+      simulateSlotValidationError(`unknown gear slot: ${key}`);
+    }
+  }
+  const out = {};
+  for (const slot of GEAR_SLOTS) {
+    const spec = slotsInput[slot] ?? defaults[slot];
+    if (spec == null || typeof spec !== "object" || Array.isArray(spec)) {
+      simulateSlotValidationError(`slots.${slot} must be an object`);
+    }
+    const rarity = normalizeSimulateRarity(
+      spec.rarity == null || spec.rarity === "" ? SIMULATE_GEAR_RARITY : spec.rarity,
+    );
+    const pool = normalizeSimulateStatPool(
+      spec.pool == null || spec.pool === "" ? SIMULATE_GEAR_STAT_POOL_DEFAULT : spec.pool,
+    );
+    if (
+      pool === GEAR_STAT_POOL_PARTIAL_B
+      && GEAR_STAT_POOL_PARTIAL_B_BLOCKED_RARITIES.includes(rarity)
+    ) {
+      simulateSlotValidationError(`partial_b is not allowed for ${rarity} gear`);
+    }
+    out[slot] = { rarity, pool };
+  }
+  return out;
 }
 
 /** 0 at L1, BASIS_POINTS_DENOMINATOR at/after SIMULATE_PURCHASE_RAMP_COMPLETE_LEVEL. */

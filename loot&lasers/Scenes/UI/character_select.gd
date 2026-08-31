@@ -329,7 +329,7 @@ func _update_slot_actions() -> void:
 		_status.text = "%s / %s operative slots" % [_characters.size(), total_slots]
 	elif can_purchase:
 		_status.text = "%s / %s slots · unlock another for %s Nova (max %s)" % [
-			_characters.size(), total_slots, AccountManager.SLOT_NOVA_COST, MAX_SLOTS,
+			_characters.size(), total_slots, NumberDisplay.nova(AccountManager.SLOT_NOVA_COST), MAX_SLOTS,
 		]
 	else:
 		_status.text = "All %s operative slots are filled." % MAX_SLOTS
@@ -743,7 +743,8 @@ func _on_unlock_slot() -> void:
 	):
 		_status.add_theme_color_override("font_color", ClientUi.DANGER)
 		_status.text = "Need %s Nova Crystals to unlock a slot — you have %s." % [
-			AccountManager.SLOT_NOVA_COST, nova,
+			NumberDisplay.nova(AccountManager.SLOT_NOVA_COST),
+			NumberDisplay.nova(nova),
 		]
 		return
 	_busy = true
@@ -769,7 +770,7 @@ func _on_unlock_slot() -> void:
 		_status.text = str(res.get("error", "Could not unlock slot"))
 		return
 	_status.add_theme_color_override("font_color", ClientUi.SUCCESS)
-	_status.text = "Slot unlocked (−%s Nova). Create your next operative." % AccountManager.SLOT_NOVA_COST
+	_status.text = "Slot unlocked (−%s Nova). Create your next operative." % NumberDisplay.nova(AccountManager.SLOT_NOVA_COST)
 	await _refresh()
 	GameManager.go_character_create()
 

@@ -14,6 +14,7 @@ import {
   MISSION_GEAR_REFERENCE_FUEL,
   MISSION_MAX_DURATION_SECONDS,
   MISSION_MIN_FUEL,
+  MISSION_MAX_FUEL,
   MISSION_OFFER_COUNT,
   MISSION_SKIP_MIN_NOVA,
   MISSION_VARIANCE_PRECISION_SCALE,
@@ -26,6 +27,7 @@ import {
   fuelFromDurationSeconds,
   generateMissionOfferEconomics,
   getMissionDurationPool,
+  affordableNormalPoolDurations,
   hasDuplicateEconomicOffers,
   LOOT_OUTCOME_GEAR,
   LOOT_OUTCOME_JUNK,
@@ -135,6 +137,31 @@ test("low-Fuel remainder: L17 with 2 Fuel can receive 120s / 2 Fuel", () => {
   assert.ok(offers.every((o) => o.lowFuel === true));
 });
 
+test("L21 with 15 Fuel never rolls above 15 and still uses the normal pool", () => {
+  const remainingFuel = 15;
+  const matureLevel = MISSION_DURATION_POOL_MATURE_LEVEL;
+  const affordable = affordableNormalPoolDurations(matureLevel, remainingFuel);
+  assert.ok(affordable.length > 1, "15 Fuel should afford more than one L21 duration");
+  const seen = new Set();
+  const boards = 200;
+  for (let i = 0; i < boards; i++) {
+    const offers = generateMissionOfferEconomics({
+      level: matureLevel,
+      availableFuel: remainingFuel,
+      rng: mulberry32(i + 1),
+    });
+    assert.equal(offers.length, MISSION_OFFER_COUNT);
+    for (const o of offers) {
+      assert.equal(o.lowFuel, false);
+      assert.ok(o.fuelCost <= remainingFuel + 1e-9, `rolled ${o.fuelCost} above ${remainingFuel}`);
+      assert.ok(affordable.includes(o.durationSeconds), `duration ${o.durationSeconds} not in affordable pool`);
+      seen.add(o.fuelCost);
+    }
+  }
+  assert.ok(seen.size > 1, "boards must not pin every offer to leftover Fuel");
+  assert.ok(!seen.has(MISSION_MAX_FUEL), "full-pool max Fuel must not appear when 15 remains");
+});
+
 test("192000 low-Fuel cases: 0 stranded usable Fuel", () => {
   const MAX_L = 800;
   const MAX_FUEL = 20;
@@ -154,6 +181,13 @@ test("192000 low-Fuel cases: 0 stranded usable Fuel", () => {
           rng,
         });
         if (!offers.some((o) => o.fuelCost <= q + 1e-9)) stranded += 1;
+        const poolAffordable = affordableNormalPoolDurations(L, q);
+        if (poolAffordable.length > 0) {
+          for (const o of offers) {
+            assert.equal(o.lowFuel, false);
+            assert.ok(o.fuelCost <= q + 1e-9, `L${L} fuel=${q} rolled ${o.fuelCost}`);
+          }
+        }
         for (const o of offers) {
           if (o.lowFuel) {
             assert.ok(o.fuelCost <= q + 1e-9);
@@ -399,7 +433,7 @@ test("Junk value = ROUND(MissionStardust * 0.45 * U(0.60,1.40))", () => {
   assert.equal(rollMissionJunkValue(1000, () => 0), Math.round(1000 * 0.45 * 0.6));
 });
 
-test("settleMissionItemChain routes Gear through GenerateGearItem origin=mission", () => {
+test("settleMissionItemChain routes Gear through randomItem origin=mission", () => {
   const r = settleMissionItemChain({
     character: { level: 20, fuel_since_last_gear: 0 },
     mission: { character_level: 20, fuel_cost: 12.5 },
@@ -409,6 +443,9 @@ test("settleMissionItemChain routes Gear through GenerateGearItem origin=mission
   assert.equal(r.itemOutcome, LOOT_OUTCOME_GEAR);
   assert.equal(r.itemTemplates.length, 1);
   assert.equal(r.itemTemplates[0].origin, "mission");
+  assert.ok(String(r.itemTemplates[0].name || "").trim().length > 0);
+  assert.notEqual(r.itemTemplates[0].name, "Item");
+  assert.equal(r.itemTemplates[0].name, r.itemTemplates[0].base_name);
 });
 
 test("enemy construction uses snapshot EPA * 35% and exact allocation", () => {

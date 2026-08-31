@@ -148,7 +148,7 @@ static func _make_row(
 	hb.add_child(p_side)
 
 	var p_lab := Label.new()
-	p_lab.text = str(p_val)
+	p_lab.text = NumberDisplay.quantity(p_val)
 	p_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	p_lab.custom_minimum_size.x = int(40 * s)
 	p_lab.add_theme_font_size_override("font_size", val_font)
@@ -219,7 +219,7 @@ static func _make_row(
 
 	e_side.add_child(_meter(float(e_val) / float(peak), bar_w, bar_h, color, false, e_adv))
 	var e_lab := Label.new()
-	e_lab.text = str(e_val)
+	e_lab.text = NumberDisplay.quantity(e_val)
 	e_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	e_lab.custom_minimum_size.x = int(40 * s)
 	e_lab.add_theme_font_size_override("font_size", val_font)

@@ -126,7 +126,7 @@ Combat HP / per-hit `round()` uses half-even. Economy/XP `rround` uses half-up. 
 | Authority | `src/lib/productionMath/missions.js` + `docs/PHASE4_MISSIONS.md` |
 | Duration | Discrete `MISSION_DURATION_POOLS`; L21+ stable `[300,600,900,1200]` |
 | Fuel | `duration/60`, quantized 0.25, min 0.25; remainder exception when no pool duration is affordable |
-| Board | Exactly 3 offers; no free/paid/timer/login/nav/reconnect reroll; rotate only after resolved Mission |
+| Board | Exactly 3 offers; when any pool duration is affordable, all three are drawn from that subset (never above remaining Fuel); no free/paid/timer/login/nav/reconnect reroll; rotate only after resolved Mission |
 | Snapshot | Acceptance freezes level, Fuel, duration, both variances, preview XP/SD, item-level basis, enemy EPA, `mission_combat_rules_version`, `mission_enemy_hp_scale`, `mission_enemy_outgoing_multiplier` |
 | XP | `missionXpReward` = ROUND(Fuel × mission_xpf(L) × xpVariance × MISSION_XP_EFFICIENCY × MISSION_XP_REWARD_SCALAR) |
 | Stardust | `missionStardustReward` = ROUND(Fuel × SPF(L) × stardustVariance); no XP-efficiency scalar |

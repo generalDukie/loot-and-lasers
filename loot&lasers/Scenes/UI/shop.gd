@@ -483,7 +483,7 @@ func _make_restock_button() -> Button:
 	restock_nova.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	restock_cluster.add_child(restock_nova)
 	var restock_amt := Label.new()
-	restock_amt.text = str(ShopManager.SHOP_REFRESH_COST)
+	restock_amt.text = NumberDisplay.nova(ShopManager.SHOP_REFRESH_COST)
 	restock_amt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	restock_amt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	restock_amt.add_theme_font_size_override("font_size", REFRESH_TIMER_FS)
@@ -1122,7 +1122,10 @@ func _on_refresh(which: String) -> void:
 		return
 	var nova: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	if nova < ShopManager.SHOP_REFRESH_COST:
-		Notify.blocked("Need %s Nova Crystals to refresh" % ShopManager.SHOP_REFRESH_COST)
+		Notify.blocked("Not enough Nova Crystals", "Need %s Nova to refresh (you have %s)" % [
+			NumberDisplay.nova(ShopManager.SHOP_REFRESH_COST),
+			NumberDisplay.nova(nova),
+		])
 		return
 	_busy = true
 	_set_status("Refreshing %s…" % which)
@@ -1133,7 +1136,7 @@ func _on_refresh(which: String) -> void:
 			_set_status(str(res.get("error", "Refresh failed")))
 		_update_meta()
 		return
-	_set_status("Black Market restocked (−%s Nova Crystals)." % ShopManager.SHOP_REFRESH_COST)
+	_set_status("Black Market restocked (−%s Nova Crystals)." % NumberDisplay.nova(ShopManager.SHOP_REFRESH_COST))
 	_populate()
 
 
@@ -1145,7 +1148,10 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 		return
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		Notify.blocked("Not enough Stardust", "Need %s — you have %s" % [cost, sd])
+		Notify.blocked("Not enough Stardust", "Need %s — you have %s" % [
+			NumberDisplay.quantity_exact(cost),
+			NumberDisplay.quantity_exact(sd),
+		])
 		return
 	if not await InventoryManager.ensure_space(self, "Free a backpack slot before buying."):
 		return
@@ -1177,10 +1183,16 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 	var sd: int = int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))
 	# Client affordability check is UX only — Node recalculates / haggles authoritatively.
 	if not haggle and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, cost):
-		Notify.blocked("Not enough Stardust", "Need %s — you have %s" % [cost, sd])
+		Notify.blocked("Not enough Stardust", "Need %s — you have %s" % [
+			NumberDisplay.quantity_exact(cost),
+			NumberDisplay.quantity_exact(sd),
+		])
 		return
 	if nova > 0 and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, nova):
-		Notify.blocked("Not enough Nova Crystals", "Need %s Nova" % nova)
+		Notify.blocked("Not enough Nova Crystals", "Need %s Nova (you have %s)" % [
+			NumberDisplay.nova(nova),
+			NumberDisplay.nova(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)),
+		])
 		return
 	if not haggle and not await InventoryManager.ensure_space(self, "Free a backpack slot before buying."):
 		return
@@ -1206,9 +1218,9 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 		var note := str(purchase.get("haggle_note", "They blinked"))
 		var pct := int(purchase.get("haggle_discount_pct", 0))
 		if pct > 0:
-			_set_status("%s · new price %s Stardust (-%s%%)" % [note, int(purchase.get("cost", 0)), pct])
+			_set_status("%s · new price %s Stardust (-%s%%)" % [note, NumberDisplay.quantity(int(purchase.get("cost", 0))), pct])
 		else:
-			_set_status("%s · new price %s Stardust" % [note, int(purchase.get("cost", 0))])
+			_set_status("%s · new price %s Stardust" % [note, NumberDisplay.quantity(int(purchase.get("cost", 0)))])
 		_populate()
 		return
 	var msg := _purchase_msg(purchase, "Purchased!")
@@ -1227,9 +1239,9 @@ func _purchase_msg(purchase: Dictionary, fallback: String) -> String:
 	var nova_cost := int(purchase.get("nova_cost", 0))
 	var parts: PackedStringArray = [fallback]
 	if cost > 0:
-		parts.append("−%s Stardust" % cost)
+		parts.append("−%s Stardust" % NumberDisplay.quantity(cost))
 	if nova_cost > 0:
-		parts.append("−%s Nova" % nova_cost)
+		parts.append("−%s Nova" % NumberDisplay.nova(nova_cost))
 	if typeof(pending) == TYPE_ARRAY and (pending as Array).size() > 0:
 		parts.append("held as pending loot")
 	elif typeof(items) == TYPE_ARRAY and (items as Array).size() > 0:
@@ -1747,5 +1759,5 @@ func _on_confirm_sell() -> void:
 		_sell_stage[i] = {}
 	await _load_bag_items()
 	_load_equipped()
-	_set_status("Sold %s item(s) for %s Stardust" % [dissolved_n, gained])
+	_set_status("Sold %s item(s) for %s Stardust" % [dissolved_n, NumberDisplay.quantity(gained)])
 	_populate()

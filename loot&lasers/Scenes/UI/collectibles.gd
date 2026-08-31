@@ -117,12 +117,12 @@ func _populate() -> void:
 
 	var ch: Dictionary = GameManager.active_character
 	_career_lab.text = "CAREER  ·  Missions %s  ·  Arena %s-%s  ·  Dungeon clears %s  ·  Peak hit %s  ·  Lifetime Stardust %s" % [
-		str(ch.get("missions_completed", 0)),
-		str(ch.get("arena_wins", 0)),
-		str(ch.get("arena_losses", 0)),
-		str(ch.get("dungeon_clears", 0)),
-		str(ch.get("highest_damage", 0)),
-		str(ch.get("total_stardust_earned", 0)),
+		NumberDisplay.quantity(ch.get("missions_completed", 0)),
+		NumberDisplay.quantity(ch.get("arena_wins", 0)),
+		NumberDisplay.quantity(ch.get("arena_losses", 0)),
+		NumberDisplay.quantity(ch.get("dungeon_clears", 0)),
+		NumberDisplay.quantity(ch.get("highest_damage", 0)),
+		NumberDisplay.quantity(ch.get("total_stardust_earned", 0)),
 	]
 
 	var species_owned := CollectiblesCatalog.owned_ids(ch.get("discovered_species", []))
@@ -141,7 +141,7 @@ func _populate() -> void:
 	var total := CollectiblesCatalog.SPECIES.size() + 100 + 500 + maxi(1, gear_total) + 10
 	var pct := int(round(float(discovered) / float(total) * 100.0))
 	_progress_lab.text = "TOTAL COLLECTION  %s / %s · %s%%  ·  XP bonus +%s%%" % [
-		str(discovered), str(total), str(pct), str(pct),
+		NumberDisplay.quantity(discovered), NumberDisplay.quantity(total), str(pct), str(pct),
 	]
 	_progress_bar.value = pct
 

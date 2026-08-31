@@ -351,7 +351,7 @@ func _make_guild_header(g: Dictionary) -> PanelContainer:
 	xp_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	xp_row.add_child(xp_lab)
 	var xp_val := Label.new()
-	xp_val.text = "%s / %s" % [str(xp), str(xp_need)]
+	xp_val.text = "%s / %s" % [NumberDisplay.quantity(xp), NumberDisplay.quantity(xp_need)]
 	xp_val.add_theme_font_size_override("font_size", 15)
 	xp_val.add_theme_color_override("font_color", ClientUi.MUTED)
 	xp_row.add_child(xp_val)
@@ -526,8 +526,8 @@ func _make_stat_strip() -> GridContainer:
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
-	grid.add_child(_stat_tile("target", "MISSIONS RUN", str(total_missions), ClientUi.CYAN))
-	grid.add_child(_stat_tile("sparkle", "STARDUST EARNED", str(total_sd), Color("#C084FC")))
+	grid.add_child(_stat_tile("target", "MISSIONS RUN", NumberDisplay.quantity(total_missions), ClientUi.CYAN))
+	grid.add_child(_stat_tile("sparkle", "STARDUST EARNED", NumberDisplay.quantity(total_sd), Color("#C084FC")))
 	grid.add_child(_stat_tile("chart-no-axes-combined", "AVG LEVEL", str(avg), ClientUi.VIOLET))
 	grid.add_child(_stat_tile("users", "MEMBERS", str(members.size()), ClientUi.SUCCESS))
 	return grid
@@ -885,8 +885,8 @@ func _make_member_row(m: Dictionary, my_id: String) -> PanelContainer:
 	var detail := Label.new()
 	detail.text = "Lvl %s · %s · %s Stardust" % [
 		ClientUi.format_level(m.get("character_level", 1)),
-		str(m.get("contributed_missions", 0)),
-		str(m.get("contributed_stardust", 0)),
+		NumberDisplay.quantity(m.get("contributed_missions", 0)),
+		NumberDisplay.quantity(m.get("contributed_stardust", 0)),
 	]
 	detail.add_theme_font_size_override("font_size", 19)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -994,7 +994,7 @@ func _make_browse_row(g: Dictionary) -> PanelContainer:
 	var detail := Label.new()
 	var invite_only: bool = g.get("recruiting", true) == false
 	detail.text = "Members %s · Lv %s · Leader %s · %s" % [
-		str(g.get("member_count", 0)), ClientUi.format_level(g.get("level", 1)), str(g.get("leader_name", "?")),
+		NumberDisplay.quantity(g.get("member_count", 0)), ClientUi.format_level(g.get("level", 1)), str(g.get("leader_name", "?")),
 		"invite-only" if invite_only else "open",
 	]
 	detail.add_theme_font_size_override("font_size", 19)
@@ -1036,7 +1036,7 @@ func _on_declare_war(gid: String) -> void:
 		_set_status(_err(res))
 		return
 	_show_war_picker = false
-	_set_status("War declared (−%s Stardust)." % GuildWarManager.DECLARE_COST)
+	_set_status("War declared (−%s Stardust)." % NumberDisplay.quantity(GuildWarManager.DECLARE_COST))
 	await SocialManager.load_my_guild()
 	await SocialManager.browse_guilds()
 	await _populate()
@@ -1139,7 +1139,7 @@ func _on_create() -> void:
 		_set_status(NAME_NO_DIGITS_MSG)
 		return
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_STARDUST, CREATE_COST):
-		_set_status("You need %s Stardust to found a guild." % CREATE_COST)
+		_set_status("You need %s Stardust to found a guild." % NumberDisplay.quantity_exact(CREATE_COST))
 		return
 	_busy = true
 	_set_status("Creating…")

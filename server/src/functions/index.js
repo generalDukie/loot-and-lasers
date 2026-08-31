@@ -1670,6 +1670,7 @@ async function adminModerationInner(user, body) {
       characterId: body.character_id,
       level: body.level,
       reason: body.reason,
+      slots: body.slots,
     });
     return { status: 200, body: out };
   }

@@ -173,7 +173,7 @@ func _make_quests_panel() -> PanelContainer:
 func _quest_subline() -> String:
 	var left := CrystalStoreManager.weekly_seconds_left()
 	return "Play to earn up to %s Nova this week · resets in %s" % [
-		CrystalStoreManager.total_weekly_reward(),
+		NumberDisplay.nova(CrystalStoreManager.total_weekly_reward()),
 		CrystalStoreManager.format_week_left(left),
 	]
 
@@ -228,7 +228,7 @@ func _make_quest_row(q: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(title)
 	title_row.add_child(title)
 
-	var reward := CurrencyIcon.make_amount_row("+%s" % str(q["reward"]), 13.0, CurrencyIcon.NOVA_GOLD, 13)
+	var reward := CurrencyIcon.make_amount_row("+" + NumberDisplay.nova(int(q["reward"])), 13.0, CurrencyIcon.NOVA_GOLD, 13)
 	title_row.add_child(reward)
 
 	var desc := Label.new()
@@ -674,17 +674,9 @@ func _on_claim(quest_id: String) -> void:
 			reward = int(q["reward"])
 			break
 	_status.add_theme_color_override("font_color", Color("#34D399"))
-	_status.text = "+%s Nova Crystals — claimed for the week." % reward
+	_status.text = "+%s Nova Crystals — claimed for the week." % NumberDisplay.nova(reward)
 	_populate()
 
 
 func _fmt_int(n: int) -> String:
-	var s := str(n)
-	var out := ""
-	var i := 0
-	for c_i in range(s.length() - 1, -1, -1):
-		if i > 0 and i % 3 == 0:
-			out = "," + out
-		out = s[c_i] + out
-		i += 1
-	return out
+	return NumberDisplay.nova(n)

@@ -428,7 +428,7 @@ func _build() -> void:
 	cost_cluster.add_child(nova_glyph)
 	var cost_lab := Label.new()
 	cost_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cost_lab.text = str(DungeonRules.SKIP_COST)
+	cost_lab.text = NumberDisplay.nova(DungeonRules.SKIP_COST)
 	cost_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	cost_lab.add_theme_font_size_override("font_size", 16)
 	cost_lab.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD)
@@ -480,8 +480,8 @@ func _populate_meta() -> void:
 	var in_infinite := active > 10
 	var depth := maxi(1, active - 10)
 	_subtitle.text = "1 hour cooldown, skip for %s Nova%s" % [
-		str(DungeonRules.SKIP_COST),
-		(" · Wormhole depth %s" % depth) if in_infinite else "",
+		NumberDisplay.nova(DungeonRules.SKIP_COST),
+		(" · Wormhole depth %s" % NumberDisplay.quantity(depth)) if in_infinite else "",
 	]
 
 	_update_detail()
@@ -780,6 +780,12 @@ func _on_skip() -> void:
 		return
 	if DungeonManager.cooldown_ms() <= 0:
 		Notify.blocked("No cooldown to skip")
+		return
+	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, DungeonRules.SKIP_COST):
+		Notify.blocked("Not enough Nova Crystals", "Need %s Nova (you have %s)" % [
+			NumberDisplay.nova(DungeonRules.SKIP_COST),
+			NumberDisplay.nova(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)),
+		])
 		return
 	_busy = true
 	_set_status("Skipping cooldown…")

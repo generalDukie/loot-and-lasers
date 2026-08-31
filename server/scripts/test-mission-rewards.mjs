@@ -110,6 +110,9 @@ test("Exclusive chain: Gear success → no Stim/Junk", () => {
   assert.equal(r.itemTemplates.length, 1);
   assert.notEqual(r.itemTemplates[0].type, "consumable");
   assert.notEqual(r.itemTemplates[0].type, "material");
+  assert.ok(String(r.itemTemplates[0].name || "").trim().length > 0);
+  assert.notEqual(r.itemTemplates[0].name, "Item");
+  assert.equal(r.itemTemplates[0].name, r.itemTemplates[0].base_name);
 });
 
 test("Exclusive chain: Gear fail → Stim", () => {

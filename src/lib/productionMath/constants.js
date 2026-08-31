@@ -614,6 +614,7 @@ export const MISSION_MIN_DURATION_SECONDS = 15;
 export const MISSION_MAX_DURATION_SECONDS = 1200;
 export const MISSION_DURATION_POOL_MATURE_LEVEL = 21;
 export const MISSION_MIN_FUEL = MISSION_MIN_DURATION_SECONDS / MISSION_SECONDS_PER_FUEL;
+export const MISSION_MAX_FUEL = MISSION_MAX_DURATION_SECONDS / MISSION_SECONDS_PER_FUEL;
 
 /**
  * Discrete production Mission duration pools (seconds). Uniform selection.
@@ -666,7 +667,6 @@ export const MISSION_ENEMY_ARCHETYPE_CLASS = Object.freeze({
 
 export const MISSION_OFFER_DEDUPE_REROLL_LIMIT = 20;
 export const MISSION_OFFER_DEDUPE_NUDGE_LIMIT = 64;
-export const MISSION_BOARD_AFFORDABLE_REROLL_LIMIT = 32;
 /** Discrete Mission XP/Stardust variance increment: VARIANCE_MIN..VARIANCE_MAX in thousandths. */
 export const MISSION_VARIANCE_STEP = 0.001;
 export const MISSION_VARIANCE_PRECISION_SCALE = 1000;
@@ -689,6 +689,30 @@ export const SIMULATE_PURCHASE_RAMP_COMPLETE_LEVEL = 25;
 export const SIMULATE_STARDUST_DAY_COUNT = 10;
 export const SIMULATE_NOVA_GRANT = 100000;
 export const SIMULATE_GEAR_RARITY = "rare";
+/** Admin simulate / directed gear generation — live loot omits these and stays Normal. */
+export const GEAR_STAT_POOL_NORMAL = "normal";
+export const GEAR_STAT_POOL_DESIRABLE = "desirable";
+export const GEAR_STAT_POOL_PARTIAL_A = "partial_a";
+export const GEAR_STAT_POOL_PARTIAL_B = "partial_b";
+export const GEAR_STAT_POOL_IDS = Object.freeze([
+  GEAR_STAT_POOL_NORMAL,
+  GEAR_STAT_POOL_DESIRABLE,
+  GEAR_STAT_POOL_PARTIAL_A,
+  GEAR_STAT_POOL_PARTIAL_B,
+]);
+export const SIMULATE_GEAR_STAT_POOL_DEFAULT = GEAR_STAT_POOL_NORMAL;
+/** Partial B needs both off-stats plus one desirable (Rare+). */
+export const GEAR_STAT_POOL_PARTIAL_B_BLOCKED_RARITIES = Object.freeze(["common", "uncommon"]);
+export const SIMULATE_PARTIAL_A_OFF_COUNT = 1;
+/** Legendary off-stat share of piece budget. Desirable pins offs at the 10% floor. */
+export const LEGENDARY_PARTIAL_A_OFF_SHARE_BPS = 1350;
+export const LEGENDARY_PARTIAL_B_OFF_SHARE_BPS = 1750;
+export const SIMULATE_GEAR_PRESET_RARITIES = Object.freeze([
+  "uncommon",
+  "rare",
+  "epic",
+  "legendary",
+]);
 export const SIMULATE_ATTR_KEYS = Object.freeze([
   "strength",
   "agility",

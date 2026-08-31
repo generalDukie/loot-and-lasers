@@ -199,7 +199,7 @@ static func _other_floater(label: String, color: Color) -> Dictionary:
 
 static func floater_label(ev: Dictionary) -> Dictionary:
 	if int(ev.get("heal", 0)) > 0:
-		return _other_floater("+%s" % int(ev.get("heal", 0)), Color("#86EFAC"))
+		return _other_floater("+%s" % NumberDisplay.quantity(int(ev.get("heal", 0))), Color("#86EFAC"))
 	if str(ev.get("type", "")) == "dodge" or bool(ev.get("dodged", false)):
 		return _other_floater("DODGE", Color("#67E8F9"))
 	if str(ev.get("type", "")) == "miss" or bool(ev.get("missed", false)):
@@ -209,12 +209,12 @@ static func floater_label(ev: Dictionary) -> Dictionary:
 	if str(ev.get("type", "")) == "barrier":
 		if str(ev.get("kind", "")) == "barrier_broken":
 			return _other_floater("BARRIER BREAK", Color("#67E8F9"))
-		return _other_floater("SHIELD −%s" % int(ev.get("absorbed", 0)), Color("#67E8F9"))
+		return _other_floater("SHIELD −%s" % NumberDisplay.quantity(int(ev.get("absorbed", 0))), Color("#67E8F9"))
 	var dmg := int(ev.get("damage", 0))
 	if bool(ev.get("shieldHit", false)) and dmg <= 0:
 		var absorbed := int(ev.get("barrierAbsorbed", 0))
 		if absorbed > 0:
-			return _other_floater("SHIELD −%s" % absorbed, Color("#67E8F9"))
+			return _other_floater("SHIELD −%s" % NumberDisplay.quantity(absorbed), Color("#67E8F9"))
 		return _other_floater("BLOCK", Color("#67E8F9"))
 	if dmg > 0:
 		var dtype := str(ev.get("damageType", "")).to_upper()
@@ -229,9 +229,9 @@ static func floater_label(ev: Dictionary) -> Dictionary:
 		# Overflow through a broken barrier: show absorb + HP on the same hit beat.
 		var shield := ""
 		if bool(ev.get("shieldHit", false)) and int(ev.get("barrierAbsorbed", 0)) > 0:
-			shield = "SHIELD −%s · BREAK · " % int(ev.get("barrierAbsorbed", 0))
+			shield = "SHIELD −%s · BREAK · " % NumberDisplay.quantity(int(ev.get("barrierAbsorbed", 0)))
 		return {
-			"label": "%s%s−%s" % [shield, prefix, dmg],
+			"label": "%s%s−%s" % [shield, prefix, NumberDisplay.quantity(dmg)],
 			"color": col,
 			"crit": is_crit,
 			"bold": is_crit,
@@ -260,7 +260,7 @@ static func status_chip_parts(side: Dictionary) -> Array:
 	if int(side.get("barrier", 0)) > 0:
 		parts.append({
 			"icon": "shield",
-			"text": "Barrier %s" % int(side.get("barrier", 0)),
+			"text": "Barrier %s" % NumberDisplay.quantity(int(side.get("barrier", 0))),
 			"color": barrier_c,
 			"tip": "Astral Barrier",
 		})
@@ -460,7 +460,7 @@ static func format_log_line(ev: Dictionary, i: int) -> String:
 	if not ability_bit.is_empty():
 		return "#%s %s" % [i + 1, ability_bit]
 	if int(ev.get("heal", 0)) > 0:
-		return "#%s heal +%s" % [i + 1, int(ev.get("heal", 0))]
+		return "#%s heal +%s" % [i + 1, NumberDisplay.quantity(int(ev.get("heal", 0)))]
 	if bool(ev.get("dodged", false)) or str(ev.get("type", "")) == "dodge":
 		return "#%s DODGE" % [i + 1]
 	if str(ev.get("type", "")) == "miss" or bool(ev.get("missed", false)):
@@ -471,7 +471,7 @@ static func format_log_line(ev: Dictionary, i: int) -> String:
 			i + 1,
 			str(ev.get("attacker", "?")),
 			str(ev.get("defender", "?")),
-			int(ev.get("damage", 0)),
+			NumberDisplay.quantity(int(ev.get("damage", 0))),
 			" CRIT" if bool(ev.get("crit", false)) else "",
 		]
 	return "#%s %s" % [i + 1, str(ev.get("type", "event"))]

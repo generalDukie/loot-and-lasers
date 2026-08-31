@@ -159,7 +159,7 @@ func buy_attribute(stat: String, count: int = 1) -> Dictionary:
 		n = mini(n, StatsRules.max_affordable_purchases(ch, stat, dust))
 	if n <= 0:
 		var one := next_cost(ch, stat)
-		return {"ok": false, "error": "Need %s stardust" % one, "data": {}}
+		return {"ok": false, "error": "Need %s stardust" % NumberDisplay.quantity_exact(one), "data": {}}
 	var preview_cost := StatsRules.batch_cost(ch, stat, n)
 	var res: Dictionary = await GameApiClient.invoke("BuyAttribute", {"stat": stat, "count": n})
 	if not res.ok:

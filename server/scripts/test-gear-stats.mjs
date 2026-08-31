@@ -22,13 +22,25 @@ import {
   ITEM_ATTR_KEYS,
   FAVORED_POOL_CHANCE,
   computeItemVendorValue,
+  classGearStatRoles,
+  GEAR_STAT_POOL_DESIRABLE,
+  GEAR_STAT_POOL_PARTIAL_A,
+  GEAR_STAT_POOL_PARTIAL_B,
+  LEGENDARY_DESIRABLE_OFF_SHARE_BPS,
+  LEGENDARY_PARTIAL_A_OFF_SHARE_BPS,
+  LEGENDARY_PARTIAL_B_OFF_SHARE_BPS,
 } from "../../src/lib/itemGeneration.js";
 
 /** Reference C4 curve — must mirror BaseGearStatBudget exactly (round-half-up). */
 const c4Budget = (L) =>
   Math.max(1, Math.trunc(Math.floor(GEAR_BUDGET_LINEAR * L + GEAR_BUDGET_CURVE * Math.sqrt(L) + GEAR_BUDGET_FLOOR + 0.5)));
 import { GearSaleValue } from "../../src/lib/stardustEconomy.js";
-import { applyGearStatBudgetVariance, gearResaleValue } from "../../src/lib/productionMath/index.js";
+import {
+  applyGearStatBudgetVariance,
+  gearResaleValue,
+  BASIS_POINTS_DENOMINATOR,
+  roundHalfUp,
+} from "../../src/lib/productionMath/index.js";
 import { randomItem } from "../src/shared/rewards.js";
 
 let passed = 0;
@@ -312,6 +324,162 @@ test("odd small pools reconcile exactly", () => {
     "rare",
   );
   assert.equal(Object.values(stats).reduce((a, b) => a + b, 0), 7);
+});
+
+test("directed pools pick class-relative stats", () => {
+  const vanguard = classGearStatRoles("Vanguard");
+  const techno = classGearStatRoles("Technomancer");
+  assert.deepEqual(vanguard.desirable.sort(), ["luck", "strength", "vitality"]);
+  assert.deepEqual(vanguard.offs.sort(), ["agility", "intellect"]);
+  assert.deepEqual(techno.desirable.sort(), ["intellect", "luck", "vitality"]);
+  assert.deepEqual(techno.offs.sort(), ["agility", "strength"]);
+
+  const commonDes = selectItemAttributes("common", seqRng([0, 0, 0]), {
+    className: "Vanguard",
+    statPool: GEAR_STAT_POOL_DESIRABLE,
+  });
+  assert.equal(commonDes.attrs.length, 1);
+  assert.ok(vanguard.desirable.includes(commonDes.attrs[0]));
+  assert.equal(commonDes.poolMode, GEAR_STAT_POOL_DESIRABLE);
+
+  const commonA = selectItemAttributes("common", seqRng([0, 0, 0]), {
+    className: "Vanguard",
+    statPool: GEAR_STAT_POOL_PARTIAL_A,
+  });
+  assert.equal(commonA.attrs.length, 1);
+  assert.ok(vanguard.offs.includes(commonA.attrs[0]));
+
+  const uncommonDes = selectItemAttributes("uncommon", seqRng([0, 0, 0, 0]), {
+    className: "Vanguard",
+    statPool: GEAR_STAT_POOL_DESIRABLE,
+  });
+  assert.equal(uncommonDes.attrs.length, 2);
+  for (const attr of uncommonDes.attrs) assert.ok(vanguard.desirable.includes(attr));
+
+  const uncommonA = selectItemAttributes("uncommon", seqRng([0, 0, 0, 0]), {
+    className: "Technomancer",
+    statPool: GEAR_STAT_POOL_PARTIAL_A,
+  });
+  assert.equal(uncommonA.attrs.length, 2);
+  const uncommonOffs = uncommonA.attrs.filter((a) => techno.offs.includes(a));
+  const uncommonDesirable = uncommonA.attrs.filter((a) => techno.desirable.includes(a));
+  assert.equal(uncommonOffs.length, 1);
+  assert.equal(uncommonDesirable.length, 1);
+
+  const rareDes = selectItemAttributes("rare", seqRng([0.1]), {
+    className: "Vanguard",
+    statPool: GEAR_STAT_POOL_DESIRABLE,
+  });
+  assert.deepEqual([...rareDes.attrs].sort(), [...vanguard.desirable].sort());
+
+  const rareA = selectItemAttributes("rare", seqRng([0, 0, 0, 0, 0]), {
+    className: "Vanguard",
+    statPool: GEAR_STAT_POOL_PARTIAL_A,
+  });
+  assert.equal(rareA.attrs.filter((a) => vanguard.offs.includes(a)).length, 1);
+  assert.equal(rareA.attrs.filter((a) => vanguard.desirable.includes(a)).length, 2);
+
+  const rareB = selectItemAttributes("rare", seqRng([0, 0, 0, 0, 0]), {
+    className: "Vanguard",
+    statPool: GEAR_STAT_POOL_PARTIAL_B,
+  });
+  assert.deepEqual(
+    [...rareB.attrs.filter((a) => vanguard.offs.includes(a))].sort(),
+    [...vanguard.offs].sort(),
+  );
+  assert.equal(rareB.attrs.filter((a) => vanguard.desirable.includes(a)).length, 1);
+
+  const epicB = selectItemAttributes("epic", seqRng([0.2, 0.4]), {
+    className: "Technomancer",
+    statPool: GEAR_STAT_POOL_PARTIAL_B,
+  });
+  assert.equal(epicB.attrs.length, 3);
+  assert.deepEqual(
+    [...epicB.attrs.filter((a) => techno.offs.includes(a))].sort(),
+    [...techno.offs].sort(),
+  );
+
+  const leg = selectItemAttributes("legendary", seqRng([0.1]), {
+    className: "Vanguard",
+    statPool: GEAR_STAT_POOL_DESIRABLE,
+  });
+  assert.equal(leg.attrs.length, 5);
+  assert.equal(leg.poolMode, GEAR_STAT_POOL_DESIRABLE);
+});
+
+test("partial B rejected on common and uncommon", () => {
+  assert.throws(() =>
+    selectItemAttributes("common", Math.random, {
+      className: "Vanguard",
+      statPool: GEAR_STAT_POOL_PARTIAL_B,
+    }),
+  );
+  assert.throws(() =>
+    selectItemAttributes("uncommon", Math.random, {
+      className: "Vanguard",
+      statPool: GEAR_STAT_POOL_PARTIAL_B,
+    }),
+  );
+  assert.throws(() =>
+    selectItemAttributes("rare", Math.random, { statPool: GEAR_STAT_POOL_DESIRABLE }),
+  );
+});
+
+test("legendary directed pools pin offs and dump remainder into desirable", () => {
+  const roles = classGearStatRoles("Vanguard");
+  const cases = [
+    [GEAR_STAT_POOL_DESIRABLE, LEGENDARY_DESIRABLE_OFF_SHARE_BPS],
+    [GEAR_STAT_POOL_PARTIAL_A, LEGENDARY_PARTIAL_A_OFF_SHARE_BPS],
+    [GEAR_STAT_POOL_PARTIAL_B, LEGENDARY_PARTIAL_B_OFF_SHARE_BPS],
+  ];
+  for (const [pool, offBps] of cases) {
+    const rolled = rollItemStats({
+      itemLevel: 100,
+      type: "armor",
+      rarity: "legendary",
+      className: "Vanguard",
+      statPool: pool,
+      statBudgetVariance: 1,
+      rng: seqRng([0.15, 0.35, 0.55, 0.75, 0.22, 0.44, 0.66, 0.88]),
+    });
+    const total = rolled.targetBudget;
+    const minEach = Math.floor(total * 0.1);
+    let expectedOff = minEach;
+    if (offBps > LEGENDARY_DESIRABLE_OFF_SHARE_BPS) {
+      expectedOff = Math.max(
+        minEach,
+        roundHalfUp((total * offBps) / BASIS_POINTS_DENOMINATOR),
+      );
+    }
+    const sum = Object.values(rolled.stats).reduce((a, b) => a + b, 0);
+    assert.equal(sum, total, pool);
+    assert.equal(Object.keys(rolled.stats).length, ITEM_ATTR_KEYS.length);
+    for (const key of roles.offs) {
+      assert.equal(rolled.stats[key], expectedOff, `${pool} ${key}`);
+    }
+    for (const key of roles.desirable) {
+      assert.ok(rolled.stats[key] >= minEach, `${pool} ${key}`);
+    }
+  }
+});
+
+test("rare directed pools keep the 20% floor", () => {
+  for (const pool of [GEAR_STAT_POOL_DESIRABLE, GEAR_STAT_POOL_PARTIAL_A, GEAR_STAT_POOL_PARTIAL_B]) {
+    const rolled = rollItemStats({
+      itemLevel: 100,
+      type: "armor",
+      rarity: "rare",
+      className: "Technomancer",
+      statPool: pool,
+      statBudgetVariance: 1,
+      rng: seqRng([0.11, 0.31, 0.51, 0.71, 0.21, 0.41, 0.61, 0.81]),
+    });
+    const minEach = Math.floor(rolled.targetBudget * 0.2);
+    const vals = Object.values(rolled.stats);
+    assert.equal(vals.length, 3, pool);
+    for (const v of vals) assert.ok(v >= minEach, `${pool} ${v} < ${minEach}`);
+    assert.equal(vals.reduce((a, b) => a + b, 0), rolled.targetBudget);
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

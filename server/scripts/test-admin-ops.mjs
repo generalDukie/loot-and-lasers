@@ -268,7 +268,7 @@ await testAsync("arena_suspend via AdminModeration", async () => {
   assert.equal(isArenaBanned("ch-as"), true);
 });
 
-const { buildSimulateLoadoutPlan, SIMULATE_GEAR_RARITY, SIMULATE_NOVA_GRANT, GEAR_SLOTS } =
+const { buildSimulateLoadoutPlan, SIMULATE_GEAR_RARITY, SIMULATE_NOVA_GRANT, GEAR_SLOTS, resolveSimulateGearSlots } =
   await import("../../src/lib/productionMath/index.js");
 const { composePermanentAttributes } = await import("../../src/lib/characterStats.js");
 
@@ -353,6 +353,83 @@ await testAsync("simulate_level L25 Technomancer purchases and epic-band not yet
   const items = entities.Item.filter({ character_id: "ch-sim-l25" }) || [];
   assert.equal(items.length, GEAR_SLOTS.length);
   assert.ok(items.every((it) => Number(it.level || it.level_requirement) === 25));
+});
+
+await testAsync("resolveSimulateGearSlots defaults and rejects partial B on uncommon", async () => {
+  const defaults = resolveSimulateGearSlots(null);
+  assert.equal(Object.keys(defaults).length, GEAR_SLOTS.length);
+  assert.ok(GEAR_SLOTS.every((slot) => defaults[slot].rarity === SIMULATE_GEAR_RARITY));
+  assert.ok(GEAR_SLOTS.every((slot) => defaults[slot].pool === "normal"));
+  const mixed = resolveSimulateGearSlots({ helmet: { rarity: "legendary", pool: "desirable" } });
+  assert.equal(mixed.helmet.rarity, "legendary");
+  assert.equal(mixed.helmet.pool, "desirable");
+  assert.equal(mixed.weapon.rarity, SIMULATE_GEAR_RARITY);
+  try {
+    resolveSimulateGearSlots({ helmet: { rarity: "uncommon", pool: "partial_b" } });
+    assert.fail("expected partial_b uncommon to throw");
+  } catch (err) {
+    assert.equal(err.status, 400);
+  }
+  try {
+    resolveSimulateGearSlots({ not_a_slot: { rarity: "rare", pool: "normal" } });
+    assert.fail("expected unknown slot to throw");
+  } catch (err) {
+    assert.equal(err.status, 400);
+  }
+});
+
+await testAsync("simulate_level honors per-slot rarity and directed pools", async () => {
+  const a = insertUser("u-sim-slots", "sim-slots@t.test", "admin");
+  const created = makeCharacter("ch-sim-slots", a.id, "SimSlots");
+  entities.Character.update(created.id, { class: "Technomancer" });
+  const slots = Object.fromEntries(
+    GEAR_SLOTS.map((slot) => [slot, { rarity: "rare", pool: "normal" }]),
+  );
+  slots.helmet = { rarity: "legendary", pool: "desirable" };
+  slots.weapon = { rarity: "common", pool: "partial_a" };
+  slots.armor = { rarity: "epic", pool: "partial_b" };
+  const res = await AdminModeration(a, {
+    action: "simulate_level",
+    character_id: "ch-sim-slots",
+    level: 25,
+    slots,
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  const items = entities.Item.filter({ character_id: "ch-sim-slots" }) || [];
+  assert.equal(items.length, GEAR_SLOTS.length);
+  const byType = Object.fromEntries(items.map((it) => [it.type, it]));
+  assert.equal(byType.helmet.rarity, "legendary");
+  assert.equal(byType.weapon.rarity, "common");
+  assert.equal(byType.armor.rarity, "epic");
+  assert.equal(byType.legs.rarity, "rare");
+  const helmetStats = byType.helmet.stats || {};
+  const helmetBudget = Object.values(helmetStats).reduce((sum, n) => sum + Number(n || 0), 0);
+  const minEach = Math.floor(helmetBudget * 0.1);
+  assert.equal(Number(helmetStats.strength), minEach);
+  assert.equal(Number(helmetStats.agility), minEach);
+  assert.ok(Number(helmetStats.intellect) >= minEach);
+  const weaponKeys = Object.keys(byType.weapon.stats || {});
+  assert.equal(weaponKeys.length, 1);
+  assert.ok(["strength", "agility"].includes(weaponKeys[0]));
+  const armorKeys = Object.keys(byType.armor.stats || {});
+  assert.equal(armorKeys.length, 3);
+  assert.ok(armorKeys.includes("strength"));
+  assert.ok(armorKeys.includes("agility"));
+});
+
+await testAsync("simulate_level rejects partial B on uncommon", async () => {
+  const a = insertUser("u-sim-badpool", "sim-badpool@t.test", "admin");
+  makeCharacter("ch-sim-badpool", a.id, "SimBad");
+  const slots = Object.fromEntries(
+    GEAR_SLOTS.map((slot) => [slot, { rarity: "uncommon", pool: "partial_b" }]),
+  );
+  const res = await AdminModeration(a, {
+    action: "simulate_level",
+    character_id: "ch-sim-badpool",
+    level: 10,
+    slots,
+  });
+  assert.equal(res.status, 400);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

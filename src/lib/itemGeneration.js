@@ -12,6 +12,7 @@
  */
 
 import {
+  BASIS_POINTS_DENOMINATOR,
   GEAR_BUDGET_CURVE,
   GEAR_BUDGET_FLOOR,
   GEAR_BUDGET_LINEAR,
@@ -19,7 +20,16 @@ import {
   GEAR_SLOT_NORMAL_MULT,
   GEAR_SLOT_PREMIUM_MULT,
   GEAR_SLOTS,
+  GEAR_STAT_POOL_DESIRABLE,
+  GEAR_STAT_POOL_IDS,
+  GEAR_STAT_POOL_NORMAL,
+  GEAR_STAT_POOL_PARTIAL_A,
+  GEAR_STAT_POOL_PARTIAL_B,
+  GEAR_STAT_POOL_PARTIAL_B_BLOCKED_RARITIES,
+  LEGENDARY_PARTIAL_A_OFF_SHARE_BPS,
+  LEGENDARY_PARTIAL_B_OFF_SHARE_BPS,
   PREMIUM_GEAR_SLOTS,
+  SIMULATE_PARTIAL_A_OFF_COUNT,
   canonicalGearOrigin,
   canonicalGearSlot,
   defaultShipmentEligible,
@@ -31,7 +41,18 @@ import {
   applyGearStatBudgetVariance,
   rollGearStatBudgetVariance,
   resolveGearLevelRefs,
+  roundHalfUp,
 } from "./productionMath/index.js";
+
+export {
+  GEAR_STAT_POOL_DESIRABLE,
+  GEAR_STAT_POOL_IDS,
+  GEAR_STAT_POOL_NORMAL,
+  GEAR_STAT_POOL_PARTIAL_A,
+  GEAR_STAT_POOL_PARTIAL_B,
+  LEGENDARY_PARTIAL_A_OFF_SHARE_BPS,
+  LEGENDARY_PARTIAL_B_OFF_SHARE_BPS,
+};
 
 export const ITEM_ATTR_KEYS = ["strength", "agility", "intellect", "vitality", "luck"];
 
@@ -108,6 +129,11 @@ export const RARITY_MIN_STAT_SHARE = {
 
 /** @deprecated use RARITY_MIN_STAT_SHARE.legendary */
 export const LEGENDARY_MIN_STAT_SHARE = 0.1;
+
+/** Legendary Desirable pins each off-stat at the rarity floor (10%). */
+export const LEGENDARY_DESIRABLE_OFF_SHARE_BPS = Math.round(
+  RARITY_MIN_STAT_SHARE.legendary * BASIS_POINTS_DENOMINATOR,
+);
 
 /**
  * Rare normal-slot base budget — one continuous, monotonic, infinitely scaling
@@ -232,40 +258,179 @@ export function getFavoredStatPool(classNameOrArchetype) {
   return [...(CLASS_FAVORED_STAT_POOLS[arch] || TOTAL_STAT_POOL)];
 }
 
+export function normalizeGearStatPool(statPool) {
+  if (statPool == null || statPool === "") return GEAR_STAT_POOL_NORMAL;
+  const pool = String(statPool).trim().toLowerCase();
+  if (!GEAR_STAT_POOL_IDS.includes(pool)) {
+    const err = new Error("Invalid gear stat pool");
+    err.status = VALIDATION_HTTP_STATUS;
+    err.code = "VALIDATION_ERROR";
+    throw err;
+  }
+  return pool;
+}
+
+export function classGearStatRoles(className) {
+  const favored = getFavoredStatPool(className);
+  if (!favored) return null;
+  return {
+    primary: resolveClassArchetype(className),
+    desirable: [...favored],
+    offs: TOTAL_STAT_POOL.filter((key) => !favored.includes(key)),
+  };
+}
+
+export function legendaryOffShareBpsForPool(statPool) {
+  const pool = normalizeGearStatPool(statPool);
+  if (pool === GEAR_STAT_POOL_DESIRABLE) return LEGENDARY_DESIRABLE_OFF_SHARE_BPS;
+  if (pool === GEAR_STAT_POOL_PARTIAL_A) return LEGENDARY_PARTIAL_A_OFF_SHARE_BPS;
+  if (pool === GEAR_STAT_POOL_PARTIAL_B) return LEGENDARY_PARTIAL_B_OFF_SHARE_BPS;
+  return null;
+}
+
+function assertDirectedStatPool(rarity, pool, className) {
+  if (pool === GEAR_STAT_POOL_NORMAL) return classGearStatRoles(className);
+  if (
+    pool === GEAR_STAT_POOL_PARTIAL_B
+    && GEAR_STAT_POOL_PARTIAL_B_BLOCKED_RARITIES.includes(rarity)
+  ) {
+    const err = new Error("partial_b is not allowed for common or uncommon gear");
+    err.status = VALIDATION_HTTP_STATUS;
+    err.code = "VALIDATION_ERROR";
+    throw err;
+  }
+  const roles = classGearStatRoles(className);
+  if (!roles) {
+    const err = new Error("className required for directed gear stat pool");
+    err.status = VALIDATION_HTTP_STATUS;
+    err.code = "VALIDATION_ERROR";
+    throw err;
+  }
+  return roles;
+}
+
+function pickSubset(pool, count, rng) {
+  const n = Math.max(0, Math.min(count, pool.length));
+  if (n <= 0) return [];
+  return shuffleInPlace([...pool], rng).slice(0, n);
+}
+
+function selectDirectedItemAttributes(rarity, rng, roles, pool) {
+  const count = getRarityAttributeCount(rarity);
+  if (rarity === "legendary" || count >= ITEM_ATTR_KEYS.length) {
+    return [...ITEM_ATTR_KEYS];
+  }
+  if (pool === GEAR_STAT_POOL_DESIRABLE) {
+    return pickSubset(roles.desirable, count, rng);
+  }
+  if (pool === GEAR_STAT_POOL_PARTIAL_A) {
+    const offCount = Math.min(SIMULATE_PARTIAL_A_OFF_COUNT, roles.offs.length, count);
+    return [
+      ...pickSubset(roles.offs, offCount, rng),
+      ...pickSubset(roles.desirable, count - offCount, rng),
+    ];
+  }
+  const offCount = Math.min(roles.offs.length, count);
+  return [
+    ...pickSubset(roles.offs, offCount, rng),
+    ...pickSubset(roles.desirable, count - offCount, rng),
+  ];
+}
+
 /**
  * Pick which attributes appear on an item.
  * Legendary: always all five.
  * Common–Epic with class: optional favored pool (existing intentional restriction).
+ * Directed pools (desirable / partial_a / partial_b) are admin-simulate only.
  */
 export function selectItemAttributes(rarity, rng = Math.random, options = {}) {
   const count = getRarityAttributeCount(rarity);
   const className = options.className;
+  const pool = normalizeGearStatPool(options.statPool);
+
+  if (pool !== GEAR_STAT_POOL_NORMAL) {
+    const roles = assertDirectedStatPool(rarity, pool, className);
+    return {
+      attrs: selectDirectedItemAttributes(rarity, rng, roles, pool),
+      poolMode: pool,
+    };
+  }
 
   if (rarity === "legendary" || count >= ITEM_ATTR_KEYS.length) {
     return { attrs: [...ITEM_ATTR_KEYS], poolMode: "legendary" };
   }
 
   const favored = getFavoredStatPool(className);
-  let pool;
+  let livePool;
   let poolMode;
 
   if (favored) {
     if (rng() < FAVORED_POOL_CHANCE) {
-      pool = favored;
+      livePool = favored;
       poolMode = "favored";
     } else {
-      pool = [...TOTAL_STAT_POOL];
+      livePool = [...TOTAL_STAT_POOL];
       poolMode = "total";
     }
   } else {
-    pool = [...TOTAL_STAT_POOL];
+    livePool = [...TOTAL_STAT_POOL];
     poolMode = "neutral";
   }
 
-  if (count >= pool.length) {
-    return { attrs: shuffleInPlace([...pool], rng), poolMode };
+  if (count >= livePool.length) {
+    return { attrs: shuffleInPlace([...livePool], rng), poolMode };
   }
-  return { attrs: shuffleInPlace([...pool], rng).slice(0, count), poolMode };
+  return { attrs: shuffleInPlace([...livePool], rng).slice(0, count), poolMode };
+}
+
+function minEachForShare(total, attrCount, minRatio) {
+  let minEach = Math.floor(total * minRatio);
+  while (minEach > 0 && minEach * attrCount > total) minEach -= 1;
+  return minEach;
+}
+
+function distributeWeightedRemainder(count, leftover, rng) {
+  const extras = new Array(count).fill(0);
+  if (leftover <= 0 || count <= 0) return extras;
+  const raw = extras.map(() => Math.max(MIN_RANDOM_ALLOCATION_WEIGHT, rng()));
+  const wSum = raw.reduce((a, b) => a + b, 0) || 1;
+  const exact = raw.map((w) => leftover * (w / wSum));
+  const floors = exact.map((x) => Math.floor(x));
+  let rem = leftover - floors.reduce((a, b) => a + b, 0);
+  const byFrac = exact
+    .map((x, i) => ({ i, frac: x - floors[i] }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (let i = 0; i < count; i++) extras[i] = floors[i];
+  for (let k = 0; k < rem; k++) extras[byFrac[k % count].i] += 1;
+  return extras;
+}
+
+function repairBudgetSum(stats, keys, total, minEach, rng) {
+  const n = keys.length;
+  let sum = keys.reduce((a, k) => a + stats[k], 0);
+  if (sum === total || n <= 0) return stats;
+  const delta = total - sum;
+  const order = shuffleInPlace([...keys], rng);
+  if (delta > 0) {
+    for (let i = 0; i < delta; i++) stats[order[i % n]] += 1;
+  } else {
+    let left = -delta;
+    for (const k of order) {
+      if (left <= 0) break;
+      const can = Math.max(0, stats[k] - minEach);
+      const take = Math.min(can, left);
+      stats[k] -= take;
+      left -= take;
+    }
+    while (left > 0) {
+      let donor = order[0];
+      for (const k of order) if (stats[k] > stats[donor]) donor = k;
+      if (stats[donor] <= 0) break;
+      stats[donor] -= 1;
+      left -= 1;
+    }
+  }
+  return stats;
 }
 
 /**
@@ -291,61 +456,52 @@ export function allocateStatBudget(attrs, budget, rng = Math.random, rarity = nu
     else if (n === RARITY_ATTR_COUNT.uncommon) rarityKey = "uncommon";
     else rarityKey = "rare";
   }
-  let minRatio = getRarityMinStatShare(rarityKey);
-  let minEach = Math.floor(total * minRatio);
-  while (minEach > 0 && minEach * n > total) minEach -= 1;
-
-  const reserved = minEach * n;
-  const leftover = total - reserved;
-
-  const extras = new Array(n).fill(0);
-  if (leftover > 0) {
-    // Free-form weights — allow near-zero extras so one stat can spike.
-    const raw = keys.map(() => Math.max(MIN_RANDOM_ALLOCATION_WEIGHT, rng()));
-    const wSum = raw.reduce((a, b) => a + b, 0) || 1;
-    const exact = raw.map((w) => leftover * (w / wSum));
-    const floors = exact.map((x) => Math.floor(x));
-    let rem = leftover - floors.reduce((a, b) => a + b, 0);
-    const byFrac = exact
-      .map((x, i) => ({ i, frac: x - floors[i] }))
-      .sort((a, b) => b.frac - a.frac || a.i - b.i);
-    for (let i = 0; i < n; i++) extras[i] = floors[i];
-    for (let k = 0; k < rem; k++) extras[byFrac[k % n].i] += 1;
-  }
-
+  const minEach = minEachForShare(total, n, getRarityMinStatShare(rarityKey));
+  const extras = distributeWeightedRemainder(n, total - minEach * n, rng);
   const stats = {};
   keys.forEach((k, i) => {
     stats[k] = minEach + extras[i];
   });
+  return repairBudgetSum(stats, keys, total, minEach, rng);
+}
 
-  // Exact-sum remainder repair (never violate floors when removing).
-  let sum = keys.reduce((a, k) => a + stats[k], 0);
-  if (sum !== total) {
-    const delta = total - sum;
-    const order = shuffleInPlace([...keys], rng);
-    if (delta > 0) {
-      for (let i = 0; i < delta; i++) stats[order[i % n]] += 1;
-    } else {
-      let left = -delta;
-      for (const k of order) {
-        if (left <= 0) break;
-        const can = Math.max(0, stats[k] - minEach);
-        const take = Math.min(can, left);
-        stats[k] -= take;
-        left -= take;
-      }
-      // If still over (pathological), strip from highest.
-      while (left > 0) {
-        let donor = order[0];
-        for (const k of order) if (stats[k] > stats[donor]) donor = k;
-        if (stats[donor] <= 0) break;
-        stats[donor] -= 1;
-        left -= 1;
-      }
-    }
+/**
+ * Legendary directed pools: pin each off-stat to offShareBps of the piece
+ * (Desirable uses the 10% floor as a cap), then dump leftover into desirable
+ * with the same piece-budget floor + random remainder.
+ */
+export function allocateLegendaryDirectedBudget(budget, rng, className, offShareBps) {
+  const roles = classGearStatRoles(className);
+  const keys = [...ITEM_ATTR_KEYS];
+  const total = Math.max(0, Math.round(Number(budget) || 0));
+  if (!roles || total <= 0) return {};
+  const minEach = minEachForShare(total, keys.length, getRarityMinStatShare("legendary"));
+  const minShareBps = LEGENDARY_DESIRABLE_OFF_SHARE_BPS;
+  let offEach = minEach;
+  if (offShareBps > minShareBps) {
+    offEach = Math.max(
+      minEach,
+      roundHalfUp((total * offShareBps) / BASIS_POINTS_DENOMINATOR),
+    );
   }
+  const maxOffEach = Math.floor(
+    (total - minEach * roles.desirable.length) / roles.offs.length,
+  );
+  offEach = Math.min(offEach, Math.max(minEach, maxOffEach));
 
-  return stats;
+  const stats = {};
+  for (const key of roles.offs) stats[key] = offEach;
+  const leftover = total - offEach * roles.offs.length;
+  const extraPool = leftover - minEach * roles.desirable.length;
+  const extras = distributeWeightedRemainder(
+    roles.desirable.length,
+    Math.max(0, extraPool),
+    rng,
+  );
+  roles.desirable.forEach((key, i) => {
+    stats[key] = minEach + extras[i];
+  });
+  return repairBudgetSum(stats, roles.desirable, leftover, minEach, rng);
 }
 
 /** @deprecated unified into allocateStatBudget(..., "legendary") */
@@ -366,18 +522,23 @@ export function rollItemStats({
   rarity,
   rng = Math.random,
   className,
+  statPool = null,
   statBudgetVariance = null,
   variancePct = 0, // ignored — live path is GEAR_STAT_BUDGET_VARIANCE_*
 } = {}) {
   void variancePct;
   const slot = canonicalGearSlot(type) || type;
-  const { attrs, poolMode } = selectItemAttributes(rarity, rng, { className });
+  const pool = normalizeGearStatPool(statPool);
+  const { attrs, poolMode } = selectItemAttributes(rarity, rng, { className, statPool: pool });
   const budgetLevel = Math.max(1, Math.floor(Number(statBudgetLevel ?? itemLevel) || 1));
   const preVarianceBudget = getItemStatBudget(budgetLevel, slot, rarity);
   const variance = rollGearStatBudgetVariance(rng, statBudgetVariance);
   const variedBudget = applyGearStatBudgetVariance(preVarianceBudget, variance);
   const budget = Math.max(attrs.length, variedBudget);
-  const stats = allocateStatBudget(attrs, budget, rng, rarity);
+  const offShareBps = rarity === "legendary" ? legendaryOffShareBpsForPool(pool) : null;
+  const stats = offShareBps == null
+    ? allocateStatBudget(attrs, budget, rng, rarity)
+    : allocateLegendaryDirectedBudget(budget, rng, className, offShareBps);
   const sum = Object.values(stats).reduce((a, b) => a + (b || 0), 0);
   return {
     stats,
@@ -414,6 +575,7 @@ export const AllocateGearStats = allocateStatBudget;
  * @param {string} opts.rarity
  * @param {() => number} [opts.rng]
  * @param {string|null} [opts.className]
+ * @param {string|null} [opts.statPool] admin-simulate directed pool; live loot omits
  * @param {string|null} [opts.origin]
  * @param {string|null} [opts.manufacturer]
  * @param {boolean|null} [opts.shipmentEligible]
@@ -429,6 +591,7 @@ export function GenerateGearItem({
   rarity,
   rng = Math.random,
   className = null,
+  statPool = null,
   origin = null,
   manufacturer = null,
   shipmentEligible = null,
@@ -471,6 +634,7 @@ export function GenerateGearItem({
     rarity: r,
     rng,
     className,
+    statPool: statPool ?? generationContext?.statPool ?? null,
   });
   const resolvedOrigin = canonicalGearOrigin(ctxOrigin) || "unassigned";
   const item = {

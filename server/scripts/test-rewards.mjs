@@ -96,6 +96,36 @@ test("safety limits reject oversized payloads", () => {
   assert.equal(ok.ok, true);
 });
 
+await testAsync("high-level mission Stardust is within safety limits", async () => {
+  const { missionVictoryStardust, missionVictoryXp } = await import("../../src/lib/productionMath/missions.js");
+  const { VARIANCE_MAX, MISSION_MAX_FUEL } = await import("../../src/lib/productionMath/constants.js");
+  const { REWARD_SAFETY_HORIZON_LEVEL, REWARD_SAFETY_MAX_MISSION_FUEL } = await import("../src/rewards/limits.js");
+  const shadowLevel = 467;
+  const longContract = {
+    fuel: MISSION_MAX_FUEL,
+    snapshotLevel: shadowLevel,
+    stardustVariance: VARIANCE_MAX,
+    xpVariance: VARIANCE_MAX,
+  };
+  const sd = missionVictoryStardust(longContract);
+  const xp = missionVictoryXp(longContract);
+  const oldStardustCeiling = 500_000;
+  assert.ok(sd > oldStardustCeiling, `L${shadowLevel} Stardust ${sd} should exceed the old ${oldStardustCeiling} ceiling`);
+  assert.equal(validateRewardPayload({ stardust: sd, experience: xp }).ok, true);
+
+  const horizonSd = missionVictoryStardust({
+    fuel: REWARD_SAFETY_MAX_MISSION_FUEL,
+    snapshotLevel: REWARD_SAFETY_HORIZON_LEVEL,
+    stardustVariance: VARIANCE_MAX,
+  });
+  const horizonXp = missionVictoryXp({
+    fuel: REWARD_SAFETY_MAX_MISSION_FUEL,
+    snapshotLevel: REWARD_SAFETY_HORIZON_LEVEL,
+    xpVariance: VARIANCE_MAX,
+  });
+  assert.equal(validateRewardPayload({ stardust: horizonSd, experience: horizonXp }).ok, true);
+});
+
 test("weighted pick respects weights", () => {
   const table = [
     { id: "a", weight: 1 },

@@ -426,7 +426,7 @@ func _fill_fight_button(btn: Button, skip_cooldown: bool) -> void:
 		var glyph := CurrencyIcon.make("nova", 18.0)
 		glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cost_cluster.add_child(glyph)
-		cost_cluster.add_child(_fight_btn_label(str(ArenaRules.SKIP_COST), accent, 16))
+		cost_cluster.add_child(_fight_btn_label(NumberDisplay.nova(ArenaRules.SKIP_COST), accent, 16))
 		row.add_child(cost_cluster)
 		return
 	var swords := UiIcon.make("swords", accent, 18.0)
@@ -708,16 +708,16 @@ func _update_lobby_chrome() -> void:
 	var daily_max := ArenaRules.DAILY_FREE_BATTLES
 	var reset_eta := ArenaRules.format_eta_short(ArenaRules.ms_until_et_midnight())
 
-	_rating_label.text = str(c.get("arena_rating", 1000))
-	_stat_wl.text = "%s / %s" % [str(c.get("arena_wins", 0)), str(c.get("arena_losses", 0))]
-	_stat_streak.text = str(c.get("arena_streak", 0))
+	_rating_label.text = NumberDisplay.quantity(c.get("arena_rating", 1000))
+	_stat_wl.text = "%s / %s" % [NumberDisplay.quantity(c.get("arena_wins", 0)), NumberDisplay.quantity(c.get("arena_losses", 0))]
+	_stat_streak.text = NumberDisplay.quantity(c.get("arena_streak", 0))
 	_refresh_free_battles_panel(free_left, daily_max, reset_eta)
 
 	if ArenaManager.cooldown_active():
 		_cooldown_panel.visible = true
 		_cooldown_banner.text = "Cooldown %s · skip %s Nova" % [
 			ArenaRules.format_ms(ArenaManager.cooldown_remaining_ms()),
-			str(ArenaRules.SKIP_COST),
+			NumberDisplay.nova(ArenaRules.SKIP_COST),
 		]
 	else:
 		_cooldown_panel.visible = false
@@ -743,7 +743,7 @@ func _refresh_free_battles_panel(free_left: int, daily_max: int, reset_eta: Stri
 		_free_count.text = "FREE BATTLES USED FOR TODAY"
 		_free_count.add_theme_font_size_override("font_size", 20)
 		_free_support.text = "Daily free quota spent (%s/%s). Keep climbing with paid battles for %s Nova each — rating only." % [
-			str(daily_max), str(daily_max), str(ArenaRules.PAID_BATTLE_COST),
+			NumberDisplay.quantity(daily_max), NumberDisplay.quantity(daily_max), NumberDisplay.nova(ArenaRules.PAID_BATTLE_COST),
 		]
 	elif final_one:
 		_free_count.text = "1 / %s  FINAL FREE BATTLE" % daily_max
@@ -903,7 +903,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	win_col.add_child(win_lab)
 	var win_val := Label.new()
 	var wd := int(on_win.get("arena_rating_delta", 0))
-	win_val.text = ("+%s" % wd) if wd > 0 else str(wd)
+	win_val.text = NumberDisplay.signed_quantity(wd)
 	win_val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	win_val.add_theme_font_size_override("font_size", 17)
 	win_val.add_theme_color_override("font_color", Color("#6EE7B7"))
@@ -911,7 +911,10 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	win_col.add_child(win_val)
 	var win_loot := Label.new()
 	if is_free:
-		win_loot.text = "%s XP · %s Stardust" % [str(on_win.get("experience", 0)), str(on_win.get("stardust", 0))]
+		win_loot.text = "%s XP · %s Stardust" % [
+			NumberDisplay.quantity(on_win.get("experience", 0)),
+			NumberDisplay.quantity(on_win.get("stardust", 0)),
+		]
 	else:
 		win_loot.text = "rating"
 	win_loot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -930,7 +933,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(lose_lab)
 	lose_col.add_child(lose_lab)
 	var lose_val := Label.new()
-	lose_val.text = str(on_loss.get("arena_rating_delta", 0))
+	lose_val.text = NumberDisplay.signed_quantity(int(on_loss.get("arena_rating_delta", 0)))
 	lose_val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lose_val.add_theme_font_size_override("font_size", 17)
 	lose_val.add_theme_color_override("font_color", Color("#FDA4AF"))
@@ -1054,7 +1057,7 @@ func _make_history_row(match: Dictionary) -> PanelContainer:
 	col.add_child(title)
 
 	var outcome := "Defense held" if (is_defense and won) else ("Raided" if is_defense else ("Victory" if won else "Defeat"))
-	var delta_txt := ("+%s" % delta) if delta > 0 else str(delta)
+	var delta_txt := NumberDisplay.signed_quantity(delta)
 	var guild := str(match.get("opponent_guild", ""))
 	var guild_bit := (" · %s" % guild) if not guild.is_empty() and guild != "<null>" else ""
 	var detail := Label.new()

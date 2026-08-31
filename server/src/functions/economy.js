@@ -352,6 +352,32 @@ function resolveMissionFinals(character, mission) {
   return { finalXp, finalStardust, fuelCost, snapshotLevel };
 }
 
+/**
+ * SkipMission marks the row `completed` and snaps the wait to now. Treat that
+ * as elapsed even if `end_time` still holds the original future timer or
+ * `character.mission_end_time` is missing. in_progress still uses the timer.
+ */
+function missionWaitElapsed(character, mission, nowMs) {
+  const status = String(mission?.status || "");
+  if (status === "completed" || status === "complete") {
+    return true;
+  }
+  const charEnd = character?.mission_end_time
+    ? new Date(character.mission_end_time).getTime()
+    : 0;
+  const missionEnd = mission?.end_time ? new Date(mission.end_time).getTime() : 0;
+  const charEndMs = Number.isFinite(charEnd) ? charEnd : 0;
+  const missionEndMs = Number.isFinite(missionEnd) ? missionEnd : 0;
+  const effectiveEnd = missionEndMs || charEndMs;
+  return !effectiveEnd || effectiveEnd <= nowMs;
+}
+
+function assertMissionWaitElapsed(character, mission, nowMs = clock.nowMs()) {
+  if (!missionWaitElapsed(character, mission, nowMs)) {
+    httpErr(400, "Mission not finished yet", TimeErrors.COOLDOWN_ACTIVE);
+  }
+}
+
 // ── Mission board (server-authoritative offer generation) ────
 // Node owns all gameplay-relevant mission values. The client requests the board,
 // renders the returned offers, and launches by offer_id — it never sends duration,
@@ -1378,16 +1404,7 @@ export async function PrepareMissionCombat(user, body = {}) {
         httpErr(409, "Mission already resolved", "REWARD_ALREADY_CLAIMED");
       }
 
-      const now = clock.nowMs();
-      const charEnd = ch.mission_end_time ? new Date(ch.mission_end_time).getTime() : 0;
-      const missionEnd = mission.end_time ? new Date(mission.end_time).getTime() : 0;
-      const effectiveEnd =
-        mission.status === "completed"
-          ? (charEnd || missionEnd)
-          : (missionEnd || charEnd);
-      if (effectiveEnd && effectiveEnd > now) {
-        httpErr(400, "Mission not finished yet", TimeErrors.COOLDOWN_ACTIVE);
-      }
+      assertMissionWaitElapsed(ch, mission);
 
       // Reject client-supplied combatants / outcomes (security).
       if (body?.player || body?.enemy || body?.battle || body?.winner != null || body?.events) {
@@ -1453,19 +1470,7 @@ export async function ClaimMission(user, body) {
         httpErr(409, "Mission already resolved", RewardErrors.REWARD_ALREADY_CLAIMED);
       }
 
-      const now = clock.nowMs();
-      // in_progress: mission.end_time is authoritative.
-      // completed (after SkipMission): character.mission_end_time is snapped to now
-      // while the mission row may still hold the original future end_time.
-      const charEnd = ch.mission_end_time ? new Date(ch.mission_end_time).getTime() : 0;
-      const missionEnd = mission.end_time ? new Date(mission.end_time).getTime() : 0;
-      const effectiveEnd =
-        mission.status === "completed"
-          ? (charEnd || missionEnd)
-          : (missionEnd || charEnd);
-      if (effectiveEnd && effectiveEnd > now) {
-        httpErr(400, "Mission not finished yet", TimeErrors.COOLDOWN_ACTIVE);
-      }
+      assertMissionWaitElapsed(ch, mission);
       if (mission.status === "in_progress") {
         mission = entities.Mission.update(mission.id, { status: "completed" });
       }
@@ -1841,9 +1846,10 @@ export async function SkipMission(user, body) {
         httpErr(400, "Not enough Nova Crystals");
       }
 
-      entities.Mission.update(mission.id, { status: "completed" });
+      const skippedAtIso = clock.nowIso();
+      entities.Mission.update(mission.id, { status: "completed", end_time: skippedAtIso });
       let character = ch;
-      let patch = { mission_end_time: clock.nowIso() };
+      let patch = { mission_end_time: skippedAtIso };
       let transaction = null;
       if (halfCost > 0) {
         const mut = debitNovaHalfUnits({

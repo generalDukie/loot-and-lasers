@@ -928,26 +928,7 @@ func _set_readout(label: Label, value: String) -> void:
 
 
 func _format_rail_amount(value: Variant) -> String:
-	# Exact integer display — no K/M/B rounding; keep full digits with separators.
-	var n := 0
-	match typeof(value):
-		TYPE_INT:
-			n = int(value)
-		TYPE_FLOAT:
-			n = int(value) # truncate .0 from JSON floats; do not round
-		_:
-			var raw := str(value).strip_edges()
-			if raw.contains("."):
-				raw = raw.get_slice(".", 0)
-			n = int(raw) if raw.is_valid_int() else 0
-	var neg := n < 0
-	var s := str(absi(n))
-	var out := ""
-	while s.length() > 3:
-		out = "," + s.substr(s.length() - 3, 3) + out
-		s = s.substr(0, s.length() - 3)
-	out = s + out
-	return ("-" if neg else "") + out
+	return NumberDisplay.quantity(value)
 
 
 func _fit_currency_fonts() -> void:

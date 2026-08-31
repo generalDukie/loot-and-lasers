@@ -172,7 +172,7 @@ func _build() -> void:
 	_buy_fuel_fuel_icon = CurrencyIcon.make("fuel", FUEL_BTN_ICON)
 	_buy_fuel_fuel_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_wrap.add_child(_buy_fuel_fuel_icon)
-	_buy_fuel_word_lab = _make_fuel_btn_label("%s Fuel" % ShopManager.FUEL_PURCHASE_AMOUNT, FUEL_COLOR)
+	_buy_fuel_word_lab = _make_fuel_btn_label("%s Fuel" % NumberDisplay.quantity(ShopManager.FUEL_PURCHASE_AMOUNT), FUEL_COLOR)
 	title_wrap.add_child(_buy_fuel_word_lab)
 
 	# Wallet-style 1px divider between Fuel and Cost (nova tint @ 45% alpha).
@@ -191,7 +191,7 @@ func _build() -> void:
 	_buy_fuel_nova_icon = CurrencyIcon.make("nova", FUEL_BTN_ICON)
 	_buy_fuel_nova_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cost_wrap.add_child(_buy_fuel_nova_icon)
-	_buy_fuel_cost_amt_lab = _make_fuel_btn_label(str(ShopManager.FUEL_PURCHASE_COST), CurrencyIcon.NOVA_GOLD)
+	_buy_fuel_cost_amt_lab = _make_fuel_btn_label(NumberDisplay.nova(ShopManager.FUEL_PURCHASE_COST), CurrencyIcon.NOVA_GOLD)
 	cost_wrap.add_child(_buy_fuel_cost_amt_lab)
 	_fit_buy_fuel_button()
 	call_deferred("_fit_buy_fuel_button")
@@ -588,7 +588,7 @@ func _sync_buy_fuel_button(left: int, sold_out: bool) -> void:
 			child.visible = true
 	if is_instance_valid(_buy_fuel_word_lab):
 		_buy_fuel_word_lab.visible = true
-		_buy_fuel_word_lab.text = "%s Fuel" % ShopManager.FUEL_PURCHASE_AMOUNT
+		_buy_fuel_word_lab.text = "%s Fuel" % NumberDisplay.quantity(ShopManager.FUEL_PURCHASE_AMOUNT)
 		_buy_fuel_word_lab.add_theme_color_override("font_color", FUEL_COLOR)
 	if is_instance_valid(_buy_fuel_divider):
 		_buy_fuel_divider.visible = true
@@ -598,7 +598,7 @@ func _sync_buy_fuel_button(left: int, sold_out: bool) -> void:
 		_buy_fuel_cost_lab.text = "Cost"
 		_buy_fuel_cost_lab.add_theme_color_override("font_color", Color.WHITE)
 	if is_instance_valid(_buy_fuel_cost_amt_lab):
-		_buy_fuel_cost_amt_lab.text = str(ShopManager.FUEL_PURCHASE_COST)
+		_buy_fuel_cost_amt_lab.text = NumberDisplay.nova(ShopManager.FUEL_PURCHASE_COST)
 		_buy_fuel_cost_amt_lab.add_theme_color_override("font_color", CurrencyIcon.NOVA_GOLD)
 	_fit_buy_fuel_button()
 
@@ -962,8 +962,8 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 	rewards.add_theme_constant_override("separation", 12)
 	_hover_body.add_child(rewards)
 	rewards.add_child(_make_reward_tile("", fuel_txt, "Fuel", FUEL_COLOR, false, "fuel"))
-	rewards.add_child(_make_reward_tile("star", str(xp_val), "XP", Color.WHITE, true))
-	rewards.add_child(_make_reward_tile("", str(sd_val), "Stardust", STARDUST_COLOR, false, "stardust"))
+	rewards.add_child(_make_reward_tile("star", NumberDisplay.quantity(xp_val), "XP", Color.WHITE, true))
+	rewards.add_child(_make_reward_tile("", NumberDisplay.quantity(sd_val), "Stardust", STARDUST_COLOR, false, "stardust"))
 
 	var footer := Label.new()
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1155,8 +1155,8 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 	reward_row.add_theme_constant_override("separation", 10)
 	_preview_body.add_child(reward_row)
 	reward_row.add_child(_make_reward_tile("", fuel_txt, "Fuel", FUEL_COLOR, false, "fuel"))
-	reward_row.add_child(_make_reward_tile("star", str(xp_val), "XP", Color.WHITE, true))
-	reward_row.add_child(_make_reward_tile("", str(sd_val), "Stardust", STARDUST_COLOR, false, "stardust"))
+	reward_row.add_child(_make_reward_tile("star", NumberDisplay.quantity(xp_val), "XP", Color.WHITE, true))
+	reward_row.add_child(_make_reward_tile("", NumberDisplay.quantity(sd_val), "Stardust", STARDUST_COLOR, false, "stardust"))
 
 	# Status + Start Mission — fuel does not gate launch (Nakama start has no debit).
 	var disabled := state == "Locked" or state == "Busy"
@@ -1310,7 +1310,7 @@ func _offer_fuel_cost(offer: Dictionary) -> float:
 func _fmt_offer_fuel(offer: Dictionary) -> String:
 	var v := _offer_fuel_cost(offer)
 	if is_equal_approx(v, roundf(v)):
-		return str(int(round(v)))
+		return NumberDisplay.quantity(int(round(v)))
 	return ("%0.2f" % v).rstrip("0").rstrip(".")
 
 
@@ -1391,7 +1391,7 @@ func _on_launch(offer: Dictionary) -> void:
 	var ch := GameManager.active_character
 	var level_req := int(offer.get("level_requirement", 1))
 	if level_req > int(ch.get("level", 1)):
-		Notify.blocked("Locked", "Reach level %s to accept this contract" % level_req)
+		Notify.blocked("Locked", "Reach level %s to accept this contract" % ClientUi.format_level(level_req))
 		return
 	if MiningManager.is_ready():
 		Notify.blocked("Collect mining first", "Your drone finished — collect the node before launching")

@@ -153,11 +153,12 @@ func reset_player(character_id: String, reason: String) -> Dictionary:
 	return await moderation("reset_player", {"character_id": character_id, "reason": reason})
 
 
-func simulate_level(character_id: String, level: int, reason: String) -> Dictionary:
+func simulate_level(character_id: String, level: int, reason: String, slots: Dictionary = {}) -> Dictionary:
 	var res: Dictionary = await moderation("simulate_level", {
 		"character_id": character_id,
 		"level": level,
 		"reason": _reason_for_grant(reason),
+		"slots": slots,
 	})
 	if bool(res.get("ok", false)):
 		await _refresh_if_active_character(character_id)

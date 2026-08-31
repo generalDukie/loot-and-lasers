@@ -528,11 +528,11 @@ func _reward_summary(rewards: Variant) -> String:
 	var r: Dictionary = rewards
 	var parts: PackedStringArray = []
 	if int(r.get("stardust", 0)) > 0:
-		parts.append("%s Stardust" % int(r.get("stardust", 0)))
+		parts.append("%s Stardust" % NumberDisplay.quantity(int(r.get("stardust", 0))))
 	if int(r.get("nova_crystals", 0)) > 0:
-		parts.append("%s Nova" % int(r.get("nova_crystals", 0)))
+		parts.append("%s Nova" % NumberDisplay.nova(int(r.get("nova_crystals", 0))))
 	if int(r.get("fuel", 0)) > 0:
-		parts.append("%s Fuel" % int(r.get("fuel", 0)))
+		parts.append("%s Fuel" % NumberDisplay.quantity(int(r.get("fuel", 0))))
 	if str(r.get("item_rarity", "")) != "":
 		parts.append("%s gear" % str(r.get("item_rarity", "")))
 	return " · ".join(parts) if not parts.is_empty() else "Attached package"

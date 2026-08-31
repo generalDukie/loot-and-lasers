@@ -106,13 +106,13 @@ static func make_complete_sheet(summary: Dictionary, on_close: Callable) -> Cont
 	var xp := int(summary.get("xp", 0))
 	var stardust := int(summary.get("stardust", 0))
 	if xp > 0 or summary.has("xp"):
-		col.add_child(_reward_row_xp("+%s" % xp))
+		col.add_child(_reward_row_xp("+%s" % NumberDisplay.quantity(xp)))
 	if stardust > 0 or summary.has("stardust"):
-		col.add_child(_reward_row_stardust("+%s" % stardust))
+		col.add_child(_reward_row_stardust("+%s" % NumberDisplay.quantity(stardust)))
 	if summary.has("rating_delta"):
 		var delta := int(summary.get("rating_delta", 0))
 		var dcol := Color("#FBBF24") if delta >= 0 else Color("#FB7185")
-		var dtxt := ("+%s" % delta) if delta >= 0 else str(delta)
+		var dtxt := NumberDisplay.signed_quantity(delta)
 		col.add_child(_reward_row("ARENA RATING", dtxt, dcol, "trophy"))
 
 	# Reward items (gear / stim / junk): glyph + name + rarity + type inline, full

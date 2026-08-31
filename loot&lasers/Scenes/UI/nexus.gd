@@ -267,9 +267,9 @@ func _populate() -> void:
 		stats.add_theme_constant_override("h_separation", 8)
 		stats.add_theme_constant_override("v_separation", 8)
 		_owner_col.add_child(stats)
-		stats.add_child(_mini("MEMBERS", str(n.get("owner_member_count", members.size())), Color("#22D3EE")))
+		stats.add_child(_mini("MEMBERS", NumberDisplay.quantity(n.get("owner_member_count", members.size())), Color("#22D3EE")))
 		stats.add_child(_mini("TIME HELD", NexusManager.format_reign(n), Color("#A855F7")))
-		stats.add_child(_mini("DEFENSES", str(n.get("defense_streak", 0)), Color("#34D399")))
+		stats.add_child(_mini("DEFENSES", NumberDisplay.quantity(n.get("defense_streak", 0)), Color("#34D399")))
 		stats.add_child(_mini("SERVER RANK", "#1", Color("#FFD700")))
 
 		var status_row := HBoxContainer.new()
@@ -325,11 +325,11 @@ func _populate() -> void:
 		reqs.text = "Your guild: %s · Lv %s · members %s · role %s\nEligibility: %s\nAssault CD: %s · Projected power %s" % [
 			str(guild.get("name", "?")),
 			ClientUi.format_level(guild.get("level", 0)),
-			str(members.size()),
+			NumberDisplay.quantity(members.size()),
 			role if not role.is_empty() else "—",
 			str(elig.get("error", "OK")) if not bool(elig.get("ok", false)) else "OK",
 			DungeonRules.format_ms(NexusManager.assault_cooldown_ms()) if NexusManager.assault_cooldown_ms() > 0 else "ready",
-			str(power),
+			NumberDisplay.quantity(power),
 		]
 		reqs.add_theme_font_size_override("font_size", 19)
 		reqs.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -460,7 +460,7 @@ func _hof_row(rank: int, r: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(name)
 	row.add_child(name)
 	var meta := Label.new()
-	meta.text = "%sd · %s def" % [str(r.get("reign_days", 0)), str(r.get("defenses", 0))]
+	meta.text = "%sd · %s def" % [NumberDisplay.quantity(r.get("reign_days", 0)), NumberDisplay.quantity(r.get("defenses", 0))]
 	meta.add_theme_font_size_override("font_size", 19)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(meta)

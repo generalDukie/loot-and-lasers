@@ -47,13 +47,13 @@ static func reward_label(rewards: Dictionary) -> String:
 		var r := str(rewards.item_rarity)
 		parts.append("%s Crate" % r.capitalize())
 	if int(rewards.get("experience", 0)) > 0:
-		parts.append("%s XP" % int(rewards.experience))
+		parts.append("%s XP" % NumberDisplay.quantity(int(rewards.experience)))
 	if int(rewards.get("stardust", 0)) > 0:
-		parts.append("%s SD" % int(rewards.stardust))
+		parts.append("%s SD" % NumberDisplay.quantity(int(rewards.stardust)))
 	if int(rewards.get("nova_crystals", 0)) > 0:
-		parts.append("%s Nova" % int(rewards.nova_crystals))
+		parts.append("%s Nova" % NumberDisplay.nova(int(rewards.nova_crystals)))
 	if int(rewards.get("fuel", 0)) > 0:
-		parts.append("%s Fuel" % int(rewards.fuel))
+		parts.append("%s Fuel" % NumberDisplay.quantity(int(rewards.fuel)))
 	return " · ".join(parts) if parts.size() > 0 else "Reward"
 
 

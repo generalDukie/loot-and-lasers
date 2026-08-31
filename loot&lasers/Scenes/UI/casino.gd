@@ -707,7 +707,7 @@ func _build_nova_wager_row() -> VBoxContainer:
 	_nova_preset_btns.clear()
 	for amt in NOVA_PRESETS:
 		var b := Button.new()
-		b.text = str(amt)
+		b.text = NumberDisplay.nova(amt)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ClientUi.apply_ghost_button(b)
 		var a := float(amt)
@@ -834,15 +834,15 @@ func _refresh_balances() -> void:
 	_balance_sd.text = _fmt(int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)))
 	var total_nova := float(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA))
 	var wag := CasinoManager.nova_wagerable()
-	_balance_nova.text = "%s  (Wagerable %s)" % [_fmt_nova(total_nova), _fmt_nova(wag)]
+	_balance_nova.text = "%s  (Wagerable %s)" % [NumberDisplay.nova(total_nova), NumberDisplay.nova(wag)]
 	var nova_rule := "Casino uses Wagerable only"
 	if AdminManager.is_admin():
 		nova_rule = "Admin: any Nova may be wagered"
 	_limits_lab.text = "Stardust %s–%s · Nova %s–%s · %s" % [
 		_fmt(CasinoManager.stardust_min()),
 		_fmt(CasinoManager.stardust_max()),
-		_fmt(CasinoManager.nova_min()),
-		_fmt(CasinoManager.nova_max()),
+		NumberDisplay.nova(CasinoManager.nova_min()),
+		NumberDisplay.nova(CasinoManager.nova_max()),
 		nova_rule,
 	]
 
@@ -863,7 +863,7 @@ func _refresh_wager_controls() -> void:
 		var amt := int(floor(float(sd_bal) * pct))
 		var btn := _sd_quick_btns[i]
 		ClientUi.fill_priced_action_button(
-			btn, "%d%%" % int(pct * 100.0), "stardust", _fmt(amt), Color.WHITE, 13, 14.0, 36
+			btn, "%d%%" % int(pct * 100.0), "stardust", amt, Color.WHITE, 13, 14.0, 36
 		)
 		var ok := amt >= mn and amt <= mx and amt <= sd_bal and amt > 0
 		btn.disabled = _busy or not ok
@@ -875,7 +875,10 @@ func _refresh_wager_controls() -> void:
 		or (not CasinoManager.active_session(GAME_CACHE).is_empty() and _active_game == GAME_CACHE)
 	)
 	if is_instance_valid(_nova_wager_lab):
-		var range_hint := "100–1,000 · steps of 0.5"
+		var range_hint := "%s–%s · steps of 0.5" % [
+			NumberDisplay.nova(CasinoManager.nova_min()),
+			NumberDisplay.nova(CasinoManager.nova_max()),
+		]
 		if AdminManager.is_admin():
 			_nova_wager_lab.text = "%s · Admin: any Nova%s" % [
 				range_hint,
@@ -952,7 +955,7 @@ func _set_sd_wager_pct(pct: float) -> void:
 	var mn := CasinoManager.stardust_min()
 	var mx := CasinoManager.stardust_max()
 	if amt < mn or amt > mx or amt > bal or amt <= 0:
-		_set_status("Wager %s is outside allowed limits." % _fmt(amt), ClientUi.DANGER)
+		_set_status("Wager %s is outside allowed limits." % NumberDisplay.quantity_exact(amt), ClientUi.DANGER)
 		return
 	_sd_edit_ok = true
 	_sd_wager = amt
@@ -965,10 +968,10 @@ func _set_nova_wager(amt: float) -> void:
 	var bal := CasinoManager.nova_spendable()
 	if snapped > bal + 0.0001:
 		if AdminManager.is_admin():
-			_set_status("Not enough Nova for %s." % _fmt_nova(snapped), ClientUi.DANGER)
+			_set_status("Not enough Nova for %s." % NumberDisplay.nova(snapped), ClientUi.DANGER)
 		else:
 			_set_status(
-				"Not enough Wagerable Nova for %s. Bonus Nova cannot be wagered." % _fmt_nova(snapped),
+				"Not enough Wagerable Nova for %s. Bonus Nova cannot be wagered." % NumberDisplay.nova(snapped),
 				ClientUi.DANGER
 			)
 		return
@@ -1365,7 +1368,7 @@ func _restore_refine_session() -> void:
 	_nova_edit_ok = true
 	_nova_wager = float(_refine_state.get("wager", _nova_wager))
 	_refine_status.text = "Active session · stage %d · wager %s Nova" % [
-		int(_refine_state.get("stage", 0)), _fmt_nova(float(_refine_state.get("wager", 0)))
+		int(_refine_state.get("stage", 0)), NumberDisplay.nova(float(_refine_state.get("wager", 0)))
 	]
 	_rebuild_refine_ladder()
 	_refresh_wager_controls()
@@ -1376,7 +1379,10 @@ func _refine_start() -> void:
 	if _busy:
 		return
 	if not _nova_wager_valid():
-		Notify.blocked("Invalid wager", "Select a valid Nova wager (100–1000)")
+		Notify.blocked("Invalid wager", "Select a valid Nova wager (%s–%s)" % [
+			NumberDisplay.nova(CasinoManager.nova_min()),
+			NumberDisplay.nova(CasinoManager.nova_max()),
+		])
 		return
 	if not CasinoManager.active_session(GAME_REFINE).is_empty():
 		Notify.blocked("Session already active", "Open Crystal Refining to continue")
@@ -1534,7 +1540,7 @@ func _restore_cache_session() -> void:
 	_nova_edit_ok = true
 	_nova_wager = float(_cache_state.get("wager", _nova_wager))
 	if bool(_cache_state.get("sealed", true)) and _cache_state.get("selected_index", null) == null:
-		_cache_status.text = "Active session · pick a sealed crate · wager %s Nova" % _fmt_nova(float(_cache_state.get("wager", 0)))
+		_cache_status.text = "Active session · pick a sealed crate · wager %s Nova" % NumberDisplay.nova(float(_cache_state.get("wager", 0)))
 		_reset_cache_crates_sealed()
 	else:
 		_cache_status.text = "Round settled."
@@ -1547,7 +1553,10 @@ func _cache_start() -> void:
 	if _busy:
 		return
 	if not _nova_wager_valid():
-		Notify.blocked("Invalid wager", "Select a valid Nova wager (100–1000)")
+		Notify.blocked("Invalid wager", "Select a valid Nova wager (%s–%s)" % [
+			NumberDisplay.nova(CasinoManager.nova_min()),
+			NumberDisplay.nova(CasinoManager.nova_max()),
+		])
 		return
 	if not CasinoManager.active_session(GAME_CACHE).is_empty():
 		Notify.blocked("Session already active", "Continue that round")
@@ -1703,8 +1712,10 @@ func _is_ambiguous(res: Dictionary) -> bool:
 
 func _payout_line(gross: int, net: int, currency: String) -> String:
 	var unit := "stardust" if currency == "stardust" else "Nova"
-	var net_s := "+%s" % _fmt(net) if net > 0 else _fmt(net)
-	return "Gross payout %s %s · Net %s %s" % [_fmt(gross), unit, net_s, unit]
+	var fmt_gross := NumberDisplay.quantity(gross) if currency == "stardust" else NumberDisplay.nova(gross)
+	var fmt_net := NumberDisplay.quantity(net) if currency == "stardust" else NumberDisplay.nova(net)
+	var net_s := "+%s" % fmt_net if net > 0 else fmt_net
+	return "Gross payout %s %s · Net %s %s" % [fmt_gross, unit, net_s, unit]
 
 
 func _show_error(res: Dictionary) -> void:
@@ -1872,15 +1883,7 @@ func _burst_fx(host: Control, big: bool) -> void:
 
 
 func _fmt(n: int) -> String:
-	var s := str(absi(n))
-	var out := ""
-	var i := 0
-	for c_i in range(s.length() - 1, -1, -1):
-		if i > 0 and i % 3 == 0:
-			out = "," + out
-		out = s[c_i] + out
-		i += 1
-	return ("-" if n < 0 else "") + out
+	return NumberDisplay.quantity(n)
 
 
 func _fmt_mult(m: float) -> String:

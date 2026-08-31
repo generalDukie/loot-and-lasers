@@ -71,6 +71,14 @@ const SIMULATE_GEAR_RARITY := "rare"
 const SIMULATE_STIM_COUNT := 3
 const SIMULATE_STIM_UNCOMMON_LEVEL_MAX := 19
 const SIMULATE_STIM_RARE_LEVEL_MAX := 49
+const SIMULATE_GEAR_SLOT_IDS: Array[String] = [
+	"helmet", "armor", "legs", "boots", "neck", "accessory", "weapon", "ship_module",
+]
+const SIMULATE_GEAR_POOL_IDS: Array[String] = ["normal", "desirable", "partial_a", "partial_b"]
+const SIMULATE_GEAR_POOL_LABELS: Array[String] = ["Normal", "Desirable", "Partial A", "Partial B"]
+const SIMULATE_GEAR_POOL_NORMAL_INDEX := 0
+const SIMULATE_GEAR_POOL_PARTIAL_B_INDEX := 3
+const SIMULATE_GEAR_PRESET_RARITIES: Array[String] = ["uncommon", "rare", "epic", "legendary"]
 const GRANT_ENTITLEMENT_QTY_MIN := 1
 const GRANT_ENTITLEMENT_QTY_MAX := 99
 const GRANT_ENTITLEMENT_QTY_DEFAULT := 1
@@ -142,6 +150,8 @@ var _item_level: SpinBox
 var _sim_level: SpinBox
 var _sim_cta: Button
 var _sim_summary: Label
+var _sim_slot_rarity: Dictionary = {}
+var _sim_slot_pool: Dictionary = {}
 var _reward_sd: SpinBox
 var _reward_nova: SpinBox
 var _ent_key: LineEdit
@@ -713,10 +723,10 @@ func _select_player(row: Dictionary) -> void:
 			str(row.get("class", "?")),
 			str(row.get("id", "")),
 			_selected_account_id if not _selected_account_id.is_empty() else "?",
-			str(row.get("stardust", 0)),
-			str(row.get("nova_crystals", 0)),
-			str(row.get("fuel", 0)),
-			str(row.get("max_fuel", ShipRules.FUEL_MAX_BASE)),
+			NumberDisplay.quantity(row.get("stardust", 0)),
+			NumberDisplay.nova(row.get("nova_crystals", 0)),
+			NumberDisplay.quantity(row.get("fuel", 0)),
+			NumberDisplay.quantity(row.get("max_fuel", ShipRules.FUEL_MAX_BASE)),
 		]
 	_run("Loading inventory…", func() -> Dictionary:
 		var items: Dictionary = await AdminManager.list_character_items(str(row.get("id", "")))
@@ -786,11 +796,11 @@ func _build_overview() -> void:
 			if res.ok and typeof(res.data) == TYPE_DICTIONARY:
 				var d: Dictionary = res.data
 				_econ_lab.text = "[b]Characters[/b] %s\n[b]Total Stardust[/b] %s\n[b]Total Nova[/b] %s\nNova events: %s · Stardust events: %s" % [
-					str(d.get("character_count", 0)),
-					str(d.get("total_stardust", 0)),
-					str(d.get("total_nova", 0)),
-					str((d.get("nova_events", []) as Array).size() if typeof(d.get("nova_events", null)) == TYPE_ARRAY else 0),
-					str((d.get("stardust_events", []) as Array).size() if typeof(d.get("stardust_events", null)) == TYPE_ARRAY else 0),
+					NumberDisplay.quantity(d.get("character_count", 0)),
+					NumberDisplay.quantity(d.get("total_stardust", 0)),
+					NumberDisplay.nova(d.get("total_nova", 0)),
+					NumberDisplay.quantity((d.get("nova_events", []) as Array).size() if typeof(d.get("nova_events", null)) == TYPE_ARRAY else 0),
+					NumberDisplay.quantity((d.get("stardust_events", []) as Array).size() if typeof(d.get("stardust_events", null)) == TYPE_ARRAY else 0),
 				]
 			return res
 		)
@@ -833,11 +843,11 @@ func _on_load_ops_dashboard() -> void:
 				d = res.data
 			var maint: Dictionary = d.get("maintenance", {}) if typeof(d.get("maintenance", null)) == TYPE_DICTIONARY else {}
 			_ops_out.text = "[b]Accounts[/b] %s · [b]Characters[/b] %s · [b]Presence[/b] %s\n[b]Open reports[/b] %s · [b]Quarantine[/b] %s\n[b]Maintenance[/b] %s — %s" % [
-				str(d.get("accounts", 0)),
-				str(d.get("characters", 0)),
-				str(d.get("players_online_estimate", 0)),
-				str(d.get("open_reports", 0)),
-				str(d.get("pending_quarantine", 0)),
+				NumberDisplay.quantity(d.get("accounts", 0)),
+				NumberDisplay.quantity(d.get("characters", 0)),
+				NumberDisplay.quantity(d.get("players_online_estimate", 0)),
+				NumberDisplay.quantity(d.get("open_reports", 0)),
+				NumberDisplay.quantity(d.get("pending_quarantine", 0)),
 				str(maint.get("enabled", false)),
 				str(maint.get("message", "")),
 			]
@@ -1018,10 +1028,10 @@ func _inspect_scalar(value: Variant) -> String:
 		TYPE_BOOL:
 			return "yes" if bool(value) else "no"
 		TYPE_INT:
-			return str(value)
+			return NumberDisplay.quantity(value)
 		TYPE_FLOAT:
 			if is_equal_approx(float(value), round(float(value))):
-				return str(int(round(float(value))))
+				return NumberDisplay.quantity(int(round(float(value))))
 			return str(value)
 		TYPE_STRING:
 			var s := str(value).strip_edges()
@@ -1154,8 +1164,8 @@ func _format_inspect_sheet(data: Dictionary) -> String:
 
 	lines.append(_inspect_section("PROGRESSION"))
 	lines.append(_inspect_line("XP", "%s / %s to next" % [
-		_inspect_scalar(_inspect_take(ch, consumed, "experience")),
-		_inspect_scalar(_inspect_take(ch, consumed, "experience_to_next_level")),
+		NumberDisplay.quantity(_inspect_take(ch, consumed, "experience")),
+		NumberDisplay.quantity(_inspect_take(ch, consumed, "experience_to_next_level")),
 	]))
 	if ch.has("unspent_stat_points"):
 		lines.append(_inspect_line("Unspent stat points", _inspect_scalar(_inspect_take(ch, consumed, "unspent_stat_points"))))
@@ -1168,13 +1178,13 @@ func _format_inspect_sheet(data: Dictionary) -> String:
 	if ch.has("dungeon_clears"):
 		lines.append(_inspect_line("Dungeon clears", _inspect_scalar(_inspect_take(ch, consumed, "dungeon_clears"))))
 	if ch.has("highest_damage"):
-		lines.append(_inspect_line("Highest damage", _inspect_scalar(_inspect_take(ch, consumed, "highest_damage"))))
+		lines.append(_inspect_line("Highest damage", NumberDisplay.quantity(_inspect_take(ch, consumed, "highest_damage"))))
 	if ch.has("total_stardust_earned"):
-		lines.append(_inspect_line("Lifetime stardust", _inspect_scalar(_inspect_take(ch, consumed, "total_stardust_earned"))))
+		lines.append(_inspect_line("Lifetime stardust", NumberDisplay.quantity(_inspect_take(ch, consumed, "total_stardust_earned"))))
 
 	lines.append(_inspect_section("CURRENCIES"))
-	lines.append(_inspect_line("Stardust", _inspect_scalar(_inspect_take(ch, consumed, "stardust"))))
-	var nova := _inspect_scalar(_inspect_take(ch, consumed, "nova_crystals"))
+	lines.append(_inspect_line("Stardust", NumberDisplay.quantity(_inspect_take(ch, consumed, "stardust"))))
+	var nova := NumberDisplay.nova(_inspect_take(ch, consumed, "nova_crystals"))
 	var nova_bits: PackedStringArray = [nova]
 	if ch.has("nova_wagerable_half") or ch.has("nova_wagerable"):
 		nova_bits.append("wagerable %s" % _inspect_scalar(_inspect_take(ch, consumed, "nova_wagerable_half" if ch.has("nova_wagerable_half") else "nova_wagerable")))
@@ -1186,8 +1196,8 @@ func _format_inspect_sheet(data: Dictionary) -> String:
 	if ch.has("economy_nova_scale"):
 		lines.append(_inspect_line("Nova scale", _inspect_scalar(_inspect_take(ch, consumed, "economy_nova_scale"))))
 	lines.append(_inspect_line("Fuel", "%s / %s" % [
-		_inspect_scalar(_inspect_take(ch, consumed, "fuel")),
-		_inspect_scalar(_inspect_take(ch, consumed, "max_fuel")),
+		NumberDisplay.quantity(_inspect_take(ch, consumed, "fuel")),
+		NumberDisplay.quantity(_inspect_take(ch, consumed, "max_fuel")),
 	]))
 	if ch.has("fuel_purchases"):
 		lines.append(_inspect_line("Fuel purchases", _inspect_scalar(_inspect_take(ch, consumed, "fuel_purchases"))))
@@ -1427,19 +1437,87 @@ func _refresh_simulate_cta() -> void:
 	if _sim_summary:
 		_sim_summary.text = (
 			"Overwrites the selected character. Class stays the same. Level %s, empty XP bar, "
-			+ "8× %s on-level gear equipped, purchases ramp to %s%% of EPA by L%s (35/35/20/5/5), "
+			+ "8 equipped pieces from the slot table (presets set rarity only; Normal uses live rolls), "
+			+ "purchases ramp to %s%% of EPA by L%s (35/35/20/5/5), "
 			+ "%s %s stims on primary/vitality/luck (max duration), Fuel filled, "
 			+ "%s days of expected mission Stardust, %s Nova, tutorial completed. Bag wiped."
 		) % [
 			ClientUi.format_level(level),
-			SIMULATE_GEAR_RARITY.capitalize(),
 			SIMULATE_PURCHASE_EPA_SHARE_PERCENT,
 			SIMULATE_PURCHASE_RAMP_COMPLETE_LEVEL,
 			SIMULATE_STIM_COUNT,
 			_simulate_stim_rarity_label(level),
 			SIMULATE_STARDUST_DAY_COUNT,
-			SIMULATE_NOVA_GRANT,
+			NumberDisplay.nova(SIMULATE_NOVA_GRANT),
 		]
+
+
+func _simulate_option(ids: Array, labels: Array, selected: int = 0) -> OptionButton:
+	var ob := OptionButton.new()
+	ob.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for i in ids.size():
+		ob.add_item(str(labels[i]))
+		ob.set_item_metadata(i, str(ids[i]))
+	ob.select(clampi(selected, 0, maxi(0, ids.size() - 1)))
+	return ob
+
+
+func _simulate_selected_id(ob: OptionButton) -> String:
+	if ob == null or ob.selected < 0:
+		return ""
+	return str(ob.get_item_metadata(ob.selected))
+
+
+func _simulate_sync_pool_options(slot: String) -> void:
+	var rarity_ob: OptionButton = _sim_slot_rarity.get(slot, null)
+	var pool_ob: OptionButton = _sim_slot_pool.get(slot, null)
+	if rarity_ob == null or pool_ob == null:
+		return
+	var rarity := _simulate_selected_id(rarity_ob)
+	var allow_partial_b := rarity != "common" and rarity != "uncommon"
+	pool_ob.set_item_disabled(SIMULATE_GEAR_POOL_PARTIAL_B_INDEX, not allow_partial_b)
+	if not allow_partial_b and pool_ob.selected == SIMULATE_GEAR_POOL_PARTIAL_B_INDEX:
+		pool_ob.select(SIMULATE_GEAR_POOL_NORMAL_INDEX)
+
+
+func _simulate_apply_preset(rarity: String) -> void:
+	var ridx := GEAR_RARITY_IDS.find(rarity)
+	if ridx < 0:
+		return
+	for slot in SIMULATE_GEAR_SLOT_IDS:
+		var rarity_ob: OptionButton = _sim_slot_rarity.get(slot, null)
+		var pool_ob: OptionButton = _sim_slot_pool.get(slot, null)
+		if rarity_ob:
+			rarity_ob.select(ridx)
+		if pool_ob:
+			pool_ob.select(SIMULATE_GEAR_POOL_NORMAL_INDEX)
+		_simulate_sync_pool_options(slot)
+	_refresh_simulate_cta()
+
+
+func _simulate_slots_payload() -> Dictionary:
+	var out := {}
+	for slot in SIMULATE_GEAR_SLOT_IDS:
+		out[slot] = {
+			"rarity": _simulate_selected_id(_sim_slot_rarity.get(slot, null)),
+			"pool": _simulate_selected_id(_sim_slot_pool.get(slot, null)),
+		}
+	return out
+
+
+func _simulate_slots_brief() -> String:
+	var parts: PackedStringArray = []
+	for slot in SIMULATE_GEAR_SLOT_IDS:
+		var rarity_ob: OptionButton = _sim_slot_rarity.get(slot, null)
+		var pool_ob: OptionButton = _sim_slot_pool.get(slot, null)
+		if rarity_ob == null or pool_ob == null:
+			continue
+		parts.append("%s %s/%s" % [
+			slot,
+			rarity_ob.get_item_text(rarity_ob.selected),
+			pool_ob.get_item_text(pool_ob.selected),
+		])
+	return ", ".join(parts)
 
 
 func _on_simulate_pressed() -> void:
@@ -1449,18 +1527,18 @@ func _on_simulate_pressed() -> void:
 	var level := maxi(SIMULATE_LEVEL_MIN, int(_sim_level.value) if _sim_level else SIMULATE_LEVEL_DEFAULT)
 	var summary := (
 		"This replaces gear, purchases, stims, currencies, level, and the mission board for %s (%s).\n"
-		+ "Simulate Level %s · 8× %s · %s stims · tutorial complete.\nReason: %s"
+		+ "Simulate Level %s · %s stims · tutorial complete.\n%s\nReason: %s"
 	) % [
 		_selected_name if not _selected_name.is_empty() else "?",
 		_cid(),
 		ClientUi.format_level(level),
-		SIMULATE_GEAR_RARITY.capitalize(),
 		_simulate_stim_rarity_label(level),
+		_simulate_slots_brief(),
 		_why() if not _why().is_empty() else "unspecified",
 	]
 	_confirm("Simulate level?", summary, func() -> void:
 		_run("Simulating…", func() -> Dictionary:
-			return await AdminManager.simulate_level(_cid(), level, _why())
+			return await AdminManager.simulate_level(_cid(), level, _why(), _simulate_slots_payload())
 		)
 	)
 
@@ -1493,6 +1571,52 @@ func _build_simulate() -> void:
 	_sim_cta = _btn("Simulate Level 1", true, true)
 	_sim_cta.pressed.connect(_on_simulate_pressed)
 	right.add_child(_sim_cta)
+
+	wrap.add_child(_subhead("GEAR PRESETS"))
+	var preset_hint := Label.new()
+	preset_hint.text = "Sets rarity on all 8 slots and resets each pool to Normal. Edit rows after."
+	preset_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	preset_hint.add_theme_color_override("font_color", ClientUi.MUTED)
+	wrap.add_child(preset_hint)
+	var presets := HFlowContainer.new()
+	presets.add_theme_constant_override("h_separation", ROW_SEPARATION_PX)
+	presets.add_theme_constant_override("v_separation", 4)
+	wrap.add_child(presets)
+	for rarity in SIMULATE_GEAR_PRESET_RARITIES:
+		var pb := _accent_btn(str(rarity).capitalize(), ClientUi.GOLD, true)
+		var rarity_id := str(rarity)
+		pb.pressed.connect(func() -> void: _simulate_apply_preset(rarity_id))
+		presets.add_child(pb)
+
+	wrap.add_child(_subhead("SLOTS"))
+	var slot_grid := GridContainer.new()
+	slot_grid.columns = 3
+	slot_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slot_grid.add_theme_constant_override("h_separation", ROW_SEPARATION_PX)
+	slot_grid.add_theme_constant_override("v_separation", ROW_SEPARATION_PX)
+	wrap.add_child(slot_grid)
+	var rarity_labels: Array[String] = []
+	for rid in GEAR_RARITY_IDS:
+		rarity_labels.append(str(rid).capitalize())
+	for slot in SIMULATE_GEAR_SLOT_IDS:
+		var lab := Label.new()
+		lab.text = str(slot).replace("_", " ").capitalize()
+		lab.add_theme_color_override("font_color", ClientUi.TEXT)
+		slot_grid.add_child(lab)
+		var rarity_ob := _simulate_option(GEAR_RARITY_IDS, rarity_labels, GEAR_RARITY_DEFAULT_INDEX)
+		var pool_ob := _simulate_option(
+			SIMULATE_GEAR_POOL_IDS,
+			SIMULATE_GEAR_POOL_LABELS,
+			SIMULATE_GEAR_POOL_NORMAL_INDEX,
+		)
+		var slot_id := str(slot)
+		rarity_ob.item_selected.connect(func(_i: int) -> void: _simulate_sync_pool_options(slot_id))
+		_sim_slot_rarity[slot_id] = rarity_ob
+		_sim_slot_pool[slot_id] = pool_ob
+		slot_grid.add_child(rarity_ob)
+		slot_grid.add_child(pool_ob)
+		_simulate_sync_pool_options(slot_id)
+
 	_refresh_simulate_cta()
 	_add_tab("simulate", wrap, true)
 
@@ -1711,13 +1835,13 @@ func _grant_cta_label() -> String:
 	var mag := absi(amt)
 	match _grant_type:
 		GRANT_TYPE_FUEL:
-			return "%s %s Fuel" % [verb, mag]
+			return "%s %s Fuel" % [verb, NumberDisplay.quantity_exact(mag)]
 		GRANT_TYPE_STARDUST:
-			return "%s %s Stardust" % [verb, mag]
+			return "%s %s Stardust" % [verb, NumberDisplay.quantity_exact(mag)]
 		GRANT_TYPE_NOVA:
-			return "%s %s Nova" % [verb, mag]
+			return "%s %s Nova" % [verb, NumberDisplay.nova(mag)]
 		GRANT_TYPE_XP:
-			return "%s %s XP" % [verb, mag]
+			return "%s %s XP" % [verb, NumberDisplay.quantity_exact(mag)]
 		GRANT_TYPE_GEAR:
 			var rarity := _item_rarity.get_item_text(_item_rarity.selected) if _item_rarity else "rare"
 			return "Grant %s Gear" % rarity.capitalize()

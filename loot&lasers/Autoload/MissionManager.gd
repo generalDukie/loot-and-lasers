@@ -31,6 +31,7 @@ const FALLBACK_MISSION_DURATION_SECONDS := 15
 
 var offers: Array = []
 var active_mission: Dictionary = {}
+var _bound_character_id := ""
 var _character_refresh_ms := 0
 var _character_refresh_id := ""
 var _character_refresh_inflight_id := ""
@@ -55,6 +56,9 @@ var _pending_fuel_request_id := ""
 
 func _ready() -> void:
 	print("[MissionManager] ready (Node mission authority)")
+	if GameManager != null and not GameManager.active_character_changed.is_connected(_on_active_character_changed):
+		GameManager.active_character_changed.connect(_on_active_character_changed)
+	_bound_character_id = str(GameManager.active_character.get("id", "")).strip_edges() if GameManager != null else ""
 
 
 func _await_nakama_idle(timeout_sec: float = RPC_LOCK_TIMEOUT_SEC) -> bool:
@@ -152,6 +156,20 @@ func invalidate_character_cache() -> void:
 	_character_refresh_id = ""
 
 
+func _on_active_character_changed(character: Dictionary, _source: String) -> void:
+	var cid := str(character.get("id", "")).strip_edges()
+	if cid == _bound_character_id:
+		return
+	_bound_character_id = cid
+	clear_nakama_mission_local()
+	if CombatReturnManager != null and CombatReturnManager.has_method("is_for_kind") and CombatReturnManager.is_for_kind("mission"):
+		CombatReturnManager.clear()
+	if cid.is_empty():
+		return
+	if not str(character.get("active_mission_id", "")).is_empty():
+		fetch_active_mission()
+
+
 ## Node owns the board. Client only renders persisted offers — never invents or rerolls.
 func ensure_board(_force_reroll: bool = false) -> Array:
 	var character: Dictionary = GameManager.active_character
@@ -162,6 +180,8 @@ func ensure_board(_force_reroll: bool = false) -> Array:
 		return offers
 
 	var res: Dictionary = await GameApiClient.invoke("GetMissionBoard", {})
+	if cid != str(GameManager.active_character.get("id", "")).strip_edges():
+		return offers
 	if not res.ok:
 		mission_error.emit(str(res.get("error", "Could not load contracts")))
 		offers = []
@@ -205,6 +225,7 @@ func launch_offer(offer: Dictionary) -> Dictionary:
 
 ## Restore the Node-owned mission selected by Character.active_mission_id.
 func fetch_active_mission() -> Dictionary:
+	var cid := str(GameManager.active_character.get("id", "")).strip_edges()
 	var mid := str(GameManager.active_character.get("active_mission_id", ""))
 	if mid.is_empty():
 		active_mission = {}
@@ -217,8 +238,15 @@ func fetch_active_mission() -> Dictionary:
 		{"query": {"id": mid}, "sort": "-created_date", "limit": 1},
 		true
 	)
+	if cid != str(GameManager.active_character.get("id", "")).strip_edges():
+		return {"ok": true, "data": {}, "stale": true}
 	if res.ok and typeof(res.data) == TYPE_ARRAY and not res.data.is_empty():
 		var row: Dictionary = res.data[0]
+		if str(row.get("character_id", "")).strip_edges() != cid:
+			active_mission = {}
+			active_mission_missing = true
+			active_mission_changed.emit(active_mission)
+			return {"ok": false, "error": "Mission belongs to another operative", "data": {}}
 		var status := str(row.get("status", "in_progress"))
 		if status in ["claimed", "failed"]:
 			active_mission_missing = true
@@ -324,10 +352,27 @@ func _parse_iso_unix(iso: String) -> int:
 
 
 func current_mission_id() -> String:
-	var authoritative := str(GameManager.active_character.get("active_mission_id", ""))
-	if not authoritative.is_empty():
-		return authoritative
-	return str(active_mission.get("id", ""))
+	return str(GameManager.active_character.get("active_mission_id", "")).strip_edges()
+
+
+func _mark_local_wait_skipped(mission_raw: Variant = null) -> void:
+	var mid := current_mission_id()
+	if typeof(mission_raw) == TYPE_DICTIONARY and not (mission_raw as Dictionary).is_empty():
+		active_mission = (mission_raw as Dictionary).duplicate(true)
+	elif active_mission.is_empty() and not mid.is_empty():
+		active_mission = {"id": mid}
+	if active_mission.is_empty():
+		return
+	active_mission["status"] = "completed"
+	var now_unix := int(Time.get_unix_time_from_system())
+	active_mission["completes_at_unix"] = now_unix
+	var end_now := str(GameManager.active_character.get("mission_end_time", "")).strip_edges()
+	if end_now.is_empty():
+		end_now = str(active_mission.get("end_time", "")).strip_edges()
+	if not end_now.is_empty():
+		active_mission["end_time"] = end_now
+		active_mission["completes_at"] = end_now
+	active_mission_changed.emit(active_mission)
 
 
 ## Node atomically debits Nova and completes the authoritative Mission row.
@@ -337,17 +382,13 @@ func skip_mission() -> Dictionary:
 		return {"ok": false, "error": "No active mission to skip", "data": {}}
 	var res: Dictionary = await GameApiClient.invoke("SkipMission", {"mission_id": mid})
 	_apply_character_payload(res)
-	if res.ok and typeof(res.data) == TYPE_DICTIONARY:
-		var mission_raw: Variant = res.data.get("mission", null)
-		if typeof(mission_raw) == TYPE_DICTIONARY and not (mission_raw as Dictionary).is_empty():
-			active_mission = (mission_raw as Dictionary).duplicate(true)
-			active_mission["status"] = "completed"
-			var end_now := str(GameManager.active_character.get("mission_end_time", ""))
-			if not end_now.is_empty():
-				active_mission["end_time"] = end_now
+	if res.ok:
+		var mission_raw: Variant = null
+		if typeof(res.data) == TYPE_DICTIONARY:
+			mission_raw = res.data.get("mission", null)
 			active_mission_missing = bool(res.data.get("mission_missing", false))
-			active_mission_changed.emit(active_mission)
-	elif not res.ok:
+		_mark_local_wait_skipped(mission_raw)
+	else:
 		mission_error.emit(str(res.get("error", "Mission skip failed")))
 	return res
 
@@ -430,7 +471,9 @@ func prepare_combat(_refresh: bool = true) -> Dictionary:
 	if ch.is_empty():
 		return {"ok": false, "error": "No active character", "data": {}}
 
-	var mid := str(active_mission.get("id", ch.get("active_mission_id", "")))
+	var mid := current_mission_id()
+	if mid.is_empty():
+		mid = str(active_mission.get("id", "")).strip_edges()
 	if mid.is_empty():
 		return {"ok": false, "error": "No active mission", "data": {}}
 
@@ -541,6 +584,17 @@ func clear_nakama_mission_local() -> void:
 	offers = []
 	active_mission = {}
 	active_mission_missing = false
+	last_claim_result = {}
+	pending_enemy = {}
+	pending_battle = {}
+	pending_player_items = []
+	_last_status_at = 0.0
+	_character_refresh_inflight_id = ""
+	_fuel_buy_busy = false
+	_pending_fuel_request_id = ""
+	invalidate_character_cache()
+	board_changed.emit(offers)
+	active_mission_changed.emit(active_mission)
 
 
 func _ensure_profile_character(character_id: String) -> Dictionary:

@@ -459,9 +459,9 @@ func _make_podium_card(medal_rank: int, visual_i: int, c: Dictionary, is_guild: 
 
 	var meta := Label.new()
 	if is_guild:
-		meta.text = "Lv %s · %s" % [str(c.get("level", c.get("guild_level", 1))), str(c.get("member_count", 0))]
+		meta.text = "Lv %s · %s" % [ClientUi.format_level(c.get("level", c.get("guild_level", 1))), NumberDisplay.quantity(c.get("member_count", 0))]
 	else:
-		meta.text = "%s · %sW" % [str(c.get("arena_rating", 1000)), str(c.get("arena_wins", 0))]
+		meta.text = "%s · %sW" % [NumberDisplay.quantity(c.get("arena_rating", 1000)), NumberDisplay.quantity(c.get("arena_wins", 0))]
 	meta.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	meta.add_theme_font_size_override("font_size", 17)
 	meta.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -632,9 +632,9 @@ func _make_guild_row(rank: int, g: Dictionary, is_mine: bool) -> PanelContainer:
 	var detail := Label.new()
 	detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if leader.is_empty():
-		detail.text = "%s members" % str(g.get("member_count", 0))
+		detail.text = "%s members" % NumberDisplay.quantity(g.get("member_count", 0))
 	else:
-		detail.text = "%s members · %s" % [str(g.get("member_count", 0)), leader]
+		detail.text = "%s members · %s" % [NumberDisplay.quantity(g.get("member_count", 0)), leader]
 	detail.add_theme_font_size_override("font_size", 16)
 	detail.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(detail)
@@ -646,7 +646,7 @@ func _make_guild_row(rank: int, g: Dictionary, is_mine: bool) -> PanelContainer:
 	lvl.add_child(UiIcon.make("shield", ClientUi.GOLD, 16.0))
 	var lvl_lab := Label.new()
 	lvl_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lvl_lab.text = "Lv %s" % str(g.get("level", g.get("guild_level", 1)))
+	lvl_lab.text = "Lv %s" % ClientUi.format_level(g.get("level", g.get("guild_level", 1)))
 	lvl_lab.add_theme_font_size_override("font_size", 16)
 	lvl_lab.add_theme_color_override("font_color", ClientUi.GOLD)
 	ClientUi.apply_display_font(lvl_lab)
@@ -813,7 +813,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	rating.add_child(UiIcon.make("trophy", ClientUi.CYAN, 16.0))
 	var rating_lab := Label.new()
 	rating_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rating_lab.text = str(c.get("arena_rating", 1000))
+	rating_lab.text = NumberDisplay.quantity(c.get("arena_rating", 1000))
 	rating_lab.add_theme_font_size_override("font_size", 16)
 	rating_lab.add_theme_color_override("font_color", ClientUi.CYAN)
 	ClientUi.apply_display_font(rating_lab)
@@ -826,7 +826,7 @@ func _make_row(rank: int, c: Dictionary, is_me: bool, my_account: String) -> Pan
 	wins.add_child(UiIcon.make("swords", ClientUi.VIOLET, 16.0))
 	var wins_lab := Label.new()
 	wins_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wins_lab.text = str(c.get("arena_wins", 0))
+	wins_lab.text = NumberDisplay.quantity(c.get("arena_wins", 0))
 	wins_lab.add_theme_font_size_override("font_size", 16)
 	wins_lab.add_theme_color_override("font_color", ClientUi.VIOLET)
 	ClientUi.apply_display_font(wins_lab)
@@ -942,9 +942,9 @@ func _on_challenge(c: Dictionary, btn: Button = null, detail: Label = null) -> v
 		var ok := await _confirm_async(
 			"Low-rated opponent",
 			"This opponent is far below your rating (%s vs %s).\n\nVictory awards no ranking points. You still risk %s rating on a loss.\n\nContinue?" % [
-				str(preview.get("challengerRating", "?")),
-				str(preview.get("opponentRating", "?")),
-				str(absi(int(preview.get("estimatedLossChange", 0)))),
+				NumberDisplay.quantity_exact(preview.get("challengerRating", 0)),
+				NumberDisplay.quantity_exact(preview.get("opponentRating", 0)),
+				NumberDisplay.quantity_exact(absi(int(preview.get("estimatedLossChange", 0)))),
 			]
 		)
 		if not ok:
@@ -971,8 +971,8 @@ func _on_challenge(c: Dictionary, btn: Button = null, detail: Label = null) -> v
 	elif warn == "ARENA_REPEAT_OPPONENT_REDUCED_REWARD":
 		_set_status(
 			"Reduced rating reward — Win ≈ +%s · Loss ≈ %s" % [
-				str(preview.get("estimatedWinChange", "?")),
-				str(preview.get("estimatedLossChange", "?")),
+				NumberDisplay.quantity(preview.get("estimatedWinChange", 0)),
+				NumberDisplay.signed_quantity(preview.get("estimatedLossChange", 0)),
 			],
 			Color("#FBBF24")
 		)

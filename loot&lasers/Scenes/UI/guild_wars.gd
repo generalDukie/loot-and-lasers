@@ -96,11 +96,11 @@ func _populate() -> void:
 		return
 	_rebuild_meta(
 		"[%s] %s · %s ·" % [str(guild.get("tag", "")), str(guild.get("name", "")), role],
-		str(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)),
-		"SD · declare costs %s" % GuildWarManager.DECLARE_COST
+		CurrencyManager.format_balance(CurrencyManager.CURRENCY_STARDUST),
+		"SD · declare costs %s" % NumberDisplay.quantity(GuildWarManager.DECLARE_COST)
 	)
 
-	_list.add_child(ClientUi.make_section_header("DECLARE", "Choose a Target", "Leaders & officers only · %s SD." % GuildWarManager.DECLARE_COST))
+	_list.add_child(ClientUi.make_section_header("DECLARE", "Choose a Target", "Leaders & officers only · %s SD." % NumberDisplay.quantity(GuildWarManager.DECLARE_COST)))
 	var can_declare := role == "leader" or role == "officer"
 	var can_afford := CurrencyManager.can_afford(
 		CurrencyManager.CURRENCY_STARDUST,
@@ -244,7 +244,10 @@ func _on_declare(gid: String) -> void:
 		CurrencyManager.CURRENCY_STARDUST,
 		GuildWarManager.DECLARE_COST
 	):
-		_status.text = "Need %s SD to declare war." % GuildWarManager.DECLARE_COST
+		_status.text = "Need %s SD to declare war (you have %s)." % [
+			NumberDisplay.quantity_exact(GuildWarManager.DECLARE_COST),
+			NumberDisplay.quantity_exact(int(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST))),
+		]
 		return
 	_busy = true
 	_status.text = "Declaring…"
@@ -253,7 +256,7 @@ func _on_declare(gid: String) -> void:
 	if not res.ok:
 		_status.text = str(res.get("error", "Declare failed"))
 		return
-	_status.text = "War declared (−%s SD)." % GuildWarManager.DECLARE_COST
+	_status.text = "War declared (−%s SD)." % NumberDisplay.quantity(GuildWarManager.DECLARE_COST)
 	await _boot()
 
 

@@ -8,7 +8,7 @@ Authoritative Mission economy, snapshots, combat construction, and physical rewa
 - Offers persist per character until a completed/claimed/failed Mission rotates the board.
 - There is **no** free/paid/timer/login/navigation/reconnect reroll.
 - Duplicate economic offers (duration + XP variance + Stardust variance) are nudged apart with named retry limits.
-- If a normal duration in the level pool is affordable, the board always contains at least one affordable offer.
+- If any normal duration in the level pool is affordable, all three offers are drawn uniformly from that affordable subset. Offers never exceed remaining Fuel. The draw is still random — leftover Fuel is not forced onto every slot.
 - If no normal duration is affordable and remaining Fuel ≥ 0.25, all three offers use the remainder exception: `FuelCost = remaining Fuel`, `Duration = Fuel × 60`.
 
 ## Duration / Fuel

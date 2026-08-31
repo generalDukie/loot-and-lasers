@@ -600,13 +600,13 @@ func _refresh_values() -> void:
 		var affordable := shown_dust >= cost or (str(stat) == _hold_stat and _hold.is_active())
 
 		var value_lab := row["value"] as Label
-		value_lab.text = str(total)
+		value_lab.text = NumberDisplay.quantity(total)
 
 		var bonus_lab := row["bonus"] as Label
 		if bonus_lab != null and is_instance_valid(bonus_lab):
 			if bonus > 0:
 				bonus_lab.visible = true
-				bonus_lab.text = "+%s" % bonus
+				bonus_lab.text = NumberDisplay.signed_quantity(bonus)
 			else:
 				bonus_lab.visible = false
 
@@ -628,8 +628,11 @@ func _refresh_values() -> void:
 				buy.tooltip_text = TutorialManager.ATTRIBUTE_UPGRADE_LOCK_HINT
 			else:
 				buy.tooltip_text = (
-					"Spend %s Stardust · hold to keep buying" % cost if affordable or holding
-					else "Need %s Stardust for the next point" % cost
+					"Spend %s Stardust · hold to keep buying" % NumberDisplay.quantity(cost) if affordable or holding
+					else "Need %s Stardust for the next point (you have %s)" % [
+						NumberDisplay.quantity_exact(cost),
+						NumberDisplay.quantity_exact(shown_dust),
+					]
 				)
 			var cost_lab := row.get("buy_cost", null) as Label
 			if cost_lab != null and is_instance_valid(cost_lab):
@@ -1311,7 +1314,7 @@ func _make_bag_attr_row(entries: Array) -> HBoxContainer:
 			continue
 		var k := str(e.get("k", ""))
 		var v := int(e.get("v", 0))
-		var label := "+%s%%" % v if bool(e.get("pct", false)) else str(v)
+		var label := "+%s%%" % v if bool(e.get("pct", false)) else NumberDisplay.quantity(v)
 		row.add_child(StatIcon.make_labeled(
 			k,
 			label,
@@ -1331,7 +1334,7 @@ func _make_bag_currency_chip(currency_id: String, amount: int) -> HBoxContainer:
 	chip.add_child(CurrencyIcon.make(currency_id, BAG_ATTR_ICON_PX))
 	var lab := Label.new()
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lab.text = str(amount)
+	lab.text = NumberDisplay.currency_amount(amount, currency_id)
 	lab.add_theme_font_size_override("font_size", BAG_ATTR_FONT_PX)
 	lab.add_theme_color_override(
 		"font_color",
@@ -1964,9 +1967,9 @@ func _make_combat_card() -> VBoxContainer:
 
 func _update_combat(derived: Dictionary, permanent: Dictionary, display: Dictionary) -> void:
 	var values := {
-		"Damage": str(derived.get("damage", 0)),
+		"Damage": NumberDisplay.quantity(derived.get("damage", 0)),
 		"Crit Chance": "%s%%" % _fmt_pct(float(derived.get("critChance", 0))),
-		"Max Health": str(derived.get("health", 0)),
+		"Max Health": NumberDisplay.quantity(derived.get("health", 0)),
 		"Dodge Chance": "%s%%" % _fmt_pct(float(derived.get("dodgeChance", 0))),
 		ARMOR_STAT_LABEL: "%s%%" % _fmt_pct(float(derived.get("armor", 0))),
 		"Tech Resist": "%s%%" % _fmt_pct(float(derived.get("techResist", 0))),
@@ -2238,15 +2241,7 @@ func _tighten_attr_buy_margins(btn: Button) -> void:
 
 
 func _fmt_int(n: int) -> String:
-	var s := str(n)
-	var out := ""
-	var count := 0
-	for i in range(s.length() - 1, -1, -1):
-		if count > 0 and count % 3 == 0:
-			out = "," + out
-		out = s[i] + out
-		count += 1
-	return out
+	return NumberDisplay.quantity(n)
 
 
 func _notification(what: int) -> void:
@@ -2417,7 +2412,7 @@ func _flush_hold_queue() -> void:
 	var leftover := n - applied
 	var label := str(StatsRules.ATTR_LABELS.get(stat, stat))
 	var spent := int(StatsManager.last_buy.get("cost", 0))
-	_status.text = "+%s %s  ·  −%s Stardust" % [applied, label, spent]
+	_status.text = "+%s %s  ·  −%s Stardust" % [applied, label, NumberDisplay.quantity(spent)]
 	if TutorialManager.should_show() and TutorialManager.step_id() == "hero_upgrade" and applied > 0:
 		# Only the purchased attribute row + its linked combat tile(s).
 		_flash_attribute_row(stat)

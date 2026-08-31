@@ -288,22 +288,22 @@ static func attribute_tooltip(stat: String, character: Dictionary, equipped: Arr
 				float(d.get("critChance", 0)), float(d.get("critMult", CRIT_MULT)),
 			]
 		"vitality":
-			return "Increases maximum health to %d." % int(d.get("health", 0))
+			return "Increases maximum health to %s." % NumberDisplay.quantity(int(d.get("health", 0)))
 		"agility":
 			var lines := "Increases dodge chance by %.1f%%." % float(d.get("dodgeChance", 0))
 			if primary == "agility":
-				lines += "\nAlso sets attack damage to %d." % int(d.get("damage", 0))
+				lines += "\nAlso sets attack damage to %s." % NumberDisplay.quantity(int(d.get("damage", 0)))
 			return lines
 		"intellect":
 			var lines2 := "Increases tech resistance by %.1f%%." % float(d.get("techResist", 0))
 			if arch == "str":
 				lines2 += "\nIncreases Reflex Resist by %.1f%%." % float(d.get("reflexResist", 0))
 			if primary == "intellect":
-				lines2 += "\nAlso sets attack damage to %d." % int(d.get("damage", 0))
+				lines2 += "\nAlso sets attack damage to %s." % NumberDisplay.quantity(int(d.get("damage", 0)))
 			return lines2
 		"strength":
 			if arch == "str" or primary == "strength":
-				return "Increases attack damage to %d." % int(d.get("damage", 0))
+				return "Increases attack damage to %s." % NumberDisplay.quantity(int(d.get("damage", 0)))
 			var str_line := "Increases Might Resistance by %.1f%%." % float(d.get("armor", 0))
 			if arch == "int":
 				str_line += "\nIncreases Reflex Resist by %.1f%%." % float(d.get("reflexResist", 0))

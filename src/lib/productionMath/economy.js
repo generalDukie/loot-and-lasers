@@ -92,6 +92,16 @@ export function stimSellValueResolved(level, tier) {
   return Math.max(0, roundHalfUp(stimSellValue(level, tier)));
 }
 
+/**
+ * Economic level for Stim shop/sell: item snapshot (mission/shop), else seller level.
+ * Stims have no independent gear item-level; `level_requirement` is the frozen SPF input.
+ */
+export function stimEconomicLevel(item, fallbackLevel = 1) {
+  const fromItem = Number(item?.level_requirement ?? item?.level);
+  if (Number.isFinite(fromItem) && fromItem >= 1) return Math.floor(fromItem);
+  return Math.max(1, Math.floor(Number(fallbackLevel) || 1));
+}
+
 function slotPremium(slot) {
   return gearSlotMultiplier(slot);
 }

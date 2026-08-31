@@ -25,6 +25,11 @@ const STIM_TIER_HOURS := {
 	"rare": 12,
 	"epic": 24,
 }
+const STIM_TIER_MAX_HOURS := {
+	"uncommon": 18,
+	"rare": 36,
+	"epic": 72,
+}
 
 
 static func is_equippable(item_type: String) -> bool:
@@ -201,10 +206,12 @@ static func stim_effect(item: Dictionary) -> Dictionary:
 	var rarity := stim_rarity(item)
 	var mult := float(STIM_TIER_MULT.get(rarity, 0.05))
 	var hours := int(STIM_TIER_HOURS.get(rarity, 6))
+	var max_hours := int(STIM_TIER_MAX_HOURS.get(rarity, 18))
 	return {
 		"stat": stat,
 		"rarity": rarity,
 		"mult": mult,
 		"duration_hours": hours,
+		"max_duration_hours": max_hours,
 		"percent": int(round(mult * float(STIM_PERCENT_SCALE))),
 	}

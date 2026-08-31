@@ -141,6 +141,9 @@ import {
 } from "../shared/dailyLoginService.js";
 import { getBalances } from "../shared/currencyService.js";
 import { ARENA_DEFAULT_RATING } from "../arena/config.js";
+import { buildMissionStimItem } from "../shared/missionRewards.js";
+import { STIM_TIERS } from "../shared/productionMath.js";
+import { STIM_ATTRIBUTES, STIM_ITEM_TYPE } from "../../../src/lib/stimActivation.js";
 import {
   auditAdminModeration,
   recordCurrencyChange,
@@ -171,6 +174,41 @@ const PROMO_CODE_MIN_LENGTH = 2;
 const PROMO_CODE_MAX_LENGTH = 48;
 const PROMO_CODE_ALLOWED_CHARACTERS = /^[A-Z0-9_-]+$/;
 const DEFAULT_ARENA_SUSPENSION_HOURS = 24;
+const ADMIN_STIM_TYPE_ALIAS = "stim";
+const ADMIN_GRANTED_ITEM_ORIGIN = "unassigned";
+const ADMIN_STIM_QUALITY_ERROR = "Stim quality must be Uncommon, Rare, or Epic.";
+const ADMIN_STIM_ATTRIBUTE_ERROR =
+  "Stim attribute must be strength, agility, intellect, vitality, or luck.";
+
+function isAdminStimGiveRequest(body, item) {
+  const type = String(item?.type || body?.type || "").toLowerCase();
+  return type === STIM_ITEM_TYPE || type === ADMIN_STIM_TYPE_ALIAS;
+}
+
+function buildAdminGrantedStimItem(body, item, character) {
+  const requestedRarity = String(item?.rarity || body?.rarity || "").toLowerCase();
+  if (!STIM_TIERS[requestedRarity]) {
+    return { error: ADMIN_STIM_QUALITY_ERROR };
+  }
+  const stat = String(
+    item?.consumable?.stat || body?.stat || body?.attribute || "",
+  ).toLowerCase();
+  if (!STIM_ATTRIBUTES.includes(stat)) {
+    return { error: ADMIN_STIM_ATTRIBUTE_ERROR };
+  }
+  const level = Math.max(
+    1,
+    Math.floor(Number(item?.level_requirement || body?.level || character?.level) || 1),
+  );
+  return {
+    item: buildMissionStimItem({
+      rarity: requestedRarity,
+      stat,
+      snapshotLevel: level,
+      origin: ADMIN_GRANTED_ITEM_ORIGIN,
+    }),
+  };
+}
 
 /**
  * Resolve the account-global selected Character via shared gameplay context.
@@ -1375,7 +1413,13 @@ async function adminModerationInner(user, body) {
     if (!ch) return { status: 404, body: { error: "Character not found" } };
 
     let item = body.item;
-    if (!item || !item.name || !item.type || !item.rarity) {
+    if (isAdminStimGiveRequest(body, item)) {
+      const built = buildAdminGrantedStimItem(body, item, ch);
+      if (built.error) {
+        return { status: 400, body: { error: built.error } };
+      }
+      item = built.item;
+    } else if (!item || !item.name || !item.type || !item.rarity) {
       const type = item?.type || body.type;
       const rarity = item?.rarity || body.rarity || "rare";
       const level = Math.max(1, Number(item?.level_requirement || body.level || ch.level) || 1);

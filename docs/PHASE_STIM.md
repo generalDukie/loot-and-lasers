@@ -12,7 +12,7 @@ presentation + `UseConsumable` / `GetActiveStims` / `DismissActiveBuff` only.
 |---------|----------|
 | Definitions | `CONSUMABLE_TIERS` in `economyFormulas.js` (+ mirror `gameData.js`) |
 | Activation | `UseConsumable` → `prepareConsumableBuffs` |
-| Persistence | `Character.active_buffs[]` (`stat`, `mult`, `rarity`, `duration_hours`, `stacks`, `expires_at`) |
+| Persistence | `Character.active_buffs[]` (`stat`, `mult`, `rarity`, `duration_hours`, `stacks`, `expires_at`, `last_applied_at`) |
 | Dismiss | `DismissActiveBuff` |
 | Attributes | `statEngine.computeTotalStats` → permanent then `applyBuffs` (Stim last) |
 | Godot | `AuthManager.use_consumable` / `refresh_active_stims` / `dismiss_active_buff` |
@@ -41,8 +41,8 @@ Common/Legendary **not** in `CONSUMABLE_TIERS`. Legacy `common`/`major` labels r
 
 | Case | Behavior |
 |------|----------|
-| Same rarity | Remaining + base, cap at max; bonus unchanged; yearn-block near full max |
-| Higher rarity | **Replace power**; duration = **now + new base** (fresh; old remaining discarded) — policy **A** preserved |
+| Same rarity | Remaining + base, cap at max; bonus unchanged; blocked until half that tier's base duration has elapsed since `last_applied_at` |
+| Higher rarity | **Replace**; duration = **now + new base** (fresh; old remaining discarded) |
 | Lower rarity | **Reject**, no consume |
 | 4th attribute | **Reject**, no consume |
 | Expired same-attr | Treated as empty; fresh activation |
@@ -70,7 +70,7 @@ Policy: **recalculate at encounter start**; no unauthorized heal on Stim activat
 
 - Mission/shop drop weights: server Uncommon **40%** / Rare **40%** / Epic **20%** (authoritative)
 - Web `gameData.randomConsumable` may still differ for client-only previews — **acquisition balance not redesigned**
-- Shop buy/sell: `STIM_SHOP_FUEL_EQUIV` / `STIM_SELL_FUEL_EQUIV` via `StardustPerFuel` (preserved)
+- Shop buy/sell primitives: `STIM_SHOP_MULT` / `STIM_SELL_MULT` via production `stardustPerFuel` (Phase 6 Market purchase is not implemented)
 - Day-23 login: fixed **Rare Vitality Stim +10%** (was invalid Major 15%)
 
 ### 22–25. Files changed

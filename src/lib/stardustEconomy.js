@@ -4,7 +4,7 @@
  *
  * XP, fuel costs, combat, and gear STAT budgets are intentionally out of scope.
  */
-import { attributePurchaseCost } from "./productionMath/index.js";
+import { attributePurchaseCost, miningStardustResolved, MINUTES_PER_HOUR as PRODUCTION_MINUTES_PER_HOUR, stimSellValueResolved, stimEconomicLevel, resolveStimRarity } from "./productionMath/index.js";
 
 // ── Constants ────────────────────────────────────────────────
 export const MISSION_GEAR_BASE_CHANCE = 0.2;
@@ -221,14 +221,12 @@ export function ArenaWinStardust(level = 1) {
 }
 
 export function MiningStardust(level, minutes) {
-  const mins = Math.max(0, Number(minutes) || 0);
-  if (mins <= 0) return 0;
-  return Math.round(StardustPerFuel(level) * MINING_EFFICIENCY * mins);
+  return miningStardustResolved({ snapshotLevel: level, minutes });
 }
 
 /** Mining hours helper — snapshots use hours at session start. */
 export function computeMiningReward(level, hours) {
-  return MiningStardust(level, (Number(hours) || 0) * MINUTES_PER_HOUR);
+  return MiningStardust(level, (Number(hours) || 0) * PRODUCTION_MINUTES_PER_HOUR);
 }
 
 /**
@@ -277,7 +275,10 @@ export function itemTypeVendorMult(type) {
 
 export function GearSaleValue(item) {
   if (!item) return 1;
-  if (item.type === "consumable" || item.type === "material") {
+  if (item.type === "consumable") {
+    return stimSellValueResolved(stimEconomicLevel(item), resolveStimRarity(item));
+  }
+  if (item.type === "material") {
     const flat = item.sell_value;
     if (typeof flat === "number" && flat > 0) return Math.max(1, Math.round(flat));
     return 1;

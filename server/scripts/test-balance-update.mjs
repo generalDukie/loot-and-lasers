@@ -43,7 +43,7 @@ import {
   GearSaleValue,
   MiningStardust,
 } from "../src/shared/stardustEconomy.js";
-import { missionXpReward } from "../../src/lib/productionMath/index.js";
+import { missionXpReward, stardustPerFuel, roundHalfUp, STIM_SHOP_MULT, STIM_SELL_MULT } from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -150,7 +150,7 @@ test("Shop item level never above player; early gaps", () => {
   }
 });
 
-test("Gear shop price markup × variance; stim fixed 2S/4S/10S", () => {
+test("Gear shop price markup × variance; stim shop 1.5/3.0/6.5 × SPF sell 0.75/1.5/3.25", () => {
   assert.equal(SHOP_RARITY_MARKUP.common, 2);
   assert.equal(SHOP_RARITY_MARKUP.legendary, 7);
   const item = { type: "armor", rarity: "rare", level_requirement: 100 };
@@ -159,11 +159,11 @@ test("Gear shop price markup × variance; stim fixed 2S/4S/10S", () => {
   const midVar = 0.8 + 0.5 * 0.4;
   assert.equal(price, Math.round(sale * 3.5 * midVar));
 
-  assert.equal(stimShopPurchasePrice("uncommon", 100), Math.round(StardustPerFuel(100) * 2));
-  assert.equal(stimShopPurchasePrice("rare", 100), Math.round(StardustPerFuel(100) * 4));
-  assert.equal(stimShopPurchasePrice("epic", 100), Math.round(StardustPerFuel(100) * 10));
-  assert.equal(stimShopSellValue("uncommon", 100), Math.round(StardustPerFuel(100) * 1));
-  assert.equal(stimShopSellValue("epic", 100), Math.round(StardustPerFuel(100) * 5));
+  assert.equal(stimShopPurchasePrice("uncommon", 100), Math.max(1, roundHalfUp(stardustPerFuel(100) * STIM_SHOP_MULT.uncommon)));
+  assert.equal(stimShopPurchasePrice("rare", 100), Math.max(1, roundHalfUp(stardustPerFuel(100) * STIM_SHOP_MULT.rare)));
+  assert.equal(stimShopPurchasePrice("epic", 100), Math.max(1, roundHalfUp(stardustPerFuel(100) * STIM_SHOP_MULT.epic)));
+  assert.equal(stimShopSellValue("uncommon", 100), Math.max(1, roundHalfUp(stardustPerFuel(100) * STIM_SELL_MULT.uncommon)));
+  assert.equal(stimShopSellValue("epic", 100), Math.max(1, roundHalfUp(stardustPerFuel(100) * STIM_SELL_MULT.epic)));
   const stim = priceStimOffer(randomConsumable(() => 0.9), 50);
   assert.ok(stim.cost > 0);
   assert.equal(stim.sell_value, stimShopSellValue(stim.rarity, 50));

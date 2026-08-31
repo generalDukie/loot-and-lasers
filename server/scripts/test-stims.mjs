@@ -8,7 +8,6 @@ import {
   CONSUMABLES,
   MAX_BUFF_STACKS,
   MAX_ACTIVE_STAT_TYPES,
-  STIM_YEARN_MESSAGE,
   prepareConsumableBuffs,
   dismissActiveBuff,
   stimRefreshRemainingMs,
@@ -101,30 +100,34 @@ test("first use activates with base duration + stacks=1", () => {
 
 test("same rarity stacks duration only — bonus stays +20%", () => {
   const now = Date.now();
+  const epicRestimWait = 12 * HOUR;
   const item = stimItem("intellect", "epic");
   let ch = charWithBuffs([]);
   let res = prepareConsumableBuffs(ch, item, undefined, now);
   ch = charWithBuffs(res.buffs);
-  res = prepareConsumableBuffs(ch, item, undefined, now + HOUR); // 23h left + 24 = 47
+  const tooSoon = prepareConsumableBuffs(ch, item, undefined, now + HOUR);
+  assert.equal(tooSoon.ok, false);
+  const t2 = now + epicRestimWait;
+  res = prepareConsumableBuffs(ch, item, undefined, t2);
   assert.equal(res.ok, true);
   assert.equal(res.buffs.length, 1);
   assert.equal(res.buffs[0].mult, 0.2);
   assert.equal(res.buffs[0].stacks, 2);
-  const rem = new Date(res.buffs[0].expires_at).getTime() - (now + HOUR);
-  assert.equal(rem, 47 * HOUR);
+  const rem = new Date(res.buffs[0].expires_at).getTime() - t2;
+  assert.equal(rem, 36 * HOUR);
   ch = charWithBuffs(res.buffs);
-  res = prepareConsumableBuffs(ch, item, undefined, now + HOUR);
+  const t3 = t2 + epicRestimWait;
+  res = prepareConsumableBuffs(ch, item, undefined, t3);
   assert.equal(res.ok, true);
-  assert.equal(res.buffs[0].stacks, 3);
+  assert.equal(res.buffs[0].stacks, 2);
   assert.equal(res.buffs[0].mult, 0.2);
-  assert.ok(new Date(res.buffs[0].expires_at).getTime() - (now + HOUR) <= 72 * HOUR);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - t3, 48 * HOUR);
 });
 
-test("max stack refresh thresholds", () => {
+test("same-tier at cap is blocked until half-base elapsed; then clamps to maxHours", () => {
   const item = stimItem("intellect", "epic");
   const now = Date.parse("2026-08-01T12:00:00.000Z");
-  // At 62h remaining (>60): block
-  const at62 = [
+  const at72 = [
     {
       stat: "intellect",
       mult: 0.2,
@@ -132,27 +135,27 @@ test("max stack refresh thresholds", () => {
       duration_hours: 24,
       stacks: 3,
       name: item.name,
-      expires_at: new Date(now + 62 * HOUR).toISOString(),
+      expires_at: new Date(now + 72 * HOUR).toISOString(),
+      last_applied_at: new Date(now).toISOString(),
     },
   ];
-  let res = prepareConsumableBuffs(charWithBuffs(at62), item, at62, now);
+  let res = prepareConsumableBuffs(charWithBuffs(at72), item, at72, now);
   assert.equal(res.ok, false);
-  assert.equal(res.reason, STIM_YEARN_MESSAGE);
 
-  // At 58h remaining (<=60): refresh to 72h
-  const at58 = [
+  const at59 = [
     {
-      ...at62[0],
-      expires_at: new Date(now + 58 * HOUR).toISOString(),
+      ...at72[0],
+      expires_at: new Date(now + 59 * HOUR).toISOString(),
+      last_applied_at: new Date(now - 13 * HOUR).toISOString(),
     },
   ];
-  res = prepareConsumableBuffs(charWithBuffs(at58), item, at58, now);
+  res = prepareConsumableBuffs(charWithBuffs(at59), item, at59, now);
   assert.equal(res.ok, true);
   assert.equal(res.buffs[0].mult, 0.2);
   assert.equal(new Date(res.buffs[0].expires_at).getTime() - now, 72 * HOUR);
 });
 
-test("uncommon/rare refresh thresholds", () => {
+test("uncommon/rare same-tier extension clamps to maxHours after restim wait", () => {
   const now = Date.parse("2026-08-01T12:00:00.000Z");
   const u = stimItem("luck", "uncommon");
   const at16 = [
@@ -166,9 +169,10 @@ test("uncommon/rare refresh thresholds", () => {
       expires_at: new Date(now + 16 * HOUR).toISOString(),
     },
   ];
-  assert.equal(prepareConsumableBuffs(charWithBuffs(at16), u, at16, now).ok, false);
-  const at15 = [{ ...at16[0], expires_at: new Date(now + 15 * HOUR).toISOString() }];
-  const ur = prepareConsumableBuffs(charWithBuffs(at15), u, at15, now);
+  const tooSoon = prepareConsumableBuffs(charWithBuffs(at16), u, at16, now);
+  assert.equal(tooSoon.ok, false);
+  const at14 = [{ ...at16[0], expires_at: new Date(now + 14 * HOUR).toISOString() }];
+  const ur = prepareConsumableBuffs(charWithBuffs(at14), u, at14, now);
   assert.equal(ur.ok, true);
   assert.equal(new Date(ur.buffs[0].expires_at).getTime() - now, 18 * HOUR);
 
@@ -184,9 +188,10 @@ test("uncommon/rare refresh thresholds", () => {
       expires_at: new Date(now + 31 * HOUR).toISOString(),
     },
   ];
-  assert.equal(prepareConsumableBuffs(charWithBuffs(at31), r, at31, now).ok, false);
-  const at30 = [{ ...at31[0], expires_at: new Date(now + 30 * HOUR).toISOString() }];
-  const rr = prepareConsumableBuffs(charWithBuffs(at30), r, at30, now);
+  const rareTooSoon = prepareConsumableBuffs(charWithBuffs(at31), r, at31, now);
+  assert.equal(rareTooSoon.ok, false);
+  const at29 = [{ ...at31[0], expires_at: new Date(now + 29 * HOUR).toISOString() }];
+  const rr = prepareConsumableBuffs(charWithBuffs(at29), r, at29, now);
   assert.equal(rr.ok, true);
   assert.equal(new Date(rr.buffs[0].expires_at).getTime() - now, 36 * HOUR);
 });
@@ -200,8 +205,8 @@ test("max 3 different attributes; duration stacks do not take slots", () => {
     buffs = res.buffs;
   }
   assert.equal(buffs.length, 3);
-  // Stack duration on intellect — still 3 slots
-  const stacked = prepareConsumableBuffs(charWithBuffs(buffs), stimItem("intellect", "epic"), buffs, now);
+  const later = now + 12 * HOUR;
+  const stacked = prepareConsumableBuffs(charWithBuffs(buffs), stimItem("intellect", "epic"), buffs, later);
   assert.equal(stacked.ok, true);
   assert.equal(stacked.buffs.length, 3);
   // Fourth attribute blocked
@@ -290,23 +295,22 @@ test("persistence via expires_at — simulated logout/reconnect", () => {
   assert.ok(new Date(active[0].expires_at).getTime() - later === 7 * HOUR);
 });
 
-test("300 Intellect + Epic Stim = 360; remove returns 300", () => {
+test("Epic Stim is +20% on composed permanent intellect; dismiss restores permanent", () => {
   const now = Date.now();
-  const permanent = { intellect: 300, strength: 10, agility: 10, vitality: 10, luck: 10 };
-  const ch = charWithBuffs([], permanent);
-  assert.equal(computePermanentTotalStats(ch, []).intellect, 300);
-  assert.equal(computeTotalStats(ch, []).intellect, 300);
+  const ch = charWithBuffs([]);
+  const perm = computePermanentTotalStats(ch, []).intellect;
+  assert.equal(computeTotalStats(ch, []).intellect, perm);
 
   const applied = prepareConsumableBuffs(ch, stimItem("intellect", "epic"), undefined, now);
   const buffed = { ...ch, active_buffs: applied.buffs };
-  assert.equal(computePermanentTotalStats(buffed, []).intellect, 300);
-  assert.equal(computeTotalStats(buffed, []).intellect, 360);
-  assert.equal(getEffectiveAttribute(buffed, [], "intellect"), 360);
+  assert.equal(computePermanentTotalStats(buffed, []).intellect, perm);
+  assert.equal(computeTotalStats(buffed, []).intellect, Math.round(perm * 1.2));
+  assert.equal(getEffectiveAttribute(buffed, [], "intellect"), Math.round(perm * 1.2));
 
   const cleared = dismissActiveBuff(buffed, { stat: "intellect" }, now);
   const after = { ...buffed, active_buffs: cleared.buffs };
-  assert.equal(computePermanentTotalStats(after, []).intellect, 300);
-  assert.equal(computeTotalStats(after, []).intellect, 300);
+  assert.equal(computePermanentTotalStats(after, []).intellect, perm);
+  assert.equal(computeTotalStats(after, []).intellect, perm);
 });
 
 test("applyBuffs is final multiplier — gear included before stim", () => {
@@ -314,6 +318,8 @@ test("applyBuffs is final multiplier — gear included before stim", () => {
   assert.equal(stats.intellect, 300);
   const ch = {
     stats: { intellect: 200, strength: 0, agility: 0, vitality: 0, luck: 0 },
+    class: "Technomancer",
+    level: 10,
     active_buffs: [
       {
         stat: "intellect",
@@ -324,15 +330,15 @@ test("applyBuffs is final multiplier — gear included before stim", () => {
     race: null,
   };
   const gear = [{ stats: { intellect: 100 } }];
-  // permanent 300, stim ×1.2 = 360
-  assert.equal(computePermanentTotalStats(ch, gear).intellect, 300);
-  assert.equal(computeTotalStats(ch, gear).intellect, 360);
+  const perm = computePermanentTotalStats(ch, gear).intellect;
+  assert.equal(computeTotalStats(ch, gear).intellect, Math.round(perm * 1.2));
+  assert.ok(perm >= 100);
 });
 
-test("web prepareConsumableBuffs stays in sync on yearn message", () => {
+test("web prepareConsumableBuffs stays in sync at duration cap", () => {
   const now = Date.parse("2026-08-01T12:00:00.000Z");
   const item = stimItem("intellect", "epic");
-  const at62 = [
+  const at59 = [
     {
       stat: "intellect",
       mult: 0.2,
@@ -340,12 +346,17 @@ test("web prepareConsumableBuffs stays in sync on yearn message", () => {
       duration_hours: 24,
       stacks: 3,
       name: item.name,
-      expires_at: new Date(now + 62 * HOUR).toISOString(),
+      expires_at: new Date(now + 59 * HOUR).toISOString(),
     },
   ];
-  const res = webPrepare(charWithBuffs(at62), item, at62, now);
-  assert.equal(res.ok, false);
-  assert.equal(res.reason, STIM_YEARN_MESSAGE);
+  const res = webPrepare(charWithBuffs(at59), item, at59, now);
+  assert.equal(res.ok, true);
+  assert.equal(new Date(res.buffs[0].expires_at).getTime() - now, 72 * HOUR);
+  const server = prepareConsumableBuffs(charWithBuffs(at59), item, at59, now);
+  assert.deepEqual(res.buffs, server.buffs);
+  const at62 = [{ ...at59[0], expires_at: new Date(now + 62 * HOUR).toISOString() }];
+  assert.equal(webPrepare(charWithBuffs(at62), item, at62, now).ok, false);
+  assert.equal(prepareConsumableBuffs(charWithBuffs(at62), item, at62, now).ok, false);
 });
 
 test("MAX caps exported", () => {
@@ -413,18 +424,14 @@ test("Common/Legendary rarity rejected; invalid attribute rejected", () => {
 
 test("unstimulated attributes unchanged", () => {
   const now = Date.now();
-  const ch = charWithBuffs([], {
-    strength: 100,
-    agility: 80,
-    intellect: 60,
-    vitality: 90,
-    luck: 40,
-  });
+  const ch = charWithBuffs([]);
   const res = prepareConsumableBuffs(ch, stimItem("strength", "rare"), undefined, now);
   const buffed = { ...ch, active_buffs: res.buffs };
-  assert.equal(computeTotalStats(buffed, []).strength, 110);
-  assert.equal(computeTotalStats(buffed, []).agility, 80);
-  assert.equal(computeTotalStats(buffed, []).intellect, 60);
+  const perm = computePermanentTotalStats(buffed, []);
+  const total = computeTotalStats(buffed, []);
+  assert.equal(total.strength, Math.round(perm.strength * 1.1));
+  assert.equal(total.agility, perm.agility);
+  assert.equal(total.intellect, perm.intellect);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

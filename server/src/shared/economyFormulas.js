@@ -23,7 +23,21 @@ import {
   XP_REWARD_EFFICIENCY,
   rollMissionVariance,
   clampMissionVariance,
+  STIM_MAX_ACTIVE_EFFECTS,
+  STIM_SHOP_MULT,
+  STIM_SELL_MULT,
+  MINUTES_PER_HOUR as PRODUCTION_MINUTES_PER_HOUR,
+  miningStardustResolved,
+  stimShopPriceResolved,
+  stimSellValueResolved,
 } from "./productionMath.js";
+import {
+  CONSUMABLE_TIERS as STIM_CONSUMABLE_TIERS,
+  STIM_ATTRIBUTES,
+  prepareConsumableBuffs,
+  resolveStimRarity,
+  stimRarityRank,
+} from "../../../src/lib/stimActivation.js";
 
 /** One production XP-efficiency factor. Mission XP applies it twice (certified). */
 export const MISSION_XP_REBALANCE = XP_REWARD_EFFICIENCY;
@@ -42,7 +56,6 @@ import { zonedLocalToUtc } from "./time/periods.js";
 import {
   MissionStardustReward,
   ArenaWinStardust,
-  computeMiningReward as miningStardustFromHours,
   JunkSaleValue,
   missionGearDropChance as sdMissionGearDropChance,
   rollMissionGearDrop as sdRollMissionGearDrop,
@@ -241,8 +254,8 @@ export const STARDUST_PER_RARITY = {
 
 export const STARDUST_TYPE_WEIGHT = { ...ITEM_SELL_TYPE_WEIGHT };
 
-export function computeStardustValue(item) {
-  return computeItemVendorValue(item);
+export function computeStardustValue(item, options = {}) {
+  return computeItemVendorValue(item, options);
 }
 
 export const NOVA_CRYSTAL_PER_RARITY = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 10 };
@@ -627,16 +640,10 @@ export const HOT_DEAL_RARITY_WEIGHTS = Object.freeze({
   epic: 0.15,
   legendary: 0.05,
 });
-export const STIM_SHOP_FUEL_EQUIV = Object.freeze({
-  uncommon: 2,
-  rare: 4,
-  epic: 10,
-});
-export const STIM_SELL_FUEL_EQUIV = Object.freeze({
-  uncommon: 1,
-  rare: 2,
-  epic: 5,
-});
+/** @deprecated use STIM_SHOP_MULT — historical 2/4/10 Fuel-equiv shop prices. */
+export const STIM_SHOP_FUEL_EQUIV = STIM_SHOP_MULT;
+/** @deprecated use STIM_SELL_MULT — historical 1/2/5 Fuel-equiv sell prices. */
+export const STIM_SELL_FUEL_EQUIV = STIM_SELL_MULT;
 
 /** 12-hour shop windows aligned to 2:00 AM / 2:00 PM America/New_York. */
 export function getShopWindow(nowMs = clock.nowMs()) {
@@ -854,15 +861,13 @@ export function gearShopPurchasePrice(item, rng = Math.random) {
 }
 
 export function stimShopPurchasePrice(rarity, playerLevel = 1) {
-  const S = StardustPerFuel(Math.max(1, playerLevel));
-  const mult = STIM_SHOP_FUEL_EQUIV[rarity] ?? STIM_SHOP_FUEL_EQUIV.uncommon;
-  return Math.max(1, Math.round(S * mult));
+  const tier = STIM_SHOP_MULT[rarity] != null ? rarity : "uncommon";
+  return Math.max(1, stimShopPriceResolved(playerLevel, tier));
 }
 
 export function stimShopSellValue(rarity, playerLevel = 1) {
-  const S = StardustPerFuel(Math.max(1, playerLevel));
-  const mult = STIM_SELL_FUEL_EQUIV[rarity] ?? STIM_SELL_FUEL_EQUIV.uncommon;
-  return Math.max(1, Math.round(S * mult));
+  const tier = STIM_SELL_MULT[rarity] != null ? rarity : "uncommon";
+  return Math.max(1, stimSellValueResolved(playerLevel, tier));
 }
 
 /** Attach standardized Stim shop/sell pricing for a given player/shop level. */
@@ -945,22 +950,20 @@ export function generateSimpleGearStock(seed, playerLevel, randomItemFn) {
 }
 
 /**
- * Stim qualities (authoritative). No Common or Legendary Stims.
- * Shop/sell prices are level-scaled via StardustPerFuel (2S / 4S / 10S buy; 50% sell).
+ * Stim qualities — productionMath STIM_TIERS via stimActivation.CONSUMABLE_TIERS.
+ * Shop/sell: STIM_SHOP_MULT / STIM_SELL_MULT × SPF (Phase 6 Market purchase is not implemented).
  */
-export const MAX_BUFF_STACKS = 3;
-export const MAX_ACTIVE_STAT_TYPES = 3;
-export const CONSUMABLE_TIERS = {
-  uncommon: { mult: 0.05, duration_hours: 6,  label: "Uncommon", rarity: "uncommon" },
-  rare:     { mult: 0.10, duration_hours: 12, label: "Rare",     rarity: "rare" },
-  epic:     { mult: 0.20, duration_hours: 24, label: "Epic",     rarity: "epic" },
+export const MAX_BUFF_STACKS = STIM_MAX_ACTIVE_EFFECTS;
+export const MAX_ACTIVE_STAT_TYPES = STIM_MAX_ACTIVE_EFFECTS;
+export const CONSUMABLE_TIERS = STIM_CONSUMABLE_TIERS;
+export const STIM_RARITY_RANK = Object.freeze({ uncommon: 1, rare: 2, epic: 3 });
+
+export {
+  prepareConsumableBuffs,
+  resolveStimRarity,
+  stimRarityRank,
+  STIM_ATTRIBUTES,
 };
-
-export const STIM_RARITY_RANK = { uncommon: 1, rare: 2, epic: 3 };
-
-const CONSUMABLE_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
-
-export const STIM_ATTRIBUTES = Object.freeze([...CONSUMABLE_STATS]);
 
 /**
  * Authoritative Stim mechanics from rarity only — ignore client/item forged
@@ -978,7 +981,7 @@ export function getStimDefinition(rarityOrSource) {
     mult: tier.mult,
     bonus_percent: Math.round(tier.mult * PERCENT_SCALE),
     duration_hours: tier.duration_hours,
-    max_duration_hours: tier.duration_hours * MAX_BUFF_STACKS,
+    max_duration_hours: tier.max_duration_hours ?? tier.duration_hours * MAX_BUFF_STACKS,
     base_duration_ms: tier.duration_hours * MILLISECONDS_PER_HOUR,
     max_duration_ms: stimMaxDurationMs(tier.duration_hours),
     label: tier.label,
@@ -999,6 +1002,7 @@ export function serializeActiveStim(buff, nowMs = clock.nowMs()) {
     mult: Number(buff.mult || def?.mult || 0),
     name: buff.name || null,
     activated_at: buff.activated_at || null,
+    last_applied_at: buff.last_applied_at || null,
     expires_at: buff.expires_at,
     remaining_ms: remaining,
     remaining_hours: remaining / MILLISECONDS_PER_HOUR,
@@ -1014,13 +1018,13 @@ export function getActiveStims(character, nowMs = clock.nowMs()) {
   const source = character?.active_buffs || [];
   return (source || [])
     .filter((b) => b && new Date(b.expires_at).getTime() > now)
-    .filter((b) => CONSUMABLE_STATS.includes(String(b.stat || "").toLowerCase()))
+    .filter((b) => STIM_ATTRIBUTES.includes(String(b.stat || "").toLowerCase()))
     .map((b) => serializeActiveStim(b, now))
     .filter(Boolean);
 }
 
 export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, tier]) =>
-  CONSUMABLE_STATS.map((stat) => ({
+  STIM_ATTRIBUTES.map((stat) => ({
     name: `${tier.label} ${stat.charAt(0).toUpperCase() + stat.slice(1)} Stim`,
     type: "consumable",
     rarity: tier.rarity,
@@ -1028,7 +1032,7 @@ export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, t
     stats: {},
     consumable: { stat, mult: tier.mult, duration_hours: tier.duration_hours, tier: tierKey },
     sell_value: 0,
-    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * PERCENT_SCALE)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.duration_hours * MAX_BUFF_STACKS}h).`,
+    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * PERCENT_SCALE)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.max_duration_hours}h).`,
     is_equipped: false,
   }))
 );
@@ -1077,28 +1081,8 @@ export function generateSimpleHotDeal(dayKey, playerLevel, randomItemFn) {
 }
 
 // ── Consumable / Stim buffs ──────────────────────────────────
+/** @deprecated HISTORICAL yearn-block copy — same-tier cap extension now consumes even at cap. */
 export const STIM_YEARN_MESSAGE = "Your character doesn't yearn for more yet.";
-
-/** Infer rarity for legacy buffs/items that lack an explicit rarity field. */
-export function resolveStimRarity(source) {
-  const raw =
-    source?.rarity ||
-    source?.consumable?.tier ||
-    source?.tier ||
-    null;
-  if (raw && STIM_RARITY_RANK[raw] != null) return raw;
-  if (raw === "common" || raw === "minor") return "uncommon";
-  if (raw === "legendary" || raw === "mythic" || raw === "prime") return "epic";
-  const mult = Number(source?.mult ?? source?.consumable?.mult ?? 0);
-  if (mult >= CONSUMABLE_TIERS.epic.mult) return "epic";
-  if (mult >= CONSUMABLE_TIERS.rare.mult) return "rare";
-  if (mult > 0) return "uncommon";
-  return "uncommon";
-}
-
-export function stimRarityRank(rarity) {
-  return STIM_RARITY_RANK[rarity] ?? 0;
-}
 
 export function stimMaxDurationMs(durationHours) {
   return Math.max(0, Number(durationHours) || 0)
@@ -1106,160 +1090,14 @@ export function stimMaxDurationMs(durationHours) {
     * MAX_BUFF_STACKS;
 }
 
-/** Remaining ms at/below which a max-stacked stim may be refreshed to max. */
+/** @deprecated HISTORICAL yearn-threshold helper — not used by live activation. */
 export function stimRefreshRemainingMs(durationHours) {
   const base = Math.max(0, Number(durationHours) || 0) * MILLISECONDS_PER_HOUR;
   return stimMaxDurationMs(durationHours) - base / STIM_REFRESH_BASE_DURATION_DIVISOR;
 }
 
-function inferStimStacks(remainingMs, baseMs) {
-  if (baseMs <= 0) return 1;
-  return Math.min(MAX_BUFF_STACKS, Math.max(1, Math.ceil(remainingMs / baseMs)));
-}
-
-function makeStimBuff({ stat, mult, name, rarity, durationHours, stacks, expiresAt }) {
-  return {
-    stat,
-    mult,
-    name,
-    rarity,
-    duration_hours: durationHours,
-    stacks,
-    expires_at: new Date(expiresAt).toISOString(),
-  };
-}
-
-/**
- * Validate + compute next active_buffs for a Stim use.
- * Does not mutate inventory — caller deletes the item only when ok.
- * @param {object} character
- * @param {object} item
- * @param {array} [sourceBuffs]
- * @param {number} [nowMs]
- */
-export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = clock.nowMs()) {
-  if (!character || item?.type !== "consumable" || !item.consumable) {
-    return { ok: false, reason: "Not a stim." };
-  }
-  // Stim Trio bundles are retired.
-  if (item._bundle === "stim_trio" || item.consumable?.tier === "bundle") {
-    return { ok: false, reason: "Stim Trios are no longer available." };
-  }
-
-  const now = Number(nowMs) || clock.nowMs();
-  const stat = String(item.consumable.stat || "").toLowerCase();
-  if (!CONSUMABLE_STATS.includes(stat)) {
-    return { ok: false, reason: "Invalid Stim attribute." };
-  }
-
-  const rarity = resolveStimRarity(item);
-  const tier = CONSUMABLE_TIERS[rarity];
-  if (!tier || STIM_RARITY_RANK[rarity] == null) {
-    return { ok: false, reason: "Invalid Stim rarity." };
-  }
-  // Authoritative mechanics — never trust item.consumable.mult / duration_hours.
-  const durationHours = tier.duration_hours;
-  const mult = tier.mult;
-  const baseMs = durationHours * MILLISECONDS_PER_HOUR;
-  const maxMs = baseMs * MAX_BUFF_STACKS;
-  const refreshAt = maxMs - baseMs / STIM_REFRESH_BASE_DURATION_DIVISOR;
-
-  const source = sourceBuffs ?? character.active_buffs ?? [];
-  const active = (source || []).filter((b) => new Date(b.expires_at).getTime() > now);
-  const sameStatIdx = active.findIndex((b) => b.stat === stat);
-
-  if (sameStatIdx < 0) {
-    if (new Set(active.map((b) => b.stat)).size >= MAX_ACTIVE_STAT_TYPES) {
-      return {
-        ok: false,
-        reason: `You already have ${MAX_ACTIVE_STAT_TYPES} active Stim effects. Remove one first.`,
-      };
-    }
-    return {
-      ok: true,
-      buffs: [
-        ...active,
-        makeStimBuff({
-          stat,
-          mult,
-          name: item.name,
-          rarity,
-          durationHours,
-          stacks: 1,
-          expiresAt: now + baseMs,
-        }),
-      ],
-    };
-  }
-
-  const existing = active[sameStatIdx];
-  const existingRarity = resolveStimRarity(existing);
-  const inRank = stimRarityRank(rarity);
-  const exRank = stimRarityRank(existingRarity);
-
-  if (inRank < exRank) {
-    return {
-      ok: false,
-      reason: `A stronger ${stat} Stim is already active. Remove it first to use a lower quality.`,
-    };
-  }
-
-  const buffs = [...active];
-
-  // Higher quality replaces lower — fresh effect, no duration transfer.
-  if (inRank > exRank) {
-    buffs[sameStatIdx] = makeStimBuff({
-      stat,
-      mult,
-      name: item.name,
-      rarity,
-      durationHours,
-      stacks: 1,
-      expiresAt: now + baseMs,
-    });
-    return { ok: true, buffs };
-  }
-
-  // Same rarity: duration stack / max-stack refresh (bonus never stacks).
-  // Always keep canonical tier mult (never inherit forged existing.mult).
-  const remaining = Math.max(0, new Date(existing.expires_at).getTime() - now);
-  let stacks = Number(existing.stacks);
-  if (!Number.isFinite(stacks) || stacks < 1) {
-    stacks = inferStimStacks(remaining, baseMs);
-  }
-  stacks = Math.min(MAX_BUFF_STACKS, Math.max(1, Math.floor(stacks)));
-
-  if (stacks >= MAX_BUFF_STACKS) {
-    if (remaining > refreshAt) {
-      return { ok: false, reason: STIM_YEARN_MESSAGE };
-    }
-    buffs[sameStatIdx] = makeStimBuff({
-      stat,
-      mult,
-      name: item.name,
-      rarity,
-      durationHours,
-      stacks: MAX_BUFF_STACKS,
-      expiresAt: now + maxMs,
-    });
-    return { ok: true, buffs };
-  }
-
-  const newRemaining = Math.min(remaining + baseMs, maxMs);
-  const nextStacks = Math.min(MAX_BUFF_STACKS, stacks + 1);
-  buffs[sameStatIdx] = makeStimBuff({
-    stat,
-    mult,
-    name: item.name,
-    rarity,
-    durationHours,
-    stacks: nextStacks,
-    expiresAt: now + newRemaining,
-  });
-  return { ok: true, buffs };
-}
-
 /** Pure helper — remove one active Stim effect by identity. */
+
 export function dismissActiveBuff(character, { stat, expires_at, name } = {}, nowMs = clock.nowMs()) {
   const now = Number(nowMs) || clock.nowMs();
   if (!stat) return { ok: false, reason: "Missing stat" };
@@ -1535,7 +1373,10 @@ export function dungeonCooldownMs(_won) {
 }
 
 export function computeMiningReward(level, hours) {
-  return miningStardustFromHours(level, hours);
+  return miningStardustResolved({
+    snapshotLevel: level,
+    minutes: (Number(hours) || 0) * PRODUCTION_MINUTES_PER_HOUR,
+  });
 }
 
 // ── Weekly nova quests ───────────────────────────────────────

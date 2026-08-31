@@ -38,6 +38,7 @@ const GRANT_TYPE_STARDUST := "stardust"
 const GRANT_TYPE_NOVA := "nova"
 const GRANT_TYPE_XP := "xp"
 const GRANT_TYPE_GEAR := "gear"
+const GRANT_TYPE_STIM := "stim"
 const GRANT_TYPE_COMPENSATION := "compensation"
 const GRANT_TYPE_ENTITLEMENT := "entitlement"
 
@@ -109,6 +110,11 @@ const GEAR_SLOT_IDS: Array[String] = [
 ]
 const GEAR_RARITY_IDS: Array[String] = ["common", "uncommon", "rare", "epic", "legendary"]
 const GEAR_RARITY_DEFAULT_INDEX := 2
+const STIM_ATTRIBUTE_IDS: Array[String] = ["strength", "agility", "intellect", "vitality", "luck"]
+const STIM_RARITY_IDS: Array[String] = ["uncommon", "rare", "epic"]
+const STIM_ATTRIBUTE_DEFAULT_INDEX := 0
+const STIM_RARITY_DEFAULT_INDEX := 1
+const STIM_ITEM_TYPE := "consumable"
 const REPAIR_TYPE_IDS: Array[String] = ["clear_expired_stim_buffs", "clear_invalid_equip_refs"]
 
 var _status: Label
@@ -142,6 +148,7 @@ var _grant_amount: SpinBox
 var _grant_preset_row: HFlowContainer
 var _grant_amount_box: VBoxContainer
 var _grant_gear_box: VBoxContainer
+var _grant_stim_box: VBoxContainer
 var _grant_comp_box: VBoxContainer
 var _grant_ent_box: VBoxContainer
 var _grant_cta: Button
@@ -149,6 +156,8 @@ var _grant_summary: Label
 var _item_type: OptionButton
 var _item_rarity: OptionButton
 var _item_level: SpinBox
+var _stim_attribute: OptionButton
+var _stim_rarity: OptionButton
 var _sim_level: SpinBox
 var _sim_cta: Button
 var _sim_summary: Label
@@ -1414,6 +1423,8 @@ func _grant_accent(kind: String = "") -> Color:
 			return ClientUi.VIOLET
 		GRANT_TYPE_GEAR:
 			return ClientUi.GOLD
+		GRANT_TYPE_STIM:
+			return ClientUi.SUCCESS
 		GRANT_TYPE_COMPENSATION:
 			return ClientUi.WARNING
 		GRANT_TYPE_ENTITLEMENT:
@@ -1643,6 +1654,7 @@ func _build_grants() -> void:
 		[GRANT_TYPE_NOVA, "Nova"],
 		[GRANT_TYPE_XP, "XP"],
 		[GRANT_TYPE_GEAR, "Gear"],
+		[GRANT_TYPE_STIM, "Stim"],
 		[GRANT_TYPE_COMPENSATION, "Compensation"],
 		[GRANT_TYPE_ENTITLEMENT, "Entitlement"],
 	]:
@@ -1680,6 +1692,22 @@ func _build_grants() -> void:
 	_grant_gear_box.add_child(_item_rarity)
 	_item_level = _spin("Item level ", GRANT_GEAR_LEVEL_MIN, GRANT_GEAR_LEVEL_WIDGET_CEILING, GRANT_GEAR_LEVEL_DEFAULT)
 	_grant_gear_box.add_child(_item_level)
+
+	_grant_stim_box = VBoxContainer.new()
+	_grant_stim_box.add_theme_constant_override("separation", ROW_SEPARATION_PX)
+	right.add_child(_grant_stim_box)
+	var stim_attr_labels: Array[String] = []
+	for sid in STIM_ATTRIBUTE_IDS:
+		stim_attr_labels.append(str(sid).capitalize())
+	var stim_rarity_labels: Array[String] = []
+	for rid in STIM_RARITY_IDS:
+		stim_rarity_labels.append(str(rid).capitalize())
+	_stim_attribute = _simulate_option(STIM_ATTRIBUTE_IDS, stim_attr_labels, STIM_ATTRIBUTE_DEFAULT_INDEX)
+	_stim_attribute.item_selected.connect(func(_i: int) -> void: _refresh_grant_cta())
+	_grant_stim_box.add_child(_stim_attribute)
+	_stim_rarity = _simulate_option(STIM_RARITY_IDS, stim_rarity_labels, STIM_RARITY_DEFAULT_INDEX)
+	_stim_rarity.item_selected.connect(func(_i: int) -> void: _refresh_grant_cta())
+	_grant_stim_box.add_child(_stim_rarity)
 
 	_grant_comp_box = VBoxContainer.new()
 	_grant_comp_box.add_theme_constant_override("separation", ROW_SEPARATION_PX)
@@ -1780,6 +1808,7 @@ func _set_grant_type(kind: String) -> void:
 	var amount := kind == GRANT_TYPE_FUEL or kind == GRANT_TYPE_STARDUST or kind == GRANT_TYPE_NOVA or kind == GRANT_TYPE_XP
 	_grant_amount_box.visible = amount
 	_grant_gear_box.visible = kind == GRANT_TYPE_GEAR
+	_grant_stim_box.visible = kind == GRANT_TYPE_STIM
 	_grant_comp_box.visible = kind == GRANT_TYPE_COMPENSATION
 	_grant_ent_box.visible = kind == GRANT_TYPE_ENTITLEMENT
 	if amount:
@@ -1847,6 +1876,14 @@ func _grant_cta_label() -> String:
 		GRANT_TYPE_GEAR:
 			var rarity := _item_rarity.get_item_text(_item_rarity.selected) if _item_rarity else "rare"
 			return "Grant %s Gear" % rarity.capitalize()
+		GRANT_TYPE_STIM:
+			var stim_rarity := _simulate_selected_id(_stim_rarity)
+			var stim_stat := _simulate_selected_id(_stim_attribute)
+			if stim_rarity.is_empty():
+				stim_rarity = STIM_RARITY_IDS[STIM_RARITY_DEFAULT_INDEX]
+			if stim_stat.is_empty():
+				stim_stat = STIM_ATTRIBUTE_IDS[STIM_ATTRIBUTE_DEFAULT_INDEX]
+			return "Grant %s %s Stim" % [stim_rarity.capitalize(), stim_stat.capitalize()]
 		GRANT_TYPE_COMPENSATION:
 			return "Grant Compensation"
 		GRANT_TYPE_ENTITLEMENT:
@@ -1868,6 +1905,11 @@ func _refresh_grant_cta() -> void:
 	elif _grant_type == GRANT_TYPE_GEAR:
 		var rarity := _item_rarity.get_item_text(_item_rarity.selected) if _item_rarity else "rare"
 		ClientUi.apply_tinted_painted_button(_grant_cta, ClientUi.rarity_color(rarity))
+	elif _grant_type == GRANT_TYPE_STIM:
+		var stim_rarity := _simulate_selected_id(_stim_rarity)
+		if stim_rarity.is_empty():
+			stim_rarity = STIM_RARITY_IDS[STIM_RARITY_DEFAULT_INDEX]
+		ClientUi.apply_tinted_painted_button(_grant_cta, ClientUi.rarity_color(stim_rarity))
 	else:
 		ClientUi.apply_tinted_painted_button(_grant_cta, accent)
 	if _grant_summary:
@@ -1909,6 +1951,12 @@ func _execute_grant() -> Dictionary:
 				"type": _item_type.get_item_text(_item_type.selected),
 				"rarity": _item_rarity.get_item_text(_item_rarity.selected),
 				"level": int(_item_level.value),
+			}, _why())
+		GRANT_TYPE_STIM:
+			return await AdminManager.grant_item(_cid(), {
+				"type": STIM_ITEM_TYPE,
+				"rarity": _simulate_selected_id(_stim_rarity),
+				"stat": _simulate_selected_id(_stim_attribute),
 			}, _why())
 		GRANT_TYPE_COMPENSATION:
 			return await AdminManager.rewards_grant({

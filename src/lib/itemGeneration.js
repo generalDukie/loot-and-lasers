@@ -42,6 +42,9 @@ import {
   rollGearStatBudgetVariance,
   resolveGearLevelRefs,
   roundHalfUp,
+  stimEconomicLevel,
+  stimSellValueResolved,
+  resolveStimRarity,
 } from "./productionMath/index.js";
 
 export {
@@ -683,12 +686,18 @@ export const ITEM_SELL_TYPE_WEIGHT = {
 /**
  * Production Gear resale — pre-variance Black Market base × rarity fraction,
  * at ECONOMIC item level (hidden PvE stat-budget level must not be used).
- * Consumables/materials keep their snapshotted sell_value.
+ * Stims: ROUND_HALF_UP(SPF(economicLevel) × STIM_SELL_MULT). Junk/materials keep
+ * their snapshotted sell_value.
  */
-export function computeItemVendorValue(item) {
+export function computeItemVendorValue(item, options = {}) {
   if (!item) return 0;
   const type = canonicalGearSlot(item.type) || item.type;
-  if (item.type === "consumable" || item.type === "material" || !canonicalGearSlot(item.type)) {
+  if (item.type === "consumable") {
+    const rarity = resolveStimRarity(item);
+    const level = stimEconomicLevel(item, options.fallbackLevel);
+    return stimSellValueResolved(level, rarity);
+  }
+  if (item.type === "material" || !canonicalGearSlot(item.type)) {
     const flat = item.sell_value;
     if (typeof flat === "number" && flat > 0) return Math.max(1, Math.round(flat));
     return 1;

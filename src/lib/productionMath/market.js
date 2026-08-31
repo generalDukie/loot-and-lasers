@@ -4,9 +4,11 @@
  * Intentional discrete Market / Stim / Nova-surcharge rules. RNG stays outside.
  */
 import {
+  BASIS_POINTS_DENOMINATOR,
   NOVA_SURCHARGE_BANDS,
   NOVA_SURCHARGE_TABLE,
   STIM_RARE_LEVEL_MAX,
+  STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR,
   STIM_TIERS,
   STIM_UNCOMMON_LEVEL_MAX,
 } from "./constants.js";
@@ -27,6 +29,46 @@ export function marketStimTier(playerLevel) {
 
 export function stimTierSpec(tier) {
   return STIM_TIERS[tier] || null;
+}
+
+/** Stim attribute multiplier from named bonusBps (500 → 0.05). */
+export function stimBonusMultiplier(tier) {
+  const spec = STIM_TIERS[tier];
+  if (!spec) return 0;
+  return spec.bonusBps / BASIS_POINTS_DENOMINATOR;
+}
+
+/** Minimum hours since last same-tier apply/extend before another dose is allowed. */
+export function stimSameTierRestimCooldownHours(tier) {
+  const spec = STIM_TIERS[tier];
+  if (!spec) return 0;
+  return spec.baseHours / STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR;
+}
+
+/**
+ * At-cap remaining-hours illustration of the restim wait:
+ * Uncommon 15h, Rare 30h, Epic 60h (`maxHours - cooldownHours`).
+ * Live eligibility uses last_applied_at elapsed time, not client remaining.
+ */
+export function stimSameTierRestimRemainingBlockHours(tier) {
+  const spec = STIM_TIERS[tier];
+  if (!spec) return 0;
+  return spec.maxHours - stimSameTierRestimCooldownHours(tier);
+}
+
+/** Map stored/legacy labels onto Uncommon / Rare / Epic. */
+export function resolveStimRarity(source) {
+  const raw = String(
+    source?.rarity || source?.consumable?.tier || source?.tier || "",
+  ).toLowerCase();
+  if (STIM_TIERS[raw]) return raw;
+  if (raw === "common" || raw === "minor") return "uncommon";
+  if (raw === "legendary" || raw === "mythic" || raw === "prime") return "epic";
+  const mult = Number(source?.mult ?? source?.consumable?.mult ?? 0);
+  if (mult >= stimBonusMultiplier("epic")) return "epic";
+  if (mult >= stimBonusMultiplier("rare")) return "rare";
+  if (mult > 0) return "uncommon";
+  return "uncommon";
 }
 
 /**

@@ -182,12 +182,13 @@ if (scrollCount === 1) {
 if (
   ui.includes("GRANT_TYPE_FUEL") &&
   ui.includes("GRANT_TYPE_GEAR") &&
+  ui.includes("GRANT_TYPE_STIM") &&
   ui.includes("GRANT_TYPE_XP") &&
   ui.includes("GRANT_TYPE_ENTITLEMENT")
 ) {
-  pass("unified grant types include Fuel, Gear, XP, Entitlement");
+  pass("unified grant types include Fuel, Gear, Stim, XP, Entitlement");
 } else {
-  fail("unified grant types include Fuel, Gear, XP, Entitlement");
+  fail("unified grant types include Fuel, Gear, Stim, XP, Entitlement");
 }
 
 console.log(`\n${REQUIRED_UI_ACTIONS.length} required actions checked; ${failed} failure(s)\n`);

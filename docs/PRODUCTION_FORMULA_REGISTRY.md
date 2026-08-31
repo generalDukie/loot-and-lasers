@@ -275,7 +275,9 @@ Nova surcharge: six-band tables exact. **D**.
 
 ## PM-STIM-DURATION
 
-Uncommon +5% 6h/18h; Rare +10% 12h/36h; Epic +20% 24h/72h. Same-tier extend to cap; higher replaces; lower does not; max 3 actives. **D**.
+Uncommon +5% 6h/18h; Rare +10% 12h/36h; Epic +20% 24h/72h. Same-tier extend to cap only after `baseHours / STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR` has elapsed since `last_applied_at` (3h/6h/12h). Early same-tier rejects without consume. Higher replaces with fresh base; lower rejects without consume. Max 3 concurrent attributes. Lazy expiry vs absolute `expires_at`. **A** live via `src/lib/stimActivation.js` + `nextStimState`.
+
+Sell: `rround(SPF(economicLevel) × 0.75/1.50/3.25)` — item `level_requirement` else seller level. Shop purchase primitive (Phase 6 Market not built): `rround(SPF × 1.50/3.00/6.50)`.
 
 ---
 
@@ -303,7 +305,7 @@ Certified T18 daily-loop order: snapshot `arenaL=self.L`; grant XP; **then** Sta
 
 ## PM-MINING
 
-`0.03 * SPF(snapshotLevel)` per minute. **A**. No 720-minute product cap.
+`rround(EligibleMinutes × SPF(snapshotLevel) × 0.03)`. Snapshot at session start (`mining_snapshot_level`, `mining_rules_version`). Product session window 1–12 hours. No 720-minute daily cap (Test 18 simulation checksum only). Hangar mining modifiers remain disabled. **A** live via `miningStardustResolved` + `miningService.js`.
 
 ---
 

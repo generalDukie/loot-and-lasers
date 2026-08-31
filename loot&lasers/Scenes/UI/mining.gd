@@ -440,16 +440,13 @@ func _refresh_idle_preview() -> void:
 func _populate() -> void:
 	var c := GameManager.active_character
 	var level := maxi(1, int(c.get("level", 1)))
-	var spf := StardustEconomy.stardust_per_fuel(level)
-	var rate_per_hour := int(
-		round(float(spf) * StardustEconomy.MINING_EFFICIENCY * MINUTES_PER_HOUR)
-	)
+	var rate_per_hour := StardustEconomy.mining_stardust(level, MINUTES_PER_HOUR)
 	_balance_lab.text = NumberDisplay.quantity(
 		CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST)
 	)
 	_stat_level.text = ClientUi.format_level(level)
 	_stat_rate.text = "%s/h" % NumberDisplay.quantity(rate_per_hour)
-	_stat_max.text = NumberDisplay.quantity(MiningManager.preview_reward(12))
+	_stat_max.text = NumberDisplay.quantity(MiningManager.preview_reward(MiningManager.MAX_MINING_HOURS))
 	_refresh_idle_preview()
 
 	var mining := MiningManager.is_mining()

@@ -54,6 +54,8 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "mining_reward",
   "mining_start_time",
   "mining_hours",
+  "mining_snapshot_level",
+  "mining_rules_version",
   "shop_meta",
   "weekly_nova_quests",
   "arena_rating",

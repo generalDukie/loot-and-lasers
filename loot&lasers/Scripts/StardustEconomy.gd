@@ -47,6 +47,11 @@ const ARENA_REWARDED_WINS_PER_DAY := 10
 const ARENA_WIN_FUEL_EQUIVALENT := 2.25
 const MINING_EFFICIENCY := 0.03
 const MINUTES_PER_HOUR := 60.0
+const STIM_SELL_MULT := {
+	"uncommon": 0.75,
+	"rare": 1.5,
+	"epic": 3.25,
+}
 const STARDUST_PER_FUEL_BASE := 50.0
 const STARDUST_PER_FUEL_GROWTH_COEFFICIENT := 1.009
 const STARDUST_PER_FUEL_LEVEL_EXPONENT := 1.625
@@ -247,7 +252,7 @@ static func mining_stardust(level: int, minutes: float) -> int:
 	var mins := maxf(0.0, minutes)
 	if mins <= 0.0:
 		return 0
-	return int(round(float(stardust_per_fuel(level)) * MINING_EFFICIENCY * mins))
+	return maxi(0, _round_half_up(float(stardust_per_fuel(level)) * MINING_EFFICIENCY * mins))
 
 
 static func compute_mining_reward(level: int, hours: float) -> int:
@@ -279,6 +284,37 @@ static func item_type_vendor_mult(item_type: String) -> float:
 	return 1.0
 
 
+static func _stim_rarity_key(item: Dictionary) -> String:
+	var cons: Variant = item.get("consumable", {})
+	var from_cons := ""
+	if typeof(cons) == TYPE_DICTIONARY:
+		from_cons = str((cons as Dictionary).get("tier", "")).strip_edges().to_lower()
+	var raw := str(item.get("rarity", from_cons)).strip_edges().to_lower()
+	if raw == "common" or raw == "minor":
+		return "uncommon"
+	if raw == "legendary" or raw == "mythic" or raw == "prime":
+		return "epic"
+	if STIM_SELL_MULT.has(raw):
+		return raw
+	if STIM_SELL_MULT.has(from_cons):
+		return from_cons
+	return "uncommon"
+
+
+static func _stim_economic_level(item: Dictionary, fallback_level: int = 1) -> int:
+	var from_item := int(item.get("level_requirement", item.get("level", 0)))
+	if from_item >= 1:
+		return from_item
+	return maxi(1, fallback_level)
+
+
+static func stim_sell_value(level: int, rarity: String) -> int:
+	var mult := float(STIM_SELL_MULT.get(rarity, 0.0))
+	if mult <= 0.0:
+		return 0
+	return maxi(0, _round_half_up(float(stardust_per_fuel(level)) * mult))
+
+
 static func gear_sale_value(item: Dictionary) -> int:
 	## Preview-only production resale. Server DissolveItem recomputes and is authority.
 	if item.is_empty():
@@ -286,7 +322,12 @@ static func gear_sale_value(item: Dictionary) -> int:
 	var itype := str(item.get("type", ""))
 	if itype == "ring":
 		itype = "accessory"
-	if itype == "consumable" or itype == "material":
+	if itype == "consumable":
+		var snap := int(item.get("sell_value", 0))
+		if snap > 0:
+			return maxi(1, snap)
+		return stim_sell_value(_stim_economic_level(item), _stim_rarity_key(item))
+	if itype == "material":
 		var flat := int(item.get("sell_value", 0))
 		if flat > 0:
 			return maxi(1, flat)

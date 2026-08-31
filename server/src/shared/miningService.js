@@ -9,11 +9,18 @@
  */
 import { clock } from "./time/clock.js";
 import { computeMiningReward } from "./economyFormulas.js";
+import {
+  MILLISECONDS_PER_HOUR,
+  MILLISECONDS_PER_SECOND,
+  MINING_RULES_VERSION,
+  MINING_SESSION_HOURS_MAX,
+  MINING_SESSION_HOURS_MIN,
+} from "./productionMath.js";
 
 export const MINING_NODE_ID = "stardust_afk";
 export const MINING_NODE_NAME = "Stardust Node";
-export const MINING_HOURS_MIN = 1;
-export const MINING_HOURS_MAX = 12;
+export const MINING_HOURS_MIN = MINING_SESSION_HOURS_MIN;
+export const MINING_HOURS_MAX = MINING_SESSION_HOURS_MAX;
 
 export const MiningStates = Object.freeze({
   IDLE: "idle",
@@ -27,6 +34,8 @@ export const MINING_CLIENT_FORBIDDEN = Object.freeze([
   "mining_end_time",
   "mining_start_time",
   "mining_hours",
+  "mining_snapshot_level",
+  "mining_rules_version",
   "mining_end_time_unix",
   "remaining_ms",
   "remaining_seconds",
@@ -74,7 +83,7 @@ export function serializeMiningState(character, nowMs = clock.nowMs()) {
   const startMs = startIso
     ? new Date(startIso).getTime()
     : hours && endMs
-      ? endMs - hours * 3600 * 1000
+      ? endMs - hours * MILLISECONDS_PER_HOUR
       : 0;
 
   let mining_state = MiningStates.IDLE;
@@ -91,12 +100,14 @@ export function serializeMiningState(character, nowMs = clock.nowMs()) {
     hours: hours != null && Number.isFinite(hours) ? hours : null,
     mining_start_time: startIso,
     mining_end_time: endIso,
-    mining_start_time_unix: startMs > 0 ? Math.floor(startMs / 1000) : null,
-    mining_end_time_unix: endMs > 0 ? Math.floor(endMs / 1000) : null,
+    mining_start_time_unix: startMs > 0 ? Math.floor(startMs / MILLISECONDS_PER_SECOND) : null,
+    mining_end_time_unix: endMs > 0 ? Math.floor(endMs / MILLISECONDS_PER_SECOND) : null,
     remaining_ms,
-    remaining_seconds: Math.ceil(remaining_ms / 1000),
+    remaining_seconds: Math.ceil(remaining_ms / MILLISECONDS_PER_SECOND),
     mining_state,
     mining_reward: reward,
+    mining_snapshot_level: character?.mining_snapshot_level ?? null,
+    mining_rules_version: character?.mining_rules_version ?? null,
     reward_state: endIso ? "committed" : "none",
     collected: !endIso,
     server_now_ms: nowMs,
@@ -106,14 +117,17 @@ export function serializeMiningState(character, nowMs = clock.nowMs()) {
 
 export function buildMiningStartPatch(character, hoursRaw, nowMs = clock.nowMs()) {
   const hours = clampMiningHours(hoursRaw);
-  const reward = computeMiningReward(character.level || 1, hours);
+  const snapshotLevel = Math.max(1, Math.floor(Number(character.level) || 1));
+  const reward = computeMiningReward(snapshotLevel, hours);
   const startIso = new Date(nowMs).toISOString();
-  const endIso = new Date(nowMs + hours * 3600 * 1000).toISOString();
+  const endIso = new Date(nowMs + hours * MILLISECONDS_PER_HOUR).toISOString();
   return {
     mining_start_time: startIso,
     mining_end_time: endIso,
     mining_hours: hours,
     mining_reward: reward,
+    mining_snapshot_level: snapshotLevel,
+    mining_rules_version: MINING_RULES_VERSION,
   };
 }
 
@@ -123,6 +137,8 @@ export function buildMiningClearPatch() {
     mining_reward: 0,
     mining_start_time: null,
     mining_hours: null,
+    mining_snapshot_level: null,
+    mining_rules_version: null,
   };
 }
 

@@ -664,7 +664,7 @@ export async function DissolveItem(user, body) {
         httpErr(400, DISSOLVE_EQUIPPED_ERROR_MESSAGE, DISSOLVE_EQUIPPED_ERROR_CODE);
       }
 
-      const gained = computeStardustValue(item);
+      const gained = computeStardustValue(item, { fallbackLevel: ch.level });
       const patch = {
         stardust: (ch.stardust || 0) + gained,
         total_stardust_earned: (ch.total_stardust_earned || 0) + gained,
@@ -723,7 +723,7 @@ export async function DissolveJunk(user, body) {
         if (!item || item.character_id !== ch.id) continue;
         // Equipped Gear cannot be sold. Skip rather than unequip/dissolve it.
         if (item.locked || item.is_equipped) continue;
-        total += computeStardustValue(item);
+        total += computeStardustValue(item, { fallbackLevel: ch.level });
         entities.Item.delete(id);
         dissolved.push(id);
       }
@@ -1092,6 +1092,9 @@ export async function UseConsumable(user, body = {}) {
       "stat",
       "expires_at",
       "active_buffs",
+      "last_applied_at",
+      "remaining_hours",
+      "remaining_ms",
     ]) {
       if (Object.prototype.hasOwnProperty.call(body, k)) delete body[k];
     }

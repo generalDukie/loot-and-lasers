@@ -1,5 +1,5 @@
 /**
- * Focused no-magic-number audit for locked Phase 0–3 live gameplay JS.
+ * Focused no-magic-number audit for locked Phase 0–5 live gameplay JS.
  *
  * Flags domain-looking numeric literals in executable code. Does not flag:
  *   - 0 / 1 / -1 structural values
@@ -29,9 +29,11 @@ const SCAN_FILES = [
   "src/lib/productionMath/pve.js",
   "src/lib/productionMath/market.js",
   "src/lib/productionMath/missions.js",
+  "src/lib/stimActivation.js",
   "src/lib/missionDuration.js",
   "src/lib/missionCombat.js",
   "server/src/shared/missionRewards.js",
+  "server/src/shared/miningService.js",
   "server/src/functions/economy.js",
   "src/lib/combatMath.js",
   "src/lib/classPassives.js",
@@ -183,7 +185,7 @@ for (const hit of allHits) {
 }
 
 if (allHits.length) {
-  console.error(`\nno-magic-number audit: ${allHits.length} suspicious literal(s) in live Phase 0–3 files.`);
+  console.error(`\nno-magic-number audit: ${allHits.length} suspicious literal(s) in live Phase 0–5 files.`);
   process.exit(1);
 }
 

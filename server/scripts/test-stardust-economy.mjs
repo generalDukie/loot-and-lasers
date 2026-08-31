@@ -39,6 +39,7 @@ import {
 } from "../src/shared/economyFormulas.js";
 import { computeItemVendorValue } from "../src/shared/itemGeneration.js";
 import { getMissionStardustPerFuel } from "../src/shared/rewards.js";
+import { miningStardustResolved, MINUTES_PER_HOUR } from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -83,7 +84,7 @@ test("StardustPerFuel monotone and uncapped", () => {
 test("MissionStardust = SD/F * fuel", () => {
   const rate50 = StardustPerFuel(50);
   assert.equal(MissionStardustReward(50, 5), rate50 * 5);
-  assert.equal(computeMissionStardustFromFuel(5, 50, 0.5), rate50 * 5); // efficiency ignored
+  assert.equal(computeMissionStardustFromFuel(5, 50, 1), rate50 * 5);
   assert.equal(MissionStardustReward(1, 2), 100);
 });
 
@@ -209,9 +210,11 @@ test("Arena first 10 wins/day", () => {
 
 test("Mining 3% efficiency", () => {
   assert.equal(MINING_EFFICIENCY, 0.03);
-  const sd50 = StardustPerFuel(50);
-  assert.equal(MiningStardust(50, 1), Math.round(sd50 * 0.03));
-  assert.equal(computeMiningReward(50, 1), Math.round(sd50 * 0.03 * 60));
+  assert.equal(MiningStardust(50, 1), miningStardustResolved({ snapshotLevel: 50, minutes: 1 }));
+  assert.equal(
+    computeMiningReward(50, 1),
+    miningStardustResolved({ snapshotLevel: 50, minutes: MINUTES_PER_HOUR }),
+  );
 });
 
 test("Attribute purchase Horner costs + independent per-stat intro mapping", () => {

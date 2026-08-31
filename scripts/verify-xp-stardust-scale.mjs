@@ -22,7 +22,7 @@ import {
   CASINO_MAX_STARDUST_BET_CAP,
   SHIP_TYPES,
 } from "../server/src/shared/economyFormulas.js";
-import { missionXpReward } from "../src/lib/productionMath/index.js";
+import { missionXpReward, miningStardustResolved, MINUTES_PER_HOUR } from "../src/lib/productionMath/index.js";
 import { computeItemVendorValue } from "../server/src/shared/itemGeneration.js";
 
 if (XP_STARDUST_SCALE !== 10) {
@@ -67,7 +67,7 @@ assertEq("Guild create", GUILD_CREATE_COST, 5000);
 assertEq("Guild war declare", GUILD_WAR_DECLARE_COST, 5000);
 assertEq("Casino floor", CASINO_MIN_STARDUST_BET_FLOOR, 1);
 assertEq("Casino cap", CASINO_MAX_STARDUST_BET_CAP, 10_000_000 * XP_STARDUST_SCALE);
-assertEq("Mining L50×1h", computeMiningReward(50, 1), Math.round(sd50 * 0.03 * 60));
+assertEq("Mining L50×1h", computeMiningReward(50, 1), miningStardustResolved({ snapshotLevel: 50, minutes: MINUTES_PER_HOUR }));
 assertEq("Ship frigate cost", SHIP_TYPES.frigate.cost, 50000);
 
 const vendor = computeItemVendorValue({

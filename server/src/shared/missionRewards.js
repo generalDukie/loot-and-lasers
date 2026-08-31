@@ -3,9 +3,10 @@
  *
  * Exclusive Test-18 checksum: Gear → Stim → Junk → None.
  * Settlement RNG is injected. Pity is Fuel-normalized, not mission-count.
- * Stim sale value is intentionally unfinished (Phase 5).
+ * Stim sale value is snapshotted at mission snapshot level (Phase 5).
  */
 import { randomItem } from "./rewards.js";
+import { stimSellValueResolved } from "./productionMath.js";
 import { getStimDefinition, MAX_BUFF_STACKS } from "./economyFormulas.js";
 import {
   LOOT_OUTCOME_GEAR,
@@ -66,21 +67,29 @@ function capitalizeStimStat(stat) {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-/** Mission Stim inventory payload — same tier table UseConsumable trusts. */
-export function buildMissionStimItem({ rarity, stat, snapshotLevel } = {}) {
+/** Stim inventory payload — same tier table UseConsumable trusts. */
+export function buildMissionStimItem({
+  rarity,
+  stat,
+  snapshotLevel,
+  origin = MISSION_GEAR_ORIGIN,
+} = {}) {
   const key = String(stat || "strength").toLowerCase();
   const def = getStimDefinition(rarity) || getStimDefinition("uncommon");
   const hours = def.duration_hours;
   const pct = def.bonus_percent;
   const statName = capitalizeStimStat(key);
+  const economicLevel = Math.max(1, Math.floor(Number(snapshotLevel) || 1));
+  const originKey = String(origin || "").trim() || MISSION_GEAR_ORIGIN;
   return {
     name: `${def.label} ${statName} Stim`,
     type: STIM_ITEM_TYPE,
     rarity: def.rarity,
-    level_requirement: snapshotLevel,
+    level_requirement: economicLevel,
     stats: {},
     flavor_text: `Boosts ${key} by ${pct}% for ${hours} hours (stacks duration up to ${hours * MAX_BUFF_STACKS}h).`,
-    origin: MISSION_GEAR_ORIGIN,
+    origin: originKey,
+    sell_value: stimSellValueResolved(economicLevel, def.rarity),
     consumable: {
       stat: key,
       tier: def.rarity,

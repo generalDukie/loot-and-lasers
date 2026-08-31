@@ -21,7 +21,16 @@ import {
   XP_REWARD_EFFICIENCY,
   rollMissionVariance,
   clampMissionVariance,
+  STIM_MAX_ACTIVE_EFFECTS,
+  stimSellValueResolved,
 } from "@/lib/productionMath";
+import {
+  CONSUMABLE_TIERS as STIM_CONSUMABLE_TIERS,
+  STIM_ATTRIBUTES,
+  prepareConsumableBuffs,
+  resolveStimRarity,
+  stimRarityRank,
+} from "./stimActivation.js";
 import {
   EQUIPMENT_SLOTS,
   rollItemStats,
@@ -1184,37 +1193,34 @@ export function checkFuelReset(character) {
 // character.active_buffs { stat, mult, expires_at, name, rarity, stacks, duration_hours }.
 // Bonus is applied as a final multiplier on pre-stim attribute totals.
 // ═══════════════════════════════════════════
-export const CONSUMABLE_TIERS = {
-  uncommon: { mult: 0.05, duration_hours: 6,  label: "Uncommon", rarity: "uncommon", cost: 800,  sell_value: 250 },
-  rare:     { mult: 0.10, duration_hours: 12, label: "Rare",     rarity: "rare",     cost: 2200, sell_value: 600 },
-  epic:     { mult: 0.20, duration_hours: 24, label: "Epic",     rarity: "epic",     cost: 5000, sell_value: 1200 },
+export {
+  prepareConsumableBuffs,
+  resolveStimRarity,
+  stimRarityRank,
+  STIM_ATTRIBUTES,
 };
 
-export const STIM_RARITY_RANK = { uncommon: 1, rare: 2, epic: 3 };
-
-// Maximum times a stim's duration can be extended by stacking the same stim.
-export const MAX_BUFF_STACKS = 3;
-// Maximum distinct attributes that can be stimulated simultaneously.
-export const MAX_ACTIVE_STAT_TYPES = 3;
+export const CONSUMABLE_TIERS = STIM_CONSUMABLE_TIERS;
+export const STIM_RARITY_RANK = Object.freeze({ uncommon: 1, rare: 2, epic: 3 });
+export const MAX_BUFF_STACKS = STIM_MAX_ACTIVE_EFFECTS;
+export const MAX_ACTIVE_STAT_TYPES = STIM_MAX_ACTIVE_EFFECTS;
+/** @deprecated HISTORICAL yearn-block copy — not used by live activation. */
 export const STIM_YEARN_MESSAGE = "Your character doesn't yearn for more yet.";
 
-const CONSUMABLE_STATS = ["strength", "agility", "intellect", "vitality", "luck"];
 const EPIC_STIM_ROLL_THRESHOLD = 0.85;
 const RARE_STIM_ROLL_THRESHOLD = 0.55;
-const STIM_REFRESH_BASE_DURATION_SHARE = 0.5;
 
 export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, tier]) =>
-  CONSUMABLE_STATS.map((stat) => ({
+  STIM_ATTRIBUTES.map((stat) => ({
     name: `${tier.label} ${stat.charAt(0).toUpperCase() + stat.slice(1)} Stim`,
     type: "consumable",
     rarity: tier.rarity,
     level_requirement: 1,
     stats: {},
     consumable: { stat, mult: tier.mult, duration_hours: tier.duration_hours, tier: tierKey },
-    sell_value: tier.sell_value,
-    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * PERCENT_SCALE)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.duration_hours * MAX_BUFF_STACKS}h).`,
+    sell_value: stimSellValueResolved(1, tierKey),
+    flavor_text: `Boosts ${stat} by ${Math.round(tier.mult * PERCENT_SCALE)}% for ${tier.duration_hours} hours (stacks duration up to ${tier.max_duration_hours}h).`,
     is_equipped: false,
-    _cost: tier.cost,
   }))
 );
 
@@ -1240,7 +1246,7 @@ export function getActiveBuffs(character, nowMs = Date.now()) {
     if (!b || !(new Date(b.expires_at).getTime() > now)) return false;
     const stat = String(b.stat || "").toLowerCase();
     // Single-attribute stims only — legacy "all" buffs are ignored.
-    return CONSUMABLE_STATS.includes(stat);
+    return STIM_ATTRIBUTES.includes(stat);
   });
 }
 
@@ -1249,176 +1255,23 @@ export function applyBuffs(stats, buffs) {
   const out = { ...(stats || {}) };
   for (const b of buffs || []) {
     const stat = String(b?.stat || "").toLowerCase();
-    if (!CONSUMABLE_STATS.includes(stat)) continue;
+    if (!STIM_ATTRIBUTES.includes(stat)) continue;
     out[stat] = Math.round((out[stat] || 0) * (1 + (b.mult || 0)));
   }
   return out;
-}
-
-export function resolveStimRarity(source) {
-  const raw = source?.rarity || source?.consumable?.tier || source?.tier || null;
-  if (raw && STIM_RARITY_RANK[raw] != null) return raw;
-  if (raw === "common" || raw === "minor") return "uncommon";
-  if (raw === "legendary" || raw === "mythic" || raw === "prime") return "epic";
-  const mult = Number(source?.mult ?? source?.consumable?.mult ?? 0);
-  if (mult >= CONSUMABLE_TIERS.epic.mult) return "epic";
-  if (mult >= CONSUMABLE_TIERS.rare.mult) return "rare";
-  if (mult > 0) return "uncommon";
-  return "uncommon";
-}
-
-export function stimRarityRank(rarity) {
-  return STIM_RARITY_RANK[rarity] ?? 0;
 }
 
 export function stimMaxDurationMs(durationHours) {
   return Math.max(0, Number(durationHours) || 0) * MILLISECONDS_PER_HOUR * MAX_BUFF_STACKS;
 }
 
+/** @deprecated HISTORICAL yearn-threshold helper — not used by live activation. */
 export function stimRefreshRemainingMs(durationHours) {
+  const STIM_REFRESH_BASE_DURATION_SHARE = 0.5;
   const base = Math.max(0, Number(durationHours) || 0) * MILLISECONDS_PER_HOUR;
   return stimMaxDurationMs(durationHours) - base * STIM_REFRESH_BASE_DURATION_SHARE;
 }
 
-function inferStimStacks(remainingMs, baseMs) {
-  if (baseMs <= 0) return 1;
-  return Math.min(MAX_BUFF_STACKS, Math.max(1, Math.ceil(remainingMs / baseMs)));
-}
-
-function makeStimBuff({ stat, mult, name, rarity, durationHours, stacks, expiresAt }) {
-  return {
-    stat,
-    mult,
-    name,
-    rarity,
-    duration_hours: durationHours,
-    stacks,
-    expires_at: new Date(expiresAt).toISOString(),
-  };
-}
-
-/**
- * Validate + compute next active_buffs for a Stim use.
- * Caller must only remove the inventory item when ok === true.
- */
-export function prepareConsumableBuffs(character, item, sourceBuffs, nowMs = Date.now()) {
-  if (!character || item?.type !== "consumable" || !item.consumable) {
-    return { ok: false, reason: "Not a stim." };
-  }
-  // Stim Trio bundles are retired.
-  if (item._bundle === "stim_trio" || item.consumable?.tier === "bundle") {
-    return { ok: false, reason: "Stim Trios are no longer available." };
-  }
-
-  const now = Number(nowMs) || Date.now();
-  const stat = String(item.consumable.stat || "").toLowerCase();
-  const VALID = ["strength", "agility", "intellect", "vitality", "luck"];
-  if (!VALID.includes(stat)) {
-    return { ok: false, reason: "Invalid Stim attribute." };
-  }
-
-  const rarity = resolveStimRarity(item);
-  const tier = CONSUMABLE_TIERS[rarity];
-  if (!tier || STIM_RARITY_RANK[rarity] == null) {
-    return { ok: false, reason: "Invalid Stim rarity." };
-  }
-  // Authoritative mechanics — never trust item.consumable.mult / duration_hours.
-  const durationHours = tier.duration_hours;
-  const mult = tier.mult;
-  const baseMs = durationHours * MILLISECONDS_PER_HOUR;
-  const maxMs = baseMs * MAX_BUFF_STACKS;
-  const refreshAt = maxMs - baseMs * STIM_REFRESH_BASE_DURATION_SHARE;
-
-  const source = sourceBuffs ?? character.active_buffs ?? [];
-  const active = (source || []).filter((b) => new Date(b.expires_at).getTime() > now);
-  const sameStatIdx = active.findIndex((b) => b.stat === stat);
-
-  if (sameStatIdx < 0) {
-    if (new Set(active.map((b) => b.stat)).size >= MAX_ACTIVE_STAT_TYPES) {
-      return {
-        ok: false,
-        reason: `You already have ${MAX_ACTIVE_STAT_TYPES} active Stim effects. Remove one first.`,
-      };
-    }
-    return {
-      ok: true,
-      buffs: [
-        ...active,
-        makeStimBuff({
-          stat,
-          mult,
-          name: item.name,
-          rarity,
-          durationHours,
-          stacks: 1,
-          expiresAt: now + baseMs,
-        }),
-      ],
-    };
-  }
-
-  const existing = active[sameStatIdx];
-  const existingRarity = resolveStimRarity(existing);
-  const inRank = stimRarityRank(rarity);
-  const exRank = stimRarityRank(existingRarity);
-
-  if (inRank < exRank) {
-    return {
-      ok: false,
-      reason: `A stronger ${stat} Stim is already active. Remove it first to use a lower quality.`,
-    };
-  }
-
-  const buffs = [...active];
-
-  if (inRank > exRank) {
-    buffs[sameStatIdx] = makeStimBuff({
-      stat,
-      mult,
-      name: item.name,
-      rarity,
-      durationHours,
-      stacks: 1,
-      expiresAt: now + baseMs,
-    });
-    return { ok: true, buffs };
-  }
-
-  const remaining = Math.max(0, new Date(existing.expires_at).getTime() - now);
-  let stacks = Number(existing.stacks);
-  if (!Number.isFinite(stacks) || stacks < 1) {
-    stacks = inferStimStacks(remaining, baseMs);
-  }
-  stacks = Math.min(MAX_BUFF_STACKS, Math.max(1, Math.floor(stacks)));
-
-  if (stacks >= MAX_BUFF_STACKS) {
-    if (remaining > refreshAt) {
-      return { ok: false, reason: STIM_YEARN_MESSAGE };
-    }
-    buffs[sameStatIdx] = makeStimBuff({
-      stat,
-      mult,
-      name: item.name,
-      rarity,
-      durationHours,
-      stacks: MAX_BUFF_STACKS,
-      expiresAt: now + maxMs,
-    });
-    return { ok: true, buffs };
-  }
-
-  const newRemaining = Math.min(remaining + baseMs, maxMs);
-  buffs[sameStatIdx] = makeStimBuff({
-    stat,
-    mult,
-    name: item.name,
-    rarity,
-    durationHours,
-    stacks: Math.min(MAX_BUFF_STACKS, stacks + 1),
-    expiresAt: now + newRemaining,
-  });
-  return { ok: true, buffs };
-}
 
 export function dismissActiveBuff(character, { stat, expires_at, name } = {}, nowMs = Date.now()) {
   const now = Number(nowMs) || Date.now();

@@ -73,6 +73,10 @@ export const DUNGEON_XP_DRU_COEFFICIENT = 2.1;
 export const ARENA_XP_PER_XPF = 2.125;
 export const ARENA_STARDUST_PER_SPF = 2.25;
 export const MINING_STARDUST_PER_SPF_PER_MINUTE = 0.03;
+/** Product Mining session window — not the Test 18 simulation 720-minute checksum. */
+export const MINING_SESSION_HOURS_MIN = 1;
+export const MINING_SESSION_HOURS_MAX = 12;
+export const MINING_RULES_VERSION = "phase5-spf-per-minute-v1";
 
 export const FRONTIER_BONUS_PER_LEVEL = 0.05;
 export const FRONTIER_BONUS_CAP = 0.5;
@@ -302,6 +306,12 @@ export const STIM_TIERS = Object.freeze({
 });
 
 export const STIM_MAX_ACTIVE_EFFECTS = 3;
+/**
+ * Same-tier restim on one attribute requires at least
+ * `baseHours / STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR` to elapse since the
+ * most recent same-tier application or extension (Uncommon 3h, Rare 6h, Epic 12h).
+ */
+export const STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR = 2;
 export const STIM_UNCOMMON_LEVEL_MAX = 19;
 export const STIM_RARE_LEVEL_MAX = 49;
 

@@ -11,6 +11,7 @@ import {
   buildMiningClearPatch,
   buildMiningStartPatch,
   serializeMiningState,
+  miningSessionId,
   MiningStates,
 } from "../shared/miningService.js";
 import {
@@ -261,6 +262,23 @@ function saveWalletOperation(accountId, operationType, operationKey, result) {
     INSERT INTO wallet_operations (
       account_id, operation_type, operation_key, result_json, created_at
     ) VALUES (?, ?, ?, ?, ?)
+  `).run(
+    accountId,
+    operationType,
+    operationKey,
+    JSON.stringify(result || {}),
+    clock.nowIso(),
+  );
+}
+
+function upsertWalletOperation(accountId, operationType, operationKey, result) {
+  if (!operationKey) return;
+  db.prepare(`
+    INSERT INTO wallet_operations (
+      account_id, operation_type, operation_key, result_json, created_at
+    ) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(account_id, operation_type, operation_key)
+    DO UPDATE SET result_json = excluded.result_json, created_at = excluded.created_at
   `).run(
     accountId,
     operationType,
@@ -1699,7 +1717,12 @@ export const CollectMining = wrap((user, body = {}) => {
   const requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
   if (!requestId) httpErr(400, "request_id required", "MISSING_REQUEST_ID");
   const opKey = `${ch.id}:${requestId}`;
-  const replay = getWalletOperation(user.id, "collect_mining", opKey);
+  const sessionIdLive = miningSessionId(ch);
+  const sessionOpKey = sessionIdLive ? `${ch.id}:session:${sessionIdLive}` : null;
+  const lastKey = `${ch.id}:last`;
+  const replay = getWalletOperation(user.id, "collect_mining", opKey)
+    || (sessionOpKey ? getWalletOperation(user.id, "collect_mining", sessionOpKey) : null)
+    || (!ch.mining_end_time ? getWalletOperation(user.id, "collect_mining", lastKey) : null);
   if (replay) {
     return {
       success: true,
@@ -1751,6 +1774,10 @@ export const CollectMining = wrap((user, body = {}) => {
     mining_session_id: sessionId,
   };
   saveWalletOperation(user.id, "collect_mining", opKey, receipt);
+  upsertWalletOperation(user.id, "collect_mining", lastKey, receipt);
+  if (sessionId) {
+    saveWalletOperation(user.id, "collect_mining", `${ch.id}:session:${sessionId}`, receipt);
+  }
   return { success: true, ...receipt, patch, mining, character };
 });
 

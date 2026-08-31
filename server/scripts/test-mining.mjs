@@ -117,6 +117,8 @@ test("reward is snapshotted at start (SPF × 0.03 × minutes)", () => {
   const patch = buildMiningStartPatch({ level: 20 }, 4, 1_700_000_000_000);
   assert.equal(patch.mining_reward, expected);
   assert.equal(patch.mining_hours, 4);
+  assert.equal(patch.mining_snapshot_level, 20);
+  assert.ok(patch.mining_rules_version);
   assert.ok(patch.mining_start_time);
   assert.ok(patch.mining_end_time);
 });
@@ -207,10 +209,12 @@ await testAsync("duplicate request_id does not double-grant", async () => {
   assert.equal(entities.Character.get(ch.id).stardust, before.stardust);
 });
 
-await testAsync("second collect without replay key fails", async () => {
+await testAsync("second collect with a new request_id replays the settled session", async () => {
+  const before = entities.Character.get(ch.id);
   const res = await CollectMining(user, { request_id: "mine_collect_ok_2" });
-  assert.equal(res.status, 400);
-  assert.equal(res.body.code, "MINING_NOT_ACTIVE");
+  assert.equal(res.status, 200);
+  assert.equal(res.body.idempotent_replay, true);
+  assert.equal(entities.Character.get(ch.id).stardust, before.stardust);
 });
 
 await testAsync("rejects client-supplied mining_reward on start", async () => {

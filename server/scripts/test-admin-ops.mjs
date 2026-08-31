@@ -489,5 +489,148 @@ await testAsync("simulate_level rejects partial B on uncommon", async () => {
   assert.equal(res.status, 400);
 });
 
+const {
+  BACKPACK_UNEQUIPPED_ITEM_CAP,
+  STIM_TIERS,
+  stimBonusMultiplier,
+  stimSellValueResolved,
+} = await import("../../src/lib/productionMath/index.js");
+const { STIM_ATTRIBUTES } = await import("../../src/lib/stimActivation.js");
+
+await testAsync("admin stim grant places a canonical Stim in backpack", async () => {
+  const a = insertUser("u-stim-grant", "stim-grant@t.test", "admin");
+  const player = insertUser("u-stim-target", "stim-target@t.test", "user");
+  makeCharacter("ch-stim-grant", player.id, "StimTarget");
+  const res = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-stim-grant",
+    type: "consumable",
+    rarity: "epic",
+    stat: "intellect",
+    reason: "qa stim",
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  const item = res.body.item;
+  assert.equal(item.type, "consumable");
+  assert.equal(item.rarity, "epic");
+  assert.equal(item.consumable.stat, "intellect");
+  assert.equal(item.consumable.tier, "epic");
+  assert.equal(item.consumable.mult, stimBonusMultiplier("epic"));
+  assert.equal(item.consumable.duration_hours, STIM_TIERS.epic.baseHours);
+  assert.equal(item.level_requirement, 3);
+  assert.equal(item.origin, "unassigned");
+  assert.equal(item.sell_value, stimSellValueResolved(3, "epic"));
+  assert.equal(item.is_equipped, false);
+  assert.match(item.name, /Epic Intellect Stim/i);
+  assert.equal(entities.Item.get(item.id)?.character_id, "ch-stim-grant");
+});
+
+await testAsync("admin stim grant covers every attribute and quality", async () => {
+  const a = insertUser("u-stim-grid", "stim-grid@t.test", "admin");
+  makeCharacter("ch-stim-grid", a.id, "StimGrid");
+  const rarities = ["uncommon", "rare", "epic"];
+  for (const rarity of rarities) {
+    for (const stat of STIM_ATTRIBUTES) {
+      const res = await AdminModeration(a, {
+        action: "give_item",
+        character_id: "ch-stim-grid",
+        type: "consumable",
+        rarity,
+        stat,
+        reason: "grid",
+      });
+      assert.equal(res.status, 200, `${rarity} ${stat}: ${res.body?.error}`);
+      assert.equal(res.body.item.rarity, rarity);
+      assert.equal(res.body.item.consumable.stat, stat);
+      assert.equal(res.body.item.consumable.mult, stimBonusMultiplier(rarity));
+      entities.Item.delete(res.body.item.id);
+    }
+  }
+});
+
+await testAsync("admin stim grant rejects invalid quality/attribute and ignores forged stats", async () => {
+  const a = insertUser("u-stim-bad", "stim-bad@t.test", "admin");
+  makeCharacter("ch-stim-bad", a.id, "StimBad");
+  const common = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-stim-bad",
+    type: "consumable",
+    rarity: "common",
+    stat: "strength",
+  });
+  assert.equal(common.status, 400);
+  const legendary = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-stim-bad",
+    type: "consumable",
+    rarity: "legendary",
+    stat: "strength",
+  });
+  assert.equal(legendary.status, 400);
+  const badStat = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-stim-bad",
+    type: "consumable",
+    rarity: "rare",
+    stat: "crit_chance",
+  });
+  assert.equal(badStat.status, 400);
+  const forged = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-stim-bad",
+    type: "consumable",
+    rarity: "uncommon",
+    stat: "luck",
+    reason: "qa forged stim",
+    item: {
+      name: "Forged",
+      type: "consumable",
+      rarity: "uncommon",
+      consumable: { stat: "luck", mult: 0.99, duration_hours: 999, tier: "uncommon" },
+    },
+  });
+  assert.equal(forged.status, 200, forged.body?.error || JSON.stringify(forged.body));
+  assert.equal(forged.body.item.consumable.mult, stimBonusMultiplier("uncommon"));
+  assert.equal(forged.body.item.consumable.duration_hours, STIM_TIERS.uncommon.baseHours);
+});
+
+await testAsync("admin stim grant denies non-admin and respects backpack cap", async () => {
+  const player = insertUser("u-stim-deny", "stim-deny@t.test", "user");
+  makeCharacter("ch-stim-deny", player.id, "StimDeny");
+  const denied = await AdminModeration(player, {
+    action: "give_item",
+    character_id: "ch-stim-deny",
+    type: "consumable",
+    rarity: "rare",
+    stat: "vitality",
+  });
+  assert.equal(denied.status, 403);
+
+  const a = insertUser("u-stim-bag", "stim-bag@t.test", "admin");
+  makeCharacter("ch-stim-bag", a.id, "StimBag");
+  for (let i = 0; i < BACKPACK_UNEQUIPPED_ITEM_CAP; i += 1) {
+    entities.Item.create({
+      id: `stim-bag-fill-${i}`,
+      name: `Filler ${i}`,
+      type: "material",
+      rarity: "common",
+      character_id: "ch-stim-bag",
+      owner_id: a.id,
+      created_by_id: a.id,
+      is_equipped: false,
+    });
+  }
+  const full = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-stim-bag",
+    type: "consumable",
+    rarity: "rare",
+    stat: "agility",
+    reason: "cap",
+  });
+  assert.equal(full.status, 400);
+  assert.equal(full.body.code, "INVENTORY_FULL");
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 if (failed) process.exit(1);

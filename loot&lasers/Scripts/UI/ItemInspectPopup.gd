@@ -520,11 +520,8 @@ func _fill_absolute_stats(item: Dictionary) -> void:
 	var stats_raw: Variant = item.get("stats", {})
 	if typeof(stats_raw) != TYPE_DICTIONARY:
 		return
-	for k in stats_raw.keys():
-		var v := int(stats_raw[k])
-		if v == 0:
-			continue
-		_section_stats.add_child(_stat_row(str(k), v, null))
+	for entry in InventoryRules.positive_stat_entries(stats_raw as Dictionary):
+		_section_stats.add_child(_stat_row(str(entry.get("k", "")), int(entry.get("v", 0)), null))
 
 
 func _fill_compare_stats(item: Dictionary, worn: Dictionary) -> void:

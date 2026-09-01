@@ -942,15 +942,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 
 
 func _gear_attr_entries(stats_raw: Dictionary) -> Array:
-	var entries: Array = []
-	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
-		var v := int(stats_raw.get(k, 0))
-		if v <= 0:
-			continue
-		entries.append({"k": k, "v": v})
-		if entries.size() >= 5:
-			break
-	return entries
+	return InventoryRules.positive_stat_entries(stats_raw)
 
 
 func _make_gear_attr_band(entries: Array, stall: bool = false) -> Control:

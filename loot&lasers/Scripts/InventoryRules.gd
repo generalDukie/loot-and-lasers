@@ -91,13 +91,15 @@ static func power_rating(item: Dictionary) -> int:
 
 ## Class-weighted power for Black Market junk heuristics (mirrors web powerRating).
 ## Not used for gear comparison presentation — see compare_gear_attributes.
-static func class_power_rating(item: Dictionary, class_key: String = "Vanguard") -> int:
+static func class_power_rating(item: Dictionary, class_key: String = StatsRules.DEFAULT_CLASS_KEY) -> int:
 	var stats: Variant = item.get("stats", {})
 	if typeof(stats) != TYPE_DICTIONARY:
 		return 0
-	var weights: Dictionary = ArenaRules.CLASS_WEIGHTS.get(class_key, ArenaRules.CLASS_WEIGHTS["Vanguard"])
+	var weights: Dictionary = ArenaRules.CLASS_WEIGHTS.get(
+		class_key, ArenaRules.CLASS_WEIGHTS[StatsRules.DEFAULT_CLASS_KEY]
+	)
 	var sum := 0.0
-	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
+	for k in StatsRules.ATTR_KEYS:
 		sum += float(stats.get(k, 0)) * float(weights.get(k, 1.0))
 	return int(round(sum * 10.0))
 
@@ -113,7 +115,7 @@ static func compare_gear_attributes(hovered: Dictionary, equipped: Dictionary = 
 		"strength": 0, "agility": 0, "intellect": 0, "vitality": 0, "luck": 0, "total": 0,
 	}
 	var total := 0
-	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
+	for k in StatsRules.ATTR_KEYS:
 		var d := int(a.get(k, 0)) - int(b.get(k, 0))
 		out[k] = d
 		total += d
@@ -125,11 +127,22 @@ static func format_stat_delta(delta: int) -> String:
 	return NumberDisplay.signed_quantity(delta)
 
 
-static func compare_lines(candidate: Dictionary, equipped: Dictionary) -> Array:
+## Positive gear stats in class display order (Primary, Vit, Luck, Off A, Off B).
+static func positive_stat_entries(stats: Dictionary, class_key: String = "") -> Array:
+	var entries: Array = []
+	for k in StatsRules.item_stat_display_order(class_key):
+		var v := int(stats.get(k, 0))
+		if v <= 0:
+			continue
+		entries.append({"k": k, "v": v})
+	return entries
+
+
+static func compare_lines(candidate: Dictionary, equipped: Dictionary, class_key: String = "") -> Array:
 	var out: Array = []
 	var a: Dictionary = candidate.get("stats", {}) if typeof(candidate.get("stats", {})) == TYPE_DICTIONARY else {}
 	var b: Dictionary = equipped.get("stats", {}) if typeof(equipped.get("stats", {})) == TYPE_DICTIONARY else {}
-	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
+	for k in StatsRules.item_stat_display_order(class_key):
 		var nv := int(a.get(k, 0))
 		var ov := int(b.get(k, 0))
 		if nv == 0 and ov == 0:

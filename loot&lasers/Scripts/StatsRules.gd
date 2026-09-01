@@ -2,13 +2,25 @@ class_name StatsRules
 extends RefCounted
 ## Character sheet math — attribute costs + totals / derived combat (mirrors web).
 
-const ATTR_KEYS: PackedStringArray = ["strength", "agility", "intellect", "vitality", "luck"]
+const ATTR_KEY_STRENGTH := "strength"
+const ATTR_KEY_AGILITY := "agility"
+const ATTR_KEY_INTELLECT := "intellect"
+const ATTR_KEY_VITALITY := "vitality"
+const ATTR_KEY_LUCK := "luck"
+const ATTR_KEYS: PackedStringArray = [
+	ATTR_KEY_STRENGTH,
+	ATTR_KEY_AGILITY,
+	ATTR_KEY_INTELLECT,
+	ATTR_KEY_VITALITY,
+	ATTR_KEY_LUCK,
+]
+const DEFAULT_CLASS_KEY := "Vanguard"
 const ATTR_LABELS := {
-	"strength": "Strength",
-	"agility": "Agility",
-	"intellect": "Intellect",
-	"vitality": "Vitality",
-	"luck": "Luck",
+	ATTR_KEY_STRENGTH: "Strength",
+	ATTR_KEY_AGILITY: "Agility",
+	ATTR_KEY_INTELLECT: "Intellect",
+	ATTR_KEY_VITALITY: "Vitality",
+	ATTR_KEY_LUCK: "Luck",
 }
 const CRIT_MULT := 1.5
 
@@ -53,7 +65,32 @@ const SOFT_CAP_REFERENCE_LEVEL := 100.0
 
 
 static func primary_stat(class_key: String) -> String:
-	return str(MissionCombat.PRIMARY_STAT.get(class_key, "strength"))
+	return str(MissionCombat.PRIMARY_STAT.get(class_key, ATTR_KEY_STRENGTH))
+
+
+static func viewer_class_key() -> String:
+	var c: Dictionary = GameManager.active_character
+	if c.is_empty():
+		return DEFAULT_CLASS_KEY
+	var key := str(c.get("class", DEFAULT_CLASS_KEY)).strip_edges()
+	return key if not key.is_empty() else DEFAULT_CLASS_KEY
+
+
+## Item tooltip / chip order: Primary, Vitality, Luck, then remaining Str/Agi/Int.
+static func item_stat_display_order(class_key: String = "") -> PackedStringArray:
+	var resolved := class_key.strip_edges()
+	if resolved.is_empty():
+		resolved = viewer_class_key()
+	var primary := primary_stat(resolved)
+	var order: PackedStringArray = PackedStringArray()
+	order.append(primary)
+	order.append(ATTR_KEY_VITALITY)
+	order.append(ATTR_KEY_LUCK)
+	for k in ATTR_KEYS:
+		if k == primary or k == ATTR_KEY_VITALITY or k == ATTR_KEY_LUCK:
+			continue
+		order.append(k)
+	return order
 
 
 ## Normalize character.stats to a Dictionary of ATTR_KEYS (handles missing / JSON string).

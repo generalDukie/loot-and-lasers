@@ -1232,17 +1232,9 @@ func _sync_bag_gear_icon_size(wrap: Control, icon: Control) -> void:
 	icon.custom_minimum_size = Vector2(side, side)
 
 
-## Positive bag stats in display order, capped at 5.
+## Positive bag stats in class display order (Primary, Vit, Luck, Off A, Off B).
 func _bag_attr_entries(stats_raw: Dictionary) -> Array:
-	var entries: Array = []
-	for k in ["strength", "agility", "intellect", "vitality", "luck"]:
-		var v := int(stats_raw.get(k, 0))
-		if v <= 0:
-			continue
-		entries.append({"k": k, "v": v})
-		if entries.size() >= 5:
-			break
-	return entries
+	return InventoryRules.positive_stat_entries(stats_raw)
 
 
 ## Single-attribute stim chip for backpack panes (legacy "all" stims ignored).

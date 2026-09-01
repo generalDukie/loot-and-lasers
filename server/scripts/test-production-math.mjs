@@ -479,7 +479,14 @@ test("Nova surcharge exhaustive table", () => {
   assert.deepEqual(M.NOVA_SURCHARGE_TABLE.epic.probabilities, [0.3, 0.5, 0.6, 0.75, 0.85, 0.95]);
   assert.deepEqual(M.NOVA_SURCHARGE_TABLE.epic.prices[0], [10, 20, 40]);
   assert.deepEqual(M.NOVA_SURCHARGE_TABLE.epic.prices[5], [160, 180, 200]);
-  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.legendary.probabilities, [0.6, 0.8, 0.9, 1, 1, 1]);
+  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.legendary.probabilities, [
+    M.NOVA_SURCHARGE_LEGENDARY_CHANCE_BELOW25,
+    M.NOVA_SURCHARGE_LEGENDARY_CHANCE_TOP17TO25,
+    M.NOVA_SURCHARGE_CHANCE_CERTAIN,
+    M.NOVA_SURCHARGE_CHANCE_CERTAIN,
+    M.NOVA_SURCHARGE_CHANCE_CERTAIN,
+    M.NOVA_SURCHARGE_CHANCE_CERTAIN,
+  ]);
   assert.deepEqual(M.NOVA_SURCHARGE_TABLE.legendary.prices[0], [50, 60, 75]);
   assert.deepEqual(M.NOVA_SURCHARGE_TABLE.legendary.prices[5], [250, 275, 300]);
   assert.equal(M.resolveNovaSurcharge("legendary", 0.99, 0.999999, 0), 250);

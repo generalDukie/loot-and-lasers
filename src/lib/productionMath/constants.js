@@ -671,8 +671,10 @@ export const NOVA_SURCHARGE_BANDS = Object.freeze([
 
 /** Uniform choice among this many Nova values after a successful surcharge roll. */
 export const NOVA_SURCHARGE_POOL_SIZE = 3;
-/** Band chance that always applies a Nova surcharge (Legendary Top 5–10% and above). */
+/** Band chance that always applies a Nova surcharge (Legendary Top 10–17.5% and above). */
 export const NOVA_SURCHARGE_CHANCE_CERTAIN = 1;
+export const NOVA_SURCHARGE_LEGENDARY_CHANCE_BELOW25 = 0.75;
+export const NOVA_SURCHARGE_LEGENDARY_CHANCE_TOP17TO25 = 0.9;
 
 /**
  * Appearance chances in `NOVA_SURCHARGE_BANDS` order:
@@ -682,9 +684,9 @@ export const NOVA_SURCHARGE_EPIC_CHANCES = Object.freeze([
   0.3, 0.5, 0.6, 0.75, 0.85, 0.95,
 ]);
 export const NOVA_SURCHARGE_LEGENDARY_CHANCES = Object.freeze([
-  0.6,
-  0.8,
-  0.9,
+  NOVA_SURCHARGE_LEGENDARY_CHANCE_BELOW25,
+  NOVA_SURCHARGE_LEGENDARY_CHANCE_TOP17TO25,
+  NOVA_SURCHARGE_CHANCE_CERTAIN,
   NOVA_SURCHARGE_CHANCE_CERTAIN,
   NOVA_SURCHARGE_CHANCE_CERTAIN,
   NOVA_SURCHARGE_CHANCE_CERTAIN,

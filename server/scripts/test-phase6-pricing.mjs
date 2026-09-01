@@ -141,7 +141,7 @@ test("Nova surcharge: C/U/R never; every Epic/Legendary band chance and pool", (
       ],
     },
     legendary: {
-      chances: [0.6, 0.8, 0.9, 1, 1, 1],
+      chances: [0.75, 0.9, 1, 1, 1, 1],
       pools: [
         [50, 60, 75],
         [75, 100, 125],

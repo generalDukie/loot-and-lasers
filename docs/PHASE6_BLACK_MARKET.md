@@ -80,9 +80,9 @@ Common, Uncommon, and Rare Gear never receive a Nova surcharge.
 
 | Band | Epic | Legendary |
 |---|---:|---:|
-| Below Top 25% | 30% | 60% |
-| Top 17.5–25% | 50% | 80% |
-| Top 10–17.5% | 60% | 90% |
+| Below Top 25% | 30% | 75% |
+| Top 17.5–25% | 50% | 90% |
+| Top 10–17.5% | 60% | 100% |
 | Top 5–10% | 75% | 100% |
 | Top 2.5–5% | 85% | 100% |
 | Top 2.5% | 95% | 100% |

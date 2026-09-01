@@ -49,6 +49,7 @@ import {
   MARKET_HAGGLE_SUCCESS_CHANCE_NOVA,
   MARKET_HAGGLE_SUCCESS_CHANCE_STANDARD,
   NOVA_SURCHARGE_BANDS,
+  NOVA_SURCHARGE_LEGENDARY_CHANCES,
   NOVA_SURCHARGE_PERCENTILE_TOP2P5,
   NOVA_SURCHARGE_PERCENTILE_TOP25,
   NOVA_SURCHARGE_TABLE,
@@ -463,11 +464,11 @@ test("new 75/82.5/90/95/97.5 bands and within-rarity CDF populations", () => {
     const chances = NOVA_SURCHARGE_TABLE[rarity].probabilities;
     let incidence = 0;
     for (let i = 0; i < shares.length; i++) incidence += shares[i] * chances[i];
-    const expectInc = rarity === "epic" ? 0.39 : 0.6775;
+    const expectInc = expected.reduce((sum, share, i) => sum + share * chances[i], 0);
     console.log(
       `    ${rarity} mean=${mean(iqs).toFixed(4)} median=${median(iqs.slice().sort((a, b) => a - b)).toFixed(4)}`
       + ` band shares=${shares.map((s) => s.toFixed(3)).join("/")}`
-      + ` surcharge≈${incidence.toFixed(4)} (design ${expectInc})`,
+      + ` surcharge≈${incidence.toFixed(4)} (design ${expectInc.toFixed(4)})`,
     );
     assert.ok(Math.abs(incidence - expectInc) < 0.05, `${rarity} incidence ${incidence} vs ${expectInc}`);
   }
@@ -661,10 +662,10 @@ test("CDF generation does not consume live offer RNG", () => {
 
 test("Nova surcharge chances/pools and Haggling constants", () => {
   assert.deepEqual(NOVA_SURCHARGE_TABLE.epic.probabilities, [0.3, 0.5, 0.6, 0.75, 0.85, 0.95]);
-  assert.deepEqual(NOVA_SURCHARGE_TABLE.legendary.probabilities, [0.6, 0.8, 0.9, 1, 1, 1]);
+  assert.deepEqual(NOVA_SURCHARGE_TABLE.legendary.probabilities, NOVA_SURCHARGE_LEGENDARY_CHANCES);
   assert.equal(MARKET_HAGGLE_SUCCESS_CHANCE_STANDARD, 0.4);
   assert.equal(MARKET_HAGGLE_SUCCESS_CHANCE_NOVA, 0.3);
-  for (const probe of [0.9, 0.95, 0.975]) {
+  for (const probe of [0.825, 0.9, 0.95, 0.975]) {
     const spec = novaSurchargeSpec("legendary", probe);
     assert.equal(spec.probability, 1);
     assert.ok(resolveNovaSurcharge("legendary", probe, 0.999999, 0) > 0);

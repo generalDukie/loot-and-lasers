@@ -1,10 +1,11 @@
 class_name NumberDisplay
 extends RefCounted
 ## Player-facing quantity labels. Stored values stay full integers; this is display only.
-## Under 100,000: grouped with commas. 100,000+: K / M / B / T.
+## Magnitudes below 8 digits stay comma-grouped. 8 digits and up compact to M / B / T.
 ## Nova Crystals never abbreviate.
 
-const ABBREV_THRESHOLD := 100_000
+## Smallest 8-digit integer — compact form starts here (10,000,000 → 10M).
+const ABBREV_THRESHOLD := 10_000_000
 const GROUP_SIZE := 1_000
 const THOUSAND := 1_000
 const MILLION := 1_000_000

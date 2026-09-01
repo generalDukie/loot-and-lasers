@@ -74,6 +74,14 @@ const _WALLET_ICON_COLUMN := 38.0
 const _WALLET_DIVIDER_GAP := 4.0
 const _WALLET_VALUE_GAP := 8.0
 const _WALLET_TRAILING_SIZE := 29.0
+const _WALLET_FUEL_RANGE_SEPARATOR := " / "
+const WALLET_VALUE_FONT_DEFAULT := 25
+const WALLET_VALUE_FONT_COMPACT := 20
+const WALLET_VALUE_FONT_SMALL := 18
+const WALLET_VALUE_FONT_TINY := 16
+const WALLET_VALUE_LEN_COMPACT := 12
+const WALLET_VALUE_LEN_SMALL := 15
+const WALLET_VALUE_LEN_TINY := 19
 var _last_nav_ms := 0
 const NAV_COOLDOWN_MS := 200
 const CHROME_REFRESH_INTERVAL_SEC := 1.0
@@ -931,20 +939,21 @@ func _format_rail_amount(value: Variant) -> String:
 	return NumberDisplay.quantity(value)
 
 
+func _wallet_displayed_number_len(text: String) -> int:
+	# Fuel is "current / max". Count each formatted amount, not the composite.
+	var longest := 0
+	for part in text.split(_WALLET_FUEL_RANGE_SEPARATOR, false):
+		longest = maxi(longest, part.length())
+	return longest
+
+
 func _fit_currency_fonts() -> void:
-	# Wallet readout stays 25px. Shrink only for extreme exact strings that
-	# would otherwise clip — never for everyday Fuel / Stardust / Nova.
-	const WALLET_VALUE_FONT_DEFAULT := 25
-	const WALLET_VALUE_FONT_COMPACT := 20
-	const WALLET_VALUE_FONT_SMALL := 18
-	const WALLET_VALUE_FONT_TINY := 16
-	const WALLET_VALUE_LEN_COMPACT := 12
-	const WALLET_VALUE_LEN_SMALL := 15
-	const WALLET_VALUE_LEN_TINY := 19
+	# Stay 25px unless a single displayed amount (after K/M/B) is 12+ chars.
+	# Fuel's slash and max tank are not part of that count.
 	var max_len := 0
 	for lab in [_fuel_value, _stardust_value, _nova_value]:
 		if lab != null and is_instance_valid(lab):
-			max_len = maxi(max_len, lab.text.length())
+			max_len = maxi(max_len, _wallet_displayed_number_len(lab.text))
 	var value_size := WALLET_VALUE_FONT_DEFAULT
 	if max_len >= WALLET_VALUE_LEN_TINY:
 		value_size = WALLET_VALUE_FONT_TINY
@@ -2433,8 +2442,9 @@ func _refresh_chrome() -> void:
 		str(character.get("class", "?")),
 	]
 	_operative_title.text = str(character.get("active_title", ""))
-	_set_readout(_fuel_value, "%s / %s" % [
+	_set_readout(_fuel_value, "%s%s%s" % [
 		CurrencyManager.format_balance(CurrencyManager.CURRENCY_FUEL),
+		_WALLET_FUEL_RANGE_SEPARATOR,
 		_format_rail_amount(ShipRules.effective_max_fuel(character)),
 	])
 	_set_readout(_stardust_value, _format_rail_amount(

@@ -59,6 +59,12 @@ func _run() -> void:
 	)
 	_check(NumberDisplay.nova(98075) == "98,075", "whole Nova does not append .0")
 	_check(NumberDisplay.nova(1.5) == "1.5", "skip cost 1.5 formats as 1.5")
+	_check(NumberDisplay.quantity(8757523) == "8,757,523", "7-digit quantities stay comma-grouped")
+	_check(NumberDisplay.quantity(9999999) == "9,999,999", "last 7-digit quantity stays comma-grouped")
+	_check(NumberDisplay.quantity(10000000) == "10M", "first 8-digit quantity abbreviates")
+	_check(NumberDisplay.quantity(87575231) == "87.58M", "8-digit quantity uses two-decimal millions")
+	_check(NumberDisplay.quantity(-8757523) == "-8,757,523", "negative 7-digit quantity stays comma-grouped")
+	_check(NumberDisplay.quantity(-87575231) == "-87.58M", "negative 8-digit quantity abbreviates")
 
 	GameManager.clear_active_character("test_logout")
 	_check(CurrencyManager.get_balance(CurrencyManager.CURRENCY_STARDUST) == 0, "logout clears wallet")

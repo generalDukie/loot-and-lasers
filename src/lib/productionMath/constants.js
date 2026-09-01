@@ -586,13 +586,16 @@ export const EPIC_LUCK_SHAPE_PENALTY_ANCHORS = Object.freeze([
   Object.freeze([1, 0.85]),
 ]);
 
-/** Must match live Phase 2 `RARITY_MIN_STAT_SHARE.legendary` (do not change generation). */
+/** Must match live Phase 2 `RARITY_MIN_STAT_SHARE.legendary`. */
 export const LEGENDARY_REQUIRED_STAT_COUNT = 5;
 export const LEGENDARY_MANDATORY_STAT_SHARE = 0.1;
 export const LEGENDARY_MANDATORY_BUDGET_SHARE =
   LEGENDARY_MANDATORY_STAT_SHARE * LEGENDARY_REQUIRED_STAT_COUNT;
-/** Live directed Partial B pin; generation is unchanged. */
+/** Hard final cap per class off-stat on all Legendary generation. */
 export const LEGENDARY_OFF_STAT_CAP_SHARE = 0.175;
+/** Discretionary headroom above the 10% floor, per off-stat (7.5 percentage points). */
+export const LEGENDARY_OFF_STAT_DISCRETIONARY_SHARE =
+  LEGENDARY_OFF_STAT_CAP_SHARE - LEGENDARY_MANDATORY_STAT_SHARE;
 export const LEGENDARY_LEAKAGE_PENALTY_SLOPE = 6;
 export const LEGENDARY_PV_SHAPE_PENALTY_ANCHORS = Object.freeze([
   Object.freeze([0.35, 0.25]),
@@ -892,6 +895,9 @@ export const PVE_HIDDEN_BUDGET_OFFSET_MATURE = 10;
 
 /** Admin expected-loadout simulator (not a live player formula). */
 export const BASIS_POINTS_DENOMINATOR = 10000;
+export const LEGENDARY_OFF_STAT_CAP_SHARE_BPS = Math.round(
+  LEGENDARY_OFF_STAT_CAP_SHARE * BASIS_POINTS_DENOMINATOR,
+);
 /** Light-spender purchase share of EPA once the ramp completes. */
 export const SIMULATE_PURCHASE_EPA_SHARE_BPS = 3800;
 /** Purchase share is 0 at L1 and reaches SIMULATE_PURCHASE_EPA_SHARE_BPS at this level. */
@@ -916,7 +922,8 @@ export const GEAR_STAT_POOL_PARTIAL_B_BLOCKED_RARITIES = Object.freeze(["common"
 export const SIMULATE_PARTIAL_A_OFF_COUNT = 1;
 /** Legendary off-stat share of piece budget. Desirable pins offs at the 10% floor. */
 export const LEGENDARY_PARTIAL_A_OFF_SHARE_BPS = 1350;
-export const LEGENDARY_PARTIAL_B_OFF_SHARE_BPS = 1750;
+/** Partial B pins each off-stat at the hard Legendary cap (never above it). */
+export const LEGENDARY_PARTIAL_B_OFF_SHARE_BPS = LEGENDARY_OFF_STAT_CAP_SHARE_BPS;
 export const SIMULATE_GEAR_PRESET_RARITIES = Object.freeze([
   "uncommon",
   "rare",

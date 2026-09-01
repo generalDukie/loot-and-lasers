@@ -243,6 +243,8 @@ Rarity budget 0.70/0.85/1.00/1.20/**1.50**. **A** live via `GenerateGearItem` / 
 
 Slot: Weapon and Ship Module ×1.20; Accessory normal.
 
+Legendary allocation (Phase 6 cap correction): all five stats; 10% floor each (`LEGENDARY_MANDATORY_STAT_SHARE`); each class off-stat ≤ `floor(T × LEGENDARY_OFF_STAT_CAP_SHARE)` (17.5%). Discretionary remainder after floors and capped off extras is allocated to Primary / Vitality / Luck. Exact integer sum = persisted `TotalStatBudget`. Existing persisted Gear is not rewritten.
+
 PvE hidden offset discrete +5 (L≤150) … +10 (L>190). **D** for source application. Generator API is live (opt-in). Stat budget only — not economic/resale/Market level.
 
 ---

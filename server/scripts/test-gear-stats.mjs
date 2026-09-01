@@ -12,6 +12,8 @@ import {
   getRarityMinStatShare,
   selectItemAttributes,
   allocateStatBudget,
+  allocateLegendaryClassBudget,
+  legendaryOffStatIntegerCap,
   rollItemStats,
   GenerateGearItem,
   GetGearSlotMultiplier,
@@ -23,6 +25,9 @@ import {
   FAVORED_POOL_CHANCE,
   computeItemVendorValue,
   classGearStatRoles,
+  itemStatDisplayOrder,
+  CLASS_ARCHETYPE_BY_NAME,
+  EQUIPMENT_SLOTS,
   GEAR_STAT_POOL_DESIRABLE,
   GEAR_STAT_POOL_PARTIAL_A,
   GEAR_STAT_POOL_PARTIAL_B,
@@ -40,6 +45,11 @@ import {
   gearResaleValue,
   BASIS_POINTS_DENOMINATOR,
   roundHalfUp,
+  GEAR_STAT_BUDGET_VARIANCE_MIN,
+  GEAR_STAT_BUDGET_VARIANCE_MAX,
+  LEGENDARY_OFF_STAT_CAP_SHARE,
+  LEGENDARY_MANDATORY_STAT_SHARE,
+  LEGENDARY_REQUIRED_STAT_COUNT,
 } from "../../src/lib/productionMath/index.js";
 import { randomItem } from "../src/shared/rewards.js";
 
@@ -407,6 +417,33 @@ test("directed pools pick class-relative stats", () => {
   assert.equal(leg.poolMode, GEAR_STAT_POOL_DESIRABLE);
 });
 
+test("item stat display order is primary, vitality, luck, then remaining Str/Agi/Int", () => {
+  assert.deepEqual(itemStatDisplayOrder("Vanguard"), [
+    "strength",
+    "vitality",
+    "luck",
+    "agility",
+    "intellect",
+  ]);
+  assert.deepEqual(itemStatDisplayOrder("Astral Warden"), itemStatDisplayOrder("Vanguard"));
+  assert.deepEqual(itemStatDisplayOrder("Shadow Operative"), [
+    "agility",
+    "vitality",
+    "luck",
+    "strength",
+    "intellect",
+  ]);
+  assert.deepEqual(itemStatDisplayOrder("Void Runner"), itemStatDisplayOrder("Shadow Operative"));
+  assert.deepEqual(itemStatDisplayOrder("Technomancer"), [
+    "intellect",
+    "vitality",
+    "luck",
+    "strength",
+    "agility",
+  ]);
+  assert.deepEqual(itemStatDisplayOrder("Cosmic Engineer"), itemStatDisplayOrder("Technomancer"));
+});
+
 test("partial B rejected on common and uncommon", () => {
   assert.throws(() =>
     selectItemAttributes("common", Math.random, {
@@ -443,7 +480,8 @@ test("legendary directed pools pin offs and dump remainder into desirable", () =
       rng: seqRng([0.15, 0.35, 0.55, 0.75, 0.22, 0.44, 0.66, 0.88]),
     });
     const total = rolled.targetBudget;
-    const minEach = Math.floor(total * 0.1);
+    const minEach = Math.floor(total * getRarityMinStatShare("legendary"));
+    const offCap = legendaryOffStatIntegerCap(total);
     let expectedOff = minEach;
     if (offBps > LEGENDARY_DESIRABLE_OFF_SHARE_BPS) {
       expectedOff = Math.max(
@@ -451,6 +489,7 @@ test("legendary directed pools pin offs and dump remainder into desirable", () =
         roundHalfUp((total * offBps) / BASIS_POINTS_DENOMINATOR),
       );
     }
+    expectedOff = Math.min(expectedOff, Math.max(minEach, offCap));
     const sum = Object.values(rolled.stats).reduce((a, b) => a + b, 0);
     assert.equal(sum, total, pool);
     assert.equal(Object.keys(rolled.stats).length, ITEM_ATTR_KEYS.length);
@@ -479,6 +518,180 @@ test("rare directed pools keep the 20% floor", () => {
     assert.equal(vals.length, 3, pool);
     for (const v of vals) assert.ok(v >= minEach, `${pool} ${v} < ${minEach}`);
     assert.equal(vals.reduce((a, b) => a + b, 0), rolled.targetBudget);
+  }
+});
+
+const LEGENDARY_OFF_CAP_REFERENCE_BUDGET = 150;
+const LEGENDARY_OFF_CAP_REFERENCE_CLASS = "Cosmic Engineer";
+const LEGENDARY_OFF_CAP_STRESS_ROLLS = 10_000;
+const LEGENDARY_OFF_CAP_STRESS_SEED = 20_260_901;
+const LEGENDARY_OFF_CAP_TEST_LEVELS = Object.freeze([1, 25, 50, 100, 200, 500]);
+const LEGENDARY_OFF_CAP_TEST_VARIANCES = Object.freeze([
+  GEAR_STAT_BUDGET_VARIANCE_MIN,
+  (GEAR_STAT_BUDGET_VARIANCE_MIN + GEAR_STAT_BUDGET_VARIANCE_MAX) / 2,
+  GEAR_STAT_BUDGET_VARIANCE_MAX,
+]);
+const LEGENDARY_OFF_CAP_FRACTIONAL_BUDGETS = Object.freeze([
+  7, 11, 17, 23, 101, 149, 151, 157, 200,
+]);
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function legendaryAllocationViolations(stats, className, total) {
+  const roles = classGearStatRoles(className);
+  const cap = legendaryOffStatIntegerCap(total);
+  const minEach = Math.floor(total * getRarityMinStatShare("legendary"));
+  let violations = 0;
+  const sum = ITEM_ATTR_KEYS.reduce((acc, key) => acc + Number(stats[key] || 0), 0);
+  if (sum !== total) violations += 1;
+  if (Object.keys(stats).length !== LEGENDARY_REQUIRED_STAT_COUNT) violations += 1;
+  for (const key of ITEM_ATTR_KEYS) {
+    const value = Number(stats[key] || 0);
+    if (!Number.isInteger(value) || value < minEach) violations += 1;
+  }
+  for (const key of roles.offs) {
+    if (Number(stats[key] || 0) > cap) violations += 1;
+  }
+  return violations;
+}
+
+test("legendary off-stat integer cap is floor(T × 17.5%)", () => {
+  assert.equal(LEGENDARY_OFF_STAT_CAP_SHARE, 0.175);
+  assert.equal(LEGENDARY_MANDATORY_STAT_SHARE, 0.1);
+  assert.equal(
+    legendaryOffStatIntegerCap(LEGENDARY_OFF_CAP_REFERENCE_BUDGET),
+    Math.floor(LEGENDARY_OFF_CAP_REFERENCE_BUDGET * LEGENDARY_OFF_STAT_CAP_SHARE),
+  );
+  assert.equal(legendaryOffStatIntegerCap(LEGENDARY_OFF_CAP_REFERENCE_BUDGET), 26);
+  for (const total of LEGENDARY_OFF_CAP_FRACTIONAL_BUDGETS) {
+    assert.equal(
+      legendaryOffStatIntegerCap(total),
+      Math.floor(total * LEGENDARY_OFF_STAT_CAP_SHARE),
+      `T=${total}`,
+    );
+  }
+});
+
+test("T=150 Cosmic Engineer Legendary caps STR and AGI at 26", () => {
+  const roles = classGearStatRoles(LEGENDARY_OFF_CAP_REFERENCE_CLASS);
+  assert.deepEqual([...roles.offs].sort(), ["agility", "strength"]);
+  const overflowRng = seqRng([
+    0.999, 1e-12, 1e-12, 1e-12, 1e-12, 0.5, 0.5, 0.5, 0.5, 0.5,
+  ]);
+  const stats = allocateLegendaryClassBudget(
+    LEGENDARY_OFF_CAP_REFERENCE_BUDGET,
+    overflowRng,
+    LEGENDARY_OFF_CAP_REFERENCE_CLASS,
+  );
+  const cap = legendaryOffStatIntegerCap(LEGENDARY_OFF_CAP_REFERENCE_BUDGET);
+  assert.equal(cap, 26);
+  assert.equal(legendaryAllocationViolations(
+    stats,
+    LEGENDARY_OFF_CAP_REFERENCE_CLASS,
+    LEGENDARY_OFF_CAP_REFERENCE_BUDGET,
+  ), 0);
+  assert.ok(stats.strength <= cap, `STR ${stats.strength}`);
+  assert.ok(stats.agility <= cap, `AGI ${stats.agility}`);
+  const minEach = Math.floor(
+    LEGENDARY_OFF_CAP_REFERENCE_BUDGET * getRarityMinStatShare("legendary"),
+  );
+  for (const key of ITEM_ATTR_KEYS) {
+    assert.ok(stats[key] >= minEach, `${key} ${stats[key]}`);
+  }
+  const sum = ITEM_ATTR_KEYS.reduce((acc, key) => acc + stats[key], 0);
+  assert.equal(sum, LEGENDARY_OFF_CAP_REFERENCE_BUDGET);
+});
+
+test("legendary off-stat cap holds across classes, slots, levels, and ±10% variance", () => {
+  const classes = Object.keys(CLASS_ARCHETYPE_BY_NAME);
+  let rolls = 0;
+  let violations = 0;
+  for (const className of classes) {
+    for (const slot of EQUIPMENT_SLOTS) {
+      for (const level of LEGENDARY_OFF_CAP_TEST_LEVELS) {
+        for (const variance of LEGENDARY_OFF_CAP_TEST_VARIANCES) {
+          const rng = seqRng([
+            (rolls * 0.017 + 0.11) % 1,
+            (rolls * 0.031 + 0.23) % 1,
+            (rolls * 0.053 + 0.41) % 1,
+            (rolls * 0.071 + 0.59) % 1,
+            (rolls * 0.089 + 0.73) % 1,
+            (rolls * 0.101 + 0.07) % 1,
+            (rolls * 0.127 + 0.29) % 1,
+            (rolls * 0.149 + 0.47) % 1,
+          ]);
+          const rolled = rollItemStats({
+            itemLevel: level,
+            type: slot,
+            rarity: "legendary",
+            className,
+            statBudgetVariance: variance,
+            rng,
+          });
+          rolls += 1;
+          violations += legendaryAllocationViolations(
+            rolled.stats,
+            className,
+            rolled.targetBudget,
+          );
+        }
+      }
+    }
+  }
+  assert.equal(rolls, classes.length * EQUIPMENT_SLOTS.length
+    * LEGENDARY_OFF_CAP_TEST_LEVELS.length * LEGENDARY_OFF_CAP_TEST_VARIANCES.length);
+  assert.equal(violations, 0, `matrix violations ${violations} / ${rolls}`);
+});
+
+test("legendary off-stat cap stress produces zero violations", () => {
+  const classes = Object.keys(CLASS_ARCHETYPE_BY_NAME);
+  const rng = mulberry32(LEGENDARY_OFF_CAP_STRESS_SEED);
+  let violations = 0;
+  for (let i = 0; i < LEGENDARY_OFF_CAP_STRESS_ROLLS; i++) {
+    const className = classes[i % classes.length];
+    const slot = EQUIPMENT_SLOTS[i % EQUIPMENT_SLOTS.length];
+    const level = LEGENDARY_OFF_CAP_TEST_LEVELS[i % LEGENDARY_OFF_CAP_TEST_LEVELS.length];
+    const variance = LEGENDARY_OFF_CAP_TEST_VARIANCES[i % LEGENDARY_OFF_CAP_TEST_VARIANCES.length];
+    const rolled = rollItemStats({
+      itemLevel: level,
+      type: slot,
+      rarity: "legendary",
+      className,
+      statBudgetVariance: variance,
+      rng,
+    });
+    violations += legendaryAllocationViolations(
+      rolled.stats,
+      className,
+      rolled.targetBudget,
+    );
+  }
+  assert.equal(violations, 0, `stress violations ${violations} / ${LEGENDARY_OFF_CAP_STRESS_ROLLS}`);
+  console.log(`    stress rolls=${LEGENDARY_OFF_CAP_STRESS_ROLLS} violations=${violations}`);
+});
+
+test("integer rounding never pushes an off-stat above floor(T × cap share)", () => {
+  const className = LEGENDARY_OFF_CAP_REFERENCE_CLASS;
+  for (const total of LEGENDARY_OFF_CAP_FRACTIONAL_BUDGETS) {
+    const cap = legendaryOffStatIntegerCap(total);
+    const stats = allocateLegendaryClassBudget(
+      total,
+      seqRng([0.999, 1e-12, 1e-12, 1e-12, 1e-12, 0.8, 0.2, 0.4, 0.6]),
+      className,
+    );
+    assert.equal(legendaryAllocationViolations(stats, className, total), 0, `T=${total}`);
+    for (const key of classGearStatRoles(className).offs) {
+      assert.ok(stats[key] <= cap, `T=${total} ${key}=${stats[key]} cap=${cap}`);
+    }
   }
 });
 

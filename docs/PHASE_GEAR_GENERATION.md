@@ -46,6 +46,7 @@ It did **not** retune budgets, drop chances, shop pricing, or vendor formulas.
 | Rarity stat mult | 0.70 / 0.85 / 1.00 / 1.20 / **1.50** (Legendary; Phase 2 live) |
 | Stat counts | 1 / 2 / 3 / 3 / 5 |
 | Min shares | 100% / 30% / 20% / 20% / 10% |
+| Legendary off-stat cap | Each class off-stat ≤ `floor(TotalStatBudget × LEGENDARY_OFF_STAT_CAP_SHARE)` (17.5%). Live Normal Legendary and directed pools. Remainder after floors + capped off extras goes to Primary / Vitality / Luck. Rounding/repair cannot exceed the cap. |
 | Exact sum | `SUM(stats) === TotalStatPool` always |
 
 Legendary **sale** 1.75× remains on historical `GearSaleValue` (shop markup until Phase 6). Player dissolve uses production `gearResaleValue`.
@@ -55,7 +56,7 @@ Legendary **sale** 1.75× remains on historical `GearSaleValue` (shop markup unt
 Already finalized in live code:
 
 - Common–Epic with class: **once per item** 60% favored pool / 40% full pool
-- Legendary: always all five attrs (`poolMode: "legendary"`)
+- Legendary: always all five attrs (`poolMode: "legendary"`); 10% minimum per stat; each of the two class off-stats is hard-capped at `floor(T × 0.175)` (`LEGENDARY_OFF_STAT_CAP_SHARE`).
 - Verified in tests
 
 ## 9. Source-specific generators
@@ -110,7 +111,7 @@ source-independence, randomItem parity, vendor≠stat.
 
 Also green: `test:inventory`, `test:shared-foundation`, `test:mission-gear-drop`.
 
-Statistical sample: 40 seeds × rarities × slots for exact-sum + floors; variety check on Legendary remainder.
+Statistical sample: 40 seeds × rarities × slots for exact-sum + floors; variety check on Legendary remainder; Legendary off-stat cap matrix + 10k stress.
 
 ## 23–25. Remaining / deferred / risks
 

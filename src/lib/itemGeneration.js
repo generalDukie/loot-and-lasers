@@ -8,7 +8,8 @@
  *   → ROUND → select stats by rarity → min floors → random remainder → integer repair
  *
  * Common–Epic: optional per-item 60/40 Favored vs Total pool when a player class
- * is provided. Legendary: always all five stats.
+ * is provided. Legendary: always all five stats, 10% floor each, and a hard
+ * class-relative off-stat cap of floor(TotalStatBudget × LEGENDARY_OFF_STAT_CAP_SHARE).
  */
 
 import {
@@ -26,6 +27,7 @@ import {
   GEAR_STAT_POOL_PARTIAL_A,
   GEAR_STAT_POOL_PARTIAL_B,
   GEAR_STAT_POOL_PARTIAL_B_BLOCKED_RARITIES,
+  LEGENDARY_OFF_STAT_CAP_SHARE,
   LEGENDARY_PARTIAL_A_OFF_SHARE_BPS,
   LEGENDARY_PARTIAL_B_OFF_SHARE_BPS,
   PREMIUM_GEAR_SLOTS,
@@ -53,6 +55,7 @@ export {
   GEAR_STAT_POOL_NORMAL,
   GEAR_STAT_POOL_PARTIAL_A,
   GEAR_STAT_POOL_PARTIAL_B,
+  LEGENDARY_OFF_STAT_CAP_SHARE,
   LEGENDARY_PARTIAL_A_OFF_SHARE_BPS,
   LEGENDARY_PARTIAL_B_OFF_SHARE_BPS,
 };
@@ -283,6 +286,17 @@ export function classGearStatRoles(className) {
   };
 }
 
+/**
+ * Visual item-stat order for a class: Primary, Vitality, Luck, Off A, Off B.
+ * Off A/B are the remaining Strength / Agility / Intellect keys in TOTAL_STAT_POOL
+ * order (skip the class primary). Presentation only — does not change generation.
+ */
+export function itemStatDisplayOrder(className) {
+  const roles = classGearStatRoles(className);
+  if (!roles) return Object.freeze([...ITEM_ATTR_KEYS]);
+  return Object.freeze([...roles.desirable, ...roles.offs]);
+}
+
 export function legendaryOffShareBpsForPool(statPool) {
   const pool = normalizeGearStatPool(statPool);
   if (pool === GEAR_STAT_POOL_DESIRABLE) return LEGENDARY_DESIRABLE_OFF_SHARE_BPS;
@@ -436,6 +450,66 @@ function repairBudgetSum(stats, keys, total, minEach, rng) {
   return stats;
 }
 
+function repairBudgetSumWithCaps(stats, keys, total, minEach, maxByKey, rng) {
+  const n = keys.length;
+  let sum = keys.reduce((a, k) => a + (stats[k] || 0), 0);
+  if (sum === total || n <= 0) return stats;
+  const delta = total - sum;
+  const order = shuffleInPlace([...keys], rng);
+  if (delta > 0) {
+    let left = delta;
+    let progressed = true;
+    while (left > 0 && progressed) {
+      progressed = false;
+      for (const k of order) {
+        if (left <= 0) break;
+        const cap = maxByKey[k] ?? total;
+        if (stats[k] >= cap) continue;
+        stats[k] += 1;
+        left -= 1;
+        progressed = true;
+      }
+    }
+  } else {
+    return repairBudgetSum(stats, keys, total, minEach, rng);
+  }
+  return stats;
+}
+
+function allocateRemainderWithCaps(keys, leftover, rng, maxExtraByKey) {
+  const extras = Object.fromEntries(keys.map((k) => [k, 0]));
+  if (leftover <= 0 || keys.length === 0) return extras;
+  const initial = distributeWeightedRemainder(keys.length, leftover, rng);
+  let spill = 0;
+  keys.forEach((k, i) => {
+    const cap = Math.max(0, maxExtraByKey[k] ?? leftover);
+    if (initial[i] > cap) {
+      extras[k] = cap;
+      spill += initial[i] - cap;
+    } else {
+      extras[k] = initial[i];
+    }
+  });
+  if (spill <= 0) return extras;
+  const receivers = keys.filter((k) => extras[k] < Math.max(0, maxExtraByKey[k] ?? leftover));
+  if (!receivers.length) return extras;
+  const room = Object.fromEntries(
+    receivers.map((k) => [k, Math.max(0, maxExtraByKey[k] ?? leftover) - extras[k]]),
+  );
+  const more = allocateRemainderWithCaps(receivers, spill, rng, room);
+  for (const k of receivers) extras[k] += more[k] || 0;
+  return extras;
+}
+
+/**
+ * Hard integer cap per class off-stat: floor(TotalStatBudget × 17.5%).
+ * Rounding and remainder repair must never exceed this value.
+ */
+export function legendaryOffStatIntegerCap(totalStatBudget) {
+  const total = Math.max(0, Math.round(Number(totalStatBudget) || 0));
+  return Math.floor(total * LEGENDARY_OFF_STAT_CAP_SHARE);
+}
+
 /**
  * Distribute TotalStatPool across attrs with rarity minimum floors, then
  * randomly allocate the remainder (allows heavily uneven rolls).
@@ -469,9 +543,40 @@ export function allocateStatBudget(attrs, budget, rng = Math.random, rarity = nu
 }
 
 /**
+ * Live Legendary allocator: all five stats, 10% floor, class off-stats capped
+ * at floor(T × LEGENDARY_OFF_STAT_CAP_SHARE). Remainder after floors and
+ * capped off-stat extras goes to Primary / Vitality / Luck. Exact sum.
+ */
+export function allocateLegendaryClassBudget(budget, rng, className) {
+  const roles = classGearStatRoles(className);
+  const keys = [...ITEM_ATTR_KEYS];
+  const total = Math.max(0, Math.round(Number(budget) || 0));
+  if (!roles || total <= 0) {
+    return allocateStatBudget(keys, total, rng, "legendary");
+  }
+  const minEach = minEachForShare(total, keys.length, getRarityMinStatShare("legendary"));
+  const offCap = Math.max(minEach, legendaryOffStatIntegerCap(total));
+  const maxByKey = {};
+  for (const key of keys) maxByKey[key] = total;
+  for (const key of roles.offs) maxByKey[key] = offCap;
+
+  const stats = {};
+  for (const key of keys) stats[key] = minEach;
+  const leftover = total - minEach * keys.length;
+  const maxExtraByKey = {};
+  for (const key of keys) {
+    maxExtraByKey[key] = Math.max(0, maxByKey[key] - minEach);
+  }
+  const extras = allocateRemainderWithCaps(keys, leftover, rng, maxExtraByKey);
+  for (const key of keys) stats[key] += extras[key] || 0;
+  return repairBudgetSumWithCaps(stats, keys, total, minEach, maxByKey, rng);
+}
+
+/**
  * Legendary directed pools: pin each off-stat to offShareBps of the piece
  * (Desirable uses the 10% floor as a cap), then dump leftover into desirable
- * with the same piece-budget floor + random remainder.
+ * with the same piece-budget floor + random remainder. Off-stats never exceed
+ * floor(T × LEGENDARY_OFF_STAT_CAP_SHARE).
  */
 export function allocateLegendaryDirectedBudget(budget, rng, className, offShareBps) {
   const roles = classGearStatRoles(className);
@@ -479,6 +584,7 @@ export function allocateLegendaryDirectedBudget(budget, rng, className, offShare
   const total = Math.max(0, Math.round(Number(budget) || 0));
   if (!roles || total <= 0) return {};
   const minEach = minEachForShare(total, keys.length, getRarityMinStatShare("legendary"));
+  const offCap = Math.max(minEach, legendaryOffStatIntegerCap(total));
   const minShareBps = LEGENDARY_DESIRABLE_OFF_SHARE_BPS;
   let offEach = minEach;
   if (offShareBps > minShareBps) {
@@ -490,7 +596,7 @@ export function allocateLegendaryDirectedBudget(budget, rng, className, offShare
   const maxOffEach = Math.floor(
     (total - minEach * roles.desirable.length) / roles.offs.length,
   );
-  offEach = Math.min(offEach, Math.max(minEach, maxOffEach));
+  offEach = Math.min(offEach, Math.max(minEach, maxOffEach), offCap);
 
   const stats = {};
   for (const key of roles.offs) stats[key] = offEach;
@@ -507,8 +613,11 @@ export function allocateLegendaryDirectedBudget(budget, rng, className, offShare
   return repairBudgetSum(stats, roles.desirable, leftover, minEach, rng);
 }
 
-/** @deprecated unified into allocateStatBudget(..., "legendary") */
-export function allocateLegendaryStatBudget(budget, rng = Math.random) {
+/** @deprecated use allocateLegendaryClassBudget when className is known */
+export function allocateLegendaryStatBudget(budget, rng = Math.random, className = null) {
+  if (classGearStatRoles(className)) {
+    return allocateLegendaryClassBudget(budget, rng, className);
+  }
   return allocateStatBudget([...ITEM_ATTR_KEYS], budget, rng, "legendary");
 }
 
@@ -539,9 +648,15 @@ export function rollItemStats({
   const variedBudget = applyGearStatBudgetVariance(preVarianceBudget, variance);
   const budget = Math.max(attrs.length, variedBudget);
   const offShareBps = rarity === "legendary" ? legendaryOffShareBpsForPool(pool) : null;
-  const stats = offShareBps == null
-    ? allocateStatBudget(attrs, budget, rng, rarity)
-    : allocateLegendaryDirectedBudget(budget, rng, className, offShareBps);
+  const legendaryRoles = rarity === "legendary" ? classGearStatRoles(className) : null;
+  let stats;
+  if (legendaryRoles && offShareBps != null) {
+    stats = allocateLegendaryDirectedBudget(budget, rng, className, offShareBps);
+  } else if (legendaryRoles) {
+    stats = allocateLegendaryClassBudget(budget, rng, className);
+  } else {
+    stats = allocateStatBudget(attrs, budget, rng, rarity);
+  }
   const sum = Object.values(stats).reduce((a, b) => a + (b || 0), 0);
   return {
     stats,

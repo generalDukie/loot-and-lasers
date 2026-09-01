@@ -39,7 +39,7 @@ GES is not a production mechanic and is not exported.
 
 | | |
 |---|---|
-| **Old / new** | `selectItemAttributes` + `allocateStatBudget` in `itemGeneration.js` |
+| **Old / new** | `selectItemAttributes` + `allocateStatBudget` / `allocateLegendaryClassBudget` in `itemGeneration.js` |
 | **Callers** | `rollItemStats` → `GenerateGearItem` (canonical generator) |
 | **Disposition** | Reused (Phase 0: already exact). Favored 60/40 Common–Epic; Legendary all five stats; exact sum |
 

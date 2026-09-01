@@ -40,6 +40,7 @@ import {
   LEGENDARY_LEAKAGE_PENALTY_SLOPE,
   LEGENDARY_MANDATORY_STAT_SHARE,
   LEGENDARY_OFF_STAT_CAP_SHARE,
+  LEGENDARY_OFF_STAT_CAP_SHARE_BPS,
   LEGENDARY_PARTIAL_B_OFF_SHARE_BPS,
   LEGENDARY_REQUIRED_STAT_COUNT,
   legendaryDesirability,
@@ -59,6 +60,8 @@ import {
   rawQualityScore,
   resolveNovaSurcharge,
   rollMarketGearItemLevel,
+  rollMarketGearSlot,
+  CLASS_PRIMARY_INDEX,
   scoreGearIntrinsicQuality,
 } from "../../src/lib/productionMath/index.js";
 
@@ -153,6 +156,7 @@ test("Legendary production minimum 10% and 17.5% off-stat cap constants unchange
   assert.equal(LEGENDARY_REQUIRED_STAT_COUNT, LEGENDARY_GEAR_STAT_COUNT);
   assert.equal(LEGENDARY_OFF_STAT_CAP_SHARE, 0.175);
   assert.equal(LEGENDARY_PARTIAL_B_OFF_SHARE_BPS, 1750);
+  assert.equal(LEGENDARY_PARTIAL_B_OFF_SHARE_BPS, LEGENDARY_OFF_STAT_CAP_SHARE_BPS);
 });
 
 test("RawQuality = 30×BQ + 50×Desirability + 20×Shape; uncapped", () => {
@@ -577,23 +581,26 @@ test("level-specific CDF band populations across production range", () => {
   const expected = [0.75, 0.075, 0.075, 0.05, 0.025, 0.025];
   const n = 2_000;
   const shareTolerance = 0.06;
+  const classNames = Object.keys(CLASS_PRIMARY_INDEX);
   resetIntrinsicQualityCdfCache();
   for (const L of levels) {
     for (const rarity of ["epic", "legendary"]) {
       const rng = mulberry32(L * 17 + (rarity === "epic" ? 3 : 5));
       const bandCounts = [0, 0, 0, 0, 0, 0];
       for (let i = 0; i < n; i++) {
+        const className = classNames[i % classNames.length];
         const itemLevel = rollMarketGearItemLevel(L, rng);
+        const slot = rollMarketGearSlot(rng);
         const rolled = rollItemStats({
-          itemLevel, type: "armor", rarity, className: "Technomancer", rng,
+          itemLevel, type: slot, rarity, className, rng,
         });
         const resolved = resolveOfferIntrinsicQuality({
           item: {
-            type: "armor", rarity, level_requirement: itemLevel,
+            type: slot, rarity, level_requirement: itemLevel,
             stats: rolled.stats, stat_budget: rolled.targetBudget,
             quality_reference_level: L,
           },
-          className: "Technomancer",
+          className,
         });
         bandCounts[resolved.band] += 1;
       }

@@ -68,7 +68,7 @@ Epic / Legendary only. Quality is **not** GES and **not** raw `stat_budget_varia
 
 **Epic Desirability** = `DesirableShare²` (P+V+Luck share of actual total). **Epic Shape** is branch-specific: full P/V/L uses P/V and Luck penalty tables (ideal Luck 17.5–22.5%); P+V+off prefers ~62.5/37.5 P/V; P+Luck+off and V+Luck+off use scaled 75/25 splits; one-desirable pieces use Primary/Vitality/Luck ceilings 0.60 / 0.50 / 0.35.
 
-**Legendary Desirability** = `clamp(1 − 6 × Leakage, 0, 1)` where Leakage is discretionary off-stat share above the mandatory 10% per off-stat. **Legendary Shape** uses P/V and Luck penalty tables (ideal Luck 15–20%). Off-stat leakage is not double-penalized in Shape. Generation is unchanged: five stats, 10% floor, 17.5% per-off-stat cap on directed Partial B.
+**Legendary Desirability** = `clamp(1 − 6 × Leakage, 0, 1)` where Leakage is discretionary off-stat share above the mandatory 10% per off-stat. **Legendary Shape** uses P/V and Luck penalty tables (ideal Luck 15–20%). Off-stat leakage is not double-penalized in Shape. Scoring math is unchanged. Legendary **generation** (Phase 6 cap correction): five stats, 10% floor, hard 17.5% cap per class off-stat (`floor(T × LEGENDARY_OFF_STAT_CAP_SHARE)`); remainder to Primary / Vitality / Luck. Applies to live Normal Legendary as well as directed pools. Existing persisted Gear/offers are not rewritten.
 
 The combined RawQuality is classified by **within-rarity** empirical CDF (Epic vs Epic, Legendary vs Legendary; **not** class-segmented) into six Nova bands. The reference population is **normal Black Market Gear at the offer's snapshotted generation level**: Market 35/35/20/10 ItemLevel offsets, Phase 2 ±10% variance, current slot/allocation. Cache key is `rarity + quality_reference_level` (lazy, deterministic, not class). Contraband uses that same rarity/level CDF. Snapshotted on the offer; existing offers are not rescored. New offers use `phase6-intrinsic-quality-v5`.
 
@@ -169,6 +169,7 @@ npm run audit:no-magic-numbers
 | Luck suitability peaked at one-third of desirable stats | SUPERSEDED — LuckShare vs total; full credit through 30%, linear decay to 60% |
 | BudgetQuality vs the item's own ItemLevel / clamp-to-1.0 | SUPERSEDED — denominator is snapshotted Market generation level; BQ may exceed 1.0 |
 | Legendary quality penalizes mandatory five-stat floors | SUPERSEDED — discretionary off-stat excess only |
+| 17.5% Legendary off-stat cap only on directed Partial B | SUPERSEDED — hard `floor(T × 0.175)` cap on every class off-stat for all Legendary generation |
 | Same-rarity + same-class CDF segmentation | SUPERSEDED — within-rarity CDF only |
 | Single L50 CDF for all Market generation levels | SUPERSEDED — lazy CDF per rarity + `quality_reference_level` |
 | Raw stat-budget variance as Nova percentile | REMOVED |

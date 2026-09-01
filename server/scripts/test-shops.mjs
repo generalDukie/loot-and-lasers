@@ -26,6 +26,7 @@ import {
   isStimOffer,
   isGearOffer,
   HAGGLE_SUCCESS_CHANCE,
+  HAGGLE_SUCCESS_CHANCE_NOVA,
   SHOP_VENDOR_GEAR,
   SHOP_VENDOR_SUPPLY,
 } from "../src/shared/shopService.js";
@@ -131,32 +132,32 @@ test("normalizeShopMeta clears stock on new window", () => {
   };
   const meta = normalizeShopMeta(ch, win, "2026-08-03");
   assert.equal(meta.window_idx, win.idx);
-  assert.equal(meta.shop_stock, undefined);
+  assert.equal(meta.shop_stock, null);
   assert.equal(meta.free_refresh_used, false);
   assert.deepEqual(meta.purchased, {});
 });
 
 test("shop gear rarity table (not mission)", () => {
   assert.deepEqual(SHOP_GEAR_RARITY_WEIGHTS, {
-    common: 0.6,
-    uncommon: 0.3,
-    rare: 0.08,
-    epic: 0.015,
-    legendary: 0.005,
+    common: 0.2,
+    uncommon: 0.35,
+    rare: 0.3,
+    epic: 0.125,
+    legendary: 0.025,
   });
   assert.deepEqual(HOT_DEAL_RARITY_WEIGHTS, {
-    uncommon: 0.35,
-    rare: 0.45,
-    epic: 0.15,
-    legendary: 0.05,
+    common: 0,
+    uncommon: 0,
+    rare: 0.65,
+    epic: 0.25,
+    legendary: 0.1,
   });
-  // High level: all rarities unlockable
   const counts = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 };
   for (let n = 0; n < 10000; n++) {
     counts[rollShopGearRarity(50, () => (n + 0.5) / 10000)] += 1;
   }
-  assert.ok(counts.common > 5000);
-  assert.ok(counts.legendary > 0 && counts.legendary < 200);
+  assert.ok(counts.common > 1500 && counts.common < 2500);
+  assert.ok(counts.legendary > 150 && counts.legendary < 400);
 });
 
 test("hot deal rarity never common", () => {
@@ -208,8 +209,10 @@ test("serialize presentation includes window + haggle rules", () => {
   const p = serializeShopPresentation(meta);
   assert.ok(p.shop_window.endsAt > p.shop_window.startsAt);
   assert.equal(p.refresh.cost_nova, SHOP_REFRESH_COST);
-  assert.equal(p.refresh.free_available, false);
+  assert.equal(p.refresh.free_available, true);
   assert.equal(p.haggle.success_chance, HAGGLE_SUCCESS_CHANCE);
+  assert.equal(p.haggle.success_chance_nova, HAGGLE_SUCCESS_CHANCE_NOVA);
+  assert.equal(p.vendors.gear.hot_deal.haggle_eligible, false);
   assert.ok(p.vendors.gear);
   assert.ok(p.vendors.supply);
   const offer = p.vendors.gear.items[0] || p.vendors.supply.items[0];
@@ -240,7 +243,7 @@ test("sold-out flags surface in serialization", () => {
 test("haggle success discounts; fail does not invent stock", () => {
   const win = rollHaggle(() => 0.1); // success path first roll < 0.4
   assert.equal(win.ok, true);
-  assert.ok(win.mult >= 0.8 && win.mult <= 0.85);
+  assert.ok(win.mult >= 0.8 && win.mult <= 0.9);
   const lose = rollHaggle(() => 0.9);
   assert.equal(lose.ok, false);
 });

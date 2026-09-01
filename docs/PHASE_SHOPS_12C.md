@@ -1,5 +1,7 @@
 # Phase / Restoration 12C — Shop Final Integration, Regression Audit & Cleanup
 
+> **HISTORICAL.** Live Market authority is Phase 6: `docs/PHASE6_BLACK_MARKET.md`.
+
 Production-readiness audit of Restorations **12A** (architecture/generation) and
 **12B** (purchasing). No new gameplay systems were added.
 

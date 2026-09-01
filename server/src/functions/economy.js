@@ -3,7 +3,7 @@
  */
 import { entities } from "../entities.js";
 import { db, withTransactionAsync } from "../db.js";
-import { randomItemForClass } from "../shared/rewards.js";
+import { randomItem } from "../shared/rewards.js";
 import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
 import { mergeDiscoveredGear, rollCombatCollectibleDiscoveries } from "../shared/discovery.js";
@@ -52,23 +52,13 @@ import {
   skipCostFor,
   skipCostHalfUnits,
   SHOP_REFRESH_COST,
-  HOT_DEAL_REFRESH_COUNT,
   getShopWindow,
   getShopGameDayKey,
-  todayET,
-  rollHaggle,
   normalizeShopMeta,
   shopGearSeed,
-  shopConsSeed,
-  generateSimpleGearStock,
-  generateSimpleGearSlot,
-  generateSimpleConsStock,
-  generateSimpleShopStock,
-  generateSimpleHotDeal,
   prepareConsumableBuffs,
   getActiveStims,
   MAX_ACTIVE_STAT_TYPES,
-  stimShopPurchasePrice,
   rollItemRarity,
   missionGearMissStreak,
   missionGearDropChance,
@@ -149,7 +139,17 @@ import {
   remainingTutorialAttributePurchases,
   TUTORIAL_ATTRIBUTE_LOCK_ERROR,
 } from "../shared/tutorialService.js";
-import { serializeShopPresentation, assertShopPurchaseClientSafe, shopMetaHasStock } from "../shared/shopService.js";
+import { serializeShopPresentation, assertShopPurchaseClientSafe, shopMetaHasStock, shopMetaHasContraband } from "../shared/shopService.js";
+import {
+  applyOfferHaggle,
+  generateContrabandOffer,
+  generateNormalMarketOffers,
+  mulberry32 as marketMulberry32,
+  nextContrabandFreeRefreshState,
+  shopGenerationId,
+  withContrabandStock,
+  withNormalStock,
+} from "../../../src/lib/blackMarket.js";
 import {
   prepareMissionCombatForCharacter,
   readMissionCombat,
@@ -253,6 +253,14 @@ function grantOrCompensate(ch, itemPayload, _patch) {
 function stripShopFields(slot) {
   const {
     _slotId, cost, nova_cost, _hotDeal, _bundle, bundle_items, _cost,
+    _offerKind, shop_item_id, haggle_eligible, haggle_attempted, haggle_success,
+    haggle_discount_pct, haggle_base_cost, price_variance, base_market_value,
+    intrinsic_quality_percentile, generation_id, refresh_id, rules_version,
+    budget_quality, distribution_quality, intrinsic_quality, intrinsic_quality_band,
+    intrinsic_quality_band_id, desirable_stat_share, off_stat_avoidance,
+    pv_balance, luck_suitability,
+    quality_reference_level, quality_reference_budget, discretionary_off_stat_avoidance,
+    contraband, contraband_period_id,
     ...itemData
   } = slot;
   return itemData;
@@ -1911,64 +1919,101 @@ export async function SkipMission(user, body) {
 
 // ── EnsureShop ───────────────────────────────────────────────
 /**
- * Rebuild normal shop slots. Hot Deal is preserved across automatic 12h rotations;
- * only regenerate it when missing or when refreshHotDeal is true (2 PM day roll / every 10 manual refreshes).
+ * Rebuild the 8 normal Market slots. Contraband Loot is independent:
+ * automatic 12h Market windows do not reroll it; daily 19:00 UTC and the
+ * 10-free-manual-refresh trigger do.
  */
-function buildShopStock(ch, meta, win, { refreshHotDeal = false } = {}) {
-  const level = ch.level || 1;
-  const gearSeed = shopGearSeed(meta, win);
-  const day = meta.hot_day || getShopGameDayKey();
-  const forClass = randomItemForClass(ch.class, { origin: "market" });
-  const shop_stock = generateSimpleShopStock(gearSeed, level, forClass);
-  let hot_deal = meta.hot_deal;
-  if (refreshHotDeal || !hot_deal) {
-    hot_deal = generateSimpleHotDeal(day, level, forClass);
+function marketCreateGear(ch) {
+  return ({ rarity, itemLevel, slot, origin, manufacturer, rng }) =>
+    randomItem(rarity, itemLevel, slot, rng, ch.class, {
+      origin,
+      manufacturer,
+      shipmentEligible: false,
+    });
+}
+
+function rngFromSeed(seed) {
+  return marketMulberry32(Math.floor(Number(seed) || 0));
+}
+
+function rebuildNormalOffers(ch, meta, win) {
+  const seq = Math.max(0, Math.floor(Number(meta.market_generation_seq) || 0));
+  const seed = shopGearSeed({ ...meta, market_generation_seq: seq }, win);
+  const built = generateNormalMarketOffers({
+    playerLevel: ch.level || 1,
+    className: ch.class,
+    rng: rngFromSeed(seed),
+    createGear: marketCreateGear(ch),
+    generationId: shopGenerationId(win.idx, seq, 0),
+    windowIdx: win.idx,
+  });
+  return withNormalStock(meta, built.offers, win);
+}
+
+function rebuildContrabandOffer(ch, meta, win, periodId) {
+  const seq = Math.max(0, Math.floor(Number(meta.market_generation_seq) || 0));
+  const seed = shopGearSeed({ ...meta, market_generation_seq: seq }, win) + seq + 1;
+  const offer = generateContrabandOffer({
+    playerLevel: ch.level || 1,
+    className: ch.class,
+    rng: rngFromSeed(seed),
+    createGear: marketCreateGear(ch),
+    generationId: shopGenerationId(win.idx, seq, 1),
+    windowIdx: win.idx,
+    periodId,
+  });
+  return withContrabandStock(meta, offer, periodId);
+}
+
+function buildShopStock(ch, meta, win, { refreshContraband = false } = {}) {
+  const period = meta.contraband_period_id || meta.hot_day || getShopGameDayKey();
+  let next = rebuildNormalOffers(ch, meta, win);
+  if (refreshContraband || !next.hot_deal) {
+    next = rebuildContrabandOffer(ch, next, win, period);
   }
-  return {
-    ...meta,
-    shop_stock,
-    // Legacy mirrors: full unified stock in gear_stock; stims also listed in cons_stock.
-    gear_stock: shop_stock,
-    cons_stock: shop_stock.filter((s) => s.type === "consumable" || s._offerKind === "stim"),
-    hot_deal,
-  };
+  return next;
+}
+
+function patchStockSlot(meta, slotId, nextSlot, isHot) {
+  const nextMeta = { ...meta };
+  if (isHot) {
+    nextMeta.hot_deal = nextSlot;
+    nextMeta.contraband_offer = nextSlot;
+    return nextMeta;
+  }
+  const patch = (arr) => (
+    Array.isArray(arr) ? arr.map((s) => (s && s._slotId === slotId ? nextSlot : s)) : arr
+  );
+  nextMeta.shop_stock = patch(meta.shop_stock);
+  nextMeta.gear_stock = patch(meta.gear_stock);
+  if (Array.isArray(meta.cons_stock)) nextMeta.cons_stock = patch(meta.cons_stock);
+  return nextMeta;
 }
 
 export async function EnsureShop(user) {
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
-      const win = getShopWindow();
-      const day = getShopGameDayKey();
-      const dayRolled = ch.shop_meta?.hot_day !== day;
+      const nowMs = clock.nowMs();
+      const win = getShopWindow(nowMs);
+      const day = getShopGameDayKey(nowMs);
+      const prev = ch.shop_meta || {};
+      const windowRolled = prev.window_idx !== win.idx;
+      const dayRolled = (prev.contraband_period_id || prev.hot_day) !== day;
       let meta = normalizeShopMeta(ch, win, day);
-      const hasStock =
-        (Array.isArray(meta.shop_stock) && meta.shop_stock.length > 0) ||
-        (Array.isArray(meta.gear_stock) && meta.gear_stock.length > 0);
-      const needsStock =
-        !hasStock ||
-        !meta.hot_deal ||
-        ch.shop_meta?.window_idx !== win.idx ||
-        dayRolled;
+      const needsNormal = windowRolled || !shopMetaHasStock(meta);
+      const needsContraband = dayRolled || !shopMetaHasContraband(meta);
 
-      if (needsStock) {
-        // Auto 12h rotation must NOT advance Hot Deal; 2 PM day roll must.
-        meta = buildShopStock(ch, meta, win, {
-          refreshHotDeal: dayRolled || !meta.hot_deal,
-        });
-        if (dayRolled) {
-          meta = {
-            ...meta,
-            hot_purchased: false,
-            hot_yanked: false,
-            hot_manual_refresh_count: 0,
-          };
-        }
+      if (needsNormal) {
+        meta = rebuildNormalOffers(ch, meta, win);
+      }
+      if (needsContraband) {
+        meta = rebuildContrabandOffer(ch, meta, win, day);
       }
 
       const patch = { shop_meta: meta };
       const character = entities.Character.update(ch.id, patch);
-      const presentation = serializeShopPresentation(meta, win);
+      const presentation = serializeShopPresentation(meta, win, nowMs);
       return { success: true, shop_meta: meta, patch, character, ...presentation };
     });
     return { status: 200, body: result };
@@ -1980,47 +2025,17 @@ export async function EnsureShop(user) {
 
 function replaceArmoryListing(meta, win, ch, slotId, isHot, outcome = "purchased") {
   const nextMeta = { ...meta };
-  const day = meta.hot_day || getShopGameDayKey();
   if (isHot) {
-    // Sold out until next Hot Deal refresh — do not regenerate immediately.
-    nextMeta.hot_day = day;
     if (outcome === "yanked") nextMeta.hot_yanked = true;
     else nextMeta.hot_purchased = true;
     return nextMeta;
   }
-
-  // Mark sold out / yanked — do not refill the slot until a full shop refresh.
   nextMeta.purchased = { ...(meta.purchased || {}) };
   nextMeta.yanked = { ...(meta.yanked || {}) };
   if (outcome === "yanked") nextMeta.yanked[slotId] = true;
   else nextMeta.purchased[slotId] = true;
   void win;
   void ch;
-  return nextMeta;
-}
-
-/** Persist a successful haggle discount onto the listing without purchasing. */
-function applyHaggleDiscount(meta, slotId, isHot, pct, newCost, baseCost) {
-  const nextMeta = { ...meta };
-  const patchSlot = (slot) => {
-    if (!slot || typeof slot !== "object") return slot;
-    return {
-      ...slot,
-      cost: newCost,
-      haggle_base_cost: Math.max(1, Math.round(Number(slot.haggle_base_cost || baseCost || slot.cost) || 1)),
-      haggle_discount_pct: pct,
-    };
-  };
-  if (isHot) {
-    nextMeta.hot_deal = patchSlot(meta.hot_deal);
-    return nextMeta;
-  }
-  const patchStock = (arr) => {
-    if (!Array.isArray(arr)) return arr;
-    return arr.map((s) => (s && s._slotId === slotId ? patchSlot(s) : s));
-  };
-  if (Array.isArray(meta.shop_stock)) nextMeta.shop_stock = patchStock(meta.shop_stock);
-  if (Array.isArray(meta.gear_stock)) nextMeta.gear_stock = patchStock(meta.gear_stock);
   return nextMeta;
 }
 
@@ -2082,9 +2097,9 @@ export async function BuyShopGear(user, body) {
         ? meta.shop_stock
         : meta.gear_stock || [];
       if (isHot) {
-        if (meta.hot_purchased || meta.hot_yanked) httpErr(409, "Hot deal already gone", "SHOP_SOLD_OUT");
-        slot = meta.hot_deal;
-        if (!slot || slot._slotId !== slotId) httpErr(404, "Hot deal slot not found");
+        if (meta.hot_purchased || meta.hot_yanked) httpErr(409, "Contraband Loot already gone", "SHOP_SOLD_OUT");
+        slot = meta.hot_deal || meta.contraband_offer;
+        if (!slot || slot._slotId !== slotId) httpErr(404, "Contraband slot not found");
       } else {
         if (meta.purchased?.[slotId] || meta.yanked?.[slotId]) {
           httpErr(409, "Already gone", "SHOP_SOLD_OUT");
@@ -2094,67 +2109,46 @@ export async function BuyShopGear(user, body) {
         if (slot.type === "consumable") httpErr(400, "Use BuyShopConsumable for stims");
       }
 
+      if (slot.generation_id && body?.generation_id && String(body.generation_id) !== String(slot.generation_id)) {
+        httpErr(409, "Shop refresh generation mismatch — reload shop", "SHOP_GENERATION_MISMATCH");
+      }
+
       let stardustCost = Number(slot.cost || 0);
       let haggleNote = null;
       if (haggle) {
+        if (isHot || slot._hotDeal || slot.contraband || slot.origin === "contraband") {
+          httpErr(400, "Cannot haggle Contraband", "SHOP_HAGGLE_INELIGIBLE");
+        }
         if (slot._bundle) httpErr(400, "Can't haggle bundles");
-        if (Number(slot.haggle_discount_pct) > 0) {
-          httpErr(400, "Already haggled this listing", "SHOP_ALREADY_HAGGLED");
+        const rolled = applyOfferHaggle(slot, Math.random);
+        if (!rolled.ok) {
+          httpErr(400, rolled.code === "SHOP_ALREADY_HAGGLED"
+            ? "Already haggled this listing"
+            : "Cannot haggle this listing", rolled.code || "SHOP_HAGGLE_INELIGIBLE");
         }
-        const outcome = rollHaggle();
-        haggleNote = outcome.label;
-        if (!outcome.ok) {
-          const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot, "yanked");
-          const patch = { shop_meta: nextMeta };
-          const character = entities.Character.update(ch.id, patch);
-          const receipt = {
-            request_id: requestId || null,
-            transaction_id: requestId || newCorrelationId(),
-            slot_id: slotId,
-            is_hot: isHot,
-            haggle: true,
-            haggle_failed: true,
-            haggle_success: false,
-            haggle_note: haggleNote,
-            cost: 0,
-            nova_cost: 0,
-            items: [],
-            pending_loot: [],
-            refresh_id: nextMeta.window_idx,
-            vendor: "gear",
-          };
-          if (requestId) saveWalletOperation(user.id, "buy_shop_gear", requestId, receipt);
-          return {
-            success: true,
-            ...receipt,
-            patch,
-            character,
-            ...serializeShopPresentation(nextMeta, win),
-          };
+        const nextSlot = rolled.offer;
+        let nextMeta = patchStockSlot(meta, slotId, nextSlot, isHot);
+        if (rolled.yanked || !rolled.success) {
+          nextMeta = replaceArmoryListing(nextMeta, win, ch, slotId, isHot, "yanked");
         }
-        const pct = Math.max(
-          1,
-          Math.round(
-            Number(outcome.pct)
-              || Math.round((1 - outcome.mult) * PERCENT_SCALE),
-          ),
-        );
-        const discounted = Math.max(1, Math.round(stardustCost * outcome.mult));
-        const nextMeta = applyHaggleDiscount(meta, slotId, isHot, pct, discounted, stardustCost);
         const patch = { shop_meta: nextMeta };
         const character = entities.Character.update(ch.id, patch);
+        haggleNote = rolled.success
+          ? `They blinked — ${rolled.discountPercent}% off`
+          : "They yanked the listing";
         const receipt = {
           request_id: requestId || null,
           transaction_id: requestId || newCorrelationId(),
           slot_id: slotId,
           is_hot: isHot,
           haggle: true,
-          haggle_failed: false,
-          haggle_success: true,
+          haggle_failed: !rolled.success,
+          haggle_success: !!rolled.success,
+          haggle_yanked: !!(rolled.yanked || !rolled.success),
           haggle_note: haggleNote,
-          haggle_discount_pct: pct,
-          cost: discounted,
-          nova_cost: 0,
+          haggle_discount_pct: rolled.discountPercent || 0,
+          cost: nextSlot.cost,
+          nova_cost: Number(nextSlot.nova_cost || 0),
           items: [],
           pending_loot: [],
           refresh_id: nextMeta.window_idx,
@@ -2170,13 +2164,12 @@ export async function BuyShopGear(user, body) {
         };
       }
       const novaCost = Number(slot.nova_cost || 0);
-      if ((ch.stardust || 0) < stardustCost) httpErr(400, "Not enough stardust");
-      if (novaCost && !hasNova(ch, novaCost)) httpErr(400, "Not enough Nova Crystals");
-
       const payloads = slot._bundle === "scrap_crate" && Array.isArray(slot.bundle_items)
         ? slot.bundle_items
         : [stripShopFields(slot)];
       assertBackpackHasSpace(ch, payloads.length);
+      if ((ch.stardust || 0) < stardustCost) httpErr(400, "Not enough stardust");
+      if (novaCost && !hasNova(ch, novaCost)) httpErr(400, "Not enough Nova Crystals");
 
       const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot, "purchased");
       const beforeStardust = ch.stardust || 0;
@@ -2262,6 +2255,9 @@ export async function BuyShopConsumable(user, body) {
 
   const slotId = body?.slot_id;
   const slotIndex = body?.slot_index;
+  if (body?.haggle) {
+    return { status: 400, body: { error: "Cannot haggle stims", code: "SHOP_HAGGLE_INELIGIBLE" } };
+  }
   if (slotId == null && slotIndex == null) {
     return { status: 400, body: { error: "Missing slot_id or slot_index" } };
   }
@@ -2326,10 +2322,10 @@ export async function BuyShopConsumable(user, body) {
         httpErr(400, "Stim Trios are no longer available");
       }
 
-      // Persisted listing cost only — never trust client; fallback is server formula.
-      const cost = Number(slot.cost ?? slot._cost ?? stimShopPurchasePrice(slot.rarity, ch.level || 1));
-      if ((ch.stardust || 0) < cost) httpErr(400, "Not enough stardust");
+      const cost = Number(slot.cost ?? slot._cost);
+      if (!Number.isFinite(cost) || cost < 0) httpErr(400, "Invalid stim listing");
       assertBackpackHasSpace(ch);
+      if ((ch.stardust || 0) < cost) httpErr(400, "Not enough stardust");
 
       const beforeStardust = ch.stardust || 0;
       const patch = { stardust: beforeStardust - cost };
@@ -2398,53 +2394,84 @@ export async function BuyShopConsumable(user, body) {
 
 // ── RefreshShop ──────────────────────────────────────────────
 export async function RefreshShop(user, body) {
-  const which = body?.which || "gear";
+  const which = body?.which || "all";
   if (which !== "gear" && which !== "consumables" && which !== "all") {
     return { status: 400, body: { error: "which must be 'gear', 'consumables', or 'all'" } };
   }
 
+  let requestId = "";
+  try {
+    requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey || "");
+  } catch (err) {
+    if (err.status) return { status: err.status, body: { error: err.message } };
+    throw err;
+  }
+
+  const useFree = !!body?.use_free;
+  const opType = useFree ? "refresh_shop_free" : "refresh_shop_paid";
+
   try {
     const result = await withTransactionAsync(async () => {
       const ch = requireMyChar(user);
-      const win = getShopWindow();
-      let meta = normalizeShopMeta(ch, win, getShopGameDayKey());
+      const nowMs = clock.nowMs();
+      const win = getShopWindow(nowMs);
+      const day = getShopGameDayKey(nowMs);
 
-      // Manual restock always costs Nova — unlimited refreshes per window.
-      // body.use_free is ignored (kept on the wire for older clients).
-      if (!hasNova(ch, SHOP_REFRESH_COST)) {
-        httpErr(400, "Not enough Nova Crystals");
-      }
-      const novaCost = SHOP_REFRESH_COST;
-      meta = { ...meta, free_refresh_used: true };
-
-      let hotCount = Math.max(0, Math.floor(meta.hot_manual_refresh_count || 0)) + 1;
-      let hotDeal = meta.hot_deal;
-      let hotPurchased = meta.hot_purchased;
-      let hotYanked = meta.hot_yanked;
-      if (hotCount >= HOT_DEAL_REFRESH_COUNT) {
-        hotCount = 0;
-        hotPurchased = false;
-        hotYanked = false;
-        hotDeal = generateSimpleHotDeal(
-          meta.hot_day || getShopGameDayKey(),
-          ch.level || 1,
-          randomItemForClass(ch.class, { origin: "market" })
-        );
+      if (requestId) {
+        const replay = getWalletOperation(user.id, opType, requestId);
+        if (replay) {
+          const live = entities.Character.get(ch.id) || ch;
+          return {
+            success: true,
+            ...replay,
+            patch: {},
+            character: live,
+            idempotent_replay: true,
+            ...serializeShopPresentation(live.shop_meta || {}, win, nowMs),
+          };
+        }
       }
 
-      meta = {
-        ...meta,
-        gear_refresh: (meta.gear_refresh || 0) + 1,
-        cons_refresh: (meta.cons_refresh || 0) + 1,
-        manual_refresh_count: (meta.manual_refresh_count || 0) + 1,
-        hot_manual_refresh_count: hotCount,
-        hot_purchased: hotPurchased,
-        hot_yanked: hotYanked,
-        hot_deal: hotDeal,
-        purchased: {},
-        yanked: {},
-      };
-      meta = buildShopStock(ch, meta, win, { refreshHotDeal: false });
+      let meta = normalizeShopMeta(ch, win, day);
+      if (!shopMetaHasStock(meta)) {
+        meta = rebuildNormalOffers(ch, meta, win);
+      }
+      if (!shopMetaHasContraband(meta)) {
+        meta = rebuildContrabandOffer(ch, meta, win, day);
+      }
+
+      let novaCost = 0;
+      if (useFree) {
+        if (meta.free_refresh_used) {
+          httpErr(400, "Free restock already used this window", "SHOP_FREE_REFRESH_USED");
+        }
+        meta = {
+          ...meta,
+          free_refresh_used: true,
+          market_generation_seq: Math.max(0, Math.floor(Number(meta.market_generation_seq) || 0)) + 1,
+        };
+        meta = rebuildNormalOffers(ch, meta, win);
+        const next = nextContrabandFreeRefreshState(meta.contraband_free_refresh_count);
+        meta = {
+          ...meta,
+          contraband_free_refresh_count: next.count,
+          hot_manual_refresh_count: next.count,
+        };
+        if (next.triggered) {
+          meta = rebuildContrabandOffer(ch, meta, win, day);
+        }
+      } else {
+        if (!hasNova(ch, SHOP_REFRESH_COST)) {
+          httpErr(400, "Not enough Nova Crystals");
+        }
+        novaCost = SHOP_REFRESH_COST;
+        meta = {
+          ...meta,
+          paid_refresh_count: Math.max(0, Math.floor(Number(meta.paid_refresh_count) || 0)) + 1,
+          market_generation_seq: Math.max(0, Math.floor(Number(meta.market_generation_seq) || 0)) + 1,
+        };
+        meta = rebuildNormalOffers(ch, meta, win);
+      }
 
       let character = ch;
       let patch = { shop_meta: meta };
@@ -2462,21 +2489,27 @@ export async function RefreshShop(user, body) {
       } else {
         character = entities.Character.update(ch.id, patch);
       }
-      return {
+      const receipt = {
         success: true,
         which: "all",
         shop_meta: meta,
-        patch,
-        character,
-        used_free: novaCost === 0,
+        used_free: useFree,
         nova_debited: novaCost,
         balances: getBalances(character),
-        ...serializeShopPresentation(meta, win),
+        request_id: requestId || null,
+        transaction_id: requestId || newCorrelationId(),
+        ...serializeShopPresentation(meta, win, nowMs),
+      };
+      if (requestId) saveWalletOperation(user.id, opType, requestId, receipt);
+      return {
+        ...receipt,
+        patch,
+        character,
       };
     });
     return { status: 200, body: result };
   } catch (err) {
-    if (err.status) return { status: err.status, body: { error: err.message } };
+    if (err.status) return { status: err.status, body: { error: err.message, code: err.code } };
     throw err;
   }
 }

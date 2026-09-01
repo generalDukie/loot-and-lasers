@@ -30,7 +30,34 @@ import {
   miningStardustResolved,
   stimShopPriceResolved,
   stimSellValueResolved,
+  MARKET_NORMAL_SLOT_COUNT,
+  MARKET_GEAR_OFFER_CHANCE,
+  MARKET_STIM_OFFER_CHANCE,
+  MARKET_MIN_STIM_OFFERS,
+  MARKET_PAID_REFRESH_NOVA,
+  MARKET_RARITY_WEIGHTS,
+  CONTRABAND_RARITY_WEIGHTS,
+  CONTRABAND_FREE_REFRESH_TRIGGER,
+  MARKET_HAGGLE_SUCCESS_CHANCE,
+  MARKET_HAGGLE_DISCOUNT_MIN_PERCENT,
+  MARKET_HAGGLE_DISCOUNT_MAX_PERCENT,
+  blackMarketPrice,
 } from "./productionMath.js";
+import {
+  generateContrabandOffer,
+  generateNormalMarketOffers,
+  marketWindowAt,
+  mulberry32 as marketMulberry32,
+  normalizeMarketMeta,
+  shopGenerationId,
+  contrabandPeriodId,
+} from "../../../src/lib/blackMarket.js";
+import {
+  resolveMarketHaggle,
+  rollMarketGearItemLevel,
+  rollMarketGearRarity,
+  rollContrabandRarity,
+} from "../../../src/lib/productionMath/market.js";
 import {
   CONSUMABLE_TIERS as STIM_CONSUMABLE_TIERS,
   STIM_ATTRIBUTES,
@@ -610,16 +637,17 @@ export function skipCostHalfUnits(mission, nowMs = clock.nowMs()) {
   return Math.round(skipCostFor(mission, nowMs) * NOVA_HALF_UNIT_SCALE);
 }
 
-// ── Shop ─────────────────────────────────────────────────────
-/** Finalized paid Gear Shop refresh. */
-export const SHOP_REFRESH_COST = 20;
-export const SHOP_SLOT_COUNT = 8;
-export const SHOP_GEAR_CHANCE = 0.8;
-export const SHOP_STIM_CHANCE = 0.2;
-export const SHOP_MIN_STIMS = 1;
+// ── Shop (Phase 6 Black Market + Contraband Loot) ────────────
+/** Paid normal-Market refresh. */
+export const SHOP_REFRESH_COST = MARKET_PAID_REFRESH_NOVA;
+export const SHOP_SLOT_COUNT = MARKET_NORMAL_SLOT_COUNT;
+export const SHOP_GEAR_CHANCE = MARKET_GEAR_OFFER_CHANCE;
+export const SHOP_STIM_CHANCE = MARKET_STIM_OFFER_CHANCE;
+export const SHOP_MIN_STIMS = MARKET_MIN_STIM_OFFERS;
 export const GEAR_SHOP_PRICE_VARIANCE_MIN = 0.8;
 export const GEAR_SHOP_PRICE_VARIANCE_MAX = 1.2;
-export const HOT_DEAL_REFRESH_COUNT = 10;
+export const HOT_DEAL_REFRESH_COUNT = CONTRABAND_FREE_REFRESH_TRIGGER;
+/** @deprecated HISTORICAL vendor→markup architecture. Live price is SPF × rarity × slot × variance. */
 export const SHOP_RARITY_MARKUP = Object.freeze({
   common: 2.0,
   uncommon: 2.5,
@@ -627,140 +655,67 @@ export const SHOP_RARITY_MARKUP = Object.freeze({
   epic: 5.0,
   legendary: 7.0,
 });
-export const SHOP_GEAR_RARITY_WEIGHTS = Object.freeze({
-  common: 0.6,
-  uncommon: 0.3,
-  rare: 0.08,
-  epic: 0.015,
-  legendary: 0.005,
-});
-export const HOT_DEAL_RARITY_WEIGHTS = Object.freeze({
-  uncommon: 0.35,
-  rare: 0.45,
-  epic: 0.15,
-  legendary: 0.05,
-});
+export const SHOP_GEAR_RARITY_WEIGHTS = MARKET_RARITY_WEIGHTS;
+export const HOT_DEAL_RARITY_WEIGHTS = CONTRABAND_RARITY_WEIGHTS;
 /** @deprecated use STIM_SHOP_MULT — historical 2/4/10 Fuel-equiv shop prices. */
 export const STIM_SHOP_FUEL_EQUIV = STIM_SHOP_MULT;
 /** @deprecated use STIM_SELL_MULT — historical 1/2/5 Fuel-equiv sell prices. */
 export const STIM_SELL_FUEL_EQUIV = STIM_SELL_MULT;
 
-/** 12-hour shop windows aligned to 2:00 AM / 2:00 PM America/New_York. */
+/** 12-hour Market windows at 19:00 UTC and 07:00 UTC. No DST. */
 export function getShopWindow(nowMs = clock.nowMs()) {
-  const parts = getZonedParts(new Date(nowMs), DEFAULT_GAME_ZONE);
-  let startHour;
-  let anchorMs = nowMs;
-  if (parts.hour >= SHOP_AFTERNOON_START_HOUR) {
-    startHour = SHOP_AFTERNOON_START_HOUR;
-  } else if (parts.hour >= SHOP_MORNING_START_HOUR) {
-    startHour = SHOP_MORNING_START_HOUR;
-  } else {
-    startHour = SHOP_AFTERNOON_START_HOUR;
-    anchorMs = nowMs - SHOP_WINDOW_DURATION_HOURS * MILLISECONDS_PER_HOUR;
-  }
-  const anchor = getZonedParts(new Date(anchorMs), DEFAULT_GAME_ZONE);
-  const startUtc = zonedLocalToUtc(
-    { year: anchor.year, month: anchor.month, day: anchor.day, hour: startHour, minute: 0, second: 0 },
-    DEFAULT_GAME_ZONE
-  ).utc.getTime();
-  const shopWindowDurationMs = SHOP_WINDOW_DURATION_HOURS * MILLISECONDS_PER_HOUR;
-  const endsAt = startUtc + shopWindowDurationMs;
-  const idx = Math.floor(startUtc / shopWindowDurationMs);
+  const win = marketWindowAt(nowMs);
   return {
-    idx,
-    startsAt: startUtc,
-    endsAt,
-    secondsLeft: Math.max(0, Math.floor((endsAt - nowMs) / MILLISECONDS_PER_SECOND)),
-    rotationPeriodId: `shop-rotation:global:${idx}`,
+    idx: win.idx,
+    startsAt: win.startsAt,
+    endsAt: win.endsAt,
+    secondsLeft: win.secondsLeft,
+    startHour: win.startHour,
+    rotationPeriodId: win.rotationPeriodId,
   };
 }
 
-/** Game-day key for Hot Deal (resets at 2:00 PM ET). */
+/** Contraband daily key — 19:00 UTC. Historical name kept for callers. */
 export function getShopGameDayKey(nowMs = clock.nowMs()) {
-  const parts = getZonedParts(new Date(nowMs), DEFAULT_GAME_ZONE);
-  let y = parts.year;
-  let m = parts.month;
-  let d = parts.day;
-  if (parts.hour < SHOP_AFTERNOON_START_HOUR) {
-    const back = getZonedParts(
-      new Date(nowMs - SHOP_AFTERNOON_START_HOUR * MILLISECONDS_PER_HOUR),
-      DEFAULT_GAME_ZONE,
-    );
-    y = back.year;
-    m = back.month;
-    d = back.day;
-  }
-  return `${y}-${String(m).padStart(DATE_PART_PAD_WIDTH, "0")}-${String(d).padStart(DATE_PART_PAD_WIDTH, "0")}`;
+  return contrabandPeriodId(nowMs);
 }
 
-/** Haggle: ~40% apply 15–20% off to listing; otherwise listing is yanked (no purchase). */
+/** Haggle: 40% (no Nova) / 30% (Nova > 0); 10–20% off Stardust and Nova. Failure yanks. */
 export function rollHaggle(rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
-  if (r() < HAGGLE_SUCCESS_CHANCE) {
-    const pct = HAGGLE_MIN_DISCOUNT_PERCENT
-      + Math.floor(r() * HAGGLE_DISCOUNT_OUTCOME_COUNT);
-    const mult = 1 - pct / PERCENT_SCALE;
-    return { ok: true, mult, key: "deal", pct, label: `They blinked — ${pct}% off` };
+  const outcome = resolveMarketHaggle(r);
+  if (outcome.success) {
+    return {
+      ok: true,
+      mult: 1 - outcome.discountPercent / PERCENT_SCALE,
+      key: "deal",
+      pct: outcome.discountPercent,
+      label: `They blinked — ${outcome.discountPercent}% off`,
+    };
   }
   return {
     ok: false,
-    mult: 0,
+    mult: 1,
     key: "refused",
-    label: "Deal soured — they yanked the listing",
+    pct: 0,
+    label: "They wouldn't budge",
   };
 }
 
 export function normalizeShopMeta(character, win = getShopWindow(), day = getShopGameDayKey()) {
-  const prev = character?.shop_meta || {};
-  const hot_day = day;
-  const hot_purchased = prev.hot_day === day ? !!prev.hot_purchased : false;
-  const hot_yanked = prev.hot_day === day ? !!prev.hot_yanked : false;
-  const hot_manual_refresh_count =
-    prev.hot_day === day ? Math.max(0, Math.floor(prev.hot_manual_refresh_count || 0)) : 0;
-  if (!prev.window_idx || prev.window_idx !== win.idx) {
-    return {
-      window_idx: win.idx,
-      gear_refresh: 0,
-      cons_refresh: 0,
-      free_refresh_used: false,
-      manual_refresh_count: 0,
-      purchased: {},
-      yanked: {},
-      hot_day,
-      hot_purchased,
-      hot_yanked,
-      hot_manual_refresh_count,
-    };
-  }
-  return {
-    window_idx: win.idx,
-    gear_refresh: Math.max(0, Math.floor(prev.gear_refresh || 0)),
-    cons_refresh: Math.max(0, Math.floor(prev.cons_refresh || 0)),
-    free_refresh_used: !!prev.free_refresh_used,
-    manual_refresh_count: Math.max(0, Math.floor(prev.manual_refresh_count || 0)),
-    purchased: prev.purchased && typeof prev.purchased === "object" ? { ...prev.purchased } : {},
-    yanked: prev.yanked && typeof prev.yanked === "object" ? { ...prev.yanked } : {},
-    hot_day,
-    hot_purchased,
-    hot_yanked,
-    hot_manual_refresh_count,
-    gear_stock: prev.gear_stock,
-    cons_stock: prev.cons_stock,
-    shop_stock: prev.shop_stock,
-    hot_deal: prev.hot_deal,
-  };
+  return normalizeMarketMeta(character?.shop_meta || {}, win, day);
 }
 
 export function shopGearSeed(meta, win = getShopWindow()) {
   return (win?.idx || 0)
-    + (meta?.gear_refresh || 0)
+    + (meta?.market_generation_seq || meta?.gear_refresh || 0)
+    + (meta?.paid_refresh_count || 0)
     + (meta?.manual_refresh_count || 0) * SHOP_GEAR_MANUAL_REFRESH_SEED_STEP;
 }
 
 export function shopConsSeed(meta, win = getShopWindow()) {
-  return (win?.idx || 0)
-    + (meta?.cons_refresh || 0)
-    + (meta?.manual_refresh_count || 0) * SHOP_CONSUMABLE_MANUAL_REFRESH_SEED_STEP;
+  return shopGearSeed(meta, win)
+    + (meta?.cons_refresh || 0) * SHOP_CONSUMABLE_MANUAL_REFRESH_SEED_STEP;
 }
 
 function mulberry32(a) {
@@ -824,39 +779,29 @@ const SHOP_LEVEL_WEIGHTS = Object.freeze([
 ]);
 
 export function rollShopItemLevel(playerLevel, rng = Math.random) {
-  const L = Math.max(1, Math.floor(Number(playerLevel) || 1));
-  const maxGap = shopItemLevelMaxGap(L);
-  const valid = SHOP_LEVEL_WEIGHTS.filter(([gap]) => gap <= maxGap && L - gap >= 1);
-  const total = valid.reduce((s, [, w]) => s + w, 0) || 1;
-  let roll = (typeof rng === "function" ? rng() : Math.random()) * total;
-  for (const [gap, w] of valid) {
-    roll -= w;
-    if (roll <= 0) return Math.max(1, L - gap);
-  }
-  return L;
+  const r = typeof rng === "function" ? rng : Math.random;
+  return rollMarketGearItemLevel(playerLevel, r);
 }
 
-const HOT_LEVEL_WEIGHTS = Object.freeze([[0, 40], [1, 30], [2, 20], [3, 10]]);
-
-export function rollHotDealItemLevel(playerLevel, rng = Math.random) {
-  const L = Math.max(1, Math.floor(Number(playerLevel) || 1));
-  const valid = HOT_LEVEL_WEIGHTS.filter(([gap]) => L - gap >= 1);
-  const total = valid.reduce((s, [, w]) => s + w, 0) || 1;
-  let roll = (typeof rng === "function" ? rng() : Math.random()) * total;
-  for (const [gap, w] of valid) {
-    roll -= w;
-    if (roll <= 0) return Math.max(1, L - gap);
-  }
-  return L;
+/** Contraband is 100% current player level. */
+export function rollHotDealItemLevel(playerLevel, _rng = Math.random) {
+  void _rng;
+  return Math.max(1, Math.floor(Number(playerLevel) || 1));
 }
 
+/** @deprecated HISTORICAL vendor×markup. Live Market uses blackMarketPrice. */
 export function gearShopPurchasePrice(item, rng = Math.random) {
-  const sale = GearSaleValue(item);
-  const markup = SHOP_RARITY_MARKUP[item?.rarity] ?? SHOP_RARITY_MARKUP.rare;
+  const rarity = String(item?.rarity || "rare").toLowerCase();
+  const slot = item?.type;
+  const level = Math.max(1, Math.floor(Number(item?.level_requirement ?? item?.level) || 1));
   const r = typeof rng === "function" ? rng : Math.random;
   const variance =
     GEAR_SHOP_PRICE_VARIANCE_MIN +
     r() * (GEAR_SHOP_PRICE_VARIANCE_MAX - GEAR_SHOP_PRICE_VARIANCE_MIN);
+  const priced = blackMarketPrice(level, slot, rarity, variance);
+  if (priced > 0) return priced;
+  const sale = GearSaleValue(item);
+  const markup = SHOP_RARITY_MARKUP[item?.rarity] ?? SHOP_RARITY_MARKUP.rare;
   return Math.max(1, Math.round(sale * markup * variance));
 }
 
@@ -883,63 +828,57 @@ export function priceStimOffer(def, playerLevel = 1) {
   };
 }
 
-export function rollShopGearRarity(playerLevel, rng = Math.random) {
+export function rollShopGearRarity(_playerLevel, rng = Math.random) {
+  void _playerLevel;
   const r = typeof rng === "function" ? rng : Math.random;
-  return clampRarityByLevel(pickWeighted(SHOP_GEAR_RARITY_WEIGHTS, r), playerLevel);
+  return rollMarketGearRarity(r);
 }
 
-export function rollHotDealRarity(playerLevel, rng = Math.random) {
+export function rollHotDealRarity(_playerLevel, rng = Math.random) {
+  void _playerLevel;
   const r = typeof rng === "function" ? rng : Math.random;
-  return clampRarityByLevel(pickWeighted(HOT_DEAL_RARITY_WEIGHTS, r), playerLevel);
+  return rollContrabandRarity(r);
+}
+
+function createGearFromRandomItemFn(randomItemFn) {
+  return ({ rarity, itemLevel, slot, origin, manufacturer, rng }) => {
+    const item = randomItemFn(rarity, itemLevel, slot, rng);
+    return {
+      ...item,
+      origin,
+      manufacturer,
+      shipment_eligible: false,
+    };
+  };
 }
 
 /** Single normal-shop gear offer. */
 export function generateSimpleGearSlot(playerLevel, randomItemFn, slotId, rng = Math.random) {
   const r = typeof rng === "function" ? rng : Math.random;
-  const type = SHOP_GEAR_TYPES[Math.floor(r() * SHOP_GEAR_TYPES.length)];
-  const rarity = rollShopGearRarity(playerLevel, r);
-  const itemLevel = rollShopItemLevel(playerLevel, r);
-  const item = randomItemFn(rarity, itemLevel, type);
-  const cost = gearShopPurchasePrice(item, r);
-  const nova_cost = computeNovaCrystalCost(item);
-  return {
-    ...item,
-    level_requirement: itemLevel,
-    _slotId: slotId,
-    _offerKind: "gear",
-    cost,
-    nova_cost,
-  };
-}
-
-function generateShopStimSlot(playerLevel, slotId, rng) {
-  const def = randomConsumable(rng);
-  const priced = priceStimOffer(def, playerLevel);
-  return {
-    ...priced,
-    _slotId: slotId,
-    _offerKind: "stim",
-  };
+  const built = generateNormalMarketOffers({
+    playerLevel,
+    rng: r,
+    createGear: createGearFromRandomItemFn(randomItemFn),
+    generationId: slotId || "slot",
+  });
+  const gear = built.offers.find((o) => o._offerKind === "gear") || built.offers[0];
+  return { ...gear, _slotId: slotId || gear._slotId };
 }
 
 /**
- * Unified normal shop: 8 independent 80/20 gear/stim rolls, then ensure ≥1 Stim.
- * Also mirrors into gear_stock / cons_stock for legacy UI paths.
+ * Unified normal shop: 8 independent 90/10 gear/stim rolls, then ensure ≥1 Stim.
  */
 export function generateSimpleShopStock(seed, playerLevel, randomItemFn) {
-  const rng = mulberry32(seed * SHOP_STOCK_SEED_MULTIPLIER + SHOP_STOCK_SEED_OFFSET);
-  const slots = [];
-  for (let i = 0; i < SHOP_SLOT_COUNT; i++) {
-    const isStim = rng() < SHOP_STIM_CHANCE;
-    if (isStim) slots.push(generateShopStimSlot(playerLevel, `${seed}-${i}`, rng));
-    else slots.push(generateSimpleGearSlot(playerLevel, randomItemFn, `${seed}-${i}`, rng));
-  }
-  const stimCount = slots.filter((s) => s._offerKind === "stim" || s.type === "consumable").length;
-  if (stimCount < SHOP_MIN_STIMS) {
-    const idx = Math.floor(rng() * slots.length);
-    slots[idx] = generateShopStimSlot(playerLevel, `${seed}-${idx}-minstim`, rng);
-  }
-  return slots;
+  const rng = marketMulberry32(
+    (Number(seed) || 0) * SHOP_STOCK_SEED_MULTIPLIER + SHOP_STOCK_SEED_OFFSET,
+  );
+  const built = generateNormalMarketOffers({
+    playerLevel,
+    rng,
+    createGear: createGearFromRandomItemFn(randomItemFn),
+    generationId: shopGenerationId(seed, 0, 0),
+  });
+  return built.offers;
 }
 
 /** @deprecated use generateSimpleShopStock — kept for callers expecting gear-only arrays. */
@@ -1055,29 +994,27 @@ export function generateSimpleConsStock(seed, playerLevel = 1) {
   );
   const slots = [];
   for (let i = 0; i < LEGACY_CONSUMABLE_STOCK_COUNT; i++) {
-    slots.push(generateShopStimSlot(playerLevel, `cons-${seed}-${i}`, rng));
+    const def = randomConsumable(rng);
+    const priced = priceStimOffer(def, playerLevel);
+    slots.push({
+      ...priced,
+      _slotId: `cons-${seed}-${i}`,
+      _offerKind: "stim",
+    });
   }
   return slots;
 }
 
 export function generateSimpleHotDeal(dayKey, playerLevel, randomItemFn) {
   const dayNum = String(dayKey || getShopGameDayKey()).split("-").reduce((a, p) => a + Number(p || 0), 0);
-  const rng = mulberry32(dayNum * HOT_DEAL_SEED_MULTIPLIER + HOT_DEAL_SEED_OFFSET);
-  const type = SHOP_GEAR_TYPES[Math.floor(rng() * SHOP_GEAR_TYPES.length)];
-  const rarity = rollHotDealRarity(playerLevel, rng);
-  const itemLevel = rollHotDealItemLevel(playerLevel, rng);
-  const item = randomItemFn(rarity, itemLevel, type);
-  const cost = gearShopPurchasePrice(item, rng);
-  const nova_cost = computeNovaCrystalCost(item);
-  return {
-    ...item,
-    level_requirement: itemLevel,
-    _slotId: `hot-${dayKey}`,
-    _hotDeal: true,
-    _offerKind: "gear",
-    cost,
-    nova_cost,
-  };
+  const rng = marketMulberry32(dayNum * HOT_DEAL_SEED_MULTIPLIER + HOT_DEAL_SEED_OFFSET);
+  return generateContrabandOffer({
+    playerLevel,
+    rng,
+    createGear: createGearFromRandomItemFn(randomItemFn),
+    generationId: `contraband-${dayKey || "day"}`,
+    periodId: dayKey || getShopGameDayKey(),
+  });
 }
 
 // ── Consumable / Stim buffs ──────────────────────────────────

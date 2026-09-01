@@ -2,7 +2,7 @@
 
 > **Status:** Godot no longer uses Nakama `shop_*` RPCs for live stalls.
 > Authoritative Black Market is Node `EnsureShop` / `RefreshShop` / `BuyShop*` —
-> see **`docs/PHASE_SHOPS_12A.md`**.
+> see **`docs/PHASE6_BLACK_MARKET.md`**. Restoration 12A is historical.
 
 Server-authoritative Black Market (`shop_id = general`) for offer load, buy, sell, and free refresh.
 

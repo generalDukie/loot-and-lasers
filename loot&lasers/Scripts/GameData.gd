@@ -495,7 +495,7 @@ static func build_create_payload(
 	}
 
 
-## Black Market — display countdown only. Server EnsureShop owns stock + 12h ET windows.
+## Black Market — display countdown only. Server EnsureShop owns stock + UTC 12h windows.
 ## Prefer ShopManager.shop_window (from Node) when available; this helper is a coarse UTC fallback.
 const SHOP_WINDOW_MS := 12 * 60 * 60 * 1000
 const SHOP_REFRESH_COST := 20

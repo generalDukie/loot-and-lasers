@@ -2,9 +2,12 @@
  * Client game-clock helpers.
  * Display / countdown only — never authoritative for claims.
  * Daily quotas use America/New_York (DST-aware), matching the server.
+ * Market / Contraband countdowns use UTC 19:00 / 07:00 — no DST.
  *
  * Prefer /api/time/now for serverTimeUtc sync when available.
  */
+
+import { contrabandPeriodId, contrabandWindowAt, marketWindowAt } from "./productionMath/market.js";
 
 export const DEFAULT_GAME_ZONE = "America/New_York";
 
@@ -118,82 +121,17 @@ function etLocalToUtcMs({ year, month, day, hour, minute = 0 }) {
   return hi;
 }
 
-/** 12-hour shop windows aligned to 2:00 AM / 2:00 PM America/New_York (mirrors server). */
+/** 12-hour Market windows at 19:00 UTC and 07:00 UTC. Display only. */
 export function getShopWindow(nowMs = estimateServerNowMs()) {
-  const parts = etParts(nowMs);
-  let startHour;
-  let anchorMs = nowMs;
-  if (parts.hour >= SHOP_WINDOW_AFTERNOON_START_HOUR) {
-    startHour = SHOP_WINDOW_AFTERNOON_START_HOUR;
-  } else if (parts.hour >= SHOP_WINDOW_MORNING_START_HOUR) {
-    startHour = SHOP_WINDOW_MORNING_START_HOUR;
-  } else {
-    startHour = SHOP_WINDOW_AFTERNOON_START_HOUR;
-    anchorMs = nowMs - SHOP_WINDOW_DURATION_HOURS * MILLISECONDS_PER_HOUR;
-  }
-  const anchor = etParts(anchorMs);
-  const startsAt = etLocalToUtcMs({
-    year: anchor.year,
-    month: anchor.month,
-    day: anchor.day,
-    hour: startHour,
-    minute: 0,
-  });
-  const shopWindowDurationMs = SHOP_WINDOW_DURATION_HOURS * MILLISECONDS_PER_HOUR;
-  const endsAt = startsAt + shopWindowDurationMs;
-  const idx = Math.floor(startsAt / shopWindowDurationMs);
-  return {
-    idx,
-    startsAt,
-    endsAt,
-    secondsLeft: Math.max(0, Math.floor((endsAt - nowMs) / MILLISECONDS_PER_SECOND)),
-  };
+  return marketWindowAt(nowMs);
 }
 
-/** Game-day key for Hot Deal (resets at 2:00 PM ET). */
+/** Contraband daily key — 19:00 UTC. */
 export function getShopGameDayKey(nowMs = estimateServerNowMs()) {
-  const parts = etParts(nowMs);
-  let y = parts.year;
-  let m = parts.month;
-  let d = parts.day;
-  if (parts.hour < SHOP_GAME_DAY_RESET_HOUR) {
-    const back = etParts(nowMs - SHOP_GAME_DAY_RESET_HOUR * MILLISECONDS_PER_HOUR);
-    y = back.year;
-    m = back.month;
-    d = back.day;
-  }
-  return `${y}-${String(m).padStart(DATE_PART_PAD_WIDTH, "0")}-${String(d).padStart(DATE_PART_PAD_WIDTH, "0")}`;
+  return contrabandPeriodId(nowMs);
 }
 
-/** Ms until next 2:00 PM ET Hot Deal / game-day reset. */
+/** Ms until next Contraband daily refresh (19:00 UTC). */
 export function msUntilNextShopGameDay(fromMs = estimateServerNowMs()) {
-  const parts = etParts(fromMs);
-  let target;
-  if (parts.hour < SHOP_GAME_DAY_RESET_HOUR) {
-    target = etLocalToUtcMs({
-      year: parts.year,
-      month: parts.month,
-      day: parts.day,
-      hour: SHOP_GAME_DAY_RESET_HOUR,
-      minute: 0,
-    });
-  } else {
-    // Tomorrow 2 PM ET — walk forward until calendar day advances.
-    let probe = fromMs + (HOURS_PER_DAY - parts.hour) * MILLISECONDS_PER_HOUR;
-    for (let i = 0; i < NEXT_DAY_PROBE_LIMIT_HOURS; i++) {
-      const p = etParts(probe);
-      if (p.year !== parts.year || p.month !== parts.month || p.day !== parts.day) {
-        target = etLocalToUtcMs({
-          year: p.year,
-          month: p.month,
-          day: p.day,
-          hour: SHOP_GAME_DAY_RESET_HOUR,
-          minute: 0,
-        });
-        break;
-      }
-      probe += MILLISECONDS_PER_HOUR;
-    }
-  }
-  return Math.max(0, (target || fromMs) - fromMs);
+  return contrabandWindowAt(fromMs).secondsLeft * MILLISECONDS_PER_SECOND;
 }

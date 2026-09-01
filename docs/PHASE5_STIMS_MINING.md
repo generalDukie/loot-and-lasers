@@ -1,7 +1,7 @@
 # Phase 5 — Stims + Mining
 
 Server-authoritative Stim activation/selling and Mining session settlement.
-Phase 4 Missions remain locked. Phase 6 Black Market is **not** started.
+Phase 4 Missions remain locked. Phase 6 consumes `stimShopPriceResolved` only; Stim effects and Mining remain locked.
 
 ## Stim
 
@@ -20,7 +20,7 @@ Authoritative path: `src/lib/stimActivation.js` → `productionMath.nextStimStat
 - Max 3 concurrent attributes (`STIM_MAX_ACTIVE_EFFECTS`); a fourth different attribute is rejected without consume.
 - `expires_at` is the server remaining-time authority; offline/reconnect time counts.
 - Sell: `rround(SPF(item.level_requirement || seller.level) × 0.75/1.50/3.25)`.
-- Shop price primitive (not Market): `rround(SPF × 1.50/3.00/6.50)`.
+- Shop price primitive (Phase 6 Market consumes this): `rround(SPF × 1.50/3.00/6.50)`.
 
 Mission Stim drop chance/tier thresholds are unchanged (Phase 4).
 

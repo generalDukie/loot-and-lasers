@@ -257,19 +257,27 @@ Mission item-level offsets weights `[.10,.15,.20,.20,.20,.15]` → `max(1, snapL
 
 ## PM-MARKET
 
-8 slots; 90% Gear / 10% Stim; if all Gear convert one random to Stim. **D**.
+**A** live via `src/lib/blackMarket.js` + `productionMath/market.js`. Phase 6 doc: `docs/PHASE6_BLACK_MARKET.md`.
 
-Normal rarity 20/35/30/12.5/2.5. Level 35/35/20/10 of L, L-1, L-2, L-3 never above player; `max(1,L-off)`. **D**.
+8 slots; 90% Gear / 10% Stim; if all Gear convert one random slot to Stim. Duplicate Gear slots legal.
 
-Stim band: L<20 Uncommon, L<50 Rare, else Epic. **D/E**.
+Normal rarity 20/35/30/12.5/2.5. Level 35/35/20/10 of L, L−1, L−2, L−3; never above player; `max(1, L−off)`.
 
-Stim shop 1.5/3.0/6.5 × SPF; sell 0.75/1.5/3.25 × SPF. T18 unrounded product; `*Resolved` helpers rround for integer wallets.
+**Contraband Loot:** one Gear-only offer; 65/25/10 Rare/Epic/Legendary; 100% current player level. Independent Sold Out / refresh from the 8 stalls.
 
-Price: `rround(SPF(il)*rarMult*slotPrem*priceVariance)` variance explicit 0.80/1.00/1.20.
+Stim shop **tier** (Test 18 bands, not Mission 40/40/20): L≤19 Uncommon, L≤49 Rare, else Epic. Economic level = player level at generation. Shop price = Phase 5 `stimShopPriceResolved` (1.50/3.00/6.50 × SPF, no ±20% variance). Sell remains 0.75/1.50/3.25 × SPF.
 
-Resale: `rround(pre-variance base * 0.60/0.60/0.40/0.35/0.30)`.
+Price: `rround(SPF(il) × rarMult × slotPrem × priceVariance)` with variance Uniform(0.80, 1.20). Rarity multipliers 2.80/4.25/7.00/12.00/24.50. Slot premium Weapon/Ship Module 1.20.
 
-Nova surcharge: six-band tables exact. **D**.
+Resale: `rround(pre-variance base × 0.60/0.60/0.40/0.35/0.30)` — independent of purchase variance / Haggle / Nova.
+
+Nova surcharge: Intrinsic Quality `0.20 × BudgetQuality + 0.80 × DistributionQuality`. **BudgetQuality** = actual generated budget / **neutral same-rarity/same-slot pool at the snapshotted Market generation level** (not the item's ItemLevel; not clamped to 1.0). Epic DQ 60/20/20 desirable share / P/V / Luck. Legendary DQ 60/25/15 **discretionary off-stat avoidance** / P/V / Luck (mandatory 10%/stat is not a penalty). Luck: 0 if absent; full credit through 30% of total; linear decay to 60%; 0 at ≥60%. Within-**rarity** percentile (not class-segmented, not shared Epic+Legendary cutoff) against a **level-specific normal Market** CDF (35/35/20/10 ItemLevel vs the offer's `quality_reference_level`; lazy cache `rarity+level`) → six-band ladders (`NOVA_SURCHARGE_TABLE`); Epic/Legendary only. Contraband uses the same rarity/level CDF. Epic 15–25% pool `[10,25,25]`. Not GES. Not raw variance-as-percentile. Not one-third Luck peak. Not a single L50 CDF for all levels.
+
+Haggle: **normal Market Gear only** (not Stims, not Contraband). One attempt. Success 40% with no snapshotted Nova / 30% if Nova > 0. One Uniform 10–20% discount applied to **both** Stardust and Nova; Nova quantized with `quantizeNova`. Floor `price > vendor`. Failure yanks the slot until the next normal Market refresh.
+
+Refresh: Market auto 19:00 and 07:00 UTC; one free manual per 12h window; paid 20 Nova. Contraband daily 19:00 UTC. Counter +1 only on successful free manual; every 10 triggers a Contraband refresh. Counter persists across 07:00/19:00.
+
+**Do not restore:** 80/20 type split; 50/25/15/7/3 through L−4; vendor×markup buy prices; Stim shop 2/4/10×; Hot Deal player-facing name; paid/auto incrementing the Contraband counter; 12h counter reset; ET Market clocks.
 
 ---
 
@@ -277,7 +285,7 @@ Nova surcharge: six-band tables exact. **D**.
 
 Uncommon +5% 6h/18h; Rare +10% 12h/36h; Epic +20% 24h/72h. Same-tier stacks immediately to cap; a further dose is allowed only when remaining ≤ 2.5 × baseHours (15h/30h/60h), then remaining + base clamp to cap. Early-at-cap rejects without consume. Higher replaces with fresh base; lower rejects without consume. Max 3 concurrent attributes. Lazy expiry vs absolute `expires_at`. **A** live via `src/lib/stimActivation.js` + `nextStimState`.
 
-Sell: `rround(SPF(economicLevel) × 0.75/1.50/3.25)` — item `level_requirement` else seller level. Shop purchase primitive (Phase 6 Market not built): `rround(SPF × 1.50/3.00/6.50)`.
+Sell: `rround(SPF(economicLevel) × 0.75/1.50/3.25)` — item `level_requirement` else seller level. Shop purchase primitive (Phase 6 Market consumes this; effects unchanged): `rround(SPF × 1.50/3.00/6.50)`.
 
 ---
 
@@ -311,7 +319,7 @@ Certified T18 daily-loop order: snapshot `arenaL=self.L`; grant XP; **then** Sta
 
 ## PM-CLOCKS / FUEL-PRODUCT
 
-Reset 19:00 UTC; Market 19:00 and 07:00 UTC; Contraband 19:00 UTC; no DST. **E**.
+Reset 19:00 UTC; Market 19:00 and 07:00 UTC; Contraband 19:00 UTC; no DST. Market/Contraband clocks **A** live via `marketWindowAt` / `contrabandWindowAt`. Other fuel-product rows remain **E**.
 
 Free Fuel 100/day; paid 20 Fuel / 20 Nova; max 10 paid/day. **E**. Not wired.
 

@@ -59,7 +59,11 @@ async function testAsync(name, fn) {
   }
 }
 
-console.log("\nShop stress / integration (Restoration 12C)\n");
+function clearUnequippedBag() {
+  for (const it of entities.Item.filter({ character_id: ch.id })) {
+    if (!it.is_equipped) entities.Item.delete(it.id);
+  }
+}
 
 test("authority map lists one owner per responsibility", () => {
   assert.equal(Object.keys(SHOP_AUTHORITY_MAP).length, 10);
@@ -217,6 +221,9 @@ await testAsync("100,000 purchase settlement loops (unique + replay)", async () 
         !live.shop_meta.yanked?.[s._slotId]
     );
     if (!gear) continue;
+    // Phase 6: backpack cap is enforced before debit. Drain the bag so unique
+    // buys can continue past 10/10 without pending-loot overflow.
+    clearUnequippedBag();
     const res = await BuyShopGear(user, {
       slot_id: gear._slotId,
       request_id: `stress-unique-${i}`,
@@ -239,6 +246,7 @@ await testAsync("concurrent same-slot purchases settle once", async () => {
   // Single SQLite connection cannot nest BEGIN from Promise.all; simulate the race
   // as back-to-back requests (production Node still serializes via IMMEDIATE + sold-out).
   await RefreshShop(user, { which: "all", use_free: false });
+  clearUnequippedBag();
   const live = entities.Character.get(ch.id);
   const gear = (live.shop_meta.shop_stock || []).find((s) => s.type !== "consumable");
   assert.ok(gear);
@@ -293,7 +301,7 @@ await testAsync("window normalize drops old stock without client help", async ()
     win,
     "2099-01-01"
   );
-  assert.equal(meta.shop_stock, undefined);
+  assert.equal(meta.shop_stock, null);
   assert.deepEqual(meta.purchased, {});
 });
 

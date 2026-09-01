@@ -43,7 +43,7 @@ import {
   GearSaleValue,
   MiningStardust,
 } from "../src/shared/stardustEconomy.js";
-import { missionXpReward, stardustPerFuel, roundHalfUp, STIM_SHOP_MULT, STIM_SELL_MULT } from "../../src/lib/productionMath/index.js";
+import { missionXpReward, stardustPerFuel, roundHalfUp, STIM_SHOP_MULT, STIM_SELL_MULT, blackMarketPrice } from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -120,7 +120,7 @@ test("Mining unchanged at 3%", () => {
   assert.equal(MiningStardust(100, 60), Math.round(StardustPerFuel(100) * 0.03 * 60));
 });
 
-test("Shop 8 slots 80/20 with min 1 stim", () => {
+test("Shop 8 slots with min 1 stim", () => {
   assert.equal(SHOP_SLOT_COUNT, 8);
   assert.equal(SHOP_MIN_STIMS, 1);
   const fakeItem = (rarity, level, type) => ({
@@ -138,26 +138,19 @@ test("Shop 8 slots 80/20 with min 1 stim", () => {
   }
 });
 
-test("Shop item level never above player; early gaps", () => {
-  assert.equal(shopItemLevelMaxGap(1), 0);
-  assert.equal(shopItemLevelMaxGap(5), 0);
-  assert.equal(shopItemLevelMaxGap(10), 1);
-  assert.equal(shopItemLevelMaxGap(20), 3);
-  assert.equal(shopItemLevelMaxGap(34), 10);
+test("Shop item level never above player; Phase 6 L through L-3", () => {
   for (let i = 0; i < 100; i++) {
-    const L = rollShopItemLevel(25, seqRng([(i * 0.017) % 1]));
-    assert.ok(L >= 1 && L <= 25);
+    const L = rollShopItemLevel(25, () => (i * 0.017) % 1);
+    assert.ok(L >= 22 && L <= 25);
   }
+  assert.equal(rollShopItemLevel(1, () => 0.99), 1);
 });
 
-test("Gear shop price markup × variance; stim shop 1.5/3.0/6.5 × SPF sell 0.75/1.5/3.25", () => {
-  assert.equal(SHOP_RARITY_MARKUP.common, 2);
-  assert.equal(SHOP_RARITY_MARKUP.legendary, 7);
+test("Gear shop price is SPF × rarity × slot × variance; stim shop 1.5/3.0/6.5 × SPF", () => {
   const item = { type: "armor", rarity: "rare", level_requirement: 100 };
-  const sale = GearSaleValue(item);
   const price = gearShopPurchasePrice(item, () => 0.5);
   const midVar = 0.8 + 0.5 * 0.4;
-  assert.equal(price, Math.round(sale * 3.5 * midVar));
+  assert.equal(price, blackMarketPrice(100, "armor", "rare", midVar));
 
   assert.equal(stimShopPurchasePrice("uncommon", 100), Math.max(1, roundHalfUp(stardustPerFuel(100) * STIM_SHOP_MULT.uncommon)));
   assert.equal(stimShopPurchasePrice("rare", 100), Math.max(1, roundHalfUp(stardustPerFuel(100) * STIM_SHOP_MULT.rare)));
@@ -169,7 +162,7 @@ test("Gear shop price markup × variance; stim shop 1.5/3.0/6.5 × SPF sell 0.75
   assert.equal(stim.sell_value, stimShopSellValue(stim.rarity, 50));
 });
 
-test("Hot Deal gear-only rarity and HOT_DEAL_REFRESH_COUNT=10", () => {
+test("Hot Deal / Contraband gear-only rarity and trigger=10", () => {
   assert.equal(HOT_DEAL_REFRESH_COUNT, 10);
   const fakeItem = (rarity, level, type) => ({
     name: "x",
@@ -177,11 +170,12 @@ test("Hot Deal gear-only rarity and HOT_DEAL_REFRESH_COUNT=10", () => {
     rarity,
     level_requirement: level,
     stats: {},
+    stat_budget_variance: 1,
   });
   const hot = generateSimpleHotDeal("2026-08-02", 100, fakeItem);
   assert.equal(hot._hotDeal, true);
-  assert.ok(["uncommon", "rare", "epic", "legendary"].includes(hot.rarity));
-  assert.ok(hot.level_requirement <= 100);
+  assert.ok(["rare", "epic", "legendary"].includes(hot.rarity));
+  assert.equal(hot.level_requirement, 100);
   assert.ok(hot.cost > 0);
 });
 
@@ -193,7 +187,7 @@ test("Shop window helpers return finite 12h period", () => {
   assert.equal(win.endsAt - win.startsAt, 12 * 60 * 60 * 1000);
 });
 
-test("normalizeShopMeta free refresh resets on window; hot counter on day", () => {
+test("normalizeShopMeta free refresh resets on window; Contraband counter persists", () => {
   const winB = { idx: 101 };
   const day = "2026-08-02";
   const next = normalizeShopMeta(
@@ -203,6 +197,7 @@ test("normalizeShopMeta free refresh resets on window; hot counter on day", () =
         free_refresh_used: true,
         hot_day: day,
         hot_manual_refresh_count: 7,
+        contraband_free_refresh_count: 7,
         hot_purchased: true,
         purchased: { a: true },
       },
@@ -212,7 +207,7 @@ test("normalizeShopMeta free refresh resets on window; hot counter on day", () =
   );
   assert.equal(next.free_refresh_used, false);
   assert.deepEqual(next.purchased, {});
-  assert.equal(next.hot_manual_refresh_count, 7);
+  assert.equal(next.contraband_free_refresh_count, 7);
   assert.equal(next.hot_purchased, true);
 
   const dayRoll = normalizeShopMeta(
@@ -222,13 +217,14 @@ test("normalizeShopMeta free refresh resets on window; hot counter on day", () =
         free_refresh_used: true,
         hot_day: "2026-08-01",
         hot_manual_refresh_count: 7,
+        contraband_free_refresh_count: 7,
         hot_purchased: true,
       },
     },
     winB,
     day
   );
-  assert.equal(dayRoll.hot_manual_refresh_count, 0);
+  assert.equal(dayRoll.contraband_free_refresh_count, 7);
   assert.equal(dayRoll.hot_purchased, false);
   assert.equal(dayRoll.free_refresh_used, true);
 });
@@ -236,8 +232,7 @@ test("normalizeShopMeta free refresh resets on window; hot counter on day", () =
 test("Hot Deal item level never above player; L1 only L1", () => {
   for (let i = 0; i < 40; i++) {
     assert.equal(rollHotDealItemLevel(1, () => (i % 10) / 10), 1);
-    const L = rollHotDealItemLevel(50, () => (i * 0.037) % 1);
-    assert.ok(L >= 47 && L <= 50);
+    assert.equal(rollHotDealItemLevel(50, () => (i * 0.037) % 1), 50);
   }
 });
 
@@ -252,11 +247,11 @@ test("Excess XP carries through level-ups; scale once", () => {
   assert.ok(patch.experience < expForLevel(patch.level));
 });
 
-test("Vendor sale unchanged vs shop purchase markup", () => {
+test("Vendor sale is pre-variance resale; purchase uses Market formula", () => {
   const item = { type: "weapon", rarity: "epic", level_requirement: 50 };
   const sale = GearSaleValue(item);
-  const buy = gearShopPurchasePrice(item, () => 0); // min variance 0.8
-  assert.equal(buy, Math.round(sale * 5.0 * 0.8));
+  const buy = gearShopPurchasePrice(item, () => 0);
+  assert.equal(buy, blackMarketPrice(50, "weapon", "epic", 0.8));
   assert.ok(buy > sale);
 });
 

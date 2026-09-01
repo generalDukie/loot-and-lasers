@@ -1,5 +1,7 @@
 # Phase / Restoration 12A — Shop Architecture, Generation, Pricing, Refresh, Hot Deals & Haggling
 
+> **HISTORICAL.** Live Black Market / Contraband Loot authority is Phase 6: `docs/PHASE6_BLACK_MARKET.md`. Do not restore 80/20, ET clocks, Hot Deal player-facing copy, or yank-on-haggle-fail from this document.
+
 Architecture: Nakama owns auth/sessions. **Node owns all shop stock, pricing, RNG,
 refresh, Hot Deal, and haggle rolls.** Godot requests and displays. Purchases are
 wired to Node for reconnect but **Part B** owns full purchase-transaction audit.

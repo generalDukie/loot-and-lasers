@@ -20,6 +20,7 @@ const DEFAULT_SHOP_ID := "general"
 
 var shop_meta: Dictionary = {}
 var shop_window: Dictionary = {}
+var contraband_window: Dictionary = {}
 var vendors: Dictionary = {}
 var refresh_info: Dictionary = {}
 var haggle_info: Dictionary = {}
@@ -38,6 +39,7 @@ func _ready() -> void:
 func clear_local() -> void:
 	shop_meta = {}
 	shop_window = {}
+	contraband_window = {}
 	vendors = {}
 	refresh_info = {}
 	haggle_info = {}
@@ -204,7 +206,7 @@ func buy_gear(slot_id: String, is_hot: bool = false, haggle: bool = false) -> Di
 	last_purchase = {
 		"kind": "gear",
 		"cost": int(data.get("cost", 0)),
-		"nova_cost": int(data.get("nova_cost", 0)),
+		"nova_cost": float(data.get("nova_cost", 0)),
 		"items": data.get("items", []),
 		"pending_loot": data.get("pending_loot", []),
 		"haggle_failed": bool(data.get("haggle_failed", false)),
@@ -265,10 +267,12 @@ func refresh_shop_for(_character_id: String = "", _shop_id: String = DEFAULT_SHO
 		return _fail("Shop request already in progress")
 	_busy = true
 	_set_mutating(true)
-	# Always paid restock (20 Nova) — infinite refreshes; no free/cooldown gate.
+	# Prefer free restock when the window still has it; otherwise 20 Nova.
+	var use_free := bool(refresh_info.get("free_available", false))
 	var res: Dictionary = await GameApiClient.invoke("RefreshShop", {
 		"which": "all",
-		"use_free": false,
+		"use_free": use_free,
+		"request_id": _new_request_id("shop-refresh"),
 	})
 	_busy = false
 	_set_mutating(false)
@@ -342,8 +346,8 @@ func slot_cost_sd(item: Dictionary) -> int:
 	return int(item.get("cost", 0))
 
 
-func slot_cost_nova(item: Dictionary) -> int:
-	return int(item.get("nova_cost", 0))
+func slot_cost_nova(item: Dictionary) -> float:
+	return float(item.get("nova_cost", 0))
 
 
 func fuel_purchases_left() -> int:
@@ -382,6 +386,9 @@ func _apply_shop_payload(data: Dictionary) -> void:
 	var win: Variant = data.get("shop_window", null)
 	if typeof(win) == TYPE_DICTIONARY:
 		shop_window = (win as Dictionary).duplicate(true)
+	var cw: Variant = data.get("contraband_window", null)
+	if typeof(cw) == TYPE_DICTIONARY:
+		contraband_window = (cw as Dictionary).duplicate(true)
 	var v: Variant = data.get("vendors", null)
 	if typeof(v) == TYPE_DICTIONARY:
 		vendors = (v as Dictionary).duplicate(true)

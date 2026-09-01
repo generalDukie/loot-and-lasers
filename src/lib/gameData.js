@@ -702,7 +702,8 @@ export function computeNovaCrystalCost(item) {
 }
 
 // ═══════════════════════════════════════════
-// ROTATING SHOP / BLACK MARKET (6h stock; daily hot deal)
+// ROTATING SHOP / BLACK MARKET (historical client generators — live authority is Node + productionMath).
+// Historical: 6h stock / daily Hot Deal. Live: 12h UTC windows + Contraband Loot.
 // ═══════════════════════════════════════════
 const SHOP_GEAR_TYPES = ["weapon", "armor", "helmet", "boots", "legs", "neck", "accessory", "ship_module"];
 

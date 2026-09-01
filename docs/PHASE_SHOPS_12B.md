@@ -1,5 +1,7 @@
 # Phase / Restoration 12B — Shop Purchasing, Transactions, Sold-Out, Recovery & Security
 
+> **HISTORICAL.** Live purchase / Sold Out / backpack / idempotency authority is Phase 6: `docs/PHASE6_BLACK_MARKET.md`.
+
 Architecture: Nakama = auth only. **Node owns purchase settlement.** Godot presents
 balances, sold-out, and pending UI — never deducts currency or inserts items.
 

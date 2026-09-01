@@ -258,6 +258,46 @@ export const MARKET_GEAR_LEVEL_OFFSET_WEIGHTS = Object.freeze([
 export const MARKET_NORMAL_SLOT_COUNT = 8;
 export const MARKET_GEAR_OFFER_CHANCE = 0.9;
 export const MARKET_STIM_OFFER_CHANCE = 0.1;
+export const MARKET_MIN_STIM_OFFERS = 1;
+export const CONTRABAND_OFFER_COUNT = 1;
+export const MARKET_PAID_REFRESH_NOVA = 20;
+export const MARKET_FREE_MANUAL_REFRESHES_PER_WINDOW = 1;
+export const CONTRABAND_FREE_REFRESH_TRIGGER = 10;
+export const MARKET_WINDOW_DURATION_HOURS = 12;
+export const MARKET_MORNING_REFRESH_HOUR_UTC = 7;
+export const MARKET_EVENING_REFRESH_HOUR_UTC = 19;
+/** No-Nova normal Black Market Gear haggle success chance. */
+export const MARKET_HAGGLE_SUCCESS_CHANCE_STANDARD = 0.4;
+/** Snapshotted Nova surcharge > 0: lower haggle success chance. */
+export const MARKET_HAGGLE_SUCCESS_CHANCE_NOVA = 0.3;
+/** Alias of the no-Nova chance for callers that do not distinguish surcharge. */
+export const MARKET_HAGGLE_SUCCESS_CHANCE = MARKET_HAGGLE_SUCCESS_CHANCE_STANDARD;
+export const MARKET_HAGGLE_DISCOUNT_MIN_PERCENT = 10;
+export const MARKET_HAGGLE_DISCOUNT_MAX_PERCENT = 20;
+export const MARKET_HAGGLE_VENDOR_FLOOR_OFFSET = 1;
+export const PERCENT_DENOMINATOR = 100;
+export const MARKET_COMPANIES_PER_SLOT = 2;
+export const GEAR_ORIGIN_MARKET = "market";
+export const GEAR_ORIGIN_CONTRABAND = "contraband";
+export const MARKET_OFFER_KIND_GEAR = "gear";
+export const MARKET_OFFER_KIND_STIM = "stim";
+export const MARKET_STIM_ATTRIBUTES = Object.freeze([
+  "strength",
+  "agility",
+  "intellect",
+  "vitality",
+  "luck",
+]);
+export const SLOT_ELIGIBLE_COMPANIES = Object.freeze({
+  helmet: Object.freeze(["Company1", "Company3"]),
+  armor: Object.freeze(["Company1", "Company2"]),
+  legs: Object.freeze(["Company1", "Company3"]),
+  boots: Object.freeze(["Company1", "Company2"]),
+  neck: Object.freeze(["Company2", "Company4"]),
+  accessory: Object.freeze(["Company2", "Company4"]),
+  weapon: Object.freeze(["Company3", "Company4"]),
+  ship_module: Object.freeze(["Company3", "Company4"]),
+});
 
 export const MARKET_PRICE_RARITY_MULT = Object.freeze({
   common: 2.8,
@@ -464,8 +504,11 @@ export const WORMHOLE_BAND_WIDTH = 20;
 export const WORMHOLE_BAND_DRU_REFERENCE = 1340;
 
 export const GAME_DAY_RESET_HOUR_UTC = 19;
-export const MARKET_REFRESH_HOURS_UTC = Object.freeze([19, 7]);
-export const CONTRABAND_RESET_HOUR_UTC = 19;
+export const MARKET_REFRESH_HOURS_UTC = Object.freeze([
+  MARKET_EVENING_REFRESH_HOUR_UTC,
+  MARKET_MORNING_REFRESH_HOUR_UTC,
+]);
+export const CONTRABAND_RESET_HOUR_UTC = MARKET_EVENING_REFRESH_HOUR_UTC;
 export const FREE_FUEL_PER_GAME_DAY = 100;
 export const STARTING_FUEL = FREE_FUEL_PER_GAME_DAY;
 export const PAID_FUEL_PER_PURCHASE = 20;
@@ -482,6 +525,37 @@ export const COMPANY_SLOTS = Object.freeze({
   Company3: Object.freeze(["helmet", "legs", "weapon", "ship_module"]),
   Company4: Object.freeze(["weapon", "neck", "accessory", "ship_module"]),
 });
+
+/** Intrinsic Quality = budgetWeight × BudgetQuality + distributionWeight × DistributionQuality. Not GES. */
+export const INTRINSIC_QUALITY_BUDGET_WEIGHT = 0.2;
+export const INTRINSIC_QUALITY_DISTRIBUTION_WEIGHT = 0.8;
+export const GEAR_DESIRABLE_STAT_COUNT = 3;
+/** LuckShare = Luck / ActualTotal. Full credit for (0, fullCredit] inclusive of 30%. */
+export const LUCK_SUITABILITY_FULL_CREDIT_SHARE = 0.3;
+/** LuckShare at or above this is zero credit. Linear decay between full-credit and zero-credit. */
+export const LUCK_SUITABILITY_ZERO_CREDIT_SHARE = 0.6;
+export const LUCK_SUITABILITY_DECAY_SPAN =
+  LUCK_SUITABILITY_ZERO_CREDIT_SHARE - LUCK_SUITABILITY_FULL_CREDIT_SHARE;
+export const EPIC_DISTRIBUTION_DESIRABLE_SHARE_WEIGHT = 0.6;
+export const EPIC_DISTRIBUTION_PV_BALANCE_WEIGHT = 0.2;
+export const EPIC_DISTRIBUTION_LUCK_SUITABILITY_WEIGHT = 0.2;
+export const LEGENDARY_DISTRIBUTION_OFF_STAT_AVOIDANCE_WEIGHT = 0.6;
+export const LEGENDARY_DISTRIBUTION_PV_BALANCE_WEIGHT = 0.25;
+export const LEGENDARY_DISTRIBUTION_LUCK_SUITABILITY_WEIGHT = 0.15;
+/** Must match live Phase 2 `RARITY_MIN_STAT_SHARE.legendary` (do not change generation). */
+export const LEGENDARY_REQUIRED_STAT_COUNT = 5;
+export const LEGENDARY_MANDATORY_STAT_SHARE = 0.1;
+export const LEGENDARY_MANDATORY_BUDGET_SHARE =
+  LEGENDARY_MANDATORY_STAT_SHARE * LEGENDARY_REQUIRED_STAT_COUNT;
+export const GEAR_VITALITY_ATTR_KEY = "vitality";
+export const GEAR_LUCK_ATTR_KEY = "luck";
+export const INTRINSIC_QUALITY_CDF_SAMPLE_SIZE = 4096;
+export const INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL = 50;
+export const INTRINSIC_QUALITY_CDF_SEED_BASE = 18_000_018;
+/** Mixes snapshotted Market generation level into the CDF RNG seed. */
+export const INTRINSIC_QUALITY_CDF_LEVEL_SEED_MIX = 0x1cdf50e1;
+/** Minimum legal quality/CDF reference level (matches Market ItemLevel clamp). */
+export const INTRINSIC_QUALITY_CDF_MIN_REFERENCE_LEVEL = 1;
 
 export const NOVA_SURCHARGE_BANDS = Object.freeze([
   Object.freeze({ id: "below25", minInclusive: 0, maxExclusive: 0.75 }),
@@ -737,5 +811,8 @@ export const SIMULATE_STIM_LUCK_KEY = "luck";
 export const MILLISECONDS_PER_SECOND = 1000;
 export const SECONDS_PER_MINUTE = 60;
 export const MINUTES_PER_HOUR = 60;
+export const HOURS_PER_DAY = 24;
 export const MILLISECONDS_PER_HOUR =
   MILLISECONDS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+export const MILLISECONDS_PER_DAY = MILLISECONDS_PER_HOUR * HOURS_PER_DAY;
+export const DATE_PART_PAD_WIDTH = 2;

@@ -147,16 +147,15 @@ static func body_bbcode(section_id: String) -> String:
 			)
 		"market":
 			return (
-				_p("The [b]Black Market[/b] sells rotating gear and stims for stardust. Stock usually includes a class signature weapon.")
+				_p("The [b]Black Market[/b] sells eight rotating gear and stim stalls for Stardust. Epic and Legendary gear may also ask for a Nova surcharge.")
 				+ _h("Stalls")
-				+ _li("Stock refreshes on a timed window. Spend [b]%s Nova Crystals[/b] to restock early." % NumberDisplay.nova(SHOP_REFRESH_COST))
+				+ _li("Stock refreshes automatically at 19:00 and 07:00 UTC. One free restock per 12-hour window; after that, spend [b]%s Nova Crystals[/b] to restock." % NumberDisplay.nova(SHOP_REFRESH_COST))
 				+ _li("Compare listed gear to what you have equipped before buying.")
-				+ _li("[b]Haggle[/b] on gear — about 40% of the time you get 15–20% off the listing; Buy separately at the new price. If haggle fails, they yank the listing (no purchase).")
-				+ _li("Rare [b]Scrap Crates[/b] (2 commons) show up as bundle deals.")
+				+ _li("[b]Haggle[/b] on normal Market gear — 40% without a Nova surcharge, 30% if the listing has any Nova. Success takes 10–20% off both Stardust and Nova. Failure yanks that stall until the next Market refresh. Stims and Contraband cannot be haggled.")
 				+ "\n" + _h("Sell")
 				+ _p("Stage unequipped backpack items in the sell tray to convert them to Stardust. Equipped gear must be unequipped on Operative first. This is the only way to remove items from your backpack.")
-				+ "\n" + _h("Contraband Item")
-				+ _p("One spotlight piece per day (midnight Eastern). It does [b]not[/b] change when you restock the Black Market — buy it or wait for tomorrow.")
+				+ "\n" + _h("Contraband Loot")
+				+ _p("One separate Gear-only spotlight. It refreshes daily at 19:00 UTC, and also after every ten [b]free[/b] Market restocks. Paid restocks and the automatic 12-hour refresh do not advance that counter.")
 			)
 		"guilds":
 			return (

@@ -89,6 +89,9 @@ test("rejects client price/currency tampering", () => {
   assert.throws(() => assertShopPurchaseClientSafe({ cost: 99 }), (e) => e.status === 400);
   assert.throws(() => assertShopPurchaseClientSafe({ stardust: 1 }), (e) => e.status === 400);
   assert.doesNotThrow(() => assertShopPurchaseClientSafe({ slot_id: "a", haggle: true }));
+  assert.throws(() => assertShopPurchaseClientSafe({ haggle_success: true }), (e) => e.status === 400);
+  assert.throws(() => assertShopPurchaseClientSafe({ haggle_discount: 15 }), (e) => e.status === 400);
+  assert.throws(() => assertShopPurchaseClientSafe({ nova_cost: 42.5 }), (e) => e.status === 400);
 });
 
 await testAsync("EnsureShop seeds persistent stock", async () => {

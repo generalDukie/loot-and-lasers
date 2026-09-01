@@ -1,5 +1,5 @@
 extends Control
-## Black Market — mirrors web ShopPage (header · hot deal · unified stalls · sell fence).
+## Black Market — header · Contraband Loot spotlight · unified stalls · sell fence.
 
 const SELL_SLOT_COUNT := 5
 ## Fixed inventory-cell metrics — never scale with leftover page height.
@@ -15,7 +15,7 @@ const SELL_GRID_V_SEP := 8
 const SELL_SECTION_SEP := 10
 const SELL_BTN_MIN_H := 56.0
 const SELL_BTN_MIN_W := 420.0
-## Stall card scale (Hot Deal / Sell left alone). Vertical ~+15%; icons/fonts/chips more.
+## Stall card scale (Contraband Loot / Sell left alone). Vertical ~+15%; icons/fonts/chips more.
 const STALL_SEP := 6
 const STALL_TOP_SEP := 10
 ## Match sell-pane gear glyph size; title/descriptor sit top-right of the pane.
@@ -59,7 +59,7 @@ var _booting := false
 var _busy_slot := ""
 var _tick: Timer
 var _win_idx := -1
-## Shared hover inspection panel (stall + Hot Deal).
+## Shared hover inspection panel (stall + Contraband Loot).
 var _inspect: ItemInspectPopup
 
 
@@ -466,7 +466,8 @@ func _make_restock_button() -> Button:
 	restock_row.add_theme_constant_override("separation", 10)
 	restock_pad.add_child(restock_row)
 	var restock_lab := Label.new()
-	restock_lab.text = "Restock"
+	var free_restock := bool(ShopManager.refresh_info.get("free_available", false))
+	restock_lab.text = "Free" if free_restock else "Restock"
 	restock_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	restock_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	restock_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -478,7 +479,8 @@ func _make_restock_button() -> Button:
 	restock_cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	restock_cluster.alignment = BoxContainer.ALIGNMENT_CENTER
 	restock_cluster.add_theme_constant_override("separation", 2)
-	restock_row.add_child(restock_cluster)
+	if not free_restock:
+		restock_row.add_child(restock_cluster)
 	var restock_nova := CurrencyIcon.make("nova", REFRESH_TIMER_ICON)
 	restock_nova.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	restock_cluster.add_child(restock_nova)
@@ -537,7 +539,11 @@ func _seconds_left() -> int:
 func _make_hot_banner(item: Dictionary) -> Control:
 	var rarity := str(item.get("rarity", "common"))
 	var tint := ClientUi.rarity_color(rarity)
-	var hot_eta := ArenaRules.format_eta_short(ArenaRules.ms_until_et_midnight())
+	var hot_eta := "soon"
+	if not ShopManager.contraband_window.is_empty():
+		hot_eta = ArenaRules.format_eta_short(int(ShopManager.contraband_window.get("secondsLeft", 0)) * MILLISECONDS_PER_SECOND)
+	elif not ShopManager.shop_window.is_empty():
+		hot_eta = ArenaRules.format_eta_short(int(ShopManager.shop_window.get("secondsLeft", 0)) * MILLISECONDS_PER_SECOND)
 	## Match painted-panel bottom inset so L/R hug the card the same as the bottom gap.
 	var edge := ClientUi.px(11)
 
@@ -569,7 +575,7 @@ func _make_hot_banner(item: Dictionary) -> Control:
 	col.add_child(badge_row)
 	badge_row.add_child(UiIcon.make("flame", Color("#FED7AA"), 18.0))
 	var badge := Label.new()
-	badge.text = "CONTRABAND ITEM · resets %s" % hot_eta
+	badge.text = "CONTRABAND LOOT · resets %s" % hot_eta
 	badge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.clip_text = true
@@ -859,7 +865,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		yanked = ShopManager.is_slot_yanked(slot_id)
 		owned = ShopManager.is_slot_purchased(slot_id) or yanked
 
-	# Contraband / Hot Deal uses the same pane chrome as every other Buy stall.
+	# Contraband Loot uses the same pane chrome as every other Buy stall.
 	var item_type := str(item.get("type", ""))
 	var rarity := str(item.get("rarity", ""))
 	var body_fs := STALL_BODY_FS
@@ -1025,7 +1031,7 @@ func _gear_actions(
 	is_hot: bool,
 	is_bundle: bool,
 	cost: int,
-	nova: int,
+	nova: float,
 	slot_id: String
 ) -> HBoxContainer:
 	var row := HBoxContainer.new()
@@ -1066,9 +1072,11 @@ func _gear_actions(
 	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(mid)
 
-	var can_haggle := not is_bundle and discount_pct <= 0
+	var can_haggle := not is_bundle and not is_hot and discount_pct <= 0
 	if item.has("haggle_eligible"):
 		can_haggle = can_haggle and bool(item.get("haggle_eligible", false))
+	if bool(item.get("haggle_attempted", false)) or bool(item.get("yanked", false)):
+		can_haggle = false
 	if can_haggle:
 		var hag := Button.new()
 		hag.text = "Haggle"
@@ -1120,7 +1128,8 @@ func _on_refresh(which: String) -> void:
 	if TutorialManager.blocks_black_market_commerce():
 		Notify.blocked("Finish or skip the tutorial before restocking the Black Market")
 		return
-	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, ShopManager.SHOP_REFRESH_COST):
+	var free_restock := bool(ShopManager.refresh_info.get("free_available", false))
+	if not free_restock and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, ShopManager.SHOP_REFRESH_COST):
 		Notify.blocked("Not enough Nova Crystals", "Need %s Nova to refresh (you have %s)" % [
 			NumberDisplay.nova(ShopManager.SHOP_REFRESH_COST),
 			CurrencyManager.format_balance(CurrencyManager.CURRENCY_NOVA),
@@ -1135,7 +1144,10 @@ func _on_refresh(which: String) -> void:
 			_set_status(str(res.get("error", "Refresh failed")))
 		_update_meta()
 		return
-	_set_status("Black Market restocked (−%s Nova Crystals)." % NumberDisplay.nova(ShopManager.SHOP_REFRESH_COST))
+	if free_restock:
+		_set_status("Black Market restocked (free restock).")
+	else:
+		_set_status("Black Market restocked (−%s Nova Crystals)." % NumberDisplay.nova(ShopManager.SHOP_REFRESH_COST))
 	_populate()
 
 
@@ -1173,7 +1185,7 @@ func _on_buy_cons(slot_id: String, cost: int) -> void:
 	_populate()
 
 
-func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: int) -> void:
+func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: float) -> void:
 	if _busy:
 		return
 	if TutorialManager.blocks_black_market_commerce():
@@ -1187,7 +1199,7 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 			NumberDisplay.quantity_exact(sd),
 		])
 		return
-	if nova > 0 and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, nova):
+	if not haggle and nova > 0.0 and not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, nova):
 		Notify.blocked("Not enough Nova Crystals", "Need %s Nova (you have %s)" % [
 			NumberDisplay.nova(nova),
 			NumberDisplay.nova(CurrencyManager.get_balance(CurrencyManager.CURRENCY_NOVA)),
@@ -1210,16 +1222,24 @@ func _on_buy_gear(slot_id: String, is_hot: bool, haggle: bool, cost: int, nova: 
 		return
 	var purchase: Dictionary = ShopManager.last_purchase
 	if bool(purchase.get("haggle_failed", false)):
-		_set_status(str(purchase.get("haggle_note", "Deal soured — listing yanked")))
+		_set_status(str(purchase.get("haggle_note", "They yanked the listing")))
 		_populate()
 		return
 	if bool(purchase.get("haggle_success", false)):
 		var note := str(purchase.get("haggle_note", "They blinked"))
 		var pct := int(purchase.get("haggle_discount_pct", 0))
-		if pct > 0:
-			_set_status("%s · new price %s Stardust (-%s%%)" % [note, NumberDisplay.quantity(int(purchase.get("cost", 0))), pct])
+		var new_sd := NumberDisplay.quantity(int(purchase.get("cost", 0)))
+		var new_nova := float(purchase.get("nova_cost", 0.0))
+		if pct > 0 and new_nova > 0.0:
+			_set_status("%s · new price %s Stardust / %s Nova (-%s%%)" % [
+				note, new_sd, NumberDisplay.nova(new_nova), pct,
+			])
+		elif pct > 0:
+			_set_status("%s · new price %s Stardust (-%s%%)" % [note, new_sd, pct])
+		elif new_nova > 0.0:
+			_set_status("%s · new price %s Stardust / %s Nova" % [note, new_sd, NumberDisplay.nova(new_nova)])
 		else:
-			_set_status("%s · new price %s Stardust" % [note, NumberDisplay.quantity(int(purchase.get("cost", 0)))])
+			_set_status("%s · new price %s Stardust" % [note, new_sd])
 		_populate()
 		return
 	var msg := _purchase_msg(purchase, "Purchased!")
@@ -1235,7 +1255,7 @@ func _purchase_msg(purchase: Dictionary, fallback: String) -> String:
 	var pending: Variant = purchase.get("pending_loot", [])
 	var items: Variant = purchase.get("items", [])
 	var cost := int(purchase.get("cost", 0))
-	var nova_cost := int(purchase.get("nova_cost", 0))
+	var nova_cost := float(purchase.get("nova_cost", 0))
 	var parts: PackedStringArray = [fallback]
 	if cost > 0:
 		parts.append("−%s Stardust" % NumberDisplay.quantity(cost))

@@ -1,19 +1,19 @@
 /**
- * Phase 6 — Contraband Loot generation, daily clock, 10-free-refresh counter.
+ * Phase 6 — Contraband Loot generation, daily clock, 10-manual-refresh counter.
  * Run: npm run test:phase6-contraband
  */
 import assert from "node:assert/strict";
 import {
   generateContrabandOffer,
   mulberry32,
-  nextContrabandFreeRefreshState,
+  nextContrabandManualRefreshState,
   shopGenerationId,
 } from "../../src/lib/blackMarket.js";
 import {
-  CONTRABAND_FREE_REFRESH_TRIGGER,
+  CONTRABAND_MANUAL_REFRESH_TRIGGER,
   CONTRABAND_RARITY_WEIGHTS,
   contrabandPeriodId,
-  contrabandTriggersFromFreeRefreshCount,
+  contrabandTriggersFromManualRefreshCount,
   contrabandWindowAt,
   GEAR_ORIGIN_CONTRABAND,
   MARKET_OFFER_KIND_GEAR,
@@ -106,13 +106,13 @@ test("daily Contraband window is 19:00 UTC", () => {
   assert.equal(a.endsAt - a.startsAt, 24 * 60 * 60 * 1000);
 });
 
-test("20,000 counted free refreshes → 2,000 Contraband triggers", () => {
+test("20,000 counted manual refreshes → 2,000 Contraband triggers", () => {
   const N = 20_000;
-  assert.equal(contrabandTriggersFromFreeRefreshCount(N), N / CONTRABAND_FREE_REFRESH_TRIGGER);
+  assert.equal(contrabandTriggersFromManualRefreshCount(N), N / CONTRABAND_MANUAL_REFRESH_TRIGGER);
   let count = 0;
   let triggers = 0;
   for (let i = 0; i < N; i++) {
-    const next = nextContrabandFreeRefreshState(count);
+    const next = nextContrabandManualRefreshState(count);
     count = next.count;
     if (next.triggered) triggers += 1;
   }
@@ -120,11 +120,11 @@ test("20,000 counted free refreshes → 2,000 Contraband triggers", () => {
   assert.equal(count, 0);
 });
 
-test("counter 9 then next free refresh triggers exactly once", () => {
-  const next = nextContrabandFreeRefreshState(9);
+test("counter 9 then next manual refresh triggers exactly once", () => {
+  const next = nextContrabandManualRefreshState(9);
   assert.equal(next.triggered, true);
   assert.equal(next.count, 0);
-  const after = nextContrabandFreeRefreshState(next.count);
+  const after = nextContrabandManualRefreshState(next.count);
   assert.equal(after.triggered, false);
   assert.equal(after.count, 1);
 });

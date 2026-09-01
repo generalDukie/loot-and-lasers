@@ -208,6 +208,7 @@ test("normalizeShopMeta free refresh resets on window; Contraband counter persis
   assert.equal(next.free_refresh_used, false);
   assert.deepEqual(next.purchased, {});
   assert.equal(next.contraband_free_refresh_count, 7);
+  assert.equal(next.contraband_manual_refresh_count, 7);
   assert.equal(next.hot_purchased, true);
 
   const dayRoll = normalizeShopMeta(
@@ -225,6 +226,7 @@ test("normalizeShopMeta free refresh resets on window; Contraband counter persis
     day
   );
   assert.equal(dayRoll.contraband_free_refresh_count, 7);
+  assert.equal(dayRoll.contraband_manual_refresh_count, 7);
   assert.equal(dayRoll.hot_purchased, false);
   assert.equal(dayRoll.free_refresh_used, true);
 });

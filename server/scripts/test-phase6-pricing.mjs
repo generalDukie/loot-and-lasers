@@ -119,19 +119,82 @@ test("Stim shop prices match Phase 5 primitive; no ±20% variance", () => {
   }
 });
 
-test("Nova surcharge bands, Epic duplicate 25, no C/U/R surcharge", () => {
-  assert.equal(resolveNovaSurcharge("common", 0.99, 0, 0), 0);
-  assert.equal(resolveNovaSurcharge("uncommon", 0.99, 0, 0), 0);
-  assert.equal(resolveNovaSurcharge("rare", 0.99, 0, 0), 0);
-  const epicMid = novaSurchargeSpec("epic", 0.8);
-  assert.deepEqual(epicMid.prices, [10, 25, 25]);
-  assert.equal(epicMid.prices.length, 3);
-  const hit = resolveNovaSurcharge("epic", 0.8, 0, 0.5);
-  assert.equal(hit, 25);
-  const miss = resolveNovaSurcharge("legendary", 0.5, 0.99, 0);
-  assert.equal(miss, 0);
-  const topLeg = resolveNovaSurcharge("legendary", 0.995, 0, 0.99);
-  assert.equal(topLeg, 150);
+test("Nova surcharge: C/U/R never; every Epic/Legendary band chance and pool", () => {
+  const bandProbes = [
+    { id: "below25", percentile: 0 },
+    { id: "15to25", percentile: 0.75 },
+    { id: "8to15", percentile: 0.85 },
+    { id: "3to8", percentile: 0.92 },
+    { id: "1to3", percentile: 0.97 },
+    { id: "top1", percentile: 0.99 },
+  ];
+  const expected = {
+    epic: {
+      chances: [0.3, 0.5, 0.6, 0.75, 0.85, 0.95],
+      pools: [
+        [10, 20, 40],
+        [50, 60, 75],
+        [80, 90, 100],
+        [100, 110, 125],
+        [125, 150, 175],
+        [160, 180, 200],
+      ],
+    },
+    legendary: {
+      chances: [0.6, 0.8, 0.9, 1, 1, 1],
+      pools: [
+        [50, 60, 75],
+        [75, 100, 125],
+        [100, 125, 150],
+        [160, 180, 200],
+        [200, 225, 250],
+        [250, 275, 300],
+      ],
+    },
+  };
+  const ineligible = ["common", "uncommon", "rare"];
+  for (const rarity of ineligible) {
+    for (const probe of bandProbes) {
+      assert.equal(resolveNovaSurcharge(rarity, probe.percentile, 0, 0), 0);
+      const spec = novaSurchargeSpec(rarity, probe.percentile);
+      assert.equal(spec.probability, 0);
+      assert.equal(spec.prices.length, 0);
+    }
+  }
+
+  const poolSize = 3;
+  const justBelowCertain = 0.999999;
+  for (const rarity of ["epic", "legendary"]) {
+    const table = expected[rarity];
+    for (let i = 0; i < bandProbes.length; i++) {
+      const percentile = bandProbes[i].percentile;
+      const spec = novaSurchargeSpec(rarity, percentile);
+      assert.equal(spec.bandId, bandProbes[i].id, `${rarity} ${bandProbes[i].id} band`);
+      assert.equal(spec.probability, table.chances[i], `${rarity} ${bandProbes[i].id} chance`);
+      assert.deepEqual(spec.prices, table.pools[i], `${rarity} ${bandProbes[i].id} pool`);
+      assert.equal(spec.prices.length, poolSize);
+
+      if (spec.probability < 1) {
+        const miss = resolveNovaSurcharge(rarity, percentile, spec.probability, 0);
+        assert.equal(miss, 0, `${rarity} ${bandProbes[i].id} miss at probability`);
+      }
+
+      for (let pi = 0; pi < poolSize; pi++) {
+        const choiceUnit = (pi + 0.5) / poolSize;
+        const nova = resolveNovaSurcharge(rarity, percentile, 0, choiceUnit);
+        assert.equal(nova, table.pools[i][pi], `${rarity} ${bandProbes[i].id} pool[${pi}]`);
+      }
+    }
+  }
+
+  for (const probe of [bandProbes[3], bandProbes[4], bandProbes[5]]) {
+    const spec = novaSurchargeSpec("legendary", probe.percentile);
+    assert.equal(spec.probability, 1, `Legendary ${probe.id} is 100%`);
+    for (const hitRoll of [0, 0.5, justBelowCertain]) {
+      const nova = resolveNovaSurcharge("legendary", probe.percentile, hitRoll, 0);
+      assert.equal(nova, spec.prices[0], `Legendary ${probe.id} always surcharges at hitRoll=${hitRoll}`);
+    }
+  }
 });
 
 test("Haggle eligibility: normal Gear only; Stims and Contraband ineligible", () => {

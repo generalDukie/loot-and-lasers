@@ -155,7 +155,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ "\n" + _h("Sell")
 				+ _p("Stage unequipped backpack items in the sell tray to convert them to Stardust. Equipped gear must be unequipped on Operative first. This is the only way to remove items from your backpack.")
 				+ "\n" + _h("Contraband Loot")
-				+ _p("One separate Gear-only spotlight. It refreshes daily at 19:00 UTC, and also after every ten [b]free[/b] Market restocks. Paid restocks and the automatic 12-hour refresh do not advance that counter.")
+				+ _p("One separate Gear-only spotlight. It refreshes daily at 19:00 UTC, and also after every ten [b]manual[/b] Market restocks (free or paid). Automatic 12-hour refreshes do not advance that counter.")
 			)
 		"guilds":
 			return (

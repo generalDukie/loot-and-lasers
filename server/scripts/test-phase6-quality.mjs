@@ -799,11 +799,25 @@ test("level-specific CDF band populations and class alignment across production 
   assert.equal(getIntrinsicQualityCdfCacheSize(), perfLevels.length);
 });
 
-test("Nova surcharge tables/pools unchanged; Haggling constants unchanged", () => {
-  assert.deepEqual(NOVA_SURCHARGE_TABLE.epic.probabilities, [0.3, 0.4, 0.55, 0.65, 0.75, 0.85]);
-  assert.deepEqual(NOVA_SURCHARGE_TABLE.epic.prices[1], [10, 25, 25]);
-  assert.deepEqual(NOVA_SURCHARGE_TABLE.legendary.probabilities, [0.4, 0.55, 0.7, 0.8, 0.9, 0.95]);
-  assert.deepEqual(NOVA_SURCHARGE_TABLE.legendary.prices[5], [75, 100, 150]);
+test("Nova surcharge chances/pools revised; Haggling constants unchanged", () => {
+  assert.deepEqual(NOVA_SURCHARGE_TABLE.epic.probabilities, [0.3, 0.5, 0.6, 0.75, 0.85, 0.95]);
+  assert.deepEqual(NOVA_SURCHARGE_TABLE.epic.prices, [
+    [10, 20, 40],
+    [50, 60, 75],
+    [80, 90, 100],
+    [100, 110, 125],
+    [125, 150, 175],
+    [160, 180, 200],
+  ]);
+  assert.deepEqual(NOVA_SURCHARGE_TABLE.legendary.probabilities, [0.6, 0.8, 0.9, 1, 1, 1]);
+  assert.deepEqual(NOVA_SURCHARGE_TABLE.legendary.prices, [
+    [50, 60, 75],
+    [75, 100, 125],
+    [100, 125, 150],
+    [160, 180, 200],
+    [200, 225, 250],
+    [250, 275, 300],
+  ]);
   assert.equal(NOVA_SURCHARGE_BANDS[0].maxExclusive, 0.75);
   assert.equal(NOVA_SURCHARGE_BANDS[5].minInclusive, 0.99);
   assert.equal(MARKET_HAGGLE_SUCCESS_CHANCE_STANDARD, 0.4);

@@ -468,13 +468,20 @@ test("Frontier cap and scope (formula only)", () => {
 test("Nova surcharge exhaustive table", () => {
   assert.equal(M.NOVA_SURCHARGE_TABLE.epic.prices.length, 6);
   assert.equal(M.NOVA_SURCHARGE_TABLE.legendary.prices.length, 6);
+  assert.equal(M.NOVA_SURCHARGE_POOL_SIZE, 3);
   assert.equal(M.novaSurchargeBandIndex(0.749), 0);
   assert.equal(M.novaSurchargeBandIndex(0.75), 1);
   assert.equal(M.novaSurchargeBandIndex(0.99), 5);
+  assert.equal(M.resolveNovaSurcharge("common", 0.99, 0, 0), 0);
   assert.equal(M.resolveNovaSurcharge("epic", 0.5, 0.99, 0), 0);
-  assert.equal(M.resolveNovaSurcharge("epic", 0.5, 0, 0), 5);
-  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.epic.prices[5], [50, 75, 100]);
-  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.legendary.prices[5], [75, 100, 150]);
+  assert.equal(M.resolveNovaSurcharge("epic", 0.5, 0, 0), 10);
+  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.epic.probabilities, [0.3, 0.5, 0.6, 0.75, 0.85, 0.95]);
+  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.epic.prices[0], [10, 20, 40]);
+  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.epic.prices[5], [160, 180, 200]);
+  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.legendary.probabilities, [0.6, 0.8, 0.9, 1, 1, 1]);
+  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.legendary.prices[0], [50, 60, 75]);
+  assert.deepEqual(M.NOVA_SURCHARGE_TABLE.legendary.prices[5], [250, 275, 300]);
+  assert.equal(M.resolveNovaSurcharge("legendary", 0.99, 0.999999, 0), 250);
 });
 
 test("EPA anchor error, monotone, infinite safety", () => {

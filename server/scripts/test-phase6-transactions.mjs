@@ -17,8 +17,8 @@ const {
   BuyShopGear,
   BuyShopConsumable,
 } = await import("../src/functions/economy.js");
-const { BACKPACK_UNEQUIPPED_ITEM_CAP } = await import("../../src/lib/productionMath/index.js");
-const { nextContrabandFreeRefreshState } = await import("../../src/lib/blackMarket.js");
+const { BACKPACK_UNEQUIPPED_ITEM_CAP, CONTRABAND_MANUAL_REFRESH_TRIGGER } = await import("../../src/lib/productionMath/index.js");
+const { nextContrabandManualRefreshState, readContrabandManualRefreshCount } = await import("../../src/lib/blackMarket.js");
 
 let passed = 0;
 let failed = 0;
@@ -394,35 +394,152 @@ await testAsync("Stim offers reject Haggle", async () => {
   assert.equal(viaStim.body.code, "SHOP_HAGGLE_INELIGIBLE");
 });
 
-await testAsync("free refresh increments Contraband counter; paid does not", async () => {
-  const before = entities.Character.get(ch.id);
-  const c0 = before.shop_meta.contraband_free_refresh_count || 0;
-  const free = await RefreshShop(user, { which: "all", use_free: true, request_id: "phase6-free-1" });
-  if (free.status === 400) {
-    entities.Character.update(ch.id, {
-      shop_meta: { ...before.shop_meta, free_refresh_used: false },
-    });
-  }
-  const live = entities.Character.get(ch.id);
-  live.shop_meta.free_refresh_used = false;
-  entities.Character.update(ch.id, { shop_meta: live.shop_meta });
-  const free2 = await RefreshShop(user, { which: "all", use_free: true, request_id: "phase6-free-2" });
-  assert.equal(free2.status, 200, free2.body?.error);
+await testAsync("free and paid manual refreshes increment Contraband counter; auto does not", async () => {
+  const live0 = entities.Character.get(ch.id);
+  live0.shop_meta.contraband_manual_refresh_count = 0;
+  live0.shop_meta.contraband_free_refresh_count = 0;
+  live0.shop_meta.hot_manual_refresh_count = 0;
+  live0.shop_meta.free_refresh_used = false;
+  entities.Character.update(ch.id, { shop_meta: live0.shop_meta, nova_crystals: 10_000 });
+
+  const free = await RefreshShop(user, { which: "all", use_free: true, request_id: "phase6-counter-free" });
+  assert.equal(free.status, 200, free.body?.error);
   const afterFree = entities.Character.get(ch.id);
-  assert.equal(
-    afterFree.shop_meta.contraband_free_refresh_count,
-    nextContrabandFreeRefreshState(c0).triggered
-      ? nextContrabandFreeRefreshState(c0).count
-      : (afterFree.shop_meta.contraband_free_refresh_count),
-  );
+  assert.equal(readContrabandManualRefreshCount(afterFree.shop_meta), 1);
   assert.equal(afterFree.shop_meta.free_refresh_used, true);
-  const novaBefore = afterFree.nova_crystals;
-  const paid = await RefreshShop(user, { which: "all", use_free: false, request_id: "phase6-paid-1" });
+
+  const paid = await RefreshShop(user, { which: "all", use_free: false, request_id: "phase6-counter-paid" });
   assert.equal(paid.status, 200, paid.body?.error);
   const afterPaid = entities.Character.get(ch.id);
-  assert.equal(afterPaid.shop_meta.contraband_free_refresh_count, afterFree.shop_meta.contraband_free_refresh_count);
-  assert.equal(afterPaid.shop_meta.free_refresh_used, true);
-  assert.ok(afterPaid.nova_crystals < novaBefore);
+  assert.equal(readContrabandManualRefreshCount(afterPaid.shop_meta), 2);
+
+  const autoBefore = readContrabandManualRefreshCount(afterPaid.shop_meta);
+  const hotBefore = afterPaid.shop_meta.hot_deal?._slotId;
+  afterPaid.shop_meta.window_idx = (afterPaid.shop_meta.window_idx || 0) - 1;
+  entities.Character.update(ch.id, { shop_meta: afterPaid.shop_meta });
+  const auto = await EnsureShop(user);
+  assert.equal(auto.status, 200, auto.body?.error);
+  const afterAuto = entities.Character.get(ch.id);
+  assert.equal(readContrabandManualRefreshCount(afterAuto.shop_meta), autoBefore);
+  assert.equal(afterAuto.shop_meta.free_refresh_used, false);
+  assert.equal(afterAuto.shop_meta.hot_deal?._slotId, hotBefore);
+
+  afterAuto.shop_meta.contraband_period_id = "1999-01-01";
+  afterAuto.shop_meta.hot_day = "1999-01-01";
+  entities.Character.update(ch.id, { shop_meta: afterAuto.shop_meta });
+  const dayRoll = await EnsureShop(user);
+  assert.equal(dayRoll.status, 200, dayRoll.body?.error);
+  const afterDay = entities.Character.get(ch.id);
+  assert.equal(readContrabandManualRefreshCount(afterDay.shop_meta), autoBefore);
+  assert.notEqual(afterDay.shop_meta.hot_deal?._slotId, hotBefore);
+});
+
+await testAsync("10 mixed manuals trigger one Contraband refresh; 20 trigger two", async () => {
+  const live0 = entities.Character.get(ch.id);
+  live0.shop_meta.contraband_manual_refresh_count = 0;
+  live0.shop_meta.contraband_free_refresh_count = 0;
+  live0.shop_meta.hot_manual_refresh_count = 0;
+  live0.shop_meta.free_refresh_used = false;
+  entities.Character.update(ch.id, { shop_meta: live0.shop_meta, nova_crystals: 10_000 });
+  const hot0 = entities.Character.get(ch.id).shop_meta.hot_deal?._slotId;
+  assert.ok(hot0);
+
+  const free = await RefreshShop(user, { which: "all", use_free: true, request_id: "phase6-mix-free" });
+  assert.equal(free.status, 200, free.body?.error);
+  let live = entities.Character.get(ch.id);
+  assert.equal(readContrabandManualRefreshCount(live.shop_meta), 1);
+  assert.equal(live.shop_meta.hot_deal?._slotId, hot0);
+
+  for (let i = 2; i < CONTRABAND_MANUAL_REFRESH_TRIGGER; i++) {
+    const paid = await RefreshShop(user, {
+      which: "all",
+      use_free: false,
+      request_id: `phase6-mix-paid-${i}`,
+    });
+    assert.equal(paid.status, 200, paid.body?.error);
+    live = entities.Character.get(ch.id);
+    assert.equal(readContrabandManualRefreshCount(live.shop_meta), i);
+    assert.equal(live.shop_meta.hot_deal?._slotId, hot0);
+  }
+
+  const tenth = await RefreshShop(user, {
+    which: "all",
+    use_free: false,
+    request_id: "phase6-mix-paid-10",
+  });
+  assert.equal(tenth.status, 200, tenth.body?.error);
+  live = entities.Character.get(ch.id);
+  assert.equal(readContrabandManualRefreshCount(live.shop_meta), 0);
+  const hot10 = live.shop_meta.hot_deal?._slotId;
+  assert.ok(hot10);
+  assert.notEqual(hot10, hot0);
+
+  for (let i = 1; i < CONTRABAND_MANUAL_REFRESH_TRIGGER; i++) {
+    const paid = await RefreshShop(user, {
+      which: "all",
+      use_free: false,
+      request_id: `phase6-mix-paid-b${i}`,
+    });
+    assert.equal(paid.status, 200, paid.body?.error);
+    live = entities.Character.get(ch.id);
+    assert.equal(readContrabandManualRefreshCount(live.shop_meta), i);
+    assert.equal(live.shop_meta.hot_deal?._slotId, hot10);
+  }
+  const twentieth = await RefreshShop(user, {
+    which: "all",
+    use_free: false,
+    request_id: "phase6-mix-paid-20",
+  });
+  assert.equal(twentieth.status, 200, twentieth.body?.error);
+  live = entities.Character.get(ch.id);
+  assert.equal(readContrabandManualRefreshCount(live.shop_meta), 0);
+  assert.notEqual(live.shop_meta.hot_deal?._slotId, hot10);
+});
+
+await testAsync("duplicate refresh request_id cannot increment the Contraband counter twice", async () => {
+  const live0 = entities.Character.get(ch.id);
+  live0.shop_meta.contraband_manual_refresh_count = 3;
+  live0.shop_meta.contraband_free_refresh_count = 3;
+  live0.shop_meta.hot_manual_refresh_count = 3;
+  live0.shop_meta.free_refresh_used = false;
+  entities.Character.update(ch.id, { shop_meta: live0.shop_meta, nova_crystals: 10_000 });
+
+  const firstFree = await RefreshShop(user, {
+    which: "all",
+    use_free: true,
+    request_id: "phase6-idem-free",
+  });
+  assert.equal(firstFree.status, 200, firstFree.body?.error);
+  const afterFree = entities.Character.get(ch.id);
+  assert.equal(readContrabandManualRefreshCount(afterFree.shop_meta), 4);
+  const replayFree = await RefreshShop(user, {
+    which: "all",
+    use_free: true,
+    request_id: "phase6-idem-free",
+  });
+  assert.equal(replayFree.status, 200);
+  assert.equal(replayFree.body.idempotent_replay, true);
+  assert.equal(readContrabandManualRefreshCount(entities.Character.get(ch.id).shop_meta), 4);
+
+  const firstPaid = await RefreshShop(user, {
+    which: "all",
+    use_free: false,
+    request_id: "phase6-idem-paid",
+  });
+  assert.equal(firstPaid.status, 200, firstPaid.body?.error);
+  const afterPaid = entities.Character.get(ch.id);
+  assert.equal(readContrabandManualRefreshCount(afterPaid.shop_meta), 5);
+  const novaAfter = afterPaid.nova_crystals;
+  const replayPaid = await RefreshShop(user, {
+    which: "all",
+    use_free: false,
+    request_id: "phase6-idem-paid",
+  });
+  assert.equal(replayPaid.status, 200);
+  assert.equal(replayPaid.body.idempotent_replay, true);
+  const afterReplay = entities.Character.get(ch.id);
+  assert.equal(readContrabandManualRefreshCount(afterReplay.shop_meta), 5);
+  assert.equal(afterReplay.nova_crystals, novaAfter);
 });
 
 await testAsync("200,000 repeated purchase attempts: one delivery", async () => {
@@ -471,15 +588,16 @@ await testAsync("200,000 repeated purchase attempts: one delivery", async () => 
   assert.equal(replays, 199_999);
 });
 
-test("in-memory tenth free refresh trigger is exact", () => {
+test("in-memory tenth manual refresh trigger is exact", () => {
   let count = 0;
   let triggers = 0;
   for (let i = 0; i < 20; i++) {
-    const n = nextContrabandFreeRefreshState(count);
+    const n = nextContrabandManualRefreshState(count);
     count = n.count;
     if (n.triggered) triggers += 1;
   }
   assert.equal(triggers, 2);
+  assert.equal(count, 0);
 });
 
 if (failed) {

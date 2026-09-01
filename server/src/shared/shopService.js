@@ -16,7 +16,7 @@ import {
   SHOP_MIN_STIMS,
 } from "./economyFormulas.js";
 import {
-  CONTRABAND_FREE_REFRESH_TRIGGER,
+  CONTRABAND_MANUAL_REFRESH_TRIGGER,
   MARKET_HAGGLE_DISCOUNT_MAX_PERCENT,
   MARKET_HAGGLE_DISCOUNT_MIN_PERCENT,
   MARKET_HAGGLE_SUCCESS_CHANCE_NOVA,
@@ -25,6 +25,7 @@ import {
   MARKET_RARITY_WEIGHTS,
   CONTRABAND_RARITY_WEIGHTS,
   quantizeNova,
+  readContrabandManualRefreshCount,
 } from "./productionMath.js";
 import { contrabandWindowAt } from "../../../src/lib/productionMath/market.js";
 import { clock } from "./time/index.js";
@@ -214,16 +215,11 @@ export function serializeShopPresentation(meta, win = getShopWindow(), nowMs = c
       free_refresh_used: freeUsed,
       manual_refresh_count: Math.max(0, Math.floor(meta?.market_generation_seq || meta?.manual_refresh_count || 0)),
       paid_refresh_count: Math.max(0, Math.floor(meta?.paid_refresh_count || 0)),
-      hot_deal_refresh_every: CONTRABAND_FREE_REFRESH_TRIGGER,
-      hot_manual_refresh_count: Math.max(
-        0,
-        Math.floor(meta?.contraband_free_refresh_count ?? meta?.hot_manual_refresh_count ?? 0),
-      ),
-      contraband_free_refresh_count: Math.max(
-        0,
-        Math.floor(meta?.contraband_free_refresh_count ?? meta?.hot_manual_refresh_count ?? 0),
-      ),
-      contraband_trigger: CONTRABAND_FREE_REFRESH_TRIGGER,
+      hot_deal_refresh_every: CONTRABAND_MANUAL_REFRESH_TRIGGER,
+      hot_manual_refresh_count: readContrabandManualRefreshCount(meta),
+      contraband_manual_refresh_count: readContrabandManualRefreshCount(meta),
+      contraband_free_refresh_count: readContrabandManualRefreshCount(meta),
+      contraband_trigger: CONTRABAND_MANUAL_REFRESH_TRIGGER,
     },
     haggle: {
       success_chance: HAGGLE_SUCCESS_CHANCE,

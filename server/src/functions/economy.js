@@ -145,7 +145,8 @@ import {
   generateContrabandOffer,
   generateNormalMarketOffers,
   mulberry32 as marketMulberry32,
-  nextContrabandFreeRefreshState,
+  nextContrabandManualRefreshState,
+  readContrabandManualRefreshCount,
   shopGenerationId,
   withContrabandStock,
   withNormalStock,
@@ -1990,6 +1991,20 @@ function patchStockSlot(meta, slotId, nextSlot, isHot) {
   return nextMeta;
 }
 
+function applyManualContrabandProgress(ch, meta, win, day) {
+  const next = nextContrabandManualRefreshState(readContrabandManualRefreshCount(meta));
+  let out = {
+    ...meta,
+    contraband_manual_refresh_count: next.count,
+    contraband_free_refresh_count: next.count,
+    hot_manual_refresh_count: next.count,
+  };
+  if (next.triggered) {
+    out = rebuildContrabandOffer(ch, out, win, day);
+  }
+  return out;
+}
+
 export async function EnsureShop(user) {
   try {
     const result = await withTransactionAsync(async () => {
@@ -2451,15 +2466,7 @@ export async function RefreshShop(user, body) {
           market_generation_seq: Math.max(0, Math.floor(Number(meta.market_generation_seq) || 0)) + 1,
         };
         meta = rebuildNormalOffers(ch, meta, win);
-        const next = nextContrabandFreeRefreshState(meta.contraband_free_refresh_count);
-        meta = {
-          ...meta,
-          contraband_free_refresh_count: next.count,
-          hot_manual_refresh_count: next.count,
-        };
-        if (next.triggered) {
-          meta = rebuildContrabandOffer(ch, meta, win, day);
-        }
+        meta = applyManualContrabandProgress(ch, meta, win, day);
       } else {
         if (!hasNova(ch, SHOP_REFRESH_COST)) {
           httpErr(400, "Not enough Nova Crystals");
@@ -2471,6 +2478,7 @@ export async function RefreshShop(user, body) {
           market_generation_seq: Math.max(0, Math.floor(Number(meta.market_generation_seq) || 0)) + 1,
         };
         meta = rebuildNormalOffers(ch, meta, win);
+        meta = applyManualContrabandProgress(ch, meta, win, day);
       }
 
       let character = ch;

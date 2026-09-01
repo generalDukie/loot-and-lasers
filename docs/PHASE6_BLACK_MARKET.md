@@ -76,7 +76,31 @@ The denominator is **not** the item's own ItemLevel. A Market L47 piece generate
 
 **P/V balance:** `1 − |Primary − Vitality| / (Primary + Vitality)`.
 
-The combined score is classified by **within-rarity** empirical CDF (Epic vs Epic, Legendary vs Legendary; **not** class-segmented, **not** a shared Epic+Legendary cutoff) into the six Nova bands. The reference population is **normal Black Market Gear at the offer's snapshotted generation level**: Market 35/35/20/10 ItemLevel offsets vs that level, Phase 2 ±10% variance, current slot/allocation. Cache key is `rarity + quality_reference_level` (lazy, deterministic, not class). A single L50 CDF is **not** used for other levels — BudgetQuality's L−k / L ratio is nonlinear, and a fixed L50 table over-rates high-level Epic Nova. Contraband uses that same rarity/level CDF (no separate on-level distribution); its 100% current-level generation naturally scores stronger BudgetQuality. Appearance chances and Nova pools are unchanged. Snapshotted on the offer (`quality_reference_level`); existing offers are not rescored when the helper changes.
+The combined score is classified by **within-rarity** empirical CDF (Epic vs Epic, Legendary vs Legendary; **not** class-segmented, **not** a shared Epic+Legendary cutoff) into the six Nova bands. The reference population is **normal Black Market Gear at the offer's snapshotted generation level**: Market 35/35/20/10 ItemLevel offsets vs that level, Phase 2 ±10% variance, current slot/allocation. Cache key is `rarity + quality_reference_level` (lazy, deterministic, not class). A single L50 CDF is **not** used for other levels — BudgetQuality's L−k / L ratio is nonlinear, and a fixed L50 table over-rates high-level Epic Nova. Contraband uses that same rarity/level CDF (no separate on-level distribution); its 100% current-level generation naturally scores stronger BudgetQuality. Snapshotted on the offer (`quality_reference_level`); existing offers are not rescored when the helper changes.
+
+Common, Uncommon, and Rare Gear never receive a Nova surcharge. Band percentile thresholds are unchanged (`NOVA_SURCHARGE_BANDS`).
+
+**Appearance chance** (`NOVA_SURCHARGE_EPIC_CHANCES` / `NOVA_SURCHARGE_LEGENDARY_CHANCES`):
+
+| Band | Epic | Legendary |
+|---|---:|---:|
+| Below Top 25% | 30% | 60% |
+| Top 15–25% | 50% | 80% |
+| Top 8–15% | 60% | 90% |
+| Top 3–8% | 75% | 100% |
+| Top 1–3% | 85% | 100% |
+| Top 1% | 95% | 100% |
+
+On a successful roll, Nova is chosen uniformly from the 3-value pool (`NOVA_SURCHARGE_POOL_SIZE`):
+
+| Band | Epic | Legendary |
+|---|---|---|
+| Below Top 25% | 10 / 20 / 40 | 50 / 60 / 75 |
+| Top 15–25% | 50 / 60 / 75 | 75 / 100 / 125 |
+| Top 8–15% | 80 / 90 / 100 | 100 / 125 / 150 |
+| Top 3–8% | 100 / 110 / 125 | 160 / 180 / 200 |
+| Top 1–3% | 125 / 150 / 175 | 200 / 225 / 250 |
+| Top 1% | 160 / 180 / 200 | 250 / 275 / 300 |
 
 ## Haggling
 
@@ -95,11 +119,11 @@ One attempt per generated normal Gear offer.
 | Event | 8 normal stalls | Contraband | Free-use | Counter |
 |---|---|---|---|---|
 | Auto 19:00 / 07:00 UTC | replace | no | no | no |
-| Free manual (1 / 12h window) | replace | only on 10th counted | consume | +1 |
-| Paid 20 Nova | replace | no | no | no |
+| Free manual (1 / 12h window) | replace | on 10th counted manual | consume | +1 |
+| Paid 20 Nova | replace | on 10th counted manual | no | +1 |
 | Daily Contraband 19:00 UTC | no | replace | no | no |
 
-Counter persists across reconnect, 07:00, 19:00, and daily Contraband refresh. Every 10 counted free manual refreshes replace Contraband and reset the 10-count. 20,000 counted free refreshes → 2,000 triggers.
+Counter persists across reconnect, 07:00, 19:00, and daily Contraband refresh. Every 10 counted **manual** refreshes (free or paid) replace Contraband and reset the 10-count. Automatic Market windows do not increment. 20,000 counted manuals → 2,000 triggers.
 
 ## Sold Out / purchase
 
@@ -133,7 +157,8 @@ npm run audit:no-magic-numbers
 | Stim shop 2× / 4× / 10× SPF | REMOVED |
 | Vendor-value × markup purchase architecture | REMOVED |
 | Common resale 75% | REMOVED (live 60%) |
-| Paid or automatic refresh increments Contraband counter | REMOVED |
+| Automatic refresh increments Contraband counter | REMOVED |
+| Counter +1 only on free manual refresh | SUPERSEDED — free and paid manuals both +1 |
 | Counter resets every 12h | REMOVED |
 | Market Gear Shipment-eligible | REMOVED (`false` permanently) |
 | Purchase causes reroll | REMOVED |

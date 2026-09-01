@@ -9,7 +9,7 @@ import {
   shopGenerationId,
 } from "../../src/lib/blackMarket.js";
 import {
-  CONTRABAND_FREE_REFRESH_TRIGGER,
+  CONTRABAND_MANUAL_REFRESH_TRIGGER,
   MARKET_GEAR_LEVEL_OFFSET_WEIGHTS,
   MARKET_GEAR_OFFER_CHANCE,
   MARKET_MIN_STIM_OFFERS,
@@ -167,7 +167,7 @@ test("500,000 shops: 0 missing Stim, 8 offers, types valid", () => {
   assert.equal(missingStim, 0);
   assert.equal(badCount, 0);
   assert.equal(badType, 0);
-  void CONTRABAND_FREE_REFRESH_TRIGGER;
+  void CONTRABAND_MANUAL_REFRESH_TRIGGER;
 });
 
 test("normal Gear rarity 20/35/30/12.5/2.5 and item levels L through L-3", () => {

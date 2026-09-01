@@ -262,7 +262,9 @@ export const MARKET_MIN_STIM_OFFERS = 1;
 export const CONTRABAND_OFFER_COUNT = 1;
 export const MARKET_PAID_REFRESH_NOVA = 20;
 export const MARKET_FREE_MANUAL_REFRESHES_PER_WINDOW = 1;
-export const CONTRABAND_FREE_REFRESH_TRIGGER = 10;
+export const CONTRABAND_MANUAL_REFRESH_TRIGGER = 10;
+/** @deprecated Same value as CONTRABAND_MANUAL_REFRESH_TRIGGER. */
+export const CONTRABAND_FREE_REFRESH_TRIGGER = CONTRABAND_MANUAL_REFRESH_TRIGGER;
 export const MARKET_WINDOW_DURATION_HOURS = 12;
 export const MARKET_MORNING_REFRESH_HOUR_UTC = 7;
 export const MARKET_EVENING_REFRESH_HOUR_UTC = 19;
@@ -566,28 +568,52 @@ export const NOVA_SURCHARGE_BANDS = Object.freeze([
   Object.freeze({ id: "top1", minInclusive: 0.99, maxExclusive: Infinity }),
 ]);
 
+/** Uniform choice among this many Nova values after a successful surcharge roll. */
+export const NOVA_SURCHARGE_POOL_SIZE = 3;
+/** Band chance that always applies a Nova surcharge (Legendary Top 3–8% and above). */
+export const NOVA_SURCHARGE_CHANCE_CERTAIN = 1;
+
+/**
+ * Appearance chances in `NOVA_SURCHARGE_BANDS` order:
+ * below25, 15to25, 8to15, 3to8, 1to3, top1.
+ */
+export const NOVA_SURCHARGE_EPIC_CHANCES = Object.freeze([
+  0.3, 0.5, 0.6, 0.75, 0.85, 0.95,
+]);
+export const NOVA_SURCHARGE_LEGENDARY_CHANCES = Object.freeze([
+  0.6,
+  0.8,
+  0.9,
+  NOVA_SURCHARGE_CHANCE_CERTAIN,
+  NOVA_SURCHARGE_CHANCE_CERTAIN,
+  NOVA_SURCHARGE_CHANCE_CERTAIN,
+]);
+
+export const NOVA_SURCHARGE_EPIC_POOLS = Object.freeze([
+  Object.freeze([10, 20, 40]),
+  Object.freeze([50, 60, 75]),
+  Object.freeze([80, 90, 100]),
+  Object.freeze([100, 110, 125]),
+  Object.freeze([125, 150, 175]),
+  Object.freeze([160, 180, 200]),
+]);
+export const NOVA_SURCHARGE_LEGENDARY_POOLS = Object.freeze([
+  Object.freeze([50, 60, 75]),
+  Object.freeze([75, 100, 125]),
+  Object.freeze([100, 125, 150]),
+  Object.freeze([160, 180, 200]),
+  Object.freeze([200, 225, 250]),
+  Object.freeze([250, 275, 300]),
+]);
+
 export const NOVA_SURCHARGE_TABLE = Object.freeze({
   epic: Object.freeze({
-    probabilities: Object.freeze([0.3, 0.4, 0.55, 0.65, 0.75, 0.85]),
-    prices: Object.freeze([
-      Object.freeze([5, 10, 15]),
-      Object.freeze([10, 25, 25]),
-      Object.freeze([20, 30, 40]),
-      Object.freeze([30, 40, 50]),
-      Object.freeze([40, 50, 75]),
-      Object.freeze([50, 75, 100]),
-    ]),
+    probabilities: NOVA_SURCHARGE_EPIC_CHANCES,
+    prices: NOVA_SURCHARGE_EPIC_POOLS,
   }),
   legendary: Object.freeze({
-    probabilities: Object.freeze([0.4, 0.55, 0.7, 0.8, 0.9, 0.95]),
-    prices: Object.freeze([
-      Object.freeze([10, 15, 20]),
-      Object.freeze([20, 30, 40]),
-      Object.freeze([30, 40, 50]),
-      Object.freeze([40, 50, 75]),
-      Object.freeze([50, 75, 100]),
-      Object.freeze([75, 100, 150]),
-    ]),
+    probabilities: NOVA_SURCHARGE_LEGENDARY_CHANCES,
+    prices: NOVA_SURCHARGE_LEGENDARY_POOLS,
   }),
 });
 

@@ -27,6 +27,8 @@ import {
   marketStimTier,
   marketWindowAt,
   nextContrabandFreeRefreshState,
+  nextContrabandManualRefreshState,
+  readContrabandManualRefreshCount,
   resolveMarketHaggle,
   resolveNovaSurcharge,
   rollContrabandRarity,
@@ -410,16 +412,7 @@ export function normalizeMarketMeta(prev = {}, win, contrabandPeriod) {
   const sameWindow = prev.window_idx === windowIdx;
   const prevPeriod = prev.contraband_period_id || prev.hot_day || null;
   const sameContraband = prevPeriod == null || prevPeriod === contrabandPeriod;
-  const freeCount = Math.max(
-    0,
-    Math.floor(
-      Number(
-        prev.contraband_free_refresh_count
-        ?? prev.hot_manual_refresh_count
-        ?? 0,
-      ) || 0,
-    ),
-  );
+  const manualCount = readContrabandManualRefreshCount(prev);
   const generationSeq = Math.max(0, Math.floor(Number(prev.market_generation_seq) || 0));
   const paidSeq = Math.max(0, Math.floor(Number(prev.paid_refresh_count) || 0));
   if (!sameWindow) {
@@ -430,7 +423,9 @@ export function normalizeMarketMeta(prev = {}, win, contrabandPeriod) {
       free_refresh_used: false,
       market_generation_seq: generationSeq,
       paid_refresh_count: paidSeq,
-      contraband_free_refresh_count: freeCount,
+      contraband_manual_refresh_count: manualCount,
+      contraband_free_refresh_count: manualCount,
+      hot_manual_refresh_count: manualCount,
       purchased: emptyPurchasedMap(),
       yanked: {},
       shop_stock: sameWindow ? prev.shop_stock : null,
@@ -440,7 +435,6 @@ export function normalizeMarketMeta(prev = {}, win, contrabandPeriod) {
       hot_day: sameContraband ? (prev.hot_day || contrabandPeriod) : contrabandPeriod,
       hot_purchased: sameContraband ? !!prev.hot_purchased : false,
       hot_yanked: false,
-      hot_manual_refresh_count: freeCount,
       rules_version: BLACK_MARKET_RULES_VERSION,
     };
   }
@@ -451,7 +445,9 @@ export function normalizeMarketMeta(prev = {}, win, contrabandPeriod) {
     free_refresh_used: !!prev.free_refresh_used,
     market_generation_seq: generationSeq,
     paid_refresh_count: paidSeq,
-    contraband_free_refresh_count: freeCount,
+    contraband_manual_refresh_count: manualCount,
+    contraband_free_refresh_count: manualCount,
+    hot_manual_refresh_count: manualCount,
     purchased: prev.purchased && typeof prev.purchased === "object" ? { ...prev.purchased } : {},
     yanked: prev.yanked && typeof prev.yanked === "object" ? { ...prev.yanked } : {},
     shop_stock: prev.shop_stock,
@@ -461,7 +457,6 @@ export function normalizeMarketMeta(prev = {}, win, contrabandPeriod) {
     hot_day: sameContraband ? (prev.hot_day || contrabandPeriod) : contrabandPeriod,
     hot_purchased: sameContraband ? !!prev.hot_purchased : false,
     hot_yanked: false,
-    hot_manual_refresh_count: freeCount,
     rules_version: BLACK_MARKET_RULES_VERSION,
   };
 }
@@ -498,5 +493,7 @@ export {
   MARKET_MIN_STIM_OFFERS,
   MARKET_NORMAL_SLOT_COUNT,
   MARKET_PAID_REFRESH_NOVA,
+  nextContrabandManualRefreshState,
   nextContrabandFreeRefreshState,
+  readContrabandManualRefreshCount,
 };

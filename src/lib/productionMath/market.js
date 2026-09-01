@@ -7,7 +7,7 @@
 import { quantizeNova, roundHalfUp } from "./rounding.js";
 import {
   BASIS_POINTS_DENOMINATOR,
-  CONTRABAND_FREE_REFRESH_TRIGGER,
+  CONTRABAND_MANUAL_REFRESH_TRIGGER,
   CONTRABAND_RARITY_WEIGHTS,
   CONTRABAND_RESET_HOUR_UTC,
   DATE_PART_PAD_WIDTH,
@@ -420,23 +420,47 @@ export function resolveMarketHaggle(rng, snapshottedNovaCost = 0) {
 }
 
 /**
- * Counted free-manual refreshes only. Returns next counter (0..TRIGGER-1)
- * and whether this increment fired a Contraband refresh.
+ * Counted free or paid manual refreshes. Auto 19:00/07:00 UTC does not count.
+ * Returns next counter (0..TRIGGER-1) and whether this increment fired Contraband.
  */
-export function nextContrabandFreeRefreshState(currentCount) {
+export function readContrabandManualRefreshCount(meta) {
+  return Math.max(
+    0,
+    Math.floor(
+      Number(
+        meta?.contraband_manual_refresh_count
+        ?? meta?.contraband_free_refresh_count
+        ?? meta?.hot_manual_refresh_count
+        ?? 0,
+      ) || 0,
+    ),
+  );
+}
+
+export function nextContrabandManualRefreshState(currentCount) {
   const next = Math.max(0, Math.floor(Number(currentCount) || 0)) + 1;
-  if (next >= CONTRABAND_FREE_REFRESH_TRIGGER) {
+  if (next >= CONTRABAND_MANUAL_REFRESH_TRIGGER) {
     return {
-      count: next % CONTRABAND_FREE_REFRESH_TRIGGER,
+      count: next % CONTRABAND_MANUAL_REFRESH_TRIGGER,
       triggered: true,
     };
   }
   return { count: next, triggered: false };
 }
 
-export function contrabandTriggersFromFreeRefreshCount(countedFreeRefreshes) {
+/** @deprecated Use nextContrabandManualRefreshState. */
+export function nextContrabandFreeRefreshState(currentCount) {
+  return nextContrabandManualRefreshState(currentCount);
+}
+
+export function contrabandTriggersFromManualRefreshCount(countedManualRefreshes) {
   return Math.floor(
-    Math.max(0, Math.floor(Number(countedFreeRefreshes) || 0))
-    / CONTRABAND_FREE_REFRESH_TRIGGER,
+    Math.max(0, Math.floor(Number(countedManualRefreshes) || 0))
+    / CONTRABAND_MANUAL_REFRESH_TRIGGER,
   );
+}
+
+/** @deprecated Use contrabandTriggersFromManualRefreshCount. */
+export function contrabandTriggersFromFreeRefreshCount(counted) {
+  return contrabandTriggersFromManualRefreshCount(counted);
 }

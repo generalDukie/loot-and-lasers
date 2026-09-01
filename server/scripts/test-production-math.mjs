@@ -471,7 +471,8 @@ test("Nova surcharge exhaustive table", () => {
   assert.equal(M.NOVA_SURCHARGE_POOL_SIZE, 3);
   assert.equal(M.novaSurchargeBandIndex(0.749), 0);
   assert.equal(M.novaSurchargeBandIndex(0.75), 1);
-  assert.equal(M.novaSurchargeBandIndex(0.99), 5);
+  assert.equal(M.novaSurchargeBandIndex(0.825), 2);
+  assert.equal(M.novaSurchargeBandIndex(0.975), 5);
   assert.equal(M.resolveNovaSurcharge("common", 0.99, 0, 0), 0);
   assert.equal(M.resolveNovaSurcharge("epic", 0.5, 0.99, 0), 0);
   assert.equal(M.resolveNovaSurcharge("epic", 0.5, 0, 0), 10);

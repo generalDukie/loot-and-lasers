@@ -43,7 +43,7 @@ import {
 } from "./productionMath/market.js";
 import { resolveOfferIntrinsicQuality } from "./gearIntrinsicQuality.js";
 
-export const BLACK_MARKET_RULES_VERSION = "phase6-intrinsic-quality-v4";
+export const BLACK_MARKET_RULES_VERSION = "phase6-intrinsic-quality-v5";
 
 const MULBERRY_INCREMENT = 0x6D2B79F5;
 const UINT32_DIVISOR = 4294967296;
@@ -167,16 +167,17 @@ function snapshotGearOffer({
     base_market_value: baseMarketValue,
     price_variance: variance,
     budget_quality: quality.budgetQuality,
-    distribution_quality: quality.distributionQuality,
+    desirability: quality.desirability,
+    shape: quality.shape,
+    distribution_quality: quality.desirability,
     intrinsic_quality: quality.intrinsicQuality,
+    raw_quality: quality.rawQuality,
     intrinsic_quality_percentile: quality.percentile,
     intrinsic_quality_band: quality.band,
     intrinsic_quality_band_id: quality.bandId,
     desirable_stat_share: quality.desirableStatShare,
     off_stat_avoidance: quality.offStatAvoidance,
-    discretionary_off_stat_avoidance: quality.discretionaryOffStatAvoidance,
-    pv_balance: quality.primaryVitalityBalance,
-    luck_suitability: quality.luckSuitability,
+    legendary_leakage_share: quality.legendaryLeakageShare,
     quality_reference_level: quality.referenceLevel,
     quality_reference_budget: quality.referenceBudget,
     haggle_eligible: !isContraband,

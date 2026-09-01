@@ -528,54 +528,152 @@ export const COMPANY_SLOTS = Object.freeze({
   Company4: Object.freeze(["weapon", "neck", "accessory", "ship_module"]),
 });
 
-/** Intrinsic Quality = budgetWeight × BudgetQuality + distributionWeight × DistributionQuality. Not GES. */
-export const INTRINSIC_QUALITY_BUDGET_WEIGHT = 0.2;
-export const INTRINSIC_QUALITY_DISTRIBUTION_WEIGHT = 0.8;
+/**
+ * RawQuality = BUDGET_WEIGHT × BudgetQuality + DESIRABILITY_WEIGHT × Desirability
+ *            + SHAPE_WEIGHT × Shape. Not capped at 100. Not GES.
+ */
+export const RAW_QUALITY_BUDGET_WEIGHT = 30;
+export const RAW_QUALITY_DESIRABILITY_WEIGHT = 50;
+export const RAW_QUALITY_SHAPE_WEIGHT = 20;
 export const GEAR_DESIRABLE_STAT_COUNT = 3;
-/** LuckShare = Luck / ActualTotal. Full credit for (0, fullCredit] inclusive of 30%. */
-export const LUCK_SUITABILITY_FULL_CREDIT_SHARE = 0.3;
-/** LuckShare at or above this is zero credit. Linear decay between full-credit and zero-credit. */
-export const LUCK_SUITABILITY_ZERO_CREDIT_SHARE = 0.6;
-export const LUCK_SUITABILITY_DECAY_SPAN =
-  LUCK_SUITABILITY_ZERO_CREDIT_SHARE - LUCK_SUITABILITY_FULL_CREDIT_SHARE;
-export const EPIC_DISTRIBUTION_DESIRABLE_SHARE_WEIGHT = 0.6;
-export const EPIC_DISTRIBUTION_PV_BALANCE_WEIGHT = 0.2;
-export const EPIC_DISTRIBUTION_LUCK_SUITABILITY_WEIGHT = 0.2;
-export const LEGENDARY_DISTRIBUTION_OFF_STAT_AVOIDANCE_WEIGHT = 0.6;
-export const LEGENDARY_DISTRIBUTION_PV_BALANCE_WEIGHT = 0.25;
-export const LEGENDARY_DISTRIBUTION_LUCK_SUITABILITY_WEIGHT = 0.15;
+export const EPIC_DESIRABILITY_EXPONENT = 2;
+export const UNIT_INTERVAL_MAX = 1;
+export const UNIT_INTERVAL_MIN = 0;
+
+export const EPIC_PV_OFF_TARGET_P_SHARE = 0.625;
+export const EPIC_PV_OFF_PENALTY_SLOPE = 4;
+export const EPIC_PL_OFF_TARGET_P_SHARE = 0.75;
+export const EPIC_PL_OFF_PENALTY_SLOPE = 3;
+export const EPIC_PL_OFF_SHAPE_SCALE = 0.85;
+export const EPIC_VL_OFF_TARGET_V_SHARE = 0.75;
+export const EPIC_VL_OFF_PENALTY_SLOPE = 3;
+export const EPIC_VL_OFF_SHAPE_SCALE = 0.75;
+export const EPIC_FULL_PVL_OFF_COUNT = 0;
+export const EPIC_MIXED_OFF_COUNT = 1;
+export const EPIC_DOUBLE_OFF_COUNT = 2;
+export const EPIC_SINGLE_DESIRABLE_COUNT = 1;
+export const EPIC_SINGLE_DESIRABLE_SHARE_REFERENCE = 0.6;
+export const EPIC_PRIMARY_ONLY_SHAPE_CEILING = 0.6;
+export const EPIC_VITALITY_ONLY_SHAPE_CEILING = 0.5;
+export const EPIC_LUCK_ONLY_SHAPE_CEILING = 0.35;
+
+/** PShareOfPV → P/V shape penalty. Piecewise-linear; clamp to endpoints. */
+export const EPIC_PV_SHAPE_PENALTY_ANCHORS = Object.freeze([
+  Object.freeze([0.25, 0.5]),
+  Object.freeze([0.3125, 0.35]),
+  Object.freeze([0.375, 0.15]),
+  Object.freeze([0.4375, 0.02]),
+  Object.freeze([0.5, 0]),
+  Object.freeze([0.5625, 0]),
+  Object.freeze([0.625, 0.175]),
+  Object.freeze([0.6875, 0.325]),
+  Object.freeze([0.75, 0.4]),
+  Object.freeze([1, 0.65]),
+]);
+/** Luck share of total → luck shape penalty. Full P/V/L Epics only. */
+export const EPIC_LUCK_SHAPE_PENALTY_ANCHORS = Object.freeze([
+  Object.freeze([0, 0.35]),
+  Object.freeze([0.05, 0.2]),
+  Object.freeze([0.1, 0.1]),
+  Object.freeze([0.15, 0.03]),
+  Object.freeze([0.175, 0]),
+  Object.freeze([0.225, 0]),
+  Object.freeze([0.25, 0.03]),
+  Object.freeze([0.3, 0.175]),
+  Object.freeze([0.4, 0.35]),
+  Object.freeze([0.5, 0.55]),
+  Object.freeze([0.6, 0.7]),
+  Object.freeze([1, 0.85]),
+]);
+
 /** Must match live Phase 2 `RARITY_MIN_STAT_SHARE.legendary` (do not change generation). */
 export const LEGENDARY_REQUIRED_STAT_COUNT = 5;
 export const LEGENDARY_MANDATORY_STAT_SHARE = 0.1;
 export const LEGENDARY_MANDATORY_BUDGET_SHARE =
   LEGENDARY_MANDATORY_STAT_SHARE * LEGENDARY_REQUIRED_STAT_COUNT;
+/** Live directed Partial B pin; generation is unchanged. */
+export const LEGENDARY_OFF_STAT_CAP_SHARE = 0.175;
+export const LEGENDARY_LEAKAGE_PENALTY_SLOPE = 6;
+export const LEGENDARY_PV_SHAPE_PENALTY_ANCHORS = Object.freeze([
+  Object.freeze([0.35, 0.25]),
+  Object.freeze([0.4, 0.12]),
+  Object.freeze([0.45, 0.02]),
+  Object.freeze([0.5, 0]),
+  Object.freeze([0.54, 0]),
+  Object.freeze([0.5714, 0.1]),
+  Object.freeze([0.625, 0.25]),
+  Object.freeze([0.7, 0.45]),
+]);
+export const LEGENDARY_LUCK_SHAPE_PENALTY_ANCHORS = Object.freeze([
+  Object.freeze([0.1, 0.03]),
+  Object.freeze([0.15, 0]),
+  Object.freeze([0.2, 0]),
+  Object.freeze([0.225, 0.03]),
+  Object.freeze([0.25, 0.08]),
+  Object.freeze([0.3, 0.18]),
+  Object.freeze([0.4, 0.35]),
+  Object.freeze([0.5, 0.55]),
+  Object.freeze([0.6, 0.7]),
+]);
+
 export const GEAR_VITALITY_ATTR_KEY = "vitality";
 export const GEAR_LUCK_ATTR_KEY = "luck";
+export const INTRINSIC_QUALITY_RULES_VERSION = "phase6-raw-quality-v1";
 export const INTRINSIC_QUALITY_CDF_SAMPLE_SIZE = 4096;
 export const INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL = 50;
-export const INTRINSIC_QUALITY_CDF_SEED_BASE = 18_000_018;
+export const INTRINSIC_QUALITY_CDF_SEED_BASE = 18_000_020;
 /** Mixes snapshotted Market generation level into the CDF RNG seed. */
 export const INTRINSIC_QUALITY_CDF_LEVEL_SEED_MIX = 0x1cdf50e1;
 /** Minimum legal quality/CDF reference level (matches Market ItemLevel clamp). */
 export const INTRINSIC_QUALITY_CDF_MIN_REFERENCE_LEVEL = 1;
 
+export const NOVA_SURCHARGE_PERCENTILE_TOP25 = 0.75;
+export const NOVA_SURCHARGE_PERCENTILE_TOP17 = 0.825;
+export const NOVA_SURCHARGE_PERCENTILE_TOP10 = 0.9;
+export const NOVA_SURCHARGE_PERCENTILE_TOP5 = 0.95;
+export const NOVA_SURCHARGE_PERCENTILE_TOP2P5 = 0.975;
+
 export const NOVA_SURCHARGE_BANDS = Object.freeze([
-  Object.freeze({ id: "below25", minInclusive: 0, maxExclusive: 0.75 }),
-  Object.freeze({ id: "15to25", minInclusive: 0.75, maxExclusive: 0.85 }),
-  Object.freeze({ id: "8to15", minInclusive: 0.85, maxExclusive: 0.92 }),
-  Object.freeze({ id: "3to8", minInclusive: 0.92, maxExclusive: 0.97 }),
-  Object.freeze({ id: "1to3", minInclusive: 0.97, maxExclusive: 0.99 }),
-  Object.freeze({ id: "top1", minInclusive: 0.99, maxExclusive: Infinity }),
+  Object.freeze({
+    id: "below25",
+    minInclusive: 0,
+    maxExclusive: NOVA_SURCHARGE_PERCENTILE_TOP25,
+  }),
+  Object.freeze({
+    id: "17to25",
+    minInclusive: NOVA_SURCHARGE_PERCENTILE_TOP25,
+    maxExclusive: NOVA_SURCHARGE_PERCENTILE_TOP17,
+  }),
+  Object.freeze({
+    id: "10to17",
+    minInclusive: NOVA_SURCHARGE_PERCENTILE_TOP17,
+    maxExclusive: NOVA_SURCHARGE_PERCENTILE_TOP10,
+  }),
+  Object.freeze({
+    id: "5to10",
+    minInclusive: NOVA_SURCHARGE_PERCENTILE_TOP10,
+    maxExclusive: NOVA_SURCHARGE_PERCENTILE_TOP5,
+  }),
+  Object.freeze({
+    id: "2p5to5",
+    minInclusive: NOVA_SURCHARGE_PERCENTILE_TOP5,
+    maxExclusive: NOVA_SURCHARGE_PERCENTILE_TOP2P5,
+  }),
+  Object.freeze({
+    id: "top2p5",
+    minInclusive: NOVA_SURCHARGE_PERCENTILE_TOP2P5,
+    maxExclusive: Infinity,
+  }),
 ]);
 
 /** Uniform choice among this many Nova values after a successful surcharge roll. */
 export const NOVA_SURCHARGE_POOL_SIZE = 3;
-/** Band chance that always applies a Nova surcharge (Legendary Top 3–8% and above). */
+/** Band chance that always applies a Nova surcharge (Legendary Top 5–10% and above). */
 export const NOVA_SURCHARGE_CHANCE_CERTAIN = 1;
 
 /**
  * Appearance chances in `NOVA_SURCHARGE_BANDS` order:
- * below25, 15to25, 8to15, 3to8, 1to3, top1.
+ * below25, 17to25, 10to17, 5to10, 2p5to5, top2p5.
  */
 export const NOVA_SURCHARGE_EPIC_CHANCES = Object.freeze([
   0.3, 0.5, 0.6, 0.75, 0.85, 0.95,

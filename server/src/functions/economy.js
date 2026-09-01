@@ -259,7 +259,8 @@ function stripShopFields(slot) {
     intrinsic_quality_percentile, generation_id, refresh_id, rules_version,
     budget_quality, distribution_quality, intrinsic_quality, intrinsic_quality_band,
     intrinsic_quality_band_id, desirable_stat_share, off_stat_avoidance,
-    pv_balance, luck_suitability,
+    pv_balance, luck_suitability, desirability, shape, raw_quality,
+    legendary_leakage_share,
     quality_reference_level, quality_reference_budget, discretionary_off_stat_avoidance,
     contraband, contraband_period_id,
     ...itemData

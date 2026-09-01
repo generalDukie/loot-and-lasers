@@ -122,11 +122,11 @@ test("Stim shop prices match Phase 5 primitive; no ±20% variance", () => {
 test("Nova surcharge: C/U/R never; every Epic/Legendary band chance and pool", () => {
   const bandProbes = [
     { id: "below25", percentile: 0 },
-    { id: "15to25", percentile: 0.75 },
-    { id: "8to15", percentile: 0.85 },
-    { id: "3to8", percentile: 0.92 },
-    { id: "1to3", percentile: 0.97 },
-    { id: "top1", percentile: 0.99 },
+    { id: "17to25", percentile: 0.75 },
+    { id: "10to17", percentile: 0.825 },
+    { id: "5to10", percentile: 0.9 },
+    { id: "2p5to5", percentile: 0.95 },
+    { id: "top2p5", percentile: 0.975 },
   ];
   const expected = {
     epic: {

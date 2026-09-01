@@ -1,27 +1,43 @@
 /**
- * Nova-surcharge Intrinsic Quality. Not GES. Not raw stat-budget variance.
+ * Phase 6 RawQuality for Nova surcharge. Not GES. Not the retired
+ * 20/80 Budget/Distribution mix.
  *
- * BudgetQuality = ActualBudget / neutral same-rarity/same-slot pool at the
- * snapshotted Market generation level (not the item's own ItemLevel).
- * Not clamped to 1.0 — Phase 2 ±10% variance can exceed the neutral pool.
+ * RawQuality = 30 × BudgetQuality + 50 × Desirability + 20 × Shape
+ * (uncapped). BudgetQuality = ActualBudget / neutral same-rarity/same-slot
+ * pool at the snapshotted Market generation level.
  */
 import {
-  EPIC_DISTRIBUTION_DESIRABLE_SHARE_WEIGHT,
-  EPIC_DISTRIBUTION_LUCK_SUITABILITY_WEIGHT,
-  EPIC_DISTRIBUTION_PV_BALANCE_WEIGHT,
+  EPIC_DESIRABILITY_EXPONENT,
+  EPIC_LUCK_ONLY_SHAPE_CEILING,
+  EPIC_LUCK_SHAPE_PENALTY_ANCHORS,
+  EPIC_PL_OFF_PENALTY_SLOPE,
+  EPIC_PL_OFF_SHAPE_SCALE,
+  EPIC_PL_OFF_TARGET_P_SHARE,
+  EPIC_PRIMARY_ONLY_SHAPE_CEILING,
+  EPIC_PV_OFF_PENALTY_SLOPE,
+  EPIC_PV_OFF_TARGET_P_SHARE,
+  EPIC_PV_SHAPE_PENALTY_ANCHORS,
+  EPIC_DOUBLE_OFF_COUNT,
+  EPIC_FULL_PVL_OFF_COUNT,
+  EPIC_MIXED_OFF_COUNT,
+  EPIC_SINGLE_DESIRABLE_COUNT,
+  EPIC_SINGLE_DESIRABLE_SHARE_REFERENCE,
+  EPIC_VITALITY_ONLY_SHAPE_CEILING,
+  EPIC_VL_OFF_PENALTY_SLOPE,
+  EPIC_VL_OFF_SHAPE_SCALE,
+  EPIC_VL_OFF_TARGET_V_SHARE,
   GEAR_LUCK_ATTR_KEY,
   GEAR_VITALITY_ATTR_KEY,
-  INTRINSIC_QUALITY_BUDGET_WEIGHT,
-  INTRINSIC_QUALITY_DISTRIBUTION_WEIGHT,
-  LEGENDARY_DISTRIBUTION_LUCK_SUITABILITY_WEIGHT,
-  LEGENDARY_DISTRIBUTION_OFF_STAT_AVOIDANCE_WEIGHT,
-  LEGENDARY_DISTRIBUTION_PV_BALANCE_WEIGHT,
-  LEGENDARY_MANDATORY_BUDGET_SHARE,
+  LEGENDARY_LEAKAGE_PENALTY_SLOPE,
+  LEGENDARY_LUCK_SHAPE_PENALTY_ANCHORS,
   LEGENDARY_MANDATORY_STAT_SHARE,
-  LUCK_SUITABILITY_DECAY_SPAN,
-  LUCK_SUITABILITY_FULL_CREDIT_SHARE,
-  LUCK_SUITABILITY_ZERO_CREDIT_SHARE,
+  LEGENDARY_PV_SHAPE_PENALTY_ANCHORS,
+  RAW_QUALITY_BUDGET_WEIGHT,
+  RAW_QUALITY_DESIRABILITY_WEIGHT,
+  RAW_QUALITY_SHAPE_WEIGHT,
   SIMULATE_ATTR_KEYS,
+  UNIT_INTERVAL_MAX,
+  UNIT_INTERVAL_MIN,
 } from "./constants.js";
 import { classPrimaryIndex } from "./attributes.js";
 import { gearStatPool } from "./gear.js";
@@ -39,8 +55,8 @@ function totalStats(stats) {
 
 function clampUnitInterval(value) {
   const x = Number(value);
-  if (!Number.isFinite(x) || x < 0) return 0;
-  if (x > 1) return 1;
+  if (!Number.isFinite(x) || x < UNIT_INTERVAL_MIN) return UNIT_INTERVAL_MIN;
+  if (x > UNIT_INTERVAL_MAX) return UNIT_INTERVAL_MAX;
   return x;
 }
 
@@ -50,6 +66,25 @@ function resolveReferenceLevel({ referenceLevel, itemLevel }) {
   const item = Number(itemLevel);
   if (Number.isFinite(item) && item >= 1) return Math.floor(item);
   return 1;
+}
+
+export function interpolatePiecewise(x, anchors) {
+  const v = Number(x);
+  if (!Number.isFinite(v) || !anchors?.length) return 0;
+  const first = anchors[0];
+  if (v <= first[0]) return first[1];
+  const last = anchors[anchors.length - 1];
+  if (v >= last[0]) return last[1];
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const [x0, y0] = anchors[i];
+    const [x1, y1] = anchors[i + 1];
+    if (v <= x1) {
+      const span = x1 - x0;
+      if (!(span > 0)) return y1;
+      return y0 + ((v - x0) / span) * (y1 - y0);
+    }
+  }
+  return last[1];
 }
 
 export function classDesirableAttrKeys(className) {
@@ -62,9 +97,13 @@ export function classOffAttrKeys(className) {
   return Object.freeze(SIMULATE_ATTR_KEYS.filter((key) => !desirable.has(key)));
 }
 
+export function classPrimaryAttrKey(className) {
+  return classDesirableAttrKeys(className)[0];
+}
+
 /**
  * Actual generated budget vs neutral pool at the snapshotted generation level.
- * Do not clamp to 1.0.
+ * Do not clamp to 1.0. Do not add a separate ItemLevel penalty.
  */
 export function gearBudgetQuality({
   stats,
@@ -81,7 +120,6 @@ export function gearBudgetQuality({
   return actual / referenceBudget;
 }
 
-/** Share of the piece budget on primary + vitality + luck. */
 export function desirableStatShare(stats, className, total = null) {
   const t = total != null ? total : totalStats(stats);
   if (!(t > 0)) return 0;
@@ -90,7 +128,6 @@ export function desirableStatShare(stats, className, total = null) {
   return sum / t;
 }
 
-/** 1 − off-stat budget share. Not the Legendary discretionary-excess helper. */
 export function offStatAvoidance(stats, className, total = null) {
   const t = total != null ? total : totalStats(stats);
   if (!(t > 0)) return 0;
@@ -99,77 +136,147 @@ export function offStatAvoidance(stats, className, total = null) {
   return 1 - off / t;
 }
 
-/**
- * Legendary: 1 − (discretionary off-stat excess / discretionary budget).
- * Mandatory 10% per required stat is not a penalty.
- */
-export function discretionaryOffStatAvoidance(stats, className, total = null) {
+export function pShareOfPv(primary, vitality) {
+  const pair = Number(primary) + Number(vitality);
+  if (!(pair > 0)) return 0;
+  return Number(primary) / pair;
+}
+
+export function legendaryLeakageShare(stats, className, total = null) {
   const t = total != null ? Number(total) : totalStats(stats);
   if (!(t > 0) || !Number.isFinite(t)) return 0;
-  const mandatoryPerStat = LEGENDARY_MANDATORY_STAT_SHARE * t;
-  const discretionaryBudget = t - LEGENDARY_MANDATORY_BUDGET_SHARE * t;
-  if (!(discretionaryBudget > 0)) return 1;
-  let excess = 0;
+  const floor = LEGENDARY_MANDATORY_STAT_SHARE;
+  let leakage = 0;
   for (const key of classOffAttrKeys(className)) {
-    excess += Math.max(0, attrValue(stats, key) - mandatoryPerStat);
+    leakage += Math.max(0, attrValue(stats, key) / t - floor);
   }
-  return clampUnitInterval(1 - excess / discretionaryBudget);
+  return leakage;
 }
 
-/** 1 − |P−V|/(P+V). Equal P/V → 1. One side zero → 0. Both zero → 0. */
-export function primaryVitalityBalance(stats, className) {
-  const primaryKey = classDesirableAttrKeys(className)[0];
+export function epicDesirability(stats, className, total = null) {
+  const share = desirableStatShare(stats, className, total);
+  return share ** EPIC_DESIRABILITY_EXPONENT;
+}
+
+export function legendaryDesirability(stats, className, total = null) {
+  const leakage = legendaryLeakageShare(stats, className, total);
+  return clampUnitInterval(1 - LEGENDARY_LEAKAGE_PENALTY_SLOPE * leakage);
+}
+
+function presentPositive(value) {
+  return Number(value) > 0;
+}
+
+function epicFullPvlShape(primary, vitality, luckShare) {
+  const pvPenalty = interpolatePiecewise(
+    pShareOfPv(primary, vitality),
+    EPIC_PV_SHAPE_PENALTY_ANCHORS,
+  );
+  const luckPenalty = interpolatePiecewise(luckShare, EPIC_LUCK_SHAPE_PENALTY_ANCHORS);
+  return clampUnitInterval(1 - pvPenalty - luckPenalty);
+}
+
+function epicPvOffShape(primary, vitality) {
+  const x = pShareOfPv(primary, vitality);
+  return clampUnitInterval(
+    1 - EPIC_PV_OFF_PENALTY_SLOPE * Math.abs(x - EPIC_PV_OFF_TARGET_P_SHARE),
+  );
+}
+
+function epicPlOffShape(primary, luck) {
+  const pair = primary + luck;
+  if (!(pair > 0)) return 0;
+  const x = primary / pair;
+  return EPIC_PL_OFF_SHAPE_SCALE * clampUnitInterval(
+    1 - EPIC_PL_OFF_PENALTY_SLOPE * Math.abs(x - EPIC_PL_OFF_TARGET_P_SHARE),
+  );
+}
+
+function epicVlOffShape(vitality, luck) {
+  const pair = vitality + luck;
+  if (!(pair > 0)) return 0;
+  const x = vitality / pair;
+  return EPIC_VL_OFF_SHAPE_SCALE * clampUnitInterval(
+    1 - EPIC_VL_OFF_PENALTY_SLOPE * Math.abs(x - EPIC_VL_OFF_TARGET_V_SHARE),
+  );
+}
+
+function epicSingleDesirableShape(desirableShare, ceiling) {
+  const ref = EPIC_SINGLE_DESIRABLE_SHARE_REFERENCE;
+  if (!(ref > 0)) return 0;
+  return ceiling * Math.min(UNIT_INTERVAL_MAX, desirableShare / ref);
+}
+
+export function epicShape(stats, className, total = null) {
+  const t = total != null ? Number(total) : totalStats(stats);
+  if (!(t > 0) || !Number.isFinite(t)) return 0;
+  const primaryKey = classPrimaryAttrKey(className);
   const primary = attrValue(stats, primaryKey);
   const vitality = attrValue(stats, GEAR_VITALITY_ATTR_KEY);
-  const pair = primary + vitality;
-  if (!(pair > 0)) return 0;
-  return 1 - Math.abs(primary - vitality) / pair;
-}
-
-/**
- * LuckShare = Luck / ActualTotalAllocatedStats.
- * 0 luck → 0; (0, 30%] → 1; (30%, 60%) linear decay; ≥60% → 0.
- */
-export function luckSuitability(stats, className, total = null) {
-  void className;
-  const t = total != null ? Number(total) : totalStats(stats);
   const luck = attrValue(stats, GEAR_LUCK_ATTR_KEY);
-  if (!(luck > 0) || !(t > 0) || !Number.isFinite(t)) return 0;
-  const luckShare = luck / t;
-  if (luckShare <= LUCK_SUITABILITY_FULL_CREDIT_SHARE) return 1;
-  if (luckShare >= LUCK_SUITABILITY_ZERO_CREDIT_SHARE) return 0;
-  return clampUnitInterval(
-    (LUCK_SUITABILITY_ZERO_CREDIT_SHARE - luckShare) / LUCK_SUITABILITY_DECAY_SPAN,
-  );
+  const offPresent = classOffAttrKeys(className).filter((key) => presentPositive(attrValue(stats, key))).length;
+  const hasP = presentPositive(primary);
+  const hasV = presentPositive(vitality);
+  const hasLuck = presentPositive(luck);
+  const desirablePresent = Number(hasP) + Number(hasV) + Number(hasLuck);
+  const share = desirableStatShare(stats, className, t);
+
+  if (hasP && hasV && hasLuck && offPresent === EPIC_FULL_PVL_OFF_COUNT) {
+    return epicFullPvlShape(primary, vitality, luck / t);
+  }
+  if (hasP && hasV && !hasLuck && offPresent === EPIC_MIXED_OFF_COUNT) {
+    return epicPvOffShape(primary, vitality);
+  }
+  if (hasP && !hasV && hasLuck && offPresent === EPIC_MIXED_OFF_COUNT) {
+    return epicPlOffShape(primary, luck);
+  }
+  if (!hasP && hasV && hasLuck && offPresent === EPIC_MIXED_OFF_COUNT) {
+    return epicVlOffShape(vitality, luck);
+  }
+  if (desirablePresent === EPIC_SINGLE_DESIRABLE_COUNT && offPresent === EPIC_DOUBLE_OFF_COUNT) {
+    if (hasP) return epicSingleDesirableShape(share, EPIC_PRIMARY_ONLY_SHAPE_CEILING);
+    if (hasV) return epicSingleDesirableShape(share, EPIC_VITALITY_ONLY_SHAPE_CEILING);
+    return epicSingleDesirableShape(share, EPIC_LUCK_ONLY_SHAPE_CEILING);
+  }
+  return 0;
 }
 
-export function epicDistributionQuality(stats, className, total = null) {
-  const t = total != null ? total : totalStats(stats);
-  return (
-    EPIC_DISTRIBUTION_DESIRABLE_SHARE_WEIGHT * desirableStatShare(stats, className, t)
-    + EPIC_DISTRIBUTION_PV_BALANCE_WEIGHT * primaryVitalityBalance(stats, className)
-    + EPIC_DISTRIBUTION_LUCK_SUITABILITY_WEIGHT * luckSuitability(stats, className, t)
+export function legendaryShape(stats, className, total = null) {
+  const t = total != null ? Number(total) : totalStats(stats);
+  if (!(t > 0) || !Number.isFinite(t)) return 0;
+  const primary = attrValue(stats, classPrimaryAttrKey(className));
+  const vitality = attrValue(stats, GEAR_VITALITY_ATTR_KEY);
+  const luckShare = attrValue(stats, GEAR_LUCK_ATTR_KEY) / t;
+  const pvPenalty = interpolatePiecewise(
+    pShareOfPv(primary, vitality),
+    LEGENDARY_PV_SHAPE_PENALTY_ANCHORS,
   );
+  const luckPenalty = interpolatePiecewise(luckShare, LEGENDARY_LUCK_SHAPE_PENALTY_ANCHORS);
+  return clampUnitInterval(1 - pvPenalty - luckPenalty);
 }
 
-export function legendaryDistributionQuality(stats, className, total = null) {
-  const t = total != null ? total : totalStats(stats);
-  return (
-    LEGENDARY_DISTRIBUTION_OFF_STAT_AVOIDANCE_WEIGHT
-      * discretionaryOffStatAvoidance(stats, className, t)
-    + LEGENDARY_DISTRIBUTION_PV_BALANCE_WEIGHT * primaryVitalityBalance(stats, className)
-    + LEGENDARY_DISTRIBUTION_LUCK_SUITABILITY_WEIGHT * luckSuitability(stats, className, t)
-  );
-}
-
-export function gearDistributionQuality(stats, className, rarity, total = null) {
+export function gearDesirability(stats, className, rarity, total = null) {
   const key = String(rarity || "").toLowerCase();
-  if (key === "legendary") return legendaryDistributionQuality(stats, className, total);
-  return epicDistributionQuality(stats, className, total);
+  if (key === "legendary") return legendaryDesirability(stats, className, total);
+  return epicDesirability(stats, className, total);
+}
+
+export function gearShape(stats, className, rarity, total = null) {
+  const key = String(rarity || "").toLowerCase();
+  if (key === "legendary") return legendaryShape(stats, className, total);
+  return epicShape(stats, className, total);
+}
+
+export function rawQualityScore(budgetQuality, desirability, shape) {
+  return (
+    RAW_QUALITY_BUDGET_WEIGHT * Number(budgetQuality)
+    + RAW_QUALITY_DESIRABILITY_WEIGHT * Number(desirability)
+    + RAW_QUALITY_SHAPE_WEIGHT * Number(shape)
+  );
 }
 
 /**
- * Combined Intrinsic Quality and Nova-surcharge band inputs.
+ * Combined RawQuality and Nova-surcharge band inputs.
  * Percentile among same-rarity items is applied by the caller (empirical CDF).
  */
 export function scoreGearIntrinsicQuality({
@@ -194,22 +301,20 @@ export function scoreGearIntrinsicQuality({
   });
   const desirableShare = desirableStatShare(stats, className, total);
   const avoidance = offStatAvoidance(stats, className, total);
-  const discretionaryAvoidance = discretionaryOffStatAvoidance(stats, className, total);
-  const pvBalance = primaryVitalityBalance(stats, className);
-  const luck = luckSuitability(stats, className, total);
-  const distributionQuality = gearDistributionQuality(stats, className, rarity, total);
-  const intrinsicQuality =
-    INTRINSIC_QUALITY_BUDGET_WEIGHT * budgetQuality
-    + INTRINSIC_QUALITY_DISTRIBUTION_WEIGHT * distributionQuality;
+  const leakage = legendaryLeakageShare(stats, className, total);
+  const desirability = gearDesirability(stats, className, rarity, total);
+  const shape = gearShape(stats, className, rarity, total);
+  const intrinsicQuality = rawQualityScore(budgetQuality, desirability, shape);
   return Object.freeze({
     budgetQuality,
-    distributionQuality,
+    desirability,
+    shape,
     intrinsicQuality,
+    rawQuality: intrinsicQuality,
+    distributionQuality: desirability,
     desirableStatShare: desirableShare,
     offStatAvoidance: avoidance,
-    discretionaryOffStatAvoidance: discretionaryAvoidance,
-    primaryVitalityBalance: pvBalance,
-    luckSuitability: luck,
+    legendaryLeakageShare: leakage,
     referenceLevel: refLevel,
     referenceBudget,
     actualBudget: total,

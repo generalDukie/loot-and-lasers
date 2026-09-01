@@ -60,47 +60,43 @@ Resale (Phase 2, reused): `ROUND(pre-variance base × 0.60/0.60/0.40/0.35/0.30)`
 
 ## Nova surcharge
 
-Epic / Legendary only. Intrinsic Quality is **not** GES and **not** raw `stat_budget_variance`.
+Epic / Legendary only. Quality is **not** GES and **not** raw `stat_budget_variance`.
 
-`IntrinsicQuality = 0.20 × BudgetQuality + 0.80 × DistributionQuality`
+`RawQuality = 30 × BudgetQuality + 50 × Desirability + 20 × Shape` (uncapped). A perfect-distribution on-level piece is 97 / 98.5 / 100 / 101.5 / 103 at BQ 0.90 / 0.95 / 1.00 / 1.05 / 1.10.
 
-**BudgetQuality** = `ActualGeneratedBudget / NeutralPool(snapshotted Market generation level, same rarity, same slot)`.
+**BudgetQuality** = `ActualPersistedTotalStatBudget / NeutralOnLevelReferenceBudget` at `quality_reference_level`, same rarity, same slot, no ±10% in the denominator. There is **no** extra ItemLevel penalty — L−1/L−2/L−3 score lower only because their actual budget is smaller.
 
-The denominator is **not** the item's own ItemLevel. A Market L47 piece generated at player L50 uses the neutral L50 pool. Phase 2 ±10% variance is in the numerator only; BudgetQuality is **not** clamped to 1.0.
+**Epic Desirability** = `DesirableShare²` (P+V+Luck share of actual total). **Epic Shape** is branch-specific: full P/V/L uses P/V and Luck penalty tables (ideal Luck 17.5–22.5%); P+V+off prefers ~62.5/37.5 P/V; P+Luck+off and V+Luck+off use scaled 75/25 splits; one-desirable pieces use Primary/Vitality/Luck ceilings 0.60 / 0.50 / 0.35.
 
-**Epic Distribution Quality:** 60% desirable-stat share (class Primary + Vitality + Luck) + 20% Primary/Vitality balance + 20% Luck suitability.
+**Legendary Desirability** = `clamp(1 − 6 × Leakage, 0, 1)` where Leakage is discretionary off-stat share above the mandatory 10% per off-stat. **Legendary Shape** uses P/V and Luck penalty tables (ideal Luck 15–20%). Off-stat leakage is not double-penalized in Shape. Generation is unchanged: five stats, 10% floor, 17.5% per-off-stat cap on directed Partial B.
 
-**Legendary Distribution Quality:** 60% **discretionary** off-stat avoidance + 25% P/V balance + 15% Luck suitability. Legendary's mandatory 10% per stat is not a penalty; only off-stat allocation above that floor counts as excess.
+The combined RawQuality is classified by **within-rarity** empirical CDF (Epic vs Epic, Legendary vs Legendary; **not** class-segmented) into six Nova bands. The reference population is **normal Black Market Gear at the offer's snapshotted generation level**: Market 35/35/20/10 ItemLevel offsets, Phase 2 ±10% variance, current slot/allocation. Cache key is `rarity + quality_reference_level` (lazy, deterministic, not class). Contraband uses that same rarity/level CDF. Snapshotted on the offer; existing offers are not rescored. New offers use `phase6-intrinsic-quality-v5`.
 
-**Luck suitability** (`Luck / ActualTotal`): absent = 0; `(0, 30%]` = full credit; 30%→60% linear decay; `≥60%` = 0. There is no peak at one-third.
+Common, Uncommon, and Rare Gear never receive a Nova surcharge.
 
-**P/V balance:** `1 − |Primary − Vitality| / (Primary + Vitality)`.
+**Bands** (`NOVA_SURCHARGE_BANDS`): Below Top 25% / Top 17.5–25% / Top 10–17.5% / Top 5–10% / Top 2.5–5% / Top 2.5% (cuts 0.75 / 0.825 / 0.90 / 0.95 / 0.975).
 
-The combined score is classified by **within-rarity** empirical CDF (Epic vs Epic, Legendary vs Legendary; **not** class-segmented, **not** a shared Epic+Legendary cutoff) into the six Nova bands. The reference population is **normal Black Market Gear at the offer's snapshotted generation level**: Market 35/35/20/10 ItemLevel offsets vs that level, Phase 2 ±10% variance, current slot/allocation. Cache key is `rarity + quality_reference_level` (lazy, deterministic, not class). A single L50 CDF is **not** used for other levels — BudgetQuality's L−k / L ratio is nonlinear, and a fixed L50 table over-rates high-level Epic Nova. Contraband uses that same rarity/level CDF (no separate on-level distribution); its 100% current-level generation naturally scores stronger BudgetQuality. Snapshotted on the offer (`quality_reference_level`); existing offers are not rescored when the helper changes.
-
-Common, Uncommon, and Rare Gear never receive a Nova surcharge. Band percentile thresholds are unchanged (`NOVA_SURCHARGE_BANDS`).
-
-**Appearance chance** (`NOVA_SURCHARGE_EPIC_CHANCES` / `NOVA_SURCHARGE_LEGENDARY_CHANCES`):
+**Appearance chance:**
 
 | Band | Epic | Legendary |
 |---|---:|---:|
 | Below Top 25% | 30% | 60% |
-| Top 15–25% | 50% | 80% |
-| Top 8–15% | 60% | 90% |
-| Top 3–8% | 75% | 100% |
-| Top 1–3% | 85% | 100% |
-| Top 1% | 95% | 100% |
+| Top 17.5–25% | 50% | 80% |
+| Top 10–17.5% | 60% | 90% |
+| Top 5–10% | 75% | 100% |
+| Top 2.5–5% | 85% | 100% |
+| Top 2.5% | 95% | 100% |
 
 On a successful roll, Nova is chosen uniformly from the 3-value pool (`NOVA_SURCHARGE_POOL_SIZE`):
 
 | Band | Epic | Legendary |
 |---|---|---|
 | Below Top 25% | 10 / 20 / 40 | 50 / 60 / 75 |
-| Top 15–25% | 50 / 60 / 75 | 75 / 100 / 125 |
-| Top 8–15% | 80 / 90 / 100 | 100 / 125 / 150 |
-| Top 3–8% | 100 / 110 / 125 | 160 / 180 / 200 |
-| Top 1–3% | 125 / 150 / 175 | 200 / 225 / 250 |
-| Top 1% | 160 / 180 / 200 | 250 / 275 / 300 |
+| Top 17.5–25% | 50 / 60 / 75 | 75 / 100 / 125 |
+| Top 10–17.5% | 80 / 90 / 100 | 100 / 125 / 150 |
+| Top 5–10% | 100 / 110 / 125 | 160 / 180 / 200 |
+| Top 2.5–5% | 125 / 150 / 175 | 200 / 225 / 250 |
+| Top 2.5% | 160 / 180 / 200 | 250 / 275 / 300 |
 
 ## Haggling
 

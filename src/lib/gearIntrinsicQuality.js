@@ -1,7 +1,7 @@
 /**
  * Offer-time Intrinsic Quality + within-rarity percentile for Nova surcharge.
- * Scoring is productionMath/gearQuality. Percentile is the empirical CDF of
- * that score among same-rarity **normal Black Market** Gear: Market 35/35/20/10
+ * Scoring is productionMath/gearQuality RawQuality. Percentile is the empirical
+ * CDF of that score among same-rarity **normal Black Market** Gear: Market 35/35/20/10
  * ItemLevel offsets vs snapshotted generation level, Phase 2 ±10% variance,
  * current slot/allocation rules, class-relative roles. Cache key is
  * rarity + qualityReferenceLevel (not class). Contraband uses this same

@@ -216,11 +216,14 @@ test("serialize collections historical discovery", () => {
     collected_artifacts: [5],
     collected_relics: [],
     discovered_gear: ["weapon:Foo"],
-    dungeon_planet: 3,
+    phase7_pve: {
+      dungeon_clears: [10, 10, 0, 0, 0, 0, 0, 0, 0, 0],
+    },
   });
   assert.equal(s.semantics, "historical_discovery");
   assert.equal(s.collections.find((c) => c.id === "species").discovered, 2);
   assert.equal(s.collections.find((c) => c.id === "dungeon_badges").discovered, 2);
+  assert.deepEqual(s.collections.find((c) => c.id === "dungeon_badges").entry_ids, ["D1", "D2"]);
 });
 
 await testAsync("SyncAchievements unlocks from stats and rejects injection", async () => {

@@ -11,6 +11,8 @@ import {
   classPrimaryIndex,
   PLAYER_FREE_ATTR_WEIGHTS,
   FREE_ATTRS_PER_LEVEL_AFTER_1,
+  projectedProgressionAfterXp,
+  MAX_LEVELS_PER_XP_GRANT,
 } from "./productionMath.js";
 import {
   composePermanentAttributes,
@@ -18,8 +20,7 @@ import {
 } from "@/lib/characterStats.js";
 
 export const LEVEL_UP_ATTRS_PER_LEVEL = FREE_ATTRS_PER_LEVEL_AFTER_1;
-/** Safety guard against infinite level-up loops. Not a production max level. */
-export const MAX_LEVELS_PER_XP_GRANT = 100_000;
+export { MAX_LEVELS_PER_XP_GRANT, projectedProgressionAfterXp };
 
 export const ATTR_KEYS = Object.freeze([
   "strength",
@@ -173,32 +174,15 @@ export function grantCharacterXp({
     return { patch, progression };
   }
 
-  let newExp = previousXp + awarded;
-  let newLevel = previousLevel;
-  let expToNext = previousReq;
-  let safety = 0;
-
-  while (newExp >= expToNext) {
-    if (!Number.isFinite(expToNext) || expToNext <= 0) {
-      const err = new Error("Invalid XP requirement during level-up");
-      err.status = 500;
-      err.code = "INTERNAL_ERROR";
-      throw err;
-    }
-    newExp -= expToNext;
-    newLevel += 1;
-    expToNext = xpToNext(newLevel);
-    safety += 1;
-    if (safety > MAX_LEVELS_PER_XP_GRANT) {
-      const err = new Error("XP level-up safety limit exceeded");
-      err.status = 500;
-      err.code = "INTERNAL_ERROR";
-      throw err;
-    }
-  }
-
-  newExp = Math.max(0, Math.floor(newExp));
-  const levelsGained = newLevel - previousLevel;
+  const projected = projectedProgressionAfterXp({
+    level: previousLevel,
+    experience: previousXp,
+    xpAmount: awarded,
+  });
+  const newExp = projected.experience;
+  const newLevel = projected.level;
+  const expToNext = projected.experience_to_next_level;
+  const levelsGained = projected.levels_gained;
   const patch = {
     experience: newExp,
     level: newLevel,

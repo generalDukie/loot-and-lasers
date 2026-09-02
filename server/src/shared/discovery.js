@@ -4,6 +4,7 @@
  * Client processDiscovery is presentation-only; Node persists ownership.
  */
 import { ARTIFACTS, RELICS, SPECIES_COUNT } from "../../../src/lib/collectibles.js";
+import { dungeonBadgeCount, dungeonBadgeIds, DUNGEON_BADGE_MAX } from "../../../src/lib/dungeonBadges.js";
 import { secureRandom } from "../rewards/rng.js";
 
 const GEAR_TYPES = new Set([
@@ -137,7 +138,8 @@ export function serializeCollections(character, { gearTotal = 0 } = {}) {
   const artifacts = [...new Set(character?.collected_artifacts || [])];
   const relics = [...new Set(character?.collected_relics || [])];
   const gear = [...new Set(character?.discovered_gear || [])];
-  const badges = Math.max(0, (character?.dungeon_planet || 1) - 1);
+  const badges = dungeonBadgeCount(character);
+  const badgeIds = dungeonBadgeIds(character);
   return {
     semantics: "historical_discovery",
     collections: [
@@ -177,10 +179,10 @@ export function serializeCollections(character, { gearTotal = 0 } = {}) {
         id: "dungeon_badges",
         display_name: "Dungeon Badges",
         discovered: badges,
-        total: null,
-        entry_ids: [],
-        completed: false,
-        note: "Derived from dungeon_planet progress",
+        total: DUNGEON_BADGE_MAX,
+        entry_ids: badgeIds,
+        completed: badges >= DUNGEON_BADGE_MAX,
+        note: "One badge per completed standard Dungeon track (D1–D10)",
       },
     ],
   };

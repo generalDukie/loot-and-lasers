@@ -16,15 +16,6 @@ export const WEEKLY_NOVA_QUESTS = [
     emoji: "swords",
   },
   {
-    id: "dungeon",
-    key: "dungeon",
-    label: "Dungeon Delver",
-    desc: "Win 3 dungeon fights",
-    goal: 3,
-    reward: 7,
-    emoji: "compass",
-  },
-  {
     id: "missions",
     key: "missions",
     label: "Mission Runner",
@@ -34,6 +25,9 @@ export const WEEKLY_NOVA_QUESTS = [
     emoji: "beer",
   },
 ];
+
+/** Retired Phase 7: Dungeon/Wormhole no longer progress a Nova-paying weekly objective. */
+export const RETIRED_WEEKLY_NOVA_QUEST_IDS = Object.freeze(["dungeon"]);
 
 export function ensureWeeklyNovaState(character) {
   const week = getWeekKey();

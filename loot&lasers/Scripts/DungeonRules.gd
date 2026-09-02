@@ -1,9 +1,10 @@
 class_name DungeonRules
 extends RefCounted
-## Galactic Frontier — mirrors dungeonEngine.js / dungeonData.js (client sim + gates).
+## Galactic Frontier presentation — unlocks, planet copy, cooldown display helpers.
+## Combat, XP, Gear, and enemy identity are server-authoritative.
 
 const ENEMIES_PER_PLANET := 10
-## @deprecated Death quotas removed — always 1h shared cooldown.
+## @deprecated Death quotas removed — independent 1h Dungeon and Wormhole cooldowns.
 const DEATHS_PER_DAY := 0
 ## @deprecated Continue fee removed with death quotas.
 const CONTINUE_COST := 0
@@ -15,38 +16,20 @@ const WIN_COOLDOWN_MS := BATTLE_COOLDOWN_MS
 const LOSS_COOLDOWN_MS := BATTLE_COOLDOWN_MS
 const WORMHOLE_ID := "wormhole"
 const STATIC_PLANET_COUNT := 10
-const WORMHOLE_BASE_LEVEL := 200
-const WORMHOLE_LEVELS_PER_DEPTH := 35
-const WORMHOLE_FIRST_LEVEL_OFFSET := 3
-const REGULAR_ENEMY_ATTRIBUTE_MULTIPLIER := 1.20
-const BOSS_ATTRIBUTE_MULTIPLIER := 1.30
-const ENEMY_SEED_PLANET_MULTIPLIER := 1_000
-const ENEMY_SEED_INDEX_MULTIPLIER := 37
-const ENEMY_SEED_OFFSET := 7
-const SPECIES_PLANET_MULTIPLIER := 13
-const SPECIES_INDEX_MULTIPLIER := 7
-const SPECIES_COUNT := 30
+const DUNGEON_BADGE_MAX := 10
+const DUNGEON_BADGE_ID_PREFIX := "D"
+const HTTP_STATUS_REQUEST_TIMEOUT := 408
+const HTTP_STATUS_TOO_EARLY := 425
+const HTTP_STATUS_TOO_MANY_REQUESTS := 429
+const HTTP_STATUS_SERVER_ERROR_MIN := 500
+const HTTP_STATUS_SERVER_ERROR_MAX := 599
+const SKIP_CODE_TIMEOUT := "TIMEOUT"
+const SKIP_CODE_NETWORK_ERROR := "NETWORK_ERROR"
 const MILLISECONDS_PER_SECOND := 1_000.0
 const SECONDS_PER_MINUTE := 60
 const UNLIMITED_LIVES_SENTINEL := 999
 
 const UNLOCK_LEVELS := [0, 10, 20, 30, 40, 50, 60, 70, 90, 120, 140]
-
-const ENEMY_LEVELS := [
-	[],
-	[10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
-	[20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
-	[30, 31, 32, 33, 34, 35, 36, 37, 38, 39],
-	[40, 42, 43, 45, 46, 48, 49, 51, 52, 54],
-	[55, 57, 58, 60, 61, 63, 64, 66, 67, 69],
-	[70, 72, 74, 76, 78, 80, 82, 84, 86, 88],
-	[90, 93, 95, 98, 100, 103, 105, 108, 110, 113],
-	[115, 118, 120, 123, 125, 128, 130, 133, 135, 138],
-	[140, 143, 146, 149, 152, 155, 158, 161, 164, 167],
-	[170, 173, 177, 180, 183, 187, 190, 193, 197, 200],
-]
-
-const LEVEL_OFFSETS := [0, 3, 7, 10, 13, 17, 20, 23, 27, 30]
 
 const PLANETS := [
 	{"id": 1, "name": "Verdant Expanse", "icon": "earth", "boss_emoji": "bug", "color": Color(0.13, 0.77, 0.37),
@@ -86,8 +69,8 @@ const PLANETS := [
 		"lore": "Every facet is a mirror with an opinion. Walk carefully — the Prism Sovereign turns regret into a weapon and calls it judgment.",
 		"boss": "Prism Sovereign", "names": ["Facet Wraith", "Prism Scout", "Lattice Blade", "Refractor", "Geode Knight", "Shardling"]},
 	{"id": 10, "name": "World Zero", "icon": "orbit", "boss_emoji": "orbit", "color": Color(0.98, 0.75, 0.14),
-		"desc": "The first planet. The last stop of the known Frontier. Clear The Genesis to open the Wormhole.",
-		"lore": "Charts end here for a reason. The Genesis is not a guardian — it is a lock. Break it, and the Wormhole stops pretending to be sealed.",
+		"desc": "The last mapped world of the Frontier. Clearing every standard Dungeon enemy — all 100 — opens the Wormhole.",
+		"lore": "Charts end here for a reason. The Genesis is the last named lock, but the Wormhole does not open until every standard enemy on D1–D10 has fallen.",
 		"boss": "The Genesis", "names": ["Proto Guard", "First Echo", "Zero Spawn", "Origin Wisp", "Seedling", "Primeform"]},
 ]
 
@@ -132,65 +115,8 @@ static func get_planet(planet_id: int) -> Dictionary:
 	}
 
 
-static func enemy_level(planet_id: int, enemy_index: int) -> int:
-	var idx := clampi(enemy_index, 1, ENEMIES_PER_PLANET)
-	var band := maxi(1, planet_id)
-	if band <= STATIC_PLANET_COUNT:
-		return int(ENEMY_LEVELS[band][idx - 1])
-	var depth := band - STATIC_PLANET_COUNT
-	var start := (
-		WORMHOLE_BASE_LEVEL
-		+ (depth - 1) * WORMHOLE_LEVELS_PER_DEPTH
-		+ WORMHOLE_FIRST_LEVEL_OFFSET
-	)
-	return start + int(LEVEL_OFFSETS[idx - 1])
-
-
-static func expected_player_attrs(level: int) -> int:
-	return ExpectedPlayerAttributes.at(level)
-
-
-static func enemy_budget(level: int, is_boss: bool) -> int:
-	var mult := BOSS_ATTRIBUTE_MULTIPLIER if is_boss else REGULAR_ENEMY_ATTRIBUTE_MULTIPLIER
-	return int(round(float(expected_player_attrs(level)) * mult))
-
-
-static func generate_enemy(planet: Dictionary, enemy_index: int) -> Dictionary:
-	var pid := int(planet.get("id", 1))
-	var idx := clampi(enemy_index, 1, ENEMIES_PER_PLANET)
-	var is_boss := idx == ENEMIES_PER_PLANET
-	var rng := RandomNumberGenerator.new()
-	rng.seed = (
-		pid * ENEMY_SEED_PLANET_MULTIPLIER
-		+ idx * ENEMY_SEED_INDEX_MULTIPLIER
-		+ ENEMY_SEED_OFFSET
-	)
-	var level := enemy_level(pid, idx)
-	var budget := enemy_budget(level, is_boss)
-	var archetypes := ["MIGHT", "REFLEX", "TECH"]
-	var arch: String = archetypes[rng.randi_range(0, 2)]
-	var stats := MissionCombat.distribute_attrs(budget, arch)
-	var class_key: String = MissionCombat.ARCHETYPE_CLASS[arch]
-	var names: Array = planet.get("names", [])
-	var name := str(planet.get("boss", "Boss")) if is_boss else (
-		str(names[rng.randi_range(0, names.size() - 1)]) if names.size() > 0 else "Frontier Foe"
-	)
-	return {
-		"id": "dungeon-%s-%s" % [pid, idx],
-		"name": name,
-		"race": null,
-		"class": class_key,
-		"dungeonEnemyArchetype": arch,
-		"dungeonEnemy": true,
-		"suppressClassPassive": true,
-		"level": level,
-		"stats": stats,
-		"isBoss": is_boss,
-		"speciesId": (
-			(pid * SPECIES_PLANET_MULTIPLIER + idx * SPECIES_INDEX_MULTIPLIER)
-			% SPECIES_COUNT
-		) + 1,
-	}
+static func displayed_remaining_ms(remaining_at_sync: int, elapsed_ms: int) -> int:
+	return maxi(0, remaining_at_sync - maxi(0, elapsed_ms))
 
 
 static func format_ms(ms: int) -> String:
@@ -200,9 +126,17 @@ static func format_ms(ms: int) -> String:
 	return "%d:%02d" % [m, s]
 
 
-static func cooldown_remaining_ms(character: Dictionary) -> int:
-	var until := str(character.get("dungeon_cooldown_until", ""))
+static func cooldown_remaining_ms(character: Dictionary, kind: String = "dungeon") -> int:
+	var blob: Variant = character.get("dungeon", {})
+	if typeof(blob) == TYPE_DICTIONARY:
+		var key := "wormhole_cooldown_remaining_ms" if kind == "wormhole" else "dungeon_cooldown_remaining_ms"
+		if (blob as Dictionary).has(key):
+			return maxi(0, int((blob as Dictionary).get(key, 0)))
+	var until_key := "wormhole_cooldown_until" if kind == "wormhole" else "dungeon_cooldown_until"
+	var until := str(character.get(until_key, ""))
 	if until.is_empty() or until == "<null>":
+		if kind == "wormhole":
+			return 0
 		var at := str(character.get("dungeon_cooldown_at", ""))
 		var ms := _as_int(character.get("dungeon_cooldown_ms", 0))
 		if at.is_empty() or ms <= 0:
@@ -256,3 +190,112 @@ static func _parse_iso_ms(iso: String) -> float:
 ## @deprecated Death quotas removed — always returns a sentinel so continue fees never gate.
 static func free_lives_left(_character: Dictionary) -> int:
 	return UNLIMITED_LIVES_SENTINEL
+
+
+static func badge_id_for_index(index: int) -> String:
+	if index < 0 or index >= STATIC_PLANET_COUNT:
+		return ""
+	return "%s%s" % [DUNGEON_BADGE_ID_PREFIX, index + 1]
+
+
+static func badge_ids_from_clears(clears: Variant) -> PackedStringArray:
+	var out := PackedStringArray()
+	if typeof(clears) != TYPE_ARRAY:
+		return out
+	var rows: Array = clears
+	var limit := mini(STATIC_PLANET_COUNT, rows.size())
+	for i in limit:
+		if _as_int(rows[i]) >= ENEMIES_PER_PLANET:
+			out.append(badge_id_for_index(i))
+	return out
+
+
+static func badge_ids_from_tracks(tracks: Variant) -> PackedStringArray:
+	var out := PackedStringArray()
+	if typeof(tracks) != TYPE_ARRAY:
+		return out
+	var rows: Array = tracks
+	var limit := mini(STATIC_PLANET_COUNT, rows.size())
+	for i in limit:
+		var row: Variant = rows[i]
+		if typeof(row) == TYPE_DICTIONARY and bool((row as Dictionary).get("complete", false)):
+			out.append(badge_id_for_index(i))
+	return out
+
+
+## Priority: serialized dungeon_badge_ids → phase7_pve.dungeon_clears → tracks → empty.
+## Never uses sequential dungeon_planet.
+static func badge_ids_from_character(character: Dictionary, dungeon_view: Dictionary = {}) -> PackedStringArray:
+	var view := dungeon_view
+	if view.is_empty() and typeof(character.get("dungeon", null)) == TYPE_DICTIONARY:
+		view = character.get("dungeon", {})
+	if typeof(view) == TYPE_DICTIONARY and (view as Dictionary).has("dungeon_badge_ids"):
+		return _normalize_badge_ids((view as Dictionary).get("dungeon_badge_ids", []))
+	var phase7: Variant = character.get("phase7_pve", {})
+	if typeof(phase7) == TYPE_DICTIONARY:
+		var clears: Variant = (phase7 as Dictionary).get("dungeon_clears", null)
+		if typeof(clears) == TYPE_ARRAY:
+			return badge_ids_from_clears(clears)
+	if typeof(view) == TYPE_DICTIONARY:
+		var from_tracks := badge_ids_from_tracks((view as Dictionary).get("tracks", []))
+		if not from_tracks.is_empty():
+			return from_tracks
+	return PackedStringArray()
+
+
+static func badge_count_from_character(character: Dictionary, dungeon_view: Dictionary = {}) -> int:
+	return badge_ids_from_character(character, dungeon_view).size()
+
+
+static func badge_label(dungeon_display_id: int) -> String:
+	var planet: Dictionary = get_planet(dungeon_display_id)
+	var dungeon_name := str(planet.get("name", "Dungeon"))
+	return "D%s · %s" % [dungeon_display_id, dungeon_name]
+
+
+static func badge_description() -> String:
+	return "Earned by completing all ten one-time enemies in this Dungeon."
+
+
+static func badge_status_text(owned: int) -> String:
+	return "Dungeon badges · %s/%s" % [owned, DUNGEON_BADGE_MAX]
+
+
+static func badge_empty_text() -> String:
+	return "No badges — complete all ten enemies in a standard Dungeon."
+
+
+static func skip_request_id_should_retain(res: Dictionary) -> bool:
+	if res.is_empty():
+		return true
+	if bool(res.get("ok", false)):
+		return false
+	if bool(res.get("retryable", false)):
+		return true
+	var status := int(res.get("status", 0))
+	if status <= 0:
+		return true
+	var code := str(res.get("code", ""))
+	if code == SKIP_CODE_TIMEOUT or code == SKIP_CODE_NETWORK_ERROR:
+		return true
+	if status == HTTP_STATUS_REQUEST_TIMEOUT or status == HTTP_STATUS_TOO_EARLY or status == HTTP_STATUS_TOO_MANY_REQUESTS:
+		return true
+	if status >= HTTP_STATUS_SERVER_ERROR_MIN and status <= HTTP_STATUS_SERVER_ERROR_MAX:
+		return true
+	return false
+
+
+static func _normalize_badge_ids(raw: Variant) -> PackedStringArray:
+	var out := PackedStringArray()
+	if typeof(raw) != TYPE_ARRAY:
+		return out
+	var seen := {}
+	for value in raw:
+		var id := str(value).strip_edges().to_upper()
+		if id.is_empty() or seen.has(id):
+			continue
+		seen[id] = true
+		out.append(id)
+		if out.size() >= DUNGEON_BADGE_MAX:
+			break
+	return out

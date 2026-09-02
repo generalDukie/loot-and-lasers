@@ -20,15 +20,11 @@ import {
 } from "../src/shared/rewards.js";
 import {
   MISSION_XP_REBALANCE,
-  DUNGEON_XP_PER_DRU_MULTIPLIER,
-  DUNGEON_TOTAL_DRU,
-  getEnemyDru,
-  druToRewards,
   computeMissionXpFromFuel,
   applyXpToCharacter,
   DUNGEON_UNLOCK_LEVELS,
 } from "../src/shared/economyFormulas.js";
-import { missionXpReward } from "../../src/lib/productionMath/index.js";
+import { missionXpReward, dungeonEncounterXp } from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -84,8 +80,7 @@ function expectedDaysTo(targets, fuelPerDay = 300) {
         if (cleared.has(key)) continue;
         if (level < levels[i] - 5) break;
         cleared.add(key);
-        const { experience } = druToRewards(getEnemyDru(d, i + 1), levels[i]);
-        gain(experience);
+        gain(dungeonEncounterXp(d - 1, i));
       }
     }
   }
@@ -148,20 +143,9 @@ test("Mission XP uses shared XP/Fuel ×0.85; scale once", () => {
   assert.equal(MISSION_XP_REBALANCE, 0.85);
 });
 
-test("Dungeon XP uses × 2.0 per DRU; uses enemy level XP/Fuel", () => {
-  assert.deepEqual(DUNGEON_TOTAL_DRU.slice(1), [40, 50, 60, 70, 95, 110, 125, 140, 155, 185]);
-  assert.equal(DUNGEON_XP_PER_DRU_MULTIPLIER, 2.0);
-  const dru = getEnemyDru(1, 10);
-  const { experience, stardust } = druToRewards(dru, 19);
-  assert.equal(stardust, 0);
-  assert.equal(
-    experience,
-    Math.round(dru * getMissionXpPerFuel(19) * DUNGEON_XP_PER_DRU_MULTIPLIER)
-  );
-  // Enemy level, not player level:
-  const highPlayer = druToRewards(dru, 19);
-  const wrongLevel = druToRewards(dru, 100);
-  assert.notEqual(highPlayer.experience, wrongLevel.experience);
+test("Dungeon XP uses production dungeonEncounterXp", () => {
+  assert.ok(dungeonEncounterXp(0, 9) > 0);
+  assert.ok(Number.isFinite(dungeonEncounterXp(9, 9)));
 });
 
 test("Historical Post200Growth helper still defined; live XPToNext is productionMath", () => {

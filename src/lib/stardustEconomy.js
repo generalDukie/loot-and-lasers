@@ -46,20 +46,6 @@ export const MISSION_GEAR_RARITY_WEIGHTS = Object.freeze({
   legendary: 2,
 });
 
-/** Regular dungeon enemy rarity (no Common). */
-export const DUNGEON_REGULAR_RARITY_WEIGHTS = Object.freeze({
-  uncommon: 40,
-  rare: 30,
-  epic: 20,
-  legendary: 10,
-});
-
-/** Dungeon boss rarity. */
-export const DUNGEON_BOSS_RARITY_WEIGHTS = Object.freeze({
-  epic: 70,
-  legendary: 30,
-});
-
 export const ARENA_REWARDED_WINS_PER_DAY = 10;
 export const ARENA_WIN_FUEL_EQUIVALENT = 2.25;
 export const ARENA_WIN_STARDUST_MULTIPLIER = ARENA_WIN_FUEL_EQUIVALENT;
@@ -318,14 +304,6 @@ function rollFromWeights(weights, rng = Math.random) {
 
 export function rollMissionGearRarity(rng = Math.random) {
   return rollFromWeights(MISSION_GEAR_RARITY_WEIGHTS, rng);
-}
-
-export function rollDungeonRegularRarity(rng = Math.random) {
-  return rollFromWeights(DUNGEON_REGULAR_RARITY_WEIGHTS, rng);
-}
-
-export function rollDungeonBossRarity(rng = Math.random) {
-  return rollFromWeights(DUNGEON_BOSS_RARITY_WEIGHTS, rng);
 }
 
 export function getArenaRewardedWinsState(character, today) {

@@ -42,6 +42,14 @@ import {
   MARKET_HAGGLE_DISCOUNT_MIN_PERCENT,
   MARKET_HAGGLE_DISCOUNT_MAX_PERCENT,
   blackMarketPrice,
+  DUNGEON_WORMHOLE_SKIP_NOVA,
+  DUNGEON_WORMHOLE_COOLDOWN_MS,
+  DUNGEON_WORMHOLE_COOLDOWN_HOURS,
+  DUNGEON_COUNT,
+  DUNGEON_ENCOUNTERS_PER_DUNGEON,
+  dungeonUnlockLevel,
+  rollDungeonRegularRarity,
+  rollDungeonBossRarity,
 } from "./productionMath.js";
 import {
   generateContrabandOffer,
@@ -68,11 +76,6 @@ import {
 
 /** One production XP-efficiency factor. Mission XP applies it twice (certified). */
 export const MISSION_XP_REBALANCE = XP_REWARD_EFFICIENCY;
-/**
- * Dungeon DRU → XP conversion: 1 DRU = 2 fuel-equivalents of XP at the
- * enemy's level. Single authoritative balance constant.
- */
-export const DUNGEON_XP_PER_DRU_MULTIPLIER = 2.0;
 import {
   computeItemVendorValue,
   ITEM_SELL_TYPE_WEIGHT,
@@ -99,8 +102,6 @@ import {
   getArenaRewardedWinsState,
   arenaWinGrantsStardust,
   rollMissionGearRarity,
-  rollDungeonRegularRarity,
-  rollDungeonBossRarity,
   GearSaleValue,
   StardustPerFuel,
 } from "./stardustEconomy.js";
@@ -145,12 +146,6 @@ const STIM_REFRESH_BASE_DURATION_DIVISOR = 2;
 
 const ARENA_XP_FUEL_EQUIVALENT_NUMERATOR = 5;
 const ARENA_XP_FUEL_EQUIVALENT_DENOMINATOR = 7;
-const WORMHOLE_BASE_TOTAL_DRU = 185;
-const WORMHOLE_DRU_PER_DEPTH = 25;
-const WORMHOLE_BASE_ENEMY_LEVEL = 200;
-const WORMHOLE_LEVELS_PER_DEPTH = 35;
-const WORMHOLE_FIRST_ENEMY_OFFSET = 3;
-const DRU_PRECISION_SCALE = 100;
 
 export { XP_STARDUST_SCALE }; // legacy Stardust callers only — not XP
 
@@ -1203,52 +1198,31 @@ export function computeArenaRewards(player, opp, won, freeOrOpts = true) {
 }
 
 // ── Dungeon ──────────────────────────────────────────────────
-export const DUNGEON_ENEMIES_PER_PLANET = 10;
-/** @deprecated Death quotas removed — infinite retries with shared cooldown. */
+export const DUNGEON_ENEMIES_PER_PLANET = DUNGEON_ENCOUNTERS_PER_DUNGEON;
+/** @deprecated Death quotas removed — infinite retries with independent cooldowns. */
 export const DUNGEON_DEATHS_PER_DAY = 0;
 /** @deprecated Continue fee removed with death quotas. */
 export const DUNGEON_CONTINUE_COST = 0;
-/** Finalized: dungeon cooldown skip (Nova crystals). */
-export const DUNGEON_SKIP_COST = 25;
-/** Shared post-sim cooldown for all dungeon / wormhole fights. */
-export const DUNGEON_BATTLE_COOLDOWN_HOURS = 1;
-export const DUNGEON_BATTLE_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_HOURS
-  * MILLISECONDS_PER_HOUR;
+/** Finalized: dungeon/wormhole cooldown skip (Nova crystals). */
+export const DUNGEON_SKIP_COST = DUNGEON_WORMHOLE_SKIP_NOVA;
+/** Independent Dungeon and Wormhole cooldowns share this duration. */
+export const DUNGEON_BATTLE_COOLDOWN_HOURS = DUNGEON_WORMHOLE_COOLDOWN_HOURS;
+export const DUNGEON_BATTLE_COOLDOWN_MS = DUNGEON_WORMHOLE_COOLDOWN_MS;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_WIN_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
 /** @deprecated use DUNGEON_BATTLE_COOLDOWN_MS */
 export const DUNGEON_LOSS_COOLDOWN_MS = DUNGEON_BATTLE_COOLDOWN_MS;
-export const DUNGEON_STORY_PLANETS = 10;
+export const DUNGEON_STORY_PLANETS = DUNGEON_COUNT;
 
-export const DUNGEON_TOTAL_DRU = [0, 40, 50, 60, 70, 95, 110, 125, 140, 155, 185];
-export const DUNGEON_ENEMY_DRU_SHARE = [
-  0, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.14, 0.18,
-];
-export const DUNGEON_ENEMY_LEVELS = [
-  null,
-  [10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
-  [20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
-  [30, 31, 32, 33, 34, 35, 36, 37, 38, 39],
-  [40, 42, 43, 45, 46, 48, 49, 51, 52, 54],
-  [55, 57, 58, 60, 61, 63, 64, 66, 67, 69],
-  [70, 72, 74, 76, 78, 80, 82, 84, 86, 88],
-  [90, 93, 95, 98, 100, 103, 105, 108, 110, 113],
-  [115, 118, 120, 123, 125, 128, 130, 133, 135, 138],
-  [140, 143, 146, 149, 152, 155, 158, 161, 164, 167],
-  [170, 173, 177, 180, 183, 187, 190, 193, 197, 200],
-];
-
-/**
- * Minimum PLAYER level to attempt each story dungeon (index = planet id 1–10).
- * Keep in sync with src/lib/dungeonEngine.js DUNGEON_UNLOCK_LEVELS.
- */
-export const DUNGEON_UNLOCK_LEVELS = Object.freeze([
-  null, 10, 20, 30, 40, 50, 60, 70, 90, 120, 140,
-]);
+export {
+  getDungeonEnemyLevel,
+  DUNGEON_ENEMY_LEVELS,
+  DUNGEON_UNLOCK_LEVELS,
+} from "../../../src/lib/dungeonEngine.js";
 
 export function getDungeonUnlockLevel(planetId) {
   const id = Math.floor(Number(planetId) || 0);
-  if (id >= 1 && id <= DUNGEON_STORY_PLANETS) return DUNGEON_UNLOCK_LEVELS[id];
+  if (id >= 1 && id <= DUNGEON_STORY_PLANETS) return dungeonUnlockLevel(id - 1);
   return null;
 }
 
@@ -1256,53 +1230,6 @@ export function isDungeonUnlockedByLevel(planetId, playerLevel) {
   const unlock = getDungeonUnlockLevel(planetId);
   if (unlock == null) return true;
   return Math.max(1, Math.floor(Number(playerLevel) || 1)) >= unlock;
-}
-
-const D10_LEVEL_OFFSETS = [0, 3, 7, 10, 13, 17, 20, 23, 27, 30];
-
-/** Minimal planet ship-mod grant table (id → flavor + SHIP_MODS cat). */
-export function getDungeonBand(planetId) {
-  return Math.max(1, Math.floor(planetId || 1));
-}
-
-export function getDungeonTotalDru(planetId) {
-  const band = getDungeonBand(planetId);
-  if (band <= DUNGEON_STORY_PLANETS) return DUNGEON_TOTAL_DRU[band];
-  const depth = band - DUNGEON_STORY_PLANETS;
-  return Math.round(WORMHOLE_BASE_TOTAL_DRU + depth * WORMHOLE_DRU_PER_DEPTH);
-}
-
-export function getEnemyDru(planetId, enemyIndex) {
-  const idx = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, enemyIndex || 1));
-  const share = DUNGEON_ENEMY_DRU_SHARE[idx];
-  return Math.round(getDungeonTotalDru(planetId) * share * DRU_PRECISION_SCALE)
-    / DRU_PRECISION_SCALE;
-}
-
-export function getDungeonEnemyLevel(planetId, enemyIndex) {
-  const idx = Math.min(DUNGEON_ENEMIES_PER_PLANET, Math.max(1, enemyIndex || 1));
-  const band = getDungeonBand(planetId);
-  if (band <= DUNGEON_STORY_PLANETS) return DUNGEON_ENEMY_LEVELS[band][idx - 1];
-  const depth = band - DUNGEON_STORY_PLANETS;
-  const start = WORMHOLE_BASE_ENEMY_LEVEL
-    + (depth - 1) * WORMHOLE_LEVELS_PER_DEPTH
-    + WORMHOLE_FIRST_ENEMY_OFFSET;
-  return start + D10_LEVEL_OFFSETS[idx - 1];
-}
-
-export function druToRewards(dru, enemyLevel) {
-  const lvl = Math.max(1, enemyLevel || 1);
-  const units = Math.max(0, Number(dru) || 0);
-  return {
-    // Standard dungeon: XP only — no direct Stardust.
-    // getMissionXpPerFuel is canonical 1:1 XP (no storage ×10).
-    // XP = round(DRU × MissionXPPerFuel(enemyLevel) × DUNGEON_XP_PER_DRU_MULTIPLIER).
-    stardust: 0,
-    experience: Math.max(
-      units > 0 ? 1 : 0,
-      Math.round(units * getMissionXpPerFuel(lvl) * DUNGEON_XP_PER_DRU_MULTIPLIER)
-    ),
-  };
 }
 
 export function dungeonCooldownMs(_won) {
@@ -1319,9 +1246,9 @@ export function computeMiningReward(level, hours) {
 // ── Weekly nova quests ───────────────────────────────────────
 export const WEEKLY_NOVA_QUESTS = [
   { id: "arena", key: "arena", goal: 5, reward: 8 },
-  { id: "dungeon", key: "dungeon", goal: 3, reward: 7 },
   { id: "missions", key: "missions", goal: 5, reward: 5 },
 ];
+export const RETIRED_WEEKLY_NOVA_QUEST_IDS = Object.freeze(["dungeon"]);
 
 export function ensureWeeklyNovaState(character) {
   const week = getWeekKey();

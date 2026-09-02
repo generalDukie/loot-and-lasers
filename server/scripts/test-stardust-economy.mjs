@@ -15,23 +15,18 @@ import {
   missionGearDropChance,
   rollMissionGearDrop,
   rollMissionGearRarity,
-  rollDungeonRegularRarity,
-  rollDungeonBossRarity,
   arenaWinGrantsStardust,
   getArenaRewardedWinsState,
   STARDUST_PER_FUEL_ANCHORS,
   MISSION_GEAR_BASE_CHANCE,
   MISSION_GEAR_PITY_INCREMENT,
   MISSION_GEAR_RARITY_WEIGHTS,
-  DUNGEON_REGULAR_RARITY_WEIGHTS,
-  DUNGEON_BOSS_RARITY_WEIGHTS,
   ARENA_REWARDED_WINS_PER_DAY,
   MINING_EFFICIENCY,
 } from "../src/shared/stardustEconomy.js";
 import {
   computeMissionStardustFromFuel,
   computeArenaRewards,
-  druToRewards,
   getAttributePointCost,
   getAttributePurchaseCount,
   getNextAttributePointCost,
@@ -161,27 +156,6 @@ test("Gear sale values", () => {
   const a = GearSaleValue({ type: "boots", rarity: "rare", level_requirement: 25, from: "mission" });
   const b = GearSaleValue({ type: "boots", rarity: "rare", level_requirement: 25, from: "dungeon" });
   assert.equal(a, b);
-});
-
-test("Dungeon rewards: 0 direct Stardust", () => {
-  const r = druToRewards(10, 50);
-  assert.equal(r.stardust, 0);
-  assert.ok(r.experience > 0);
-});
-
-test("Dungeon rarity tables", () => {
-  assert.deepEqual(DUNGEON_REGULAR_RARITY_WEIGHTS, {
-    uncommon: 40, rare: 30, epic: 20, legendary: 10,
-  });
-  assert.deepEqual(DUNGEON_BOSS_RARITY_WEIGHTS, { epic: 70, legendary: 30 });
-  for (let n = 0; n < 100; n++) {
-    const r = rollDungeonRegularRarity(() => (n + 0.5) / 100);
-    assert.notEqual(r, "common");
-  }
-  for (let n = 0; n < 100; n++) {
-    const r = rollDungeonBossRarity(() => (n + 0.5) / 100);
-    assert.ok(r === "epic" || r === "legendary");
-  }
 });
 
 test("Arena first 10 wins/day", () => {

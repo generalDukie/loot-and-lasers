@@ -241,16 +241,25 @@ await testAsync("BuyFuel costs 20 Nova / grants 20 Fuel / max 10", async () => {
 
 await testAsync("SkipDungeonCooldown costs 25 Nova and requires cooldown", async () => {
   installFakeClock(3_000_000_000_000);
+  const until = new Date(clock.nowMs() + 3_600_000).toISOString();
   entities.Character.update(ch.id, {
     ...buildCooldownPatch(true, clock.nowMs()),
+    phase7_pve: {
+      version: "phase7-pve-v1",
+      dungeon_clears: Array.from({ length: 10 }, () => 0),
+      wormhole_next_index: 0,
+      dungeon_cooldown_until: until,
+      wormhole_cooldown_until: null,
+      pending_settlement: null,
+    },
     nova_crystals: 100,
     economy_nova_scale: 2,
   });
-  const res = await SkipDungeonCooldown(user, { request_id: "dskip_1" });
+  const res = await SkipDungeonCooldown(user, { request_id: "dskip_1", cooldown: "dungeon" });
   assert.equal(res.status, 200, res.body?.error);
   assert.equal(getBalances(entities.Character.get(ch.id)).nova_crystals, 25);
   assert.equal(entities.Character.get(ch.id).dungeon_cooldown_until, null);
-  const again = await SkipDungeonCooldown(user, { request_id: "dskip_1" });
+  const again = await SkipDungeonCooldown(user, { request_id: "dskip_1", cooldown: "dungeon" });
   assert.equal(again.body.idempotent_replay, true);
   resetClockState();
 });

@@ -505,6 +505,46 @@ export const WORMHOLE_ENCOUNTERS_PER_BAND = 10;
 export const WORMHOLE_BAND_WIDTH = 20;
 export const WORMHOLE_BAND_DRU_REFERENCE = 1340;
 
+/** Discrete Dungeon/Wormhole enemy total-attribute multipliers vs production EPA. Boss replaces regular; never stacked. */
+export const DUNGEON_WORMHOLE_REGULAR_EPA_MULT = 1.20;
+export const DUNGEON_WORMHOLE_BOSS_EPA_MULT = 1.30;
+export const DUNGEON_WORMHOLE_ENEMY_MIN_ATTRIBUTES = 1;
+export const DUNGEON_BOSS_ENCOUNTER_NUMBER = DUNGEON_ENCOUNTERS_PER_DUNGEON;
+export const DUNGEON_STANDARD_TOTAL_CLEARS_FOR_WORMHOLE =
+  DUNGEON_COUNT * DUNGEON_ENCOUNTERS_PER_DUNGEON;
+
+export const PHASE7_PVE_RULES_VERSION = "phase7-pve-v1";
+/** Safety guard against infinite level-up loops. Not a production max level. */
+export const MAX_LEVELS_PER_XP_GRANT = 100_000;
+/** Wallet-operations type for Dungeon/Wormhole cooldown-skip idempotency. */
+export const PHASE7_SKIP_LEDGER_TYPE = "phase7_cooldown_skip";
+export const DUNGEON_BADGE_MAX = DUNGEON_COUNT;
+/** Derived identity prefix: index 0 complete → D1. Not persisted gameplay state. */
+export const DUNGEON_BADGE_ID_PREFIX = "D";
+export const PHASE7_ARCHETYPE_SCHEDULE_VERSION = "phase7-archetype-v1";
+export const PHASE7_CONTENT_DUNGEON = "dungeon";
+export const PHASE7_CONTENT_WORMHOLE = "wormhole";
+export const PHASE7_COOLDOWN_DUNGEON = "dungeon";
+export const PHASE7_COOLDOWN_WORMHOLE = "wormhole";
+/** Extra-slot rotation start: Reflex, then Tech, then Might — ten Dungeons total 33/34/33, not Might-first. */
+export const PHASE7_DUNGEON_EXTRA_ARCHETYPE_START_INDEX = 1;
+/** Wormhole extra-slot start: Tech, then Might, then Reflex. Independent of Dungeon start. */
+export const PHASE7_WORMHOLE_EXTRA_ARCHETYPE_START_INDEX = 2;
+export const DUNGEON_WORMHOLE_ARCHETYPE_BASE_COUNT = 3;
+export const DUNGEON_WORMHOLE_ARCHETYPE_EXTRA_COUNT = 4;
+export const PHASE7_DUNGEON_CONTENT_CODE = 1;
+export const PHASE7_WORMHOLE_CONTENT_CODE = 2;
+export const PHASE7_ARCHETYPE_SEED_CONTENT_MULT = 1_000_003;
+export const PHASE7_ARCHETYPE_SEED_GROUP_MULT = 97;
+export const PHASE7_ARCHETYPE_INDEX_STRIDE = 17;
+export const PHASE7_ARCHETYPE_MIX_GOLDEN = 0x9e3779b9;
+export const PHASE7_ARCHETYPE_MIX_C1 = 0x85ebca6b;
+export const PHASE7_ARCHETYPE_MIX_C2 = 0xc2b2ae35;
+export const PHASE7_ARCHETYPE_HASH_SHIFT_16 = 16;
+export const PHASE7_ARCHETYPE_HASH_SHIFT_13 = 13;
+export const PHASE7_ARCHETYPE_VERSION_SALT_HEX_WIDTH = 8;
+export const PHASE7_ARCHETYPE_HEX_RADIX = 16;
+
 export const GAME_DAY_RESET_HOUR_UTC = 19;
 export const MARKET_REFRESH_HOURS_UTC = Object.freeze([
   MARKET_EVENING_REFRESH_HOUR_UTC,
@@ -949,3 +989,8 @@ export const MILLISECONDS_PER_HOUR =
   MILLISECONDS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
 export const MILLISECONDS_PER_DAY = MILLISECONDS_PER_HOUR * HOURS_PER_DAY;
 export const DATE_PART_PAD_WIDTH = 2;
+
+export const DUNGEON_WORMHOLE_COOLDOWN_HOURS = 1;
+export const DUNGEON_WORMHOLE_COOLDOWN_MS =
+  DUNGEON_WORMHOLE_COOLDOWN_HOURS * MILLISECONDS_PER_HOUR;
+export const DUNGEON_WORMHOLE_SKIP_NOVA = 25;

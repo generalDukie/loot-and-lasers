@@ -4,10 +4,13 @@
  */
 import assert from "node:assert/strict";
 import {
+  dungeonWormholeEnemyAttributeTotal,
   expectedPlayerAttributes,
-  dungeonEnemyAttributeBudget,
-  DUNGEON_REGULAR_ATTRIBUTE_MULTIPLIER,
-  DUNGEON_BOSS_ATTRIBUTE_MULTIPLIER,
+  roundHalfUp,
+  DUNGEON_WORMHOLE_REGULAR_EPA_MULT,
+  DUNGEON_WORMHOLE_BOSS_EPA_MULT,
+} from "../../src/lib/productionMath/index.js";
+import {
   distributeMissionEnemyAttributes,
   MISSION_ENEMY_ARCHETYPES,
 } from "../../src/lib/expectedPlayerAttributes.js";
@@ -43,21 +46,21 @@ function test(name, fn) {
 
 console.log("\nDungeon enemy scaling & unlock tests\n");
 
-test("regular dungeon budget = ROUND(expected × 1.20)", () => {
-  assert.equal(DUNGEON_REGULAR_ATTRIBUTE_MULTIPLIER, 1.2);
+test("regular dungeon budget = rround(production EPA × 1.20)", () => {
+  assert.equal(DUNGEON_WORMHOLE_REGULAR_EPA_MULT, 1.2);
   for (const level of [10, 19, 50, 100, 200, 500]) {
-    const got = dungeonEnemyAttributeBudget(level, false);
-    const expected = Math.round(expectedPlayerAttributes(level) * 1.2);
+    const got = dungeonWormholeEnemyAttributeTotal(level, false);
+    const expected = Math.max(1, roundHalfUp(expectedPlayerAttributes(level) * 1.2));
     assert.equal(got, expected, `L${level} regular`);
   }
 });
 
-test("boss dungeon budget = ROUND(expected × 1.30) without compounding 1.20", () => {
-  assert.equal(DUNGEON_BOSS_ATTRIBUTE_MULTIPLIER, 1.3);
+test("boss dungeon budget = rround(production EPA × 1.30) without compounding 1.20", () => {
+  assert.equal(DUNGEON_WORMHOLE_BOSS_EPA_MULT, 1.3);
   for (const level of [19, 29, 54, 113, 200]) {
-    const got = dungeonEnemyAttributeBudget(level, true);
-    const expected = Math.round(expectedPlayerAttributes(level) * 1.3);
-    const compounded = Math.round(Math.round(expectedPlayerAttributes(level) * 1.2) * 1.3);
+    const got = dungeonWormholeEnemyAttributeTotal(level, true);
+    const expected = Math.max(1, roundHalfUp(expectedPlayerAttributes(level) * 1.3));
+    const compounded = roundHalfUp(dungeonWormholeEnemyAttributeTotal(level, false) * 1.3);
     assert.equal(got, expected, `L${level} boss`);
     assert.notEqual(got, compounded, `L${level} must not compound 1.20×1.30`);
   }
@@ -115,12 +118,12 @@ test("only encounter 10 is boss (1.30); encounters 1–9 use 1.20", () => {
     const isBoss = e === DUNGEON_ENEMIES_PER_PLANET;
     assert.equal(enemy.isBoss, isBoss, `E${e} isBoss`);
     const sum = Object.values(enemy.stats).reduce((a, b) => a + b, 0);
-    const budget = dungeonEnemyAttributeBudget(level, isBoss);
+    const budget = dungeonWormholeEnemyAttributeTotal(level, isBoss);
     assert.equal(sum, budget, `E${e} attr sum`);
     if (isBoss) {
-      assert.equal(budget, Math.round(expectedPlayerAttributes(level) * 1.3));
+      assert.equal(budget, Math.max(1, roundHalfUp(expectedPlayerAttributes(level) * 1.3)));
     } else {
-      assert.equal(budget, Math.round(expectedPlayerAttributes(level) * 1.2));
+      assert.equal(budget, Math.max(1, roundHalfUp(expectedPlayerAttributes(level) * 1.2)));
     }
   }
 });
@@ -139,7 +142,7 @@ test("attribute allocation sums to budget for all archetypes", () => {
   for (const arch of MISSION_ENEMY_ARCHETYPES) {
     for (const level of [10, 50, 100, 200]) {
       for (const isBoss of [false, true]) {
-        const budget = dungeonEnemyAttributeBudget(level, isBoss);
+        const budget = dungeonWormholeEnemyAttributeTotal(level, isBoss);
         const stats = distributeMissionEnemyAttributes(budget, arch);
         const sum = Object.values(stats).reduce((a, b) => a + b, 0);
         assert.equal(sum, budget, `${arch} L${level} boss=${isBoss}`);
@@ -153,7 +156,7 @@ test("generated enemy suppresses passives and uses dungeon flags", () => {
   assert.equal(enemy.dungeonEnemy, true);
   assert.equal(enemy.suppressClassPassive, true);
   assert.equal(enemy.race, null);
-  assert.ok(MISSION_ENEMY_ARCHETYPES.includes(enemy.dungeonEnemyArchetype));
+  assert.ok(["Might", "Reflex", "Tech"].includes(enemy.dungeonEnemyArchetype));
   assert.ok(enemy.appearance?.race);
 });
 

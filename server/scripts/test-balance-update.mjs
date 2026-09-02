@@ -7,11 +7,6 @@ import { XP_STARDUST_SCALE } from "../src/shared/economyConstants.js";
 import { expForLevel, getMissionXpPerFuel } from "../src/shared/rewards.js";
 import {
   MISSION_XP_REBALANCE,
-  DUNGEON_XP_PER_DRU_MULTIPLIER,
-  DUNGEON_TOTAL_DRU,
-  getDungeonTotalDru,
-  getEnemyDru,
-  druToRewards,
   computeMissionXpFromFuel,
   getShopWindow,
   getShopGameDayKey,
@@ -43,7 +38,7 @@ import {
   GearSaleValue,
   MiningStardust,
 } from "../src/shared/stardustEconomy.js";
-import { missionXpReward, stardustPerFuel, roundHalfUp, STIM_SHOP_MULT, STIM_SELL_MULT, blackMarketPrice } from "../../src/lib/productionMath/index.js";
+import { missionXpReward, stardustPerFuel, roundHalfUp, STIM_SHOP_MULT, STIM_SELL_MULT, blackMarketPrice, dungeonEncounterXp } from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -88,21 +83,9 @@ test("Mission XP uses 0.85 rebalance; canonical XP/Fuel", () => {
   assert.equal(xp, missionXpReward({ fuel: 10, snapshotLevel: 100, xpVariance: 1 }));
 });
 
-test("Dungeon DRU totals and XP × 2.0 per DRU", () => {
-  assert.deepEqual(DUNGEON_TOTAL_DRU.slice(1), [40, 50, 60, 70, 95, 110, 125, 140, 155, 185]);
-  assert.equal(getDungeonTotalDru(1), 40);
-  assert.equal(getDungeonTotalDru(10), 185);
-  const shares = [0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.14, 0.18];
-  assert.ok(Math.abs(shares.reduce((a, b) => a + b, 0) - 1) < 1e-9);
-  const dru = getEnemyDru(1, 10);
-  assert.equal(dru, Math.round(40 * 0.18 * 100) / 100);
-  const { experience, stardust } = druToRewards(dru, 19);
-  assert.equal(stardust, 0);
-  assert.equal(DUNGEON_XP_PER_DRU_MULTIPLIER, 2.0);
-  assert.equal(
-    experience,
-    Math.round(dru * getMissionXpPerFuel(19) * DUNGEON_XP_PER_DRU_MULTIPLIER)
-  );
+test("Dungeon victory XP uses production dungeonEncounterXp", () => {
+  assert.ok(dungeonEncounterXp(0, 9) > 0);
+  assert.ok(Number.isFinite(dungeonEncounterXp(9, 9)));
 });
 
 test("Arena 2.25S; junk 0.45; mission chain chances", () => {

@@ -74,10 +74,16 @@ func clear_zoom() -> void:
 
 
 func _structure_stamp_now() -> Array:
-	return [
-		DungeonManager.current_planet_id(),
+	var stamp: Array = [
 		int(GameManager.active_character.get("level", 1)),
+		int(DungeonManager.wormhole_unlocked()),
+		DungeonManager.standard_clears(),
+		int(DungeonManager.viewing_wormhole),
 	]
+	for pid in range(1, 11):
+		stamp.append(int(DungeonManager.track(pid).get("cleared_count", 0)))
+		stamp.append(int(DungeonManager.track(pid).get("unlocked", false)))
+	return stamp
 
 
 func _ensure_overlays() -> void:
@@ -199,18 +205,17 @@ func _rebuild_buttons() -> void:
 
 	var nodes: Array = layout.get("nodes", [])
 	var level := int(GameManager.active_character.get("level", 1))
-	var active := DungeonManager.current_planet_id()
-	var story_front := mini(active, 10)
-	var in_infinite := active > 10
+	var selected := DungeonManager.selected_planet_id
+	var wh_on := DungeonManager.wormhole_unlocked()
 
 	for i in nodes.size():
 		var pid := i + 1
 		var planet := DungeonRules.get_planet(pid)
-		var level_locked := not DungeonRules.is_unlocked(pid, level)
-		var story_locked := not in_infinite and pid > story_front
-		var locked := level_locked or story_locked
-		var cleared := in_infinite or pid < story_front
-		var current := not in_infinite and pid == story_front
+		var t := DungeonManager.track(pid)
+		var level_locked := not bool(t.get("unlocked", DungeonRules.is_unlocked(pid, level)))
+		var locked := level_locked
+		var cleared := bool(t.get("complete", false))
+		var current := not DungeonManager.viewing_wormhole and pid == selected and not cleared and not locked
 		var tint: Color = planet.get("color", ClientUi.CYAN)
 
 		var btn := Button.new()
@@ -229,16 +234,13 @@ func _rebuild_buttons() -> void:
 			else:
 				CurrencyIcon.apply_planet_button_glyph(btn, planet, 23)
 		else:
-			# Story-locked but level-eligible — keep world icon, no padlock.
 			CurrencyIcon.apply_planet_button_glyph(btn, planet, 23)
 		btn.disabled = locked
 		btn.mouse_default_cursor_shape = (
 			Control.CURSOR_FORBIDDEN if locked else Control.CURSOR_POINTING_HAND
 		)
 		if level_locked:
-			btn.tooltip_text = "Unlocks at level %s" % DungeonRules.unlock_level(pid)
-		elif story_locked:
-			btn.tooltip_text = "Locked"
+			btn.tooltip_text = "Unlocks at level %s" % int(t.get("unlock_level", DungeonRules.unlock_level(pid)))
 		elif current:
 			btn.tooltip_text = "Inspect this world"
 		elif cleared:
@@ -251,7 +253,6 @@ func _rebuild_buttons() -> void:
 			_on_planet_click(captured, is_current)
 		)
 		add_child(btn)
-		# Keep under overlays
 		move_child(btn, 0)
 		_buttons[pid] = btn
 		_style_planet_button(btn, tint, locked, current, false, cleared)
@@ -267,17 +268,17 @@ func _rebuild_buttons() -> void:
 	_wormhole_button.z_index = 12
 	_wormhole_button.text = ""
 	_wormhole_button.icon = null
-	_wormhole_button.disabled = not in_infinite
+	_wormhole_button.disabled = not wh_on
 	_wormhole_button.tooltip_text = (
-		"Inspect Wormhole · Depth %s" % maxi(1, active - 10)
-		if in_infinite
-		else "Clear World Zero to open the Wormhole"
+		"Inspect Wormhole · Band %s" % maxi(1, int(DungeonManager.wormhole_state().get("band", 1)))
+		if wh_on
+		else "Clear all 100 standard Dungeon enemies to open the Wormhole (%s/100)" % DungeonManager.standard_clears()
 	)
 	_wormhole_button.pressed.connect(_on_wormhole_click)
 	add_child(_wormhole_button)
 	move_child(_wormhole_button, 0)
-	_style_wormhole_button(in_infinite, false)
-	if in_infinite:
+	_style_wormhole_button(wh_on, false)
+	if wh_on:
 		UiIcon.set_button_icon(_wormhole_button, "infinity", WORMHOLE_CYAN, 33.0)
 	else:
 		_apply_level_lock_icon(_wormhole_button)
@@ -509,21 +510,19 @@ func _xform_radius(r: float) -> float:
 
 func _refresh_button_looks() -> void:
 	var level := int(GameManager.active_character.get("level", 1))
-	var active := DungeonManager.current_planet_id()
-	var story_front := mini(active, 10)
-	var in_infinite := active > 10
 	var selected := DungeonManager.selected_planet_id
+	var wh_on := DungeonManager.wormhole_unlocked()
 	for pid in _buttons.keys():
 		var btn: Button = _buttons[pid]
 		if not is_instance_valid(btn):
 			continue
 		var planet := DungeonRules.get_planet(pid)
 		var tint: Color = planet.get("color", ClientUi.CYAN)
-		var level_locked: bool = not DungeonRules.is_unlocked(pid, level)
-		var story_locked: bool = not in_infinite and pid > story_front
-		var locked: bool = level_locked or story_locked
-		var cleared: bool = in_infinite or pid < story_front
-		var current: bool = not in_infinite and pid == story_front
+		var t := DungeonManager.track(pid)
+		var level_locked: bool = not bool(t.get("unlocked", DungeonRules.is_unlocked(pid, level)))
+		var locked: bool = level_locked
+		var cleared: bool = bool(t.get("complete", false))
+		var current: bool = not DungeonManager.viewing_wormhole and pid == selected and not cleared and not locked
 		var is_selected: bool = not DungeonManager.viewing_wormhole and pid == selected
 		if level_locked:
 			btn.text = ""
@@ -541,11 +540,12 @@ func _refresh_button_looks() -> void:
 	if is_instance_valid(_wormhole_button):
 		_wormhole_button.text = ""
 		_wormhole_button.icon = null
+		_wormhole_button.disabled = not wh_on
 		_style_wormhole_button(
-			active > 10,
+			wh_on,
 			DungeonManager.viewing_wormhole or _zoom_id == ZOOM_WORMHOLE
 		)
-		if active > 10:
+		if wh_on:
 			UiIcon.set_button_icon(_wormhole_button, "infinity", WORMHOLE_CYAN, 33.0)
 		else:
 			_apply_level_lock_icon(_wormhole_button)
@@ -779,9 +779,6 @@ func _draw_spiral(side: float, offset: Vector2) -> void:
 
 func _draw_planet_fx(side: float, offset: Vector2) -> void:
 	var nodes: Array = layout.get("nodes", [])
-	var active := DungeonManager.current_planet_id()
-	var story_front := mini(active, 10)
-	var in_infinite := active > 10
 	var selected := DungeonManager.selected_planet_id
 	var level := int(GameManager.active_character.get("level", 1))
 	var zooming := _zoom_id != ZOOM_NONE
@@ -789,20 +786,20 @@ func _draw_planet_fx(side: float, offset: Vector2) -> void:
 		var pid := i + 1
 		var raw := SpiralMap.pct_to_px(nodes[i], side) + offset
 		var point := _xform(raw)
-		# Prefer live button center so the radar ring stays locked to the orb.
 		var btn: Button = _buttons.get(pid)
 		if is_instance_valid(btn) and btn.visible:
 			point = btn.position + btn.size * 0.5
 		var planet := DungeonRules.get_planet(pid)
 		var tint: Color = planet.get("color", ClientUi.CYAN)
-		var locked := not DungeonRules.is_unlocked(pid, level) or (not in_infinite and pid > story_front)
+		var t := DungeonManager.track(pid)
+		var locked := not bool(t.get("unlocked", DungeonRules.is_unlocked(pid, level)))
+		var cleared := bool(t.get("complete", false))
 		if zooming and pid == _zoom_id:
 			_draw_focus_planet(point, tint, pid)
 			continue
 		if not locked:
 			draw_circle(point, _xform_radius(31.0), Color(tint, 0.055))
-		if not zooming and ((pid == story_front and not in_infinite) or (pid == selected and not DungeonManager.viewing_wormhole)):
-			# Ring grows from just outside the chart orb (~22px radius).
+		if not zooming and pid == selected and not DungeonManager.viewing_wormhole:
 			var orb_r := maxf(btn.size.x * 0.5 if is_instance_valid(btn) else CHART_NODE_SIZE * 0.5, 18.0)
 			var pulse := orb_r + fposmod(_elapsed * 18.0, 18.0)
 			var alpha := 0.55 * (1.0 - fposmod(_elapsed * 1.1, 1.0))
@@ -814,10 +811,10 @@ func _draw_planet_fx(side: float, offset: Vector2) -> void:
 		var label_pos := _xform(raw + label_offset)
 		var state := ""
 		if locked:
-			state = "Lv %s" % DungeonRules.unlock_level(pid)
-		elif in_infinite or pid < story_front:
+			state = "Lv %s" % int(t.get("unlock_level", DungeonRules.unlock_level(pid)))
+		elif cleared:
 			state = "CLEARED" if pid == selected and not DungeonManager.viewing_wormhole else ""
-		elif pid == story_front:
+		elif pid == selected and not DungeonManager.viewing_wormhole:
 			state = "HERE · TAP"
 		var title := "%s. %s" % [pid, str(planet.get("name", ""))]
 		var font: Font = ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font
@@ -900,8 +897,7 @@ func _draw_focus_planet(center: Vector2, tint: Color, world_id: int) -> void:
 func _draw_wormhole(side: float, offset: Vector2) -> void:
 	var raw := SpiralMap.pct_to_px(SpiralMap.WORMHOLE, side) + offset
 	var center := _xform(raw)
-	var active := DungeonManager.current_planet_id()
-	var unlocked := active > 10
+	var unlocked := DungeonManager.wormhole_unlocked()
 	var base := WORMHOLE_COLOR if unlocked else Color(0.3, 0.3, 0.36)
 	var pulse := 1.0 + 0.08 * sin(_elapsed * 2.2)
 	draw_circle(center, _xform_radius(52.0 * pulse), Color(base, 0.08 if unlocked else 0.035))

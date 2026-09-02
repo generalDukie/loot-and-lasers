@@ -68,10 +68,10 @@ func _boot() -> void:
 		_status.text = str(res.get("error", "SyncDungeonState failed"))
 	else:
 		_status.text = ""
+	DungeonManager.reassert_view()
 	var active := DungeonManager.current_planet_id()
-	var in_infinite := active > 10
-	DungeonManager.selected_planet_id = active
-	DungeonManager.viewing_wormhole = in_infinite
+	DungeonManager.selected_planet_id = mini(active, 10) if active > 10 else maxi(1, active)
+	DungeonManager.viewing_wormhole = false
 	_populate()
 	if _tick != null and is_instance_valid(_tick):
 		return
@@ -476,12 +476,10 @@ func _build() -> void:
 
 func _populate_meta() -> void:
 	_sync_view_rewards_cta()
-	var active := DungeonManager.current_planet_id()
-	var in_infinite := active > 10
-	var depth := maxi(1, active - 10)
-	_subtitle.text = "1 hour cooldown, skip for %s Nova%s" % [
-		NumberDisplay.nova(DungeonRules.SKIP_COST),
-		(" · Wormhole depth %s" % NumberDisplay.quantity(depth)) if in_infinite else "",
+	var clears := DungeonManager.standard_clears()
+	_subtitle.text = "Dungeons and Wormhole each have a 1 hour cooldown, skip for %s Nova · %s/100 standard clears" % [
+		NumberDisplay.nova(int(DungeonManager.dungeon_blob().get("skip_cost", DungeonRules.SKIP_COST))),
+		NumberDisplay.quantity(clears),
 	]
 
 	_update_detail()
@@ -499,11 +497,30 @@ func _update_detail() -> void:
 
 	var pid := DungeonManager.selected_planet_id
 	var viewing_wh := DungeonManager.viewing_wormhole
-	var active := DungeonManager.current_planet_id()
-	var enemy_idx := DungeonManager.current_enemy_index()
-	var display_enemy := enemy_idx
-	# Only the active frontier node (story front or current wormhole depth) can be fought.
-	var fightable := pid == active
+	var display_enemy := 1
+	var fightable := false
+	var locked_ahead := false
+	var cleared := 0
+	if viewing_wh:
+		var wh := DungeonManager.wormhole_state()
+		fightable = bool(wh.get("unlocked", false))
+		locked_ahead = not fightable
+		display_enemy = clampi(int(wh.get("enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
+		cleared = maxi(0, display_enemy - 1)
+	else:
+		var t := DungeonManager.track(pid)
+		var unlocked := bool(t.get("unlocked", DungeonRules.is_unlocked(pid, int(GameManager.active_character.get("level", 1)))))
+		var complete := bool(t.get("complete", false))
+		fightable = unlocked and not complete
+		locked_ahead = not unlocked
+		cleared = int(t.get("cleared_count", 0))
+		if complete:
+			display_enemy = DungeonRules.ENEMIES_PER_PLANET
+			cleared = DungeonRules.ENEMIES_PER_PLANET
+		elif t.get("next_enemy", null) != null:
+			display_enemy = clampi(int(t.get("next_enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
+		else:
+			display_enemy = clampi(cleared + 1, 1, DungeonRules.ENEMIES_PER_PLANET)
 
 	var planet: Dictionary
 	if viewing_wh:
@@ -544,12 +561,6 @@ func _update_detail() -> void:
 	_detail_boss_lab.text = str(planet.get("boss", ""))
 	_detail_boss_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 
-	var cleared := maxi(0, display_enemy - 1)
-	if viewing_wh:
-		cleared = maxi(0, enemy_idx - 1)
-	elif pid != active:
-		cleared = 10 if pid < active else 0
-
 	_detail_cleared_lab.text = "CLEARED"
 	_detail_cleared_lab.add_theme_color_override("font_color", ClientUi.MUTED)
 	_detail_cleared_val.text = "%s/10" % cleared
@@ -562,35 +573,38 @@ func _update_detail() -> void:
 
 	_mode_banner.visible = false
 
-	# Encounter cells — active node highlights the current enemy; other worlds show cleared/locked.
 	for i in range(1, 11):
 		var is_boss := i == 10
-		var is_current := i == display_enemy
-		var is_cleared := i < display_enemy
-		var locked := i > display_enemy
-		if not viewing_wh and pid != active:
-			if pid < active:
-				is_cleared = true
-				is_current = false
-				locked = false
-			else:
-				locked = true
-				is_cleared = false
-				is_current = false
+		var is_current := fightable and i == display_enemy
+		var is_cleared := i <= cleared
+		if is_current:
+			is_cleared = false
+		if not viewing_wh and bool(DungeonManager.track(pid).get("complete", false)):
+			is_cleared = true
+			is_current = false
+		var locked := not is_cleared and not is_current
 		_encounter_grid.add_child(_enc_cell(i, is_boss, is_current, is_cleared, locked))
 
-	var locked_ahead := (not viewing_wh) and pid > active
 	_update_actions(fightable, locked_ahead, display_enemy)
 
 
 func _update_actions(fightable: bool, locked_ahead: bool, enemy_idx: int) -> void:
+	var pending := DungeonManager.pending_settlement()
+	var has_pending_gear := not pending.is_empty() and bool(pending.get("has_gear", false))
 	var cooldown := DungeonManager.cooldown_ms()
 
-	_cooldown_bar.visible = cooldown > 0
+	_cooldown_bar.visible = cooldown > 0 and not has_pending_gear
 	_cooldown_bar.disabled = cooldown <= 0 or _busy
 	if cooldown > 0:
 		CurrencyIcon.fill_glyph_host(_cooldown_icon, "timer", 16.0, Color("#FDE68A"))
 		_cooldown_lab.text = "Cooldown %s" % DungeonRules.format_ms(cooldown)
+
+	if has_pending_gear:
+		_fight_btn.disabled = _busy
+		_fight_btn.text = "Recover Gear"
+		ClientUi.apply_primary_button(_fight_btn)
+		UiIcon.apply_leading_icon(_fight_btn, "package", Color(0.05, 0.05, 0.08), 20.0)
+		return
 
 	_fight_btn.disabled = cooldown > 0 or _busy or not fightable
 
@@ -699,20 +713,27 @@ func _on_zoom_changed(zooming: bool) -> void:
 
 
 func _return_to_front() -> void:
-	var active := DungeonManager.current_planet_id()
-	if active > 10:
-		DungeonManager.select_planet(active, true)
+	if DungeonManager.viewing_wormhole:
+		DungeonManager.select_planet(DungeonManager.selected_planet_id, true)
 	else:
-		DungeonManager.select_planet(active, false)
+		var pid := DungeonManager.selected_planet_id
+		if pid < 1 or pid > 10:
+			pid = 1
+		DungeonManager.select_planet(pid, false)
 	if _map_stage:
 		_map_stage.clear_zoom()
 	_populate_meta()
 
 
 func _on_wormhole() -> void:
-	var active := DungeonManager.current_planet_id()
-	var depth := maxi(1, active - 10)
-	DungeonManager.select_planet(10 + depth, true)
+	if not DungeonManager.wormhole_unlocked():
+		Notify.blocked(
+			"Wormhole locked",
+			"Clear all 100 standard Dungeon enemies (%s/100)" % DungeonManager.standard_clears(),
+		)
+		return
+	var band := maxi(1, int(DungeonManager.wormhole_state().get("band", 1)))
+	DungeonManager.select_planet(10 + band, true)
 	_populate_meta()
 
 
@@ -749,6 +770,20 @@ func _sync_view_rewards_cta() -> void:
 
 func _on_fight() -> void:
 	if _busy:
+		return
+	var pending := DungeonManager.pending_settlement()
+	if not pending.is_empty() and bool(pending.get("has_gear", false)):
+		_busy = true
+		_set_status("Recovering Gear…")
+		var claimed: Dictionary = await DungeonManager.claim_pending_settlement()
+		_busy = false
+		if not claimed.ok:
+			Notify.blocked(str(claimed.get("error", "Recover failed")))
+			_set_status("")
+			_populate_meta()
+			return
+		_set_status("")
+		_populate_meta()
 		return
 	if not await InventoryManager.ensure_space(self, "Free a backpack slot before fighting. Loot needs somewhere to go."):
 		return

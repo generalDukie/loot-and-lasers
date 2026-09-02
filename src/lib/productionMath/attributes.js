@@ -117,6 +117,15 @@ export function missionEnemyAttributes(snapshotPlayerLevel, archetypeIndex = 0) 
   };
 }
 
+/** Largest-remainder 35/25/20/10/10 split of an already-computed integer budget. */
+export function distributeEnemyAttributes(total, archetypeIndex = 0) {
+  const arch = Math.max(0, Math.min(ARCHETYPE_INDEX_MAX, Math.floor(Number(archetypeIndex) || 0)));
+  return allocateByWeights(
+    Math.max(0, Math.floor(Number(total) || 0)),
+    weightsFor(arch, ENEMY_ATTR_WEIGHTS),
+  );
+}
+
 export function classPrimaryIndex(className) {
   return CLASS_PRIMARY_INDEX[className] ?? 0;
 }

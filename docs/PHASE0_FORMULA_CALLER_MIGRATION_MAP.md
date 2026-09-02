@@ -20,13 +20,13 @@ Phase 0 did **not** migrate live callers. This map exists so later phases do not
 | Mission enemy base ramp | `statEngine.js` (already close) | **Phase 3 complete** |
 | Mission outgoing × / context multipliers | `arenaEngine.js` / mission combat | **Phase 3 complete** |
 | Gear base / Legendary 1.50 / slot premium | `src/lib/itemGeneration.js` via `productionMath` | **Phase 2 complete** (universal item; source rarity tables later) |
-| PvE hidden budget offset (stat only) | dungeon/wormhole loot gen | **API staged Phase 2**; source opt-in later |
-| Mission vs Dungeon rarity tables | mission loot; dungeon loot | Phase 4 / Phase 7 |
+| PvE hidden budget offset (stat only) | dungeon/wormhole loot gen | **Phase 7 complete** (`applyPveHiddenBudgetOffset`) |
+| Mission vs Dungeon rarity tables | mission loot; dungeon loot | **Phase 7 complete** for D/WH (`rollDungeonRegularRarity` / boss) |
 | Market 8-slot / rarity / stim bands / prices / resale / nova surcharge | `economyFormulas.js` shop generation | Phase 6 market (player **resale** is Phase 2) |
 | Stim duration stacking | stim engine | Phase 4 stim |
-| Dungeon DRU + XP conversion | `dungeonEngine.js` / `economyFormulas.js` | Phase 5 PvE |
-| Wormhole wormlevel / BandWeight / XP | dungeon/wormhole engine | Phase 5 PvE |
-| Frontier bonus | PvE victory XP only | later PvE phase; formula ready |
+| Dungeon DRU + XP conversion | `dungeonEngine.js` / `economyFormulas.js` | **Phase 7 complete** (`dungeonEncounterXp`) |
+| Wormhole wormlevel / BandWeight / XP | dungeon/wormhole engine | **Phase 7 complete** |
+| Frontier bonus | PvE victory XP only | **Phase 7 complete** (`frontierBonusPct` / `applyFrontierBonus`)
 | Arena XP 2.125 / SD 2.25 / grant order | arena reward service | Phase 6 Arena product+math |
 | Mining 0.03 SPF/min snapshot | mining service (already matching) | Phase 4/6 |
 | Fuel/Nova quantize + 100 free / 19:00 UTC clocks | `economyFormulas.js`, `server/src/shared/time/` | later product clocks |

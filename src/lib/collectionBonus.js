@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════
 import { ALIEN_SPECIES, ARTIFACTS, RELICS } from "@/lib/collectibles";
 import { DUNGEON_PLANETS } from "@/lib/dungeonData";
+import { dungeonBadgeCount } from "@/lib/dungeonBadges";
 import { GEAR_CATALOG_TOTAL } from "@/lib/gameData";
 
 const PERCENT_SCALE = 100;
@@ -22,7 +23,7 @@ export function getCollectionStats(character, gearTotal = GEAR_CATALOG_TOTAL) {
   const artifacts = (character?.collected_artifacts || []).length;
   const relics = (character?.collected_relics || []).length;
   const gear = (character?.discovered_gear || []).length;
-  const badges = Math.max(0, (character?.dungeon_planet || 1) - 1);
+  const badges = dungeonBadgeCount(character);
 
   const discovered = species + artifacts + relics + gear + badges;
   const total = COLLECTION_BASE_TOTAL + gearTotal;

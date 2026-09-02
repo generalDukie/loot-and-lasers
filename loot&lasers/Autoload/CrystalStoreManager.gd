@@ -84,15 +84,6 @@ const QUESTS := [
 		"emoji": "swords",
 	},
 	{
-		"id": "dungeon",
-		"key": "dungeon",
-		"label": "Dungeon Delver",
-		"desc": "Win 3 dungeon fights",
-		"goal": 3,
-		"reward": 7,
-		"emoji": "compass",
-	},
-	{
 		"id": "missions",
 		"key": "missions",
 		"label": "Mission Runner",

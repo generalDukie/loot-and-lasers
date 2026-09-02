@@ -16,15 +16,28 @@ import {
 } from "../shared/miningService.js";
 import {
   assertDungeonClientSafe,
-  assertCooldownClear,
-  assertCooldownActive,
-  assertDungeonProgressAllowed,
-  buildCooldownPatch,
-  clearCooldownPatch,
+  assertSelectedCooldownClear,
   pendingCombatMatches,
   serializeDungeonState,
-  cooldownRemainingMs,
+  needsPhase7Migration,
+  phase7MigrationPatch,
+  readPhase7,
+  writePhase7Patch,
+  parseDungeonSelection,
+  parseCooldownSelector,
+  deriveDungeonTarget,
+  pendingTargetFromMeta,
+  applyVictoryProgress,
+  dungeonCooldownRemainingMs,
+  wormholeCooldownRemainingMs,
+  buildCooldownPatchForContent,
+  clearSelectedCooldown,
   DUNGEON_SKIP_COST,
+  PHASE7_DISPLAY_ID_ONE,
+  PHASE7_CONTENT_WORMHOLE,
+  PHASE7_COOLDOWN_DUNGEON,
+  PHASE7_COOLDOWN_WORMHOLE,
+  PHASE7_SKIP_LEDGER_TYPE,
 } from "../shared/dungeonService.js";
 import {
   debitNova,
@@ -79,14 +92,8 @@ import {
   ARENA_SKIP_COST,
   computeArenaRewards,
   getArenaRewardedWinsState,
-  rollDungeonRegularRarity,
-  rollDungeonBossRarity,
-  DUNGEON_ENEMIES_PER_PLANET,
-  DUNGEON_STORY_PLANETS,
-  getEnemyDru,
-  getDungeonEnemyLevel,
-  druToRewards,
   WEEKLY_NOVA_QUESTS,
+  RETIRED_WEEKLY_NOVA_QUEST_IDS,
   ensureWeeklyNovaState,
   progressWeeklyNovaQuest,
   NOVA_CASINO_OPEN,
@@ -131,6 +138,7 @@ import {
   buildAttributeSheet,
   loadEquippedItemsForCharacter,
 } from "../shared/characterAttributes.js";
+import { freezePhase7Settlement } from "../../../src/lib/dungeonEngine.js";
 import {
   prepareDungeonCombatForCharacter,
   readDungeonPendingCombat,
@@ -210,7 +218,6 @@ const DEFAULT_NEARBY_RANK_RADIUS = 5;
 const DIRECT_CHALLENGE_REDUCED_REWARD_MULTIPLIER = 0.25;
 const ARENA_STREAK_NEWS_MILESTONES = Object.freeze([5, 10, 15, 20]);
 const ARENA_STREAK_NEWS_MINIMUM = ARENA_STREAK_NEWS_MILESTONES[0];
-const DUNGEON_CONSUMABLE_DROP_CHANCE = 0.2;
 const DRU_PRECISION_SCALE = 100;
 const GUILD_TAG_MAX_LENGTH = 5;
 const GUILD_MEMBERSHIP_QUERY_LIMIT = 5;
@@ -1199,68 +1206,142 @@ export const RecoverArenaMatch = wrap((user, body = {}) => {
   };
 });
 
+function migratePhase7Character(ch) {
+  if (!needsPhase7Migration(ch)) return ch;
+  return entities.Character.update(ch.id, phase7MigrationPatch());
+}
+
+function generatePhase7Gear({
+  rarity,
+  economicLevel,
+  playerLevel,
+  applyPveHiddenBudgetOffset,
+  itemType,
+  rng,
+  className,
+  origin,
+}) {
+  return randomItem(rarity, economicLevel, itemType, rng, className, {
+    origin,
+    economicLevel,
+    playerLevel,
+    applyPveHiddenBudgetOffset,
+  });
+}
+
 // ── Dungeon ──────────────────────────────────────────────────
 export const SyncDungeonState = wrap((user) => {
-  const ch = requireMyChar(user);
+  let ch = requireMyChar(user);
+  const migrated = needsPhase7Migration(ch);
+  ch = migratePhase7Character(ch);
   const today = todayET();
   const nowMs = clock.nowMs();
-  const patch = {};
-  // Clear obsolete continue credit if still set.
-  if (ch.dungeon_continue_credit) {
-    patch.dungeon_continue_credit = false;
-  }
-  let character = ch;
-  if (Object.keys(patch).length) {
-    character = entities.Character.update(ch.id, patch);
-  }
-  const dungeon = serializeDungeonState(character, nowMs, today);
+  const dungeon = serializeDungeonState(ch, nowMs, today);
+  const pending = readDungeonPendingCombat(ch);
   return {
     success: true,
-    patched: Object.keys(patch).length > 0,
-    patch: Object.keys(patch).length ? patch : undefined,
+    patched: migrated,
     dungeon,
-    character,
+    character: ch,
+    pending_combat: pending ? publicCombatResult(pending) : null,
+    pending_settlement: readPhase7(ch).pending_settlement || null,
   };
 });
 
 export const GetDungeonStatus = wrap((user) => {
-  const ch = requireMyChar(user);
+  const ch = migratePhase7Character(requireMyChar(user));
   const today = todayET();
   const dungeon = serializeDungeonState(ch, clock.nowMs(), today);
-  return { success: true, dungeon, character: ch };
+  const pending = readDungeonPendingCombat(ch);
+  return {
+    success: true,
+    dungeon,
+    character: ch,
+    pending_combat: pending ? publicCombatResult(pending) : null,
+    pending_settlement: readPhase7(ch).pending_settlement || null,
+  };
 });
 
 export const SkipDungeonCooldown = wrap((user, body = {}) => {
   assertDungeonClientSafe(body);
-  const ch = requireMyChar(user);
-  const requestId = String(body?.request_id || body?.idempotencyKey || "").trim();
-  if (requestId) {
-    const prior = recoverTransaction(user.id, "dungeon_cooldown_skip", requestId);
-    if (prior) {
-      const live = entities.Character.get(ch.id) || ch;
-      return {
-        success: true,
-        patch: {},
-        dungeon: serializeDungeonState(live, clock.nowMs(), todayET()),
-        character: live,
-        balances: getBalances(live),
-        transaction: prior,
-        idempotent_replay: true,
-      };
-    }
+  let ch = migratePhase7Character(requireMyChar(user));
+  const selector = parseCooldownSelector(body);
+  if (!selector) {
+    httpErr(400, "Select cooldown dungeon or wormhole", "DUNGEON_SKIP_SELECTOR");
   }
-  assertCooldownActive(ch);
+  const requestId = normalizeOperationKey(body?.request_id || body?.idempotencyKey);
+  if (!requestId) httpErr(400, "request_id required", "MISSING_REQUEST_ID");
+
+  const priorSkip = getWalletOperation(user.id, PHASE7_SKIP_LEDGER_TYPE, requestId);
+  if (priorSkip) {
+    if (priorSkip.cleared && priorSkip.cleared !== selector) {
+      httpErr(409, "request_id already used for a different cooldown", "DUNGEON_SKIP_ID_CONFLICT");
+    }
+    const live = entities.Character.get(ch.id) || ch;
+    return {
+      success: true,
+      ...priorSkip,
+      patch: {},
+      dungeon: serializeDungeonState(live, clock.nowMs(), todayET()),
+      character: live,
+      balances: getBalances(live),
+      idempotent_replay: true,
+    };
+  }
+
+  const opType = selector === PHASE7_COOLDOWN_WORMHOLE
+    ? "wormhole_cooldown_skip"
+    : "dungeon_cooldown_skip";
+  const debitKey = `${selector}:${requestId}`;
+  const priorDebit = recoverTransaction(user.id, opType, debitKey);
+  if (priorDebit) {
+    const live = entities.Character.get(ch.id) || ch;
+    const receipt = {
+      success: true,
+      patch: {},
+      dungeon: serializeDungeonState(live, clock.nowMs(), todayET()),
+      character: live,
+      balances: getBalances(live),
+      transaction: priorDebit,
+      idempotent_replay: true,
+      cleared: selector,
+    };
+    saveWalletOperation(user.id, PHASE7_SKIP_LEDGER_TYPE, requestId, {
+      success: true,
+      cleared: selector,
+      balances: receipt.balances,
+      transaction: priorDebit,
+    });
+    return receipt;
+  }
+
+  const state = readPhase7(ch);
+  const nowMs = clock.nowMs();
+  const remaining = selector === PHASE7_COOLDOWN_WORMHOLE
+    ? wormholeCooldownRemainingMs(state, nowMs)
+    : dungeonCooldownRemainingMs(state, nowMs);
+  if (remaining <= 0) {
+    httpErr(400, "No active cooldown for that selector", "DUNGEON_NO_COOLDOWN");
+  }
+  const nextState = clearSelectedCooldown(state, selector);
+  const extraPatch = {
+    phase7_pve: nextState,
+    dungeon_cooldown_until: selector === PHASE7_COOLDOWN_DUNGEON ? null : ch.dungeon_cooldown_until,
+    dungeon_cooldown_at: selector === PHASE7_COOLDOWN_DUNGEON ? null : ch.dungeon_cooldown_at,
+    dungeon_cooldown_ms: selector === PHASE7_COOLDOWN_DUNGEON ? null : ch.dungeon_cooldown_ms,
+    wormhole_cooldown_until: selector === PHASE7_COOLDOWN_WORMHOLE ? null : ch.wormhole_cooldown_until,
+  };
   const mut = debitNova({
     user,
     character: ch,
     amount: DUNGEON_SKIP_COST,
-    category: "dungeon_cooldown_skip",
-    reasonCode: "dungeon_cooldown_skip",
-    idempotencyKey: requestId || undefined,
-    extraPatch: clearCooldownPatch(),
+    category: opType,
+    reasonCode: opType,
+    idempotencyKey: debitKey,
+    extraPatch,
   });
   const dungeon = serializeDungeonState(mut.character, clock.nowMs(), todayET());
-  return {
+  const receipt = {
     success: true,
     patch: mut.patch,
     dungeon,
@@ -1268,7 +1349,15 @@ export const SkipDungeonCooldown = wrap((user, body = {}) => {
     balances: mut.balances,
     transaction: mut.transaction,
     idempotent_replay: !!mut.replay,
+    cleared: selector,
   };
+  saveWalletOperation(user.id, PHASE7_SKIP_LEDGER_TYPE, requestId, {
+    success: true,
+    cleared: selector,
+    balances: mut.balances,
+    transaction: mut.transaction,
+  });
+  return receipt;
 });
 
 export const PayDungeonContinue = wrap((user, body = {}) => {
@@ -1290,12 +1379,11 @@ export const PayDungeonContinue = wrap((user, body = {}) => {
 });
 
 /**
- * Authoritative dungeon/wormhole combat simulation (Restoration 08 + 14).
- * Idempotent for the same planet_id + enemy_index keys.
+ * Authoritative dungeon/wormhole combat simulation.
+ * Client may select a Dungeon or Wormhole; the server derives the next enemy.
  */
 export const PrepareDungeonCombat = wrap((user, body) => {
   assertDungeonClientSafe(body);
-  let ch = requireMyChar(user);
   if (body?.player || body?.enemy || body?.battle || body?.winner != null || body?.events) {
     httpErr(400, "Client combat payloads are not accepted", "CLIENT_COMBAT_REJECTED");
   }
@@ -1303,76 +1391,114 @@ export const PrepareDungeonCombat = wrap((user, body) => {
     httpErr(400, "Client RNG seeds are not accepted", "CLIENT_RNG_REJECTED");
   }
 
+  let ch = migratePhase7Character(requireMyChar(user));
   const today = todayET();
   const nowMs = clock.nowMs();
+  const state = readPhase7(ch);
+  if (state.pending_settlement?.gear) {
+    httpErr(409, "Recover pending Dungeon Gear before starting another fight", "PHASE7_PENDING_SETTLEMENT");
+  }
 
-  const encounter = assertDungeonProgressAllowed(ch, {
-    planetId: body.planet_id ?? ch.dungeon_planet ?? 1,
-    enemyIndex: body.enemy_index ?? ch.dungeon_enemy ?? 1,
-    viewingWormhole: !!body.viewing_wormhole,
-  });
+  const selection = parseDungeonSelection(body);
+  const target = deriveDungeonTarget(state, ch, selection);
+  const requestId = String(body?.request_id || body?.idempotencyKey || "").trim();
+  if (requestId) {
+    const prior = getWalletOperation(user.id, "prepare_dungeon", requestId);
+    if (prior) {
+      return {
+        success: true,
+        ...prior,
+        dungeon: serializeDungeonState(ch, nowMs, today),
+        character: ch,
+        idempotent_replay: true,
+      };
+    }
+  }
 
   const existingPending = readDungeonPendingCombat(ch);
-  const willReplay = pendingCombatMatches(existingPending, {
-    planetId: encounter.planetId,
-    enemyIndex: encounter.enemyIndex,
-  });
-  // New fights require a clear shared cooldown; replaying an unfinished pending combat does not.
+  const willReplay = pendingCombatMatches(existingPending, target);
   if (!willReplay) {
-    assertCooldownClear(ch, nowMs);
+    if (existingPending?.combat_id) {
+      httpErr(409, "Unresolved Dungeon combat already committed", "DUNGEON_PENDING_EXISTS");
+    }
+    assertSelectedCooldownClear(state, target.content, nowMs);
     assertBackpackHasSpace(ch);
   }
 
   const prepared = prepareDungeonCombatForCharacter(ch, {
-    planetId: encounter.planetId,
-    enemyIndex: encounter.enemyIndex,
-    viewingWormhole: encounter.viewingWormhole,
+    target,
     rng: secureRandom,
   });
   let rawChar = prepared.character || ch;
-  // Impose shared 1h cooldown as soon as the sim decides the outcome (not after replay).
-  // Replays of an existing pending combat do not refresh the timer.
   if (!prepared.replay && !willReplay) {
-    rawChar = entities.Character.update(rawChar.id, buildCooldownPatch(prepared.combat?.winner === "player", nowMs));
+    const frozen = freezePhase7Settlement({
+      won: prepared.combat?.winner === "player",
+      content: target.content,
+      dungeonId: target.dungeonId,
+      encounterNumber: target.encounterNumber,
+      wormholeIndex: target.wormholeIndex,
+      playerLevelAtVictory: ch.level || PHASE7_DISPLAY_ID_ONE,
+      experience: ch.experience || 0,
+      className: ch.class,
+      rng: secureRandom,
+      generateGear: generatePhase7Gear,
+    });
+    const nextState = buildCooldownPatchForContent(state, target.content, nowMs);
+    const pendingNow = readDungeonPendingCombat(rawChar);
+    const cooldownMirror = target.content === PHASE7_CONTENT_WORMHOLE
+      ? { wormhole_cooldown_until: nextState.wormhole_cooldown_until }
+      : { dungeon_cooldown_until: nextState.dungeon_cooldown_until };
+    rawChar = entities.Character.update(rawChar.id, {
+      phase7_pve: nextState,
+      ...cooldownMirror,
+      dungeon_pending_combat: {
+        ...pendingNow,
+        settlement: frozen,
+      },
+    });
   }
   const pub = publicCombatResult(prepared.combat);
   const { dungeon_pending_combat: _pending, ...safeCharacter } = rawChar;
   void _pending;
   const dungeon = serializeDungeonState(rawChar, nowMs, today);
-  return {
+  const payload = {
     success: true,
     replay: prepared.replay,
     combat_id: prepared.combat.combat_id,
-    planet_id: encounter.planetId,
-    enemy_index: encounter.enemyIndex,
-    viewing_wormhole: encounter.viewingWormhole,
+    dungeon_id: target.dungeonId,
+    planet_id: target.dungeonId || dungeon.dungeon_planet,
+    enemy_index: target.encounterNumber,
+    viewing_wormhole: target.content === PHASE7_CONTENT_WORMHOLE,
+    content: target.content,
+    is_boss: target.isBoss,
+    enemy_level: target.enemyLevel,
+    settlement: readDungeonPendingCombat(rawChar)?.settlement || null,
     ...pub,
     enemy: pub.enemy,
     battle: pub.battle,
     dungeon,
     character: safeCharacter,
   };
+  if (requestId) {
+    saveWalletOperation(user.id, "prepare_dungeon", requestId, payload);
+  }
+  return payload;
 });
 
 export const FinishDungeonBattle = wrap((user, body) => {
   assertDungeonClientSafe(body);
-  let ch = requireMyChar(user);
+  let ch = migratePhase7Character(requireMyChar(user));
   const today = todayET();
   const nowMs = clock.nowMs();
-
-  const planetId = Math.max(1, Math.floor(Number(body.planet_id) || ch.dungeon_planet || 1));
-  const enemyIndex = Math.min(
-    DUNGEON_ENEMIES_PER_PLANET,
-    Math.max(1, Math.floor(Number(body.enemy_index) || ch.dungeon_enemy || 1)),
-  );
-  const viewingWormhole = !!body.viewing_wormhole;
   const combatIdReq = body.combat_id ? String(body.combat_id).trim() : "";
 
-  // Idempotent settle: same combat_id never pays twice.
-  const settleKey = combatIdReq || "";
-  if (settleKey) {
-    const replay = getWalletOperation(user.id, "finish_dungeon", settleKey);
+  if (combatIdReq) {
+    const replay = getWalletOperation(user.id, "finish_dungeon", combatIdReq);
     if (replay) {
+      const pendingNow = readDungeonPendingCombat(ch);
+      if (pendingNow?.combat_id && String(pendingNow.combat_id) === combatIdReq) {
+        ch = entities.Character.update(ch.id, { dungeon_pending_combat: null });
+      }
       return {
         success: true,
         ...replay,
@@ -1384,28 +1510,17 @@ export const FinishDungeonBattle = wrap((user, body) => {
     }
   }
 
-  // Authoritative combat — require committed pending. Never re-sim on Finish.
   const pending = readDungeonPendingCombat(ch);
-  if (!pendingCombatMatches(pending, {
-    planetId,
-    enemyIndex,
-    combatId: combatIdReq || null,
-  })) {
+  if (!pending?.combat_id) {
     httpErr(409, "No matching pending dungeon combat", "DUNGEON_NO_PENDING");
   }
+  if (combatIdReq && String(pending.combat_id) !== combatIdReq) {
+    httpErr(409, "combat_id does not match pending Dungeon combat", "DUNGEON_COMBAT_MISMATCH");
+  }
 
-  assertDungeonProgressAllowed(ch, {
-    planetId,
-    enemyIndex,
-    viewingWormhole,
-  });
-
-  const won = pending.winner === "player";
   const combatId = pending.combat_id;
-
   const priorSettle = getWalletOperation(user.id, "finish_dungeon", combatId);
   if (priorSettle) {
-    // Pending may linger if a prior response was lost after wallet write — clear + replay.
     if (ch.dungeon_pending_combat) {
       ch = entities.Character.update(ch.id, { dungeon_pending_combat: null });
     }
@@ -1419,79 +1534,55 @@ export const FinishDungeonBattle = wrap((user, body) => {
     };
   }
 
-  const enemyLevel = getDungeonEnemyLevel(planetId, enemyIndex);
-  const dru = getEnemyDru(planetId, enemyIndex);
-  const isBoss = enemyIndex === DUNGEON_ENEMIES_PER_PLANET;
-  let stardust = 0;
-  let experience = 0;
-  if (won) {
-    const r = druToRewards(dru, enemyLevel);
-    stardust = r.stardust;
-    experience = r.experience;
+  const won = pending.winner === "player";
+  if (won && !pending.settlement) {
+    httpErr(409, "Committed combat is missing frozen settlement", "PHASE7_SETTLEMENT_MISSING");
   }
-
-  const collectPct = getCollectionPercentage(ch, 0);
-  const boostedXp = won ? applyXpBonus(experience, collectPct) : 0;
+  const frozen = pending.settlement || freezePhase7Settlement({
+    won: false,
+    content: pending.meta?.content,
+    dungeonId: pending.meta?.dungeon_id,
+    encounterNumber: pending.meta?.encounter_number,
+    wormholeIndex: pending.meta?.wormhole_index,
+    playerLevelAtVictory: ch.level || PHASE7_DISPLAY_ID_ONE,
+    experience: ch.experience || 0,
+    className: ch.class,
+    rng: () => 0,
+    generateGear: generatePhase7Gear,
+  });
+  const target = pendingTargetFromMeta(pending.meta || {});
+  let state = readPhase7(ch);
   const patch = { dungeon_pending_combat: null };
-  applyXpToCharacter(ch, boostedXp, patch);
-
   const itemsGranted = [];
   const pendingLoot = [];
+  let parkedSettlement = null;
+
   if (won) {
-    patch.stardust = (patch.stardust ?? ch.stardust ?? 0) + stardust;
-    patch.total_stardust_earned = (patch.total_stardust_earned ?? ch.total_stardust_earned ?? 0) + stardust;
-
-    patch.dungeon_clears = (ch.dungeon_clears || 0) + (isBoss ? 1 : 0);
-    if (isBoss) {
-      // Boss clears advance progression only — no Ship / Ship Module interaction.
-      if (planetId > DUNGEON_STORY_PLANETS) {
-        patch.dungeon_planet = Math.max(ch.dungeon_planet || planetId, planetId) + 1;
-        patch.dungeon_enemy = 1;
-      } else if (planetId === DUNGEON_STORY_PLANETS) {
-        patch.dungeon_planet = DUNGEON_STORY_PLANETS + 1;
-        patch.dungeon_enemy = 1;
-        patch.highest_sector = Math.max(ch.highest_sector || 1, DUNGEON_STORY_PLANETS);
-      } else {
-        patch.dungeon_planet = planetId + 1;
-        patch.dungeon_enemy = 1;
-        patch.highest_sector = Math.max(ch.highest_sector || 1, planetId + 1);
-      }
-    } else {
-      patch.dungeon_enemy = Math.min(DUNGEON_ENEMIES_PER_PLANET, enemyIndex + 1);
-    }
-
-    // Gear loot on each node clear.
-    // RNG via secureRandom (Node authority); settle-once via wallet_operations.
-    const itemLevel = Math.max(1, enemyLevel || ch.level || 1);
-    const gearRarity = isBoss
-      ? rollDungeonBossRarity(secureRandom)
-      : rollDungeonRegularRarity(secureRandom);
-    const gear = randomItem(gearRarity, itemLevel, undefined, secureRandom, ch.class, {
-      origin: viewingWormhole ? "wormhole" : "dungeon",
+    applyXpToCharacter(ch, frozen.final_xp || 0, patch);
+    state = applyVictoryProgress(state, {
+      content: frozen.content || target.content,
+      dungeonId: frozen.dungeon_id || target.dungeonId,
+      encounterNumber: frozen.encounter_number || target.encounterNumber,
+      wormholeIndex: frozen.wormhole_index ?? target.wormholeIndex,
     });
-    const grantCtx = { accountId: user.id, characterId: ch.id };
-    if (gear) {
-      collectGrant(grantOrCompensate(ch, stripShopNoise(gear), patch), itemsGranted, pendingLoot, grantCtx);
-    }
-
-    if (secureRandom() < DUNGEON_CONSUMABLE_DROP_CHANCE) {
-      const cons = stripShopNoise(randomConsumable(secureRandom));
-      collectGrant(grantOrCompensate(ch, cons, patch), itemsGranted, pendingLoot, grantCtx);
-    }
-
-    // Node counter feeds the public `dungeon_nodes_cleared` statistic (not a reward).
     patch.dungeon_nodes_cleared = (ch.dungeon_nodes_cleared || 0) + 1;
-
-    const weekly = progressWeeklyNovaQuest(
-      { ...ch, weekly_nova_quests: patch.weekly_nova_quests || ch.weekly_nova_quests },
-      "dungeon",
-      1,
-    );
-    if (weekly) patch.weekly_nova_quests = weekly;
-  } else {
-    // Defeat — no death quota; shared cooldown already set at PrepareDungeonCombat.
+    if (frozen.gear) {
+      const granted = grantItemOrPending(ch, stripShopNoise(frozen.gear));
+      if (granted.item) {
+        itemsGranted.push(granted.item);
+      } else if (granted.pending) {
+        parkedSettlement = {
+          combat_id: combatId,
+          ...frozen,
+          gear: granted.pending,
+          won: true,
+        };
+        state = writePhase7Patch(state, { pending_settlement: parkedSettlement });
+      }
+    }
   }
 
+  patch.phase7_pve = state;
   const maxHit = maxPlayerHitFromCombat(pending);
   if (maxHit > 0) patch.highest_damage = Math.max(ch.highest_damage || 0, maxHit);
   const speciesId =
@@ -1501,27 +1592,10 @@ export const FinishDungeonBattle = wrap((user, body) => {
     pending.enemy?.species_id ??
     null;
   if (won) mergeSpeciesDiscovery(ch, patch, speciesId);
-  let discoveries = [];
-  if (won) {
-    const rolled = rollCombatCollectibleDiscoveries(ch, patch, { win: true });
-    discoveries = rolled.found;
-  }
-
-  // Cooldown is imposed when the sim completes (PrepareDungeonCombat). Only backfill
-  // if an older pending fight somehow finished without a timer (legacy clients).
-  if (cooldownRemainingMs(ch, nowMs) <= 0) {
-    Object.assign(patch, buildCooldownPatch(won, nowMs));
-  }
 
   const ach = mergeAchievementUnlocks(ch, patch);
   Object.assign(patch, ach.patch);
-
-  if (won) {
-    mergeDiscoveredGear(ch, [
-      ...itemsGranted,
-      ...pendingLoot.map((p) => p.item),
-    ], patch);
-  }
+  if (won) mergeDiscoveredGear(ch, itemsGranted, patch);
 
   const progression = consumeProgression(patch);
   const character = entities.Character.update(ch.id, patch);
@@ -1533,12 +1607,12 @@ export const FinishDungeonBattle = wrap((user, body) => {
     character: ch,
     won,
     beforeStardust: ch.stardust || 0,
-    afterStardust: patch.stardust ?? ch.stardust ?? 0,
+    afterStardust: ch.stardust || 0,
     rewards: {
-      stardust,
-      experience: boostedXp,
-      planetId,
-      enemyIndex,
+      stardust: 0,
+      experience: won ? frozen.final_xp || 0 : 0,
+      planetId: frozen.dungeon_id,
+      enemyIndex: frozen.encounter_number,
     },
     items: itemsGranted,
     pendingLoot,
@@ -1548,29 +1622,47 @@ export const FinishDungeonBattle = wrap((user, body) => {
   const receipt = {
     won,
     combat_id: combatId,
+    enemy: {
+      content: frozen.content || null,
+      dungeon_id: frozen.dungeon_id ?? null,
+      encounter_number: frozen.encounter_number ?? null,
+      wormhole_index: frozen.wormhole_index ?? null,
+      band: frozen.band ?? null,
+      level: frozen.enemy_level,
+      is_boss: !!frozen.is_boss,
+      archetype: frozen.archetype || null,
+    },
     rewards: {
-      stardust,
-      experience: boostedXp,
-      base_experience: experience,
-      dru: Math.round(dru * DRU_PRECISION_SCALE) / DRU_PRECISION_SCALE,
-      enemyLevel,
-      isBoss,
+      stardust: 0,
+      experience: won ? frozen.final_xp || 0 : 0,
+      base_experience: won ? frozen.base_xp || 0 : 0,
+      frontier_pct: won ? frozen.frontier_pct || 0 : 0,
+      frontier_amount: won ? frozen.frontier_amount || 0 : 0,
+      enemyLevel: frozen.enemy_level,
+      isBoss: !!frozen.is_boss,
+      archetype: frozen.archetype || null,
+      player_level_at_victory: frozen.player_level_at_victory,
+      player_level_after_xp: frozen.player_level_after_xp,
+      gear_economic_level: won ? frozen.gear_economic_level : null,
+      gear_stat_budget_level: won ? frozen.gear_stat_budget_level : null,
     },
     items: itemsGranted,
     pending_loot: pendingLoot,
+    pending_settlement: parkedSettlement,
     newly_unlocked: ach.newly_unlocked,
-    discoveries,
+    discoveries: [],
+    settlement: frozen,
   };
   saveWalletOperation(user.id, "finish_dungeon", combatId, receipt);
 
   const dungeon = serializeDungeonState(character, nowMs, today);
   try {
     const pname = character.name;
-    const label = isBoss ? "conquered a boss on" : "cleared an enemy on";
+    const label = frozen.is_boss ? "conquered a boss on" : "cleared an enemy on";
     entities.GalaxyNews.create({
       message: won
-        ? `⚔️ ${pname} ${label} sector ${planetId}.`
-        : `💀 ${pname} fell on sector ${planetId}.`,
+        ? `⚔️ ${pname} ${label} ${frozen.content || "the frontier"}.`
+        : `💀 ${pname} fell on the frontier.`,
       entry_type: won ? "victory" : "defeat",
       character_name: pname,
       character_id: character.id,
@@ -1585,6 +1677,76 @@ export const FinishDungeonBattle = wrap((user, body) => {
     dungeon,
     character,
     progression,
+  };
+});
+
+export const ClaimPhase7Settlement = wrap((user, body = {}) => {
+  assertDungeonClientSafe(body);
+  let ch = migratePhase7Character(requireMyChar(user));
+  const requestId = String(body?.request_id || body?.idempotencyKey || "").trim();
+  const combatIdReq = String(body?.combat_id || "").trim();
+  if (requestId) {
+    const prior = getWalletOperation(user.id, "claim_phase7_settlement", requestId);
+    if (prior) {
+      return {
+        success: true,
+        ...prior,
+        dungeon: serializeDungeonState(ch, clock.nowMs(), todayET()),
+        character: ch,
+        idempotent_replay: true,
+      };
+    }
+  }
+  if (combatIdReq) {
+    const prior = getWalletOperation(user.id, "claim_phase7_settlement", combatIdReq);
+    if (prior) {
+      return {
+        success: true,
+        ...prior,
+        dungeon: serializeDungeonState(ch, clock.nowMs(), todayET()),
+        character: ch,
+        idempotent_replay: true,
+      };
+    }
+  }
+  const state = readPhase7(ch);
+  const settlement = state.pending_settlement;
+  if (!settlement?.gear) {
+    httpErr(400, "No pending Phase 7 settlement", "PHASE7_NO_SETTLEMENT");
+  }
+  const settleKey = settlement.combat_id || "phase7-settlement";
+  const prior = getWalletOperation(user.id, "claim_phase7_settlement", settleKey);
+  if (prior) {
+    return {
+      success: true,
+      ...prior,
+      dungeon: serializeDungeonState(ch, clock.nowMs(), todayET()),
+      character: ch,
+      idempotent_replay: true,
+    };
+  }
+  assertBackpackHasSpace(ch);
+  const granted = grantItemOrPending(ch, stripShopNoise(settlement.gear));
+  if (!granted.item) {
+    httpErr(400, "Inventory full — sell an item at the Black Market first", "INVENTORY_FULL");
+  }
+  const nextState = writePhase7Patch(state, { pending_settlement: null });
+  const patch = { phase7_pve: nextState };
+  mergeDiscoveredGear(ch, [granted.item], patch);
+  const character = entities.Character.update(ch.id, patch);
+  const receipt = {
+    success: true,
+    items: [granted.item],
+    pending_settlement: null,
+  };
+  saveWalletOperation(user.id, "claim_phase7_settlement", settleKey, receipt);
+  if (requestId && requestId !== settleKey) {
+    saveWalletOperation(user.id, "claim_phase7_settlement", requestId, receipt);
+  }
+  return {
+    ...receipt,
+    dungeon: serializeDungeonState(character, clock.nowMs(), todayET()),
+    character,
   };
 });
 
@@ -2533,6 +2695,9 @@ export const BuyCharacterSlot = wrap(async (user) => {
 export const ClaimWeeklyNovaQuest = wrap((user, body) => {
   const ch = requireMyChar(user);
   const questId = body.quest_id;
+  if (RETIRED_WEEKLY_NOVA_QUEST_IDS.includes(questId)) {
+    httpErr(400, "This weekly objective is retired", "WEEKLY_QUEST_RETIRED");
+  }
   const quest = WEEKLY_NOVA_QUESTS.find((q) => q.id === questId);
   if (!quest) httpErr(400, "Unknown quest");
   const state = ensureWeeklyNovaState(ch);
@@ -2875,6 +3040,7 @@ export const ECONOMY_FOLLOW_ON_HANDLERS = {
   PayDungeonContinue,
   PrepareDungeonCombat,
   FinishDungeonBattle,
+  ClaimPhase7Settlement,
   BuyShip,
   BuyShipMod,
   ActivateShip,

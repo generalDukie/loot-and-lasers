@@ -10,10 +10,17 @@ var pending_battle: Dictionary = {}
 var pending_player_items: Array = []
 var pending_enemy_index: int = 1
 var last_finish: Dictionary = {}
+var _client := DungeonClientState.new()
+var _cd_dungeon_remaining_at_sync := 0
+var _cd_dungeon_sync_ticks := 0
+var _cd_wormhole_remaining_at_sync := 0
+var _cd_wormhole_sync_ticks := 0
 
 
 func _ready() -> void:
 	print("[DungeonManager] ready")
+	if GameManager != null and not GameManager.active_character_changed.is_connected(_on_active_character_changed):
+		GameManager.active_character_changed.connect(_on_active_character_changed)
 
 
 func clear_local() -> void:
@@ -24,10 +31,30 @@ func clear_local() -> void:
 	pending_player_items = []
 	pending_enemy_index = 1
 	last_finish = {}
+	_client.clear()
+	_cd_dungeon_remaining_at_sync = 0
+	_cd_dungeon_sync_ticks = 0
+	_cd_wormhole_remaining_at_sync = 0
+	_cd_wormhole_sync_ticks = 0
+	state_changed.emit()
+
+
+func _on_active_character_changed(character: Dictionary, _source: String) -> void:
+	var cid := str(character.get("id", "")).strip_edges()
+	if cid.is_empty():
+		clear_local()
+		return
+	if not _client.character_id.is_empty() and _client.character_id != cid:
+		clear_local()
+	_client.apply_character_refresh(character)
 
 
 func active_char() -> Dictionary:
 	return GameManager.active_character
+
+
+func live_character_id() -> String:
+	return str(active_char().get("id", "")).strip_edges()
 
 
 func sync_state() -> Dictionary:
@@ -46,34 +73,109 @@ func refresh_status() -> Dictionary:
 	return res
 
 
-func skip_cooldown() -> Dictionary:
-	var res: Dictionary = await GameApiClient.invoke("SkipDungeonCooldown", {})
+func reassert_view() -> void:
+	state_changed.emit()
+
+
+func dungeon_blob() -> Dictionary:
+	return _client.blob_for(active_char())
+
+
+func track(planet_id: int) -> Dictionary:
+	var tracks: Variant = dungeon_blob().get("tracks", [])
+	if typeof(tracks) != TYPE_ARRAY:
+		return {}
+	var idx := planet_id - 1
+	if idx < 0 or idx >= (tracks as Array).size():
+		return {}
+	var row: Variant = (tracks as Array)[idx]
+	return row if typeof(row) == TYPE_DICTIONARY else {}
+
+
+func wormhole_state() -> Dictionary:
+	var v: Variant = dungeon_blob().get("wormhole", {})
+	return v if typeof(v) == TYPE_DICTIONARY else {}
+
+
+func wormhole_unlocked() -> bool:
+	return bool(wormhole_state().get("unlocked", false))
+
+
+func standard_clears() -> int:
+	return int(dungeon_blob().get("standard_clears", 0))
+
+
+func pending_settlement() -> Dictionary:
+	var v: Variant = dungeon_blob().get("pending_settlement", {})
+	if typeof(v) == TYPE_DICTIONARY and not (v as Dictionary).is_empty():
+		return v
+	return {}
+
+
+func skip_cooldown(kind: String = "") -> Dictionary:
+	var selector := kind
+	if selector.is_empty():
+		selector = "wormhole" if viewing_wormhole else "dungeon"
+	var request_id := _client.begin_skip(selector)
+	var res: Dictionary = await GameApiClient.invoke("SkipDungeonCooldown", {
+		"cooldown": selector,
+		"request_id": request_id,
+	})
+	_client.complete_skip(selector, res)
+	if res.ok:
+		_apply(res)
+		_apply_dungeon_blob(res)
+	state_changed.emit()
+	return res
+
+
+func claim_pending_settlement() -> Dictionary:
+	var body := {}
+	var pending := pending_settlement()
+	if not str(pending.get("combat_id", "")).is_empty():
+		body["combat_id"] = str(pending.get("combat_id", ""))
+	var res: Dictionary = await GameApiClient.invoke("ClaimPhase7Settlement", body)
 	_apply(res)
 	_apply_dungeon_blob(res)
+	if res.ok:
+		var items: Variant = res.data.get("items", []) if typeof(res.data) == TYPE_DICTIONARY else []
+		if typeof(items) == TYPE_ARRAY and (items as Array).size() > 0:
+			GameManager.remember_loot_from_claim({"items": items})
 	state_changed.emit()
 	return res
 
 
 func current_planet_id() -> int:
+	var blob := dungeon_blob()
+	if blob.has("dungeon_planet"):
+		return maxi(1, int(blob.get("dungeon_planet", 1)))
 	return maxi(1, int(active_char().get("dungeon_planet", 1)))
 
 
 func current_enemy_index() -> int:
+	if viewing_wormhole:
+		return clampi(int(wormhole_state().get("enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
+	var t := track(selected_planet_id)
+	if not t.is_empty() and t.get("next_enemy", null) != null:
+		return clampi(int(t.get("next_enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
 	return clampi(int(active_char().get("dungeon_enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
 
 
 func highest_cleared() -> int:
-	# dungeon_planet advances on boss clear; clears track progress.
-	return maxi(0, current_planet_id() - 1)
+	return standard_clears()
 
 
 func can_enter_story(planet_id: int) -> Dictionary:
-	var c := active_char()
-	var level := int(c.get("level", 1))
-	if not DungeonRules.is_unlocked(planet_id, level):
-		return {"ok": false, "error": "Requires level %s" % DungeonRules.unlock_level(planet_id)}
-	if planet_id > current_planet_id():
-		return {"ok": false, "error": "Clear earlier worlds first"}
+	var t := track(planet_id)
+	if t.is_empty():
+		var level := int(active_char().get("level", 1))
+		if not DungeonRules.is_unlocked(planet_id, level):
+			return {"ok": false, "error": "Requires level %s" % DungeonRules.unlock_level(planet_id)}
+		return {"ok": true}
+	if not bool(t.get("unlocked", false)):
+		return {"ok": false, "error": "Requires level %s" % int(t.get("unlock_level", DungeonRules.unlock_level(planet_id)))}
+	if bool(t.get("complete", false)):
+		return {"ok": false, "error": "Dungeon complete"}
 	return {"ok": true}
 
 
@@ -83,28 +185,42 @@ func select_planet(planet_id: int, wormhole: bool = false) -> void:
 	state_changed.emit()
 
 
-func cooldown_ms() -> int:
-	return DungeonRules.cooldown_remaining_ms(active_char())
+func cooldown_ms(kind: String = "") -> int:
+	var selector := kind
+	if selector.is_empty():
+		selector = "wormhole" if viewing_wormhole else "dungeon"
+	var now_ticks := Time.get_ticks_msec()
+	if selector == "wormhole":
+		return DungeonRules.displayed_remaining_ms(
+			_cd_wormhole_remaining_at_sync,
+			now_ticks - _cd_wormhole_sync_ticks,
+		)
+	return DungeonRules.displayed_remaining_ms(
+		_cd_dungeon_remaining_at_sync,
+		now_ticks - _cd_dungeon_sync_ticks,
+	)
 
 
 func prepare_fight() -> Dictionary:
+	if not pending_settlement().is_empty() and bool(pending_settlement().get("has_gear", false)):
+		return {"ok": false, "error": "Recover pending Dungeon Gear before starting another fight"}
 	var planet: Dictionary = DungeonRules.get_planet(selected_planet_id)
-	var enemy_idx := current_enemy_index()
 	if viewing_wormhole:
-		enemy_idx = current_enemy_index()
-	elif selected_planet_id != current_planet_id():
-		return {"ok": false, "error": "Not your active frontier world"}
-	var gate := can_enter_story(selected_planet_id) if not viewing_wormhole else {"ok": true}
-	if not bool(gate.get("ok", false)) and not viewing_wormhole:
-		return gate
+		if not wormhole_unlocked():
+			return {"ok": false, "error": "Clear all 100 standard Dungeon enemies to open the Wormhole"}
+	else:
+		var gate := can_enter_story(selected_planet_id)
+		if not bool(gate.get("ok", false)):
+			return gate
 	if cooldown_ms() > 0:
 		return {"ok": false, "error": "On cooldown (%s)" % DungeonRules.format_ms(cooldown_ms())}
 
-	var body := {
-		"planet_id": selected_planet_id,
-		"enemy_index": enemy_idx,
-		"viewing_wormhole": viewing_wormhole,
-	}
+	var body := {}
+	if viewing_wormhole:
+		body["viewing_wormhole"] = true
+		body["dungeon_id"] = "wormhole"
+	else:
+		body["dungeon_id"] = selected_planet_id
 	var res: Dictionary = await GameApiClient.invoke("PrepareDungeonCombat", body)
 	if not res.ok:
 		return {"ok": false, "error": str(res.get("error", "PrepareDungeonCombat failed"))}
@@ -141,18 +257,14 @@ func prepare_fight() -> Dictionary:
 	pending_player_items = StatsManager.equipped_items.duplicate(true) \
 		if typeof(StatsManager.equipped_items) == TYPE_ARRAY and not StatsManager.equipped_items.is_empty() \
 		else await _load_equipped()
-	pending_enemy_index = int(payload.get("enemy_index", enemy_idx))
+	pending_enemy_index = int(payload.get("enemy_index", current_enemy_index()))
 	var cid := str(payload.get("combat_id", ""))
 	if not cid.is_empty():
 		pending_battle["combat_id"] = cid
-	if typeof(payload.get("dungeon", null)) == TYPE_DICTIONARY:
-		var dungeon: Dictionary = payload.dungeon
-		for k in ["dungeon_cooldown_until", "dungeon_cooldown_at", "dungeon_cooldown_ms", "dungeon_continue_credit"]:
-			if dungeon.has(k):
-				GameManager.active_character[k] = dungeon[k]
-		GameManager.active_character["pending_combat_id"] = dungeon.get("pending_combat_id", cid)
 	if typeof(payload.get("character", null)) == TYPE_DICTIONARY:
 		GameManager.apply_active_character(payload.character, "dungeon_prepare")
+	if typeof(payload.get("dungeon", null)) == TYPE_DICTIONARY:
+		_store_dungeon_view(payload.dungeon, str(payload.get("combat_id", "")))
 	return {"ok": true, "enemy": pending_enemy, "battle": pending_battle, "combat_id": cid}
 
 
@@ -246,13 +358,28 @@ func _apply_dungeon_blob(res: Dictionary) -> void:
 	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	if typeof(data.get("dungeon", null)) != TYPE_DICTIONARY:
 		return
-	var dungeon: Dictionary = data.dungeon
+	_store_dungeon_view(data.dungeon, str(data.get("combat_id", "")))
+
+
+func _store_dungeon_view(dungeon: Dictionary, combat_id: String = "") -> void:
+	_client.apply_dungeon_sync(live_character_id(), dungeon)
 	for k in [
 		"dungeon_planet", "dungeon_enemy", "dungeon_deaths", "dungeon_deaths_date",
 		"dungeon_clears", "dungeon_nodes_cleared", "dungeon_continue_credit",
 		"dungeon_cooldown_until", "dungeon_cooldown_at", "dungeon_cooldown_ms",
+		"wormhole_cooldown_until",
 	]:
 		if dungeon.has(k):
 			GameManager.active_character[k] = dungeon[k]
-	GameManager.active_character["pending_combat_id"] = dungeon.get("pending_combat_id", "")
-	GameManager.active_character["dungeon"] = dungeon
+	var pending_id := str(dungeon.get("pending_combat_id", combat_id))
+	if not pending_id.is_empty():
+		GameManager.active_character["pending_combat_id"] = pending_id
+	_capture_cooldowns(dungeon)
+
+
+func _capture_cooldowns(dungeon: Dictionary) -> void:
+	var now_ticks := Time.get_ticks_msec()
+	_cd_dungeon_remaining_at_sync = maxi(0, int(dungeon.get("dungeon_cooldown_remaining_ms", 0)))
+	_cd_dungeon_sync_ticks = now_ticks
+	_cd_wormhole_remaining_at_sync = maxi(0, int(dungeon.get("wormhole_cooldown_remaining_ms", 0)))
+	_cd_wormhole_sync_ticks = now_ticks

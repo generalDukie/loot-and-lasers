@@ -1659,11 +1659,11 @@ func _make_vault_teaser(c: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(head)
 	col.add_child(head)
 
-	var pct := MissionBoard.collection_percentage(c)
+	var pct := MissionBoard.collection_percentage(c, DungeonManager.dungeon_blob() if DungeonManager != null else {})
 	var species_n := CollectiblesCatalog.owned_ids(c.get("discovered_species", [])).size()
 	var arts_n := CollectiblesCatalog.owned_ids(c.get("collected_artifacts", [])).size()
 	var relics_n := CollectiblesCatalog.owned_ids(c.get("collected_relics", [])).size()
-	var badges := CollectiblesCatalog.badge_count(c)
+	var badges := CollectiblesCatalog.badge_count(c, DungeonManager.dungeon_blob() if DungeonManager != null else {})
 	var gear_n := CollectiblesCatalog.discovered_gear_ids(c).size()
 	var unlocked: Variant = c.get("unlocked_achievements", [])
 	var ach_n := 0
@@ -1723,7 +1723,7 @@ func _make_vault_teaser(c: Dictionary) -> PanelContainer:
 	col.add_child(chips)
 	for chip in [
 		["Species", "%s/%s" % [species_n, SPECIES_TOTAL]],
-		["Badges", "%s/%s" % [badges, BADGES_TOTAL]],
+		["Dungeon", "%s/%s" % [badges, BADGES_TOTAL]],
 		["Artifacts", "%s/%s" % [arts_n, ARTS_TOTAL]],
 		["Relics", "%s/%s" % [relics_n, RELICS_TOTAL]],
 		["Gear", "%s/%s" % [gear_n, GEAR_TOTAL]],

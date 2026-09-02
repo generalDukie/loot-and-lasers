@@ -89,6 +89,8 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "dungeon_extra_lives",
   "dungeon_pending_combat",
   "dungeon_continue_credit",
+  "phase7_pve",
+  "wormhole_cooldown_until",
   "owned_ships",
   "ship_mod_loadouts",
   "ship_mods",

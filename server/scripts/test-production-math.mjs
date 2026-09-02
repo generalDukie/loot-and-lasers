@@ -540,6 +540,22 @@ test("admin simulate loadout purchase ramp and stim bands", () => {
   assert.equal(plan.gearSlots.length, M.GEAR_SLOTS.length);
 });
 
+test("Phase 7 Dungeon/Wormhole enemy budget uses production EPA × 1.20 / 1.30", () => {
+  const epa = M.expectedPlayerAttributes(100);
+  assert.equal(
+    M.dungeonWormholeEnemyAttributeTotal(100, false),
+    Math.max(1, M.roundHalfUp(epa * M.DUNGEON_WORMHOLE_REGULAR_EPA_MULT)),
+  );
+  assert.equal(
+    M.dungeonWormholeEnemyAttributeTotal(100, true),
+    Math.max(1, M.roundHalfUp(epa * M.DUNGEON_WORMHOLE_BOSS_EPA_MULT)),
+  );
+  assert.notEqual(
+    M.dungeonWormholeEnemyAttributeTotal(100, true),
+    M.roundHalfUp(M.dungeonWormholeEnemyAttributeTotal(100, false) * M.DUNGEON_WORMHOLE_BOSS_EPA_MULT),
+  );
+});
+
 test("numeric safety vs MAX_SAFE_INTEGER", () => {
   const samples = [
     M.xpToNext(2500),

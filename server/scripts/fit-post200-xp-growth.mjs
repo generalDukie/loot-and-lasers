@@ -12,10 +12,9 @@ import {
   POST_200_Q,
   post200Growth,
 } from "../src/shared/rewards.js";
+import { dungeonEncounterXp } from "../../src/lib/productionMath/index.js";
 import {
   MISSION_XP_REBALANCE,
-  getEnemyDru,
-  druToRewards,
   DUNGEON_UNLOCK_LEVELS,
 } from "../src/shared/economyFormulas.js";
 
@@ -59,7 +58,7 @@ function daysToTargets(targets) {
         if (cleared.has(key)) continue;
         if (level < levels[i] - 5) break;
         cleared.add(key);
-        gain(druToRewards(getEnemyDru(d, i + 1), levels[i]).experience);
+        gain(dungeonEncounterXp(d - 1, i));
       }
     }
   }

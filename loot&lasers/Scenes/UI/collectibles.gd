@@ -130,7 +130,7 @@ func _populate() -> void:
 	var relics_owned := CollectiblesCatalog.owned_ids(ch.get("collected_relics", []))
 	var gear_owned := CollectiblesCatalog.discovered_gear_ids(ch)
 	var gear_total := CollectiblesCatalog.gear_catalog().size()
-	var badges := CollectiblesCatalog.badge_count(ch)
+	var badges := CollectiblesCatalog.badge_count(ch, DungeonManager.dungeon_blob() if DungeonManager != null else {})
 
 	var ach_unlocked := 0
 	for entry in AchievementsCatalog.ENTRIES:
@@ -170,13 +170,26 @@ func _populate() -> void:
 					species_owned.has(id)
 				))
 		"badges":
-			_status.text = "Frontier planet badges · %s" % badges
-			if badges <= 0:
+			var owned_ids := CollectiblesCatalog.badge_ids(ch, DungeonManager.dungeon_blob() if DungeonManager != null else {})
+			_status.text = DungeonRules.badge_status_text(owned_ids.size())
+			if owned_ids.is_empty():
 				_list.columns = 1
-				_list.add_child(_empty("No badges — conquer spiral planets on the Galactic Frontier."))
+				_list.add_child(_empty(DungeonRules.badge_empty_text()))
 			else:
-				for i in badges:
-					_list.add_child(_entry("Planet Badge #%s" % (i + 1), "frontier", "Earned by clearing a spiral planet.", true))
+				_list.columns = 1 if owned_ids.size() <= 1 else 2
+				var owned := {}
+				for existing in owned_ids:
+					owned[str(existing)] = true
+				for display_id in range(1, DungeonRules.STATIC_PLANET_COUNT + 1):
+					var badge_id := DungeonRules.badge_id_for_index(display_id - 1)
+					if not owned.has(badge_id):
+						continue
+					_list.add_child(_entry(
+						DungeonRules.badge_label(display_id),
+						"dungeon",
+						DungeonRules.badge_description(),
+						true
+					))
 		"artifacts":
 			_status.text = "Artifacts · %s/100" % arts_owned.size()
 			for i in range(1, 101):

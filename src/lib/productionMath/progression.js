@@ -15,6 +15,7 @@ import {
   EMPLOYMENT_LOAD_QUARTIC_COEFFICIENT,
   EMPLOYMENT_LOAD_QUARTIC_EXPONENT,
   EMPLOYMENT_LOAD_QUARTIC_REFERENCE_LEVEL,
+  MAX_LEVELS_PER_XP_GRANT,
   MISSION_XPF_BASE,
   MISSION_XPF_EXPONENT,
   MISSION_XPF_LINEAR_COEFFICIENT,
@@ -68,6 +69,57 @@ function xpToNextCore(level, share) {
 /** Certified xpnext(L) in canonical design XP units. */
 export function xpToNext(level) {
   return xpToNextCore(level, XP_MISSION_SHARE);
+}
+
+/**
+ * Project level/leftover XP after an award without mutating the character.
+ * Same loop used by grantCharacterXp. awarded === 0 does not consume leftover XP into a level-up.
+ */
+export function projectedProgressionAfterXp({
+  level,
+  experience = 0,
+  xpAmount = 0,
+} = {}) {
+  const previousLevel = Math.max(1, Math.floor(Number(level) || 1));
+  const previousXp = Math.max(0, Math.floor(Number(experience) || 0));
+  const awarded = Math.max(0, Math.floor(Number(xpAmount) || 0));
+  const previousReq = xpToNext(previousLevel);
+  if (awarded === 0) {
+    return {
+      level: previousLevel,
+      experience: previousXp,
+      experience_to_next_level: previousReq,
+      levels_gained: 0,
+    };
+  }
+  let newExp = previousXp + awarded;
+  let newLevel = previousLevel;
+  let expToNext = previousReq;
+  let safety = 0;
+  while (newExp >= expToNext) {
+    if (!Number.isFinite(expToNext) || expToNext <= 0) {
+      const err = new Error("Invalid XP requirement during level-up");
+      err.status = 500;
+      err.code = "INTERNAL_ERROR";
+      throw err;
+    }
+    newExp -= expToNext;
+    newLevel += 1;
+    expToNext = xpToNext(newLevel);
+    safety += 1;
+    if (safety > MAX_LEVELS_PER_XP_GRANT) {
+      const err = new Error("XP level-up safety limit exceeded");
+      err.status = 500;
+      err.code = "INTERNAL_ERROR";
+      throw err;
+    }
+  }
+  return {
+    level: newLevel,
+    experience: Math.max(0, Math.floor(newExp)),
+    experience_to_next_level: expToNext,
+    levels_gained: newLevel - previousLevel,
+  };
 }
 
 /** Wormhole BandWeight reference curve (share 0.60), not player XPToNext. */

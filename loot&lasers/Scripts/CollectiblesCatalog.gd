@@ -111,8 +111,15 @@ static func owned_ids(raw: Variant) -> Dictionary:
 	return out
 
 
-static func badge_count(character: Dictionary) -> int:
-	return maxi(0, int(character.get("dungeon_planet", 1)) - 1)
+static func badge_count(character: Dictionary, dungeon_view: Dictionary = {}) -> int:
+	return badge_ids(character, dungeon_view).size()
+
+
+static func badge_ids(character: Dictionary, dungeon_view: Dictionary = {}) -> PackedStringArray:
+	var view := dungeon_view
+	if view.is_empty() and typeof(character.get("dungeon", null)) == TYPE_DICTIONARY:
+		view = character.get("dungeon", {})
+	return DungeonRules.badge_ids_from_character(character, view)
 
 
 ## Gear catalog — mirrors gameData ITEM_NAMES + CLASS_WEAPONS (~166 entries).

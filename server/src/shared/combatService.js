@@ -13,6 +13,8 @@ import { ATTR_KEYS } from "./expectedPlayerAttributes.js";
 import { generateMissionEncounter } from "../../../src/lib/missionCombat.js";
 import { generateDungeonEnemy } from "../../../src/lib/dungeonEngine.js";
 import { DUNGEON_PLANETS, getDungeonPlanetById } from "../../../src/lib/dungeonData.js";
+import { pendingCombatMatches } from "./dungeonService.js";
+import { PHASE7_CONTENT_WORMHOLE } from "./productionMath.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -246,11 +248,20 @@ export function resolveDungeonPlanet(planetId) {
 /** Dungeon / wormhole foe + sim. */
 export function simulateDungeonCombat(
   character,
-  { planetId, enemyIndex, rng = secureRandom } = {},
+  { target, planetId, enemyIndex, rng = secureRandom } = {},
 ) {
-  const planet = resolveDungeonPlanet(planetId);
-  const idx = Math.max(1, Math.floor(Number(enemyIndex) || 1));
-  const enemy = generateDungeonEnemy(planet, idx, character?.level);
+  const resolved = target || {
+    content: Number(planetId) > 10 ? "wormhole" : "dungeon",
+    dungeonId: planetId,
+    encounterNumber: enemyIndex,
+    wormholeIndex: 0,
+  };
+  const enemy = generateDungeonEnemy({
+    content: resolved.content,
+    dungeonId: resolved.dungeonId || 1,
+    encounterNumber: resolved.encounterNumber || 1,
+    wormholeIndex: resolved.wormholeIndex || 0,
+  });
   const items = loadPlayerEquipped(character);
   return SimulateCombat({
     player: character,
@@ -258,8 +269,8 @@ export function simulateDungeonCombat(
     playerItems: items,
     opponentItems: [],
     rng,
-    mode: "dungeon",
-    encounterId: `dungeon-${planet.id || planetId}-${idx}`,
+    mode: resolved.content === PHASE7_CONTENT_WORMHOLE ? "wormhole" : "dungeon",
+    encounterId: enemy.id,
   });
 }
 
@@ -297,11 +308,7 @@ export function commitDungeonPendingCombat(characterId, combatResult, meta = {})
   return entities.Character.update(characterId, {
     dungeon_pending_combat: {
       ...combatResult,
-      meta: {
-        planet_id: meta.planetId,
-        enemy_index: meta.enemyIndex,
-        viewing_wormhole: !!meta.viewingWormhole,
-      },
+      meta: { ...meta },
     },
   });
 }
@@ -426,22 +433,27 @@ export function prepareArenaCombatForCharacter(
  */
 export function prepareDungeonCombatForCharacter(
   character,
-  { planetId, enemyIndex, viewingWormhole = false, rng = secureRandom } = {},
+  { target, planetId, enemyIndex, viewingWormhole = false, rng = secureRandom } = {},
 ) {
+  const resolved = target || {
+    content: viewingWormhole ? PHASE7_CONTENT_WORMHOLE : "dungeon",
+    dungeonId: planetId,
+    encounterNumber: enemyIndex,
+    wormholeIndex: 0,
+  };
   const pending = readDungeonPendingCombat(character);
-  const meta = pending?.meta || {};
-  if (
-    pending?.combat_id &&
-    Number(meta.planet_id) === Number(planetId) &&
-    Number(meta.enemy_index) === Number(enemyIndex)
-  ) {
+  if (pendingCombatMatches(pending, resolved)) {
     return { combat: pending, replay: true, character };
   }
-  const combat = simulateDungeonCombat(character, { planetId, enemyIndex, rng });
+  const combat = simulateDungeonCombat(character, { target: resolved, rng });
   const updated = commitDungeonPendingCombat(character.id, combat, {
-    planetId,
-    enemyIndex,
-    viewingWormhole,
+    content: resolved.content,
+    dungeon_id: resolved.dungeonId,
+    encounter_number: resolved.encounterNumber,
+    wormhole_index: resolved.wormholeIndex,
+    viewing_wormhole: resolved.content === PHASE7_CONTENT_WORMHOLE,
+    planet_id: resolved.dungeonId,
+    enemy_index: resolved.encounterNumber,
   });
   return { combat, replay: false, character: updated };
 }

@@ -63,14 +63,6 @@ assert.deepEqual(
 );
 assert.equal(sharedEpa.expectedPlayerAttributes(50), libEpa.expectedPlayerAttributes(50));
 assert.equal(
-  sharedEpa.dungeonEnemyAttributeBudget(40, false),
-  libEpa.dungeonEnemyAttributeBudget(40, false),
-);
-assert.equal(
-  sharedEpa.dungeonEnemyAttributeBudget(40, true),
-  libEpa.dungeonEnemyAttributeBudget(40, true),
-);
-assert.equal(
   sharedEpa.missionEnemyAttributeBudget(25),
   libEpa.missionEnemyAttributeBudget(25),
 );

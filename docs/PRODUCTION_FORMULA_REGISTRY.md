@@ -293,13 +293,15 @@ Sell: `rround(SPF(economicLevel) × 0.75/1.50/3.25)` — item `level_requirement
 
 ## PM-DUNGEON / PM-WORMHOLE / PM-FRONTIER
 
-DRU `[60,150,170,300,340,495,715,810,1060,1330]`. **D**. Unlock `[10,20,30,40,50,60,70,90,120,140]`.
+DRU `[60,150,170,300,340,495,715,810,1060,1330]`. **A** live via `dungeonDru`. Unlock `[10,20,30,40,50,60,70,90,120,140]`. **A** via `dungeonUnlockLevel`.
 
-XP: `rround(DRU*share*xpf(enemyL)*0.87*2.10)` then `rround(*1.25)`. **B** vs live DRU/`×2.0`.
+XP: `rround(DRU*share*xpf(enemyL)*0.87*2.10)` then `rround(*1.25)`. **A** live via `dungeonEncounterXp` / `wormholeEncounterXp`. No collection XP. No local ×2.0.
 
-Wormhole: `wormlevel(i)=202+2*i`; BandWeight vs xpnext_dru_reference share 0.60; `round5(1340*w(B)/w(1))`. Infinite. **B** vs live `185+25*depth`.
+Wormhole: `wormlevel(i)=202+2*i`; BandWeight vs xpnext_dru_reference share 0.60; `round5(1340*w(B)/w(1))`. Infinite. **A** via `wormholeEnemyLevel` / `wormholeBandDru`.
 
-Frontier: `min(0.50, 0.05*max(0, EnemyL-PlayerLAtVictory))` on D/WH victory XP only. **E**. Not wired.
+Frontier: `min(0.50, 0.05*max(0, EnemyL-PlayerLAtVictory))` on D/WH victory XP only. **A** via `frontierBonusPct` / `applyFrontierBonus`. XP/Frontier still use the pre-grant player level. Victory Gear economic/display level is `projectedProgressionAfterXp` (including all level-ups from that grant); hidden PvE stat-budget is `pveGearStatBudgetLevel(postXpLevel)`.
+
+Enemy total budget: `rround(production EPA × 1.20)` regular; `rround(production EPA × 1.30)` boss. Boss replaces regular; never stacked. **A** via `dungeonWormholeEnemyAttributeTotal`. Phase 7 doc: `docs/PHASE7_DUNGEON_WORMHOLE_FRONTIER.md`.
 
 ---
 

@@ -76,8 +76,13 @@ export function randomItem(
     ? type
     : pick(EQUIPMENT_SLOTS, rng);
   const names = ITEM_NAMES[t] || ITEM_NAMES.weapon;
+  const economicLevel = generationContext?.economicLevel ?? itemLevel;
+  const playerLevel = generationContext?.playerLevel ?? economicLevel;
   const base = GenerateGearItem({
-    itemLevel,
+    itemLevel: economicLevel,
+    economicLevel,
+    playerLevel,
+    applyPveHiddenBudgetOffset: !!generationContext?.applyPveHiddenBudgetOffset,
     itemType: t,
     rarity,
     rng,

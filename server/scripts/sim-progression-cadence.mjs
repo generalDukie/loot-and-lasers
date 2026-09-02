@@ -6,10 +6,9 @@
  * Run: node --import ./server/scripts/register-src-alias.mjs ./server/scripts/sim-progression-cadence.mjs
  */
 import { expForLevel, getMissionXpPerFuel } from "../src/shared/rewards.js";
+import { dungeonEncounterXp } from "../../src/lib/productionMath/index.js";
 import {
   MISSION_XP_REBALANCE,
-  getEnemyDru,
-  druToRewards,
   DUNGEON_UNLOCK_LEVELS,
 } from "../src/shared/economyFormulas.js";
 
@@ -78,9 +77,7 @@ function simulate(seed) {
         if (cleared.has(key)) continue;
         if (level < levels[i] - 5) break;
         cleared.add(key);
-        const dru = getEnemyDru(d, i + 1);
-        const { experience } = druToRewards(dru, levels[i]);
-        gain(experience, "dungeon");
+        gain(dungeonEncounterXp(d - 1, i), "dungeon");
       }
     }
   }

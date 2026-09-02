@@ -8,10 +8,14 @@ import {
   EXPECTED_PLAYER_ATTRIBUTE_ANCHORS,
   EXPECTED_PLAYER_AT_500,
   EXPECTED_PLAYER_POST_500_SLOPE,
-  dungeonEnemyAttributeBudget,
-  DUNGEON_REGULAR_ATTRIBUTE_MULTIPLIER,
-  DUNGEON_BOSS_ATTRIBUTE_MULTIPLIER,
 } from "../../src/lib/expectedPlayerAttributes.js";
+import {
+  dungeonWormholeEnemyAttributeTotal,
+  DUNGEON_WORMHOLE_REGULAR_EPA_MULT,
+  DUNGEON_WORMHOLE_BOSS_EPA_MULT,
+  expectedPlayerAttributes as productionExpectedPlayerAttributes,
+  roundHalfUp,
+} from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -85,16 +89,18 @@ test("no extra Stim multiplier on benchmark", () => {
   assert.notEqual(expectedPlayerAttributes(100), Math.round(2275 * 1.125));
 });
 
-test("dungeon multipliers unchanged", () => {
-  assert.equal(DUNGEON_REGULAR_ATTRIBUTE_MULTIPLIER, 1.2);
-  assert.equal(DUNGEON_BOSS_ATTRIBUTE_MULTIPLIER, 1.3);
+test("Dungeon/Wormhole budgets use production EPA helpers, not the retired PCHIP dungeon path", () => {
+  assert.equal(DUNGEON_WORMHOLE_REGULAR_EPA_MULT, 1.2);
+  assert.equal(DUNGEON_WORMHOLE_BOSS_EPA_MULT, 1.3);
+  const epa = productionExpectedPlayerAttributes(100);
+  assert.notEqual(epa, expectedPlayerAttributes(100));
   assert.equal(
-    dungeonEnemyAttributeBudget(100, false),
-    Math.round(expectedPlayerAttributes(100) * 1.2)
+    dungeonWormholeEnemyAttributeTotal(100, false),
+    Math.max(1, roundHalfUp(epa * DUNGEON_WORMHOLE_REGULAR_EPA_MULT)),
   );
   assert.equal(
-    dungeonEnemyAttributeBudget(100, true),
-    Math.round(expectedPlayerAttributes(100) * 1.3)
+    dungeonWormholeEnemyAttributeTotal(100, true),
+    Math.max(1, roundHalfUp(epa * DUNGEON_WORMHOLE_BOSS_EPA_MULT)),
   );
 });
 

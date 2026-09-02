@@ -33,7 +33,7 @@ static func xp_per_fuel(level: int) -> int:
 
 ## Collection bonus percentage — mirrors server getCollectionPercentage(character, 0).
 ## Used by stats.gd for the collection readout (not a mission-board authority value).
-static func collection_percentage(character: Dictionary) -> float:
+static func collection_percentage(character: Dictionary, dungeon_view: Dictionary = {}) -> float:
 	const BASE_TOTAL := 30 + 100 + 500 + 10
 	var species := 0
 	var arts := 0
@@ -51,7 +51,7 @@ static func collection_percentage(character: Dictionary) -> float:
 	var raw_g: Variant = character.get("discovered_gear", [])
 	if typeof(raw_g) == TYPE_ARRAY:
 		gear = (raw_g as Array).size()
-	var badges := CollectiblesCatalog.badge_count(character)
+	var badges := CollectiblesCatalog.badge_count(character, dungeon_view)
 	var discovered := species + arts + relics + gear + badges
 	if BASE_TOTAL <= 0:
 		return 0.0

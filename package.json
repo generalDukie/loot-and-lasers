@@ -61,6 +61,7 @@
     "test:shop-stress": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-shop-stress.mjs",
     "test:mining": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-mining.mjs",
     "test:dungeon": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-dungeon.mjs",
+    "test:phase7-pve": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/run-phase7-pve.mjs",
     "audit:no-magic-numbers": "node scripts/audit-no-magic-numbers.mjs",
     "test:production-math": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-production-math.mjs",
     "test:derived-stat-caps": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-derived-stat-caps.mjs",

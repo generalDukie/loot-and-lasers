@@ -28,6 +28,13 @@ func _init() -> void:
 	failed += _check("sync then character refresh keeps view", _assert_view_order(true))
 	failed += _check("character then sync keeps view", _assert_view_order(false))
 	failed += _check("character switch clears view and skip IDs", _assert_switch_clears())
+	failed += _check("loss stays on the defeated enemy dungeon", _assert_sel_loss())
+	failed += _check("non-boss win stays on the same dungeon", _assert_sel_win())
+	failed += _check("boss win selects the next dungeon", _assert_sel_boss())
+	failed += _check("D10 boss win without Wormhole stays on D10", _assert_sel_d10_locked())
+	failed += _check("D10 boss win with Wormhole selects Wormhole", _assert_sel_d10_open())
+	failed += _check("Wormhole win stays on Wormhole", _assert_sel_wormhole_win())
+	failed += _check("Wormhole loss stays on Wormhole", _assert_sel_wormhole_loss())
 	print("test_phase7_client_contract: %s" % ("PASS" if failed == 0 else "FAIL (%d)" % failed))
 	quit(0 if failed == 0 else 1)
 
@@ -128,3 +135,88 @@ func _assert_switch_clears() -> bool:
 	state.begin_skip("dungeon")
 	state.apply_character_refresh({ "id": "c2" })
 	return state.blob_for({ "id": "c2" }).is_empty() and state.pending_skip_id("dungeon") == ""
+
+
+func _sel(args: Dictionary) -> Dictionary:
+	return DungeonRules.frontier_selection_after_combat(args)
+
+
+func _assert_sel_loss() -> bool:
+	var s := _sel({
+		"viewing_wormhole": false,
+		"won": false,
+		"is_boss": false,
+		"dungeon_id": 7,
+		"selected_planet_id": 7,
+	})
+	return int(s.get("planet_id", 0)) == 7 and not bool(s.get("viewing_wormhole", true))
+
+
+func _assert_sel_win() -> bool:
+	var s := _sel({
+		"viewing_wormhole": false,
+		"won": true,
+		"is_boss": false,
+		"track_complete": false,
+		"dungeon_id": 7,
+		"selected_planet_id": 7,
+	})
+	return int(s.get("planet_id", 0)) == 7 and not bool(s.get("viewing_wormhole", true))
+
+
+func _assert_sel_boss() -> bool:
+	var s := _sel({
+		"viewing_wormhole": false,
+		"won": true,
+		"is_boss": true,
+		"track_complete": true,
+		"dungeon_id": 7,
+		"selected_planet_id": 7,
+	})
+	return int(s.get("planet_id", 0)) == 8 and not bool(s.get("viewing_wormhole", true))
+
+
+func _assert_sel_d10_locked() -> bool:
+	var s := _sel({
+		"viewing_wormhole": false,
+		"won": true,
+		"is_boss": true,
+		"track_complete": true,
+		"dungeon_id": DungeonRules.STATIC_PLANET_COUNT,
+		"wormhole_unlocked": false,
+	})
+	return int(s.get("planet_id", 0)) == DungeonRules.STATIC_PLANET_COUNT and not bool(s.get("viewing_wormhole", true))
+
+
+func _assert_sel_d10_open() -> bool:
+	var s := _sel({
+		"viewing_wormhole": false,
+		"won": true,
+		"is_boss": true,
+		"track_complete": true,
+		"dungeon_id": DungeonRules.STATIC_PLANET_COUNT,
+		"wormhole_unlocked": true,
+		"wormhole_band": 2,
+	})
+	return int(s.get("planet_id", 0)) == DungeonRules.wormhole_planet_id(2) and bool(s.get("viewing_wormhole", false))
+
+
+func _assert_sel_wormhole_win() -> bool:
+	var s := _sel({
+		"viewing_wormhole": true,
+		"content": DungeonRules.WORMHOLE_ID,
+		"won": true,
+		"is_boss": true,
+		"wormhole_band": 3,
+	})
+	return int(s.get("planet_id", 0)) == DungeonRules.wormhole_planet_id(3) and bool(s.get("viewing_wormhole", false))
+
+
+func _assert_sel_wormhole_loss() -> bool:
+	var s := _sel({
+		"viewing_wormhole": true,
+		"content": DungeonRules.WORMHOLE_ID,
+		"won": false,
+		"wormhole_band": 1,
+	})
+	return int(s.get("planet_id", 0)) == DungeonRules.wormhole_planet_id(1) and bool(s.get("viewing_wormhole", false))

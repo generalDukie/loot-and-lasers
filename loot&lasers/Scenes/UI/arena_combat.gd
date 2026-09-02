@@ -1588,6 +1588,9 @@ func _input(event: InputEvent) -> void:
 		return
 	if is_instance_valid(_sheet_host) and _sheet_host.visible and _sheet_host.get_child_count() > 0:
 		return
+	# Eat Enter for skip/outro so Frontier under the overlay cannot Fight/Skip too.
+	if vp != null:
+		vp.set_input_as_handled()
 	if is_instance_valid(_outro_layer) and _outro_layer.visible:
 		ClientUi.try_activate_confirm_button(_outro_btn, vp)
 		return

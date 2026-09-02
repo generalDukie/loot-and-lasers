@@ -16,6 +16,8 @@ const WIN_COOLDOWN_MS := BATTLE_COOLDOWN_MS
 const LOSS_COOLDOWN_MS := BATTLE_COOLDOWN_MS
 const WORMHOLE_ID := "wormhole"
 const STATIC_PLANET_COUNT := 10
+const DUNGEON_DISPLAY_ID_ONE := 1
+const NEXT_DUNGEON_ID_STEP := 1
 const DUNGEON_BADGE_MAX := 10
 const DUNGEON_BADGE_ID_PREFIX := "D"
 const HTTP_STATUS_REQUEST_TIMEOUT := 408
@@ -88,6 +90,58 @@ static func is_unlocked(planet_id: int, player_level: int) -> bool:
 	return maxi(1, player_level) >= u
 
 
+static func wormhole_planet_id(band: int) -> int:
+	return STATIC_PLANET_COUNT + maxi(DUNGEON_DISPLAY_ID_ONE, band)
+
+
+## Map selection after a Frontier fight. Does not use sequential dungeon_planet.
+## Loss / non-boss win stay on the fought location. Dungeon boss win advances
+## to the next dungeon; D10 boss win opens the Wormhole when it is unlocked.
+static func frontier_selection_after_combat(args: Dictionary) -> Dictionary:
+	var viewing_wormhole := bool(args.get("viewing_wormhole", false))
+	var content := str(args.get("content", "")).strip_edges()
+	var wormhole_band := maxi(DUNGEON_DISPLAY_ID_ONE, as_int(args.get("wormhole_band", DUNGEON_DISPLAY_ID_ONE), DUNGEON_DISPLAY_ID_ONE))
+	if viewing_wormhole or content == WORMHOLE_ID:
+		return {
+			"planet_id": wormhole_planet_id(wormhole_band),
+			"viewing_wormhole": true,
+		}
+	var fought := _fought_dungeon_id(args)
+	var won := bool(args.get("won", false))
+	var is_boss := bool(args.get("is_boss", false))
+	var track_complete := bool(args.get("track_complete", false))
+	if (not won) or (not is_boss and not track_complete):
+		return {
+			"planet_id": fought,
+			"viewing_wormhole": false,
+		}
+	var next_planet := fought + NEXT_DUNGEON_ID_STEP
+	if next_planet > STATIC_PLANET_COUNT:
+		if bool(args.get("wormhole_unlocked", false)):
+			return {
+				"planet_id": wormhole_planet_id(wormhole_band),
+				"viewing_wormhole": true,
+			}
+		return {
+			"planet_id": STATIC_PLANET_COUNT,
+			"viewing_wormhole": false,
+		}
+	return {
+		"planet_id": next_planet,
+		"viewing_wormhole": false,
+	}
+
+
+static func _fought_dungeon_id(args: Dictionary) -> int:
+	var from_enemy := as_int(args.get("dungeon_id", 0), 0)
+	if from_enemy >= DUNGEON_DISPLAY_ID_ONE and from_enemy <= STATIC_PLANET_COUNT:
+		return from_enemy
+	var selected := as_int(args.get("selected_planet_id", DUNGEON_DISPLAY_ID_ONE), DUNGEON_DISPLAY_ID_ONE)
+	if selected >= DUNGEON_DISPLAY_ID_ONE and selected <= STATIC_PLANET_COUNT:
+		return selected
+	return DUNGEON_DISPLAY_ID_ONE
+
+
 static func get_planet(planet_id: int) -> Dictionary:
 	if planet_id >= 1 and planet_id <= STATIC_PLANET_COUNT:
 		return PLANETS[planet_id - 1].duplicate(true)
@@ -157,8 +211,12 @@ static func cooldown_remaining_ms(character: Dictionary, kind: String = "dungeon
 	)
 
 
-static func _as_int(value: Variant) -> int:
+static func as_int(value: Variant, fallback: int = 0) -> int:
 	match typeof(value):
+		TYPE_NIL:
+			return fallback
+		TYPE_BOOL:
+			return 1 if value else 0
 		TYPE_INT:
 			return value
 		TYPE_FLOAT:
@@ -169,9 +227,13 @@ static func _as_int(value: Variant) -> int:
 				return int(s)
 			if s.is_valid_float():
 				return int(float(s))
-			return 0
+			return fallback
 		_:
-			return 0
+			return fallback
+
+
+static func _as_int(value: Variant) -> int:
+	return as_int(value, 0)
 
 
 static func _parse_iso_ms(iso: String) -> float:

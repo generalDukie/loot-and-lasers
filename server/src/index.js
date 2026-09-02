@@ -1,4 +1,6 @@
 import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import express from "express";
 import cors from "cors";
@@ -36,7 +38,7 @@ import { createArenaRouter } from "./arena/index.js";
 import { createAuditRouter, auditAdminEntityWrite } from "./audit/index.js";
 import { migrateLegacyEntitlements } from "./entitlements/migrate.js";
 import { createWalletBridgeRouter } from "./walletBridge.js";
-import { normalizeFunctionBody, sendApiError } from "./apiResponse.js";
+import { normalizeFunctionBody, sendApiError, attachPricingQualityResponseBoundary } from "./apiResponse.js";
 import { assertWritesAllowed, getMaintenanceState } from "./shared/maintenanceGate.js";
 import { assertSchemaCompatible } from "./shared/migrationFramework.js";
 import {
@@ -121,6 +123,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(requestContextMiddleware);
 app.use(authMiddleware);
+app.use("/api", attachPricingQualityResponseBoundary);
 
 app.get("/health", (_req, res) => {
   // Backward-compatible alias → readiness (Docker / Godot clients)
@@ -631,39 +634,61 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify({ type: "connected", entity: entityType }));
 });
 
-server.listen(PORT, () => {
-  bootLog.info("api_listening", { port: PORT, static: !!servingStatic });
-  console.log(`Loot & Lasers API listening on http://localhost:${PORT}`);
-  console.log(`WebSocket: ws://localhost:${PORT}/ws`);
-  if (servingStatic) console.log(`Serving client from ${resolveStaticDir()}`);
+function shouldListenOnBoot() {
+  if (process.env.NODE_API_LISTEN === "0") return false;
+  if (process.env.NODE_API_LISTEN === "1") return true;
+  const entry = process.argv[1];
+  if (!entry) return false;
   try {
-    migrateXpRequirementSlowdown({ expForLevel, grantCharacterXp });
-  } catch (err) {
-    bootLog.error("xp_slowdown_migration_failed", { error: String(err?.message || err) });
-    console.error("[migrate] XP requirement slowdown failed:", err);
+    const invoked = path.normalize(path.resolve(entry)).toLowerCase();
+    const self = path.normalize(fileURLToPath(import.meta.url)).toLowerCase();
+    return invoked === self;
+  } catch {
+    return false;
   }
-  try {
-    migratePhase1ProgressionFoundation({ reconstructProgressionState });
-  } catch (err) {
-    bootLog.error("phase1_progression_migration_failed", { error: String(err?.message || err) });
-    console.error("[migrate] Phase 1 production progression failed:", err);
-  }
-  try {
-    ensureDefaultSchedules();
-    startScheduler({ intervalMs: Number(process.env.SCHEDULE_TICK_MS) || 15_000 });
-  } catch (err) {
-    bootLog.error("scheduler_start_failed", { error: String(err?.message || err) });
-    console.error("[scheduler] failed to start:", err);
-  }
-  migrateLegacyEntitlements()
-    .then((r) => {
-      if (!r?.skipped) {
-        bootLog.info("entitlements_legacy_migration", {});
-        console.log("[entitlements] legacy migration:", r);
-      }
-    })
-    .catch((err) => {
-      bootLog.error("entitlements_migration_failed", { error: String(err?.message || err) });
-      console.error("[entitlements] migration failed:", err);
-    });
-});
+}
+
+function startListening() {
+  server.listen(PORT, () => {
+    bootLog.info("api_listening", { port: PORT, static: !!servingStatic });
+    console.log(`Loot & Lasers API listening on http://localhost:${PORT}`);
+    console.log(`WebSocket: ws://localhost:${PORT}/ws`);
+    if (servingStatic) console.log(`Serving client from ${resolveStaticDir()}`);
+    try {
+      migrateXpRequirementSlowdown({ expForLevel, grantCharacterXp });
+    } catch (err) {
+      bootLog.error("xp_slowdown_migration_failed", { error: String(err?.message || err) });
+      console.error("[migrate] XP requirement slowdown failed:", err);
+    }
+    try {
+      migratePhase1ProgressionFoundation({ reconstructProgressionState });
+    } catch (err) {
+      bootLog.error("phase1_progression_migration_failed", { error: String(err?.message || err) });
+      console.error("[migrate] Phase 1 production progression failed:", err);
+    }
+    try {
+      ensureDefaultSchedules();
+      startScheduler({ intervalMs: Number(process.env.SCHEDULE_TICK_MS) || 15_000 });
+    } catch (err) {
+      bootLog.error("scheduler_start_failed", { error: String(err?.message || err) });
+      console.error("[scheduler] failed to start:", err);
+    }
+    migrateLegacyEntitlements()
+      .then((r) => {
+        if (!r?.skipped) {
+          bootLog.info("entitlements_legacy_migration", {});
+          console.log("[entitlements] legacy migration:", r);
+        }
+      })
+      .catch((err) => {
+        bootLog.error("entitlements_migration_failed", { error: String(err?.message || err) });
+        console.error("[entitlements] migration failed:", err);
+      });
+  });
+}
+
+export { app };
+
+if (shouldListenOnBoot()) {
+  startListening();
+}

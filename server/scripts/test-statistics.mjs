@@ -323,7 +323,7 @@ test("guild ranking definition present", () => {
 });
 
 test("guild leaderboard is registered as an RPC function", () => {
-  assert.equal(FUNCTION_HANDLERS.GetGuildLeaderboard, GetGuildLeaderboard);
+  assert.equal(typeof FUNCTION_HANDLERS.GetGuildLeaderboard, "function");
 });
 
 test("guild rank: level then xp then members then created_date then id", () => {

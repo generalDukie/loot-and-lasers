@@ -36,6 +36,7 @@ const SCAN_FILES = [
   "src/lib/productionMath/market.js",
   "src/lib/productionMath/gearQuality.js",
   "src/lib/gearIntrinsicQuality.js",
+  "src/lib/gearPricingQuality.js",
   "src/lib/blackMarket.js",
   "server/src/shared/shopService.js",
   "server/src/shared/missionRewards.js",

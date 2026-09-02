@@ -15,6 +15,8 @@ const PAD_Y := 8
 const ICON_SZ := 42.0
 const TITLE_FS := 19
 const META_FS := 18
+## Item level is a player-facing number, not a requirement.
+const LEVEL_FS := 14
 const BODY_FS := 19
 const VAL_FS := 19
 const DELTA_FS := 17
@@ -99,7 +101,10 @@ func _make_section(sep: int) -> VBoxContainer:
 
 
 func present(anchor: Control, item: Dictionary, options: Dictionary = {}) -> void:
-	if anchor == null or not is_instance_valid(anchor) or item.is_empty():
+	var empty_slot := bool(options.get("empty_slot", false))
+	if anchor == null or not is_instance_valid(anchor):
+		return
+	if item.is_empty() and not empty_slot:
 		return
 	# Never open (or stay open) while an item drag is in progress.
 	var vp := get_viewport()
@@ -113,13 +118,54 @@ func present(anchor: Control, item: Dictionary, options: Dictionary = {}) -> voi
 	# Instant mode: ignore hover on the card so leaving the stall dismisses immediately.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE if _instant_dismiss else Control.MOUSE_FILTER_STOP
 	_rebuild(options)
-	_apply_frame_style(ClientUi.rarity_color(str(item.get("rarity", ""))))
+	_apply_frame_style(ClientUi.rarity_color(str(_item.get("rarity", ""))))
 	visible = true
 	_open = true
 	set_process(true)
 	_fit_to_content()
 	_position_near(anchor)
 	_play_open_anim()
+
+
+## Shop / backpack hover for a candidate piece. Equipped-slot hovers still use present().
+func present_hover(
+	anchor: Control,
+	hovered: Dictionary,
+	worn: Dictionary = {},
+	options: Dictionary = {}
+) -> void:
+	var opts := options.duplicate(true)
+	var hovered_item: Dictionary = hovered.duplicate(true) if not hovered.is_empty() else {}
+	var item_type := str(hovered_item.get("type", ""))
+	if not InventoryRules.is_equippable(item_type) or InventoryRules.is_consumable(hovered_item):
+		present(anchor, hovered_item, opts)
+		return
+	var mode := SettingsManager.GEAR_COMPARISON_COMPARE
+	if SettingsManager != null:
+		mode = SettingsManager.normalize_gear_comparison(SettingsManager.gear_comparison)
+	match mode:
+		SettingsManager.GEAR_COMPARISON_OFF:
+			opts["equipped_preview"] = true
+			opts["compare_with"] = {}
+			present(anchor, hovered_item, opts)
+		SettingsManager.GEAR_COMPARISON_EQUIPPED:
+			var slot := str(GameData.gear_type_label(item_type))
+			if slot.is_empty():
+				slot = "Slot"
+			opts["inspect_banner"] = "Currently Equipped (%s)" % slot
+			opts["equipped_preview"] = true
+			opts["compare_with"] = {}
+			opts["actions"] = []
+			opts["show_sell_value"] = false
+			var worn_item: Dictionary = worn.duplicate(true) if not worn.is_empty() else {}
+			if worn_item.is_empty():
+				opts["empty_slot"] = true
+				present(anchor, {"type": item_type}, opts)
+			else:
+				present(anchor, worn_item, opts)
+		_:
+			opts["compare_with"] = worn.duplicate(true) if not worn.is_empty() else {}
+			present(anchor, hovered_item, opts)
 
 
 func _process(_delta: float) -> void:
@@ -302,9 +348,43 @@ func _rebuild(options: Dictionary) -> void:
 	var item_type := str(item.get("type", ""))
 	var tint := ClientUi.rarity_color(str(item.get("rarity", "")))
 	var equipped_preview := bool(options.get("equipped_preview", false))
+	var empty_slot := bool(options.get("empty_slot", false))
+	var inspect_banner := str(options.get("inspect_banner", "")).strip_edges()
 	var compare_with: Dictionary = options.get("compare_with", {}) if typeof(options.get("compare_with", {})) == TYPE_DICTIONARY else {}
 	var show_sell := bool(options.get("show_sell_value", false))
 	var actions: Array = options.get("actions", []) if typeof(options.get("actions", [])) == TYPE_ARRAY else []
+
+	if not inspect_banner.is_empty():
+		var banner := Label.new()
+		banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		banner.text = inspect_banner
+		banner.autowrap_mode = TextServer.AUTOWRAP_OFF
+		banner.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		banner.set_meta("inspect_wrap", true)
+		banner.add_theme_font_size_override("font_size", META_FS)
+		banner.add_theme_color_override("font_color", Color(ClientUi.CYAN_SOFT, 0.9))
+		ClientUi.apply_display_font(banner)
+		_section_header.add_child(banner)
+
+	if empty_slot:
+		var empty_lab := Label.new()
+		empty_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		empty_lab.text = "Nothing equipped in this slot"
+		empty_lab.autowrap_mode = TextServer.AUTOWRAP_OFF
+		empty_lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		empty_lab.set_meta("inspect_wrap", true)
+		empty_lab.add_theme_font_size_override("font_size", META_FS)
+		empty_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_body_font(empty_lab)
+		_section_stats.add_child(empty_lab)
+		_section_header.visible = _section_header.get_child_count() > 0
+		_section_meta.visible = false
+		_section_compare.visible = false
+		_section_stats.visible = true
+		_section_extras.visible = false
+		_section_footer.visible = false
+		_section_actions.visible = false
+		return
 
 	var icon_box := ICON_SZ + 4.0
 
@@ -366,10 +446,7 @@ func _rebuild(options: Dictionary) -> void:
 		type_label = str(GameData.gear_type_label(item_type))
 	var meta := Label.new()
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	meta.text = "%s · Requires Lv %s" % [
-		type_label if not type_label.is_empty() else "Item",
-		ClientUi.format_level(item.get("level_requirement", item.get("level", 1))),
-	]
+	meta.text = type_label if not type_label.is_empty() else "Item"
 	meta.autowrap_mode = TextServer.AUTOWRAP_OFF
 	meta.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	meta.set_meta("inspect_wrap", true)
@@ -378,11 +455,26 @@ func _rebuild(options: Dictionary) -> void:
 	ClientUi.apply_body_font(meta)
 	_section_meta.add_child(meta)
 
+	if InventoryRules.is_equippable(item_type):
+		var level_lab := Label.new()
+		level_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		level_lab.text = "Level %s" % ClientUi.format_level(item.get("level", item.get("level_requirement", 1)))
+		level_lab.autowrap_mode = TextServer.AUTOWRAP_OFF
+		level_lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		level_lab.set_meta("inspect_wrap", true)
+		level_lab.add_theme_font_size_override("font_size", LEVEL_FS)
+		level_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_body_font(level_lab)
+		_section_meta.add_child(level_lab)
+
 	# —— Compare banner ——
-	if not equipped_preview and not compare_with.is_empty():
+	if not equipped_preview and InventoryRules.is_equippable(item_type):
 		var eq_lab := Label.new()
 		eq_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		eq_lab.text = "Compared to equipped: %s" % str(compare_with.get("name", "gear"))
+		if compare_with.is_empty():
+			eq_lab.text = "Nothing equipped in this slot"
+		else:
+			eq_lab.text = "Compared to equipped: %s" % str(compare_with.get("name", "gear"))
 		eq_lab.autowrap_mode = TextServer.AUTOWRAP_OFF
 		eq_lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		eq_lab.set_meta("inspect_wrap", true)
@@ -425,7 +517,7 @@ func _rebuild(options: Dictionary) -> void:
 		ClientUi.apply_body_font(dur)
 		stim_row.add_child(dur)
 		_section_stats.add_child(stim_row)
-	elif equipped_preview:
+	elif equipped_preview or compare_with.is_empty():
 		_fill_absolute_stats(item)
 	else:
 		_fill_compare_stats(item, compare_with)
@@ -547,13 +639,16 @@ func _stat_row(stat_key: String, value: int, delta) -> Control:
 	abbr.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(abbr)
 	lab.add_child(abbr)
-	var val := Label.new()
-	val.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	val.text = NumberDisplay.signed_quantity(value) if value > 0 else "0"
-	val.add_theme_font_size_override("font_size", VAL_FS)
-	val.add_theme_color_override("font_color", ClientUi.TEXT if value > 0 else ClientUi.MUTED)
-	ClientUi.apply_body_font(val)
-	lab.add_child(val)
+	## Item stats are unsigned. A missing stat vs equipped shows only the signed delta.
+	var hide_value := value == 0 and delta != null
+	if not hide_value:
+		var val := Label.new()
+		val.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		val.text = NumberDisplay.quantity(value)
+		val.add_theme_font_size_override("font_size", VAL_FS)
+		val.add_theme_color_override("font_color", ClientUi.TEXT if value > 0 else ClientUi.MUTED)
+		ClientUi.apply_body_font(val)
+		lab.add_child(val)
 	if delta != null:
 		var d: int = int(delta)
 		var dlab := Label.new()

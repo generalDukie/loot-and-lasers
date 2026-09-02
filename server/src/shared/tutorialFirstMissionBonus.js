@@ -10,6 +10,10 @@ import {
 } from "./itemGeneration.js";
 import { randomItem } from "./rewards.js";
 import {
+  finalizeGearPricingQuality,
+  resolveAuthoritativeGearResaleValue,
+} from "../../../src/lib/gearPricingQuality.js";
+import {
   normalizeOnboarding,
 } from "./tutorialService.js";
 
@@ -85,15 +89,18 @@ export function generateTutorialFirstMissionHelmet(character, rng = Math.random)
   const classKey = String(character?.class || "Vanguard");
   const primary = CLASSES[classKey]?.primaryStat || "strength";
   const level = Math.max(1, Math.floor(Number(character?.level) || 1));
-  const item = randomItem("common", level, "helmet", rng, classKey, { origin: "mission" });
+  const item = randomItem("common", level, "helmet", rng, classKey, {
+    origin: "mission",
+    skipPricingQuality: true,
+  });
   const budget = Number.isFinite(Number(item.stat_budget))
     ? Math.max(1, Math.floor(Number(item.stat_budget)))
     : getItemStatBudget(level, "helmet", "common");
   const stats = allocateStatBudget([primary], budget, rng, "common");
-  return {
-    ...item,
-    stats,
-  };
+  item.stats = stats;
+  finalizeGearPricingQuality(item, { className: classKey, forceRescore: true });
+  item.sell_value = resolveAuthoritativeGearResaleValue(item, { className: classKey });
+  return item;
 }
 
 /** Replaces the normal mission loot chain for the tutorial first win. */

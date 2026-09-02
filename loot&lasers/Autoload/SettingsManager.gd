@@ -22,11 +22,16 @@ const COMBAT_ANIMATION_MAX_SPEED := 2.0
 const LEGACY_COMBAT_SPEED_EPSILON := 0.01
 const WINDOW_DECORATION_PADDING := Vector2i(12, 28)
 
+## Candidate-item hover (shop / backpack). Equipped-slot hovers stay absolute.
+const GEAR_COMPARISON_OFF := "off"
+const GEAR_COMPARISON_COMPARE := "comparison"
+const GEAR_COMPARISON_EQUIPPED := "equipped"
+
 ## Local-only keys (must never POST to Node as authority).
 const LOCAL_KEYS := [
 	"master_volume", "music_volume", "sfx_volume", "ambient_volume", "master_muted",
 	"window_mode", "fullscreen", "play_music_when_unfocused",
-	"vsync", "combat_anim_speed", "screen_shake_scale",
+	"vsync", "combat_anim_speed", "screen_shake_scale", "gear_comparison",
 	"notif_mission_complete", "notif_arena_ready", "notif_daily_reward",
 	"notif_mail", "notif_guild_activity",
 	"privacy_friend_requests", "privacy_guild_invites", "privacy_show_online",
@@ -44,6 +49,7 @@ const DEFAULTS := {
 	"vsync": true,
 	"combat_anim_speed": 1.0,
 	"screen_shake_scale": 1.0,
+	"gear_comparison": "comparison",
 	"notif_mission_complete": true,
 	"notif_arena_ready": true,
 	"notif_daily_reward": true,
@@ -75,6 +81,8 @@ var vsync: bool = true
 var combat_anim_speed: float = 1.0
 ## 0 = no shake, 1 = full CombatBeatConfig shake.
 var screen_shake_scale: float = 1.0
+## off | comparison | equipped — hover on unequipped / shop gear.
+var gear_comparison: String = GEAR_COMPARISON_COMPARE
 
 var notif_mission_complete: bool = true
 var notif_arena_ready: bool = true
@@ -138,6 +146,7 @@ func load_settings() -> void:
 	vsync = bool(_config.get_value("display", "vsync", DEFAULTS["vsync"]))
 	combat_anim_speed = float(_config.get_value("accessibility", "combat_anim_speed", DEFAULTS["combat_anim_speed"]))
 	screen_shake_scale = clampf(float(_config.get_value("accessibility", "screen_shake_scale", DEFAULTS["screen_shake_scale"])), 0.0, 1.0)
+	gear_comparison = normalize_gear_comparison(_config.get_value("gameplay", "gear_comparison", DEFAULTS["gear_comparison"]))
 	notif_mission_complete = bool(_config.get_value("notifications", "mission_complete", DEFAULTS["notif_mission_complete"]))
 	notif_arena_ready = bool(_config.get_value("notifications", "arena_ready", DEFAULTS["notif_arena_ready"]))
 	notif_daily_reward = bool(_config.get_value("notifications", "daily_reward", DEFAULTS["notif_daily_reward"]))
@@ -167,6 +176,7 @@ func save_settings() -> Error:
 	_config.set_value("display", "vsync", vsync)
 	_config.set_value("accessibility", "combat_anim_speed", combat_anim_speed)
 	_config.set_value("accessibility", "screen_shake_scale", screen_shake_scale)
+	_config.set_value("gameplay", "gear_comparison", gear_comparison)
 	_config.set_value("notifications", "mission_complete", notif_mission_complete)
 	_config.set_value("notifications", "arena_ready", notif_arena_ready)
 	_config.set_value("notifications", "daily_reward", notif_daily_reward)
@@ -193,6 +203,7 @@ func serialize_local_preferences() -> Dictionary:
 		"vsync": vsync,
 		"combat_anim_speed": combat_anim_speed,
 		"screen_shake_scale": screen_shake_scale,
+		"gear_comparison": gear_comparison,
 		"notif_mission_complete": notif_mission_complete,
 		"notif_arena_ready": notif_arena_ready,
 		"notif_daily_reward": notif_daily_reward,
@@ -217,6 +228,7 @@ func restore_defaults() -> void:
 	vsync = bool(DEFAULTS["vsync"])
 	combat_anim_speed = float(DEFAULTS["combat_anim_speed"])
 	screen_shake_scale = float(DEFAULTS["screen_shake_scale"])
+	gear_comparison = normalize_gear_comparison(DEFAULTS["gear_comparison"])
 	notif_mission_complete = bool(DEFAULTS["notif_mission_complete"])
 	notif_arena_ready = bool(DEFAULTS["notif_arena_ready"])
 	notif_daily_reward = bool(DEFAULTS["notif_daily_reward"])
@@ -386,6 +398,21 @@ func set_screen_shake_scale(v: float, persist: bool = true) -> void:
 	screen_shake_scale = clampf(v, 0.0, 1.0)
 	if persist:
 		save_settings()
+
+
+func normalize_gear_comparison(value: Variant) -> String:
+	var mode := str(value).strip_edges().to_lower()
+	if mode == GEAR_COMPARISON_OFF or mode == GEAR_COMPARISON_EQUIPPED:
+		return mode
+	return GEAR_COMPARISON_COMPARE
+
+
+func set_gear_comparison(mode: String, persist: bool = true) -> void:
+	gear_comparison = normalize_gear_comparison(mode)
+	if persist:
+		save_settings()
+	else:
+		settings_changed.emit()
 
 
 func _persist_audio(immediate: bool) -> void:

@@ -5,6 +5,7 @@
 import { entities } from "../entities.js";
 import { grantItemOrPending } from "../shared/inventoryGrant.js";
 import { computeStardustValue } from "../shared/economyFormulas.js";
+import { ensureGearPricingQuality } from "../../../src/lib/gearPricingQuality.js";
 import { RewardErrors } from "./errors.js";
 import {
   getPendingLoot,
@@ -41,7 +42,9 @@ export function acceptServerPendingLoot(user, pendingLootId) {
     err.status = 404;
     throw err;
   }
-  const granted = grantItemOrPending(ch, pl.item);
+  const payload = { ...pl.item };
+  ensureGearPricingQuality(payload, { className: ch.class, characterClass: ch.class });
+  const granted = grantItemOrPending(ch, payload);
   if (granted.pending) {
     const err = new Error("Inventory still full");
     err.status = 400;
@@ -85,7 +88,11 @@ export function dissolveServerPendingLoot(user, pendingLootId) {
     err.status = 404;
     throw err;
   }
-  const value = computeStardustValue(pl.item);
+  const value = computeStardustValue(pl.item, {
+    fallbackLevel: ch.level,
+    className: ch.class,
+    characterClass: ch.class,
+  });
   const patch = {
     stardust: (ch.stardust || 0) + value,
     total_stardust_earned: (ch.total_stardust_earned || 0) + value,

@@ -30,7 +30,10 @@ const {
   applyDungeonSync,
   createDungeonViewCache,
   dungeonViewBlob,
+  frontierSelectionAfterCombat,
+  wormholePlanetId,
 } = await import("../../src/lib/dungeonClientState.js");
+const { DUNGEON_COUNT, PHASE7_CONTENT_WORMHOLE } = await import("../../src/lib/productionMath/constants.js");
 const { entities } = await import("../src/entities.js");
 const { clock, installFakeClock, resetClockState } = await import("../src/shared/time/clock.js");
 const { SkipDungeonCooldown } = await import("../src/functions/economyFollowOn.js");
@@ -217,6 +220,102 @@ test("character switch / logout clears skip IDs", () => {
   state = createSkipIntentState();
   assert.equal(state.dungeon, "");
   assert.equal(state.wormhole, "");
+});
+
+const DUNGEON_SEVEN = 7;
+const DUNGEON_EIGHT = 8;
+const WORMHOLE_BAND_ONE = 1;
+const WORMHOLE_BAND_TWO = 2;
+const WORMHOLE_BAND_THREE = 3;
+
+test("loss stays on the defeated enemy dungeon", () => {
+  const s = frontierSelectionAfterCombat({
+    viewing_wormhole: false,
+    won: false,
+    is_boss: false,
+    dungeon_id: DUNGEON_SEVEN,
+    selected_planet_id: DUNGEON_SEVEN,
+  });
+  assert.deepEqual(s, { planet_id: DUNGEON_SEVEN, viewing_wormhole: false });
+});
+
+test("non-boss win stays on the same dungeon", () => {
+  const s = frontierSelectionAfterCombat({
+    viewing_wormhole: false,
+    won: true,
+    is_boss: false,
+    track_complete: false,
+    dungeon_id: DUNGEON_SEVEN,
+    selected_planet_id: DUNGEON_SEVEN,
+  });
+  assert.deepEqual(s, { planet_id: DUNGEON_SEVEN, viewing_wormhole: false });
+});
+
+test("boss win selects the next dungeon", () => {
+  const s = frontierSelectionAfterCombat({
+    viewing_wormhole: false,
+    won: true,
+    is_boss: true,
+    track_complete: true,
+    dungeon_id: DUNGEON_SEVEN,
+    selected_planet_id: DUNGEON_SEVEN,
+  });
+  assert.deepEqual(s, { planet_id: DUNGEON_EIGHT, viewing_wormhole: false });
+});
+
+test("D10 boss win without Wormhole stays on D10", () => {
+  const s = frontierSelectionAfterCombat({
+    viewing_wormhole: false,
+    won: true,
+    is_boss: true,
+    track_complete: true,
+    dungeon_id: DUNGEON_COUNT,
+    wormhole_unlocked: false,
+  });
+  assert.deepEqual(s, { planet_id: DUNGEON_COUNT, viewing_wormhole: false });
+});
+
+test("D10 boss win with Wormhole selects Wormhole", () => {
+  const s = frontierSelectionAfterCombat({
+    viewing_wormhole: false,
+    won: true,
+    is_boss: true,
+    track_complete: true,
+    dungeon_id: DUNGEON_COUNT,
+    wormhole_unlocked: true,
+    wormhole_band: WORMHOLE_BAND_TWO,
+  });
+  assert.deepEqual(s, {
+    planet_id: wormholePlanetId(WORMHOLE_BAND_TWO),
+    viewing_wormhole: true,
+  });
+});
+
+test("Wormhole win stays on Wormhole", () => {
+  const s = frontierSelectionAfterCombat({
+    viewing_wormhole: true,
+    content: PHASE7_CONTENT_WORMHOLE,
+    won: true,
+    is_boss: true,
+    wormhole_band: WORMHOLE_BAND_THREE,
+  });
+  assert.deepEqual(s, {
+    planet_id: wormholePlanetId(WORMHOLE_BAND_THREE),
+    viewing_wormhole: true,
+  });
+});
+
+test("Wormhole loss stays on Wormhole", () => {
+  const s = frontierSelectionAfterCombat({
+    viewing_wormhole: true,
+    content: PHASE7_CONTENT_WORMHOLE,
+    won: false,
+    wormhole_band: WORMHOLE_BAND_ONE,
+  });
+  assert.deepEqual(s, {
+    planet_id: wormholePlanetId(WORMHOLE_BAND_ONE),
+    viewing_wormhole: true,
+  });
 });
 
 installFakeClock(2_300_000_000_000);

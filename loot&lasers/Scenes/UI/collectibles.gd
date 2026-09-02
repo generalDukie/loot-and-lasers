@@ -71,7 +71,7 @@ func _build() -> void:
 	ClientUi.apply_hp_bar(_progress_bar, ClientUi.CYAN)
 	pcol.add_child(_progress_bar)
 
-	_status = ClientUi.make_status()
+	_status = ClientUi.make_flow_status()
 	root.add_child(_status)
 
 	_tabs = HBoxContainer.new()

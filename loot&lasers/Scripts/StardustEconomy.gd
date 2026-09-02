@@ -316,22 +316,27 @@ static func stim_sell_value(level: int, rarity: String) -> int:
 
 
 static func gear_sale_value(item: Dictionary) -> int:
-	## Preview-only production resale. Server DissolveItem recomputes and is authority.
+	## Preview-only. Server DissolveItem recomputes and is authority.
+	## Prefer the last authoritative sell_value from the server; do not infer
+	## quality or list prices on the client.
 	if item.is_empty():
 		return 0
 	var itype := str(item.get("type", ""))
 	if itype == "ring":
 		itype = "accessory"
 	if itype == "consumable":
-		var snap := int(item.get("sell_value", 0))
-		if snap > 0:
-			return maxi(1, snap)
+		var stim_snap := int(item.get("sell_value", 0))
+		if stim_snap > 0:
+			return maxi(1, stim_snap)
 		return stim_sell_value(_stim_economic_level(item), _stim_rarity_key(item))
 	if itype == "material":
 		var flat := int(item.get("sell_value", 0))
 		if flat > 0:
 			return maxi(1, flat)
 		return 1
+	var snap := int(item.get("sell_value", 0))
+	if snap > 0:
+		return snap
 	var item_level := maxi(1, int(item.get("level", item.get("level_requirement", 1))))
 	var rarity := str(item.get("rarity", "common"))
 	var rar_mult := float(MARKET_PRICE_RARITY_MULT.get(rarity, 0.0))

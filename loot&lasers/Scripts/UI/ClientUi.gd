@@ -84,12 +84,21 @@ static func confirm_blocked_by_text_focus(viewport: Viewport) -> bool:
 static func shell_has_blocking_overlay(from: Node) -> bool:
 	if from == null or not from.is_inside_tree():
 		return false
+	var n: Node = from
+	while n != null:
+		if _node_has_blocking_overlay(n):
+			return true
+		n = n.get_parent()
 	var scene := from.get_tree().current_scene
-	if scene == null:
+	return _node_has_blocking_overlay(scene)
+
+
+static func _node_has_blocking_overlay(n: Node) -> bool:
+	if n == null:
 		return false
-	if scene.has_method("has_overlay") and bool(scene.call("has_overlay")):
+	if n.has_method("has_overlay") and bool(n.call("has_overlay")):
 		return true
-	if scene.has_method("has_settings_overlay") and bool(scene.call("has_settings_overlay")):
+	if n.has_method("has_settings_overlay") and bool(n.call("has_settings_overlay")):
 		return true
 	return false
 
@@ -99,11 +108,10 @@ static func try_activate_confirm_button(btn: Button, viewport: Viewport = null) 
 		return false
 	if not btn.is_visible_in_tree() or btn.disabled:
 		return false
-	btn.pressed.emit()
-	# Navigation/overlay teardown can free the caller before the next line; use
-	# the viewport captured as an argument, not get_viewport() after emit.
+	# Handle before emit so overlay teardown cannot leak the same Enter onto the page.
 	if viewport != null:
 		viewport.set_input_as_handled()
+	btn.pressed.emit()
 	return true
 
 
@@ -952,13 +960,26 @@ static func apply_dock_button(btn: Button, tint: Color) -> void:
 
 
 static func make_status() -> Label:
+	var label := StatusLine.new()
+	label.overlay = true
+	_style_status_label(label)
+	return label
+
+
+## Persistent in-flow caption (tab summaries, slot counts). Do not use for
+## temporary loading copy — that must overlay via make_status().
+static func make_flow_status() -> Label:
 	var label := Label.new()
+	_style_status_label(label)
+	return label
+
+
+static func _style_status_label(label: Label) -> void:
 	label.text = ""
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override("font_size", BODY_FS)
 	label.add_theme_color_override("font_color", DANGER)
 	apply_body_font(label)
-	return label
 
 
 static func make_currency_chip(symbol: String, value: Variant, tint: Color = CYAN) -> PanelContainer:

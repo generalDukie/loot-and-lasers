@@ -1384,14 +1384,19 @@ func _show_bag_inspect(anchor: Control, item: Dictionary, equipped_preview := fa
 			actions.append({"id": "use", "label": "Use"})
 		elif InventoryRules.is_equippable(item_type):
 			actions.append({"id": "equip", "label": "Swap" if not worn.is_empty() else "Equip"})
-	_inspect.present(anchor, item, {
-		"equipped_preview": equipped_preview,
-		"compare_with": worn,
-		"show_sell_value": not equipped_preview and not InventoryRules.is_consumable(item),
+	if equipped_preview:
+		_inspect.present(anchor, item, {
+			"equipped_preview": true,
+			"compare_with": {},
+			"show_sell_value": false,
+			"actions": [],
+			"instant_dismiss": true,
+		})
+		return
+	_inspect.present_hover(anchor, item, worn, {
+		"show_sell_value": not InventoryRules.is_consumable(item),
 		"actions": actions,
-		# Equipped doll: dismiss as soon as the pointer leaves the slot (don't keep
-		# the card open while crossing into the popup). Bag keeps the bridge for actions.
-		"instant_dismiss": equipped_preview,
+		"instant_dismiss": false,
 	})
 
 

@@ -5,10 +5,15 @@
 import { roundHalfUp } from "./rounding.js";
 import {
   ARENA_STARDUST_PER_SPF,
+  BASIS_POINTS_DENOMINATOR,
   DEFEAT_REWARD_FACTOR,
   GEAR_RESALE_FRACTION,
   MARKET_PRICE_RARITY_MULT,
   MINING_STARDUST_PER_SPF_PER_MINUTE,
+  PRICING_QUALITY_MULTIPLIER_MIN_BPS,
+  PRICING_QUALITY_MULTIPLIER_PER_SCORE_BPS,
+  PRICING_QUALITY_SCORE_MAX,
+  PRICING_QUALITY_SCORE_MIN,
   STARDUST_PF_BASE,
   STARDUST_PF_GROWTH_COEFFICIENT,
   STARDUST_PF_GROWTH_EXPONENT,
@@ -131,4 +136,49 @@ export function gearResaleValue(itemReferenceLevel, slot, rarity) {
   const frac = GEAR_RESALE_FRACTION[rarity];
   if (frac == null) return 0;
   return Math.max(0, roundHalfUp(blackMarketBasePrice(itemReferenceLevel, slot, rarity) * frac));
+}
+
+export function clampPricingQualityScore(score) {
+  const n = Math.floor(Number(score));
+  if (!Number.isFinite(n)) return PRICING_QUALITY_SCORE_MIN;
+  if (n < PRICING_QUALITY_SCORE_MIN) return PRICING_QUALITY_SCORE_MIN;
+  if (n > PRICING_QUALITY_SCORE_MAX) return PRICING_QUALITY_SCORE_MAX;
+  return n;
+}
+
+/** QualityPriceMultiplierBps = 8000 + 40 × PricingQualityScore */
+export function qualityPriceMultiplierBps(pricingQualityScore) {
+  const score = clampPricingQualityScore(pricingQualityScore);
+  return PRICING_QUALITY_MULTIPLIER_MIN_BPS
+    + PRICING_QUALITY_MULTIPLIER_PER_SCORE_BPS * score;
+}
+
+/**
+ * ROUND_HALF_UP(BaseMarketPrice × QualityPriceMultiplierBps ÷ 10000)
+ */
+export function gearQualityListPrice(itemReferenceLevel, slot, rarity, pricingQualityScore) {
+  const bps = qualityPriceMultiplierBps(pricingQualityScore);
+  return Math.max(
+    0,
+    roundHalfUp(blackMarketBasePrice(itemReferenceLevel, slot, rarity) * bps / BASIS_POINTS_DENOMINATOR),
+  );
+}
+
+/**
+ * Single final ROUND_HALF_UP(Base × rarityFraction × QualityPriceMultiplierBps ÷ 10000).
+ * Do not round the old resale value and multiply again.
+ */
+export function gearQualityResaleValue(itemReferenceLevel, slot, rarity, pricingQualityScore) {
+  const frac = GEAR_RESALE_FRACTION[rarity];
+  if (frac == null) return 0;
+  const bps = qualityPriceMultiplierBps(pricingQualityScore);
+  return Math.max(
+    0,
+    roundHalfUp(
+      blackMarketBasePrice(itemReferenceLevel, slot, rarity)
+      * frac
+      * bps
+      / BASIS_POINTS_DENOMINATOR,
+    ),
+  );
 }

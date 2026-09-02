@@ -334,7 +334,7 @@ test("offer snapshots quality at generation level; later player level does not c
   assert.ok(gear);
   assert.equal(gear.quality_reference_level, 50);
   assert.equal(gear.rules_version, BLACK_MARKET_RULES_VERSION);
-  assert.equal(BLACK_MARKET_RULES_VERSION, "phase6-intrinsic-quality-v5");
+  assert.equal(BLACK_MARKET_RULES_VERSION, "phase7-amendment-pricing-quality-v1");
   assert.equal(INTRINSIC_QUALITY_RULES_VERSION, "phase6-raw-quality-v1");
   const before = {
     iq: gear.intrinsic_quality,
@@ -475,7 +475,7 @@ test("new 75/82.5/90/95/97.5 bands and within-rarity CDF populations", () => {
 });
 
 test("level-specific CDF: cache key, lazy reuse, no class, Contraband share, early clamp", () => {
-  assert.equal(BLACK_MARKET_RULES_VERSION, "phase6-intrinsic-quality-v5");
+  assert.equal(BLACK_MARKET_RULES_VERSION, "phase7-amendment-pricing-quality-v1");
   assert.equal(INTRINSIC_QUALITY_CDF_SAMPLE_SIZE, 4096);
   assert.ok(INTRINSIC_QUALITY_CDF_LEVEL_SEED_MIX);
   assert.equal(INTRINSIC_QUALITY_CDF_MIN_REFERENCE_LEVEL, 1);

@@ -151,6 +151,7 @@ import {
   withContrabandStock,
   withNormalStock,
 } from "../../../src/lib/blackMarket.js";
+import { persistAcquisitionStardustPaid } from "../../../src/lib/gearPricingQuality.js";
 import {
   prepareMissionCombatForCharacter,
   readMissionCombat,
@@ -674,7 +675,11 @@ export async function DissolveItem(user, body) {
         httpErr(400, DISSOLVE_EQUIPPED_ERROR_MESSAGE, DISSOLVE_EQUIPPED_ERROR_CODE);
       }
 
-      const gained = computeStardustValue(item, { fallbackLevel: ch.level });
+      const gained = computeStardustValue(item, {
+        fallbackLevel: ch.level,
+        className: ch.class,
+        characterClass: ch.class,
+      });
       const patch = {
         stardust: (ch.stardust || 0) + gained,
         total_stardust_earned: (ch.total_stardust_earned || 0) + gained,
@@ -733,7 +738,11 @@ export async function DissolveJunk(user, body) {
         if (!item || item.character_id !== ch.id) continue;
         // Equipped Gear cannot be sold. Skip rather than unequip/dissolve it.
         if (item.locked || item.is_equipped) continue;
-        total += computeStardustValue(item, { fallbackLevel: ch.level });
+        total += computeStardustValue(item, {
+          fallbackLevel: ch.level,
+          className: ch.class,
+          characterClass: ch.class,
+        });
         entities.Item.delete(id);
         dissolved.push(id);
       }
@@ -2186,6 +2195,10 @@ export async function BuyShopGear(user, body) {
       assertBackpackHasSpace(ch, payloads.length);
       if ((ch.stardust || 0) < stardustCost) httpErr(400, "Not enough stardust");
       if (novaCost && !hasNova(ch, novaCost)) httpErr(400, "Not enough Nova Crystals");
+
+      if (payloads.length === 1) {
+        persistAcquisitionStardustPaid(payloads[0], stardustCost);
+      }
 
       const nextMeta = replaceArmoryListing(meta, win, ch, slotId, isHot, "purchased");
       const beforeStardust = ch.stardust || 0;

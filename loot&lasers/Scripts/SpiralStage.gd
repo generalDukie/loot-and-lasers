@@ -75,14 +75,15 @@ func clear_zoom() -> void:
 
 func _structure_stamp_now() -> Array:
 	var stamp: Array = [
-		int(GameManager.active_character.get("level", 1)),
-		int(DungeonManager.wormhole_unlocked()),
+		DungeonRules.as_int(GameManager.active_character.get("level", 1), 1),
+		DungeonManager.wormhole_unlocked(),
 		DungeonManager.standard_clears(),
-		int(DungeonManager.viewing_wormhole),
+		DungeonManager.viewing_wormhole,
 	]
-	for pid in range(1, 11):
-		stamp.append(int(DungeonManager.track(pid).get("cleared_count", 0)))
-		stamp.append(int(DungeonManager.track(pid).get("unlocked", false)))
+	for pid in range(1, DungeonRules.STATIC_PLANET_COUNT + 1):
+		var t := DungeonManager.track(pid)
+		stamp.append(DungeonRules.as_int(t.get("cleared_count", 0)))
+		stamp.append(bool(t.get("unlocked", false)))
 	return stamp
 
 
@@ -270,7 +271,7 @@ func _rebuild_buttons() -> void:
 	_wormhole_button.icon = null
 	_wormhole_button.disabled = not wh_on
 	_wormhole_button.tooltip_text = (
-		"Inspect Wormhole · Band %s" % maxi(1, int(DungeonManager.wormhole_state().get("band", 1)))
+		"Inspect Wormhole · Band %s" % maxi(1, DungeonRules.as_int(DungeonManager.wormhole_state().get("band", 1), 1))
 		if wh_on
 		else "Clear all 100 standard Dungeon enemies to open the Wormhole (%s/100)" % DungeonManager.standard_clears()
 	)
@@ -312,8 +313,7 @@ func _on_planet_click(planet_id: int, is_current: bool) -> void:
 
 
 func _on_wormhole_click() -> void:
-	var active := DungeonManager.current_planet_id()
-	if active <= 10:
+	if not DungeonManager.wormhole_unlocked():
 		return
 	wormhole_pressed.emit()
 	if _zoom_id == ZOOM_WORMHOLE:
@@ -705,7 +705,7 @@ func _position_buttons() -> void:
 		_wormhole_button.custom_minimum_size = wsz
 		_wormhole_button.size = wsz
 		_wormhole_button.position = wp - wsz * 0.5
-		if DungeonManager.current_planet_id() <= 10:
+		if not DungeonManager.wormhole_unlocked():
 			_wormhole_button.text = ""
 			_apply_level_lock_icon(_wormhole_button)
 
@@ -920,7 +920,8 @@ func _draw_wormhole(side: float, offset: Vector2) -> void:
 			)
 	if _zoom_id == ZOOM_NONE:
 		var font: Font = ClientUi.display_font() if ClientUi.display_font() != null else ThemeDB.fallback_font
-		var label := "WORMHOLE · DEPTH %s" % maxi(1, active - 10) if unlocked else "WORMHOLE SEALED"
+		var band := maxi(1, DungeonRules.as_int(DungeonManager.wormhole_state().get("band", 1), 1))
+		var label := "WORMHOLE · BAND %s" % band if unlocked else "WORMHOLE SEALED"
 		var label_w := maxf(200.0, font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x)
 		draw_string(
 			font,

@@ -8,6 +8,9 @@ import { countBagOccupancy, BACKPACK_FULL_ERROR_MESSAGE } from "./inventoryGrant
 import { getInventoryCap } from "./economyFormulas.js";
 import { canonicalGearSlot } from "./productionMath.js";
 import {
+  PRICING_QUALITY_PRESENTATION_KEYS,
+} from "../../../src/lib/gearPricingQuality.js";
+import {
   buildAttributeSheet,
   loadEquippedItemsForCharacter,
 } from "./characterAttributes.js";
@@ -24,8 +27,24 @@ function httpErr(status, message, code) {
   throw e;
 }
 
-function computeLiveSellValue(item) {
-  return computeItemVendorValue(item);
+function persistPricingQualityIfPresent(item) {
+  if (!item?.id || item.pricing_quality_score == null) return;
+  const patch = {};
+  for (const key of PRICING_QUALITY_PRESENTATION_KEYS) {
+    if (item[key] !== undefined) patch[key] = item[key];
+  }
+  if (!Object.keys(patch).length) return;
+  entities.Item.update(item.id, patch);
+}
+
+function computeLiveSellValue(item, character = null) {
+  const value = computeItemVendorValue(item, {
+    fallbackLevel: character?.level,
+    className: character?.class,
+    characterClass: character?.class,
+  });
+  persistPricingQualityIfPresent(item);
+  return value;
 }
 
 export function isEquippableType(type) {
@@ -38,8 +57,10 @@ export function listOwnedItems(characterId, limit = 500) {
   return entities.Item.filter({ character_id: characterId }, "-created_date", limit) || [];
 }
 
-/** Canonical client-facing item shape (optional fields preserved when present). */
-export function serializeItem(item) {
+/** Canonical client-facing item shape (optional fields preserved when present).
+ * Permanent pricing-quality internals are server-owned and omitted here.
+ */
+export function serializeItem(item, character = null) {
   if (!item || typeof item !== "object") return null;
   const type = canonicalGearSlot(item.type) || item.type;
   return {
@@ -59,7 +80,7 @@ export function serializeItem(item) {
     locked: !!item.locked,
     character_id: item.character_id || null,
     owner_id: item.owner_id || null,
-    sell_value: computeLiveSellValue(item),
+    sell_value: computeLiveSellValue(item, character),
     origin: item.origin || "unassigned",
     manufacturer: item.manufacturer ?? null,
     shipment_eligible: item.shipment_eligible ?? null,
@@ -72,7 +93,7 @@ export function serializeItem(item) {
 
 export function buildInventorySnapshot(character) {
   const raw = listOwnedItems(character?.id);
-  const items = raw.map(serializeItem).filter(Boolean);
+  const items = raw.map((item) => serializeItem(item, character)).filter(Boolean);
   const equipped_items = items.filter((i) => i.is_equipped);
   const bag_items = items.filter((i) => !i.is_equipped);
   const sheet = buildAttributeSheet(

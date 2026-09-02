@@ -49,14 +49,19 @@ Manufacturer does **not** imply Shipment eligibility. Phase 9 reputation / Shipm
 
 ```
 BaseMarketValue = SPF(ItemLevel) × RarityMarketMultiplier × SlotMultiplier
-MarketPrice     = ROUND(BaseMarketValue × Uniform(0.80, 1.20))
+QualityPriceMultiplierBps = 8000 + 40 × PricingQualityScore
+MarketPrice     = ROUND(BaseMarketValue × QualityPriceMultiplierBps ÷ 10000)
 ```
+
+Independent Uniform(0.80, 1.20) Gear listing variance is retired. New offers use `phase7-amendment-pricing-quality-v1`. Existing active offers keep their snapshotted Stardust/Nova until the next refresh.
 
 Rarity multipliers: Common 2.80 / Uncommon 4.25 / Rare 7.00 / Epic 12.00 / Legendary 24.50.
 Slot: Weapon and Ship Module 1.20; all other slots 1.00.
-Rounding: production `roundHalfUp`. Price uses **item level**, snapshotted. Contraband uses the same formula with no extra Contraband markup.
+Rounding: production `roundHalfUp`. Price uses **item level**, snapshotted. Contraband uses the same quality-based listing with no extra Contraband markup.
 
-Resale (Phase 2, reused): `ROUND(pre-variance base × 0.60/0.60/0.40/0.35/0.30)`. Independent of purchase variance, Haggling, Nova, and what the player paid.
+Resale: `ROUND(BaseMarketValue × rarityFraction × QualityPriceMultiplierBps ÷ 10000)` then cap strictly below max-haggle purchase (and below recorded `acquisition_stardust_paid` when present). Fractions remain 0.60/0.60/0.40/0.35/0.30. Quality is **not** shown to the player.
+
+Permanent pricing quality (all five rarities) is separate from the Nova offer-relative CDF. See `docs/GEAR_PRICING_QUALITY_AMENDMENT.md`.
 
 ## Nova surcharge
 
@@ -70,7 +75,7 @@ Epic / Legendary only. Quality is **not** GES and **not** raw `stat_budget_varia
 
 **Legendary Desirability** = `clamp(1 − 6 × Leakage, 0, 1)` where Leakage is discretionary off-stat share above the mandatory 10% per off-stat. **Legendary Shape** uses P/V and Luck penalty tables (ideal Luck 15–20%). Off-stat leakage is not double-penalized in Shape. Scoring math is unchanged. Legendary **generation** (Phase 6 cap correction): five stats, 10% floor, hard 17.5% cap per class off-stat (`floor(T × LEGENDARY_OFF_STAT_CAP_SHARE)`); remainder to Primary / Vitality / Luck. Applies to live Normal Legendary as well as directed pools. Existing persisted Gear/offers are not rewritten.
 
-The combined RawQuality is classified by **within-rarity** empirical CDF (Epic vs Epic, Legendary vs Legendary; **not** class-segmented) into six Nova bands. The reference population is **normal Black Market Gear at the offer's snapshotted generation level**: Market 35/35/20/10 ItemLevel offsets, Phase 2 ±10% variance, current slot/allocation. Cache key is `rarity + quality_reference_level` (lazy, deterministic, not class). Contraband uses that same rarity/level CDF. Snapshotted on the offer; existing offers are not rescored. New offers use `phase6-intrinsic-quality-v5`.
+The combined RawQuality is classified by **within-rarity** empirical CDF (Epic vs Epic, Legendary vs Legendary; **not** class-segmented) into six Nova bands. The reference population is **normal Black Market Gear at the offer's snapshotted generation level**: Market 35/35/20/10 ItemLevel offsets, Phase 2 ±10% variance, current slot/allocation. Cache key is `rarity + quality_reference_level` (lazy, deterministic, not class). Contraband uses that same rarity/level CDF. Snapshotted on the offer; existing offers are not rescored. Nova formula/tables unchanged. New Market offers also carry `phase7-amendment-pricing-quality-v1` for Stardust pricing.
 
 Common, Uncommon, and Rare Gear never receive a Nova surcharge.
 

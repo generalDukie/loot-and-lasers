@@ -48,6 +48,10 @@ import {
   stimSellValueResolved,
   resolveStimRarity,
 } from "./productionMath/index.js";
+import {
+  finalizeGearPricingQuality,
+  resolveAuthoritativeGearResaleValue,
+} from "./gearPricingQuality.js";
 
 export {
   GEAR_STAT_POOL_DESIRABLE,
@@ -697,7 +701,8 @@ export const AllocateGearStats = allocateStatBudget;
  * @param {string|null} [opts.origin]
  * @param {string|null} [opts.manufacturer]
  * @param {boolean|null} [opts.shipmentEligible]
- * @param {object|null} [opts.generationContext]
+ * @param {boolean} [opts.skipPricingQuality] CDF / Nova sampling only — do not
+ *   finalize permanent pricing quality (prevents generator recursion).
  */
 export function GenerateGearItem({
   itemLevel,
@@ -714,7 +719,9 @@ export function GenerateGearItem({
   manufacturer = null,
   shipmentEligible = null,
   generationContext = null,
+  skipPricingQuality = false,
 } = {}) {
+  const skipQuality = skipPricingQuality || !!generationContext?.skipPricingQuality;
   const ctxOrigin = origin || generationContext?.origin || generationContext?.source || null;
   const levels = resolveGearLevelRefs({
     economicLevel,
@@ -772,7 +779,12 @@ export function GenerateGearItem({
       ? defaultShipmentEligible(resolvedOrigin)
       : !!shipmentEligible,
   };
-  item.sell_value = computeItemVendorValue(item);
+  if (!skipQuality) {
+    finalizeGearPricingQuality(item, { className });
+    item.sell_value = resolveAuthoritativeGearResaleValue(item, { className });
+  } else {
+    item.sell_value = gearResaleValue(L, type, r);
+  }
   return item;
 }
 
@@ -799,14 +811,13 @@ export const ITEM_SELL_TYPE_WEIGHT = {
 };
 
 /**
- * Production Gear resale — pre-variance Black Market base × rarity fraction,
- * at ECONOMIC item level (hidden PvE stat-budget level must not be used).
+ * Production Gear resale — quality-based Stardust at ECONOMIC item level
+ * (hidden PvE stat-budget level must not be used as the price level).
  * Stims: ROUND_HALF_UP(SPF(economicLevel) × STIM_SELL_MULT). Junk/materials keep
  * their snapshotted sell_value.
  */
 export function computeItemVendorValue(item, options = {}) {
   if (!item) return 0;
-  const type = canonicalGearSlot(item.type) || item.type;
   if (item.type === "consumable") {
     const rarity = resolveStimRarity(item);
     const level = stimEconomicLevel(item, options.fallbackLevel);
@@ -817,10 +828,5 @@ export function computeItemVendorValue(item, options = {}) {
     if (typeof flat === "number" && flat > 0) return Math.max(1, Math.round(flat));
     return 1;
   }
-  const economic = Math.max(
-    1,
-    Math.floor(Number(item.level ?? item.level_requirement) || 1),
-  );
-  const rarity = String(item.rarity || "").toLowerCase();
-  return gearResaleValue(economic, type, rarity);
+  return resolveAuthoritativeGearResaleValue(item, options);
 }

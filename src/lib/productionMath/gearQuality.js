@@ -38,6 +38,17 @@ import {
   SIMULATE_ATTR_KEYS,
   UNIT_INTERVAL_MAX,
   UNIT_INTERVAL_MIN,
+  COMMON_LUCK_SHAPE,
+  COMMON_OFF_SHAPE,
+  COMMON_POSITIVE_STAT_COUNT,
+  COMMON_PRIMARY_SHAPE,
+  COMMON_VITALITY_SHAPE,
+  PRICING_QUALITY_FALLBACK_MALFORMED_SHAPE,
+  UNCOMMON_LUCK_OFF_SHAPE_CEILING,
+  UNCOMMON_POSITIVE_STAT_COUNT,
+  UNCOMMON_PRIMARY_OFF_SHAPE_CEILING,
+  UNCOMMON_SINGLE_DESIRABLE_SHARE_REFERENCE,
+  UNCOMMON_VITALITY_OFF_SHAPE_CEILING,
 } from "./constants.js";
 import { classPrimaryIndex } from "./attributes.js";
 import { gearStatPool } from "./gear.js";
@@ -176,14 +187,14 @@ function epicFullPvlShape(primary, vitality, luckShare) {
   return clampUnitInterval(1 - pvPenalty - luckPenalty);
 }
 
-function epicPvOffShape(primary, vitality) {
+export function epicPvOffShape(primary, vitality) {
   const x = pShareOfPv(primary, vitality);
   return clampUnitInterval(
     1 - EPIC_PV_OFF_PENALTY_SLOPE * Math.abs(x - EPIC_PV_OFF_TARGET_P_SHARE),
   );
 }
 
-function epicPlOffShape(primary, luck) {
+export function epicPlOffShape(primary, luck) {
   const pair = primary + luck;
   if (!(pair > 0)) return 0;
   const x = primary / pair;
@@ -192,7 +203,7 @@ function epicPlOffShape(primary, luck) {
   );
 }
 
-function epicVlOffShape(vitality, luck) {
+export function epicVlOffShape(vitality, luck) {
   const pair = vitality + luck;
   if (!(pair > 0)) return 0;
   const x = vitality / pair;
@@ -201,7 +212,7 @@ function epicVlOffShape(vitality, luck) {
   );
 }
 
-function epicSingleDesirableShape(desirableShare, ceiling) {
+export function epicSingleDesirableShape(desirableShare, ceiling) {
   const ref = EPIC_SINGLE_DESIRABLE_SHARE_REFERENCE;
   if (!(ref > 0)) return 0;
   return ceiling * Math.min(UNIT_INTERVAL_MAX, desirableShare / ref);
@@ -319,5 +330,164 @@ export function scoreGearIntrinsicQuality({
     referenceBudget,
     actualBudget: total,
     rarity: String(rarity || "").toLowerCase(),
+  });
+}
+
+export function countPositiveGearStats(stats) {
+  let n = 0;
+  for (const key of SIMULATE_ATTR_KEYS) {
+    if (presentPositive(attrValue(stats, key))) n += 1;
+  }
+  return n;
+}
+
+export function uncommonSingleDesirableShape(desirableShare, ceiling) {
+  const ref = UNCOMMON_SINGLE_DESIRABLE_SHARE_REFERENCE;
+  if (!(ref > 0)) return 0;
+  return ceiling * Math.min(UNIT_INTERVAL_MAX, desirableShare / ref);
+}
+
+/**
+ * Common Shape for permanent pricing quality. Nova gearShape() is unchanged.
+ */
+export function commonPricingShape(stats, className) {
+  if (countPositiveGearStats(stats) !== COMMON_POSITIVE_STAT_COUNT) {
+    return {
+      shape: 0,
+      fallback: PRICING_QUALITY_FALLBACK_MALFORMED_SHAPE,
+    };
+  }
+  const primaryKey = classPrimaryAttrKey(className);
+  const primary = attrValue(stats, primaryKey);
+  const vitality = attrValue(stats, GEAR_VITALITY_ATTR_KEY);
+  const luck = attrValue(stats, GEAR_LUCK_ATTR_KEY);
+  if (presentPositive(primary)) return { shape: COMMON_PRIMARY_SHAPE, fallback: null };
+  if (presentPositive(vitality)) return { shape: COMMON_VITALITY_SHAPE, fallback: null };
+  if (presentPositive(luck)) return { shape: COMMON_LUCK_SHAPE, fallback: null };
+  const offPresent = classOffAttrKeys(className).some((key) => presentPositive(attrValue(stats, key)));
+  if (offPresent) return { shape: COMMON_OFF_SHAPE, fallback: null };
+  return { shape: 0, fallback: PRICING_QUALITY_FALLBACK_MALFORMED_SHAPE };
+}
+
+/**
+ * Uncommon Shape for permanent pricing quality. Pair math reuses Epic PV/PL/VL helpers.
+ */
+export function uncommonPricingShape(stats, className, total = null) {
+  const t = total != null ? Number(total) : totalStats(stats);
+  if (countPositiveGearStats(stats) !== UNCOMMON_POSITIVE_STAT_COUNT || !(t > 0)) {
+    return {
+      shape: 0,
+      fallback: PRICING_QUALITY_FALLBACK_MALFORMED_SHAPE,
+    };
+  }
+  const primaryKey = classPrimaryAttrKey(className);
+  const primary = attrValue(stats, primaryKey);
+  const vitality = attrValue(stats, GEAR_VITALITY_ATTR_KEY);
+  const luck = attrValue(stats, GEAR_LUCK_ATTR_KEY);
+  const offKeys = classOffAttrKeys(className).filter((key) => presentPositive(attrValue(stats, key)));
+  const hasP = presentPositive(primary);
+  const hasV = presentPositive(vitality);
+  const hasLuck = presentPositive(luck);
+  const share = desirableStatShare(stats, className, t);
+
+  if (hasP && hasV && !hasLuck && offKeys.length === 0) {
+    return { shape: epicPvOffShape(primary, vitality), fallback: null };
+  }
+  if (hasP && !hasV && hasLuck && offKeys.length === 0) {
+    return { shape: epicPlOffShape(primary, luck), fallback: null };
+  }
+  if (!hasP && hasV && hasLuck && offKeys.length === 0) {
+    return { shape: epicVlOffShape(vitality, luck), fallback: null };
+  }
+  if (hasP && !hasV && !hasLuck && offKeys.length === 1) {
+    return { shape: uncommonSingleDesirableShape(share, UNCOMMON_PRIMARY_OFF_SHAPE_CEILING), fallback: null };
+  }
+  if (!hasP && hasV && !hasLuck && offKeys.length === 1) {
+    return { shape: uncommonSingleDesirableShape(share, UNCOMMON_VITALITY_OFF_SHAPE_CEILING), fallback: null };
+  }
+  if (!hasP && !hasV && hasLuck && offKeys.length === 1) {
+    return { shape: uncommonSingleDesirableShape(share, UNCOMMON_LUCK_OFF_SHAPE_CEILING), fallback: null };
+  }
+  if (!hasP && !hasV && !hasLuck && offKeys.length === UNCOMMON_POSITIVE_STAT_COUNT) {
+    return { shape: 0, fallback: null };
+  }
+  return { shape: 0, fallback: PRICING_QUALITY_FALLBACK_MALFORMED_SHAPE };
+}
+
+export function pricingShape(stats, className, rarity, total = null) {
+  const key = String(rarity || "").toLowerCase();
+  if (key === "common") return commonPricingShape(stats, className);
+  if (key === "uncommon") return uncommonPricingShape(stats, className, total);
+  if (key === "legendary") return { shape: legendaryShape(stats, className, total), fallback: null };
+  return { shape: epicShape(stats, className, total), fallback: null };
+}
+
+export function pricingDesirability(stats, className, rarity, total = null) {
+  const key = String(rarity || "").toLowerCase();
+  if (key === "legendary") return legendaryDesirability(stats, className, total);
+  return epicDesirability(stats, className, total);
+}
+
+/**
+ * Budget Quality for permanent pricing: actual T ÷ expected pre-variance pool
+ * at frozen stat_budget_level + slot + rarity. Not Market/offer-relative.
+ * Not clamped to 0–1.
+ */
+export function pricingBudgetQuality({
+  stats,
+  slot,
+  rarity,
+  statBudgetLevel,
+  actualTotal = null,
+  expectedBudget = null,
+} = {}) {
+  const level = Math.max(1, Math.floor(Number(statBudgetLevel) || 1));
+  const canonical = gearStatPool(level, slot, rarity);
+  const expected = Number(expectedBudget);
+  const denominator = Number.isFinite(expected) && expected > 0 && expected === canonical
+    ? expected
+    : canonical;
+  const actual = actualTotal != null ? Number(actualTotal) : totalStats(stats);
+  if (!(denominator > 0) || !(actual >= 0) || !Number.isFinite(actual)) return 0;
+  return actual / denominator;
+}
+
+/**
+ * Permanent pricing Raw Quality. Independent of Nova scoreGearIntrinsicQuality.
+ */
+export function scoreGearPricingQuality({
+  stats,
+  rarity,
+  slot,
+  statBudgetLevel,
+  className,
+  actualTotal = null,
+  expectedBudget = null,
+} = {}) {
+  const total = actualTotal != null ? Number(actualTotal) : totalStats(stats);
+  const budgetQuality = pricingBudgetQuality({
+    stats,
+    slot,
+    rarity,
+    statBudgetLevel,
+    actualTotal: total,
+    expectedBudget,
+  });
+  const desirability = pricingDesirability(stats, className, rarity, total);
+  const shaped = pricingShape(stats, className, rarity, total);
+  const rawPricingQuality = rawQualityScore(budgetQuality, desirability, shaped.shape);
+  const level = Math.max(1, Math.floor(Number(statBudgetLevel) || 1));
+  return Object.freeze({
+    budgetQuality,
+    desirability,
+    shape: shaped.shape,
+    shapeFallback: shaped.fallback,
+    rawPricingQuality,
+    desirableStatShare: desirableStatShare(stats, className, total),
+    statBudgetLevel: level,
+    expectedBudget: gearStatPool(level, slot, rarity),
+    actualBudget: total,
+    rarity: String(rarity || "").toLowerCase(),
+    className: className || null,
   });
 }

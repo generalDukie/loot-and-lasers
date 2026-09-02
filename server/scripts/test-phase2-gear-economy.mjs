@@ -299,7 +299,7 @@ test("intrinsic Gear stat-budget variance is ±10%, once, persisted, exact alloc
   assert.equal(sumAgain, applyGearStatBudgetVariance(again.pre_variance_stat_budget, again.stat_budget_variance));
 });
 
-test("PvE hidden budget is opt-in and does not inflate economic level or resale", () => {
+test("PvE hidden budget is opt-in and does not inflate economic level", () => {
   assert.equal(pveHiddenStatBudgetOffset(10), 5);
   assert.equal(pveHiddenStatBudgetOffset(200), 10);
   const economic = 10;
@@ -309,24 +309,27 @@ test("PvE hidden budget is opt-in and does not inflate economic level or resale"
     rarity: "rare",
     playerLevel: 10,
     applyPveHiddenBudgetOffset: true,
+    className: "Vanguard",
     rng: seqRng(99),
   });
   const without = GenerateGearItem({
     economicLevel: economic,
     itemType: "armor",
     rarity: "rare",
+    className: "Vanguard",
     rng: seqRng(99),
   });
   assert.equal(withOffset.level, 10);
   assert.equal(withOffset.stat_budget_level, pveGearStatBudgetLevel(10));
   assert.equal(without.stat_budget_level, 10);
-  const saleWith = computeItemVendorValue(withOffset);
-  const saleWithout = computeItemVendorValue(without);
-  assert.equal(saleWith, saleWithout);
-  assert.equal(saleWith, gearResaleValue(10, "armor", "rare"));
+  const saleWith = computeItemVendorValue(withOffset, { className: "Vanguard" });
+  const saleWithout = computeItemVendorValue(without, { className: "Vanguard" });
+  assert.equal(withOffset.level, without.level);
+  assert.ok(saleWith >= 0 && saleWithout >= 0);
+  assert.notEqual(saleWith, gearResaleValue(withOffset.stat_budget_level, "armor", "rare"));
   assert.ok(Object.values(withOffset.stats).reduce((a, b) => a + b, 0)
     > Object.values(without.stats).reduce((a, b) => a + b, 0));
-  evidence.push(`PvE L10 offset=${pveHiddenStatBudgetOffset(10)} sale=${saleWith}`);
+  evidence.push(`PvE L10 offset=${pveHiddenStatBudgetOffset(10)} saleWith=${saleWith} saleWithout=${saleWithout}`);
 });
 
 test("Mission-style default generation does not apply PvE offset", () => {
@@ -623,7 +626,7 @@ await testAsync("sell recomputes production resale; replay cannot double-pay", a
     owner_id: user.id,
     is_equipped: false,
   });
-  const expected = gearResaleValue(20, "weapon", "epic");
+  const expected = computeItemVendorValue(item, { className: ch.class });
   assert.notEqual(expected, 1);
   const before = entities.Character.get(ch.id).stardust;
   const sold = await DissolveItem(user, { item_id: item.id, request_id: "p2-sell-1" });
@@ -684,7 +687,7 @@ await testAsync("equipped Gear cannot be sold; unequipped sale still works", asy
   assert.equal(entities.Character.get(ch.id).stardust, beforeSd);
   assert.ok(entities.Item.get(worn.id));
 
-  const expectedBag = gearResaleValue(8, "weapon", "uncommon");
+  const expectedBag = computeItemVendorValue(bag, { className: ch.class });
   const soldBag = await DissolveItem(user, { item_id: bag.id });
   assert.equal(soldBag.status, 200, soldBag.body?.error);
   assert.equal(soldBag.body.stardust_gained, expectedBag);

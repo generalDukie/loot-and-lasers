@@ -10,6 +10,7 @@ var pending_battle: Dictionary = {}
 var pending_player_items: Array = []
 var pending_enemy_index: int = 1
 var last_finish: Dictionary = {}
+var _post_combat_selection_pending := false
 var _client := DungeonClientState.new()
 var _cd_dungeon_remaining_at_sync := 0
 var _cd_dungeon_sync_ticks := 0
@@ -31,6 +32,7 @@ func clear_local() -> void:
 	pending_player_items = []
 	pending_enemy_index = 1
 	last_finish = {}
+	_post_combat_selection_pending = false
 	_client.clear()
 	_cd_dungeon_remaining_at_sync = 0
 	_cd_dungeon_sync_ticks = 0
@@ -102,7 +104,7 @@ func wormhole_unlocked() -> bool:
 
 
 func standard_clears() -> int:
-	return int(dungeon_blob().get("standard_clears", 0))
+	return DungeonRules.as_int(dungeon_blob().get("standard_clears", 0))
 
 
 func pending_settlement() -> Dictionary:
@@ -148,17 +150,17 @@ func claim_pending_settlement() -> Dictionary:
 func current_planet_id() -> int:
 	var blob := dungeon_blob()
 	if blob.has("dungeon_planet"):
-		return maxi(1, int(blob.get("dungeon_planet", 1)))
-	return maxi(1, int(active_char().get("dungeon_planet", 1)))
+		return maxi(1, DungeonRules.as_int(blob.get("dungeon_planet", 1), 1))
+	return maxi(1, DungeonRules.as_int(active_char().get("dungeon_planet", 1), 1))
 
 
 func current_enemy_index() -> int:
 	if viewing_wormhole:
-		return clampi(int(wormhole_state().get("enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
+		return clampi(DungeonRules.as_int(wormhole_state().get("enemy", 1), 1), 1, DungeonRules.ENEMIES_PER_PLANET)
 	var t := track(selected_planet_id)
 	if not t.is_empty() and t.get("next_enemy", null) != null:
-		return clampi(int(t.get("next_enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
-	return clampi(int(active_char().get("dungeon_enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
+		return clampi(DungeonRules.as_int(t.get("next_enemy", 1), 1), 1, DungeonRules.ENEMIES_PER_PLANET)
+	return clampi(DungeonRules.as_int(active_char().get("dungeon_enemy", 1), 1), 1, DungeonRules.ENEMIES_PER_PLANET)
 
 
 func highest_cleared() -> int:
@@ -183,6 +185,47 @@ func select_planet(planet_id: int, wormhole: bool = false) -> void:
 	selected_planet_id = planet_id
 	viewing_wormhole = wormhole
 	state_changed.emit()
+
+
+func select_wormhole() -> void:
+	var band := maxi(
+		DungeonRules.DUNGEON_DISPLAY_ID_ONE,
+		DungeonRules.as_int(wormhole_state().get("band", DungeonRules.DUNGEON_DISPLAY_ID_ONE), DungeonRules.DUNGEON_DISPLAY_ID_ONE),
+	)
+	select_planet(DungeonRules.wormhole_planet_id(band), true)
+
+
+func consume_post_combat_selection() -> bool:
+	if not _post_combat_selection_pending:
+		return false
+	_post_combat_selection_pending = false
+	return true
+
+
+func apply_selection_after_combat() -> void:
+	var enemy: Dictionary = {}
+	if typeof(last_finish.get("enemy", null)) == TYPE_DICTIONARY:
+		enemy = last_finish.get("enemy")
+	var rewards: Dictionary = {}
+	if typeof(last_finish.get("rewards", null)) == TYPE_DICTIONARY:
+		rewards = last_finish.get("rewards")
+	var dungeon_id := DungeonRules.as_int(enemy.get("dungeon_id", selected_planet_id), selected_planet_id)
+	var t := track(dungeon_id)
+	var choice := DungeonRules.frontier_selection_after_combat({
+		"viewing_wormhole": viewing_wormhole,
+		"content": str(enemy.get("content", "")),
+		"won": bool(last_finish.get("won", false)),
+		"is_boss": bool(enemy.get("is_boss", false)) or bool(rewards.get("isBoss", false)),
+		"track_complete": bool(t.get("complete", false)),
+		"dungeon_id": dungeon_id,
+		"selected_planet_id": selected_planet_id,
+		"wormhole_unlocked": wormhole_unlocked(),
+		"wormhole_band": wormhole_state().get("band", DungeonRules.DUNGEON_DISPLAY_ID_ONE),
+	})
+	select_planet(
+		DungeonRules.as_int(choice.get("planet_id"), selected_planet_id),
+		bool(choice.get("viewing_wormhole", false)),
+	)
 
 
 func cooldown_ms(kind: String = "") -> int:
@@ -286,6 +329,9 @@ func finish_battle() -> Dictionary:
 	_apply(res)
 	last_finish = res.data if res.ok and typeof(res.data) == TYPE_DICTIONARY else {}
 	if res.ok:
+		_post_combat_selection_pending = true
+		if not last_finish.has("won"):
+			last_finish["won"] = str(pending_battle.get("winner", "opponent")) == "player"
 		var items: Variant = last_finish.get("items", [])
 		if typeof(items) == TYPE_ARRAY and (items as Array).size() > 0:
 			GameManager.remember_loot_from_claim({"items": items})
@@ -379,7 +425,7 @@ func _store_dungeon_view(dungeon: Dictionary, combat_id: String = "") -> void:
 
 func _capture_cooldowns(dungeon: Dictionary) -> void:
 	var now_ticks := Time.get_ticks_msec()
-	_cd_dungeon_remaining_at_sync = maxi(0, int(dungeon.get("dungeon_cooldown_remaining_ms", 0)))
+	_cd_dungeon_remaining_at_sync = maxi(0, DungeonRules.as_int(dungeon.get("dungeon_cooldown_remaining_ms", 0)))
 	_cd_dungeon_sync_ticks = now_ticks
-	_cd_wormhole_remaining_at_sync = maxi(0, int(dungeon.get("wormhole_cooldown_remaining_ms", 0)))
+	_cd_wormhole_remaining_at_sync = maxi(0, DungeonRules.as_int(dungeon.get("wormhole_cooldown_remaining_ms", 0)))
 	_cd_wormhole_sync_ticks = now_ticks

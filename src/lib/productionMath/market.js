@@ -354,6 +354,12 @@ export function rollMarketStimAttribute(rng) {
   ];
 }
 
+/**
+ * Historical independent listing variance Uniform(0.80, 1.20).
+ * New Gear Market/Contraband offers do not call this — quality multiplier
+ * replaced it. Kept for Stim `price_variance: 1` clamps, formula tests, and
+ * legacy-offer compatibility reconstruction.
+ */
 export function rollMarketPriceVariance(rng, variance = null) {
   if (variance != null && Number.isFinite(Number(variance))) {
     const v = Number(variance);

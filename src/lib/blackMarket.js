@@ -5,11 +5,10 @@
 import { GenerateGearItem } from "./itemGeneration.js";
 import {
   blackMarketBasePrice,
-  blackMarketPrice,
+  BASIS_POINTS_DENOMINATOR,
   CONTRABAND_OFFER_COUNT,
   GEAR_ORIGIN_CONTRABAND,
   GEAR_ORIGIN_MARKET,
-  gearResaleValue,
   MARKET_MIN_STIM_OFFERS,
   MARKET_NORMAL_SLOT_COUNT,
   MARKET_OFFER_KIND_GEAR,
@@ -36,14 +35,19 @@ import {
   rollMarketGearItemLevel,
   rollMarketGearRarity,
   rollMarketGearSlot,
-  rollMarketPriceVariance,
   rollMarketStimAttribute,
   rollNormalMarketOfferKinds,
   stimBonusMultiplier,
 } from "./productionMath/market.js";
 import { resolveOfferIntrinsicQuality } from "./gearIntrinsicQuality.js";
+import {
+  ensureGearPricingQuality,
+  gearQualityListPriceForItem,
+  resolveAuthoritativeGearResaleValue,
+} from "./gearPricingQuality.js";
+import { qualityPriceMultiplierBps } from "./productionMath/economy.js";
 
-export const BLACK_MARKET_RULES_VERSION = "phase6-intrinsic-quality-v5";
+export const BLACK_MARKET_RULES_VERSION = "phase7-amendment-pricing-quality-v1";
 
 const MULBERRY_INCREMENT = 0x6D2B79F5;
 const UINT32_DIVISOR = 4294967296;
@@ -128,30 +132,30 @@ function snapshotGearOffer({
   windowIdx,
   rng,
   className = null,
-  priceVariance = null,
   qualityReferenceLevel = null,
 }) {
   const r = requireRng(rng, "snapshotGearOffer");
-  const slot = item.type;
-  const rarity = String(item.rarity || "").toLowerCase();
-  const itemLevel = Math.max(1, Math.floor(Number(item.level_requirement ?? item.level) || 1));
+  const frozen = ensureGearPricingQuality({ ...item }, { className });
+  const slot = frozen.type;
+  const rarity = String(frozen.rarity || "").toLowerCase();
+  const itemLevel = Math.max(1, Math.floor(Number(frozen.level_requirement ?? frozen.level) || 1));
   const referenceLevel = Math.max(
     1,
     Math.floor(Number(qualityReferenceLevel ?? itemLevel) || 1),
   );
-  const variance = rollMarketPriceVariance(r, priceVariance);
   const baseMarketValue = blackMarketBasePrice(itemLevel, slot, rarity);
-  const stardustPrice = blackMarketPrice(itemLevel, slot, rarity, variance);
-  const vendorValue = gearResaleValue(itemLevel, slot, rarity);
+  const stardustPrice = gearQualityListPriceForItem(frozen, { className });
+  const vendorValue = resolveAuthoritativeGearResaleValue(frozen, { className });
   const quality = resolveOfferIntrinsicQuality({
-    item,
+    item: frozen,
     className,
     referenceLevel,
   });
   const novaCost = resolveNovaSurcharge(rarity, quality.percentile, r(), r());
-  const manufacturer = item.manufacturer || null;
+  const manufacturer = frozen.manufacturer || null;
+  const multiplierBps = qualityPriceMultiplierBps(frozen.pricing_quality_score);
   return {
-    ...item,
+    ...frozen,
     origin,
     manufacturer,
     shipment_eligible: false,
@@ -165,7 +169,7 @@ function snapshotGearOffer({
     _cost: stardustPrice,
     nova_cost: novaCost,
     base_market_value: baseMarketValue,
-    price_variance: variance,
+    price_variance: multiplierBps / BASIS_POINTS_DENOMINATOR,
     budget_quality: quality.budgetQuality,
     desirability: quality.desirability,
     shape: quality.shape,

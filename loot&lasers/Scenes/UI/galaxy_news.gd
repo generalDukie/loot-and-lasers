@@ -73,7 +73,7 @@ func _build() -> void:
 	refresh.pressed.connect(_boot)
 	header.add_child(refresh)
 
-	_status = ClientUi.make_status()
+	_status = ClientUi.make_flow_status()
 	root.add_child(_status)
 
 	var feed_panel := PanelContainer.new()

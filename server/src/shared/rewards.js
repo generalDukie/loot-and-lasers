@@ -91,6 +91,7 @@ export function randomItem(
     origin: generationContext?.origin || generationContext?.source || null,
     manufacturer: generationContext?.manufacturer ?? null,
     shipmentEligible: generationContext?.shipmentEligible,
+    skipPricingQuality: !!generationContext?.skipPricingQuality,
     generationContext,
   });
   const baseName = pick(names, rng);

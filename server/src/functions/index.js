@@ -105,6 +105,7 @@ import {
   ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_ITEM,
 } from "../realtime.js";
 import { ECONOMY_HANDLERS } from "./economy.js";
+import { withPublicPricingQualitySanitize } from "../../../src/lib/gearPricingQuality.js";
 import {
   GetTutorialState,
   AdvanceTutorial,
@@ -2698,7 +2699,16 @@ export async function UpdateRuntimeConfigRpc(user, body = {}) {
 /** Internal helper used by tests — validate one account without admin gate when called directly. */
 export { ValidateAccountIntegrity, ValidateCharacterIntegrity, assertWritesAllowed, assertSchemaCompatible, AdminPermissions };
 
-export const FUNCTION_HANDLERS = {
+/** Player RPCs strip quality; admin inspection handlers keep it (HTTP boundary also role-aware). */
+function sanitizePublicFunctionHandlers(handlers) {
+  const out = {};
+  for (const [name, handler] of Object.entries(handlers)) {
+    out[name] = withPublicPricingQualitySanitize(handler);
+  }
+  return out;
+}
+
+export const FUNCTION_HANDLERS = sanitizePublicFunctionHandlers({
   ClaimDailyLogin,
   GetDailyLoginStatus,
   ClaimMailReward,
@@ -2772,4 +2782,4 @@ export const FUNCTION_HANDLERS = {
   SkipTutorial,
   CompleteTutorial,
   ...ECONOMY_HANDLERS,
-};
+});

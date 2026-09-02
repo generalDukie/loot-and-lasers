@@ -24,6 +24,8 @@ const STALL_BUNDLE_ICON := SELL_ICON_SZ
 ## Match sell-pane name size; descriptor stays ~75% of title (was 15/20).
 const STALL_TITLE_FS := SELL_TITLE_FS
 const STALL_SUB_FS := 18
+## Gear item-level under rarity · type — smaller than the descriptor.
+const STALL_LEVEL_FS := 14
 const STALL_BODY_FS := 18
 ## Stall price chrome — 2× prior icon (16→32), 1.5× prior font (20→30).
 const STALL_PRICE_ICON := 32.0
@@ -177,16 +179,15 @@ func _build() -> void:
 	root.add_theme_constant_override("separation", 10)
 	margin.add_child(root)
 
-	# Status lives in the sell footer (re-parented on each populate) — never in the top flow.
+	# Overlay status — never parented into the sell footer (that used to reflow the page).
 	_status = ClientUi.make_status()
 	_status.visible = false
 	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_status.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status.clip_text = true
 	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	add_child(_status)
 
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -211,14 +212,6 @@ func _set_status(text: String) -> void:
 	_status.visible = not text.is_empty()
 
 
-func _detach_status() -> void:
-	if not is_instance_valid(_status):
-		return
-	var parent := _status.get_parent()
-	if parent != null:
-		parent.remove_child(_status)
-
-
 func _on_tick() -> void:
 	_update_meta()
 	var idx := int(_shop_window().get("idx", 0))
@@ -238,7 +231,6 @@ func _refresh_window() -> void:
 func _populate() -> void:
 	_hide_gear_inspect()
 	_refresh_timer = null
-	_detach_status()
 	for c in _list.get_children():
 		c.queue_free()
 
@@ -703,11 +695,13 @@ func _empty_line(text: String) -> Label:
 # ─── Cards ──────────────────────────────────────────────────────────────────
 
 ## Glyph left (sell-pane size); name + descriptor hug the top-right.
+## Optional `level_text` sits in smaller type under rarity · type.
 func _make_stall_title_row(
 	glyph: Control,
 	title_text: String,
 	sub_text: String,
-	title_color: Color
+	title_color: Color,
+	level_text: String = ""
 ) -> HBoxContainer:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", STALL_TOP_SEP)
@@ -744,7 +738,23 @@ func _make_stall_title_row(
 	sub.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_body_font(sub)
 	title_col.add_child(sub)
+
+	if not level_text.is_empty():
+		var level_lab := Label.new()
+		level_lab.text = level_text
+		level_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		level_lab.autowrap_mode = TextServer.AUTOWRAP_OFF
+		level_lab.clip_text = true
+		level_lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		level_lab.add_theme_font_size_override("font_size", STALL_LEVEL_FS)
+		level_lab.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_body_font(level_lab)
+		title_col.add_child(level_lab)
 	return top
+
+
+func _gear_level_label(item: Dictionary) -> String:
+	return "Level %s" % ClientUi.format_level(item.get("level", item.get("level_requirement", 1)))
 
 
 func _make_cons_card(item: Dictionary, tutorial_stim := false) -> PanelContainer:
@@ -902,7 +912,8 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		rarity.capitalize(),
 		GameData.gear_type_label(item_type),
 	]
-	col.add_child(_make_stall_title_row(glyph, str(item.get("name", "?")), sub_text, tint))
+	var level_text := "" if is_bundle else _gear_level_label(item)
+	col.add_child(_make_stall_title_row(glyph, str(item.get("name", "?")), sub_text, tint, level_text))
 
 	if is_bundle:
 		var flavor := Label.new()
@@ -1011,8 +1022,7 @@ func _show_gear_inspect(anchor: Control, item: Dictionary) -> void:
 	var worn: Dictionary = {}
 	if InventoryRules.is_equippable(item_type):
 		worn = _equipped_of_type(item_type)
-	_inspect.present(anchor, item, {
-		"compare_with": worn,
+	_inspect.present_hover(anchor, item, worn, {
 		"show_sell_value": false,
 		"actions": [],
 		"instant_dismiss": true,
@@ -1345,8 +1355,6 @@ func _make_sell_section() -> VBoxContainer:
 	left.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	left.alignment = BoxContainer.ALIGNMENT_BEGIN
 	footer.add_child(left)
-	_detach_status()
-	left.add_child(_status)
 
 	_sell_btn = Button.new()
 	_sell_btn.custom_minimum_size = Vector2(SELL_BTN_MIN_W, SELL_BTN_MIN_H)

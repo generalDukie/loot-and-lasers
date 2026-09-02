@@ -5,6 +5,7 @@ const CARD_SEP := 14
 const INNER_SEP := 12
 const FIELD_H := 56
 const BTN_H := 52
+const GEAR_COMPARISON_SELECTOR_W := 280
 
 var _status: Label
 var _saved_toast: Label
@@ -490,6 +491,8 @@ func _build_gameplay_body() -> VBoxContainer:
 		_mark_dirty()
 	, "shake", true))
 
+	col.add_child(_gear_comparison_row())
+
 	col.add_child(_coming_soon("Damage Numbers"))
 	col.add_child(_coming_soon("Auto Skip Battles"))
 	col.add_child(_coming_soon("Confirm Before Selling"))
@@ -497,6 +500,49 @@ func _build_gameplay_body() -> VBoxContainer:
 	col.add_child(_coming_soon("Colorblind Mode"))
 	col.add_child(_coming_soon("Reduce Motion"))
 	return col
+
+
+func _gear_comparison_row() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var lab := Label.new()
+	lab.text = "Gear Comparison"
+	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lab.add_theme_font_size_override("font_size", 16)
+	lab.add_theme_color_override("font_color", ClientUi.TEXT)
+	ClientUi.apply_body_font(lab)
+	row.add_child(lab)
+
+	var ob := OptionButton.new()
+	ob.custom_minimum_size = Vector2(GEAR_COMPARISON_SELECTOR_W, 0)
+	ob.size_flags_horizontal = Control.SIZE_SHRINK_END
+	ClientUi.apply_selector(ob)
+	ob.size_flags_horizontal = Control.SIZE_SHRINK_END
+	ob.custom_minimum_size.x = GEAR_COMPARISON_SELECTOR_W
+	var modes: Array = [
+		[SettingsManager.GEAR_COMPARISON_OFF, "Off"],
+		[SettingsManager.GEAR_COMPARISON_COMPARE, "Comparison"],
+		[SettingsManager.GEAR_COMPARISON_EQUIPPED, "Currently Equipped"],
+	]
+	var selected := 0
+	var current := SettingsManager.normalize_gear_comparison(SettingsManager.gear_comparison)
+	for i in modes.size():
+		var pair: Array = modes[i]
+		ob.add_item(str(pair[1]))
+		ob.set_item_metadata(i, pair[0])
+		if str(pair[0]) == current:
+			selected = i
+	ob.select(selected)
+	ob.item_selected.connect(func(idx: int) -> void:
+		if _building:
+			return
+		SettingsManager.set_gear_comparison(str(ob.get_item_metadata(idx)), false)
+		_mark_dirty()
+	)
+	row.add_child(ob)
+	return row
 
 
 # ── Notifications ─────────────────────────────────────────────

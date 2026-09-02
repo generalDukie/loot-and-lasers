@@ -125,6 +125,7 @@ function referenceIntrinsicQualities(rarity, qualityReferenceLevel) {
       rarity,
       rng,
       className,
+      skipPricingQuality: true,
     });
     values.push(
       scoreGearIntrinsicQuality({

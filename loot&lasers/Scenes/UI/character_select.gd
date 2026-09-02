@@ -148,7 +148,7 @@ func _build() -> void:
 	_list.add_theme_constant_override("separation", 20)
 	_main_host.add_child(_list)
 
-	_status = ClientUi.make_status()
+	_status = ClientUi.make_flow_status()
 	_status.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_main_host.add_child(_status)

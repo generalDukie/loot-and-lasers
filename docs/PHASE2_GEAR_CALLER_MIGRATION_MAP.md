@@ -79,11 +79,12 @@ GES is not a production mechanic and is not exported.
 | | |
 |---|---|
 | **Old dissolve** | `GearSaleValue` = `ROUND(SPF(L)×2×raritySaleMult×slotMult)` (Legendary sale 1.75) |
-| **New dissolve** | `gearResaleValue` = `rround(blackMarketBasePrice(economicL, slot, rarity) × 0.60/0.60/0.40/0.35/0.30)` |
-| **Callers** | `computeItemVendorValue`, `computeStardustValue`, `DissolveItem`, Godot `StardustEconomy.gear_sale_value` |
+| **Phase 2 dissolve** | `gearResaleValue` = `rround(blackMarketBasePrice(economicL, slot, rarity) × 0.60/0.60/0.40/0.35/0.30)` |
+| **Amendment dissolve** | `gearQualityResaleValue` then purchase-safety cap. Same rarity fractions. Frozen `pricing_quality_score` |
+| **Callers** | `computeItemVendorValue` → `resolveAuthoritativeGearResaleValue`, `computeStardustValue`, `DissolveItem`. Godot shows server `sell_value` |
 | **Stale `sell_value`** | Cache only. Settlement recomputes. Client cannot submit payout |
 | **Equipped Gear** | **Cannot be sold.** Unequip first. Server `DissolveItem` rejects `ITEM_EQUIPPED`. Not a full-Backpack safety valve. |
-| **Shop buy markup** | Still uses historical `GearSaleValue` until Phase 6 Market |
+| **Shop buy markup** | Quality-based list price (post–Phase 7 amendment). Independent random listing variance retired for Gear |
 
 ## Item persistence / metadata
 

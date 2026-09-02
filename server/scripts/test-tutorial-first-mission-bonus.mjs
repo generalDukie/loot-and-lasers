@@ -17,6 +17,18 @@ import {
   settleTutorialFirstMissionBonus,
 } from "../src/shared/tutorialFirstMissionBonus.js";
 import { CLASSES } from "../../src/lib/gameData.js";
+import {
+  allocateStatBudget,
+  getItemStatBudget,
+} from "../src/shared/itemGeneration.js";
+import { randomItem } from "../src/shared/rewards.js";
+import {
+  finalizeGearPricingQuality,
+  resolveAuthoritativeGearResaleValue,
+} from "../../src/lib/gearPricingQuality.js";
+import {
+  COMMON_POSITIVE_STAT_COUNT,
+} from "../../src/lib/productionMath/index.js";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -86,19 +98,79 @@ function testFlags() {
   );
 }
 
-function testHelmet() {
-  let seed = 42;
-  const rng = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 0x100000000;
+const TUTORIAL_HELMET_TEST_SEEDS = Object.freeze([1, 42, 99, 1_234_567]);
+const TUTORIAL_HELMET_LCG_MULTIPLIER = 1664525;
+const TUTORIAL_HELMET_LCG_INCREMENT = 1013904223;
+const TUTORIAL_HELMET_LCG_MODULUS = 0x100000000;
+
+function makeLcg(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, TUTORIAL_HELMET_LCG_MULTIPLIER) + TUTORIAL_HELMET_LCG_INCREMENT) >>> 0;
+    return state / TUTORIAL_HELMET_LCG_MODULUS;
   };
-  for (const classKey of Object.keys(CLASSES)) {
-    const item = generateTutorialFirstMissionHelmet({ class: classKey, level: 1 }, rng);
-    const primary = CLASSES[classKey].primaryStat;
-    assert(item.type === "helmet", `${classKey} helmet type`);
-    assert(item.rarity === "common", `${classKey} common rarity`);
-    assert(Object.keys(item.stats).length === 1, `${classKey} single stat only`);
-    assert(item.stats[primary] > 0, `${classKey} primary stat present`);
+}
+
+function countingRng(inner) {
+  let calls = 0;
+  const rng = () => {
+    calls += 1;
+    return inner();
+  };
+  rng.calls = () => calls;
+  return rng;
+}
+
+function testHelmet() {
+  for (const seed of TUTORIAL_HELMET_TEST_SEEDS) {
+    for (const classKey of Object.keys(CLASSES)) {
+      const character = { class: classKey, level: 1 };
+      const primary = CLASSES[classKey].primaryStat;
+      const liveRng = countingRng(makeLcg(seed));
+      const item = generateTutorialFirstMissionHelmet(character, liveRng);
+
+      assert(item.type === "helmet", `${classKey} helmet type`);
+      assert(item.rarity === "common", `${classKey} common rarity`);
+      assert(Object.keys(item.stats).length === COMMON_POSITIVE_STAT_COUNT, `${classKey} single stat only`);
+      assert(item.stats[primary] > 0, `${classKey} primary stat present`);
+      assert(Number.isFinite(item.pricing_quality_raw), `${classKey} finite raw quality`);
+      assert(Number.isFinite(item.pricing_quality_score), `${classKey} finite quality score`);
+      assert(Number.isFinite(item.pricing_quality_multiplier_bps), `${classKey} finite multiplier`);
+      assert(Number.isFinite(item.sell_value), `${classKey} finite sell value`);
+
+      const baselineRng = countingRng(makeLcg(seed));
+      const rolled = randomItem("common", 1, "helmet", baselineRng, classKey, {
+        origin: "mission",
+        skipPricingQuality: true,
+      });
+      const budget = Number.isFinite(Number(rolled.stat_budget))
+        ? Math.max(1, Math.floor(Number(rolled.stat_budget)))
+        : getItemStatBudget(1, "helmet", "common");
+      allocateStatBudget([primary], budget, baselineRng, "common");
+      assert(
+        liveRng.calls() === baselineRng.calls(),
+        `${classKey} seed ${seed} quality finalization consumed extra RNG`,
+      );
+
+      const independent = {
+        ...item,
+        stats: { ...item.stats },
+      };
+      finalizeGearPricingQuality(independent, { className: classKey, forceRescore: true });
+      independent.sell_value = resolveAuthoritativeGearResaleValue(independent, { className: classKey });
+      assert(independent.pricing_quality_raw === item.pricing_quality_raw, `${classKey} raw quality reproduces`);
+      assert(independent.pricing_quality_score === item.pricing_quality_score, `${classKey} score reproduces`);
+      assert(
+        independent.pricing_quality_multiplier_bps === item.pricing_quality_multiplier_bps,
+        `${classKey} multiplier reproduces`,
+      );
+      assert(independent.sell_value === item.sell_value, `${classKey} sell value reproduces`);
+
+      const again = generateTutorialFirstMissionHelmet(character, makeLcg(seed));
+      assert(JSON.stringify(again.stats) === JSON.stringify(item.stats), `${classKey} seed ${seed} stats match`);
+      assert(again.pricing_quality_score === item.pricing_quality_score, `${classKey} seed ${seed} score match`);
+      assert(again.sell_value === item.sell_value, `${classKey} seed ${seed} sell match`);
+    }
   }
 }
 

@@ -670,6 +670,41 @@ export const INTRINSIC_QUALITY_CDF_LEVEL_SEED_MIX = 0x1cdf50e1;
 /** Minimum legal quality/CDF reference level (matches Market ItemLevel clamp). */
 export const INTRINSIC_QUALITY_CDF_MIN_REFERENCE_LEVEL = 1;
 
+/**
+ * Permanent item-intrinsic pricing quality (post–Phase 7 amendment).
+ * Separate from Phase 6 Nova offer-relative Intrinsic Quality.
+ * RawPricingQuality uses the same 30/50/20 weights as RawQuality.
+ */
+export const PRICING_QUALITY_RULES_VERSION = "phase7-amendment-pricing-quality-v1";
+export const PRICING_QUALITY_CDF_SAMPLE_SIZE = INTRINSIC_QUALITY_CDF_SAMPLE_SIZE;
+export const PRICING_QUALITY_CDF_SEED_BASE = 18_000_130;
+export const PRICING_QUALITY_CDF_LEVEL_SEED_MIX = 0x71c4a11e;
+export const PRICING_QUALITY_CDF_MIN_REFERENCE_LEVEL = INTRINSIC_QUALITY_CDF_MIN_REFERENCE_LEVEL;
+export const PRICING_QUALITY_PERCENTILE_SCALE = 100;
+export const PRICING_QUALITY_SCORE_MIN = 0;
+export const PRICING_QUALITY_SCORE_MAX = 100;
+/** Neutral internal score for genuinely unrecoverable legacy Gear. Not a random roll. */
+export const PRICING_QUALITY_NEUTRAL_SCORE = 50;
+export const PRICING_QUALITY_MULTIPLIER_MIN_BPS = 8000;
+export const PRICING_QUALITY_MULTIPLIER_PER_SCORE_BPS = 40;
+export const COMMON_POSITIVE_STAT_COUNT = 1;
+export const UNCOMMON_POSITIVE_STAT_COUNT = 2;
+export const COMMON_PRIMARY_SHAPE = EPIC_PRIMARY_ONLY_SHAPE_CEILING;
+export const COMMON_VITALITY_SHAPE = EPIC_VITALITY_ONLY_SHAPE_CEILING;
+export const COMMON_LUCK_SHAPE = EPIC_LUCK_ONLY_SHAPE_CEILING;
+export const COMMON_OFF_SHAPE = 0;
+/** Uncommon single-desirable + off-stat share reference. Distinct from Epic 0.6. */
+export const UNCOMMON_SINGLE_DESIRABLE_SHARE_REFERENCE = 0.7;
+export const UNCOMMON_PRIMARY_OFF_SHAPE_CEILING = EPIC_PRIMARY_ONLY_SHAPE_CEILING;
+export const UNCOMMON_VITALITY_OFF_SHAPE_CEILING = EPIC_VITALITY_ONLY_SHAPE_CEILING;
+export const UNCOMMON_LUCK_OFF_SHAPE_CEILING = EPIC_LUCK_ONLY_SHAPE_CEILING;
+export const PRICING_QUALITY_FALLBACK_MALFORMED_SHAPE = "malformed_shape";
+export const PRICING_QUALITY_FALLBACK_UNRECOVERABLE = "unrecoverable_inputs";
+export const GEAR_ORIGINS_WITH_LEGACY_LISTING_VARIANCE = Object.freeze([
+  GEAR_ORIGIN_MARKET,
+  GEAR_ORIGIN_CONTRABAND,
+]);
+
 export const NOVA_SURCHARGE_PERCENTILE_TOP25 = 0.75;
 export const NOVA_SURCHARGE_PERCENTILE_TOP17 = 0.825;
 export const NOVA_SURCHARGE_PERCENTILE_TOP10 = 0.9;

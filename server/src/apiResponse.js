@@ -1,3 +1,5 @@
+import { sanitizePublicResponseBody } from "../../src/lib/gearPricingQuality.js";
+
 export const ApiErrorCodes = Object.freeze({
   UNAUTHORIZED: "UNAUTHORIZED",
   FORBIDDEN: "FORBIDDEN",
@@ -44,9 +46,32 @@ export function sendApiError(res, err, options = {}) {
   return res.status(status).json(apiErrorBody(err, options));
 }
 
+/** Matches `isAdmin` in entityAccess.js — role is the only staff discriminator. */
+export function shouldRetainInternalPricingQuality(user) {
+  return user?.role === "admin";
+}
+
+export function sanitizeApiJsonBody(body, user) {
+  if (shouldRetainInternalPricingQuality(user)) return body;
+  return sanitizePublicResponseBody(body);
+}
+
+/**
+ * Central /api JSON boundary. Copies only; persisted records are untouched.
+ * Mount after auth so `req.user` is already resolved.
+ */
+export function attachPricingQualityResponseBoundary(req, res, next) {
+  const originalJson = res.json.bind(res);
+  res.json = function pricingQualityAwareJson(body) {
+    return originalJson(sanitizeApiJsonBody(body, req.user));
+  };
+  next();
+}
+
 /**
  * Add a success discriminator without moving existing resources or changing
- * arrays/scalars consumed by legacy clients.
+ * arrays/scalars consumed by legacy clients. Does not strip pricing quality;
+ * the /api JSON boundary owns player vs admin visibility.
  */
 export function normalizeFunctionBody(body, status = 200) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return body;

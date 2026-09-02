@@ -28,6 +28,7 @@ import {
   readContrabandManualRefreshCount,
 } from "./productionMath.js";
 import { contrabandWindowAt } from "../../../src/lib/productionMath/market.js";
+import { omitPricingQualityFromPresentation } from "../../../src/lib/gearPricingQuality.js";
 import { clock } from "./time/index.js";
 
 export const SHOP_AUTHORITY_MAP = Object.freeze({
@@ -35,7 +36,7 @@ export const SHOP_AUTHORITY_MAP = Object.freeze({
   GenerateGearInventory: "blackMarket.generateNormalMarketOffers (gear slots)",
   GenerateStimInventory: "blackMarket.generateNormalMarketOffers (stim slots, T18 level band)",
   GenerateContrabandLoot: "blackMarket.generateContrabandOffer",
-  CalculateShopPrices: "blackMarketPrice / stimShopPriceResolved / resolveNovaSurcharge",
+  CalculateShopPrices: "gearQualityListPrice / stimShopPriceResolved / resolveNovaSurcharge",
   PurchaseShopItem: "BuyShopGear / BuyShopConsumable",
   ValidatePurchase: "assertShopPurchaseClientSafe + BuyShop* guards",
   RefreshInventory: "RefreshShop + marketWindowAt UTC 19:00/07:00",
@@ -132,7 +133,7 @@ export function serializeShopOffer(slot, meta = {}, { isHot = false } = {}) {
     haggle_success: !!slot.haggle_success,
     haggle_eligible: haggleEligible,
     offer_kind: stim ? "stim" : "gear",
-    item: slot,
+    item: omitPricingQualityFromPresentation(slot),
     cost: pricing.final_price,
     _slotId: shopItemId,
     _offerKind: stim ? "stim" : "gear",
@@ -265,6 +266,15 @@ export const SHOP_PURCHASE_FORBIDDEN_CLIENT_FIELDS = Object.freeze([
   "haggle_discount",
   "discount_percent",
   "yanked",
+  "pricing_quality_score",
+  "pricing_quality_raw",
+  "pricing_quality_percentile",
+  "pricing_quality_multiplier_bps",
+  "pricing_quality_class",
+  "pricing_quality_stat_budget_level",
+  "pricing_quality_rules_version",
+  "pricing_quality_fallback",
+  "acquisition_stardust_paid",
 ]);
 
 export function detectSuspiciousShopPurchaseFields(body) {

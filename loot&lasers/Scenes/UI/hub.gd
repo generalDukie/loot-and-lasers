@@ -408,9 +408,9 @@ func _build() -> void:
 	vista.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(vista)
 
-	_status = Label.new()
+	_status = ClientUi.make_status()
 	_status.visible = false
-	root.add_child(_status)
+	add_child(_status)
 
 	# Bottom dock — DOCK_ORDER equal flex tiles (web SpaceStationHub)
 	var deck := HBoxContainer.new()

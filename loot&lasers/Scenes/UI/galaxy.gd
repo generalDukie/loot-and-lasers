@@ -32,6 +32,7 @@ var _view_rewards_btn: Button
 var _reward_sheet_host: Control
 var _map_stage: SpiralStage
 var _busy := false
+var _boot_gen := 0
 var _tick: Timer
 var _layout: Dictionary = {}
 
@@ -42,11 +43,16 @@ func _ready() -> void:
 	_build()
 	if not CombatReturnManager.state_changed.is_connected(_on_combat_return_changed):
 		CombatReturnManager.state_changed.connect(_on_combat_return_changed)
+	if not DungeonManager.state_changed.is_connected(_on_dungeon_state_changed):
+		DungeonManager.state_changed.connect(_on_dungeon_state_changed)
 	await _boot()
 	_sync_view_rewards_cta()
 
 
 func on_shell_reshow() -> void:
+	# Apply already-settled cooldown / rewards before the next Enter can fire.
+	_populate()
+	_sync_view_rewards_cta()
 	await _boot()
 	_sync_view_rewards_cta()
 
@@ -55,24 +61,65 @@ func _on_combat_return_changed() -> void:
 	_sync_view_rewards_cta()
 
 
+func _on_dungeon_state_changed() -> void:
+	if not is_inside_tree() or not is_instance_valid(_fight_btn):
+		return
+	_populate_meta()
+	_sync_view_rewards_cta()
+
+
+func _input(event: InputEvent) -> void:
+	if not ClientUi.is_confirm_key(event):
+		return
+	if not is_visible_in_tree() or _busy:
+		return
+	var vp := get_viewport()
+	if ClientUi.confirm_blocked_by_text_focus(vp):
+		return
+	if ClientUi.shell_has_blocking_overlay(self):
+		return
+	if _reward_sheet_open():
+		return
+	if CombatReturnManager.is_for_kind("dungeon"):
+		if is_instance_valid(_view_rewards_btn):
+			ClientUi.try_activate_confirm_button(_view_rewards_btn, vp)
+		return
+	if DungeonManager.cooldown_ms() > 0:
+		if is_instance_valid(_cooldown_bar):
+			ClientUi.try_activate_confirm_button(_cooldown_bar, vp)
+		return
+	if not DungeonManager.pending_battle.is_empty():
+		return
+	if is_instance_valid(_fight_btn):
+		ClientUi.try_activate_confirm_button(_fight_btn, vp)
+
+
 func _boot() -> void:
-	_status.text = "Syncing frontier…"
+	_boot_gen += 1
+	var boot_gen := _boot_gen
+	_busy = true
+	_set_status("Syncing frontier…")
 	var requests := AsyncGroup.new()
 	requests.add(MissionManager.refresh_character)
 	requests.add(DungeonManager.sync_state)
 	var results := await requests.wait()
-	var res: Dictionary = results[DUNGEON_SYNC_RESULT_INDEX]
-	if not is_inside_tree() or not visible:
+	if boot_gen != _boot_gen:
 		return
+	if not is_inside_tree() or not visible:
+		_busy = false
+		return
+	var res: Dictionary = results[DUNGEON_SYNC_RESULT_INDEX]
 	if not res.ok:
-		_status.text = str(res.get("error", "SyncDungeonState failed"))
+		_set_status(str(res.get("error", "SyncDungeonState failed")), true)
 	else:
-		_status.text = ""
+		_set_status("")
 	DungeonManager.reassert_view()
-	var active := DungeonManager.current_planet_id()
-	DungeonManager.selected_planet_id = mini(active, 10) if active > 10 else maxi(1, active)
-	DungeonManager.viewing_wormhole = false
+	if DungeonManager.consume_post_combat_selection():
+		DungeonManager.apply_selection_after_combat()
 	_populate()
+	_sync_view_rewards_cta()
+	if boot_gen == _boot_gen:
+		_busy = false
 	if _tick != null and is_instance_valid(_tick):
 		return
 	_tick = Timer.new()
@@ -478,7 +525,7 @@ func _populate_meta() -> void:
 	_sync_view_rewards_cta()
 	var clears := DungeonManager.standard_clears()
 	_subtitle.text = "Dungeons and Wormhole each have a 1 hour cooldown, skip for %s Nova · %s/100 standard clears" % [
-		NumberDisplay.nova(int(DungeonManager.dungeon_blob().get("skip_cost", DungeonRules.SKIP_COST))),
+		NumberDisplay.nova(DungeonRules.as_int(DungeonManager.dungeon_blob().get("skip_cost", DungeonRules.SKIP_COST), DungeonRules.SKIP_COST)),
 		NumberDisplay.quantity(clears),
 	]
 
@@ -505,20 +552,20 @@ func _update_detail() -> void:
 		var wh := DungeonManager.wormhole_state()
 		fightable = bool(wh.get("unlocked", false))
 		locked_ahead = not fightable
-		display_enemy = clampi(int(wh.get("enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
+		display_enemy = clampi(DungeonRules.as_int(wh.get("enemy", 1), 1), 1, DungeonRules.ENEMIES_PER_PLANET)
 		cleared = maxi(0, display_enemy - 1)
 	else:
 		var t := DungeonManager.track(pid)
-		var unlocked := bool(t.get("unlocked", DungeonRules.is_unlocked(pid, int(GameManager.active_character.get("level", 1)))))
+		var unlocked := bool(t.get("unlocked", DungeonRules.is_unlocked(pid, DungeonRules.as_int(GameManager.active_character.get("level", 1), 1))))
 		var complete := bool(t.get("complete", false))
 		fightable = unlocked and not complete
 		locked_ahead = not unlocked
-		cleared = int(t.get("cleared_count", 0))
+		cleared = DungeonRules.as_int(t.get("cleared_count", 0))
 		if complete:
 			display_enemy = DungeonRules.ENEMIES_PER_PLANET
 			cleared = DungeonRules.ENEMIES_PER_PLANET
 		elif t.get("next_enemy", null) != null:
-			display_enemy = clampi(int(t.get("next_enemy", 1)), 1, DungeonRules.ENEMIES_PER_PLANET)
+			display_enemy = clampi(DungeonRules.as_int(t.get("next_enemy", 1), 1), 1, DungeonRules.ENEMIES_PER_PLANET)
 		else:
 			display_enemy = clampi(cleared + 1, 1, DungeonRules.ENEMIES_PER_PLANET)
 
@@ -717,8 +764,8 @@ func _return_to_front() -> void:
 		DungeonManager.select_planet(DungeonManager.selected_planet_id, true)
 	else:
 		var pid := DungeonManager.selected_planet_id
-		if pid < 1 or pid > 10:
-			pid = 1
+		if pid < DungeonRules.DUNGEON_DISPLAY_ID_ONE or pid > DungeonRules.STATIC_PLANET_COUNT:
+			pid = DungeonRules.DUNGEON_DISPLAY_ID_ONE
 		DungeonManager.select_planet(pid, false)
 	if _map_stage:
 		_map_stage.clear_zoom()
@@ -732,8 +779,7 @@ func _on_wormhole() -> void:
 			"Clear all 100 standard Dungeon enemies (%s/100)" % DungeonManager.standard_clears(),
 		)
 		return
-	var band := maxi(1, int(DungeonManager.wormhole_state().get("band", 1)))
-	DungeonManager.select_planet(10 + band, true)
+	DungeonManager.select_wormhole()
 	_populate_meta()
 
 
@@ -744,6 +790,10 @@ func _set_status(msg: String, danger := false) -> void:
 		"font_color",
 		Color(1.0, 0.55, 0.45) if danger else ClientUi.MUTED
 	)
+
+
+func _reward_sheet_open() -> bool:
+	return is_instance_valid(_reward_sheet_host) and _reward_sheet_host.visible and _reward_sheet_host.get_child_count() > 0
 
 
 func _on_view_rewards() -> void:
@@ -771,6 +821,14 @@ func _sync_view_rewards_cta() -> void:
 func _on_fight() -> void:
 	if _busy:
 		return
+	if CombatReturnManager.is_for_kind("dungeon"):
+		await _on_view_rewards()
+		return
+	if not DungeonManager.pending_battle.is_empty():
+		return
+	if DungeonManager.cooldown_ms() > 0:
+		_populate_meta()
+		return
 	var pending := DungeonManager.pending_settlement()
 	if not pending.is_empty() and bool(pending.get("has_gear", false)):
 		_busy = true
@@ -785,21 +843,28 @@ func _on_fight() -> void:
 		_set_status("")
 		_populate_meta()
 		return
-	if not await InventoryManager.ensure_space(self, "Free a backpack slot before fighting. Loot needs somewhere to go."):
-		return
 	_busy = true
+	_populate_meta()
+	if not await InventoryManager.ensure_space(self, "Free a backpack slot before fighting. Loot needs somewhere to go."):
+		_busy = false
+		_populate_meta()
+		return
 	_set_status("Preparing encounter…")
 	var prep: Dictionary = await DungeonManager.prepare_fight()
-	_busy = false
 	if not prep.ok:
+		_busy = false
 		var err := str(prep.get("error", "Cannot fight"))
+		var low := err.to_lower()
+		if low.contains("cooldown"):
+			_set_status("")
+			_populate_meta()
+			return
 		if InventoryManager.is_inventory_full_error(prep):
 			Notify.blocked("Bag full", err)
 			await InventoryManager.prompt_bag_pressure(self, "Free a backpack slot before fighting. Loot needs somewhere to go.")
 			_set_status("")
 			_populate_meta()
 			return
-		var low := err.to_lower()
 		if low.contains("failed") or low.contains("network") or low.contains("timeout"):
 			_set_status(err, true)
 		else:
@@ -807,14 +872,18 @@ func _on_fight() -> void:
 			_set_status("")
 		_populate_meta()
 		return
+	_set_status("")
 	GameManager.go_galaxy_combat()
 
 
 func _on_skip() -> void:
 	if _busy:
 		return
+	if CombatReturnManager.is_for_kind("dungeon"):
+		await _on_view_rewards()
+		return
 	if DungeonManager.cooldown_ms() <= 0:
-		Notify.blocked("No cooldown to skip")
+		_populate_meta()
 		return
 	if not CurrencyManager.can_afford(CurrencyManager.CURRENCY_NOVA, DungeonRules.SKIP_COST):
 		Notify.blocked("Not enough Nova Crystals", "Need %s Nova (you have %s)" % [

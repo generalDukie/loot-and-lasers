@@ -139,6 +139,7 @@ import {
   loadEquippedItemsForCharacter,
 } from "../shared/characterAttributes.js";
 import { freezePhase7Settlement } from "../../../src/lib/dungeonEngine.js";
+import { sanitizePublicResponseBody } from "../../../src/lib/gearPricingQuality.js";
 import {
   prepareDungeonCombatForCharacter,
   readDungeonPendingCombat,
@@ -315,7 +316,10 @@ function wrap(fn) {
   return async (user, body) => {
     try {
       const result = await withTransactionAsync(async () => fn(user, body || {}));
-      return { status: 200, body: result };
+      return {
+        status: 200,
+        body: isAdmin(user) ? result : sanitizePublicResponseBody(result),
+      };
     } catch (err) {
       if (err.status) {
         const bodyOut = { error: err.message, code: err.code };
@@ -325,10 +329,17 @@ function wrap(fn) {
           if (err.character) bodyOut.character = err.character;
           if (err.arena) bodyOut.arena = err.arena;
         }
-        return { status: err.status, body: bodyOut };
+        return {
+          status: err.status,
+          body: isAdmin(user) ? bodyOut : sanitizePublicResponseBody(bodyOut),
+        };
       }
       if (err.code && String(err.code).startsWith("ENTITLEMENT_")) {
-        return { status: 400, body: { error: err.message, code: err.code } };
+        const bodyOut = { error: err.message, code: err.code };
+        return {
+          status: 400,
+          body: isAdmin(user) ? bodyOut : sanitizePublicResponseBody(bodyOut),
+        };
       }
       throw err;
     }

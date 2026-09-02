@@ -16,6 +16,7 @@ import {
   applyHaggleDiscountToPrice,
   blackMarketBasePrice,
   blackMarketPrice,
+  gearQualityListPrice,
   gearResaleValue,
   MARKET_HAGGLE_DISCOUNT_MAX_PERCENT,
   MARKET_HAGGLE_DISCOUNT_MIN_PERCENT,
@@ -86,20 +87,21 @@ test("Gear price = ROUND(SPF × rar × slot × variance) at 0.80/1.00/1.20", () 
   }
 });
 
-test("Contraband uses the same Gear price architecture", () => {
+test("Contraband Gear listing uses frozen pricing-quality multiplier, not random variance", () => {
   const offer = generateContrabandOffer({
     playerLevel: 40,
     rng: mulberry32(3),
     createGear: cheapGear,
     generationId: "c1",
   });
-  const expect = blackMarketPrice(
+  const expect = gearQualityListPrice(
     offer.level_requirement,
     offer.type,
     offer.rarity,
-    offer.price_variance,
+    offer.pricing_quality_score,
   );
   assert.equal(offer.cost, expect);
+  assert.equal(offer.pricing_quality_score, offer.pricing_quality_score);
 });
 
 test("Stim shop prices match Phase 5 primitive; no ±20% variance", () => {

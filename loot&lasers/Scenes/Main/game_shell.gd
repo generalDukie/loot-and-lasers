@@ -351,13 +351,16 @@ func _build() -> void:
 	frame.add_child(shell)
 	shell.add_child(_make_top_chrome())
 
-	var divider := HSeparator.new()
-	divider.add_theme_constant_override("separation", 1)
+	var divider := ColorRect.new()
+	divider.color = Color(0.32, 0.42, 0.52, 0.95)
+	divider.custom_minimum_size.y = 1
+	divider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shell.add_child(divider)
 
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 10)
+	body.add_theme_constant_override("separation", 0)
 	shell.add_child(body)
 	body.add_child(_make_rail())
 
@@ -365,9 +368,10 @@ func _build() -> void:
 	var content_stage := MarginContainer.new()
 	content_stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content_stage.add_theme_constant_override("margin_right", 6)
-	content_stage.add_theme_constant_override("margin_bottom", 6)
-	content_stage.add_theme_constant_override("margin_top", 2)
+	content_stage.add_theme_constant_override("margin_left", 0)
+	content_stage.add_theme_constant_override("margin_right", 0)
+	content_stage.add_theme_constant_override("margin_bottom", 0)
+	content_stage.add_theme_constant_override("margin_top", 0)
 	body.add_child(content_stage)
 
 	_content = Control.new()
@@ -426,10 +430,13 @@ func _make_top_chrome() -> Control:
 	var top := PanelContainer.new()
 	top.custom_minimum_size.y = ClientUi.px(48)
 	top.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	top.add_theme_stylebox_override(
-		"panel",
-		_shell_panel_style(Color(0.045, 0.06, 0.09, 0.98), Color(0.2, 0.3, 0.38, 0.9), 6, 8, 2)
+	var banner_style := _shell_panel_style(
+		Color(0.045, 0.06, 0.09, 0.98), Color(0.2, 0.3, 0.38, 0.9), 6, 8, 2
 	)
+	# Square the content-facing edge so page art meets the banner with no curved gutter.
+	banner_style.corner_radius_bottom_left = 0
+	banner_style.corner_radius_bottom_right = 0
+	top.add_theme_stylebox_override("panel", banner_style)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", ClientUi.px(9))
@@ -616,10 +623,13 @@ func _make_rail() -> Control:
 	rail.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	# Critical: rail must shrink with the window — never dictate shell height.
 	rail.clip_contents = true
-	rail.add_theme_stylebox_override(
-		"panel",
-		_shell_panel_style(Color(0.038, 0.052, 0.08, 0.99), Color(0.15, 0.25, 0.32, 0.95), 5, 6, 4)
+	var rail_style := _shell_panel_style(
+		Color(0.038, 0.052, 0.08, 0.99), Color(0.15, 0.25, 0.32, 0.95), 5, 6, 4
 	)
+	# Square the content-facing edge so page art meets the nav with no curved gutter.
+	rail_style.corner_radius_top_right = 0
+	rail_style.corner_radius_bottom_right = 0
+	rail.add_theme_stylebox_override("panel", rail_style)
 
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL

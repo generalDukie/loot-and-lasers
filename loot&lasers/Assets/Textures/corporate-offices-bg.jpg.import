@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c8qp7idlrhsls"
-path="res://.godot/imported/cantina-bg.png-3d3b92c7ad6b8e8c69f922cc46cf4bac.ctex"
+uid="uid://by6mwdavlopsq"
+path="res://.godot/imported/corporate-offices-bg.jpg-73292acfdd3492e51d03686c01f6f11d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/cantina-bg.png"
-dest_files=["res://.godot/imported/cantina-bg.png-3d3b92c7ad6b8e8c69f922cc46cf4bac.ctex"]
+source_file="res://Assets/Textures/corporate-offices-bg.jpg"
+dest_files=["res://.godot/imported/corporate-offices-bg.jpg-73292acfdd3492e51d03686c01f6f11d.ctex"]
 
 [params]
 

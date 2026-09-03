@@ -12,6 +12,7 @@ var _boot_gen := 0
 
 
 func _ready() -> void:
+	clip_contents = true
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
 	# Defer live boot so shell show_page can finish mounting / fading the dock
@@ -375,19 +376,14 @@ func _exit_tree() -> void:
 
 
 func _build() -> void:
-	add_child(ClientUi.make_page_bg(self, "hub"))
-
-	# Web SpaceStationHub — station art as full content-stage backdrop.
+	# Full-bleed station art — no wash, vignette, or page gutter over the photo.
 	var station_art := TextureRect.new()
-	station_art.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	station_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	station_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	station_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	station_art.texture = _load_station_texture("station-hub.png")
 	add_child(station_art)
-	add_child(_make_stage_gradient())
-	add_child(_make_stage_vignette())
-	add_child(_make_top_fade())
+	station_art.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -575,68 +571,6 @@ func _build() -> void:
 	_chatter_timer.autostart = false
 	_chatter_timer.timeout.connect(_advance_chatter)
 	add_child(_chatter_timer)
-
-
-func _make_stage_gradient() -> TextureRect:
-	var gradient := Gradient.new()
-	gradient.offsets = PackedFloat32Array([0.0, 0.42, 1.0])
-	gradient.colors = PackedColorArray([
-		Color(0.015, 0.02, 0.045, 0.72),
-		Color(0.015, 0.02, 0.045, 0.08),
-		Color(0.015, 0.02, 0.045, 0.84),
-	])
-	var texture := GradientTexture2D.new()
-	texture.gradient = gradient
-	texture.fill_from = Vector2(0.5, 0.0)
-	texture.fill_to = Vector2(0.5, 1.0)
-	var overlay := TextureRect.new()
-	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	overlay.texture = texture
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return overlay
-
-
-func _make_stage_vignette() -> TextureRect:
-	var gradient := Gradient.new()
-	gradient.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
-	gradient.colors = PackedColorArray([
-		Color(0.015, 0.02, 0.045, 0.0),
-		Color(0.015, 0.02, 0.045, 0.08),
-		Color(0.015, 0.02, 0.045, 0.58),
-	])
-	var texture := GradientTexture2D.new()
-	texture.gradient = gradient
-	texture.fill = GradientTexture2D.FILL_RADIAL
-	texture.fill_from = Vector2(0.5, 0.45)
-	texture.fill_to = Vector2(1.0, 1.0)
-	var overlay := TextureRect.new()
-	overlay.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	overlay.texture = texture
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return overlay
-
-
-func _make_top_fade() -> TextureRect:
-	## Web: absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background/50
-	var gradient := Gradient.new()
-	gradient.offsets = PackedFloat32Array([0.0, 1.0])
-	gradient.colors = PackedColorArray([
-		Color(0.015, 0.02, 0.045, 0.5),
-		Color(0.015, 0.02, 0.045, 0.0),
-	])
-	var texture := GradientTexture2D.new()
-	texture.gradient = gradient
-	texture.fill_from = Vector2(0.5, 0.0)
-	texture.fill_to = Vector2(0.5, 1.0)
-	var overlay := TextureRect.new()
-	overlay.set_anchors_and_offsets_preset(PRESET_TOP_WIDE)
-	overlay.offset_bottom = 128
-	overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	overlay.texture = texture
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return overlay
 
 
 func _dock_tile(icon_id: String, label: String, tint_hex: String, action: Callable) -> Button:

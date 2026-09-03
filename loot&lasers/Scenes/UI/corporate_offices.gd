@@ -2,6 +2,17 @@ extends Control
 ## Corporate Offices — company reputation, manual Shipments, and Commission tokens.
 
 const SLOT_COUNT := CompanyRules.SHIPMENT_ITEM_COUNT
+const BACKDROP_FILE := "corporate-offices-bg.jpg"
+const BACKDROP_DIM := Color(0.03, 0.04, 0.07, 0.28)
+const OVERLAY_PANEL_FILL := Color(0.05, 0.06, 0.09, 0.78)
+const OVERLAY_PANEL_FILL_STRONG := Color(0.07, 0.09, 0.13, 0.88)
+const OVERLAY_CARD_FILL := Color(0.06, 0.07, 0.11, 0.82)
+const OVERLAY_CARD_FILL_IDLE := Color(0.05, 0.06, 0.09, 0.72)
+const OVERLAY_HOVER_FILL := Color(0.08, 0.09, 0.14, 0.86)
+const OVERLAY_PRESSED_FILL := Color(0.07, 0.08, 0.12, 0.86)
+const OVERLAY_BANNER_FILL := Color(0.22, 0.12, 0.04, 0.82)
+const OVERLAY_ITEM_FILL := Color(0.05, 0.06, 0.09, 0.78)
+const OVERLAY_TOKEN_FILL := Color(0.07, 0.08, 0.12, 0.82)
 
 var _status: Label
 var _overflow_banner: PanelContainer
@@ -27,6 +38,7 @@ var _weight_labels: Array[Label] = []
 
 
 func _ready() -> void:
+	clip_contents = true
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
 	if not CompanyManager.companies_loaded.is_connected(_on_companies_loaded):
@@ -65,25 +77,30 @@ func _build() -> void:
 	add_child(ClientUi.make_page_bg(self, "hub"))
 
 	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(margin)
 	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	for k in ["margin_left", "margin_right"]:
 		margin.add_theme_constant_override(k, 16)
 	margin.add_theme_constant_override("margin_top", 12)
 	margin.add_theme_constant_override("margin_bottom", 12)
-	add_child(margin)
 
 	var root := VBoxContainer.new()
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_theme_constant_override("separation", 12)
 	margin.add_child(root)
 
 	var header := HBoxContainer.new()
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_theme_constant_override("separation", 12)
 	root.add_child(header)
 	var title_row := UiIcon.make_title_row("landmark", "Corporate Offices", ClientUi.TEXT, 27, 28.0)
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title_row)
 	_status = ClientUi.make_status()
+	_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	header.add_child(_status)
@@ -91,14 +108,16 @@ func _build() -> void:
 	_overflow_banner = PanelContainer.new()
 	_overflow_banner.visible = false
 	_overflow_banner.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.22, 0.12, 0.04, 0.95), Color(ClientUi.WARNING, 0.7), 10, 1
+		OVERLAY_BANNER_FILL, Color(ClientUi.WARNING, 0.7), 10, 1
 	))
 	root.add_child(_overflow_banner)
 	var banner_pad := MarginContainer.new()
+	banner_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for k in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
 		banner_pad.add_theme_constant_override(k, 10)
 	_overflow_banner.add_child(banner_pad)
 	_overflow_label = Label.new()
+	_overflow_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overflow_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_overflow_label.add_theme_font_size_override("font_size", 15)
 	_overflow_label.add_theme_color_override("font_color", ClientUi.GOLD)
@@ -106,14 +125,37 @@ func _build() -> void:
 	banner_pad.add_child(_overflow_label)
 
 	_company_row = HBoxContainer.new()
+	_company_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_company_row.add_theme_constant_override("separation", 10)
 	_company_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.add_child(_company_row)
 
+	var stage := Control.new()
+	stage.clip_contents = true
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(stage)
+
+	var bg := TextureRect.new()
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.texture = _load_offices_texture(BACKDROP_FILE)
+	stage.add_child(bg)
+	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+
+	var dim := ColorRect.new()
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.color = BACKDROP_DIM
+	stage.add_child(dim)
+	dim.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+
 	var body := HBoxContainer.new()
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_theme_constant_override("separation", 12)
-	root.add_child(body)
+	stage.add_child(body)
+	body.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
 	body.add_child(_make_column("Shipment", _build_shipment_column))
 	body.add_child(_make_column("Commissions", _build_commission_column))
@@ -124,9 +166,10 @@ func _make_column(title: String, fill: Callable) -> PanelContainer:
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.05, 0.06, 0.09, 0.96), Color(0.35, 0.40, 0.48, 0.4), 14, 1
+		OVERLAY_PANEL_FILL, Color(0.35, 0.40, 0.48, 0.4), 14, 1
 	))
 	var pad := MarginContainer.new()
+	pad.mouse_filter = Control.MOUSE_FILTER_PASS
 	for k in ["margin_left", "margin_right"]:
 		pad.add_theme_constant_override(k, 14)
 	pad.add_theme_constant_override("margin_top", 12)
@@ -137,6 +180,7 @@ func _make_column(title: String, fill: Callable) -> PanelContainer:
 	col.add_theme_constant_override("separation", 10)
 	pad.add_child(col)
 	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lab.text = title
 	lab.add_theme_font_size_override("font_size", 18)
 	lab.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
@@ -148,12 +192,14 @@ func _make_column(title: String, fill: Callable) -> PanelContainer:
 
 func _build_shipment_column(col: VBoxContainer) -> void:
 	_ship_summary = Label.new()
+	_ship_summary.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ship_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_ship_summary.add_theme_font_size_override("font_size", 14)
 	_ship_summary.add_theme_color_override("font_color", ClientUi.MUTED)
 	col.add_child(_ship_summary)
 
 	var scroll := ScrollContainer.new()
+	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
@@ -167,12 +213,14 @@ func _build_shipment_column(col: VBoxContainer) -> void:
 	col.add_child(actions)
 	_preview_btn = Button.new()
 	_preview_btn.text = "Preview payout"
+	_preview_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	_preview_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_accent_chip_button(_preview_btn)
 	_preview_btn.pressed.connect(_on_preview_pressed)
 	actions.add_child(_preview_btn)
 	_confirm_btn = Button.new()
 	_confirm_btn.text = "Confirm Shipment"
+	_confirm_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	_confirm_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ClientUi.apply_accent_chip_button(_confirm_btn)
 	_confirm_btn.pressed.connect(_on_confirm_pressed)
@@ -181,6 +229,7 @@ func _build_shipment_column(col: VBoxContainer) -> void:
 
 func _build_commission_column(col: VBoxContainer) -> void:
 	var scroll := ScrollContainer.new()
+	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
@@ -219,17 +268,18 @@ func _make_company_card(row: Dictionary) -> Button:
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.custom_minimum_size.y = 148
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	btn.add_theme_stylebox_override("normal", ClientUi.painted_panel_style(
-		Color(0.06, 0.07, 0.11, 0.96) if selected else Color(0.05, 0.06, 0.09, 0.9),
+		OVERLAY_CARD_FILL if selected else OVERLAY_CARD_FILL_IDLE,
 		Color(accent, 0.85 if selected else 0.4),
 		12,
 		2 if selected else 1
 	))
 	btn.add_theme_stylebox_override("hover", ClientUi.painted_panel_style(
-		Color(0.08, 0.09, 0.14, 0.96), Color(accent, 0.8), 12, 2
+		OVERLAY_HOVER_FILL, Color(accent, 0.8), 12, 2
 	))
 	btn.add_theme_stylebox_override("pressed", ClientUi.painted_panel_style(
-		Color(0.07, 0.08, 0.12, 0.96), Color(accent, 0.9), 12, 2
+		OVERLAY_PRESSED_FILL, Color(accent, 0.9), 12, 2
 	))
 	btn.pressed.connect(func() -> void:
 		_selected_company = cid
@@ -252,6 +302,7 @@ func _make_company_card(row: Dictionary) -> Button:
 	pad.add_child(col)
 
 	var name_lab := Label.new()
+	name_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_lab.text = "%s  %s" % [str(row.get("abbreviation", cid)), str(row.get("name", CompanyRules.display_name(cid)))]
 	name_lab.add_theme_font_size_override("font_size", 15)
 	name_lab.add_theme_color_override("font_color", accent)
@@ -261,6 +312,7 @@ func _make_company_card(row: Dictionary) -> Button:
 
 	var slots: Variant = row.get("slots", [])
 	var slot_lab := Label.new()
+	slot_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if typeof(slots) == TYPE_ARRAY:
 		var labels: Array[String] = []
 		for slot in slots:
@@ -275,6 +327,7 @@ func _make_company_card(row: Dictionary) -> Button:
 	var into := int(row.get("reputation_into_level", 0))
 	var need := int(row.get("reputation_per_level", CompanyRules.COMPANY_REPUTATION_PER_LEVEL))
 	var meta := Label.new()
+	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meta.text = "Lv %s  ·  %s / %s  ·  next %s" % [
 		level,
 		into,
@@ -286,6 +339,7 @@ func _make_company_card(row: Dictionary) -> Button:
 	col.add_child(meta)
 
 	var bar := ProgressBar.new()
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.min_value = 0
 	bar.max_value = need
 	bar.value = into
@@ -395,19 +449,21 @@ func _make_item_row(it: Dictionary) -> PanelContainer:
 	var accent := ClientUi.CYAN if selected else Color(0.35, 0.40, 0.48, 0.4)
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.07, 0.09, 0.13, 0.96) if selected else Color(0.05, 0.06, 0.09, 0.9),
+		OVERLAY_PANEL_FILL_STRONG if selected else OVERLAY_ITEM_FILL,
 		accent,
 		8,
 		1
 	))
-	var btn := Button.new()
-	btn.flat = true
-	btn.focus_mode = Control.FOCUS_NONE
-	btn.pressed.connect(func() -> void:
-		_toggle_item(iid)
+	panel.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			var mb := event as InputEventMouseButton
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+				_toggle_item(iid)
+				panel.accept_event()
 	)
-	panel.add_child(btn)
 	var pad := MarginContainer.new()
 	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for k in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
@@ -423,6 +479,7 @@ func _make_item_row(it: Dictionary) -> PanelContainer:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(col)
 	var name_lab := Label.new()
+	name_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_lab.text = "%s  ·  %s %s" % [
 		str(it.get("name", "Gear")),
 		str(it.get("rarity", "")).capitalize(),
@@ -432,6 +489,7 @@ func _make_item_row(it: Dictionary) -> PanelContainer:
 	name_lab.add_theme_color_override("font_color", ClientUi.rarity_color(str(it.get("rarity", "common"))))
 	col.add_child(name_lab)
 	var meta := Label.new()
+	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	meta.text = "Lv %s  ·  sell %s  ·  %s" % [
 		int(it.get("level", 1)),
 		int(it.get("sell_value", 0)),
@@ -549,7 +607,7 @@ func _begin_commission_from_token(token: Variant) -> void:
 func _token_card(token: Variant, caption: String) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		Color(0.07, 0.08, 0.12, 0.96), Color(ClientUi.GOLD, 0.45), 10, 1
+		OVERLAY_TOKEN_FILL, Color(ClientUi.GOLD, 0.45), 10, 1
 	))
 	var pad := MarginContainer.new()
 	for k in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
@@ -672,6 +730,7 @@ func _fill_rare_controls() -> void:
 			_weight_labels.append(lab)
 			wrap.add_child(lab)
 			var slider := HSlider.new()
+			slider.mouse_filter = Control.MOUSE_FILTER_STOP
 			slider.min_value = CompanyRules.RARE_WEIGHT_MIN_PERCENT
 			slider.max_value = CompanyRules.RARE_WEIGHT_MAX_PERCENT
 			slider.step = 1
@@ -852,6 +911,21 @@ func _on_redeem_pressed() -> void:
 	_set_status("Commission delivered: %s. It is in your backpack, unequipped." % str(item.get("name", "Gear")))
 	await CompanyManager.load_status()
 	_refresh()
+
+
+func _load_offices_texture(file_name: String) -> Texture2D:
+	var rel := "res://Assets/Textures/%s" % file_name
+	if ResourceLoader.exists(rel):
+		var texture := load(rel) as Texture2D
+		if texture != null:
+			return texture
+	var path := ProjectSettings.globalize_path(rel)
+	if FileAccess.file_exists(path):
+		var image := Image.load_from_file(path)
+		if image != null and not image.is_empty():
+			return ImageTexture.create_from_image(image)
+	push_warning("Corporate Offices backdrop missing: %s" % rel)
+	return null
 
 
 func _set_status(text: String) -> void:

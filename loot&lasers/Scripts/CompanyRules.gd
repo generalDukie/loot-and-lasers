@@ -78,6 +78,8 @@ const COMPANY_ABBREV := {
 const ORIGIN_MARKET := "market"
 const ORIGIN_CONTRABAND := "contraband"
 const SHIPMENT_INELIGIBLE_TAG := "No Refunds — Shipment Ineligible"
+## Matches ClientUi.CYAN without importing that class (avoids class_name parse cycles).
+const FALLBACK_ACCENT := Color("#0DCADF")
 
 const COMPANY_SLOTS := {
 	COMPANY_ID_DTD: ["helmet", "armor", "legs", "boots"],
@@ -88,7 +90,10 @@ const COMPANY_SLOTS := {
 
 
 static func color_for(company_id: String) -> Color:
-	return COMPANY_COLORS.get(company_id, ClientUi.CYAN) as Color
+	var raw: Variant = COMPANY_COLORS.get(company_id, FALLBACK_ACCENT)
+	if raw is Color:
+		return raw
+	return FALLBACK_ACCENT
 
 
 static func display_name(company_id: String) -> String:

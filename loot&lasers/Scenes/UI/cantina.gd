@@ -59,6 +59,7 @@ var _start_mission_btn: Button
 
 
 func _ready() -> void:
+	clip_contents = true
 	set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_build()
 	if not CurrencyManager.wallet_changed.is_connected(_on_wallet_changed):
@@ -114,15 +115,22 @@ func _input(event: InputEvent) -> void:
 
 
 func _build() -> void:
-	add_child(ClientUi.make_page_bg(self, "cantina"))
+	var bg := TextureRect.new()
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.texture = _load_web_texture("cantina-bg.png")
+	add_child(bg)
+	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
 	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(margin)
 	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 12)
 	margin.add_theme_constant_override("margin_right", 12)
 	margin.add_theme_constant_override("margin_top", 8)
 	margin.add_theme_constant_override("margin_bottom", 8)
-	add_child(margin)
 
 	var root := VBoxContainer.new()
 	root.add_theme_constant_override("separation", 8)
@@ -297,75 +305,6 @@ func _build() -> void:
 	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stage.custom_minimum_size.y = 267
 	root.add_child(stage)
-
-	var bg := TextureRect.new()
-	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.texture = _load_web_texture("cantina-bg.png")
-	stage.add_child(bg)
-
-	for orb in [
-		{"x": 0.08, "y": 0.18, "s": 120, "c": Color(0.62, 0.42, 1.0, 0.22)},
-		{"x": 0.82, "y": 0.14, "s": 90, "c": Color(0.0, 0.9, 1.0, 0.2)},
-		{"x": 0.60, "y": 0.70, "s": 140, "c": Color(1.0, 0.42, 0.1, 0.16)},
-		{"x": 0.28, "y": 0.78, "s": 80, "c": Color(0.0, 0.9, 1.0, 0.16)},
-		{"x": 0.92, "y": 0.60, "s": 70, "c": Color(0.62, 0.42, 1.0, 0.18)},
-	]:
-		var gradient := Gradient.new()
-		var orb_color: Color = orb["c"]
-		gradient.colors = PackedColorArray([orb_color, Color(orb_color, 0.0)])
-		var texture := GradientTexture2D.new()
-		texture.gradient = gradient
-		texture.fill = GradientTexture2D.FILL_RADIAL
-		texture.fill_from = Vector2(0.5, 0.5)
-		texture.fill_to = Vector2(1.0, 0.5)
-		var glow := TextureRect.new()
-		glow.texture = texture
-		glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		glow.anchor_left = float(orb["x"])
-		glow.anchor_top = float(orb["y"])
-		glow.anchor_right = float(orb["x"])
-		glow.anchor_bottom = float(orb["y"])
-		var sz := float(orb["s"])
-		glow.offset_left = -sz * 0.5
-		glow.offset_top = -sz * 0.5
-		glow.offset_right = sz * 0.5
-		glow.offset_bottom = sz * 0.5
-		stage.add_child(glow)
-		var drift := glow.create_tween().set_loops()
-		drift.tween_property(glow, "modulate:a", 0.62, 1.8 + float(orb["x"])).set_trans(Tween.TRANS_SINE)
-		drift.tween_property(glow, "modulate:a", 1.0, 1.8 + float(orb["y"])).set_trans(Tween.TRANS_SINE)
-
-	for spark in [
-		{"x": 0.14, "y": 0.22, "r": 4, "c": Color("#00E5FF")},
-		{"x": 0.44, "y": 0.12, "r": 3, "c": Color("#9D6BFF")},
-		{"x": 0.70, "y": 0.30, "r": 5, "c": Color("#FFB347")},
-		{"x": 0.36, "y": 0.40, "r": 3, "c": Color("#00E5FF")},
-		{"x": 0.88, "y": 0.36, "r": 4, "c": Color("#9D6BFF")},
-		{"x": 0.22, "y": 0.64, "r": 3, "c": Color("#5CFFB0")},
-		{"x": 0.64, "y": 0.58, "r": 4, "c": Color("#00E5FF")},
-		{"x": 0.52, "y": 0.80, "r": 3, "c": Color("#FFB347")},
-	]:
-		var dot := ColorRect.new()
-		dot.color = spark["c"]
-		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		dot.anchor_left = float(spark["x"])
-		dot.anchor_top = float(spark["y"])
-		dot.anchor_right = float(spark["x"])
-		dot.anchor_bottom = float(spark["y"])
-		var r := float(spark["r"])
-		dot.offset_right = r
-		dot.offset_bottom = r
-		stage.add_child(dot)
-
-	var veil := ColorRect.new()
-	veil.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	veil.color = Color(0.025, 0.02, 0.05, 0.10)
-	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stage.add_child(veil)
 
 	_stage_hint = Label.new()
 	_stage_hint.text = "Hover a patron for the full job · click to accept"
@@ -925,7 +864,7 @@ func _show_hover_preview(offer: Dictionary, tint: Color, state: String) -> void:
 
 	var card_style := ClientUi.painted_panel_style(
 		Color(0.05, 0.045, 0.08, 0.97), Color(tint, 0.55), 18, 2
-	)
+	).duplicate() as StyleBoxFlat
 	card_style.content_margin_left = 0
 	card_style.content_margin_right = 0
 	card_style.content_margin_top = 0
@@ -1082,7 +1021,7 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 
 	var card_style := ClientUi.painted_panel_style(
 		Color(0.06, 0.055, 0.09, 0.98), Color(0.35, 0.4, 0.48, 0.55), 18, 1
-	)
+	).duplicate() as StyleBoxFlat
 	card_style.content_margin_left = 0
 	card_style.content_margin_right = 0
 	card_style.content_margin_top = 0
@@ -1137,10 +1076,14 @@ func _open_mission_sheet(offer: Dictionary, tint: Color, state: String) -> void:
 		art_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		art_frame.custom_minimum_size = Vector2(0, 132)
 		art_frame.clip_contents = true
-		art_frame.add_theme_stylebox_override(
-			"panel",
-			ClientUi.painted_panel_style(Color(0.04, 0.04, 0.07, 1.0), Color(tint, 0.45), 12, 1)
-		)
+		var art_style := ClientUi.painted_panel_style(
+			Color(0.04, 0.04, 0.07, 1.0), Color(tint, 0.45), 12, 1
+		).duplicate() as StyleBoxFlat
+		art_style.content_margin_left = 0
+		art_style.content_margin_right = 0
+		art_style.content_margin_top = 0
+		art_style.content_margin_bottom = 0
+		art_frame.add_theme_stylebox_override("panel", art_style)
 		_preview_body.add_child(art_frame)
 		var art_host := Control.new()
 		art_host.custom_minimum_size = Vector2(0, 128)
@@ -1292,7 +1235,7 @@ func _make_sheet_quest_icon(patron: Dictionary, tint: Color) -> PanelContainer:
 	wrap.custom_minimum_size = Vector2(96, 96)
 	var wrap_style := ClientUi.painted_panel_style(
 		Color(0.04, 0.05, 0.08, 0.98), Color(tint, 0.95), 14, 2
-	)
+	).duplicate() as StyleBoxFlat
 	wrap_style.content_margin_left = 6
 	wrap_style.content_margin_right = 6
 	wrap_style.content_margin_top = 6

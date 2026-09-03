@@ -24,7 +24,6 @@ var _reward_sheet_host: Control
 var _active_panel: PanelContainer
 var _explore: MissionExploreStage
 var _ui_layer: Control
-var _dim: ColorRect
 var _progress_track: Control
 var _progress_fill: ColorRect
 var _rocket: TextureRect
@@ -78,23 +77,12 @@ func _input(event: InputEvent) -> void:
 
 
 func _build() -> void:
-	# Void under art (visible only until texture loads).
-	add_child(ClientUi.make_page_bg(self, "void"))
-
 	# Full content-pane backdrop — does not cover side nav (page is already content-only).
 	_explore = MissionExploreStage.new()
-	_explore.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	_explore.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_explore.modulate.a = 0.0
 	add_child(_explore)
-
-	# Subtle global dim so floating panels stay readable without hiding the art.
-	_dim = ColorRect.new()
-	_dim.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	_dim.color = Color(0.02, 0.03, 0.07, 0.22)
-	_dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_dim.modulate.a = 0.0
-	add_child(_dim)
+	_explore.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
 	_ui_layer = Control.new()
 	_ui_layer.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
@@ -441,7 +429,6 @@ func _play_enter_transition() -> void:
 	_enter_tween = create_tween()
 	_enter_tween.set_parallel(true)
 	_enter_tween.tween_property(_explore, "modulate:a", 1.0, 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_enter_tween.tween_property(_dim, "modulate:a", 1.0, 0.4).set_trans(Tween.TRANS_SINE)
 	_enter_tween.tween_property(_ui_layer, "modulate:a", 1.0, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 

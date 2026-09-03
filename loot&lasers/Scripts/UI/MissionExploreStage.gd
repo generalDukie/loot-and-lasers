@@ -32,7 +32,6 @@ var _image: TextureRect
 var _caption: Label
 var _badge: Label
 var _fallback: ColorRect
-var _elapsed := 0.0
 var _applied_index := -2
 var _built := false
 var _pending_apply := false
@@ -95,7 +94,7 @@ func _ready() -> void:
 	# Never pick art in _ready — host must configure once to avoid flicker.
 	if _pending_apply or scene_index >= 0:
 		_apply_scene()
-	set_process(true)
+	set_process(false)
 
 
 func configure(
@@ -128,23 +127,7 @@ func _build() -> void:
 	_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_image.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_image.modulate.a = 0.0
 	add_child(_image)
-
-	var bottom_grad := ColorRect.new()
-	bottom_grad.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-	bottom_grad.color = Color(0.02, 0.03, 0.06, 0.28)
-	bottom_grad.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bottom_grad)
-
-	# Soft bottom vignette so overlaid timer/copy stays readable.
-	var vignette := ColorRect.new()
-	vignette.set_anchors_preset(PRESET_BOTTOM_WIDE)
-	vignette.offset_top = -300
-	vignette.offset_bottom = 0
-	vignette.color = Color(0.02, 0.03, 0.06, 0.55)
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(vignette)
 
 	_badge = Label.new()
 	_badge.set_anchors_preset(PRESET_CENTER_TOP)
@@ -217,11 +200,3 @@ func _paint_fallback(idx: int) -> void:
 		Color("#3A2418"), Color("#14263A"), Color("#2E1A1A"),
 	]
 	_fallback.color = hues[idx % hues.size()]
-
-
-func _process(delta: float) -> void:
-	_elapsed += delta
-	if _image != null and _image.texture != null:
-		var s := 1.0 + 0.018 * sin(_elapsed * 0.22)
-		_image.scale = Vector2(s, s)
-		_image.pivot_offset = _image.size * 0.5

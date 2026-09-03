@@ -87,3 +87,8 @@ docker-data/
 # Generated desktop exports and installer artifacts
 /build/
 /installer/output/
+
+# Full-size art drops for the agent. Outside loot&lasers/ so Godot never imports them.
+image-drop/*
+!image-drop/.gitkeep
+

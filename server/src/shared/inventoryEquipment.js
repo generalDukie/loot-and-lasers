@@ -85,6 +85,7 @@ export function serializeItem(item, character = null) {
     shipment_eligible: item.shipment_eligible ?? null,
     consumable: item.consumable,
     flavor_text: item.flavor_text,
+    company_flavor: item.company_flavor || "",
     created_date: item.created_date,
     updated_date: item.updated_date,
   };

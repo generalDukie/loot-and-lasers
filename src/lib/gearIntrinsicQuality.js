@@ -6,8 +6,12 @@
  * current slot/allocation rules, class-relative roles. Cache key is
  * rarity + qualityReferenceLevel (not class). Contraband uses this same
  * rarity/level CDF (no separate current-level distribution).
+ *
+ * CDF samples use `rollItemStats` only — never `GenerateGearItem` — so the
+ * synthetic population does not consume manufacturer RNG and stays on the
+ * locked pre-Phase-9 stream. Live Gear generation still assigns manufacturers.
  */
-import { GenerateGearItem } from "./itemGeneration.js";
+import { rollItemStats } from "./itemGeneration.js";
 import {
   CLASS_PRIMARY_INDEX,
   INTRINSIC_QUALITY_CDF_LEVEL_SEED_MIX,
@@ -119,23 +123,22 @@ function referenceIntrinsicQualities(rarity, qualityReferenceLevel) {
   for (let i = 0; i < INTRINSIC_QUALITY_CDF_SAMPLE_SIZE; i++) {
     const className = CDF_CLASS_NAMES[i % classCount];
     const identity = rollIntrinsicQualityCdfIdentity(rng, referenceLevel);
-    const item = GenerateGearItem({
+    const rolled = rollItemStats({
       itemLevel: identity.itemLevel,
-      itemType: identity.slot,
-      rarity,
+      type: identity.slot,
+      rarity: key,
       rng,
       className,
-      skipPricingQuality: true,
     });
     values.push(
       scoreGearIntrinsicQuality({
-        stats: item.stats,
+        stats: rolled.stats,
         rarity,
         slot: identity.slot,
         itemLevel: identity.itemLevel,
         referenceLevel: identity.referenceLevel,
         className,
-        actualTotal: item.stat_budget ?? null,
+        actualTotal: rolled.targetBudget ?? null,
       }).intrinsicQuality,
     );
   }
@@ -150,6 +153,16 @@ export function resetIntrinsicQualityCdfCache() {
 
 export function getIntrinsicQualityCdfCacheSize() {
   return cdfCache.size;
+}
+
+export function getIntrinsicQualityCdfValues(rarity, qualityReferenceLevel) {
+  return referenceIntrinsicQualities(rarity, qualityReferenceLevel).slice();
+}
+
+export function createIntrinsicQualityCdfRng(rarity, qualityReferenceLevel) {
+  const key = String(rarity || "").toLowerCase();
+  const referenceLevel = resolveIntrinsicQualityCdfReferenceLevel(qualityReferenceLevel);
+  return mulberry32(cdfSeed(key, referenceLevel));
 }
 
 export function intrinsicQualityPercentile(intrinsicQuality, rarity, qualityReferenceLevel) {

@@ -10,8 +10,11 @@ import {
   COMMISSION_EPIC_STAT_LUCK,
   COMMISSION_EPIC_STAT_VITALITY,
   COMPANY_ABBREVIATIONS,
+  COMPANY_FLAVOR_CHANCE_BPS,
+  COMPANY_FLAVOR_LINES,
   COMPANY_FULL_NAMES,
   COMPANY_IDS,
+  COMPANY_NAME_TOKENS,
   COMPANY_REPUTATION_PER_LEVEL,
   COMPANY_SLOTS,
   COMPANY_TOKEN_EPIC_OFFSET,
@@ -109,6 +112,43 @@ export function resolveGearManufacturer(slot, { manufacturer = null, rng } = {})
     return id;
   }
   return rollManufacturerForSlot(key, typeof rng === "function" ? rng : Math.random);
+}
+
+export function companyNameToken(companyId) {
+  const id = String(companyId || "");
+  return COMPANY_NAME_TOKENS[id] || "";
+}
+
+export function brandedGearName(baseName, manufacturer) {
+  const token = companyNameToken(manufacturer);
+  const base = String(baseName || "").trim();
+  if (!token) return base;
+  if (!base) return token;
+  return `${token} ${base}`;
+}
+
+export function rollCompanyFlavor(manufacturer, rng) {
+  const lines = COMPANY_FLAVOR_LINES[String(manufacturer || "")];
+  if (!lines || !lines.length) return "";
+  const r = requireRng(rng, "rollCompanyFlavor");
+  const roll = Math.floor(unitHalfOpen(r) * BASIS_POINTS_DENOMINATOR);
+  if (roll >= COMPANY_FLAVOR_CHANCE_BPS) return "";
+  const idx = Math.min(
+    lines.length - 1,
+    Math.floor((roll * lines.length) / COMPANY_FLAVOR_CHANCE_BPS),
+  );
+  return lines[idx];
+}
+
+export function applyGearCompanyPresentation(item, { baseName, rng } = {}) {
+  const next = { ...item };
+  const base = String(baseName || next.base_name || "").trim();
+  next.base_name = base;
+  next.name = brandedGearName(base, next.manufacturer);
+  const flavor = typeof rng === "function" ? rollCompanyFlavor(next.manufacturer, rng) : "";
+  if (flavor) next.company_flavor = flavor;
+  else delete next.company_flavor;
+  return next;
 }
 
 export function shipmentPayoutFromBase(baseValue) {

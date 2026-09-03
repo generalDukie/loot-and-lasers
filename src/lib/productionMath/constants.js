@@ -323,6 +323,42 @@ export const COMPANY_ABBREVIATIONS = Object.freeze({
   [COMPANY_ID_RDR]: "RDR",
   [COMPANY_ID_GORP]: "GORP",
 });
+/** Short brand tokens baked into generated Gear names. Not the legal full name. */
+export const COMPANY_NAME_TOKENS = Object.freeze({
+  [COMPANY_ID_DTD]: "Duct Tape",
+  [COMPANY_ID_TTT]: "Tedious",
+  [COMPANY_ID_RDR]: "Run-Down",
+  [COMPANY_ID_GORP]: "GORPTEK",
+});
+/** Chance a generated Gear item receives inspect-only company flavor text. */
+export const COMPANY_FLAVOR_CHANCE_BPS = 2000;
+export const COMPANY_FLAVOR_LINES = Object.freeze({
+  [COMPANY_ID_DTD]: Object.freeze([
+    "Held together by optimism and an entire roll of Duct Tape.",
+    "DTD warranty: if it falls apart, add more tape.",
+    "Duct Tape Dynamics: structural integrity sold separately.",
+    "Good enough. That's the Duct Tape Dynamics promise.",
+  ]),
+  [COMPANY_ID_TTT]: Object.freeze([
+    "Terribly Tedious Technologies: please allow 6–8 business years.",
+    "Every bolt has a form. The form has an addendum.",
+    "Tediously specified. Tediously assembled. Tediously yours.",
+    "Comes with a manual. The manual has a manual.",
+  ]),
+  [COMPANY_ID_RDR]: Object.freeze([
+    "Run-Down Robotics: previously loved, currently rattling.",
+    "It still boots. We checked. Once.",
+    "Run-down, not run-out. There's a difference. Barely.",
+    "If it sparks, that's character.",
+  ]),
+  [COMPANY_ID_GORP]: Object.freeze([
+    "GORPTEK-certified. Do not ask what GORP stands for.",
+    "Powered by Gorp. Fueled by confidence.",
+    "Absolutely GORPTEK. Accept no substitutes. Accept this.",
+    "GORPTEK: louder than it needs to be, on purpose.",
+  ]),
+});
+export const SHIPMENT_INELIGIBLE_INSPECT_TAG = "No Refunds — Shipment Ineligible";
 export const COMPANY_SLOTS = Object.freeze({
   [COMPANY_ID_DTD]: Object.freeze(["helmet", "armor", "legs", "boots"]),
   [COMPANY_ID_TTT]: Object.freeze(["armor", "boots", "neck", "accessory"]),

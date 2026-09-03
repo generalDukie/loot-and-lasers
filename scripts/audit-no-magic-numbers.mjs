@@ -32,6 +32,7 @@ const SCAN_FILES = [
   "src/lib/dungeonBadges.js",
   "src/lib/dungeonSkipRequest.js",
   "src/lib/dungeonClientState.js",
+  "src/lib/companyClientState.js",
   "server/src/shared/dungeonService.js",
   "src/lib/productionMath/companies.js",
   "server/src/shared/companyService.js",

@@ -432,6 +432,20 @@ func _rebuild(options: Dictionary) -> void:
 	ClientUi.apply_display_font(title)
 	title_col.add_child(title)
 
+	var company_flavor := str(item.get("company_flavor", "")).strip_edges()
+	if not company_flavor.is_empty():
+		var flav := Label.new()
+		flav.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		flav.text = company_flavor
+		flav.autowrap_mode = TextServer.AUTOWRAP_OFF
+		flav.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		flav.set_meta("inspect_wrap", true)
+		flav.set_meta("inspect_wrap_inset", icon_box + 8.0)
+		flav.add_theme_font_size_override("font_size", LEVEL_FS)
+		flav.add_theme_color_override("font_color", ClientUi.WARNING)
+		ClientUi.apply_italic_body_font(flav)
+		title_col.add_child(flav)
+
 	var rarity_lab := Label.new()
 	rarity_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rarity_lab.text = str(item.get("rarity", "common")).capitalize()
@@ -523,6 +537,17 @@ func _rebuild(options: Dictionary) -> void:
 		_fill_compare_stats(item, compare_with)
 
 	# —— Extras (sell value now; set bonuses / flavor later) ——
+	if CompanyRules.is_market_or_contraband_origin(str(item.get("origin", ""))):
+		var ineligible := Label.new()
+		ineligible.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ineligible.text = CompanyRules.SHIPMENT_INELIGIBLE_TAG
+		ineligible.autowrap_mode = TextServer.AUTOWRAP_OFF
+		ineligible.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		ineligible.set_meta("inspect_wrap", true)
+		ineligible.add_theme_font_size_override("font_size", LEVEL_FS)
+		ineligible.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_body_font(ineligible)
+		_section_extras.add_child(ineligible)
 	if show_sell and not InventoryRules.is_consumable(item):
 		var sell_row := HBoxContainer.new()
 		sell_row.mouse_filter = Control.MOUSE_FILTER_IGNORE

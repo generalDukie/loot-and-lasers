@@ -75,11 +75,15 @@ const COMPANY_ABBREV := {
 	COMPANY_ID_GORP: "GORP",
 }
 
+const ORIGIN_MARKET := "market"
+const ORIGIN_CONTRABAND := "contraband"
+const SHIPMENT_INELIGIBLE_TAG := "No Refunds — Shipment Ineligible"
+
 const COMPANY_SLOTS := {
-	COMPANY_ID_DTD: PackedStringArray(["helmet", "armor", "legs", "boots"]),
-	COMPANY_ID_TTT: PackedStringArray(["armor", "boots", "neck", "accessory"]),
-	COMPANY_ID_RDR: PackedStringArray(["helmet", "legs", "weapon", "ship_module"]),
-	COMPANY_ID_GORP: PackedStringArray(["weapon", "neck", "accessory", "ship_module"]),
+	COMPANY_ID_DTD: ["helmet", "armor", "legs", "boots"],
+	COMPANY_ID_TTT: ["armor", "boots", "neck", "accessory"],
+	COMPANY_ID_RDR: ["helmet", "legs", "weapon", "ship_module"],
+	COMPANY_ID_GORP: ["weapon", "neck", "accessory", "ship_module"],
 }
 
 
@@ -95,8 +99,19 @@ static func abbreviation(company_id: String) -> String:
 	return str(COMPANY_ABBREV.get(company_id, company_id))
 
 
-static func slots_for(company_id: String) -> PackedStringArray:
-	return COMPANY_SLOTS.get(company_id, PackedStringArray()) as PackedStringArray
+static func is_market_or_contraband_origin(origin: String) -> bool:
+	var key := origin.strip_edges().to_lower()
+	return key == ORIGIN_MARKET or key == ORIGIN_CONTRABAND
+
+
+static func slots_for(company_id: String) -> Array:
+	var raw: Variant = COMPANY_SLOTS.get(company_id, [])
+	if typeof(raw) != TYPE_ARRAY:
+		return []
+	var out: Array = []
+	for slot in raw:
+		out.append(str(slot))
+	return out
 
 
 static func slot_label(slot: String) -> String:

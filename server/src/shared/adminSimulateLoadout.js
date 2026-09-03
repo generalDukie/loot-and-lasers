@@ -116,7 +116,6 @@ export function applyAdminSimulateLevel({ user, characterId, level, reason, slot
       created_by_id: user.id,
       created_by: user.email,
       is_equipped: true,
-      locked: false,
       origin: SIMULATE_GEAR_ORIGIN,
     });
     equippedItems[slot] = created.id;

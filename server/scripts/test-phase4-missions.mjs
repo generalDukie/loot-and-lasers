@@ -56,6 +56,7 @@ import {
   missionEnemyOutgoingMultiplier,
   MISSION_COMBAT_RULES_VERSION,
   MISSION_ENEMY_HP_SCALE,
+  brandedGearName,
 } from "../../src/lib/productionMath/index.js";
 import {
   freeLevelAttributes,
@@ -445,7 +446,10 @@ test("settleMissionItemChain routes Gear through randomItem origin=mission", () 
   assert.equal(r.itemTemplates[0].origin, "mission");
   assert.ok(String(r.itemTemplates[0].name || "").trim().length > 0);
   assert.notEqual(r.itemTemplates[0].name, "Item");
-  assert.equal(r.itemTemplates[0].name, r.itemTemplates[0].base_name);
+  assert.equal(
+    r.itemTemplates[0].name,
+    brandedGearName(r.itemTemplates[0].base_name, r.itemTemplates[0].manufacturer),
+  );
 });
 
 test("enemy construction uses snapshot EPA * 35% and exact allocation", () => {

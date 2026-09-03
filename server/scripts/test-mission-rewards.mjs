@@ -28,6 +28,7 @@ import {
   MISSION_JUNK_VALUE_RATIO,
   MISSION_JUNK_VARIANCE_MIN,
   MISSION_JUNK_VARIANCE_MAX,
+  brandedGearName,
 } from "../../src/lib/productionMath/index.js";
 
 let passed = 0;
@@ -112,7 +113,10 @@ test("Exclusive chain: Gear success → no Stim/Junk", () => {
   assert.notEqual(r.itemTemplates[0].type, "material");
   assert.ok(String(r.itemTemplates[0].name || "").trim().length > 0);
   assert.notEqual(r.itemTemplates[0].name, "Item");
-  assert.equal(r.itemTemplates[0].name, r.itemTemplates[0].base_name);
+  assert.equal(
+    r.itemTemplates[0].name,
+    brandedGearName(r.itemTemplates[0].base_name, r.itemTemplates[0].manufacturer),
+  );
 });
 
 test("Exclusive chain: Gear fail → Stim", () => {

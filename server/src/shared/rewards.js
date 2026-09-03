@@ -17,6 +17,7 @@ import {
   MISSION_XPF_EXPONENT,
   BACKPACK_UNEQUIPPED_ITEM_CAP,
   STARTING_FUEL,
+  applyGearCompanyPresentation,
 } from "./productionMath.js";
 
 export { XP_STARDUST_SCALE }; // legacy Stardust callers only — not XP
@@ -95,11 +96,13 @@ export function randomItem(
     generationContext,
   });
   const baseName = pick(names, rng);
-  return {
-    ...base,
-    name: baseName,
-    base_name: baseName,
-  };
+  return applyGearCompanyPresentation(base, { baseName, rng });
+}
+
+export function pickGearCatalogName(slot, rng = Math.random) {
+  const t = EQUIPMENT_SLOTS.includes(slot) ? slot : pick(EQUIPMENT_SLOTS, rng);
+  const names = ITEM_NAMES[t] || ITEM_NAMES.weapon;
+  return pick(names, rng);
 }
 
 /** Bind randomItem to a player's class for shop stock / loot helpers. */

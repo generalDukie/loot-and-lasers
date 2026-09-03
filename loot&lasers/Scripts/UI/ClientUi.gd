@@ -15,6 +15,7 @@ const MUTED := Color("#8CA4B7")
 const SUCCESS := Color("#62D89B")
 const DANGER := Color("#FF6B6B")
 const WARNING := Color("#F5A94E")
+const BODY_ITALIC_SHEAR := 0.22
 
 ## Hub "LOOT & LASERS" wordmark + XP bars (nearly white → cyan/teal → purple).
 const BRAND_GRAD_NEAR_WHITE := Color("#A5F3FC")
@@ -134,6 +135,7 @@ const TOAST_BODY_FS := 19
 static var _display_font: Font
 static var _body_font: Font
 static var _bold_display_font: Font
+static var _italic_body_font: Font
 static var _space_shader: Shader
 static var _app_theme: Theme
 static var _painted_style_cache: Dictionary = {}
@@ -186,6 +188,25 @@ static func bold_display_font() -> Font:
 
 static func apply_body_font(control: Control) -> void:
 	var font := body_font()
+	if font != null:
+		control.add_theme_font_override("font", font)
+
+
+static func italic_body_font() -> Font:
+	if _italic_body_font != null:
+		return _italic_body_font
+	var base := body_font()
+	if base == null:
+		return null
+	var italic := FontVariation.new()
+	italic.base_font = base
+	italic.variation_transform = Transform2D(Vector2(1, 0), Vector2(BODY_ITALIC_SHEAR, 1), Vector2.ZERO)
+	_italic_body_font = italic
+	return _italic_body_font
+
+
+static func apply_italic_body_font(control: Control) -> void:
+	var font := italic_body_font()
 	if font != null:
 		control.add_theme_font_override("font", font)
 

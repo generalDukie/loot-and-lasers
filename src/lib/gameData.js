@@ -24,6 +24,8 @@ import {
   clampMissionVariance,
   STIM_MAX_ACTIVE_EFFECTS,
   stimSellValueResolved,
+  applyGearCompanyPresentation,
+  brandedGearName,
 } from "@/lib/productionMath";
 import {
   CONSUMABLE_TIERS as STIM_CONSUMABLE_TIERS,
@@ -463,18 +465,11 @@ const EPITHETS = [
   "of the Hollow Crown", "of the Dead Frequency",
 ];
 
-export function buildItemName(baseName, rarity, stats, rng = Math.random) {
-  const statKeys = ["strength", "agility", "intellect", "vitality", "luck"];
-  let dominant = "strength", best = -1;
-  for (const k of statKeys) {
-    const v = (stats && stats[k]) || 0;
-    if (v > best) { best = v; dominant = k; }
-  }
-  const pool = STAT_PREFIXES[dominant] || STAT_PREFIXES.strength;
-  const prefix = pool[Math.floor(rng() * pool.length)];
-  const epithet = EPITHETS[Math.floor(rng() * EPITHETS.length)];
-  const name = `${prefix} ${baseName} ${epithet}`;
-  return rarity === "legendary" ? `The ${name}` : name;
+export function buildItemName(baseName, rarity, stats, rng = Math.random, manufacturer = null) {
+  void rarity;
+  void stats;
+  void rng;
+  return brandedGearName(baseName, manufacturer);
 }
 
 function romanize(num) {
@@ -513,13 +508,11 @@ function _rollItem(rarity, playerLevel, type, rng, className) {
     className,
   });
 
-  const item = {
+  const item = applyGearCompanyPresentation({
     ...generated,
-    name: buildItemName(baseName, rarity, generated.stats, r),
-    base_name: baseName,
     flavor_text: FLAVOR_TEXTS[Math.floor(r() * FLAVOR_TEXTS.length)],
     ...(itemType === "weapon" ? { emoji: weaponEmojiFor(baseName, baseName) } : {}),
-  };
+  }, { baseName, rng: r });
   item.sell_value = computeItemVendorValue(item);
   return item;
 }
@@ -536,13 +529,11 @@ export function generateClassWeapon(className, rarity, playerLevel, rng = Math.r
     rng,
     className,
   });
-  return {
+  return applyGearCompanyPresentation({
     ...generated,
-    name: buildItemName(w.name, rarity, generated.stats, rng),
-    base_name: w.name,
     flavor_text: w.flavor,
     emoji: w.emoji,
-  };
+  }, { baseName: w.name, rng });
 }
 
 const CLASS_SIGNATURE_WEAPON_CHANCE = 0.20;

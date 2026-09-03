@@ -18,9 +18,11 @@ import {
   TOKEN_STATUS_OVERFLOW,
   TOKEN_STATUS_WAITING,
   allCompanyDefinitions,
+  applyGearCompanyPresentation,
   companyLevelFromReputation,
   companyManufacturesSlot,
   isCompanyId,
+  isShipmentOriginDenied,
   levelsAwardedByReputation,
   nextTokenRarity,
   normalizeRareCommissionWeights,
@@ -30,6 +32,7 @@ import {
   tokenRarityForCompanyLevel,
 } from "../../../src/lib/productionMath/index.js";
 import { GenerateGearItem } from "./itemGeneration.js";
+import { pickGearCatalogName } from "./rewards.js";
 import { serializeItem } from "./inventoryEquipment.js";
 import { assertBackpackHasSpace } from "./inventoryGrant.js";
 import { creditStardust } from "./currencyService.js";
@@ -161,6 +164,12 @@ export function validateShipmentItems(character, companyId, itemIds) {
     const item = loadOwnedGear(character, id);
     if (item.is_equipped) httpErr(400, "Equipped Gear cannot be shipped", "ITEM_EQUIPPED");
     if (!canonicalGearSlot(item.type)) httpErr(400, "Only Gear can be shipped", "ITEM_NOT_GEAR");
+    if (isShipmentOriginDenied(item.origin)) {
+      httpErr(400, "Market and Contraband Gear cannot be shipped", "ITEM_NOT_SHIPMENT_ELIGIBLE");
+    }
+    if (!companyManufacturesSlot(item.manufacturer, item.type)) {
+      httpErr(400, "That Gear is not manufactured by its recorded Company", "ITEM_INVALID_MANUFACTURER");
+    }
     if (!isPersistedShipmentEligible(item)) {
       httpErr(400, "That Gear is not Shipment-eligible", "ITEM_NOT_SHIPMENT_ELIGIBLE");
     }
@@ -281,7 +290,13 @@ export function settleShipment({ user, character, companyId, itemIds, requestId 
 export function serializeCompanyStatus(character, inventoryItems = []) {
   const companies = serializeCompanies(character);
   const eligible = (inventoryItems || [])
-    .filter((item) => !item.is_equipped && isPersistedShipmentEligible(item) && isCompanyId(item.manufacturer))
+    .filter((item) => (
+      !item.is_equipped
+      && isPersistedShipmentEligible(item)
+      && isCompanyId(item.manufacturer)
+      && !isShipmentOriginDenied(item.origin)
+      && companyManufacturesSlot(item.manufacturer, item.type)
+    ))
     .map((item) => serializeItem(item, character));
   return {
     companies,
@@ -298,12 +313,6 @@ function findToken(row, tokenId) {
     return { token: row.overflow_token, kind: "overflow" };
   }
   return null;
-}
-
-function commissionItemName(companyId, slot, rarity) {
-  const def = allCompanyDefinitions().find((c) => c.id === companyId);
-  const slotLabel = String(slot || "gear").replace(/_/g, " ");
-  return `${def?.abbreviation || companyId} ${rarity} ${slotLabel}`;
 }
 
 export function redeemCommission({
@@ -344,11 +353,13 @@ export function redeemCommission({
       weights: rareWeights,
     },
   });
-  generated.name = commissionItemName(companyId, type, token.rarity);
-  generated.base_name = generated.name;
-  generated.is_equipped = false;
+  const presented = applyGearCompanyPresentation(generated, {
+    baseName: pickGearCatalogName(type, rng),
+    rng,
+  });
+  presented.is_equipped = false;
   const created = entities.Item.create({
-    ...generated,
+    ...presented,
     owner_id: character.created_by_id,
     character_id: character.id,
     is_equipped: false,

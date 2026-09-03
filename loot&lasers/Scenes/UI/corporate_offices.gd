@@ -203,10 +203,12 @@ func _refresh_companies() -> void:
 	for raw in CompanyManager.companies:
 		if typeof(raw) != TYPE_DICTIONARY:
 			continue
-		_company_row.add_child(_make_company_card(raw))
+		var card_row: Dictionary = raw
+		_company_row.add_child(_make_company_card(card_row))
 	if CompanyManager.company_row(_selected_company).is_empty() and not CompanyManager.companies.is_empty():
-		var first: Dictionary = CompanyManager.companies[0]
-		_selected_company = str(first.get("id", CompanyRules.COMPANY_ID_DTD))
+		var first_raw: Variant = CompanyManager.companies[0]
+		if typeof(first_raw) == TYPE_DICTIONARY:
+			_selected_company = str((first_raw as Dictionary).get("id", CompanyRules.COMPANY_ID_DTD))
 
 
 func _make_company_card(row: Dictionary) -> Button:
@@ -257,7 +259,7 @@ func _make_company_card(row: Dictionary) -> Button:
 	ClientUi.apply_display_font(name_lab)
 	col.add_child(name_lab)
 
-	var slots := row.get("slots", [])
+	var slots: Variant = row.get("slots", [])
 	var slot_lab := Label.new()
 	if typeof(slots) == TYPE_ARRAY:
 		var labels: Array[String] = []
@@ -292,13 +294,13 @@ func _make_company_card(row: Dictionary) -> Button:
 	ClientUi.apply_hp_bar(bar, accent)
 	col.add_child(bar)
 
-	var token := row.get("waiting_token", null)
+	var token: Variant = row.get("waiting_token", null)
 	var token_lab := Label.new()
 	if bool(row.get("overflow_pending", false)):
 		token_lab.text = "Overflow — choose a token"
 		token_lab.add_theme_color_override("font_color", ClientUi.WARNING)
-	elif typeof(token) == TYPE_DICTIONARY and not token.is_empty():
-		token_lab.text = "Waiting %s token" % CompanyRules.rarity_label(str(token.get("rarity", "")))
+	elif typeof(token) == TYPE_DICTIONARY and not (token as Dictionary).is_empty():
+		token_lab.text = "Waiting %s token" % CompanyRules.rarity_label(str((token as Dictionary).get("rarity", "")))
 		token_lab.add_theme_color_override("font_color", ClientUi.GOLD)
 	else:
 		token_lab.text = "No waiting token"
@@ -321,7 +323,6 @@ func _refresh_overflow_banner() -> void:
 func _refresh_shipment() -> void:
 	for child in _ship_list.get_children():
 		child.queue_free()
-	var row := CompanyManager.company_row(_selected_company)
 	var overflow := CompanyManager.overflow_pending(_selected_company)
 	var items := CompanyManager.eligible_for_company(_selected_company)
 	if overflow:
@@ -372,7 +373,6 @@ func _refresh_shipment() -> void:
 	_ship_summary.text += "\nSelected %s / %s. Listed sell total %s.%s" % [selected_n, SLOT_COUNT, base, extra]
 	_preview_btn.disabled = _busy or selected_n != SLOT_COUNT
 	_confirm_btn.disabled = _busy or not preview_ok
-	void row
 
 
 func _preview_matches_selection() -> bool:
@@ -710,8 +710,8 @@ func _adjust_rare_weight(index: int, value: int) -> void:
 		if i != index:
 			others.append(i)
 	var leftover := total - value
-	var a := others[0]
-	var b := others[1]
+	var a: int = others[0]
+	var b: int = others[1]
 	var a_val := clampi(_rare_weights[a], lo, hi)
 	var b_val := leftover - a_val
 	if b_val < lo:
@@ -748,8 +748,8 @@ func _rare_ready() -> bool:
 func _find_token(row: Dictionary, token_id: String) -> Dictionary:
 	for key in ["waiting_token", "overflow_token"]:
 		var tok: Variant = row.get(key, null)
-		if typeof(tok) == TYPE_DICTIONARY and str(tok.get("id", "")) == token_id:
-			return tok
+		if typeof(tok) == TYPE_DICTIONARY and str((tok as Dictionary).get("id", "")) == token_id:
+			return tok as Dictionary
 	return {}
 
 

@@ -62,11 +62,25 @@ export function canonicalGearOrigin(origin) {
   return null;
 }
 
+export function isShipmentOriginDenied(origin) {
+  const key = canonicalGearOrigin(origin);
+  return SHIPMENT_INELIGIBLE_ORIGINS.includes(key);
+}
+
 /** Market/Contraband are permanently ineligible. Every other generated origin defaults eligible. */
 export function defaultShipmentEligible(origin) {
-  const key = canonicalGearOrigin(origin);
-  if (SHIPMENT_INELIGIBLE_ORIGINS.includes(key)) return false;
+  if (isShipmentOriginDenied(origin)) return false;
   return true;
+}
+
+/**
+ * Universal generator eligibility. Canonical Market/Contraband origin always
+ * denies, even when a caller passes an explicit `true` override.
+ */
+export function resolveGeneratedShipmentEligible(origin, override) {
+  if (isShipmentOriginDenied(origin)) return false;
+  if (override == null) return defaultShipmentEligible(origin);
+  return !!override;
 }
 
 /**

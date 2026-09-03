@@ -34,7 +34,7 @@ import {
   SIMULATE_PARTIAL_A_OFF_COUNT,
   canonicalGearOrigin,
   canonicalGearSlot,
-  defaultShipmentEligible,
+  resolveGeneratedShipmentEligible,
   gearBaseStatBudget,
   gearRarityBudgetMultiplier,
   gearResaleValue,
@@ -828,9 +828,7 @@ export function GenerateGearItem({
     is_equipped: false,
     origin: resolvedOrigin,
     manufacturer: resolvedManufacturer,
-    shipment_eligible: shipmentEligible == null
-      ? defaultShipmentEligible(resolvedOrigin)
-      : !!shipmentEligible,
+    shipment_eligible: resolveGeneratedShipmentEligible(resolvedOrigin, shipmentEligible),
   };
   if (!skipQuality) {
     finalizeGearPricingQuality(item, { className });

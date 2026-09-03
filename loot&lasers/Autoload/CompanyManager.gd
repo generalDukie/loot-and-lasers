@@ -18,13 +18,33 @@ var loading := false
 var _busy := false
 var _shipment_request_id := ""
 var _commission_request_id := ""
+var _bound_character_id := ""
+var _bound_account_id := ""
 
 
 func _ready() -> void:
 	print("[CompanyManager] ready (Node company authority)")
+	if GameManager != null and not GameManager.active_character_changed.is_connected(_on_active_character_changed):
+		GameManager.active_character_changed.connect(_on_active_character_changed)
+
+
+func loaded_character_id() -> String:
+	return _bound_character_id
+
+
+func loaded_account_id() -> String:
+	return _bound_account_id
 
 
 func clear_local() -> void:
+	_clear_loaded_payload()
+	_shipment_request_id = ""
+	_commission_request_id = ""
+	_bound_character_id = ""
+	_bound_account_id = ""
+
+
+func _clear_loaded_payload() -> void:
 	companies = []
 	eligible_items = []
 	overflow_companies = []
@@ -32,13 +52,46 @@ func clear_local() -> void:
 	last_item = {}
 	loading = false
 	_busy = false
+
+
+func _live_character_id() -> String:
+	if GameManager == null:
+		return ""
+	return str(GameManager.selected_character_id()).strip_edges()
+
+
+func _live_account_id() -> String:
+	if AuthManager == null or typeof(AuthManager.user) != TYPE_DICTIONARY:
+		return ""
+	return str(AuthManager.user.get("id", "")).strip_edges()
+
+
+func _bind_identity(character_id: String, account_id: String) -> void:
+	if character_id == _bound_character_id and account_id == _bound_account_id:
+		return
+	_clear_loaded_payload()
 	_shipment_request_id = ""
 	_commission_request_id = ""
+	_bound_character_id = character_id
+	_bound_account_id = account_id
+	companies_loaded.emit(_snapshot())
+
+
+func _on_active_character_changed(character: Dictionary, _source: String) -> void:
+	var cid := str(character.get("id", "")).strip_edges()
+	if cid.is_empty():
+		clear_local()
+		companies_loaded.emit(_snapshot())
+		return
+	_bind_identity(cid, _live_account_id())
 
 
 func company_row(company_id: String) -> Dictionary:
-	for row in companies:
-		if typeof(row) == TYPE_DICTIONARY and str(row.get("id", "")) == company_id:
+	for raw in companies:
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var row: Dictionary = raw
+		if str(row.get("id", "")) == company_id:
 			return row
 	return {}
 
@@ -61,11 +114,18 @@ func eligible_for_company(company_id: String) -> Array:
 func load_status() -> Dictionary:
 	if _busy:
 		return _fail("Company request already in progress")
+	var cid := _live_character_id()
+	var aid := _live_account_id()
+	_bind_identity(cid, aid)
+	if cid.is_empty():
+		return _fail("No character selected")
 	_busy = true
 	_set_loading(true)
 	var res: Dictionary = await GameApiClient.invoke("GetCompanyStatus", {})
 	_busy = false
 	_set_loading(false)
+	if _live_character_id() != cid or _live_account_id() != aid:
+		return {"ok": false, "error": "Character changed", "data": {}}
 	if not res.ok:
 		var err := str(res.get("error", "Could not load Corporate Offices"))
 		company_error.emit(err)
@@ -78,6 +138,8 @@ func load_status() -> Dictionary:
 func preview_shipment(company_id: String, item_ids: Array) -> Dictionary:
 	if _busy:
 		return _fail("Company request already in progress")
+	var cid := _live_character_id()
+	var aid := _live_account_id()
 	_busy = true
 	_set_loading(true)
 	var res: Dictionary = await GameApiClient.invoke("PreviewShipment", {
@@ -86,6 +148,8 @@ func preview_shipment(company_id: String, item_ids: Array) -> Dictionary:
 	})
 	_busy = false
 	_set_loading(false)
+	if _live_character_id() != cid or _live_account_id() != aid:
+		return {"ok": false, "error": "Character changed", "data": {}}
 	if not res.ok:
 		var err := str(res.get("error", "Could not preview Shipment"))
 		company_error.emit(err)
@@ -99,6 +163,8 @@ func preview_shipment(company_id: String, item_ids: Array) -> Dictionary:
 func confirm_shipment(company_id: String, item_ids: Array) -> Dictionary:
 	if _busy:
 		return _fail("Company request already in progress")
+	var cid := _live_character_id()
+	var aid := _live_account_id()
 	if _shipment_request_id.is_empty():
 		_shipment_request_id = _new_request_id("ship")
 	_busy = true
@@ -110,6 +176,8 @@ func confirm_shipment(company_id: String, item_ids: Array) -> Dictionary:
 	}, true)
 	_busy = false
 	_set_loading(false)
+	if _live_character_id() != cid or _live_account_id() != aid:
+		return {"ok": false, "error": "Character changed", "data": {}}
 	if bool(res.get("ok", false)) or int(res.get("status", 0)) > 0:
 		_shipment_request_id = ""
 	if not res.ok:
@@ -128,6 +196,8 @@ func confirm_shipment(company_id: String, item_ids: Array) -> Dictionary:
 func redeem_commission(company_id: String, spend_token_id: String, slot: String, weights: Dictionary = {}) -> Dictionary:
 	if _busy:
 		return _fail("Company request already in progress")
+	var cid := _live_character_id()
+	var aid := _live_account_id()
 	if _commission_request_id.is_empty():
 		_commission_request_id = _new_request_id("comm")
 	var payload := {
@@ -143,6 +213,8 @@ func redeem_commission(company_id: String, spend_token_id: String, slot: String,
 	var res: Dictionary = await GameApiClient.invoke("RedeemCommission", payload, true)
 	_busy = false
 	_set_loading(false)
+	if _live_character_id() != cid or _live_account_id() != aid:
+		return {"ok": false, "error": "Character changed", "data": {}}
 	if bool(res.get("ok", false)) or int(res.get("status", 0)) > 0:
 		_commission_request_id = ""
 	if not res.ok:

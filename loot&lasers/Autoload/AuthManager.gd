@@ -746,6 +746,8 @@ func logout_nakama() -> Dictionary:
 		ProgressManager.clear_local()
 	if DungeonManager != null and DungeonManager.has_method("clear_local"):
 		DungeonManager.clear_local()
+	if CompanyManager != null and CompanyManager.has_method("clear_local"):
+		CompanyManager.clear_local()
 	if NotificationManager != null and NotificationManager.has_method("clear_local"):
 		NotificationManager.clear_local()
 	if PresenceManager != null and PresenceManager.has_method("stop"):

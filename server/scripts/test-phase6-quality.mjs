@@ -3,6 +3,7 @@
  * Run: npm run test:phase6-quality
  */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   BLACK_MARKET_RULES_VERSION,
   generateContrabandOffer,
@@ -10,13 +11,16 @@ import {
   mulberry32,
 } from "../../src/lib/blackMarket.js";
 import {
+  GenerateGearItem,
   LEGENDARY_GEAR_STAT_COUNT,
   LEGENDARY_MIN_STAT_SHARE,
   RARITY_MIN_STAT_SHARE,
   rollItemStats,
 } from "../../src/lib/itemGeneration.js";
 import {
+  createIntrinsicQualityCdfRng,
   getIntrinsicQualityCdfCacheSize,
+  getIntrinsicQualityCdfValues,
   intrinsicQualityCdfCacheKey,
   resetIntrinsicQualityCdfCache,
   resolveIntrinsicQualityCdfReferenceLevel,
@@ -63,6 +67,9 @@ import {
   rollMarketGearItemLevel,
   rollMarketGearSlot,
   CLASS_PRIMARY_INDEX,
+  COMPANY_ID_DTD,
+  COMPANY_ID_RDR,
+  COMPANY_SLOTS,
   scoreGearIntrinsicQuality,
 } from "../../src/lib/productionMath/index.js";
 
@@ -81,6 +88,117 @@ function test(name, fn) {
     console.error(`    ${err.stack || err.message}`);
   }
 }
+
+function empiricalCdfReplica(sorted, value) {
+  const n = sorted.length;
+  if (n <= 0) return 0;
+  let lo = 0;
+  let hi = n;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  let equal = 0;
+  for (let i = lo; i < n && sorted[i] === value; i += 1) equal += 1;
+  return (lo + equal / 2) / n;
+}
+
+function buildPrePhase9IntrinsicQualityCdf(rarity, qualityReferenceLevel) {
+  const key = String(rarity || "").toLowerCase();
+  const referenceLevel = resolveIntrinsicQualityCdfReferenceLevel(qualityReferenceLevel);
+  const rng = createIntrinsicQualityCdfRng(key, referenceLevel);
+  const classNames = Object.keys(CLASS_PRIMARY_INDEX);
+  const values = [];
+  for (let i = 0; i < INTRINSIC_QUALITY_CDF_SAMPLE_SIZE; i += 1) {
+    const className = classNames[i % classNames.length];
+    const identity = rollIntrinsicQualityCdfIdentity(rng, referenceLevel);
+    const rolled = rollItemStats({
+      itemLevel: identity.itemLevel,
+      type: identity.slot,
+      rarity: key,
+      rng,
+      className,
+    });
+    values.push(
+      scoreGearIntrinsicQuality({
+        stats: rolled.stats,
+        rarity: key,
+        slot: identity.slot,
+        itemLevel: identity.itemLevel,
+        referenceLevel: identity.referenceLevel,
+        className,
+        actualTotal: rolled.targetBudget ?? null,
+      }).intrinsicQuality,
+    );
+  }
+  values.sort((a, b) => a - b);
+  return values;
+}
+
+function firstIntrinsicQualityCdfSamples(rarity, qualityReferenceLevel, { consumeManufacturerRng = false } = {}) {
+  const key = String(rarity || "").toLowerCase();
+  const referenceLevel = resolveIntrinsicQualityCdfReferenceLevel(qualityReferenceLevel);
+  const rng = createIntrinsicQualityCdfRng(key, referenceLevel);
+  const classNames = Object.keys(CLASS_PRIMARY_INDEX);
+  const values = [];
+  const probeCount = 32;
+  for (let i = 0; i < probeCount; i += 1) {
+    const className = classNames[i % classNames.length];
+    const identity = rollIntrinsicQualityCdfIdentity(rng, referenceLevel);
+    let stats;
+    let actualTotal;
+    if (consumeManufacturerRng) {
+      const item = GenerateGearItem({
+        itemLevel: identity.itemLevel,
+        itemType: identity.slot,
+        rarity: key,
+        rng,
+        className,
+        skipPricingQuality: true,
+      });
+      stats = item.stats;
+      actualTotal = item.stat_budget ?? null;
+    } else {
+      const rolled = rollItemStats({
+        itemLevel: identity.itemLevel,
+        type: identity.slot,
+        rarity: key,
+        rng,
+        className,
+      });
+      stats = rolled.stats;
+      actualTotal = rolled.targetBudget ?? null;
+    }
+    values.push(
+      scoreGearIntrinsicQuality({
+        stats,
+        rarity: key,
+        slot: identity.slot,
+        itemLevel: identity.itemLevel,
+        referenceLevel: identity.referenceLevel,
+        className,
+        actualTotal,
+      }).intrinsicQuality,
+    );
+  }
+  return values;
+}
+
+function cdfSha256(values) {
+  return createHash("sha256")
+    .update(values.map((v) => Number(v).toExponential(15)).join(","))
+    .digest("hex");
+}
+
+const PRE_PHASE9_NOVA_CDF_SHA256 = Object.freeze({
+  "epic:1": "a45dda750bf9e134e4cdce01ea7dd97fd3711c041bfc2010441104b2e74d0459",
+  "epic:20": "df1ae42d169574540ebddf5421597c0b53bc84ac84834e89d7123a0fa22129f1",
+  "epic:50": "45480e30b11857d6d0d637ee4925b49691e5918c7d2d86d17747e2f5ce092810",
+  "legendary:1": "b2ac45709c23c322b1670363b5695048654af2d2cfe5996f55bf10a5f0bf64ab",
+  "legendary:20": "c614c28ec58b0677383717cf03da53379b0c49bf8b74a5e307379318e7bf6c6e",
+  "legendary:50": "334b618447f6104dde3478e82e5b1ad5e7bdab511f84cbe385b28688351a34cd",
+});
 
 function quantile(sorted, p) {
   if (!sorted.length) return 0;
@@ -419,6 +537,114 @@ test("CDF population uses Market 35/35/20/10 IL vs snapshotted generation level"
     className: "Vanguard",
   }).percentile;
   assert.equal(marketP, contraP);
+});
+
+test("Nova CDF matches the pre-Phase-9 rollItemStats stream exactly", () => {
+  const levels = [
+    INTRINSIC_QUALITY_CDF_MIN_REFERENCE_LEVEL,
+    20,
+    INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL,
+  ];
+  const probes = [
+    {
+      rarity: "epic",
+      className: "Vanguard",
+      slot: "weapon",
+      stats: { strength: 40, vitality: 40, luck: 20 },
+      budget: 100,
+    },
+    {
+      rarity: "epic",
+      className: "Technomancer",
+      slot: "armor",
+      stats: { intellect: 35, vitality: 35, luck: 30 },
+      budget: 100,
+    },
+    {
+      rarity: "legendary",
+      className: "Vanguard",
+      slot: "weapon",
+      stats: { strength: 30, agility: 20, intellect: 10, vitality: 25, luck: 15 },
+      budget: 100,
+    },
+    {
+      rarity: "legendary",
+      className: "Warden",
+      slot: "helmet",
+      stats: { strength: 22, agility: 18, intellect: 12, vitality: 28, luck: 20 },
+      budget: 100,
+    },
+  ];
+
+  resetIntrinsicQualityCdfCache();
+  let offerDraws = 0;
+  const offerRng = () => {
+    offerDraws += 1;
+    return 0.42;
+  };
+  const replicaByKey = new Map();
+
+  for (const rarity of ["epic", "legendary"]) {
+    for (const level of levels) {
+      const live = getIntrinsicQualityCdfValues(rarity, level);
+      const replica = buildPrePhase9IntrinsicQualityCdf(rarity, level);
+      replicaByKey.set(`${rarity}:${level}`, replica);
+      assert.deepEqual(live, replica, `${rarity}@${level} pre-Phase-9 replica`);
+      const key = `${rarity}:${level}`;
+      const digest = cdfSha256(live);
+      assert.equal(digest, PRE_PHASE9_NOVA_CDF_SHA256[key], `${key} golden digest`);
+    }
+  }
+
+  assert.equal(offerDraws, 0, "CDF build must not consume live offer RNG");
+  const liveGear = GenerateGearItem({
+    itemLevel: INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL,
+    itemType: "helmet",
+    rarity: "epic",
+    className: "Vanguard",
+    origin: "mission",
+    rng: offerRng,
+  });
+  assert.ok(offerDraws > 0);
+  assert.ok(COMPANY_SLOTS[liveGear.manufacturer].includes("helmet"));
+  assert.equal(GenerateGearItem({
+    itemLevel: 12,
+    itemType: "helmet",
+    rarity: "rare",
+    className: "Vanguard",
+    rng: () => 0,
+  }).manufacturer, COMPANY_ID_DTD);
+  assert.equal(GenerateGearItem({
+    itemLevel: 12,
+    itemType: "helmet",
+    rarity: "rare",
+    className: "Vanguard",
+    rng: () => 0.99,
+  }).manufacturer, COMPANY_ID_RDR);
+
+  const restoredHead = firstIntrinsicQualityCdfSamples("epic", INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL);
+  const contaminated = firstIntrinsicQualityCdfSamples("epic", INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL, {
+    consumeManufacturerRng: true,
+  });
+  assert.notDeepEqual(contaminated, restoredHead);
+
+  const L = INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL;
+  for (const probe of probes) {
+    const scored = scoreGearIntrinsicQuality({
+      stats: probe.stats,
+      rarity: probe.rarity,
+      slot: probe.slot,
+      itemLevel: L,
+      referenceLevel: L,
+      className: probe.className,
+      actualTotal: probe.budget,
+    });
+    const liveP = intrinsicQualityPercentile(scored.intrinsicQuality, probe.rarity, L);
+    const replica = replicaByKey.get(`${probe.rarity}:${L}`);
+    const replicaP = empiricalCdfReplica(replica, scored.intrinsicQuality);
+    assert.equal(liveP, replicaP, `${probe.rarity} ${probe.className} percentile`);
+    assert.equal(novaSurchargeBandIndex(liveP), novaSurchargeBandIndex(replicaP));
+  }
 });
 
 test("new 75/82.5/90/95/97.5 bands and within-rarity CDF populations", () => {

@@ -52,6 +52,7 @@ import {
   rollDungeonBossRarity,
   arenaXpReward,
   ARENA_COOLDOWN_SKIP_NOVA,
+  applyGearCompanyPresentation,
 } from "./productionMath.js";
 import {
   generateContrabandOffer,
@@ -844,12 +845,12 @@ export function rollHotDealRarity(_playerLevel, rng = Math.random) {
 function createGearFromRandomItemFn(randomItemFn) {
   return ({ rarity, itemLevel, slot, origin, manufacturer, rng }) => {
     const item = randomItemFn(rarity, itemLevel, slot, rng);
-    return {
+    return applyGearCompanyPresentation({
       ...item,
       origin,
       manufacturer,
       shipment_eligible: false,
-    };
+    }, { baseName: item.base_name, rng });
   };
 }
 

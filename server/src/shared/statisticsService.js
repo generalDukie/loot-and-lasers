@@ -5,7 +5,7 @@
  */
 import { entities } from "../entities.js";
 import { computeArenaRank, listArenaLeaderboard } from "./arenaService.js";
-import { getArenaRewardedWinsState, todayET } from "./economyFormulas.js";
+import { getArenaRewardedWinsState, productionGameDayId } from "./economyFormulas.js";
 import {
   computeGuildRank,
   getNearbyGuildEntries,
@@ -79,7 +79,7 @@ function arrLen(v) {
  */
 export function serializeCharacterStatistics(character, { includePrivate = true } = {}) {
   if (!character) return null;
-  const today = todayET();
+  const today = productionGameDayId();
   const rewarded = getArenaRewardedWinsState(character, today);
   const rank = computeArenaRank(character.id);
   const stats = {

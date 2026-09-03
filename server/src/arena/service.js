@@ -4,7 +4,7 @@
 
 import { nanoid } from "nanoid";
 import { entities } from "../entities.js";
-import { todayET } from "../shared/economyFormulas.js";
+import { productionGameDayId } from "../shared/economyFormulas.js";
 import { clock } from "../shared/time/clock.js";
 import {
   ARENA_RATING_POLICY_VERSION,
@@ -14,6 +14,7 @@ import {
   FARMING_SIGNAL_THRESHOLDS,
   DIRECT_CHALLENGE_RATING,
 } from "./config.js";
+import { readArenaPendingCombat } from "../shared/combatService.js";
 
 const DATE_PART_PAD_WIDTH = 2;
 const MILLISECONDS_PER_SECOND = 1_000;
@@ -54,7 +55,7 @@ export function currentSeasonId(now = new Date()) {
 }
 
 export function currentPeriodId() {
-  return todayET();
+  return productionGameDayId();
 }
 
 function hourAgoIso() {
@@ -426,7 +427,6 @@ function maybeEmitFarmingSignals({
  */
 export function completeDirectChallenge(user, body = {}) {
   const challengeId = body.challengeId;
-  const won = !!body.won;
   if (!challengeId) {
     throw new ArenaError(ArenaErrors.ARENA_INVALID_REQUEST, "challengeId required");
   }
@@ -452,6 +452,7 @@ export function completeDirectChallenge(user, body = {}) {
       replayed: true,
       ratingDelta: challenge.finalRatingDelta,
       result: challenge.result,
+      won: !!challenge.result?.won,
     };
   }
 
@@ -469,7 +470,22 @@ export function completeDirectChallenge(user, body = {}) {
     );
   }
 
-  // Never trust client rating fields.
+  const challengerChar = assertOwnsCharacter(user, challenge.challengerCharacterId);
+  const pending = readArenaPendingCombat(challengerChar);
+  if (
+    !pending?.combat_id
+    || !pending.winner
+    || String(pending.meta?.challenge_id || "") !== String(challengeId)
+  ) {
+    throw new ArenaError(
+      ArenaErrors.ARENA_NO_PENDING_COMBAT,
+      "Direct challenge must settle from committed Arena combat",
+      409,
+    );
+  }
+  const won = pending.winner === "player";
+
+  // Never trust client rating fields. Delta from frozen challenge snapshot only.
   const calc = computeDirectChallengeRatingDelta({
     challengerRating: challenge.challengerRatingAtStart,
     opponentRating: challenge.opponentRatingAtStart,
@@ -478,7 +494,6 @@ export function completeDirectChallenge(user, body = {}) {
     practice: challenge.challengeType === CHALLENGE_TYPES.PRACTICE,
   });
 
-  const challengerChar = assertOwnsCharacter(user, challenge.challengerCharacterId);
   const prevRating = challengerChar.arena_rating || ARENA_DEFAULT_RATING;
   // Apply delta to live character, but delta was computed from snapshot.
   const newRating = Math.max(0, prevRating + calc.ratingDelta);
@@ -488,8 +503,6 @@ export function completeDirectChallenge(user, body = {}) {
     arena_wins: (challengerChar.arena_wins || 0) + (won ? 1 : 0),
     arena_losses: (challengerChar.arena_losses || 0) + (won ? 0 : 1),
     arena_battles: (challengerChar.arena_battles || 0) + 1,
-    arena_last_battle_at: clock.nowIso(),
-    arena_cooldown_at: clock.nowIso(),
   };
 
   // Competitive streak: only count when rating-bearing win (or any win if not zero-gap?).

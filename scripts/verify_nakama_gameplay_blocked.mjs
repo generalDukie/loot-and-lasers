@@ -75,6 +75,21 @@ expect(
   /case "Guild":[\s\S]*case "NexusAssault":[\s\S]*return false/,
   "Guild/Nexus client create locked",
 );
+reject(
+  "loot&lasers/Autoload/ArenaManager.gd",
+  /invoke_rpc\(\s*["']arena_/,
+  "ArenaManager must not invoke Nakama arena RPCs",
+);
+expect(
+  "modules/arena.lua",
+  /rpc_arena_gameplay_blocked/,
+  "Nakama Arena RPCs are registered as gameplay-blocked",
+);
+reject(
+  "loot&lasers/Autoload/ArenaManager.gd",
+  /"is_free"\s*:/,
+  "Godot Arena prepare/finish does not send is_free",
+);
 expect(
   "server/src/functions/economyFollowOn.js",
   /LOOT_ENVIRONMENT[\s\S]*CRYSTAL_PACK_DEV_GRANT/,

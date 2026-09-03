@@ -72,6 +72,8 @@ export const DUNGEON_XP_SHARE_COEFFICIENT = 0.87;
 export const DUNGEON_XP_DRU_COEFFICIENT = 2.1;
 export const ARENA_XP_PER_XPF = 2.125;
 export const ARENA_STARDUST_PER_SPF = 2.25;
+/** Nova cost to skip an active Arena cooldown. Unlimited skips if the player can pay. */
+export const ARENA_COOLDOWN_SKIP_NOVA = 10;
 export const MINING_STARDUST_PER_SPF_PER_MINUTE = 0.03;
 /** Product Mining session window — not the Test 18 simulation 720-minute checksum. */
 export const MINING_SESSION_HOURS_MIN = 1;

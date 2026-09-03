@@ -11,6 +11,7 @@ var _status: Label
 var _rating_label: Label
 var _stat_wl: Label
 var _stat_streak: Label
+var _stat_rank: Label
 var _free_panel: PanelContainer
 var _free_title: Label
 var _free_count: Label
@@ -19,6 +20,7 @@ var _free_support: Label
 var _free_segments: HBoxContainer
 var _cooldown_banner: Label
 var _cooldown_panel: PanelContainer
+var _skip_btn: Button
 var _list: GridContainer
 var _history_list: VBoxContainer
 var _news_list: VBoxContainer
@@ -68,6 +70,21 @@ func _on_opponents_loaded(_opponents: Array = []) -> void:
 
 func _on_wallet_changed(_wallet: Dictionary) -> void:
 	_update_lobby_chrome()
+
+
+func _on_skip_cooldown_pressed() -> void:
+	if _busy or ArenaManager.is_battling():
+		return
+	if not ArenaManager.cooldown_active():
+		return
+	_busy = true
+	var res: Dictionary = await ArenaManager.skip_cooldown()
+	_busy = false
+	if not bool(res.get("ok", false)):
+		Notify.blocked("Skip failed", str(res.get("error", "Could not skip Arena cooldown")))
+		return
+	_update_lobby_chrome()
+	_populate_challengers()
 
 
 func _on_combat_return_changed() -> void:
@@ -191,12 +208,13 @@ func _build() -> void:
 	head_r.add_child(_rating_label)
 
 	var chips := GridContainer.new()
-	chips.columns = 2
+	chips.columns = 3
 	chips.add_theme_constant_override("h_separation", 8)
 	chips.add_theme_constant_override("v_separation", 6)
 	stats_col.add_child(chips)
 	_stat_wl = _add_stat_chip(chips, "swords", "W / L", Color("#60A5FA"))
 	_stat_streak = _add_stat_chip(chips, "flame", "STREAK", Color("#FB7185"))
+	_stat_rank = _add_stat_chip(chips, "trophy", "RANK", Color("#FBBF24"))
 
 	_free_panel = _build_free_battles_panel()
 	TutorialManager.tag_target(_free_panel, "arena-free")
@@ -258,6 +276,12 @@ func _build() -> void:
 	_cooldown_banner.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55))
 	ClientUi.apply_display_font(_cooldown_banner)
 	cd_row.add_child(_cooldown_banner)
+	_skip_btn = Button.new()
+	_skip_btn.text = "SKIP %s" % NumberDisplay.nova(ArenaRules.SKIP_COST)
+	_skip_btn.custom_minimum_size = Vector2(0, 24)
+	ClientUi.apply_ghost_button(_skip_btn)
+	_skip_btn.pressed.connect(_on_skip_cooldown_pressed)
+	cd_row.add_child(_skip_btn)
 
 	var cd_spacer := Control.new()
 	cd_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -476,7 +500,7 @@ func _build_free_battles_panel() -> PanelContainer:
 	head_l.add_theme_constant_override("separation", 2)
 	head.add_child(head_l)
 	_free_title = Label.new()
-	_free_title.text = "FREE ARENA BATTLES"
+	_free_title.text = "REWARDED WINS TODAY"
 	_free_title.add_theme_font_size_override("font_size", 13)
 	_free_title.add_theme_color_override("font_color", Color("#FBBF24"))
 	ClientUi.apply_display_font(_free_title)
@@ -497,7 +521,7 @@ func _build_free_battles_panel() -> PanelContainer:
 	_free_segments = HBoxContainer.new()
 	_free_segments.add_theme_constant_override("separation", 4)
 	col.add_child(_free_segments)
-	for _i in ArenaRules.DAILY_FREE_BATTLES:
+	for _i in ArenaRules.DAILY_REWARDED_WINS:
 		var seg := ColorRect.new()
 		seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		seg.custom_minimum_size = Vector2(0, 10)
@@ -704,14 +728,18 @@ func _populate_history() -> void:
 
 func _update_lobby_chrome() -> void:
 	var c: Dictionary = GameManager.active_character
-	var free_left := ArenaManager.free_battles_left
-	var daily_max := ArenaRules.DAILY_FREE_BATTLES
-	var reset_eta := ArenaRules.format_eta_short(ArenaRules.ms_until_et_midnight())
+	var used := ArenaManager.rewarded_wins_today
+	var remaining := ArenaManager.rewarded_wins_remaining
+	var daily_max := ArenaRules.DAILY_REWARDED_WINS
+	var reset_eta := ArenaRules.format_eta_short(ArenaRules.ms_until_game_day_reset_utc())
 
 	_rating_label.text = NumberDisplay.quantity(c.get("arena_rating", 1000))
 	_stat_wl.text = "%s / %s" % [NumberDisplay.quantity(c.get("arena_wins", 0)), NumberDisplay.quantity(c.get("arena_losses", 0))]
 	_stat_streak.text = NumberDisplay.quantity(c.get("arena_streak", 0))
-	_refresh_free_battles_panel(free_left, daily_max, reset_eta)
+	if _stat_rank != null:
+		var rank := ArenaManager.rank_position
+		_stat_rank.text = str(rank) if rank > 0 else "—"
+	_refresh_free_battles_panel(used, remaining, daily_max, reset_eta)
 
 	if ArenaManager.cooldown_active():
 		_cooldown_panel.visible = true
@@ -719,14 +747,19 @@ func _update_lobby_chrome() -> void:
 			ArenaRules.format_ms(ArenaManager.cooldown_remaining_ms()),
 			NumberDisplay.nova(ArenaRules.SKIP_COST),
 		]
+		if _skip_btn != null:
+			_skip_btn.visible = true
 	else:
 		_cooldown_panel.visible = false
+		if _skip_btn != null:
+			_skip_btn.visible = false
 
 
-func _refresh_free_battles_panel(free_left: int, daily_max: int, reset_eta: String) -> void:
+func _refresh_free_battles_panel(used: int, remaining: int, daily_max: int, reset_eta: String) -> void:
 	if _free_panel == null:
 		return
-	var left := clampi(free_left, 0, daily_max)
+	var used_n := clampi(used, 0, daily_max)
+	var left := clampi(remaining, 0, daily_max)
 	var depleted := left <= 0
 	var final_one := left == 1
 	var accent := Color("#64748B") if depleted else (Color("#F59E0B") if final_one else Color("#FBBF24"))
@@ -740,26 +773,24 @@ func _refresh_free_battles_panel(free_left: int, daily_max: int, reset_eta: Stri
 	_free_title.add_theme_color_override("font_color", accent)
 	_free_count.add_theme_color_override("font_color", Color("#CBD5E1") if depleted else accent)
 	if depleted:
-		_free_count.text = "FREE BATTLES USED FOR TODAY"
-		_free_count.add_theme_font_size_override("font_size", 20)
-		_free_support.text = "Daily free quota spent (%s/%s). Keep climbing with paid battles for %s Nova each — rating only." % [
-			NumberDisplay.quantity(daily_max), NumberDisplay.quantity(daily_max), NumberDisplay.nova(ArenaRules.PAID_BATTLE_COST),
-		]
+		_free_count.text = "RATING ONLY"
+		_free_count.add_theme_font_size_override("font_size", 24)
+		_free_support.text = "First %s wins of the game day already granted XP and Stardust. Further fights still change rating and start cooldown." % NumberDisplay.quantity(daily_max)
 	elif final_one:
-		_free_count.text = "1 / %s  FINAL FREE BATTLE" % daily_max
+		_free_count.text = "%s / %s  LAST REWARD WIN" % [str(used_n), str(daily_max)]
 		_free_count.add_theme_font_size_override("font_size", 26)
-		_free_support.text = "Last free battle of the day — use it for ranking progress and rewards."
+		_free_support.text = "One rewarded win left today. After it, battles stay unlimited for rating only."
 	else:
-		_free_count.text = "%s / %s  REMAINING" % [str(left), str(daily_max)]
+		_free_count.text = "%s / %s  REWARD WINS" % [str(used_n), str(daily_max)]
 		_free_count.add_theme_font_size_override("font_size", 28)
-		_free_support.text = "Use your free Arena battles each day to earn ranking progress and rewards."
+		_free_support.text = "First %s wins each game day grant XP and Stardust. Losses do not consume a rewarded win." % NumberDisplay.quantity(daily_max)
 
 	_free_hint.text = "Resets\n%s" % reset_eta
 
 	var i := 0
 	for child in _free_segments.get_children():
 		if child is ColorRect:
-			var filled := i < left
+			var filled := i < used_n
 			(child as ColorRect).color = Color(accent, 1.0 if filled else 0.22) if not depleted else Color("#64748B", 0.28)
 			i += 1
 
@@ -867,8 +898,8 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	stats.add_child(_mini_stat("trophy", "RATING", str(opp.get("arena_rating", 1000)), Color("#FBBF24")))
 	stats.add_child(_mini_stat("flame", win_rate_txt, "%s/%s" % [str(wins), str(losses)], Color("#FB7185"), true))
 
-	var is_free := ArenaManager.free_battles_left > 0
-	var preview := ArenaRules.preview_arena_match(GameManager.active_character, opp, is_free)
+	var reward_eligible := ArenaManager.rewarded_wins_remaining > 0
+	var preview := ArenaRules.preview_arena_match(GameManager.active_character, opp, reward_eligible)
 	var on_win: Dictionary = preview.get("onWin", {})
 	var on_loss: Dictionary = preview.get("onLoss", {})
 
@@ -882,7 +913,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	stake.add_child(stake_col)
 
 	var stake_kind := Label.new()
-	stake_kind.text = "FREE" if is_free else "RATING"
+	stake_kind.text = "REWARD" if reward_eligible else "RATING ONLY"
 	stake_kind.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stake_kind.add_theme_font_size_override("font_size", 12)
 	stake_kind.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -910,7 +941,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(win_val)
 	win_col.add_child(win_val)
 	var win_loot := Label.new()
-	if is_free:
+	if reward_eligible:
 		win_loot.text = "%s XP · %s Stardust" % [
 			NumberDisplay.quantity(on_win.get("experience", 0)),
 			NumberDisplay.quantity(on_win.get("stardust", 0)),
@@ -940,7 +971,7 @@ func _make_card(opp: Dictionary) -> PanelContainer:
 	ClientUi.apply_display_font(lose_val)
 	lose_col.add_child(lose_val)
 	var lose_sub := Label.new()
-	lose_sub.text = "no loot" if is_free else "rating"
+	lose_sub.text = "no loot" if reward_eligible else "rating"
 	lose_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lose_sub.add_theme_font_size_override("font_size", 12)
 	lose_sub.add_theme_color_override("font_color", ClientUi.MUTED)

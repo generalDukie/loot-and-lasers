@@ -400,15 +400,17 @@ func _arena_summary(result: Dictionary) -> Dictionary:
 	var rewards: Dictionary = result.get("rewards", {}) if typeof(result.get("rewards", null)) == TYPE_DICTIONARY else {}
 	var opp: Dictionary = result.get("opp", {}) if typeof(result.get("opp", null)) == TYPE_DICTIONARY else {}
 	var delta := int(rewards.get("arena_rating_delta", result.get("rankingChange", 0)))
-	var was_free := bool(result.get("is_free", rewards.get("free", true)))
+	var rating_only := bool(result.get("rating_only", rewards.get("rating_only", false)))
+	if int(rewards.get("experience", 0)) <= 0 and int(rewards.get("stardust", 0)) <= 0:
+		rating_only = rating_only or won
 	var nova_spent := int(result.get("nova_spent", 0))
 	var note := ""
 	if not won:
 		note = "No rewards on defeat."
-	elif not was_free:
-		note = "Paid battle — rating only."
+	elif rating_only:
+		note = "Daily reward cap — rating only."
 	else:
-		note = "Free battle rewards applied."
+		note = "Arena rewards applied."
 	if nova_spent > 0:
 		note += " Nova spent: %s." % nova_spent
 	var opp_name := str(opp.get("name", "rival"))

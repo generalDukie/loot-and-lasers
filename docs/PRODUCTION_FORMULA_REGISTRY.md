@@ -307,11 +307,11 @@ Enemy total budget: `rround(production EPA × 1.20)` regular; `rround(production
 
 ## PM-ARENA-XP / SD / ORDER
 
-XP `rround(2.125 * mission_xpf(L))`. **B**.
+XP `rround(2.125 * mission_xpf(L))`. **A** live via `arenaXpReward` / `getArenaXpReward` / `applyArenaRewardGrant`.
 
-SD `rround(2.25 * SPF(L))`. **A**.
+SD `rround(2.25 * SPF(L))`. **A** live via `arenaStardustReward` / `ArenaWinStardust`.
 
-Certified T18 daily-loop order: snapshot `arenaL=self.L`; grant XP; **then** Stardust at `self.L` after possible level-up. Product 10-wins/day wrapper is not Phase 0.
+Certified T18 daily-loop order: snapshot `arenaL=self.L`; grant XP; **then** Stardust at `self.L` after possible level-up. **A** live via `applyArenaRewardGrant`. Product wrapper: first 10 reward-eligible wins per 19:00 UTC game day; losses grant 0 and do not consume a win. Direct-challenge reductions stay outside these primitives. Phase 8 doc: `docs/PHASE8_ARENA_PVP.md`.
 
 ---
 

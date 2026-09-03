@@ -22,7 +22,7 @@ import {
   CASINO_MAX_STARDUST_BET_CAP,
   SHIP_TYPES,
 } from "../server/src/shared/economyFormulas.js";
-import { missionXpReward, miningStardustResolved, MINUTES_PER_HOUR } from "../src/lib/productionMath/index.js";
+import { missionXpReward, miningStardustResolved, MINUTES_PER_HOUR, arenaXpReward, arenaStardustReward } from "../src/lib/productionMath/index.js";
 import { computeItemVendorValue } from "../server/src/shared/itemGeneration.js";
 
 if (XP_STARDUST_SCALE !== 10) {
@@ -60,8 +60,8 @@ assertEq("Live purchase #655 (= attrcost 650)", getAttributePointCost(655), 1115
 
 const sd10 = getMissionStardustPerFuel(10);
 const sd50 = getMissionStardustPerFuel(50);
-assertEq("Arena XP L10", getArenaXpReward(10), Math.max(1, Math.round((160 * 5) / 7)));
-assertEq("Arena SD L10", getArenaStardustReward(10), Math.round(2.25 * sd10));
+assertEq("Arena XP L10", getArenaXpReward(10), arenaXpReward(10));
+assertEq("Arena SD L10", getArenaStardustReward(10), arenaStardustReward(10));
 assertEq("Arena refresh", ARENA_REFRESH_COST, 500);
 assertEq("Guild create", GUILD_CREATE_COST, 5000);
 assertEq("Guild war declare", GUILD_WAR_DECLARE_COST, 5000);

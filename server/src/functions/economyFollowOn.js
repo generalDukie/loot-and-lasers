@@ -56,7 +56,7 @@ import {
   NOVA_HALF_UNITS_PER_NOVA,
 } from "../shared/currencyService.js";
 import { randomItem } from "../shared/rewards.js";
-import { getCollectionPercentage, applyXpBonus } from "../shared/collectionBonus.js";
+import { getCollectionPercentage } from "../shared/collectionBonus.js";
 import { mergeAchievementUnlocks } from "../shared/achievements.js";
 import { notifyAchievementsUnlocked, tryCreateNotification } from "../shared/notificationService.js";
 import {
@@ -87,11 +87,12 @@ import {
   getTierCost,
   getNextModTier,
   computeMaxFuelForLoadout,
-  ARENA_DAILY_FREE_BATTLES,
-  ARENA_PAID_BATTLE_COST,
   ARENA_SKIP_COST,
+  ARENA_PREPARE_SKIP_LEDGER_CATEGORY,
   computeArenaRewards,
+  applyArenaRewardGrant,
   getArenaRewardedWinsState,
+  productionGameDayId,
   WEEKLY_NOVA_QUESTS,
   RETIRED_WEEKLY_NOVA_QUEST_IDS,
   ensureWeeklyNovaState,
@@ -122,11 +123,11 @@ import {
   resolveQuantity,
   EntitlementErrors,
 } from "../entitlements/index.js";
-import {
-  completeDirectChallenge,
-  settleBotAsOpponent,
-} from "../arena/index.js";
+import { completeDirectChallenge } from "../arena/service.js";
+import { settleBotAsOpponent } from "../arena/bots.js";
 import { ArenaError } from "../arena/errors.js";
+import { getChallengeById } from "../arena/store.js";
+import { DIRECT_CHALLENGE_REDUCED_REWARD_MULTIPLIER } from "../arena/config.js";
 import {
   auditCasinoSettle,
   auditMiningEvent,
@@ -216,7 +217,6 @@ import { ARENA_DEFAULT_RATING } from "../arena/config.js";
 
 const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
 const DEFAULT_NEARBY_RANK_RADIUS = 5;
-const DIRECT_CHALLENGE_REDUCED_REWARD_MULTIPLIER = 0.25;
 const ARENA_STREAK_NEWS_MILESTONES = Object.freeze([5, 10, 15, 20]);
 const ARENA_STREAK_NEWS_MINIMUM = ARENA_STREAK_NEWS_MILESTONES[0];
 const DRU_PRECISION_SCALE = 100;
@@ -356,19 +356,58 @@ function stripShopNoise(item) {
   return rest;
 }
 
+function arenaGameDay(nowMs = clock.nowMs()) {
+  return productionGameDayId(nowMs);
+}
+
+function combatantFromDefenseSnapshot(snap) {
+  if (!snap || typeof snap !== "object") return null;
+  return {
+    id: snap.characterId,
+    name: snap.name,
+    race: snap.race,
+    class: snap.class,
+    level: snap.level || 1,
+    arena_rating: snap.arena_rating || ARENA_DEFAULT_RATING,
+    arena_wins: snap.arena_wins || 0,
+    arena_losses: snap.arena_losses || 0,
+    stats: snap.stats || {},
+    appearance: snap.appearance || {},
+    avatar_url: snap.avatar_url || null,
+  };
+}
+
+function publicOpponentFromDefenseSnapshot(snap) {
+  if (!snap || typeof snap !== "object") return null;
+  return {
+    id: snap.characterId,
+    name: snap.name,
+    level: snap.level || 1,
+    class: snap.class,
+    race: snap.race,
+    arena_rating: snap.arena_rating || ARENA_DEFAULT_RATING,
+    arena_wins: snap.arena_wins || 0,
+    arena_losses: snap.arena_losses || 0,
+    appearance: snap.appearance || null,
+    character_id: snap.characterId,
+    realCharacterId: snap.characterId,
+    isBot: false,
+    is_bot: false,
+  };
+}
+
 // ── Arena ────────────────────────────────────────────────────
 export const SyncArenaDay = wrap((user, body = {}) => {
   assertArenaClientSafe(body);
   const ch = requireMyChar(user);
-  const today = todayET();
-  let left = ch.arena_attempts_left ?? ARENA_DAILY_FREE_BATTLES;
+  const today = arenaGameDay();
+  const rewarded = getArenaRewardedWinsState(ch, today);
   let character = ch;
   let patched = false;
-  if (ch.arena_attempts_date !== today) {
-    left = ARENA_DAILY_FREE_BATTLES;
+  if (ch.arena_rewarded_wins_date !== today) {
     character = entities.Character.update(ch.id, {
-      arena_attempts_left: left,
-      arena_attempts_date: today,
+      arena_rewarded_wins_today: 0,
+      arena_rewarded_wins_date: today,
     });
     patched = true;
   }
@@ -377,8 +416,8 @@ export const SyncArenaDay = wrap((user, body = {}) => {
     success: true,
     patched,
     arena,
-    arena_attempts_left: left,
-    arena_attempts_date: today,
+    rewarded_wins_today: rewarded.wins,
+    game_day: today,
     character,
   };
 });
@@ -386,7 +425,7 @@ export const SyncArenaDay = wrap((user, body = {}) => {
 export const GetArenaStatus = wrap((user, body = {}) => {
   assertArenaClientSafe(body);
   const ch = requireMyChar(user);
-  const today = todayET();
+  const today = arenaGameDay();
   const arena = serializeArenaState(ch, clock.nowMs(), today);
   return { success: true, arena, character: ch, balances: getBalances(ch) };
 });
@@ -416,9 +455,9 @@ export const GetArenaOpponents = wrap((user, body = {}) => {
     opponents: result.offers,
     expires_at: result.expires_at,
     replay: result.replay,
-    arena: serializeArenaState(ch, clock.nowMs(), todayET()),
+    arena: serializeArenaState(ch, clock.nowMs(), arenaGameDay()),
     character: ch,
-    debug_offers: result.debug || null,
+    debug_offers: isAdmin(user) ? (result.debug || null) : null,
   };
 });
 
@@ -429,7 +468,7 @@ export const GetArenaLeaderboard = wrap((user, body = {}) => {
     limit: body.limit,
     offset: body.offset,
   });
-  const arena = serializeArenaState(ch, clock.nowMs(), todayET());
+  const arena = serializeArenaState(ch, clock.nowMs(), arenaGameDay());
   const out = {
     success: true,
     leaderboard_id: page.leaderboard_id,
@@ -550,7 +589,6 @@ export const RefreshArenaOpponents = wrap((user, body = {}) => {
 export const SkipArenaCooldown = wrap((user, body = {}) => {
   assertArenaClientSafe(body);
   const ch = requireMyChar(user);
-  assertArenaCooldownActive(ch);
   const requestId = String(body?.request_id || body?.idempotencyKey || "").trim();
   if (requestId) {
     const prior = recoverTransaction(user.id, "arena_cooldown_skip", requestId);
@@ -559,7 +597,7 @@ export const SkipArenaCooldown = wrap((user, body = {}) => {
       return {
         success: true,
         patch: {},
-        arena: serializeArenaState(live, clock.nowMs(), todayET()),
+        arena: serializeArenaState(live, clock.nowMs(), arenaGameDay()),
         character: live,
         balances: getBalances(live),
         transaction: prior,
@@ -567,6 +605,7 @@ export const SkipArenaCooldown = wrap((user, body = {}) => {
       };
     }
   }
+  assertArenaCooldownActive(ch);
   const mut = debitNova({
     user,
     character: ch,
@@ -579,7 +618,7 @@ export const SkipArenaCooldown = wrap((user, body = {}) => {
   return {
     success: true,
     patch: mut.patch,
-    arena: serializeArenaState(mut.character, clock.nowMs(), todayET()),
+    arena: serializeArenaState(mut.character, clock.nowMs(), arenaGameDay()),
     character: mut.character,
     balances: mut.balances,
     transaction: mut.transaction,
@@ -589,302 +628,132 @@ export const SkipArenaCooldown = wrap((user, body = {}) => {
 
 /**
  * Authoritative Arena combat prepare — shared simulator, committed pending.
- * Client supplies offer_id only (not winner/stats).
+ * Client supplies offer_id or challenge_id only (not winner/stats).
  */
 export const PrepareArenaCombat = wrap((user, body = {}) => {
   assertArenaClientSafe(body);
   let ch = requireMyChar(user);
   const offerId = String(body.offer_id || body.offerId || "").trim();
-  if (!offerId) httpErr(400, "offer_id required", "ARENA_OFFER_REQUIRED");
+  const challengeId = String(body.challenge_id || body.challengeId || "").trim();
+  if (!offerId && !challengeId) {
+    httpErr(400, "offer_id or challenge_id required", "ARENA_OFFER_REQUIRED");
+  }
 
-  const today = todayET();
-  let freeLeft = ch.arena_attempts_left ?? ARENA_DAILY_FREE_BATTLES;
-  if (ch.arena_attempts_date !== today) freeLeft = ARENA_DAILY_FREE_BATTLES;
-
+  const today = arenaGameDay();
   const skipRequested = !!body.skip_cooldown || !!body.skipped;
   const cooldownWasActive = isArenaCooldownActive(ch);
   const skipCooldown = skipRequested && cooldownWasActive;
-  const wantFree = body.is_free != null ? !!body.is_free : freeLeft > 0;
-  const useFree = wantFree && freeLeft > 0;
-
   assertArenaCooldownClear(ch, { skip: skipCooldown });
 
-  let novaCost = 0;
-  if (skipCooldown) novaCost += ARENA_SKIP_COST;
-  if (!useFree) novaCost += ARENA_PAID_BATTLE_COST;
-  if (novaCost > 0 && !hasNova(ch, novaCost)) {
+  let combatant;
+  let opponentItems = [];
+  let publicOpponent = null;
+  let arenaBotId = null;
+  let realCharacterId = null;
+  let isBot = false;
+  let opponentRating = ARENA_DEFAULT_RATING;
+
+  if (challengeId) {
+    const challenge = getChallengeById(challengeId);
+    if (!challenge) httpErr(404, "Challenge not found", "ARENA_CHALLENGE_NOT_FOUND");
+    if (challenge.challengerAccountId !== user.id) {
+      httpErr(403, "Not your challenge", "ARENA_CHALLENGE_NOT_OWNED");
+    }
+    if (challenge.status === "completed") {
+      httpErr(409, "Challenge already completed", "ARENA_CHALLENGE_ALREADY_COMPLETED");
+    }
+    const snap = challenge.defenseSnapshot;
+    combatant = combatantFromDefenseSnapshot(snap);
+    if (!combatant) httpErr(409, "Defense snapshot unavailable", "ARENA_DEFENSE_SNAPSHOT_UNAVAILABLE");
+    opponentItems = Array.isArray(snap.equippedItems) ? snap.equippedItems : [];
+    publicOpponent = publicOpponentFromDefenseSnapshot(snap);
+    realCharacterId = snap.characterId || challenge.opponentCharacterId || null;
+    opponentRating = challenge.opponentRatingAtStart || combatant.arena_rating || ARENA_DEFAULT_RATING;
+  } else {
+    const resolved = resolveOfferCombatant(ch, offerId);
+    combatant = resolved.combatant;
+    opponentItems = resolved.items;
+    publicOpponent = resolved.publicOpponent;
+    arenaBotId = resolved.arena_bot_id;
+    realCharacterId = resolved.realCharacterId;
+    isBot = resolved.isBot;
+    opponentRating = resolved.combatant.arena_rating || ARENA_DEFAULT_RATING;
+  }
+
+  if (skipCooldown && !hasNova(ch, ARENA_SKIP_COST)) {
     httpErr(400, "Not enough Nova Crystals", "INSUFFICIENT_NOVA");
   }
 
-  const resolved = resolveOfferCombatant(ch, offerId);
-  const existing = readArenaPendingCombat(ch);
-  if (
-    existing?.combat_id &&
-    String(existing.meta?.offer_id || "") === offerId &&
-    existing.winner &&
-    Array.isArray(existing.events)
-  ) {
-    const pubExisting = publicCombatResult(existing);
-    return {
-      success: true,
-      combat: pubExisting,
-      opponent: {
-        ...(pubExisting?.enemy || {}),
-        ...(resolved.publicOpponent || {}),
-      },
-      offer_id: offerId,
-      arena: serializeArenaState(ch, clock.nowMs(), today),
-      character: ch,
-      replay: true,
-      is_free: existing.meta?.is_free !== false,
-    };
-  }
-
+  let novaSpent = 0;
+  let skipTransaction = null;
   const prepared = prepareArenaCombatForCharacter(ch, {
     offerId,
-    combatant: resolved.combatant,
-    opponentItems: resolved.items,
-    opponentSummary: resolved.publicOpponent,
-    arenaBotId: resolved.arena_bot_id,
-    realCharacterId: resolved.realCharacterId,
-    isBot: resolved.isBot,
-    opponentRating: resolved.combatant.arena_rating || ARENA_DEFAULT_RATING,
+    challengeId,
+    combatant,
+    opponentItems,
+    opponentSummary: publicOpponent,
+    arenaBotId,
+    realCharacterId,
+    isBot,
+    opponentRating,
     skipCooldown,
-    isFree: useFree,
+    skipPaid: skipCooldown,
+    skipNova: skipCooldown ? ARENA_SKIP_COST : 0,
     rng: secureRandom,
+    applyBeforeCommit: skipCooldown
+      ? (character, combat) => {
+          const mut = debitNova({
+            user,
+            character,
+            amount: ARENA_SKIP_COST,
+            category: ARENA_PREPARE_SKIP_LEDGER_CATEGORY,
+            reasonCode: ARENA_PREPARE_SKIP_LEDGER_CATEGORY,
+            idempotencyKey: `${ARENA_PREPARE_SKIP_LEDGER_CATEGORY}:${character.id}:${combat.combat_id}`,
+            extraPatch: clearArenaCooldownPatch(),
+          });
+          novaSpent = ARENA_SKIP_COST;
+          skipTransaction = mut.transaction;
+        }
+      : null,
   });
   ch = prepared.character;
+  const pendingMeta = prepared.combat?.meta || {};
+  const skipPaid = !!(pendingMeta.skip_paid || (prepared.replay && pendingMeta.skip_cooldown));
+  if (prepared.replay) {
+    novaSpent = 0;
+  }
 
-  // Persist entitlement intent on pending meta only — Nova charged on Finish so
-  // failed prepare never spends. (Combat already committed.)
   const pub = publicCombatResult(prepared.combat);
   const opponent = {
     ...(pub?.enemy || {}),
-    ...(resolved.publicOpponent || {}),
+    ...(publicOpponent || {}),
   };
   return {
     success: true,
     combat: pub,
     opponent,
-    offer_id: offerId,
+    offer_id: offerId || null,
+    challenge_id: challengeId || null,
     arena: serializeArenaState(ch, clock.nowMs(), today),
     character: ch,
     replay: prepared.replay,
-    is_free: useFree,
-    skip_cooldown: skipCooldown,
-    estimated_nova_cost: novaCost,
+    skip_cooldown: !!(skipCooldown || pendingMeta.skip_cooldown),
+    skip_paid: skipPaid,
+    nova_spent: novaSpent,
+    estimated_nova_cost: prepared.replay ? 0 : (skipCooldown ? ARENA_SKIP_COST : 0),
+    balances: getBalances(ch),
+    transaction: skipTransaction,
   };
 });
 
 export const FinishArenaBattle = wrap((user, body = {}) => {
-  // Direct challenges keep rating settlement via challenge snapshot.
-  if (body.challenge_id || body.challengeId) {
-    // Legacy: direct-challenge completion still accepts client won until
-    // challenge PrepareCombat is restored. Ladder path never trusts won.
-    const legacyChallengeWon = !!body.won;
-    assertArenaClientSafe(body);
-    const challengeId = body.challenge_id || body.challengeId;
-    let dc;
-    try {
-      const ch0 = requireMyChar(user);
-      const pending = readArenaPendingCombat(ch0);
-      const wonFromPending =
-        pending && String(pending.meta?.challenge_id || "") === String(challengeId)
-          ? pending.winner === "player"
-          : null;
-      const won = wonFromPending != null ? wonFromPending : legacyChallengeWon;
-      dc = completeDirectChallenge(user, {
-        challengeId,
-        won,
-        policyVersion: body.policyVersion,
-      });
-    } catch (err) {
-      if (err instanceof ArenaError) httpErr(err.status || 400, err.message, err.code);
-      throw err;
-    }
-
-    const ch = dc.character || requireMyChar(user);
-    const actuallyWon = typeof dc.won === "boolean" ? dc.won : legacyChallengeWon;
-    const today = todayET();
-    let freeLeft = ch.arena_attempts_left ?? ARENA_DAILY_FREE_BATTLES;
-    let attemptsDate = ch.arena_attempts_date;
-    if (attemptsDate !== today) {
-      freeLeft = ARENA_DAILY_FREE_BATTLES;
-      attemptsDate = today;
-    }
-    if (dc.replayed) {
-      const replayWinner = actuallyWon ? "player" : "opponent";
-      const replayRewards = {
-        won: actuallyWon,
-        free: false,
-        experience: 0,
-        stardust: 0,
-        arena_rating_delta: dc.ratingDelta,
-        direct_challenge: true,
-        replayed: true,
-      };
-      const replayOpponentId = String(
-        dc.challenge?.opponentCharacterId || dc.challenge?.opponent_character_id || "",
-      );
-      const battleResult = normalizeArenaBattleResult({
-        battleId: String(challengeId || ""),
-        playerId: ch.id,
-        opponentId: replayOpponentId,
-        winner: replayWinner,
-        rewards: replayRewards,
-        rankingChange: dc.ratingDelta,
-      });
-      return {
-        success: true,
-        winner: replayWinner,
-        won: battleResult.playerWon,
-        outcome: battleResult.outcome,
-        player_won: battleResult.playerWon,
-        battle_result: battleResult,
-        rewards: replayRewards,
-        is_free: false,
-        nova_spent: 0,
-        patch: {},
-        character: ch,
-        challenge_id: challengeId,
-        newly_unlocked: [],
-        replayed: true,
-        arena: serializeArenaState(ch, clock.nowMs(), today),
-      };
-    }
-
-    const isFree = body.is_free != null ? !!body.is_free : freeLeft > 0;
-    const useFree = isFree && freeLeft > 0;
-    const skipCooldown = !!body.skip_cooldown || !!body.skipped;
-    let novaCost = 0;
-    if (skipCooldown) novaCost += ARENA_SKIP_COST;
-    if (!useFree) novaCost += ARENA_PAID_BATTLE_COST;
-    if (novaCost > 0 && !hasNova(ch, novaCost)) httpErr(400, "Not enough Nova Crystals");
-
-    const ratingEligible = (dc.ratingDelta || 0) > 0 || !actuallyWon;
-    const rewardMult = !actuallyWon
-      ? 0
-      : ratingEligible
-        ? 1
-        : DIRECT_CHALLENGE_REDUCED_REWARD_MULTIPLIER;
-    const rewardedState = getArenaRewardedWinsState(ch, today);
-    const baseRewards = computeArenaRewards(
-      ch,
-      { arena_rating: dc.challenge?.opponentRatingAtStart || ARENA_DEFAULT_RATING },
-      actuallyWon,
-      { free: useFree, rewardedWinsToday: rewardedState.wins },
-    );
-    const experience = Math.round((baseRewards.experience || 0) * rewardMult);
-    const stardust = baseRewards.stardust_rewarded
-      ? Math.round((baseRewards.stardust || 0) * (ratingEligible ? 1 : rewardMult))
-      : 0;
-
-    const patch = { ...buildArenaCooldownPatch() };
-    applyXpToCharacter(ch, experience, patch);
-    if (stardust > 0) {
-      patch.stardust = (ch.stardust || 0) + stardust;
-      patch.total_stardust_earned = (ch.total_stardust_earned || 0) + stardust;
-    }
-    if (baseRewards.stardust_rewarded) {
-      patch.arena_rewarded_wins_today = rewardedState.wins + 1;
-      patch.arena_rewarded_wins_date = rewardedState.date;
-    }
-    patch.arena_attempts_left = Math.max(0, freeLeft - (useFree ? 1 : 0));
-    patch.arena_attempts_date = attemptsDate;
-    if (novaCost > 0) Object.assign(patch, novaDebitPatch(ch, novaCost));
-    if (actuallyWon) {
-      const weekly = progressWeeklyNovaQuest(ch, "arena", 1);
-      if (weekly) patch.weekly_nova_quests = weekly;
-    }
-    const ach = mergeAchievementUnlocks(ch, patch);
-    Object.assign(patch, ach.patch);
-    const progression = consumeProgression(patch);
-    patch.arena_pending_combat = null;
-    let character = entities.Character.update(ch.id, patch);
-    if (ach.newly_unlocked?.length) {
-      notifyAchievementsUnlocked(character.id, ach.newly_unlocked);
-    }
-    const challengeWinner = actuallyWon ? "player" : "opponent";
-    const challengeRewards = {
-      ...baseRewards,
-      experience,
-      stardust,
-      arena_rating_delta: dc.ratingDelta,
-      won: actuallyWon,
-    };
-    const opponentId = String(
-      dc.challenge?.opponentCharacterId || dc.challenge?.opponent_character_id || "",
-    );
-    const battleResult = normalizeArenaBattleResult({
-      battleId: String(challengeId || ""),
-      playerId: character.id,
-      opponentId,
-      winner: challengeWinner,
-      rewards: challengeRewards,
-      rankingChange: dc.ratingDelta,
-    });
-    logArenaBattleResultDiag("FinishArenaBattle.direct_challenge", {
-      authenticatedPlayerId: user.id,
-      playerCombatantId: character.id,
-      opponentId,
-      winnerId: battleResult.winnerId,
-      winner: challengeWinner,
-      playerWon: battleResult.playerWon,
-      outcome: battleResult.outcome,
-      rankingChange: battleResult.rankingChange,
-      rewardsRequested: {
-        experience: challengeRewards.experience,
-        stardust: challengeRewards.stardust,
-        arena_rating_delta: challengeRewards.arena_rating_delta,
-      },
-      rewardsGranted: {
-        experience: challengeRewards.experience,
-        stardust: challengeRewards.stardust,
-        arena_rating_delta: challengeRewards.arena_rating_delta,
-      },
-    });
-    let opponents = null;
-    let expiresAt = null;
-    let debugOffers = null;
-    try {
-      const offerRefresh = refreshArenaOffersAfterBattle(character, opponentId);
-      character = offerRefresh.character;
-      opponents = offerRefresh.offers;
-      expiresAt = offerRefresh.expires_at;
-      debugOffers = offerRefresh.debug || null;
-    } catch (err) {
-      console.warn("[ArenaOffers] post-challenge refresh failed:", err?.message || err);
-    }
-    return {
-      success: true,
-      winner: challengeWinner,
-      won: battleResult.playerWon,
-      outcome: battleResult.outcome,
-      player_won: battleResult.playerWon,
-      battle_result: battleResult,
-      rewards: challengeRewards,
-      is_free: useFree,
-      nova_spent: novaCost,
-      patch,
-      character,
-      progression,
-      challenge_id: challengeId,
-      newly_unlocked: ach.newly_unlocked,
-      opponents,
-      expires_at: expiresAt,
-      debug_offers: debugOffers,
-      arena: serializeArenaState(character, clock.nowMs(), today),
-      balances: getBalances(character),
-    };
-  }
-
-  // ── Ladder / offer path (authoritative pending combat) ──
   assertArenaClientSafe(body);
   let ch = requireMyChar(user);
-  const today = todayET();
+  const today = arenaGameDay();
   const nowMs = clock.nowMs();
   const combatIdReq = body.combat_id ? String(body.combat_id).trim() : "";
   const offerId = String(body.offer_id || body.offerId || "").trim();
+  const challengeIdReq = String(body.challenge_id || body.challengeId || "").trim();
 
   if (combatIdReq) {
     const replay = getWalletOperation(user.id, "finish_arena", combatIdReq);
@@ -903,13 +772,17 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
 
   const pending = readArenaPendingCombat(ch);
   if (!pending?.combat_id || !pending.winner) {
-    httpErr(409, "No matching pending Arena combat", "ARENA_NO_PENDING");
+    httpErr(409, "No matching pending Arena combat", "ARENA_NO_PENDING_COMBAT");
   }
   if (combatIdReq && combatIdReq !== pending.combat_id) {
     httpErr(409, "combat_id does not match pending Arena combat", "ARENA_COMBAT_MISMATCH");
   }
   if (offerId && pending.meta?.offer_id && offerId !== pending.meta.offer_id) {
     httpErr(409, "offer_id does not match pending Arena combat", "ARENA_OFFER_MISMATCH");
+  }
+  const pendingChallengeId = String(pending.meta?.challenge_id || "");
+  if (challengeIdReq && pendingChallengeId && challengeIdReq !== pendingChallengeId) {
+    httpErr(409, "challenge_id does not match pending Arena combat", "ARENA_CHALLENGE_MISMATCH");
   }
 
   const priorSettle = getWalletOperation(user.id, "finish_arena", pending.combat_id);
@@ -931,78 +804,116 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
   const won = pending.winner === "player";
   const combatId = pending.combat_id;
   const meta = pending.meta || {};
+  const isDirectChallenge = !!pendingChallengeId;
+  const skipAlreadyPaid = !!meta.skip_paid || Number(meta.skip_nova) > 0;
 
-  let freeLeft = ch.arena_attempts_left ?? ARENA_DAILY_FREE_BATTLES;
-  let attemptsDate = ch.arena_attempts_date;
-  if (attemptsDate !== today) {
-    freeLeft = ARENA_DAILY_FREE_BATTLES;
-    attemptsDate = today;
-  }
-  const useFree = meta.is_free !== false && freeLeft > 0;
-  const skipCooldown = !!meta.skip_cooldown;
-
-  // If cooldown still active and skip was not prepared, reject.
-  if (!skipCooldown) {
+  let ratingDelta = 0;
+  let dc = null;
+  if (isDirectChallenge) {
     try {
-      assertArenaCooldownClear(ch);
+      dc = completeDirectChallenge(user, {
+        challengeId: pendingChallengeId,
+        policyVersion: body.policyVersion,
+      });
     } catch (err) {
-      // Allow finish if cooldown started after prepare (same match).
-      if (ch.arena_last_battle_at && ch.arena_pending_combat) {
-        /* settle anyway — match already simulated */
-      } else {
-        throw err;
-      }
+      if (err instanceof ArenaError) httpErr(err.status || 400, err.message, err.code);
+      throw err;
     }
+    ch = dc.character || entities.Character.get(ch.id) || ch;
+    ratingDelta = dc.ratingDelta || 0;
+    if (dc.replayed) {
+      const replayWinner = won ? "player" : "opponent";
+      const replayRewards = {
+        won,
+        experience: 0,
+        stardust: 0,
+        arena_rating_delta: ratingDelta,
+        direct_challenge: true,
+        replayed: true,
+      };
+      const replayOpponentId = String(
+        dc.challenge?.opponentCharacterId || dc.challenge?.opponent_character_id || "",
+      );
+      const battleResult = normalizeArenaBattleResult({
+        battleId: combatId,
+        playerId: ch.id,
+        opponentId: replayOpponentId,
+        winner: replayWinner,
+        rewards: replayRewards,
+        rankingChange: ratingDelta,
+      });
+      return {
+        success: true,
+        combat_id: combatId,
+        winner: replayWinner,
+        won: battleResult.playerWon,
+        outcome: battleResult.outcome,
+        player_won: battleResult.playerWon,
+        battle_result: battleResult,
+        rewards: replayRewards,
+        nova_spent: 0,
+        patch: {},
+        character: ch,
+        challenge_id: pendingChallengeId,
+        newly_unlocked: [],
+        replayed: true,
+        arena: serializeArenaState(ch, clock.nowMs(), today),
+      };
+    }
+  } else {
+    const oppRating = meta.opponent_rating || ARENA_DEFAULT_RATING;
+    const preview = computeArenaRewards(
+      ch,
+      { arena_rating: oppRating },
+      won,
+      { rewardedWinsToday: getArenaRewardedWinsState(ch, today).wins },
+    );
+    ratingDelta = preview.arena_rating_delta;
   }
 
-  let novaCost = 0;
-  if (skipCooldown) novaCost += ARENA_SKIP_COST;
-  if (!useFree) novaCost += ARENA_PAID_BATTLE_COST;
-  if (novaCost > 0 && !hasNova(ch, novaCost)) {
-    httpErr(400, "Not enough Nova Crystals", "INSUFFICIENT_NOVA");
-  }
-
-  const oppRating = meta.opponent_rating || ARENA_DEFAULT_RATING;
-  const rewardedState = getArenaRewardedWinsState(ch, today);
-  const rewards = computeArenaRewards(
-    ch,
-    { arena_rating: oppRating },
-    won,
-    { free: useFree, rewardedWinsToday: rewardedState.wins },
-  );
   const collectPct = getCollectionPercentage(ch, 0);
-  const boostedXp = won ? applyXpBonus(rewards.experience, collectPct) : 0;
-  const stardustGain = rewards.stardust_rewarded ? (rewards.stardust || 0) : 0;
-  const maxHit = maxPlayerHitFromCombat(pending);
+  let xpMultiplier = 1;
+  let stardustMultiplier = 1;
+  if (isDirectChallenge) {
+    const ratingEligible = (ratingDelta || 0) > 0 || !won;
+    const reduced = DIRECT_CHALLENGE_REDUCED_REWARD_MULTIPLIER;
+    xpMultiplier = !won ? 0 : ratingEligible ? 1 : reduced;
+    stardustMultiplier = !won ? 0 : ratingEligible ? 1 : reduced;
+  }
 
+  const grant = applyArenaRewardGrant(ch, {
+    won,
+    collectPct,
+    xpMultiplier,
+    stardustMultiplier,
+    gameDay: today,
+  });
+  const maxHit = maxPlayerHitFromCombat(pending);
   const patch = {
     arena_pending_combat: null,
     ...buildArenaCooldownPatch(),
+    ...grant.patch,
   };
-  applyXpToCharacter(ch, boostedXp, patch);
-
-  if (rewards.stardust_rewarded) {
-    patch.arena_rewarded_wins_today = rewardedState.wins + 1;
-    patch.arena_rewarded_wins_date = rewardedState.date;
-  } else if (rewardedState.date !== ch.arena_rewarded_wins_date) {
-    patch.arena_rewarded_wins_today = rewardedState.wins;
-    patch.arena_rewarded_wins_date = rewardedState.date;
-  }
+  if (maxHit > 0) patch.highest_damage = Math.max(ch.highest_damage || 0, maxHit);
 
   const prevRating = ch.arena_rating || ARENA_DEFAULT_RATING;
-  const newRating = Math.max(0, prevRating + rewards.arena_rating_delta);
+  let newRating = prevRating;
   const prevStreak = ch.arena_streak || 0;
-  const newStreak = won ? prevStreak + 1 : 0;
-  patch.arena_rating = newRating;
-  patch.arena_wins = (ch.arena_wins || 0) + (won ? 1 : 0);
-  patch.arena_losses = (ch.arena_losses || 0) + (won ? 0 : 1);
-  patch.arena_streak = newStreak;
-  patch.arena_max_streak = Math.max(ch.arena_max_streak || 0, newStreak);
-  patch.arena_battles = (ch.arena_battles || 0) + 1;
-  patch.arena_attempts_left = Math.max(0, freeLeft - (useFree ? 1 : 0));
-  patch.arena_attempts_date = attemptsDate;
-  if (novaCost > 0) Object.assign(patch, novaDebitPatch(ch, novaCost));
-  if (maxHit > 0) patch.highest_damage = Math.max(ch.highest_damage || 0, maxHit);
+  let newStreak = prevStreak;
+  if (!isDirectChallenge) {
+    newRating = Math.max(0, prevRating + ratingDelta);
+    newStreak = won ? prevStreak + 1 : 0;
+    patch.arena_rating = newRating;
+    patch.arena_wins = (ch.arena_wins || 0) + (won ? 1 : 0);
+    patch.arena_losses = (ch.arena_losses || 0) + (won ? 0 : 1);
+    patch.arena_streak = newStreak;
+    patch.arena_max_streak = Math.max(ch.arena_max_streak || 0, newStreak);
+    patch.arena_battles = (ch.arena_battles || 0) + 1;
+  } else {
+    newRating = ch.arena_rating || ARENA_DEFAULT_RATING;
+    newStreak = ch.arena_streak || 0;
+  }
+
   if (won && meta.opponent_summary?.speciesId) {
     mergeSpeciesDiscovery(ch, patch, meta.opponent_summary.speciesId);
   }
@@ -1017,11 +928,9 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
   }
   const ach = mergeAchievementUnlocks(ch, patch);
   Object.assign(patch, ach.patch);
-
-  // Stardust via shared ledger when awarding (atomic with counter in same Character update).
-  if (stardustGain > 0) {
-    patch.stardust = (ch.stardust || 0) + stardustGain;
-    patch.total_stardust_earned = (ch.total_stardust_earned || 0) + stardustGain;
+  if (grant.stardust > 0) {
+    patch.stardust = (ch.stardust || 0) + grant.stardust;
+    patch.total_stardust_earned = (ch.total_stardust_earned || 0) + grant.stardust;
   }
 
   const progression = consumeProgression(patch);
@@ -1035,7 +944,7 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
   if (ladderId) {
     botUpdate = settleBotAsOpponent(ladderId, {
       playerWon: won,
-      playerRatingDelta: rewards.arena_rating_delta,
+      playerRatingDelta: ratingDelta,
     });
   }
 
@@ -1047,15 +956,20 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
   const arena = serializeArenaState(character, clock.nowMs(), today);
 
   const settledRewards = {
-    ...rewards,
-    experience: boostedXp,
-    stardust: stardustGain,
+    won,
+    experience: grant.experience,
+    stardust: grant.stardust,
+    arena_rating_delta: ratingDelta,
+    stardust_rewarded: grant.grantNormal,
+    reward_eligible: grant.grantNormal,
     collectionPct: collectPct,
+    snapshot_level: grant.snapshotLevel,
+    post_xp_level: grant.postXpLevel,
     rating_before: prevRating,
     rating_after: newRating,
     rank_before: rankBefore,
     rank_after: arena.rank_position,
-    won,
+    direct_challenge: isDirectChallenge,
   };
   const opponentId = String(
     meta.real_character_id ||
@@ -1070,29 +984,32 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     opponentId,
     winner: pending.winner,
     rewards: settledRewards,
-    rankingChange: rewards.arena_rating_delta,
+    rankingChange: ratingDelta,
   });
-  logArenaBattleResultDiag("FinishArenaBattle.ladder", {
-    authenticatedPlayerId: user.id,
-    playerCombatantId: character.id,
-    opponentId,
-    winnerId: battleResult.winnerId,
-    winner: pending.winner,
-    playerWon: battleResult.playerWon,
-    outcome: battleResult.outcome,
-    rankingChange: battleResult.rankingChange,
-    rewardsRequested: {
-      experience: settledRewards.experience,
-      stardust: settledRewards.stardust,
-      arena_rating_delta: settledRewards.arena_rating_delta,
+  logArenaBattleResultDiag(
+    isDirectChallenge ? "FinishArenaBattle.direct_challenge" : "FinishArenaBattle.ladder",
+    {
+      authenticatedPlayerId: user.id,
+      playerCombatantId: character.id,
+      opponentId,
+      winnerId: battleResult.winnerId,
+      winner: pending.winner,
+      playerWon: battleResult.playerWon,
+      outcome: battleResult.outcome,
+      rankingChange: battleResult.rankingChange,
+      rewardsRequested: {
+        experience: settledRewards.experience,
+        stardust: settledRewards.stardust,
+        arena_rating_delta: settledRewards.arena_rating_delta,
+      },
+      rewardsGranted: {
+        experience: settledRewards.experience,
+        stardust: settledRewards.stardust,
+        arena_rating_delta: settledRewards.arena_rating_delta,
+        rating_after: newRating,
+      },
     },
-    rewardsGranted: {
-      experience: settledRewards.experience,
-      stardust: settledRewards.stardust,
-      arena_rating_delta: settledRewards.arena_rating_delta,
-      rating_after: newRating,
-    },
-  });
+  );
 
   const resultBody = {
     success: true,
@@ -1104,8 +1021,9 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     battle_result: battleResult,
     combat: publicCombatResult(pending),
     rewards: settledRewards,
-    is_free: useFree,
-    nova_spent: novaCost,
+    nova_spent: 0,
+    skip_paid: skipAlreadyPaid,
+    skip_nova: skipAlreadyPaid ? ARENA_SKIP_COST : 0,
     opponent: meta.opponent_summary || null,
     patch,
     character,
@@ -1115,16 +1033,16 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     bot: botUpdate,
     arena,
     balances: getBalances(character),
+    challenge_id: pendingChallengeId || null,
   };
 
-  // Fresh contender board after every settled ladder fight (not a UI reshuffle).
   try {
     const offerRefresh = refreshArenaOffersAfterBattle(character, opponentId);
     character = offerRefresh.character;
     resultBody.character = character;
     resultBody.opponents = offerRefresh.offers;
     resultBody.expires_at = offerRefresh.expires_at;
-    resultBody.debug_offers = offerRefresh.debug || null;
+    resultBody.debug_offers = isAdmin(user) ? (offerRefresh.debug || null) : null;
     resultBody.arena = serializeArenaState(character, clock.nowMs(), today);
     resultBody.balances = getBalances(character);
   } catch (err) {
@@ -1140,10 +1058,12 @@ export const FinishArenaBattle = wrap((user, body = {}) => {
     player_won: battleResult.playerWon,
     battle_result: battleResult,
     rewards: resultBody.rewards,
-    is_free: useFree,
-    nova_spent: novaCost,
+    nova_spent: 0,
+    skip_paid: skipAlreadyPaid,
+    skip_nova: skipAlreadyPaid ? ARENA_SKIP_COST : 0,
     arena,
     balances: resultBody.balances,
+    challenge_id: pendingChallengeId || null,
   });
 
   try {
@@ -1191,7 +1111,7 @@ export const RecoverArenaMatch = wrap((user, body = {}) => {
         success: true,
         ...replay,
         character: ch,
-        arena: serializeArenaState(ch, clock.nowMs(), todayET()),
+        arena: serializeArenaState(ch, clock.nowMs(), arenaGameDay()),
         balances: getBalances(ch),
         recovered: true,
       };
@@ -1205,14 +1125,16 @@ export const RecoverArenaMatch = wrap((user, body = {}) => {
       combat: publicCombatResult(pending),
       combat_id: pending.combat_id,
       opponent: pending.meta?.opponent_summary || null,
-      arena: serializeArenaState(ch, clock.nowMs(), todayET()),
+      skip_paid: !!(pending.meta?.skip_paid || Number(pending.meta?.skip_nova) > 0),
+      skip_nova: Number(pending.meta?.skip_nova) || 0,
+      arena: serializeArenaState(ch, clock.nowMs(), arenaGameDay()),
       character: ch,
     };
   }
   return {
     success: true,
     pending: false,
-    arena: serializeArenaState(ch, clock.nowMs(), todayET()),
+    arena: serializeArenaState(ch, clock.nowMs(), arenaGameDay()),
     character: ch,
   };
 });

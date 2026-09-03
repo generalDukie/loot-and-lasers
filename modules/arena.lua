@@ -1168,13 +1168,20 @@ local function rpc_arena_get_history(context, payload)
   })
 end
 
-nk.register_rpc(rpc_arena_get_state, "arena_get_state")
-nk.register_rpc(rpc_arena_get_opponents, "arena_get_opponents")
-nk.register_rpc(rpc_arena_refresh_opponents, "arena_refresh_opponents")
-nk.register_rpc(rpc_arena_get_rankings, "arena_get_rankings")
-nk.register_rpc(rpc_arena_challenge, "arena_challenge")
-nk.register_rpc(rpc_arena_get_history, "arena_get_history")
-nk.logger_info("Phase 18 arena RPCs registered")
+local function rpc_arena_gameplay_blocked(_context, _payload)
+  return encode_fail(
+    "Arena gameplay is Node-authoritative. Nakama is authentication-only.",
+    403
+  )
+end
+
+nk.register_rpc(rpc_arena_gameplay_blocked, "arena_get_state")
+nk.register_rpc(rpc_arena_gameplay_blocked, "arena_get_opponents")
+nk.register_rpc(rpc_arena_gameplay_blocked, "arena_refresh_opponents")
+nk.register_rpc(rpc_arena_gameplay_blocked, "arena_get_rankings")
+nk.register_rpc(rpc_arena_gameplay_blocked, "arena_challenge")
+nk.register_rpc(rpc_arena_gameplay_blocked, "arena_get_history")
+nk.logger_info("Phase 18 arena RPCs registered as NAKAMA_GAMEPLAY_BLOCKED")
 
 return {
   STATE_COLLECTION = STATE_COLLECTION,

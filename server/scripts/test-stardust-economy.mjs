@@ -27,6 +27,7 @@ import {
 import {
   computeMissionStardustFromFuel,
   computeArenaRewards,
+  getArenaXpReward,
   getAttributePointCost,
   getAttributePurchaseCount,
   getNextAttributePointCost,
@@ -166,18 +167,18 @@ test("Arena first 10 wins/day", () => {
   assert.equal(arenaWinGrantsStardust(9), true);
   assert.equal(arenaWinGrantsStardust(10), false);
   const loss = computeArenaRewards({ level: 50, arena_rating: 1000 }, { arena_rating: 1000 }, false, {
-    free: true, rewardedWinsToday: 0,
+    rewardedWinsToday: 0,
   });
   assert.equal(loss.stardust, 0);
   const win11 = computeArenaRewards({ level: 50, arena_rating: 1000 }, { arena_rating: 1000 }, true, {
-    free: true, rewardedWinsToday: 10,
+    rewardedWinsToday: 10,
   });
   assert.equal(win11.stardust, 0);
   const win1 = computeArenaRewards({ level: 50, arena_rating: 1000 }, { arena_rating: 1000 }, true, {
-    free: false, rewardedWinsToday: 0,
+    rewardedWinsToday: 0,
   });
   assert.equal(win1.stardust, ArenaWinStardust(50));
-  assert.equal(win1.experience, 0); // paid fight: XP still free-gated
+  assert.equal(win1.experience, getArenaXpReward(50));
   const state = getArenaRewardedWinsState({ arena_rewarded_wins_today: 3, arena_rewarded_wins_date: "2026-01-01" }, "2026-01-02");
   assert.equal(state.wins, 0);
 });

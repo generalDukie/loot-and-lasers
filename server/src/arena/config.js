@@ -37,9 +37,12 @@ export const REPEAT_OPPONENT = {
   reducedMultiplier: Number(process.env.ARENA_REPEAT_MULT || 0.4),
   /** After this many wins in period → zero positive rating. */
   zeroRewardAfter: Number(process.env.ARENA_REPEAT_ZERO_AFTER || 2),
-  /** Period key: "daily" uses arena ET day. */
+  /** Period key: "daily" uses production 19:00 UTC game day. */
   period: process.env.ARENA_REPEAT_PERIOD || "daily",
 };
+
+/** XP/SD multiplier when a rated direct-challenge win is not full-reward. Applied outside canonical formulas. */
+export const DIRECT_CHALLENGE_REDUCED_REWARD_MULTIPLIER = 0.25;
 
 export const CHALLENGE_LIMITS = {
   /** ms between creating new direct challenges. */

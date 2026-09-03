@@ -33,11 +33,12 @@ const {
 const {
   ARENA_WIN_FUEL_EQUIVALENT,
   ARENA_REWARDED_WINS_PER_DAY,
+  ARENA_SKIP_COST,
   computeArenaRewards,
   ArenaWinStardust,
   getArenaRewardedWinsState,
 } = await import("../src/shared/economyFormulas.js");
-const { ARENA_PAID_BATTLE_COST } = await import("../src/shared/economyFormulas.js");
+const { toNovaHalfUnits } = await import("../src/shared/currencyService.js");
 
 let passed = 0;
 let failed = 0;
@@ -89,8 +90,6 @@ function makeChar(ownerId, opts = {}) {
     arena_losses: 0,
     arena_streak: 0,
     arena_battles: opts.battles ?? 0,
-    arena_attempts_left: opts.attempts ?? 10,
-    arena_attempts_date: opts.attemptsDate,
     arena_rewarded_wins_today: opts.rewardedWins ?? 0,
     arena_rewarded_wins_date: opts.rewardedDate,
     arena_cooldown_at: opts.cooldownAt || null,
@@ -123,7 +122,6 @@ test("cooldown is 10 minutes", () => {
 test("Arena Stardust multiplier is 2.25 (not 1.5)", () => {
   assert.equal(ARENA_WIN_FUEL_EQUIVALENT, 2.25);
   assert.equal(ARENA_REWARDED_WINS_PER_DAY, 10);
-  assert.equal(ARENA_PAID_BATTLE_COST, 15);
   const sd = ArenaWinStardust(50);
   assert.ok(sd > 0);
 });
@@ -131,13 +129,15 @@ test("Arena Stardust multiplier is 2.25 (not 1.5)", () => {
 test("rewarded wins gate: 10th grants, 11th zero", () => {
   const player = { level: 20, arena_rating: 1000 };
   const opp = { arena_rating: 1000 };
-  const r10 = computeArenaRewards(player, opp, true, { free: true, rewardedWinsToday: 9 });
+  const r10 = computeArenaRewards(player, opp, true, { rewardedWinsToday: 9 });
   assert.equal(r10.stardust_rewarded, true);
   assert.ok(r10.stardust > 0);
-  const r11 = computeArenaRewards(player, opp, true, { free: true, rewardedWinsToday: 10 });
+  assert.ok(r10.experience > 0);
+  const r11 = computeArenaRewards(player, opp, true, { rewardedWinsToday: 10 });
   assert.equal(r11.stardust_rewarded, false);
   assert.equal(r11.stardust, 0);
-  const loss = computeArenaRewards(player, opp, false, { free: true, rewardedWinsToday: 0 });
+  assert.equal(r11.experience, 0);
+  const loss = computeArenaRewards(player, opp, false, { rewardedWinsToday: 0 });
   assert.equal(loss.stardust, 0);
 });
 
@@ -186,7 +186,7 @@ await testAsync("Prepare + Finish settles once; ignores client won; cooldown app
   assert.ok(offersRes.opponents?.length);
   const offerId = offersRes.opponents[0].offer_id;
 
-  const prep = unwrap(await PrepareArenaCombat(user, { offer_id: offerId, is_free: true }));
+  const prep = unwrap(await PrepareArenaCombat(user, { offer_id: offerId }));
   assert.ok(prep.combat?.combat_id);
   assert.ok(prep.combat?.winner === "player" || prep.combat?.winner === "opponent");
   const combatId = prep.combat.combat_id;
@@ -247,7 +247,8 @@ await testAsync("cannot prepare while cooldown active without skip", async () =>
 
 await testAsync("GetArenaStatus exposes rewarded win progress", async () => {
   const u = insertUser("u-arena-4", "a4@test.local");
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const { productionGameDayId, ARENA_SKIP_COST } = await import("../src/shared/economyFormulas.js");
+  const today = productionGameDayId();
   const ch = makeChar(u.id, {
     name: "Status",
     rewardedWins: 7,
@@ -257,8 +258,10 @@ await testAsync("GetArenaStatus exposes rewarded win progress", async () => {
   const status = unwrap(await GetArenaStatus(user, {}));
   assert.equal(status.arena.rewarded_wins_today, 7);
   assert.equal(status.arena.rewarded_wins_remaining, 3);
-  assert.equal(status.arena.paid_battle_cost, 15);
+  assert.equal(status.arena.skip_cooldown_cost, ARENA_SKIP_COST);
+  assert.equal(status.arena.paid_battle_cost, undefined);
   assert.equal(status.arena.cooldown_ms, ARENA_BATTLE_COOLDOWN_MS);
+  assert.equal(status.arena.rating_only, false);
 });
 
 await testAsync("self-match prevented via offer ownership", async () => {
@@ -340,7 +343,7 @@ async function prepareLadder(user, characterId) {
   const offersRes = unwrap(await GetArenaOpponents(user, { force: true }));
   assert.ok(offersRes.opponents?.length);
   const offerId = offersRes.opponents[0].offer_id;
-  const prep = unwrap(await PrepareArenaCombat(user, { offer_id: offerId, is_free: true }));
+  const prep = unwrap(await PrepareArenaCombat(user, { offer_id: offerId }));
   assert.ok(prep.combat?.combat_id);
   return { offerId, combatId: prep.combat.combat_id, prep };
 }
@@ -465,18 +468,20 @@ await testAsync("direct challenge win outcome agrees with ranking/rewards", asyn
     idempotencyKey: "chal-win-1",
   });
   assert.ok(createdWin.challenge?.challengeId);
+  const prepWin = unwrap(
+    await PrepareArenaCombat(attacker, { challenge_id: createdWin.challenge.challengeId }),
+  );
   const winFinish = unwrap(
     await FinishArenaBattle(attacker, {
       challenge_id: createdWin.challenge.challengeId,
+      combat_id: prepWin.combat.combat_id,
       won: true,
-      is_free: true,
     }),
   );
-  assert.equal(winFinish.won, true);
-  assert.equal(winFinish.outcome, "victory");
-  assert.equal(winFinish.winner, "player");
-  assert.equal(winFinish.battle_result.playerWon, true);
-  assert.ok((winFinish.rewards?.arena_rating_delta ?? 0) >= 0);
+  assert.equal(winFinish.winner, prepWin.combat.winner);
+  assert.equal(winFinish.won, prepWin.combat.winner === "player");
+  assert.equal(winFinish.battle_result.playerWon, prepWin.combat.winner === "player");
+  assert.ok(Number.isFinite(winFinish.rewards?.arena_rating_delta ?? 0));
 });
 
 await testAsync("direct challenge loss outcome agrees with ranking/rewards", async () => {
@@ -490,19 +495,22 @@ await testAsync("direct challenge loss outcome agrees with ranking/rewards", asy
     opponentCharacterId: chb.id,
     idempotencyKey: "chal-loss-1",
   });
+  const prepLoss = unwrap(
+    await PrepareArenaCombat(attacker, { challenge_id: createdLoss.challenge.challengeId }),
+  );
   const lossFinish = unwrap(
     await FinishArenaBattle(attacker, {
       challenge_id: createdLoss.challenge.challengeId,
+      combat_id: prepLoss.combat.combat_id,
       won: false,
-      is_free: true,
     }),
   );
-  assert.equal(lossFinish.won, false);
-  assert.equal(lossFinish.outcome, "defeat");
-  assert.equal(lossFinish.winner, "opponent");
-  assert.equal(lossFinish.battle_result.playerWon, false);
-  assert.equal(lossFinish.rewards.experience, 0);
-  assert.equal(lossFinish.rewards.stardust, 0);
+  assert.equal(lossFinish.winner, prepLoss.combat.winner);
+  assert.equal(lossFinish.won, prepLoss.combat.winner === "player");
+  if (prepLoss.combat.winner !== "player") {
+    assert.equal(lossFinish.rewards.experience, 0);
+    assert.equal(lossFinish.rewards.stardust, 0);
+  }
 });
 
 await testAsync("consecutive skip battles charge nova and re-apply cooldown", async () => {
@@ -511,8 +519,7 @@ await testAsync("consecutive skip battles charge nova and re-apply cooldown", as
     name: "Skipper",
     level: 25,
     rating: 1000,
-    nova: 40,
-    attempts: 10,
+    nova: toNovaHalfUnits(80),
   });
   const user = { id: u.id, active_character_id: ch.id, role: "user" };
   let prevNova = entities.Character.get(ch.id).nova_crystals;
@@ -524,11 +531,18 @@ await testAsync("consecutive skip battles charge nova and re-apply cooldown", as
     const prep = unwrap(
       await PrepareArenaCombat(user, {
         offer_id: offerId,
-        is_free: true,
         skip_cooldown: onCd,
       }),
     );
     assert.equal(!!prep.skip_cooldown, onCd);
+    if (onCd) {
+      assert.equal(prep.nova_spent, ARENA_SKIP_COST);
+      assert.ok(
+        entities.Character.get(ch.id).nova_crystals < prevNova,
+        `battle ${i + 1} prepare should debit skip Nova`,
+      );
+      prevNova = entities.Character.get(ch.id).nova_crystals;
+    }
     const finish = unwrap(
       await FinishArenaBattle(user, {
         combat_id: prep.combat.combat_id,
@@ -537,14 +551,8 @@ await testAsync("consecutive skip battles charge nova and re-apply cooldown", as
     );
     assert.ok(finish.character.arena_cooldown_at);
     assert.equal(isArenaCooldownActive(finish.character), true);
-    if (onCd) {
-      assert.ok(finish.nova_spent >= 1, `battle ${i + 1} should spend skip nova`);
-      assert.ok(
-        entities.Character.get(ch.id).nova_crystals < prevNova,
-        `battle ${i + 1} nova should decrease`,
-      );
-    }
-    prevNova = entities.Character.get(ch.id).nova_crystals;
+    assert.equal(finish.nova_spent, 0);
+    assert.equal(entities.Character.get(ch.id).nova_crystals, prevNova);
   }
 });
 
@@ -570,7 +578,7 @@ await testAsync("prepare honors existing offer_id even when board remint is due"
   });
   assert.equal(arenaOffersNeedRemint(entities.Character.get(ch.id)), true);
   const prep = unwrap(
-    await PrepareArenaCombat(user, { offer_id: offerId, is_free: true, skip_cooldown: false }),
+    await PrepareArenaCombat(user, { offer_id: offerId, skip_cooldown: false }),
   );
   assert.ok(prep.combat?.combat_id, "prepare should honor the still-present offer");
   assert.notEqual(prep.code, "ARENA_BOARD_REFRESHED");
@@ -591,7 +599,7 @@ await testAsync("stale offer_id returns current board without reminting", async 
   assert.equal(arenaOffersNeedRemint(entities.Character.get(ch.id)), false);
   let status = 200;
   let body = null;
-  const r = await PrepareArenaCombat(user, { offer_id: "not-a-real-offer", is_free: true });
+  const r = await PrepareArenaCombat(user, { offer_id: "not-a-real-offer" });
   status = r.status || 200;
   body = r.body || r;
   assert.equal(status, 409);

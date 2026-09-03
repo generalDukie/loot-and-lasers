@@ -73,6 +73,10 @@ test("RECURRING_CONSUMERS documents absent casino/stats daily", () => {
   assert.equal(stats.kind, "absent");
   const fuel = RECURRING_CONSUMERS.find((c) => c.id === "fuel_cycle");
   assert.equal(fuel.kind, "rolling_24h");
+  const arena = RECURRING_CONSUMERS.find((c) => c.id === "arena_daily");
+  assert.equal(arena.kind, "production_game_day");
+  assert.deepEqual(arena.fields, ["arena_rewarded_wins_date"]);
+  assert.equal(JSON.stringify(RECURRING_CONSUMERS).includes("arena_attempts"), false);
 });
 
 await testAsync("executeDailyReset runs hooks idempotently", async () => {

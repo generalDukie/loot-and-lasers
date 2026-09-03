@@ -11,11 +11,11 @@ import { withTransactionAsync } from "../db.js";
 import { isAdmin } from "../entityAccess.js";
 import { ArenaError, ArenaErrors } from "./errors.js";
 import {
-  completeDirectChallenge,
   createDirectChallenge,
   getChallengeForUser,
   previewDirectChallenge,
 } from "./service.js";
+import { PrepareArenaCombat, FinishArenaBattle } from "../functions/economyFollowOn.js";
 import { listRecentAudit } from "./store.js";
 import {
   ensureBotPoolForPlayer,
@@ -85,6 +85,23 @@ export function createArenaRouter(express) {
     }
   });
 
+  router.post("/challenges/:id/prepare", requireAuth, async (req, res) => {
+    try {
+      const wrapped = await PrepareArenaCombat(req.user, {
+        challenge_id: req.params.id,
+        skip_cooldown: req.body?.skip_cooldown || req.body?.skipped,
+      });
+      const status = wrapped?.status || 200;
+      const payload = wrapped?.body || wrapped;
+      if (status !== 200) {
+        return res.status(status).json(payload);
+      }
+      res.json(payload);
+    } catch (err) {
+      handleErr(res, err);
+    }
+  });
+
   router.get("/challenges/:id", requireAuth, (req, res) => {
     try {
       const challenge = getChallengeForUser(req.user, req.params.id);
@@ -96,22 +113,16 @@ export function createArenaRouter(express) {
 
   router.post("/challenges/:id/complete", requireAuth, async (req, res) => {
     try {
-      const result = await withTransactionAsync(() =>
-        completeDirectChallenge(req.user, {
-          ...(req.body || {}),
-          challengeId: req.params.id,
-        })
-      );
-      res.json({
-        challengeId: result.challenge.challengeId,
-        replayed: result.replayed,
-        won: result.result?.won ?? result.challenge.won,
-        ratingDelta: result.ratingDelta,
-        result: result.result,
-        patch: result.patch,
-        character: result.character,
-        rewards: result.rewards,
+      const wrapped = await FinishArenaBattle(req.user, {
+        challenge_id: req.params.id,
+        combat_id: req.body?.combat_id || req.body?.combatId,
       });
+      const status = wrapped?.status || 200;
+      const payload = wrapped?.body || wrapped;
+      if (status !== 200) {
+        return res.status(status).json(payload);
+      }
+      res.json(payload);
     } catch (err) {
       handleErr(res, err);
     }

@@ -203,7 +203,7 @@ Existing combat window, HP bars, turn flow, log feed, buttons, animations, resul
 | `modules/lib/combat_formulas.lua` AGI 0.80–1.05 | Historical Nakama `combat_simulate`. Godot live path is Node Prepare*. |
 | `loot&lasers/Scripts/MissionCombat.gd` | Presentation / foe-preview mirror. **Not** mission/dungeon settlement. Unscaled polynomial (not player Base Damage). |
 | Godot `StatsRules.gd` Damage | Character-sheet presentation of canonical `playerBaseDamage`. Combat authority remains server `combatMath`. |
-| Direct-challenge `FinishArenaBattle` `body.won` fallback | Legacy challenge path; ladder uses pending combat. Not a second math engine. |
+| Direct-challenge `FinishArenaBattle` `body.won` fallback | **Removed in Phase 8.** Direct challenges settle from committed pending combat only. |
 | Consumable Stim combat mods | Existing `applyBuffs` last step. **Not expanded** (Phase 5). |
 
 No second live JS engine can settle Mission/Arena/Dungeon/Wormhole.

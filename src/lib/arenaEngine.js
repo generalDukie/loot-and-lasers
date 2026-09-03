@@ -42,10 +42,11 @@ import {
 } from "@/lib/classPassives";
 import { EYES, EARS, MOUTHS, NOSES, BROWS, MARKINGS } from "@/lib/avatarFeatures";
 import { generateArenaBot, ARENA_BOT_CLASSES } from "@/lib/arenaBotGenerator";
+import { ARENA_COOLDOWN_SKIP_NOVA } from "@/lib/productionMath";
 
-// First 10 arena battles each day are free (grant xp + stardust + rating on wins only).
-// Losses never grant XP or stardust. Beyond the free quota, each battle costs nova
-// crystals and yields rating only, but can be fought indefinitely to climb.
+// Arena battles are unlimited. The first 10 reward-eligible wins each 19:00 UTC
+// game day grant XP + Stardust. Losses grant neither and do not consume a win.
+// After the cap, fights continue for rating and cooldown only.
 const MILLISECONDS_PER_SECOND = 1_000;
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
@@ -57,14 +58,12 @@ const PERCENT_SCALE = 100;
 const EVEN_CHANCE = 0.5;
 
 export const DEFAULT_ARENA_RATING = 1_000;
-export const ARENA_DAILY_FREE_BATTLES = 10;
-export const ARENA_PAID_BATTLE_COST = 15; // nova crystals per battle after the free quota
 export const ARENA_REFRESH_HOURS = 2;
 export const ARENA_REFRESH_MS = ARENA_REFRESH_HOURS * MILLISECONDS_PER_HOUR;
 export const ARENA_REFRESH_COST = 500; // stardust (10× scale) — unused; kept for catalog compatibility
 export const ARENA_BATTLE_COOLDOWN_MINUTES = 10;
 export const ARENA_BATTLE_COOLDOWN_MS = ARENA_BATTLE_COOLDOWN_MINUTES * MILLISECONDS_PER_MINUTE;
-export const ARENA_SKIP_COST = 1; // nova crystals to skip the cooldown
+export const ARENA_SKIP_COST = ARENA_COOLDOWN_SKIP_NOVA;
 export const ARENA_CHALLENGER_SLOTS = 3;
 /** Prefer this many real players when the population supports it (rest filled with bots). */
 export const ARENA_MAX_REAL_OPPONENTS = 2;
@@ -894,26 +893,26 @@ export function eloRatingDelta(playerRating, oppRating, won, k = ARENA_ELO_K) {
   return Math.max(-ARENA_RATING_DELTA_MAX, Math.min(-ARENA_RATING_DELTA_MIN, raw));
 }
 
-function lootForOutcome(player, opp, won, free) {
-  if (!free || !won) return { experience: 0, stardust: 0 };
+function lootForOutcome(player, opp, won, rewardEligible) {
+  void opp;
+  if (!rewardEligible || !won) return { experience: 0, stardust: 0 };
   const pl = player.level || 1;
-  // Design: Arena SD = ARENA_WIN_FUEL_EQUIVALENT × SD/F; Arena XP = XP/F × 5/7.
   return {
     experience: getArenaXpReward(pl),
     stardust: getArenaStardustReward(pl),
   };
 }
 
-export function computeRewards(player, opp, won, free = true) {
+export function computeRewards(player, opp, won, rewardEligible = true) {
   const ratingDelta = eloRatingDelta(
     player.arena_rating || DEFAULT_ARENA_RATING,
     opp.arena_rating || DEFAULT_ARENA_RATING,
     won,
   );
-  const loot = lootForOutcome(player, opp, won, free);
+  const loot = lootForOutcome(player, opp, won, rewardEligible);
   return {
     won,
-    free,
+    reward_eligible: !!rewardEligible,
     experience: loot.experience,
     stardust: loot.stardust,
     arena_rating_delta: ratingDelta,
@@ -921,8 +920,8 @@ export function computeRewards(player, opp, won, free = true) {
 }
 
 /** Pre-fight stakes preview used by challenger cards. */
-export function previewArenaMatch(player, opp, { free = true } = {}) {
-  const onWin = computeRewards(player, opp, true, free);
-  const onLoss = computeRewards(player, opp, false, free);
+export function previewArenaMatch(player, opp, { rewardEligible = true } = {}) {
+  const onWin = computeRewards(player, opp, true, rewardEligible);
+  const onLoss = computeRewards(player, opp, false, rewardEligible);
   return { onWin, onLoss };
 }

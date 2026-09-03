@@ -26,12 +26,14 @@ const DEFAULT_BOT_RAID_BATCH := 2
 
 var opponents: Array = []
 var equipped_items: Array = []
-var free_battles_left: int = ArenaRules.DAILY_FREE_BATTLES
+var rewarded_wins_today: int = 0
+var rewarded_wins_remaining: int = ArenaRules.DAILY_REWARDED_WINS
+var reward_cap_reached := false
+var rank_position: int = 0
 var refresh_at_unix_ms: int = 0
 var pending_opp: Dictionary = {}
 var pending_battle: Dictionary = {}
 var pending_rewards: Dictionary = {}
-var pending_is_free: bool = true
 var pending_skipped: bool = false
 var pending_challenge_id := ""
 var pending_policy_version := ""
@@ -53,12 +55,14 @@ func _ready() -> void:
 func clear_local() -> void:
 	opponents = []
 	equipped_items = []
-	free_battles_left = ArenaRules.DAILY_FREE_BATTLES
+	rewarded_wins_today = 0
+	rewarded_wins_remaining = ArenaRules.DAILY_REWARDED_WINS
+	reward_cap_reached = false
+	rank_position = 0
 	refresh_at_unix_ms = 0
 	pending_opp = {}
 	pending_battle = {}
 	pending_rewards = {}
-	pending_is_free = true
 	pending_skipped = false
 	pending_challenge_id = ""
 	pending_policy_version = ""
@@ -177,7 +181,7 @@ func _apply_board_from_payload(data: Dictionary) -> void:
 
 func _apply_character(data: Dictionary) -> void:
 	## Must go through GameApiClient → GameManager/CurrencyManager so the
-	## operative console sees spends (Nova skip, paid battles, etc.) immediately.
+	## operative console sees spends (Nova skip) immediately.
 	GameApiClient.apply_authoritative_response(data, "arena_node_action")
 
 
@@ -191,10 +195,13 @@ func _apply_arena_state(data: Dictionary) -> void:
 	if not _looks_like_arena_state(a):
 		return
 	arena_state = (a as Dictionary).duplicate(true)
-	if arena_state.has("attempts_remaining"):
-		free_battles_left = int(arena_state["attempts_remaining"])
-	elif arena_state.has("arena_attempts_left"):
-		free_battles_left = int(arena_state["arena_attempts_left"])
+	rewarded_wins_today = int(arena_state.get("rewarded_wins_today", 0))
+	rewarded_wins_remaining = int(arena_state.get(
+		"rewarded_wins_remaining",
+		maxi(0, ArenaRules.DAILY_REWARDED_WINS - rewarded_wins_today)
+	))
+	reward_cap_reached = bool(arena_state.get("reward_cap_reached", arena_state.get("rating_only", false)))
+	rank_position = int(arena_state.get("rank_position", arena_state.get("rank", 0)))
 	if typeof(GameManager.active_character) == TYPE_DICTIONARY and not GameManager.active_character.is_empty():
 		GameManager.active_character["arena_rating"] = int(
 			arena_state.get("rating", DEFAULT_ARENA_RATING)
@@ -202,7 +209,7 @@ func _apply_arena_state(data: Dictionary) -> void:
 		GameManager.active_character["arena_wins"] = int(arena_state.get("wins", 0))
 		GameManager.active_character["arena_losses"] = int(arena_state.get("losses", 0))
 		GameManager.active_character["arena_streak"] = int(arena_state.get("win_streak", 0))
-		GameManager.active_character["arena_attempts_left"] = free_battles_left
+		GameManager.active_character["arena_rank"] = rank_position
 		# Never write str(null) → "<null>" — that breaks cooldown math fallbacks.
 		GameManager.active_character["arena_cooldown_at"] = _iso_field(arena_state.get("arena_cooldown_at", null))
 
@@ -210,8 +217,8 @@ func _apply_arena_state(data: Dictionary) -> void:
 func _looks_like_arena_state(d: Dictionary) -> bool:
 	return (
 		d.has("cooldown_active")
-		or d.has("attempts_remaining")
-		or d.has("arena_attempts_left")
+		or d.has("rewarded_wins_today")
+		or d.has("rewarded_wins_remaining")
 		or d.has("next_battle_at")
 		or d.has("available_at")
 		or (d.has("rating") and d.has("wins"))
@@ -394,7 +401,6 @@ func prepare_challenge(
 	challenge_started.emit()
 	var payload := {
 		"offer_id": offer_id,
-		"is_free": free_battles_left > 0,
 		"skip_cooldown": skip_cooldown,
 	}
 	var res: Dictionary = await GameApiClient.invoke("PrepareArenaCombat", payload)
@@ -426,7 +432,6 @@ func prepare_challenge(
 		"opp": pending_opp,
 		"battle": pending_battle,
 		"rewards": pending_rewards,
-		"is_free": pending_is_free,
 		"skipped": pending_skipped,
 	}
 
@@ -471,7 +476,87 @@ func start_direct_challenge(opponent_character_id: String) -> Dictionary:
 		var oid := str(o.get("character_id", o.get("realCharacterId", "")))
 		if oid == opponent_character_id and str(o.get("offer_id", "")) != "":
 			return await prepare_challenge(o, false)
-	return _fail("Opponent not on your current challenger board")
+	return await _create_and_prepare_direct_challenge(opponent_character_id)
+
+
+func _create_and_prepare_direct_challenge(
+	opponent_character_id: String,
+	skip_cooldown: bool = false,
+	_cooldown_retry: bool = false,
+	existing_challenge_id: String = ""
+) -> Dictionary:
+	if opponent_character_id.is_empty():
+		return _fail("Opponent required")
+	if battling:
+		_busy = true
+		var orphan: Dictionary = await recover_orphan_presentation()
+		_busy = false
+		if bool(orphan.get("overlay", false)):
+			return _fail("Arena battle already in progress")
+		if bool(orphan.get("settling", false)):
+			return _fail("Still settling arena rewards…")
+		if bool(orphan.get("awaiting_rewards", false)):
+			return _fail("Collect your arena rewards first")
+		if battling:
+			return _fail("Arena battle already in progress")
+	if cooldown_active():
+		skip_cooldown = true
+
+	var challenge_id := existing_challenge_id
+	if challenge_id.is_empty():
+		var me := str(GameManager.active_character.get("id", ""))
+		var created: Dictionary = await GameApiClient.request(
+			"POST",
+			"/api/arena/challenges",
+			{
+				"challengerCharacterId": me,
+				"opponentCharacterId": opponent_character_id,
+				"idempotencyKey": "godot-dc-%s-%s-%s" % [
+					me,
+					opponent_character_id,
+					str(Time.get_ticks_msec()),
+				],
+				"challengeType": "leaderboard_direct",
+			},
+			true
+		)
+		if not bool(created.get("ok", false)):
+			return _fail(str(created.get("error", "Direct challenge create failed")), str(created.get("code", "")))
+		var created_data := _payload(created)
+		challenge_id = str(created_data.get("challengeId", created_data.get("challenge_id", "")))
+		if challenge_id.is_empty():
+			return _fail("Direct challenge id missing")
+
+	_set_battling(true)
+	challenge_started.emit()
+	var payload := {
+		"challenge_id": challenge_id,
+		"skip_cooldown": skip_cooldown,
+	}
+	var res: Dictionary = await GameApiClient.invoke("PrepareArenaCombat", payload)
+	if not bool(res.get("ok", false)):
+		_set_battling(false)
+		var code := str(res.get("code", ""))
+		if code == "ARENA_COOLDOWN" and not _cooldown_retry:
+			await load_arena_state()
+			return await _create_and_prepare_direct_challenge(
+				opponent_character_id, true, true, challenge_id
+			)
+		return _fail(str(res.get("error", "PrepareArenaCombat failed")), code, _payload(res))
+
+	var data := _payload(res)
+	_apply_character(data)
+	_apply_arena_state(data)
+	var opp: Dictionary = data.get("opponent", {}) if typeof(data.get("opponent", {})) == TYPE_DICTIONARY else {}
+	_begin_active_opponent(opp)
+	_ingest_prepare_result(opp, data, skip_cooldown)
+	return {
+		"ok": true,
+		"opp": pending_opp,
+		"battle": pending_battle,
+		"rewards": pending_rewards,
+		"skipped": pending_skipped,
+	}
 
 
 func prepare_revenge(match: Dictionary) -> Dictionary:
@@ -492,9 +577,10 @@ func finish_battle() -> Dictionary:
 	var body := {
 		"combat_id": pending_combat_id,
 		"offer_id": pending_offer_id,
-		"is_free": pending_is_free,
 		"skip_cooldown": pending_skipped,
 	}
+	if not pending_challenge_id.is_empty():
+		body["challenge_id"] = pending_challenge_id
 	var res: Dictionary = await GameApiClient.invoke("FinishArenaBattle", body)
 	if not bool(res.get("ok", false)):
 		_set_battling(false)
@@ -591,7 +677,6 @@ func _normalize_battle_result(data: Dictionary) -> Dictionary:
 		"rating_delta": ranking_change,
 		"rewards": normalized_rewards,
 		"opp": opp,
-		"is_free": bool(data.get("is_free", pending_is_free)),
 		"nova_spent": int(data.get("nova_spent", 0)),
 		"progression": data.get("progression", {}) if typeof(data.get("progression", {})) == TYPE_DICTIONARY else {},
 		"data": data,
@@ -766,10 +851,8 @@ func _merge_opponent_combat_fields(dst: Dictionary, src: Dictionary) -> void:
 
 func _ingest_prepare_result(opp: Dictionary, data: Dictionary, requested_skip: bool = false) -> void:
 	pending_offer_id = str(data.get("offer_id", opp.get("offer_id", "")))
-	pending_is_free = bool(data.get("is_free", free_battles_left > 0))
-	# Prepare responses historically omitted skip_cooldown — keep the request bit.
+	pending_challenge_id = str(data.get("challenge_id", ""))
 	pending_skipped = bool(data.get("skip_cooldown", requested_skip))
-	pending_challenge_id = ""
 	var combat: Dictionary = data.get("combat", {}) if typeof(data.get("combat", {})) == TYPE_DICTIONARY else {}
 	pending_combat_id = str(combat.get("combat_id", ""))
 	_ingest_combat_payload(combat)

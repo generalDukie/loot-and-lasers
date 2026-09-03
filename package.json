@@ -95,6 +95,9 @@
     "verify:wallet": "node scripts/verify_wallet_integration.mjs && npm --prefix server run test:wallet-bridge",
     "verify:backend": "node scripts/verify_backend.mjs",
     "checkpoint:backend": "node scripts/checkpoint_backend.mjs",
+    "test:phase8-arena": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-phase8-arena.mjs",
+    "test:phase8-pvp-matrix": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-phase8-pvp-matrix.mjs",
+    "test:phase8": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/run-phase8.mjs",
     "test:restoration28": "node scripts/run_restoration28_regression.mjs",
     "verify:nakama-gameplay-blocked": "node scripts/verify_nakama_gameplay_blocked.mjs"
   },

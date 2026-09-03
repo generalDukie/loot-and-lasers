@@ -16,6 +16,7 @@ import {
   MISSION_XPF_POWER_COEFFICIENT,
   MISSION_XPF_EXPONENT,
   missionXpReward,
+  arenaXpReward,
   permanentAttributePurchaseCost,
   BACKPACK_UNEQUIPPED_ITEM_CAP,
   XP_REWARD_EFFICIENCY,
@@ -943,8 +944,6 @@ export function getArenaStardustReward(level = 1) {
   return ArenaWinStardust(level);
 }
 
-const ARENA_XP_REWARD_NUMERATOR = 5;
-const ARENA_XP_REWARD_DENOMINATOR = 7;
 const MISSION_REWARD_VARIANCE = 0.10;
 const COMBAT_XP_RELATIVE_MIN = 0.5;
 const COMBAT_XP_RELATIVE_MAX = 1.65;
@@ -957,15 +956,9 @@ const EARLY_FUEL_DISCOUNT_BRACKETS = Object.freeze([
   Object.freeze({ maxLevel: 7, discount: 1 }),
 ]);
 
-/** Arena win XP = XP/F(playerLevel) × 5/7 (≈0.714). */
+/** Arena win XP — canonical productionMath.arenaXpReward. */
 export function getArenaXpReward(level = 1) {
-  return Math.max(
-    1,
-    Math.round(
-      (getMissionXpPerFuel(level) * ARENA_XP_REWARD_NUMERATOR)
-      / ARENA_XP_REWARD_DENOMINATOR,
-    ),
-  );
+  return arenaXpReward(level);
 }
 
 /** Mission reward variance band by player level (±fraction around 1.0). */

@@ -29,6 +29,7 @@ const SUITES = [
   "test:stardust-economy",
   "test:arena",
   "test:arena-authority",
+  "test:phase8",
   "test:stims",
   "test:casino",
   "test:statistics",

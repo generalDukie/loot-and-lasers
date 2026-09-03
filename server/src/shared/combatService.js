@@ -15,6 +15,7 @@ import { generateDungeonEnemy } from "../../../src/lib/dungeonEngine.js";
 import { DUNGEON_PLANETS, getDungeonPlanetById } from "../../../src/lib/dungeonData.js";
 import { pendingCombatMatches } from "./dungeonService.js";
 import { PHASE7_CONTENT_WORMHOLE } from "./productionMath.js";
+import { ARENA_DEFAULT_RATING } from "../arena/config.js";
 
 function httpErr(status, message, code) {
   const e = new Error(message);
@@ -332,13 +333,15 @@ export function commitArenaPendingCombat(characterId, combatResult, meta = {}) {
       ...combatResult,
       meta: {
         offer_id: meta.offerId || null,
+        challenge_id: meta.challengeId || null,
         arena_bot_id: meta.arenaBotId || null,
         real_character_id: meta.realCharacterId || null,
         is_bot: !!meta.isBot,
-        opponent_rating: meta.opponentRating ?? 1000,
+        opponent_rating: meta.opponentRating ?? ARENA_DEFAULT_RATING,
         opponent_summary: meta.opponentSummary || null,
         skip_cooldown: !!meta.skipCooldown,
-        is_free: meta.isFree !== false,
+        skip_paid: !!meta.skipPaid,
+        skip_nova: Math.max(0, Math.floor(Number(meta.skipNova) || 0)),
       },
     },
   });
@@ -377,49 +380,76 @@ export function simulateArenaCombat(
   });
 }
 
+export function pendingArenaCombatConflicts(pending, { offerId = "", challengeId = "" } = {}) {
+  if (!pending?.combat_id || !pending?.winner) return false;
+  const meta = pending.meta || {};
+  if (offerId && String(meta.offer_id || "") === String(offerId)) return false;
+  if (challengeId && String(meta.challenge_id || "") === String(challengeId)) return false;
+  return true;
+}
+
 /**
- * Prepare (or replay) Arena combat for a committed offer.
+ * Prepare (or replay) Arena combat for a committed offer or direct challenge.
  */
 export function prepareArenaCombatForCharacter(
   character,
   {
-    offerId,
+    offerId = "",
+    challengeId = "",
     combatant,
     opponentItems = [],
     opponentSummary = null,
     arenaBotId = null,
     realCharacterId = null,
     isBot = false,
-    opponentRating = 1000,
+    opponentRating = ARENA_DEFAULT_RATING,
     skipCooldown = false,
-    isFree = true,
+    skipPaid = false,
+    skipNova = 0,
+    applyBeforeCommit = null,
     rng = secureRandom,
   } = {},
 ) {
   const pending = readArenaPendingCombat(character);
   const meta = pending?.meta || {};
+  const sameOffer = offerId && String(meta.offer_id || "") === String(offerId || "");
+  const sameChallenge = challengeId && String(meta.challenge_id || "") === String(challengeId || "");
   if (
     pending?.combat_id &&
     pending?.winner &&
     Array.isArray(pending.events) &&
-    String(meta.offer_id || "") === String(offerId || "")
+    (sameOffer || sameChallenge)
   ) {
     return { combat: pending, replay: true, character };
   }
+  if (pendingArenaCombatConflicts(pending, { offerId, challengeId })) {
+    const e = new Error("Finish or recover the pending Arena fight first");
+    e.status = 409;
+    e.code = "ARENA_PENDING_COMBAT";
+    throw e;
+  }
+  const encounterKey = challengeId
+    ? `arena-challenge-${challengeId}`
+    : `arena-offer-${offerId || nanoid(8)}`;
   const combat = simulateArenaCombat(character, combatant, {
     opponentItems,
     rng,
-    encounterId: `arena-offer-${offerId || nanoid(8)}`,
+    encounterId: encounterKey,
   });
+  if (typeof applyBeforeCommit === "function") {
+    applyBeforeCommit(character, combat);
+  }
   const updated = commitArenaPendingCombat(character.id, combat, {
     offerId,
+    challengeId,
     arenaBotId,
     realCharacterId,
     isBot,
     opponentRating,
     opponentSummary,
     skipCooldown,
-    isFree,
+    skipPaid,
+    skipNova,
   });
   return {
     combat: updated.arena_pending_combat || combat,

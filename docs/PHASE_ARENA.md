@@ -28,17 +28,17 @@ Recovered and preserved:
 - **Stable offers**: `arena_opponent_offers` on Character with `offer_id` (**2 hour TTL**; remint on fight, player/foe level-up, or expiry — no manual refresh)
 - Bots fill remaining slots via persistent `arena_bots` ladder (+ ephemeral EPA bots if empty)
 
-### 5–6. Cooldown & paid attempt
+### 5–6. Cooldown & skip (Phase 8)
 
 | Rule | Value |
 |------|-------|
-| Normal cooldown | **10 minutes** (`ARENA_BATTLE_COOLDOWN_MS`) |
+| Battles | Unlimited. No daily attempt quota. No 15-Nova extra-battle purchase. |
+| Normal cooldown | **10 minutes** (`ARENA_BATTLE_COOLDOWN_MS`) after every completed win or loss |
 | Storage | `arena_cooldown_at` = battle commit time; available = start + 10m (server clock) |
-| Skip cooldown | **1 Nova** (`SkipArenaCooldown` / prepare `skip_cooldown` when active) |
-| Paid battle | **15 Nova** when free attempts exhausted (normal matchmaking — no premium queue) |
+| Skip cooldown | **10 Nova** (`ARENA_COOLDOWN_SKIP_NOVA`) while cooldown is active; unlimited if the player can pay |
+| Paid battle | **Removed.** No extra-battle purchase exists. |
 
-Paid battles do **not** reset rewarded-win counters. Skip clears cooldown only;
-it does not grant unlimited fights.
+Skip of an active cooldown is charged during successful `PrepareArenaCombat`, atomically with the committed fight. Finish never re-evaluates or charges that skip. An expired or missing cooldown never charges Nova. Duplicate Prepare/Finish cannot double-charge. See `docs/PHASE8_ARENA_PVP.md`.
 
 ### 7. Player snapshot policy
 
@@ -70,10 +70,10 @@ it does not grant unlimited fights.
 
 ### 18–19. Daily rewarded wins & 2.25×
 
-- Cap: **10** rewarded wins / game-day (`todayET`)
-- `ArenaWinStardust = ROUND(2.25 × StardustPerFuel(level))`
+- Cap: **10** rewarded wins / production game day (`productionGameDayId`, 19:00 UTC)
+- `arenaStardustReward = roundHalfUp(2.25 × stardustPerFuel(level))` after XP / level-ups
 - **1.5× path inactive** (`ARENA_WIN_FUEL_EQUIVALENT = 2.25`)
-- Losses: 0 Stardust; wins after 10: 0 Stardust; rating still updates
+- Losses: 0 XP / 0 Stardust and do not consume a rewarded win; wins after 10: rating only
 
 ### 20–21. Paid economy & history
 
@@ -163,11 +163,12 @@ committed winner → eloRatingDelta(pre ratings) → Character.arena_rating once
   → optional bot mirror → leaderboard sort
 ```
 
-**Rewards / paid**
+**Rewards / skip**
 
 ```
-won && rewarded_wins < 10 → 2.25× SPF → increment counter
-free attempts else −15 Nova; skip cooldown −1 Nova if active
+won && rewarded_wins < 10 → canonical arenaXpReward then arenaStardustReward(post-XP level)
+losses and wins after the cap → 0 XP / 0 Stardust; rating and cooldown still process
+skip active cooldown −10 Nova; no 15-Nova battle purchase
 ```
 
 **Recovery**

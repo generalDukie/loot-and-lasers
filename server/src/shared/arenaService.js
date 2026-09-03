@@ -8,12 +8,10 @@ import { entities } from "../entities.js";
 import { db } from "../db.js";
 import { clock } from "./time/clock.js";
 import {
-  ARENA_DAILY_FREE_BATTLES,
-  ARENA_PAID_BATTLE_COST,
   ARENA_SKIP_COST,
   ARENA_REWARDED_WINS_PER_DAY,
   getArenaRewardedWinsState,
-  todayET,
+  productionGameDayId,
 } from "./economyFormulas.js";
 import {
   ARENA_CHALLENGER_SLOTS,
@@ -449,18 +447,13 @@ export function listArenaLeaderboard({ limit = DEFAULT_ARENA_LEADERBOARD_LIMIT, 
   ));
 }
 
-export function serializeArenaState(character, nowMs = clock.nowMs(), today = todayET()) {
+export function serializeArenaState(character, nowMs = clock.nowMs(), today = productionGameDayId(nowMs)) {
   const rewarded = getArenaRewardedWinsState(character, today);
-  let freeLeft = character.arena_attempts_left ?? ARENA_DAILY_FREE_BATTLES;
-  let attemptsDate = character.arena_attempts_date;
-  if (attemptsDate !== today) {
-    freeLeft = ARENA_DAILY_FREE_BATTLES;
-    attemptsDate = today;
-  }
   const cooldownEnds = arenaCooldownEndsMs(character, nowMs);
   const available = !isArenaCooldownActive(character, nowMs);
   const pending = readArenaPendingCombat(character);
   const rank = computeArenaRank(character.id);
+  const capReached = rewarded.wins >= ARENA_REWARDED_WINS_PER_DAY;
   return {
     rating: character.arena_rating || ARENA_DEFAULT_RATING,
     rank_position: rank,
@@ -470,10 +463,6 @@ export function serializeArenaState(character, nowMs = clock.nowMs(), today = to
     win_streak: character.arena_streak || 0,
     battles: character.arena_battles || 0,
     battles_today: character.arena_battles_today || 0,
-    daily_attempt_limit: ARENA_DAILY_FREE_BATTLES,
-    attempts_remaining: freeLeft,
-    arena_attempts_left: freeLeft,
-    arena_attempts_date: attemptsDate,
     available,
     cooldown_active: !available,
     cooldown_ms: ARENA_BATTLE_COOLDOWN_MS,
@@ -484,16 +473,16 @@ export function serializeArenaState(character, nowMs = clock.nowMs(), today = to
     rewarded_wins_today: rewarded.wins,
     rewarded_wins_remaining: Math.max(0, ARENA_REWARDED_WINS_PER_DAY - rewarded.wins),
     rewarded_wins_cap: ARENA_REWARDED_WINS_PER_DAY,
-    reward_cap_reached: rewarded.wins >= ARENA_REWARDED_WINS_PER_DAY,
+    reward_cap_reached: capReached,
+    rating_only: capReached,
     game_day: today,
-    paid_battle_cost: ARENA_PAID_BATTLE_COST,
     skip_cooldown_cost: ARENA_SKIP_COST,
     pending_combat_id: pending?.combat_id || null,
     pending_match: pending
       ? {
           combat_id: pending.combat_id,
-          winner: pending.winner,
           offer_id: pending.meta?.offer_id || null,
+          challenge_id: pending.meta?.challenge_id || null,
         }
       : null,
     server_time_ms: nowMs,
@@ -828,8 +817,6 @@ export function resolveOfferCombatant(character, offerId) {
 }
 
 export {
-  ARENA_DAILY_FREE_BATTLES,
-  ARENA_PAID_BATTLE_COST,
   ARENA_SKIP_COST,
   ARENA_REWARDED_WINS_PER_DAY,
 };

@@ -31,6 +31,7 @@ const { getChallengeById, getPairBattleStats, normalizeAccountPairKey } = await 
   "../src/arena/store.js"
 );
 const { currentPeriodId } = await import("../src/arena/service.js");
+const { commitArenaPendingCombat } = await import("../src/shared/combatService.js");
 
 let passed = 0;
 let failed = 0;
@@ -58,6 +59,23 @@ function insertUser(id, email) {
      VALUES (?, ?, ?, 'user', 1, ?, ?)`
   ).run(id, email, hashPw("x"), now, now);
   return { id, email, role: "user", active_character_id: null };
+}
+
+function settleChallenge(user, challenge, winner) {
+  const live = entities.Character.get(user.active_character_id);
+  commitArenaPendingCombat(live.id, {
+    combat_id: `dc-${challenge.challengeId}-${winner}`,
+    winner,
+    events: [{ type: "resolved" }],
+    mode: "arena",
+  }, {
+    challengeId: challenge.challengeId,
+    opponentRating: challenge.opponentRatingAtStart,
+  });
+  return completeDirectChallenge(user, {
+    challengeId: challenge.challengeId,
+    won: winner !== "player",
+  });
 }
 
 function makeChar(ownerId, { name, rating = 1000, id } = {}) {
@@ -240,10 +258,7 @@ test("snapshot ratings used even if live rating changes", () => {
   entities.Character.update(c1.id, { arena_rating: 1900 });
   entities.Character.update(c2.id, { arena_rating: 900 });
 
-  const done = completeDirectChallenge(freshA, {
-    challengeId: created.challenge.challengeId,
-    won: true,
-  });
+  const done = settleChallenge(freshA, created.challenge, "player");
   assert.equal(done.replayed, false);
   // Delta computed from 1700 vs 1650, not 1900 vs 900.
   const expected = computeDirectChallengeRatingDelta({
@@ -269,10 +284,7 @@ test("idempotent complete does not double-apply rating", () => {
     opponentCharacterId: c2.id,
     idempotencyKey: "idem-complete-1",
   });
-  const first = completeDirectChallenge(freshA, {
-    challengeId: created.challenge.challengeId,
-    won: true,
-  });
+  const first = settleChallenge(freshA, created.challenge, "player");
   const ratingAfterFirst = entities.Character.get(c1.id).arena_rating;
   const second = completeDirectChallenge(freshA, {
     challengeId: created.challenge.challengeId,
@@ -295,11 +307,7 @@ test("client cannot force rewarded zero-gap battle via submitted delta", () => {
     idempotencyKey: "idem-zero-1",
     estimatedWinChange: 32,
   });
-  const done = completeDirectChallenge(freshA, {
-    challengeId: created.challenge.challengeId,
-    won: true,
-    arena_rating_delta: 32,
-  });
+  const done = settleChallenge(freshA, created.challenge, "player");
   assert.equal(done.ratingDelta, 0);
 });
 
@@ -318,10 +326,7 @@ test("repeat opponent: second win reduced, third zero; loss still applies", () =
       idempotencyKey: `idem-rep-win-${i}`,
     });
     // Clear active by completing
-    const done = completeDirectChallenge(ua, {
-      challengeId: created.challenge.challengeId,
-      won: true,
-    });
+    const done = settleChallenge(ua, created.challenge, "player");
     deltas.push(done.ratingDelta);
     // Refresh live char for next create ownership
     Object.assign(ca, entities.Character.get(ca.id));
@@ -336,10 +341,7 @@ test("repeat opponent: second win reduced, third zero; loss still applies", () =
     idempotencyKey: "idem-rep-loss",
   });
   const before = entities.Character.get(ca.id).arena_rating;
-  const loss = completeDirectChallenge(ua, {
-    challengeId: lossChallenge.challenge.challengeId,
-    won: false,
-  });
+  const loss = settleChallenge(ua, lossChallenge.challenge, "opponent");
   assert.ok(loss.ratingDelta < 0);
   assert.equal(entities.Character.get(ca.id).arena_rating, before + loss.ratingDelta);
 });
@@ -358,7 +360,7 @@ test("alternate character cannot bypass account-pair limits", () => {
       opponentCharacterId: cb.id,
       idempotencyKey: `idem-alt-a-${i}`,
     });
-    completeDirectChallenge(ua, { challengeId: created.challenge.challengeId, won: true });
+    settleChallenge(ua, created.challenge, "player");
   }
 
   const pair = normalizeAccountPairKey(ua.id, ub.id);
@@ -371,10 +373,7 @@ test("alternate character cannot bypass account-pair limits", () => {
     opponentCharacterId: cb.id,
     idempotencyKey: "idem-alt-bypass",
   });
-  const done = completeDirectChallenge(ua, {
-    challengeId: created.challenge.challengeId,
-    won: true,
-  });
+  const done = settleChallenge(ua, created.challenge, "player");
   assert.equal(done.ratingDelta, 0);
 });
 
@@ -387,6 +386,23 @@ test("rejects unowned challenger character", () => {
         idempotencyKey: "idem-steal",
       }),
     (e) => e instanceof ArenaError && e.code === ArenaErrors.ARENA_CHARACTER_NOT_OWNED
+  );
+});
+
+test("complete without committed combat is rejected even with body.won", () => {
+  const ua = insertUser("acct-nowon-a", "nowon-a@loot.local");
+  const ub = insertUser("acct-nowon-b", "nowon-b@loot.local");
+  const ca = makeChar(ua.id, { name: "NoWonA", rating: 1500 });
+  const cb = makeChar(ub.id, { name: "NoWonB", rating: 1490 });
+  ua.active_character_id = ca.id;
+  const created = createDirectChallenge(ua, {
+    challengerCharacterId: ca.id,
+    opponentCharacterId: cb.id,
+    idempotencyKey: "idem-nowon",
+  });
+  assert.throws(
+    () => completeDirectChallenge(ua, { challengeId: created.challenge.challengeId, won: true }),
+    (e) => e instanceof ArenaError && e.code === ArenaErrors.ARENA_NO_PENDING_COMBAT,
   );
 });
 

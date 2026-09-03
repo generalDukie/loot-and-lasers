@@ -27,8 +27,8 @@ Godot request combat, play committed events, and never decide outcomes.
 |------|-----------|---------|--------|
 | Mission soft encounter | Shared `simulateBattle` | `PrepareMissionCombat` | `ClaimMission` / `FailMission` (winner from `mission.combat_result`) |
 | Dungeon / wormhole | Shared | `PrepareDungeonCombat` | `FinishDungeonBattle` (winner from `dungeon_pending_combat`) |
-| Arena (Godot) | Nakama `arena_challenge` path (unchanged) | — | Pipeline / Prompt later |
-| Arena (web) | Still local `simulateBattle` + `FinishArenaBattle` trusts `body.won` | **Deferred** | Documented debt |
+| Arena (Godot) | Shared `SimulateCombat` (`mode: "arena"`) | `PrepareArenaCombat` | `FinishArenaBattle` (winner from pending combat) |
+| Arena (web) | None — no player web client | — | — |
 | Guild war sim | Local / client | Deferred | `ApplyGuildWarResult` still client-trusted |
 | Debug | Shared via `SimulateCombat` in tests | — | — |
 
@@ -157,8 +157,6 @@ Initiative ~50/50 (4000 trials, band 46–54%). Dodge ~20% and Crit ~15% within 
 ### 27. Defects deferred to Prompt 09 / later
 
 - Full class-passive rebalance / documentation pass
-- Arena web + `FinishArenaBattle` still client-trusted `body.won`
-- Godot Arena Nakama path not moved to Node simulator
 - Guild war client simulation
 - Stim Injector turn override already in engine (class passive) — no change required here
 

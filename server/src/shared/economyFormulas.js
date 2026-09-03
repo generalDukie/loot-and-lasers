@@ -50,6 +50,8 @@ import {
   dungeonUnlockLevel,
   rollDungeonRegularRarity,
   rollDungeonBossRarity,
+  arenaXpReward,
+  ARENA_COOLDOWN_SKIP_NOVA,
 } from "./productionMath.js";
 import {
   generateContrabandOffer,
@@ -65,7 +67,9 @@ import {
   rollMarketGearItemLevel,
   rollMarketGearRarity,
   rollContrabandRarity,
+  productionGameDayId as productionGameDayIdFromMath,
 } from "../../../src/lib/productionMath/market.js";
+import { applyXpBonus } from "./collectionBonus.js";
 import {
   CONSUMABLE_TIERS as STIM_CONSUMABLE_TIERS,
   STIM_ATTRIBUTES,
@@ -144,9 +148,6 @@ const STIM_RARE_ROLL_THRESHOLD = 0.4;
 const STIM_EPIC_ROLL_THRESHOLD = 0.8;
 const STIM_REFRESH_BASE_DURATION_DIVISOR = 2;
 
-const ARENA_XP_FUEL_EQUIVALENT_NUMERATOR = 5;
-const ARENA_XP_FUEL_EQUIVALENT_DENOMINATOR = 7;
-
 export { XP_STARDUST_SCALE }; // legacy Stardust callers only — not XP
 
 /** Temporary Coming Soon gates — flip to restore hangar / void without hunting call sites. */
@@ -190,6 +191,11 @@ export {
 /** Clock-backed daily key (America/New_York). */
 export function todayET(now = clock.now()) {
   return todayETFromClock(now);
+}
+
+/** Arena / production game-day key at 19:00 UTC. Unrelated ET clocks stay on todayET. */
+export function productionGameDayId(nowMs = clock.nowMs()) {
+  return productionGameDayIdFromMath(nowMs);
 }
 
 /** Clock-backed weekly key (ET Monday week). */
@@ -1123,11 +1129,10 @@ export { consumeProgression } from "./characterProgression.js";
 export { getMissionXpPerFuel, getMissionStardustPerFuel, expForLevel };
 
 // ── Arena ────────────────────────────────────────────────────
-export const ARENA_DAILY_FREE_BATTLES = 10;
-/** Finalized: additional Arena battle entitlement. */
-export const ARENA_PAID_BATTLE_COST = 15;
 export const ARENA_REFRESH_COST = 50 * XP_STARDUST_SCALE; // legacy Stardust, not XP
-export const ARENA_SKIP_COST = 1;
+export const ARENA_SKIP_COST = ARENA_COOLDOWN_SKIP_NOVA;
+/** Ledger category for inline Prepare cooldown-skip debit. */
+export const ARENA_PREPARE_SKIP_LEDGER_CATEGORY = "arena_prepare_skip";
 export const ARENA_ELO_K = 28;
 export const ARENA_RATING_DELTA_MIN = 6;
 export const ARENA_RATING_DELTA_MAX = 36;
@@ -1137,11 +1142,7 @@ export function getArenaStardustReward(level = 1) {
 }
 
 export function getArenaXpReward(level = 1) {
-  return Math.round(
-    getMissionXpPerFuel(level)
-      * ARENA_XP_FUEL_EQUIVALENT_NUMERATOR
-      / ARENA_XP_FUEL_EQUIVALENT_DENOMINATOR,
-  );
+  return arenaXpReward(level);
 }
 
 export function eloExpectedScore(playerRating, oppRating) {
@@ -1164,36 +1165,74 @@ export function eloRatingDelta(playerRating, oppRating, won, k = ARENA_ELO_K) {
 }
 
 /**
- * Arena rewards. Stardust: first ARENA_REWARDED_WINS_PER_DAY wins/day only.
- * XP still tied to free-battle quota (unrelated progression preserved).
- * @param {object} player
- * @param {object} opp
- * @param {boolean} won
- * @param {boolean|{free?: boolean, rewardedWinsToday?: number}} freeOrOpts
+ * Arena Elo + reward *preview*. Settlement must call applyArenaRewardGrant
+ * so Stardust uses the post-XP level. XP/SD grant only when won and under the
+ * daily rewarded-win cap. `free` is ignored.
  */
-export function computeArenaRewards(player, opp, won, freeOrOpts = true) {
-  let free = true;
+export function computeArenaRewards(player, opp, won, opts = {}) {
   let rewardedWinsToday = 0;
-  if (typeof freeOrOpts === "object" && freeOrOpts != null) {
-    free = freeOrOpts.free !== false;
-    rewardedWinsToday = Math.max(0, Math.floor(Number(freeOrOpts.rewardedWinsToday) || 0));
-  } else {
-    free = !!freeOrOpts;
+  if (opts && typeof opts === "object") {
+    rewardedWinsToday = Math.max(0, Math.floor(Number(opts.rewardedWinsToday) || 0));
   }
   const ratingDelta = eloRatingDelta(
     player.arena_rating || ARENA_DEFAULT_RATING,
     opp?.arena_rating || ARENA_DEFAULT_RATING,
     won,
   );
-  const grantSd = won && arenaWinGrantsStardust(rewardedWinsToday);
-  const grantXp = free && won;
+  const grantNormal = won && arenaWinGrantsStardust(rewardedWinsToday);
+  const snapshotLevel = Math.max(1, Math.floor(Number(player.level) || 1));
   return {
     won,
-    free,
-    experience: grantXp ? getArenaXpReward(player.level || 1) : 0,
-    stardust: grantSd ? getArenaStardustReward(player.level || 1) : 0,
+    experience: grantNormal ? getArenaXpReward(snapshotLevel) : 0,
+    stardust: grantNormal ? getArenaStardustReward(snapshotLevel) : 0,
     arena_rating_delta: ratingDelta,
-    stardust_rewarded: grantSd,
+    stardust_rewarded: grantNormal,
+    reward_eligible: grantNormal,
+  };
+}
+
+/**
+ * Certified Arena reward order for an eligible win:
+ * snapshot level → canonical XP → collection XP bonus → optional path multiplier
+ * → grant XP / level-ups → canonical Stardust at post-XP level → optional SD multiplier.
+ */
+export function applyArenaRewardGrant(character, {
+  won,
+  collectPct = 0,
+  xpMultiplier = 1,
+  stardustMultiplier = 1,
+  gameDay,
+} = {}) {
+  const rewardedState = getArenaRewardedWinsState(character, gameDay);
+  const grantNormal = !!won && arenaWinGrantsStardust(rewardedState.wins);
+  const snapshotLevel = Math.max(1, Math.floor(Number(character.level) || 1));
+  let experience = 0;
+  if (grantNormal) {
+    const baseXp = getArenaXpReward(snapshotLevel);
+    experience = Math.round(applyXpBonus(baseXp, collectPct) * Number(xpMultiplier || 0));
+  }
+  const patch = {};
+  applyXpToCharacter(character, experience, patch);
+  const postXpLevel = Math.max(1, Math.floor(Number(patch.level ?? character.level) || 1));
+  let stardust = 0;
+  if (grantNormal) {
+    stardust = Math.round(getArenaStardustReward(postXpLevel) * Number(stardustMultiplier || 0));
+  }
+  if (grantNormal) {
+    patch.arena_rewarded_wins_today = rewardedState.wins + 1;
+    patch.arena_rewarded_wins_date = rewardedState.date;
+  } else if (rewardedState.date !== character.arena_rewarded_wins_date) {
+    patch.arena_rewarded_wins_today = rewardedState.wins;
+    patch.arena_rewarded_wins_date = rewardedState.date;
+  }
+  return {
+    patch,
+    experience,
+    stardust,
+    grantNormal,
+    snapshotLevel,
+    postXpLevel,
+    rewardedState,
   };
 }
 

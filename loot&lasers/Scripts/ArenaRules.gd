@@ -2,15 +2,14 @@ class_name ArenaRules
 extends RefCounted
 ## Arena matchmaking / Elo / rewards — mirrors src/lib/arenaEngine.js (subset).
 
-const DAILY_FREE_BATTLES := 10
-const PAID_BATTLE_COST := 15
+const DAILY_REWARDED_WINS := 10
 ## Challenger board lifetime (server remints on fight / level-up / expiry).
 const BOARD_TTL_MS := 2 * 60 * 60 * 1000
 ## @deprecated Manual refresh removed.
 const REFRESH_MS := BOARD_TTL_MS
 const REFRESH_COST := 500
 const BATTLE_COOLDOWN_MS := 10 * 60 * 1000
-const SKIP_COST := 1
+const SKIP_COST := 10
 const CHALLENGER_SLOTS := 3
 const MAX_REAL_OPPONENTS := 2
 const RATING_BAND := 120
@@ -27,8 +26,7 @@ const POWER_PER_LEVEL := 10.0
 const POWER_PER_WEIGHTED_STAT := 7.5
 const ELO_EXPONENT_BASE := 10.0
 const ELO_RATING_SCALE := 400.0
-const ARENA_XP_REWARD_NUMERATOR := 5.0
-const ARENA_XP_REWARD_DENOMINATOR := 7.0
+const ARENA_XP_PER_XPF := 2.125
 const BOT_ATTRIBUTE_MULTIPLIER_MIN := 0.85
 const BOT_ATTRIBUTE_MULTIPLIER_RANGE := 0.30
 const BOT_LAST_ONLINE_MAX_MINUTES := 180
@@ -47,7 +45,9 @@ const SECONDS_PER_MINUTE := 60
 const MINUTES_PER_HOUR := 60
 const HOURS_PER_DAY := 24
 const MILLISECONDS_PER_SECOND := 1_000
-const ET_DAY_FALLBACK_OFFSET_HOURS := 4
+const GAME_DAY_RESET_HOUR_UTC := 19
+## Offline daily-login / todayET fallback. Matches ProgressManager (UTC−5, no DST).
+const ET_STANDARD_OFFSET_HOURS := 5
 
 const BOT_NAMES: PackedStringArray = [
 	"Nyx Voss", "Kade Orrin", "Vesper Quill", "Jax Riven", "Sable Tor",
@@ -140,23 +140,20 @@ static func elo_rating_delta(player_rating: int, opp_rating: int, won: bool) -> 
 
 
 static func arena_xp_reward(level: int) -> int:
-	return maxi(
-		1,
-		int(
-			round(
-				float(MissionBoard.xp_per_fuel(level))
-				* ARENA_XP_REWARD_NUMERATOR
-				/ ARENA_XP_REWARD_DENOMINATOR
-			)
-		),
-	)
+	return maxi(0, _round_half_up(ARENA_XP_PER_XPF * float(MissionBoard.xp_per_fuel(level))))
+
+
+static func _round_half_up(value: float) -> int:
+	if value >= 0.0:
+		return int(floor(value + 0.5))
+	return int(ceil(value - 0.5))
 
 
 static func arena_sd_reward(level: int) -> int:
 	return StardustEconomy.arena_win_stardust(level)
 
 
-static func compute_rewards(player: Dictionary, opp: Dictionary, won: bool, is_free: bool) -> Dictionary:
+static func compute_rewards(player: Dictionary, opp: Dictionary, won: bool, reward_eligible: bool) -> Dictionary:
 	var rating_delta := elo_rating_delta(
 		int(player.get("arena_rating", DEFAULT_ARENA_RATING)),
 		int(opp.get("arena_rating", DEFAULT_ARENA_RATING)),
@@ -164,13 +161,13 @@ static func compute_rewards(player: Dictionary, opp: Dictionary, won: bool, is_f
 	)
 	var xp := 0
 	var sd := 0
-	if is_free and won:
+	if reward_eligible and won:
 		var pl := int(player.get("level", 1))
 		xp = arena_xp_reward(pl)
 		sd = arena_sd_reward(pl)
 	return {
 		"won": won,
-		"free": is_free,
+		"reward_eligible": reward_eligible,
 		"experience": xp,
 		"stardust": sd,
 		"arena_rating_delta": rating_delta,
@@ -178,9 +175,9 @@ static func compute_rewards(player: Dictionary, opp: Dictionary, won: bool, is_f
 
 
 ## Pre-fight stakes preview used by challenger cards (rewards only — no risk badge).
-static func preview_arena_match(player: Dictionary, opp: Dictionary, is_free: bool, _player_power: int = -1) -> Dictionary:
-	var on_win := compute_rewards(player, opp, true, is_free)
-	var on_loss := compute_rewards(player, opp, false, is_free)
+static func preview_arena_match(player: Dictionary, opp: Dictionary, reward_eligible: bool, _player_power: int = -1) -> Dictionary:
+	var on_win := compute_rewards(player, opp, true, reward_eligible)
+	var on_loss := compute_rewards(player, opp, false, reward_eligible)
 	return {"onWin": on_win, "onLoss": on_loss}
 
 
@@ -496,26 +493,40 @@ static func format_eta_short(ms: int) -> String:
 	return "<1m"
 
 
+static func ms_until_game_day_reset_utc() -> int:
+	var unix := int(Time.get_unix_time_from_system())
+	var utc := Time.get_datetime_dict_from_unix_time(unix)
+	var hour := int(utc.get("hour", 0))
+	var minute := int(utc.get("minute", 0))
+	var second := int(utc.get("second", 0))
+	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+	var elapsed := hour * seconds_per_hour + minute * SECONDS_PER_MINUTE + second
+	var reset_at := GAME_DAY_RESET_HOUR_UTC * seconds_per_hour
+	var remaining := reset_at - elapsed
+	if remaining <= 0:
+		remaining += HOURS_PER_DAY * seconds_per_hour
+	return remaining * MILLISECONDS_PER_SECOND
+
+
 static func ms_until_et_midnight() -> int:
-	## Prefer ProgressManager server sync; local fallback only when unsynced.
-	## Resolve via /root so this class_name script does not hard-depend on Autoload
-	## globals (that chain breaks CodexCatalog compilation).
-	var tree := Engine.get_main_loop() as SceneTree
-	if tree != null and tree.root != null:
-		var pm := tree.root.get_node_or_null("/root/ProgressManager")
-		if pm != null and not pm.last_time_payload.is_empty():
-			return int(pm.ms_until_daily_reset_display())
-	return ms_until_et_midnight_local_fallback()
+	## Arena lobby uses the production 19:00 UTC game day, not Eastern midnight.
+	return ms_until_game_day_reset_utc()
 
 
 static func ms_until_et_midnight_local_fallback() -> int:
-	## Approximate Eastern as UTC-4 (EDT). Lobby-only ETA when /api/time/now unavailable.
+	## Offline display only for daily login / todayET. Not the Arena 19:00 UTC cap.
 	var unix := int(Time.get_unix_time_from_system())
 	var seconds_per_hour := SECONDS_PER_MINUTE * MINUTES_PER_HOUR
-	var seconds_per_day := seconds_per_hour * HOURS_PER_DAY
-	var et := unix - ET_DAY_FALLBACK_OFFSET_HOURS * seconds_per_hour
-	var day_sec := posmod(et, seconds_per_day)
-	return (seconds_per_day - day_sec) * MILLISECONDS_PER_SECOND
+	var et_unix := unix - ET_STANDARD_OFFSET_HOURS * seconds_per_hour
+	var et := Time.get_datetime_dict_from_unix_time(et_unix)
+	var hour := int(et.get("hour", 0))
+	var minute := int(et.get("minute", 0))
+	var second := int(et.get("second", 0))
+	var elapsed := hour * seconds_per_hour + minute * SECONDS_PER_MINUTE + second
+	var remaining := HOURS_PER_DAY * seconds_per_hour - elapsed
+	if remaining <= 0:
+		remaining = HOURS_PER_DAY * seconds_per_hour
+	return remaining * MILLISECONDS_PER_SECOND
 
 
 static func resolve_opp_items(opp: Dictionary) -> Array:

@@ -31,7 +31,7 @@ const {
   FUEL_PURCHASE_AMOUNT,
   FUEL_PURCHASE_MAX,
   SHOP_REFRESH_COST,
-  ARENA_PAID_BATTLE_COST,
+  ARENA_SKIP_COST,
   DUNGEON_SKIP_COST,
   skipCostFor,
   skipCostHalfUnits,
@@ -77,7 +77,7 @@ test("finalized Nova sink costs", () => {
   assert.equal(FUEL_PURCHASE_AMOUNT, 20);
   assert.equal(FUEL_PURCHASE_MAX, 10);
   assert.equal(SHOP_REFRESH_COST, 20);
-  assert.equal(ARENA_PAID_BATTLE_COST, 15);
+  assert.equal(ARENA_SKIP_COST, 10);
   assert.equal(DUNGEON_SKIP_COST, 25);
   assert.equal(STARTING_NOVA_DISPLAY, 500);
 });

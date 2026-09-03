@@ -4,7 +4,7 @@
  *
  * XP, fuel costs, combat, and gear STAT budgets are intentionally out of scope.
  */
-import { attributePurchaseCost, miningStardustResolved, MINUTES_PER_HOUR as PRODUCTION_MINUTES_PER_HOUR, stimSellValueResolved, stimEconomicLevel, resolveStimRarity } from "./productionMath/index.js";
+import { attributePurchaseCost, miningStardustResolved, MINUTES_PER_HOUR as PRODUCTION_MINUTES_PER_HOUR, stimSellValueResolved, stimEconomicLevel, resolveStimRarity, arenaStardustReward } from "./productionMath/index.js";
 
 // ── Constants ────────────────────────────────────────────────
 export const MISSION_GEAR_BASE_CHANCE = 0.2;
@@ -203,7 +203,7 @@ export function MissionStardustReward(level, fuelCost) {
 }
 
 export function ArenaWinStardust(level = 1) {
-  return Math.round(ARENA_WIN_FUEL_EQUIVALENT * StardustPerFuel(level));
+  return arenaStardustReward(level);
 }
 
 export function MiningStardust(level, minutes) {

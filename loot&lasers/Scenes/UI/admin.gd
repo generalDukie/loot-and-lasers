@@ -1359,7 +1359,8 @@ func _format_inspect_sheet(data: Dictionary) -> String:
 		lines.append(_inspect_section("ARENA"))
 		for arena_key in [
 			"arena_rating", "arena_wins", "arena_losses", "arena_battles",
-			"arena_streak", "arena_max_streak", "arena_attempts_left", "arena_attempts_date",
+			"arena_streak", "arena_max_streak", "arena_rewarded_wins_today",
+			"arena_rewarded_wins_date", "arena_cooldown_at",
 		]:
 			if ch.has(arena_key):
 				lines.append(_inspect_line(str(arena_key).capitalize().replace("_", " ").replace("Arena ", ""), _inspect_scalar(_inspect_take(ch, consumed, arena_key))))
@@ -1367,6 +1368,9 @@ func _format_inspect_sheet(data: Dictionary) -> String:
 	var leftover: PackedStringArray = []
 	for k in ch.keys():
 		if consumed.has(k):
+			continue
+		if k == "arena_attempts" or k == "arena_attempts_left" or k == "arena_attempts_date":
+			consumed[k] = true
 			continue
 		leftover.append(_inspect_line(str(k).capitalize().replace("_", " "), _inspect_scalar(ch[k])))
 	if not leftover.is_empty():

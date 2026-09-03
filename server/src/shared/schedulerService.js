@@ -85,9 +85,9 @@ export const RECURRING_CONSUMERS = Object.freeze([
   },
   {
     id: "arena_daily",
-    kind: "daily_et",
-    boundary: "todayET",
-    fields: ["arena_attempts_date", "arena_rewarded_wins_date"],
+    kind: "production_game_day",
+    boundary: "productionGameDayId 19:00 UTC",
+    fields: ["arena_rewarded_wins_date"],
   },
   {
     id: "dungeon_lives",
@@ -239,7 +239,7 @@ export function getCooldownRemainingMs(endsAtMs, nowMs = clock.nowMs()) {
 // ── Built-in marker hooks (audit / observability only) ─────────
 registerDailyHook("period_marker", async (ctx) => ({
   ok: true,
-  note: "Claim-time systems (arena, dungeon lives, daily login) use todayET on next request",
+  note: "Claim-time systems (arena rewarded wins use productionGameDayId; dungeon lives, daily login use todayET) on next request",
   periodId: ctx.periodId,
 }));
 

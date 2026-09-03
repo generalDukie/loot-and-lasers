@@ -594,7 +594,7 @@ func _can_perform_optional() -> bool:
 		"equip_item":
 			return _has_unequipped_gear()
 		"arena_battle":
-			return ArenaManager != null and ArenaManager.free_battles_left > 0
+			return ArenaManager != null
 		"dungeon_fight":
 			return _frontier_fight_available()
 		"click_target":

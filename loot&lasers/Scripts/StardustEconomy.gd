@@ -245,7 +245,7 @@ static func mission_stardust_reward(level: int, fuel_cost: float) -> int:
 
 
 static func arena_win_stardust(level: int = 1) -> int:
-	return int(round(ARENA_WIN_FUEL_EQUIVALENT * float(stardust_per_fuel(level))))
+	return maxi(0, _round_half_up(ARENA_WIN_FUEL_EQUIVALENT * float(stardust_per_fuel(level))))
 
 
 static func mining_stardust(level: int, minutes: float) -> int:

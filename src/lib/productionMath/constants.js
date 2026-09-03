@@ -301,55 +301,57 @@ export const MARKET_STIM_ATTRIBUTES = Object.freeze([
   "vitality",
   "luck",
 ]);
+export const COMPANY_ID_CNC = "CNC";
+export const COMPANY_ID_BJS = "BJS";
 export const COMPANY_ID_DTD = "DTD";
-export const COMPANY_ID_TTT = "TTT";
-export const COMPANY_ID_RDR = "RDR";
 export const COMPANY_ID_GORP = "GORP";
 export const COMPANY_IDS = Object.freeze([
+  COMPANY_ID_CNC,
+  COMPANY_ID_BJS,
   COMPANY_ID_DTD,
-  COMPANY_ID_TTT,
-  COMPANY_ID_RDR,
   COMPANY_ID_GORP,
 ]);
+export const COMPANY_SLOT_COUNT = 4;
+export const COMPANY_PREMIUM_SLOT_COUNT = 1;
 export const COMPANY_FULL_NAMES = Object.freeze({
-  [COMPANY_ID_DTD]: "Duct Tape Dynamics",
-  [COMPANY_ID_TTT]: "Terribly Tedious Technologies",
-  [COMPANY_ID_RDR]: "Run-Down Robotics",
+  [COMPANY_ID_CNC]: "Crown & Carapace",
+  [COMPANY_ID_BJS]: "Ballistics & Jewelry Services",
+  [COMPANY_ID_DTD]: "Duct-Tape Dynamics",
   [COMPANY_ID_GORP]: "GORPTEK",
 });
 export const COMPANY_ABBREVIATIONS = Object.freeze({
+  [COMPANY_ID_CNC]: "C&C",
+  [COMPANY_ID_BJS]: "BJ Services",
   [COMPANY_ID_DTD]: "DTD",
-  [COMPANY_ID_TTT]: "TTT",
-  [COMPANY_ID_RDR]: "RDR",
   [COMPANY_ID_GORP]: "GORP",
 });
 /** Short brand tokens baked into generated Gear names. Not the legal full name. */
 export const COMPANY_NAME_TOKENS = Object.freeze({
+  [COMPANY_ID_CNC]: "C&C",
+  [COMPANY_ID_BJS]: "BJ Services",
   [COMPANY_ID_DTD]: "Duct Tape",
-  [COMPANY_ID_TTT]: "Tedious",
-  [COMPANY_ID_RDR]: "Run-Down",
   [COMPANY_ID_GORP]: "GORPTEK",
 });
 /** Chance a generated Gear item receives inspect-only company flavor text. */
 export const COMPANY_FLAVOR_CHANCE_BPS = 2000;
 export const COMPANY_FLAVOR_LINES = Object.freeze({
+  [COMPANY_ID_CNC]: Object.freeze([
+    "Crown & Carapace: the shell is ceremonial. The dents are not.",
+    "C&C: polished enough to look expensive. Tough enough to survive that.",
+    "Issued under a Crown. Repaired under a Carapace.",
+    "If it looks regal, that's the Carapace talking.",
+  ]),
+  [COMPANY_ID_BJS]: Object.freeze([
+    "Ballistics & Jewelry Services: if it sparkles, it still shoots.",
+    "BJ Services: calibrated, gem-set, and slightly overinsured.",
+    "Half ballistic. Half jewelry. All invoice.",
+    "BJ Services does not do subtle. It does settings.",
+  ]),
   [COMPANY_ID_DTD]: Object.freeze([
     "Held together by optimism and an entire roll of Duct Tape.",
     "DTD warranty: if it falls apart, add more tape.",
-    "Duct Tape Dynamics: structural integrity sold separately.",
-    "Good enough. That's the Duct Tape Dynamics promise.",
-  ]),
-  [COMPANY_ID_TTT]: Object.freeze([
-    "Terribly Tedious Technologies: please allow 6–8 business years.",
-    "Every bolt has a form. The form has an addendum.",
-    "Tediously specified. Tediously assembled. Tediously yours.",
-    "Comes with a manual. The manual has a manual.",
-  ]),
-  [COMPANY_ID_RDR]: Object.freeze([
-    "Run-Down Robotics: previously loved, currently rattling.",
-    "It still boots. We checked. Once.",
-    "Run-down, not run-out. There's a difference. Barely.",
-    "If it sparks, that's character.",
+    "Duct-Tape Dynamics: structural integrity sold separately.",
+    "Good enough. That's the Duct-Tape Dynamics promise.",
   ]),
   [COMPANY_ID_GORP]: Object.freeze([
     "GORPTEK-certified. Do not ask what GORP stands for.",
@@ -360,32 +362,36 @@ export const COMPANY_FLAVOR_LINES = Object.freeze({
 });
 export const SHIPMENT_INELIGIBLE_INSPECT_TAG = "No Refunds — Shipment Ineligible";
 export const COMPANY_SLOTS = Object.freeze({
-  [COMPANY_ID_DTD]: Object.freeze(["helmet", "armor", "legs", "boots"]),
-  [COMPANY_ID_TTT]: Object.freeze(["armor", "boots", "neck", "accessory"]),
-  [COMPANY_ID_RDR]: Object.freeze(["helmet", "legs", "weapon", "ship_module"]),
-  [COMPANY_ID_GORP]: Object.freeze(["weapon", "neck", "accessory", "ship_module"]),
+  [COMPANY_ID_CNC]: Object.freeze(["helmet", "armor", "legs", "ship_module"]),
+  [COMPANY_ID_BJS]: Object.freeze(["helmet", "weapon", "neck", "accessory"]),
+  [COMPANY_ID_DTD]: Object.freeze(["legs", "boots", "accessory", "ship_module"]),
+  [COMPANY_ID_GORP]: Object.freeze(["armor", "boots", "weapon", "neck"]),
 });
 export const SLOT_ELIGIBLE_COMPANIES = Object.freeze({
-  helmet: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_RDR]),
-  armor: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_TTT]),
-  legs: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_RDR]),
-  boots: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_TTT]),
-  neck: Object.freeze([COMPANY_ID_TTT, COMPANY_ID_GORP]),
-  accessory: Object.freeze([COMPANY_ID_TTT, COMPANY_ID_GORP]),
-  weapon: Object.freeze([COMPANY_ID_RDR, COMPANY_ID_GORP]),
-  ship_module: Object.freeze([COMPANY_ID_RDR, COMPANY_ID_GORP]),
+  helmet: Object.freeze([COMPANY_ID_CNC, COMPANY_ID_BJS]),
+  armor: Object.freeze([COMPANY_ID_CNC, COMPANY_ID_GORP]),
+  legs: Object.freeze([COMPANY_ID_CNC, COMPANY_ID_DTD]),
+  boots: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_GORP]),
+  neck: Object.freeze([COMPANY_ID_BJS, COMPANY_ID_GORP]),
+  accessory: Object.freeze([COMPANY_ID_BJS, COMPANY_ID_DTD]),
+  weapon: Object.freeze([COMPANY_ID_BJS, COMPANY_ID_GORP]),
+  ship_module: Object.freeze([COMPANY_ID_CNC, COMPANY_ID_DTD]),
 });
 export const SHIPMENT_ITEM_COUNT = 5;
 export const SHIPMENT_PAYOUT_BPS = 11000;
 export const SHIPMENT_BONUS_PERCENT = 10;
 export const SHIPMENT_REPUTATION_REWARD = 100;
+/** Black Market Shipping Dock presentation modes. Settlement still uses PreviewShipment / ConfirmShipment. */
+export const SHIPMENT_DOCK_MODE_SALE = "sale";
+export const SHIPMENT_DOCK_MODE_SHIPMENT = "shipment";
+export const SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE = "same_company_ineligible";
 export const COMPANY_REPUTATION_PER_LEVEL = 1500;
 export const COMPANY_WAITING_TOKEN_SLOTS = 1;
 export const TOKEN_ROTATION_PERIOD = 4;
 export const COMPANY_TOKEN_EPIC_OFFSET = Object.freeze({
-  [COMPANY_ID_DTD]: 0,
-  [COMPANY_ID_TTT]: 1,
-  [COMPANY_ID_RDR]: 2,
+  [COMPANY_ID_CNC]: 0,
+  [COMPANY_ID_BJS]: 1,
+  [COMPANY_ID_DTD]: 2,
   [COMPANY_ID_GORP]: 3,
 });
 export const TOKEN_RARITY_RARE = "rare";

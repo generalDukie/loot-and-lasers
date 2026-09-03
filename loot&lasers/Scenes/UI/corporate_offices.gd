@@ -1,33 +1,23 @@
 extends Control
-## Corporate Offices — company reputation, manual Shipments, and Commission tokens.
+## Corporate Offices — company reputation, token storage, overflow resolution, and Commission tokens.
 
-const SLOT_COUNT := CompanyRules.SHIPMENT_ITEM_COUNT
-const BACKDROP_FILE := "corporate-offices-bg.jpg"
-const BACKDROP_DIM := Color(0.03, 0.04, 0.07, 0.28)
+const BACKDROP_FILE := "corporate-offices-bg.png"
 const OVERLAY_PANEL_FILL := Color(0.05, 0.06, 0.09, 0.78)
-const OVERLAY_PANEL_FILL_STRONG := Color(0.07, 0.09, 0.13, 0.88)
 const OVERLAY_CARD_FILL := Color(0.06, 0.07, 0.11, 0.82)
 const OVERLAY_CARD_FILL_IDLE := Color(0.05, 0.06, 0.09, 0.72)
 const OVERLAY_HOVER_FILL := Color(0.08, 0.09, 0.14, 0.86)
 const OVERLAY_PRESSED_FILL := Color(0.07, 0.08, 0.12, 0.86)
 const OVERLAY_BANNER_FILL := Color(0.22, 0.12, 0.04, 0.82)
-const OVERLAY_ITEM_FILL := Color(0.05, 0.06, 0.09, 0.78)
 const OVERLAY_TOKEN_FILL := Color(0.07, 0.08, 0.12, 0.82)
 
 var _status: Label
 var _overflow_banner: PanelContainer
 var _overflow_label: Label
 var _company_row: HBoxContainer
-var _ship_list: VBoxContainer
-var _ship_summary: Label
-var _preview_btn: Button
-var _confirm_btn: Button
 var _commission_host: VBoxContainer
 var _busy := false
 
 var _selected_company := CompanyRules.COMPANY_ID_DTD
-var _selected_ids: Array[String] = []
-var _preview: Dictionary = {}
 var _stage := "home"
 var _spend_token_id := ""
 var _chosen_slot := ""
@@ -74,7 +64,14 @@ func _on_company_error(error: String) -> void:
 
 
 func _build() -> void:
-	add_child(ClientUi.make_page_bg(self, "hub"))
+	# Full-bleed offices art — no wash, dim, or page gutter over the photo.
+	var bg := TextureRect.new()
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.texture = _load_offices_texture(BACKDROP_FILE)
+	add_child(bg)
+	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
 	var margin := MarginContainer.new()
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -130,35 +127,7 @@ func _build() -> void:
 	_company_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.add_child(_company_row)
 
-	var stage := Control.new()
-	stage.clip_contents = true
-	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(stage)
-
-	var bg := TextureRect.new()
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.texture = _load_offices_texture(BACKDROP_FILE)
-	stage.add_child(bg)
-	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-
-	var dim := ColorRect.new()
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dim.color = BACKDROP_DIM
-	stage.add_child(dim)
-	dim.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-
-	var body := HBoxContainer.new()
-	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	body.add_theme_constant_override("separation", 12)
-	stage.add_child(body)
-	body.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
-
-	body.add_child(_make_column("Shipment", _build_shipment_column))
-	body.add_child(_make_column("Commissions", _build_commission_column))
+	root.add_child(_make_column("Commissions", _build_commission_column))
 
 
 func _make_column(title: String, fill: Callable) -> PanelContainer:
@@ -190,43 +159,6 @@ func _make_column(title: String, fill: Callable) -> PanelContainer:
 	return panel
 
 
-func _build_shipment_column(col: VBoxContainer) -> void:
-	_ship_summary = Label.new()
-	_ship_summary.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ship_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_ship_summary.add_theme_font_size_override("font_size", 14)
-	_ship_summary.add_theme_color_override("font_color", ClientUi.MUTED)
-	col.add_child(_ship_summary)
-
-	var scroll := ScrollContainer.new()
-	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	col.add_child(scroll)
-	_ship_list = VBoxContainer.new()
-	_ship_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_ship_list.add_theme_constant_override("separation", 6)
-	scroll.add_child(_ship_list)
-
-	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 8)
-	col.add_child(actions)
-	_preview_btn = Button.new()
-	_preview_btn.text = "Preview payout"
-	_preview_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	_preview_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ClientUi.apply_accent_chip_button(_preview_btn)
-	_preview_btn.pressed.connect(_on_preview_pressed)
-	actions.add_child(_preview_btn)
-	_confirm_btn = Button.new()
-	_confirm_btn.text = "Confirm Shipment"
-	_confirm_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	_confirm_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ClientUi.apply_accent_chip_button(_confirm_btn)
-	_confirm_btn.pressed.connect(_on_confirm_pressed)
-	actions.add_child(_confirm_btn)
-
-
 func _build_commission_column(col: VBoxContainer) -> void:
 	var scroll := ScrollContainer.new()
 	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -242,7 +174,6 @@ func _build_commission_column(col: VBoxContainer) -> void:
 func _refresh() -> void:
 	_refresh_companies()
 	_refresh_overflow_banner()
-	_refresh_shipment()
 	_refresh_commission()
 
 
@@ -283,8 +214,6 @@ func _make_company_card(row: Dictionary) -> Button:
 	))
 	btn.pressed.connect(func() -> void:
 		_selected_company = cid
-		_selected_ids.clear()
-		_preview = {}
 		_stage = "home"
 		_spend_token_id = ""
 		_chosen_slot = ""
@@ -371,143 +300,7 @@ func _refresh_overflow_banner() -> void:
 	_overflow_banner.visible = not pending.is_empty()
 	if pending.is_empty():
 		return
-	_overflow_label.text = "Unresolved token overflow: %s. Choose which Commission to keep before shipping more Gear for that Company." % ", ".join(pending)
-
-
-func _refresh_shipment() -> void:
-	for child in _ship_list.get_children():
-		child.queue_free()
-	var overflow := CompanyManager.overflow_pending(_selected_company)
-	var items := CompanyManager.eligible_for_company(_selected_company)
-	if overflow:
-		_ship_summary.text = "%s Shipments are paused until you resolve the waiting-token choice." % CompanyRules.abbreviation(_selected_company)
-		_preview_btn.disabled = true
-		_confirm_btn.disabled = true
-		var pause := Label.new()
-		pause.text = "You can still ship for the other three Companies."
-		pause.add_theme_color_override("font_color", ClientUi.MUTED)
-		_ship_list.add_child(pause)
-		return
-
-	var selected_n := _selected_ids.size()
-	_ship_summary.text = "Select exactly %s unequipped %s Gear pieces. Market and Contraband stock cannot be shipped. Equipped Gear is hidden. These items will be permanently consumed." % [
-		SLOT_COUNT,
-		CompanyRules.abbreviation(_selected_company),
-	]
-	if items.is_empty():
-		var empty := Label.new()
-		empty.text = "No eligible %s Gear in your backpack." % CompanyRules.abbreviation(_selected_company)
-		empty.add_theme_color_override("font_color", ClientUi.MUTED)
-		_ship_list.add_child(empty)
-	for it in items:
-		if typeof(it) != TYPE_DICTIONARY:
-			continue
-		_ship_list.add_child(_make_item_row(it))
-
-	var base := 0
-	for it in items:
-		if typeof(it) != TYPE_DICTIONARY:
-			continue
-		if _selected_ids.has(str(it.get("id", ""))):
-			base += int(it.get("sell_value", 0))
-	var preview_ok := not _preview.is_empty() and _preview_matches_selection()
-	var extra := ""
-	if preview_ok:
-		var token_note := ""
-		var awarded: Variant = _preview.get("awarded_tokens", [])
-		if bool(_preview.get("levels_up", false)) and typeof(awarded) == TYPE_ARRAY and awarded.size() > 0 and typeof(awarded[0]) == TYPE_DICTIONARY:
-			token_note = " — this will level the Company and award a %s token" % CompanyRules.rarity_label(str(awarded[0].get("rarity", "rare")))
-		extra = "\nServer preview: %s base + %s bonus = %s Stardust. +%s reputation%s." % [
-			int(_preview.get("base_value", 0)),
-			int(_preview.get("bonus", 0)),
-			int(_preview.get("payout", 0)),
-			CompanyRules.SHIPMENT_REPUTATION_REWARD,
-			token_note,
-		]
-	_ship_summary.text += "\nSelected %s / %s. Listed sell total %s.%s" % [selected_n, SLOT_COUNT, base, extra]
-	_preview_btn.disabled = _busy or selected_n != SLOT_COUNT
-	_confirm_btn.disabled = _busy or not preview_ok
-
-
-func _preview_matches_selection() -> bool:
-	var ids: Array = _preview.get("items", []) if typeof(_preview.get("items", [])) == TYPE_ARRAY else []
-	if ids.size() != _selected_ids.size():
-		return false
-	var preview_ids: Array[String] = []
-	for it in ids:
-		if typeof(it) == TYPE_DICTIONARY:
-			preview_ids.append(str(it.get("id", "")))
-	for sid in _selected_ids:
-		if not preview_ids.has(sid):
-			return false
-	return str(_preview.get("company_id", "")) == _selected_company
-
-
-func _make_item_row(it: Dictionary) -> PanelContainer:
-	var iid := str(it.get("id", ""))
-	var selected := _selected_ids.has(iid)
-	var accent := ClientUi.CYAN if selected else Color(0.35, 0.40, 0.48, 0.4)
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		OVERLAY_PANEL_FILL_STRONG if selected else OVERLAY_ITEM_FILL,
-		accent,
-		8,
-		1
-	))
-	panel.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventMouseButton:
-			var mb := event as InputEventMouseButton
-			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
-				_toggle_item(iid)
-				panel.accept_event()
-	)
-	var pad := MarginContainer.new()
-	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for k in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		pad.add_theme_constant_override(k, 8)
-	panel.add_child(pad)
-	var row := HBoxContainer.new()
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", 8)
-	pad.add_child(row)
-	row.add_child(GearIcon.make(it, 32.0))
-	var col := VBoxContainer.new()
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(col)
-	var name_lab := Label.new()
-	name_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_lab.text = "%s  ·  %s %s" % [
-		str(it.get("name", "Gear")),
-		str(it.get("rarity", "")).capitalize(),
-		CompanyRules.slot_label(str(it.get("type", ""))),
-	]
-	name_lab.add_theme_font_size_override("font_size", 13)
-	name_lab.add_theme_color_override("font_color", ClientUi.rarity_color(str(it.get("rarity", "common"))))
-	col.add_child(name_lab)
-	var meta := Label.new()
-	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	meta.text = "Lv %s  ·  sell %s  ·  %s" % [
-		int(it.get("level", 1)),
-		int(it.get("sell_value", 0)),
-		str(it.get("origin", "earned")).replace("_", " "),
-	]
-	meta.add_theme_font_size_override("font_size", 12)
-	meta.add_theme_color_override("font_color", ClientUi.MUTED)
-	col.add_child(meta)
-	return panel
-
-
-func _toggle_item(item_id: String) -> void:
-	_preview = {}
-	if _selected_ids.has(item_id):
-		_selected_ids.erase(item_id)
-	elif _selected_ids.size() < SLOT_COUNT:
-		_selected_ids.append(item_id)
-	_refresh_shipment()
+	_overflow_label.text = "Unresolved token overflow: %s. Choose which Commission to keep before sending more return shipments for that Company from the Black Market." % ", ".join(pending)
 
 
 func _refresh_commission() -> void:
@@ -530,7 +323,7 @@ func _fill_waiting_token(row: Dictionary) -> void:
 	if typeof(waiting) != TYPE_DICTIONARY or waiting.is_empty():
 		var empty := Label.new()
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		empty.text = "No waiting Commission token. Each successful Shipment grants +%s reputation. A Company level every %s reputation awards one token." % [
+		empty.text = "No waiting Commission token. Each successful return Shipment from the Black Market grants +%s reputation. A Company level every %s reputation awards one token." % [
 			CompanyRules.SHIPMENT_REPUTATION_REWARD,
 			CompanyRules.COMPANY_REPUTATION_PER_LEVEL,
 		]
@@ -810,66 +603,6 @@ func _find_token(row: Dictionary, token_id: String) -> Dictionary:
 		if typeof(tok) == TYPE_DICTIONARY and str((tok as Dictionary).get("id", "")) == token_id:
 			return tok as Dictionary
 	return {}
-
-
-func _on_preview_pressed() -> void:
-	if _busy or _selected_ids.size() != SLOT_COUNT:
-		return
-	_busy = true
-	_set_status("Requesting server payout preview…")
-	var res: Dictionary = await CompanyManager.preview_shipment(_selected_company, _selected_ids)
-	_busy = false
-	if not res.ok:
-		_preview = {}
-		_set_status(str(res.get("error", "Preview failed")))
-		_refresh_shipment()
-		return
-	_preview = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
-	_set_status("Preview ready. Confirm to consume the five items.")
-	_refresh_shipment()
-
-
-func _on_confirm_pressed() -> void:
-	if _busy or not _preview_matches_selection():
-		return
-	var payout := int(_preview.get("payout", 0))
-	var body := "This permanently consumes the five selected Gear items.\nPayout: %s Stardust.\nReputation: +%s.\n%s" % [
-		payout,
-		CompanyRules.SHIPMENT_REPUTATION_REWARD,
-		str(_preview.get("warning", "These five items will be permanently consumed.")),
-	]
-	var sheet := ClientUi.make_confirm_sheet(
-		"Shipment",
-		"Send this crate?",
-		body,
-		func() -> void: _submit_shipment(),
-		Callable(),
-		"Confirm Shipment",
-		"Cancel",
-		ClientUi.GOLD,
-		true
-	)
-	add_child(sheet)
-
-
-func _submit_shipment() -> void:
-	if _busy:
-		return
-	_busy = true
-	_set_status("Settling Shipment…")
-	var res: Dictionary = await CompanyManager.confirm_shipment(_selected_company, _selected_ids)
-	_busy = false
-	if not res.ok:
-		_set_status(str(res.get("error", "Shipment failed")))
-		await CompanyManager.load_status()
-		_refresh()
-		return
-	_selected_ids.clear()
-	_preview = {}
-	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
-	_set_status("Shipment paid %s Stardust." % int(data.get("payout", 0)))
-	await CompanyManager.load_status()
-	_refresh()
 
 
 func _on_redeem_pressed() -> void:

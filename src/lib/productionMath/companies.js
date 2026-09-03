@@ -3,7 +3,7 @@
  * Canonical company identities, Shipment math, token rotation, Commission allocation.
  */
 import { roundHalfUp } from "./rounding.js";
-import { canonicalGearSlot } from "./gear.js";
+import { canonicalGearSlot, isShipmentOriginDenied } from "./gear.js";
 import {
   BASIS_POINTS_DENOMINATOR,
   CANONICAL_GEAR_STAT_KEYS,
@@ -18,6 +18,7 @@ import {
   COMPANY_REPUTATION_PER_LEVEL,
   COMPANY_SLOTS,
   COMPANY_TOKEN_EPIC_OFFSET,
+  PREMIUM_GEAR_SLOTS,
   EPIC_COMMISSION_LUCK_PERCENT,
   EPIC_COMMISSION_PRIMARY_PERCENT,
   EPIC_COMMISSION_RANDOM_REMAINDER_PERCENT,
@@ -28,6 +29,9 @@ import {
   RARE_COMMISSION_WEIGHT_MAX_PERCENT,
   RARE_COMMISSION_WEIGHT_MIN_PERCENT,
   RARE_COMMISSION_WEIGHT_TOTAL_PERCENT,
+  SHIPMENT_DOCK_MODE_SALE,
+  SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE,
+  SHIPMENT_DOCK_MODE_SHIPMENT,
   SHIPMENT_ITEM_COUNT,
   SHIPMENT_PAYOUT_BPS,
   SHIPMENT_REPUTATION_REWARD,
@@ -85,6 +89,20 @@ export function companyManufacturesSlot(companyId, slot) {
   const key = canonicalGearSlot(slot);
   if (!isCompanyId(id) || !key) return false;
   return (COMPANY_SLOTS[id] || []).includes(key);
+}
+
+export function premiumSlotsForCompany(companyId) {
+  const id = String(companyId || "");
+  if (!isCompanyId(id)) return Object.freeze([]);
+  return Object.freeze(
+    (COMPANY_SLOTS[id] || []).filter((slot) => PREMIUM_GEAR_SLOTS.includes(slot)),
+  );
+}
+
+export function companySlotCount(companyId) {
+  const id = String(companyId || "");
+  if (!isCompanyId(id)) return 0;
+  return (COMPANY_SLOTS[id] || []).length;
 }
 
 export function rollManufacturerForSlot(slot, rng) {
@@ -161,6 +179,126 @@ export function shipmentPayoutFromBase(baseValue) {
     item_count: SHIPMENT_ITEM_COUNT,
     reputation: SHIPMENT_REPUTATION_REWARD,
   };
+}
+
+function persistedDockSellValue(item) {
+  return Math.max(0, Math.floor(Number(item?.sell_value) || 0));
+}
+
+function filledDockItem(item) {
+  if (!item || typeof item !== "object") return false;
+  return String(item.id || "").trim() !== "";
+}
+
+export function isShipmentDockEligibleItem(item) {
+  if (!filledDockItem(item)) return false;
+  if (item.is_equipped) return false;
+  const slot = canonicalGearSlot(item.type || item.slot);
+  if (!slot) return false;
+  const manufacturer = String(item.manufacturer || "").trim();
+  if (!isCompanyId(manufacturer)) return false;
+  if (!companyManufacturesSlot(manufacturer, slot)) return false;
+  if (isShipmentOriginDenied(item.origin)) return false;
+  return item.shipment_eligible === true;
+}
+
+export function classifyShipmentDock(items) {
+  const filled = Array.isArray(items) ? items.filter(filledDockItem) : [];
+  if (filled.length !== SHIPMENT_ITEM_COUNT) {
+    return {
+      mode: SHIPMENT_DOCK_MODE_SALE,
+      company_id: null,
+      reason: "incomplete",
+    };
+  }
+  const ids = filled.map((item) => String(item.id || "").trim());
+  if (new Set(ids).size !== SHIPMENT_ITEM_COUNT) {
+    return {
+      mode: SHIPMENT_DOCK_MODE_SALE,
+      company_id: null,
+      reason: "duplicate",
+    };
+  }
+  const manufacturers = filled.map((item) => String(item.manufacturer || "").trim());
+  const unique = [...new Set(manufacturers)];
+  const companyId = unique.length === 1 ? unique[0] : "";
+  const sameLiveCompany = unique.length === 1 && isCompanyId(companyId);
+  if (sameLiveCompany && filled.every(isShipmentDockEligibleItem)) {
+    return {
+      mode: SHIPMENT_DOCK_MODE_SHIPMENT,
+      company_id: companyId,
+      reason: "qualifying",
+    };
+  }
+  if (sameLiveCompany) {
+    return {
+      mode: SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE,
+      company_id: companyId,
+      reason: "same_company_ineligible",
+    };
+  }
+  return {
+    mode: SHIPMENT_DOCK_MODE_SALE,
+    company_id: null,
+    reason: "mixed",
+  };
+}
+
+/**
+ * Presentation-only Shipping Dock row amounts.
+ * Starts from persisted sell_value and distributes the server-returned bonus
+ * in stable dock order so the five rows sum to the authoritative payout.
+ * Does not recompute the 1.10 formula and does not mutate persisted sell_value.
+ */
+export function allocateShipmentDisplayValues(sellValues, previewMath = {}) {
+  const values = (Array.isArray(sellValues) ? sellValues : []).map((value) => (
+    Math.max(0, Math.floor(Number(value) || 0))
+  ));
+  const count = values.length;
+  if (count === 0) return [];
+  const payout = Math.max(0, Math.floor(Number(previewMath.payout) || 0));
+  const bonus = Math.max(0, Math.floor(Number(previewMath.bonus) || 0));
+  const serverBase = Math.max(0, Math.floor(Number(previewMath.base_value) || 0));
+  const out = values.slice();
+  const shareBase = serverBase > 0 ? serverBase : out.reduce((sum, value) => sum + value, 0);
+  const extras = Array(count).fill(0);
+  let assigned = 0;
+  if (bonus > 0 && shareBase > 0) {
+    for (let i = 0; i < count; i += 1) {
+      extras[i] = Math.floor((bonus * out[i]) / shareBase);
+      assigned += extras[i];
+    }
+  }
+  let leftover = bonus - assigned;
+  let index = 0;
+  while (leftover > 0 && count > 0) {
+    extras[index] += 1;
+    leftover -= 1;
+    index = (index + 1) % count;
+  }
+  for (let i = 0; i < count; i += 1) out[i] += extras[i];
+  let delta = payout - out.reduce((sum, value) => sum + value, 0);
+  index = 0;
+  const maxSteps = count * (Math.abs(delta) + 1);
+  let steps = 0;
+  while (delta !== 0 && steps < maxSteps) {
+    const slot = index % count;
+    if (delta > 0) {
+      out[slot] += 1;
+      delta -= 1;
+    } else if (out[slot] > 0) {
+      out[slot] -= 1;
+      delta += 1;
+    }
+    index += 1;
+    steps += 1;
+  }
+  return out;
+}
+
+export function shipmentDisplayValuesForItems(items, previewMath = {}) {
+  const filled = Array.isArray(items) ? items.filter(filledDockItem) : [];
+  return allocateShipmentDisplayValues(filled.map(persistedDockSellValue), previewMath);
 }
 
 export function companyLevelFromReputation(reputation) {

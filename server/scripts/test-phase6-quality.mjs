@@ -67,8 +67,8 @@ import {
   rollMarketGearItemLevel,
   rollMarketGearSlot,
   CLASS_PRIMARY_INDEX,
-  COMPANY_ID_DTD,
-  COMPANY_ID_RDR,
+  COMPANY_ID_CNC,
+  COMPANY_ID_BJS,
   COMPANY_SLOTS,
   scoreGearIntrinsicQuality,
 } from "../../src/lib/productionMath/index.js";
@@ -613,14 +613,14 @@ test("Nova CDF matches the pre-Phase-9 rollItemStats stream exactly", () => {
     rarity: "rare",
     className: "Vanguard",
     rng: () => 0,
-  }).manufacturer, COMPANY_ID_DTD);
+  }).manufacturer, COMPANY_ID_CNC);
   assert.equal(GenerateGearItem({
     itemLevel: 12,
     itemType: "helmet",
     rarity: "rare",
     className: "Vanguard",
     rng: () => 0.99,
-  }).manufacturer, COMPANY_ID_RDR);
+  }).manufacturer, COMPANY_ID_BJS);
 
   const restoredHead = firstIntrinsicQualityCdfSamples("epic", INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL);
   const contaminated = firstIntrinsicQualityCdfSamples("epic", INTRINSIC_QUALITY_CDF_REFERENCE_LEVEL, {

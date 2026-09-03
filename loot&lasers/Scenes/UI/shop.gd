@@ -48,6 +48,7 @@ const MARKET_BRAND_TINT := Color("#9D6BFF")
 const MARKET_BRAND_FS := 69 ## was 46 × 1.5
 const MARKET_TAGLINE_FS := 19 ## was 15 × 1.25
 const SHOP_WINDOW_RESULT_INDEX: int = 0
+const SHIPMENT_PREVIEW_FLIGHT_NONE := -1
 var _status: Label
 var _refresh_timer: Control
 var _list: VBoxContainer
@@ -56,6 +57,13 @@ var _bag_items: Array = []
 ## Staging only — up to 5 item dicts (empty Dictionary = vacant). Not bag storage.
 var _sell_stage: Array = []
 var _sell_btn: Button
+var _sell_notice: Label
+var _shipment_preview: Dictionary = {}
+var _shipment_generation := 0
+var _shipment_in_flight_generation := SHIPMENT_PREVIEW_FLIGHT_NONE
+var _shipment_overflow_blocked := false
+var _shipment_error := ""
+var _shipment_retry_available := false
 var _busy := false
 var _booting := false
 var _busy_slot := ""
@@ -107,6 +115,7 @@ func _boot() -> void:
 	var requests := AsyncGroup.new()
 	requests.add(ShopManager.ensure_shop)
 	requests.add(_load_bag_items)
+	requests.add(_load_company_status)
 	var results := await requests.wait()
 	var res: Dictionary = results[SHOP_WINDOW_RESULT_INDEX]
 	if not is_inside_tree() or not is_instance_valid(self):
@@ -146,7 +155,37 @@ func _load_bag_items() -> void:
 	_prune_stale_sell_stage()
 
 
+func _load_company_status() -> void:
+	if CompanyManager == null:
+		return
+	await CompanyManager.load_status()
+
+
+func _invalidate_shipment_preview() -> void:
+	_shipment_generation += 1
+	_shipment_preview = {}
+	_shipment_overflow_blocked = false
+	_shipment_error = ""
+	_shipment_retry_available = false
+
+
+func _is_shipment_preview_in_flight() -> bool:
+	return _shipment_in_flight_generation != SHIPMENT_PREVIEW_FLIGHT_NONE
+
+
+func _end_shipment_preview_flight(requested_generation: int) -> void:
+	if _shipment_in_flight_generation == requested_generation:
+		_shipment_in_flight_generation = SHIPMENT_PREVIEW_FLIGHT_NONE
+
+
+func _refresh_after_stale_shipment_preview(requested_generation: int) -> void:
+	_end_shipment_preview_flight(requested_generation)
+	if is_inside_tree():
+		_populate()
+
+
 func _prune_stale_sell_stage() -> void:
+	var changed := false
 	for i in _sell_stage.size():
 		var staged: Variant = _sell_stage[i]
 		if typeof(staged) != TYPE_DICTIONARY or staged.is_empty():
@@ -156,8 +195,11 @@ func _prune_stale_sell_stage() -> void:
 		var live := InventoryRules.find_by_id(_bag_items, id)
 		if live.is_empty() or not InventoryRules.is_sellable(live):
 			_sell_stage[i] = {}
+			changed = true
 		else:
 			_sell_stage[i] = live
+	if changed:
+		_invalidate_shipment_preview()
 
 
 func _equipped_of_type(item_type: String) -> Dictionary:
@@ -1295,17 +1337,18 @@ func _make_sell_section() -> VBoxContainer:
 	col.add_child(rule)
 
 	var head := Label.new()
-	head.text = "SELL ITEMS"
+	head.text = "Sell Items - Send Shipments"
 	head.add_theme_font_size_override("font_size", 15)
 	head.add_theme_color_override("font_color", ClientUi.CYAN_SOFT)
 	ClientUi.apply_display_font(head)
 	col.add_child(head)
 
 	var bag_hint := Label.new()
-	bag_hint.text = "Bag — click or drag gear into the tray"
+	bag_hint.text = "Backpack - Add 5 items from the same manufacturer to send a return shipment and earn reputation with that company"
 	bag_hint.add_theme_font_size_override("font_size", 17)
 	bag_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_body_font(bag_hint)
+	bag_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(bag_hint)
 
 	var available := _sell_available_items()
@@ -1327,10 +1370,10 @@ func _make_sell_section() -> VBoxContainer:
 	while source_grid.get_child_count() < min_cells:
 		source_grid.add_child(_make_sell_bag_slot({}, false))
 	if available.is_empty():
-		bag_hint.text = "Bag — unequipped items appear here"
+		bag_hint.text = "Backpack - unequipped items appear here"
 
 	var tray_hint := Label.new()
-	tray_hint.text = "Sell tray — up to %s items" % SELL_SLOT_COUNT
+	tray_hint.text = "Shipping dock - Sell up to 5 items at once"
 	tray_hint.add_theme_font_size_override("font_size", 17)
 	tray_hint.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.9))
 	ClientUi.apply_body_font(tray_hint)
@@ -1339,9 +1382,19 @@ func _make_sell_section() -> VBoxContainer:
 	var stage_grid := _make_sell_grid()
 	stage_grid.custom_minimum_size.y = SELL_SLOT_H
 	col.add_child(stage_grid)
+	var display_by_id := _shipment_row_display_values()
 	for i in SELL_SLOT_COUNT:
 		var staged: Dictionary = _sell_stage[i] if typeof(_sell_stage[i]) == TYPE_DICTIONARY else {}
-		stage_grid.add_child(_make_sell_bag_slot(staged, true, i))
+		var display_value := -1
+		if not staged.is_empty():
+			display_value = int(display_by_id.get(str(staged.get("id", "")), -1))
+		stage_grid.add_child(_make_sell_bag_slot(staged, true, i, display_value))
+
+	_sell_notice = Label.new()
+	_sell_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_sell_notice.add_theme_font_size_override("font_size", 16)
+	ClientUi.apply_body_font(_sell_notice)
+	col.add_child(_sell_notice)
 
 	var footer := HBoxContainer.new()
 	footer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1509,12 +1562,113 @@ func _sell_staged_ids() -> Array:
 	return ids
 
 
+func _sell_dock_classification() -> Dictionary:
+	return CompanyRules.classify_shipment_dock(_sell_stage)
+
+
+func _shipment_preview_matches_dock() -> bool:
+	if _shipment_preview.is_empty():
+		return false
+	var ids := _sell_staged_ids()
+	var preview_items: Variant = _shipment_preview.get("items", [])
+	if typeof(preview_items) != TYPE_ARRAY or (preview_items as Array).size() != ids.size():
+		return false
+	var preview_ids: Dictionary = {}
+	for raw in preview_items:
+		if typeof(raw) == TYPE_DICTIONARY:
+			preview_ids[str((raw as Dictionary).get("id", ""))] = true
+	for iid in ids:
+		if not preview_ids.has(str(iid)):
+			return false
+	return str(_shipment_preview.get("company_id", "")) == str(_sell_dock_classification().get("company_id", ""))
+
+
+func _shipment_row_display_values() -> Dictionary:
+	var out := {}
+	if not _shipment_preview_matches_dock():
+		return out
+	var payout := int(_shipment_preview.get("payout", 0))
+	var bonus := int(_shipment_preview.get("bonus", 0))
+	var base_value := int(_shipment_preview.get("base_value", 0))
+	var sell_values: Array = []
+	var ids: Array = []
+	for slot in _sell_stage:
+		if typeof(slot) != TYPE_DICTIONARY or slot.is_empty():
+			continue
+		var item: Dictionary = slot
+		ids.append(str(item.get("id", "")))
+		sell_values.append(maxi(0, int(item.get("sell_value", 0))))
+	var allocated: Array[int] = CompanyRules.allocate_shipment_display_values(sell_values, payout, bonus, base_value)
+	for i in range(mini(ids.size(), allocated.size())):
+		out[str(ids[i])] = allocated[i]
+	return out
+
+
+func _set_sell_notice(text: String, color: Color) -> void:
+	if _sell_notice == null or not is_instance_valid(_sell_notice):
+		return
+	_sell_notice.text = text
+	_sell_notice.visible = not text.is_empty()
+	_sell_notice.add_theme_color_override("font_color", color)
+
+
+func _refresh_sell_notice(classification: Dictionary) -> void:
+	var mode := str(classification.get("mode", CompanyRules.SHIPMENT_DOCK_MODE_SALE))
+	if mode == CompanyRules.SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE:
+		_set_sell_notice(
+			"This selection does not qualify as a return shipment and will be sold as a normal sale. Market, Contraband, and other ineligible Gear cannot earn company reputation.",
+			ClientUi.WARNING
+		)
+		return
+	if mode != CompanyRules.SHIPMENT_DOCK_MODE_SHIPMENT:
+		_set_sell_notice("", ClientUi.MUTED)
+		return
+	var company_id := str(classification.get("company_id", ""))
+	if _shipment_overflow_blocked or CompanyManager.overflow_pending(company_id):
+		_set_sell_notice(
+			"%s already has an unresolved token choice. Deliver is blocked until you resolve it in Corporate Offices. This crate will not be sold as a normal sale." % CompanyRules.display_name(company_id),
+			ClientUi.WARNING
+		)
+		return
+	if not _shipment_error.is_empty():
+		_set_sell_notice(_shipment_error, ClientUi.DANGER)
+		return
+	if not _shipment_preview_matches_dock():
+		_set_sell_notice("Checking return shipment with the company…", ClientUi.MUTED)
+		return
+	var bonus := int(_shipment_preview.get("bonus", 0))
+	_set_sell_notice(
+		"Return shipment to %s. +%s%% bonus (%s Stardust) and +%s reputation." % [
+			CompanyRules.display_name(company_id),
+			CompanyRules.SHIPMENT_BONUS_PERCENT,
+			_format_sell_amount(bonus),
+			CompanyRules.SHIPMENT_REPUTATION_REWARD,
+		],
+		ClientUi.SUCCESS
+	)
+
+
 func _refresh_sell_button() -> void:
 	if _sell_btn == null or not is_instance_valid(_sell_btn):
 		return
 	var ids := _sell_staged_ids()
-	var total := _sell_preview_total()
-	_sell_btn.disabled = ids.is_empty() or _busy
+	var classification := _sell_dock_classification()
+	var mode := str(classification.get("mode", CompanyRules.SHIPMENT_DOCK_MODE_SALE))
+	var shipment_mode := mode == CompanyRules.SHIPMENT_DOCK_MODE_SHIPMENT
+	var overflow := shipment_mode and (
+		_shipment_overflow_blocked
+		or CompanyManager.overflow_pending(str(classification.get("company_id", "")))
+	)
+	var retry_available := shipment_mode and _shipment_retry_available and not overflow
+	var preview_ready := shipment_mode and _shipment_preview_matches_dock() and not overflow and _shipment_error.is_empty()
+	var total := int(_shipment_preview.get("payout", 0)) if preview_ready else _sell_preview_total()
+	var can_act := not ids.is_empty() and not _busy
+	if shipment_mode:
+		if retry_available:
+			can_act = can_act and not _is_shipment_preview_in_flight()
+		else:
+			can_act = can_act and preview_ready and not overflow
+	_sell_btn.disabled = not can_act
 	_sell_btn.text = ""
 	_sell_btn.icon = null
 	var row := _sell_btn_content_row()
@@ -1535,9 +1689,26 @@ func _refresh_sell_button() -> void:
 	row.add_child(prefix)
 	if ids.is_empty():
 		prefix.text = "SELL ITEMS — SELECT GEAR"
+		_refresh_sell_notice(classification)
 		return
-	prefix.text = "SELL ITEMS —"
-	# Icon immediately before the amount; 2× prior button glyph (16 → 32).
+	if shipment_mode:
+		prefix.text = "DELIVER SHIPMENT —"
+		if retry_available:
+			prefix.text = "RETRY PREVIEW"
+			_refresh_sell_notice(classification)
+			return
+		if not preview_ready:
+			if overflow:
+				prefix.text = "DELIVER SHIPMENT — RESOLVE TOKEN"
+			elif not _shipment_error.is_empty():
+				prefix.text = "DELIVER SHIPMENT — BLOCKED"
+			else:
+				prefix.text = "DELIVER SHIPMENT — PREVIEWING"
+			_refresh_sell_notice(classification)
+			_request_shipment_preview(classification)
+			return
+	else:
+		prefix.text = "SELL ITEMS —"
 	var glyph := CurrencyIcon.make("stardust", 32.0)
 	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(glyph)
@@ -1553,9 +1724,64 @@ func _refresh_sell_button() -> void:
 	)
 	ClientUi.apply_display_font(amount)
 	row.add_child(amount)
+	_refresh_sell_notice(classification)
+	if shipment_mode and not preview_ready and not retry_available:
+		_request_shipment_preview(classification)
 
 
-func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1) -> PanelContainer:
+func _request_shipment_preview(classification: Dictionary) -> void:
+	if _is_shipment_preview_in_flight():
+		return
+	if _shipment_retry_available:
+		return
+	if str(classification.get("mode", "")) != CompanyRules.SHIPMENT_DOCK_MODE_SHIPMENT:
+		return
+	var company_id := str(classification.get("company_id", ""))
+	var ids := _sell_staged_ids()
+	if company_id.is_empty() or ids.size() != CompanyRules.SHIPMENT_ITEM_COUNT:
+		return
+	if CompanyManager.overflow_pending(company_id):
+		_shipment_overflow_blocked = true
+		_refresh_sell_notice(classification)
+		return
+	_shipment_in_flight_generation = _shipment_generation
+	var generation := _shipment_generation
+	if CompanyManager.companies.is_empty():
+		await _load_company_status()
+	if generation != _shipment_generation or not is_inside_tree():
+		_refresh_after_stale_shipment_preview(generation)
+		return
+	if CompanyManager.overflow_pending(company_id):
+		_end_shipment_preview_flight(generation)
+		_shipment_overflow_blocked = true
+		_populate()
+		return
+	var res: Dictionary = await CompanyManager.preview_shipment(company_id, ids)
+	_end_shipment_preview_flight(generation)
+	if generation != _shipment_generation or not is_inside_tree():
+		if is_inside_tree():
+			_populate()
+		return
+	if not res.ok:
+		var code := str(res.get("code", ""))
+		if code == CompanyRules.COMPANY_OVERFLOW_PENDING:
+			_shipment_overflow_blocked = true
+			_shipment_error = ""
+			_shipment_retry_available = false
+		else:
+			_shipment_error = str(res.get("error", "This crate cannot be delivered as a shipment."))
+			_shipment_preview = {}
+			_shipment_retry_available = true
+		_populate()
+		return
+	_shipment_error = ""
+	_shipment_retry_available = false
+	_shipment_overflow_blocked = false
+	_shipment_preview = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	_populate()
+
+
+func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1, shipment_display_value: int = -1) -> PanelContainer:
 	var filled := not item.is_empty()
 	var panel := PanelContainer.new()
 	# Equal stretch across the 5 columns; height is locked so icons never grow.
@@ -1623,11 +1849,20 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		price_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		price_row.alignment = BoxContainer.ALIGNMENT_END
 		text_col.add_child(price_row)
+		var shown_value := shipment_display_value if shipment_display_value >= 0 else InventoryRules.estimate_sell_value(item)
 		price_row.add_child(CurrencyIcon.make_stardust_amount_row(
-			_format_sell_amount(InventoryRules.estimate_sell_value(item)),
+			_format_sell_amount(shown_value),
 			STALL_PRICE_ICON,
 			STALL_PRICE_FS
 		))
+		if shipment_display_value >= 0:
+			var bonus := Label.new()
+			bonus.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			bonus.text = CompanyRules.shipment_bonus_label()
+			bonus.add_theme_font_size_override("font_size", 16)
+			bonus.add_theme_color_override("font_color", ClientUi.SUCCESS)
+			ClientUi.apply_display_font(bonus)
+			price_row.add_child(bonus)
 	else:
 		var mark := Label.new()
 		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1719,6 +1954,7 @@ func _drop_on_sell_slot(stage_index: int, data: Variant) -> void:
 		if typeof(slot) == TYPE_DICTIONARY and str(slot.get("id", "")) == id:
 			_sell_stage[i] = {}
 	_sell_stage[stage_index] = item
+	_invalidate_shipment_preview()
 	_populate()
 
 
@@ -1739,6 +1975,7 @@ func _stage_sell_item(item: Dictionary) -> void:
 		Notify.blocked("Sell tray full", "Remove an item or confirm the sale")
 		return
 	_sell_stage[empty] = item.duplicate(true)
+	_invalidate_shipment_preview()
 	_populate()
 
 
@@ -1746,6 +1983,17 @@ func _unstage_sell_slot(stage_index: int) -> void:
 	if stage_index < 0 or stage_index >= _sell_stage.size():
 		return
 	_sell_stage[stage_index] = {}
+	_invalidate_shipment_preview()
+	_populate()
+
+
+func _retry_shipment_preview() -> void:
+	if _busy or _is_shipment_preview_in_flight() or not _shipment_retry_available:
+		return
+	if str(_sell_dock_classification().get("mode", "")) != CompanyRules.SHIPMENT_DOCK_MODE_SHIPMENT:
+		return
+	_shipment_retry_available = false
+	_shipment_error = ""
 	_populate()
 
 
@@ -1754,6 +2002,14 @@ func _on_confirm_sell() -> void:
 		return
 	var ids := _sell_staged_ids()
 	if ids.is_empty():
+		return
+	var classification := _sell_dock_classification()
+	var mode := str(classification.get("mode", CompanyRules.SHIPMENT_DOCK_MODE_SALE))
+	if mode == CompanyRules.SHIPMENT_DOCK_MODE_SHIPMENT:
+		if _shipment_retry_available:
+			_retry_shipment_preview()
+			return
+		_on_confirm_shipment(classification)
 		return
 	_busy = true
 	_refresh_sell_button()
@@ -1776,7 +2032,130 @@ func _on_confirm_sell() -> void:
 		dissolved_n = (dissolved as Array).size()
 	for i in _sell_stage.size():
 		_sell_stage[i] = {}
+	_invalidate_shipment_preview()
 	await _load_bag_items()
 	_load_equipped()
 	_set_status("Sold %s item(s) for %s Stardust" % [dissolved_n, NumberDisplay.quantity(gained)])
 	_populate()
+
+
+func _on_confirm_shipment(classification: Dictionary) -> void:
+	if _busy:
+		return
+	var company_id := str(classification.get("company_id", ""))
+	if company_id.is_empty() or not _shipment_preview_matches_dock():
+		_set_status("Wait for the company preview before delivering this shipment.")
+		return
+	if _shipment_overflow_blocked or CompanyManager.overflow_pending(company_id):
+		_set_status("Resolve %s token overflow in Corporate Offices before delivering." % CompanyRules.display_name(company_id))
+		return
+	var preview := _shipment_preview.duplicate(true)
+	var payout := int(preview.get("payout", 0))
+	var base_value := int(preview.get("base_value", 0))
+	var bonus := int(preview.get("bonus", 0))
+	var names: Array[String] = []
+	for slot in _sell_stage:
+		if typeof(slot) == TYPE_DICTIONARY and not slot.is_empty():
+			names.append(str((slot as Dictionary).get("name", "Gear")))
+	var token_note := "No company level this time."
+	var awarded: Variant = preview.get("awarded_tokens", [])
+	if bool(preview.get("levels_up", false)):
+		token_note = "This will raise %s to company level %s." % [
+			CompanyRules.display_name(company_id),
+			int(preview.get("next_level", 0)),
+		]
+		if typeof(awarded) == TYPE_ARRAY and awarded.size() > 0 and typeof(awarded[0]) == TYPE_DICTIONARY:
+			token_note += " It awards a %s Commission token." % CompanyRules.rarity_label(str((awarded[0] as Dictionary).get("rarity", "rare")))
+	var overflow_note := ""
+	var row := CompanyManager.company_row(company_id)
+	var waiting: Variant = row.get("waiting_token", null)
+	if typeof(waiting) == TYPE_DICTIONARY and not (waiting as Dictionary).is_empty() and typeof(awarded) == TYPE_ARRAY and awarded.size() > 0:
+		overflow_note = "\nThis will create token overflow. Stay here, then resolve the choice in Corporate Offices."
+	var body := "%s\n%s\nNormal sell value: %s Stardust.\n%s%% shipment bonus: %s Stardust.\nFinal payout: %s Stardust.\nReputation: +%s.\n%s%s\n%s" % [
+		CompanyRules.display_name(company_id),
+		", ".join(names),
+		_format_sell_amount(base_value),
+		CompanyRules.SHIPMENT_BONUS_PERCENT,
+		_format_sell_amount(bonus),
+		_format_sell_amount(payout),
+		CompanyRules.SHIPMENT_REPUTATION_REWARD,
+		token_note,
+		overflow_note,
+		str(preview.get("warning", "These five items will be permanently consumed.")),
+	]
+	var sheet := ClientUi.make_confirm_sheet(
+		"Return shipment",
+		"Deliver this crate?",
+		body,
+		func() -> void: _submit_shipment(company_id),
+		Callable(),
+		"Deliver Shipment",
+		"Cancel",
+		ClientUi.GOLD,
+		true
+	)
+	add_child(sheet)
+
+
+func _submit_shipment(company_id: String) -> void:
+	if _busy:
+		return
+	var classification := _sell_dock_classification()
+	if str(classification.get("mode", "")) != CompanyRules.SHIPMENT_DOCK_MODE_SHIPMENT:
+		_set_status("This crate is no longer a return shipment.")
+		_populate()
+		return
+	if str(classification.get("company_id", "")) != company_id or not _shipment_preview_matches_dock():
+		_set_status("Shipment preview expired. The crate was not delivered.")
+		_invalidate_shipment_preview()
+		_populate()
+		return
+	var ids := _sell_staged_ids()
+	_busy = true
+	_refresh_sell_button()
+	_set_status("Delivering shipment…")
+	var res: Dictionary = await CompanyManager.confirm_shipment(company_id, ids)
+	_busy = false
+	if not res.ok:
+		var code := str(res.get("code", ""))
+		if code == CompanyRules.COMPANY_OVERFLOW_PENDING:
+			_shipment_overflow_blocked = true
+			_set_status("Resolve %s token overflow in Corporate Offices. Nothing was sold." % CompanyRules.display_name(company_id))
+		else:
+			_set_status(str(res.get("error", "Shipment failed")))
+		await _load_company_status()
+		await _load_bag_items()
+		_load_equipped()
+		_populate()
+		return
+	var data: Dictionary = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
+	for i in _sell_stage.size():
+		_sell_stage[i] = {}
+	_invalidate_shipment_preview()
+	await _load_company_status()
+	await _load_bag_items()
+	_load_equipped()
+	_set_status(_shipment_success_status(company_id, data))
+	_populate()
+
+
+func _shipment_success_status(company_id: String, data: Dictionary) -> String:
+	var payload := {
+		"company_name": CompanyRules.display_name(company_id),
+		"overflow_pending": bool(data.get("overflow_pending", false)),
+	}
+	if data.has("payout"):
+		payload["payout"] = int(data.get("payout", 0))
+	if data.has("reputation_granted"):
+		payload["reputation_granted"] = int(data.get("reputation_granted", 0))
+	var levels: Variant = data.get("levels_awarded", [])
+	var company: Variant = data.get("company", {})
+	if typeof(levels) == TYPE_ARRAY and (levels as Array).size() > 0:
+		if typeof(company) == TYPE_DICTIONARY and (company as Dictionary).has("level"):
+			payload["company_level"] = int((company as Dictionary).get("level", 0))
+		else:
+			payload["company_level"] = int((levels as Array)[(levels as Array).size() - 1])
+	var tokens: Variant = data.get("tokens_created", [])
+	if typeof(tokens) == TYPE_ARRAY and (tokens as Array).size() > 0 and typeof(tokens[0]) == TYPE_DICTIONARY:
+		payload["token_rarity"] = CompanyRules.rarity_label(str((tokens[0] as Dictionary).get("rarity", "")))
+	return CompanyRules.format_shipment_delivery_status(payload)

@@ -28,11 +28,16 @@ const {
 } = await import("../../src/lib/companyClientState.js");
 const {
   COMPANY_IDS,
+  COMPANY_ID_CNC,
+  COMPANY_ID_BJS,
   COMPANY_ID_DTD,
-  COMPANY_ID_TTT,
-  COMPANY_ID_RDR,
   COMPANY_ID_GORP,
   COMPANY_SLOTS,
+  COMPANY_SLOT_COUNT,
+  COMPANY_PREMIUM_SLOT_COUNT,
+  COMPANY_TOKEN_EPIC_OFFSET,
+  MARKET_COMPANIES_PER_SLOT,
+  PREMIUM_GEAR_SLOTS,
   SLOT_ELIGIBLE_COMPANIES,
   GEAR_SLOTS,
   SHIPMENT_ITEM_COUNT,
@@ -43,6 +48,9 @@ const {
   CANONICAL_GEAR_STAT_KEYS,
   companyLevelFromReputation,
   companiesForSlot,
+  companyManufacturesSlot,
+  premiumSlotsForCompany,
+  resolveGearManufacturer,
   rollManufacturerForSlot,
   shipmentPayoutFromBase,
   tokenRarityForCompanyLevel,
@@ -56,13 +64,31 @@ const {
   isShipmentOriginDenied,
   resolveGeneratedShipmentEligible,
   COMPANY_NAME_TOKENS,
+  COMPANY_FULL_NAMES,
+  COMPANY_ABBREVIATIONS,
   COMPANY_FLAVOR_CHANCE_BPS,
   COMPANY_FLAVOR_LINES,
   SHIPMENT_INELIGIBLE_INSPECT_TAG,
   brandedGearName,
+  isCompanyId,
   rollCompanyFlavor,
   applyGearCompanyPresentation,
+  classifyShipmentDock,
+  allocateShipmentDisplayValues,
+  shipmentDisplayValuesForItems,
+  SHIPMENT_DOCK_MODE_SALE,
+  SHIPMENT_DOCK_MODE_SHIPMENT,
+  SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE,
 } = await import("../../src/lib/productionMath/index.js");
+const {
+  applyShipmentDockPreviewResponse,
+  beginShipmentDockPreviewRetry,
+  createShipmentDockPreviewState,
+  formatShipmentDeliveryStatus,
+  invalidateShipmentDockPreview,
+  markShipmentDockPreviewStarted,
+  shouldStartShipmentDockPreview,
+} = await import("../../src/lib/shipmentDockPreview.js");
 const { DissolveItem } = await import("../src/functions/economy.js");
 const {
   GetCompanyStatus,
@@ -237,12 +263,39 @@ function ownedCount(characterId) {
 
 console.log("\nPhase 9 Companies / Shipments / Commissions\n");
 
-test("each slot maps to exactly two Companies; each Company maps to four slots", () => {
+test("locked company identities and slot matrix", () => {
+  assert.deepEqual([...COMPANY_IDS], [COMPANY_ID_CNC, COMPANY_ID_BJS, COMPANY_ID_DTD, COMPANY_ID_GORP]);
+  assert.equal(COMPANY_FULL_NAMES[COMPANY_ID_CNC], "Crown & Carapace");
+  assert.equal(COMPANY_ABBREVIATIONS[COMPANY_ID_CNC], "C&C");
+  assert.equal(COMPANY_FULL_NAMES[COMPANY_ID_BJS], "Ballistics & Jewelry Services");
+  assert.equal(COMPANY_ABBREVIATIONS[COMPANY_ID_BJS], "BJ Services");
+  assert.equal(COMPANY_FULL_NAMES[COMPANY_ID_DTD], "Duct-Tape Dynamics");
+  assert.equal(COMPANY_ABBREVIATIONS[COMPANY_ID_DTD], "DTD");
+  assert.equal(COMPANY_FULL_NAMES[COMPANY_ID_GORP], "GORPTEK");
+  assert.equal(COMPANY_ABBREVIATIONS[COMPANY_ID_GORP], "GORP");
+  assert.equal(COMPANY_NAME_TOKENS[COMPANY_ID_CNC], "C&C");
+  assert.equal(COMPANY_NAME_TOKENS[COMPANY_ID_BJS], "BJ Services");
+  assert.equal(COMPANY_NAME_TOKENS[COMPANY_ID_DTD], "Duct Tape");
+  assert.equal(COMPANY_NAME_TOKENS[COMPANY_ID_GORP], "GORPTEK");
+  assert.deepEqual([...COMPANY_SLOTS[COMPANY_ID_CNC]], ["helmet", "armor", "legs", "ship_module"]);
+  assert.deepEqual([...COMPANY_SLOTS[COMPANY_ID_BJS]], ["helmet", "weapon", "neck", "accessory"]);
+  assert.deepEqual([...COMPANY_SLOTS[COMPANY_ID_DTD]], ["legs", "boots", "accessory", "ship_module"]);
+  assert.deepEqual([...COMPANY_SLOTS[COMPANY_ID_GORP]], ["armor", "boots", "weapon", "neck"]);
+  assert.deepEqual([...SLOT_ELIGIBLE_COMPANIES.helmet], [COMPANY_ID_CNC, COMPANY_ID_BJS]);
+  assert.deepEqual([...SLOT_ELIGIBLE_COMPANIES.armor], [COMPANY_ID_CNC, COMPANY_ID_GORP]);
+  assert.deepEqual([...SLOT_ELIGIBLE_COMPANIES.legs], [COMPANY_ID_CNC, COMPANY_ID_DTD]);
+  assert.deepEqual([...SLOT_ELIGIBLE_COMPANIES.boots], [COMPANY_ID_DTD, COMPANY_ID_GORP]);
+  assert.deepEqual([...SLOT_ELIGIBLE_COMPANIES.neck], [COMPANY_ID_BJS, COMPANY_ID_GORP]);
+  assert.deepEqual([...SLOT_ELIGIBLE_COMPANIES.accessory], [COMPANY_ID_BJS, COMPANY_ID_DTD]);
+  assert.deepEqual([...SLOT_ELIGIBLE_COMPANIES.weapon], [COMPANY_ID_BJS, COMPANY_ID_GORP]);
+  assert.deepEqual([...SLOT_ELIGIBLE_COMPANIES.ship_module], [COMPANY_ID_CNC, COMPANY_ID_DTD]);
   for (const slot of GEAR_SLOTS) {
-    assert.equal(companiesForSlot(slot).length, 2, slot);
+    assert.equal(companiesForSlot(slot).length, MARKET_COMPANIES_PER_SLOT, slot);
   }
   for (const id of COMPANY_IDS) {
-    assert.equal(COMPANY_SLOTS[id].length, 4, id);
+    assert.equal(COMPANY_SLOTS[id].length, COMPANY_SLOT_COUNT, id);
+    assert.equal(premiumSlotsForCompany(id).length, COMPANY_PREMIUM_SLOT_COUNT, id);
+    assert.ok(PREMIUM_GEAR_SLOTS.includes(premiumSlotsForCompany(id)[0]), id);
   }
   const reverse = {};
   for (const id of COMPANY_IDS) {
@@ -252,15 +305,244 @@ test("each slot maps to exactly two Companies; each Company maps to four slots",
     }
   }
   for (const slot of GEAR_SLOTS) {
-    assert.deepEqual([...reverse[slot]].sort(), [...SLOT_ELIGIBLE_COMPANIES[slot]].sort());
+    assert.deepEqual([...reverse[slot]], [...SLOT_ELIGIBLE_COMPANIES[slot]]);
   }
 });
 
-test("compatible manufacturers are 50/50 under controlled RNG", () => {
-  assert.equal(rollManufacturerForSlot("helmet", () => 0), COMPANY_ID_DTD);
-  assert.equal(rollManufacturerForSlot("helmet", () => 0.99), COMPANY_ID_RDR);
-  assert.equal(rollManufacturerForSlot("weapon", () => 0), COMPANY_ID_RDR);
-  assert.equal(rollManufacturerForSlot("weapon", () => 0.99), COMPANY_ID_GORP);
+test("compatible manufacturers are 50/50 at the exact unit boundary", () => {
+  const split = 1 / MARKET_COMPANIES_PER_SLOT;
+  for (const slot of GEAR_SLOTS) {
+    const [first, second] = companiesForSlot(slot);
+    assert.equal(rollManufacturerForSlot(slot, () => 0), first, slot);
+    assert.equal(rollManufacturerForSlot(slot, () => split - Number.EPSILON), first, `${slot} below`);
+    assert.equal(rollManufacturerForSlot(slot, () => split), second, `${slot} at`);
+    assert.equal(rollManufacturerForSlot(slot, () => 0.999999), second, `${slot} above`);
+  }
+});
+
+test("retired identities cannot generate or validate Gear", () => {
+  for (const retired of ["TTT", "RDR"]) {
+    assert.equal(isCompanyId(retired), false, retired);
+    assert.equal(COMPANY_IDS.includes(retired), false, retired);
+    assert.equal(companyManufacturesSlot(retired, "weapon"), false, retired);
+    assert.equal(COMPANY_SLOTS[retired], undefined, retired);
+    assert.equal(COMPANY_FLAVOR_LINES[retired], undefined, retired);
+    assert.throws(
+      () => resolveGearManufacturer("armor", { manufacturer: retired }),
+      /Company does not manufacture that slot/,
+    );
+  }
+  assert.throws(
+    () => resolveGearManufacturer("weapon", { manufacturer: COMPANY_ID_DTD }),
+    /Company does not manufacture that slot/,
+  );
+  assert.throws(
+    () => resolveGearManufacturer("ship_module", { manufacturer: COMPANY_ID_BJS }),
+    /Company does not manufacture that slot/,
+  );
+  assert.equal(resolveGearManufacturer("helmet", { manufacturer: COMPANY_ID_CNC }), COMPANY_ID_CNC);
+});
+
+test("legal commission slots are exactly each Company's four manufactured slots", () => {
+  for (const id of COMPANY_IDS) {
+    for (const slot of GEAR_SLOTS) {
+      const legal = COMPANY_SLOTS[id].includes(slot);
+      assert.equal(companyManufacturesSlot(id, slot), legal, `${id} ${slot}`);
+    }
+  }
+});
+
+function dockItem(patch = {}) {
+  return {
+    id: patch.id || "g1",
+    manufacturer: patch.manufacturer ?? COMPANY_ID_CNC,
+    type: patch.type || patch.slot || "helmet",
+    origin: patch.origin || "mission",
+    shipment_eligible: patch.shipment_eligible ?? true,
+    is_equipped: patch.is_equipped ?? false,
+    sell_value: patch.sell_value ?? 10,
+  };
+}
+
+function fiveDock(companyId, extra = {}) {
+  return Array.from({ length: SHIPMENT_ITEM_COUNT }, (_, i) => dockItem({
+    id: `g-${i + 1}`,
+    manufacturer: companyId,
+    type: COMPANY_SLOTS[companyId][i % COMPANY_SLOTS[companyId].length],
+    ...extra,
+  }));
+}
+
+test("Shipping Dock: fewer than five and mixed companies stay normal sales", () => {
+  assert.equal(classifyShipmentDock(fiveDock(COMPANY_ID_CNC).slice(0, 4)).mode, SHIPMENT_DOCK_MODE_SALE);
+  assert.equal(classifyShipmentDock(fiveDock(COMPANY_ID_CNC).slice(0, 4)).reason, "incomplete");
+  const mixed = fiveDock(COMPANY_ID_CNC);
+  mixed[4] = dockItem({ id: "g-5", manufacturer: COMPANY_ID_BJS, type: "weapon" });
+  const classified = classifyShipmentDock(mixed);
+  assert.equal(classified.mode, SHIPMENT_DOCK_MODE_SALE);
+  assert.equal(classified.reason, "mixed");
+});
+
+test("Shipping Dock: five eligible same-company items enter shipment mode", () => {
+  for (const id of COMPANY_IDS) {
+    const classified = classifyShipmentDock(fiveDock(id));
+    assert.equal(classified.mode, SHIPMENT_DOCK_MODE_SHIPMENT, id);
+    assert.equal(classified.company_id, id);
+  }
+});
+
+test("Shipping Dock: ineligible same-company crates remain normal sales", () => {
+  const market = fiveDock(COMPANY_ID_DTD, { origin: GEAR_ORIGIN_MARKET, shipment_eligible: false });
+  const classified = classifyShipmentDock(market);
+  assert.equal(classified.mode, SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE);
+  assert.equal(classified.company_id, COMPANY_ID_DTD);
+  const contraband = fiveDock(COMPANY_ID_BJS, { origin: GEAR_ORIGIN_CONTRABAND, shipment_eligible: false });
+  assert.equal(classifyShipmentDock(contraband).mode, SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE);
+  const mixedEligible = fiveDock(COMPANY_ID_GORP);
+  mixedEligible[2] = dockItem({
+    id: "g-3",
+    manufacturer: COMPANY_ID_GORP,
+    type: "weapon",
+    shipment_eligible: false,
+    origin: GEAR_ORIGIN_MARKET,
+  });
+  assert.equal(classifyShipmentDock(mixedEligible).mode, SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE);
+  const retired = Array.from({ length: SHIPMENT_ITEM_COUNT }, (_, i) => dockItem({
+    id: `ttt-${i}`,
+    manufacturer: "TTT",
+    type: "helmet",
+  }));
+  assert.equal(classifyShipmentDock(retired).mode, SHIPMENT_DOCK_MODE_SALE);
+});
+
+test("Shipping Dock: removing or replacing an item exits shipment mode", () => {
+  const items = fiveDock(COMPANY_ID_CNC);
+  assert.equal(classifyShipmentDock(items).mode, SHIPMENT_DOCK_MODE_SHIPMENT);
+  assert.equal(classifyShipmentDock(items.slice(0, 4)).mode, SHIPMENT_DOCK_MODE_SALE);
+  items[0] = dockItem({ id: "g-1", manufacturer: COMPANY_ID_BJS, type: "weapon" });
+  assert.equal(classifyShipmentDock(items).mode, SHIPMENT_DOCK_MODE_SALE);
+});
+
+test("Shipping Dock row values distribute the server-returned bonus and sum to payout", () => {
+  const awkward = [1, 1, 1, 1, 1];
+  const mathAwkward = shipmentPayoutFromBase(awkward.reduce((a, b) => a + b, 0));
+  const rowsAwkward = allocateShipmentDisplayValues(awkward, mathAwkward);
+  assert.equal(rowsAwkward.reduce((a, b) => a + b, 0), mathAwkward.payout);
+  assert.equal(mathAwkward.payout, 6);
+  assert.equal(mathAwkward.bonus, 1);
+  assert.deepEqual(rowsAwkward, [2, 1, 1, 1, 1]);
+
+  const over = [15, 15, 15, 15, 15];
+  const mathOver = shipmentPayoutFromBase(over.reduce((a, b) => a + b, 0));
+  const rowsOver = allocateShipmentDisplayValues(over, mathOver);
+  assert.equal(rowsOver.reduce((a, b) => a + b, 0), mathOver.payout);
+  assert.equal(mathOver.payout, 83);
+  assert.equal(mathOver.bonus, 8);
+  assert.deepEqual(rowsOver, [17, 17, 17, 16, 16]);
+
+  const items = fiveDock(COMPANY_ID_CNC).map((item, i) => ({ ...item, sell_value: [7, 8, 9, 10, 11][i] }));
+  const mathItems = shipmentPayoutFromBase(45);
+  const displayed = shipmentDisplayValuesForItems(items, mathItems);
+  assert.equal(displayed.reduce((a, b) => a + b, 0), mathItems.payout);
+  assert.equal(items[0].sell_value, 7);
+  const allocateSrc = fs.readFileSync(path.join(ROOT, "src/lib/productionMath/companies.js"), "utf8");
+  const allocateFn = allocateSrc.match(/export function allocateShipmentDisplayValues[\s\S]*?export function shipmentDisplayValuesForItems/)?.[0] || "";
+  assert.doesNotMatch(allocateFn, /SHIPMENT_PAYOUT_BPS/);
+  assert.match(allocateFn, /previewMath/);
+});
+
+test("Shipping Dock discards a stale preview and starts the current crate automatically", () => {
+  let state = createShipmentDockPreviewState();
+  state = markShipmentDockPreviewStarted(state);
+  assert.equal(state.inFlightGeneration, 0);
+  assert.equal(
+    shouldStartShipmentDockPreview(state, { qualifies: true }),
+    false,
+    "A in flight must not start B yet",
+  );
+
+  state = invalidateShipmentDockPreview(state);
+  assert.equal(state.generation, 1);
+  assert.equal(state.inFlightGeneration, 0);
+  assert.deepEqual(state.preview, {});
+  assert.equal(
+    shouldStartShipmentDockPreview(state, { qualifies: true }),
+    false,
+    "B waits until A's request finishes",
+  );
+
+  state = applyShipmentDockPreviewResponse(state, 0, {
+    ok: true,
+    preview: { payout: 1210, company_id: COMPANY_ID_CNC, bonus: 110, base_value: 1100 },
+  });
+  assert.equal(state.inFlightGeneration, null);
+  assert.deepEqual(state.preview, {});
+  assert.equal(state.previewGeneration, null);
+  assert.equal(
+    shouldStartShipmentDockPreview(state, { qualifies: true }),
+    true,
+    "B must auto-start after A is discarded",
+  );
+
+  state = markShipmentDockPreviewStarted(state);
+  state = applyShipmentDockPreviewResponse(state, 1, {
+    ok: true,
+    preview: { payout: 550, company_id: COMPANY_ID_BJS, bonus: 50, base_value: 500 },
+  });
+  assert.equal(state.preview.payout, 550);
+  assert.equal(state.preview.company_id, COMPANY_ID_BJS);
+  assert.equal(state.previewGeneration, 1);
+  assert.equal(shouldStartShipmentDockPreview(state, { qualifies: true }), false);
+});
+
+test("Shipping Dock preview failure stays a shipment and retries only when asked", () => {
+  let state = createShipmentDockPreviewState();
+  state = markShipmentDockPreviewStarted(state);
+  state = applyShipmentDockPreviewResponse(state, 0, {
+    ok: false,
+    error: "Could not preview this return shipment.",
+  });
+  assert.equal(state.retryAvailable, true);
+  assert.equal(state.previewGeneration, null);
+  assert.equal(shouldStartShipmentDockPreview(state, { qualifies: true }), false);
+  assert.equal(shouldStartShipmentDockPreview(state, { qualifies: true }), false, "no automatic retry loop");
+
+  state = beginShipmentDockPreviewRetry(state);
+  assert.equal(state.retryAvailable, false);
+  assert.equal(state.error, "");
+  assert.equal(shouldStartShipmentDockPreview(state, { qualifies: true }), true);
+
+  state = markShipmentDockPreviewStarted(state);
+  state = applyShipmentDockPreviewResponse(state, 0, {
+    ok: true,
+    preview: { payout: 550, company_id: COMPANY_ID_BJS, bonus: 50, base_value: 500 },
+  });
+  assert.equal(state.retryAvailable, false);
+  assert.equal(state.preview.payout, 550);
+  assert.equal(state.preview.company_id, COMPANY_ID_BJS);
+});
+
+test("shipment success copy uses the returned company level, payout, reputation, and token", () => {
+  const message = formatShipmentDeliveryStatus({
+    company_name: "Crown & Carapace",
+    payout: 1210,
+    reputation_granted: 100,
+    company_level: 1,
+    token_rarity: "Rare",
+  });
+  assert.equal(
+    message,
+    "Shipment delivered: Crown & Carapace · 1210 Stardust · +100 reputation · company level 1 · Rare token.",
+  );
+  assert.doesNotMatch(message, /company level gained/);
+  const overflow = formatShipmentDeliveryStatus({
+    company_name: "GORPTEK",
+    payout: 550,
+    reputation_granted: 100,
+    overflow_pending: true,
+  });
+  assert.match(overflow, /resolve token overflow in Corporate Offices/);
+  assert.doesNotMatch(overflow, /company level/);
 });
 
 test("generated Gear always has a legal manufacturer", () => {
@@ -280,9 +562,9 @@ test("generated Gear always has a legal manufacturer", () => {
 
 test("branded Gear names use the short company token plus catalog base", () => {
   assert.equal(brandedGearName("Shield Amplifier", COMPANY_ID_GORP), "GORPTEK Shield Amplifier");
-  assert.equal(brandedGearName("Turret System", COMPANY_ID_TTT), "Tedious Turret System");
+  assert.equal(brandedGearName("Plasma Rifle", COMPANY_ID_BJS), "BJ Services Plasma Rifle");
   assert.equal(brandedGearName("Chrono Band", COMPANY_ID_DTD), "Duct Tape Chrono Band");
-  assert.equal(brandedGearName("Titan Plating", COMPANY_ID_RDR), "Run-Down Titan Plating");
+  assert.equal(brandedGearName("Titan Plating", COMPANY_ID_CNC), "C&C Titan Plating");
   assert.equal(brandedGearName("Plasma Rifle", null), "Plasma Rifle");
 });
 
@@ -351,27 +633,29 @@ test("company level is floor(rep / 1500) and unbounded", () => {
 
 test("staggered Rare/Epic token rotation continues indefinitely", () => {
   const epicAt = {
-    [COMPANY_ID_DTD]: [1, 5, 9, 13],
-    [COMPANY_ID_TTT]: [2, 6, 10, 14],
-    [COMPANY_ID_RDR]: [3, 7, 11, 15],
+    [COMPANY_ID_CNC]: [1, 5, 9, 13],
+    [COMPANY_ID_BJS]: [2, 6, 10, 14],
+    [COMPANY_ID_DTD]: [3, 7, 11, 15],
     [COMPANY_ID_GORP]: [4, 8, 12, 16],
   };
   for (const id of COMPANY_IDS) {
     for (let L = 1; L <= 64; L += 1) {
-      const expected = epicAt[id].includes(((L - 1) % 4) + 1 + Math.floor((L - 1) / 4) * 0)
-        ? null
-        : null;
-      void expected;
-      const offset = { DTD: 0, TTT: 1, RDR: 2, GORP: 3 }[id];
-      const want = ((L - 1) % 4) === offset ? TOKEN_RARITY_EPIC : TOKEN_RARITY_RARE;
-      assert.equal(tokenRarityForCompanyLevel(id, L), want, `${id} L${L}`);
+      const offset = COMPANY_TOKEN_EPIC_OFFSET[id];
+      const expected = ((L - 1) % 4) === offset ? TOKEN_RARITY_EPIC : TOKEN_RARITY_RARE;
+      assert.equal(tokenRarityForCompanyLevel(id, L), expected, `${id} L${L}`);
     }
     assert.equal(nextTokenRarity(id, 0), tokenRarityForCompanyLevel(id, 1));
   }
-  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_DTD, 1), TOKEN_RARITY_EPIC);
-  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_TTT, 2), TOKEN_RARITY_EPIC);
-  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_RDR, 3), TOKEN_RARITY_EPIC);
+  for (const [id, levels] of Object.entries(epicAt)) {
+    for (const L of levels) {
+      assert.equal(tokenRarityForCompanyLevel(id, L), TOKEN_RARITY_EPIC, `${id} epic ${L}`);
+    }
+  }
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_CNC, 1), TOKEN_RARITY_EPIC);
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_BJS, 2), TOKEN_RARITY_EPIC);
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_DTD, 3), TOKEN_RARITY_EPIC);
   assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_GORP, 4), TOKEN_RARITY_EPIC);
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_DTD, 1), TOKEN_RARITY_RARE);
 });
 
 test("largest-remainder allocation conserves budget and uses canonical order", () => {
@@ -428,7 +712,7 @@ await testAsync("Shipment requires exactly five same-company unequipped eligible
   assert.equal(equipped.body.code, "ITEM_EQUIPPED");
   entities.Item.update(items[0].id, { is_equipped: false });
 
-  const mismatch = grantGear(ch, { manufacturer: COMPANY_ID_TTT, slot: "armor" });
+  const mismatch = grantGear(ch, { manufacturer: COMPANY_ID_BJS, slot: "neck" });
   const mixed = await PreviewShipment(account, {
     company_id: COMPANY_ID_DTD,
     item_ids: [...items.slice(0, 4).map((i) => i.id), mismatch.id],
@@ -436,7 +720,7 @@ await testAsync("Shipment requires exactly five same-company unequipped eligible
   assert.equal(mixed.status, 400);
   assert.equal(mixed.body.code, "SHIPMENT_COMPANY_MISMATCH");
 
-  const market = grantGear(ch, { manufacturer: COMPANY_ID_DTD, slot: "helmet", origin: "market", eligible: false });
+  const market = grantGear(ch, { manufacturer: COMPANY_ID_DTD, slot: "legs", origin: "market", eligible: false });
   const ineligible = await PreviewShipment(account, {
     company_id: COMPANY_ID_DTD,
     item_ids: [...items.slice(0, 4).map((i) => i.id), market.id],
@@ -458,15 +742,15 @@ await testAsync("foreign IDs and missing IDs are rejected", async () => {
   const chA = makeChar(a.id);
   const chB = makeChar(b.id);
   a.active_character_id = chA.id;
-  const mine = fiveItems(chA, COMPANY_ID_RDR);
-  const theirs = grantGear(chB, { manufacturer: COMPANY_ID_RDR, slot: "weapon" });
+  const mine = fiveItems(chA, COMPANY_ID_GORP);
+  const theirs = grantGear(chB, { manufacturer: COMPANY_ID_GORP, slot: "weapon" });
   const foreign = await PreviewShipment(a, {
-    company_id: COMPANY_ID_RDR,
+    company_id: COMPANY_ID_GORP,
     item_ids: [...mine.slice(0, 4).map((i) => i.id), theirs.id],
   });
   assert.equal(foreign.status, 403);
   const missing = await PreviewShipment(a, {
-    company_id: COMPANY_ID_RDR,
+    company_id: COMPANY_ID_GORP,
     item_ids: [...mine.slice(0, 4).map((i) => i.id), "no-such-item"],
   });
   assert.equal(missing.status, 404);
@@ -476,15 +760,15 @@ await testAsync("preview matches settlement; items consumed once; reputation +10
   const account = insertUser("p9-a3", "p9-a3@x.test");
   const ch = makeChar(account.id, { stardust: 10 });
   account.active_character_id = ch.id;
-  const items = fiveItems(ch, COMPANY_ID_TTT, { sellValue: 100 });
+  const items = fiveItems(ch, COMPANY_ID_BJS, { sellValue: 100 });
   const ids = items.map((i) => i.id);
-  const preview = await PreviewShipment(account, { company_id: COMPANY_ID_TTT, item_ids: ids });
+  const preview = await PreviewShipment(account, { company_id: COMPANY_ID_BJS, item_ids: ids });
   assert.equal(preview.status, 200);
   assert.equal(preview.body.preview.payout, 550);
   assert.equal(preview.body.preview.base_value, 500);
   assert.equal(preview.body.preview.bonus, 50);
   const settled = await ConfirmShipment(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     item_ids: ids,
     request_id: "ship-a3-1",
   });
@@ -493,20 +777,20 @@ await testAsync("preview matches settlement; items consumed once; reputation +10
   assert.equal(settled.body.reputation_granted, 100);
   const live = entities.Character.get(ch.id);
   assert.equal(live.stardust, 560);
-  assert.equal(live.company_state.TTT.reputation, 100);
-  assert.equal(live.company_state.TTT.shipment_count, 1);
-  assert.equal(live.company_state.TTT.level, undefined);
-  assert.equal(companyLevelFromReputation(live.company_state.TTT.reputation), 0);
+  assert.equal(live.company_state.BJS.reputation, 100);
+  assert.equal(live.company_state.BJS.shipment_count, 1);
+  assert.equal(live.company_state.BJS.level, undefined);
+  assert.equal(companyLevelFromReputation(live.company_state.BJS.reputation), 0);
   for (const id of ids) assert.equal(entities.Item.get(id), null);
   const replay = await ConfirmShipment(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     item_ids: ids,
     request_id: "ship-a3-1",
   });
   assert.equal(replay.status, 200);
   assert.equal(replay.body.idempotent_replay, true);
   assert.equal(entities.Character.get(ch.id).stardust, 560);
-  assert.equal(entities.Character.get(ch.id).company_state.TTT.shipment_count, 1);
+  assert.equal(entities.Character.get(ch.id).company_state.BJS.shipment_count, 1);
 });
 
 await testAsync("stale preview is revalidated; dissolved item blocks settlement", async () => {
@@ -561,25 +845,25 @@ await testAsync("companies and characters stay isolated; level-up awards a token
   const b = insertUser("p9-b7", "p9-b7@x.test");
   const chA = makeChar(a.id, {
     companyState: {
-      DTD: { reputation: 1400, shipment_count: 14, waiting_token: null, overflow_token: null },
+      CNC: { reputation: 1400, shipment_count: 14, waiting_token: null, overflow_token: null },
     },
   });
   const chB = makeChar(b.id);
   a.active_character_id = chA.id;
   b.active_character_id = chB.id;
-  const items = fiveItems(chA, COMPANY_ID_DTD, { sellValue: 10 });
+  const items = fiveItems(chA, COMPANY_ID_CNC, { sellValue: 10 });
   const settled = await ConfirmShipment(a, {
-    company_id: COMPANY_ID_DTD,
+    company_id: COMPANY_ID_CNC,
     item_ids: items.map((i) => i.id),
-    request_id: "ship-level-dtd",
+    request_id: "ship-level-cnc",
   });
   assert.equal(settled.status, 200);
   assert.equal(settled.body.company.level, 1);
   assert.equal(settled.body.company.waiting_token.rarity, TOKEN_RARITY_EPIC);
   const other = entities.Character.get(chB.id);
-  assert.equal(other.company_state?.DTD?.reputation || 0, 0);
+  assert.equal(other.company_state?.CNC?.reputation || 0, 0);
   const liveA = entities.Character.get(chA.id);
-  assert.equal(liveA.company_state.TTT.reputation || 0, 0);
+  assert.equal(liveA.company_state.BJS.reputation || 0, 0);
 });
 
 await testAsync("overflow preserves the shipment, blocks same-company ships, allows others", async () => {
@@ -616,9 +900,9 @@ await testAsync("overflow preserves the shipment, blocks same-company ships, all
   });
   assert.equal(blocked.status, 409);
   assert.equal(blocked.body.code, "COMPANY_OVERFLOW_PENDING");
-  const other = fiveItems(ch, COMPANY_ID_TTT, { sellValue: 10 });
+  const other = fiveItems(ch, COMPANY_ID_BJS, { sellValue: 10 });
   const allowed = await ConfirmShipment(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     item_ids: other.map((i) => i.id),
     request_id: "ship-other-ok",
   });
@@ -627,16 +911,16 @@ await testAsync("overflow preserves the shipment, blocks same-company ships, all
 
 await testAsync("overflow spend waiting keeps overflow token", async () => {
   const account = insertUser("p9-a9", "p9-a9@x.test");
-  const waiting = makeToken("tok-old", COMPANY_ID_RDR, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
-  const overflow = makeToken("tok-new", COMPANY_ID_RDR, { rarity: TOKEN_RARITY_EPIC, level: 2, status: "overflow" });
+  const waiting = makeToken("tok-old", COMPANY_ID_GORP, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
+  const overflow = makeToken("tok-new", COMPANY_ID_GORP, { rarity: TOKEN_RARITY_EPIC, level: 2, status: "overflow" });
   const ch = makeChar(account.id, {
     companyState: {
-      RDR: { reputation: 3000, shipment_count: 30, waiting_token: waiting, overflow_token: overflow },
+      GORP: { reputation: 3000, shipment_count: 30, waiting_token: waiting, overflow_token: overflow },
     },
   });
   account.active_character_id = ch.id;
   const created = await RedeemCommission(account, {
-    company_id: COMPANY_ID_RDR,
+    company_id: COMPANY_ID_GORP,
     spend_token_id: "tok-old",
     slot: "weapon",
     weights: { strength: 40, vitality: 40, luck: 20 },
@@ -644,34 +928,34 @@ await testAsync("overflow spend waiting keeps overflow token", async () => {
   });
   assert.equal(created.status, 200);
   assert.equal(created.body.item.origin, "rare_commission");
-  assert.equal(created.body.item.manufacturer, COMPANY_ID_RDR);
+  assert.equal(created.body.item.manufacturer, COMPANY_ID_GORP);
   assert.equal(created.body.item.shipment_eligible, true);
   assert.equal(created.body.item.is_equipped, false);
-  const after = companyRow(ch.id, COMPANY_ID_RDR);
+  const after = companyRow(ch.id, COMPANY_ID_GORP);
   assert.equal(after.waiting_token.id, "tok-new");
   assert.equal(after.overflow_token, null);
 });
 
 await testAsync("overflow spend overflow keeps waiting token", async () => {
   const account = insertUser("p9-a9b", "p9-a9b@x.test");
-  const waiting = makeToken("tok-keep-wait", COMPANY_ID_RDR, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
-  const overflow = makeToken("tok-spend-over", COMPANY_ID_RDR, { rarity: TOKEN_RARITY_EPIC, level: 2, status: "overflow" });
+  const waiting = makeToken("tok-keep-wait", COMPANY_ID_GORP, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
+  const overflow = makeToken("tok-spend-over", COMPANY_ID_GORP, { rarity: TOKEN_RARITY_EPIC, level: 2, status: "overflow" });
   const ch = makeChar(account.id, {
     companyState: {
-      RDR: { reputation: 3000, shipment_count: 30, waiting_token: waiting, overflow_token: overflow },
+      GORP: { reputation: 3000, shipment_count: 30, waiting_token: waiting, overflow_token: overflow },
     },
   });
   account.active_character_id = ch.id;
   const beforeCount = ownedCount(ch.id);
   const created = await RedeemCommission(account, {
-    company_id: COMPANY_ID_RDR,
+    company_id: COMPANY_ID_GORP,
     spend_token_id: "tok-spend-over",
     slot: "weapon",
     request_id: "comm-spend-overflow",
   });
   assert.equal(created.status, 200);
   assert.equal(created.body.item.origin, "epic_commission");
-  const after = companyRow(ch.id, COMPANY_ID_RDR);
+  const after = companyRow(ch.id, COMPANY_ID_GORP);
   assert.equal(after.waiting_token.id, "tok-keep-wait");
   assert.equal(after.overflow_token, null);
   assert.equal(ownedCount(ch.id), beforeCount + 1);
@@ -679,11 +963,11 @@ await testAsync("overflow spend overflow keeps waiting token", async () => {
 
 await testAsync("overflow cancel and preview mutate neither token", async () => {
   const account = insertUser("p9-a9c", "p9-a9c@x.test");
-  const waiting = makeToken("tok-c-w", COMPANY_ID_TTT, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
-  const overflow = makeToken("tok-c-o", COMPANY_ID_TTT, { rarity: TOKEN_RARITY_EPIC, level: 2, status: "overflow" });
+  const waiting = makeToken("tok-c-w", COMPANY_ID_BJS, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
+  const overflow = makeToken("tok-c-o", COMPANY_ID_BJS, { rarity: TOKEN_RARITY_EPIC, level: 2, status: "overflow" });
   const ch = makeChar(account.id, {
     companyState: {
-      TTT: { reputation: 3000, shipment_count: 30, waiting_token: waiting, overflow_token: overflow },
+      BJS: { reputation: 3000, shipment_count: 30, waiting_token: waiting, overflow_token: overflow },
     },
     stardust: 40,
   });
@@ -692,13 +976,13 @@ await testAsync("overflow cancel and preview mutate neither token", async () => 
   const beforeCount = ownedCount(ch.id);
   const status = await GetCompanyStatus(account, {});
   assert.equal(status.status, 200);
-  assert.ok(status.body.overflow_companies.includes(COMPANY_ID_TTT));
+  assert.ok(status.body.overflow_companies.includes(COMPANY_ID_BJS));
   const preview = await PreviewShipment(account, {
     company_id: COMPANY_ID_GORP,
     item_ids: fiveItems(ch, COMPANY_ID_GORP, { sellValue: 10 }).map((i) => i.id),
   });
   assert.equal(preview.status, 200);
-  const live = companyRow(ch.id, COMPANY_ID_TTT);
+  const live = companyRow(ch.id, COMPANY_ID_BJS);
   assert.equal(live.waiting_token.id, "tok-c-w");
   assert.equal(live.overflow_token.id, "tok-c-o");
   assert.equal(entities.Character.get(ch.id).stardust, beforeDust);
@@ -718,7 +1002,7 @@ await testAsync("same-rarity overflow spend waiting keeps overflow", async () =>
   const created = await RedeemCommission(account, {
     company_id: COMPANY_ID_DTD,
     spend_token_id: "tok-sr-w",
-    slot: "helmet",
+    slot: "legs",
     weights: { strength: 40, vitality: 40, luck: 20 },
     request_id: "comm-same-rarity",
   });
@@ -733,30 +1017,30 @@ await testAsync("Rare invalid weights reject without consuming the token", async
   const account = insertUser("p9-a10", "p9-a10@x.test");
   const token = {
     id: "tok-rare",
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     rarity: TOKEN_RARITY_RARE,
     awarded_level: 1,
     status: "waiting",
   };
   const ch = makeChar(account.id, {
     companyState: {
-      TTT: { reputation: 1500, shipment_count: 15, waiting_token: token, overflow_token: null },
+      BJS: { reputation: 1500, shipment_count: 15, waiting_token: token, overflow_token: null },
     },
   });
   account.active_character_id = ch.id;
   const bad = await RedeemCommission(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     spend_token_id: "tok-rare",
     slot: "neck",
     weights: { strength: 70, vitality: 20, luck: 10 },
     request_id: "comm-bad-weights",
   });
   assert.equal(bad.status, 400);
-  assert.equal(entities.Character.get(ch.id).company_state.TTT.waiting_token.id, "tok-rare");
+  assert.equal(entities.Character.get(ch.id).company_state.BJS.waiting_token.id, "tok-rare");
   const illegalSlot = await RedeemCommission(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     spend_token_id: "tok-rare",
-    slot: "weapon",
+    slot: "legs",
     weights: { strength: 40, vitality: 40, luck: 20 },
     request_id: "comm-bad-slot",
   });
@@ -784,7 +1068,7 @@ await testAsync("Epic commission is deterministic, zero off-stats, and does not 
   const created = await RedeemCommission(account, {
     company_id: COMPANY_ID_GORP,
     spend_token_id: "tok-epic",
-    slot: "accessory",
+    slot: "neck",
     request_id: "comm-epic-1",
   });
   assert.equal(created.status, 200);
@@ -830,12 +1114,12 @@ await testAsync("full backpack rejects commission and preserves waiting/overflow
   });
   account.active_character_id = ch.id;
   for (let i = 0; i < 10; i += 1) {
-    grantGear(ch, { manufacturer: COMPANY_ID_TTT, slot: "armor", sellValue: 1, rng: () => 0.3 });
+    grantGear(ch, { manufacturer: COMPANY_ID_BJS, slot: "neck", sellValue: 1, rng: () => 0.3 });
   }
   const failed = await RedeemCommission(account, {
     company_id: COMPANY_ID_DTD,
     spend_token_id: "tok-full-w",
-    slot: "helmet",
+    slot: "legs",
     weights: { strength: 40, vitality: 40, luck: 20 },
     request_id: "comm-full",
   });
@@ -882,11 +1166,11 @@ await testAsync("concurrent Shipment confirmations settle once", async () => {
   const account = insertUser("p9-conc-ship", "p9-conc-ship@x.test");
   const ch = makeChar(account.id, { stardust: 0 });
   account.active_character_id = ch.id;
-  const items = fiveItems(ch, COMPANY_ID_TTT, { sellValue: 100 });
+  const items = fiveItems(ch, COMPANY_ID_BJS, { sellValue: 100 });
   const ids = items.map((i) => i.id);
   const [a, b] = await Promise.all([
-    ConfirmShipment(account, { company_id: COMPANY_ID_TTT, item_ids: ids, request_id: "ship-conc-1" }),
-    ConfirmShipment(account, { company_id: COMPANY_ID_TTT, item_ids: ids, request_id: "ship-conc-1" }),
+    ConfirmShipment(account, { company_id: COMPANY_ID_BJS, item_ids: ids, request_id: "ship-conc-1" }),
+    ConfirmShipment(account, { company_id: COMPANY_ID_BJS, item_ids: ids, request_id: "ship-conc-1" }),
   ]);
   const bodies = [a, b].map((row) => (row.status >= 400 ? row.body : row.body));
   const ok = [a, b].filter((row) => row.status === 200);
@@ -896,23 +1180,23 @@ await testAsync("concurrent Shipment confirmations settle once", async () => {
   assert.equal(live.length, 1);
   assert.equal(replay.length, 1);
   assert.equal(replay[0].body.payout, live[0].body.payout);
-  assert.equal(entities.Character.get(ch.id).company_state.TTT.shipment_count, 1);
+  assert.equal(entities.Character.get(ch.id).company_state.BJS.shipment_count, 1);
   for (const id of ids) assert.equal(entities.Item.get(id), null);
   void bodies;
 });
 
 await testAsync("concurrent Commission redemptions create one item and spend one token", async () => {
   const account = insertUser("p9-conc-comm", "p9-conc-comm@x.test");
-  const token = makeToken("tok-conc", COMPANY_ID_RDR, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
+  const token = makeToken("tok-conc", COMPANY_ID_GORP, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
   const ch = makeChar(account.id, {
     companyState: {
-      RDR: { reputation: 1500, shipment_count: 15, waiting_token: token, overflow_token: null },
+      GORP: { reputation: 1500, shipment_count: 15, waiting_token: token, overflow_token: null },
     },
   });
   account.active_character_id = ch.id;
   const before = ownedCount(ch.id);
   const payload = {
-    company_id: COMPANY_ID_RDR,
+    company_id: COMPANY_ID_GORP,
     spend_token_id: "tok-conc",
     slot: "weapon",
     weights: { strength: 40, vitality: 40, luck: 20 },
@@ -930,7 +1214,7 @@ await testAsync("concurrent Commission redemptions create one item and spend one
   assert.equal(replay.length, 1);
   assert.equal(replay[0].body.item.id, live[0].body.item.id);
   assert.equal(ownedCount(ch.id), before + 1);
-  assert.equal(companyRow(ch.id, COMPANY_ID_RDR).waiting_token, null);
+  assert.equal(companyRow(ch.id, COMPANY_ID_GORP).waiting_token, null);
 });
 
 await testAsync("forced failure inside Shipment settlement rolls everything back", async () => {
@@ -1002,50 +1286,50 @@ await testAsync("forced failure inside Commission settlement rolls everything ba
 
 await testAsync("Shipment and Commission replays return the original receipt", async () => {
   const account = insertUser("p9-replay", "p9-replay@x.test");
-  const token = makeToken("tok-replay", COMPANY_ID_TTT, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
+  const token = makeToken("tok-replay", COMPANY_ID_BJS, { rarity: TOKEN_RARITY_RARE, level: 1, status: "waiting" });
   const ch = makeChar(account.id, {
     stardust: 0,
     companyState: {
-      TTT: { reputation: 0, shipment_count: 0, waiting_token: token, overflow_token: null },
+      BJS: { reputation: 0, shipment_count: 0, waiting_token: token, overflow_token: null },
     },
   });
   account.active_character_id = ch.id;
-  const ids = fiveItems(ch, COMPANY_ID_TTT, { sellValue: 60 }).map((i) => i.id);
+  const ids = fiveItems(ch, COMPANY_ID_BJS, { sellValue: 60 }).map((i) => i.id);
   const firstShip = await ConfirmShipment(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     item_ids: ids,
     request_id: "ship-replay-1",
   });
   assert.equal(firstShip.status, 200);
   const shipReplay = await ConfirmShipment(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     item_ids: ids,
     request_id: "ship-replay-1",
   });
   assert.equal(shipReplay.body.idempotent_replay, true);
   assert.equal(shipReplay.body.payout, firstShip.body.payout);
-  assert.equal(entities.Character.get(ch.id).company_state.TTT.shipment_count, 1);
+  assert.equal(entities.Character.get(ch.id).company_state.BJS.shipment_count, 1);
 
   const firstComm = await RedeemCommission(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     spend_token_id: "tok-replay",
-    slot: "armor",
+    slot: "neck",
     weights: { strength: 40, vitality: 40, luck: 20 },
     request_id: "comm-replay-1",
   });
   assert.equal(firstComm.status, 200);
   const itemId = firstComm.body.item.id;
   const commReplay = await RedeemCommission(account, {
-    company_id: COMPANY_ID_TTT,
+    company_id: COMPANY_ID_BJS,
     spend_token_id: "tok-replay",
-    slot: "boots",
+    slot: "accessory",
     weights: { strength: 50, vitality: 30, luck: 20 },
     request_id: "comm-replay-1",
   });
   assert.equal(commReplay.body.idempotent_replay, true);
   assert.equal(commReplay.body.item.id, itemId);
-  assert.equal(entities.Item.get(itemId).type, "armor");
-  assert.equal(companyRow(ch.id, COMPANY_ID_TTT).waiting_token, null);
+  assert.equal(entities.Item.get(itemId).type, "neck");
+  assert.equal(companyRow(ch.id, COMPANY_ID_BJS).waiting_token, null);
 });
 
 test("generator forces Market and Contraband ineligible despite override", () => {
@@ -1263,11 +1547,47 @@ test("Corporate Offices replaces Ship Hangar in live navigation", () => {
   assert.match(gm, /SCENE_CORPORATE_OFFICES/);
   assert.match(gm, /corporate_offices\.tscn/);
   const ui = fs.readFileSync(path.join(GODOT_ROOT, "Scenes/UI/corporate_offices.gd"), "utf8");
-  assert.match(ui, /preview_shipment/);
-  assert.match(ui, /confirm_shipment/);
   assert.match(ui, /redeem_commission/);
   assert.match(ui, /Decide later/);
+  assert.match(ui, /_refresh_commission/);
+  assert.match(ui, /overflow_pending/);
+  assert.doesNotMatch(ui, /preview_shipment/);
+  assert.doesNotMatch(ui, /confirm_shipment/);
+  assert.doesNotMatch(ui, /Preview payout/);
+  assert.doesNotMatch(ui, /Confirm Shipment/);
+  assert.doesNotMatch(ui, /_build_shipment_column/);
   assert.doesNotMatch(ui, /Decide later[\s\S]{0,240}redeem_commission/);
+  const shop = fs.readFileSync(path.join(GODOT_ROOT, "Scenes/UI/shop.gd"), "utf8");
+  assert.match(shop, /Sell Items - Send Shipments/);
+  assert.match(shop, /Backpack - Add 5 items from the same manufacturer to send a return shipment and earn reputation with that company/);
+  assert.match(shop, /Shipping dock - Sell up to 5 items at once/);
+  assert.match(shop, /DELIVER SHIPMENT/);
+  assert.match(shop, /RETRY PREVIEW/);
+  assert.match(shop, /_retry_shipment_preview/);
+  assert.match(shop, /_refresh_after_stale_shipment_preview/);
+  assert.match(shop, /shipment_bonus_label/);
+  assert.match(shop, /preview_shipment/);
+  assert.match(shop, /confirm_shipment/);
+  assert.match(shop, /sell_items/);
+  assert.match(shop, /format_shipment_delivery_status/);
+  assert.doesNotMatch(shop, /SHIPMENT_PAYOUT_BPS/);
+  assert.doesNotMatch(shop, /company level gained/);
+  const confirmSell = shop.match(/func _on_confirm_sell\(\)[\s\S]*?\nfunc /)?.[0] || "";
+  assert.match(confirmSell, /SHIPMENT_DOCK_MODE_SHIPMENT/);
+  assert.match(confirmSell, /_retry_shipment_preview/);
+  assert.match(confirmSell, /_on_confirm_shipment/);
+  assert.match(confirmSell, /sell_items/);
+  assert.match(
+    confirmSell,
+    /SHIPMENT_DOCK_MODE_SHIPMENT:[\s\S]*_retry_shipment_preview[\s\S]*_on_confirm_shipment[\s\S]*return[\s\S]*sell_items/,
+  );
+  const submitShip = shop.match(/func _submit_shipment\([\s\S]*?\nfunc /)?.[0] || "";
+  assert.match(submitShip, /confirm_shipment/);
+  assert.doesNotMatch(submitShip, /sell_items/);
+  const rulesGd = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/CompanyRules.gd"), "utf8");
+  assert.doesNotMatch(rulesGd, /SHIPMENT_PAYOUT_BPS/);
+  assert.match(rulesGd, /allocate_shipment_display_values\(sell_values: Array, payout: int, bonus: int, base_value: int\)/);
+  assert.match(rulesGd, /format_shipment_delivery_status/);
   const inv = fs.readFileSync(path.join(GODOT_ROOT, "Autoload/InventoryManager.gd"), "utf8");
   assert.doesNotMatch(inv, /set_locked/);
   const rules = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/InventoryRules.gd"), "utf8");
@@ -1303,6 +1623,18 @@ test("client commission payload does not include final stats or epic rolls", () 
   const offices = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/CompanyRules.gd"), "utf8");
   assert.match(offices, /func slots_for/);
   assert.match(offices, /COMPANY_SLOTS :=/);
+  assert.match(offices, /COMPANY_ID_CNC/);
+  assert.match(offices, /COMPANY_ID_BJS/);
+  assert.match(offices, /Crown & Carapace/);
+  assert.match(offices, /Ballistics & Jewelry Services/);
+  assert.match(offices, /Duct-Tape Dynamics/);
+  assert.match(offices, /COMPANY_NAME_TOKENS/);
+  assert.match(offices, /Duct Tape/);
+  assert.match(offices, /GORPTEK/);
+  assert.doesNotMatch(offices, /COMPANY_ID_TTT/);
+  assert.doesNotMatch(offices, /COMPANY_ID_RDR/);
+  assert.doesNotMatch(offices, /Terribly Tedious Technologies/);
+  assert.doesNotMatch(offices, /Run-Down Robotics/);
 });
 
 if (failed) {

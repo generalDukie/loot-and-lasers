@@ -2,7 +2,7 @@
 
 Live authority is this document plus the Phase 9 prompt rules, locked Phase 0–8 production math, and `docs/PRODUCTION_FORMULA_REGISTRY.md` (PM-COMPANY-SHIPMENT / REP / TOKEN / COMMISSION). Historical Ship Hangar, placeholder Company1–4 names, automatic Shipments, and item locking are not gameplay authority.
 
-Node Character / Item / wallet_operations are the only gameplay authority. Nakama stays authentication-only. Godot Corporate Offices is presentation and request initiation.
+Node Character / Item / wallet_operations are the only gameplay authority. Nakama stays authentication-only. Godot Corporate Offices is presentation for reputation, tokens, overflow, and Commissions. Return Shipments are initiated from the Black Market Shipping Dock.
 
 Phase 10 economy reconciliation and Phase 11 production stress were not started.
 
@@ -10,24 +10,26 @@ Phase 10 economy reconciliation and Phase 11 production stress were not started.
 
 Four Companies manufacture Gear:
 
-| Company | Abbreviation | Slots |
-| --- | --- | --- |
-| Duct Tape Dynamics | DTD | Helmet, Armor, Legs, Boots |
-| Terribly Tedious Technologies | TTT | Armor, Boots, Neck, Accessory |
-| Run-Down Robotics | RDR | Helmet, Legs, Weapon, Ship Module |
-| GORPTEK | GORP | Weapon, Neck, Accessory, Ship Module |
+| Company | Internal ID | Public short / prefix | Slots | Epic-token levels |
+| --- | --- | --- | --- | --- |
+| Crown & Carapace | CNC | C&C | Helmet, Armor, Legs, Ship Module | 1, 5, 9… |
+| Ballistics & Jewelry Services | BJS | BJ Services | Helmet, Weapon, Neck, Accessory | 2, 6, 10… |
+| Duct-Tape Dynamics | DTD | DTD / Duct Tape | Legs, Boots, Accessory, Ship Module | 3, 7, 11… |
+| GORPTEK | GORP | GORP / GORPTEK | Armor, Boots, Weapon, Neck | 4, 8, 12… |
 
-Every newly generated Gear item receives a Company. Ordinary sources pick the slot first, then choose between the two legal Companies with an even server roll. Commission Gear uses the token's Company. Manufacturer, origin, and Shipment eligibility are permanent.
+Every company manufactures exactly four slots. Every slot has exactly two legal manufacturers. Each company has exactly one premium slot (Weapon or Ship Module). Ordinary sources pick the slot first, then choose between the two legal Companies with an even server roll. Commission Gear uses the token's Company. Manufacturer, origin, and Shipment eligibility are permanent. TTT and RDR are retired and have no live aliases.
 
 Shipment eligibility defaults true for generated Gear. Market and Contraband Gear are permanently ineligible and cannot become eligible later. Commission Gear is eligible.
 
+The Black Market Shipping Dock is where players send return Shipments. Filling all five dock slots with the same live Company's unequipped, shipment-eligible Gear replaces the normal sale with a Deliver Shipment action. Fewer than five items, mixed manufacturers, and same-company ineligible crates remain ordinary sales. Market and Contraband Gear stay permanently ineligible.
+
+Each preview request is bound to the dock generation that started it. Replacing shipment A with shipment B discards A's response and automatically previews B when B still qualifies. A temporary preview failure does not sell the crate; the player uses RETRY PREVIEW. Overflow still blocks delivery with no sale fallback. Confirmation remains mandatory. After delivery the player stays on the Black Market. The success line uses the confirmation payload, including the actual company level reached when a level was awarded.
+
 Corporate Offices (Explore side nav, formerly the Ship Coming Soon entry) is where players:
 
-1. Build a five-item Shipment of one Company's unequipped eligible Gear.
-2. Preview the 10% Shipment bonus, +100 reputation, and any Company level / token award.
-3. Confirm to consume the five items and receive Stardust.
-4. Redeem a waiting Rare or Epic Commission token into one backpack Gear item.
-5. Resolve token overflow if a level-up arrives while a token is already waiting.
+1. Review company reputation, level, and next token.
+2. Redeem a waiting Rare or Epic Commission token into one backpack Gear item.
+3. Resolve token overflow if a level-up arrives while a token is already waiting.
 
 There is no Shipment cooldown or daily limit. Equipped Gear cannot be shipped. Item locking/favoriting is removed; leftover stored lock flags do nothing.
 
@@ -43,7 +45,7 @@ Company level = `floor(CompanyReputation / 1500)`. New characters start at 0. Sh
 
 ## Tokens
 
-Every Company level awards one Company-specific Commission token (staggered 3 Rare / 1 Epic; DTD Epic on levels 1, 5, 9…; TTT 2, 6, 10…; RDR 3, 7, 11…; GORP 4, 8, 12…). One waiting token per Company. Tokens do not use backpack space.
+Every Company level awards one Company-specific Commission token (staggered 3 Rare / 1 Epic; CNC Epic on levels 1, 5, 9…; BJS 2, 6, 10…; DTD 3, 7, 11…; GORP 4, 8, 12…). One waiting token per Company. Tokens do not use backpack space.
 
 If a waiting token exists when another is earned, the Shipment still settles and the new token is stored as overflow. The player must later spend one of the two by creating a Commission. Same-Company Shipments are blocked until then. Other Companies remain available. Overflow persists across disconnects.
 
@@ -65,7 +67,7 @@ The delivered item is unequipped, Shipment-eligible, uses normal quality-based s
 
 | Path | Disposition |
 | --- | --- |
-| Placeholder Company1–4 | Replaced by DTD/TTT/RDR/GORP in `productionMath/constants.js` |
+| Placeholder Company1–4 and retired TTT/RDR | Replaced by CNC/BJS/DTD/GORP in `productionMath/constants.js`. No live aliases. |
 | Allow-list shipment eligibility | Replaced by Market/Contraband deny-list |
 | Item `locked` / `favorited` | Removed from live sell/dissolve/update/UI. Stored values ignored |
 | Ship Hangar Coming Soon nav | Replaced by Corporate Offices. `ship.gd` / ShipManager remain dormant behind `FEATURE_SHIP_HANGAR` |

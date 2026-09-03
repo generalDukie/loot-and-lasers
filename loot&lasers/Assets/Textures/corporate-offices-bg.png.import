@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://by6mwdavlopsq"
-path="res://.godot/imported/corporate-offices-bg.jpg-73292acfdd3492e51d03686c01f6f11d.ctex"
+uid="uid://d4corpofc3632"
+path="res://.godot/imported/corporate-offices-bg.png-6d0ba9c477a8353ced53d5df20e0c57e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/corporate-offices-bg.jpg"
-dest_files=["res://.godot/imported/corporate-offices-bg.jpg-73292acfdd3492e51d03686c01f6f11d.ctex"]
+source_file="res://Assets/Textures/corporate-offices-bg.png"
+dest_files=["res://.godot/imported/corporate-offices-bg.png-6d0ba9c477a8353ced53d5df20e0c57e.ctex"]
 
 [params]
 

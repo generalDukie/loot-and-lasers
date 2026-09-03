@@ -1327,7 +1327,7 @@ func _make_sell_section() -> VBoxContainer:
 	while source_grid.get_child_count() < min_cells:
 		source_grid.add_child(_make_sell_bag_slot({}, false))
 	if available.is_empty():
-		bag_hint.text = "Bag — unequipped unlocked items appear here"
+		bag_hint.text = "Bag — unequipped items appear here"
 
 	var tray_hint := Label.new()
 	tray_hint.text = "Sell tray — up to %s items" % SELL_SLOT_COUNT

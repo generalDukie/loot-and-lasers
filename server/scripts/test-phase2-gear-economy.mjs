@@ -343,10 +343,10 @@ test("Mission-style default generation does not apply PvE offset", () => {
   assert.equal(item.stat_budget_level, 10);
   assert.equal(item.origin, "mission");
   assert.equal(item.shipment_eligible, true);
-  assert.equal(item.manufacturer, null);
+  assert.equal(item.manufacturer, "DTD");
 });
 
-test("Market origin is shipment-ineligible; unassigned defers eligibility", () => {
+test("Market origin is shipment-ineligible; other generated Gear defaults eligible", () => {
   const market = GenerateGearItem({
     itemLevel: 5,
     itemType: "boots",
@@ -362,7 +362,8 @@ test("Market origin is shipment-ineligible; unassigned defers eligibility", () =
     rng: () => 0.2,
   });
   assert.equal(unknown.origin, "unassigned");
-  assert.equal(unknown.shipment_eligible, null);
+  assert.equal(unknown.shipment_eligible, true);
+  assert.ok(unknown.manufacturer === "DTD" || unknown.manufacturer === "TTT");
 });
 
 test("resale ratios vs pre-variance market base; shop GearSaleValue stays separate", () => {

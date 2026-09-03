@@ -37,7 +37,7 @@ total_stardust_earned, level, playtime_seconds (non-authoritative note).
 
 ### 5. Daily / weekly models
 
-- **Daily:** Arena rewarded wins via shared `todayET()` / `getArenaRewardedWinsState`
+- **Daily:** Arena rewarded wins via `productionGameDayId()` (19:00 UTC) / `getArenaRewardedWinsState`
   (already Arena authority). No generic `daily_stats` table.
 - **Weekly:** **absent** — not invented. Weekly Nova quests are separate.
 

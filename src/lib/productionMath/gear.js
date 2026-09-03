@@ -62,13 +62,11 @@ export function canonicalGearOrigin(origin) {
   return null;
 }
 
-/** null = not yet classified (Phase 9 / source phase). No gameplay effect in Phase 2. */
+/** Market/Contraband are permanently ineligible. Every other generated origin defaults eligible. */
 export function defaultShipmentEligible(origin) {
   const key = canonicalGearOrigin(origin);
-  if (!key || key === "unassigned") return null;
   if (SHIPMENT_INELIGIBLE_ORIGINS.includes(key)) return false;
-  if (SHIPMENT_ELIGIBLE_ORIGINS.includes(key)) return true;
-  return null;
+  return true;
 }
 
 /**

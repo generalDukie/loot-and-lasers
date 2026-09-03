@@ -2,7 +2,7 @@
 
 Production integration of independent D1–D10 tracks, infinite Wormhole bands, Frontier XP, and guaranteed Gear. Godot renders server state. The client does not author winners, XP, Gear, cooldowns, or Nova debits.
 
-**Phase 8 (Arena/PvP wrapper) was not started.**
+**Phase 8 Arena/PvP is live.** See `docs/PHASE8_ARENA_PVP.md`.
 
 Historical `docs/PHASE7_MISSIONS.md` and `docs/PHASE_DUNGEON.md` are not authority for this phase.
 

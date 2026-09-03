@@ -12,7 +12,6 @@ import {
   CONTRABAND_RESET_HOUR_UTC,
   DATE_PART_PAD_WIDTH,
   GEAR_SLOTS,
-  MARKET_COMPANIES_PER_SLOT,
   MARKET_GEAR_LEVEL_OFFSET_WEIGHTS,
   MARKET_GEAR_OFFER_CHANCE,
   MARKET_HAGGLE_DISCOUNT_MAX_PERCENT,
@@ -36,13 +35,11 @@ import {
   NOVA_SURCHARGE_BANDS,
   NOVA_SURCHARGE_TABLE,
   PERCENT_DENOMINATOR,
-  SLOT_ELIGIBLE_COMPANIES,
   STIM_RARE_LEVEL_MAX,
   STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR,
   STIM_TIERS,
   STIM_UNCOMMON_LEVEL_MAX,
 } from "./constants.js";
-import { canonicalGearSlot } from "./gear.js";
 
 const STIM_TIER_RANK = Object.freeze({ uncommon: 0, rare: 1, epic: 2 });
 
@@ -247,6 +244,14 @@ export function marketWindowAt(nowMs) {
   };
 }
 
+/**
+ * Production game-day id keyed at GAME_DAY_RESET_HOUR_UTC (19:00 UTC, no DST).
+ * Reuses the existing 19:00 UTC calendar math; do not invent a second clock.
+ */
+export function productionGameDayId(nowMs) {
+  return contrabandPeriodId(nowMs);
+}
+
 /** Contraband daily period keyed at 19:00 UTC. Independent of the 07:00 Market window. */
 export function contrabandPeriodId(nowMs) {
   const ms = Number(nowMs);
@@ -329,22 +334,6 @@ export function rollMarketGearItemLevel(playerLevel, rng) {
 export function rollMarketGearSlot(rng) {
   const r = requireRng(rng, "rollMarketGearSlot");
   return GEAR_SLOTS[Math.floor(unitHalfOpen(r) * GEAR_SLOTS.length)];
-}
-
-export function companiesForSlot(slot) {
-  const key = canonicalGearSlot(slot) || String(slot || "").toLowerCase();
-  return SLOT_ELIGIBLE_COMPANIES[key] || Object.freeze([]);
-}
-
-export function rollManufacturerForSlot(slot, rng) {
-  const r = requireRng(rng, "rollManufacturerForSlot");
-  const companies = companiesForSlot(slot);
-  if (!companies.length) return null;
-  const idx = Math.min(
-    MARKET_COMPANIES_PER_SLOT - 1,
-    Math.floor(unitHalfOpen(r) * companies.length),
-  );
-  return companies[idx];
 }
 
 export function rollMarketStimAttribute(rng) {

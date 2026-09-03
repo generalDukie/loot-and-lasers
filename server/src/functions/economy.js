@@ -101,6 +101,7 @@ import {
   missionLootTypeFromName,
 } from "../shared/missionTemplates.js";
 import { ECONOMY_FOLLOW_ON_HANDLERS } from "./economyFollowOn.js";
+import { COMPANY_HANDLERS } from "./companies.js";
 import { clock, TimeErrors } from "../shared/time/index.js";
 import {
   ClaimKeys,
@@ -670,7 +671,6 @@ export async function DissolveItem(user, body) {
       const item = entities.Item.get(itemId);
       if (!item) httpErr(404, "Item not found");
       if (item.character_id !== ch.id) httpErr(403, "Not your item");
-      if (item.locked) httpErr(400, "Item is locked");
       if (item.is_equipped) {
         httpErr(400, DISSOLVE_EQUIPPED_ERROR_MESSAGE, DISSOLVE_EQUIPPED_ERROR_CODE);
       }
@@ -737,7 +737,7 @@ export async function DissolveJunk(user, body) {
         const item = entities.Item.get(id);
         if (!item || item.character_id !== ch.id) continue;
         // Equipped Gear cannot be sold. Skip rather than unequip/dissolve it.
-        if (item.locked || item.is_equipped) continue;
+        if (item.is_equipped) continue;
         total += computeStardustValue(item, {
           fallbackLevel: ch.level,
           className: ch.class,
@@ -2562,4 +2562,5 @@ export const ECONOMY_HANDLERS = {
   RefreshShop,
   EnsureShop,
   ...ECONOMY_FOLLOW_ON_HANDLERS,
+  ...COMPANY_HANDLERS,
 };

@@ -350,7 +350,6 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 	var rarity := str(it.get("rarity", "common"))
 	var tint := ClientUi.rarity_color(rarity)
 	var iid := str(it.get("id", ""))
-	var locked := bool(it.get("locked", false))
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -415,7 +414,7 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 	var btn := Button.new()
 	btn.text = "Dissolve"
 	btn.focus_mode = Control.FOCUS_NONE
-	btn.disabled = locked or _busy
+	btn.disabled = _busy
 	ClientUi.apply_accent_chip_button(btn)
 	btn.pressed.connect(func() -> void: _on_dissolve(iid))
 	row.add_child(btn)
@@ -424,7 +423,7 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 
 func _card_get_drag(panel: Control, it: Dictionary) -> Variant:
 	var iid := str(it.get("id", ""))
-	if iid.is_empty() or _busy or _sucking_ids.has(iid) or bool(it.get("locked", false)):
+	if iid.is_empty() or _busy or _sucking_ids.has(iid):
 		return null
 	var preview := GearIcon.make(it, 40.0)
 	panel.set_drag_preview(preview)
@@ -464,9 +463,6 @@ func _on_dissolve(item_id: String) -> void:
 		return
 	var it: Dictionary = InventoryRules.find_by_id(_items, item_id)
 	if it.is_empty():
-		return
-	if bool(it.get("locked", false)):
-		Notify.blocked("Item locked", "Locked items can't be dissolved")
 		return
 
 	_busy = true

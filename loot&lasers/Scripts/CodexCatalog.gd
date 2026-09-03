@@ -14,8 +14,8 @@ const FUEL_PURCHASE_COST := 20
 const FUEL_PURCHASE_AMOUNT := 20
 const FUEL_PURCHASE_MAX := 10
 const SHOP_REFRESH_COST := 20
-const ARENA_FREE_BATTLES := 10
-const ARENA_PAID_BATTLE_COST := 15
+const ARENA_REWARDED_WINS := 10
+const ARENA_SKIP_COST := 10
 const DUNGEON_SKIP_COST := 25
 
 const SECTIONS: Array = [
@@ -75,7 +75,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("Try the [b]Arena[/b] for PvP, or brave the [b]Galaxy Dungeon[/b] for risky loot.")
 				+ _li("Sell unwanted gear at the [b]Black Market[/b] to reclaim stardust and free backpack slots.")
 				+ "\n" + _h("Where things live")
-				+ _p("The [b]station hub[/b] on the home screen is your map — tap any glowing module to travel there. The %s gives quests, the [b]Nav Deck[/b] is the dungeon, [b]Operative / Ship Hangar[/b] is your character and vessel." % _amber("Cantina"))
+				+ _p("The [b]station hub[/b] on the home screen is your map — tap any glowing module to travel there. The %s gives quests, the [b]Nav Deck[/b] is the dungeon, [b]Operative[/b] is your character, and [b]Corporate Offices[/b] handles company Shipments and Commissions." % _amber("Cantina"))
 				+ _tip("Tip: this guide lives in [b]Settings → Codex[/b] whenever you need a refresher.")
 			)
 		"currencies":
@@ -83,8 +83,8 @@ static func body_bbcode(section_id: String) -> String:
 				_stardust_h()
 				+ _p("The primary currency. Earned from missions, arena wins, dungeons, daily rewards, and selling gear at the Black Market. Spent in the Black Market, on ship mods, and attribute buys.")
 				+ _h("Nova Crystals")
-				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission/arena/dungeon waits, buy extra fuel, and fight past free arena quotas (%s Nova Crystals per arena battle after free fights). Frontier cooldown skip costs %s Nova Crystals." % [
-					NumberDisplay.nova(ARENA_PAID_BATTLE_COST), NumberDisplay.nova(DUNGEON_SKIP_COST)
+				+ _p("Premium currency — buy them in the Crystal Store or earn them from daily rewards. Used to skip mission, arena, and dungeon waits, and to buy extra fuel. Arena cooldown skip costs %s Nova Crystals. Frontier cooldown skip costs %s Nova Crystals." % [
+					NumberDisplay.nova(ARENA_SKIP_COST), NumberDisplay.nova(DUNGEON_SKIP_COST)
 				])
 				+ "[font_size=14]%s[/font_size]\n" % _fuel("FUEL")
 				+ _p("Your mission energy. Each mission costs fuel based on its length. You get a pool of 100 that [b]resets to full every 24 hours[/b]. Need more sooner? Spend [b]%s Nova Crystals[/b] to buy +%s fuel, up to [b]%s times[/b] per cycle." % [
@@ -107,14 +107,12 @@ static func body_bbcode(section_id: String) -> String:
 					NumberDisplay.quantity(FUEL_PURCHASE_AMOUNT),
 					NumberDisplay.quantity(FUEL_PURCHASE_MAX),
 				])
-				+ _h("Ship bonuses")
-				+ _p("Your active ship and its mods apply at launch (fuel/time reduction) and at claim (stardust/XP boosts). Check the Ship Hangar.")
+				+ _h("Corporate Offices")
+				+ _p("Ship five matching-company Gear pieces from Corporate Offices for a 10% Shipment bonus and company reputation. Company levels award Commission tokens you redeem there.")
 			)
 		"combat":
 			return (
-				_p("The [b]Arena[/b] is automated PvP — your stats and gear fight an opponent in a simulated battle. You get [b]%s free battles per day[/b] (resets at midnight Eastern). After that, each fight costs [b]%s Nova Crystals[/b] and awards rating only." % [
-					NumberDisplay.quantity(ARENA_FREE_BATTLES), NumberDisplay.nova(ARENA_PAID_BATTLE_COST)
-				])
+				_p("The [b]Arena[/b] is automated PvP — your stats and gear fight an opponent in a simulated battle. Battles are unlimited. After every fight you wait a [b]10 minute cooldown[/b]; skip it for [b]%s Nova Crystals[/b] as often as you can pay." % NumberDisplay.nova(ARENA_SKIP_COST))
 				+ _h("Challengers")
 				+ _li("You see [b]three[/b] challengers at a time. The board lasts [b]2 hours[/b], remints after you fight one, or when you (or a real foe on the board) level up.")
 				+ _li("Rankings remain the path to pick a specific rival when they appear on your board.")
@@ -123,7 +121,7 @@ static func body_bbcode(section_id: String) -> String:
 				+ _li("Beating higher-rated opponents gives bonus rating.")
 				+ _li("Chain wins for a [b]streak[/b] — hit milestones for news feed glory.")
 				+ "\n" + _h("Rewards")
-				+ _p("Free battles earn XP and stardust on a [b]win[/b] only — losses grant nothing (rating still changes). After your free quota, battles cost Nova Crystals and award rating only.")
+				+ _p("The first [b]%s wins[/b] each game day (resets at 19:00 UTC) grant XP and Stardust. Losses grant no XP or Stardust and do not consume a rewarded win. After that cap, fights continue for [b]rating only[/b]." % NumberDisplay.quantity(ARENA_REWARDED_WINS))
 				+ _h("Power")
 				+ _p("Your combat power comes from level + attributes + equipped gear rarity. Buy attributes with Stardust (each attribute has its own cost curve) and upgrade gear to climb the ladder.")
 				+ _h("Attributes")

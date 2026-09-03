@@ -69,7 +69,7 @@ Malformed records → logged, defaults used (not trusted).
 
 ## Feature flags
 
-Sample: `shipments_enabled` → `enabled=false`, `client_visible=true`, `environment=development`.
+Sample: `shipments_enabled` → `enabled=true` (Phase 9 informational default; Corporate Offices is not gated by this flag), `client_visible=true`, `environment=development`.
 
 Phase 10 evaluation uses: `enabled`, `environment`, `client_visible`, `starts_at`, `ends_at` (server time).
 **No** percentage rollout / allowlists in this phase.

@@ -1113,7 +1113,7 @@ func _nav_groups() -> Array:
 			{"path": GameManager.SCENE_STATS, "label": "Operative", "icon": "user", "color": "#00E5FF"},
 			{"path": GameManager.SCENE_CANTINA, "label": "Cantina", "icon": "beer", "color": "#FF8C00"},
 			{"path": GameManager.SCENE_GALAXY, "label": "Galactic Frontier", "icon": "orbit", "color": "#BA55D3"},
-			{"path": GameManager.SCENE_SHIP, "label": "Coming Soon", "icon": "rocket", "color": "#2DD4BF", "feature_id": FeatureFlags.FEATURE_SHIP_HANGAR},
+			{"path": GameManager.SCENE_CORPORATE_OFFICES, "label": "Corporate Offices", "icon": "landmark", "color": "#2DD4BF"},
 		]},
 		{"name": "Social", "items": [
 			{"path": GameManager.SCENE_FRIENDS, "label": "Friends", "icon": "users", "color": "#A855F7"},
@@ -1140,8 +1140,6 @@ func _on_nav_pressed(path: String) -> void:
 		return
 	if path == GameManager.SCENE_VOID and FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID):
 		return
-	if path == GameManager.SCENE_SHIP and FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
-		return
 	if TutorialManager.should_show() and not TutorialManager.nav_allowed(path):
 		return
 	GameManager.open_game_page(path)
@@ -1155,8 +1153,6 @@ func try_begin_page_nav(path: String) -> bool:
 		Notify.blocked("Finish the tutorial fight first")
 		return false
 	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID) and path == GameManager.SCENE_VOID:
-		return false
-	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR) and path == GameManager.SCENE_SHIP:
 		return false
 	if _page_swap_busy or _page_nav_pending:
 		return false
@@ -1184,8 +1180,6 @@ func show_page(path: String) -> void:
 	if path.is_empty():
 		return
 	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_VOID) and path == GameManager.SCENE_VOID:
-		return
-	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR) and path == GameManager.SCENE_SHIP:
 		return
 	if path == _page_path and _page != null and is_instance_valid(_page):
 		_refresh_kept_page(_page)

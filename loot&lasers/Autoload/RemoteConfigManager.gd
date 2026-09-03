@@ -35,7 +35,7 @@ const DEFAULTS := {
 }
 
 const DEFAULT_FLAGS := {
-	"shipments_enabled": false,
+	"shipments_enabled": true,
 }
 
 var loading := false

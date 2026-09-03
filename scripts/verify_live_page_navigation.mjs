@@ -20,7 +20,7 @@ const FRESH_PAGE_PATHS = [
   path.join("Scenes", "UI", "crystal_store.gd"),
   path.join("Scenes", "UI", "progress.gd"),
   path.join("Scenes", "UI", "void.gd"),
-  path.join("Scenes", "UI", "ship.gd"),
+  path.join("Scenes", "UI", "corporate_offices.gd"),
 ];
 const CACHED_RENDER_CALLS = ["_populate()", "_render()"];
 const PARALLEL_BOOT_PAGE_PATHS = [

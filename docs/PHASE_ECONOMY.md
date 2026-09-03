@@ -48,7 +48,7 @@ Unchanged single source: `src/lib/stardustEconomy.js` (re-exported).
 | Fuel +20 | **20 Nova** (flat, max 10/day) |
 | Mission skip | **Fuel × 0.10**, ceil to 0.5 Nova min |
 | Shop refresh | **20 Nova** |
-| Arena paid battle | **15 Nova** |
+| Arena cooldown skip | **10 Nova** |
 | Dungeon cooldown skip | **25 Nova** |
 
 Mission skip ignores elapsed time; naturally complete → 0 charge.

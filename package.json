@@ -98,6 +98,8 @@
     "test:phase8-arena": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-phase8-arena.mjs",
     "test:phase8-pvp-matrix": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-phase8-pvp-matrix.mjs",
     "test:phase8": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/run-phase8.mjs",
+    "test:phase9-companies": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/test-phase9-companies.mjs",
+    "test:phase9": "node --import ./server/scripts/register-src-alias.mjs ./server/scripts/run-phase9.mjs",
     "test:restoration28": "node scripts/run_restoration28_regression.mjs",
     "verify:nakama-gameplay-blocked": "node scripts/verify_nakama_gameplay_blocked.mjs"
   },

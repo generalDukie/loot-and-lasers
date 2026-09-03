@@ -107,7 +107,7 @@ Gameplay wallet cap `5e12 * 10` removed. `STARDUST_MAX` is now `Number.MAX_SAFE_
 
 ## Daily clocks
 
-`todayET` (America/New_York) still used by Arena, dungeon, daily login, and other side systems. Production game day is 19:00 UTC. **Not migrated in Phase 1** — flagged for global timer work.
+`todayET` (America/New_York) still used by dungeon lives, daily login, and other side systems. **Arena rewarded wins use `productionGameDayId` (19:00 UTC)** as of Phase 8.
 
 ## Intentionally not migrated (later phases)
 

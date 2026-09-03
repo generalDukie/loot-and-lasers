@@ -95,8 +95,8 @@ GES is not a production mechanic and is not exported.
 | `rarity` / `level` / `stats` | Immutable after create |
 | `stat_budget_level` | Hidden budget used at generation (equals `level` unless PvE offset opted in) |
 | `origin` | `mission` / `dungeon` / `wormhole` / `market` / `contraband` / `commission` / `unassigned` |
-| `manufacturer` | `null` until Phase 9 |
-| `shipment_eligible` | Set when origin is unambiguous; otherwise `null`. No Shipment UI |
+| `manufacturer` | Historical Phase 2: `null` until Phase 9. **Live Phase 9:** every generated Gear has a Company. |
+| `shipment_eligible` | Historical Phase 2: set when origin is unambiguous; otherwise `null`. **Live Phase 9:** deny-list — Market/Contraband false, every other generated origin true. |
 
 Migration `phase2_gear_item_model_v1`: normalize `ring`, stamp missing origin/manufacturer/shipment fields. **Does not reroll stats.**
 

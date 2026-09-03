@@ -315,6 +315,22 @@ Certified T18 daily-loop order: snapshot `arenaL=self.L`; grant XP; **then** Sta
 
 ---
 
+## PM-COMPANY-SHIPMENT / REP / TOKEN / COMMISSION
+
+Four Companies: DTD, TTT, RDR, GORP. Each manufactures four of eight Gear slots; each slot has exactly two Companies. Ordinary generation picks the slot first, then 50/50 among the two legal Companies (`rollManufacturerForSlot`). Commission Gear uses the token's Company. Manufacturer is immutable after generation.
+
+Shipment eligibility is a deny-list: Market and Contraband are permanently ineligible. Every other generated origin defaults eligible, including Rare/Epic Commission. Eligibility is stored on the item and is not rewritten by resale, transfer, or refresh.
+
+Manual Shipment: exactly five owned, unequipped, eligible, same-Company Gear IDs. `ShipmentBaseValue = sum(persisted sell_value)`. `ShipmentPayout = roundHalfUp(base × 1.10)` (`SHIPMENT_PAYOUT_BPS = 11000`). +100 Company reputation. Company level = `floor(reputation / 1500)`. Cumulative `shipment_count` is stored separately.
+
+Token rarity: one-indexed level `L`, Epic when `(L-1) mod 4` equals the Company offset (DTD 0, TTT 1, RDR 2, GORP 3); otherwise Rare. One waiting token per Company. A second token creates persisted overflow without undoing the Shipment. Same-Company Shipments are blocked until the player spends one token via Commission creation.
+
+Rare Commission: player picks one legal slot and three distinct stats with whole percents 20–60 totaling 100. Server applies largest-remainder allocation in canonical order `strength, agility, intellect, vitality, luck`. Epic Commission: slot only; Primary/Vitality/Luck; integer floors of 30/30/20 then normalized-random remainder to conserve the rolled budget. No client-submitted stats, payout, reputation, quality, or sell value.
+
+Authority: `src/lib/productionMath/companies.js` + `server/src/shared/companyService.js`. Phase 9 doc: `docs/PHASE9_COMPANIES.md`.
+
+---
+
 ## PM-MINING
 
 `rround(EligibleMinutes × SPF(snapshotLevel) × 0.03)`. Snapshot at session start (`mining_snapshot_level`, `mining_rules_version`). Product session window 1–12 hours. No 720-minute daily cap (Test 18 simulation checksum only). Hangar mining modifiers remain disabled. **A** live via `miningStardustResolved` + `miningService.js`.

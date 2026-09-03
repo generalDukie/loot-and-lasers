@@ -47,6 +47,12 @@ import {
   stimEconomicLevel,
   stimSellValueResolved,
   resolveStimRarity,
+  allocateEpicCommissionStats,
+  allocateRareCommissionStats,
+  companyManufacturesSlot,
+  resolveGearManufacturer,
+  GEAR_ORIGIN_EPIC_COMMISSION,
+  GEAR_ORIGIN_RARE_COMMISSION,
 } from "./productionMath/index.js";
 import {
   finalizeGearPricingQuality,
@@ -641,20 +647,39 @@ export function rollItemStats({
   statPool = null,
   statBudgetVariance = null,
   variancePct = 0, // ignored — live path is GEAR_STAT_BUDGET_VARIANCE_*
+  commission = null,
 } = {}) {
   void variancePct;
   const slot = canonicalGearSlot(type) || type;
   const pool = normalizeGearStatPool(statPool);
-  const { attrs, poolMode } = selectItemAttributes(rarity, rng, { className, statPool: pool });
+  const commissionMode = commission?.mode || null;
+  let attrs;
+  let poolMode;
+  if (commissionMode === "rare" || commissionMode === "epic") {
+    attrs = [...ITEM_ATTR_KEYS];
+    poolMode = `commission_${commissionMode}`;
+  } else {
+    const selected = selectItemAttributes(rarity, rng, { className, statPool: pool });
+    attrs = selected.attrs;
+    poolMode = selected.poolMode;
+  }
   const budgetLevel = Math.max(1, Math.floor(Number(statBudgetLevel ?? itemLevel) || 1));
   const preVarianceBudget = getItemStatBudget(budgetLevel, slot, rarity);
   const variance = rollGearStatBudgetVariance(rng, statBudgetVariance);
   const variedBudget = applyGearStatBudgetVariance(preVarianceBudget, variance);
-  const budget = Math.max(attrs.length, variedBudget);
+  const budget = Math.max(
+    commissionMode ? 1 : attrs.length,
+    variedBudget,
+  );
   const offShareBps = rarity === "legendary" ? legendaryOffShareBpsForPool(pool) : null;
   const legendaryRoles = rarity === "legendary" ? classGearStatRoles(className) : null;
   let stats;
-  if (legendaryRoles && offShareBps != null) {
+  if (commissionMode === "rare") {
+    stats = allocateRareCommissionStats(budget, commission.weights);
+  } else if (commissionMode === "epic") {
+    const primary = classGearStatRoles(className)?.primary || resolveClassArchetype(className);
+    stats = allocateEpicCommissionStats(budget, primary, rng);
+  } else if (legendaryRoles && offShareBps != null) {
     stats = allocateLegendaryDirectedBudget(budget, rng, className, offShareBps);
   } else if (legendaryRoles) {
     stats = allocateLegendaryClassBudget(budget, rng, className);
@@ -701,6 +726,7 @@ export const AllocateGearStats = allocateStatBudget;
  * @param {string|null} [opts.origin]
  * @param {string|null} [opts.manufacturer]
  * @param {boolean|null} [opts.shipmentEligible]
+ * @param {object|null} [opts.commission]
  * @param {boolean} [opts.skipPricingQuality] CDF / Nova sampling only — do not
  *   finalize permanent pricing quality (prevents generator recursion).
  */
@@ -720,9 +746,11 @@ export function GenerateGearItem({
   shipmentEligible = null,
   generationContext = null,
   skipPricingQuality = false,
+  commission = null,
 } = {}) {
   const skipQuality = skipPricingQuality || !!generationContext?.skipPricingQuality;
   const ctxOrigin = origin || generationContext?.origin || generationContext?.source || null;
+  const commissionSpec = commission || generationContext?.commission || null;
   const levels = resolveGearLevelRefs({
     economicLevel,
     itemLevel,
@@ -751,6 +779,24 @@ export function GenerateGearItem({
     err.code = "VALIDATION_ERROR";
     throw err;
   }
+  if (commissionSpec?.mode === "rare" && r !== "rare") {
+    const err = new Error("Rare Commissions must generate Rare Gear");
+    err.status = VALIDATION_HTTP_STATUS;
+    err.code = "INVALID_COMMISSION_RARITY";
+    throw err;
+  }
+  if (commissionSpec?.mode === "epic" && r !== "epic") {
+    const err = new Error("Epic Commissions must generate Epic Gear");
+    err.status = VALIDATION_HTTP_STATUS;
+    err.code = "INVALID_COMMISSION_RARITY";
+    throw err;
+  }
+  if (commissionSpec?.companyId && !companyManufacturesSlot(commissionSpec.companyId, type)) {
+    const err = new Error("Company does not manufacture that slot");
+    err.status = VALIDATION_HTTP_STATUS;
+    err.code = "INVALID_COMPANY_SLOT";
+    throw err;
+  }
 
   const rolled = rollItemStats({
     itemLevel: L,
@@ -760,8 +806,15 @@ export function GenerateGearItem({
     rng,
     className,
     statPool: statPool ?? generationContext?.statPool ?? null,
+    commission: commissionSpec,
   });
-  const resolvedOrigin = canonicalGearOrigin(ctxOrigin) || "unassigned";
+  let resolvedOrigin = canonicalGearOrigin(ctxOrigin) || "unassigned";
+  if (commissionSpec?.mode === "rare") resolvedOrigin = GEAR_ORIGIN_RARE_COMMISSION;
+  if (commissionSpec?.mode === "epic") resolvedOrigin = GEAR_ORIGIN_EPIC_COMMISSION;
+  const resolvedManufacturer = resolveGearManufacturer(type, {
+    manufacturer: manufacturer ?? generationContext?.manufacturer ?? commissionSpec?.companyId ?? null,
+    rng,
+  });
   const item = {
     type,
     rarity: r,
@@ -774,7 +827,7 @@ export function GenerateGearItem({
     stats: rolled.stats,
     is_equipped: false,
     origin: resolvedOrigin,
-    manufacturer: manufacturer == null ? null : String(manufacturer),
+    manufacturer: resolvedManufacturer,
     shipment_eligible: shipmentEligible == null
       ? defaultShipmentEligible(resolvedOrigin)
       : !!shipmentEligible,

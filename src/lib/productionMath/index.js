@@ -16,6 +16,7 @@ export * from "./combatStats.js";
 export * from "./attributes.js";
 export * from "./pve.js";
 export * from "./market.js";
+export * from "./companies.js";
 export * from "./gearQuality.js";
 export * from "./missions.js";
 export * from "./simulateLoadout.js";

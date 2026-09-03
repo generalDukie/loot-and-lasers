@@ -172,25 +172,34 @@ export const BACKPACK_UNEQUIPPED_ITEM_CAP = 10;
 export const BACKPACK_UNEQUIPPED_GEAR_CAP = BACKPACK_UNEQUIPPED_ITEM_CAP;
 
 /**
- * Production Gear origin keys. Company/manufacturer assignment is Phase 9.
- * Unknown/legacy items use `unassigned`.
+ * Production Gear origin keys. Unknown/legacy items use `unassigned`.
+ * Commission Gear records Rare vs Epic origin separately.
  */
+export const GEAR_ORIGIN_RARE_COMMISSION = "rare_commission";
+export const GEAR_ORIGIN_EPIC_COMMISSION = "epic_commission";
+export const GEAR_ORIGIN_COMMISSION = "commission";
 export const GEAR_ORIGINS = Object.freeze([
   "mission",
   "dungeon",
   "wormhole",
   "market",
   "contraband",
-  "commission",
+  GEAR_ORIGIN_COMMISSION,
+  GEAR_ORIGIN_RARE_COMMISSION,
+  GEAR_ORIGIN_EPIC_COMMISSION,
   "unassigned",
 ]);
 export const GEAR_SLOT_ALIASES = Object.freeze({ ring: "accessory" });
+/** Deny-list only. Every other generated origin defaults Shipment-eligible. */
 export const SHIPMENT_INELIGIBLE_ORIGINS = Object.freeze(["market", "contraband"]);
+/** Known earned origins — not an eligibility gate. */
 export const SHIPMENT_ELIGIBLE_ORIGINS = Object.freeze([
   "mission",
   "dungeon",
   "wormhole",
-  "commission",
+  GEAR_ORIGIN_COMMISSION,
+  GEAR_ORIGIN_RARE_COMMISSION,
+  GEAR_ORIGIN_EPIC_COMMISSION,
 ]);
 
 export const RARITIES = Object.freeze(["common", "uncommon", "rare", "epic", "legendary"]);
@@ -292,16 +301,78 @@ export const MARKET_STIM_ATTRIBUTES = Object.freeze([
   "vitality",
   "luck",
 ]);
-export const SLOT_ELIGIBLE_COMPANIES = Object.freeze({
-  helmet: Object.freeze(["Company1", "Company3"]),
-  armor: Object.freeze(["Company1", "Company2"]),
-  legs: Object.freeze(["Company1", "Company3"]),
-  boots: Object.freeze(["Company1", "Company2"]),
-  neck: Object.freeze(["Company2", "Company4"]),
-  accessory: Object.freeze(["Company2", "Company4"]),
-  weapon: Object.freeze(["Company3", "Company4"]),
-  ship_module: Object.freeze(["Company3", "Company4"]),
+export const COMPANY_ID_DTD = "DTD";
+export const COMPANY_ID_TTT = "TTT";
+export const COMPANY_ID_RDR = "RDR";
+export const COMPANY_ID_GORP = "GORP";
+export const COMPANY_IDS = Object.freeze([
+  COMPANY_ID_DTD,
+  COMPANY_ID_TTT,
+  COMPANY_ID_RDR,
+  COMPANY_ID_GORP,
+]);
+export const COMPANY_FULL_NAMES = Object.freeze({
+  [COMPANY_ID_DTD]: "Duct Tape Dynamics",
+  [COMPANY_ID_TTT]: "Terribly Tedious Technologies",
+  [COMPANY_ID_RDR]: "Run-Down Robotics",
+  [COMPANY_ID_GORP]: "GORPTEK",
 });
+export const COMPANY_ABBREVIATIONS = Object.freeze({
+  [COMPANY_ID_DTD]: "DTD",
+  [COMPANY_ID_TTT]: "TTT",
+  [COMPANY_ID_RDR]: "RDR",
+  [COMPANY_ID_GORP]: "GORP",
+});
+export const COMPANY_SLOTS = Object.freeze({
+  [COMPANY_ID_DTD]: Object.freeze(["helmet", "armor", "legs", "boots"]),
+  [COMPANY_ID_TTT]: Object.freeze(["armor", "boots", "neck", "accessory"]),
+  [COMPANY_ID_RDR]: Object.freeze(["helmet", "legs", "weapon", "ship_module"]),
+  [COMPANY_ID_GORP]: Object.freeze(["weapon", "neck", "accessory", "ship_module"]),
+});
+export const SLOT_ELIGIBLE_COMPANIES = Object.freeze({
+  helmet: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_RDR]),
+  armor: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_TTT]),
+  legs: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_RDR]),
+  boots: Object.freeze([COMPANY_ID_DTD, COMPANY_ID_TTT]),
+  neck: Object.freeze([COMPANY_ID_TTT, COMPANY_ID_GORP]),
+  accessory: Object.freeze([COMPANY_ID_TTT, COMPANY_ID_GORP]),
+  weapon: Object.freeze([COMPANY_ID_RDR, COMPANY_ID_GORP]),
+  ship_module: Object.freeze([COMPANY_ID_RDR, COMPANY_ID_GORP]),
+});
+export const SHIPMENT_ITEM_COUNT = 5;
+export const SHIPMENT_PAYOUT_BPS = 11000;
+export const SHIPMENT_BONUS_PERCENT = 10;
+export const SHIPMENT_REPUTATION_REWARD = 100;
+export const COMPANY_REPUTATION_PER_LEVEL = 1500;
+export const COMPANY_WAITING_TOKEN_SLOTS = 1;
+export const TOKEN_ROTATION_PERIOD = 4;
+export const COMPANY_TOKEN_EPIC_OFFSET = Object.freeze({
+  [COMPANY_ID_DTD]: 0,
+  [COMPANY_ID_TTT]: 1,
+  [COMPANY_ID_RDR]: 2,
+  [COMPANY_ID_GORP]: 3,
+});
+export const TOKEN_RARITY_RARE = "rare";
+export const TOKEN_RARITY_EPIC = "epic";
+export const RARE_COMMISSION_STAT_COUNT = 3;
+export const RARE_COMMISSION_WEIGHT_MIN_PERCENT = 20;
+export const RARE_COMMISSION_WEIGHT_MAX_PERCENT = 60;
+export const RARE_COMMISSION_WEIGHT_TOTAL_PERCENT = 100;
+export const EPIC_COMMISSION_PRIMARY_PERCENT = 30;
+export const EPIC_COMMISSION_VITALITY_PERCENT = 30;
+export const EPIC_COMMISSION_LUCK_PERCENT = 20;
+export const EPIC_COMMISSION_RANDOM_REMAINDER_PERCENT = 20;
+export const CANONICAL_GEAR_STAT_KEYS = Object.freeze([
+  "strength",
+  "agility",
+  "intellect",
+  "vitality",
+  "luck",
+]);
+export const COMMISSION_EPIC_STAT_VITALITY = "vitality";
+export const COMMISSION_EPIC_STAT_LUCK = "luck";
+export const TOKEN_STATUS_WAITING = "waiting";
+export const TOKEN_STATUS_OVERFLOW = "overflow";
 
 export const MARKET_PRICE_RARITY_MULT = Object.freeze({
   common: 2.8,
@@ -562,13 +633,6 @@ export const STARTING_NOVA = 500;
 export const STARTING_STARDUST = 0;
 
 export const JS_MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
-
-export const COMPANY_SLOTS = Object.freeze({
-  Company1: Object.freeze(["helmet", "armor", "legs", "boots"]),
-  Company2: Object.freeze(["armor", "boots", "neck", "accessory"]),
-  Company3: Object.freeze(["helmet", "legs", "weapon", "ship_module"]),
-  Company4: Object.freeze(["weapon", "neck", "accessory", "ship_module"]),
-});
 
 /**
  * RawQuality = BUDGET_WEIGHT × BudgetQuality + DESIRABILITY_WEIGHT × Desirability

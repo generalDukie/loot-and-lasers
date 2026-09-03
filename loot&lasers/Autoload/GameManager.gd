@@ -22,6 +22,7 @@ const SCENE_ARENA := "res://Scenes/UI/arena.tscn"
 const SCENE_ARENA_COMBAT := "res://Scenes/UI/arena_combat.tscn"
 const SCENE_SHOP := "res://Scenes/UI/shop.tscn"
 const SCENE_STATS := "res://Scenes/UI/stats.tscn"
+const SCENE_CORPORATE_OFFICES := "res://Scenes/UI/corporate_offices.tscn"
 const SCENE_SHIP := "res://Scenes/UI/ship.tscn"
 const SCENE_PROGRESS := "res://Scenes/UI/progress.tscn"
 const SCENE_LEADERBOARD := "res://Scenes/UI/leaderboard.tscn"
@@ -179,14 +180,9 @@ func go_stats() -> void:
 
 
 func go_ship() -> void:
-	## Ship Hangar temporarily retired — Coming Soon. Do not open hangar or apply upgrades.
-	if FeatureFlags.is_coming_soon(FeatureFlags.FEATURE_SHIP_HANGAR):
-		var host := get_tree().current_scene
-		if host != null:
-			ClientUi.show_toast(host, "Coming Soon", "Ship Hangar is offline for now.")
-		return
+	## Live Explore destination is Corporate Offices. Ship Hangar remains dormant.
 	change_state(GameState.IN_GAME)
-	open_game_page(SCENE_SHIP)
+	open_game_page(SCENE_CORPORATE_OFFICES)
 
 
 func go_progress() -> void:
@@ -325,8 +321,7 @@ func open_game_page(path: String) -> void:
 		go_void()
 		return
 	if path == SCENE_SHIP:
-		go_ship()
-		return
+		path = SCENE_CORPORATE_OFFICES
 	change_state(GameState.IN_GAME)
 	var current := get_tree().current_scene
 	if current != null and current.is_in_group("game_shell") and current.has_method("show_page"):

@@ -115,7 +115,7 @@ export function getFeatureFlags() {
       missions_enabled: true,
       mining_enabled: true,
       dungeons_enabled: true,
-      shipments_enabled: false,
+      shipments_enabled: true,
     };
   }
   try {

@@ -220,10 +220,10 @@ async function liveChecks(token) {
 
   if (typeof data.feature_flags?.shipments_enabled !== "boolean") {
     fail("feature flag shipments_enabled missing");
-  } else if (data.feature_flags.shipments_enabled !== false) {
-    fail("shipments_enabled should default false", String(data.feature_flags.shipments_enabled));
+  } else if (data.feature_flags.shipments_enabled !== true) {
+    fail("shipments_enabled should default true", String(data.feature_flags.shipments_enabled));
   } else {
-    pass("shipments_enabled default false");
+    pass("shipments_enabled default true (informational; Phase 9 is not gated)");
   }
 
   if (!["development", "staging", "production"].includes(data.environment)) {

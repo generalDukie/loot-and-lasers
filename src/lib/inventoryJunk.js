@@ -8,10 +8,11 @@ export const EQUIPPABLE_TYPES = [
  * Junk eligible for one-click Dissolve Junk:
  * - unequippable (materials, consumables, …)
  * - common equippable gear strictly worse than the piece already equipped in that slot
- * Skips locked / equipped items. Commons for empty slots are kept (might equip).
+ * Skips equipped items. Commons for empty slots are kept (might equip).
+ * Stored item-lock values are ignored; locking was removed in Phase 9.
  */
 export function isDissolveJunk(item, equippedItems = [], characterClass) {
-  if (!item || item.locked || item.is_equipped) return false;
+  if (!item || item.is_equipped) return false;
   if (!EQUIPPABLE_TYPES.includes(item.type)) return true;
   if (item.rarity !== "common") return false;
   const eq = (equippedItems || []).find((e) => e.type === item.type && e.is_equipped);

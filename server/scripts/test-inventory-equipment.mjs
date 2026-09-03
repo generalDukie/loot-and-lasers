@@ -36,8 +36,8 @@ console.log("\nInventory & equipment tests\n");
 assert.ok(EQUIPABLE_TYPES.includes("weapon"));
 assert.ok(EQUIPABLE_TYPES.includes("ship_module"));
 assert.ok(!ITEM_ALLOWED_UPDATE_FIELDS.has("is_equipped"));
-assert.ok(ITEM_ALLOWED_UPDATE_FIELDS.has("locked"));
-console.log("  ✓ slots + client cannot PATCH is_equipped");
+assert.ok(!ITEM_ALLOWED_UPDATE_FIELDS.has("locked"));
+console.log("  ✓ slots + client cannot PATCH is_equipped or locked");
 
 const accountA = {
   id: "inv-user-a",
@@ -127,13 +127,20 @@ entities.Item.create({
 });
 
 {
+  assert.throws(
+    () => sanitizeUpdatePayload(accountA, "Item", {
+      is_equipped: true,
+      locked: true,
+      stats: { strength: 999 },
+    }),
+    (err) => err?.code === "ITEM_LOCK_REMOVED" && err?.status === 400,
+  );
   const stripped = sanitizeUpdatePayload(accountA, "Item", {
     is_equipped: true,
-    locked: true,
     stats: { strength: 999 },
   });
-  assert.deepEqual(stripped, { locked: true });
-  console.log("  ✓ Item PATCH allowlist strips is_equipped + stats");
+  assert.deepEqual(stripped, {});
+  console.log("  ✓ Item PATCH rejects lock restore and strips remaining fields");
 }
 
 {

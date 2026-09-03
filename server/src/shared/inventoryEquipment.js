@@ -77,7 +77,6 @@ export function serializeItem(item, character = null) {
     stat_budget: item.stat_budget ?? null,
     stats: item.stats && typeof item.stats === "object" ? item.stats : {},
     is_equipped: !!item.is_equipped,
-    locked: !!item.locked,
     character_id: item.character_id || null,
     owner_id: item.owner_id || null,
     sell_value: computeLiveSellValue(item, character),

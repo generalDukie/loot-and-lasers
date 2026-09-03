@@ -44,7 +44,7 @@ Live authority is `docs/PHASE7_DUNGEON_WORMHOLE_FRONTIER.md`. Historical `docs/P
 
 - Mission enemy construction (`constructMissionEnemy`) — still production EPA × 0.35, not Dungeon 1.20/1.30
 - Arena bots
-- Phase 8 Arena rewards — **not started**
+- Phase 8 Arena — **live**; see `docs/PHASE8_ARENA_PVP.md`
 - `src/lib/expectedPlayerAttributes.js` PCHIP EPA — leftover for Mission/legacy tests; Dungeon/Wormhole construction does not call it
 
 ## Removed from live Dungeon/Wormhole paths

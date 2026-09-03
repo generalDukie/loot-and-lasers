@@ -1439,6 +1439,8 @@ async function adminModerationInner(user, body) {
       created_date: _ignoreCd,
       updated_date: _ignoreUd,
       is_equipped: _ignoreEq,
+      locked: _ignoreLocked,
+      favorited: _ignoreFav,
       ...safeItem
     } = item;
     const cap = getInventoryCap(ch);
@@ -1464,7 +1466,6 @@ async function adminModerationInner(user, body) {
       created_by_id: user.id,
       created_by: user.email,
       is_equipped: false,
-      locked: !!safeItem.locked,
     });
     const corr = newCorrelationId();
     recordItemOwnershipChange({
@@ -1530,7 +1531,6 @@ async function adminModerationInner(user, body) {
       nova_wagerable: beforeBal.nova_wagerable,
       nova_promotional: beforeBal.nova_promotional,
       fuel: live.fuel || 0,
-      arena_attempts_left: live.arena_attempts_left || 0,
       experience: live.experience || 0,
       level: live.level || 1,
     };
@@ -1589,9 +1589,14 @@ async function adminModerationInner(user, body) {
       const owner = getUserById(ch.created_by_id);
       patch.fuel = nextFuelAfterGrant(ch, nextFuel, { uncapped: isAdmin(owner) });
     }
-    if (deltas.arena_attempts != null && deltas.arena_attempts !== 0) {
-      patch.arena_attempts_left = Math.max(0, (ch.arena_attempts_left || 0) + Number(deltas.arena_attempts));
-      patch.arena_attempts_date = todayET();
+    if (deltas.arena_attempts != null) {
+      return {
+        status: 400,
+        body: {
+          error: "Arena attempt entitlements are not a live currency",
+          code: "ARENA_ATTEMPTS_REMOVED",
+        },
+      };
     }
     if (deltas.experience != null && deltas.experience !== 0) {
       const xpDelta = Number(deltas.experience);
@@ -1651,7 +1656,6 @@ async function adminModerationInner(user, body) {
         fuel: updated.fuel,
         level: updated.level,
         experience: updated.experience,
-        arena_attempts_left: updated.arena_attempts_left,
       },
       changeSet: { deltas },
       correlationId: corr,

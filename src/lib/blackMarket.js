@@ -16,11 +16,12 @@ import {
   MARKET_PAID_REFRESH_NOVA,
   stimSellValueResolved,
   stimShopPriceResolved,
+  companiesForSlot,
+  rollManufacturerForSlot,
 } from "./productionMath/index.js";
 import {
   applyHaggleDiscountToNova,
   applyHaggleDiscountToPrice,
-  companiesForSlot,
   contrabandPeriodId,
   contrabandWindowAt,
   marketStimTier,
@@ -31,7 +32,6 @@ import {
   resolveMarketHaggle,
   resolveNovaSurcharge,
   rollContrabandRarity,
-  rollManufacturerForSlot,
   rollMarketGearItemLevel,
   rollMarketGearRarity,
   rollMarketGearSlot,

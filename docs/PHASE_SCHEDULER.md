@@ -35,7 +35,7 @@ correct).
 | System | Boundary | Mechanism |
 |--------|----------|-----------|
 | Fuel | Rolling 24h from `fuel_reset_at` | `checkFuelReset` (now clock-backed) |
-| Arena free/rewarded | `todayET` | Claim/request-time |
+| Arena rewarded wins | `productionGameDayId` (19:00 UTC) | Claim/request-time |
 | Dungeon lives | `todayET` | Claim/request-time |
 | Daily login | `todayET` | `ClaimDailyLogin` |
 | Shop windows | Absolute 12h ET anchors | `getShopWindow` |

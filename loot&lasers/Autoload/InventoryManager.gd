@@ -93,12 +93,6 @@ func prompt_bag_pressure(host: Node, reason: String = "Inventory full") -> Strin
 	return choice
 
 
-func set_locked(item_id: String, locked: bool) -> Dictionary:
-	if item_id.is_empty():
-		return {"ok": false, "error": "Missing item_id", "data": {}}
-	return await AuthManager.patch_item(item_id, {"locked": locked})
-
-
 func dissolve_item(item_id: String, auto_claim: bool = false) -> Dictionary:
 	if item_id.is_empty():
 		return {"ok": false, "error": "Missing item_id", "data": {}}

@@ -68,9 +68,6 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "arena_battles_date",
   "arena_last_battle_at",
   "arena_cooldown_at",
-  "arena_attempts",
-  "arena_attempts_left",
-  "arena_attempts_date",
   "arena_rewarded_wins_today",
   "arena_rewarded_wins_date",
   "arena_bot_raid_at",
@@ -115,10 +112,27 @@ export const CHARACTER_ECONOMY_FIELDS = new Set([
   "equipped_items",
   // Interactive onboarding — server Get/Advance/Skip/CompleteTutorial only
   "onboarding_tutorial",
+  // Phase 9 company reputation, waiting tokens, overflow
+  "company_state",
 ]);
 
 /** Non-admin Item.update may only touch these fields (equip via EquipItem/UnequipItem). */
-export const ITEM_ALLOWED_UPDATE_FIELDS = new Set(["locked"]);
+export const ITEM_ALLOWED_UPDATE_FIELDS = new Set();
+
+/** Leftover development keys: stripped from create/update payloads. Never live Arena state. */
+const RETIRED_CHARACTER_FIELDS = Object.freeze([
+  "arena_attempts",
+  "arena_attempts_left",
+  "arena_attempts_date",
+]);
+
+function stripRetiredCharacterFields(data) {
+  if (!data || typeof data !== "object") return data;
+  for (const key of RETIRED_CHARACTER_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) delete data[key];
+  }
+  return data;
+}
 
 /** Character ids belonging to this auth user. */
 export function characterIdsForUser(userId) {
@@ -388,6 +402,7 @@ export function sanitizeCreatePayload(user, type, data = {}) {
 
   // Character always belongs to caller
   if (type === "Character") {
+    stripRetiredCharacterFields(out);
     out.created_by_id = user.id;
 
     const name = String(out.name || "").trim();
@@ -533,16 +548,20 @@ export function sanitizeCreatePayload(user, type, data = {}) {
 export function sanitizeUpdatePayload(user, type, data = {}) {
   if (isAdmin(user)) {
     const out = { ...data };
-    if (type === "Character" && out.name != null) {
-      out.name = String(out.name).trim();
-      assertNameHasNoDigits(out.name);
-      assertNameHasNoSpaces(out.name);
+    if (type === "Character") {
+      stripRetiredCharacterFields(out);
+      if (out.name != null) {
+        out.name = String(out.name).trim();
+        assertNameHasNoDigits(out.name);
+        assertNameHasNoSpaces(out.name);
+      }
     }
     return out;
   }
   const out = { ...data };
 
   if (type === "Character") {
+    stripRetiredCharacterFields(out);
     for (const key of CHARACTER_ECONOMY_FIELDS) {
       delete out[key];
     }
@@ -564,6 +583,14 @@ export function sanitizeUpdatePayload(user, type, data = {}) {
   }
 
   if (type === "Item") {
+    if (Object.prototype.hasOwnProperty.call(out, "locked")
+      || Object.prototype.hasOwnProperty.call(out, "favorited")
+      || Object.prototype.hasOwnProperty.call(out, "favorite")) {
+      const err = new Error("Item locking was removed");
+      err.status = 400;
+      err.code = "ITEM_LOCK_REMOVED";
+      throw err;
+    }
     for (const key of Object.keys(out)) {
       if (!ITEM_ALLOWED_UPDATE_FIELDS.has(key)) delete out[key];
     }

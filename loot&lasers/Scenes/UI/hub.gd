@@ -424,7 +424,7 @@ func _build() -> void:
 		"user", "Operative", "#00E5FF",
 		[
 			{"label": "Operative", "icon": "user", "color": "#00E5FF", "action": func() -> void: GameManager.go_stats()},
-			{"label": "Coming Soon", "icon": "rocket", "color": "#2DD4BF", "action": func() -> void: GameManager.go_ship()},
+			{"label": "Corporate Offices", "icon": "landmark", "color": "#2DD4BF", "action": func() -> void: GameManager.go_ship()},
 		]
 	))
 	deck.add_child(_dock_tile("orbit", "Galactic Frontier", "#BA55D3", func() -> void: GameManager.go_galaxy()))

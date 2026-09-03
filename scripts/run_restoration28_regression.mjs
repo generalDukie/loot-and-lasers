@@ -30,6 +30,7 @@ const SUITES = [
   "test:arena",
   "test:arena-authority",
   "test:phase8",
+  "test:phase9",
   "test:stims",
   "test:casino",
   "test:statistics",

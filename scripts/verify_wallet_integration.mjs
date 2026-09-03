@@ -87,6 +87,7 @@ const activeWalletPages = [
   "loot&lasers/Scenes/UI/mining.gd",
   "loot&lasers/Scenes/UI/mission_run.gd",
   "loot&lasers/Scenes/UI/shop.gd",
+  "loot&lasers/Scenes/UI/corporate_offices.gd",
   "loot&lasers/Scenes/UI/ship.gd",
   "loot&lasers/Scenes/UI/stats.gd",
   "loot&lasers/Scenes/UI/void.gd",

@@ -209,12 +209,12 @@ await testAsync("Player Item list, filter, get, and update omit protected fields
       acquisition_stardust_paid: 99,
     },
   });
-  assert.equal(patched.status, 200, patched.data?.error);
-  assertPublic(patched.data, "Item patch");
+  assert.equal(patched.status, 400, patched.data?.error);
+  assert.equal(patched.data?.code, "ITEM_LOCK_REMOVED");
   const stored = entities.Item.get(item.id);
   assert.equal(stored.pricing_quality_score, originalScore);
   assert.equal(stored.acquisition_stardust_paid ?? null, originalPaid);
-  assert.equal(stored.locked, true);
+  assert.notEqual(stored.locked, true);
 });
 
 await testAsync("Player Character GET strips shop metadata quality", async () => {

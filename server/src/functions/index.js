@@ -143,7 +143,13 @@ import {
 import { getBalances } from "../shared/currencyService.js";
 import { ARENA_DEFAULT_RATING } from "../arena/config.js";
 import { buildMissionStimItem } from "../shared/missionRewards.js";
-import { STIM_TIERS } from "../shared/productionMath.js";
+import {
+  STIM_TIERS,
+  RARITIES,
+  isCompanyId,
+  companyManufacturesSlot,
+  canonicalGearSlot,
+} from "../shared/productionMath.js";
 import { STIM_ATTRIBUTES, STIM_ITEM_TYPE } from "../../../src/lib/stimActivation.js";
 import {
   auditAdminModeration,
@@ -177,13 +183,52 @@ const PROMO_CODE_ALLOWED_CHARACTERS = /^[A-Z0-9_-]+$/;
 const DEFAULT_ARENA_SUSPENSION_HOURS = 24;
 const ADMIN_STIM_TYPE_ALIAS = "stim";
 const ADMIN_GRANTED_ITEM_ORIGIN = "unassigned";
+const ADMIN_SHIPMENT_ELIGIBLE_GEAR_ORIGIN = "mission";
 const ADMIN_STIM_QUALITY_ERROR = "Stim quality must be Uncommon, Rare, or Epic.";
 const ADMIN_STIM_ATTRIBUTE_ERROR =
   "Stim attribute must be strength, agility, intellect, vitality, or luck.";
+const ADMIN_SHIPMENT_ELIGIBLE_GEAR_SLOT_ERROR = "S-E Gear requires a legal Gear slot.";
+const ADMIN_SHIPMENT_ELIGIBLE_GEAR_RARITY_ERROR = "S-E Gear rarity is invalid.";
+const ADMIN_SHIPMENT_ELIGIBLE_GEAR_COMPANY_ERROR = "S-E Gear company must be a live manufacturer.";
+const ADMIN_SHIPMENT_ELIGIBLE_GEAR_COMPANY_SLOT_ERROR =
+  "That Company does not manufacture that slot.";
 
 function isAdminStimGiveRequest(body, item) {
   const type = String(item?.type || body?.type || "").toLowerCase();
   return type === STIM_ITEM_TYPE || type === ADMIN_STIM_TYPE_ALIAS;
+}
+
+function isAdminShipmentEligibleGearGiveRequest(body) {
+  return body?.shipment_eligible_gear === true;
+}
+
+function buildAdminGrantedShipmentEligibleGearItem(body, item, character) {
+  const slot = canonicalGearSlot(item?.type || body?.type);
+  if (!slot) {
+    return { error: ADMIN_SHIPMENT_ELIGIBLE_GEAR_SLOT_ERROR };
+  }
+  const rarity = String(item?.rarity || body?.rarity || "").toLowerCase();
+  if (!RARITIES.includes(rarity)) {
+    return { error: ADMIN_SHIPMENT_ELIGIBLE_GEAR_RARITY_ERROR };
+  }
+  const manufacturer = String(body?.manufacturer || body?.company_id || item?.manufacturer || "").trim();
+  if (!isCompanyId(manufacturer)) {
+    return { error: ADMIN_SHIPMENT_ELIGIBLE_GEAR_COMPANY_ERROR };
+  }
+  if (!companyManufacturesSlot(manufacturer, slot)) {
+    return { error: ADMIN_SHIPMENT_ELIGIBLE_GEAR_COMPANY_SLOT_ERROR };
+  }
+  const level = Math.max(
+    1,
+    Math.floor(Number(item?.level_requirement || body?.level || character?.level) || 1),
+  );
+  return {
+    item: randomItem(rarity, level, slot, Math.random, character?.class, {
+      origin: ADMIN_SHIPMENT_ELIGIBLE_GEAR_ORIGIN,
+      shipmentEligible: true,
+      manufacturer,
+    }),
+  };
 }
 
 function buildAdminGrantedStimItem(body, item, character) {
@@ -1420,6 +1465,12 @@ async function adminModerationInner(user, body) {
         return { status: 400, body: { error: built.error } };
       }
       item = built.item;
+    } else if (isAdminShipmentEligibleGearGiveRequest(body)) {
+      const built = buildAdminGrantedShipmentEligibleGearItem(body, item, ch);
+      if (built.error) {
+        return { status: 400, body: { error: built.error } };
+      }
+      item = built.item;
     } else if (!item || !item.name || !item.type || !item.rarity) {
       const type = item?.type || body.type;
       const rarity = item?.rarity || body.rarity || "rare";
@@ -1487,7 +1538,13 @@ async function adminModerationInner(user, body) {
       subjectId: created.id,
       reason,
       correlationId: corr,
-      changeSet: { itemName: created.name, rarity: created.rarity, type: created.type },
+      changeSet: {
+        itemName: created.name,
+        rarity: created.rarity,
+        type: created.type,
+        manufacturer: created.manufacturer || null,
+        shipment_eligible: created.shipment_eligible === true,
+      },
       afterState: { itemId: created.id },
     });
     broadcastAccountCharacterRefresh(

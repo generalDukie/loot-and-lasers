@@ -38,6 +38,7 @@ const GRANT_TYPE_STARDUST := "stardust"
 const GRANT_TYPE_NOVA := "nova"
 const GRANT_TYPE_XP := "xp"
 const GRANT_TYPE_GEAR := "gear"
+const GRANT_TYPE_SE_GEAR := "se_gear"
 const GRANT_TYPE_STIM := "stim"
 const GRANT_TYPE_COMPENSATION := "compensation"
 const GRANT_TYPE_ENTITLEMENT := "entitlement"
@@ -156,6 +157,7 @@ var _grant_summary: Label
 var _item_type: OptionButton
 var _item_rarity: OptionButton
 var _item_level: SpinBox
+var _item_company: OptionButton
 var _stim_attribute: OptionButton
 var _stim_rarity: OptionButton
 var _sim_level: SpinBox
@@ -434,10 +436,40 @@ func _spin(prefix: String, min_v: float, max_v: float, val: float = 0.0) -> Spin
 func _option(items: Array, selected: int = 0) -> OptionButton:
 	var ob := OptionButton.new()
 	ob.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for it in items:
-		ob.add_item(str(it))
-	ob.select(clampi(selected, 0, maxi(0, items.size() - 1)))
+	_fill_option_items(ob, items, selected)
 	return ob
+
+
+func _fill_option_items(ob: OptionButton, items: Array, selected: int = 0) -> void:
+	if ob == null:
+		return
+	var keep := ""
+	if ob.item_count > 0 and ob.selected >= 0:
+		keep = ob.get_item_text(ob.selected)
+	ob.clear()
+	var next_index := selected
+	for i in items.size():
+		var label := str(items[i])
+		ob.add_item(label)
+		if label == keep:
+			next_index = i
+	if items.size() > 0:
+		ob.select(clampi(next_index, 0, items.size() - 1))
+
+
+func _se_gear_company_id() -> String:
+	var company_id := _simulate_selected_id(_item_company)
+	if company_id.is_empty() and CompanyRules.COMPANY_IDS.size() > 0:
+		return CompanyRules.COMPANY_IDS[0]
+	return company_id
+
+
+func _sync_se_gear_slots() -> void:
+	var slots: Array = CompanyRules.slots_for(_se_gear_company_id())
+	if slots.is_empty():
+		slots = GEAR_SLOT_IDS
+	_fill_option_items(_item_type, slots)
+	_refresh_grant_cta()
 
 
 func _confirm(title: String, text: String, on_ok: Callable) -> void:
@@ -1427,6 +1459,8 @@ func _grant_accent(kind: String = "") -> Color:
 			return ClientUi.VIOLET
 		GRANT_TYPE_GEAR:
 			return ClientUi.GOLD
+		GRANT_TYPE_SE_GEAR:
+			return ClientUi.GOLD
 		GRANT_TYPE_STIM:
 			return ClientUi.SUCCESS
 		GRANT_TYPE_COMPENSATION:
@@ -1658,6 +1692,7 @@ func _build_grants() -> void:
 		[GRANT_TYPE_NOVA, "Nova"],
 		[GRANT_TYPE_XP, "XP"],
 		[GRANT_TYPE_GEAR, "Gear"],
+		[GRANT_TYPE_SE_GEAR, "S-E Gear"],
 		[GRANT_TYPE_STIM, "Stim"],
 		[GRANT_TYPE_COMPENSATION, "Compensation"],
 		[GRANT_TYPE_ENTITLEMENT, "Entitlement"],
@@ -1689,6 +1724,14 @@ func _build_grants() -> void:
 	_grant_gear_box = VBoxContainer.new()
 	_grant_gear_box.add_theme_constant_override("separation", ROW_SEPARATION_PX)
 	right.add_child(_grant_gear_box)
+	var company_ids: Array = []
+	var company_labels: Array = []
+	for cid in CompanyRules.COMPANY_IDS:
+		company_ids.append(str(cid))
+		company_labels.append(CompanyRules.display_name(str(cid)))
+	_item_company = _simulate_option(company_ids, company_labels, 0)
+	_item_company.item_selected.connect(func(_i: int) -> void: _sync_se_gear_slots())
+	_grant_gear_box.add_child(_item_company)
 	_item_type = _option(GEAR_SLOT_IDS, 0)
 	_grant_gear_box.add_child(_item_type)
 	_item_rarity = _option(GEAR_RARITY_IDS, GEAR_RARITY_DEFAULT_INDEX)
@@ -1811,7 +1854,13 @@ func _set_grant_type(kind: String) -> void:
 			ClientUi.apply_dark_outline_button(b, _grant_accent(str(id)), 0)
 	var amount := kind == GRANT_TYPE_FUEL or kind == GRANT_TYPE_STARDUST or kind == GRANT_TYPE_NOVA or kind == GRANT_TYPE_XP
 	_grant_amount_box.visible = amount
-	_grant_gear_box.visible = kind == GRANT_TYPE_GEAR
+	_grant_gear_box.visible = kind == GRANT_TYPE_GEAR or kind == GRANT_TYPE_SE_GEAR
+	if _item_company:
+		_item_company.visible = kind == GRANT_TYPE_SE_GEAR
+	if kind == GRANT_TYPE_SE_GEAR:
+		_sync_se_gear_slots()
+	elif kind == GRANT_TYPE_GEAR:
+		_fill_option_items(_item_type, GEAR_SLOT_IDS)
 	_grant_stim_box.visible = kind == GRANT_TYPE_STIM
 	_grant_comp_box.visible = kind == GRANT_TYPE_COMPENSATION
 	_grant_ent_box.visible = kind == GRANT_TYPE_ENTITLEMENT
@@ -1880,6 +1929,9 @@ func _grant_cta_label() -> String:
 		GRANT_TYPE_GEAR:
 			var rarity := _item_rarity.get_item_text(_item_rarity.selected) if _item_rarity else "rare"
 			return "Grant %s Gear" % rarity.capitalize()
+		GRANT_TYPE_SE_GEAR:
+			var se_rarity := _item_rarity.get_item_text(_item_rarity.selected) if _item_rarity else "rare"
+			return "Grant S-E %s Gear" % se_rarity.capitalize()
 		GRANT_TYPE_STIM:
 			var stim_rarity := _simulate_selected_id(_stim_rarity)
 			var stim_stat := _simulate_selected_id(_stim_attribute)
@@ -1906,7 +1958,7 @@ func _refresh_grant_cta() -> void:
 			ClientUi.apply_danger_button(_grant_cta)
 		else:
 			ClientUi.apply_tinted_painted_button(_grant_cta, accent)
-	elif _grant_type == GRANT_TYPE_GEAR:
+	elif _grant_type == GRANT_TYPE_GEAR or _grant_type == GRANT_TYPE_SE_GEAR:
 		var rarity := _item_rarity.get_item_text(_item_rarity.selected) if _item_rarity else "rare"
 		ClientUi.apply_tinted_painted_button(_grant_cta, ClientUi.rarity_color(rarity))
 	elif _grant_type == GRANT_TYPE_STIM:
@@ -1955,6 +2007,14 @@ func _execute_grant() -> Dictionary:
 				"type": _item_type.get_item_text(_item_type.selected),
 				"rarity": _item_rarity.get_item_text(_item_rarity.selected),
 				"level": int(_item_level.value),
+			}, _why())
+		GRANT_TYPE_SE_GEAR:
+			return await AdminManager.grant_item(_cid(), {
+				"type": _item_type.get_item_text(_item_type.selected),
+				"rarity": _item_rarity.get_item_text(_item_rarity.selected),
+				"level": int(_item_level.value),
+				"manufacturer": _se_gear_company_id(),
+				"shipment_eligible_gear": true,
 			}, _why())
 		GRANT_TYPE_STIM:
 			return await AdminManager.grant_item(_cid(), {

@@ -494,6 +494,8 @@ const {
   STIM_TIERS,
   stimBonusMultiplier,
   stimSellValueResolved,
+  COMPANY_ID_CNC,
+  isShipmentDockEligibleItem,
 } = await import("../../src/lib/productionMath/index.js");
 const { STIM_ATTRIBUTES } = await import("../../src/lib/stimActivation.js");
 
@@ -630,6 +632,82 @@ await testAsync("admin stim grant denies non-admin and respects backpack cap", a
   });
   assert.equal(full.status, 400);
   assert.equal(full.body.code, "INVENTORY_FULL");
+});
+
+await testAsync("admin S-E Gear grant is shipment-eligible for the requested Company", async () => {
+  const a = insertUser("u-se-gear", "se-gear@t.test", "admin");
+  makeCharacter("ch-se-gear", a.id, "SeGear");
+  const res = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-se-gear",
+    shipment_eligible_gear: true,
+    type: "helmet",
+    rarity: "rare",
+    level: 12,
+    manufacturer: COMPANY_ID_CNC,
+    reason: "qa shipment crate",
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  const item = res.body.item;
+  assert.equal(item.type, "helmet");
+  assert.equal(item.rarity, "rare");
+  assert.equal(item.level, 12);
+  assert.equal(item.manufacturer, COMPANY_ID_CNC);
+  assert.equal(item.origin, "mission");
+  assert.equal(item.shipment_eligible, true);
+  assert.equal(item.is_equipped, false);
+  assert.equal(isShipmentDockEligibleItem(item), true);
+  assert.equal(entities.Item.get(item.id)?.shipment_eligible, true);
+});
+
+await testAsync("admin S-E Gear grant rejects illegal company/slot and ignores forged ineligibility", async () => {
+  const a = insertUser("u-se-gear-bad", "se-gear-bad@t.test", "admin");
+  makeCharacter("ch-se-gear-bad", a.id, "SeGearBad");
+  const illegal = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-se-gear-bad",
+    shipment_eligible_gear: true,
+    type: "weapon",
+    rarity: "rare",
+    manufacturer: COMPANY_ID_CNC,
+  });
+  assert.equal(illegal.status, 400);
+  const forged = await AdminModeration(a, {
+    action: "give_item",
+    character_id: "ch-se-gear-bad",
+    shipment_eligible_gear: true,
+    type: "armor",
+    rarity: "epic",
+    manufacturer: COMPANY_ID_CNC,
+    reason: "qa forged ineligibility",
+    item: {
+      name: "Forged Market",
+      type: "armor",
+      rarity: "epic",
+      origin: "market",
+      shipment_eligible: false,
+      manufacturer: COMPANY_ID_CNC,
+    },
+  });
+  assert.equal(forged.status, 200, forged.body?.error);
+  assert.equal(forged.body.item.origin, "mission");
+  assert.equal(forged.body.item.shipment_eligible, true);
+  assert.equal(forged.body.item.manufacturer, COMPANY_ID_CNC);
+  assert.equal(isShipmentDockEligibleItem(forged.body.item), true);
+});
+
+await testAsync("admin S-E Gear grant denies non-admin", async () => {
+  const player = insertUser("u-se-gear-deny", "se-gear-deny@t.test", "user");
+  makeCharacter("ch-se-gear-deny", player.id, "SeGearDeny");
+  const denied = await AdminModeration(player, {
+    action: "give_item",
+    character_id: "ch-se-gear-deny",
+    shipment_eligible_gear: true,
+    type: "helmet",
+    rarity: "rare",
+    manufacturer: COMPANY_ID_CNC,
+  });
+  assert.equal(denied.status, 403);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

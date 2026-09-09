@@ -26,6 +26,12 @@ import {
   stimSellValueResolved,
   applyGearCompanyPresentation,
   brandedGearName,
+  COMPANY_GEAR_CATALOG,
+  companyGearCatalogEntryId,
+  companyGearCatalogKey,
+  companyGearVariantById,
+  companyGearVariantByName,
+  WEAPON_COMBAT_STYLES,
 } from "@/lib/productionMath";
 import {
   CONSUMABLE_TIERS as STIM_CONSUMABLE_TIERS,
@@ -312,6 +318,8 @@ export const MISSION_TEMPLATES = [
 // ═══════════════════════════════════════════
 // ITEM GENERATION
 // ═══════════════════════════════════════════
+// Historical generic loot names (pre-company catalog). New Gear uses
+// COMPANY_GEAR_CATALOG. Kept so old inventory still matches LOOT_WEAPON_EMOJIS.
 const ITEM_NAMES = {
   weapon: [
     "Plasma Rifle", "Ion Blaster", "Photon Cannon", "Pulse Repeater", "Neutrino Sniper", "Graviton Shotgun", "Phase Pistol", "Singularity Cannon",
@@ -382,7 +390,13 @@ export function weaponEmojiFor(name, baseName) {
 
 // Combat motion for arena visuals: swing / stab / shoot — derived from the
 // equipped weapon, not the fighter's class (so a Vanguard with a saber swings).
-export function weaponCombatStyleFor(name, baseName, emoji) {
+export function weaponCombatStyleFor(name, baseName, emoji, combatStyle, visualId) {
+  const stamped = String(combatStyle || "").trim().toLowerCase();
+  if (WEAPON_COMBAT_STYLES.includes(stamped)) return stamped;
+  const variant = companyGearVariantById(visualId) || companyGearVariantByName(baseName);
+  if (variant?.combatStyle && WEAPON_COMBAT_STYLES.includes(variant.combatStyle)) {
+    return variant.combatStyle;
+  }
   for (const w of Object.values(CLASS_WEAPONS)) {
     if (baseName === w.name || (name && name.includes(w.name))) return w.style || "shoot";
   }
@@ -479,8 +493,9 @@ function romanize(num) {
   return res;
 }
 
-// Guarantees an item's name doesn't collide with any existing name. If it
-// does, appends a roman-numeral suffix (II, III, …) until unique.
+// Guarantees an item's display name doesn't collide with any existing name.
+// Roman suffixes (II, III, …) are display-only — visual_id and base_name stay
+// on the catalog variant so collection keys and glyphs do not change.
 export function ensureUniqueItemName(item, existingNames) {
   const taken = new Set((existingNames || []).filter(Boolean));
   if (!taken.has(item.name)) return item;
@@ -497,8 +512,6 @@ export function ensureUniqueItemName(item, existingNames) {
 function _rollItem(rarity, playerLevel, type, rng, className) {
   const r = rng || Math.random;
   const itemType = type || EQUIPMENT_SLOTS[Math.floor(r() * EQUIPMENT_SLOTS.length)];
-  const names = ITEM_NAMES[itemType] || ITEM_NAMES.weapon;
-  const baseName = names[Math.floor(r() * names.length)];
   const itemLevel = Math.max(1, playerLevel || 1);
   const generated = GenerateGearItem({
     itemLevel,
@@ -511,14 +524,25 @@ function _rollItem(rarity, playerLevel, type, rng, className) {
   const item = applyGearCompanyPresentation({
     ...generated,
     flavor_text: FLAVOR_TEXTS[Math.floor(r() * FLAVOR_TEXTS.length)],
-    ...(itemType === "weapon" ? { emoji: weaponEmojiFor(baseName, baseName) } : {}),
-  }, { baseName, rng: r });
+  }, { rng: r });
+  if (itemType === "weapon") {
+    item.emoji = weaponEmojiFor(item.name, item.base_name);
+    if (!item.combat_style) {
+      item.combat_style = weaponCombatStyleFor(
+        item.name,
+        item.base_name,
+        item.emoji,
+        item.combat_style,
+        item.visual_id,
+      );
+    }
+  }
   item.sell_value = computeItemVendorValue(item);
   return item;
 }
 
-// Class signature weapons keep name/flavor/emoji; attribute pool uses the same
-// class-aware Common–Epic rules (and class-neutral Legendary) as other gear.
+// Class signature weapons keep flavor/emoji; the visible name + glyph come from
+// the company's three weapon variants. Attribute pool stays class-aware.
 export function generateClassWeapon(className, rarity, playerLevel, rng = Math.random) {
   const w = CLASS_WEAPONS[className] || CLASS_WEAPONS.Vanguard;
   const itemLevel = Math.max(1, playerLevel || 1);
@@ -529,31 +553,21 @@ export function generateClassWeapon(className, rarity, playerLevel, rng = Math.r
     rng,
     className,
   });
-  return applyGearCompanyPresentation({
+  const presented = applyGearCompanyPresentation({
     ...generated,
     flavor_text: w.flavor,
     emoji: w.emoji,
-  }, { baseName: w.name, rng });
+    combat_style: w.style,
+  }, { rng });
+  if (!presented.combat_style) presented.combat_style = w.style;
+  return presented;
 }
-
-const CLASS_SIGNATURE_WEAPON_CHANCE = 0.20;
 
 /**
  * @param {string} [playerClass] Player class for Common–Epic 60/40 favored pools.
  *   When omitted, generation stays class-neutral (Total pool only).
  */
 export function generateItem(rarity, playerLevel, type, playerClass) {
-  // 20% chance for a class-signature weapon skin when rolling a weapon.
-  // Skin class may be cosmetic-random; stat pool uses playerClass when provided.
-  const rollingWeapon = !type || type === "weapon";
-  if (rollingWeapon && Math.random() < CLASS_SIGNATURE_WEAPON_CHANCE) {
-    const classKeys = Object.keys(CLASS_WEAPONS);
-    const skinClass = playerClass && CLASS_WEAPONS[playerClass]
-      ? playerClass
-      : classKeys[Math.floor(Math.random() * classKeys.length)];
-    // Prefer player class for pool bias; fall back to skin class so bots still bias.
-    return generateClassWeapon(playerClass || skinClass, rarity, playerLevel);
-  }
   return _rollItem(rarity, playerLevel, type, Math.random, playerClass);
 }
 
@@ -1691,27 +1705,16 @@ export function getMaxTierTotal(mod, shipId) {
 // GEAR CATALOG — static base gear types for collection tracking
 // ═══════════════════════════════════════════
 function buildGearCatalog() {
-  const entries = [];
-  for (const [type, names] of Object.entries(ITEM_NAMES)) {
-    for (const name of names) {
-      entries.push({ id: `${type}:${name}`, name, type });
-    }
-  }
-  for (const w of Object.values(CLASS_WEAPONS)) {
-    entries.push({ id: `weapon:${w.name}`, name: w.name, type: "weapon" });
-  }
-  return entries;
+  return COMPANY_GEAR_CATALOG.map((row) => ({
+    id: companyGearCatalogEntryId(row.slot, row.id),
+    name: row.name,
+    type: row.slot,
+  }));
 }
 
 export const GEAR_CATALOG = buildGearCatalog();
 export const GEAR_CATALOG_TOTAL = GEAR_CATALOG.length;
 
 export function gearCatalogKey(item) {
-  if (!item) return null;
-  if (item.base_name && item.type) return `${item.type}:${item.base_name}`;
-  if (item.type && item.name) {
-    const match = GEAR_CATALOG.find((e) => e.type === item.type && item.name.includes(e.name));
-    if (match) return match.id;
-  }
-  return item.id || null;
+  return companyGearCatalogKey(item);
 }

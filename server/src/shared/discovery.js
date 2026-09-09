@@ -5,18 +5,8 @@
  */
 import { ARTIFACTS, RELICS, SPECIES_COUNT } from "../../../src/lib/collectibles.js";
 import { dungeonBadgeCount, dungeonBadgeIds, DUNGEON_BADGE_MAX } from "../../../src/lib/dungeonBadges.js";
+import { catalogGearDiscoveryKeys, companyGearCatalogKey } from "../../../src/lib/productionMath/companies.js";
 import { secureRandom } from "../rewards/rng.js";
-
-const GEAR_TYPES = new Set([
-  "weapon",
-  "armor",
-  "helmet",
-  "boots",
-  "legs",
-  "neck",
-  "accessory",
-  "ship_module",
-]);
 
 /** Recovered rates from src/lib/discovery.js — do not invent new rates. */
 export const RELIC_DISCOVERY_CHANCE = 0.02;
@@ -26,12 +16,7 @@ const DISCOVERY_WEIGHTS = { common: 50, uncommon: 30, rare: 15, epic: 4, legenda
 
 /** Stable catalog key for an equipment item, or null if not gear. */
 export function gearCatalogKey(item) {
-  if (!item || typeof item !== "object") return null;
-  const type = item.type;
-  if (!GEAR_TYPES.has(type)) return null;
-  const base = item.base_name || item.name;
-  if (!base) return null;
-  return `${type}:${base}`;
+  return companyGearCatalogKey(item);
 }
 
 /**
@@ -137,7 +122,7 @@ export function serializeCollections(character, { gearTotal = 0 } = {}) {
   const species = [...new Set(character?.discovered_species || [])];
   const artifacts = [...new Set(character?.collected_artifacts || [])];
   const relics = [...new Set(character?.collected_relics || [])];
-  const gear = [...new Set(character?.discovered_gear || [])];
+  const gearMatched = catalogGearDiscoveryKeys(character?.discovered_gear);
   const badges = dungeonBadgeCount(character);
   const badgeIds = dungeonBadgeIds(character);
   return {
@@ -170,10 +155,10 @@ export function serializeCollections(character, { gearTotal = 0 } = {}) {
       {
         id: "gear",
         display_name: "Gear Catalog",
-        discovered: gear.length,
-        total: gearTotal || gear.length,
-        entry_ids: gear,
-        completed: gearTotal > 0 ? gear.length >= gearTotal : false,
+        discovered: gearMatched.length,
+        total: gearTotal || gearMatched.length,
+        entry_ids: gearMatched,
+        completed: gearTotal > 0 ? gearMatched.length >= gearTotal : false,
       },
       {
         id: "dungeon_badges",

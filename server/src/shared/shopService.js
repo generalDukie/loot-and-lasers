@@ -148,6 +148,8 @@ export function serializeShopOffer(slot, meta = {}, { isHot = false } = {}) {
     consumable: slot.consumable || null,
     sell_value: slot.sell_value,
     manufacturer: slot.manufacturer ?? null,
+    visual_id: slot.visual_id ?? null,
+    combat_style: slot.combat_style ?? null,
     origin: slot.origin ?? null,
     shipment_eligible: slot.shipment_eligible === true,
   };

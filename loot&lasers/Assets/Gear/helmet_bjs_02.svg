@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">BJ Services Helmet Variant 2 — Counter Ballistic Shield</title>
+  <desc id="desc">A boxy full-face blast helmet with a solid slab shield, a tiny sensor strip, a reinforced jaw, and numbered service hardware. Gunmetal shell, teal visors and optics, charcoal and black structure, sky blue hardware accents.</desc>
+  <defs>
+    <linearGradient id="steel" x1="89" y1="72" x2="430" y2="457" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b8c3c9"/><stop offset=".28" stop-color="#606c75"/><stop offset=".64" stop-color="#202a32"/><stop offset="1" stop-color="#7b8891"/>
+    </linearGradient>
+    <linearGradient id="plate" x1="145" y1="162" x2="374" y2="406" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#75838c"/><stop offset=".45" stop-color="#3b4852"/><stop offset="1" stop-color="#182127"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="184" y1="231" x2="330" y2="255" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0a4c50"/><stop offset=".48" stop-color="#68d0c3"/><stop offset="1" stop-color="#0d5356"/>
+    </linearGradient>
+    <radialGradient id="sky"><stop offset="0" stop-color="#e3f5ff"/><stop offset=".45" stop-color="#82c9f4"/><stop offset="1" stop-color="#315c7d"/></radialGradient>
+  </defs>
+  <g stroke="#080c11" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Broad rectangular shell and external roll cage. -->
+    <path d="M117 86h278l58 78-14 251-65 67H138l-65-67-14-251z" fill="#111820" stroke-width="18"/>
+    <path d="M133 99h246l47 74-15 80H101l-15-80z" fill="url(#steel)" stroke-width="13"/>
+    <path d="M165 65h182l36 42-24 49H153l-24-49z" fill="#35404a" stroke="#7b8c97" stroke-width="9"/>
+    <path d="M190 83h132M211 65v72M301 65v72" fill="none" stroke="#151d24" stroke-width="7"/>
+    <!-- Completely solid face shield with only a thin instrument slit. -->
+    <path d="M112 184l62-43h164l62 43-20 208-58 54H190l-58-54z" fill="url(#plate)" stroke="#7b8c97" stroke-width="13"/>
+    <path d="M151 206l37-25h136l37 25-12 78H163z" fill="#222c34" stroke="#59656e" stroke-width="9"/>
+    <path d="M181 228h150l-7 30H188z" fill="url(#teal)" stroke-width="7"/>
+    <path d="M205 237h102" fill="none" stroke="#d4f4e9" stroke-width="4" opacity=".75"/>
+    <!-- Slab jaw and bolt grid. -->
+    <path d="M156 292h200l-14 119-52 42h-68l-52-42z" fill="url(#steel)" stroke-width="11"/>
+    <path d="M203 319h106l15 74-39 34h-58l-39-34z" fill="#273139" stroke="#717d85" stroke-width="8"/>
+    <path d="M224 343h64M219 369h74M231 396h50" fill="none" stroke="#8195a2" stroke-width="7"/>
+    <!-- Square side buffers and exposed rail hardware. -->
+    <path d="M64 215h75l20 72-13 143-57 22-32-78zM448 215h-75l-20 72 13 143 57 22 32-78z" fill="url(#steel)" stroke-width="12"/>
+    <path d="M74 260h62v52H70zM438 260h-62v52h66z" fill="#202930" stroke="#7399b2" stroke-width="8"/>
+    <path d="M80 277h41M432 277h-41M85 295h36M427 295h-36" fill="none" stroke="#90bdd9" stroke-width="6"/>
+    <g fill="url(#sky)" stroke="#16232e" stroke-width="4"><circle cx="181" cy="190" r="7"/><circle cx="331" cy="190" r="7"/><circle cx="184" cy="306" r="7"/><circle cx="328" cy="306" r="7"/></g>
+  </g>
+</svg>

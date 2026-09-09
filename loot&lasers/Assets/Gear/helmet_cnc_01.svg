@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Crown and Carapace Helmet Variant 1 — Grand Carapace</title>
+  <desc id="desc">An extravagant open-faced ceremonial helm with a fan-shaped purple crown, swept shell wings, and curling beetle mandibles. Gold metal, ivory highlights and ornaments, purple fabric, lightly smoked neutral glass where present.</desc>
+  <defs>
+    <linearGradient id="gold" x1="78" y1="76" x2="425" y2="446" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff2a8"/><stop offset=".28" stop-color="#d9a42f"/><stop offset=".65" stop-color="#704719"/><stop offset="1" stop-color="#e4ba4c"/>
+    </linearGradient>
+    <linearGradient id="ivory" x1="142" y1="134" x2="356" y2="422" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f4ecd6"/><stop offset=".55" stop-color="#b7aa89"/><stop offset="1" stop-color="#6e654f"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="150" y1="33" x2="358" y2="254" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ac61c1"/><stop offset=".48" stop-color="#59256e"/><stop offset="1" stop-color="#24102e"/>
+    </linearGradient>
+    <radialGradient id="ivoryInset" cx="50%" cy="42%" r="60%">
+      <stop offset="0" stop-color="#f4ecd6"/><stop offset=".38" stop-color="#b7aa89"/><stop offset="1" stop-color="#6e654f"/>
+    </radialGradient>
+  </defs>
+  <g stroke="#080b11" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M256 126L177 45l23 104-78-51 52 101-91-5 93 62h160l93-62-91 5 52-101-78 51 23-104z" fill="url(#purple)" stroke-width="12"/>
+    <path d="M256 116l-28-82 28 24 28-24-28 82z" fill="url(#gold)" stroke-width="8"/>
+    <path d="M177 135Q256 65 335 135l16 70-42 48H203l-42-48z" fill="url(#gold)" stroke-width="13"/>
+    <path d="M176 147Q110 111 77 135q33 27 66 100l61-2zM336 147q66-36 99-12-33 27-66 100l-61-2z" fill="url(#gold)" stroke-width="12"/>
+    <path d="M256 91l-35 124 35 29 35-29z" fill="url(#ivory)" stroke-width="8"/>
+    <path d="M191 140l25 84M321 140l-25 84M132 151l44 69M380 151l-44 69" fill="none" stroke="#81571c" stroke-width="7"/>
+    <path d="M185 222q71-46 142 0l25 69-30 113-66 55-66-55-30-113z" fill="#0d141d" stroke="#8b641f" stroke-width="13"/>
+    <path d="M205 246q51-28 102 0l12 54-22 79-41 40-41-40-22-79z" fill="#211a27" stroke="#51455b" stroke-width="7"/>
+    <path d="M215 256q41-19 82 0" fill="none" stroke="#eeeae0" stroke-width="7" opacity=".7"/>
+    <path d="M162 211q-66 25-75 101 5 93 87 137l39-42q-66-20-73-77 2-38 39-61z" fill="url(#gold)" stroke-width="13"/>
+    <path d="M350 211q66 25 75 101-5 93-87 137l-39-42q66-20 73-77-2-38-39-61z" fill="url(#gold)" stroke-width="13"/>
+    <path d="M135 289q-28 63 25 104M377 289q28 63-25 104" fill="none" stroke="#f4d266" stroke-width="7"/>
+    <path d="M213 393l43 34 43-34 23 75-66 22-66-22z" fill="url(#purple)" stroke-width="11"/>
+    <path d="M233 427l23 18 23-18-8 41h-30z" fill="url(#ivory)" stroke-width="6"/>
+    <path d="M237 171l19-25 19 25-19 25z" fill="url(#ivoryInset)" stroke="#473013" stroke-width="5"/>
+    <g fill="#f6d66b" stroke-width="4"><circle cx="151" cy="198" r="8"/><circle cx="361" cy="198" r="8"/><circle cx="119" cy="278" r="7"/><circle cx="393" cy="278" r="7"/></g>
+  </g>
+</svg>

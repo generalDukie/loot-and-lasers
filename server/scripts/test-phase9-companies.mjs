@@ -70,6 +70,14 @@ const {
   COMPANY_ABBREVIATIONS,
   COMPANY_FLAVOR_CHANCE_BPS,
   COMPANY_FLAVOR_LINES,
+  COMPANY_GEAR_CATALOG,
+  COMPANY_GEAR_CATALOG_SIZE,
+  COMPANY_GEAR_PRESENTATION,
+  COMPANY_GEAR_VARIANT_COUNT,
+  companyGearVisualId,
+  companyGearCatalogKey,
+  catalogGearDiscoveryCount,
+  pickCompanyGearVariant,
   SHIPMENT_INELIGIBLE_INSPECT_TAG,
   brandedGearName,
   isCompanyId,
@@ -92,6 +100,7 @@ const {
   shouldStartShipmentDockPreview,
 } = await import("../../src/lib/shipmentDockPreview.js");
 const { DissolveItem } = await import("../src/functions/economy.js");
+const { ensureUniqueItemName, generateClassWeapon } = await import("../../src/lib/gameData.js");
 const {
   GetCompanyStatus,
   PreviewShipment,
@@ -584,11 +593,111 @@ test("generated Gear always has a legal manufacturer", () => {
   }
 });
 
-test("branded Gear names use the short company token plus catalog base", () => {
-  assert.equal(brandedGearName("Shield Amplifier", COMPANY_ID_GORP), "GORPTEK Shield Amplifier");
-  assert.equal(brandedGearName("Plasma Rifle", COMPANY_ID_BJS), "BJ Services Plasma Rifle");
-  assert.equal(brandedGearName("Chrono Band", COMPANY_ID_DTD), "Duct Tape Chrono Band");
-  assert.equal(brandedGearName("Titan Plating", COMPANY_ID_CNC), "C&C Titan Plating");
+test("company Gear catalog is 48 unique company×slot variants with no name prefix", () => {
+  assert.equal(COMPANY_GEAR_VARIANT_COUNT, 3);
+  assert.equal(COMPANY_GEAR_CATALOG_SIZE, COMPANY_IDS.length * COMPANY_SLOT_COUNT * COMPANY_GEAR_VARIANT_COUNT);
+  assert.equal(COMPANY_GEAR_CATALOG.length, COMPANY_GEAR_CATALOG_SIZE);
+  const ids = new Set();
+  const names = new Set();
+  const namedRows = COMPANY_GEAR_CATALOG.filter((row) => row.name !== row.id);
+  if (namedRows.length === 0) {
+    for (const row of COMPANY_GEAR_CATALOG) {
+      assert.equal(row.name, row.id);
+    }
+  } else {
+    assert.equal(
+      namedRows.length,
+      COMPANY_GEAR_CATALOG_SIZE,
+      "fill all 48 catalog names together in companyGearPresentation.js",
+    );
+  }
+  const weaponStyles = COMPANY_GEAR_CATALOG
+    .filter((row) => row.slot === "weapon" && row.combatStyle)
+    .map((row) => row.combatStyle);
+  if (weaponStyles.length > 0) {
+    const weaponRows = COMPANY_GEAR_CATALOG.filter((row) => row.slot === "weapon");
+    assert.equal(
+      weaponStyles.length,
+      weaponRows.length,
+      "if any weapon combatStyle is set, set all weapon variants",
+    );
+    for (const style of weaponStyles) {
+      assert.equal(["swing", "stab", "shoot"].includes(style), true, style);
+    }
+  }
+  for (const row of COMPANY_GEAR_CATALOG) {
+    assert.equal(row.id, companyGearVisualId(row.slot, row.companyId, row.variantIndex));
+    assert.ok(COMPANY_SLOTS[row.companyId].includes(row.slot), row.id);
+    assert.equal(ids.has(row.id), false, row.id);
+    assert.equal(names.has(row.name), false, row.name);
+    ids.add(row.id);
+    names.add(row.name);
+    for (const token of Object.values(COMPANY_NAME_TOKENS)) {
+      assert.equal(row.name.startsWith(`${token} `), false, row.name);
+    }
+  }
+  for (const companyId of COMPANY_IDS) {
+    for (const slot of COMPANY_SLOTS[companyId]) {
+      const rows = COMPANY_GEAR_CATALOG.filter((row) => row.companyId === companyId && row.slot === slot);
+      assert.equal(rows.length, COMPANY_GEAR_VARIANT_COUNT, `${companyId} ${slot}`);
+    }
+  }
+  const gearDir = path.join(ROOT, "loot&lasers", "Assets", "Gear");
+  const missing = COMPANY_GEAR_CATALOG.filter((row) => !fs.existsSync(path.join(gearDir, `${row.id}.svg`)));
+  if (namedRows.length === COMPANY_GEAR_CATALOG_SIZE) {
+    assert.equal(missing.length, 0, `named catalog missing SVGs: ${missing.map((row) => row.id).join(", ")}`);
+  } else if (missing.length > 0 && missing.length < COMPANY_GEAR_CATALOG_SIZE) {
+    assert.equal(missing.length, 0, `partial Gear SVG set: ${missing.map((row) => row.id).join(", ")}`);
+  }
+  const rulesGd = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/CompanyRules.gd"), "utf8");
+  assert.match(rulesGd, /COMPANY_GEAR_PRESENTATION/);
+  assert.match(rulesGd, /GEAR_SVG_HAS_OWN_FRAME/);
+  assert.match(rulesGd, /GEAR_SVG_IMPORT_SCALE/);
+  for (const row of namedRows) {
+    assert.match(rulesGd, new RegExp(row.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(rulesGd, new RegExp(row.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.equal(typeof COMPANY_GEAR_PRESENTATION, "object");
+});
+
+test("catalog collection keys stay on visual_id and ignore legacy names", () => {
+  const key = companyGearCatalogKey({
+    type: "helmet",
+    visual_id: "helmet_cnc_01",
+    base_name: "Neural Crown",
+    name: "Neural Crown II",
+  });
+  assert.equal(key, "helmet:helmet_cnc_01");
+  assert.equal(
+    catalogGearDiscoveryCount(["helmet:Neural Crown", "helmet:helmet_cnc_01", "helmet:helmet_cnc_01"]),
+    1,
+  );
+});
+
+test("duplicate catalog names uniquify display only", () => {
+  const item = {
+    name: "Example Repeater",
+    base_name: "Example Repeater",
+    visual_id: "weapon_bjs_01",
+    combat_style: "shoot",
+  };
+  const out = ensureUniqueItemName(item, ["Example Repeater"]);
+  assert.equal(out.visual_id, "weapon_bjs_01");
+  assert.equal(out.base_name, "Example Repeater");
+  assert.equal(out.combat_style, "shoot");
+  assert.match(out.name, / II$/);
+  const weapon = generateClassWeapon("Vanguard", "rare", 8, () => 0.1);
+  assert.notEqual(weapon.name, "Vanguard Assault Rifle");
+  assert.ok(weapon.visual_id);
+  assert.equal(["swing", "stab", "shoot"].includes(weapon.combat_style), true);
+});
+
+
+test("branded Gear names no longer prefix a company token", () => {
+  assert.equal(brandedGearName("Shield Amplifier", COMPANY_ID_GORP), "Shield Amplifier");
+  assert.equal(brandedGearName("Plasma Rifle", COMPANY_ID_BJS), "Plasma Rifle");
+  assert.equal(brandedGearName("Chrono Band", COMPANY_ID_DTD), "Chrono Band");
+  assert.equal(brandedGearName("Titan Plating", COMPANY_ID_CNC), "Titan Plating");
   assert.equal(brandedGearName("Plasma Rifle", null), "Plasma Rifle");
 });
 
@@ -599,11 +708,14 @@ test("company flavor rolls at 20% and stays empty otherwise", () => {
   assert.equal(COMPANY_FLAVOR_CHANCE_BPS, 2000);
   assert.equal(COMPANY_NAME_TOKENS[COMPANY_ID_DTD], "Duct Tape");
   const presented = applyGearCompanyPresentation(
-    { manufacturer: COMPANY_ID_DTD, origin: "market" },
-    { baseName: "Neural Crown", rng: () => 0 },
+    { manufacturer: COMPANY_ID_DTD, type: "legs", origin: "market" },
+    { rng: () => 0 },
   );
-  assert.equal(presented.name, "Duct Tape Neural Crown");
-  assert.equal(presented.base_name, "Neural Crown");
+  const expected = pickCompanyGearVariant(COMPANY_ID_DTD, "legs", () => 0);
+  assert.equal(presented.name, expected.name);
+  assert.equal(presented.base_name, expected.name);
+  assert.equal(presented.visual_id, expected.id);
+  assert.equal(presented.name.startsWith("Duct Tape "), false);
   assert.ok(String(presented.company_flavor || "").length > 0);
   assert.equal(SHIPMENT_INELIGIBLE_INSPECT_TAG, "No Refunds — Shipment Ineligible");
 });
@@ -1586,8 +1698,8 @@ test("Corporate Offices replaces Ship Hangar in live navigation", () => {
   assert.match(gm, /corporate_offices\.tscn/);
   const ui = fs.readFileSync(path.join(GODOT_ROOT, "Scenes/UI/corporate_offices.gd"), "utf8");
   assert.match(ui, /redeem_commission/);
-  assert.match(ui, /Redeem waiting — keep new/);
-  assert.match(ui, /Redeem new — keep waiting/);
+  assert.match(ui, /Redeem Stored Token - %s/);
+  assert.match(ui, /Redeem New Token - %s/);
   assert.match(ui, /_refresh_companies/);
   assert.match(ui, /overflow_pending/);
   assert.doesNotMatch(ui, /preview_shipment/);
@@ -1634,6 +1746,16 @@ test("Corporate Offices replaces Ship Hangar in live navigation", () => {
   assert.match(rulesGd, /\"crosshair\"/);
   assert.match(rulesGd, /\"hard-hat\"/);
   assert.match(rulesGd, /\"cpu\"/);
+  assert.match(rulesGd, /gear_catalog/);
+  assert.match(rulesGd, /gear_svg_path/);
+  assert.match(rulesGd, /Assets\/Gear/);
+  const gearIcon = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/UI/GearIcon.gd"), "utf8");
+  assert.match(gearIcon, /visual_id/);
+  assert.match(gearIcon, /_svg_texture/);
+  assert.match(gearIcon, /gear_svg_has_own_frame/);
+  const collectibles = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/CollectiblesCatalog.gd"), "utf8");
+  assert.match(collectibles, /CompanyRules\.gear_catalog/);
+  assert.match(collectibles, /visual_id/);
   const uiIcon = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/UI/UiIcon.gd"), "utf8");
   assert.match(uiIcon, /make_item_name_row/);
   assert.match(uiIcon, /\"nexus\": \"satellite\"/);

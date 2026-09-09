@@ -122,89 +122,43 @@ static func badge_ids(character: Dictionary, dungeon_view: Dictionary = {}) -> P
 	return DungeonRules.badge_ids_from_character(character, view)
 
 
-## Gear catalog — mirrors gameData ITEM_NAMES + CLASS_WEAPONS (~166 entries).
-const ITEM_NAMES := {
-	"weapon": [
-		"Plasma Rifle", "Ion Blaster", "Photon Cannon", "Pulse Repeater", "Neutrino Sniper",
-		"Graviton Shotgun", "Phase Pistol", "Singularity Cannon", "Void Saber", "Photon Cleaver",
-		"Starforged Blade", "Quantum Dagger", "Shadow Needle", "Phase Knife", "Nebula Bow",
-		"Ion Longbow", "Graviton Axe", "Titan Maul", "Arc Staff", "Psionic Wand",
-	],
-	"armor": [
-		"Nanoweave Suit", "Titan Plating", "Void Shell", "Quantum Mesh",
-		"Stellar Guard", "Plasma Coat", "Crystal Carapace", "Shadow Shroud",
-	],
-	"helmet": [
-		"Neural Crown", "Scan Visor", "Astral Helm", "Combat HUD",
-		"Psi Amplifier", "Void Mask", "Star Circlet", "Echo Chamber",
-	],
-	"boots": [
-		"Gravity Boots", "Phase Walkers", "Jet Treads", "Stealth Soles",
-		"Mag-Lock Greaves", "Drift Runners", "Storm Striders", "Warp Steps",
-	],
-	"legs": [
-		"Void Greaves", "Plasma Leggings", "Titan Leg Plates", "Phase Treads", "Graviton Greaves",
-		"Storm Leggings", "Crystal Shin Guards", "Shadow Greaves", "Nebula Leg Plating", "Ion Shin Guards",
-		"Quantum Greaves", "Starforged Leggings", "Voidstrider Greaves", "Mag-Lock Leg Plates", "Pulse Leggings",
-		"Solar Greaves", "Abyssal Leg Guards", "Photon Leggings", "Echo Greaves", "Drift Leg Plates",
-		"Warp Shin Guards", "Singularity Greaves", "Specter Leggings", "Ember Leg Plates", "Frostbound Greaves",
-		"Volt Leggings", "Prism Shin Guards", "Null Greaves", "Comet Leggings", "Astral Leg Plates",
-		"Ironclad Greaves", "Nebula Shin Guards", "Voidwalker Leggings", "Cinder Leg Plates", "Glitch Greaves",
-		"Horizon Leggings", "Tempest Shin Guards", "Obsidian Greaves", "Chrome Leggings", "Radiant Leg Plates",
-		"Phantom Greaves", "Nova Shin Guards", "Tidal Leggings", "Magma Leg Plates", "Glacial Greaves",
-		"Stellar Leggings", "Eclipse Shin Guards", "Vortex Greaves", "Lunar Leg Plates", "Genesis Leggings",
-	],
-	"neck": [
-		"Quantum Amulet", "Void Collar", "Nebula Pendant", "Star Choker", "Plasma Torc",
-		"Ion Amulet", "Graviton Pendant", "Shadow Collar", "Crystal Necklace", "Phase Amulet",
-		"Singularity Pendant", "Echo Collar", "Storm Torc", "Abyssal Amulet", "Photon Pendant",
-		"Voidstrider Collar", "Mag-Lock Choker", "Solar Amulet", "Frostbound Pendant", "Volt Collar",
-		"Prism Amulet", "Null Pendant", "Comet Choker", "Astral Collar", "Ironclad Amulet",
-		"Nebula Choker", "Voidwalker Collar", "Cinder Amulet", "Glitch Pendant", "Horizon Collar",
-		"Tempest Torc", "Obsidian Amulet", "Chrome Pendant", "Radiant Choker", "Phantom Collar",
-		"Nova Amulet", "Tidal Pendant", "Magma Collar", "Glacial Amulet", "Stellar Choker",
-		"Eclipse Pendant", "Vortex Collar", "Lunar Amulet", "Genesis Pendant", "Ember Torc",
-		"Drift Pendant", "Wraith Collar", "Pulsar Amulet", "Quasar Choker", "Celestial Torc",
-	],
-	"accessory": [
-		"Quantum Amulet", "Data Core Ring", "Nebula Charm", "Warp Beacon",
-		"Chrono Band", "Star Shard Pendant", "Void Capacitor", "Neural Link",
-	],
-	"ship_module": [
-		"Warp Drive MK-I", "Shield Amplifier", "Cargo Expander", "Sensor Array",
-		"Cloaking Module", "Turret System", "Engine Booster", "Hull Reinforcement",
-	],
-}
-
-const CLASS_WEAPONS := [
-	"Vanguard Assault Rifle", "Shadowstrike Silencer", "Arcane Pulse Caster",
-	"Cosmic Aegis Blaster", "Slipstream Needles", "Plasma Multi-Cannon",
-]
-
-
+## Gear catalog — mirrors productionMath COMPANY_GEAR_CATALOG (48 company variants).
 static func gear_catalog() -> Array:
 	var out: Array = []
-	for type in ITEM_NAMES.keys():
-		for name in ITEM_NAMES[type]:
-			out.append({"id": "%s:%s" % [type, name], "name": name, "type": type})
-	for wname in CLASS_WEAPONS:
-		out.append({"id": "weapon:%s" % wname, "name": wname, "type": "weapon"})
+	for row in CompanyRules.gear_catalog():
+		if typeof(row) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = row
+		var itype := str(entry.get("type", ""))
+		var vid := str(entry.get("id", ""))
+		var iname := str(entry.get("name", vid))
+		if itype.is_empty() or vid.is_empty():
+			continue
+		out.append({"id": "%s:%s" % [itype, vid], "name": iname, "type": itype, "visual_id": vid})
 	return out
 
 
 static func discovered_gear_ids(character: Dictionary) -> Dictionary:
 	var out := {}
+	var catalog := {}
+	for entry in gear_catalog():
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var key := str(entry.get("id", ""))
+		if not key.is_empty():
+			catalog[key] = true
 	var raw: Variant = character.get("discovered_gear", [])
 	if typeof(raw) != TYPE_ARRAY:
 		return out
 	for v in raw:
 		var key := str(v)
-		if not key.is_empty():
-			out[key] = true
+		if key.is_empty() or not catalog.has(key):
+			continue
+		out[key] = true
 	return out
 
 
-## Best-effort: mark gear base names discovered after claiming loot items.
+## Best-effort: mark catalog variants discovered after claiming loot items.
 static func keys_from_items(items: Array) -> Array:
 	var out: Array = []
 	var catalog := gear_catalog()
@@ -212,8 +166,22 @@ static func keys_from_items(items: Array) -> Array:
 		if typeof(it) != TYPE_DICTIONARY:
 			continue
 		var itype := str(it.get("type", ""))
+		var visual := str(it.get("visual_id", "")).strip_edges()
+		if not itype.is_empty() and not visual.is_empty():
+			out.append("%s:%s" % [itype, visual])
+			continue
 		var base := str(it.get("base_name", ""))
 		if not base.is_empty() and not itype.is_empty():
+			var matched := false
+			for e in catalog:
+				if str(e.get("type", "")) != itype:
+					continue
+				if str(e.get("name", "")) == base or str(e.get("visual_id", "")) == base:
+					out.append(str(e.get("id", "")))
+					matched = true
+					break
+			if matched:
+				continue
 			out.append("%s:%s" % [itype, base])
 			continue
 		var iname := str(it.get("name", ""))

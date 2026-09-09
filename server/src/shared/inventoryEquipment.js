@@ -82,6 +82,8 @@ export function serializeItem(item, character = null) {
     sell_value: computeLiveSellValue(item, character),
     origin: item.origin || "unassigned",
     manufacturer: item.manufacturer ?? null,
+    visual_id: item.visual_id ?? null,
+    combat_style: item.combat_style ?? null,
     shipment_eligible: item.shipment_eligible ?? null,
     consumable: item.consumable,
     flavor_text: item.flavor_text,

@@ -63,11 +63,15 @@ const SLOT_LABELS := {
 	"ship_module": "Ship Module",
 }
 
+const COMPANY_COLOR_CNC := Color("#E8C547")
+const COMPANY_COLOR_BJS := Color("#38BDF8")
+const COMPANY_COLOR_DTD := Color("#8B9198")
+const COMPANY_COLOR_GORP := Color("#34D399")
 const COMPANY_COLORS := {
-	COMPANY_ID_CNC: Color("#E8C547"),
-	COMPANY_ID_BJS: Color("#38BDF8"),
-	COMPANY_ID_DTD: Color("#F59E0B"),
-	COMPANY_ID_GORP: Color("#34D399"),
+	COMPANY_ID_CNC: COMPANY_COLOR_CNC,
+	COMPANY_ID_BJS: COMPANY_COLOR_BJS,
+	COMPANY_ID_DTD: COMPANY_COLOR_DTD,
+	COMPANY_ID_GORP: COMPANY_COLOR_GORP,
 }
 
 const COMPANY_BADGE_ICON := {
@@ -77,10 +81,10 @@ const COMPANY_BADGE_ICON := {
 	COMPANY_ID_GORP: "cpu",
 }
 
-const COMPANY_BADGE_COLOR_CNC := Color("#E8C547")
-const COMPANY_BADGE_COLOR_BJS := Color("#9B1C1C")
-const COMPANY_BADGE_COLOR_DTD := Color("#8B9198")
-const COMPANY_BADGE_COLOR_GORP := Color("#F472B6")
+const COMPANY_BADGE_COLOR_CNC := COMPANY_COLOR_CNC
+const COMPANY_BADGE_COLOR_BJS := COMPANY_COLOR_BJS
+const COMPANY_BADGE_COLOR_DTD := COMPANY_COLOR_DTD
+const COMPANY_BADGE_COLOR_GORP := COMPANY_COLOR_GORP
 const COMPANY_BADGE_COLORS := {
 	COMPANY_ID_CNC: COMPANY_BADGE_COLOR_CNC,
 	COMPANY_ID_BJS: COMPANY_BADGE_COLOR_BJS,
@@ -122,6 +126,75 @@ const COMPANY_SLOTS := {
 	COMPANY_ID_DTD: ["legs", "boots", "accessory", "ship_module"],
 	COMPANY_ID_GORP: ["armor", "boots", "weapon", "neck"],
 }
+const COMPANY_GEAR_VARIANT_COUNT := 3
+const COMPANY_GEAR_VARIANT_FILE_INDEX_PAD := 2
+const COMPANY_GEAR_VARIANT_FILE_INDEX_ORIGIN := 1
+const GEAR_SVG_DIR := "res://Assets/Gear/"
+## Match nav Lucide SVGs (`svg/scale=3.0` in `.import`) after the 48 glyphs land.
+const GEAR_SVG_IMPORT_SCALE := 3.0
+## Set true if company SVGs already include a plate/frame (avoids double-framing in GearIcon).
+const GEAR_SVG_HAS_OWN_FRAME := false
+const WEAPON_COMBAT_STYLE_SWING := "swing"
+const WEAPON_COMBAT_STYLE_STAB := "stab"
+const WEAPON_COMBAT_STYLE_SHOOT := "shoot"
+const WEAPON_COMBAT_STYLES: PackedStringArray = [
+	WEAPON_COMBAT_STYLE_SWING,
+	WEAPON_COMBAT_STYLE_STAB,
+	WEAPON_COMBAT_STYLE_SHOOT,
+]
+## Mirrors src/lib/productionMath/companyGearPresentation.js. Keys are visual ids.
+const COMPANY_GEAR_PRESENTATION := {
+	"helmet_cnc_01": { "name": "Grand Carapace" },
+	"helmet_cnc_02": { "name": "Sovereign Death-Mask" },
+	"helmet_cnc_03": { "name": "Scarab Oracle" },
+	"armor_cnc_01": { "name": "Imperial Elytra" },
+	"armor_cnc_02": { "name": "Regent Thorn-Mantle" },
+	"armor_cnc_03": { "name": "Scarab Reliquary Harness" },
+	"legs_cnc_01": { "name": "Duelist Greaves" },
+	"legs_cnc_02": { "name": "Royal Shellguards" },
+	"legs_cnc_03": { "name": "Court Striders" },
+	"ship_module_cnc_01": { "name": "Royal Aegis" },
+	"ship_module_cnc_02": { "name": "Throne Drive" },
+	"ship_module_cnc_03": { "name": "Oracle Array" },
+	"helmet_bjs_01": { "name": "Service Visor" },
+	"helmet_bjs_02": { "name": "Counter Ballistic Shield" },
+	"helmet_bjs_03": { "name": "Dual-Optic Field Rig" },
+	"weapon_bjs_01": { "name": "Service Carbine", "combat_style": WEAPON_COMBAT_STYLE_SHOOT },
+	"weapon_bjs_02": { "name": "Breach Marshal", "combat_style": WEAPON_COMBAT_STYLE_SHOOT },
+	"weapon_bjs_03": { "name": "Field Breacher", "combat_style": WEAPON_COMBAT_STYLE_SWING },
+	"neck_bjs_01": { "name": "Service Tags" },
+	"neck_bjs_02": { "name": "Field Gorget" },
+	"neck_bjs_03": { "name": "Signal Pendant" },
+	"accessory_bjs_01": { "name": "Service Signet" },
+	"accessory_bjs_02": { "name": "Field Scanner" },
+	"accessory_bjs_03": { "name": "Utility Bracer" },
+	"legs_dtd_01": { "name": "Patchwork Worklegs" },
+	"legs_dtd_02": { "name": "Scrapwalker Braces" },
+	"legs_dtd_03": { "name": "Emergency Overpants" },
+	"boots_dtd_01": { "name": "Quickfix Stompers" },
+	"boots_dtd_02": { "name": "Springheel Scramblers" },
+	"boots_dtd_03": { "name": "Scrapyard Clompers" },
+	"accessory_dtd_01": { "name": "Panic Kit" },
+	"accessory_dtd_02": { "name": "Lucky Fuse" },
+	"accessory_dtd_03": { "name": "Scrapclaw Rig" },
+	"ship_module_dtd_01": { "name": "Patchwork Reactor" },
+	"ship_module_dtd_02": { "name": "Panic Thruster" },
+	"ship_module_dtd_03": { "name": "Scrap Relay" },
+	"armor_gorp_01": { "name": "Compliance Vest" },
+	"armor_gorp_02": { "name": "Supervisor Yoke" },
+	"armor_gorp_03": { "name": "Containment Harness" },
+	"boots_gorp_01": { "name": "Compliance Treads" },
+	"boots_gorp_02": { "name": "Supervisor Locksteps" },
+	"boots_gorp_03": { "name": "Facility Anchors" },
+	"weapon_gorp_01": { "name": "Compliance Projector", "combat_style": WEAPON_COMBAT_STYLE_SHOOT },
+	"weapon_gorp_02": { "name": "Supervisor's Directive", "combat_style": WEAPON_COMBAT_STYLE_SHOOT },
+	"weapon_gorp_03": { "name": "Contract Enforcer", "combat_style": WEAPON_COMBAT_STYLE_SWING },
+	"neck_gorp_01": { "name": "Compliance Collar" },
+	"neck_gorp_02": { "name": "Supervisor's Seal" },
+	"neck_gorp_03": { "name": "Vitality Monitor" },
+}
+
+static var _gear_catalog: Array = []
 
 
 static func color_for(company_id: String) -> Color:
@@ -158,6 +231,81 @@ static func slots_for(company_id: String) -> Array:
 	return out
 
 
+static func gear_visual_id(slot: String, company_id: String, variant_index: int) -> String:
+	var n := variant_index + COMPANY_GEAR_VARIANT_FILE_INDEX_ORIGIN
+	var suffix := str(n).pad_zeros(COMPANY_GEAR_VARIANT_FILE_INDEX_PAD)
+	return "%s_%s_%s" % [canonical_slot(slot), company_id.strip_edges().to_lower(), suffix]
+
+
+static func gear_svg_path(visual_id: String) -> String:
+	var id := visual_id.strip_edges()
+	if id.is_empty():
+		return ""
+	return GEAR_SVG_DIR + id + ".svg"
+
+
+static func gear_svg_has_own_frame() -> bool:
+	return GEAR_SVG_HAS_OWN_FRAME
+
+
+static func gear_svg_import_scale() -> float:
+	return GEAR_SVG_IMPORT_SCALE
+
+
+static func _presentation_for(visual_id: String) -> Dictionary:
+	var raw: Variant = COMPANY_GEAR_PRESENTATION.get(visual_id, {})
+	if typeof(raw) != TYPE_DICTIONARY:
+		return {"name": visual_id, "combat_style": ""}
+	var entry: Dictionary = raw
+	var name := str(entry.get("name", "")).strip_edges()
+	if name.is_empty():
+		name = visual_id
+	var style := str(entry.get("combat_style", "")).strip_edges().to_lower()
+	if not WEAPON_COMBAT_STYLES.has(style):
+		style = ""
+	return {"name": name, "combat_style": style}
+
+
+static func gear_combat_style(visual_id: String) -> String:
+	return str(_presentation_for(visual_id).get("combat_style", ""))
+
+
+static func gear_combat_style_for_name(item_name: String) -> String:
+	var key := item_name.strip_edges()
+	if key.is_empty():
+		return ""
+	for row in gear_catalog():
+		if typeof(row) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = row
+		if str(entry.get("name", "")) == key or str(entry.get("id", "")) == key:
+			return str(entry.get("combat_style", ""))
+	return ""
+
+
+static func gear_catalog() -> Array:
+	if not _gear_catalog.is_empty():
+		return _gear_catalog
+	var rows: Array = []
+	for company_id in COMPANY_IDS:
+		for slot in slots_for(company_id):
+			for i in range(COMPANY_GEAR_VARIANT_COUNT):
+				var id := gear_visual_id(str(slot), company_id, i)
+				var pres := _presentation_for(id)
+				var combat := ""
+				if str(slot) == "weapon":
+					combat = str(pres.get("combat_style", ""))
+				rows.append({
+					"id": id,
+					"name": str(pres.get("name", id)),
+					"type": str(slot),
+					"company_id": company_id,
+					"combat_style": combat,
+				})
+	_gear_catalog = rows
+	return _gear_catalog
+
+
 static func slot_label(slot: String) -> String:
 	return str(SLOT_LABELS.get(slot, slot.replace("_", " ").capitalize()))
 
@@ -190,10 +338,7 @@ static func manufacturer_badge_icon(company_id: String) -> String:
 
 
 static func manufacturer_badge_color(company_id: String) -> Color:
-	var raw: Variant = COMPANY_BADGE_COLORS.get(company_id, FALLBACK_ACCENT)
-	if raw is Color:
-		return raw
-	return FALLBACK_ACCENT
+	return color_for(company_id)
 
 
 static func should_show_manufacturer_badge(item: Dictionary, sell_tab: bool = false) -> bool:

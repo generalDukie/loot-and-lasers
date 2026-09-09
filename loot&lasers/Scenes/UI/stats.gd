@@ -82,9 +82,9 @@ const EQUIP_NAME_FS := 12
 const EQUIP_GRID_INSET := 8.0
 const EQUIP_GRID_SEP := 8
 const BAG_COLS := 5
-## Company badge next to backpack names (2× the shared item-name badge).
-const BAG_COMPANY_BADGE_SCALE_NUMERATOR := 2
-const BAG_COMPANY_BADGE_SCALE_DENOMINATOR := 1
+## Company badge next to backpack names — same 5/4 scale as market stall titles.
+const BAG_COMPANY_BADGE_SCALE_NUMERATOR := 5
+const BAG_COMPANY_BADGE_SCALE_DENOMINATOR := 4
 ## 1.25× backpack item names so type rasterizes larger (not Control-scaled).
 const BAG_NAME_FONT_SCALE_NUMERATOR := 5
 const BAG_NAME_FONT_SCALE_DENOMINATOR := 4
@@ -101,6 +101,8 @@ const BAG_NAME_FONT_RATIO := BAG_NAME_FONT_RATIO_BASE * float(BAG_NAME_FONT_SCAL
 const BAG_NAME_FONT_MIN_PX := BAG_NAME_FONT_MIN_PX_BASE * float(BAG_NAME_FONT_SCALE_NUMERATOR) / float(BAG_NAME_FONT_SCALE_DENOMINATOR)
 const BAG_NAME_FONT_MAX_PX := BAG_NAME_FONT_MAX_PX_BASE * float(BAG_NAME_FONT_SCALE_NUMERATOR) / float(BAG_NAME_FONT_SCALE_DENOMINATOR)
 const BAG_NAME_BADGE_PAD_PX := 4.0
+## Ignore sub-pixel resize jitter when centering the backpack name cluster.
+const BAG_NAME_LAYOUT_EPSILON_PX := 0.5
 ## Backpack gear glyph — fraction of the middle band's shorter side (name/attrs unchanged).
 const BAG_GEAR_ICON_FILL := 0.82
 ## Fixed bottom reserve so 0–5 attr chips don't resize the middle glyph band.
@@ -1250,17 +1252,12 @@ func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContaine
 	if tutorial_helmet and TutorialManager.should_show() and TutorialManager.step_id() == "hero_equip":
 		TutorialManager.tag_target(panel, "hero-bag-helmet")
 
-	var root := Control.new()
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_child(root)
-
 	var col := VBoxContainer.new()
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 2)
-	root.add_child(col)
+	panel.add_child(col)
 
 	if filled:
 		var rarity_tint := ClientUi.rarity_color(str(item.get("rarity", "")))
@@ -1274,39 +1271,13 @@ func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContaine
 		if CompanyRules.should_show_manufacturer_badge(item):
 			name_h = maxf(name_h, badge_sz + BAG_NAME_BADGE_PAD_PX)
 
-		var name_band := Control.new()
-		name_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		name_band.custom_minimum_size = Vector2(0, name_h)
-		name_band.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_band.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		col.add_child(name_band)
-
-		var title_row := HBoxContainer.new()
-		title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title_row.add_theme_constant_override("separation", int(BAG_NAME_BADGE_PAD_PX))
-		name_band.add_child(title_row)
-		title_row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		title_row.offset_left = 1
-		title_row.offset_right = -1
-
-		if CompanyRules.should_show_manufacturer_badge(item):
-			title_row.add_child(UiIcon.make_manufacturer_badge(item, badge_sz))
-
-		var title := Label.new()
-		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title.text = str(item.get("name", "Item"))
-		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		title.max_lines_visible = 2
-		title.clip_text = true
-		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		title.add_theme_font_size_override("font_size", name_fs)
-		title.add_theme_color_override("font_color", rarity_tint.lightened(0.2))
-		ClientUi.apply_display_font(title)
-		title_row.add_child(title)
+		col.add_child(_make_bag_name_band(
+			item,
+			name_h,
+			name_fs,
+			badge_sz,
+			rarity_tint.lightened(0.2)
+		))
 
 		var icon_wrap := CenterContainer.new()
 		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1370,6 +1341,86 @@ func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContaine
 					_on_equip(captured_id)
 		)
 	return panel
+
+
+func _make_bag_name_band(
+	item: Dictionary,
+	name_h: float,
+	name_fs: int,
+	badge_sz: float,
+	font_color: Color
+) -> Control:
+	## Plain Control so the name cluster cannot widen the 5-column slot grid.
+	var band := Control.new()
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.clip_contents = true
+	band.custom_minimum_size = Vector2(0, name_h)
+	band.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	band.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+
+	var cluster := HBoxContainer.new()
+	cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cluster.add_theme_constant_override("separation", UiIcon.ITEM_NAME_BADGE_GAP_PX)
+	band.add_child(cluster)
+
+	if CompanyRules.should_show_manufacturer_badge(item):
+		cluster.add_child(UiIcon.make_manufacturer_badge(item, badge_sz))
+
+	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.text = str(item.get("name", "Item"))
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lab.autowrap_mode = TextServer.AUTOWRAP_OFF
+	lab.clip_text = true
+	lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	lab.max_lines_visible = 1
+	lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	lab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	lab.custom_minimum_size.x = 0
+	lab.add_theme_font_size_override("font_size", name_fs)
+	lab.add_theme_color_override("font_color", font_color)
+	ClientUi.apply_display_font(lab)
+	cluster.add_child(lab)
+	_bind_bag_name_cluster(band, cluster, lab)
+	return band
+
+
+func _bind_bag_name_cluster(band: Control, cluster: HBoxContainer, lab: Label) -> void:
+	var sync := func() -> void:
+		_sync_bag_name_cluster(band, cluster, lab)
+	band.resized.connect(sync)
+	sync.call_deferred()
+
+
+func _sync_bag_name_cluster(band: Control, cluster: HBoxContainer, lab: Label) -> void:
+	if not is_instance_valid(band) or not is_instance_valid(cluster) or not is_instance_valid(lab):
+		return
+	var budget := band.size.x
+	if budget <= 0.0:
+		return
+	var sep := float(cluster.get_theme_constant("separation"))
+	var reserved := 0.0
+	var extra_n := 0
+	for child in cluster.get_children():
+		if child == lab or not (child is Control):
+			continue
+		reserved += (child as Control).get_combined_minimum_size().x
+		extra_n += 1
+	if extra_n > 0:
+		reserved += sep * float(extra_n)
+	var lab_budget := maxf(0.0, budget - reserved)
+	var font := lab.get_theme_font("font")
+	var font_sz := lab.get_theme_font_size("font_size")
+	var text_w := 0.0
+	if font != null:
+		text_w = font.get_string_size(lab.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_sz).x
+	var shown := minf(text_w, lab_budget)
+	if absf(lab.custom_minimum_size.x - shown) > BAG_NAME_LAYOUT_EPSILON_PX:
+		lab.custom_minimum_size.x = shown
+	var cluster_w := reserved + shown
+	cluster.size = Vector2(cluster_w, band.size.y)
+	cluster.position = Vector2((budget - cluster_w) * 0.5, 0.0)
 
 
 func _bag_company_badge_size(name_fs: int) -> float:

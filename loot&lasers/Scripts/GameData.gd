@@ -316,8 +316,22 @@ static func weapon_emoji_for(name: String, base_name: String = "") -> String:
 	return "⚔️"
 
 
-## swing | stab | shoot — drives attack motion + SFX.
-static func weapon_combat_style_for(name: String, base_name: String = "", emoji: String = "") -> String:
+## swing | stab | shoot — catalog combat_style wins; else keyword heuristic.
+static func weapon_combat_style_for(
+	name: String,
+	base_name: String = "",
+	emoji: String = "",
+	combat_style: String = "",
+	visual_id: String = ""
+) -> String:
+	var stamped := combat_style.strip_edges().to_lower()
+	if CompanyRules.WEAPON_COMBAT_STYLES.has(stamped):
+		return stamped
+	var from_catalog := CompanyRules.gear_combat_style(visual_id)
+	if from_catalog.is_empty() and not base_name.is_empty():
+		from_catalog = CompanyRules.gear_combat_style_for_name(base_name)
+	if not from_catalog.is_empty():
+		return from_catalog
 	var e := emoji if not emoji.is_empty() else weapon_emoji_for(name, base_name)
 	if e in ["⚔️", "🪓"]:
 		return "swing"
@@ -352,7 +366,13 @@ static func weapon_from_items(items: Array) -> Dictionary:
 			"name": wname,
 			"base_name": base,
 			"emoji": emoji,
-			"style": weapon_combat_style_for(wname, base, emoji),
+			"style": weapon_combat_style_for(
+				wname,
+				base,
+				emoji,
+				str(it.get("combat_style", "")),
+				str(it.get("visual_id", ""))
+			),
 			"rarity": rarity,
 			"color": ClientUi.rarity_color(rarity),
 		}

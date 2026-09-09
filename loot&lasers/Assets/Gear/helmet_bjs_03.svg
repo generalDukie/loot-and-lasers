@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">BJ Services Helmet Variant 3 — Dual-Optic Field Rig</title>
+  <desc id="desc">A lightweight open field helmet with separate hinged goggles, an offset rangefinder, exposed ear cups, an antenna, and a hose respirator. Gunmetal shell, teal visors and optics, charcoal and black structure, sky blue hardware accents.</desc>
+  <defs>
+    <linearGradient id="steel" x1="91" y1="87" x2="405" y2="442" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b8c3c9"/><stop offset=".3" stop-color="#606c75"/><stop offset=".67" stop-color="#202a32"/><stop offset="1" stop-color="#7b8891"/>
+    </linearGradient>
+    <linearGradient id="dark" x1="156" y1="195" x2="355" y2="454" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#293139"/><stop offset=".56" stop-color="#10161c"/><stop offset="1" stop-color="#05090d"/>
+    </linearGradient>
+    <radialGradient id="optic" cx="42%" cy="38%" r="61%">
+      <stop offset="0" stop-color="#dcf8ee"/><stop offset=".32" stop-color="#57c8bb"/><stop offset=".7" stop-color="#187d78"/><stop offset="1" stop-color="#0a4347"/>
+    </radialGradient>
+    <radialGradient id="sky"><stop offset="0" stop-color="#e3f5ff"/><stop offset=".43" stop-color="#82c9f4"/><stop offset="1" stop-color="#315c7d"/></radialGradient>
+  </defs>
+  <g stroke="#080c11" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Compact open cap instead of a full enclosing shell. -->
+    <path d="M120 220l29-102 72-61h92l72 61 20 102-56 37H176z" fill="url(#steel)" stroke-width="15"/>
+    <path d="M175 126l60-47h65l55 47-17 57H189z" fill="#39444e" stroke="#7b8c97" stroke-width="9"/>
+    <path d="M211 75h109l22 30-26 25H194l-20-25z" fill="#1e272e" stroke="#6f7b83" stroke-width="7"/>
+    <path d="M230 78v77M288 78v77M190 144h51M340 144h-51" fill="none" stroke="#161e25" stroke-width="7"/>
+    <!-- Asymmetric antenna and rangefinder make the silhouette unique. -->
+    <path d="M356 123l37-48 19 10-21 75" fill="none" stroke="#7e8a92" stroke-width="10"/>
+    <circle cx="398" cy="75" r="10" fill="#82c9f4" stroke-width="5"/>
+    <path d="M348 151h70l15 74-62 21-30-39z" fill="#273139" stroke="#909ca4" stroke-width="9"/>
+    <circle cx="389" cy="194" r="18" fill="url(#optic)" stroke-width="7"/>
+    <!-- Open face with two independent hinged goggles. -->
+    <path d="M148 206l61-28h104l61 28-24 122-94 45-94-45z" fill="#111820" stroke="#4f5c65" stroke-width="11"/>
+    <path d="M155 228l67-34 30 22-10 84-65 13-36-40z" fill="url(#optic)" stroke-width="9"/>
+    <path d="M357 228l-67-34-30 22 10 84 65 13 36-40z" fill="url(#optic)" stroke-width="9"/>
+    <path d="M242 225h28M172 246l54-25M340 246l-54-25M176 276l53-10M336 276l-53-10" fill="none" stroke="#d4f4e9" stroke-width="4" opacity=".68"/>
+    <!-- Exposed ear cups rather than integrated cheek armor. -->
+    <path d="M104 228h62l16 72-26 113-62 5-25-99zM408 228h-62l-16 72 26 113 62 5 25-99z" fill="url(#steel)" stroke-width="11"/>
+    <circle cx="125" cy="319" r="35" fill="#263039" stroke="#89959d" stroke-width="9"/>
+    <circle cx="387" cy="319" r="35" fill="#263039" stroke="#89959d" stroke-width="9"/>
+    <!-- Small respirator suspended below the goggles. -->
+    <path d="M182 326l74 38 74-38 7 87-81 67-81-67z" fill="url(#dark)" stroke-width="12"/>
+    <path d="M214 358l42 18 42-18 12 55-54 42-54-42z" fill="#39454e" stroke="#808c94" stroke-width="8"/>
+    <path d="M229 387h54M224 409h64M238 431h36" fill="none" stroke="#8195a2" stroke-width="7"/>
+    <path d="M154 347q-19 67 42 102" fill="none" stroke="#68747c" stroke-width="10"/>
+    <g fill="url(#sky)" stroke="#16232e" stroke-width="4"><circle cx="201" cy="156" r="7"/><circle cx="312" cy="156" r="7"/><circle cx="125" cy="319" r="7"/></g>
+  </g>
+</svg>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Crown and Carapace Helmet Variant 2 — Sovereign Death-Mask</title>
+  <desc id="desc">A narrow, fully sealed royal death-mask with a towering crown, an ivory face plate, and one severe eye slit. Gold metal, ivory highlights and ornaments, purple fabric, lightly smoked neutral glass where present.</desc>
+  <defs>
+    <linearGradient id="gold" x1="122" y1="44" x2="381" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff2a8"/><stop offset=".31" stop-color="#d9a42f"/><stop offset=".7" stop-color="#704719"/><stop offset="1" stop-color="#e4ba4c"/>
+    </linearGradient>
+    <linearGradient id="mask" x1="188" y1="133" x2="318" y2="438" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f4ecd6"/><stop offset=".48" stop-color="#b7aa89"/><stop offset="1" stop-color="#6e654f"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="147" y1="111" x2="365" y2="457" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ac61c1"/><stop offset=".5" stop-color="#59256e"/><stop offset="1" stop-color="#24102e"/>
+    </linearGradient>
+    <linearGradient id="slit" x1="174" y1="239" x2="338" y2="239" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#53595a"/><stop offset=".5" stop-color="#e9eae5"/><stop offset="1" stop-color="#53595a"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#080b11" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Crown and hanging mantle produce a narrow, towering silhouette. -->
+    <path d="M167 143l-18-103 67 53 40-76 40 76 67-53-18 103z" fill="url(#gold)" stroke-width="13"/>
+    <path d="M198 115l-14-64 42 48 30-82 30 82 42-48-14 64z" fill="url(#purple)" stroke-width="8"/>
+    <path d="M165 124l-45 87 28 218 66 57h84l66-57 28-218-45-87z" fill="url(#purple)" stroke-width="16"/>
+    <path d="M176 135q80-63 160 0l29 85-43 54H190l-43-54z" fill="url(#gold)" stroke-width="12"/>
+    <!-- Single uninterrupted face plate. -->
+    <path d="M190 181l66-45 66 45 31 92-27 139-70 61-70-61-27-139z" fill="url(#mask)" stroke-width="13"/>
+    <path d="M256 150l-25 80 25 34 25-34z" fill="#f4e8c7" stroke="#846323" stroke-width="7"/>
+    <path d="M174 227l54-21h56l54 21-17 38H191z" fill="#12151b" stroke="#77511a" stroke-width="9"/>
+    <path d="M193 235h126l-9 17H202z" fill="url(#slit)" stroke-width="5"/>
+    <path d="M208 280l48 25 48-25 17 117-65 58-65-58z" fill="url(#mask)" stroke="#82775f" stroke-width="7"/>
+    <path d="M256 305v125M229 331l27 15 27-15M220 373l36 18 36-18" fill="none" stroke="#776b55" stroke-width="7"/>
+    <!-- Flat ornamental ear-discs and collar distinguish it from practical rails. -->
+    <path d="M147 232l43 47-10 139-38 25-24-89 8-91zM365 232l-43 47 10 139 38 25 24-89-8-91z" fill="url(#gold)" stroke-width="12"/>
+    <circle cx="151" cy="306" r="29" fill="url(#purple)" stroke="#dab247" stroke-width="8"/>
+    <circle cx="361" cy="306" r="29" fill="url(#purple)" stroke="#dab247" stroke-width="8"/>
+    <path d="M220 453l36 20 36-20 43 33H177z" fill="url(#gold)" stroke-width="11"/>
+    <path d="M238 89l18-31 18 31-18 24z" fill="#f4ecd6" stroke="#513615" stroke-width="5"/>
+    <g fill="#f5d46a" stroke-width="4"><circle cx="183" cy="159" r="8"/><circle cx="329" cy="159" r="8"/><circle cx="151" cy="306" r="8"/><circle cx="361" cy="306" r="8"/></g>
+  </g>
+</svg>

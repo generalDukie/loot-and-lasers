@@ -13,8 +13,13 @@ import {
   COMPANY_FLAVOR_CHANCE_BPS,
   COMPANY_FLAVOR_LINES,
   COMPANY_FULL_NAMES,
+  COMPANY_GEAR_CATALOG_KEY_SEPARATOR,
+  COMPANY_GEAR_VARIANT_COUNT,
+  COMPANY_GEAR_VARIANT_FILE_INDEX_PAD,
+  COMPANY_GEAR_VARIANT_FILE_INDEX_ORIGIN,
   COMPANY_IDS,
   COMPANY_NAME_TOKENS,
+  WEAPON_COMBAT_STYLES,
   COMPANY_REPUTATION_PER_LEVEL,
   COMPANY_STARTING_LEVEL,
   COMPANY_SLOTS,
@@ -41,6 +46,7 @@ import {
   TOKEN_RARITY_RARE,
   TOKEN_ROTATION_PERIOD,
 } from "./constants.js";
+import { COMPANY_GEAR_PRESENTATION } from "./companyGearPresentation.js";
 
 const MIN_RANDOM_ALLOCATION_WEIGHT = 1e-12;
 
@@ -138,12 +144,150 @@ export function companyNameToken(companyId) {
   return COMPANY_NAME_TOKENS[id] || "";
 }
 
+export function companyGearVisualId(slot, companyId, variantIndex) {
+  const key = canonicalGearSlot(slot) || String(slot || "").toLowerCase();
+  const n = Math.floor(Number(variantIndex) || 0) + COMPANY_GEAR_VARIANT_FILE_INDEX_ORIGIN;
+  const suffix = String(n).padStart(COMPANY_GEAR_VARIANT_FILE_INDEX_PAD, "0");
+  return `${key}_${String(companyId || "").toLowerCase()}_${suffix}`;
+}
+
+export function companyGearCatalogEntryId(slot, visualId) {
+  const key = canonicalGearSlot(slot) || String(slot || "").toLowerCase();
+  const id = String(visualId || "").trim();
+  if (!key || !id) return "";
+  return `${key}${COMPANY_GEAR_CATALOG_KEY_SEPARATOR}${id}`;
+}
+
+function normalizeCombatStyle(raw) {
+  const key = String(raw || "").trim().toLowerCase();
+  return WEAPON_COMBAT_STYLES.includes(key) ? key : "";
+}
+
+function presentationFor(visualId) {
+  const overlay = COMPANY_GEAR_PRESENTATION[visualId];
+  if (!overlay || typeof overlay !== "object") {
+    return { name: visualId, combatStyle: "" };
+  }
+  const name = String(overlay.name || "").trim() || visualId;
+  return { name, combatStyle: normalizeCombatStyle(overlay.combatStyle) };
+}
+
+function buildCompanyGearCatalog() {
+  const rows = [];
+  for (const companyId of COMPANY_IDS) {
+    for (const slot of COMPANY_SLOTS[companyId] || []) {
+      for (let i = 0; i < COMPANY_GEAR_VARIANT_COUNT; i += 1) {
+        const id = companyGearVisualId(slot, companyId, i);
+        const pres = presentationFor(id);
+        rows.push(Object.freeze({
+          id,
+          name: pres.name,
+          slot,
+          companyId,
+          variantIndex: i,
+          combatStyle: slot === "weapon" ? pres.combatStyle : "",
+        }));
+      }
+    }
+  }
+  return Object.freeze(rows);
+}
+
+export const COMPANY_GEAR_CATALOG = buildCompanyGearCatalog();
+
+export function companyGearVariantById(visualId) {
+  const id = String(visualId || "").trim();
+  if (!id) return null;
+  return COMPANY_GEAR_CATALOG.find((row) => row.id === id) || null;
+}
+
+export function companyGearVariantByName(name) {
+  const key = String(name || "").trim();
+  if (!key) return null;
+  return COMPANY_GEAR_CATALOG.find((row) => row.name === key) || null;
+}
+
+export function companyGearCatalogKey(item) {
+  if (!item || typeof item !== "object") return null;
+  const slot = canonicalGearSlot(item.type || item.slot);
+  if (!slot) return null;
+  const requestedId = String(item.visual_id || "").trim();
+  let variant = requestedId ? companyGearVariantById(requestedId) : null;
+  if (!variant) {
+    const base = String(item.base_name || item.name || "").trim();
+    variant = base ? companyGearVariantByName(base) : null;
+  }
+  if (variant) {
+    if (variant.slot !== slot) return null;
+    return companyGearCatalogEntryId(variant.slot, variant.id);
+  }
+  const legacy = String(item.base_name || item.name || "").trim();
+  if (!legacy) return null;
+  return companyGearCatalogEntryId(slot, legacy);
+}
+
+export function catalogGearDiscoveryKeys(discoveredGear) {
+  const catalog = new Set(COMPANY_GEAR_CATALOG.map((row) => companyGearCatalogEntryId(row.slot, row.id)));
+  const keys = Array.isArray(discoveredGear) ? discoveredGear : [];
+  const matched = [];
+  const seen = new Set();
+  for (const raw of keys) {
+    const key = String(raw || "").trim();
+    if (!key || seen.has(key) || !catalog.has(key)) continue;
+    seen.add(key);
+    matched.push(key);
+  }
+  return matched;
+}
+
+export function catalogGearDiscoveryCount(discoveredGear) {
+  return catalogGearDiscoveryKeys(discoveredGear).length;
+}
+
+export function companyGearVariantsFor(companyId, slot) {
+  const id = String(companyId || "");
+  const key = canonicalGearSlot(slot);
+  if (!id || !key) return Object.freeze([]);
+  return Object.freeze(
+    COMPANY_GEAR_CATALOG.filter((row) => row.companyId === id && row.slot === key),
+  );
+}
+
+export function pickCompanyGearVariant(companyId, slot, rng) {
+  const r = requireRng(rng, "pickCompanyGearVariant");
+  const rows = companyGearVariantsFor(companyId, slot);
+  if (!rows.length) return null;
+  const idx = Math.min(
+    rows.length - 1,
+    Math.floor(unitHalfOpen(r) * rows.length),
+  );
+  return rows[idx];
+}
+
+function resolveCompanyGearVariant(item, { baseName, rng, visualId } = {}) {
+  const slot = canonicalGearSlot(item?.type || item?.slot);
+  const companyId = String(item?.manufacturer || "").trim();
+  const requestedId = String(visualId || item?.visual_id || "").trim();
+  let variant = requestedId ? companyGearVariantById(requestedId) : null;
+  if (!variant && baseName) variant = companyGearVariantByName(baseName);
+  if (variant) {
+    if (slot && variant.slot !== slot) variant = null;
+    else if (isCompanyId(companyId) && variant.companyId !== companyId) variant = null;
+  }
+  if (!variant && isCompanyId(companyId) && slot && companyManufacturesSlot(companyId, slot)) {
+    variant = pickCompanyGearVariant(
+      companyId,
+      slot,
+      typeof rng === "function" ? rng : Math.random,
+    );
+  }
+  return variant;
+}
+
+/** Display name only — company identity is the manufacturer badge, not a name prefix. */
 export function brandedGearName(baseName, manufacturer) {
-  const token = companyNameToken(manufacturer);
-  const base = String(baseName || "").trim();
-  if (!token) return base;
-  if (!base) return token;
-  return `${token} ${base}`;
+  void manufacturer;
+  return String(baseName || "").trim();
 }
 
 export function rollCompanyFlavor(manufacturer, rng) {
@@ -159,11 +303,26 @@ export function rollCompanyFlavor(manufacturer, rng) {
   return lines[idx];
 }
 
-export function applyGearCompanyPresentation(item, { baseName, rng } = {}) {
+export function applyGearCompanyPresentation(item, { baseName, rng, visualId } = {}) {
   const next = { ...item };
-  const base = String(baseName || next.base_name || "").trim();
-  next.base_name = base;
-  next.name = brandedGearName(base, next.manufacturer);
+  const variant = resolveCompanyGearVariant(next, { baseName, rng, visualId });
+  if (variant) {
+    next.base_name = variant.name;
+    next.name = variant.name;
+    next.visual_id = variant.id;
+    if (!next.type) next.type = variant.slot;
+    if (variant.combatStyle) next.combat_style = variant.combatStyle;
+    else if (next.combat_style && !normalizeCombatStyle(next.combat_style)) {
+      delete next.combat_style;
+    }
+  } else {
+    const base = String(baseName || next.base_name || "").trim();
+    next.base_name = base;
+    next.name = brandedGearName(base, next.manufacturer);
+    if (next.visual_id && !companyGearVariantById(next.visual_id)) {
+      delete next.visual_id;
+    }
+  }
   const flavor = typeof rng === "function" ? rollCompanyFlavor(next.manufacturer, rng) : "";
   if (flavor) next.company_flavor = flavor;
   else delete next.company_flavor;

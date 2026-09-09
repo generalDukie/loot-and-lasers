@@ -317,8 +317,12 @@ static func make_manufacturer_badge(item: Dictionary, size: float) -> TextureRec
 		CompanyRules.manufacturer_badge_color(company_id),
 		size
 	)
-	badge.custom_minimum_size = Vector2(size, size)
-	badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var side := Vector2(size, size)
+	badge.custom_minimum_size = side
+	badge.size = side
+	badge.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	badge.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	badge.size_flags_stretch_ratio = 0.0
 	return badge
@@ -342,6 +346,7 @@ static func make_item_name_row(
 	var clip := bool(opts.get("clip", expand))
 	var fallback := str(opts.get("fallback", "Item"))
 	var max_lines := int(opts.get("max_lines", 1))
+	var cluster := alignment == HORIZONTAL_ALIGNMENT_CENTER or alignment == HORIZONTAL_ALIGNMENT_RIGHT
 
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -357,22 +362,27 @@ static func make_item_name_row(
 	else:
 		row.alignment = BoxContainer.ALIGNMENT_BEGIN
 
+	if expand and cluster:
+		row.add_child(_item_name_flex())
+
 	if CompanyRules.should_show_manufacturer_badge(item, sell_tab):
 		row.add_child(make_manufacturer_badge(item, icon_size))
 
 	var lab := Label.new()
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lab.text = str(item.get("name", fallback))
-	lab.horizontal_alignment = alignment
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lab.autowrap_mode = autowrap
 	lab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	if expand:
+	if expand and not cluster:
 		lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lab.custom_minimum_size.x = ITEM_NAME_LABEL_MIN_PX
 	else:
-		lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	if clip:
+		lab.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		lab.custom_minimum_size.x = ITEM_NAME_LABEL_MIN_PX
+	## clip_text on a shrink-to-content label reports 0 width and hides the name.
+	if clip and expand and not cluster:
 		lab.clip_text = true
 		if autowrap == TextServer.AUTOWRAP_OFF:
 			lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -389,8 +399,17 @@ static func make_item_name_row(
 		if opts.has("inspect_wrap_inset"):
 			lab.set_meta("inspect_wrap_inset", float(opts.get("inspect_wrap_inset", 0.0)))
 	row.add_child(lab)
+	if expand and alignment == HORIZONTAL_ALIGNMENT_CENTER:
+		row.add_child(_item_name_flex())
 	row.set_meta("name_label", lab)
 	return row
+
+
+static func _item_name_flex() -> Control:
+	var spacer := Control.new()
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return spacer
 
 
 ## Title row: neon icon + text label (replaces "🔔 Notifications" patterns).

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Crown and Carapace Helmet Variant 3 — Scarab Oracle</title>
+  <desc id="desc">A broad, low scarab helmet with huge lateral shell horns, two jewel-like compound goggles, and crossed mandibles. Gold metal, ivory highlights and ornaments, purple fabric, lightly smoked neutral glass where present.</desc>
+  <defs>
+    <linearGradient id="shell" x1="66" y1="102" x2="449" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff2a8"/><stop offset=".25" stop-color="#d9a42f"/><stop offset=".6" stop-color="#704719"/><stop offset=".84" stop-color="#e4ba4c"/><stop offset="1" stop-color="#7a501b"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="173" y1="85" x2="339" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ac61c1"/><stop offset=".52" stop-color="#59256e"/><stop offset="1" stop-color="#24102e"/>
+    </linearGradient>
+    <radialGradient id="eye" cx="45%" cy="38%" r="62%">
+      <stop offset="0" stop-color="#fafbf8"/><stop offset=".3" stop-color="#cbd0cd"/><stop offset=".67" stop-color="#7b8583"/><stop offset="1" stop-color="#343d3d"/>
+    </radialGradient>
+    <linearGradient id="bone" x1="164" y1="235" x2="344" y2="434" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f4ecd6"/><stop offset=".58" stop-color="#b7aa89"/><stop offset="1" stop-color="#6e654f"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#080b11" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Wide beetle shell and exaggerated horns create a squat silhouette. -->
+    <path d="M169 132Q256 66 343 132l54 58-25 97H140l-25-97z" fill="url(#shell)" stroke-width="14"/>
+    <path d="M157 144Q77 89 48 119q54 42 72 131l83 9zM355 144q80-55 109-25-54 42-72 131l-83 9z" fill="url(#shell)" stroke-width="13"/>
+    <path d="M178 119q78-74 156 0l-26 119H204z" fill="url(#purple)" stroke-width="10"/>
+    <path d="M256 77v156M202 113l28 119M310 113l-28 119M97 139l71 98M415 139l-71 98" fill="none" stroke="#77501b" stroke-width="7"/>
+    <path d="M127 225l75-50h108l75 50-23 113-106 48-106-48z" fill="#11161e" stroke="#81591d" stroke-width="12"/>
+    <!-- Separate compound goggles, deliberately unlike the other C&C face systems. -->
+    <path d="M151 239l55-38 47 27-13 81-70 13-32-43z" fill="url(#eye)" stroke-width="10"/>
+    <path d="M361 239l-55-38-47 27 13 81 70 13 32-43z" fill="url(#eye)" stroke-width="10"/>
+    <path d="M171 250l35-22 24 14M341 250l-35-22-24 14M173 277l57-12M339 277l-57-12" fill="none" stroke="#ffffff" stroke-width="5" opacity=".72"/>
+    <path d="M251 225h10l20 83-25 28-25-28z" fill="url(#bone)" stroke-width="7"/>
+    <!-- Beetle mandibles cross into a compact lower mask. -->
+    <path d="M128 297q29 19 93 36l35 44-47 24q-83-23-112-82z" fill="url(#shell)" stroke-width="12"/>
+    <path d="M384 297q-29 19-93 36l-35 44 47 24q83-23 112-82z" fill="url(#shell)" stroke-width="12"/>
+    <path d="M204 341l52 36 52-36 28 106-80 42-80-42z" fill="url(#purple)" stroke-width="12"/>
+    <path d="M225 376l31 18 31-18-8 66-23 18-23-18z" fill="url(#bone)" stroke-width="7"/>
+    <path d="M239 414h34" fill="none" stroke="#77511c" stroke-width="7"/>
+    <path d="M240 131l16-28 16 28-16 27z" fill="#f6d76b" stroke="#513613" stroke-width="5"/>
+    <g fill="#f5d466" stroke-width="4"><circle cx="117" cy="201" r="8"/><circle cx="395" cy="201" r="8"/><circle cx="134" cy="334" r="7"/><circle cx="378" cy="334" r="7"/></g>
+  </g>
+</svg>

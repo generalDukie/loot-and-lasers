@@ -496,6 +496,7 @@ const {
   stimSellValueResolved,
   COMPANY_ID_CNC,
   COMPANY_ID_BJS,
+  COMPANY_ID_DTD,
   COMPANY_REPUTATION_PER_LEVEL,
   TOKEN_RARITY_EPIC,
   TOKEN_RARITY_RARE,
@@ -778,6 +779,47 @@ await testAsync("admin company reputation grant overflows when a token is alread
   assert.equal(live.waiting_token.id, "tok-wait-rep");
   assert.ok(live.overflow_token?.id);
   assert.notEqual(live.overflow_token.id, "tok-wait-rep");
+});
+
+await testAsync("admin company reputation grant cannot add reputation during overflow", async () => {
+  const a = insertUser("u-rep-halt", "rep-halt@t.test", "admin");
+  makeCharacter("ch-rep-halt", a.id, "RepHalt");
+  entities.Character.update("ch-rep-halt", {
+    company_state: {
+      DTD: {
+        reputation: COMPANY_REPUTATION_PER_LEVEL * 2,
+        shipment_count: 0,
+        waiting_token: {
+          id: "tok-halt-wait",
+          company_id: COMPANY_ID_DTD,
+          rarity: TOKEN_RARITY_RARE,
+          awarded_level: 2,
+          status: "waiting",
+        },
+        overflow_token: {
+          id: "tok-halt-over",
+          company_id: COMPANY_ID_DTD,
+          rarity: TOKEN_RARITY_EPIC,
+          awarded_level: 3,
+          status: "overflow",
+        },
+      },
+    },
+  });
+  const before = entities.Character.get("ch-rep-halt").company_state.DTD;
+  const res = await AdminModeration(a, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-halt",
+    company_id: COMPANY_ID_DTD,
+    amount: COMPANY_REPUTATION_PER_LEVEL,
+    reason: "qa halt",
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.code, "COMPANY_OVERFLOW_PENDING");
+  const live = entities.Character.get("ch-rep-halt").company_state.DTD;
+  assert.equal(live.reputation, before.reputation);
+  assert.equal(live.waiting_token.id, "tok-halt-wait");
+  assert.equal(live.overflow_token.id, "tok-halt-over");
 });
 
 await testAsync("admin reputation grant on one company is independent of another company's overflow", async () => {

@@ -4,8 +4,6 @@ extends Control
 const BACKDROP_FILE := "corporate-offices-bg.png"
 const OVERLAY_PANEL_FILL := Color(0.05, 0.06, 0.09, 0.78)
 const OVERLAY_CARD_FILL := Color(0.06, 0.07, 0.11, 0.82)
-const OVERLAY_BANNER_FILL := Color(0.22, 0.12, 0.04, 0.82)
-const OVERLAY_TOKEN_FILL := Color(0.07, 0.08, 0.12, 0.82)
 const OVERLAY_SCRIM := Color(0.015, 0.018, 0.04, 0.82)
 const PAGE_MARGIN_HORIZONTAL_PX := 16
 const PAGE_MARGIN_VERTICAL_PX := 12
@@ -16,12 +14,11 @@ const CARD_PAD_PX := 10
 const CARD_INNER_SEPARATION_PX := 8
 const CARD_CORNER_RADIUS_PX := 12
 const CARD_BORDER_WIDTH_PX := 1
-const BANNER_PAD_PX := 10
-const BANNER_FONT_SIZE_PX := 15
-const BANNER_CORNER_RADIUS_PX := 10
 const TITLE_FONT_SIZE_PX := 27
 const TITLE_ICON_SIZE_PX := 28
 const COMPANY_NAME_FONT_SIZE_PX := 16
+const COMPANY_NAME_SCALE_NUMERATOR := 5
+const COMPANY_NAME_SCALE_DENOMINATOR := 4
 const COMPANY_META_FONT_SIZE_PX := 13
 const COMPANY_SLOT_FONT_SIZE_PX := 12
 const TOKEN_STATUS_FONT_SIZE_PX := 14
@@ -37,24 +34,65 @@ const TOKEN_ART_EPIC := "commission_token_epic.svg"
 const TOKEN_ART_PANE_HEIGHT_PERCENT := 40
 const TOKEN_ART_SCALE_REDUCTION_PERCENT := 25
 const PANE_CHROME_SCALE_INCREASE_PERCENT := 50
-const ORDER_POPUP_WIDTH_PX := 640
-const ORDER_POPUP_MAX_HEIGHT_NUMERATOR := 70
-const ORDER_POPUP_MAX_HEIGHT_DENOMINATOR := 100
+const ORDER_POPUP_REF_WIDTH_PX := 908
+const ORDER_POPUP_REF_HEIGHT_PX := 2256
+const ORDER_POPUP_SIZE_PERCENT := 50
 const ORDER_POPUP_Z_INDEX := 140
 const ORDER_POPUP_CORNER_RADIUS_PX := 14
 const ORDER_POPUP_BORDER_WIDTH_PX := 2
-const ORDER_POPUP_PAD_H_PX := 18
-const ORDER_POPUP_PAD_V_PX := 16
+const ORDER_POPUP_PAD_H_PX := 24
+const ORDER_POPUP_PAD_V_PX := 22
 const ORDER_POPUP_FADE_MS := 180
+const ORDER_POPUP_BODY_SEPARATION_PX := 16
+const ORDER_POPUP_TOKEN_ART_PX := 64
+const ORDER_POPUP_STAT_ICON_PX := 40
+const ORDER_POPUP_STAT_TILE_WIDTH_PX := 118
+const ORDER_POPUP_STAT_TILE_HEIGHT_PX := 96
+const ORDER_POPUP_STAT_TILE_INNER_PAD_PX := 6
+const ORDER_POPUP_STAT_TILE_STYLE_MARGIN_PX := 4
+const ORDER_POPUP_STAT_TILE_LABEL_ROOM_PX := 12
+const ORDER_POPUP_STAT_TILE_HEIGHT_EXTRA_PX := 10
+const ORDER_POPUP_STAT_TILE_BOTTOM_PAD_EXTRA_PX := 6
+const ORDER_POPUP_STAT_ROW_SEPARATION_PX := 8
+const ORDER_POPUP_STAT_NAME_FONT_EXTRA_PX := 2
+const ORDER_POPUP_STAT_NAME_COLUMN_PAD_PX := 4
+const ORDER_POPUP_SLOT_CHIP_FONT_SIZE_PX := 11
+const ORDER_POPUP_ACTION_FONT_SIZE_PX := 13
+const ORDER_POPUP_ACTION_FONT_MIN_PX := 11
+const ORDER_POPUP_ACTION_PAD_H_PX := 8
+const ORDER_POPUP_BODY_INSET_PX := 4
+const ORDER_POPUP_CONTROL_CHROME_PAD_PX := 10
+const ORDER_POPUP_WEIGHT_ROW_CHROME_PX := 8
+const ORDER_POPUP_FIXED_BODY_ROW_COUNT := 8
+const ORDER_POPUP_RULE_LINE_COUNT := 2
+const ORDER_POPUP_CONTENT_SLACK_PX := 32
+const ORDER_POPUP_CONTENT_FILL_PERCENT := 90
+const ORDER_POPUP_RULE_FONT_SIZE_PX := 14
+const ORDER_POPUP_CHOOSE_SLOT_COPY := "Choose a slot"
+const ORDER_POPUP_RARE_RULE_COPY := "Minimum %s%% - Maximum %s%%"
+const ORDER_POPUP_RARE_TOTAL_COPY := "Total Stat Distribution - %s%%"
+const ORDER_POPUP_RARE_TOTAL_MUST_COPY := "Total must come to exactly %s%%"
+const ORDER_POPUP_EPIC_RULE_COPY := "%s, %s, and %s minimums at %s%% / %s%% / %s%% - Remaining stats distributed randomly."
 const MILLISECONDS_PER_SECOND := 1000
 const EMPTY_TOKEN_COPY := "No Stored Token"
+const OVERFLOW_STATUS_COPY := "Reputation gains halted until a token is spent"
 const REDEEM_BUTTON_LABEL := "Redeem"
+const REDEEM_STORED_TOKEN_LABEL := "Redeem Stored Token - %s"
+const ORDER_POPUP_BAG_FULL_COPY := "Free a backpack slot before creating a Commission."
+const REDEEM_NEW_TOKEN_LABEL := "Redeem New Token - %s"
+const STORED_TOKEN_CAPTION := "Stored"
+const NEW_TOKEN_CAPTION := "New"
+const TOKEN_CAPTION_FONT_SIZE_PX := 11
+const OVERFLOW_TOKEN_PAIR_SEPARATION_PX := 12
 const ORDER_POPUP_HEADING := "Order Commission"
+const ORDER_POPUP_BG_ALPHA_PERCENT := 24
+const ORDER_POPUP_BG_CNC := "corporate_offices_crown_and_carapace.png"
+const ORDER_POPUP_BG_BJS := "corporate_offices_bj_services.png"
+const ORDER_POPUP_BG_DTD := "corporate_offices_duct_tape_dynamics.png"
+const ORDER_POPUP_BG_GORP := "corporate_offices_gorptek.png"
 
 var _status: Label
 var _page_header: HBoxContainer
-var _overflow_banner: PanelContainer
-var _overflow_label: Label
 var _company_row: HBoxContainer
 var _busy := false
 
@@ -65,7 +103,13 @@ var _rare_stats: Array[String] = []
 var _rare_weights: Array[int] = []
 var _weight_sliders: Array[HSlider] = []
 var _weight_labels: Array[Label] = []
+var _rare_total_lab: Label
+var _rare_must_lab: Label
+var _order_create_btn: Button
+var _order_is_epic := false
+var _order_filling := false
 var _order_overlay: Control
+var _order_card: PanelContainer
 var _order_body: VBoxContainer
 
 
@@ -91,6 +135,7 @@ func _on_viewport_resized() -> void:
 	_apply_pane_height()
 	if _company_row != null:
 		_refresh_companies()
+	_apply_order_popup_size()
 
 
 func on_shell_reshow() -> void:
@@ -162,25 +207,6 @@ func _build() -> void:
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	header.add_child(_status)
 
-	_overflow_banner = PanelContainer.new()
-	_overflow_banner.visible = false
-	_overflow_banner.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		OVERLAY_BANNER_FILL, Color(ClientUi.WARNING, 0.7), BANNER_CORNER_RADIUS_PX, CARD_BORDER_WIDTH_PX
-	))
-	root.add_child(_overflow_banner)
-	var banner_pad := MarginContainer.new()
-	banner_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for k in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		banner_pad.add_theme_constant_override(k, BANNER_PAD_PX)
-	_overflow_banner.add_child(banner_pad)
-	_overflow_label = Label.new()
-	_overflow_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_overflow_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_overflow_label.add_theme_font_size_override("font_size", BANNER_FONT_SIZE_PX)
-	_overflow_label.add_theme_color_override("font_color", ClientUi.GOLD)
-	ClientUi.apply_display_font(_overflow_label)
-	banner_pad.add_child(_overflow_label)
-
 	var top_spacer := Control.new()
 	top_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -195,7 +221,6 @@ func _build() -> void:
 
 
 func _refresh() -> void:
-	_refresh_overflow_banner()
 	_apply_pane_height()
 	_refresh_companies()
 	if has_overlay():
@@ -242,8 +267,13 @@ func _make_company_card(row: Dictionary) -> PanelContainer:
 
 	var name_lab := Label.new()
 	name_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_lab.text = "%s  %s" % [str(row.get("abbreviation", cid)), str(row.get("name", CompanyRules.display_name(cid)))]
-	name_lab.add_theme_font_size_override("font_size", _pane_chrome_px(COMPANY_NAME_FONT_SIZE_PX))
+	name_lab.text = str(row.get("name", CompanyRules.display_name(cid)))
+	name_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lab.add_theme_font_size_override(
+		"font_size",
+		(_pane_chrome_px(COMPANY_NAME_FONT_SIZE_PX) * COMPANY_NAME_SCALE_NUMERATOR) / COMPANY_NAME_SCALE_DENOMINATOR
+	)
 	name_lab.add_theme_color_override("font_color", accent)
 	name_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ClientUi.apply_display_font(name_lab)
@@ -293,7 +323,10 @@ func _make_company_card(row: Dictionary) -> PanelContainer:
 	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	mid.add_child(_make_token_art(waiting if _is_token(waiting) else overflow_token))
+	if overflow:
+		mid.add_child(_make_overflow_token_pair(waiting, overflow_token))
+	else:
+		mid.add_child(_make_token_art(waiting if _is_token(waiting) else overflow_token))
 	col.add_child(mid)
 
 	var status := Label.new()
@@ -303,10 +336,10 @@ func _make_company_card(row: Dictionary) -> PanelContainer:
 	status.add_theme_font_size_override("font_size", _pane_chrome_px(TOKEN_STATUS_FONT_SIZE_PX))
 	ClientUi.apply_display_font(status)
 	if overflow:
-		status.text = "Overflow — choose a token"
+		status.text = OVERFLOW_STATUS_COPY
 		status.add_theme_color_override("font_color", ClientUi.WARNING)
 	elif _is_token(waiting):
-		status.text = "Waiting %s token" % _token_rarity_label(waiting)
+		status.text = "%s Token Waiting" % _token_rarity_label(waiting)
 		status.add_theme_color_override("font_color", ClientUi.GOLD)
 	else:
 		status.text = EMPTY_TOKEN_COPY
@@ -317,14 +350,14 @@ func _make_company_card(row: Dictionary) -> PanelContainer:
 	if overflow:
 		if _is_token(waiting):
 			col.add_child(_pane_action_button(
-				"Redeem waiting — keep new",
+				REDEEM_STORED_TOKEN_LABEL % _token_rarity_label(waiting),
 				accent,
 				not _busy and not ordering,
 				func() -> void: _begin_order(cid, waiting)
 			))
 		if _is_token(overflow_token):
 			col.add_child(_pane_action_button(
-				"Redeem new — keep waiting",
+				REDEEM_NEW_TOKEN_LABEL % _token_rarity_label(overflow_token),
 				accent,
 				not _busy and not ordering,
 				func() -> void: _begin_order(cid, overflow_token)
@@ -339,13 +372,41 @@ func _make_company_card(row: Dictionary) -> PanelContainer:
 	return panel
 
 
-func _make_token_art(token: Variant) -> TextureRect:
+func _make_overflow_token_pair(stored: Variant, new_token: Variant) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", OVERFLOW_TOKEN_PAIR_SEPARATION_PX)
+	var side := _token_art_side_px()
+	row.add_child(_make_labeled_token_column(STORED_TOKEN_CAPTION, stored, side))
+	row.add_child(_make_labeled_token_column(NEW_TOKEN_CAPTION, new_token, side))
+	return row
+
+
+func _make_labeled_token_column(caption: String, token: Variant, side_px: int) -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", CARD_INNER_SEPARATION_PX)
+	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.text = caption
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", _pane_chrome_px(TOKEN_CAPTION_FONT_SIZE_PX))
+	lab.add_theme_color_override("font_color", ClientUi.MUTED)
+	ClientUi.apply_display_font(lab)
+	col.add_child(lab)
+	col.add_child(_make_token_art(token, side_px))
+	return col
+
+
+func _make_token_art(token: Variant, side_px: int = 0) -> TextureRect:
 	var tex := TextureRect.new()
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tex.texture = _token_art_texture(token)
-	var side := _token_art_side_px()
+	var side := side_px if side_px > 0 else _token_art_side_px()
 	tex.custom_minimum_size = Vector2(side, side)
 	return tex
 
@@ -388,16 +449,6 @@ func _pane_action_button(text: String, accent: Color, enabled: bool, on_press: C
 	return btn
 
 
-func _refresh_overflow_banner() -> void:
-	var pending: Array = []
-	for cid in CompanyManager.overflow_companies:
-		pending.append(CompanyRules.abbreviation(str(cid)))
-	_overflow_banner.visible = not pending.is_empty()
-	if pending.is_empty():
-		return
-	_overflow_label.text = "Unresolved token overflow: %s. Redeem one token for that Company before sending it more return shipments. Other companies can still earn and store their own token." % ", ".join(pending)
-
-
 func _apply_pane_height() -> void:
 	if _company_row == null:
 		return
@@ -416,8 +467,6 @@ func _available_row_height() -> int:
 	var used := PAGE_MARGIN_VERTICAL_PX + PAGE_MARGIN_VERTICAL_PX + ROOT_SEPARATION_PX
 	if _page_header != null:
 		used += int(_page_header.get_combined_minimum_size().y)
-	if _overflow_banner != null and _overflow_banner.visible:
-		used += int(_overflow_banner.get_combined_minimum_size().y) + ROOT_SEPARATION_PX
 	return maxi(0, int(size.y) - used)
 
 
@@ -436,7 +485,7 @@ func _begin_order(company_id: String, token: Variant) -> void:
 		return
 	_order_company_id = company_id
 	_spend_token_id = str((token as Dictionary).get("id", ""))
-	_chosen_slot = ""
+	_chosen_slot = _default_order_slot(company_id)
 	_rare_stats.clear()
 	_rare_weights.clear()
 	_open_order_popup()
@@ -465,57 +514,86 @@ func _open_order_popup() -> void:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_order_overlay.add_child(center)
 
-	var card := PanelContainer.new()
-	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.custom_minimum_size.x = ORDER_POPUP_WIDTH_PX
-	card.add_theme_stylebox_override(
-		"panel",
-		ClientUi.painted_panel_style(
-			Color(0.045, 0.05, 0.085, 0.98),
-			Color(CompanyRules.color_for(_order_company_id), 0.65),
-			ORDER_POPUP_CORNER_RADIUS_PX,
-			ORDER_POPUP_BORDER_WIDTH_PX
-		)
-	)
-	center.add_child(card)
+	_order_card = PanelContainer.new()
+	_order_card.mouse_filter = Control.MOUSE_FILTER_STOP
+	_order_card.clip_contents = true
+	var panel_style := ClientUi.painted_panel_style(
+		Color(0.045, 0.05, 0.085, 0.98),
+		Color(CompanyRules.color_for(_order_company_id), 0.65),
+		ORDER_POPUP_CORNER_RADIUS_PX,
+		ORDER_POPUP_BORDER_WIDTH_PX
+	).duplicate() as StyleBoxFlat
+	panel_style.content_margin_left = 0
+	panel_style.content_margin_right = 0
+	panel_style.content_margin_top = 0
+	panel_style.content_margin_bottom = 0
+	_order_card.add_theme_stylebox_override("panel", panel_style)
+	center.add_child(_order_card)
+	_apply_order_popup_size()
+
+	var host := Control.new()
+	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_order_card.add_child(host)
+
+	var bg := TextureRect.new()
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	bg.modulate = Color(1.0, 1.0, 1.0, float(ORDER_POPUP_BG_ALPHA_PERCENT) / float(PERCENT_UNIT))
+	bg.texture = _load_offices_texture(_order_popup_bg_file(_order_company_id))
+	host.add_child(bg)
+	bg.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
 	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_theme_constant_override("margin_left", ORDER_POPUP_PAD_H_PX)
 	margin.add_theme_constant_override("margin_right", ORDER_POPUP_PAD_H_PX)
 	margin.add_theme_constant_override("margin_top", ORDER_POPUP_PAD_V_PX)
 	margin.add_theme_constant_override("margin_bottom", ORDER_POPUP_PAD_V_PX)
-	card.add_child(margin)
-
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(
-		ORDER_POPUP_WIDTH_PX - ORDER_POPUP_PAD_H_PX - ORDER_POPUP_PAD_H_PX,
-		_order_popup_max_body_height()
-	)
-	margin.add_child(scroll)
+	host.add_child(margin)
+	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
 	_order_body = VBoxContainer.new()
+	_order_body.alignment = BoxContainer.ALIGNMENT_CENTER
 	_order_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_order_body.add_theme_constant_override("separation", CARD_INNER_SEPARATION_PX)
-	scroll.add_child(_order_body)
+	_order_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_order_body.add_theme_constant_override("separation", ORDER_POPUP_BODY_SEPARATION_PX)
+	margin.add_child(_order_body)
 
 	add_child(_order_overlay)
 	_fill_order_body()
 	_refresh_companies()
-	card.modulate.a = 0.0
-	var tween := card.create_tween()
-	tween.tween_property(card, "modulate:a", 1.0, float(ORDER_POPUP_FADE_MS) / float(MILLISECONDS_PER_SECOND)).set_ease(Tween.EASE_OUT)
+	_order_card.modulate.a = 0.0
+	var tween := _order_card.create_tween()
+	tween.tween_property(_order_card, "modulate:a", 1.0, float(ORDER_POPUP_FADE_MS) / float(MILLISECONDS_PER_SECOND)).set_ease(Tween.EASE_OUT)
 
 
-func _order_popup_max_body_height() -> int:
-	var window_h := int(get_viewport().get_visible_rect().size.y)
-	return maxi(1, (window_h * ORDER_POPUP_MAX_HEIGHT_NUMERATOR) / ORDER_POPUP_MAX_HEIGHT_DENOMINATOR)
+func _order_popup_card_size() -> Vector2:
+	var view := get_viewport().get_visible_rect().size
+	var max_w := maxi(1, int(view.x) - PAGE_MARGIN_HORIZONTAL_PX - PAGE_MARGIN_HORIZONTAL_PX)
+	var max_h := maxi(1, int(view.y) - PAGE_MARGIN_VERTICAL_PX - PAGE_MARGIN_VERTICAL_PX)
+	var width := (ORDER_POPUP_REF_WIDTH_PX * ORDER_POPUP_SIZE_PERCENT) / PERCENT_UNIT
+	var height := (ORDER_POPUP_REF_HEIGHT_PX * ORDER_POPUP_SIZE_PERCENT) / PERCENT_UNIT
+	return Vector2(mini(width, max_w), mini(height, max_h))
+
+
+func _apply_order_popup_size() -> void:
+	if _order_card == null or not is_instance_valid(_order_card):
+		return
+	var card_size := _order_popup_card_size()
+	_order_card.custom_minimum_size = card_size
 
 
 func _close_order_popup() -> void:
 	if _order_overlay != null and is_instance_valid(_order_overlay):
 		_order_overlay.queue_free()
 	_order_overlay = null
+	_order_card = null
 	_order_body = null
 	_order_company_id = ""
 	_spend_token_id = ""
@@ -524,6 +602,9 @@ func _close_order_popup() -> void:
 	_rare_weights.clear()
 	_weight_sliders.clear()
 	_weight_labels.clear()
+	_rare_total_lab = null
+	_rare_must_lab = null
+	_order_create_btn = null
 	if is_inside_tree():
 		_refresh_companies()
 
@@ -531,43 +612,301 @@ func _close_order_popup() -> void:
 func _fill_order_body() -> void:
 	if _order_body == null:
 		return
+	_rare_total_lab = null
+	_rare_must_lab = null
+	_order_create_btn = null
+	_order_filling = true
+	_order_body.add_theme_constant_override("separation", _order_px(ORDER_POPUP_BODY_SEPARATION_PX))
 	for child in _order_body.get_children():
 		child.queue_free()
 	var row := CompanyManager.company_row(_order_company_id)
 	var token := _find_token(row, _spend_token_id)
 	if token.is_empty():
+		_order_filling = false
 		_close_order_popup()
 		return
 	var rarity := str(token.get("rarity", "rare")).to_lower()
+	_order_is_epic = rarity == "epic"
 	var accent := CompanyRules.color_for(_order_company_id)
 
-	var eyebrow := Label.new()
-	eyebrow.text = CompanyRules.abbreviation(_order_company_id)
-	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	eyebrow.add_theme_font_size_override("font_size", COMPANY_META_FONT_SIZE_PX)
-	eyebrow.add_theme_color_override("font_color", Color(accent, 0.85))
-	ClientUi.apply_display_font(eyebrow)
-	_order_body.add_child(eyebrow)
+	_order_body.add_child(_order_centered_label(
+		CompanyRules.display_name(_order_company_id),
+		COMPANY_NAME_FONT_SIZE_PX,
+		accent
+	))
+	_order_body.add_child(_order_centered_label(ORDER_POPUP_HEADING, TITLE_FONT_SIZE_PX, accent))
+	_order_body.add_child(_order_rarity_row(token, rarity, accent))
 
-	var heading := Label.new()
-	heading.text = ORDER_POPUP_HEADING
-	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	heading.add_theme_font_size_override("font_size", TITLE_FONT_SIZE_PX)
-	heading.add_theme_color_override("font_color", accent)
-	ClientUi.apply_display_font(heading)
-	_order_body.add_child(heading)
+	_order_body.add_child(_order_centered_label(ORDER_POPUP_CHOOSE_SLOT_COPY, COMPANY_META_FONT_SIZE_PX, ClientUi.MUTED))
+	_order_body.add_child(_order_slot_row(row))
 
-	_order_body.add_child(_token_card(token, "Spending this token"))
+	if rarity == "epic":
+		_fill_epic_controls()
+		_order_body.add_child(_order_centered_label(
+			ORDER_POPUP_EPIC_RULE_COPY % [
+				CompanyRules.stat_label(_active_class_primary_stat()),
+				CompanyRules.stat_label("vitality"),
+				CompanyRules.stat_label("luck"),
+				CompanyRules.EPIC_PRIMARY_PERCENT,
+				CompanyRules.EPIC_VITALITY_PERCENT,
+				CompanyRules.EPIC_LUCK_PERCENT,
+			],
+			ORDER_POPUP_RULE_FONT_SIZE_PX,
+			ClientUi.TEXT
+		))
+	else:
+		_fill_rare_controls()
+		_order_body.add_child(_order_centered_label(
+			ORDER_POPUP_RARE_RULE_COPY % [
+				CompanyRules.RARE_WEIGHT_MIN_PERCENT,
+				CompanyRules.RARE_WEIGHT_MAX_PERCENT,
+			],
+			ORDER_POPUP_RULE_FONT_SIZE_PX,
+			ClientUi.TEXT
+		))
+		if _rare_stats.size() == CompanyRules.RARE_COMMISSION_STAT_COUNT:
+			_rare_total_lab = _order_centered_label("", ORDER_POPUP_RULE_FONT_SIZE_PX, ClientUi.TEXT)
+			_rare_must_lab = _order_centered_label(
+				ORDER_POPUP_RARE_TOTAL_MUST_COPY % CompanyRules.RARE_WEIGHT_TOTAL_PERCENT,
+				ORDER_POPUP_RULE_FONT_SIZE_PX,
+				ClientUi.TEXT
+			)
+			_order_body.add_child(_rare_total_lab)
+			_order_body.add_child(_rare_must_lab)
 
-	var slot_lab := Label.new()
-	slot_lab.text = "Choose one slot this Company manufactures."
-	slot_lab.add_theme_color_override("font_color", ClientUi.MUTED)
-	slot_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_order_body.add_child(slot_lab)
-	var slot_row := HFlowContainer.new()
-	slot_row.add_theme_constant_override("h_separation", PANE_ROW_SEPARATION_PX)
-	slot_row.add_theme_constant_override("v_separation", PANE_ROW_SEPARATION_PX)
-	_order_body.add_child(slot_row)
+	var actions := _order_centered_row()
+	_order_body.add_child(actions)
+	var cancel := Button.new()
+	cancel.text = "Cancel — keep token"
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ClientUi.apply_ghost_button(cancel)
+	var go := Button.new()
+	go.text = "Create Commission item"
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ClientUi.apply_tinted_painted_button(go, accent)
+	_order_create_btn = go
+	var action_fs := _order_action_font_px(cancel.text, go.text, cancel.get_theme_font("font"))
+	_order_constrain_action_button(cancel, action_fs)
+	_order_constrain_action_button(go, action_fs)
+	cancel.pressed.connect(_close_order_popup)
+	go.pressed.connect(_on_redeem_pressed)
+	actions.add_child(cancel)
+	actions.add_child(go)
+	_order_filling = false
+	_refresh_rare_total_ui()
+	_sync_order_create_enabled()
+
+
+func _order_centered_label(text: String, font_size_px: int, color: Color) -> Label:
+	var lab := Label.new()
+	lab.text = text
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lab.add_theme_font_size_override("font_size", _order_px(font_size_px))
+	lab.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(lab)
+	return lab
+
+
+func _order_centered_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", PANE_ROW_SEPARATION_PX)
+	return row
+
+
+func _order_apply_button_font(btn: Button, font_size_px: int) -> void:
+	btn.add_theme_font_size_override("font_size", _order_px(font_size_px))
+
+
+func _order_popup_inner_width() -> int:
+	return maxi(
+		1,
+		int(_order_popup_card_size().x)
+		- ORDER_POPUP_PAD_H_PX
+		- ORDER_POPUP_PAD_H_PX
+		- ORDER_POPUP_BORDER_WIDTH_PX
+		- ORDER_POPUP_BORDER_WIDTH_PX
+		- ORDER_POPUP_BODY_INSET_PX
+		- ORDER_POPUP_BODY_INSET_PX
+	)
+
+
+func _order_popup_inner_height() -> int:
+	return maxi(1, int(_order_popup_card_size().y) - ORDER_POPUP_PAD_V_PX - ORDER_POPUP_PAD_V_PX)
+
+
+func _order_popup_baseline_content_height() -> int:
+	var tile_content := (
+		ORDER_POPUP_STAT_TILE_INNER_PAD_PX
+		+ ORDER_POPUP_STAT_TILE_INNER_PAD_PX
+		+ ORDER_POPUP_STAT_TILE_STYLE_MARGIN_PX
+		+ ORDER_POPUP_STAT_TILE_STYLE_MARGIN_PX
+		+ ORDER_POPUP_STAT_ICON_PX
+		+ CARD_INNER_SEPARATION_PX
+		+ TOKEN_CAPTION_FONT_SIZE_PX
+		+ CARD_INNER_SEPARATION_PX
+		+ COMPANY_META_FONT_SIZE_PX
+		+ ORDER_POPUP_STAT_NAME_FONT_EXTRA_PX
+		+ ORDER_POPUP_STAT_TILE_LABEL_ROOM_PX
+		+ ORDER_POPUP_STAT_TILE_HEIGHT_EXTRA_PX
+		+ ORDER_POPUP_STAT_TILE_BOTTOM_PAD_EXTRA_PX
+	)
+	var tile_h := maxi(tile_content, ORDER_POPUP_STAT_TILE_HEIGHT_PX)
+	var chip_h := ORDER_POPUP_SLOT_CHIP_FONT_SIZE_PX + ORDER_POPUP_CONTROL_CHROME_PAD_PX
+	var action_h := ORDER_POPUP_ACTION_FONT_SIZE_PX + ORDER_POPUP_CONTROL_CHROME_PAD_PX
+	var weight_h := ORDER_POPUP_STAT_ICON_PX + ORDER_POPUP_WEIGHT_ROW_CHROME_PX
+	var rows := ORDER_POPUP_FIXED_BODY_ROW_COUNT + CompanyRules.RARE_COMMISSION_STAT_COUNT
+	var seps := maxi(0, rows - 1) * ORDER_POPUP_BODY_SEPARATION_PX
+	return (
+		COMPANY_NAME_FONT_SIZE_PX
+		+ TITLE_FONT_SIZE_PX
+		+ ORDER_POPUP_TOKEN_ART_PX
+		+ COMPANY_META_FONT_SIZE_PX
+		+ chip_h
+		+ tile_h
+		+ ORDER_POPUP_RULE_FONT_SIZE_PX * ORDER_POPUP_RULE_LINE_COUNT
+		+ weight_h * CompanyRules.RARE_COMMISSION_STAT_COUNT
+		+ action_h
+		+ seps
+		+ ORDER_POPUP_CONTENT_SLACK_PX
+	)
+
+
+func _order_popup_scale_percent() -> int:
+	var baseline := _order_popup_baseline_content_height()
+	return maxi(PERCENT_UNIT, (_order_popup_inner_height() * ORDER_POPUP_CONTENT_FILL_PERCENT) / maxi(1, baseline))
+
+
+func _order_px(base_px: int) -> int:
+	return (base_px * _order_popup_scale_percent()) / PERCENT_UNIT
+
+
+func _order_stat_tile_slot_width() -> int:
+	var count := CompanyRules.STAT_KEYS.size()
+	var gaps := maxi(0, count - 1) * ORDER_POPUP_STAT_ROW_SEPARATION_PX
+	return maxi(1, (_order_popup_inner_width() - gaps) / maxi(1, count))
+
+
+func _order_stat_tile_chrome_x() -> int:
+	return CARD_BORDER_WIDTH_PX + CARD_BORDER_WIDTH_PX
+
+
+func _order_action_font_px(left_text: String, right_text: String, font: Font) -> int:
+	var share := maxi(1, (_order_popup_inner_width() - PANE_ROW_SEPARATION_PX) / 2)
+	var text_budget := maxi(1, share - ORDER_POPUP_ACTION_PAD_H_PX - ORDER_POPUP_ACTION_PAD_H_PX)
+	if font == null:
+		font = ThemeDB.fallback_font
+	var size_px := _order_px(ORDER_POPUP_ACTION_FONT_SIZE_PX)
+	while size_px > ORDER_POPUP_ACTION_FONT_MIN_PX:
+		var left_w := int(font.get_string_size(left_text, HORIZONTAL_ALIGNMENT_CENTER, -1, size_px).x)
+		var right_w := int(font.get_string_size(right_text, HORIZONTAL_ALIGNMENT_CENTER, -1, size_px).x)
+		if maxi(left_w, right_w) <= text_budget:
+			break
+		size_px -= 1
+	return size_px
+
+
+func _order_constrain_action_button(btn: Button, font_size_px: int) -> void:
+	btn.add_theme_font_size_override("font_size", font_size_px)
+	btn.clip_text = false
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size.x = 0
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		var raw := btn.get_theme_stylebox(state)
+		if raw == null:
+			continue
+		var style := raw.duplicate() as StyleBoxFlat
+		if style == null:
+			continue
+		style.content_margin_left = ORDER_POPUP_ACTION_PAD_H_PX
+		style.content_margin_right = ORDER_POPUP_ACTION_PAD_H_PX
+		style.shadow_size = 0
+		style.shadow_offset = Vector2.ZERO
+		btn.add_theme_stylebox_override(state, style)
+
+
+func _order_stat_name_font_px() -> int:
+	var scaled := _order_px(COMPANY_META_FONT_SIZE_PX)
+	var width_safe := COMPANY_META_FONT_SIZE_PX + ORDER_POPUP_STAT_NAME_FONT_EXTRA_PX
+	return mini(scaled, width_safe)
+
+
+func _order_stat_name_column_width() -> int:
+	var font := ClientUi.display_font()
+	if font == null:
+		font = ThemeDB.fallback_font
+	var fs := _order_stat_name_font_px()
+	var widest := 1
+	for key in CompanyRules.STAT_KEYS:
+		var w := int(font.get_string_size(CompanyRules.stat_label(key), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+		widest = maxi(widest, w)
+	return widest + ORDER_POPUP_STAT_NAME_COLUMN_PAD_PX
+
+
+func _order_stat_icon_px() -> int:
+	var scaled := _order_px(ORDER_POPUP_STAT_ICON_PX)
+	var inner := (
+		_order_stat_tile_slot_width()
+		- _order_stat_tile_chrome_x()
+		- _order_px(ORDER_POPUP_STAT_TILE_INNER_PAD_PX)
+		- _order_px(ORDER_POPUP_STAT_TILE_INNER_PAD_PX)
+	)
+	return clampi(scaled, 1, maxi(1, inner))
+
+
+func _order_stat_tile_style(bg: Color, border: Color) -> StyleBoxFlat:
+	var style := ClientUi.painted_panel_style(
+		bg,
+		border,
+		CARD_CORNER_RADIUS_PX,
+		CARD_BORDER_WIDTH_PX
+	).duplicate() as StyleBoxFlat
+	style.content_margin_left = 0
+	style.content_margin_right = 0
+	style.content_margin_top = 0
+	style.content_margin_bottom = 0
+	style.shadow_size = 0
+	style.shadow_offset = Vector2.ZERO
+	return style
+
+
+func _order_stat_tile_size() -> Vector2:
+	var slot := _order_stat_tile_slot_width()
+	var width := maxi(1, slot - _order_stat_tile_chrome_x())
+	var pad := _order_px(ORDER_POPUP_STAT_TILE_INNER_PAD_PX)
+	var sep := _order_px(CARD_INNER_SEPARATION_PX)
+	var content_h := (
+		pad
+		+ pad
+		+ _order_stat_icon_px()
+		+ sep
+		+ _order_px(TOKEN_CAPTION_FONT_SIZE_PX)
+		+ sep
+		+ _order_stat_name_font_px()
+		+ _order_px(ORDER_POPUP_STAT_TILE_LABEL_ROOM_PX)
+	)
+	var height := maxi(content_h, _order_px(ORDER_POPUP_STAT_TILE_HEIGHT_PX)) + _order_px(ORDER_POPUP_STAT_TILE_HEIGHT_EXTRA_PX)
+	return Vector2(width, height)
+
+
+func _order_rarity_row(token: Dictionary, rarity: String, accent: Color) -> HBoxContainer:
+	var row := _order_centered_row()
+	row.add_child(_make_token_art(token, _order_px(ORDER_POPUP_TOKEN_ART_PX)))
+	var rarity_lab := Label.new()
+	rarity_lab.text = CompanyRules.rarity_label(rarity)
+	rarity_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rarity_lab.add_theme_font_size_override("font_size", _order_px(TOKEN_STATUS_FONT_SIZE_PX))
+	rarity_lab.add_theme_color_override("font_color", ClientUi.GOLD if rarity == "epic" else accent)
+	ClientUi.apply_display_font(rarity_lab)
+	row.add_child(rarity_lab)
+	return row
+
+
+func _order_slot_row(row: Dictionary) -> HBoxContainer:
+	var slot_row := _order_centered_row()
 	var slots: Variant = row.get("slots", CompanyRules.slots_for(_order_company_id))
 	if typeof(slots) == TYPE_ARRAY:
 		for slot in slots:
@@ -576,126 +915,193 @@ func _fill_order_body() -> void:
 			sbtn.text = CompanyRules.slot_label(sid)
 			sbtn.toggle_mode = true
 			sbtn.button_pressed = _chosen_slot == sid
+			sbtn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			ClientUi.apply_accent_chip_button(sbtn)
-			sbtn.pressed.connect(func() -> void:
+			_order_apply_button_font(sbtn, ORDER_POPUP_SLOT_CHIP_FONT_SIZE_PX)
+			sbtn.toggled.connect(func(on: bool) -> void:
+				if _order_filling or not on:
+					return
 				_chosen_slot = sid
 				_fill_order_body()
 			)
 			slot_row.add_child(sbtn)
-
-	if rarity == "epic":
-		var epic := Label.new()
-		epic.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		epic.text = "Epic Commissions always roll Class Primary, Vitality, and Luck. Bases are %s / %s / %s. The remaining %s is split at random among those three. Off-stats stay at zero. The server rolls this; you cannot submit the result." % [
-			CompanyRules.EPIC_PRIMARY_PERCENT,
-			CompanyRules.EPIC_VITALITY_PERCENT,
-			CompanyRules.EPIC_LUCK_PERCENT,
-			CompanyRules.EPIC_RANDOM_REMAINDER_PERCENT,
-		]
-		epic.add_theme_color_override("font_color", ClientUi.TEXT)
-		_order_body.add_child(epic)
-	else:
-		_fill_rare_controls()
-
-	var warn := Label.new()
-	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	warn.text = "Confirming consumes the token and delivers one unequipped Gear item to your backpack. A full backpack rejects this and keeps the token."
-	warn.add_theme_color_override("font_color", ClientUi.WARNING)
-	_order_body.add_child(warn)
-
-	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", PANE_ROW_SEPARATION_PX)
-	_order_body.add_child(actions)
-	var cancel := Button.new()
-	cancel.text = "Cancel — keep token"
-	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ClientUi.apply_ghost_button(cancel)
-	cancel.pressed.connect(_close_order_popup)
-	actions.add_child(cancel)
-	var go := Button.new()
-	go.text = "Create Commission item"
-	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	go.disabled = _busy or _chosen_slot.is_empty() or (rarity != "epic" and not _rare_ready())
-	ClientUi.apply_tinted_painted_button(go, accent)
-	go.pressed.connect(_on_redeem_pressed)
-	actions.add_child(go)
+	return slot_row
 
 
-func _token_card(token: Variant, caption: String) -> PanelContainer:
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", ClientUi.painted_panel_style(
-		OVERLAY_TOKEN_FILL, Color(ClientUi.GOLD, 0.45), BANNER_CORNER_RADIUS_PX, CARD_BORDER_WIDTH_PX
-	))
-	var pad := MarginContainer.new()
-	for k in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		pad.add_theme_constant_override(k, CARD_PAD_PX)
-	panel.add_child(pad)
-	var lab := Label.new()
-	if _is_token(token):
-		lab.text = "%s\n%s %s token from Company level %s" % [
-			caption,
-			CompanyRules.abbreviation(str((token as Dictionary).get("company_id", _order_company_id))),
-			_token_rarity_label(token),
-			int((token as Dictionary).get("awarded_level", 1)),
-		]
-	lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lab.add_theme_color_override("font_color", ClientUi.TEXT)
-	pad.add_child(lab)
-	return panel
+func _fill_epic_controls() -> void:
+	if _order_body == null:
+		return
+	var primary := _active_class_primary_stat()
+	var row := _order_centered_row()
+	row.add_theme_constant_override("separation", ORDER_POPUP_STAT_ROW_SEPARATION_PX)
+	row.add_child(_make_stat_tile(primary, true, true, ""))
+	row.add_child(_make_stat_tile("vitality", true, true, ""))
+	row.add_child(_make_stat_tile("luck", true, true, ""))
+	_order_body.add_child(row)
 
 
 func _fill_rare_controls() -> void:
 	if _order_body == null:
 		return
-	var intro := Label.new()
-	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	intro.text = "Pick any three stats. Each must be between %s%% and %s%%, in whole percents, totaling %s%%." % [
-		CompanyRules.RARE_WEIGHT_MIN_PERCENT,
-		CompanyRules.RARE_WEIGHT_MAX_PERCENT,
-		CompanyRules.RARE_WEIGHT_TOTAL_PERCENT,
-	]
-	intro.add_theme_color_override("font_color", ClientUi.TEXT)
-	_order_body.add_child(intro)
-	var stat_row := HFlowContainer.new()
-	stat_row.add_theme_constant_override("h_separation", PANE_ROW_SEPARATION_PX)
-	stat_row.add_theme_constant_override("v_separation", PANE_ROW_SEPARATION_PX)
+	var stat_row := _order_centered_row()
+	stat_row.add_theme_constant_override("separation", ORDER_POPUP_STAT_ROW_SEPARATION_PX)
 	_order_body.add_child(stat_row)
 	for key in CompanyRules.STAT_KEYS:
-		var sbtn := Button.new()
-		sbtn.text = CompanyRules.stat_label(key)
-		sbtn.toggle_mode = true
-		sbtn.button_pressed = _rare_stats.has(key)
-		ClientUi.apply_accent_chip_button(sbtn)
-		sbtn.pressed.connect(func() -> void:
-			_toggle_rare_stat(key)
-			_fill_order_body()
-		)
-		stat_row.add_child(sbtn)
+		var selected := _rare_stats.has(key)
+		var tile := _make_stat_tile(key, selected, false, "")
+		if tile is Button:
+			(tile as Button).pressed.connect(func() -> void:
+				_toggle_rare_stat(key)
+				_fill_order_body()
+			)
+		stat_row.add_child(tile)
 	_weight_sliders.clear()
 	_weight_labels.clear()
-	if _rare_stats.size() == CompanyRules.RARE_COMMISSION_STAT_COUNT:
-		if _rare_weights.size() != CompanyRules.RARE_COMMISSION_STAT_COUNT:
-			_rare_weights = _default_rare_weights()
-		for i in range(_rare_stats.size()):
-			var wrap := VBoxContainer.new()
-			var lab := Label.new()
-			lab.text = "%s  %s%%" % [CompanyRules.stat_label(_rare_stats[i]), _rare_weights[i]]
-			_weight_labels.append(lab)
-			wrap.add_child(lab)
-			var slider := HSlider.new()
-			slider.mouse_filter = Control.MOUSE_FILTER_STOP
-			slider.min_value = CompanyRules.RARE_WEIGHT_MIN_PERCENT
-			slider.max_value = CompanyRules.RARE_WEIGHT_MAX_PERCENT
-			slider.step = 1
-			slider.value = _rare_weights[i]
-			slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			var captured := i
-			slider.value_changed.connect(func(v: float) -> void:
-				_adjust_rare_weight(captured, int(round(v)))
-			)
-			_weight_sliders.append(slider)
-			wrap.add_child(slider)
-			_order_body.add_child(wrap)
+	if _rare_stats.size() != CompanyRules.RARE_COMMISSION_STAT_COUNT:
+		return
+	if _rare_weights.size() != CompanyRules.RARE_COMMISSION_STAT_COUNT:
+		_rare_weights = _default_rare_weights()
+	for i in range(_rare_stats.size()):
+		_order_body.add_child(_make_rare_weight_row(i))
+
+
+func _make_rare_weight_row(index: int) -> HBoxContainer:
+	var stat := _rare_stats[index]
+	var color: Color = GameData.STAT_COLORS.get(stat, ClientUi.CYAN)
+	var row := _order_centered_row()
+	row.add_child(StatIcon.make(stat, float(_order_stat_icon_px())))
+	var name_lab := Label.new()
+	name_lab.text = CompanyRules.stat_label(stat)
+	name_lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name_lab.custom_minimum_size.x = _order_stat_name_column_width()
+	name_lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	name_lab.add_theme_font_size_override("font_size", _order_stat_name_font_px())
+	name_lab.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(name_lab)
+	row.add_child(name_lab)
+	var pct := Label.new()
+	pct.custom_minimum_size.x = _order_px(ORDER_POPUP_STAT_TILE_WIDTH_PX / 2)
+	pct.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	pct.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pct.text = "%s%%" % _rare_weights[index]
+	pct.add_theme_font_size_override("font_size", _order_stat_name_font_px())
+	pct.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(pct)
+	_weight_labels.append(pct)
+	row.add_child(pct)
+	var slider := HSlider.new()
+	slider.mouse_filter = Control.MOUSE_FILTER_STOP
+	slider.min_value = CompanyRules.RARE_WEIGHT_MIN_PERCENT
+	slider.max_value = CompanyRules.RARE_WEIGHT_MAX_PERCENT
+	slider.step = 1
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	slider.size_flags_stretch_ratio = 1.0
+	row.add_child(slider)
+	slider.set_value_no_signal(float(_rare_weights[index]))
+	var captured := index
+	slider.value_changed.connect(func(v: float) -> void:
+		_adjust_rare_weight(captured, int(round(v)))
+	)
+	_weight_sliders.append(slider)
+	return row
+
+
+func _make_stat_tile(stat: String, selected: bool, locked: bool, caption: String) -> Control:
+	var color: Color = GameData.STAT_COLORS.get(stat, ClientUi.CYAN)
+	var tile_size := _order_stat_tile_size()
+	var icon_px := _order_stat_icon_px()
+	var name_fs := _order_stat_name_font_px()
+	var caption_fs := _order_px(TOKEN_CAPTION_FONT_SIZE_PX)
+	var inner_pad := _order_px(ORDER_POPUP_STAT_TILE_INNER_PAD_PX)
+	var host: Control
+	if locked:
+		var panel := PanelContainer.new()
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.clip_contents = false
+		panel.custom_minimum_size = tile_size
+		panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		panel.add_theme_stylebox_override(
+			"panel",
+			_order_stat_tile_style(Color(color, 0.16), Color(color, 0.85))
+		)
+		host = panel
+	else:
+		var btn := Button.new()
+		btn.toggle_mode = true
+		btn.button_pressed = selected
+		btn.clip_text = false
+		btn.clip_contents = false
+		btn.custom_minimum_size = tile_size
+		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		btn.add_theme_stylebox_override("normal", _order_stat_tile_style(
+			Color(color, 0.28 if selected else 0.10),
+			Color(color, 0.95 if selected else 0.40)
+		))
+		btn.add_theme_stylebox_override("hover", _order_stat_tile_style(
+			Color(color, 0.34 if selected else 0.18),
+			Color(color, 0.95)
+		))
+		btn.add_theme_stylebox_override("pressed", _order_stat_tile_style(
+			Color(color, 0.28),
+			Color(color, 0.95)
+		))
+		btn.add_theme_color_override("font_color", color)
+		host = btn
+	var inner := MarginContainer.new()
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inner.add_theme_constant_override("margin_left", inner_pad)
+	inner.add_theme_constant_override("margin_right", inner_pad)
+	inner.add_theme_constant_override("margin_top", inner_pad)
+	inner.add_theme_constant_override("margin_bottom", inner_pad + _order_px(ORDER_POPUP_STAT_TILE_BOTTOM_PAD_EXTRA_PX))
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", _order_px(CARD_INNER_SEPARATION_PX))
+	col.add_child(StatIcon.make(stat, float(icon_px)))
+	if not caption.is_empty():
+		var cap := Label.new()
+		cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cap.text = caption
+		cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cap.clip_text = false
+		cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cap.add_theme_font_size_override("font_size", caption_fs)
+		cap.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_display_font(cap)
+		col.add_child(cap)
+	var name_lab := Label.new()
+	name_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_lab.text = CompanyRules.stat_label(stat)
+	name_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lab.clip_text = false
+	name_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lab.add_theme_font_size_override("font_size", name_fs)
+	name_lab.add_theme_color_override("font_color", color)
+	ClientUi.apply_display_font(name_lab)
+	col.add_child(name_lab)
+	inner.add_child(col)
+	host.add_child(inner)
+	if host is Button:
+		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	return host
+
+
+func _active_class_primary_stat() -> String:
+	if GameManager == null or typeof(GameManager.active_character) != TYPE_DICTIONARY:
+		return "strength"
+	var class_key := str(GameManager.active_character.get("class", "Vanguard"))
+	var info := GameData.class_info(class_key)
+	var primary := str(info.get("primaryStat", "strength")).strip_edges().to_lower()
+	if not CompanyRules.STAT_KEYS.has(primary):
+		return "strength"
+	return primary
 
 
 func _default_rare_weights() -> Array[int]:
@@ -721,35 +1127,48 @@ func _toggle_rare_stat(stat: String) -> void:
 func _adjust_rare_weight(index: int, value: int) -> void:
 	if _rare_weights.size() != CompanyRules.RARE_COMMISSION_STAT_COUNT:
 		return
-	var lo := CompanyRules.RARE_WEIGHT_MIN_PERCENT
-	var hi := CompanyRules.RARE_WEIGHT_MAX_PERCENT
-	var total := CompanyRules.RARE_WEIGHT_TOTAL_PERCENT
-	value = clampi(value, lo, hi)
-	var others: Array[int] = []
-	for i in range(_rare_weights.size()):
-		if i != index:
-			others.append(i)
-	var leftover := total - value
-	var a: int = others[0]
-	var b: int = others[1]
-	var a_val := clampi(_rare_weights[a], lo, hi)
-	var b_val := leftover - a_val
-	if b_val < lo:
-		b_val = lo
-		a_val = leftover - b_val
-	if b_val > hi:
-		b_val = hi
-		a_val = leftover - b_val
-	a_val = clampi(a_val, lo, hi)
-	b_val = leftover - a_val
-	_rare_weights[index] = value
-	_rare_weights[a] = a_val
-	_rare_weights[b] = b_val
-	for i in range(_weight_sliders.size()):
-		if is_instance_valid(_weight_sliders[i]):
-			_weight_sliders[i].set_value_no_signal(float(_rare_weights[i]))
-		if i < _weight_labels.size() and is_instance_valid(_weight_labels[i]):
-			_weight_labels[i].text = "%s  %s%%" % [CompanyRules.stat_label(_rare_stats[i]), _rare_weights[i]]
+	if index < 0 or index >= _rare_weights.size():
+		return
+	_rare_weights[index] = clampi(
+		value,
+		CompanyRules.RARE_WEIGHT_MIN_PERCENT,
+		CompanyRules.RARE_WEIGHT_MAX_PERCENT
+	)
+	if index < _weight_labels.size() and is_instance_valid(_weight_labels[index]):
+		_weight_labels[index].text = "%s%%" % _rare_weights[index]
+	_refresh_rare_total_ui()
+
+
+func _rare_weight_sum() -> int:
+	var sum := 0
+	for w in _rare_weights:
+		sum += w
+	return sum
+
+
+func _refresh_rare_total_ui() -> void:
+	var sum := _rare_weight_sum()
+	var exact := sum == CompanyRules.RARE_WEIGHT_TOTAL_PERCENT
+	var color := ClientUi.SUCCESS if exact else ClientUi.DANGER
+	if _rare_total_lab != null and is_instance_valid(_rare_total_lab):
+		_rare_total_lab.text = ORDER_POPUP_RARE_TOTAL_COPY % sum
+		_rare_total_lab.add_theme_color_override("font_color", color)
+	if _rare_must_lab != null and is_instance_valid(_rare_must_lab):
+		_rare_must_lab.add_theme_color_override("font_color", color)
+	_sync_order_create_enabled()
+
+
+func _sync_order_create_enabled() -> void:
+	if _order_create_btn == null or not is_instance_valid(_order_create_btn):
+		return
+	_order_create_btn.disabled = _busy or _chosen_slot.is_empty() or (not _order_is_epic and not _rare_ready())
+
+
+func _default_order_slot(company_id: String) -> String:
+	var slots: Array = CompanyRules.slots_for(company_id)
+	if slots.is_empty():
+		return ""
+	return str(slots[0])
 
 
 func _rare_ready() -> bool:
@@ -786,6 +1205,11 @@ func _on_redeem_pressed() -> void:
 			return
 		for i in range(_rare_stats.size()):
 			weights[_rare_stats[i]] = _rare_weights[i]
+	if await InventoryManager.is_bag_full():
+		var action := await InventoryManager.prompt_bag_pressure(self, ORDER_POPUP_BAG_FULL_COPY)
+		if action == "shop" or action == "inventory":
+			_close_order_popup()
+		return
 	_busy = true
 	_set_status("Creating Commission item…")
 	var company_id := _order_company_id
@@ -797,9 +1221,10 @@ func _on_redeem_pressed() -> void:
 	)
 	_busy = false
 	if not res.ok:
-		var code := str(res.get("code", ""))
-		if code == "INVENTORY_FULL":
-			_set_status("Backpack full. Sell or equip something first. Your token was not spent.")
+		if InventoryManager.is_inventory_full_error(res):
+			var action := await InventoryManager.prompt_bag_pressure(self, ORDER_POPUP_BAG_FULL_COPY)
+			if action == "shop" or action == "inventory":
+				_close_order_popup()
 		else:
 			_set_status(str(res.get("error", "Commission failed")))
 		await CompanyManager.load_status()
@@ -811,6 +1236,20 @@ func _on_redeem_pressed() -> void:
 	_set_status("Commission delivered: %s. It is in your backpack, unequipped." % str(item.get("name", "Gear")))
 	await CompanyManager.load_status()
 	_refresh()
+
+
+func _order_popup_bg_file(company_id: String) -> String:
+	match company_id:
+		CompanyRules.COMPANY_ID_CNC:
+			return ORDER_POPUP_BG_CNC
+		CompanyRules.COMPANY_ID_BJS:
+			return ORDER_POPUP_BG_BJS
+		CompanyRules.COMPANY_ID_DTD:
+			return ORDER_POPUP_BG_DTD
+		CompanyRules.COMPANY_ID_GORP:
+			return ORDER_POPUP_BG_GORP
+		_:
+			return BACKDROP_FILE
 
 
 func _load_offices_texture(file_name: String) -> Texture2D:

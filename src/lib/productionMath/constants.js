@@ -313,6 +313,24 @@ export const COMPANY_IDS = Object.freeze([
 ]);
 export const COMPANY_SLOT_COUNT = 4;
 export const COMPANY_PREMIUM_SLOT_COUNT = 1;
+/** Named art/name rows per company-manufactured slot (`helmet_cnc_01` … `_03`). */
+export const COMPANY_GEAR_VARIANT_COUNT = 3;
+/** Zero-pad width for the 1-based SVG suffix (`01`, `02`, `03`). */
+export const COMPANY_GEAR_VARIANT_FILE_INDEX_PAD = 2;
+/** 1-based suffix in `helmet_cnc_01` (variantIndex 0 → 01). */
+export const COMPANY_GEAR_VARIANT_FILE_INDEX_ORIGIN = 1;
+export const COMPANY_GEAR_CATALOG_SIZE =
+  COMPANY_IDS.length * COMPANY_SLOT_COUNT * COMPANY_GEAR_VARIANT_COUNT;
+/** Cosmic Vault / discovery key is `slot` + this + visual id (`helmet:helmet_cnc_01`). */
+export const COMPANY_GEAR_CATALOG_KEY_SEPARATOR = ":";
+export const WEAPON_COMBAT_STYLE_SWING = "swing";
+export const WEAPON_COMBAT_STYLE_STAB = "stab";
+export const WEAPON_COMBAT_STYLE_SHOOT = "shoot";
+export const WEAPON_COMBAT_STYLES = Object.freeze([
+  WEAPON_COMBAT_STYLE_SWING,
+  WEAPON_COMBAT_STYLE_STAB,
+  WEAPON_COMBAT_STYLE_SHOOT,
+]);
 export const COMPANY_FULL_NAMES = Object.freeze({
   [COMPANY_ID_CNC]: "Crown & Carapace",
   [COMPANY_ID_BJS]: "Ballistics & Jewelry Services",
@@ -325,7 +343,7 @@ export const COMPANY_ABBREVIATIONS = Object.freeze({
   [COMPANY_ID_DTD]: "DTD",
   [COMPANY_ID_GORP]: "GORP",
 });
-/** Short brand tokens baked into generated Gear names. Not the legal full name. */
+/** Short brand tokens. Inspect flavor / Offices copy only — not prefixed onto Gear names. */
 export const COMPANY_NAME_TOKENS = Object.freeze({
   [COMPANY_ID_CNC]: "C&C",
   [COMPANY_ID_BJS]: "BJ Services",

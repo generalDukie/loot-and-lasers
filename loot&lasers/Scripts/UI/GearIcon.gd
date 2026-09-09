@@ -1,11 +1,13 @@
 class_name GearIcon
 extends Control
-## Procedural gear glyph — mirrors web GearVisual / GearArtSvg silhouette role.
+## Gear glyph — company SVG when `visual_id` is present, else a procedural silhouette.
 
 const REF_SIZE := 40.0
+const GEAR_SVG_INSET_PX := 4.0
 
 var item: Dictionary = {}
 var _variant := 0
+static var _svg_cache: Dictionary = {}
 
 
 static func make(for_item: Dictionary, size_px: float = 40.0) -> GearIcon:
@@ -27,6 +29,20 @@ static func _variant_index(for_item: Dictionary) -> int:
 		h = (h ^ seed_s.unicode_at(i)) * 16777619
 		h = h & 0x7fffffff
 	return abs(h) % 4
+
+
+static func _svg_texture(visual_id: String) -> Texture2D:
+	var key := visual_id.strip_edges()
+	if key.is_empty():
+		return null
+	if _svg_cache.has(key):
+		return _svg_cache[key] as Texture2D
+	var path := CompanyRules.gear_svg_path(key)
+	var tex: Texture2D = null
+	if not path.is_empty() and ResourceLoader.exists(path):
+		tex = load(path) as Texture2D
+	_svg_cache[key] = tex
+	return tex
 
 
 func _ready() -> void:
@@ -56,9 +72,21 @@ func _draw_icon(cx: float, cy: float) -> void:
 	var rarity := str(item.get("rarity", "common"))
 	var tint := ClientUi.rarity_color(rarity)
 	var itype := str(item.get("type", "weapon"))
-	# Plate — rarity border / glow for all types (incl. stims).
-	draw_rect(Rect2(Vector2.ZERO, Vector2(REF_SIZE, REF_SIZE)), Color(0.04, 0.05, 0.08, 0.95), true)
+	# Plate — rarity border / glow. Skip fill when the SVG already has a frame.
+	var own_frame := CompanyRules.gear_svg_has_own_frame()
+	if not own_frame:
+		draw_rect(Rect2(Vector2.ZERO, Vector2(REF_SIZE, REF_SIZE)), Color(0.04, 0.05, 0.08, 0.95), true)
 	draw_rect(Rect2(1, 1, REF_SIZE - 2, REF_SIZE - 2), Color(tint, 0.22), false, 1.5)
+	var svg := _svg_texture(str(item.get("visual_id", "")))
+	if svg != null:
+		var inset := 0.0 if own_frame else GEAR_SVG_INSET_PX
+		var inner := REF_SIZE - inset * 2.0
+		draw_texture_rect(
+			svg,
+			Rect2(inset, inset, inner, inner),
+			false
+		)
+		return
 	draw_circle(Vector2(cx, cy), REF_SIZE * 0.38, Color(tint, 0.12))
 	match itype:
 		"weapon":

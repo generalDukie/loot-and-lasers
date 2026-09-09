@@ -10,14 +10,22 @@ Phase 10 economy reconciliation and Phase 11 production stress were not started.
 
 Four Companies manufacture Gear:
 
-| Company | Internal ID | Public short / prefix | Slots | Epic-token levels |
+| Company | Internal ID | Public short | Slots | Epic-token levels |
 | --- | --- | --- | --- | --- |
 | Crown & Carapace | CNC | C&C | Helmet, Armor, Legs, Ship Module | 1, 5, 9… |
 | Ballistics & Jewelry Services | BJS | BJ Services | Helmet, Weapon, Neck, Accessory | 2, 6, 10… |
 | Duct-Tape Dynamics | DTD | DTD / Duct Tape | Legs, Boots, Accessory, Ship Module | 3, 7, 11… |
 | GORPTEK | GORP | GORP / GORPTEK | Armor, Boots, Weapon, Neck | 4, 8, 12… |
 
-Every company manufactures exactly four slots. Every slot has exactly two legal manufacturers. Each company has exactly one premium slot (Weapon or Ship Module). Ordinary sources pick the slot first, then choose between the two legal Companies with an even server roll. Commission Gear uses the token's Company. Manufacturer, origin, and Shipment eligibility are permanent. TTT and RDR are retired and have no live aliases.
+Every company manufactures exactly four slots. Every slot has exactly two legal manufacturers. Each company has exactly one premium slot (Weapon or Ship Module). Each company×slot pair has **three** named catalog variants (`helmet_cnc_01` … `_03`). New Gear uses that catalog name with **no** company prefix (`Duct Tape`, `C&C`, …). Company identity on items is the manufacturer badge plus `visual_id` for the SVG glyph. Existing inventory is not remapped.
+
+### Landing the 48 names + SVGs
+
+Live names and glyphs are in `src/lib/productionMath/companyGearPresentation.js`, `loot&lasers/Scripts/CompanyRules.gd` (`COMPANY_GEAR_PRESENTATION`), and `loot&lasers/Assets/Gear/{visual_id}.svg`. After Godot import, keep `svg/scale=3.0` on each `.import`. These SVGs have no plate or rarity frame (`GEAR_SVG_HAS_OWN_FRAME` stays false).
+
+Collection keys use `slot:visual_id` so renaming the 48 does not reset Cosmic Vault progress. Old `helmet:Neural Crown` keys stay on the character but do not count toward the 48. Duplicate bag copies may show `II` / `III` on the display name only; `visual_id` is unchanged.
+
+Ordinary sources pick the slot first, then choose between the two legal Companies with an even server roll. Commission Gear uses the token's Company. Manufacturer, origin, and Shipment eligibility are permanent. TTT and RDR are retired and have no live aliases.
 
 Shipment eligibility defaults true for generated Gear. Market and Contraband Gear are permanently ineligible and cannot become eligible later. Commission Gear is eligible.
 
@@ -47,7 +55,7 @@ Company level = `floor(CompanyReputation / 1500) + COMPANY_STARTING_LEVEL`. New 
 
 Every Company level after 1 awards one Company-specific Commission token (staggered 3 Rare / 1 Epic; CNC Epic on levels 2, 6, 10…; BJS 3, 7, 11…; DTD 4, 8, 12…; GORP 5, 9, 13…). One waiting token per Company. Tokens do not use backpack space.
 
-If a waiting token exists when another is earned, the Shipment still settles and the new token is stored as overflow. The player must later spend one of the two by creating a Commission. Same-Company Shipments are blocked until then. Other Companies remain independent: each stores one waiting token of its own, and overflow on one Company never blocks another Company from earning or storing a token. Overflow persists across disconnects.
+If a waiting token exists when another is earned, the Shipment still settles and the new token is stored as overflow. The player must later spend one of the two by creating a Commission. While overflow is pending, that Company cannot gain reputation from any source, including admin grants, and Same-Company Shipments are blocked. Other Companies remain independent: each stores one waiting token of its own, and overflow on one Company never blocks another Company from earning or storing a token. Overflow persists across disconnects.
 
 ## Commissions
 

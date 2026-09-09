@@ -18,6 +18,7 @@ import {
   BACKPACK_UNEQUIPPED_ITEM_CAP,
   STARTING_FUEL,
   applyGearCompanyPresentation,
+  pickCompanyGearVariant,
 } from "./productionMath.js";
 
 export { XP_STARDUST_SCALE }; // legacy Stardust callers only — not XP
@@ -37,22 +38,6 @@ function getInventoryCap(ch) {
   }
   return DEFAULT_INVENTORY_CAP;
 }
-
-/** Keep in sync with src/lib/gameData.js ITEM_NAMES (Cosmic Vault keys). */
-const ITEM_NAMES = {
-  weapon: [
-    "Plasma Rifle", "Ion Blaster", "Photon Cannon", "Pulse Repeater", "Neutrino Sniper", "Graviton Shotgun",
-    "Phase Pistol", "Singularity Cannon", "Void Saber", "Photon Cleaver", "Starforged Blade", "Quantum Dagger",
-    "Shadow Needle", "Phase Knife", "Nebula Bow", "Ion Longbow", "Graviton Axe", "Titan Maul", "Arc Staff", "Psionic Wand",
-  ],
-  armor: ["Nanoweave Suit", "Titan Plating", "Void Shell", "Quantum Mesh", "Stellar Guard", "Plasma Coat", "Crystal Carapace", "Shadow Shroud"],
-  helmet: ["Neural Crown", "Scan Visor", "Astral Helm", "Combat HUD", "Psi Amplifier", "Void Mask", "Star Circlet", "Echo Chamber"],
-  boots: ["Gravity Boots", "Phase Walkers", "Jet Treads", "Stealth Soles", "Mag-Lock Greaves", "Drift Runners", "Storm Striders", "Warp Steps"],
-  legs: ["Void Greaves", "Plasma Leggings", "Titan Leg Plates", "Phase Treads", "Graviton Greaves"],
-  neck: ["Quantum Amulet", "Void Collar", "Nebula Pendant", "Star Choker", "Plasma Torc"],
-  accessory: ["Quantum Amulet", "Data Core Ring", "Nebula Charm", "Warp Beacon", "Chrono Band", "Star Shard Pendant", "Void Capacitor", "Neural Link"],
-  ship_module: ["Warp Drive MK-I", "Shield Amplifier", "Cargo Expander", "Sensor Array", "Cloaking Module", "Turret System", "Engine Booster", "Hull Reinforcement"],
-};
 
 function pick(arr, rng = Math.random) {
   return arr[Math.floor(rng() * arr.length)];
@@ -76,7 +61,6 @@ export function randomItem(
   const t = type && EQUIPMENT_SLOTS.includes(type)
     ? type
     : pick(EQUIPMENT_SLOTS, rng);
-  const names = ITEM_NAMES[t] || ITEM_NAMES.weapon;
   const economicLevel = generationContext?.economicLevel ?? itemLevel;
   const playerLevel = generationContext?.playerLevel ?? economicLevel;
   const base = GenerateGearItem({
@@ -95,14 +79,13 @@ export function randomItem(
     skipPricingQuality: !!generationContext?.skipPricingQuality,
     generationContext,
   });
-  const baseName = pick(names, rng);
-  return applyGearCompanyPresentation(base, { baseName, rng });
+  return applyGearCompanyPresentation(base, { rng });
 }
 
-export function pickGearCatalogName(slot, rng = Math.random) {
+export function pickGearCatalogName(slot, rng = Math.random, manufacturer = null) {
   const t = EQUIPMENT_SLOTS.includes(slot) ? slot : pick(EQUIPMENT_SLOTS, rng);
-  const names = ITEM_NAMES[t] || ITEM_NAMES.weapon;
-  return pick(names, rng);
+  const row = pickCompanyGearVariant(manufacturer, t, rng);
+  return row?.name || "";
 }
 
 /** Bind randomItem to a player's class for shop stock / loot helpers. */

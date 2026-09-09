@@ -32,7 +32,6 @@ import {
   tokenRarityForCompanyLevel,
 } from "../../../src/lib/productionMath/index.js";
 import { GenerateGearItem } from "./itemGeneration.js";
-import { pickGearCatalogName } from "./rewards.js";
 import { serializeItem } from "./inventoryEquipment.js";
 import { assertBackpackHasSpace } from "./inventoryGrant.js";
 import { creditStardust } from "./currencyService.js";
@@ -43,6 +42,16 @@ function httpErr(status, message, code) {
   e.status = status;
   e.code = code || "COMPANY_ERROR";
   throw e;
+}
+
+function assertCompanyCanGainReputation(row) {
+  if (row?.overflow_token) {
+    httpErr(
+      409,
+      "Reputation gains are halted until this Company's overflow token is spent",
+      "COMPANY_OVERFLOW_PENDING",
+    );
+  }
 }
 
 function normalizeToken(raw) {
@@ -159,9 +168,7 @@ export function validateShipmentItems(character, companyId, itemIds) {
     httpErr(400, "Shipment items must be distinct", "DUPLICATE_SHIPMENT_ITEM");
   }
   const state = readCompanyState(character);
-  if (state[companyId].overflow_token) {
-    httpErr(409, "Resolve this Company's token overflow before shipping more Gear", "COMPANY_OVERFLOW_PENDING");
-  }
+  assertCompanyCanGainReputation(state[companyId]);
   const items = [];
   let base = 0;
   for (const id of ids) {
@@ -304,6 +311,7 @@ export function grantCompanyReputation({ character, companyId, amount }) {
   }
   const state = readCompanyState(character);
   const row = state[companyId];
+  if (delta > 0) assertCompanyCanGainReputation(row);
   const previousReputation = row.reputation;
   const nextReputation = Math.max(0, previousReputation + delta);
   const awardedLevels = delta > 0
@@ -394,7 +402,6 @@ export function redeemCommission({
     },
   });
   const presented = applyGearCompanyPresentation(generated, {
-    baseName: pickGearCatalogName(type, rng),
     rng,
   });
   presented.is_equipped = false;

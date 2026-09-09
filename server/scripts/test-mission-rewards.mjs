@@ -3,8 +3,12 @@
  * Run: npm run test:mission-rewards
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   settleMissionItemChain,
+  buildMissionJunkItem,
   missionGearItemLevel,
   missionGearDropProbability,
   missionStimConditionalProbability,
@@ -29,7 +33,15 @@ import {
   MISSION_JUNK_VARIANCE_MIN,
   MISSION_JUNK_VARIANCE_MAX,
   brandedGearName,
+  JUNK_CATALOG,
+  JUNK_CATALOG_SIZE,
+  JUNK_PRESENTATION,
+  JUNK_VISUAL_ID_INDEX_ORIGIN,
+  junkVisualId,
+  stimDisplayName,
 } from "../../src/lib/productionMath/index.js";
+
+const GODOT_ROOT = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."), "loot&lasers");
 
 let passed = 0;
 let failed = 0;
@@ -136,7 +148,8 @@ test("Exclusive chain: Gear fail → Stim", () => {
   assert.equal(stim.consumable.tier, stim.rarity);
   assert.ok(Number(stim.consumable.mult) > 0, "mission stim must carry tier bonus");
   assert.ok(Number(stim.consumable.duration_hours) > 0, "mission stim must carry duration");
-  assert.match(String(stim.name), /Stim$/);
+  assert.equal(stim.name, stimDisplayName(stim.consumable.stat, stim.rarity));
+  assert.equal(stim.visual_id, `stim_${stim.consumable.stat}_${stim.rarity}`);
   assert.match(String(stim.flavor_text), /Boosts /);
 });
 
@@ -150,8 +163,13 @@ test("Exclusive chain: Gear+Stim fail → Junk", () => {
   });
   assert.equal(r.itemOutcome, "JUNK");
   assert.equal(r.junkDropped, true);
-  assert.equal(r.itemTemplates[0].type, "material");
-  assert.ok(r.itemTemplates[0].sell_value >= 1);
+  const junk = r.itemTemplates[0];
+  assert.equal(junk.type, "material");
+  assert.ok(junk.sell_value >= 1);
+  assert.equal(junk.visual_id, "trinket_10");
+  assert.equal(junk.name, "Counterfeit Prize Idol");
+  assert.equal(junk.base_name, junk.name);
+  assert.equal(junk.flavor_text, JUNK_PRESENTATION.trinket_10.flavor);
 });
 
 test("Exclusive chain: all fail → NONE", () => {
@@ -275,6 +293,57 @@ test("grantCharacterXp awards the integer Mission XP with no extra multiplier", 
   assert.equal(granted.patch.experience, 36);
   assert.equal(granted.patch.level, 1);
   assert.equal(granted.progression.levels_gained, 0);
+});
+
+test("junk catalog is 10 unique names with glyphs and Godot parity", () => {
+  assert.equal(JUNK_CATALOG.length, JUNK_CATALOG_SIZE);
+  assert.equal(Object.keys(JUNK_PRESENTATION).length, JUNK_CATALOG_SIZE);
+  const ids = new Set();
+  const names = new Set();
+  for (let i = 0; i < JUNK_CATALOG_SIZE; i += 1) {
+    const row = JUNK_CATALOG[i];
+    assert.equal(row.id, junkVisualId(JUNK_VISUAL_ID_INDEX_ORIGIN + i));
+    assert.equal(row.name, JUNK_PRESENTATION[row.id].name);
+    assert.notEqual(row.name, row.id);
+    assert.ok(String(row.flavor || "").trim().length > 0, row.id);
+    assert.equal(ids.has(row.id), false, row.id);
+    assert.equal(names.has(row.name), false, row.name);
+    ids.add(row.id);
+    names.add(row.name);
+  }
+  const first = buildMissionJunkItem({
+    snapshotLevel: 12,
+    sellValue: 40,
+    rng: () => 0,
+  });
+  assert.equal(first.visual_id, "trinket_01");
+  assert.equal(first.name, "Cracked Data Slate");
+  assert.equal(first.base_name, first.name);
+  assert.equal(first.flavor_text, JUNK_PRESENTATION.trinket_01.flavor);
+  assert.equal(first.type, "material");
+  const pinned = buildMissionJunkItem({
+    snapshotLevel: 8,
+    sellValue: 10,
+    visualId: "trinket_06",
+  });
+  assert.equal(pinned.visual_id, "trinket_06");
+  assert.equal(pinned.name, "Crushed Ration Tin");
+  const junkDir = path.join(GODOT_ROOT, "Assets", "Junk");
+  const missing = JUNK_CATALOG.filter((row) => !fs.existsSync(path.join(junkDir, `${row.id}.svg`)));
+  assert.equal(missing.length, 0, `named catalog missing SVGs: ${missing.map((row) => row.id).join(", ")}`);
+  const importScale = "svg/scale=3.0";
+  for (const row of JUNK_CATALOG) {
+    const importPath = path.join(junkDir, `${row.id}.svg.import`);
+    assert.equal(fs.existsSync(importPath), true, importPath);
+    assert.match(fs.readFileSync(importPath, "utf8"), new RegExp(importScale.replace(".", "\\.")));
+  }
+  const catalogGd = fs.readFileSync(path.join(GODOT_ROOT, "Scripts", "JunkCatalog.gd"), "utf8");
+  assert.match(catalogGd, /JUNK_SVG_HAS_OWN_FRAME/);
+  assert.match(catalogGd, /JUNK_SVG_IMPORT_SCALE/);
+  for (const row of JUNK_CATALOG) {
+    assert.match(catalogGd, new RegExp(row.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(catalogGd, new RegExp(row.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

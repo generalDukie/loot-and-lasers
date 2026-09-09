@@ -487,6 +487,13 @@ export const STIM_VISUAL_ID_PREFIX = "stim";
 export const STIM_VISUAL_ID_SEPARATOR = "_";
 export const STIM_CATALOG_SIZE = MARKET_STIM_ATTRIBUTES.length * Object.keys(STIM_TIERS).length;
 
+/** Mission salvage trinkets — pack ids `trinket_01` … `trinket_10`. */
+export const JUNK_VISUAL_ID_PREFIX = "trinket";
+export const JUNK_VISUAL_ID_SEPARATOR = "_";
+export const JUNK_CATALOG_SIZE = 10;
+export const JUNK_VISUAL_ID_INDEX_ORIGIN = 1;
+export const JUNK_VISUAL_ID_INDEX_DIGITS = 2;
+
 export const STIM_MAX_ACTIVE_EFFECTS = 3;
 /**
  * Same-tier restim is allowed while remaining duration is at most

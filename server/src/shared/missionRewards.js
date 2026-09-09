@@ -6,7 +6,12 @@
  * Stim sale value is snapshotted at mission snapshot level (Phase 5).
  */
 import { randomItem } from "./rewards.js";
-import { applyStimPresentation, stimSellValueResolved } from "./productionMath.js";
+import {
+  applyJunkPresentation,
+  applyStimPresentation,
+  pickJunkCatalogRow,
+  stimSellValueResolved,
+} from "./productionMath.js";
 import { getStimDefinition, MAX_BUFF_STACKS } from "./economyFormulas.js";
 import {
   LOOT_OUTCOME_GEAR,
@@ -47,6 +52,7 @@ const STIM_ITEM_TYPE = "consumable";
 const JUNK_ITEM_TYPE = "material";
 const JUNK_RARITY = "common";
 const DEFAULT_JUNK_NAME = "Salvaged Trinket";
+const DEFAULT_JUNK_FLAVOR = "A curious trinket recovered on mission.";
 
 function snapshotLevelOf(character, mission) {
   const fromMission = Number(mission?.character_level ?? mission?.reward_item_level_basis);
@@ -65,6 +71,30 @@ function capitalizeStimStat(stat) {
   const key = String(stat || "").toLowerCase();
   if (!key) return "Strength";
   return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+/** Mission salvage trinket — catalog name/glyph from the 10-pack. */
+export function buildMissionJunkItem({
+  snapshotLevel,
+  sellValue,
+  rng,
+  visualId,
+  origin = MISSION_GEAR_ORIGIN,
+} = {}) {
+  const requested = String(visualId || "").trim();
+  const row = requested ? { id: requested } : pickJunkCatalogRow(rng);
+  const economicLevel = Math.max(1, Math.floor(Number(snapshotLevel) || 1));
+  const originKey = String(origin || "").trim() || MISSION_GEAR_ORIGIN;
+  return applyJunkPresentation({
+    name: DEFAULT_JUNK_NAME,
+    type: JUNK_ITEM_TYPE,
+    rarity: JUNK_RARITY,
+    level_requirement: economicLevel,
+    stats: {},
+    flavor_text: DEFAULT_JUNK_FLAVOR,
+    origin: originKey,
+    sell_value: sellValue,
+  }, row?.id);
 }
 
 /** Stim inventory payload — same tier table UseConsumable trusts. */
@@ -156,18 +186,12 @@ export function settleMissionItemChain({
     }));
   } else if (itemOutcome === LOOT_OUTCOME_JUNK) {
     junkDropped = true;
-    const junkName = mission?.rewards?.collectible?.name || DEFAULT_JUNK_NAME;
     const sellValue = rollMissionJunkValue(missionStardustReward, r);
-    itemTemplates.push({
-      name: junkName,
-      type: JUNK_ITEM_TYPE,
-      rarity: JUNK_RARITY,
-      level_requirement: snapshotLevel,
-      stats: {},
-      flavor_text: "A curious trinket recovered on mission.",
-      origin: MISSION_GEAR_ORIGIN,
-      sell_value: sellValue,
-    });
+    itemTemplates.push(buildMissionJunkItem({
+      snapshotLevel,
+      sellValue,
+      rng: r,
+    }));
   }
 
   return {

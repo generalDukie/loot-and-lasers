@@ -1753,6 +1753,8 @@ test("Corporate Offices replaces Ship Hangar in live navigation", () => {
   assert.match(gearIcon, /visual_id/);
   assert.match(gearIcon, /_svg_texture/);
   assert.match(gearIcon, /gear_svg_has_own_frame/);
+  assert.match(gearIcon, /draw_texture_rect_region/);
+  assert.match(gearIcon, /_opaque_source_rect/);
   const collectibles = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/CollectiblesCatalog.gd"), "utf8");
   assert.match(collectibles, /CompanyRules\.gear_catalog/);
   assert.match(collectibles, /visual_id/);

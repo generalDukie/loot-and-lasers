@@ -3,11 +3,18 @@ extends Control
 ## Gear / stim glyph — SVG when `visual_id` resolves, else a procedural silhouette.
 
 const REF_SIZE := 40.0
-const GEAR_SVG_INSET_PX := 4.0
+const GLYPH_FRAME_MARGIN_PX := 1.0
+const GLYPH_FRAME_STROKE_PX := 1.5
+## Inner edge of the rarity stroke — glyphs fill the plate inside the frame.
+const GEAR_SVG_INSET_PX := GLYPH_FRAME_MARGIN_PX + GLYPH_FRAME_STROKE_PX * 0.5
+const GLYPH_BOUNDS_SAMPLE_PX := 128
+const GLYPH_OPAQUE_ALPHA := 0.04
+const GLYPH_CONTENT_PAD_RATIO := 0.02
 
 var item: Dictionary = {}
 var _variant := 0
 static var _svg_cache: Dictionary = {}
+static var _svg_region_cache: Dictionary = {}
 
 
 static func make(for_item: Dictionary, size_px: float = 40.0) -> GearIcon:
@@ -47,6 +54,69 @@ static func _svg_texture(visual_id: String) -> Texture2D:
 	return tex
 
 
+static func _opaque_source_rect(tex: Texture2D) -> Rect2:
+	var tex_size := tex.get_size()
+	var full := Rect2(Vector2.ZERO, tex_size)
+	var cache_key := tex.resource_path
+	if cache_key.is_empty():
+		cache_key = str(tex.get_instance_id())
+	if _svg_region_cache.has(cache_key):
+		return _svg_region_cache[cache_key] as Rect2
+	var img := tex.get_image()
+	if img == null or img.is_empty():
+		_svg_region_cache[cache_key] = full
+		return full
+	if img.is_compressed():
+		var err := img.decompress()
+		if err != OK:
+			_svg_region_cache[cache_key] = full
+			return full
+	var sample := img
+	if img.get_width() > GLYPH_BOUNDS_SAMPLE_PX or img.get_height() > GLYPH_BOUNDS_SAMPLE_PX:
+		sample = img.duplicate()
+		sample.resize(GLYPH_BOUNDS_SAMPLE_PX, GLYPH_BOUNDS_SAMPLE_PX, Image.INTERPOLATE_NEAREST)
+	var min_x := sample.get_width()
+	var min_y := sample.get_height()
+	var max_x := -1
+	var max_y := -1
+	for y in sample.get_height():
+		for x in sample.get_width():
+			if sample.get_pixel(x, y).a >= GLYPH_OPAQUE_ALPHA:
+				if x < min_x:
+					min_x = x
+				if y < min_y:
+					min_y = y
+				if x > max_x:
+					max_x = x
+				if y > max_y:
+					max_y = y
+	if max_x < 0:
+		_svg_region_cache[cache_key] = full
+		return full
+	var sx := tex_size.x / float(sample.get_width())
+	var sy := tex_size.y / float(sample.get_height())
+	var region := Rect2(
+		float(min_x) * sx,
+		float(min_y) * sy,
+		float(max_x - min_x + 1) * sx,
+		float(max_y - min_y + 1) * sy
+	)
+	var pad := maxf(region.size.x, region.size.y) * GLYPH_CONTENT_PAD_RATIO
+	region = region.grow(pad).intersection(full)
+	if region.size.x < 1.0 or region.size.y < 1.0:
+		region = full
+	_svg_region_cache[cache_key] = region
+	return region
+
+
+static func _contain_rect(src_size: Vector2, dest: Rect2) -> Rect2:
+	if src_size.x <= 0.0 or src_size.y <= 0.0:
+		return dest
+	var fit := minf(dest.size.x / src_size.x, dest.size.y / src_size.y)
+	var drawn := src_size * fit
+	return Rect2(dest.position + (dest.size - drawn) * 0.5, drawn)
+
+
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	resized.connect(queue_redraw)
@@ -79,16 +149,23 @@ func _draw_icon(cx: float, cy: float) -> void:
 	var own_frame := StimCatalog.svg_has_own_frame() if StimCatalog.is_stim_visual_id(visual) else CompanyRules.gear_svg_has_own_frame()
 	if not own_frame:
 		draw_rect(Rect2(Vector2.ZERO, Vector2(REF_SIZE, REF_SIZE)), Color(0.04, 0.05, 0.08, 0.95), true)
-	draw_rect(Rect2(1, 1, REF_SIZE - 2, REF_SIZE - 2), Color(tint, 0.22), false, 1.5)
+	draw_rect(
+		Rect2(
+			GLYPH_FRAME_MARGIN_PX,
+			GLYPH_FRAME_MARGIN_PX,
+			REF_SIZE - GLYPH_FRAME_MARGIN_PX * 2.0,
+			REF_SIZE - GLYPH_FRAME_MARGIN_PX * 2.0
+		),
+		Color(tint, 0.22),
+		false,
+		GLYPH_FRAME_STROKE_PX
+	)
 	var svg := _svg_texture(visual)
 	if svg != null:
 		var inset := 0.0 if own_frame else GEAR_SVG_INSET_PX
-		var inner := REF_SIZE - inset * 2.0
-		draw_texture_rect(
-			svg,
-			Rect2(inset, inset, inner, inner),
-			false
-		)
+		var dest := Rect2(inset, inset, REF_SIZE - inset * 2.0, REF_SIZE - inset * 2.0)
+		var src := _opaque_source_rect(svg)
+		draw_texture_rect_region(svg, _contain_rect(src.size, dest), src)
 		return
 	draw_circle(Vector2(cx, cy), REF_SIZE * 0.38, Color(tint, 0.12))
 	match itype:

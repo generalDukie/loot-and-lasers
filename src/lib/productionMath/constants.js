@@ -482,6 +482,11 @@ export const STIM_TIERS = Object.freeze({
   }),
 });
 
+/** Inventory visual ids are `{prefix}_{stat}_{rarity}` (e.g. stim_strength_uncommon). */
+export const STIM_VISUAL_ID_PREFIX = "stim";
+export const STIM_VISUAL_ID_SEPARATOR = "_";
+export const STIM_CATALOG_SIZE = MARKET_STIM_ATTRIBUTES.length * Object.keys(STIM_TIERS).length;
+
 export const STIM_MAX_ACTIVE_EFFECTS = 3;
 /**
  * Same-tier restim is allowed while remaining duration is at most

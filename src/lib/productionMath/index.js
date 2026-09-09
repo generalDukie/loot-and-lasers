@@ -18,6 +18,7 @@ export * from "./pve.js";
 export * from "./market.js";
 export * from "./companies.js";
 export * from "./companyGearPresentation.js";
+export * from "./stimPresentation.js";
 export * from "./gearQuality.js";
 export * from "./missions.js";
 export * from "./simulateLoadout.js";

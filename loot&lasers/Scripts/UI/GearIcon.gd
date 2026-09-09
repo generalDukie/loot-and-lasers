@@ -1,6 +1,6 @@
 class_name GearIcon
 extends Control
-## Gear glyph — company SVG when `visual_id` is present, else a procedural silhouette.
+## Gear / stim glyph — SVG when `visual_id` resolves, else a procedural silhouette.
 
 const REF_SIZE := 40.0
 const GEAR_SVG_INSET_PX := 4.0
@@ -37,7 +37,9 @@ static func _svg_texture(visual_id: String) -> Texture2D:
 		return null
 	if _svg_cache.has(key):
 		return _svg_cache[key] as Texture2D
-	var path := CompanyRules.gear_svg_path(key)
+	var path := StimCatalog.svg_path(key)
+	if path.is_empty() or not ResourceLoader.exists(path):
+		path = CompanyRules.gear_svg_path(key)
 	var tex: Texture2D = null
 	if not path.is_empty() and ResourceLoader.exists(path):
 		tex = load(path) as Texture2D
@@ -72,12 +74,13 @@ func _draw_icon(cx: float, cy: float) -> void:
 	var rarity := str(item.get("rarity", "common"))
 	var tint := ClientUi.rarity_color(rarity)
 	var itype := str(item.get("type", "weapon"))
+	var visual := str(item.get("visual_id", ""))
 	# Plate — rarity border / glow. Skip fill when the SVG already has a frame.
-	var own_frame := CompanyRules.gear_svg_has_own_frame()
+	var own_frame := StimCatalog.svg_has_own_frame() if StimCatalog.is_stim_visual_id(visual) else CompanyRules.gear_svg_has_own_frame()
 	if not own_frame:
 		draw_rect(Rect2(Vector2.ZERO, Vector2(REF_SIZE, REF_SIZE)), Color(0.04, 0.05, 0.08, 0.95), true)
 	draw_rect(Rect2(1, 1, REF_SIZE - 2, REF_SIZE - 2), Color(tint, 0.22), false, 1.5)
-	var svg := _svg_texture(str(item.get("visual_id", "")))
+	var svg := _svg_texture(visual)
 	if svg != null:
 		var inset := 0.0 if own_frame else GEAR_SVG_INSET_PX
 		var inner := REF_SIZE - inset * 2.0

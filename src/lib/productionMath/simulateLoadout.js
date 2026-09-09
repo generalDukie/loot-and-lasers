@@ -29,6 +29,7 @@ import { roundHalfUp } from "./rounding.js";
 import { averageMissionFuel, employmentLoad } from "./progression.js";
 import { stardustPerFuel } from "./economy.js";
 import { marketStimTier } from "./market.js";
+import { stimDisplayName } from "./stimPresentation.js";
 import {
   allocateByWeights,
   classPrimaryIndex,
@@ -205,7 +206,7 @@ export function buildSimulateStimBuffs({ className, level, nowMs = Date.now() } 
   return simulateStimStats(className).map((stat) => ({
     stat,
     mult,
-    name: `${titleCase(tier)} ${titleCase(stat)} Stim`,
+    name: stimDisplayName(stat, tier) || `${titleCase(tier)} ${titleCase(stat)} Stim`,
     rarity: tier,
     duration_hours: spec.baseHours,
     stacks: STIM_MAX_ACTIVE_EFFECTS,

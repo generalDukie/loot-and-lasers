@@ -32,6 +32,7 @@ import {
   companyGearVariantById,
   companyGearVariantByName,
   WEAPON_COMBAT_STYLES,
+  applyStimPresentation,
 } from "@/lib/productionMath";
 import {
   CONSUMABLE_TIERS as STIM_CONSUMABLE_TIERS,
@@ -1210,7 +1211,7 @@ const EPIC_STIM_ROLL_THRESHOLD = 0.85;
 const RARE_STIM_ROLL_THRESHOLD = 0.55;
 
 export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, tier]) =>
-  STIM_ATTRIBUTES.map((stat) => ({
+  STIM_ATTRIBUTES.map((stat) => applyStimPresentation({
     name: `${tier.label} ${stat.charAt(0).toUpperCase() + stat.slice(1)} Stim`,
     type: "consumable",
     rarity: tier.rarity,

@@ -18,6 +18,7 @@ import {
   stimShopPriceResolved,
   companiesForSlot,
   rollManufacturerForSlot,
+  applyStimPresentation,
 } from "./productionMath/index.js";
 import {
   applyHaggleDiscountToNova,
@@ -94,17 +95,12 @@ function defaultCreateGear({
   });
 }
 
-function capitalizeStimStat(stat) {
-  const key = String(stat || "strength");
-  return key.charAt(0).toUpperCase() + key.slice(1);
-}
-
 function stimPayload({ rarity, stat, economicLevel, origin }) {
   const key = String(stat || "strength").toLowerCase();
   const rarityKey = String(rarity || "uncommon").toLowerCase();
   const label = rarityKey.charAt(0).toUpperCase() + rarityKey.slice(1);
-  const statName = capitalizeStimStat(key);
-  return {
+  const statName = key.charAt(0).toUpperCase() + key.slice(1);
+  return applyStimPresentation({
     name: `${label} ${statName} Stim`,
     type: "consumable",
     rarity: rarityKey,
@@ -120,7 +116,7 @@ function stimPayload({ rarity, stat, economicLevel, origin }) {
       tier: rarityKey,
       mult: stimBonusMultiplier(rarityKey),
     },
-  };
+  });
 }
 
 function snapshotGearOffer({

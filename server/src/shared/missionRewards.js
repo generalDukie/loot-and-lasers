@@ -6,7 +6,7 @@
  * Stim sale value is snapshotted at mission snapshot level (Phase 5).
  */
 import { randomItem } from "./rewards.js";
-import { stimSellValueResolved } from "./productionMath.js";
+import { applyStimPresentation, stimSellValueResolved } from "./productionMath.js";
 import { getStimDefinition, MAX_BUFF_STACKS } from "./economyFormulas.js";
 import {
   LOOT_OUTCOME_GEAR,
@@ -81,7 +81,7 @@ export function buildMissionStimItem({
   const statName = capitalizeStimStat(key);
   const economicLevel = Math.max(1, Math.floor(Number(snapshotLevel) || 1));
   const originKey = String(origin || "").trim() || MISSION_GEAR_ORIGIN;
-  return {
+  return applyStimPresentation({
     name: `${def.label} ${statName} Stim`,
     type: STIM_ITEM_TYPE,
     rarity: def.rarity,
@@ -96,7 +96,7 @@ export function buildMissionStimItem({
       mult: def.mult,
       duration_hours: hours,
     },
-  };
+  });
 }
 
 export function missionGearItemLevel(character, mission) {

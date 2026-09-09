@@ -18,6 +18,7 @@ import {
   BACKPACK_UNEQUIPPED_ITEM_CAP,
   STARTING_FUEL,
   applyGearCompanyPresentation,
+  applyStimPresentation,
   pickCompanyGearVariant,
 } from "./productionMath.js";
 
@@ -252,7 +253,7 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
   if (rewards.collectible) {
     const c = rewards.collectible;
     if (c.type === "consumable") {
-      const payload = {
+      const payload = applyStimPresentation({
         name: c.name,
         type: "consumable",
         rarity: c.rarity || "uncommon",
@@ -264,7 +265,7 @@ export async function applyCharacterRewards(gameService, characterId, rewards) {
         is_equipped: false,
         owner_id: ch.created_by_id,
         character_id: ch.id,
-      };
+      });
       const granted = grantItemOrPending(ch, payload);
       if (granted.item) {
         items.push(granted.item);
@@ -308,7 +309,7 @@ export const DAILY_REWARDS = [
   { day: 7, rewards: { stardust: 1500 } },
   { day: 8, rewards: { stardust: 800 } },
   { day: 9, rewards: { experience: 10000 } },
-  { day: 10, rewards: { collectible: { type: "consumable", name: "Uncommon Strength Stim", rarity: "uncommon", consumable: { stat: "strength", mult: 0.05, duration_hours: 6, tier: "uncommon" }, flavor_text: "Boosts Strength by 5% for 6 hours (stacks duration up to 18h).", sell_value: 250 } } },
+  { day: 10, rewards: { collectible: { type: "consumable", name: "Strength Field Injector", rarity: "uncommon", consumable: { stat: "strength", mult: 0.05, duration_hours: 6, tier: "uncommon" }, flavor_text: "Boosts Strength by 5% for 6 hours (stacks duration up to 18h).", sell_value: 250 } } },
   { day: 11, rewards: { stardust: 1000 } },
   { day: 12, rewards: { fuel: 30 } },
   { day: 13, rewards: { nova_crystals: 4 } },
@@ -316,12 +317,12 @@ export const DAILY_REWARDS = [
   { day: 15, rewards: { item_rarity: "rare" } },
   { day: 16, rewards: { stardust: 2000 } },
   { day: 17, rewards: { stardust: 1200 } },
-  { day: 18, rewards: { collectible: { type: "consumable", name: "Uncommon Agility Stim", rarity: "uncommon", consumable: { stat: "agility", mult: 0.05, duration_hours: 6, tier: "uncommon" }, flavor_text: "Boosts Agility by 5% for 6 hours (stacks duration up to 18h).", sell_value: 250 } } },
+  { day: 18, rewards: { collectible: { type: "consumable", name: "Agility Field Injector", rarity: "uncommon", consumable: { stat: "agility", mult: 0.05, duration_hours: 6, tier: "uncommon" }, flavor_text: "Boosts Agility by 5% for 6 hours (stacks duration up to 18h).", sell_value: 250 } } },
   { day: 19, rewards: { experience: 15000 } },
   { day: 20, rewards: { nova_crystals: 8 } },
   { day: 21, rewards: { item_rarity: "rare", stardust: 1500 } },
   { day: 22, rewards: { experience: 20000 } },
-  { day: 23, rewards: { collectible: { type: "consumable", name: "Rare Vitality Stim", rarity: "rare", consumable: { stat: "vitality", mult: 0.10, duration_hours: 12, tier: "rare" }, flavor_text: "Boosts Vitality by 10% for 12 hours (stacks duration up to 36h).", sell_value: 600 } } },
+  { day: 23, rewards: { collectible: { type: "consumable", name: "Vitality Precision Injector", rarity: "rare", consumable: { stat: "vitality", mult: 0.10, duration_hours: 12, tier: "rare" }, flavor_text: "Boosts Vitality by 10% for 12 hours (stacks duration up to 36h).", sell_value: 600 } } },
   { day: 24, rewards: { stardust: 2000 } },
   { day: 25, rewards: { item_rarity: "epic" } },
   { day: 26, rewards: { nova_crystals: 10 } },

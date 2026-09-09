@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
+const GODOT_ROOT = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."), "loot&lasers");
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ll-phase5-stims-"));
 process.env.DB_PATH = path.join(tmpDir, "phase5-stims.db");
 
@@ -15,12 +17,16 @@ const {
   STIM_MAX_ACTIVE_EFFECTS,
   STIM_SELL_MULT,
   STIM_SAME_TIER_RESTIM_ELAPSED_DIVISOR,
+  STIM_CATALOG,
+  STIM_CATALOG_SIZE,
+  STIM_PRESENTATION,
   MILLISECONDS_PER_HOUR,
   BACKPACK_UNEQUIPPED_ITEM_CAP,
   stimBonusMultiplier,
   stimSellValueResolved,
   stimSameTierRestimCooldownHours,
   stimSameTierRestimRemainingBlockHours,
+  stimVisualId,
   stardustPerFuel,
   roundHalfUp,
   nextStimState,
@@ -33,7 +39,7 @@ const {
 } = await import("../../src/lib/stimActivation.js");
 const { computeItemVendorValue } = await import("../../src/lib/itemGeneration.js");
 const { computePermanentTotalStats } = await import("../../src/lib/statEngine.js");
-const { applyBuffs, getActiveBuffs } = await import("../../src/lib/gameData.js");
+const { applyBuffs, getActiveBuffs, CONSUMABLES } = await import("../../src/lib/gameData.js");
 const { buildMissionStimItem } = await import("../src/shared/missionRewards.js");
 const { countBagOccupancy } = await import("../src/shared/inventoryGrant.js");
 const { entities } = await import("../src/entities.js");
@@ -568,6 +574,49 @@ test("remaining duration is never negative after expiration", () => {
   };
   const remaining = Math.max(0, new Date(buff.expires_at).getTime() - NOW);
   assert.equal(remaining, 0);
+});
+
+test("stim catalog is 15 unique names with glyphs and Godot parity", () => {
+  assert.equal(STIM_CATALOG.length, STIM_CATALOG_SIZE);
+  assert.equal(Object.keys(STIM_PRESENTATION).length, STIM_CATALOG_SIZE);
+  const ids = new Set();
+  const names = new Set();
+  for (const row of STIM_CATALOG) {
+    assert.equal(row.id, stimVisualId(row.stat, row.rarity));
+    assert.equal(row.name, STIM_PRESENTATION[row.id].name);
+    assert.notEqual(row.name, row.id);
+    assert.equal(ids.has(row.id), false, row.id);
+    assert.equal(names.has(row.name), false, row.name);
+    ids.add(row.id);
+    names.add(row.name);
+  }
+  assert.equal(CONSUMABLES.length, STIM_CATALOG_SIZE);
+  for (const item of CONSUMABLES) {
+    const expected = stimVisualId(item.consumable.stat, item.rarity);
+    assert.equal(item.visual_id, expected);
+    assert.equal(item.name, STIM_PRESENTATION[expected].name);
+    assert.equal(item.base_name, item.name);
+  }
+  const stimDir = path.join(GODOT_ROOT, "Assets", "Stims");
+  const missing = STIM_CATALOG.filter((row) => !fs.existsSync(path.join(stimDir, `${row.id}.svg`)));
+  assert.equal(missing.length, 0, `named catalog missing SVGs: ${missing.map((row) => row.id).join(", ")}`);
+  const importScale = "svg/scale=3.0";
+  for (const row of STIM_CATALOG) {
+    const importPath = path.join(stimDir, `${row.id}.svg.import`);
+    assert.equal(fs.existsSync(importPath), true, importPath);
+    assert.match(fs.readFileSync(importPath, "utf8"), new RegExp(importScale.replace(".", "\\.")));
+  }
+  const catalogGd = fs.readFileSync(path.join(GODOT_ROOT, "Scripts", "StimCatalog.gd"), "utf8");
+  assert.match(catalogGd, /STIM_SVG_HAS_OWN_FRAME/);
+  assert.match(catalogGd, /STIM_SVG_IMPORT_SCALE/);
+  for (const row of STIM_CATALOG) {
+    assert.match(catalogGd, new RegExp(row.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(catalogGd, new RegExp(row.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  const mission = buildMissionStimItem({ rarity: "rare", stat: "vitality", snapshotLevel: 33 });
+  assert.equal(mission.visual_id, "stim_vitality_rare");
+  assert.equal(mission.name, "Vitality Precision Injector");
+  assert.equal(mission.base_name, "Vitality Precision Injector");
 });
 
 if (failed) {

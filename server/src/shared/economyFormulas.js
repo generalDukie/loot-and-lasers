@@ -53,6 +53,7 @@ import {
   arenaXpReward,
   ARENA_COOLDOWN_SKIP_NOVA,
   applyGearCompanyPresentation,
+  applyStimPresentation,
 } from "./productionMath.js";
 import {
   generateContrabandOffer,
@@ -965,7 +966,7 @@ export function getActiveStims(character, nowMs = clock.nowMs()) {
 }
 
 export const CONSUMABLES = Object.entries(CONSUMABLE_TIERS).flatMap(([tierKey, tier]) =>
-  STIM_ATTRIBUTES.map((stat) => ({
+  STIM_ATTRIBUTES.map((stat) => applyStimPresentation({
     name: `${tier.label} ${stat.charAt(0).toUpperCase() + stat.slice(1)} Stim`,
     type: "consumable",
     rarity: tier.rarity,

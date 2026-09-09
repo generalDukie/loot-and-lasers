@@ -507,9 +507,9 @@ func _build() -> void:
 	sc_row.add_theme_constant_override("separation", 10)
 	showcase.add_child(sc_row)
 
-	var crown := UiIcon.make("crown", Color("#FBBF24"), 28.0)
-	crown.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sc_row.add_child(crown)
+	var nexus_icon := UiIcon.make("satellite", Color("#FBBF24"), 28.0)
+	nexus_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sc_row.add_child(nexus_icon)
 
 	var sc_copy := VBoxContainer.new()
 	sc_copy.mouse_filter = Control.MOUSE_FILTER_IGNORE

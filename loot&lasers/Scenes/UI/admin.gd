@@ -40,16 +40,37 @@ const GRANT_TYPE_XP := "xp"
 const GRANT_TYPE_GEAR := "gear"
 const GRANT_TYPE_SE_GEAR := "se_gear"
 const GRANT_TYPE_STIM := "stim"
+const GRANT_TYPE_REPUTATION := "reputation"
 const GRANT_TYPE_COMPENSATION := "compensation"
 const GRANT_TYPE_ENTITLEMENT := "entitlement"
 
 const GRANT_PRESETS_FUEL: Array[int] = [1, 5, 10, 20, 50, 100_000]
 const GRANT_PRESETS_STANDARD: Array[int] = [10, 50, 100, 500, 1000]
 const GRANT_PRESETS_XP: Array[int] = [100, 500, 1000, 5000, 10000]
+const GRANT_REPUTATION_PRESET_SHIPMENT_COUNT := 5
+const GRANT_REPUTATION_PRESET_LEVEL_COUNT_MID := 2
+const GRANT_REPUTATION_PRESET_LEVEL_COUNT_HIGH := 5
+const GRANT_PRESETS_REPUTATION: Array[int] = [
+	CompanyRules.SHIPMENT_REPUTATION_REWARD,
+	CompanyRules.SHIPMENT_REPUTATION_REWARD * GRANT_REPUTATION_PRESET_SHIPMENT_COUNT,
+	CompanyRules.COMPANY_REPUTATION_PER_LEVEL,
+	CompanyRules.COMPANY_REPUTATION_PER_LEVEL * GRANT_REPUTATION_PRESET_LEVEL_COUNT_MID,
+	CompanyRules.COMPANY_REPUTATION_PER_LEVEL * GRANT_REPUTATION_PRESET_LEVEL_COUNT_HIGH,
+]
 const GRANT_FUEL_DEFAULT := 10
 const GRANT_STARDUST_DEFAULT := 100
 const GRANT_NOVA_DEFAULT := 10
 const GRANT_XP_DEFAULT := 1000
+const GRANT_REPUTATION_DEFAULT := CompanyRules.COMPANY_REPUTATION_PER_LEVEL
+## Admin grant chrome — larger than default ClientUi button type so Grants
+## type chips and matching configure controls stay in proportion.
+const GRANT_CHROME_FONT_SIZE_PX := 16
+const GRANT_CHROME_MIN_HEIGHT_PX := 42
+const GRANT_CTA_MIN_HEIGHT_PX := 52
+const GRANT_TYPE_H_SEPARATION_PX := 8
+const GRANT_TYPE_V_SEPARATION_PX := 6
+const GRANT_PRESET_H_SEPARATION_PX := 6
+const GRANT_PRESET_V_SEPARATION_PX := 6
 ## SpinBox bound for Fuel grants. Admin-owned characters may exceed the tank cap;
 ## this is not a gameplay Fuel rule.
 const GRANT_FUEL_DELTA_MIN := -1_000_000
@@ -60,6 +81,8 @@ const GRANT_NOVA_DELTA_MIN := -100_000
 const GRANT_NOVA_DELTA_MAX := 100_000
 const GRANT_XP_DELTA_MIN := -10_000_000
 const GRANT_XP_DELTA_MAX := 10_000_000
+const GRANT_REPUTATION_DELTA_MIN := -1_000_000
+const GRANT_REPUTATION_DELTA_MAX := 1_000_000
 const GRANT_GEAR_LEVEL_MIN := 1
 ## Gear formulas have no item-level cap. SpinBox requires a finite max; this is a
 ## widget bound (signed 32-bit), not a gameplay rule.
@@ -158,6 +181,7 @@ var _item_type: OptionButton
 var _item_rarity: OptionButton
 var _item_level: SpinBox
 var _item_company: OptionButton
+var _rep_company: OptionButton
 var _stim_attribute: OptionButton
 var _stim_rarity: OptionButton
 var _sim_level: SpinBox
@@ -462,6 +486,23 @@ func _se_gear_company_id() -> String:
 	if company_id.is_empty() and CompanyRules.COMPANY_IDS.size() > 0:
 		return CompanyRules.COMPANY_IDS[0]
 	return company_id
+
+
+func _rep_company_id() -> String:
+	var company_id := _simulate_selected_id(_rep_company)
+	if company_id.is_empty() and CompanyRules.COMPANY_IDS.size() > 0:
+		return CompanyRules.COMPANY_IDS[0]
+	return company_id
+
+
+func _scale_grant_chrome(ctrl: Control, is_cta: bool = false) -> void:
+	if ctrl == null:
+		return
+	ctrl.add_theme_font_size_override("font_size", GRANT_CHROME_FONT_SIZE_PX)
+	if ctrl is Label:
+		return
+	var min_h := GRANT_CTA_MIN_HEIGHT_PX if is_cta else GRANT_CHROME_MIN_HEIGHT_PX
+	ctrl.custom_minimum_size.y = maxi(int(ctrl.custom_minimum_size.y), min_h)
 
 
 func _sync_se_gear_slots() -> void:
@@ -1463,6 +1504,8 @@ func _grant_accent(kind: String = "") -> Color:
 			return ClientUi.GOLD
 		GRANT_TYPE_STIM:
 			return ClientUi.SUCCESS
+		GRANT_TYPE_REPUTATION:
+			return CompanyRules.manufacturer_badge_color(_rep_company_id())
 		GRANT_TYPE_COMPENSATION:
 			return ClientUi.WARNING
 		GRANT_TYPE_ENTITLEMENT:
@@ -1681,10 +1724,12 @@ func _build_grants() -> void:
 	var left := _col()
 	grid.add_child(left)
 	left.add_child(_make_target_picker(false))
-	left.add_child(_subhead("GRANT TYPE"))
+	var grant_type_head := _subhead("GRANT TYPE")
+	_scale_grant_chrome(grant_type_head)
+	left.add_child(grant_type_head)
 	var types := HFlowContainer.new()
-	types.add_theme_constant_override("h_separation", ROW_SEPARATION_PX)
-	types.add_theme_constant_override("v_separation", 4)
+	types.add_theme_constant_override("h_separation", GRANT_TYPE_H_SEPARATION_PX)
+	types.add_theme_constant_override("v_separation", GRANT_TYPE_V_SEPARATION_PX)
 	left.add_child(types)
 	for spec in [
 		[GRANT_TYPE_FUEL, "Fuel"],
@@ -1694,11 +1739,13 @@ func _build_grants() -> void:
 		[GRANT_TYPE_GEAR, "Gear"],
 		[GRANT_TYPE_SE_GEAR, "S-E Gear"],
 		[GRANT_TYPE_STIM, "Stim"],
+		[GRANT_TYPE_REPUTATION, "Rep"],
 		[GRANT_TYPE_COMPENSATION, "Compensation"],
 		[GRANT_TYPE_ENTITLEMENT, "Entitlement"],
 	]:
 		var id := str(spec[0])
 		var b := _accent_btn(str(spec[1]), _grant_accent(id), id == _grant_type)
+		_scale_grant_chrome(b)
 		b.pressed.connect(func() -> void: _set_grant_type(id))
 		types.add_child(b)
 		_grant_type_buttons[id] = b
@@ -1708,36 +1755,46 @@ func _build_grants() -> void:
 	_grant_summary = Label.new()
 	_grant_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_grant_summary.add_theme_color_override("font_color", ClientUi.TEXT)
+	_scale_grant_chrome(_grant_summary)
 	right.add_child(_grant_summary)
 
 	_grant_amount_box = VBoxContainer.new()
 	_grant_amount_box.add_theme_constant_override("separation", ROW_SEPARATION_PX)
 	right.add_child(_grant_amount_box)
-	_grant_amount = _spin("Amount ", GRANT_FUEL_DELTA_MIN, GRANT_FUEL_DELTA_MAX, GRANT_FUEL_DEFAULT)
-	_grant_amount.value_changed.connect(func(_v: float) -> void: _refresh_grant_cta())
-	_grant_amount_box.add_child(_grant_amount)
-	_grant_preset_row = HFlowContainer.new()
-	_grant_preset_row.add_theme_constant_override("h_separation", 4)
-	_grant_preset_row.add_theme_constant_override("v_separation", 4)
-	_grant_amount_box.add_child(_grant_preset_row)
-
-	_grant_gear_box = VBoxContainer.new()
-	_grant_gear_box.add_theme_constant_override("separation", ROW_SEPARATION_PX)
-	right.add_child(_grant_gear_box)
 	var company_ids: Array = []
 	var company_labels: Array = []
 	for cid in CompanyRules.COMPANY_IDS:
 		company_ids.append(str(cid))
 		company_labels.append(CompanyRules.display_name(str(cid)))
+	_rep_company = _simulate_option(company_ids, company_labels, 0)
+	_rep_company.item_selected.connect(func(_i: int) -> void: _refresh_grant_cta())
+	_scale_grant_chrome(_rep_company)
+	_grant_amount_box.add_child(_rep_company)
+	_grant_amount = _spin("Amount ", GRANT_FUEL_DELTA_MIN, GRANT_FUEL_DELTA_MAX, GRANT_FUEL_DEFAULT)
+	_grant_amount.value_changed.connect(func(_v: float) -> void: _refresh_grant_cta())
+	_scale_grant_chrome(_grant_amount)
+	_grant_amount_box.add_child(_grant_amount)
+	_grant_preset_row = HFlowContainer.new()
+	_grant_preset_row.add_theme_constant_override("h_separation", GRANT_PRESET_H_SEPARATION_PX)
+	_grant_preset_row.add_theme_constant_override("v_separation", GRANT_PRESET_V_SEPARATION_PX)
+	_grant_amount_box.add_child(_grant_preset_row)
+
+	_grant_gear_box = VBoxContainer.new()
+	_grant_gear_box.add_theme_constant_override("separation", ROW_SEPARATION_PX)
+	right.add_child(_grant_gear_box)
 	_item_company = _simulate_option(company_ids, company_labels, 0)
 	_item_company.item_selected.connect(func(_i: int) -> void: _sync_se_gear_slots())
 	_grant_gear_box.add_child(_item_company)
+	_scale_grant_chrome(_item_company)
 	_item_type = _option(GEAR_SLOT_IDS, 0)
+	_scale_grant_chrome(_item_type)
 	_grant_gear_box.add_child(_item_type)
 	_item_rarity = _option(GEAR_RARITY_IDS, GEAR_RARITY_DEFAULT_INDEX)
 	_item_rarity.item_selected.connect(func(_i: int) -> void: _refresh_grant_cta())
+	_scale_grant_chrome(_item_rarity)
 	_grant_gear_box.add_child(_item_rarity)
 	_item_level = _spin("Item level ", GRANT_GEAR_LEVEL_MIN, GRANT_GEAR_LEVEL_WIDGET_CEILING, GRANT_GEAR_LEVEL_DEFAULT)
+	_scale_grant_chrome(_item_level)
 	_grant_gear_box.add_child(_item_level)
 
 	_grant_stim_box = VBoxContainer.new()
@@ -1751,9 +1808,11 @@ func _build_grants() -> void:
 		stim_rarity_labels.append(str(rid).capitalize())
 	_stim_attribute = _simulate_option(STIM_ATTRIBUTE_IDS, stim_attr_labels, STIM_ATTRIBUTE_DEFAULT_INDEX)
 	_stim_attribute.item_selected.connect(func(_i: int) -> void: _refresh_grant_cta())
+	_scale_grant_chrome(_stim_attribute)
 	_grant_stim_box.add_child(_stim_attribute)
 	_stim_rarity = _simulate_option(STIM_RARITY_IDS, stim_rarity_labels, STIM_RARITY_DEFAULT_INDEX)
 	_stim_rarity.item_selected.connect(func(_i: int) -> void: _refresh_grant_cta())
+	_scale_grant_chrome(_stim_rarity)
 	_grant_stim_box.add_child(_stim_rarity)
 
 	_grant_comp_box = VBoxContainer.new()
@@ -1764,6 +1823,8 @@ func _build_grants() -> void:
 	_grant_comp_box.add_child(crow)
 	_reward_sd = _spin("SD ", 0, GRANT_SD_DELTA_MAX, 0)
 	_reward_nova = _spin("Nova ", 0, GRANT_NOVA_DELTA_MAX, 0)
+	_scale_grant_chrome(_reward_sd)
+	_scale_grant_chrome(_reward_nova)
 	crow.add_child(_reward_sd)
 	crow.add_child(_reward_nova)
 
@@ -1772,11 +1833,14 @@ func _build_grants() -> void:
 	right.add_child(_grant_ent_box)
 	_ent_key = ClientUi.make_field("entitlementKey")
 	_ent_key.text = DEFAULT_ENTITLEMENT_KEY
+	_scale_grant_chrome(_ent_key)
 	_grant_ent_box.add_child(_ent_key)
 	_ent_qty = _spin("qty ", GRANT_ENTITLEMENT_QTY_MIN, GRANT_ENTITLEMENT_QTY_MAX, GRANT_ENTITLEMENT_QTY_DEFAULT)
+	_scale_grant_chrome(_ent_qty)
 	_grant_ent_box.add_child(_ent_qty)
 	_grant_ent_box.add_child(_account_id)
 	_ent_id = ClientUi.make_field("entitlement record id (revoke / restore)")
+	_scale_grant_chrome(_ent_id)
 	_grant_ent_box.add_child(_ent_id)
 	var ent_row := HBoxContainer.new()
 	ent_row.add_theme_constant_override("separation", ROW_SEPARATION_PX)
@@ -1790,6 +1854,7 @@ func _build_grants() -> void:
 			)
 		)
 	)
+	_scale_grant_chrome(rev)
 	ent_row.add_child(rev)
 	var rest := _accent_btn("Restore Entitlement", ClientUi.SUCCESS, false)
 	rest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1798,6 +1863,7 @@ func _build_grants() -> void:
 			return await AdminManager.entitlements_restore(_ent_id.text.strip_edges(), {"reason": _why()})
 		)
 	)
+	_scale_grant_chrome(rest)
 	ent_row.add_child(rest)
 	var search_ent := _btn("Search Account Entitlements")
 	search_ent.pressed.connect(func() -> void:
@@ -1809,6 +1875,7 @@ func _build_grants() -> void:
 			return res
 		)
 	)
+	_scale_grant_chrome(search_ent)
 	_grant_ent_box.add_child(search_ent)
 	var products := _btn("List Product Mappings")
 	products.pressed.connect(func() -> void:
@@ -1818,6 +1885,7 @@ func _build_grants() -> void:
 			return res
 		)
 	)
+	_scale_grant_chrome(products)
 	_grant_ent_box.add_child(products)
 	var eaudit := _btn("Entitlement Audit")
 	eaudit.pressed.connect(func() -> void:
@@ -1830,6 +1898,7 @@ func _build_grants() -> void:
 			return res
 		)
 	)
+	_scale_grant_chrome(eaudit)
 	_grant_ent_box.add_child(eaudit)
 	_ent_list = VBoxContainer.new()
 	_grant_ent_box.add_child(_ent_list)
@@ -1837,6 +1906,7 @@ func _build_grants() -> void:
 	_grant_ent_box.add_child(_ent_products)
 
 	_grant_cta = _btn("Grant", true)
+	_scale_grant_chrome(_grant_cta, true)
 	_grant_cta.pressed.connect(_on_grant_pressed)
 	right.add_child(_grant_cta)
 	_set_grant_type(GRANT_TYPE_FUEL)
@@ -1852,8 +1922,11 @@ func _set_grant_type(kind: String) -> void:
 			ClientUi.apply_tinted_painted_button(b, _grant_accent(str(id)))
 		else:
 			ClientUi.apply_dark_outline_button(b, _grant_accent(str(id)), 0)
-	var amount := kind == GRANT_TYPE_FUEL or kind == GRANT_TYPE_STARDUST or kind == GRANT_TYPE_NOVA or kind == GRANT_TYPE_XP
+		_scale_grant_chrome(b)
+	var amount := kind == GRANT_TYPE_FUEL or kind == GRANT_TYPE_STARDUST or kind == GRANT_TYPE_NOVA or kind == GRANT_TYPE_XP or kind == GRANT_TYPE_REPUTATION
 	_grant_amount_box.visible = amount
+	if _rep_company:
+		_rep_company.visible = kind == GRANT_TYPE_REPUTATION
 	_grant_gear_box.visible = kind == GRANT_TYPE_GEAR or kind == GRANT_TYPE_SE_GEAR
 	if _item_company:
 		_item_company.visible = kind == GRANT_TYPE_SE_GEAR
@@ -1895,6 +1968,12 @@ func _configure_grant_amount(kind: String) -> void:
 			_grant_amount.value = GRANT_XP_DEFAULT
 			_grant_amount.prefix = "XP "
 			_fill_presets(GRANT_PRESETS_XP)
+		GRANT_TYPE_REPUTATION:
+			_grant_amount.min_value = GRANT_REPUTATION_DELTA_MIN
+			_grant_amount.max_value = GRANT_REPUTATION_DELTA_MAX
+			_grant_amount.value = GRANT_REPUTATION_DEFAULT
+			_grant_amount.prefix = "Rep "
+			_fill_presets(GRANT_PRESETS_REPUTATION)
 
 
 func _fill_presets(values: Array[int]) -> void:
@@ -1902,6 +1981,7 @@ func _fill_presets(values: Array[int]) -> void:
 	for n in values:
 		var amt := n
 		var b := _btn(str(amt))
+		_scale_grant_chrome(b)
 		b.pressed.connect(func() -> void:
 			_grant_amount.value = amt
 			_refresh_grant_cta()
@@ -1940,6 +2020,12 @@ func _grant_cta_label() -> String:
 			if stim_stat.is_empty():
 				stim_stat = STIM_ATTRIBUTE_IDS[STIM_ATTRIBUTE_DEFAULT_INDEX]
 			return "Grant %s %s Stim" % [stim_rarity.capitalize(), stim_stat.capitalize()]
+		GRANT_TYPE_REPUTATION:
+			return "%s %s %s Reputation" % [
+				verb,
+				NumberDisplay.quantity_exact(mag),
+				CompanyRules.abbreviation(_rep_company_id()),
+			]
 		GRANT_TYPE_COMPENSATION:
 			return "Grant Compensation"
 		GRANT_TYPE_ENTITLEMENT:
@@ -1953,7 +2039,7 @@ func _refresh_grant_cta() -> void:
 		return
 	_grant_cta.text = _grant_cta_label()
 	var accent := _grant_accent()
-	if _grant_type == GRANT_TYPE_FUEL or _grant_type == GRANT_TYPE_STARDUST or _grant_type == GRANT_TYPE_NOVA or _grant_type == GRANT_TYPE_XP:
+	if _grant_type == GRANT_TYPE_FUEL or _grant_type == GRANT_TYPE_STARDUST or _grant_type == GRANT_TYPE_NOVA or _grant_type == GRANT_TYPE_XP or _grant_type == GRANT_TYPE_REPUTATION:
 		if _grant_amount_int() < 0:
 			ClientUi.apply_danger_button(_grant_cta)
 		else:
@@ -1968,6 +2054,11 @@ func _refresh_grant_cta() -> void:
 		ClientUi.apply_tinted_painted_button(_grant_cta, ClientUi.rarity_color(stim_rarity))
 	else:
 		ClientUi.apply_tinted_painted_button(_grant_cta, accent)
+	_scale_grant_chrome(_grant_cta, true)
+	if _grant_type == GRANT_TYPE_REPUTATION and _grant_type_buttons.has(GRANT_TYPE_REPUTATION):
+		var rb: Button = _grant_type_buttons[GRANT_TYPE_REPUTATION]
+		ClientUi.apply_tinted_painted_button(rb, accent)
+		_scale_grant_chrome(rb)
 	if _grant_summary:
 		_grant_summary.text = "Will apply to: %s" % _target_label_text()
 		_grant_summary.add_theme_color_override("font_color", accent)
@@ -1980,7 +2071,7 @@ func _on_grant_pressed() -> void:
 	if _grant_type == GRANT_TYPE_ENTITLEMENT and _account_id.text.strip_edges().is_empty():
 		_set_feedback("Account id required for entitlements.", "err")
 		return
-	if _grant_type == GRANT_TYPE_FUEL or _grant_type == GRANT_TYPE_STARDUST or _grant_type == GRANT_TYPE_NOVA or _grant_type == GRANT_TYPE_XP:
+	if _grant_type == GRANT_TYPE_FUEL or _grant_type == GRANT_TYPE_STARDUST or _grant_type == GRANT_TYPE_NOVA or _grant_type == GRANT_TYPE_XP or _grant_type == GRANT_TYPE_REPUTATION:
 		if _grant_amount_int() == 0:
 			_set_feedback("Invalid amount.", "err")
 			return
@@ -2022,6 +2113,13 @@ func _execute_grant() -> Dictionary:
 				"rarity": _simulate_selected_id(_stim_rarity),
 				"stat": _simulate_selected_id(_stim_attribute),
 			}, _why())
+		GRANT_TYPE_REPUTATION:
+			return await AdminManager.grant_company_reputation(
+				_cid(),
+				_rep_company_id(),
+				_grant_amount_int(),
+				_why()
+			)
 		GRANT_TYPE_COMPENSATION:
 			return await AdminManager.rewards_grant({
 				"characterId": _cid(),

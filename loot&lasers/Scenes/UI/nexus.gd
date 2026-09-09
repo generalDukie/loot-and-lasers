@@ -56,7 +56,7 @@ func _build() -> void:
 	root.add_theme_constant_override("separation", 8)
 	margin.add_child(root)
 
-	root.add_child(UiIcon.make_title_row("crown", "Galactic Command Nexus", ClientUi.TEXT, 27, 28.0))
+	root.add_child(UiIcon.make_title_row("satellite", "Galactic Command Nexus", ClientUi.TEXT, 27, 28.0))
 
 	# NexusChatter — icon + rotating italic line.
 	var chatter_panel := PanelContainer.new()
@@ -185,7 +185,7 @@ func _populate() -> void:
 	var showcase_head := HBoxContainer.new()
 	showcase_head.add_theme_constant_override("separation", 8)
 	_owner_col.add_child(showcase_head)
-	showcase_head.add_child(UiIcon.make("crown", Color("#FBBF24"), 21.0))
+	showcase_head.add_child(UiIcon.make("satellite", Color("#FBBF24"), 21.0))
 	var showcase_title := Label.new()
 	showcase_title.text = "GALACTIC COMMAND NEXUS"
 	showcase_title.add_theme_font_size_override("font_size", 16)

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bpgi3eut47ji"
-path="res://.godot/imported/hard-hat.svg-b588fc1316a37ecda7c618d856cebfbf.ctex"
+uid="uid://l4fu8c3ev4vs"
+path="res://.godot/imported/cpu.svg-751dcf364de6372c8ad278c347145246.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Icons/nav/hard-hat.svg"
-dest_files=["res://.godot/imported/hard-hat.svg-b588fc1316a37ecda7c618d856cebfbf.ctex"]
+source_file="res://Assets/Icons/nav/cpu.svg"
+dest_files=["res://.godot/imported/cpu.svg-751dcf364de6372c8ad278c347145246.ctex"]
 
 [params]
 

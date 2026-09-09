@@ -390,14 +390,12 @@ func _make_item_card(it: Dictionary) -> PanelContainer:
 	col.add_theme_constant_override("separation", 1)
 	drag_row.add_child(col)
 
-	var title := Label.new()
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.text = str(it.get("name", "?"))
-	title.clip_text = true
-	title.add_theme_font_size_override("font_size", 16)
-	title.add_theme_color_override("font_color", tint)
-	ClientUi.apply_display_font(title)
-	col.add_child(title)
+	col.add_child(UiIcon.make_item_name_row(
+		it,
+		16,
+		tint,
+		{"fallback": "?"}
+	))
 
 	var meta := Label.new()
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE

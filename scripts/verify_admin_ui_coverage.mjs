@@ -38,6 +38,7 @@ const REQUIRED_UI_ACTIONS = [
   "toggle_promo_code",
   "delete_promo_code",
   "grant_item",
+  "grant_company_reputation",
   "rewards_grant",
   "rewards_search",
   "rewards_get",
@@ -184,14 +185,15 @@ if (
   ui.includes("GRANT_TYPE_GEAR") &&
   ui.includes("GRANT_TYPE_SE_GEAR") &&
   ui.includes("GRANT_TYPE_STIM") &&
+  ui.includes("GRANT_TYPE_REPUTATION") &&
   ui.includes("GRANT_TYPE_XP") &&
   ui.includes("GRANT_TYPE_ENTITLEMENT") &&
   ui.includes("S-E Gear") &&
-  /GRANT_TYPE_GEAR[\s\S]*GRANT_TYPE_SE_GEAR[\s\S]*GRANT_TYPE_STIM/.test(ui)
+  /GRANT_TYPE_GEAR[\s\S]*GRANT_TYPE_SE_GEAR[\s\S]*GRANT_TYPE_STIM[\s\S]*GRANT_TYPE_REPUTATION/.test(ui)
 ) {
-  pass("unified grant types include Fuel, Gear, S-E Gear, Stim, XP, Entitlement");
+  pass("unified grant types include Fuel, Gear, S-E Gear, Stim, Rep, XP, Entitlement");
 } else {
-  fail("unified grant types include Fuel, Gear, S-E Gear, Stim, XP, Entitlement");
+  fail("unified grant types include Fuel, Gear, S-E Gear, Stim, Rep, XP, Entitlement");
 }
 
 console.log(`\n${REQUIRED_UI_ACTIONS.length} required actions checked; ${failed} failure(s)\n`);

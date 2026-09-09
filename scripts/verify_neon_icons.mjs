@@ -29,6 +29,10 @@ const REQUIRED = [
   "Assets/Icons/nav/swords.svg",
   "Assets/Icons/nav/triangle-alert.svg",
   "Scripts/UI/UiIcon.gd",
+  "Assets/Icons/nav/crosshair.svg",
+  "Assets/Icons/nav/cpu.svg",
+  "Assets/Icons/nav/hard-hat.svg",
+  "Assets/Icons/nav/crown.svg",
 ];
 for (const rel of REQUIRED) {
   if (fs.existsSync(path.join(ROOT, rel))) pass(`asset ${rel}`);
@@ -55,6 +59,8 @@ const titleFiles = {
   "Scenes/UI/notifications.gd": "bell",
   "Scenes/UI/casino.gd": "dice-5",
   "Scenes/UI/progress.gd": "trophy",
+  "Scenes/UI/nexus.gd": "satellite",
+  "Scenes/UI/leaderboard.gd": "trophy",
 };
 for (const [rel, icon] of Object.entries(titleFiles)) {
   const src = fs.readFileSync(path.join(ROOT, rel), "utf8");

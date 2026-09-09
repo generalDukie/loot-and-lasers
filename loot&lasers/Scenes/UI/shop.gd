@@ -23,6 +23,10 @@ const STALL_GEAR_ICON := SELL_ICON_SZ
 const STALL_BUNDLE_ICON := SELL_ICON_SZ
 ## Match sell-pane name size; descriptor stays ~75% of title (was 15/20).
 const STALL_TITLE_FS := SELL_TITLE_FS
+## Company badge beside buy-stall names (1.25× the default item-name badge).
+const STALL_COMPANY_BADGE_SCALE_NUMERATOR := 5
+const STALL_COMPANY_BADGE_SCALE_DENOMINATOR := 4
+const STALL_COMPANY_BADGE_FONT_INSET_PX := 4.0
 const STALL_SUB_FS := 18
 ## Gear item-level under rarity · type — smaller than the descriptor.
 const STALL_LEVEL_FS := 14
@@ -738,12 +742,21 @@ func _empty_line(text: String) -> Label:
 
 ## Glyph left (sell-pane size); name + descriptor hug the top-right.
 ## Optional `level_text` sits in smaller type under rarity · type.
+func _market_company_badge_size(title_fs: int) -> float:
+	var badge_sz := maxf(
+		UiIcon.ITEM_NAME_BADGE_MIN_PX,
+		float(title_fs) - STALL_COMPANY_BADGE_FONT_INSET_PX
+	)
+	return badge_sz * float(STALL_COMPANY_BADGE_SCALE_NUMERATOR) / float(STALL_COMPANY_BADGE_SCALE_DENOMINATOR)
+
+
 func _make_stall_title_row(
 	glyph: Control,
 	title_text: String,
 	sub_text: String,
 	title_color: Color,
-	level_text: String = ""
+	level_text: String = "",
+	item: Dictionary = {}
 ) -> HBoxContainer:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", STALL_TOP_SEP)
@@ -759,16 +772,23 @@ func _make_stall_title_row(
 	title_col.add_theme_constant_override("separation", 2)
 	top.add_child(title_col)
 
-	var title := Label.new()
-	title.text = title_text
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	title.autowrap_mode = TextServer.AUTOWRAP_OFF
-	title.clip_text = true
-	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	title.add_theme_font_size_override("font_size", STALL_TITLE_FS)
-	title.add_theme_color_override("font_color", title_color)
-	ClientUi.apply_display_font(title)
-	title_col.add_child(title)
+	if item.is_empty():
+		var title := Label.new()
+		title.text = title_text
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		title.autowrap_mode = TextServer.AUTOWRAP_OFF
+		title.clip_text = true
+		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		title.add_theme_font_size_override("font_size", STALL_TITLE_FS)
+		title.add_theme_color_override("font_color", title_color)
+		ClientUi.apply_display_font(title)
+		title_col.add_child(title)
+	else:
+		title_col.add_child(UiIcon.make_item_name_row(item, STALL_TITLE_FS, title_color, {
+			"alignment": HORIZONTAL_ALIGNMENT_RIGHT,
+			"fallback": title_text,
+			"icon_size": _market_company_badge_size(STALL_TITLE_FS),
+		}))
 
 	var sub := Label.new()
 	sub.text = sub_text
@@ -840,7 +860,9 @@ func _make_cons_card(item: Dictionary, tutorial_stim := false) -> PanelContainer
 		glyph,
 		str(item.get("name", "?")),
 		"%s · Stim" % rarity.capitalize(),
-		rarity_tint
+		rarity_tint,
+		"",
+		item
 	))
 
 	# Face: attribute glyph + % only. Duration lives on hover inspect.
@@ -955,7 +977,7 @@ func _make_gear_card(item: Dictionary, is_hot: bool, tint: Color) -> PanelContai
 		GameData.gear_type_label(item_type),
 	]
 	var level_text := "" if is_bundle else _gear_level_label(item)
-	col.add_child(_make_stall_title_row(glyph, str(item.get("name", "?")), sub_text, tint, level_text))
+	col.add_child(_make_stall_title_row(glyph, str(item.get("name", "?")), sub_text, tint, level_text, item))
 
 	if is_bundle:
 		var flavor := Label.new()
@@ -1828,21 +1850,16 @@ func _make_sell_bag_slot(item: Dictionary, is_stage: bool, stage_index: int = -1
 		text_col.add_theme_constant_override("separation", 4)
 		root.add_child(text_col)
 
-		var title := Label.new()
-		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		title.autowrap_mode = TextServer.AUTOWRAP_OFF
-		title.clip_text = true
-		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		title.text = str(item.get("name", "Item"))
-		title.add_theme_font_size_override("font_size", SELL_TITLE_FS)
-		title.add_theme_color_override(
-			"font_color",
-			ClientUi.rarity_color(str(item.get("rarity", ""))).lightened(0.2)
-		)
-		ClientUi.apply_display_font(title)
-		text_col.add_child(title)
+		text_col.add_child(UiIcon.make_item_name_row(
+			item,
+			SELL_TITLE_FS,
+			ClientUi.rarity_color(str(item.get("rarity", ""))).lightened(0.2),
+			{
+				"sell_tab": true,
+				"alignment": HORIZONTAL_ALIGNMENT_RIGHT,
+				"icon_size": _market_company_badge_size(SELL_TITLE_FS),
+			}
+		))
 
 		var price_row := HBoxContainer.new()
 		price_row.mouse_filter = Control.MOUSE_FILTER_IGNORE

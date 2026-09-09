@@ -79,6 +79,8 @@ const IDS = [
   "play",
   "pause",
   "skip-forward",
+  "crosshair",
+  "cpu",
 ];
 
 fs.mkdirSync(OUT, { recursive: true });

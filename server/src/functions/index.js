@@ -151,6 +151,7 @@ import {
   canonicalGearSlot,
 } from "../shared/productionMath.js";
 import { STIM_ATTRIBUTES, STIM_ITEM_TYPE } from "../../../src/lib/stimActivation.js";
+import { grantCompanyReputation } from "../shared/companyService.js";
 import {
   auditAdminModeration,
   recordCurrencyChange,
@@ -1730,6 +1731,66 @@ async function adminModerationInner(user, body) {
         character_name: ch.name,
         progression,
         balances: afterBal,
+      },
+    };
+  }
+
+  if (action === "grant_company_reputation") {
+    const character_id = String(body.character_id || "").trim();
+    const company_id = String(body.company_id || "").trim();
+    const amount = body.amount != null ? body.amount : body.reputation;
+    const reason = String(body.reason || "").trim();
+    const ch = entities.Character.get(character_id);
+    if (!ch) return { status: 404, body: { error: "Character not found" } };
+    const granted = grantCompanyReputation({
+      character: ch,
+      companyId: company_id,
+      amount,
+    });
+    const corr = newCorrelationId();
+    auditAdminModeration(user, "grant_company_reputation", {
+      characterId: ch.id,
+      targetAccountId: ch.created_by_id,
+      reason,
+      subjectType: "company",
+      subjectId: company_id,
+      beforeState: {
+        reputation: granted.previous_reputation,
+        level: granted.previous_level,
+      },
+      afterState: {
+        reputation: granted.next_reputation,
+        level: granted.next_level,
+        overflow_pending: granted.overflow_pending,
+        tokens_created: granted.tokens_created,
+      },
+      changeSet: {
+        company_id,
+        amount: granted.next_reputation - granted.previous_reputation,
+        requested_amount: Math.floor(Number(amount)),
+      },
+      correlationId: corr,
+    });
+    broadcastAccountCharacterRefresh(
+      granted.character.created_by_id || ch.created_by_id,
+      granted.character.id,
+      ACCOUNT_CHARACTER_REFRESH_SOURCE_ADMIN_CURRENCY,
+    );
+    return {
+      status: 200,
+      body: {
+        success: true,
+        character_id: granted.character.id,
+        character_name: ch.name,
+        company: granted.company,
+        companies: granted.companies,
+        previous_reputation: granted.previous_reputation,
+        next_reputation: granted.next_reputation,
+        previous_level: granted.previous_level,
+        next_level: granted.next_level,
+        levels_awarded: granted.levels_awarded,
+        tokens_created: granted.tokens_created,
+        overflow_pending: granted.overflow_pending,
       },
     };
   }

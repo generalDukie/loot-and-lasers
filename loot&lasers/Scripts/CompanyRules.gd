@@ -67,6 +67,24 @@ const COMPANY_COLORS := {
 	COMPANY_ID_GORP: Color("#34D399"),
 }
 
+const COMPANY_BADGE_ICON := {
+	COMPANY_ID_CNC: "crown",
+	COMPANY_ID_BJS: "crosshair",
+	COMPANY_ID_DTD: "hard-hat",
+	COMPANY_ID_GORP: "cpu",
+}
+
+const COMPANY_BADGE_COLOR_CNC := Color("#E8C547")
+const COMPANY_BADGE_COLOR_BJS := Color("#9B1C1C")
+const COMPANY_BADGE_COLOR_DTD := Color("#8B9198")
+const COMPANY_BADGE_COLOR_GORP := Color("#F472B6")
+const COMPANY_BADGE_COLORS := {
+	COMPANY_ID_CNC: COMPANY_BADGE_COLOR_CNC,
+	COMPANY_ID_BJS: COMPANY_BADGE_COLOR_BJS,
+	COMPANY_ID_DTD: COMPANY_BADGE_COLOR_DTD,
+	COMPANY_ID_GORP: COMPANY_BADGE_COLOR_GORP,
+}
+
 const COMPANY_NAMES := {
 	COMPANY_ID_CNC: "Crown & Carapace",
 	COMPANY_ID_BJS: "Ballistics & Jewelry Services",
@@ -154,6 +172,29 @@ static func rarity_label(rarity: String) -> String:
 
 static func is_company_id(company_id: String) -> bool:
 	return COMPANY_IDS.has(company_id)
+
+
+static func manufacturer_id(item: Dictionary) -> String:
+	return str(item.get("manufacturer", "")).strip_edges()
+
+
+static func manufacturer_badge_icon(company_id: String) -> String:
+	return str(COMPANY_BADGE_ICON.get(company_id, ""))
+
+
+static func manufacturer_badge_color(company_id: String) -> Color:
+	var raw: Variant = COMPANY_BADGE_COLORS.get(company_id, FALLBACK_ACCENT)
+	if raw is Color:
+		return raw
+	return FALLBACK_ACCENT
+
+
+static func should_show_manufacturer_badge(item: Dictionary, sell_tab: bool = false) -> bool:
+	if item.is_empty() or not is_company_id(manufacturer_id(item)):
+		return false
+	if sell_tab:
+		return item.get("shipment_eligible") == true
+	return true
 
 
 static func canonical_slot(slot: String) -> String:

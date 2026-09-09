@@ -25,7 +25,7 @@ const SECTIONS: Array = [
 	{"id": "combat", "label": "Combat & Arena", "icon": "swords", "color": "#FF4D6D"},
 	{"id": "galaxy", "label": "Galaxy Dungeon", "icon": "map", "color": "#00E5FF"},
 	{"id": "market", "label": "Black Market", "icon": "shopping-bag", "color": "#4ADE80"},
-	{"id": "guilds", "label": "Guilds & Nexus", "icon": "crown", "color": "#A855F7"},
+	{"id": "guilds", "label": "Guilds & Nexus", "icon": "satellite", "color": "#A855F7"},
 	{"id": "social", "label": "Social & Mail", "icon": "users", "color": "#34D399"},
 ]
 

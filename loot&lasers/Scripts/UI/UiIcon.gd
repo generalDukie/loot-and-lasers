@@ -63,7 +63,7 @@ const ALIAS := {
 	"dice": "dices",
 	"casino": "dice-5",
 	"landmark": "landmark",
-	"nexus": "crown",
+	"nexus": "satellite",
 	"inbox": "inbox",
 	"mail": "mail",
 	"send": "send",
@@ -179,7 +179,9 @@ const ALIAS := {
 	"ranks": "trophy",
 	"progress": "trophy",
 	"crown": "crown",
-	"leaderboard": "crown",
+	"leaderboard": "trophy",
+	"crosshair": "crosshair",
+	"cpu": "cpu",
 	"beer": "beer",
 	"cantina": "beer",
 	"zap": "zap",
@@ -300,6 +302,95 @@ static func apply_leading_icon(btn: Button, icon_id: String, tint: Color, size: 
 	var baked := key == "stardust" or key == "fuel" or key == "nova"
 	apply_button_icon_colors(btn, Color.WHITE if baked else tint)
 	btn.set_meta("ui_icon_id", key if baked else resolve_id(icon_id))
+
+
+const ITEM_NAME_BADGE_GAP_PX := 4
+const ITEM_NAME_BADGE_MIN_PX := 12.0
+## Keeps the name visible when a parent sizes to content or the badge texture is large.
+const ITEM_NAME_LABEL_MIN_PX := 32.0
+
+
+static func make_manufacturer_badge(item: Dictionary, size: float) -> TextureRect:
+	var company_id := CompanyRules.manufacturer_id(item)
+	var badge := make(
+		CompanyRules.manufacturer_badge_icon(company_id),
+		CompanyRules.manufacturer_badge_color(company_id),
+		size
+	)
+	badge.custom_minimum_size = Vector2(size, size)
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	badge.size_flags_stretch_ratio = 0.0
+	return badge
+
+
+## Item name with the company badge immediately beside it.
+## Pass sell_tab=true to hide the badge on non-shipment-eligible Gear.
+static func make_item_name_row(
+	item: Dictionary,
+	font_size: int,
+	font_color: Color,
+	opts: Dictionary = {}
+) -> HBoxContainer:
+	var sell_tab := bool(opts.get("sell_tab", false))
+	var icon_size := float(opts.get("icon_size", maxf(ITEM_NAME_BADGE_MIN_PX, float(font_size) - 4.0)))
+	var alignment := int(opts.get("alignment", HORIZONTAL_ALIGNMENT_LEFT))
+	var autowrap := int(opts.get("autowrap", TextServer.AUTOWRAP_OFF))
+	var display_font := bool(opts.get("display_font", true))
+	var expand := bool(opts.get("expand", true))
+	## Shrink-to-content rows (inspect hover) must not clip or the name width becomes 0.
+	var clip := bool(opts.get("clip", expand))
+	var fallback := str(opts.get("fallback", "Item"))
+	var max_lines := int(opts.get("max_lines", 1))
+
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", ITEM_NAME_BADGE_GAP_PX)
+	if expand:
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	if alignment == HORIZONTAL_ALIGNMENT_CENTER:
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+	elif alignment == HORIZONTAL_ALIGNMENT_RIGHT:
+		row.alignment = BoxContainer.ALIGNMENT_END
+	else:
+		row.alignment = BoxContainer.ALIGNMENT_BEGIN
+
+	if CompanyRules.should_show_manufacturer_badge(item, sell_tab):
+		row.add_child(make_manufacturer_badge(item, icon_size))
+
+	var lab := Label.new()
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.text = str(item.get("name", fallback))
+	lab.horizontal_alignment = alignment
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lab.autowrap_mode = autowrap
+	lab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if expand:
+		lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lab.custom_minimum_size.x = ITEM_NAME_LABEL_MIN_PX
+	else:
+		lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	if clip:
+		lab.clip_text = true
+		if autowrap == TextServer.AUTOWRAP_OFF:
+			lab.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	if max_lines > 0:
+		lab.max_lines_visible = max_lines
+	lab.add_theme_font_size_override("font_size", font_size)
+	lab.add_theme_color_override("font_color", font_color)
+	if display_font:
+		ClientUi.apply_display_font(lab)
+	else:
+		ClientUi.apply_body_font(lab)
+	if bool(opts.get("inspect_wrap", false)):
+		lab.set_meta("inspect_wrap", true)
+		if opts.has("inspect_wrap_inset"):
+			lab.set_meta("inspect_wrap_inset", float(opts.get("inspect_wrap_inset", 0.0)))
+	row.add_child(lab)
+	row.set_meta("name_label", lab)
+	return row
 
 
 ## Title row: neon icon + text label (replaces "🔔 Notifications" patterns).

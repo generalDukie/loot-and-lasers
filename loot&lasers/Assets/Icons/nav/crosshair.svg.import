@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bpgi3eut47ji"
-path="res://.godot/imported/hard-hat.svg-b588fc1316a37ecda7c618d856cebfbf.ctex"
+uid="uid://l4fu8xtsevvs"
+path="res://.godot/imported/crosshair.svg-2e1767d83386c5db070844808d6c6cb9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Icons/nav/hard-hat.svg"
-dest_files=["res://.godot/imported/hard-hat.svg-b588fc1316a37ecda7c618d856cebfbf.ctex"]
+source_file="res://Assets/Icons/nav/crosshair.svg"
+dest_files=["res://.godot/imported/crosshair.svg-2e1767d83386c5db070844808d6c6cb9.ctex"]
 
 [params]
 

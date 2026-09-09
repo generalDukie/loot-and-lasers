@@ -149,6 +149,21 @@ func grant_item(character_id: String, item_spec: Dictionary, reason: String) -> 
 	return res
 
 
+func grant_company_reputation(character_id: String, company_id: String, amount: int, reason: String) -> Dictionary:
+	var res: Dictionary = await moderation("grant_company_reputation", {
+		"character_id": character_id,
+		"company_id": company_id,
+		"amount": amount,
+		"reason": _reason_for_grant(reason),
+	})
+	if bool(res.get("ok", false)):
+		await _refresh_if_active_character(character_id)
+		if CompanyManager != null and CompanyManager.has_method("load_status"):
+			if character_id.strip_edges() == GameManager.selected_character_id():
+				await CompanyManager.load_status()
+	return res
+
+
 func reset_player(character_id: String, reason: String) -> Dictionary:
 	return await moderation("reset_player", {"character_id": character_id, "reason": reason})
 

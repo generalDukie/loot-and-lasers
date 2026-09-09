@@ -495,6 +495,9 @@ const {
   stimBonusMultiplier,
   stimSellValueResolved,
   COMPANY_ID_CNC,
+  COMPANY_ID_BJS,
+  COMPANY_REPUTATION_PER_LEVEL,
+  TOKEN_RARITY_EPIC,
   isShipmentDockEligibleItem,
 } = await import("../../src/lib/productionMath/index.js");
 const { STIM_ATTRIBUTES } = await import("../../src/lib/stimActivation.js");
@@ -706,6 +709,149 @@ await testAsync("admin S-E Gear grant denies non-admin", async () => {
     type: "helmet",
     rarity: "rare",
     manufacturer: COMPANY_ID_CNC,
+  });
+  assert.equal(denied.status, 403);
+});
+
+const {
+  ADMIN_COMPANY_REPUTATION_DELTA_MAX,
+} = await import("../src/shared/companyService.js");
+
+await testAsync("admin company reputation grant adds rep and awards a level token", async () => {
+  const a = insertUser("u-rep-grant", "rep-grant@t.test", "admin");
+  const player = insertUser("u-rep-target", "rep-target@t.test", "user");
+  makeCharacter("ch-rep-grant", player.id, "RepTarget");
+  entities.Character.update("ch-rep-grant", {
+    company_state: {
+      CNC: { reputation: 0, shipment_count: 0, waiting_token: null, overflow_token: null },
+    },
+  });
+  const res = await AdminModeration(a, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-grant",
+    company_id: COMPANY_ID_CNC,
+    amount: COMPANY_REPUTATION_PER_LEVEL,
+    reason: "qa reputation",
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  assert.equal(res.body.next_reputation, COMPANY_REPUTATION_PER_LEVEL);
+  assert.equal(res.body.next_level, 1);
+  assert.equal(res.body.levels_awarded.length, 1);
+  assert.equal(res.body.tokens_created.length, 1);
+  assert.equal(res.body.tokens_created[0].rarity, TOKEN_RARITY_EPIC);
+  const live = entities.Character.get("ch-rep-grant");
+  assert.equal(live.company_state.CNC.reputation, COMPANY_REPUTATION_PER_LEVEL);
+  assert.ok(live.company_state.CNC.waiting_token?.id);
+  assert.equal(live.company_state.CNC.overflow_token, null);
+});
+
+await testAsync("admin company reputation grant overflows when a token is already waiting", async () => {
+  const a = insertUser("u-rep-over", "rep-over@t.test", "admin");
+  makeCharacter("ch-rep-over", a.id, "RepOverflow");
+  entities.Character.update("ch-rep-over", {
+    company_state: {
+      BJS: {
+        reputation: COMPANY_REPUTATION_PER_LEVEL,
+        shipment_count: 0,
+        waiting_token: {
+          id: "tok-wait-rep",
+          company_id: COMPANY_ID_BJS,
+          rarity: "rare",
+          awarded_level: 1,
+          status: "waiting",
+        },
+        overflow_token: null,
+      },
+    },
+  });
+  const res = await AdminModeration(a, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-over",
+    company_id: COMPANY_ID_BJS,
+    amount: COMPANY_REPUTATION_PER_LEVEL,
+    reason: "qa overflow",
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  assert.equal(res.body.overflow_pending, true);
+  const live = entities.Character.get("ch-rep-over").company_state.BJS;
+  assert.equal(live.waiting_token.id, "tok-wait-rep");
+  assert.ok(live.overflow_token?.id);
+  assert.notEqual(live.overflow_token.id, "tok-wait-rep");
+});
+
+await testAsync("admin company reputation grant rejects invalid company and zero amount", async () => {
+  const a = insertUser("u-rep-bad", "rep-bad@t.test", "admin");
+  makeCharacter("ch-rep-bad", a.id, "RepBad");
+  const badCompany = await AdminModeration(a, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-bad",
+    company_id: "NOPE",
+    amount: COMPANY_REPUTATION_PER_LEVEL,
+    reason: "qa",
+  });
+  assert.equal(badCompany.status, 400);
+  assert.equal(badCompany.body.code, "INVALID_COMPANY");
+  const zero = await AdminModeration(a, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-bad",
+    company_id: COMPANY_ID_CNC,
+    amount: 0,
+    reason: "qa",
+  });
+  assert.equal(zero.status, 400);
+  const over = await AdminModeration(a, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-bad",
+    company_id: COMPANY_ID_CNC,
+    amount: ADMIN_COMPANY_REPUTATION_DELTA_MAX + 1,
+    reason: "qa",
+  });
+  assert.equal(over.status, 400);
+});
+
+await testAsync("admin company reputation removal clamps at zero and does not revoke tokens", async () => {
+  const a = insertUser("u-rep-neg", "rep-neg@t.test", "admin");
+  makeCharacter("ch-rep-neg", a.id, "RepNeg");
+  entities.Character.update("ch-rep-neg", {
+    company_state: {
+      CNC: {
+        reputation: 200,
+        shipment_count: 0,
+        waiting_token: {
+          id: "tok-keep-rep",
+          company_id: COMPANY_ID_CNC,
+          rarity: "epic",
+          awarded_level: 1,
+          status: "waiting",
+        },
+        overflow_token: null,
+      },
+    },
+  });
+  const res = await AdminModeration(a, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-neg",
+    company_id: COMPANY_ID_CNC,
+    amount: -1_000,
+    reason: "qa clamp",
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  assert.equal(res.body.next_reputation, 0);
+  assert.equal(res.body.tokens_created.length, 0);
+  const live = entities.Character.get("ch-rep-neg").company_state.CNC;
+  assert.equal(live.reputation, 0);
+  assert.equal(live.waiting_token.id, "tok-keep-rep");
+});
+
+await testAsync("admin company reputation grant denies non-admin", async () => {
+  const player = insertUser("u-rep-deny", "rep-deny@t.test", "user");
+  makeCharacter("ch-rep-deny", player.id, "RepDeny");
+  const denied = await AdminModeration(player, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-deny",
+    company_id: COMPANY_ID_CNC,
+    amount: COMPANY_REPUTATION_PER_LEVEL,
+    reason: "nope",
   });
   assert.equal(denied.status, 403);
 });

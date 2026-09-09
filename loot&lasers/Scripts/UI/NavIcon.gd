@@ -15,6 +15,8 @@ static func make(icon_id: String, tint: Color, size: float = DEFAULT_SIZE) -> Te
 	tr.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	tr.texture_repeat = CanvasItem.TEXTURE_REPEAT_DISABLED
 	tr.texture = _texture(icon_id)
 	tr.modulate = tint
 	tr.set_meta("nav_tint", tint)

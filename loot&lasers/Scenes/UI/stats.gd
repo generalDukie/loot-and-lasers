@@ -25,6 +25,10 @@ var _hero_meta_icon: TextureRect
 var _xp_bar: ProgressBar
 var _xp_lab: Label
 var _lore_lab: RichTextLabel
+var _lore_bb := ""
+var _lore_crisp_body: Font
+var _lore_crisp_bold: Font
+var _lore_fitting := false
 var _stims_lab: Label
 var _stims_panel: PanelContainer
 var _effects: ActiveEffectsBar
@@ -78,6 +82,25 @@ const EQUIP_NAME_FS := 12
 const EQUIP_GRID_INSET := 8.0
 const EQUIP_GRID_SEP := 8
 const BAG_COLS := 5
+## Company badge next to backpack names (2× the shared item-name badge).
+const BAG_COMPANY_BADGE_SCALE_NUMERATOR := 2
+const BAG_COMPANY_BADGE_SCALE_DENOMINATOR := 1
+## 1.25× backpack item names so type rasterizes larger (not Control-scaled).
+const BAG_NAME_FONT_SCALE_NUMERATOR := 5
+const BAG_NAME_FONT_SCALE_DENOMINATOR := 4
+const BAG_NAME_BAND_HEIGHT_RATIO_BASE := 0.26
+const BAG_NAME_BAND_MIN_PX_BASE := 20.0
+const BAG_NAME_BAND_MAX_PX_BASE := 36.0
+const BAG_NAME_FONT_RATIO_BASE := 0.58
+const BAG_NAME_FONT_MIN_PX_BASE := 11.0
+const BAG_NAME_FONT_MAX_PX_BASE := 16.0
+const BAG_NAME_BAND_HEIGHT_RATIO := BAG_NAME_BAND_HEIGHT_RATIO_BASE * float(BAG_NAME_FONT_SCALE_NUMERATOR) / float(BAG_NAME_FONT_SCALE_DENOMINATOR)
+const BAG_NAME_BAND_MIN_PX := BAG_NAME_BAND_MIN_PX_BASE * float(BAG_NAME_FONT_SCALE_NUMERATOR) / float(BAG_NAME_FONT_SCALE_DENOMINATOR)
+const BAG_NAME_BAND_MAX_PX := BAG_NAME_BAND_MAX_PX_BASE * float(BAG_NAME_FONT_SCALE_NUMERATOR) / float(BAG_NAME_FONT_SCALE_DENOMINATOR)
+const BAG_NAME_FONT_RATIO := BAG_NAME_FONT_RATIO_BASE * float(BAG_NAME_FONT_SCALE_NUMERATOR) / float(BAG_NAME_FONT_SCALE_DENOMINATOR)
+const BAG_NAME_FONT_MIN_PX := BAG_NAME_FONT_MIN_PX_BASE * float(BAG_NAME_FONT_SCALE_NUMERATOR) / float(BAG_NAME_FONT_SCALE_DENOMINATOR)
+const BAG_NAME_FONT_MAX_PX := BAG_NAME_FONT_MAX_PX_BASE * float(BAG_NAME_FONT_SCALE_NUMERATOR) / float(BAG_NAME_FONT_SCALE_DENOMINATOR)
+const BAG_NAME_BADGE_PAD_PX := 4.0
 ## Backpack gear glyph — fraction of the middle band's shorter side (name/attrs unchanged).
 const BAG_GEAR_ICON_FILL := 0.82
 ## Fixed bottom reserve so 0–5 attr chips don't resize the middle glyph band.
@@ -93,6 +116,16 @@ const REFLEX_RESIST_LABEL := "Reflex Resist"
 const REFLEX_RESIST_TILE_COLOR := Color("#A3E635")
 ## Half-period of the slow tutorial pulse (~2 full cycles over a 5s hold).
 const COMBAT_STAT_FLASH_HALF_SEC := 1.25
+## Lore rail type — MSDF stays sharp under canvas_items fractional stretch.
+const LORE_FS := 17
+const LORE_FS_MIN := 12
+const LORE_LINE_SEPARATION := 0
+const LORE_FIT_MIN_PX := 8.0
+const LORE_MSDF_SIZE := 64
+const LORE_MSDF_PIXEL_RANGE := 8
+## Inter `opsz` OpenType tag — small optical size for UI.
+const LORE_OPENTYPE_TAG_OPSZ := 0x6F70737A
+const LORE_OPTICAL_SIZE := 18
 const COMBAT_STAT_FLASH_PEAK := Color(1.55, 1.9, 1.2, 1.0)
 const ATTR_ROW_FLASH_PEAK := Color(1.45, 1.75, 1.95, 1.0)
 
@@ -251,10 +284,19 @@ func _build() -> void:
 	_lore_lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_lore_lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lore_lab.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_lore_lab.add_theme_font_size_override("normal_font_size", 17)
-	_lore_lab.add_theme_font_size_override("bold_font_size", 17)
-	_lore_lab.add_theme_color_override("default_color", Color(0.86, 0.91, 0.96))
-	ClientUi.apply_body_font(_lore_lab)
+	_lore_lab.clip_contents = true
+	_lore_lab.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_lore_lab.add_theme_color_override("default_color", ClientUi.TEXT)
+	_lore_lab.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+	_lore_lab.add_theme_constant_override("shadow_offset_x", 0)
+	_lore_lab.add_theme_constant_override("shadow_offset_y", 0)
+	_lore_lab.add_theme_constant_override("outline_size", 0)
+	_lore_lab.add_theme_constant_override("line_separation", LORE_LINE_SEPARATION)
+	_apply_lore_fonts()
+	_apply_lore_font_size(LORE_FS)
+	if _lore_crisp_bold != null:
+		lore_eye.add_theme_font_override("font", _lore_crisp_bold)
+	_lore_lab.resized.connect(_on_lore_resized)
 	lore_outer.add_child(_lore_lab)
 
 	# Center: EquippedFrame doll fills height; name / guild / XP pinned to pane bottom.
@@ -714,7 +756,9 @@ func _update_hero() -> void:
 			str(special.get("name", "")), str(special.get("effect", "")),
 		]
 	if is_instance_valid(_lore_lab):
+		_lore_bb = lore_bb
 		_lore_lab.text = lore_bb
+		_fit_lore_to_panel()
 
 	# Side rail owns empty-state copy via STIMS / MOUNTS section labels.
 	_stims_lab.visible = false
@@ -725,6 +769,88 @@ func _update_hero() -> void:
 	_bio_field.text = _saved_bio
 	_bio_count.text = str(_saved_bio.length())
 	_bio_save.disabled = true
+
+
+func _load_lore_msdf_font(path: String) -> Font:
+	var ff := FontFile.new()
+	if ff.load_dynamic_font(path) != OK:
+		var loaded: Variant = load(path)
+		return loaded as Font if loaded is Font else null
+	ff.multichannel_signed_distance_field = true
+	ff.msdf_size = LORE_MSDF_SIZE
+	ff.msdf_pixel_range = LORE_MSDF_PIXEL_RANGE
+	ff.hinting = TextServer.HINTING_NONE
+	ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+	ff.oversampling = 0.0
+	return ff
+
+
+func _lore_msdf_body() -> Font:
+	var msdf := _load_lore_msdf_font(ClientUi.BODY_FONT_PATH)
+	if msdf == null:
+		return ClientUi.body_font()
+	var face := FontVariation.new()
+	face.base_font = msdf
+	face.variation_opentype = {LORE_OPENTYPE_TAG_OPSZ: LORE_OPTICAL_SIZE}
+	return face
+
+
+func _lore_msdf_bold() -> Font:
+	var msdf := _load_lore_msdf_font(ClientUi.DISPLAY_FONT_PATH)
+	if msdf == null:
+		return ClientUi.display_font()
+	var face := FontVariation.new()
+	face.base_font = msdf
+	face.variation_embolden = 0.7
+	return face
+
+
+func _apply_lore_fonts() -> void:
+	if not is_instance_valid(_lore_lab):
+		return
+	if _lore_crisp_body == null:
+		_lore_crisp_body = _lore_msdf_body()
+	if _lore_crisp_bold == null:
+		_lore_crisp_bold = _lore_msdf_bold()
+	if _lore_crisp_body != null:
+		_lore_lab.add_theme_font_override("normal_font", _lore_crisp_body)
+		_lore_lab.add_theme_font_override("italics_font", _lore_crisp_body)
+	if _lore_crisp_bold != null:
+		_lore_lab.add_theme_font_override("bold_font", _lore_crisp_bold)
+		_lore_lab.add_theme_font_override("bold_italics_font", _lore_crisp_bold)
+
+
+func _apply_lore_font_size(font_px: int) -> void:
+	if not is_instance_valid(_lore_lab):
+		return
+	_lore_lab.add_theme_font_size_override("normal_font_size", font_px)
+	_lore_lab.add_theme_font_size_override("bold_font_size", font_px)
+	_lore_lab.add_theme_font_size_override("italics_font_size", font_px)
+	_lore_lab.add_theme_font_size_override("bold_italics_font_size", font_px)
+
+
+func _on_lore_resized() -> void:
+	if _lore_fitting or _lore_bb.is_empty():
+		return
+	_fit_lore_to_panel()
+
+
+func _fit_lore_to_panel() -> void:
+	if _lore_fitting or not is_instance_valid(_lore_lab) or _lore_bb.is_empty():
+		return
+	var avail_h := _lore_lab.size.y
+	var avail_w := _lore_lab.size.x
+	if avail_h < LORE_FIT_MIN_PX or avail_w < LORE_FIT_MIN_PX:
+		return
+	_lore_fitting = true
+	var fitted := LORE_FS_MIN
+	for fs in range(LORE_FS, LORE_FS_MIN - 1, -1):
+		_apply_lore_font_size(fs)
+		if _lore_lab.get_content_height() <= int(avail_h):
+			fitted = fs
+			break
+	_apply_lore_font_size(fitted)
+	_lore_fitting = false
 
 
 func _on_save_bio() -> void:
@@ -979,19 +1105,34 @@ func _make_slot_chip(slot_type: String, label: String, worn: Dictionary) -> Pane
 		empty_mark.add_theme_color_override("font_color", Color(ClientUi.MUTED, 0.55))
 		icon_wrap.add_child(empty_mark)
 
-	var name := Label.new()
-	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.autowrap_mode = TextServer.AUTOWRAP_OFF
-	name.clip_text = true
-	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name.custom_minimum_size.y = float(_equip_name_fs() + 4)
-	name.text = str(worn.get("name", "—")) if filled else "empty"
-	name.add_theme_font_size_override("font_size", _equip_name_fs())
-	name.add_theme_color_override("font_color", rarity_tint.lightened(0.15) if filled else ClientUi.MUTED)
-	ClientUi.apply_body_font(name)
-	col.add_child(name)
+	if filled:
+		var name := Label.new()
+		name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name.autowrap_mode = TextServer.AUTOWRAP_OFF
+		name.clip_text = true
+		name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name.custom_minimum_size.y = float(_equip_name_fs() + 4)
+		name.text = str(worn.get("name", "Item"))
+		name.add_theme_font_size_override("font_size", _equip_name_fs())
+		name.add_theme_color_override("font_color", rarity_tint.lightened(0.15))
+		ClientUi.apply_body_font(name)
+		col.add_child(name)
+	else:
+		var name := Label.new()
+		name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name.autowrap_mode = TextServer.AUTOWRAP_OFF
+		name.clip_text = true
+		name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name.custom_minimum_size.y = float(_equip_name_fs() + 4)
+		name.text = "empty"
+		name.add_theme_font_size_override("font_size", _equip_name_fs())
+		name.add_theme_color_override("font_color", ClientUi.MUTED)
+		ClientUi.apply_body_font(name)
+		col.add_child(name)
 
 	panel.set_drag_forwarding(
 		func(_at: Vector2) -> Variant:
@@ -1123,7 +1264,15 @@ func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContaine
 
 	if filled:
 		var rarity_tint := ClientUi.rarity_color(str(item.get("rarity", "")))
-		var name_h := clampf(_bag_slot_min_h * 0.26, 20.0, 30.0)
+		var name_h := clampf(
+			_bag_slot_min_h * BAG_NAME_BAND_HEIGHT_RATIO,
+			BAG_NAME_BAND_MIN_PX,
+			BAG_NAME_BAND_MAX_PX
+		)
+		var name_fs := int(round(clampf(name_h * BAG_NAME_FONT_RATIO, BAG_NAME_FONT_MIN_PX, BAG_NAME_FONT_MAX_PX)))
+		var badge_sz := _bag_company_badge_size(name_fs)
+		if CompanyRules.should_show_manufacturer_badge(item):
+			name_h = maxf(name_h, badge_sz + BAG_NAME_BADGE_PAD_PX)
 
 		var name_band := Control.new()
 		name_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1132,23 +1281,32 @@ func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContaine
 		name_band.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		col.add_child(name_band)
 
+		var title_row := HBoxContainer.new()
+		title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title_row.add_theme_constant_override("separation", int(BAG_NAME_BADGE_PAD_PX))
+		name_band.add_child(title_row)
+		title_row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		title_row.offset_left = 1
+		title_row.offset_right = -1
+
+		if CompanyRules.should_show_manufacturer_badge(item):
+			title_row.add_child(UiIcon.make_manufacturer_badge(item, badge_sz))
+
 		var title := Label.new()
 		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		title.offset_left = 1
-		title.offset_right = -1
+		title.text = str(item.get("name", "Item"))
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		title.max_lines_visible = 2
 		title.clip_text = true
-		title.text = str(item.get("name", "Item"))
-		var name_fs := int(round(clampf(name_h * 0.58, 11.0, 16.0)))
+		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		title.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		title.add_theme_font_size_override("font_size", name_fs)
 		title.add_theme_color_override("font_color", rarity_tint.lightened(0.2))
-		title.add_theme_constant_override("line_spacing", -2)
 		ClientUi.apply_display_font(title)
-		name_band.add_child(title)
+		title_row.add_child(title)
 
 		var icon_wrap := CenterContainer.new()
 		icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1212,6 +1370,11 @@ func _make_bag_slot(item: Dictionary, tutorial_helmet := false) -> PanelContaine
 					_on_equip(captured_id)
 		)
 	return panel
+
+
+func _bag_company_badge_size(name_fs: int) -> float:
+	var base := maxf(UiIcon.ITEM_NAME_BADGE_MIN_PX, float(name_fs) - BAG_NAME_BADGE_PAD_PX)
+	return base * float(BAG_COMPANY_BADGE_SCALE_NUMERATOR) / float(BAG_COMPANY_BADGE_SCALE_DENOMINATOR)
 
 
 func _bind_bag_gear_icon_size(wrap: Control, icon: Control) -> void:

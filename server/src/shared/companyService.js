@@ -82,6 +82,10 @@ export function persistCompanyState(characterId, state) {
   return entities.Character.update(characterId, { company_state: state });
 }
 
+/** Admin grant bound — not a gameplay reputation cap. */
+export const ADMIN_COMPANY_REPUTATION_DELTA_MIN = -1_000_000;
+export const ADMIN_COMPANY_REPUTATION_DELTA_MAX = 1_000_000;
+
 function makeToken(companyId, rarity, awardedLevel, status) {
   return {
     id: nanoid(),
@@ -284,6 +288,40 @@ export function settleShipment({ user, character, companyId, itemIds, requestId 
     overflow_pending: !!liveRow.overflow_token,
     balances: { stardust: updated.stardust },
     transaction: mut.transaction || null,
+  };
+}
+
+export function grantCompanyReputation({ character, companyId, amount }) {
+  if (!isCompanyId(companyId)) httpErr(400, "Unknown company", "INVALID_COMPANY");
+  const delta = Math.floor(Number(amount));
+  if (!Number.isFinite(delta) || delta === 0) {
+    httpErr(400, "Reputation amount required", "INVALID_REPUTATION_AMOUNT");
+  }
+  if (delta < ADMIN_COMPANY_REPUTATION_DELTA_MIN || delta > ADMIN_COMPANY_REPUTATION_DELTA_MAX) {
+    httpErr(400, "Reputation amount out of range", "INVALID_REPUTATION_AMOUNT");
+  }
+  const state = readCompanyState(character);
+  const row = state[companyId];
+  const previousReputation = row.reputation;
+  const nextReputation = Math.max(0, previousReputation + delta);
+  const awardedLevels = delta > 0
+    ? levelsAwardedByReputation(previousReputation, nextReputation)
+    : [];
+  row.reputation = nextReputation;
+  const createdTokens = awardTokensForLevels(row, companyId, awardedLevels);
+  const updated = persistCompanyState(character.id, state);
+  const liveRow = readCompanyState(updated)[companyId];
+  return {
+    character: updated,
+    company: publicCompanyRow(companyId, liveRow),
+    companies: serializeCompanies(updated),
+    previous_reputation: previousReputation,
+    next_reputation: nextReputation,
+    previous_level: companyLevelFromReputation(previousReputation),
+    next_level: companyLevelFromReputation(nextReputation),
+    levels_awarded: awardedLevels,
+    tokens_created: createdTokens.map(publicToken),
+    overflow_pending: !!liveRow.overflow_token,
   };
 }
 

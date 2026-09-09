@@ -320,14 +320,16 @@ func _equip_chip(it: Dictionary) -> PanelContainer:
 	t.add_theme_color_override("font_color", ClientUi.MUTED)
 	ClientUi.apply_display_font(t)
 	col.add_child(t)
-	var n := Label.new()
-	n.text = str(it.get("name", "Item"))
-	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	n.add_theme_font_size_override("font_size", 15)
-	n.add_theme_color_override("font_color", tint.lightened(0.15))
-	ClientUi.apply_body_font(n)
-	col.add_child(n)
+	col.add_child(UiIcon.make_item_name_row(
+		it,
+		15,
+		tint.lightened(0.15),
+		{
+			"alignment": HORIZONTAL_ALIGNMENT_CENTER,
+			"autowrap": TextServer.AUTOWRAP_WORD_SMART,
+			"display_font": false,
+		}
+	))
 	return panel
 
 

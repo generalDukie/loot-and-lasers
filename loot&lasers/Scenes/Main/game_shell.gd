@@ -1134,7 +1134,7 @@ func _nav_groups() -> Array:
 		{"name": "Battle", "items": [
 			{"path": GameManager.SCENE_ARENA, "label": "Arena", "icon": "swords", "color": "#FB7185"},
 			{"path": GameManager.SCENE_LEADERBOARD, "label": "Ranks", "icon": "trophy", "color": "#34D399"},
-			{"path": GameManager.SCENE_NEXUS, "label": "Nexus", "icon": "crown", "color": "#60A5FA"},
+			{"path": GameManager.SCENE_NEXUS, "label": "Nexus", "icon": "satellite", "color": "#60A5FA"},
 		]},
 		{"name": "Trade", "items": [
 			{"path": GameManager.SCENE_SHOP, "label": "Black Market", "icon": "shopping-bag", "color": "#9D6BFF"},

@@ -5,19 +5,15 @@ extends Control
 const LOGO_WIDTH_FRAC := 0.75
 const STATUS_GAP_PX := 16.0
 const STATUS_FONT_PX := 23
-const MIN_SPLASH_SEC := 5.0
 const SPLASH_FADE_IN_SEC := 0.18
-const MILLISECONDS_PER_SECOND := 1_000.0
 
 var _status: Label
 var _brand: BrandGradientTitle
 var _brand_host: CenterContainer
-var _splash_started_ms := 0
 
 
 func _ready() -> void:
 	_build_splash()
-	_splash_started_ms = Time.get_ticks_msec()
 	DevEnvironmentBadge.attach_to(self)
 	# Let the splash paint one frame before any network work.
 	await get_tree().process_frame
@@ -88,28 +84,15 @@ func _set_status(text: String) -> void:
 		call_deferred("_layout_splash")
 
 
-func _hold_splash() -> void:
-	var elapsed := (
-		float(Time.get_ticks_msec() - _splash_started_ms) / MILLISECONDS_PER_SECOND
-	)
-	var remain := MIN_SPLASH_SEC - elapsed
-	if remain > 0.05:
-		_set_status("Bringing you into space...")
-		await get_tree().create_timer(remain).timeout
-
-
 func _leave_to_login() -> void:
-	await _hold_splash()
 	GameManager.go_login()
 
 
 func _leave_to_character_select() -> void:
-	await _hold_splash()
 	GameManager.go_character_select()
 
 
 func _leave_to_hub(character: Dictionary) -> void:
-	await _hold_splash()
 	_set_status("Entering station...")
 	await get_tree().process_frame
 	GameManager.go_hub(character)

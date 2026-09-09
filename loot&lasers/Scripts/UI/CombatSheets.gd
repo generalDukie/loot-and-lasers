@@ -624,13 +624,12 @@ static func _reward_item_pane(item: Dictionary, inspect: ItemInspectPopup) -> Pa
 	col.add_theme_constant_override("separation", 1)
 	row.add_child(col)
 
-	var name_lab := Label.new()
-	name_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_lab.text = str(item.get("name", "Item"))
-	name_lab.add_theme_font_size_override("font_size", 18)
-	name_lab.add_theme_color_override("font_color", tint.lightened(0.22))
-	ClientUi.apply_display_font(name_lab)
-	col.add_child(name_lab)
+	col.add_child(UiIcon.make_item_name_row(
+		item,
+		18,
+		tint.lightened(0.22),
+		{}
+	))
 
 	var sub := Label.new()
 	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE

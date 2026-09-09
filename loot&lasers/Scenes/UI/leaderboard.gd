@@ -64,7 +64,7 @@ func _build() -> void:
 	root.add_child(head)
 
 	var title_center := CenterContainer.new()
-	title_center.add_child(UiIcon.make_title_row("crown", "Galactic Rankings", ClientUi.TEXT, 29, 28.0))
+	title_center.add_child(UiIcon.make_title_row("trophy", "Galactic Rankings", ClientUi.TEXT, 29, 28.0))
 	head.add_child(title_center)
 
 	var sub := Label.new()
@@ -118,7 +118,7 @@ func _make_tab_bar() -> CenterContainer:
 	wrap.add_child(tabs)
 	_tab_buttons.clear()
 	for spec in [
-		{"id": MODE_CHARACTER, "label": "CHARACTER RANKING", "icon": "crown", "tint": ClientUi.GOLD},
+		{"id": MODE_CHARACTER, "label": "CHARACTER RANKING", "icon": "trophy", "tint": ClientUi.GOLD},
 		{"id": MODE_GUILD, "label": "GUILD RANKING", "icon": "users", "tint": ClientUi.CYAN},
 	]:
 		var b := Button.new()

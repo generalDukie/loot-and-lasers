@@ -9,19 +9,43 @@ signal closed
 ## One-frame bridge so the cursor can leave the item and enter the popup.
 ## Must not be reset every frame (see request_hide) or the card never closes.
 const HIDE_DELAY_S := 0.02
-const MAX_W := 640.0
-const PAD_X := 10
-const PAD_Y := 8
-const ICON_SZ := 42.0
-const TITLE_FS := 19
-const META_FS := 18
+## 1.25× inspect chrome. Applied to authored sizes — never Control.scale —
+## so fonts and vector/SVG glyphs stay rasterized at the larger size.
+const INSPECT_SCALE_NUMERATOR := 5
+const INSPECT_SCALE_DENOMINATOR := 4
+const MAX_W_BASE := 640.0
+const PAD_X_BASE := 10
+const PAD_Y_BASE := 8
+const ICON_SZ_BASE := 42.0
+const TITLE_FS_BASE := 19
+const META_FS_BASE := 18
+const LEVEL_FS_BASE := 14
+const BODY_FS_BASE := 19
+const VAL_FS_BASE := 19
+const DELTA_FS_BASE := 17
+const STAT_ICON_BASE := 22.0
+const ACTION_H_BASE := 32.0
+const SELL_ICON_BASE := 14.0
+const WRAP_MIN_BASE := 80.0
+const EDGE_GAP_BASE := 8.0
+const ICON_FRAME_PAD_BASE := 4.0
+const MAX_W := MAX_W_BASE * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)
+const PAD_X := int(round(float(PAD_X_BASE) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
+const PAD_Y := int(round(float(PAD_Y_BASE) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
+const ICON_SZ := ICON_SZ_BASE * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)
+const TITLE_FS := int(round(float(TITLE_FS_BASE) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
+const META_FS := int(round(float(META_FS_BASE) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
 ## Item level is a player-facing number, not a requirement.
-const LEVEL_FS := 14
-const BODY_FS := 19
-const VAL_FS := 19
-const DELTA_FS := 17
-const STAT_ICON := 22.0
-const ACTION_H := 32.0
+const LEVEL_FS := int(round(float(LEVEL_FS_BASE) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
+const BODY_FS := int(round(float(BODY_FS_BASE) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
+const VAL_FS := int(round(float(VAL_FS_BASE) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
+const DELTA_FS := int(round(float(DELTA_FS_BASE) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
+const STAT_ICON := STAT_ICON_BASE * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)
+const ACTION_H := ACTION_H_BASE * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)
+const SELL_ICON := SELL_ICON_BASE * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)
+const WRAP_MIN := WRAP_MIN_BASE * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)
+const EDGE_GAP := EDGE_GAP_BASE * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)
+const ICON_FRAME_PAD := ICON_FRAME_PAD_BASE * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)
 
 var _pad: MarginContainer
 var _root: VBoxContainer
@@ -45,10 +69,15 @@ var _tween: Tween
 var _instant_dismiss := false
 
 
+func _scaled_sep(value: int) -> int:
+	return int(round(float(value) * float(INSPECT_SCALE_NUMERATOR) / float(INSPECT_SCALE_DENOMINATOR)))
+
+
 func _ready() -> void:
 	visible = false
 	modulate.a = 0.0
-	scale = Vector2(0.96, 0.96)
+	scale = Vector2.ONE
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	z_index = 90
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	# Top-level so the card never reflows Hero/Shop layout.
@@ -73,19 +102,19 @@ func _build_chrome() -> void:
 
 	_root = VBoxContainer.new()
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_theme_constant_override("separation", 4)
+	_root.add_theme_constant_override("separation", _scaled_sep(4))
 	_root.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_pad.add_child(_root)
 
-	_section_header = _make_section(2)
-	_section_meta = _make_section(2)
-	_section_compare = _make_section(2)
-	_section_stats = _make_section(2)
-	_section_extras = _make_section(3)
-	_section_footer = _make_section(2)
+	_section_header = _make_section(_scaled_sep(2))
+	_section_meta = _make_section(_scaled_sep(2))
+	_section_compare = _make_section(_scaled_sep(2))
+	_section_stats = _make_section(_scaled_sep(2))
+	_section_extras = _make_section(_scaled_sep(3))
+	_section_footer = _make_section(_scaled_sep(2))
 
 	_section_actions = HBoxContainer.new()
-	_section_actions.add_theme_constant_override("separation", 6)
+	_section_actions.add_theme_constant_override("separation", _scaled_sep(6))
 	_section_actions.mouse_filter = Control.MOUSE_FILTER_STOP
 	_section_actions.visible = false
 	_root.add_child(_section_actions)
@@ -208,7 +237,7 @@ func _set_wrap_labels(n: Node, wrap: bool, inner_w: float) -> void:
 		if wrap:
 			var inset := float(lab.get_meta("inspect_wrap_inset", 0.0))
 			lab.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			lab.custom_minimum_size.x = maxf(80.0, inner_w - inset)
+			lab.custom_minimum_size.x = maxf(WRAP_MIN, inner_w - inset)
 		else:
 			lab.autowrap_mode = TextServer.AUTOWRAP_OFF
 			lab.custom_minimum_size.x = 0
@@ -255,7 +284,7 @@ func force_hide() -> void:
 	_tween = null
 	visible = false
 	modulate.a = 0.0
-	scale = Vector2(0.96, 0.96)
+	scale = Vector2.ONE
 	closed.emit()
 
 
@@ -305,25 +334,24 @@ func _play_open_anim() -> void:
 		_tween.kill()
 	pivot_offset = size * 0.5
 	modulate.a = 0.0
-	scale = Vector2(0.96, 0.96)
-	_tween = create_tween().set_parallel(true)
+	scale = Vector2.ONE
+	_tween = create_tween()
 	_tween.tween_property(self, "modulate:a", 1.0, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	_tween.tween_property(self, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _apply_frame_style(accent: Color) -> void:
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.035, 0.05, 0.1, 0.98)
 	sb.border_color = Color(accent, 0.92)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(8)
+	sb.set_border_width_all(_scaled_sep(2))
+	sb.set_corner_radius_all(_scaled_sep(8))
 	sb.content_margin_left = 0
 	sb.content_margin_right = 0
 	sb.content_margin_top = 0
 	sb.content_margin_bottom = 0
 	sb.shadow_color = Color(accent.r, accent.g, accent.b, 0.22)
-	sb.shadow_size = 4
-	sb.shadow_offset = Vector2(0, 2)
+	sb.shadow_size = _scaled_sep(4)
+	sb.shadow_offset = Vector2(0, float(_scaled_sep(2)))
 	add_theme_stylebox_override("panel", sb)
 
 
@@ -386,12 +414,12 @@ func _rebuild(options: Dictionary) -> void:
 		_section_actions.visible = false
 		return
 
-	var icon_box := ICON_SZ + 4.0
+	var icon_box := ICON_SZ + ICON_FRAME_PAD
 
 	# —— Header: icon + name ——
 	var head := HBoxContainer.new()
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_theme_constant_override("separation", 8)
+	head.add_theme_constant_override("separation", _scaled_sep(8))
 	head.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_section_header.add_child(head)
 
@@ -406,7 +434,7 @@ func _rebuild(options: Dictionary) -> void:
 	icon_sb.bg_color = Color(tint, 0.14)
 	icon_sb.border_color = Color(tint, 0.65)
 	icon_sb.set_border_width_all(1)
-	icon_sb.set_corner_radius_all(8)
+	icon_sb.set_corner_radius_all(_scaled_sep(8))
 	icon_panel.add_theme_stylebox_override("panel", icon_sb)
 	icon_wrap.add_child(icon_panel)
 	var icon_center := CenterContainer.new()
@@ -417,20 +445,19 @@ func _rebuild(options: Dictionary) -> void:
 	var title_col := VBoxContainer.new()
 	title_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_col.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	title_col.add_theme_constant_override("separation", 1)
+	title_col.add_theme_constant_override("separation", _scaled_sep(1))
 	head.add_child(title_col)
 
-	var title := Label.new()
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.text = str(item.get("name", "Item"))
-	title.autowrap_mode = TextServer.AUTOWRAP_OFF
-	title.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	title.set_meta("inspect_wrap", true)
-	title.set_meta("inspect_wrap_inset", icon_box + 8.0)
-	title.add_theme_font_size_override("font_size", TITLE_FS)
-	title.add_theme_color_override("font_color", tint.lightened(0.22))
-	ClientUi.apply_display_font(title)
-	title_col.add_child(title)
+	title_col.add_child(UiIcon.make_item_name_row(
+		item,
+		TITLE_FS,
+		tint.lightened(0.22),
+		{
+			"expand": false,
+			"inspect_wrap": true,
+			"inspect_wrap_inset": icon_box + EDGE_GAP,
+		}
+	))
 
 	var company_flavor := str(item.get("company_flavor", "")).strip_edges()
 	if not company_flavor.is_empty():
@@ -440,7 +467,7 @@ func _rebuild(options: Dictionary) -> void:
 		flav.autowrap_mode = TextServer.AUTOWRAP_OFF
 		flav.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		flav.set_meta("inspect_wrap", true)
-		flav.set_meta("inspect_wrap_inset", icon_box + 8.0)
+		flav.set_meta("inspect_wrap_inset", icon_box + EDGE_GAP)
 		flav.add_theme_font_size_override("font_size", LEVEL_FS)
 		flav.add_theme_color_override("font_color", ClientUi.WARNING)
 		ClientUi.apply_italic_body_font(flav)
@@ -488,14 +515,31 @@ func _rebuild(options: Dictionary) -> void:
 		if compare_with.is_empty():
 			eq_lab.text = "Nothing equipped in this slot"
 		else:
-			eq_lab.text = "Compared to equipped: %s" % str(compare_with.get("name", "gear"))
+			eq_lab.text = "Compared to equipped:"
 		eq_lab.autowrap_mode = TextServer.AUTOWRAP_OFF
 		eq_lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		eq_lab.set_meta("inspect_wrap", true)
 		eq_lab.add_theme_font_size_override("font_size", META_FS)
 		eq_lab.add_theme_color_override("font_color", Color(ClientUi.CYAN_SOFT, 0.9))
 		ClientUi.apply_body_font(eq_lab)
-		_section_compare.add_child(eq_lab)
+		if compare_with.is_empty():
+			_section_compare.add_child(eq_lab)
+		else:
+			var compare_row := HBoxContainer.new()
+			compare_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			compare_row.add_theme_constant_override("separation", _scaled_sep(6))
+			compare_row.add_child(eq_lab)
+			compare_row.add_child(UiIcon.make_item_name_row(
+				compare_with,
+				META_FS,
+				Color(ClientUi.CYAN_SOFT, 0.9),
+				{
+					"expand": false,
+					"display_font": false,
+					"fallback": "gear",
+				}
+			))
+			_section_compare.add_child(compare_row)
 
 	# —— Stats / stims ——
 	if InventoryRules.is_consumable(item):
@@ -505,7 +549,7 @@ func _rebuild(options: Dictionary) -> void:
 		var stim_hours := str(effect.get("duration_hours", 0))
 		var stim_row := HBoxContainer.new()
 		stim_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		stim_row.add_theme_constant_override("separation", 6)
+		stim_row.add_theme_constant_override("separation", _scaled_sep(6))
 		if StatIcon.has(stim_stat):
 			stim_row.add_child(StatIcon.make_labeled(
 				stim_stat,
@@ -513,7 +557,7 @@ func _rebuild(options: Dictionary) -> void:
 				STAT_ICON,
 				BODY_FS,
 				GameData.stat_color(stim_stat),
-				4
+				_scaled_sep(4)
 			))
 		else:
 			var stim := Label.new()
@@ -551,8 +595,8 @@ func _rebuild(options: Dictionary) -> void:
 	if show_sell and not InventoryRules.is_consumable(item):
 		var sell_row := HBoxContainer.new()
 		sell_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		sell_row.add_theme_constant_override("separation", 4)
-		sell_row.add_child(CurrencyIcon.make("stardust", 14.0))
+		sell_row.add_theme_constant_override("separation", _scaled_sep(4))
+		sell_row.add_child(CurrencyIcon.make("stardust", SELL_ICON))
 		var sell := Label.new()
 		sell.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		sell.text = "Sell value · %s" % NumberDisplay.quantity(InventoryRules.estimate_sell_value(item))
@@ -581,7 +625,7 @@ func _rebuild(options: Dictionary) -> void:
 		var total: int = int(diffs.get("total", 0))
 		var footer := HBoxContainer.new()
 		footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		footer.add_theme_constant_override("separation", 6)
+		footer.add_theme_constant_override("separation", _scaled_sep(6))
 		var total_lab := Label.new()
 		total_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		total_lab.text = "TOTAL STAT CHANGE"
@@ -653,7 +697,7 @@ func _stat_row(stat_key: String, value: int, delta) -> Control:
 	var lab := HBoxContainer.new()
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	lab.add_theme_constant_override("separation", 6)
+	lab.add_theme_constant_override("separation", _scaled_sep(6))
 	if StatIcon.has(stat_key):
 		lab.add_child(StatIcon.make(stat_key, STAT_ICON))
 	var abbr := Label.new()
@@ -696,7 +740,7 @@ func _position_near(anchor: Control) -> void:
 	var rect := anchor.get_global_rect()
 	var sz := size
 	var vp := get_viewport_rect().size
-	var gap := 8.0
+	var gap := EDGE_GAP
 	# Prefer right of item; flip left; then above/below. Avoid covering the item.
 	var candidates: Array[Vector2] = [
 		Vector2(rect.end.x + gap, rect.position.y),
@@ -708,8 +752,8 @@ func _position_near(anchor: Control) -> void:
 	var best_score := -INF
 	for pos in candidates:
 		var p: Vector2 = pos
-		p.x = clampf(p.x, 8.0, maxf(8.0, vp.x - sz.x - 8.0))
-		p.y = clampf(p.y, 8.0, maxf(8.0, vp.y - sz.y - 8.0))
+		p.x = clampf(p.x, EDGE_GAP, maxf(EDGE_GAP, vp.x - sz.x - EDGE_GAP))
+		p.y = clampf(p.y, EDGE_GAP, maxf(EDGE_GAP, vp.y - sz.y - EDGE_GAP))
 		var popup_rect := Rect2(p, sz)
 		var overlap := popup_rect.intersection(rect).get_area()
 		var on_screen := popup_rect.get_area()

@@ -494,6 +494,16 @@ export const JUNK_CATALOG_SIZE = 10;
 export const JUNK_VISUAL_ID_INDEX_ORIGIN = 1;
 export const JUNK_VISUAL_ID_INDEX_DIGITS = 2;
 
+/** Cantina mission-giver portraits — pack ids `cantina_contact_01` … `cantina_contact_10`. */
+export const CANTINA_CONTACT_VISUAL_ID_PREFIX = "cantina_contact";
+export const CANTINA_CONTACT_VISUAL_ID_SEPARATOR = "_";
+export const CANTINA_CONTACTS_PER_COMPANY = 1;
+export const CANTINA_INDEPENDENT_CONTACT_COUNT = 6;
+export const CANTINA_CONTACT_CATALOG_SIZE =
+  COMPANY_IDS.length * CANTINA_CONTACTS_PER_COMPANY + CANTINA_INDEPENDENT_CONTACT_COUNT;
+export const CANTINA_CONTACT_INDEX_ORIGIN = 1;
+export const CANTINA_CONTACT_INDEX_DIGITS = 2;
+
 export const STIM_MAX_ACTIVE_EFFECTS = 3;
 /**
  * Same-tier restim is allowed while remaining duration is at most

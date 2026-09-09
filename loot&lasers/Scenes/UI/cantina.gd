@@ -6,6 +6,8 @@ const FUEL_COLOR := Color("#39FF14")
 const STARDUST_COLOR := Color("#E879F9")
 const FUEL_BTN_FS := 24
 const FUEL_BTN_ICON := 28.0
+## Existing cantina fallback when a patron has no company color (was Vix's card tint).
+const PATRON_INDEPENDENT_TINT := Color("#FF9E4F")
 const PATRON_FACES: Array[String] = ["👽", "🤖", "👺", "🥸", "🤠", "🐵", "🐸", "🦊", "👹"]
 const PATRON_FACE_BY_NAME := {
 	"zyx": "👽",
@@ -696,7 +698,7 @@ func _make_patron(offer: Dictionary) -> Button:
 	elif locked:
 		state = "Locked"
 
-	var tint := Color(str(patron.get("color", "#FF9E4F")))
+	var tint := _patron_tint(patron)
 	var scene_i := int(offer.get("explore_scene", -1))
 	var art := MissionExploreStage.texture_for_index(scene_i)
 
@@ -1201,6 +1203,16 @@ func _fit_preview_above_patrons() -> void:
 	_preview.pivot_offset = Vector2(card_w * 0.5, h * 0.5)
 
 
+func _patron_tint(patron: Dictionary) -> Color:
+	var company := str(patron.get("visual_company_id", "")).strip_edges().to_upper()
+	if CompanyRules.is_company_id(company):
+		return CompanyRules.color_for(company)
+	var raw := str(patron.get("color", "")).strip_edges()
+	if raw.begins_with("#"):
+		return Color(raw)
+	return PATRON_INDEPENDENT_TINT
+
+
 func _patron_face(patron: Dictionary) -> String:
 	var raw := str(patron.get("emoji", "")).strip_edges()
 	if PATRON_FACES.has(raw):
@@ -1221,6 +1233,19 @@ func _fill_patron_face(host: Control, patron: Dictionary, size: float) -> void:
 		var c := host.get_child(0)
 		host.remove_child(c)
 		c.free()
+	var visual := str(patron.get("visual_id", "")).strip_edges()
+	var path := CantinaCatalog.svg_path(visual)
+	if not path.is_empty() and ResourceLoader.exists(path):
+		var tex := load(path) as Texture2D
+		if tex != null:
+			var tr := TextureRect.new()
+			tr.custom_minimum_size = Vector2(size, size)
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tr.texture = tex
+			host.add_child(tr)
+			return
 	var lab := Label.new()
 	lab.text = _patron_face(patron)
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

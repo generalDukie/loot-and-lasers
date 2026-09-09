@@ -1,14 +1,11 @@
 /**
  * Authoritative Cantina mission-board content.
  *
- * These templates/patrons/collectibles were previously owned by the Godot client
- * (Scripts/MissionBoard.gd). They are mirrored here verbatim so Node can generate
- * the mission board and remain the single source of truth for gameplay-relevant
- * values (duration, efficiency, previews). The client renders whatever Node returns.
- *
- * NOTE: content is intentionally identical to the previous Godot tables — this is an
- * authority/consolidation move, not a balance or copy change.
+ * These templates were previously owned by the Godot client (Scripts/MissionBoard.gd).
+ * Node generates the board and remains the single source of truth for gameplay-relevant
+ * values (duration, efficiency, previews). Patron portraits/names are cosmetic pack copy.
  */
+import { MISSION_CONTACT_PATRONS } from "./productionMath.js";
 
 /** 0-based indices into the mission-explore art pool (6 images). */
 export const EXPLORE_SCENE_COUNT = 6;
@@ -123,17 +120,8 @@ export const LOW_FUEL_TEMPLATES = [
   },
 ];
 
-export const MISSION_PATRONS = [
-  { emoji: "👽", name: "Zyx", color: "#9D5CFF" },
-  { emoji: "🤖", name: "CLANK", color: "#00E5FF" },
-  { emoji: "👺", name: "Grimjaw", color: "#FF4D6D" },
-  { emoji: "🥸", name: "Maskara", color: "#E879F9" },
-  { emoji: "🤠", name: "Deputy Jax", color: "#F59E0B" },
-  { emoji: "🐵", name: "Noko", color: "#D97706" },
-  { emoji: "🐸", name: "Boggs", color: "#22C55E" },
-  { emoji: "🦊", name: "Vix", color: "#FF9E4F" },
-  { emoji: "👹", name: "Karn", color: "#EF4444" },
-];
+/** Cantina mission givers — 10 pack portraits. Cosmetic names/glyphs only. */
+export const MISSION_PATRONS = MISSION_CONTACT_PATRONS;
 
 export const MISSION_COLLECTIBLES = [
   { name: "Void Geode", emoji: "🪨" },

@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ll-mission-board-"));
 process.env.DB_PATH = path.join(tmpDir, "mission-board.db");
@@ -25,6 +26,22 @@ const {
 } = await import("../src/shared/economyFormulas.js");
 const { applyXpBonus, getCollectionPercentage } = await import("../src/shared/collectionBonus.js");
 const { isLaunchableMissionDuration } = await import("../../src/lib/missionDuration.js");
+const {
+  CANTINA_CONTACT_CATALOG,
+  CANTINA_CONTACT_CATALOG_SIZE,
+  CANTINA_CONTACT_INDEX_ORIGIN,
+  CANTINA_CONTACT_PRESENTATION,
+  COMPANY_ID_BJS,
+  COMPANY_ID_CNC,
+  COMPANY_ID_DTD,
+  COMPANY_ID_GORP,
+  CANTINA_CONTACTS_PER_COMPANY,
+  CANTINA_INDEPENDENT_CONTACT_COUNT,
+  cantinaContactVisualId,
+} = await import("../../src/lib/productionMath/index.js");
+const { MISSION_PATRONS } = await import("../src/shared/missionTemplates.js");
+
+const GODOT_ROOT = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."), "loot&lasers");
 
 let passed = 0;
 let failed = 0;
@@ -91,6 +108,10 @@ await testAsync("GetMissionBoard returns 3 authoritative offers and persists the
     assert.ok(o.preview_xp > 0, "preview_xp > 0");
     assert.ok(o.preview_stardust > 0, "preview_stardust > 0");
     assert.ok(o.xp_efficiency > 0 && o.stardust_efficiency > 0, "efficiency present");
+    assert.ok(o.patron && typeof o.patron === "object", "patron present");
+    assert.ok(CANTINA_CONTACT_PRESENTATION[o.patron.visual_id], o.patron.visual_id);
+    assert.equal(o.patron.name, CANTINA_CONTACT_PRESENTATION[o.patron.visual_id].name);
+    assert.equal(o.patron.emoji, undefined);
     // Requirement 1: item/rarity probabilities are NOT revealed to the client.
     assert.equal(o.rarity_weights, undefined, "rarity spread not exposed");
     assert.equal(o.gear_drop_chance, undefined, "gear probability not exposed");
@@ -276,6 +297,56 @@ await testAsync("Level requirement gate rejects an over-level offer (403)", asyn
   const res = await LaunchMission(user, { board_offer_id: "off_locked" });
   assert.equal(res.status, 403);
   assert.equal(res.body.code, "LEVEL_TOO_LOW");
+});
+
+await testAsync("cantina contact catalog is 10 unique names with glyphs and Godot parity", async () => {
+  assert.equal(CANTINA_CONTACT_CATALOG.length, CANTINA_CONTACT_CATALOG_SIZE);
+  assert.equal(Object.keys(CANTINA_CONTACT_PRESENTATION).length, CANTINA_CONTACT_CATALOG_SIZE);
+  assert.equal(MISSION_PATRONS.length, CANTINA_CONTACT_CATALOG_SIZE);
+  const ids = new Set();
+  const names = new Set();
+  const companyCounts = { [COMPANY_ID_CNC]: 0, [COMPANY_ID_BJS]: 0, [COMPANY_ID_DTD]: 0, [COMPANY_ID_GORP]: 0, "": 0 };
+  for (let i = 0; i < CANTINA_CONTACT_CATALOG_SIZE; i += 1) {
+    const row = CANTINA_CONTACT_CATALOG[i];
+    assert.equal(row.id, cantinaContactVisualId(CANTINA_CONTACT_INDEX_ORIGIN + i));
+    assert.equal(row.name, CANTINA_CONTACT_PRESENTATION[row.id].name);
+    assert.notEqual(row.name, row.id);
+    assert.equal(ids.has(row.id), false, row.id);
+    assert.equal(names.has(row.name), false, row.name);
+    ids.add(row.id);
+    names.add(row.name);
+    const company = row.visual_company_id || "";
+    assert.equal(company in companyCounts, true, company);
+    companyCounts[company] += 1;
+    const patron = MISSION_PATRONS[i];
+    assert.equal(patron.visual_id, row.id);
+    assert.equal(patron.name, row.name);
+    assert.equal(patron.visual_company_id, row.visual_company_id);
+    assert.equal(patron.emoji, undefined);
+  }
+  assert.equal(companyCounts[COMPANY_ID_CNC], CANTINA_CONTACTS_PER_COMPANY);
+  assert.equal(companyCounts[COMPANY_ID_BJS], CANTINA_CONTACTS_PER_COMPANY);
+  assert.equal(companyCounts[COMPANY_ID_DTD], CANTINA_CONTACTS_PER_COMPANY);
+  assert.equal(companyCounts[COMPANY_ID_GORP], CANTINA_CONTACTS_PER_COMPANY);
+  assert.equal(companyCounts[""], CANTINA_INDEPENDENT_CONTACT_COUNT);
+  const cantinaDir = path.join(GODOT_ROOT, "Assets", "Cantina");
+  const missing = CANTINA_CONTACT_CATALOG.filter((row) => !fs.existsSync(path.join(cantinaDir, `${row.id}.svg`)));
+  assert.equal(missing.length, 0, `named catalog missing SVGs: ${missing.map((row) => row.id).join(", ")}`);
+  const importScale = "svg/scale=3.0";
+  for (const row of CANTINA_CONTACT_CATALOG) {
+    const importPath = path.join(cantinaDir, `${row.id}.svg.import`);
+    assert.equal(fs.existsSync(importPath), true, importPath);
+    assert.match(fs.readFileSync(importPath, "utf8"), new RegExp(importScale.replace(".", "\\.")));
+  }
+  const catalogGd = fs.readFileSync(path.join(GODOT_ROOT, "Scripts", "CantinaCatalog.gd"), "utf8");
+  assert.match(catalogGd, /CANTINA_SVG_IMPORT_SCALE/);
+  for (const row of CANTINA_CONTACT_CATALOG) {
+    assert.match(catalogGd, new RegExp(row.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(catalogGd, new RegExp(row.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  const cantinaUi = fs.readFileSync(path.join(GODOT_ROOT, "Scenes/UI/cantina.gd"), "utf8");
+  assert.match(cantinaUi, /CantinaCatalog\.svg_path/);
+  assert.match(cantinaUi, /STRETCH_KEEP_ASPECT_CENTERED/);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

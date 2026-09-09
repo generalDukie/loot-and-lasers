@@ -38,6 +38,8 @@ const {
   CANTINA_CONTACTS_PER_COMPANY,
   CANTINA_INDEPENDENT_CONTACT_COUNT,
   cantinaContactVisualId,
+  overlayCantinaBoardOffers,
+  cantinaBoardPatronsNeedOverlay,
 } = await import("../../src/lib/productionMath/index.js");
 const { MISSION_PATRONS } = await import("../src/shared/missionTemplates.js");
 
@@ -345,8 +347,55 @@ await testAsync("cantina contact catalog is 10 unique names with glyphs and Godo
     assert.match(catalogGd, new RegExp(row.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   const cantinaUi = fs.readFileSync(path.join(GODOT_ROOT, "Scenes/UI/cantina.gd"), "utf8");
-  assert.match(cantinaUi, /CantinaCatalog\.svg_path/);
-  assert.match(cantinaUi, /STRETCH_KEEP_ASPECT_CENTERED/);
+  assert.match(cantinaUi, /CantinaCatalog\.overlay_offers/);
+  assert.match(cantinaUi, /CantinaPatronIcon\.make/);
+  const patronIcon = fs.readFileSync(path.join(GODOT_ROOT, "Scripts/UI/CantinaPatronIcon.gd"), "utf8");
+  assert.match(patronIcon, /GearIcon\.opaque_source_rect/);
+  assert.match(patronIcon, /GearIcon\.contain_dest_rect/);
+  assert.match(patronIcon, /draw_texture_rect_region/);
+});
+
+await testAsync("emoji-only persisted boards overlay unique catalog patrons without rerolling rewards", async () => {
+  const { user, ch } = makeCharacter();
+  const first = await GetMissionBoard(user, {});
+  assert.equal(first.status, 200, first.body?.error);
+  const stored = entities.Character.get(ch.id).mission_board;
+  const fuelCosts = stored.offers.map((o) => o.fuel_cost);
+  const names = stored.offers.map((o) => o.name);
+  entities.Character.update(ch.id, {
+    mission_board: {
+      ...stored,
+      offers: stored.offers.map((offer) => ({
+        ...offer,
+        patron: { emoji: "👽", name: "Zyx", color: "#9D5CFF" },
+      })),
+    },
+  });
+  assert.equal(cantinaBoardPatronsNeedOverlay(entities.Character.get(ch.id).mission_board.offers), true);
+  const again = await GetMissionBoard(user, {});
+  assert.equal(again.status, 200, again.body?.error);
+  assert.equal(again.body.generated, false);
+  const ids = new Set();
+  for (let i = 0; i < again.body.offers.length; i += 1) {
+    const offer = again.body.offers[i];
+    assert.equal(offer.name, names[i], "mission name stays");
+    assert.equal(offer.fuel_cost, fuelCosts[i], "fuel stays");
+    assert.ok(CANTINA_CONTACT_PRESENTATION[offer.patron.visual_id], offer.patron.visual_id);
+    assert.equal(offer.patron.name, CANTINA_CONTACT_PRESENTATION[offer.patron.visual_id].name);
+    assert.notEqual(offer.patron.name, "Zyx");
+    assert.equal(offer.patron.emoji, undefined);
+    assert.equal(ids.has(offer.patron.visual_id), false, offer.patron.visual_id);
+    ids.add(offer.patron.visual_id);
+  }
+  const persisted = entities.Character.get(ch.id).mission_board.offers;
+  assert.equal(persisted[0].patron.visual_id, again.body.offers[0].patron.visual_id);
+  const overlaid = overlayCantinaBoardOffers([
+    { offer_id: "a", patron: { emoji: "🤠", name: "Deputy Jax" } },
+    { offer_id: "b", patron: { emoji: "🦊", name: "Vix" } },
+  ]);
+  assert.equal(overlaid[0].patron.visual_id, "cantina_contact_01");
+  assert.equal(overlaid[1].patron.visual_id, "cantina_contact_02");
+  assert.equal(overlaid[0].patron.name, "Lady Vessara");
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

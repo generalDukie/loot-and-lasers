@@ -90,6 +90,10 @@ import {
 } from "../../../src/lib/productionMath/missions.js";
 import { MISSION_OFFER_COUNT } from "../../../src/lib/productionMath/constants.js";
 import {
+  overlayCantinaBoardOffers,
+  cantinaBoardPatronsNeedOverlay,
+} from "../../../src/lib/productionMath/cantinaContactPresentation.js";
+import {
   MISSION_TEMPLATES,
   LOW_FUEL_TEMPLATES,
   MISSION_PATRONS,
@@ -560,16 +564,17 @@ function retireAndGenerateMissionBoard(character, extraPatch = {}) {
     Object.assign(offer, finalizeMissionRewards(preview, offer));
   }
   dedupeOfferRewards(preview, offers, secureRandom);
+  const presented = overlayCantinaBoardOffers(offers);
   const board = {
     version: MISSION_BOARD_VERSION,
     generated_at: clock.nowIso(),
     character_level: preview.level || 1,
-    offers,
+    offers: presented,
   };
   return {
     mission_board: board,
     mission_board_status: "available",
-    offers: offers.map((o) => serializeBoardOffer(preview, o)),
+    offers: presented.map((o) => serializeBoardOffer(preview, o)),
   };
 }
 
@@ -606,12 +611,22 @@ export async function GetMissionBoard(user, _body = {}) {
       if (!locked && hasValidMissionBoard(ch)) {
         const liveLevel = chForGen.level || 1;
         let board = ch.mission_board;
+        let writeBoard = false;
         if (Number(board.character_level || 0) !== liveLevel) {
-          const offers = board.offers.map((o) => ({
+          const leveled = board.offers.map((o) => ({
             ...o,
             ...finalizeMissionRewards(chForGen, o),
           }));
-          board = { ...board, character_level: liveLevel, offers };
+          board = { ...board, character_level: liveLevel, offers: leveled };
+          writeBoard = true;
+        }
+        if (cantinaBoardPatronsNeedOverlay(board.offers)) {
+          board = { ...board, offers: overlayCantinaBoardOffers(board.offers) };
+          writeBoard = true;
+        } else {
+          board = { ...board, offers: overlayCantinaBoardOffers(board.offers) };
+        }
+        if (writeBoard) {
           ch = entities.Character.update(ch.id, { mission_board: board });
         }
         const offers = board.offers.map((o) => serializeBoardOffer(chForGen, o));
@@ -1267,9 +1282,16 @@ export async function LaunchMission(user, body) {
         / FUEL_PRECISION_SCALE;
 
       const board = ch.mission_board;
+      let boardOffers = board && Array.isArray(board.offers) ? board.offers : null;
+      if (boardOffers && cantinaBoardPatronsNeedOverlay(boardOffers)) {
+        boardOffers = overlayCantinaBoardOffers(boardOffers);
+        ch = entities.Character.update(ch.id, {
+          mission_board: { ...board, offers: boardOffers },
+        });
+      }
       const offer =
-        board && Array.isArray(board.offers)
-          ? board.offers.find((o) => o.offer_id === boardOfferId)
+        boardOffers
+          ? boardOffers.find((o) => o.offer_id === boardOfferId)
           : null;
       if (!offer) httpErr(409, "That contract is no longer on the board", "OFFER_NOT_FOUND");
       if ((offer.level_requirement || 1) > level) {

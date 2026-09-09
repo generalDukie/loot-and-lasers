@@ -111,6 +111,14 @@ static func _opaque_source_rect(tex: Texture2D) -> Rect2:
 	return region
 
 
+static func opaque_source_rect(tex: Texture2D) -> Rect2:
+	return _opaque_source_rect(tex)
+
+
+static func contain_dest_rect(src_size: Vector2, dest: Rect2) -> Rect2:
+	return _contain_rect(src_size, dest)
+
+
 static func _contain_rect(src_size: Vector2, dest: Rect2) -> Rect2:
 	if src_size.x <= 0.0 or src_size.y <= 0.0:
 		return dest

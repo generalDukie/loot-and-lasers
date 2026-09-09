@@ -3,7 +3,8 @@
  *
  * Keys MUST be visual ids (`cantina_contact_01`). `name` is the player-facing
  * title from the pack (do not invent). Company affiliation is cosmetic only and
- * does not affect mission rewards. New boards only; existing offers are not remapped.
+ * does not affect mission rewards. Existing emoji-only boards are overlaid on
+ * read so cantina faces update without rerolling mission rewards.
  *
  * Mirror the same 10 names in `loot&lasers/Scripts/CantinaCatalog.gd`.
  */
@@ -109,6 +110,55 @@ export function missionPatronFromContact(row) {
     visual_id: id,
     visual_company_id: String(row.visual_company_id || "").trim(),
   });
+}
+
+export function cantinaPatronFromVisualId(visualId) {
+  const id = String(visualId || "").trim();
+  const overlay = id ? CANTINA_CONTACT_PRESENTATION[id] : null;
+  if (!overlay) return null;
+  return missionPatronFromContact({
+    id,
+    name: overlay.name,
+    visual_company_id: overlay.visual_company_id,
+  });
+}
+
+export function overlayCantinaBoardOffers(offers) {
+  if (!Array.isArray(offers)) return [];
+  const used = new Set();
+  let cursor = 0;
+  const takeNextUnused = () => {
+    while (cursor < CANTINA_CONTACT_CATALOG_SIZE) {
+      const row = CANTINA_CONTACT_CATALOG[cursor];
+      cursor += 1;
+      if (!used.has(row.id)) {
+        used.add(row.id);
+        return missionPatronFromContact(row);
+      }
+    }
+    return missionPatronFromContact(CANTINA_CONTACT_CATALOG[0]);
+  };
+  return offers.map((offer) => {
+    const current = cantinaPatronFromVisualId(offer?.patron?.visual_id);
+    let patron = current;
+    if (!patron || used.has(patron.visual_id)) {
+      patron = takeNextUnused();
+    } else {
+      used.add(patron.visual_id);
+    }
+    return { ...offer, patron };
+  });
+}
+
+export function cantinaBoardPatronsNeedOverlay(offers) {
+  if (!Array.isArray(offers) || offers.length === 0) return true;
+  const seen = new Set();
+  for (const offer of offers) {
+    const id = String(offer?.patron?.visual_id || "").trim();
+    if (!CANTINA_CONTACT_PRESENTATION[id] || seen.has(id)) return true;
+    seen.add(id);
+  }
+  return false;
 }
 
 export const MISSION_CONTACT_PATRONS = Object.freeze(

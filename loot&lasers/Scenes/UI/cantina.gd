@@ -8,6 +8,9 @@ const FUEL_BTN_FS := 24
 const FUEL_BTN_ICON := 28.0
 ## Existing cantina fallback when a patron has no company color (was Vix's card tint).
 const PATRON_INDEPENDENT_TINT := Color("#FF9E4F")
+const PATRON_FACE_TILE_PX := 88.0
+const PATRON_FACE_SHEET_WRAP_PX := 96.0
+const PATRON_FACE_SHEET_MARGIN_PX := 6.0
 const PATRON_FACES: Array[String] = ["👽", "🤖", "👺", "🥸", "🤠", "🐵", "🐸", "🦊", "👹"]
 const PATRON_FACE_BY_NAME := {
 	"zyx": "👽",
@@ -499,7 +502,7 @@ func _render() -> void:
 	else:
 		_stage_hint.text = "Hover a patron for the full job · click to accept"
 
-	var offers: Array = MissionManager.offers
+	var offers: Array = CantinaCatalog.overlay_offers(MissionManager.offers)
 	if offers.is_empty():
 		if _status.text.is_empty() or _status.text == "Loading contracts…":
 			_status.add_theme_color_override("font_color", ClientUi.MUTED)
@@ -759,11 +762,11 @@ func _make_patron(offer: Dictionary) -> Button:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.add_child(col)
 
-	var glyph_host := CenterContainer.new()
-	glyph_host.custom_minimum_size = Vector2(88, 88)
+	var glyph_host := Control.new()
+	glyph_host.custom_minimum_size = Vector2(PATRON_FACE_TILE_PX, PATRON_FACE_TILE_PX)
 	glyph_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(glyph_host)
-	_fill_patron_face(glyph_host, patron, 80.0)
+	_fill_patron_face(glyph_host, patron, PATRON_FACE_TILE_PX)
 
 	var name_l := Label.new()
 	name_l.text = str(patron.get("name", "Patron"))
@@ -1234,18 +1237,12 @@ func _fill_patron_face(host: Control, patron: Dictionary, size: float) -> void:
 		host.remove_child(c)
 		c.free()
 	var visual := str(patron.get("visual_id", "")).strip_edges()
-	var path := CantinaCatalog.svg_path(visual)
-	if not path.is_empty() and ResourceLoader.exists(path):
-		var tex := load(path) as Texture2D
-		if tex != null:
-			var tr := TextureRect.new()
-			tr.custom_minimum_size = Vector2(size, size)
-			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			tr.texture = tex
-			host.add_child(tr)
-			return
+	var tex := CantinaCatalog.texture(visual)
+	if tex != null:
+		var icon := CantinaPatronIcon.make(visual, size)
+		host.add_child(icon)
+		icon.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+		return
 	var lab := Label.new()
 	lab.text = _patron_face(patron)
 	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1253,23 +1250,28 @@ func _fill_patron_face(host: Control, patron: Dictionary, size: float) -> void:
 	lab.add_theme_font_size_override("font_size", int(round(size)))
 	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.add_child(lab)
+	lab.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 
 
 func _make_sheet_quest_icon(patron: Dictionary, tint: Color) -> PanelContainer:
 	var wrap := PanelContainer.new()
-	wrap.custom_minimum_size = Vector2(96, 96)
+	wrap.custom_minimum_size = Vector2(PATRON_FACE_SHEET_WRAP_PX, PATRON_FACE_SHEET_WRAP_PX)
 	var wrap_style := ClientUi.painted_panel_style(
 		Color(0.04, 0.05, 0.08, 0.98), Color(tint, 0.95), 14, 2
 	).duplicate() as StyleBoxFlat
-	wrap_style.content_margin_left = 6
-	wrap_style.content_margin_right = 6
-	wrap_style.content_margin_top = 6
-	wrap_style.content_margin_bottom = 6
+	wrap_style.content_margin_left = PATRON_FACE_SHEET_MARGIN_PX
+	wrap_style.content_margin_right = PATRON_FACE_SHEET_MARGIN_PX
+	wrap_style.content_margin_top = PATRON_FACE_SHEET_MARGIN_PX
+	wrap_style.content_margin_bottom = PATRON_FACE_SHEET_MARGIN_PX
 	wrap.add_theme_stylebox_override("panel", wrap_style)
-	var glyph_host := CenterContainer.new()
-	glyph_host.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
+	var inner := PATRON_FACE_SHEET_WRAP_PX - PATRON_FACE_SHEET_MARGIN_PX * 2.0
+	var glyph_host := Control.new()
+	glyph_host.custom_minimum_size = Vector2(inner, inner)
+	glyph_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	glyph_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	glyph_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	wrap.add_child(glyph_host)
-	_fill_patron_face(glyph_host, patron, 64.0)
+	_fill_patron_face(glyph_host, patron, inner)
 	return wrap
 
 

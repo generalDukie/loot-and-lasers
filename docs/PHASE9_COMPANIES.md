@@ -41,13 +41,13 @@ There is no Shipment cooldown or daily limit. Equipped Gear cannot be shipped. I
 
 A successful Shipment atomically consumes the five items, credits the payout, adds 100 reputation, increments that Company's shipment count, applies any level-up, and records token/overflow state. Duplicate `request_id` replays the original result.
 
-Company level = `floor(CompanyReputation / 1500)`. New characters start at 0. Shipments are currently the only reputation source.
+Company level = `floor(CompanyReputation / 1500) + COMPANY_STARTING_LEVEL`. New characters start at level 1. Shipments are currently the only reputation source.
 
 ## Tokens
 
-Every Company level awards one Company-specific Commission token (staggered 3 Rare / 1 Epic; CNC Epic on levels 1, 5, 9…; BJS 2, 6, 10…; DTD 3, 7, 11…; GORP 4, 8, 12…). One waiting token per Company. Tokens do not use backpack space.
+Every Company level after 1 awards one Company-specific Commission token (staggered 3 Rare / 1 Epic; CNC Epic on levels 2, 6, 10…; BJS 3, 7, 11…; DTD 4, 8, 12…; GORP 5, 9, 13…). One waiting token per Company. Tokens do not use backpack space.
 
-If a waiting token exists when another is earned, the Shipment still settles and the new token is stored as overflow. The player must later spend one of the two by creating a Commission. Same-Company Shipments are blocked until then. Other Companies remain available. Overflow persists across disconnects.
+If a waiting token exists when another is earned, the Shipment still settles and the new token is stored as overflow. The player must later spend one of the two by creating a Commission. Same-Company Shipments are blocked until then. Other Companies remain independent: each stores one waiting token of its own, and overflow on one Company never blocks another Company from earning or storing a token. Overflow persists across disconnects.
 
 ## Commissions
 

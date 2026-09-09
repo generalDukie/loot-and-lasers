@@ -498,6 +498,7 @@ const {
   COMPANY_ID_BJS,
   COMPANY_REPUTATION_PER_LEVEL,
   TOKEN_RARITY_EPIC,
+  TOKEN_RARITY_RARE,
   isShipmentDockEligibleItem,
 } = await import("../../src/lib/productionMath/index.js");
 const { STIM_ATTRIBUTES } = await import("../../src/lib/stimActivation.js");
@@ -735,7 +736,7 @@ await testAsync("admin company reputation grant adds rep and awards a level toke
   });
   assert.equal(res.status, 200, res.body?.error);
   assert.equal(res.body.next_reputation, COMPANY_REPUTATION_PER_LEVEL);
-  assert.equal(res.body.next_level, 1);
+  assert.equal(res.body.next_level, 2);
   assert.equal(res.body.levels_awarded.length, 1);
   assert.equal(res.body.tokens_created.length, 1);
   assert.equal(res.body.tokens_created[0].rarity, TOKEN_RARITY_EPIC);
@@ -777,6 +778,49 @@ await testAsync("admin company reputation grant overflows when a token is alread
   assert.equal(live.waiting_token.id, "tok-wait-rep");
   assert.ok(live.overflow_token?.id);
   assert.notEqual(live.overflow_token.id, "tok-wait-rep");
+});
+
+await testAsync("admin reputation grant on one company is independent of another company's overflow", async () => {
+  const a = insertUser("u-rep-indep", "rep-indep@t.test", "admin");
+  makeCharacter("ch-rep-indep", a.id, "RepIndep");
+  entities.Character.update("ch-rep-indep", {
+    company_state: {
+      CNC: {
+        reputation: COMPANY_REPUTATION_PER_LEVEL,
+        shipment_count: 0,
+        waiting_token: {
+          id: "tok-cnc-wait",
+          company_id: COMPANY_ID_CNC,
+          rarity: TOKEN_RARITY_EPIC,
+          awarded_level: 2,
+          status: "waiting",
+        },
+        overflow_token: {
+          id: "tok-cnc-over",
+          company_id: COMPANY_ID_CNC,
+          rarity: TOKEN_RARITY_RARE,
+          awarded_level: 3,
+          status: "overflow",
+        },
+      },
+      BJS: { reputation: 0, shipment_count: 0, waiting_token: null, overflow_token: null },
+    },
+  });
+  const res = await AdminModeration(a, {
+    action: "grant_company_reputation",
+    character_id: "ch-rep-indep",
+    company_id: COMPANY_ID_BJS,
+    amount: COMPANY_REPUTATION_PER_LEVEL,
+    reason: "qa independent token",
+  });
+  assert.equal(res.status, 200, res.body?.error);
+  assert.equal(res.body.overflow_pending, false);
+  assert.equal(res.body.tokens_created.length, 1);
+  const live = entities.Character.get("ch-rep-indep").company_state;
+  assert.equal(live.CNC.waiting_token.id, "tok-cnc-wait");
+  assert.equal(live.CNC.overflow_token.id, "tok-cnc-over");
+  assert.ok(live.BJS.waiting_token?.id);
+  assert.equal(live.BJS.overflow_token, null);
 });
 
 await testAsync("admin company reputation grant rejects invalid company and zero amount", async () => {

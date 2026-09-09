@@ -2,6 +2,7 @@
  * Black Market Shipping Dock preview session.
  * Presentation/client coordination only. Settlement stays PreviewShipment / ConfirmShipment.
  */
+import { COMPANY_STARTING_LEVEL } from "./productionMath/constants.js";
 
 function text(value) {
   return String(value || "").trim();
@@ -22,7 +23,7 @@ export function createShipmentDockPreviewState() {
     preview: {},
     previewGeneration: null,
     error: "",
-    overflowBlocked: false,
+    overflowBlockedCompanyId: "",
     retryAvailable: false,
   };
 }
@@ -40,9 +41,12 @@ export function shipmentDockPreviewMatchesGeneration(state) {
     && state?.previewGeneration === state?.generation;
 }
 
-export function shouldStartShipmentDockPreview(state, { qualifies = false, overflowPending = false } = {}) {
+export function shouldStartShipmentDockPreview(state, { qualifies = false, overflowPending = false, companyId = "" } = {}) {
   if (!qualifies) return false;
-  if (overflowPending || state?.overflowBlocked) return false;
+  if (overflowPending) return false;
+  const blockedId = text(state?.overflowBlockedCompanyId);
+  const dockId = text(companyId);
+  if (blockedId && (!dockId || blockedId === dockId)) return false;
   if (shipmentDockPreviewMatchesGeneration(state)) return false;
   if (state?.inFlightGeneration != null) return false;
   if (state?.retryAvailable) return false;
@@ -71,7 +75,7 @@ export function applyShipmentDockPreviewResponse(state, requestedGeneration, res
   if (result.overflow) {
     return {
       ...next,
-      overflowBlocked: true,
+      overflowBlockedCompanyId: text(result.company_id || result.companyId),
       error: "",
       retryAvailable: false,
       preview: {},
@@ -85,7 +89,7 @@ export function applyShipmentDockPreviewResponse(state, requestedGeneration, res
       retryAvailable: true,
       preview: {},
       previewGeneration: null,
-      overflowBlocked: false,
+      overflowBlockedCompanyId: "",
     };
   }
   return {
@@ -94,7 +98,7 @@ export function applyShipmentDockPreviewResponse(state, requestedGeneration, res
     previewGeneration: state.generation,
     error: "",
     retryAvailable: false,
-    overflowBlocked: false,
+    overflowBlockedCompanyId: "",
   };
 }
 
@@ -118,7 +122,7 @@ export function formatShipmentDeliveryStatus(data = {}) {
     parts.push(`+${Math.max(0, Math.floor(Number(data.reputation_granted)))} reputation`);
   }
   if (data.company_level != null && Number.isFinite(Number(data.company_level))) {
-    parts.push(`company level ${Math.max(0, Math.floor(Number(data.company_level)))}`);
+    parts.push(`company level ${Math.max(COMPANY_STARTING_LEVEL, Math.floor(Number(data.company_level)))}`);
   }
   const rarity = text(data.token_rarity || data.tokenRarity);
   if (rarity) parts.push(`${rarity} token`);

@@ -19,6 +19,7 @@ const SHIPMENT_ITEM_COUNT := 5
 const SHIPMENT_BONUS_PERCENT := 10
 const SHIPMENT_REPUTATION_REWARD := 100
 const COMPANY_REPUTATION_PER_LEVEL := 1500
+const COMPANY_STARTING_LEVEL := 1
 const SHIPMENT_DOCK_MODE_SALE := "sale"
 const SHIPMENT_DOCK_MODE_SHIPMENT := "shipment"
 const SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE := "same_company_ineligible"
@@ -28,6 +29,8 @@ const RARE_COMMISSION_STAT_COUNT := 3
 const RARE_WEIGHT_MIN_PERCENT := 20
 const RARE_WEIGHT_MAX_PERCENT := 60
 const RARE_WEIGHT_TOTAL_PERCENT := 100
+const RARE_WEIGHT_DEFAULT_HIGH_PERCENT := 40
+const RARE_WEIGHT_DEFAULT_LOW_PERCENT := 20
 const EPIC_PRIMARY_PERCENT := 30
 const EPIC_VITALITY_PERCENT := 30
 const EPIC_LUCK_PERCENT := 20
@@ -172,6 +175,10 @@ static func rarity_label(rarity: String) -> String:
 
 static func is_company_id(company_id: String) -> bool:
 	return COMPANY_IDS.has(company_id)
+
+
+static func level_from_reputation(reputation: int) -> int:
+	return (maxi(0, reputation) / COMPANY_REPUTATION_PER_LEVEL) + COMPANY_STARTING_LEVEL
 
 
 static func manufacturer_id(item: Dictionary) -> String:
@@ -332,7 +339,7 @@ static func format_shipment_delivery_status(data: Dictionary) -> String:
 	if data.has("reputation_granted"):
 		parts.append("+%s reputation" % maxi(0, int(data.get("reputation_granted", 0))))
 	if data.has("company_level"):
-		parts.append("company level %s" % maxi(0, int(data.get("company_level", 0))))
+		parts.append("company level %s" % maxi(COMPANY_STARTING_LEVEL, int(data.get("company_level", COMPANY_STARTING_LEVEL))))
 	var rarity := str(data.get("token_rarity", "")).strip_edges()
 	if not rarity.is_empty():
 		parts.append("%s token" % rarity)

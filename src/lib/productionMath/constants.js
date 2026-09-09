@@ -386,6 +386,8 @@ export const SHIPMENT_DOCK_MODE_SALE = "sale";
 export const SHIPMENT_DOCK_MODE_SHIPMENT = "shipment";
 export const SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE = "same_company_ineligible";
 export const COMPANY_REPUTATION_PER_LEVEL = 1500;
+/** Display/rank floor. `companyLevelFromReputation(0) === COMPANY_STARTING_LEVEL`. */
+export const COMPANY_STARTING_LEVEL = 1;
 export const COMPANY_WAITING_TOKEN_SLOTS = 1;
 export const TOKEN_ROTATION_PERIOD = 4;
 export const COMPANY_TOKEN_EPIC_OFFSET = Object.freeze({

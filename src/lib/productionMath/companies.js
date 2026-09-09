@@ -16,6 +16,7 @@ import {
   COMPANY_IDS,
   COMPANY_NAME_TOKENS,
   COMPANY_REPUTATION_PER_LEVEL,
+  COMPANY_STARTING_LEVEL,
   COMPANY_SLOTS,
   COMPANY_TOKEN_EPIC_OFFSET,
   PREMIUM_GEAR_SLOTS,
@@ -303,7 +304,7 @@ export function shipmentDisplayValuesForItems(items, previewMath = {}) {
 
 export function companyLevelFromReputation(reputation) {
   const rep = Math.max(0, Math.floor(Number(reputation) || 0));
-  return Math.floor(rep / COMPANY_REPUTATION_PER_LEVEL);
+  return Math.floor(rep / COMPANY_REPUTATION_PER_LEVEL) + COMPANY_STARTING_LEVEL;
 }
 
 export function reputationIntoCurrentLevel(reputation) {
@@ -319,14 +320,19 @@ export function reputationToNextLevel(reputation) {
 export function tokenRarityForCompanyLevel(companyId, level) {
   const id = String(companyId || "");
   const L = Math.floor(Number(level) || 0);
-  if (!isCompanyId(id) || L < 1) return null;
+  if (!isCompanyId(id) || L <= COMPANY_STARTING_LEVEL) return null;
   const offset = COMPANY_TOKEN_EPIC_OFFSET[id];
-  if (((L - 1) % TOKEN_ROTATION_PERIOD) === offset) return TOKEN_RARITY_EPIC;
+  const rankIndex = L - COMPANY_STARTING_LEVEL;
+  if (((rankIndex - 1) % TOKEN_ROTATION_PERIOD) === offset) return TOKEN_RARITY_EPIC;
   return TOKEN_RARITY_RARE;
 }
 
 export function nextTokenRarity(companyId, currentLevel) {
-  return tokenRarityForCompanyLevel(companyId, Math.floor(Number(currentLevel) || 0) + 1);
+  const current = Math.max(
+    COMPANY_STARTING_LEVEL,
+    Math.floor(Number(currentLevel) || 0),
+  );
+  return tokenRarityForCompanyLevel(companyId, current + 1);
 }
 
 export function levelsAwardedByReputation(previousReputation, nextReputation) {

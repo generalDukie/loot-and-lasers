@@ -43,10 +43,12 @@ const {
   SHIPMENT_ITEM_COUNT,
   SHIPMENT_REPUTATION_REWARD,
   COMPANY_REPUTATION_PER_LEVEL,
+  COMPANY_STARTING_LEVEL,
   TOKEN_RARITY_EPIC,
   TOKEN_RARITY_RARE,
   CANONICAL_GEAR_STAT_KEYS,
   companyLevelFromReputation,
+  levelsAwardedByReputation,
   companiesForSlot,
   companyManufacturesSlot,
   premiumSlotsForCompany,
@@ -495,6 +497,28 @@ test("Shipping Dock discards a stale preview and starts the current crate automa
   assert.equal(shouldStartShipmentDockPreview(state, { qualifies: true }), false);
 });
 
+test("token overflow on one company does not block another company's dock preview", () => {
+  let state = createShipmentDockPreviewState();
+  state = markShipmentDockPreviewStarted(state);
+  state = applyShipmentDockPreviewResponse(state, 0, {
+    overflow: true,
+    company_id: COMPANY_ID_DTD,
+  });
+  assert.equal(state.overflowBlockedCompanyId, COMPANY_ID_DTD);
+  assert.equal(
+    shouldStartShipmentDockPreview(state, { qualifies: true, companyId: COMPANY_ID_DTD }),
+    false,
+  );
+  assert.equal(
+    shouldStartShipmentDockPreview(state, { qualifies: true, overflowPending: true, companyId: COMPANY_ID_DTD }),
+    false,
+  );
+  assert.equal(
+    shouldStartShipmentDockPreview(state, { qualifies: true, companyId: COMPANY_ID_BJS }),
+    true,
+  );
+});
+
 test("Shipping Dock preview failure stays a shipment and retries only when asked", () => {
   let state = createShipmentDockPreviewState();
   state = markShipmentDockPreviewStarted(state);
@@ -622,40 +646,46 @@ test("shipment payout uses persisted sell values and roundHalfUp 10%", () => {
   assert.equal(evenish.payout, 17);
 });
 
-test("company level is floor(rep / 1500) and unbounded", () => {
-  assert.equal(companyLevelFromReputation(0), 0);
-  assert.equal(companyLevelFromReputation(1499), 0);
-  assert.equal(companyLevelFromReputation(1500), 1);
-  assert.equal(companyLevelFromReputation(2999), 1);
-  assert.equal(companyLevelFromReputation(3000), 2);
-  assert.equal(companyLevelFromReputation(1_500_000), 1000);
+test("company level starts at 1 and is unbounded", () => {
+  assert.equal(companyLevelFromReputation(0), 1);
+  assert.equal(companyLevelFromReputation(1499), 1);
+  assert.equal(companyLevelFromReputation(1500), 2);
+  assert.equal(companyLevelFromReputation(2999), 2);
+  assert.equal(companyLevelFromReputation(3000), 3);
+  assert.equal(companyLevelFromReputation(1_500_000), 1001);
+  assert.deepEqual(levelsAwardedByReputation(0, 1499), []);
+  assert.deepEqual(levelsAwardedByReputation(0, COMPANY_REPUTATION_PER_LEVEL), [2]);
+  assert.deepEqual(levelsAwardedByReputation(1499, COMPANY_REPUTATION_PER_LEVEL), [2]);
 });
 
 test("staggered Rare/Epic token rotation continues indefinitely", () => {
+  const firstAwardedLevel = COMPANY_STARTING_LEVEL + 1;
   const epicAt = {
-    [COMPANY_ID_CNC]: [1, 5, 9, 13],
-    [COMPANY_ID_BJS]: [2, 6, 10, 14],
-    [COMPANY_ID_DTD]: [3, 7, 11, 15],
-    [COMPANY_ID_GORP]: [4, 8, 12, 16],
+    [COMPANY_ID_CNC]: [2, 6, 10, 14],
+    [COMPANY_ID_BJS]: [3, 7, 11, 15],
+    [COMPANY_ID_DTD]: [4, 8, 12, 16],
+    [COMPANY_ID_GORP]: [5, 9, 13, 17],
   };
   for (const id of COMPANY_IDS) {
-    for (let L = 1; L <= 64; L += 1) {
+    assert.equal(tokenRarityForCompanyLevel(id, COMPANY_STARTING_LEVEL), null);
+    for (let L = firstAwardedLevel; L <= 64; L += 1) {
       const offset = COMPANY_TOKEN_EPIC_OFFSET[id];
-      const expected = ((L - 1) % 4) === offset ? TOKEN_RARITY_EPIC : TOKEN_RARITY_RARE;
+      const rankIndex = L - COMPANY_STARTING_LEVEL;
+      const expected = ((rankIndex - 1) % 4) === offset ? TOKEN_RARITY_EPIC : TOKEN_RARITY_RARE;
       assert.equal(tokenRarityForCompanyLevel(id, L), expected, `${id} L${L}`);
     }
-    assert.equal(nextTokenRarity(id, 0), tokenRarityForCompanyLevel(id, 1));
+    assert.equal(nextTokenRarity(id, COMPANY_STARTING_LEVEL), tokenRarityForCompanyLevel(id, firstAwardedLevel));
   }
   for (const [id, levels] of Object.entries(epicAt)) {
     for (const L of levels) {
       assert.equal(tokenRarityForCompanyLevel(id, L), TOKEN_RARITY_EPIC, `${id} epic ${L}`);
     }
   }
-  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_CNC, 1), TOKEN_RARITY_EPIC);
-  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_BJS, 2), TOKEN_RARITY_EPIC);
-  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_DTD, 3), TOKEN_RARITY_EPIC);
-  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_GORP, 4), TOKEN_RARITY_EPIC);
-  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_DTD, 1), TOKEN_RARITY_RARE);
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_CNC, 2), TOKEN_RARITY_EPIC);
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_BJS, 3), TOKEN_RARITY_EPIC);
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_DTD, 4), TOKEN_RARITY_EPIC);
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_GORP, 5), TOKEN_RARITY_EPIC);
+  assert.equal(tokenRarityForCompanyLevel(COMPANY_ID_DTD, 2), TOKEN_RARITY_RARE);
 });
 
 test("largest-remainder allocation conserves budget and uses canonical order", () => {
@@ -780,7 +810,7 @@ await testAsync("preview matches settlement; items consumed once; reputation +10
   assert.equal(live.company_state.BJS.reputation, 100);
   assert.equal(live.company_state.BJS.shipment_count, 1);
   assert.equal(live.company_state.BJS.level, undefined);
-  assert.equal(companyLevelFromReputation(live.company_state.BJS.reputation), 0);
+  assert.equal(companyLevelFromReputation(live.company_state.BJS.reputation), COMPANY_STARTING_LEVEL);
   for (const id of ids) assert.equal(entities.Item.get(id), null);
   const replay = await ConfirmShipment(account, {
     company_id: COMPANY_ID_BJS,
@@ -858,7 +888,7 @@ await testAsync("companies and characters stay isolated; level-up awards a token
     request_id: "ship-level-cnc",
   });
   assert.equal(settled.status, 200);
-  assert.equal(settled.body.company.level, 1);
+  assert.equal(settled.body.company.level, 2);
   assert.equal(settled.body.company.waiting_token.rarity, TOKEN_RARITY_EPIC);
   const other = entities.Character.get(chB.id);
   assert.equal(other.company_state?.CNC?.reputation || 0, 0);
@@ -878,6 +908,7 @@ await testAsync("overflow preserves the shipment, blocks same-company ships, all
   const ch = makeChar(account.id, {
     companyState: {
       DTD: { reputation: 1400, shipment_count: 14, waiting_token: existing, overflow_token: null },
+      BJS: { reputation: 1400, shipment_count: 14, waiting_token: null, overflow_token: null },
     },
   });
   account.active_character_id = ch.id;
@@ -907,6 +938,13 @@ await testAsync("overflow preserves the shipment, blocks same-company ships, all
     request_id: "ship-other-ok",
   });
   assert.equal(allowed.status, 200);
+  assert.equal(allowed.body.overflow_pending, false);
+  assert.ok(allowed.body.company.waiting_token?.id);
+  const after = entities.Character.get(ch.id);
+  assert.equal(after.company_state.DTD.waiting_token.id, "tok-wait-1");
+  assert.ok(after.company_state.DTD.overflow_token?.id);
+  assert.ok(after.company_state.BJS.waiting_token?.id);
+  assert.equal(after.company_state.BJS.overflow_token, null);
 });
 
 await testAsync("overflow spend waiting keeps overflow token", async () => {
@@ -1548,15 +1586,15 @@ test("Corporate Offices replaces Ship Hangar in live navigation", () => {
   assert.match(gm, /corporate_offices\.tscn/);
   const ui = fs.readFileSync(path.join(GODOT_ROOT, "Scenes/UI/corporate_offices.gd"), "utf8");
   assert.match(ui, /redeem_commission/);
-  assert.match(ui, /Decide later/);
-  assert.match(ui, /_refresh_commission/);
+  assert.match(ui, /Redeem waiting — keep new/);
+  assert.match(ui, /Redeem new — keep waiting/);
+  assert.match(ui, /_refresh_companies/);
   assert.match(ui, /overflow_pending/);
   assert.doesNotMatch(ui, /preview_shipment/);
   assert.doesNotMatch(ui, /confirm_shipment/);
   assert.doesNotMatch(ui, /Preview payout/);
   assert.doesNotMatch(ui, /Confirm Shipment/);
   assert.doesNotMatch(ui, /_build_shipment_column/);
-  assert.doesNotMatch(ui, /Decide later[\s\S]{0,240}redeem_commission/);
   const shop = fs.readFileSync(path.join(GODOT_ROOT, "Scenes/UI/shop.gd"), "utf8");
   assert.match(shop, /Sell Items - Send Shipments/);
   assert.match(shop, /Backpack - Add 5 items from the same manufacturer to send a return shipment and earn reputation with that company/);
@@ -1572,6 +1610,8 @@ test("Corporate Offices replaces Ship Hangar in live navigation", () => {
   assert.match(shop, /format_shipment_delivery_status/);
   assert.doesNotMatch(shop, /SHIPMENT_PAYOUT_BPS/);
   assert.doesNotMatch(shop, /company level gained/);
+  assert.doesNotMatch(shop, /_shipment_overflow_blocked/);
+  assert.match(shop, /_company_overflow_blocks_shipment/);
   const confirmSell = shop.match(/func _on_confirm_sell\(\)[\s\S]*?\nfunc /)?.[0] || "";
   assert.match(confirmSell, /SHIPMENT_DOCK_MODE_SHIPMENT/);
   assert.match(confirmSell, /_retry_shipment_preview/);

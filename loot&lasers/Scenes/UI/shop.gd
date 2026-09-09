@@ -65,7 +65,6 @@ var _sell_notice: Label
 var _shipment_preview: Dictionary = {}
 var _shipment_generation := 0
 var _shipment_in_flight_generation := SHIPMENT_PREVIEW_FLIGHT_NONE
-var _shipment_overflow_blocked := false
 var _shipment_error := ""
 var _shipment_retry_available := false
 var _busy := false
@@ -168,7 +167,6 @@ func _load_company_status() -> void:
 func _invalidate_shipment_preview() -> void:
 	_shipment_generation += 1
 	_shipment_preview = {}
-	_shipment_overflow_blocked = false
 	_shipment_error = ""
 	_shipment_retry_available = false
 
@@ -1634,6 +1632,10 @@ func _set_sell_notice(text: String, color: Color) -> void:
 	_sell_notice.add_theme_color_override("font_color", color)
 
 
+func _company_overflow_blocks_shipment(company_id: String) -> bool:
+	return not company_id.is_empty() and CompanyManager.overflow_pending(company_id)
+
+
 func _refresh_sell_notice(classification: Dictionary) -> void:
 	var mode := str(classification.get("mode", CompanyRules.SHIPMENT_DOCK_MODE_SALE))
 	if mode == CompanyRules.SHIPMENT_DOCK_MODE_SAME_COMPANY_INELIGIBLE:
@@ -1646,9 +1648,9 @@ func _refresh_sell_notice(classification: Dictionary) -> void:
 		_set_sell_notice("", ClientUi.MUTED)
 		return
 	var company_id := str(classification.get("company_id", ""))
-	if _shipment_overflow_blocked or CompanyManager.overflow_pending(company_id):
+	if _company_overflow_blocks_shipment(company_id):
 		_set_sell_notice(
-			"%s already has an unresolved token choice. Deliver is blocked until you resolve it in Corporate Offices. This crate will not be sold as a normal sale." % CompanyRules.display_name(company_id),
+			"%s already has an unresolved token choice. Deliver is blocked until you resolve it in Corporate Offices. Other companies can still earn and store their own token." % CompanyRules.display_name(company_id),
 			ClientUi.WARNING
 		)
 		return
@@ -1677,10 +1679,7 @@ func _refresh_sell_button() -> void:
 	var classification := _sell_dock_classification()
 	var mode := str(classification.get("mode", CompanyRules.SHIPMENT_DOCK_MODE_SALE))
 	var shipment_mode := mode == CompanyRules.SHIPMENT_DOCK_MODE_SHIPMENT
-	var overflow := shipment_mode and (
-		_shipment_overflow_blocked
-		or CompanyManager.overflow_pending(str(classification.get("company_id", "")))
-	)
+	var overflow := shipment_mode and _company_overflow_blocks_shipment(str(classification.get("company_id", "")))
 	var retry_available := shipment_mode and _shipment_retry_available and not overflow
 	var preview_ready := shipment_mode and _shipment_preview_matches_dock() and not overflow and _shipment_error.is_empty()
 	var total := int(_shipment_preview.get("payout", 0)) if preview_ready else _sell_preview_total()
@@ -1762,8 +1761,7 @@ func _request_shipment_preview(classification: Dictionary) -> void:
 	var ids := _sell_staged_ids()
 	if company_id.is_empty() or ids.size() != CompanyRules.SHIPMENT_ITEM_COUNT:
 		return
-	if CompanyManager.overflow_pending(company_id):
-		_shipment_overflow_blocked = true
+	if _company_overflow_blocks_shipment(company_id):
 		_refresh_sell_notice(classification)
 		return
 	_shipment_in_flight_generation = _shipment_generation
@@ -1773,9 +1771,8 @@ func _request_shipment_preview(classification: Dictionary) -> void:
 	if generation != _shipment_generation or not is_inside_tree():
 		_refresh_after_stale_shipment_preview(generation)
 		return
-	if CompanyManager.overflow_pending(company_id):
+	if _company_overflow_blocks_shipment(company_id):
 		_end_shipment_preview_flight(generation)
-		_shipment_overflow_blocked = true
 		_populate()
 		return
 	var res: Dictionary = await CompanyManager.preview_shipment(company_id, ids)
@@ -1787,7 +1784,6 @@ func _request_shipment_preview(classification: Dictionary) -> void:
 	if not res.ok:
 		var code := str(res.get("code", ""))
 		if code == CompanyRules.COMPANY_OVERFLOW_PENDING:
-			_shipment_overflow_blocked = true
 			_shipment_error = ""
 			_shipment_retry_available = false
 		else:
@@ -1798,7 +1794,6 @@ func _request_shipment_preview(classification: Dictionary) -> void:
 		return
 	_shipment_error = ""
 	_shipment_retry_available = false
-	_shipment_overflow_blocked = false
 	_shipment_preview = res.data if typeof(res.data) == TYPE_DICTIONARY else {}
 	_populate()
 
@@ -2063,7 +2058,7 @@ func _on_confirm_shipment(classification: Dictionary) -> void:
 	if company_id.is_empty() or not _shipment_preview_matches_dock():
 		_set_status("Wait for the company preview before delivering this shipment.")
 		return
-	if _shipment_overflow_blocked or CompanyManager.overflow_pending(company_id):
+	if _company_overflow_blocks_shipment(company_id):
 		_set_status("Resolve %s token overflow in Corporate Offices before delivering." % CompanyRules.display_name(company_id))
 		return
 	var preview := _shipment_preview.duplicate(true)
@@ -2074,17 +2069,20 @@ func _on_confirm_shipment(classification: Dictionary) -> void:
 	for slot in _sell_stage:
 		if typeof(slot) == TYPE_DICTIONARY and not slot.is_empty():
 			names.append(str((slot as Dictionary).get("name", "Gear")))
+	var row := CompanyManager.company_row(company_id)
 	var token_note := "No company level this time."
 	var awarded: Variant = preview.get("awarded_tokens", [])
 	if bool(preview.get("levels_up", false)):
+		var next_rep := int(row.get("reputation", 0)) + CompanyRules.SHIPMENT_REPUTATION_REWARD
+		if preview.has("next_reputation"):
+			next_rep = int(preview.get("next_reputation", next_rep))
 		token_note = "This will raise %s to company level %s." % [
 			CompanyRules.display_name(company_id),
-			int(preview.get("next_level", 0)),
+			CompanyRules.level_from_reputation(next_rep),
 		]
 		if typeof(awarded) == TYPE_ARRAY and awarded.size() > 0 and typeof(awarded[0]) == TYPE_DICTIONARY:
 			token_note += " It awards a %s Commission token." % CompanyRules.rarity_label(str((awarded[0] as Dictionary).get("rarity", "rare")))
 	var overflow_note := ""
-	var row := CompanyManager.company_row(company_id)
 	var waiting: Variant = row.get("waiting_token", null)
 	if typeof(waiting) == TYPE_DICTIONARY and not (waiting as Dictionary).is_empty() and typeof(awarded) == TYPE_ARRAY and awarded.size() > 0:
 		overflow_note = "\nThis will create token overflow. Stay here, then resolve the choice in Corporate Offices."
@@ -2136,7 +2134,6 @@ func _submit_shipment(company_id: String) -> void:
 	if not res.ok:
 		var code := str(res.get("code", ""))
 		if code == CompanyRules.COMPANY_OVERFLOW_PENDING:
-			_shipment_overflow_blocked = true
 			_set_status("Resolve %s token overflow in Corporate Offices. Nothing was sold." % CompanyRules.display_name(company_id))
 		else:
 			_set_status(str(res.get("error", "Shipment failed")))
@@ -2168,8 +2165,10 @@ func _shipment_success_status(company_id: String, data: Dictionary) -> String:
 	var levels: Variant = data.get("levels_awarded", [])
 	var company: Variant = data.get("company", {})
 	if typeof(levels) == TYPE_ARRAY and (levels as Array).size() > 0:
-		if typeof(company) == TYPE_DICTIONARY and (company as Dictionary).has("level"):
-			payload["company_level"] = int((company as Dictionary).get("level", 0))
+		if typeof(company) == TYPE_DICTIONARY and (company as Dictionary).has("reputation"):
+			payload["company_level"] = CompanyRules.level_from_reputation(int((company as Dictionary).get("reputation", 0)))
+		elif typeof(company) == TYPE_DICTIONARY and (company as Dictionary).has("level"):
+			payload["company_level"] = maxi(CompanyRules.COMPANY_STARTING_LEVEL, int((company as Dictionary).get("level", CompanyRules.COMPANY_STARTING_LEVEL)))
 		else:
 			payload["company_level"] = int((levels as Array)[(levels as Array).size() - 1])
 	var tokens: Variant = data.get("tokens_created", [])

@@ -217,6 +217,8 @@ export function previewShipment(character, companyId, itemIds) {
     bonus: preview.bonus,
     payout: preview.payout,
     reputation: preview.reputation,
+    previous_reputation: preview.previous_reputation,
+    next_reputation: preview.next_reputation,
     previous_level: preview.previous_level,
     next_level: preview.next_level,
     levels_up: preview.levels_up,

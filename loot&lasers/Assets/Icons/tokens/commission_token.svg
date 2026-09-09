@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Loot &amp; Lasers Commission Token</title>
+  <desc id="desc">An octagonal metallic science-fiction token with illuminated circuitry and a central commission seal.</desc>
+
+  <defs>
+    <linearGradient id="outerMetal" x1="72" y1="52" x2="440" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff3ad"/>
+      <stop offset="0.16" stop-color="#d8a738"/>
+      <stop offset="0.43" stop-color="#6e4212"/>
+      <stop offset="0.7" stop-color="#f1ca5e"/>
+      <stop offset="1" stop-color="#80501a"/>
+    </linearGradient>
+    <linearGradient id="rimFace" x1="110" y1="88" x2="400" y2="424" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5f6c78"/>
+      <stop offset="0.22" stop-color="#202a35"/>
+      <stop offset="0.58" stop-color="#0b111a"/>
+      <stop offset="0.83" stop-color="#364653"/>
+      <stop offset="1" stop-color="#101822"/>
+    </linearGradient>
+    <radialGradient id="coreFace" cx="42%" cy="34%" r="73%">
+      <stop offset="0" stop-color="#243849"/>
+      <stop offset="0.52" stop-color="#101b27"/>
+      <stop offset="1" stop-color="#060a11"/>
+    </radialGradient>
+    <linearGradient id="sealGold" x1="180" y1="166" x2="342" y2="354" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff0a1"/>
+      <stop offset="0.45" stop-color="#e9b83f"/>
+      <stop offset="1" stop-color="#8a5418"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="148" y1="110" x2="374" y2="410" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8ffcff"/>
+      <stop offset="0.55" stop-color="#1bd8eb"/>
+      <stop offset="1" stop-color="#087a99"/>
+    </linearGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#00050b" flood-opacity="0.8"/>
+    </filter>
+    <filter id="cyanGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="goldGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="coreClip">
+      <path d="M177 92h158l85 85v158l-85 85H177l-85-85V177z"/>
+    </clipPath>
+  </defs>
+
+  <!-- Outer octagonal body -->
+  <g id="token-body" filter="url(#shadow)">
+    <path d="M150 24h212l126 126v212L362 488H150L24 362V150z" fill="#070b11" stroke="#020407" stroke-width="12"/>
+    <path d="M153 34h206l119 119v206L359 478H153L34 359V153z" fill="url(#outerMetal)" stroke="#f7dc78" stroke-width="4"/>
+    <path d="M166 55h180l111 111v180L346 457H166L55 346V166z" fill="url(#rimFace)" stroke="#4d2f0e" stroke-width="6"/>
+    <path d="M180 78h152l102 102v152L332 434H180L78 332V180z" fill="#090e16" stroke="#efc354" stroke-width="5"/>
+    <path d="M185 92h142l93 93v142l-93 93H185l-93-93V185z" fill="url(#coreFace)" stroke="#152c3a" stroke-width="7"/>
+  </g>
+
+  <!-- Recessed edge panels -->
+  <g id="edge-panels" fill="#111a24" stroke="#daa83c" stroke-width="3">
+    <path d="M176 50h160l-17 22H193z"/>
+    <path d="M336 61l115 115-28 4-91-91z"/>
+    <path d="M440 193v126l-20 17V176z"/>
+    <path d="M451 336L336 451l-4-28 91-91z"/>
+    <path d="M336 440H176l17-20h126z"/>
+    <path d="M176 451L61 336l28-4 91 91z"/>
+    <path d="M72 319V193l20-17v160z"/>
+    <path d="M61 176L176 61l4 28-91 91z"/>
+  </g>
+
+  <!-- Rim cuts and registration marks -->
+  <g id="rim-details" fill="none" stroke-linecap="round">
+    <g stroke="#f6d66e" stroke-width="5" opacity="0.82">
+      <path d="M206 63h34M272 63h34M449 206v34M449 272v34M306 449h-34M240 449h-34M63 306v-34M63 240v-34"/>
+    </g>
+    <g stroke="#111820" stroke-width="7">
+      <path d="M121 105l18-18M391 105l-18-18M407 391l-18-18M105 391l18-18"/>
+    </g>
+    <g fill="#e7b744" stroke="#4d2d0d" stroke-width="3">
+      <circle cx="162" cy="82" r="7"/><circle cx="350" cy="82" r="7"/>
+      <circle cx="430" cy="162" r="7"/><circle cx="430" cy="350" r="7"/>
+      <circle cx="350" cy="430" r="7"/><circle cx="162" cy="430" r="7"/>
+      <circle cx="82" cy="350" r="7"/><circle cx="82" cy="162" r="7"/>
+    </g>
+    <g fill="#fff2a1" opacity="0.65">
+      <circle cx="160" cy="80" r="2"/><circle cx="348" cy="80" r="2"/>
+      <circle cx="428" cy="160" r="2"/><circle cx="428" cy="348" r="2"/>
+      <circle cx="348" cy="428" r="2"/><circle cx="160" cy="428" r="2"/>
+      <circle cx="80" cy="348" r="2"/><circle cx="80" cy="160" r="2"/>
+    </g>
+  </g>
+
+  <!-- Circuit traces -->
+  <g id="circuitry" clip-path="url(#coreClip)" fill="none" stroke="url(#cyan)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.92" filter="url(#cyanGlow)">
+    <path d="M96 206h55l23 23h37"/>
+    <path d="M92 266h55l24-24h31"/>
+    <path d="M108 321h47l29-29h25"/>
+    <path d="M416 206h-55l-23 23h-37"/>
+    <path d="M420 266h-55l-24-24h-31"/>
+    <path d="M404 321h-47l-29-29h-25"/>
+    <path d="M206 96v43l23 23v35"/>
+    <path d="M306 96v43l-23 23v35"/>
+    <path d="M206 416v-43l23-23v-35"/>
+    <path d="M306 416v-43l-23-23v-35"/>
+  </g>
+  <g id="circuit-nodes" fill="#91fbff" stroke="#0a6680" stroke-width="3" filter="url(#cyanGlow)">
+    <circle cx="112" cy="206" r="6"/><circle cx="112" cy="266" r="6"/><circle cx="126" cy="321" r="6"/>
+    <circle cx="400" cy="206" r="6"/><circle cx="400" cy="266" r="6"/><circle cx="386" cy="321" r="6"/>
+    <circle cx="206" cy="112" r="6"/><circle cx="306" cy="112" r="6"/>
+    <circle cx="206" cy="400" r="6"/><circle cx="306" cy="400" r="6"/>
+  </g>
+
+  <!-- Central commission seal -->
+  <g id="commission-seal">
+    <circle cx="256" cy="256" r="111" fill="#070b12" stroke="#162f3e" stroke-width="10"/>
+    <circle cx="256" cy="256" r="96" fill="none" stroke="url(#sealGold)" stroke-width="8"/>
+    <circle cx="256" cy="256" r="83" fill="#0e1823" stroke="#6a4519" stroke-width="3"/>
+
+    <!-- Eight authorization ticks -->
+    <g fill="#f0c756" filter="url(#goldGlow)">
+      <path d="M250 151h12l5 21h-22z"/>
+      <path d="M325 179l8 8-11 19-15-15z"/>
+      <path d="M340 250v12l-21 5v-22z"/>
+      <path d="M333 325l-8 8-18-11 15-15z"/>
+      <path d="M262 361h-12l-5-21h22z"/>
+      <path d="M187 333l-8-8 11-18 15 15z"/>
+      <path d="M172 262v-12l21-5v22z"/>
+      <path d="M179 187l8-8 18 11-15 15z"/>
+    </g>
+
+    <!-- Enlarged commission insignia: star inside targeting rings -->
+    <circle cx="256" cy="256" r="64" fill="#0a1018" stroke="url(#sealGold)" stroke-width="8"/>
+    <circle cx="256" cy="256" r="49" fill="none" stroke="#1ed9e9" stroke-width="5" stroke-dasharray="10 8" filter="url(#cyanGlow)"/>
+    <circle cx="256" cy="256" r="39" fill="#111d29" stroke="#6a4519" stroke-width="3"/>
+    <path d="M256 204l16 32 36 5-26 25 6 36-32-17-32 17 6-36-26-25 36-5z" fill="url(#sealGold)" stroke="#fff0a1" stroke-width="3" stroke-linejoin="round" filter="url(#goldGlow)"/>
+    <circle cx="256" cy="256" r="9" fill="#fff0a1" opacity="0.82"/>
+  </g>
+
+  <!-- Highlight and wear -->
+  <g id="surface-wear" fill="none" stroke-linecap="round">
+    <path d="M118 154l38-38M365 397l29-29M370 123l18 18M123 370l21 21" stroke="#fff0ae" stroke-width="3" opacity="0.48"/>
+    <path d="M129 346l37-12M348 165l28-9M173 112l21-5M320 402l25-8" stroke="#05080d" stroke-width="4" opacity="0.8"/>
+    <path d="M115 181l13-4M395 333l-18 5M194 441l28-2M288 69l31 2" stroke="#dba83a" stroke-width="3" opacity="0.55"/>
+  </g>
+</svg>
